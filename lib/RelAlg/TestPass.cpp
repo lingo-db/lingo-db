@@ -14,9 +14,6 @@ class TestPass : public mlir::PassWrapper<TestPass, mlir::FunctionPass> {
 
 public:
   void runOnFunction() override {
-    auto f = getFunction();
-    auto *context = &getContext();
-
   }
 };
 } // end anonymous namespace

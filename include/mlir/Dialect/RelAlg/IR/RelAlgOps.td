@@ -59,10 +59,8 @@ let summary = "loop yield and termination operation";
 
 let arguments = (ins Variadic<DBType>:$results);
 let builders = [OpBuilderDAG<(ins), [{ /* nothing to do */ }]>];
-
 let assemblyFormat =
 [{  attr-dict ($results^ `:` type($results))? }];
-
 }
 
 
@@ -79,14 +77,27 @@ let summary = "get attribute operation";
 let arguments = (ins RelationalAttributeRefAttr:$attr, RelAlg_Tuple:$tuple);
 let results = (outs DBType : $res);
 }
+def AddAttrOp : RelAlg_Op<"addattr"> {
+let summary = "add attribute operation";
+let arguments = (ins RelationalAttributeDefAttr:$attr, DBType:$val);
+}
 
-
-def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects]> {
+def SelectionOp : RelAlg_Op<"selection",[NoSideEffect]> {
 let summary = "selection operation";
 let arguments = (ins RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
+def AggregationOp : RelAlg_Op<"aggregation",[NoSideEffect]> {
+let summary = "aggregation operation";
+let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel, ArrayAttr:$group_by_attrs);
+let results = (outs RelAlg_Relation:$result);
+let regions = (region SizedRegion<1>:$aggr_func);
+}
 
-
+def SumAggrFuncOp : RelAlg_Op<"aggr.sum"> {
+let summary = "aggregation operation";
+let arguments = (ins RelAlg_Relation:$rel,RelationalAttributeRefAttr:$attr);
+let results = (outs DBType:$result);
+}
 #endif// OPS
