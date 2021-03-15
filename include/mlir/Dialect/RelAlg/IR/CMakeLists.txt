@@ -1,0 +1,16 @@
+
+set(LLVM_TARGET_DEFINITIONS RelAlgOps.td)
+mlir_tablegen(RelAlgOpsDialect.h.inc -gen-dialect-decls)
+mlir_tablegen(RelAlgOps.h.inc -gen-op-decls)
+mlir_tablegen(RelAlgOps.cpp.inc -gen-op-defs)
+mlir_tablegen(RelAlgOpsEnums.h.inc -gen-enum-decls)
+mlir_tablegen(RelAlgOpsEnums.cpp.inc -gen-enum-defs)
+mlir_tablegen(RelAlgOpsTypes.h.inc --gen-typedef-decls)
+mlir_tablegen(RelAlgOpsTypes.cpp.inc --gen-typedef-defs)
+set(LLVM_TARGET_DEFINITIONS RelAlgInterfaces.td)
+mlir_tablegen(RelAlgOpsInterfaces.h.inc -gen-op-interface-decls)
+mlir_tablegen(RelAlgOpsInterfaces.cpp.inc -gen-op-interface-defs)
+add_public_tablegen_target(MLIRRelAlgOpsIncGen)
+add_mlir_doc(RelAlgDialect -gen-dialect-doc RelAlgDialect RelAlg/)
+add_mlir_doc(RelAlgOps -gen-op-doc RelAlgOps RelAlg/)
+
