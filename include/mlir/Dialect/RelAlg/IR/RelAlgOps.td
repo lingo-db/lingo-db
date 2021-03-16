@@ -30,6 +30,12 @@ let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
 def DBType : Type<CPred<"$_self.isa<::mlir::db::DBType>()">,"DB dialect type">;
+def DB_BoolType : Type<CPred<"$_self.isa<::mlir::db::BoolType>()">,"DB bool type">{
+let builderCall = "::mlir::db::BoolType::get($_builder.getContext(),false)";
+}
+def DB_IntType : Type<CPred<"$_self.isa<::mlir::db::IntType>()">,"DB int type">{
+let builderCall = "::mlir::db::IntType::get($_builder.getContext(),false,64)";
+}
 
 def RelAlg_Relation :  TypeDef<RelAlg_Dialect, "Relation"> {
 let summary = "relation type";
@@ -53,7 +59,7 @@ let convertFromStorage = "$_self";
 }
 
 def RelAlg_ReturnOp : RelAlg_Op<"return", [NoSideEffect, ReturnLike, Terminator,
-   // ParentOneOf<[", ForOp", "ParallelOp","WhileOp"]>
+   ParentOneOf<["SelectionOp","AggregationOp","ForEachOp"]>
         ]> {
 let summary = "loop yield and termination operation";
 
@@ -100,4 +106,34 @@ let summary = "aggregation operation";
 let arguments = (ins RelAlg_Relation:$rel,RelationalAttributeRefAttr:$attr);
 let results = (outs DBType:$result);
 }
+def CountRowsOp : RelAlg_Op<"count"> {
+let summary = "count rows";
+let arguments = (ins RelAlg_Relation:$rel);
+let results = (outs DB_IntType:$res);
+let assemblyFormat =
+[{  $rel attr-dict }];
+}
+
+
+def ForEachOp : RelAlg_Op<"foreach",
+[RecursiveSideEffects]> {
+let arguments = (ins RelAlg_Relation: $rel,ArrayAttr:$attrs);
+let regions = (region SizedRegion<1>:$region);
+}
+
+def ExistsOp : RelAlg_Op<"exists"> {
+let summary = "exists operation";
+let arguments = (ins RelAlg_Relation:$rel);
+let results = (outs DB_BoolType:$result);
+let assemblyFormat =
+[{  $rel attr-dict }];
+}
+def MaterializeOp : RelAlg_Op<"materialize"> {
+let summary = "materialize operation";
+let arguments = (ins RelAlg_Relation:$rel);
+let results = (outs DB_BoolType:$result);
+let assemblyFormat =
+[{  $rel attr-dict }];
+}
+
 #endif// OPS

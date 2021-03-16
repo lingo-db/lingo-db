@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.13.4)
-project(mlir-goes-relational LANGUAGES CXX C)
+project(db-dialects LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
 

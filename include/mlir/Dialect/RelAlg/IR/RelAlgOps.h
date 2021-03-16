@@ -6,6 +6,8 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #include "mlir/Dialect/DB/IR/DBType.h"
+#include "mlir/Dialect/DB/IR/DBTypes.h"
+
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsEnums.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgTypes.h"

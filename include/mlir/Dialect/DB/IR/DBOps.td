@@ -35,9 +35,32 @@ def DBType : Type<CPred<"$_self.isa<::mlir::db::DBType>()">,"DB dialect type">;
 
 def DB_BoolType : DB_Type<"Bool","bool"> {
   let summary = "database boolean type";
+  let parameters = (ins "bool":$nullable);
+    let builders = [
+    TypeBuilder<(ins ), [{
+    return $_get($_ctxt, "false");
+    }]>
+    ];
 }
 def DB_IntType : DB_Type<"Int","int"> {
 let summary = "database integer type";
+let parameters = (ins "bool":$nullable,"unsigned":$width);
+}
+def DB_DateType : DB_Type<"Date","date"> {
+let summary = "database date type";
+let parameters = (ins "bool":$nullable);
+}
+def DB_TimeType : DB_Type<"Timestamp","timestamp"> {
+let summary = "database date type";
+let parameters = (ins "bool":$nullable);
+}
+def DB_DecimalType : DB_Type<"Decimal","decimal"> {
+let summary = "database date type";
+let parameters = (ins "bool":$nullable,"unsigned":$p,"unsigned":$s);
+}
+def DB_StringType : DB_Type<"String","string"> {
+let summary = "database date type";
+let parameters = (ins "bool":$nullable);
 }
 
 def DB_ConstantOp : DB_Op<"constant",
@@ -60,11 +83,11 @@ Op<DB_Dialect, mnemonic,
         SameOperandsAndResultType])>,Arguments<(ins DBType:$lhs, DBType:$rhs)> {
 let results = (outs AnyType:$result);
 let parser = [{
-return impl::parseOneResultSameOperandTypeOp(parser, result);
+return parseImplicitResultSameOperandBaseTypeOp(parser, result);
 }];
 
 let printer = [{
-return printStandardBinaryOp(this->getOperation(), p);
+return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
 }];
 }
 class DB_UnaryOp<string mnemonic, list<OpTrait> traits = []> :
@@ -73,11 +96,11 @@ Op<DB_Dialect, mnemonic,
         SameOperandsAndResultType])>,Arguments<(ins DBType:$val)> {
 let results = (outs AnyType:$result);
 let parser = [{
-return impl::parseOneResultSameOperandTypeOp(parser, result);
+return parseImplicitResultSameOperandBaseTypeOp(parser, result);
 }];
 
 let printer = [{
-return printStandardBinaryOp(this->getOperation(), p);
+return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
 }];
 }
 def DB_AddOp : DB_BinaryOp<"add"> {}
@@ -131,6 +154,25 @@ CmpIPredicate getPredicate() {
       getPredicateAttrName()).getInt();
 }
 }];
-let assemblyFormat = "$predicate `,` $lhs `:` type($lhs) `,` $rhs `:` type($rhs) attr-dict";
+let assemblyFormat = "$predicate  $lhs `:` type($lhs) `,` $rhs `:` type($rhs) attr-dict type($result)";
 }
+
+def PrintOp : DB_Op<"print"> {
+let summary = "print function";
+let arguments = (ins StrAttr:$format, Variadic<DBType>: $to_print);
+let assemblyFormat = "$format `,` $to_print `:` type($to_print) attr-dict";
+}
+
+
+def AndOp : DB_Op<"and", [NoSideEffect]> {
+let arguments = (ins Variadic<DB_BoolType>: $vals);
+let results = (outs  DB_BoolType : $res);
+let parser = [{
+return parseImplicitResultSameOperandBaseTypeOp(parser, result);
+}];
+let printer = [{
+return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
+}];
+}
+
 #endif// OPS

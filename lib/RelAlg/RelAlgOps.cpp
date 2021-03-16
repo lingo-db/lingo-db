@@ -1,6 +1,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/IR/OpImplementation.h"
+#include <iostream>
 #include <queue>
 #include <unordered_set>
 using namespace mlir;
@@ -23,16 +24,39 @@ static ParseResult parseCustomRegion(OpAsmParser& parser, OperationState& result
    Type pred_arg_type;
    SmallVector<OpAsmParser::OperandType, 4> regionArgs;
    SmallVector<Type, 4> argTypes;
-   if (parser.parseLParen() || parser.parseRegionArgument(pred_argument) || parser.parseColonType(pred_arg_type) || parser.parseRParen()) { return failure(); }
-   regionArgs.push_back(pred_argument);
-   argTypes.push_back(pred_arg_type);
+   if (parser.parseLParen()) {
+      return failure();
+   }
+   while (true) {
+      if (!parser.parseOptionalRParen()) {
+         break;
+      }
+      if (parser.parseRegionArgument(pred_argument) || parser.parseColonType(pred_arg_type)) {
+         return failure();
+      }
+      regionArgs.push_back(pred_argument);
+      argTypes.push_back(pred_arg_type);
+      if (!parser.parseOptionalComma()) { continue; }
+      if (parser.parseRParen()) { return failure(); }
+      break;
+   }
+
    Region* body = result.addRegion();
    if (parser.parseRegion(*body, regionArgs, argTypes)) return failure();
    return success();
 }
 static void printCustomRegion(OpAsmPrinter& p, Region& r) {
-   auto ba = r.front().getArguments().front();
-   p << "(" << ba << ":" << ba.getType() << ")";
+   p << "(";
+   bool first = true;
+   for (auto arg : r.front().getArguments()) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      p << arg << ": " << arg.getType();
+   }
+   p << ")";
    p.printRegion(r, false, true);
 }
 static ParseResult parseAttributeRefArr(OpAsmParser& parser, OperationState& result, Attribute& attr) {
@@ -120,7 +144,9 @@ static ParseResult parseBaseTableOp(OpAsmParser& parser, OperationState& result)
       if (parser.parseKeyword(&col_name)) { return failure(); }
       if (parser.parseEqual() || parser.parseGreater()) { return failure(); }
       mlir::relalg::RelationalAttributeDefAttr attr_def_attr;
-      parseAttributeDefAttr(parser, result, attr_def_attr);
+      if(parseAttributeDefAttr(parser, result, attr_def_attr)){
+         return failure();
+      }
       columns.push_back({Identifier::get(col_name, parser.getBuilder().getContext()), attr_def_attr});
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRBrace()) { return failure(); }
@@ -190,17 +216,15 @@ static void print(OpAsmPrinter& p, relalg::GetAttrOp& op) {
 static ParseResult parseAddAttrOp(OpAsmParser& parser, OperationState& result) {
    OpAsmParser::OperandType input;
    Type inputType;
-   mlir::relalg::RelationalAttributeDefAttr refAttr;
-   if (parseAttributeDefAttr(parser, result, refAttr)) {
+   mlir::relalg::RelationalAttributeDefAttr defAttr;
+   if (parseAttributeDefAttr(parser, result, defAttr)) {
       return failure();
    }
-   result.addAttribute("attr", refAttr);
+   result.addAttribute("attr", defAttr);
    if (parser.parseOperand(input)) {
       return failure();
    }
-   if (parser.parseColonType(inputType)) {
-      return failure();
-   }
+   inputType=defAttr.getRelationalAttribute().type;
    if (parser.resolveOperand(input, inputType, result.operands)) {
       return failure();
    }
@@ -210,7 +234,7 @@ static void print(OpAsmPrinter& p, relalg::AddAttrOp& op) {
    p << op.getOperationName();
    p << " ";
    printAttributeDefAttr(p, op.attr());
-   p << " " << op.val() <<" : "<< op.val().getType();
+   p << " " << op.val();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -273,6 +297,29 @@ static void print(OpAsmPrinter& p, relalg::SumAggrFuncOp& op) {
    p << " " << op.rel();
    p << " : ";
    p << op.getType();
+}
+
+///////////////////////////////////////////////////////////////////////////////////
+// ForEachOp
+///////////////////////////////////////////////////////////////////////////////////
+static void print(mlir::OpAsmPrinter& p, mlir::relalg::ForEachOp op) {
+   p << mlir::relalg::ForEachOp::getOperationName() << " " << op.rel() << " ";
+   printAttributeRefArr(p, op.attrs());
+   printCustomRegion(p,op.region());
+}
+static mlir::ParseResult parseForEachOp(mlir::OpAsmParser& parser, mlir::OperationState& result) {
+   if (parseRelationalInputs(parser, result, 1)) {
+      return failure();
+   }
+   Attribute attrs;
+   if (parseAttributeRefArr(parser, result, attrs)) {
+      return failure();
+   }
+   result.addAttribute("attrs", attrs);
+   if (parseCustomRegion(parser, result)) {
+      return failure();
+   }
+   return success();
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.cpp.inc"

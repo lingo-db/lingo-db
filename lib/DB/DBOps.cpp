@@ -37,35 +37,71 @@ static ParseResult parseConstantOp(OpAsmParser &parser,
   return parser.addTypeToList(type, result.types);
 }
 
-/// A custom binary operation printer that omits the "std." prefix from the
-/// operation names.
-static void printStandardBinaryOp(Operation *op, OpAsmPrinter &p) {
-  assert(op->getNumOperands() == 2 && "binary op should have two operands");
-  assert(op->getNumResults() == 1 && "binary op should have one result");
-
-  // If not all the operand and result types are the same, just use the
-  // generic assembly form to avoid omitting information in printing.
-  auto resultType = op->getResult(0).getType();
-  if (op->getOperand(0).getType() != resultType ||
-      op->getOperand(1).getType() != resultType) {
-    p.printGenericOp(op);
-    return;
-  }
-
-  p << op->getName() << ' '
-    << op->getOperand(0) << ", " << op->getOperand(1);
-  p.printOptionalAttrDict(op->getAttrs());
-
-  // Now we can output only one type for all operands and the result.
-  p << " : " << op->getResult(0).getType();
-}
-
 static void buildDBCmpOp(OpBuilder &build, OperationState &result,
                         CmpIPredicate predicate, Value lhs, Value rhs) {
   result.addOperands({lhs, rhs});
-  result.types.push_back(mlir::db::BoolType::get(build.getContext()));
+  result.types.push_back(mlir::db::BoolType::get(build.getContext(),false));//TODO
   result.addAttribute(CmpIOp::getPredicateAttrName(),
                       build.getI64IntegerAttr(static_cast<int64_t>(predicate)));
+}
+
+static mlir::db::DBType inferResultType(OpAsmParser &parser,ArrayRef<mlir::db::DBType> types){
+   assert(types.size());
+   bool anyNullables=llvm::any_of(types,[](mlir::db::DBType t){return t.isNullable();});
+   db::DBType baseType=types[0].getBaseType();
+   for(auto t:types){
+      if(t.getBaseType()!=baseType){
+         parser.emitError(parser.getCurrentLocation(),"types do not have same base type");
+         return mlir::db::DBType();
+      }
+   }
+   if(anyNullables){
+      return baseType.asNullable();
+   }
+   return baseType;
+
+}
+static ParseResult parseImplicitResultSameOperandBaseTypeOp(OpAsmParser &parser,
+                                                  OperationState &result) {
+   SmallVector<OpAsmParser::OperandType, 4> args;
+   SmallVector<mlir::db::DBType, 4> argTypes;
+
+   while (true) {
+      OpAsmParser::OperandType arg;
+      mlir::db::DBType argType;
+      auto parse_res=parser.parseOptionalOperand(arg);
+      if (!parse_res.hasValue()||parse_res.getValue().failed()) {
+         break;
+      }
+      if (parser.parseColonType(argType)) {
+         return failure();
+      }
+      args.push_back(arg);
+      argTypes.push_back(argType);
+      if (!parser.parseOptionalComma()) { continue; }
+      break;
+   }
+   if(parser.resolveOperands(args,argTypes,parser.getCurrentLocation(),result.operands).failed()){
+      return failure();
+   }
+   Type t=inferResultType(parser,argTypes);
+   parser.addTypeToList(t,result.types);
+   return success();
+}
+
+static void printImplicitResultSameOperandBaseTypeOp(Operation *op, OpAsmPrinter &p){
+   bool first=true;
+   p<<op->getName()<<" ";
+   for(auto operand:op->getOperands()){
+
+      if(first){
+         first=false;
+      }else{
+         p<<",";
+      }
+      p<<operand<<":"<<operand.getType();
+   }
+
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.cpp.inc"
