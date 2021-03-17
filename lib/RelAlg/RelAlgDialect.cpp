@@ -50,7 +50,7 @@ RelAlgDialect::parseAttribute(::mlir::DialectAsmParser& parser,
          return mlir::Attribute();
       return mlir::relalg::RelationalAttributeDefAttr::get(
          parser.getBuilder().getContext(), name,
-         std::make_shared<RelationalAttribute>("", mlir::db::BoolType::get(parser.getBuilder().getContext(), false)));
+         std::make_shared<RelationalAttribute>(mlir::db::BoolType::get(parser.getBuilder().getContext(), false)));
    }
    return mlir::Attribute();
 }

@@ -6,9 +6,8 @@ namespace mlir::relalg {
 class RelationalAttribute {
 
 public:
-  RelationalAttribute(StringRef name, mlir::db::DBType type)
-      : name(name), type(type) {}
-  std::string name;
+  RelationalAttribute(mlir::db::DBType type)
+      : type(type) {}
   mlir::db::DBType type;
 };
 } // namespace mlir::relalg

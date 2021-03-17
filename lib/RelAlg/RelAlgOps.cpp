@@ -111,9 +111,8 @@ static ParseResult parseAttributeDefAttr(OpAsmParser& parser, OperationState& re
    if (parser.parseLParen()) { return failure(); }
    DictionaryAttr dictAttr;
    if (parser.parseAttribute(dictAttr)) { return failure(); }
-   auto prop_name = dictAttr.get("name").dyn_cast<StringAttr>().getValue();
    auto prop_type = dictAttr.get("type").dyn_cast<TypeAttr>().getValue().dyn_cast<mlir::db::DBType>();
-   auto relationalAttribute = std::make_shared<mlir::relalg::RelationalAttribute>(prop_name, prop_type);
+   auto relationalAttribute = std::make_shared<mlir::relalg::RelationalAttribute>(prop_type);
    attr = mlir::relalg::RelationalAttributeDefAttr::get(parser.getBuilder().getContext(), attr_name, relationalAttribute);
    if (parser.parseRParen()) { return failure(); }
    return success();
@@ -123,7 +122,6 @@ static void printAttributeDefAttr(OpAsmPrinter& p, mlir::relalg::RelationalAttri
    std::vector<mlir::NamedAttribute> rel_attr_def_props;
    MLIRContext* context = attr.getContext();
    const mlir::relalg::RelationalAttribute& relationalAttribute = attr.getRelationalAttribute();
-   rel_attr_def_props.push_back({mlir::Identifier::get("name", context), mlir::StringAttr::get(context, relationalAttribute.name)});
    rel_attr_def_props.push_back({mlir::Identifier::get("type", context), mlir::TypeAttr::get(relationalAttribute.type)});
    p << "(" << mlir::DictionaryAttr::get(context, rel_attr_def_props) << ")";
 }

@@ -154,7 +154,6 @@ CmpIPredicate getPredicate() {
       getPredicateAttrName()).getInt();
 }
 }];
-let assemblyFormat = "$predicate  $lhs `:` type($lhs) `,` $rhs `:` type($rhs) attr-dict type($result)";
 }
 
 def PrintOp : DB_Op<"print"> {

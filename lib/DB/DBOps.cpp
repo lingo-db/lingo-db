@@ -103,6 +103,92 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation *op, OpAsmPrinter
    }
 
 }
+
+
+//////////////////////////////////////////////////////////////////////////////////////////
+// CmpOp
+//////////////////////////////////////////////////////////////////////////////////////////
+
+::mlir::ParseResult parseCmpOp(::mlir::OpAsmParser &parser, ::mlir::OperationState &result) {
+   ::mlir::IntegerAttr predicateAttr;
+   ::mlir::OpAsmParser::OperandType leftOperand;::llvm::SMLoc lhsOperandsLoc;
+   (void)lhsOperandsLoc;
+   ::mlir::db::DBType leftType,rightType;
+   ::mlir::OpAsmParser::OperandType rightOperand;
+   ::llvm::SMLoc rhsOperandsLoc;
+   (void)rhsOperandsLoc;
+
+   {
+      ::llvm::StringRef attrStr;
+      ::mlir::NamedAttrList attrStorage;
+      auto loc = parser.getCurrentLocation();
+      if (parser.parseOptionalKeyword(&attrStr, {"eq","ne","slt","sle","sgt","sge","ult","ule","ugt","uge"})) {
+         ::mlir::StringAttr attrVal;
+         ::mlir::OptionalParseResult parseResult =
+            parser.parseOptionalAttribute(attrVal,
+                                          parser.getBuilder().getNoneType(),
+                                          "predicate", attrStorage);
+         if (parseResult.hasValue()) {
+            if (failed(*parseResult))
+               return ::mlir::failure();
+            attrStr = attrVal.getValue();
+         } else {
+            return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'predicate' [eq, ne, slt, sle, sgt, sge, ult, ule, ugt, uge]");
+         }
+      }
+      if (!attrStr.empty()) {
+         auto attrOptional = ::mlir::db::symbolizeDBCmpPredicate(attrStr);
+         if (!attrOptional)
+            return parser.emitError(loc, "invalid ")
+               << "predicate attribute specification: \"" << attrStr << '"';;
+
+         predicateAttr = parser.getBuilder().getI64IntegerAttr(static_cast<int64_t>(attrOptional.getValue()));
+         result.addAttribute("predicate", predicateAttr);
+      }
+   }
+
+   lhsOperandsLoc = parser.getCurrentLocation();
+   if (parser.parseOperand(leftOperand))
+      return ::mlir::failure();
+   if (parser.parseColon())
+      return ::mlir::failure();
+
+   if (parser.parseType(leftType))
+      return ::mlir::failure();
+   if (parser.parseComma())
+      return ::mlir::failure();
+
+   rhsOperandsLoc = parser.getCurrentLocation();
+   if (parser.parseOperand(rightOperand))
+      return ::mlir::failure();
+   if (parser.parseColon())
+      return ::mlir::failure();
+
+   if (parser.parseType(rightType))
+      return ::mlir::failure();
+   if (parser.parseOptionalAttrDict(result.attributes))
+      return ::mlir::failure();
+   if (parser.resolveOperand(leftOperand, leftType, result.operands))
+      return ::mlir::failure();
+   if (parser.resolveOperand(rightOperand, rightType, result.operands))
+      return ::mlir::failure();
+   bool nullable=rightType.isNullable()||leftType.isNullable();
+   parser.addTypeToList(db::BoolType::get(parser.getBuilder().getContext(),nullable),result.types);
+   return ::mlir::success();
+}
+
+static void print(::mlir::OpAsmPrinter &p,mlir::db::CmpOp& op) {
+   p << "db.compare";
+   p << ' ';
+   {
+      auto caseValue = op.predicate();
+      auto caseValueStr = stringifyDBCmpPredicate(caseValue);
+      p << caseValueStr;
+   }
+   p << ' '<< op.lhs()<< " : "<<op.lhs().getType() << ", " << op.rhs()<<' ' << ": " << op.rhs().getType();
+   p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"predicate"});
+}
+
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.cpp.inc"
 #include "mlir/Dialect/DB/IR/DBOpsInterfaces.cpp.inc"
