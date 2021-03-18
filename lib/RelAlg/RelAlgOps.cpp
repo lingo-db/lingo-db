@@ -319,6 +319,28 @@ static mlir::ParseResult parseForEachOp(mlir::OpAsmParser& parser, mlir::Operati
    }
    return success();
 }
+
+
+///////////////////////////////////////////////////////////////////////////////////
+// MaterializeOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseMaterializeOp(OpAsmParser& parser, OperationState& result) {
+   parseRelationalInputs(parser, result, 1);
+   Attribute attrs;
+   parseAttributeRefArr(parser, result, attrs);
+   result.addAttribute("attrs", attrs);
+   mlir::db::CollectionType collectionType;
+   if(parser.parseColonType(collectionType)){
+          return failure();
+   }
+   return parser.addTypeToList(collectionType,result.types);
+}
+static void print(OpAsmPrinter& p, relalg::MaterializeOp& op) {
+   p << op.getOperationName()  << " " << op.rel() << " ";
+   printAttributeRefArr(p, op.attrs());
+   p <<" : "<<op.getType();
+}
+
 #define GET_OP_CLASSES
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.cpp.inc"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"

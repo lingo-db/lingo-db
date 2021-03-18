@@ -33,6 +33,7 @@ def DBType : Type<CPred<"$_self.isa<::mlir::db::DBType>()">,"DB dialect type">;
 def DB_BoolType : Type<CPred<"$_self.isa<::mlir::db::BoolType>()">,"DB bool type">{
 let builderCall = "::mlir::db::BoolType::get($_builder.getContext(),false)";
 }
+def DB_CollectionType : Type<CPred<"$_self.isa<::mlir::db::CollectionType>()">,"DB collection type">;
 def DB_IntType : Type<CPred<"$_self.isa<::mlir::db::IntType>()">,"DB int type">{
 let builderCall = "::mlir::db::IntType::get($_builder.getContext(),false,64)";
 }
@@ -130,10 +131,8 @@ let assemblyFormat =
 }
 def MaterializeOp : RelAlg_Op<"materialize"> {
 let summary = "materialize operation";
-let arguments = (ins RelAlg_Relation:$rel);
-let results = (outs DB_BoolType:$result);
-let assemblyFormat =
-[{  $rel attr-dict }];
+let arguments = (ins RelAlg_Relation:$rel,ArrayAttr:$attrs);
+let results = (outs DB_CollectionType:$result);
 }
 
 #endif// OPS

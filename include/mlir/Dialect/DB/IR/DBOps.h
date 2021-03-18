@@ -8,6 +8,7 @@
 
 #include "mlir/Dialect/DB/IR/DBOpsEnums.h"
 #include "mlir/Dialect/DB/IR/DBTypes.h"
+#include "mlir/Dialect/DB/IR/DBCollectionType.h"
 
 #include "mlir/Dialect/DB/IR/DBOpsInterfaces.h"
 

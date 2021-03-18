@@ -1,5 +1,5 @@
 module @tpchq4  {
-  func @query() {
+  func @query() -> !db.matcollection<!db.string<nullable>,!db.int<64>> {
     %0 = relalg.basetable @orders  {table_identifier = "orders"} columns: {o_orderdate => @o_orderdate({type = !db.date<nullable>}), o_orderkey => @o_orderkey({type = !db.int<64,nullable>}), o_orderpriority => @o_orderpriority({type = !db.string<nullable>})}
     %1 = relalg.basetable @lineitem  {table_identifier = "lineitem"} columns: {l_commitdate => @l_commitdate({type = !db.date<nullable>}), l_orderkey => @l_orderkey({type = !db.int<64>}), l_receiptdate => @l_receiptdate({type = !db.date<nullable>})}
     %2 = relalg.selection %0 (%arg0: !relalg.tuple) {
@@ -27,6 +27,7 @@ module @tpchq4  {
       relalg.addattr @order_count({type = !db.int<64>}) %4
       relalg.return
     }
-    return
+    %4 = relalg.materialize %3 [@orders::@o_orderpriority, @agg1::@order_count] : !db.matcollection<!db.string<nullable>,!db.int<64>>
+    return %4 : !db.matcollection<!db.string<nullable>,!db.int<64>>
   }
 }

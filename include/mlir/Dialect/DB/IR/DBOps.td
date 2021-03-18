@@ -32,7 +32,14 @@ class DB_Type<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,"::ml
 }
 def DBType : Type<CPred<"$_self.isa<::mlir::db::DBType>()">,"DB dialect type">;
 
-
+class DB_Collection<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,"::mlir::db::CollectionType"> {
+    let mnemonic = typeMnemonic;
+    let parameters = (ins "TypeRange":$types);
+    let genStorageClass = 0;
+}
+def DB_MaterializedCollection : DB_Collection<"MaterializedCollection","matcollection"> {
+let summary = "materialized collection";
+}
 def DB_BoolType : DB_Type<"Bool","bool"> {
   let summary = "database boolean type";
   let parameters = (ins "bool":$nullable);

@@ -27,47 +27,47 @@ bool mlir::db::DBType::isNullable() {
       })
       .Default([](::mlir::Type) { return false; });
 }
-mlir::db::DBType mlir::db::DBType::getBaseType() const{
+mlir::db::DBType mlir::db::DBType::getBaseType() const {
    return ::llvm::TypeSwitch<::mlir::db::DBType, mlir::db::DBType>(*this)
       .Case<::mlir::db::BoolType>([&](::mlir::db::BoolType t) {
-        return mlir::db::BoolType::get(t.getContext(),false);
+         return mlir::db::BoolType::get(t.getContext(), false);
       })
       .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) {
-        return mlir::db::DateType::get(t.getContext(),false);
+         return mlir::db::DateType::get(t.getContext(), false);
       })
       .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
-        return mlir::db::DecimalType::get(t.getContext(),false,t.getP(),t.getS());
+         return mlir::db::DecimalType::get(t.getContext(), false, t.getP(), t.getS());
       })
       .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
-        return mlir::db::IntType::get(t.getContext(),false,t.getWidth());
+         return mlir::db::IntType::get(t.getContext(), false, t.getWidth());
       })
       .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
-        return mlir::db::StringType::get(t.getContext(),false);
+         return mlir::db::StringType::get(t.getContext(), false);
       })
       .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
-        return mlir::db::TimestampType::get(t.getContext(),false);
+         return mlir::db::TimestampType::get(t.getContext(), false);
       })
       .Default([](::mlir::Type) { return mlir::db::DBType(); });
 }
-mlir::db::DBType mlir::db::DBType::asNullable() const{
+mlir::db::DBType mlir::db::DBType::asNullable() const {
    return ::llvm::TypeSwitch<::mlir::db::DBType, mlir::db::DBType>(*this)
       .Case<::mlir::db::BoolType>([&](::mlir::db::BoolType t) {
-        return mlir::db::BoolType::get(t.getContext(),true);
+         return mlir::db::BoolType::get(t.getContext(), true);
       })
       .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) {
-        return mlir::db::DateType::get(t.getContext(),true);
+         return mlir::db::DateType::get(t.getContext(), true);
       })
       .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
-        return mlir::db::DecimalType::get(t.getContext(),true,t.getP(),t.getS());
+         return mlir::db::DecimalType::get(t.getContext(), true, t.getP(), t.getS());
       })
       .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
-        return mlir::db::IntType::get(t.getContext(),true,t.getWidth());
+         return mlir::db::IntType::get(t.getContext(), true, t.getWidth());
       })
       .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
-        return mlir::db::StringType::get(t.getContext(),true);
+         return mlir::db::StringType::get(t.getContext(), true);
       })
       .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
-        return mlir::db::TimestampType::get(t.getContext(),true);
+         return mlir::db::TimestampType::get(t.getContext(), true);
       })
       .Default([](::mlir::Type) { return mlir::db::DBType(); });
 }
@@ -118,7 +118,7 @@ mlir::Type parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser)
       }
       std::tuple<ParamT...> a = {parseSingle<ParamT>(first, error, parser)...};
       if (parser.parseOptionalGreater().failed()) {
-         if(!first&&parser.parseOptionalComma().failed()){
+         if (!first && parser.parseOptionalComma().failed()) {
             return mlir::Type();
          }
          if (!parser.parseOptionalKeyword("nullable")) {
@@ -154,8 +154,8 @@ void print(::mlir::DialectAsmPrinter& printer, bool nullable, ParamT... params) 
    printer << "<";
    (void) expander{0, ((void) printSingle<ParamT>(first, printer, params), 0)...};
    if (nullable) {
-      if(!first){
-         printer<<",";
+      if (!first) {
+         printer << ",";
       }
       first = false;
       printer << "nullable";
@@ -197,6 +197,78 @@ void mlir::db::DecimalType::print(::mlir::DialectAsmPrinter& printer) const {
 }
 void mlir::db::StringType::print(::mlir::DialectAsmPrinter& printer) const {
    ::print<mlir::db::StringType>(printer, getNullable());
+}
+
+::mlir::Type mlir::db::MaterializedCollectionType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
+   if (parser.parseLess()) {
+      return mlir::Type();
+   }
+   SmallVector<Type> types;
+   while (true) {
+      if (!parser.parseOptionalGreater()) {
+         break;
+      }
+      DBType type;
+      if (parser.parseType(type)) {
+         return Type();
+      }
+      types.push_back(type);
+      if (!parser.parseOptionalComma()) { continue; }
+      if (parser.parseGreater()) { return Type(); }
+      break;
+   }
+   return mlir::db::MaterializedCollectionType::get(parser.getBuilder().getContext(), TypeRange(ArrayRef<Type>(types)));
+}
+void mlir::db::MaterializedCollectionType::print(mlir::DialectAsmPrinter& p) const {
+   p << getMnemonic() << "<";
+   bool first = true;
+   for (auto t : getTypes()) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      p << t;
+   }
+   p << ">";
+}
+
+namespace mlir {
+namespace db {
+namespace detail {
+struct MaterializedCollectionTypeStorage : public mlir::TypeStorage{
+   MaterializedCollectionTypeStorage(std::vector<mlir::Type> types)
+      :types(types) {}
+
+   /// The hash key used for uniquing.
+   using KeyTy = mlir::TypeRange;
+   bool operator==(const KeyTy &key) const {
+      return key == mlir::TypeRange(types);
+   }
+   static ::llvm::hash_code hashKey(const KeyTy &key) {
+      return ::llvm::hash_combine(key);
+   }
+   /// Construction.
+   static MaterializedCollectionTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
+                                                       const KeyTy &key) {
+      std::vector<mlir::Type> v;
+      v.insert(v.begin(),key.begin(),key.end());
+      return new (allocator.allocate<MaterializedCollectionTypeStorage>())
+         MaterializedCollectionTypeStorage(v);
+   }
+
+   llvm::ArrayRef<mlir::Type> getTypes() const {
+      return llvm::ArrayRef<mlir::Type>(types);
+   }
+
+   std::vector<mlir::Type> types;
+};
+} // namespace detail
+}
+}
+
+mlir::TypeRange mlir::db::MaterializedCollectionType::getTypes() const {
+   return getImpl()->getTypes();
 }
 
 #define GET_TYPEDEF_CLASSES
