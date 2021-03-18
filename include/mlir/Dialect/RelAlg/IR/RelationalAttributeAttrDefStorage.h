@@ -7,24 +7,26 @@
 namespace mlir::relalg {
 struct RelationalAttributeAttrDefStorage : public AttributeStorage {
   RelationalAttributeAttrDefStorage(
-      StringRef name, std::shared_ptr<RelationalAttribute> relationalAttribute)
-      : name(name), relationalAttribute(relationalAttribute) {}
+      StringRef name, std::shared_ptr<RelationalAttribute> relationalAttribute,Attribute fromExisting)
+      : name(name), relationalAttribute(relationalAttribute),fromExisting(fromExisting) {}
 
-  using KeyTy = std::pair<std::string, std::shared_ptr<RelationalAttribute>>;
+  using KeyTy = std::tuple<std::string, std::shared_ptr<RelationalAttribute>,Attribute>;
 
   bool operator==(const KeyTy &key) const {
-    return key.first == name && key.second == relationalAttribute;
+    return std::get<0>(key) == name &&  std::get<1>(key) == relationalAttribute &&  std::get<2>(key)==fromExisting;
   }
   static llvm::hash_code hashKey(const KeyTy &key) {
-    return llvm::hash_combine(key.first, key.second.get());
+    return llvm::hash_combine(std::get<0>(key),std::get<1>(key).get(),std::get<2>(key));
   }
   static RelationalAttributeAttrDefStorage *
   construct(AttributeStorageAllocator &allocator, const KeyTy &key) {
     return new (allocator.allocate<RelationalAttributeAttrDefStorage>())
-        RelationalAttributeAttrDefStorage(key.first, key.second);
+        RelationalAttributeAttrDefStorage(std::get<0>(key),std::get<1>(key),std::get<2>(key));
   }
   std::string name;
   std::shared_ptr<RelationalAttribute> relationalAttribute;
+   Attribute fromExisting;
+
 };
 } // namespace mlir::relalg
 #endif // MLIR_GOES_RELATIONAL_RELATIONALATTRIBUTEATTRDEFSTORAGE_H

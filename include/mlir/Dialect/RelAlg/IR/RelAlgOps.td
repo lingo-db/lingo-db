@@ -60,7 +60,7 @@ let convertFromStorage = "$_self";
 }
 
 def RelAlg_ReturnOp : RelAlg_Op<"return", [NoSideEffect, ReturnLike, Terminator,
-   ParentOneOf<["SelectionOp","AggregationOp","ForEachOp"]>
+   ParentOneOf<["SelectionOp","AggregationOp","ForEachOp","MapOp","JoinOp","OuterJoinOp","DependentJoinOp"]>
         ]> {
 let summary = "loop yield and termination operation";
 
@@ -95,6 +95,27 @@ let arguments = (ins RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
+def MapOp : RelAlg_Op<"map",[NoSideEffect]> {
+let summary = "map operation";
+let arguments = (ins RelAlg_Relation:$rel);
+let results = (outs RelAlg_Relation:$result);
+let regions = (region SizedRegion<1>:$predicate);
+}
+def LimitOp : RelAlg_Op<"limit",[NoSideEffect]> {
+let summary = "limit operation";
+let arguments = (ins I32Attr:$rows, RelAlg_Relation:$rel);
+let results = (outs RelAlg_Relation:$result);
+let assemblyFormat =
+[{ $rows $rel attr-dict }];
+}
+def CrossProductOp : RelAlg_Op<"crossproduct",[NoSideEffect]> {
+let summary = "crossproduct operation";
+let arguments = (ins RelAlg_Relation:$left,RelAlg_Relation:$right);
+let results = (outs RelAlg_Relation:$result);
+let assemblyFormat =
+[{ $left `,` $right attr-dict }];
+}
+
 def AggregationOp : RelAlg_Op<"aggregation",[NoSideEffect]> {
 let summary = "aggregation operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel, ArrayAttr:$group_by_attrs);
@@ -135,4 +156,81 @@ let arguments = (ins RelAlg_Relation:$rel,ArrayAttr:$attrs);
 let results = (outs DB_CollectionType:$result);
 }
 
+
+
+//joins
+
+
+def RelAlg_JoinType_Inner  : I64EnumAttrCase<"inner", 0>;
+def RelAlg_JoinType_Semi  : I64EnumAttrCase<"semi", 1>;
+def RelAlg_JoinType_AntiSemi  : I64EnumAttrCase<"antisemi", 2>;
+def RelAlg_JoinType_LeftOuter  : I64EnumAttrCase<"leftouter", 3>;
+def RelAlg_JoinType_RightOuter  : I64EnumAttrCase<"rightouter", 4>;
+def RelAlg_JoinType_FullOuter  : I64EnumAttrCase<"fullouter", 5>;
+
+
+def RelAlg_NormalJoinType : I64EnumAttr<
+        "NormalJoinType", "",
+        [RelAlg_JoinType_Inner,RelAlg_JoinType_Semi,RelAlg_JoinType_AntiSemi]> {
+let cppNamespace = "::mlir::relalg";
+}
+def RelAlg_OuterJoinType : I64EnumAttr<
+        "OuterJoinType", "",
+        [RelAlg_JoinType_LeftOuter,RelAlg_JoinType_RightOuter,RelAlg_JoinType_FullOuter]> {
+let cppNamespace = "::mlir::relalg";
+}
+
+def JoinOp : RelAlg_Op<"join",[NoSideEffect]> {
+let summary = "normal join operation";
+let arguments = (ins RelAlg_NormalJoinType:$type,RelAlg_Relation:$left,RelAlg_Relation:$right);
+let results = (outs RelAlg_Relation:$result);
+let regions = (region SizedRegion<1>:$predicate);
+}
+def DependentJoinOp : RelAlg_Op<"dependentjoin",[NoSideEffect]> {
+let summary = "dependent join operation";
+let arguments = (ins RelAlg_NormalJoinType:$type,ArrayAttr:$attrs,RelAlg_Relation:$left,RelAlg_Relation:$right);
+let results = (outs RelAlg_Relation:$result);
+let regions = (region SizedRegion<1>:$predicate);
+}
+def OuterJoinOp : RelAlg_Op<"outerjoin",[NoSideEffect]> {
+let summary = "outer join operation";
+let arguments = (ins RelAlg_OuterJoinType:$type,RelAlg_Relation:$left,RelAlg_Relation:$right);
+let results = (outs RelAlg_Relation:$result);
+let regions = (region SizedRegion<1>:$predicate);
+}
+
+
+
+def RelAlg_SetSemantic_Distinct  : I64EnumAttrCase<"distinct", 0>;
+def RelAlg_SetSemantic_All : I64EnumAttrCase<"all", 1>;
+
+
+def RelAlg_SetSemantic : I64EnumAttr<
+        "SetSemantic", "",
+        [RelAlg_SetSemantic_Distinct,RelAlg_SetSemantic_All]> {
+let cppNamespace = "::mlir::relalg";
+}
+
+
+def DistinctOp : RelAlg_Op<"distinct",[NoSideEffect]> {
+let summary = "distinct operation";
+let arguments = (ins RelAlg_Relation:$rel, ArrayAttr:$attrs);
+let results = (outs RelAlg_Relation:$result);
+}
+
+def UnionOp :  RelAlg_Op<"union",[NoSideEffect]> {
+let summary = "union operation";
+let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
+let results = (outs RelAlg_Relation:$result);
+}
+def IntersectOp :  RelAlg_Op<"intersect",[NoSideEffect]> {
+let summary = "intersect operation";
+let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
+let results = (outs RelAlg_Relation:$result);
+}
+def ExceptOp :  RelAlg_Op<"except",[NoSideEffect]> {
+let summary = "except operation";
+let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
+let results = (outs RelAlg_Relation:$result);
+}
 #endif// OPS

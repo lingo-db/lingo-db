@@ -19,14 +19,17 @@ public:
   using Base::Base;
   static RelationalAttributeDefAttr
   get(MLIRContext *context,StringRef attributeName,
-      std::shared_ptr<RelationalAttribute> relationalAttribute) {
-    return Base::get(context, attributeName,relationalAttribute);
+      std::shared_ptr<RelationalAttribute> relationalAttribute,Attribute fromExisting) {
+    return Base::get(context, attributeName,relationalAttribute,fromExisting);
   }
   const StringRef getName() {
     return getImpl()->name;
   }
   const RelationalAttribute &getRelationalAttribute() {
     return *getImpl()->relationalAttribute;
+  }
+  const Attribute getFromExisting(){
+     return getImpl()->fromExisting;
   }
 };
 } // namespace relalg

@@ -9,6 +9,107 @@ using namespace mlir;
 ///////////////////////////////////////////////////////////////////////////////////
 // Utility Functions
 ///////////////////////////////////////////////////////////////////////////////////
+
+::mlir::ParseResult parseOuterJoinType(::mlir::OpAsmParser &parser, ::mlir::OperationState &result) {
+   ::mlir::IntegerAttr typeAttr;
+
+
+   ::llvm::StringRef attrStr;
+   ::mlir::NamedAttrList attrStorage;
+   auto loc = parser.getCurrentLocation();
+   if (parser.parseOptionalKeyword(&attrStr, {"leftouter","rightouter","fullouter"})) {
+      ::mlir::StringAttr attrVal;
+      ::mlir::OptionalParseResult parseResult =
+         parser.parseOptionalAttribute(attrVal,
+                                       parser.getBuilder().getNoneType(),
+                                       "type", attrStorage);
+      if (parseResult.hasValue()) {
+         if (failed(*parseResult))
+            return ::mlir::failure();
+         attrStr = attrVal.getValue();
+      } else {
+         return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'type' [leftouter, rightouter, fullouter]");
+      }
+   }
+   if (!attrStr.empty()) {
+      auto attrOptional = ::mlir::relalg::symbolizeOuterJoinType(attrStr);
+      if (!attrOptional)
+         return parser.emitError(loc, "invalid ")
+            << "type attribute specification: \"" << attrStr << '"';;
+
+      typeAttr = parser.getBuilder().getI64IntegerAttr(static_cast<int64_t>(attrOptional.getValue()));
+      result.addAttribute("type", typeAttr);
+   }
+   return success();
+}
+::mlir::ParseResult parseSetSemantic(::mlir::OpAsmParser &parser, ::mlir::OperationState &result) {
+   ::mlir::IntegerAttr typeAttr;
+
+
+   ::llvm::StringRef attrStr;
+   ::mlir::NamedAttrList attrStorage;
+   auto loc = parser.getCurrentLocation();
+   if (parser.parseOptionalKeyword(&attrStr, {"distinct","all"})) {
+      ::mlir::StringAttr attrVal;
+      ::mlir::OptionalParseResult parseResult =
+         parser.parseOptionalAttribute(attrVal,
+                                       parser.getBuilder().getNoneType(),
+                                       "set_semantic", attrStorage);
+      if (parseResult.hasValue()) {
+         if (failed(*parseResult))
+            return ::mlir::failure();
+         attrStr = attrVal.getValue();
+      } else {
+         return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'type' [distinct, all]");
+      }
+   }
+   if (!attrStr.empty()) {
+      auto attrOptional = ::mlir::relalg::symbolizeSetSemantic(attrStr);
+      if (!attrOptional)
+         return parser.emitError(loc, "invalid ")
+            << "type attribute specification: \"" << attrStr << '"';;
+
+      typeAttr = parser.getBuilder().getI64IntegerAttr(static_cast<int64_t>(attrOptional.getValue()));
+      result.addAttribute("set_semantic", typeAttr);
+   }
+   return success();
+}
+void printSetSemantic(OpAsmPrinter& p,mlir::relalg::SetSemantic semantic){
+   std::string sem(mlir::relalg::stringifySetSemantic(semantic));
+   p<<sem;
+}
+::mlir::ParseResult parseJoinType(::mlir::OpAsmParser &parser, ::mlir::OperationState &result) {
+   ::mlir::IntegerAttr typeAttr;
+
+
+   ::llvm::StringRef attrStr;
+   ::mlir::NamedAttrList attrStorage;
+   auto loc = parser.getCurrentLocation();
+   if (parser.parseOptionalKeyword(&attrStr, {"inner","semi","antisemi"})) {
+      ::mlir::StringAttr attrVal;
+      ::mlir::OptionalParseResult parseResult =
+         parser.parseOptionalAttribute(attrVal,
+                                       parser.getBuilder().getNoneType(),
+                                       "type", attrStorage);
+      if (parseResult.hasValue()) {
+         if (failed(*parseResult))
+            return ::mlir::failure();
+         attrStr = attrVal.getValue();
+      } else {
+         return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'type' [inner, semi, antisemi]");
+      }
+   }
+   if (!attrStr.empty()) {
+      auto attrOptional = ::mlir::relalg::symbolizeNormalJoinType(attrStr);
+      if (!attrOptional)
+         return parser.emitError(loc, "invalid ")
+            << "type attribute specification: \"" << attrStr << '"';;
+
+      typeAttr = parser.getBuilder().getI64IntegerAttr(static_cast<int64_t>(attrOptional.getValue()));
+      result.addAttribute("type", typeAttr);
+   }
+   return success();
+}
 static void createAttributeRefAttr(MLIRContext* context, const SymbolRefAttr& parsedSymbolRefAttr, relalg::RelationalAttributeRefAttr& attr) {
    attr = relalg::RelationalAttributeRefAttr::get(context, parsedSymbolRefAttr,
                                                   std::shared_ptr<relalg::RelationalAttribute>());
@@ -113,8 +214,14 @@ static ParseResult parseAttributeDefAttr(OpAsmParser& parser, OperationState& re
    if (parser.parseAttribute(dictAttr)) { return failure(); }
    auto prop_type = dictAttr.get("type").dyn_cast<TypeAttr>().getValue().dyn_cast<mlir::db::DBType>();
    auto relationalAttribute = std::make_shared<mlir::relalg::RelationalAttribute>(prop_type);
-   attr = mlir::relalg::RelationalAttributeDefAttr::get(parser.getBuilder().getContext(), attr_name, relationalAttribute);
+   Attribute from_existing;
    if (parser.parseRParen()) { return failure(); }
+   if(parser.parseOptionalEqual().succeeded()){
+      if(parseAttributeRefArr(parser, result, from_existing)){
+         return failure();
+      }
+   }
+   attr = mlir::relalg::RelationalAttributeDefAttr::get(parser.getBuilder().getContext(), attr_name, relationalAttribute,from_existing);
    return success();
 }
 static void printAttributeDefAttr(OpAsmPrinter& p, mlir::relalg::RelationalAttributeDefAttr attr) {
@@ -124,7 +231,48 @@ static void printAttributeDefAttr(OpAsmPrinter& p, mlir::relalg::RelationalAttri
    const mlir::relalg::RelationalAttribute& relationalAttribute = attr.getRelationalAttribute();
    rel_attr_def_props.push_back({mlir::Identifier::get("type", context), mlir::TypeAttr::get(relationalAttribute.type)});
    p << "(" << mlir::DictionaryAttr::get(context, rel_attr_def_props) << ")";
+   Attribute from_existing=attr.getFromExisting();
+   if(from_existing){
+      ArrayAttr from_existing_arr=from_existing.dyn_cast_or_null<ArrayAttr>();
+      p <<"=";
+      printAttributeRefArr(p,from_existing_arr);
+   }
 }
+
+static ParseResult parseAttrMapping(OpAsmParser& parser, OperationState& result) {
+   if (parser.parseKeyword("mapping") || parser.parseColon() || parser.parseLBrace()) return failure();
+   std::vector<mlir::Attribute> mapping;
+   while (true) {
+      if (!parser.parseOptionalRBrace()) { break; }
+      mlir::relalg::RelationalAttributeDefAttr attr_def_attr;
+      if(parseAttributeDefAttr(parser, result, attr_def_attr)){
+         return failure();
+      }
+      mapping.push_back(attr_def_attr);
+      if (!parser.parseOptionalComma()) { continue; }
+      if (parser.parseRBrace()) { return failure(); }
+      break;
+   }
+   result.addAttribute("mapping", mlir::ArrayAttr::get(parser.getBuilder().getContext(), mapping));
+   return success();
+}
+static void printMapping(OpAsmPrinter& p, Attribute mapping) {
+   p << " mapping: {";
+   auto first = true;
+   for (auto attr : mapping.dyn_cast_or_null<ArrayAttr>()) {
+      auto relation_def_attr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+      if (first) {
+         first = false;
+      } else {
+         p << ", ";
+      }
+      printAttributeDefAttr(p, relation_def_attr);
+   }
+   p << "}";
+}
+
+
+
 ///////////////////////////////////////////////////////////////////////////////////
 // BaseTableOp
 ///////////////////////////////////////////////////////////////////////////////////
@@ -249,6 +397,20 @@ static void print(OpAsmPrinter& p, relalg::SelectionOp& op) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
+// MapOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseMapOp(OpAsmParser& parser, OperationState& result) {
+   parseRelationalInputs(parser, result, 1);
+   parseCustomRegion(parser, result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::MapOp& op) {
+   p << op.getOperationName() << " " << op.rel() << " ";
+   printCustomRegion(p, op.getRegion());
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////
 // AggregationOp
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseAggregationOp(OpAsmParser& parser, OperationState& result) {
@@ -339,6 +501,140 @@ static void print(OpAsmPrinter& p, relalg::MaterializeOp& op) {
    p << op.getOperationName()  << " " << op.rel() << " ";
    printAttributeRefArr(p, op.attrs());
    p <<" : "<<op.getType();
+}
+
+
+///////////////////////////////////////////////////////////////////////////////////
+// JoinOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseJoinOp(OpAsmParser& parser, OperationState& result) {
+   parseJoinType(parser,result);
+   parseRelationalInputs(parser, result, 2);
+   parseCustomRegion(parser, result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::JoinOp& op) {
+   std::string jt(mlir::relalg::stringifyEnum(op.type()));
+   p << op.getOperationName() << " "<<jt<<" " << op.left() << ", "<<op.right();
+   printCustomRegion(p, op.getRegion());
+}
+
+///////////////////////////////////////////////////////////////////////////////////
+// OuterJoinOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseOuterJoinOp(OpAsmParser& parser, OperationState& result) {
+   parseOuterJoinType(parser,result);
+   parseRelationalInputs(parser, result, 2);
+   parseCustomRegion(parser, result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::OuterJoinOp& op) {
+   std::string ojt(mlir::relalg::stringifyEnum(op.type()));
+   p << op.getOperationName() << " "<<ojt<<" " << op.left() << ", "<<op.right();
+   printCustomRegion(p, op.getRegion());
+}
+///////////////////////////////////////////////////////////////////////////////////
+// DependentJoinOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseDependentJoinOp(OpAsmParser& parser, OperationState& result) {
+   parseJoinType(parser, result);
+   Attribute attrs;
+   parseAttributeRefArr(parser, result, attrs);
+   result.addAttribute("attrs", attrs);
+   parseRelationalInputs(parser, result, 2);
+   parseCustomRegion(parser, result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::DependentJoinOp& op) {
+   std::string jt(mlir::relalg::stringifyEnum(op.type()));
+   p << op.getOperationName() << " " << jt << " ";
+   printAttributeRefArr(p,op.attrs());
+   p<<" "<< op.left() << ", " << op.right();
+   printCustomRegion(p, op.getRegion());
+}
+///////////////////////////////////////////////////////////////////////////////////
+// DistinctOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseDistinctOp(OpAsmParser& parser, OperationState& result) {
+   Attribute attrs;
+   parseAttributeRefArr(parser, result, attrs);
+   result.addAttribute("attrs", attrs);
+   parseRelationalInputs(parser, result, 1);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::DistinctOp& op) {
+   p << op.getOperationName() << " ";
+   printAttributeRefArr(p,op.attrs());
+   p<<" "<< op.rel();
+}
+///////////////////////////////////////////////////////////////////////////////////
+// UnionOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseUnionOp(OpAsmParser& parser, OperationState& result) {
+   StringAttr nameAttr;
+   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
+      return failure();
+   }
+   if(parseSetSemantic(parser,result)){
+      return failure();
+   }
+   parseRelationalInputs(parser, result, 2);
+   parseAttrMapping(parser,result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::UnionOp& op) {
+   p << op.getOperationName() << " ";
+   p.printSymbolName(op.sym_name());
+   p<<" ";
+   printSetSemantic(p,op.set_semantic());
+   p << " " << op.left() <<", " <<op.right()<< " ";
+   printMapping(p,op.mapping());
+}
+///////////////////////////////////////////////////////////////////////////////////
+// IntersectOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseIntersectOp(OpAsmParser& parser, OperationState& result) {
+   StringAttr nameAttr;
+   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
+      return failure();
+   }
+   if(parseSetSemantic(parser,result)){
+      return failure();
+   }
+   parseRelationalInputs(parser, result, 2);
+   parseAttrMapping(parser,result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::IntersectOp& op) {
+   p << op.getOperationName() << " ";
+   p.printSymbolName(op.sym_name());
+   p<<" ";
+   printSetSemantic(p,op.set_semantic());
+   p << " " << op.left() <<", " <<op.right()<< " ";
+   printMapping(p,op.mapping());
+}
+///////////////////////////////////////////////////////////////////////////////////
+// ExceptOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseExceptOp(OpAsmParser& parser, OperationState& result) {
+   StringAttr nameAttr;
+   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
+      return failure();
+   }
+   if(parseSetSemantic(parser,result)){
+      return failure();
+   }
+   parseRelationalInputs(parser, result, 2);
+   parseAttrMapping(parser,result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::ExceptOp& op) {
+   p << op.getOperationName() << " ";
+   p.printSymbolName(op.sym_name());
+   p<<" ";
+   printSetSemantic(p,op.set_semantic());
+   p << " " << op.left() <<", " <<op.right()<< " ";
+   printMapping(p,op.mapping());
 }
 
 #define GET_OP_CLASSES
