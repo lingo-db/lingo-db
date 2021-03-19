@@ -47,9 +47,7 @@ class CodeGen:
         for line in str.split("\n"):
             self.add_(line)
     def create_relalg_crossproduct(self,left,right):
-        var=self.newVar("relation")
-        self.add("%s = relalg.crossproduct %s,%s" % (var,left,right))
-        return var
+        return self.create("relation", "relalg.crossproduct %s,%s" % (left,right))
     def getType(self,var):
         type=self.types[var]
         return type
@@ -109,6 +107,16 @@ class CodeGen:
         self.startRegion()
         return var,tuple
     def endSelection(self,res):
+        self.add("relalg.return %s : %s" % (res,self.getType(res).to_string()))
+        self.endRegion()
+
+    def startJoin(self,outer,type,left,right):
+        tuple=self.newVar("tuple")
+        joinop= "outerjoin" if outer else "join"
+        var=self.create("relation","relalg.%s %s %s,%s (%s : relalg.tuple) {" % (joinop,type,left,right,tuple))
+        self.startRegion()
+        return var,tuple
+    def endJoin(self,res):
         self.add("relalg.return %s : %s" % (res,self.getType(res).to_string()))
         self.endRegion()
     def startAggregation(self,name,rel, attributes):

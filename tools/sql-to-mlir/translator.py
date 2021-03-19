@@ -45,26 +45,25 @@ class Translator:
         for from_val in ensure_list(stmt["from"]):
             from_value = ensure_value_dict(from_val)
             var = None
-            if type(from_value["value"]) is str:
-                table = getTPCHTable(from_value["value"], from_value["value"])
-                prefixes = [from_value["value"]]
-                if "name" in from_value:
-                    prefixes.append(from_value["name"])
-                for col_name in table.columns:
-                    resolver.add(prefixes, col_name, table.columns[col_name])
-                var = table.createBaseTableInstr(codegen)
+            if "value" in from_value:
+                var = self.addJoinTable(codegen, from_value, resolver)
+                if tree_var == "":
+                    tree_var = var
+                else:
+                    tree_var = codegen.create_relalg_crossproduct(tree_var, var)
             else:
-                var,attrs = self.translateSelectStmt(from_value["value"], codegen)
-                prefixes = []
-                if "name" in from_value:
-                    prefixes.append(from_value["name"])
-                for attr in attrs:
-                    resolver.add(prefixes,attr.print_name,attr)
+                key = list(from_value.keys())[0]
+                if key.endswith("join"):
+                    join_table_desc = ensure_value_dict(from_value[key])
+                    var =self.addJoinTable(codegen,join_table_desc,resolver)
+                    outer= "outer" in key
+                    jointype=key.split(" ")[0]
+                    tree_var, tuple = codegen.startJoin(outer,jointype,tree_var,var)
+                    stacked_resolver.push(tuple, resolver)
+                    sel_res = self.translateExpression(from_value["on"], codegen, stacked_resolver)
+                    stacked_resolver.pop()
+                    codegen.endSelection(sel_res)
 
-            if tree_var == "":
-                tree_var = var
-            else:
-                tree_var = codegen.create_relalg_crossproduct(tree_var, var)
 
         if "where" in stmt:
             tree_var, tuple = codegen.startSelection(tree_var)
@@ -127,6 +126,24 @@ class Translator:
             for i in range(0, len(results)):
                 results[i].print_name=select_print_names[i]
         return tree_var, results
+
+    def addJoinTable(self, codegen, from_value, resolver):
+        if type(from_value["value"]) is str:
+            table = getTPCHTable(from_value["value"], from_value["value"])
+            prefixes = [from_value["value"]]
+            if "name" in from_value:
+                prefixes.append(from_value["name"])
+            for col_name in table.columns:
+                resolver.add(prefixes, col_name, table.columns[col_name])
+            var = table.createBaseTableInstr(codegen)
+        else:
+            var, attrs = self.translateSelectStmt(from_value["value"], codegen)
+            prefixes = []
+            if "name" in from_value:
+                prefixes.append(from_value["name"])
+            for attr in attrs:
+                resolver.add(prefixes, attr.print_name, attr)
+        return var
 
     def translate(self):
         parsed=parse(self.query)

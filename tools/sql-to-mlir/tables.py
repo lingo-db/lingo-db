@@ -119,4 +119,4 @@ def getTPCHTable(name, scope_name):
             "l_comment": Attribute(scope_name, "l_comment", DBType("string", [])),
         })
     else:
-        return None
+        raise Exception("unknown table: "+ name)
