@@ -16,11 +16,12 @@ class DBType:
             return '!db.%s<%s>' % (self.name,type_props)
 
 class Attribute:
-    def __init__ (self,scope_name,name,type,from_existing=[]):
+    def __init__ (self,scope_name,name,type,from_existing=[],print_name=""):
         self.name=name
         self.scope_name=scope_name
         self.type=type
         self.from_existing=from_existing
+        self.print_name=print_name
     def ref_to_string(self):
         return '@%s::@%s' % (self.scope_name,self.name)
     def def_to_string(self):
