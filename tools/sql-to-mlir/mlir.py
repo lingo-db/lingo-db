@@ -56,18 +56,21 @@ class CodeGen:
         self.add(var +" = "+str)
         return var
 
+    def is_any_nullable(self,values):
+        return any(self.getType(x).nullable for x in values)
+
     def create_db_and(self, values):
         values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
-        return self.create(DBType("bool"),"db.and %s" % (",".join(values_with_types)))
+        return self.create(DBType("bool",[],self.is_any_nullable(values)),"db.and %s" % (",".join(values_with_types)))
     def create_db_or(self, values):
         values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
-        return self.create(DBType("bool"),"db.or %s" % (",".join(values_with_types)))
+        return self.create(DBType("bool",[],self.is_any_nullable(values)),"db.or %s" % (",".join(values_with_types)))
     def create_db_not(self, values):
         values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
-        return self.create(DBType("bool"),"db.not %s" % (",".join(values_with_types)))
+        return self.create(DBType("bool",[],self.is_any_nullable(values)),"db.not %s" % (",".join(values_with_types)))
     def create_db_cmp(self, type,values):
         values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
-        return self.create(DBType("bool"),"db.compare %s %s" % (type,",".join(values_with_types)))
+        return self.create(DBType("bool",[],self.is_any_nullable(values)),"db.compare %s %s" % (type,",".join(values_with_types)))
     def create_db_binary_op(self, name,values):
         values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
         return self.create(DBType("bool"),"db.%s %s" % (name,",".join(values_with_types)))
@@ -87,13 +90,13 @@ class CodeGen:
     def create_relalg_exists(self,rel):
         return self.create(DBType("bool"),"relalg.exists %s" % (rel))
     def create_relalg_in(self,val,rel):
-        return self.create(DBType("bool"),"relalg.in %s, %s" % (val,rel))
+        return self.create(DBType("bool",[],self.is_any_nullable([val])),"relalg.in %s, %s" % (val,rel))
     def create_relalg_getscalar(self,rel,attr):
         return self.create(attr.type,"relalg.getscalar @%s %s" % (attr.ref_to_string(),rel))
     def create_relalg_aggr_func(self,type,attr,rel):
-        return self.create(DBType("bool"),"relalg.aggr.%s %s %s" % (type,attr.ref_to_string(),rel))
+        return self.create(DBType(attr.type.name,attr.type.baseprops,True),"relalg.aggr.%s %s %s" % (type,attr.ref_to_string(),rel))
     def create_relalg_count_rows(self,rel):
-        return self.create(DBType("bool"),"relalg.count_rows %s" % (rel))
+        return self.create(DBType("int",["32"]),"relalg.count_rows %s" % (rel))
     def create_db_const(self,const,type):
         return self.create(type,"db.constant (\"%s\") : %s" % (const,type.to_string()))
     def create_relalg_const_relation(self,values):
