@@ -59,12 +59,20 @@ class CodeGen:
     def create_db_and(self, values):
         values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
         return self.create(DBType("bool"),"db.and %s" % (",".join(values_with_types)))
+    def create_db_or(self, values):
+        values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
+        return self.create(DBType("bool"),"db.or %s" % (",".join(values_with_types)))
+    def create_db_not(self, values):
+        values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
+        return self.create(DBType("bool"),"db.not %s" % (",".join(values_with_types)))
     def create_db_cmp(self, type,values):
         values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
         return self.create(DBType("bool"),"db.compare %s %s" % (type,",".join(values_with_types)))
     def create_db_binary_op(self, name,values):
         values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
         return self.create(DBType("bool"),"db.%s %s" % (name,",".join(values_with_types)))
+    def create_db_extract(self, key,value):
+        return self.create(DBType("bool"),"db.extract \"%s\" %s" % (key,value+" : "+self.getType(value).to_string()))
     def create_relalg_getattr(self,tuple,attr):
         return self.create(attr.type,"relalg.getattr %s %s : %s" % (tuple,attr.ref_to_string(),attr.type.to_string()))
     def create_relalg_addattr(self,val,attr):
@@ -72,15 +80,25 @@ class CodeGen:
     def create_relalg_materialize(self,rel,attrs):
         attr_refs=list(map(lambda val:val.ref_to_string(),attrs))
         return self.create("collection","relalg.materialize %s [%s]" % (rel,",".join(attr_refs)))
+    def create_relalg_distinct(self,rel,attrs):
+        attr_refs=list(map(lambda val:val.ref_to_string(),attrs))
+        return self.create("collection","relalg.distinct [%s] %s" % (",".join(attr_refs),rel))
 
     def create_relalg_exists(self,rel):
         return self.create(DBType("bool"),"relalg.exists %s" % (rel))
+    def create_relalg_in(self,val,rel):
+        return self.create(DBType("bool"),"relalg.in %s, %s" % (val,rel))
+    def create_relalg_getscalar(self,rel,attr):
+        return self.create(attr.type,"relalg.getscalar @%s %s" % (attr.ref_to_string(),rel))
     def create_relalg_aggr_func(self,type,attr,rel):
         return self.create(DBType("bool"),"relalg.aggr.%s %s %s" % (type,attr.ref_to_string(),rel))
     def create_relalg_count_rows(self,rel):
         return self.create(DBType("bool"),"relalg.count_rows %s" % (rel))
     def create_db_const(self,const,type):
         return self.create(type,"db.constant (\"%s\") : %s" % (const,type.to_string()))
+    def create_relalg_const_relation(self,values):
+        return self.create("relation","relalg.const_relation [%s]" % (",".join(map(lambda x: "\""+x+"\"" if type(x) == str else str(x),values))))
+
 
 
     def startRegion(self):
@@ -106,6 +124,27 @@ class CodeGen:
         var=self.create("relation","relalg.selection %s (%s : relalg.tuple) {" % (rel,tuple))
         self.startRegion()
         return var,tuple
+    def endSelection(self,res):
+        self.add("relalg.return %s : %s" % (res,self.getType(res).to_string()))
+        self.endRegion()
+    def startIf(self,val):
+        var=self.create(DBType("bool"),"db.if %s {" % (val))
+        self.startRegion()
+        return var
+    def addElse(self, yieldval=None):
+        if yieldval != None:
+            self.add("db.yield %s : %s" % (yieldval, self.getType(yieldval).to_string()))
+        else:
+            self.add("db.yield")
+        self.endRegion()
+        self.add("else {")
+        self.startRegion()
+    def endIf(self, yieldval=None):
+        if yieldval != None:
+            self.add("db.yield %s : %s" % (yieldval, self.getType(yieldval).to_string()))
+        else:
+            self.add("db.yield")
+        self.endRegion()
     def endSelection(self,res):
         self.add("relalg.return %s : %s" % (res,self.getType(res).to_string()))
         self.endRegion()

@@ -18,16 +18,16 @@ def getAttributeList(resolver, maybe_list):
     return res
 
 
-def getPrintNames(list):
+def getPrintNames(l):
     res=[]
-    for expr_ in list:
+    for expr_ in l:
         expr=ensure_value_dict(expr_)
         if "name" in expr:
             res.append(expr["name"])
         else:
             v=expr["value"]
             if type(v) is dict:
-                res.append(list(dict.keys())[0])
+                res.append(list(v.keys())[0])
             else:
                 res.append(v)
     return res
@@ -50,8 +50,12 @@ class AggrFuncManager:
         return "aggfmname"+str(self.namectr)
 
     def handleAggrFunc(self,t,exprs):
+        distinct=False
         names_for_agg=[]
         for expr in exprs:
+            if type(expr) is dict and "distinct" in expr:
+                distinct = True
+                expr = expr["distinct"]["value"]
             if type(expr) is dict:
                 name=self.gen_name()
                 self.evaluate_before_agg[name]=expr
@@ -59,7 +63,7 @@ class AggrFuncManager:
             else:
                 names_for_agg.append(expr)
         aggr_name=self.gen_name()
-        self.aggr[aggr_name]={ "type":t, "names":names_for_agg}
+        self.aggr[aggr_name]={ "type":t,"distinct":distinct,"names":names_for_agg}
         return aggr_name
     def substituteAggrFuncs(self, obj):
         if type(obj) is list:

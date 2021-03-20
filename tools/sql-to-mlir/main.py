@@ -3,7 +3,7 @@ from tables import getTPCHTable
 from mlir import CodeGen, DBType, Attribute
 from translator import Translator
 
-for query_number in range(13,23):
+for query_number in range(1,22):
     file="./sql/tpch/"+str(query_number)+".sql"
     print(file)
     query=""
@@ -12,6 +12,7 @@ for query_number in range(13,23):
          f.close()
     translator=Translator(query)
     mlir=translator.translate()
+    print(mlir)
 
 
 
