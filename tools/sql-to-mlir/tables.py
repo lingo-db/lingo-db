@@ -6,24 +6,6 @@ class Table:
         self.table_identifier = table_identifier
         self.scope_name=scope_name
         self.columns = columns
-    def createBaseTableInstr(self,codegen):
-        var=codegen.newVar("relation")
-        column_str=""
-        first=True
-        for column_name,attr in self.columns.items():
-            if first:
-                first=False
-            else:
-                column_str+=",\n"
-            column_str+=column_name+" => "+attr.def_to_string();
-        str="%s = relalg.basetable @%s { table_identifier=\"%s\" } columns: {" % (var,self.scope_name,self.table_identifier)
-        codegen.add(str)
-        codegen.indent+=1
-        codegen.add(column_str)
-        codegen.indent-=1
-        codegen.add("}")
-        return var
-
 
 def getTPCHTable(name, scope_name):
     if name == "nation":

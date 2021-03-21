@@ -192,7 +192,7 @@ class Translator:
                 prefixes.append(from_value["name"])
             for col_name in table.columns:
                 resolver.add(prefixes, col_name, table.columns[col_name])
-            var = table.createBaseTableInstr(codegen)
+            var = codegen.create_relalg_base_table(table)
         elif  "values" in from_value["value"]:
             var = codegen.create_relalg_const_relation(from_value["value"]["values"]["literal"])
         else:
@@ -220,4 +220,4 @@ class Translator:
         res = codegen.create_relalg_materialize(var, results)
         codegen.endFunction(res)
         codegen.endModule()
-        return codegen.result
+        return codegen.getResult()

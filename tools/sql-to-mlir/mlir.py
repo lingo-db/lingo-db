@@ -30,152 +30,287 @@ class Attribute:
         if len(self.from_existing)>0:
             from_existing_def="=["+",".join(map(lambda x:x.ref_to_string(),self.from_existing))+"]"
         return '@%s({%s})%s' % (self.name,props,from_existing_def)
+
+class ValueRef:
+    def __init__(self,var):
+        self.var=var
+    def print(self,codegen):
+        codegen.print(str(self.var))
+class TypeRef:
+    def __init__(self,var):
+        self.var=var
+    def print(self,codegen):
+        codegen.print(codegen.getType(self.var).to_string())
+class Operation:
+    def __init__(self,var,type, print_args):
+        self.var=var
+        self.type=type
+        self.print_args=print_args
+    def print(self,codegen):
+        if self.var != None:
+            codegen.print(self.var + " = ")
+        for print_arg in self.print_args:
+            if type(print_arg) is str:
+                codegen.print(print_arg)
+            elif type(print_arg) is int or type(print_arg) is float:
+                codegen.print(str(print_arg))
+            else:
+                print_arg.print(codegen)
+        codegen.print("\n")
+class BaseTableOp:
+    def __init__(self,var,table):
+        self.table=table
+        self.var=var
+        self.type="relation"
+
+    def print(self, codegen):
+        column_str=""
+        first=True
+        for column_name,attr in self.table.columns.items():
+            if first:
+                first=False
+            else:
+                column_str+=",\n"
+            column_str+=column_name+" => "+attr.def_to_string();
+        str="%s = relalg.basetable @%s { table_identifier=\"%s\" } columns: {" % (self.var,self.table.scope_name,self.table.table_identifier)
+        codegen.print(str)
+        codegen.indent+=1
+        codegen.print(column_str)
+        codegen.indent-=1
+        codegen.print("\n}\n")
+
+class Param:
+    def __init__(self,type):
+        self.type=type
+
+class Region:
+    def __init__(self):
+        self.ops=[]
+    def addOp(self,op):
+        self.ops.append(op)
+    def print(self,codegen):
+        codegen.print("{")
+        codegen.print("\n")
+        codegen.indent+=1
+        for op in self.ops:
+            op.print(codegen)
+        codegen.indent-=1
+        codegen.print("}")
+class RootRegion:
+    def __init__(self,ops):
+        self.ops=ops
+    def addOp(self, op):
+        self.ops.append(op)
+    def print(self,codegen):
+        for op in self.ops:
+            op.print(codegen)
 class CodeGen:
+
+
     def __init__(self):
         self.var_number = 0
+        self.needs_indent=False
         self.indent=0
         self.result =""
-        self.types ={"%unknown": DBType("unknown")}
-    def newVar(self,type):
+        self.ops ={}
+        self.stacked_regions=[RootRegion([])]
+        self.stacked_ops=[]
+
+    def getType(self, var):
+        type = self.ops[var].type
+        return type
+    def getCurrentRegion(self):
+        return self.stacked_regions[-1]
+    def newParam(self,type):
         self.var_number+=1
         var_str='%%%d' % (self.var_number)
-        self.types[var_str]=type
+        self.ops[var_str]=Param(type)
         return var_str
-    def add_(self,str):
-        self.result+=("    "*self.indent)+str+"\n"
-    def add(self,str):
-        for line in str.split("\n"):
-            self.add_(line)
+    def newVar(self):
+        self.var_number+=1
+        var_str='%%%d' % (self.var_number)
+        return var_str
+
+    def print(self,str):
+        for c in str:
+            if c=="\n":
+                self.result+="\n"
+                self.needs_indent=True
+            else:
+                if self.needs_indent:
+                    self.needs_indent=False
+                    self.result+=("    " * self.indent)
+                self.result+=c
+
+
+
+
     def create_relalg_crossproduct(self,left,right):
-        return self.create("relation", "relalg.crossproduct %s,%s" % (left,right))
-    def getType(self,var):
-        type=self.types[var]
-        return type
-    def create(self,type,str):
-        var=self.newVar(type)
-        self.add(var +" = "+str)
+        return self.addOp("relation", ["relalg.crossproduct ",ValueRef(left)," ",ValueRef(right)])
+    def create_relalg_base_table(self,table):
+        var=self.newVar()
+        self.addExistingOp(BaseTableOp(var,table))
         return var
+    def startRegion(self):
+        self.stacked_regions.append(Region())
+    def endRegion(self):
+        return self.stacked_regions.pop()
 
     def is_any_nullable(self,values):
         return any(self.getType(x).nullable for x in values)
 
     def create_db_and(self, values):
-        values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
-        return self.create(DBType("bool",[],self.is_any_nullable(values)),"db.and %s" % (",".join(values_with_types)))
+        args = ["db.and "]
+        self.addValuesWithTypes(args, values)
+        return self.addOp(DBType("bool", [], self.is_any_nullable(values)), args)
     def create_db_or(self, values):
-        values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
-        return self.create(DBType("bool",[],self.is_any_nullable(values)),"db.or %s" % (",".join(values_with_types)))
+        args = ["db.or "]
+        self.addValuesWithTypes(args, values)
+        return self.addOp(DBType("bool", [], self.is_any_nullable(values)), args)
     def create_db_not(self, values):
-        values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
-        return self.create(DBType("bool",[],self.is_any_nullable(values)),"db.not %s" % (",".join(values_with_types)))
+        args = ["db.not "]
+        self.addValuesWithTypes(args, values)
+        return self.addOp(DBType("bool", [], self.is_any_nullable(values)), args)
     def create_db_cmp(self, type,values):
-        values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
-        return self.create(DBType("bool",[],self.is_any_nullable(values)),"db.compare %s %s" % (type,",".join(values_with_types)))
+        args=["db.compare ",type," "]
+        self.addValuesWithTypes(args,values)
+        return self.addOp(DBType("bool",[],self.is_any_nullable(values)),args)
+    def addValuesWithTypes(self,arr,values):
+        first=True
+        for v in values:
+            if first:
+                first=False
+            else:
+                arr.append(",")
+            arr.append(ValueRef(v))
+            arr.append(" : ")
+            arr.append(TypeRef(v))
+
     def create_db_binary_op(self, name,values):
-        values_with_types=list(map(lambda val:val+" : "+self.getType(val).to_string(),values))
-        return self.create(DBType("bool"),"db.%s %s" % (name,",".join(values_with_types)))
+        args=["db.",name," "]
+        self.addValuesWithTypes(args,values)
+        return self.addOp(DBType("bool"),args)
     def create_db_extract(self, key,value):
-        return self.create(DBType("bool"),"db.extract \"%s\" %s" % (key,value+" : "+self.getType(value).to_string()))
+        return self.addOp(DBType("bool"),["db.extract \"",key,"\" ",ValueRef(value)," : ",TypeRef(value)])
     def create_relalg_getattr(self,tuple,attr):
-        return self.create(attr.type,"relalg.getattr %s %s : %s" % (tuple,attr.ref_to_string(),attr.type.to_string()))
+        return self.addOp(attr.type,["relalg.getattr ",ValueRef(tuple), " ",attr.ref_to_string()," : ",attr.type.to_string()])
     def create_relalg_addattr(self,val,attr):
-        return self.add("relalg.addattr %s %s" % (attr.def_to_string(),val))
+        return self.addExistingOp(Operation(None,None,["relalg.addattr ",attr.def_to_string()," ", ValueRef(val)]))
     def create_relalg_materialize(self,rel,attrs):
         attr_refs=list(map(lambda val:val.ref_to_string(),attrs))
-        return self.create("collection","relalg.materialize %s [%s]" % (rel,",".join(attr_refs)))
+        return self.addOp("collection",["relalg.materialize ",ValueRef(rel)," [",",".join(attr_refs),"]"])
     def create_relalg_distinct(self,rel,attrs):
         attr_refs=list(map(lambda val:val.ref_to_string(),attrs))
-        return self.create("collection","relalg.distinct [%s] %s" % (",".join(attr_refs),rel))
+        return self.addOp("relation",["relalg.distinct [",",".join(attr_refs),"]",ValueRef(rel)])
 
     def create_relalg_exists(self,rel):
-        return self.create(DBType("bool"),"relalg.exists %s" % (rel))
+        return self.addOp(DBType("bool"),["relalg.exists", ValueRef(rel)])
     def create_relalg_in(self,val,rel):
-        return self.create(DBType("bool",[],self.is_any_nullable([val])),"relalg.in %s, %s" % (val,rel))
+        return self.addOp(DBType("bool",[],self.is_any_nullable([val])),["relalg.in ",ValueRef(val),", ",ValueRef(rel)])
     def create_relalg_getscalar(self,rel,attr):
-        return self.create(attr.type,"relalg.getscalar @%s %s" % (attr.ref_to_string(),rel))
+        return self.addOp(attr.type,["relalg.getscalar @]",attr.ref_to_string()," ",ValueRef(rel)])
     def create_relalg_aggr_func(self,type,attr,rel):
-        return self.create(DBType(attr.type.name,attr.type.baseprops,True),"relalg.aggr.%s %s %s" % (type,attr.ref_to_string(),rel))
+        return self.addOp(DBType(attr.type.name,attr.type.baseprops,True),["relalg.aggr.",type," ",attr.ref_to_string()," ", ValueRef(rel)])
     def create_relalg_count_rows(self,rel):
-        return self.create(DBType("int",["32"]),"relalg.count_rows %s" % (rel))
+        return self.addOp(DBType("int",["32"]),["relalg.count_rows",ValueRef(rel)])
     def create_db_const(self,const,type):
-        return self.create(type,"db.constant (\"%s\") : %s" % (const,type.to_string()))
+        var=self.newVar()
+        self.addExistingOp(Operation(var,type,["db.constant (\"",const,"\") :", TypeRef(var)]))
+        return var
     def create_relalg_const_relation(self,values):
-        return self.create("relation","relalg.const_relation [%s]" % (",".join(map(lambda x: "\""+x+"\"" if type(x) == str else str(x),values))))
+        return self.addOp("relation",["relalg.const_relation [%s]" % (",".join(map(lambda x: "\""+x+"\"" if type(x) == str else str(x),values)))])
 
 
 
-    def startRegion(self):
-        self.indent+=1
-    def endRegion(self):
-        self.indent-=1;
-        self.add("}")
-
+    def addExistingOp(self,op):
+        self.getCurrentRegion().addOp(op)
+        if op.var != None:
+            self.ops[op.var]=op
+            return op.var
+    def addOp(self,type,print_args):
+        var=self.newVar()
+        op=Operation(var,type,print_args)
+        return self.addExistingOp(op)
     def startModule(self,name):
-        self.add("module @"+ name +" {")
+        self.stacked_ops.append(Operation(None,None,["module @",name]))
         self.startRegion()
+    def endModule(self):
+        op=self.stacked_ops.pop()
+        op.print_args.append(self.endRegion())
+        self.getCurrentRegion().addOp(op)
     def startFunction(self,name):
-        self.add("func @" + name +" {")
+        self.stacked_ops.append(Operation(None,None,["func @",name]))
         self.startRegion()
     def endFunction(self,res):
-        self.add("return %s" % (res));
-        self.endRegion()
-    def endModule(self):
-        self.endRegion()
+        self.endRegionOpWith(Operation(None,None,["return ",ValueRef(res)]))
 
-    def startSelection(self,rel):
-        tuple=self.newVar("tuple")
-        var=self.create("relation","relalg.selection %s (%s : relalg.tuple) {" % (rel,tuple))
-        self.startRegion()
-        return var,tuple
-    def endSelection(self,res):
-        self.add("relalg.return %s : %s" % (res,self.getType(res).to_string()))
-        self.endRegion()
-    def startIf(self,val):
-        var=self.create(DBType("bool"),"db.if %s {" % (val))
+    def startRegionOp(self,type,args):
+        var=self.newVar()
+        self.stacked_ops.append(Operation(var,type,args))
         self.startRegion()
         return var
+    def endRegionOp(self):
+        op = self.stacked_ops.pop()
+        op.print_args.append(self.endRegion())
+        self.addExistingOp(op)
+    def endRegionOpWith(self,op):
+        current_region = self.getCurrentRegion()
+        current_region.addOp(op)
+        self.endRegionOp()
+
+
+
+    def startSelection(self,rel):
+        tuple=self.newParam("tuple")
+        return self.startRegionOp("relation",["relalg.selection",ValueRef(rel),"(",tuple, ": relalg.tuple) "]),tuple
+    def endSelection(self,res):
+        self.endRegionOpWith(Operation(None,None,["relalg.return ",ValueRef(res)," : ",TypeRef(res)]))
+    def startMap(self,scope_name,rel):
+        tuple=self.newParam("tuple")
+        return self.startRegionOp("relation",["relalg.map @",scope_name,ValueRef(rel),"(",tuple, ": relalg.tuple) "]),tuple
+    def endMap(self):
+        self.endRegionOp()
+    def startSelection(self,rel):
+        tuple=self.newParam("tuple")
+        return self.startRegionOp("relation",["relalg.selection",ValueRef(rel),"(",tuple, ": relalg.tuple) "]),tuple
+    def endSelection(self,res):
+        self.endRegionOpWith(Operation(None,None,["relalg.return ",ValueRef(res)," : ",TypeRef(res)]))
+    def startIf(self,val):
+        return self.startRegionOp(DBType("bool"),["db.if ", ValueRef(val)," "])
     def addElse(self, yieldval=None):
         if yieldval != None:
-            self.add("db.yield %s : %s" % (yieldval, self.getType(yieldval).to_string()))
+            yieldOp=Operation(None,None,["db.yield ",ValueRef(yieldval)," : ",TypeRef(yieldval)])
         else:
-            self.add("db.yield")
-        self.endRegion()
-        self.add("else {")
+            yieldOp=Operation(None,None,["db.yield"])
+        current_region = self.getCurrentRegion()
+        current_region.addOp(yieldOp)
+        ifop=self.stacked_ops[-1]
+        ifop.print_args.append(self.endRegion())
+        ifop.print_args.append(" else ")
         self.startRegion()
     def endIf(self, yieldval=None):
         if yieldval != None:
-            self.add("db.yield %s : %s" % (yieldval, self.getType(yieldval).to_string()))
+            yieldOp=Operation(None,None,["db.yield ",ValueRef(yieldval)," : ",TypeRef(yieldval)])
         else:
-            self.add("db.yield")
-        self.endRegion()
-    def endSelection(self,res):
-        self.add("relalg.return %s : %s" % (res,self.getType(res).to_string()))
-        self.endRegion()
+            yieldOp=Operation(None,None,["db.yield"])
+        self.endRegionOpWith(yieldOp)
 
-    def startJoin(self,outer,type,left,right):
-        tuple=self.newVar("tuple")
+
+    def startJoin(self, outer,type,left,right):
+        tuple = self.newParam("tuple")
         joinop= "outerjoin" if outer else "join"
-        var=self.create("relation","relalg.%s %s %s,%s (%s : relalg.tuple) {" % (joinop,type,left,right,tuple))
-        self.startRegion()
-        return var,tuple
-    def endJoin(self,res):
-        self.add("relalg.return %s : %s" % (res,self.getType(res).to_string()))
-        self.endRegion()
+        return self.startRegionOp("relation",
+                                  ["relalg.",joinop," ",type," ", ValueRef(left),", ",ValueRef(right), "(", tuple, ": relalg.tuple) "]), tuple
+
+    def endJoin(self, res):
+        self.endRegionOpWith(Operation(None, None, ["relalg.return ", ValueRef(res), " : ", TypeRef(res)]))
     def startAggregation(self,name,rel, attributes):
-        relation=self.newVar("relation")
+        relation=self.newParam("relation")
         attr_refs=list(map(lambda val:val.ref_to_string(),attributes))
-
-        var=self.create("relation","relalg.aggregation @%s %s [%s] (%s : relalg.relation) {" % (name,rel,",".join(attr_refs) ,relation))
-        self.startRegion()
-        return var,relation
+        return self.startRegionOp("relation",["relalg.aggregation @",name," ",ValueRef(rel)," [",",".join(attr_refs),"] (",relation," : relalg.relation) "]),relation
     def endAggregation(self):
-        self.endRegion()
-    def startMap(self,scope_name,rel):
-        tuple=self.newVar("tuple")
-        var=self.create("relation","relalg.map @%s %s (%s : relalg.tuple) {" % (scope_name,rel,tuple))
-        self.startRegion()
-        return var,tuple
-    def endMap(self):
-        self.endRegion()
-
+        self.endRegionOp()
+    def getResult(self):
+        self.getCurrentRegion().print(self)
+        return self.result
 

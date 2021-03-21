@@ -1,21 +1,15 @@
-from moz_sql_parser import parse
-from tables import getTPCHTable
-from mlir import CodeGen, DBType, Attribute
 from translator import Translator
 
 for query_number in range(1,22):
     file="./sql/tpch/"+str(query_number)+".sql"
-    print(file)
+    outfile="./mlir/tpch/"+str(query_number)+".mlir"
+
     query=""
     with open(file) as f:
          query = f.read()
          f.close()
     translator=Translator(query)
     mlir=translator.translate()
-    print(mlir)
-
-
-
-
-
-
+    with open(outfile,'x') as of:
+        of.write(mlir)
+        of.close()
