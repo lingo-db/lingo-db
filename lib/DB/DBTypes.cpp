@@ -47,6 +47,12 @@ mlir::db::DBType mlir::db::DBType::getBaseType() const {
       .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
          return mlir::db::TimestampType::get(t.getContext(), false);
       })
+      .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
+        return mlir::db::IntervalType::get(t.getContext(), false);
+      })
+      .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
+        return mlir::db::FloatType::get(t.getContext(), false,t.getWidth());
+      })
       .Default([](::mlir::Type) { return mlir::db::DBType(); });
 }
 mlir::db::DBType mlir::db::DBType::asNullable() const {
@@ -68,6 +74,12 @@ mlir::db::DBType mlir::db::DBType::asNullable() const {
       })
       .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
          return mlir::db::TimestampType::get(t.getContext(), true);
+      })
+      .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
+        return mlir::db::IntervalType::get(t.getContext(), true);
+      })
+      .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
+        return mlir::db::FloatType::get(t.getContext(), true,t.getWidth());
       })
       .Default([](::mlir::Type) { return mlir::db::DBType(); });
 }
@@ -168,6 +180,12 @@ void print(::mlir::DialectAsmPrinter& printer, bool nullable, ParamT... params) 
 void mlir::db::IntType::print(::mlir::DialectAsmPrinter& printer) const {
    ::print<mlir::db::IntType, unsigned>(printer, getNullable(), getWidth());
 }
+::mlir::Type mlir::db::FloatType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
+   return ::parse<mlir::db::FloatType, unsigned>(context, parser);
+}
+void mlir::db::FloatType::print(::mlir::DialectAsmPrinter& printer) const {
+   ::print<mlir::db::FloatType, unsigned>(printer, getNullable(), getWidth());
+}
 ::mlir::Type mlir::db::BoolType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
    return ::parse<mlir::db::BoolType>(context, parser);
 }
@@ -180,6 +198,13 @@ void mlir::db::BoolType::print(::mlir::DialectAsmPrinter& printer) const {
 void mlir::db::DateType::print(::mlir::DialectAsmPrinter& printer) const {
    ::print<mlir::db::DateType>(printer, getNullable());
 }
+::mlir::Type mlir::db::IntervalType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
+   return ::parse<mlir::db::IntervalType>(context, parser);
+}
+void mlir::db::IntervalType::print(::mlir::DialectAsmPrinter& printer) const {
+   ::print<mlir::db::IntervalType>(printer, getNullable());
+}
+
 ::mlir::Type mlir::db::TimestampType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
    return ::parse<mlir::db::TimestampType>(context, parser);
 }

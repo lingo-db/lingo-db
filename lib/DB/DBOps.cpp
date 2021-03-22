@@ -122,7 +122,7 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation *op, OpAsmPrinter
       ::llvm::StringRef attrStr;
       ::mlir::NamedAttrList attrStorage;
       auto loc = parser.getCurrentLocation();
-      if (parser.parseOptionalKeyword(&attrStr, {"eq","ne","slt","sle","sgt","sge","ult","ule","ugt","uge"})) {
+      if (parser.parseOptionalKeyword(&attrStr, {"eq","neq","lt","lte","gt","gte"})) {
          ::mlir::StringAttr attrVal;
          ::mlir::OptionalParseResult parseResult =
             parser.parseOptionalAttribute(attrVal,
@@ -133,7 +133,7 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation *op, OpAsmPrinter
                return ::mlir::failure();
             attrStr = attrVal.getValue();
          } else {
-            return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'predicate' [eq, ne, slt, sle, sgt, sge, ult, ule, ugt, uge]");
+            return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'predicate' [eq, neq, lt, lte, gt, gte]");
          }
       }
       if (!attrStr.empty()) {

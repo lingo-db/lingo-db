@@ -146,7 +146,7 @@ class CodeGen:
 
 
     def create_relalg_crossproduct(self,left,right):
-        return self.addOp("relation", ["relalg.crossproduct ",ValueRef(left)," ",ValueRef(right)])
+        return self.addOp("relation", ["relalg.crossproduct ",ValueRef(left),", ",ValueRef(right)])
     def create_relalg_base_table(self,table):
         var=self.newVar()
         self.addExistingOp(BaseTableOp(var,table))
@@ -198,7 +198,9 @@ class CodeGen:
         return self.addExistingOp(Operation(None,None,["relalg.addattr ",attr.def_to_string()," ", ValueRef(val)]))
     def create_relalg_materialize(self,rel,attrs):
         attr_refs=list(map(lambda val:val.ref_to_string(),attrs))
-        return self.addOp("collection",["relalg.materialize ",ValueRef(rel)," [",",".join(attr_refs),"]"])
+        attr_types=list(map(lambda val:val.type.to_string(),attrs))
+
+        return self.addOp(DBType("matcollection",attr_types),["relalg.materialize ",ValueRef(rel)," [",",".join(attr_refs),"]", " : ",DBType("matcollection",attr_types).to_string()])
     def create_relalg_distinct(self,rel,attrs):
         attr_refs=list(map(lambda val:val.ref_to_string(),attrs))
         return self.addOp("relation",["relalg.distinct [",",".join(attr_refs),"]",ValueRef(rel)])
@@ -206,13 +208,13 @@ class CodeGen:
     def create_relalg_exists(self,rel):
         return self.addOp(DBType("bool"),["relalg.exists", ValueRef(rel)])
     def create_relalg_in(self,val,rel):
-        return self.addOp(DBType("bool",[],self.is_any_nullable([val])),["relalg.in ",ValueRef(val),", ",ValueRef(rel)])
+        return self.addOp(DBType("bool",[],self.is_any_nullable([val])),["relalg.in ",ValueRef(val)," : ",TypeRef(val),", ",ValueRef(rel)])
     def create_relalg_getscalar(self,rel,attr):
-        return self.addOp(attr.type,["relalg.getscalar @]",attr.ref_to_string()," ",ValueRef(rel)])
+        return self.addOp(attr.type,["relalg.getscalar ",attr.ref_to_string()," ",ValueRef(rel)," : ",attr.type.to_string()])
     def create_relalg_aggr_func(self,type,attr,rel):
-        return self.addOp(DBType(attr.type.name,attr.type.baseprops,True),["relalg.aggr.",type," ",attr.ref_to_string()," ", ValueRef(rel)])
+        return self.addOp(DBType(attr.type.name,attr.type.baseprops,True),["relalg.aggrfn ",type," ",attr.ref_to_string()," ", ValueRef(rel), " : ",attr.type.to_string()])
     def create_relalg_count_rows(self,rel):
-        return self.addOp(DBType("int",["32"]),["relalg.count_rows",ValueRef(rel)])
+        return self.addOp(DBType("int",["64"]),["relalg.count ",ValueRef(rel)])
     def create_db_const(self,const,type):
         var=self.newVar()
         self.addExistingOp(Operation(var,type,["db.constant (\"",const,"\") :", TypeRef(var)]))
@@ -239,11 +241,17 @@ class CodeGen:
         op.print_args.append(self.endRegion())
         self.getCurrentRegion().addOp(op)
     def startFunction(self,name):
-        self.stacked_ops.append(Operation(None,None,["func @",name]))
+        self.stacked_ops.append(Operation(None,None,["func @",name," () "]))
         self.startRegion()
     def endFunction(self,res):
-        self.endRegionOpWith(Operation(None,None,["return ",ValueRef(res)]))
-
+        op = self.stacked_ops.pop()
+        op.print_args.append(" -> ")
+        op.print_args.append(TypeRef(res))
+        return_op=Operation(None, None, ["return ", ValueRef(res)," : ",TypeRef(res)])
+        current_region = self.getCurrentRegion()
+        current_region.addOp(return_op)
+        op.print_args.append(self.endRegion())
+        self.addExistingOp(op)
     def startRegionOp(self,type,args):
         var=self.newVar()
         self.stacked_ops.append(Operation(var,type,args))
@@ -262,17 +270,18 @@ class CodeGen:
 
     def startSelection(self,rel):
         tuple=self.newParam("tuple")
-        return self.startRegionOp("relation",["relalg.selection",ValueRef(rel),"(",tuple, ": relalg.tuple) "]),tuple
+        return self.startRegionOp("relation",["relalg.selection",ValueRef(rel),"(",tuple, ": !relalg.tuple) "]),tuple
     def endSelection(self,res):
         self.endRegionOpWith(Operation(None,None,["relalg.return ",ValueRef(res)," : ",TypeRef(res)]))
     def startMap(self,scope_name,rel):
         tuple=self.newParam("tuple")
-        return self.startRegionOp("relation",["relalg.map @",scope_name,ValueRef(rel),"(",tuple, ": relalg.tuple) "]),tuple
+        return self.startRegionOp("relation",["relalg.map @",scope_name," ",ValueRef(rel)," (",tuple, ": !relalg.tuple) "]),tuple
     def endMap(self):
-        self.endRegionOp()
+        self.endRegionOpWith(Operation(None, None, ["relalg.return"]))
+
     def startSelection(self,rel):
         tuple=self.newParam("tuple")
-        return self.startRegionOp("relation",["relalg.selection",ValueRef(rel),"(",tuple, ": relalg.tuple) "]),tuple
+        return self.startRegionOp("relation",["relalg.selection",ValueRef(rel),"(",tuple, ": !relalg.tuple) "]),tuple
     def endSelection(self,res):
         self.endRegionOpWith(Operation(None,None,["relalg.return ",ValueRef(res)," : ",TypeRef(res)]))
     def startIf(self,val):
@@ -300,16 +309,16 @@ class CodeGen:
         tuple = self.newParam("tuple")
         joinop= "outerjoin" if outer else "join"
         return self.startRegionOp("relation",
-                                  ["relalg.",joinop," ",type," ", ValueRef(left),", ",ValueRef(right), "(", tuple, ": relalg.tuple) "]), tuple
+                                  ["relalg.",joinop," ",type," ", ValueRef(left),", ",ValueRef(right), "(", tuple, ": !relalg.tuple) "]), tuple
 
     def endJoin(self, res):
         self.endRegionOpWith(Operation(None, None, ["relalg.return ", ValueRef(res), " : ", TypeRef(res)]))
     def startAggregation(self,name,rel, attributes):
         relation=self.newParam("relation")
         attr_refs=list(map(lambda val:val.ref_to_string(),attributes))
-        return self.startRegionOp("relation",["relalg.aggregation @",name," ",ValueRef(rel)," [",",".join(attr_refs),"] (",relation," : relalg.relation) "]),relation
+        return self.startRegionOp("relation",["relalg.aggregation @",name," ",ValueRef(rel)," [",",".join(attr_refs),"] (",relation," : !relalg.relation) "]),relation
     def endAggregation(self):
-        self.endRegionOp()
+        self.endRegionOpWith(Operation(None, None, ["relalg.return"]))
     def getResult(self):
         self.getCurrentRegion().print(self)
         return self.result

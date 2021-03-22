@@ -58,6 +58,15 @@ let storageType = "::mlir::relalg::RelationalAttributeRefAttr";
 let returnType = "::mlir::relalg::RelationalAttributeRefAttr";
 let convertFromStorage = "$_self";
 }
+def ConstRelationOp : RelAlg_Op<"const_relation",
+        [ NoSideEffect]> {
+let summary = "constant relation";
+
+let arguments = (ins ArrayAttr:$value);
+let results = (outs RelAlg_Relation:$result);
+
+}
+
 
 def RelAlg_ReturnOp : RelAlg_Op<"return", [NoSideEffect, ReturnLike, Terminator,
    ParentOneOf<["SelectionOp","AggregationOp","ForEachOp","MapOp","JoinOp","OuterJoinOp","DependentJoinOp"]>
@@ -97,7 +106,7 @@ let regions = (region SizedRegion<1>:$predicate);
 }
 def MapOp : RelAlg_Op<"map",[NoSideEffect]> {
 let summary = "map operation";
-let arguments = (ins RelAlg_Relation:$rel);
+let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
@@ -123,9 +132,20 @@ let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$aggr_func);
 }
 
-def SumAggrFuncOp : RelAlg_Op<"aggr.sum"> {
+def RelAlg_AggrFunc_Sum  : I64EnumAttrCase<"sum", 0>;
+def RelAlg_AggrFunc_Min  : I64EnumAttrCase<"min", 1>;
+def RelAlg_AggrFunc_Max  : I64EnumAttrCase<"max", 2>;
+def RelAlg_AggrFunc_Avg  : I64EnumAttrCase<"avg", 3>;
+def RelAlg_AggrFunc_Count  : I64EnumAttrCase<"count", 4>;
+
+def RelAlg_AggrFunc : I64EnumAttr<
+        "AggrFunc", "",
+        [RelAlg_AggrFunc_Sum,RelAlg_AggrFunc_Min,RelAlg_AggrFunc_Max,RelAlg_AggrFunc_Avg,RelAlg_AggrFunc_Count]> {
+let cppNamespace = "::mlir::relalg";
+}
+def AggrFuncOp : RelAlg_Op<"aggrfn"> {
 let summary = "aggregation operation";
-let arguments = (ins RelAlg_Relation:$rel,RelationalAttributeRefAttr:$attr);
+let arguments = (ins RelAlg_AggrFunc:$fn,RelAlg_Relation:$rel,RelationalAttributeRefAttr:$attr);
 let results = (outs DBType:$result);
 }
 def CountRowsOp : RelAlg_Op<"count"> {
@@ -164,9 +184,9 @@ let results = (outs DB_CollectionType:$result);
 def RelAlg_JoinType_Inner  : I64EnumAttrCase<"inner", 0>;
 def RelAlg_JoinType_Semi  : I64EnumAttrCase<"semi", 1>;
 def RelAlg_JoinType_AntiSemi  : I64EnumAttrCase<"antisemi", 2>;
-def RelAlg_JoinType_LeftOuter  : I64EnumAttrCase<"leftouter", 3>;
-def RelAlg_JoinType_RightOuter  : I64EnumAttrCase<"rightouter", 4>;
-def RelAlg_JoinType_FullOuter  : I64EnumAttrCase<"fullouter", 5>;
+def RelAlg_JoinType_Left  : I64EnumAttrCase<"left", 3>;
+def RelAlg_JoinType_Right  : I64EnumAttrCase<"right", 4>;
+def RelAlg_JoinType_Full  : I64EnumAttrCase<"full", 5>;
 
 
 def RelAlg_NormalJoinType : I64EnumAttr<
@@ -176,7 +196,7 @@ let cppNamespace = "::mlir::relalg";
 }
 def RelAlg_OuterJoinType : I64EnumAttr<
         "OuterJoinType", "",
-        [RelAlg_JoinType_LeftOuter,RelAlg_JoinType_RightOuter,RelAlg_JoinType_FullOuter]> {
+        [RelAlg_JoinType_Left,RelAlg_JoinType_Right,RelAlg_JoinType_Full]> {
 let cppNamespace = "::mlir::relalg";
 }
 
@@ -232,5 +252,16 @@ def ExceptOp :  RelAlg_Op<"except",[NoSideEffect]> {
 let summary = "except operation";
 let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_Relation:$result);
+}
+
+def GetScalarOp : RelAlg_Op<"getscalar"> {
+let summary = "get attribute operation";
+let arguments = (ins RelationalAttributeRefAttr:$attr, RelAlg_Relation:$rel);
+let results = (outs DBType : $res);
+}
+def InOp : RelAlg_Op<"in"> {
+let summary = "in operation";
+let arguments = (ins DBType:$val, RelAlg_Relation:$rel);
+let results = (outs DB_BoolType : $res);
 }
 #endif// OPS

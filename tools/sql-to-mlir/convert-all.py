@@ -10,6 +10,6 @@ for query_number in range(1,22):
          f.close()
     translator=Translator(query)
     mlir=translator.translate()
-    with open(outfile,'x') as of:
+    with open(outfile,'w') as of:
         of.write(mlir)
         of.close()

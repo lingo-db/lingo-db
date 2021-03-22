@@ -53,8 +53,16 @@ def DB_IntType : DB_Type<"Int","int"> {
 let summary = "database integer type";
 let parameters = (ins "bool":$nullable,"unsigned":$width);
 }
+def DB_FloatType : DB_Type<"Float","float"> {
+let summary = "database float type";
+let parameters = (ins "bool":$nullable,"unsigned":$width);
+}
 def DB_DateType : DB_Type<"Date","date"> {
 let summary = "database date type";
+let parameters = (ins "bool":$nullable);
+}
+def DB_IntervalType : DB_Type<"Interval","interval"> {
+let summary = "database interval type";
 let parameters = (ins "bool":$nullable);
 }
 def DB_TimeType : DB_Type<"Timestamp","timestamp"> {
@@ -116,27 +124,24 @@ def DB_MulOp : DB_BinaryOp<"mul"> {}
 def DB_DivOp : DB_BinaryOp<"div"> {}
 def DB_ModOp : DB_BinaryOp<"mod"> {}
 def DB_NegOp : DB_BinaryOp<"neg"> {}
+def DB_LikeOp : DB_BinaryOp<"like"> {}
 
 def DB_CMP_P_EQ  : I64EnumAttrCase<"eq", 0>;
-def DB_CMP_P_NE  : I64EnumAttrCase<"ne", 1>;
-def DB_CMP_P_SLT : I64EnumAttrCase<"slt", 2>;
-def DB_CMP_P_SLE : I64EnumAttrCase<"sle", 3>;
-def DB_CMP_P_SGT : I64EnumAttrCase<"sgt", 4>;
-def DB_CMP_P_SGE : I64EnumAttrCase<"sge", 5>;
-def DB_CMP_P_ULT : I64EnumAttrCase<"ult", 6>;
-def DB_CMP_P_ULE : I64EnumAttrCase<"ule", 7>;
-def DB_CMP_P_UGT : I64EnumAttrCase<"ugt", 8>;
-def DB_CMP_P_UGE : I64EnumAttrCase<"uge", 9>;
+def DB_CMP_P_NEQ  : I64EnumAttrCase<"neq", 1>;
+def DB_CMP_P_LT : I64EnumAttrCase<"lt", 2>;
+def DB_CMP_P_LTE : I64EnumAttrCase<"lte", 3>;
+def DB_CMP_P_GT : I64EnumAttrCase<"gt", 4>;
+def DB_CMP_P_GTE : I64EnumAttrCase<"gte", 5>;
 
 def DB_CmpPredicateAttr : I64EnumAttr<
     "DBCmpPredicate", "",
-    [DB_CMP_P_EQ, DB_CMP_P_NE, DB_CMP_P_SLT, DB_CMP_P_SLE, DB_CMP_P_SGT,
-        DB_CMP_P_SGE, DB_CMP_P_ULT, DB_CMP_P_ULE, DB_CMP_P_UGT, DB_CMP_P_UGE]> {
+    [DB_CMP_P_EQ, DB_CMP_P_NEQ, DB_CMP_P_LT, DB_CMP_P_LTE, DB_CMP_P_GT,
+        DB_CMP_P_GTE]> {
 let cppNamespace = "::mlir::db";
 }
 
 def DB_CmpOp : DB_Op<"compare",
-    [NoSideEffect, SameTypeOperands]> {
+    [NoSideEffect]> {
 let summary = "integer comparison operation";
 
 let arguments = (ins
@@ -180,5 +185,26 @@ let printer = [{
 return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
 }];
 }
+def OrOp : DB_Op<"or", [NoSideEffect]> {
+let arguments = (ins Variadic<DB_BoolType>: $vals);
+let results = (outs  DB_BoolType : $res);
+let parser = [{
+return parseImplicitResultSameOperandBaseTypeOp(parser, result);
+}];
+let printer = [{
+return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
+}];
+}
+def NotOp : DB_Op<"not", [NoSideEffect]> {
+let arguments = (ins DB_BoolType: $vals);
+let results = (outs  DB_BoolType : $res);
+let parser = [{
+return parseImplicitResultSameOperandBaseTypeOp(parser, result);
+}];
+let printer = [{
+return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
+}];
+}
+
 
 #endif// OPS
