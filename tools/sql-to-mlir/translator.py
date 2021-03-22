@@ -1,6 +1,7 @@
 from moz_sql_parser import parse
 
-from mlir import DBType, Attribute, CodeGen
+from mlir import DBType, Attribute
+from codegen import CodeGen
 from resolver import StackedResolver, Resolver
 from tables import getTPCHTable
 from utility import ensure_list, ensure_value_dict, AggrFuncManager, getAttributeList, getPrintNames
@@ -233,5 +234,4 @@ class Translator:
         res = codegen.create_relalg_materialize(var, results)
         codegen.endFunction(res)
         codegen.endModule()
-        codegen.fixTypes()
         return codegen.getResult()
