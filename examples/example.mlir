@@ -1,8 +1,7 @@
 module @testmodule  {
   func @main() {
-    %11 = db.constant ("0.01") :!db.float<32>
-    //%12 = db.constant ("0.01") :!db.float<32>
-    %13 = db.sub %11 : !db.float<32>,%11 : !db.float<32>
+    %1 = relalg.basetable @abctable  {table_identifier = "abc"} columns: {col1 => @col1({name = "abc", type = !db.int<64>}), col2 => @col2({name = "dupp", type = !db.bool})}
+    %2 = relalg.sort %1 [(@abctable::@col1,desc),(@abctable::@colw,asc)]
     return
   }
 }

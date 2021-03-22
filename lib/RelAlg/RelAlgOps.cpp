@@ -74,6 +74,35 @@ using namespace mlir;
    }
    return success();
 }
+::mlir::ParseResult parseSortSpec(::mlir::OpAsmParser& parser,mlir::relalg::SortSpec& spec) {
+   ::mlir::IntegerAttr typeAttr;
+
+   ::llvm::StringRef attrStr;
+   ::mlir::NamedAttrList attrStorage;
+   auto loc = parser.getCurrentLocation();
+   if (parser.parseOptionalKeyword(&attrStr, {"desc", "asc"})) {
+      ::mlir::StringAttr attrVal;
+      ::mlir::OptionalParseResult parseResult =
+         parser.parseOptionalAttribute(attrVal,
+                                       parser.getBuilder().getNoneType(),
+                                       "type", attrStorage);
+      if (parseResult.hasValue()) {
+         if (failed(*parseResult))
+            return ::mlir::failure();
+         attrStr = attrVal.getValue();
+      } else {
+         return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'sortSpec' [desc,asc]");
+      }
+   }
+   if (!attrStr.empty()) {
+      auto spec_ = ::mlir::relalg::symbolizeSortSpec(attrStr);
+      if (!spec_)
+         return parser.emitError(loc, "invalid ")
+            << "type attribute specification: \"" << attrStr << '"';
+      spec=spec_.getValue();
+   }
+   return success();
+}
 ::mlir::ParseResult parseSetSemantic(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    ::mlir::IntegerAttr typeAttr;
 
@@ -220,6 +249,43 @@ static void printAttributeRefArr(OpAsmPrinter& p, ArrayAttr arrayAttr) {
       }
       mlir::relalg::RelationalAttributeRefAttr parsedSymbolRefAttr = a.dyn_cast<mlir::relalg::RelationalAttributeRefAttr>();
       p << parsedSymbolRefAttr.getName();
+   }
+   p << "]";
+}
+static ParseResult parseSortSpecs(OpAsmParser& parser, OperationState& result) {
+   if (parser.parseLSquare()) return failure();
+   std::vector<mlir::Attribute> mapping;
+   while (true) {
+      if (!parser.parseOptionalRSquare()) { break; }
+      mlir::relalg::RelationalAttributeRefAttr attr_ref_attr;
+      if (parser.parseLParen()||parseAttributeRefAttr(parser, result, attr_ref_attr)||parser.parseComma()) {
+         return failure();
+      }
+      mlir::relalg::SortSpec spec;
+      if(parseSortSpec(parser,spec)||parser.parseRParen()){
+         return failure();
+      }
+      mapping.push_back(mlir::relalg::SortSpecificationAttr::get(parser.getBuilder().getContext(),attr_ref_attr,spec));
+      if (!parser.parseOptionalComma()) { continue; }
+      if (parser.parseRSquare()) { return failure(); }
+      break;
+   }
+   result.addAttribute("sortspecs", mlir::ArrayAttr::get(parser.getBuilder().getContext(), mapping));
+   return success();
+}
+static void printSortSpecs(OpAsmPrinter& p, ArrayAttr arrayAttr) {
+   ArrayAttr parsed_attr;
+   p << "[";
+   std::vector<Attribute> attributes;
+   bool first = true;
+   for (auto a : arrayAttr) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      mlir::relalg::SortSpecificationAttr sortSpecificationAttr = a.dyn_cast<mlir::relalg::SortSpecificationAttr>();
+      p <<"("<<sortSpecificationAttr.getAttr().getName()<<","<<mlir::relalg::stringifySortSpec(sortSpecificationAttr.getSortSpec())<<")";
    }
    p << "]";
 }
@@ -630,6 +696,18 @@ static void print(OpAsmPrinter& p, relalg::DistinctOp& op) {
    p << op.getOperationName() << " ";
    printAttributeRefArr(p, op.attrs());
    p << " " << op.rel();
+}
+///////////////////////////////////////////////////////////////////////////////////
+// SortOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
+   parseRelationalInputs(parser, result, 1);
+   parseSortSpecs(parser,result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::SortOp& op) {
+   p << op.getOperationName() << " "<< op.rel()<<" ";
+   printSortSpecs(p,op.sortspecs());
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // UnionOp

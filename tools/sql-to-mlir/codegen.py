@@ -202,6 +202,10 @@ class CodeGen:
         return self.addOp(DBType(attr.type.name,attr.type.baseprops,True),["relalg.aggrfn ",type," ",attr.ref_to_string()," ", ValueRef(rel), " : ",DBType(attr.type.name,attr.type.baseprops,True).to_string()])
     def create_relalg_count_rows(self,rel):
         return self.addOp(DBType("int",["64"]),["relalg.count ",ValueRef(rel)])
+
+    def create_relalg_sort(self,rel,sortSpecifications):
+        return self.addOp("relation",["relalg.sort ",ValueRef(rel)," [%s]" % (",".join(map(lambda x: "("+x[0].ref_to_string()+","+x[1]+")",sortSpecifications)))])
+
     def create_db_const(self,const,type):
         var=self.newVar()
         self.addExistingOp(Operation(var,type,["db.constant ","(\"",const,"\") :", TypeRef(var)]))

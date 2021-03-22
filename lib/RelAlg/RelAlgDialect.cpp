@@ -18,6 +18,8 @@ void RelAlgDialect::initialize() {
       >();
    addAttributes<mlir::relalg::RelationalAttributeDefAttr>();
    addAttributes<mlir::relalg::RelationalAttributeRefAttr>();
+   addAttributes<mlir::relalg::SortSpecificationAttr>();
+
 }
 
 /// Parse a type registered to this dialect.

@@ -18,6 +18,8 @@ class Resolver:
         self.add_(name, attr)
         for prefix in prefixes:
             self.add_(prefix + "." + name, attr)
+    def addOverride(self,name,attr):
+        self.lookup_table[name]=attr
 
 
 class StackedResolver:

@@ -16,6 +16,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"
 #include "mlir/Dialect/RelAlg/IR/RelationalAttributeDefAttr.h"
 #include "mlir/Dialect/RelAlg/IR/RelationalAttributeRefAttr.h"
+#include "mlir/Dialect/RelAlg/IR/SortSpecificationAttr.h"
 
 
 #include "mlir/Dialect/StandardOps/IR/Ops.h"

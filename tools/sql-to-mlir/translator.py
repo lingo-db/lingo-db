@@ -196,6 +196,15 @@ class Translator:
             results = getAttributeList(resolver, select_names)
             for i in range(0, len(results)):
                 results[i].print_name = select_print_names[i]
+                resolver.addOverride(select_print_names[i],results[i])
+        if "orderby" in stmt:
+            sortSpecifications=[]
+            for v in ensure_list(stmt["orderby"]):
+                attr=resolver.resolve(v["value"])
+                sortSpec=v["sort"] if "sort" in v else "asc"
+                sortSpecifications.append((attr,sortSpec))
+            tree_var=codegen.create_relalg_sort(tree_var,sortSpecifications)
+
         return tree_var, results
 
     def addJoinTable(self, codegen, from_value, resolver):
@@ -223,7 +232,7 @@ class Translator:
 
     def translate(self):
         parsed = parse(self.query)
-        #print(parsed)
+        print(parsed)
         if "with" in parsed:
             for with_query in ensure_list(parsed["with"]):
                 self.with_defs[with_query["name"]] = with_query["value"]

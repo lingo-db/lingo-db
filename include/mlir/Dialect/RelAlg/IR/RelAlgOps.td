@@ -58,6 +58,13 @@ let storageType = "::mlir::relalg::RelationalAttributeRefAttr";
 let returnType = "::mlir::relalg::RelationalAttributeRefAttr";
 let convertFromStorage = "$_self";
 }
+def SortSpecificationAttr :
+DialectAttr<RelAlg_Dialect,
+        CPred<"$_self.isa<SortSpecificationAttr>()">, "SortSpecificationAttr">{
+let storageType = "::mlir::relalg::SortSpecificationAttr";
+let returnType = "::mlir::relalg::SortSpecificationAttr";
+let convertFromStorage = "$_self";
+}
 def ConstRelationOp : RelAlg_Op<"const_relation",
         [ NoSideEffect]> {
 let summary = "constant relation";
@@ -130,6 +137,20 @@ let summary = "aggregation operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel, ArrayAttr:$group_by_attrs);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$aggr_func);
+}
+def RelAlg_SortSpec_DESC  : I64EnumAttrCase<"desc", 0>;
+def RelAlg_AggrFunc_ASC  : I64EnumAttrCase<"asc", 1>;
+
+def RelAlg_SortSpec : I64EnumAttr<
+        "SortSpec", "",
+        [RelAlg_SortSpec_DESC,RelAlg_AggrFunc_ASC]> {
+let cppNamespace = "::mlir::relalg";
+}
+
+def SortOp : RelAlg_Op<"sort",[NoSideEffect]> {
+let summary = "sort operation";
+let arguments = (ins RelAlg_Relation:$rel, ArrayAttr:$sortspecs);
+let results = (outs RelAlg_Relation:$result);
 }
 
 def RelAlg_AggrFunc_Sum  : I64EnumAttrCase<"sum", 0>;
