@@ -10,6 +10,15 @@ class Translator:
     def __init__(self, query):
         self.query = query
         self.with_defs = {}
+        self.mapnumber=0
+        self.aggrnumber=0
+    def uniqueMapName(self):
+        self.mapnumber+=1
+        return "map"+str(self.mapnumber)
+
+    def uniqueAggrName(self):
+        self.aggrnumber += 1
+        return "aggr" + str(self.aggrnumber)
 
     def translateExpression(self, expr, codegen, stacked_resolver):
         def translateSubExpressions(subexprs):
@@ -129,7 +138,7 @@ class Translator:
             sel_res = self.translateExpression(stmt["where"], codegen, stacked_resolver)
             stacked_resolver.pop()
             codegen.endSelection(sel_res)
-        AFM = AggrFuncManager()
+        AFM = AggrFuncManager(self.uniqueAggrName(),self.uniqueMapName(),self.uniqueMapName())
         if "having" in stmt:
             having_expr = AFM.substituteAggrFuncs(stmt["having"])
         select_names = AFM.substituteComplexExpressions(stmt["select"])
@@ -148,7 +157,7 @@ class Translator:
         if "groupby" in stmt or len(AFM.aggr) > 0:
             scope_name = AFM.aggname
             attributeList = getAttributeList(resolver, stmt["groupby"]) if "groupby" in stmt else []
-            tree_var, relation = codegen.startAggregation("agg1", tree_var, attributeList)
+            tree_var, relation = codegen.startAggregation(scope_name, tree_var, attributeList)
             for name, aggrfunc in AFM.aggr.items():
                 if len(aggrfunc["names"]) > 0:
                     if aggrfunc["distinct"] == True:

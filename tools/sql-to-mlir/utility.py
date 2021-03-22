@@ -34,10 +34,10 @@ def getPrintNames(l):
 
 class AggrFuncManager:
 
-    def __init__(self):
-        self.aggname="agg1"
-        self.mapname_before="map1"
-        self.mapname_after="map2"
+    def __init__(self,aggname,mapname_before,mapname_after):
+        self.aggname=aggname
+        self.mapname_before=mapname_before
+        self.mapname_after=mapname_after
 
         self.evaluate_before_agg={}
         self.aggr={}
