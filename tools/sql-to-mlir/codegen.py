@@ -205,6 +205,8 @@ class CodeGen:
 
     def create_relalg_sort(self,rel,sortSpecifications):
         return self.addOp("relation",["relalg.sort ",ValueRef(rel)," [%s]" % (",".join(map(lambda x: "("+x[0].ref_to_string()+","+x[1]+")",sortSpecifications)))])
+    def create_relalg_limit(self,rel,limit):
+        return self.addOp("relation",["relalg.limit ",limit," ",ValueRef(rel)])
 
     def create_db_const(self,const,type):
         var=self.newVar()

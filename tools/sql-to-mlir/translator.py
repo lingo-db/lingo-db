@@ -204,6 +204,8 @@ class Translator:
                 sortSpec=v["sort"] if "sort" in v else "asc"
                 sortSpecifications.append((attr,sortSpec))
             tree_var=codegen.create_relalg_sort(tree_var,sortSpecifications)
+        if "limit" in stmt:
+            tree_var=codegen.create_relalg_limit(tree_var,stmt["limit"])
 
         return tree_var, results
 
@@ -232,7 +234,6 @@ class Translator:
 
     def translate(self):
         parsed = parse(self.query)
-        print(parsed)
         if "with" in parsed:
             for with_query in ensure_list(parsed["with"]):
                 self.with_defs[with_query["name"]] = with_query["value"]
