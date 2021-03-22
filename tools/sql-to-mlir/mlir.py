@@ -1,4 +1,4 @@
-
+import functools
 class DBType:
     def __init__ (self,name,baseprops=[],nullable=False):
         self.name=name
@@ -57,6 +57,13 @@ class Operation:
             else:
                 print_arg.print(codegen)
         codegen.print("\n")
+    def fixTypes(self,codegen):
+        for print_arg in reversed(self.print_args):
+            if type(print_arg) == Region:
+                print_arg.fixTypes(codegen)
+        codegen.fixTypesForOp(self)
+
+
 class BaseTableOp:
     def __init__(self,var,table):
         self.table=table
@@ -78,6 +85,8 @@ class BaseTableOp:
         codegen.print(column_str)
         codegen.indent-=1
         codegen.print("\n}\n")
+    def fixTypes(self,codegen):
+        pass
 
 class Param:
     def __init__(self,type):
@@ -96,6 +105,9 @@ class Region:
             op.print(codegen)
         codegen.indent-=1
         codegen.print("}")
+    def fixTypes(self,codegen):
+        for op in reversed(self.ops):
+            op.fixTypes(codegen)
 class RootRegion:
     def __init__(self,ops):
         self.ops=ops
@@ -104,6 +116,9 @@ class RootRegion:
     def print(self,codegen):
         for op in self.ops:
             op.print(codegen)
+    def fixTypes(self,codegen):
+        for op in reversed(self.ops):
+            op.fixTypes(codegen)
 class CodeGen:
 
 
@@ -186,12 +201,26 @@ class CodeGen:
             arr.append(" : ")
             arr.append(TypeRef(v))
 
-    def create_db_binary_op(self, name,values):
-        args=["db.",name," "]
+    def create_db_binary_op(self, name,values:list):
+        bin_values=[values[0],values[1]]
+        args=["db."+name+" "]
+        common_type=self.getCommonType(self.getTypesForValues(bin_values))
+        self.addValuesWithTypes(args,self.toCommonTypes(bin_values,common_type))
+        res= self.addOp(common_type,args)
+        if len(values)>2:
+            rec_vals=values[2:]
+            rec_vals.append(res)
+            return self.create_db_binary_op(name,rec_vals)
+        else:
+            return res
+    def create_db_date_binary_op(self, name,values):
+        args=["db.date_"+name+" "]
         self.addValuesWithTypes(args,values)
-        return self.addOp(DBType("bool"),args)
+        return self.addOp(DBType("date"),args)
     def create_db_extract(self, key,value):
-        return self.addOp(DBType("bool"),["db.extract \"",key,"\" ",ValueRef(value)," : ",TypeRef(value)])
+        return self.addOp(DBType("int",["32"],self.getType(value).nullable),["db.date_extract"," \"",key,"\", ",ValueRef(value)," : ",TypeRef(value)])
+    def create_db_cast(self, value, targetType):
+        return self.addOp(targetType,["db.cast ",ValueRef(value)," : ",TypeRef(value)," -> ",targetType.to_string()])
     def create_relalg_getattr(self,tuple,attr):
         return self.addOp(attr.type,["relalg.getattr ",ValueRef(tuple), " ",attr.ref_to_string()," : ",attr.type.to_string()])
     def create_relalg_addattr(self,val,attr):
@@ -203,7 +232,7 @@ class CodeGen:
         return self.addOp(DBType("matcollection",attr_types),["relalg.materialize ",ValueRef(rel)," [",",".join(attr_refs),"]", " : ",DBType("matcollection",attr_types).to_string()])
     def create_relalg_distinct(self,rel,attrs):
         attr_refs=list(map(lambda val:val.ref_to_string(),attrs))
-        return self.addOp("relation",["relalg.distinct [",",".join(attr_refs),"]",ValueRef(rel)])
+        return self.addOp("relation",["relalg.distinct ","[",",".join(attr_refs),"]",ValueRef(rel)])
 
     def create_relalg_exists(self,rel):
         return self.addOp(DBType("bool"),["relalg.exists", ValueRef(rel)])
@@ -212,15 +241,15 @@ class CodeGen:
     def create_relalg_getscalar(self,rel,attr):
         return self.addOp(attr.type,["relalg.getscalar ",attr.ref_to_string()," ",ValueRef(rel)," : ",attr.type.to_string()])
     def create_relalg_aggr_func(self,type,attr,rel):
-        return self.addOp(DBType(attr.type.name,attr.type.baseprops,True),["relalg.aggrfn ",type," ",attr.ref_to_string()," ", ValueRef(rel), " : ",attr.type.to_string()])
+        return self.addOp(DBType(attr.type.name,attr.type.baseprops,True),["relalg.aggrfn ",type," ",attr.ref_to_string()," ", ValueRef(rel), " : ",DBType(attr.type.name,attr.type.baseprops,True).to_string()])
     def create_relalg_count_rows(self,rel):
         return self.addOp(DBType("int",["64"]),["relalg.count ",ValueRef(rel)])
     def create_db_const(self,const,type):
         var=self.newVar()
-        self.addExistingOp(Operation(var,type,["db.constant (\"",const,"\") :", TypeRef(var)]))
+        self.addExistingOp(Operation(var,type,["db.constant ","(\"",const,"\") :", TypeRef(var)]))
         return var
     def create_relalg_const_relation(self,values):
-        return self.addOp("relation",["relalg.const_relation [%s]" % (",".join(map(lambda x: "\""+x+"\"" if type(x) == str else str(x),values)))])
+        return self.addOp("relation",["relalg.const_relation ","[%s]" % (",".join(map(lambda x: "\""+x+"\"" if type(x) == str else str(x),values)))])
 
 
 
@@ -234,14 +263,14 @@ class CodeGen:
         op=Operation(var,type,print_args)
         return self.addExistingOp(op)
     def startModule(self,name):
-        self.stacked_ops.append(Operation(None,None,["module @",name]))
+        self.stacked_ops.append(Operation(None,None,["module ","@",name]))
         self.startRegion()
     def endModule(self):
         op=self.stacked_ops.pop()
         op.print_args.append(self.endRegion())
         self.getCurrentRegion().addOp(op)
     def startFunction(self,name):
-        self.stacked_ops.append(Operation(None,None,["func @",name," () "]))
+        self.stacked_ops.append(Operation(None,None,["func ","@",name," () "]))
         self.startRegion()
     def endFunction(self,res):
         op = self.stacked_ops.pop()
@@ -270,24 +299,29 @@ class CodeGen:
 
     def startSelection(self,rel):
         tuple=self.newParam("tuple")
-        return self.startRegionOp("relation",["relalg.selection",ValueRef(rel),"(",tuple, ": !relalg.tuple) "]),tuple
+        return self.startRegionOp("relation",["relalg.selection ",ValueRef(rel),"(",tuple, ": !relalg.tuple) "]),tuple
     def endSelection(self,res):
         self.endRegionOpWith(Operation(None,None,["relalg.return ",ValueRef(res)," : ",TypeRef(res)]))
     def startMap(self,scope_name,rel):
         tuple=self.newParam("tuple")
-        return self.startRegionOp("relation",["relalg.map @",scope_name," ",ValueRef(rel)," (",tuple, ": !relalg.tuple) "]),tuple
+        return self.startRegionOp("relation",["relalg.map ","@",scope_name," ",ValueRef(rel)," (",tuple, ": !relalg.tuple) "]),tuple
     def endMap(self):
         self.endRegionOpWith(Operation(None, None, ["relalg.return"]))
 
     def startSelection(self,rel):
         tuple=self.newParam("tuple")
-        return self.startRegionOp("relation",["relalg.selection",ValueRef(rel),"(",tuple, ": !relalg.tuple) "]),tuple
+        return self.startRegionOp("relation",["relalg.selection ",ValueRef(rel),"(",tuple, ": !relalg.tuple) "]),tuple
     def endSelection(self,res):
         self.endRegionOpWith(Operation(None,None,["relalg.return ",ValueRef(res)," : ",TypeRef(res)]))
     def startIf(self,val):
-        return self.startRegionOp(DBType("bool"),["db.if ", ValueRef(val)," "])
+        return self.startRegionOp(None,["db.if ", ValueRef(val)," : ",TypeRef(val)," "])
     def addElse(self, yieldval=None):
         if yieldval != None:
+            ifop = self.stacked_ops[-1]
+            ifop.print_args.append(" -> ")
+            ifop.print_args.append(TypeRef(yieldval))
+            ifop.print_args.append(" ")
+            ifop.type=self.getType(yieldval)
             yieldOp=Operation(None,None,["db.yield ",ValueRef(yieldval)," : ",TypeRef(yieldval)])
         else:
             yieldOp=Operation(None,None,["db.yield"])
@@ -299,6 +333,13 @@ class CodeGen:
         self.startRegion()
     def endIf(self, yieldval=None):
         if yieldval != None:
+            ifop = self.stacked_ops[-1]
+            if ifop.type == None:
+                ifop = self.stacked_ops[-1]
+                ifop.print_args.append(" -> ")
+                ifop.print_args.append(TypeRef(yieldval))
+                ifop.print_args.append(" ")
+                ifop.type = self.getType(yieldval)
             yieldOp=Operation(None,None,["db.yield ",ValueRef(yieldval)," : ",TypeRef(yieldval)])
         else:
             yieldOp=Operation(None,None,["db.yield"])
@@ -309,17 +350,64 @@ class CodeGen:
         tuple = self.newParam("tuple")
         joinop= "outerjoin" if outer else "join"
         return self.startRegionOp("relation",
-                                  ["relalg.",joinop," ",type," ", ValueRef(left),", ",ValueRef(right), "(", tuple, ": !relalg.tuple) "]), tuple
+                                  ["relalg."+joinop," ",type," ", ValueRef(left),", ",ValueRef(right), "(", tuple, ": !relalg.tuple) "]), tuple
 
     def endJoin(self, res):
         self.endRegionOpWith(Operation(None, None, ["relalg.return ", ValueRef(res), " : ", TypeRef(res)]))
     def startAggregation(self,name,rel, attributes):
         relation=self.newParam("relation")
         attr_refs=list(map(lambda val:val.ref_to_string(),attributes))
-        return self.startRegionOp("relation",["relalg.aggregation @",name," ",ValueRef(rel)," [",",".join(attr_refs),"] (",relation," : !relalg.relation) "]),relation
+        return self.startRegionOp("relation",["relalg.aggregation ","@",name," ",ValueRef(rel)," [",",".join(attr_refs),"] (",relation," : !relalg.relation) "]),relation
     def endAggregation(self):
         self.endRegionOpWith(Operation(None, None, ["relalg.return"]))
+    def fixTypes(self):
+        self.getCurrentRegion().fixTypes(self)
+    def fixTypesForOp(self,op,expectedType=None):
+        print(op.print_args[0])
+        pass
     def getResult(self):
         self.getCurrentRegion().print(self)
         return self.result
+    def getHigherType(self,left:DBType,right:DBType):
+        if left==None:
+            return right
+        nullable=left.nullable or right.nullable
+        if left.name > right.name:
+            tmp=left
+            left=right
+            right=tmp
+        # int -> decimal / float -> decimal / int -> float
+        if (left.name=="decimal" and right.name=="int") or \
+                (left.name=="decimal" and right.name=="float") or\
+                (left.name =="float" and right.name=="int"):
+            return DBType(left.name,left.baseprops,nullable)
+        if left.name==right.name:
+            if left.name=="int" or left.name=="float":
+                width=max(int(left.baseprops[0]),int(right.baseprops[0]))
+                return DBType(left.name,[str(width)],nullable)
+            if left.name=="decimal":
+                p=max(int(left.baseprops[0]),int(right.baseprops[0]))
+                s=max(int(left.baseprops[1]),int(right.baseprops[1]))
+                return DBType(left.name,[str(p),str(s)],nullable)
+        if right.name=="string" or left.name=="string":
+            return DBType("string",[],nullable)
+        return None
+    def getTypesForValues(self,values):
+        return list(map(lambda x:self.getType(x),values))
+    def getCommonType(self,types):
+        return functools.reduce(self.getHigherType,types,None)
+    def toCommonType(self,value,common_type):
+        op=self.ops[value]
+        if type(op) == Operation:
+            if op.type.name==common_type.name and op.type.baseprops==common_type.baseprops:
+                return value
+            if op.print_args[0].startswith("db.constant"):
+                op.type=DBType(common_type.name,common_type.baseprops)
+                return value
+        return self.create_db_cast(value,common_type)
+
+    def toCommonTypes(self,values,common_type):
+        return list(map(lambda x:self.toCommonType(x,common_type),values))
+
+
 

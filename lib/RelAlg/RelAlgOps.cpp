@@ -728,7 +728,7 @@ static ParseResult parseConstRelationOp(OpAsmParser &parser,
 // InOp
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseInOp(OpAsmParser& parser, OperationState& result) {
-   ::mlir::Type resultType;
+   ::mlir::db::DBType resultType;
    OpAsmParser::OperandType val;
    ::mlir::Type valType;
    if (parser.parseOperand(val)||parser.parseColonType(valType)||parser.parseComma()) {
@@ -742,7 +742,7 @@ static ParseResult parseInOp(OpAsmParser& parser, OperationState& result) {
 }
 static void print(OpAsmPrinter& p, relalg::InOp& op) {
    p << op.getOperationName();
-   p << " " << op.val() <<" : "<<op.val().getType() <<", "<<op.rel();
+   p << " " << op.val() <<" : "<<op.val().getType() <<", "<<op.rel() <<":"<<op.getType();
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.cpp.inc"

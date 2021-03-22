@@ -24,7 +24,7 @@ class Translator:
                 return codegen.create_db_or(translateSubExpressions(expr["or"]))
             if key == "not":
                 return codegen.create_db_not(translateSubExpressions(expr[key]))
-            elif key in ["lt", "gt", "lte", "gte", "eq", "neq"]:
+            elif key in ["lt", "gt", "lte", "gte", "eq", "neq","like"]:
                 return codegen.create_db_cmp(key, translateSubExpressions(expr[key]))
             elif key == "date":
                 return codegen.create_db_const(expr["date"]["literal"], DBType("date", [], False))
@@ -35,8 +35,12 @@ class Translator:
                 return self.translateExpression({"not": {"like": expr[key]}}, codegen, stacked_resolver)
             elif key == "nin":
                 return self.translateExpression({"not": {"in": expr[key]}}, codegen, stacked_resolver)
-            elif key in ["add", "mul", "sub", "div", "like"]:
-                return codegen.create_db_binary_op(key, translateSubExpressions(expr[key]))
+            elif key in ["add", "mul", "sub", "div"]:
+                subexprs=translateSubExpressions(expr[key])
+                if codegen.getType(subexprs[0]).name =="date":
+                    return codegen.create_db_date_binary_op(key, subexprs )
+                else:
+                    return codegen.create_db_binary_op(key, subexprs )
             elif key == "case":
                 return_values=[]
                 for case in expr[key]:
@@ -220,4 +224,5 @@ class Translator:
         res = codegen.create_relalg_materialize(var, results)
         codegen.endFunction(res)
         codegen.endModule()
+        codegen.fixTypes()
         return codegen.getResult()

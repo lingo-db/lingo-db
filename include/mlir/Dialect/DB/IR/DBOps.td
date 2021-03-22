@@ -45,7 +45,7 @@ def DB_BoolType : DB_Type<"Bool","bool"> {
   let parameters = (ins "bool":$nullable);
     let builders = [
     TypeBuilder<(ins ), [{
-    return $_get($_ctxt, "false");
+    return $_get($_ctxt, false);
     }]>
     ];
 }
@@ -94,8 +94,7 @@ Attribute getValue() { return (*this)->getAttr("value"); }
 
 class DB_BinaryOp<string mnemonic, list<OpTrait> traits = []> :
 Op<DB_Dialect, mnemonic,
-    !listconcat(traits, [NoSideEffect,
-        SameOperandsAndResultType])>,Arguments<(ins DBType:$lhs, DBType:$rhs)> {
+    !listconcat(traits, [NoSideEffect])>,Arguments<(ins DBType:$lhs, DBType:$rhs)> {
 let results = (outs AnyType:$result);
 let parser = [{
 return parseImplicitResultSameOperandBaseTypeOp(parser, result);
@@ -124,7 +123,6 @@ def DB_MulOp : DB_BinaryOp<"mul"> {}
 def DB_DivOp : DB_BinaryOp<"div"> {}
 def DB_ModOp : DB_BinaryOp<"mod"> {}
 def DB_NegOp : DB_BinaryOp<"neg"> {}
-def DB_LikeOp : DB_BinaryOp<"like"> {}
 
 def DB_CMP_P_EQ  : I64EnumAttrCase<"eq", 0>;
 def DB_CMP_P_NEQ  : I64EnumAttrCase<"neq", 1>;
@@ -132,11 +130,12 @@ def DB_CMP_P_LT : I64EnumAttrCase<"lt", 2>;
 def DB_CMP_P_LTE : I64EnumAttrCase<"lte", 3>;
 def DB_CMP_P_GT : I64EnumAttrCase<"gt", 4>;
 def DB_CMP_P_GTE : I64EnumAttrCase<"gte", 5>;
+def DB_CMP_P_LIKE : I64EnumAttrCase<"like", 6>;
 
 def DB_CmpPredicateAttr : I64EnumAttr<
     "DBCmpPredicate", "",
     [DB_CMP_P_EQ, DB_CMP_P_NEQ, DB_CMP_P_LT, DB_CMP_P_LTE, DB_CMP_P_GT,
-        DB_CMP_P_GTE]> {
+        DB_CMP_P_GTE,DB_CMP_P_LIKE]> {
 let cppNamespace = "::mlir::db";
 }
 
@@ -206,5 +205,66 @@ return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
 }];
 }
 
+def DateAddOp : DB_Op<"date_add"> {
+let summary = "date add function";
+let arguments = (ins DB_DateType:$left, DB_IntervalType:$right );
+let results = (outs  DB_DateType : $res);
+let parser = [{
+return parseDateOp(parser, result);
+}];
+let printer = [{
+return printDateOp(this->getOperation(), p);
+}];
+}
+def DateSubOp : DB_Op<"date_sub"> {
+let summary = "date sub function";
+let arguments = (ins DB_DateType:$left, DB_IntervalType:$right );
+let results = (outs  DB_DateType : $res);
+let parser = [{
+return parseDateOp(parser, result);
+}];
+let printer = [{
+return printDateOp(this->getOperation(), p);
+}];
+}
+def DateExtractOp : DB_Op<"date_extract"> {
+let summary = "date sub function";
+let arguments = (ins StrAttr:$unit, DB_DateType:$date );
+let results = (outs  DB_IntType : $res);
+}
+def CastOp : DB_Op<"cast"> {
+let summary = "cast function";
+let arguments = (ins DBType:$val);
+let results=(outs DBType:$res);
+let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
+}
 
+
+def IfOp : DB_Op<"if",
+[SingleBlockImplicitTerminator<"db::YieldOp">, RecursiveSideEffects,
+NoRegionArguments]> {
+let summary = "if-then-else operation";
+
+let arguments = (ins DB_BoolType:$condition);
+let results = (outs Variadic<AnyType>:$results);
+let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
+}
+
+
+
+
+def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
+        ParentOneOf<["IfOp"]>]> {
+let summary = "loop yield and termination operation";
+
+let arguments = (ins Variadic<AnyType>:$results);
+let builders = [OpBuilderDAG<(ins), [{ /* nothing to do */ }]>];
+
+let assemblyFormat =
+[{  attr-dict ($results^ `:` type($results))? }];
+
+// Override default verifier (defined in SCF_Op), no custom verification
+// needed.
+let verifier = ?;
+}
 #endif// OPS

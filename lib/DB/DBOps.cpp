@@ -122,7 +122,7 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation *op, OpAsmPrinter
       ::llvm::StringRef attrStr;
       ::mlir::NamedAttrList attrStorage;
       auto loc = parser.getCurrentLocation();
-      if (parser.parseOptionalKeyword(&attrStr, {"eq","neq","lt","lte","gt","gte"})) {
+      if (parser.parseOptionalKeyword(&attrStr, {"eq","neq","lt","lte","gt","gte","like"})) {
          ::mlir::StringAttr attrVal;
          ::mlir::OptionalParseResult parseResult =
             parser.parseOptionalAttribute(attrVal,
@@ -133,7 +133,7 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation *op, OpAsmPrinter
                return ::mlir::failure();
             attrStr = attrVal.getValue();
          } else {
-            return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'predicate' [eq, neq, lt, lte, gt, gte]");
+            return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'predicate' [eq, neq, lt, lte, gt, gte,like]");
          }
       }
       if (!attrStr.empty()) {
@@ -189,6 +189,116 @@ static void print(::mlir::OpAsmPrinter &p,mlir::db::CmpOp& op) {
    p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"predicate"});
 }
 
+
+
+static ParseResult parseDateOp(OpAsmParser &parser,
+                                                            OperationState &result) {
+   OpAsmParser::OperandType left,right;
+   mlir::db::DBType leftType, rightType;
+   if(parser.parseOperand(left)||parser.parseColonType(leftType)||parser.parseComma()||parser.parseOperand(right)||parser.parseColonType(rightType)){
+      return failure();
+   }
+   if(parser.resolveOperand(left, leftType,result.operands).failed()||parser.resolveOperand(right, rightType,result.operands).failed()){
+      return failure();
+   }
+   bool nullable=rightType.isNullable()||leftType.isNullable();
+   parser.addTypeToList(db::DateType::get(parser.getBuilder().getContext(),nullable),result.types);
+   return success();
+}
+
+static void printDateOp(Operation *op, OpAsmPrinter &p){
+   bool first=true;
+   p<<op->getName()<<" ";
+   for(auto operand:op->getOperands()){
+
+      if(first){
+         first=false;
+      }else{
+         p<<",";
+      }
+      p<<operand<<":"<<operand.getType();
+   }
+
+}
+
+
+
+static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
+   // Create the regions for 'then'.
+   result.regions.reserve(2);
+   Region *thenRegion = result.addRegion();
+   Region *elseRegion = result.addRegion();
+
+   auto &builder = parser.getBuilder();
+   OpAsmParser::OperandType cond;
+   Type condType;
+   if (parser.parseOperand(cond) || parser.parseColonType(condType) ||
+       parser.resolveOperand(cond, condType, result.operands))
+      return failure();
+   // Parse optional results type list.
+   if (parser.parseOptionalArrowTypeList(result.types))
+      return failure();
+   // Parse the 'then' region.
+   if (parser.parseRegion(*thenRegion, /*arguments=*/{}, /*argTypes=*/{}))
+      return failure();
+
+   // If we find an 'else' keyword then parse the 'else' region.
+   if (!parser.parseOptionalKeyword("else")) {
+      if (parser.parseRegion(*elseRegion, /*arguments=*/{}, /*argTypes=*/{}))
+         return failure();
+   }
+
+   // Parse the optional attribute list.
+   if (parser.parseOptionalAttrDict(result.attributes))
+      return failure();
+   return success();
+}
+
+static void print(OpAsmPrinter &p, mlir::db::IfOp op) {
+   bool printBlockTerminators = false;
+
+   p << mlir::db::IfOp::getOperationName() << " " << op.condition() << " : "<<op.condition().getType();
+   if (!op.results().empty()) {
+      p << " -> (" << op.getResultTypes() << ")";
+      // Print yield explicitly if the op defines values.
+      printBlockTerminators = true;
+   }
+   p.printRegion(op.thenRegion(),
+      /*printEntryBlockArgs=*/false,
+      /*printBlockTerminators=*/printBlockTerminators);
+
+   // Print the 'else' regions if it exists and has a block.
+   auto &elseRegion = op.elseRegion();
+   if (!elseRegion.empty()) {
+      p << " else";
+      p.printRegion(elseRegion,
+         /*printEntryBlockArgs=*/false,
+         /*printBlockTerminators=*/printBlockTerminators);
+   }
+
+   p.printOptionalAttrDict(op->getAttrs());
+}
+
+static ParseResult parseDateExtractOp(OpAsmParser &parser,
+                               OperationState &result) {
+   OpAsmParser::OperandType date;
+   mlir::db::DBType dateType;
+   StringAttr unit;
+   if(parser.parseAttribute(unit)||parser.parseComma()|| parser.parseOperand(date)||parser.parseColonType(dateType)){
+      return failure();
+   }
+   if(parser.resolveOperand(date, dateType,result.operands).failed()){
+      return failure();
+   }
+   result.addAttribute("unit",unit);
+   parser.addTypeToList(db::IntType::get(parser.getBuilder().getContext(),dateType.isNullable(),32),result.types);
+   return success();
+}
+
+static void print(OpAsmPrinter &p,mlir::db::DateExtractOp extractOp){
+   p<<extractOp.getOperationName()<<" "<<extractOp.unit()<<", "<<extractOp.date()<<" : "<<extractOp.date().getType();
+
+}
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.cpp.inc"
 #include "mlir/Dialect/DB/IR/DBOpsInterfaces.cpp.inc"
