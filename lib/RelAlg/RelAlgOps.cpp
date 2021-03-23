@@ -521,6 +521,17 @@ static void print(OpAsmPrinter& p, relalg::SelectionOp& op) {
    p << op.getOperationName() << " " << op.rel() << " ";
    printCustomRegion(p, op.getRegion());
 }
+Region &mlir::relalg::SelectionOp::getLoopBody() { return getRegion(); }
+
+bool mlir::relalg::SelectionOp::isDefinedOutsideOfLoop(Value value) {
+   return !getRegion().isAncestor(value.getParentRegion());
+}
+
+LogicalResult mlir::relalg::SelectionOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
+   for (auto op : ops)
+      op->moveBefore(*this);
+   return success();
+}
 
 ///////////////////////////////////////////////////////////////////////////////////
 // MapOp
@@ -557,6 +568,7 @@ static ParseResult parseAggregationOp(OpAsmParser& parser, OperationState& resul
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::AggregationOp& op) {
+   op.getCreatedAttributes();
    p << op.getOperationName() << " ";
    p.printSymbolName(op.sym_name());
    p << " " << op.rel() << " ";
@@ -679,7 +691,7 @@ static void print(OpAsmPrinter& p, relalg::DependentJoinOp& op) {
    std::string jt(mlir::relalg::stringifyEnum(op.type()));
    p << op.getOperationName() << " " << jt << " ";
    printAttributeRefArr(p, op.attrs());
-   p << " " << op.left() << ", " << op.right();
+   p << " " << op.left();
    printCustomRegion(p, op.getRegion());
 }
 ///////////////////////////////////////////////////////////////////////////////////
@@ -824,5 +836,4 @@ static void print(OpAsmPrinter& p, relalg::InOp& op) {
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.cpp.inc"
-#include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsTypes.cpp.inc"

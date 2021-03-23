@@ -130,30 +130,33 @@ let cppNamespace = "::mlir::relalg";
 // Operations that "create" relations
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 def ConstRelationOp : RelAlg_Op<"const_relation",
-        [ NoSideEffect]> {
+        [ RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "constant relation";
 let arguments = (ins ArrayAttr:$value);
 let results = (outs RelAlg_Relation:$result);
 }
 
 def BaseTableOp : RelAlg_Op<"basetable",
-[SingleBlockImplicitTerminator<"relalg::ReturnOp">,RecursiveSideEffects]> {
+[SingleBlockImplicitTerminator<"relalg::ReturnOp">,RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "base table operation";
 let arguments = (ins SymbolNameAttr:$sym_name, StrAttr: $table_identifier, DictionaryAttr: $columns);
 let results = (outs RelAlg_Relation:$result);
+let extraClassDeclaration = [{
+std::vector<mlir::relalg::RelationalAttributeDefAttr> getCreatedAttributes();
+}];
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Operators
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def SelectionOp : RelAlg_Op<"selection",[NoSideEffect]> {
+def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "selection operation";
 let arguments = (ins RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
-def MapOp : RelAlg_Op<"map",[NoSideEffect]> {
+def MapOp : RelAlg_Op<"map",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "map operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
@@ -166,7 +169,7 @@ let results = (outs RelAlg_Relation:$result);
 let assemblyFormat =
 [{ $rows $rel attr-dict }];
 }
-def CrossProductOp : RelAlg_Op<"crossproduct",[NoSideEffect]> {
+def CrossProductOp : RelAlg_Op<"crossproduct",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "crossproduct operation";
 let arguments = (ins RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
@@ -174,54 +177,58 @@ let assemblyFormat =
 [{ $left `,` $right attr-dict }];
 }
 
-def AggregationOp : RelAlg_Op<"aggregation",[NoSideEffect]> {
+def AggregationOp : RelAlg_Op<"aggregation",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>,DeclareOpInterfaceMethods<AttributeCreating>]> {
 let summary = "aggregation operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel, ArrayAttr:$group_by_attrs);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$aggr_func);
+let extraClassDeclaration = [{
+std::vector<mlir::relalg::RelationalAttributeRefAttr> getAttributeUsage();
+}];
+
 }
-def SortOp : RelAlg_Op<"sort",[NoSideEffect]> {
+def SortOp : RelAlg_Op<"sort",[NoSideEffect,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "sort operation";
 let arguments = (ins RelAlg_Relation:$rel, ArrayAttr:$sortspecs);
 let results = (outs RelAlg_Relation:$result);
 }
 
-def JoinOp : RelAlg_Op<"join",[NoSideEffect]> {
+def JoinOp : RelAlg_Op<"join",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "normal join operation";
 let arguments = (ins RelAlg_NormalJoinType:$type,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
-def DependentJoinOp : RelAlg_Op<"dependentjoin",[NoSideEffect]> {
+def DependentJoinOp : RelAlg_Op<"dependentjoin",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "dependent join operation";
-let arguments = (ins RelAlg_NormalJoinType:$type,ArrayAttr:$attrs,RelAlg_Relation:$left,RelAlg_Relation:$right);
+let arguments = (ins RelAlg_NormalJoinType:$type,ArrayAttr:$attrs,RelAlg_Relation:$left);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
-def OuterJoinOp : RelAlg_Op<"outerjoin",[NoSideEffect]> {
+def OuterJoinOp : RelAlg_Op<"outerjoin",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "outer join operation";
 let arguments = (ins RelAlg_OuterJoinType:$type,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
 
-def DistinctOp : RelAlg_Op<"distinct",[NoSideEffect]> {
+def DistinctOp : RelAlg_Op<"distinct",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "distinct operation";
 let arguments = (ins RelAlg_Relation:$rel, ArrayAttr:$attrs);
 let results = (outs RelAlg_Relation:$result);
 }
 
-def UnionOp :  RelAlg_Op<"union",[NoSideEffect]> {
+def UnionOp :  RelAlg_Op<"union",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "union operation";
 let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_Relation:$result);
 }
-def IntersectOp :  RelAlg_Op<"intersect",[NoSideEffect]> {
+def IntersectOp :  RelAlg_Op<"intersect",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "intersect operation";
 let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_Relation:$result);
 }
-def ExceptOp :  RelAlg_Op<"except",[NoSideEffect]> {
+def ExceptOp :  RelAlg_Op<"except",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "except operation";
 let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_Relation:$result);
