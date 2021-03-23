@@ -199,12 +199,6 @@ let arguments = (ins RelAlg_NormalJoinType:$type,RelAlg_Relation:$left,RelAlg_Re
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
-def DependentJoinOp : RelAlg_Op<"dependentjoin",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
-let summary = "dependent join operation";
-let arguments = (ins RelAlg_NormalJoinType:$type,ArrayAttr:$attrs,RelAlg_Relation:$left);
-let results = (outs RelAlg_Relation:$result);
-let regions = (region SizedRegion<1>:$predicate);
-}
 def OuterJoinOp : RelAlg_Op<"outerjoin",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "outer join operation";
 let arguments = (ins RelAlg_OuterJoinType:$type,RelAlg_Relation:$left,RelAlg_Relation:$right);

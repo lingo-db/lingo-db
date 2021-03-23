@@ -18,15 +18,12 @@ module @testmodule  {
                                                 }
     %7 = relalg.outerjoin "fullouter" %1,%1 (%tuple : !relalg.tuple){
                                                    relalg.return
-                                               }
-    %8 = relalg.dependentjoin "semi" [@a,@b,@c] %1,%1 (%tuple : !relalg.tuple){
-                                                   relalg.return
-                                               }
 
 
 
 
-    %9 = relalg.distinct [@a,@b] %8
+
+    %9 = relalg.distinct [@a,@b] %7
 
     %10 = relalg.union @union1 distinct %9,%8 mapping: {
       @a({type=!db.int<64>})=[@a1,@a2],

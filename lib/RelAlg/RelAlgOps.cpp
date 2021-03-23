@@ -676,25 +676,6 @@ static void print(OpAsmPrinter& p, relalg::OuterJoinOp& op) {
    printCustomRegion(p, op.getRegion());
 }
 ///////////////////////////////////////////////////////////////////////////////////
-// DependentJoinOp
-///////////////////////////////////////////////////////////////////////////////////
-static ParseResult parseDependentJoinOp(OpAsmParser& parser, OperationState& result) {
-   parseJoinType(parser, result);
-   Attribute attrs;
-   parseAttributeRefArr(parser, result, attrs);
-   result.addAttribute("attrs", attrs);
-   parseRelationalInputs(parser, result, 2);
-   parseCustomRegion(parser, result);
-   return addRelationOutput(parser, result);
-}
-static void print(OpAsmPrinter& p, relalg::DependentJoinOp& op) {
-   std::string jt(mlir::relalg::stringifyEnum(op.type()));
-   p << op.getOperationName() << " " << jt << " ";
-   printAttributeRefArr(p, op.attrs());
-   p << " " << op.left();
-   printCustomRegion(p, op.getRegion());
-}
-///////////////////////////////////////////////////////////////////////////////////
 // DistinctOp
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseDistinctOp(OpAsmParser& parser, OperationState& result) {
