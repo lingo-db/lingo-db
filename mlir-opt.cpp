@@ -21,6 +21,9 @@ int main(int argc, char **argv) {
   ::mlir::registerPass("relalg-test-pass", "test pass for relalg dialect", []() -> std::unique_ptr<::mlir::Pass> {
     return mlir::relalg::createTestPass();
   });
+   ::mlir::registerPass("relalg-extract-nested-operators", "extract nested operators", []() -> std::unique_ptr<::mlir::Pass> {
+     return mlir::relalg::createExtractNestedOperatorsPass();
+   });
   mlir::DialectRegistry registry;
   registry.insert<mlir::relalg::RelAlgDialect>();
   registry.insert<mlir::db::DBDialect>();

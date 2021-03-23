@@ -12,6 +12,23 @@ InterfaceMethod<
 >
 ];
 }
+def TupleLamdaOperator : OpInterface<"TupleLamdaOperator"> {
+let methods = [
+InterfaceMethod<
+        "Get Attribute Usage",
+        "mlir::Region&", "getLambdaRegion",(ins )
+        , /*op=*/[{
+return $_op->getRegion(0);
+}]
+>,
+InterfaceMethod<
+        "",
+        "mlir::Block&", "getLambdaBlock",(ins )
+        , /*op=*/[{
+return $_op->getRegion(0).front();
+}]
+>];
+}
 def AttributeCreating : OpInterface<"AttributeCreating"> {
 let methods = [
 InterfaceMethod<

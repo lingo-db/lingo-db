@@ -150,13 +150,13 @@ std::vector<mlir::relalg::RelationalAttributeDefAttr> getCreatedAttributes();
 // Operators
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
+def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>,TupleLamdaOperator]> {
 let summary = "selection operation";
 let arguments = (ins RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
-def MapOp : RelAlg_Op<"map",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
+def MapOp : RelAlg_Op<"map",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>,TupleLamdaOperator]> {
 let summary = "map operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);

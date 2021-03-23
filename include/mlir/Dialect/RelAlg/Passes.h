@@ -5,9 +5,11 @@
 #include <memory>
 
 namespace mlir {
-    namespace relalg {
-        std::unique_ptr<Pass> createTestPass();
-    }// end namespace db
-}// end namespace mlir
+namespace relalg {
+std::unique_ptr<Pass> createTestPass();
+std::unique_ptr<Pass> createExtractNestedOperatorsPass();
 
-#endif// MLIR_DB_PASSES_H
+} // end namespace db
+} // end namespace mlir
+
+#endif // MLIR_DB_PASSES_H
