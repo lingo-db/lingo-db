@@ -551,6 +551,17 @@ static void print(OpAsmPrinter& p, relalg::MapOp& op) {
    p << " " << op.rel() << " ";
    printCustomRegion(p, op.getRegion());
 }
+Region &mlir::relalg::MapOp::getLoopBody() { return getRegion(); }
+
+bool mlir::relalg::MapOp::isDefinedOutsideOfLoop(Value value) {
+   return !getRegion().isAncestor(value.getParentRegion());
+}
+
+LogicalResult mlir::relalg::MapOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
+   for (auto op : ops)
+      op->moveBefore(*this);
+   return success();
+}
 
 ///////////////////////////////////////////////////////////////////////////////////
 // AggregationOp
@@ -575,6 +586,17 @@ static void print(OpAsmPrinter& p, relalg::AggregationOp& op) {
    printAttributeRefArr(p, op.group_by_attrs());
    p << " ";
    printCustomRegion(p, op.getRegion());
+}
+Region &mlir::relalg::AggregationOp::getLoopBody() { return getRegion(); }
+
+bool mlir::relalg::AggregationOp::isDefinedOutsideOfLoop(Value value) {
+   return !getRegion().isAncestor(value.getParentRegion());
+}
+
+LogicalResult mlir::relalg::AggregationOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
+   for (auto op : ops)
+      op->moveBefore(*this);
+   return success();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -660,7 +682,17 @@ static void print(OpAsmPrinter& p, relalg::JoinOp& op) {
    p << op.getOperationName() << " " << jt << " " << op.left() << ", " << op.right();
    printCustomRegion(p, op.getRegion());
 }
+Region &mlir::relalg::JoinOp::getLoopBody() { return getRegion(); }
 
+bool mlir::relalg::JoinOp::isDefinedOutsideOfLoop(Value value) {
+   return !getRegion().isAncestor(value.getParentRegion());
+}
+
+LogicalResult mlir::relalg::JoinOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
+   for (auto op : ops)
+      op->moveBefore(*this);
+   return success();
+}
 ///////////////////////////////////////////////////////////////////////////////////
 // OuterJoinOp
 ///////////////////////////////////////////////////////////////////////////////////
@@ -674,6 +706,17 @@ static void print(OpAsmPrinter& p, relalg::OuterJoinOp& op) {
    std::string ojt(mlir::relalg::stringifyEnum(op.type()));
    p << op.getOperationName() << " " << ojt << " " << op.left() << ", " << op.right();
    printCustomRegion(p, op.getRegion());
+}
+Region &mlir::relalg::OuterJoinOp::getLoopBody() { return getRegion(); }
+
+bool mlir::relalg::OuterJoinOp::isDefinedOutsideOfLoop(Value value) {
+   return !getRegion().isAncestor(value.getParentRegion());
+}
+
+LogicalResult mlir::relalg::OuterJoinOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
+   for (auto op : ops)
+      op->moveBefore(*this);
+   return success();
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // DistinctOp

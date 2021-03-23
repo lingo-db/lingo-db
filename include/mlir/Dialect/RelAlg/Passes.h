@@ -6,7 +6,6 @@
 
 namespace mlir {
 namespace relalg {
-std::unique_ptr<Pass> createTestPass();
 std::unique_ptr<Pass> createExtractNestedOperatorsPass();
 
 } // end namespace db

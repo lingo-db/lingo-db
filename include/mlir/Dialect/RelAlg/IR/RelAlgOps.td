@@ -150,13 +150,13 @@ std::vector<mlir::relalg::RelationalAttributeDefAttr> getCreatedAttributes();
 // Operators
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>,TupleLamdaOperator]> {
+def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>,DeclareOpInterfaceMethods<LoopLikeOpInterface>,TupleLamdaOperator]> {
 let summary = "selection operation";
 let arguments = (ins RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
-def MapOp : RelAlg_Op<"map",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>,TupleLamdaOperator]> {
+def MapOp : RelAlg_Op<"map",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>,DeclareOpInterfaceMethods<LoopLikeOpInterface>,TupleLamdaOperator]> {
 let summary = "map operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
@@ -177,7 +177,7 @@ let assemblyFormat =
 [{ $left `,` $right attr-dict }];
 }
 
-def AggregationOp : RelAlg_Op<"aggregation",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>,DeclareOpInterfaceMethods<AttributeCreating>]> {
+def AggregationOp : RelAlg_Op<"aggregation",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>,DeclareOpInterfaceMethods<LoopLikeOpInterface>,DeclareOpInterfaceMethods<AttributeCreating>]> {
 let summary = "aggregation operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel, ArrayAttr:$group_by_attrs);
 let results = (outs RelAlg_Relation:$result);
@@ -193,13 +193,13 @@ let arguments = (ins RelAlg_Relation:$rel, ArrayAttr:$sortspecs);
 let results = (outs RelAlg_Relation:$result);
 }
 
-def JoinOp : RelAlg_Op<"join",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
+def JoinOp : RelAlg_Op<"join",[RecursiveSideEffects,DeclareOpInterfaceMethods<LoopLikeOpInterface>,DeclareOpInterfaceMethods<Operator>,TupleLamdaOperator]> {
 let summary = "normal join operation";
 let arguments = (ins RelAlg_NormalJoinType:$type,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
-def OuterJoinOp : RelAlg_Op<"outerjoin",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
+def OuterJoinOp : RelAlg_Op<"outerjoin",[RecursiveSideEffects,DeclareOpInterfaceMethods<LoopLikeOpInterface>,DeclareOpInterfaceMethods<Operator>,TupleLamdaOperator]> {
 let summary = "outer join operation";
 let arguments = (ins RelAlg_OuterJoinType:$type,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
@@ -233,7 +233,7 @@ let results = (outs RelAlg_Relation:$result);
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def RelAlg_ReturnOp : RelAlg_Op<"return", [NoSideEffect, ReturnLike, Terminator,
-   ParentOneOf<["SelectionOp","AggregationOp","ForEachOp","MapOp","JoinOp","OuterJoinOp","DependentJoinOp"]>
+   ParentOneOf<["SelectionOp","AggregationOp","ForEachOp","MapOp","JoinOp","OuterJoinOp"]>
         ]> {
 let summary = "loop yield and termination operation";
 let arguments = (ins Variadic<DBType>:$results);
