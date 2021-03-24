@@ -82,15 +82,18 @@ class Translator:
             elif key == "in":
                 attr = expr[key][0]
                 vals = expr[key][1]
-                if "literal" in vals:
-                    return self.translateExpression({"in": [attr, {'select': '*', 'from': {'value': {'values': vals}}}
-                                                            ]}, codegen, stacked_resolver)
-                elif type(vals)==list:
-                    return self.translateExpression({"in": [attr, {'select': '*', 'from': {'value': {'values': {"literal":vals}}}}
-                                                            ]}, codegen, stacked_resolver)
-                else:
-                    subquery, _ = self.translateSelectStmt(vals, codegen, stacked_resolver)
-                    return codegen.create_relalg_in(translateSubExpressions(attr)[0],subquery)
+                query=vals
+                immediate=False
+                if "literal" in query:
+                    query={'select': '*', 'from': {'value': {'values': vals}}}
+                    immediate=True
+                elif type(query)==list:
+                    query={'select': '*', 'from': {'value': {'values': {"literal":vals}}}}
+                    immediate=True
+                rel, attrs = self.translateSelectStmt(query, codegen, stacked_resolver)
+                if not immediate:
+                    rel=codegen.create_relalg_projection("all",rel,attrs)
+                return codegen.create_relalg_in(translateSubExpressions(attr)[0],rel)
 
             elif key == "between":
                 subexpressions = translateSubExpressions(expr[key])
@@ -115,12 +118,12 @@ class Translator:
     def translateSelectStmt(self, stmt, codegen, stacked_resolver=StackedResolver()):
         resolver = Resolver()
         tree_var = ""
-        star_attributes = []
+        all_from_attributes = []
         for from_val in ensure_list(stmt["from"]):
             from_value = ensure_value_dict(from_val)
             var = None
             if "value" in from_value:
-                var = self.addJoinTable(codegen, from_value, resolver)
+                var = self.addJoinTable(codegen, from_value, resolver,all_from_attributes)
                 if tree_var == "":
                     tree_var = var
                 else:
@@ -129,7 +132,7 @@ class Translator:
                 key = list(from_value.keys())[0]
                 if key.endswith("join"):
                     join_table_desc = ensure_value_dict(from_value[key])
-                    var = self.addJoinTable(codegen, join_table_desc, resolver)
+                    var = self.addJoinTable(codegen, join_table_desc, resolver,all_from_attributes)
                     outer = "outer" in key
                     jointype = key.split(" ")[0]
                     tree_var, tuple = codegen.startJoin(outer, jointype, tree_var, var)
@@ -196,7 +199,7 @@ class Translator:
             stacked_resolver.pop()
             codegen.endMap()
         if select_names == ["*"]:
-            results = []
+            results = all_from_attributes
         else:
             results = getAttributeList(resolver, select_names)
             for i in range(0, len(results)):
@@ -220,7 +223,7 @@ class Translator:
         else:
             self.basetables[base] = 0
         return base
-    def addJoinTable(self, codegen, from_value, resolver):
+    def addJoinTable(self, codegen, from_value, resolver,all_from_attributes):
         if type(from_value["value"]) is str and not from_value["value"] in self.with_defs:
             scope_name=self.getScopeName(from_value["value"])
 
@@ -230,12 +233,17 @@ class Translator:
             if "name" in from_value:
                 prefixes.append(from_value["name"])
             for col_name in table.columns:
+                table.columns[col_name].print_name=col_name
                 resolver.add(prefixes, col_name, table.columns[col_name])
+                all_from_attributes.append(table.columns[col_name]);
             var = codegen.create_relalg_base_table(table)
         elif  "values" in from_value["value"]:
             t= DBType("string") if type(from_value["value"]["values"]["literal"][0]) == str else DBType("int",["32"])
             scope_name=self.getScopeName("constrel")
-            var = codegen.create_relalg_const_relation(scope_name,[Attribute(scope_name,self.uniqueMapName(),t)],from_value["value"]["values"]["literal"])
+            attrname=self.uniqueMapName()
+            attr=Attribute(scope_name,attrname,t,[],attrname)
+            var = codegen.create_relalg_const_relation(scope_name,[attr],from_value["value"]["values"]["literal"])
+            all_from_attributes.append(attr)
         else:
             if type(from_value["value"]) is str and from_value["value"] in self.with_defs:
                 with_def = self.with_defs[from_value["value"]]
@@ -246,6 +254,7 @@ class Translator:
                 prefixes.append(from_value["name"])
             for attr in attrs:
                 resolver.add(prefixes, attr.print_name, attr)
+                all_from_attributes.append(attr)
         return var
 
     def translate(self):
