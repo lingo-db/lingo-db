@@ -196,6 +196,7 @@ let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$aggr_func);
 let extraClassDeclaration = [{
 llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getUsedAttributes();
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
 }];
 }
 def SortOp : RelAlg_Op<"sort",[NoSideEffect,DeclareOpInterfaceMethods<Operator>]> {
@@ -224,6 +225,9 @@ def DistinctOp : RelAlg_Op<"distinct",[RecursiveSideEffects,DeclareOpInterfaceMe
 let summary = "distinct operation";
 let arguments = (ins RelAlg_Relation:$rel, ArrayAttr:$attrs);
 let results = (outs RelAlg_Relation:$result);
+let extraClassDeclaration = [{
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
+}];
 }
 
 def UnionOp :  RelAlg_Op<"union",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {

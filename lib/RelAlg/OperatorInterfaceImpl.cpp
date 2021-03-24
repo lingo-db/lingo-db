@@ -89,4 +89,18 @@ llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*,8> BaseTableOp::getCreate
    }
    return creations;
 }
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute *, 8> mlir::relalg::AggregationOp::getAvailableAttributes() {
+   attribute_set available=getCreatedAttributes();
+   for(Attribute a:group_by_attrs()){
+      available.insert(&a.dyn_cast_or_null<RelationalAttributeRefAttr>().getRelationalAttribute());
+   }
+   return available;
+}
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute *, 8> mlir::relalg::DistinctOp::getAvailableAttributes() {
+   attribute_set available;
+   for(Attribute a:attrs()){
+      available.insert(&a.dyn_cast_or_null<RelationalAttributeRefAttr>().getRelationalAttribute());
+   }
+   return available;
+}
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"
