@@ -53,6 +53,9 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
             auto clone_op=builder.clone(*op,mapping);
             clone_op->moveBefore(returnop);
          }
+         builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(),mapping.lookup(v));
+         returnop->remove();
+         returnop->destroy();
 
       }
    }
