@@ -4,6 +4,7 @@ add_mlir_dialect_library(MLIRRelAlg
         RelAlgOpsEnums.cpp
         OperatorInterfaceImpl.cpp
         ExtractNestedOperators.cpp
+        DecomposeLambdas.cpp
         ADDITIONAL_HEADER_DIRS
         ../../include/mlir/Dialect/RelAlg
 

@@ -10,6 +10,7 @@ from utility import ensure_list, ensure_value_dict, AggrFuncManager, getAttribut
 class Translator:
     def __init__(self, query):
         self.query = query
+        self.basetables = {}
         self.with_defs = {}
         self.mapnumber=0
         self.aggrnumber=0
@@ -211,7 +212,14 @@ class Translator:
 
     def addJoinTable(self, codegen, from_value, resolver):
         if type(from_value["value"]) is str and not from_value["value"] in self.with_defs:
-            table = getTPCHTable(from_value["value"], from_value["value"])
+            scope_name=from_value["value"]
+            if scope_name in self.basetables:
+                self.basetables[scope_name]+=1
+                scope_name+=str(self.basetables[scope_name])
+            else:
+                self.basetables[scope_name]=0
+
+            table = getTPCHTable(from_value["value"],scope_name)
             prefixes = [from_value["value"]]
             if "name" in from_value:
                 prefixes.append(from_value["name"])

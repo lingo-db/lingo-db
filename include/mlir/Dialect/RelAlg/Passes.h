@@ -7,6 +7,8 @@
 namespace mlir {
 namespace relalg {
 std::unique_ptr<Pass> createExtractNestedOperatorsPass();
+std::unique_ptr<Pass> createDecomposeLambdasPass();
+
 
 } // end namespace db
 } // end namespace mlir

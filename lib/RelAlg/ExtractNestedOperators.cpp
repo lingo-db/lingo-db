@@ -10,7 +10,6 @@
 #include <unordered_set>
 
 namespace {
-// query optimization pass
 class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, mlir::FunctionPass> {
    public:
    void sanitizeOp(Operator& inner_operator, mlir::BlockAndValueMapping& mapping, mlir::Operation* op) const {
