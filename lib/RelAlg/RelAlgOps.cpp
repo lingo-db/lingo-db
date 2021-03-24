@@ -13,7 +13,7 @@ using namespace mlir;
 mlir::relalg::RelationalAttributeManager& getRelationalAttributeManager(::mlir::OpAsmParser& parser) {
    return parser.getBuilder().getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
 }
-::mlir::ParseResult parseOuterJoinType(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+::mlir::ParseResult parseJoinDirection(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    ::mlir::IntegerAttr typeAttr;
 
    ::llvm::StringRef attrStr;
@@ -34,16 +34,20 @@ mlir::relalg::RelationalAttributeManager& getRelationalAttributeManager(::mlir::
       }
    }
    if (!attrStr.empty()) {
-      auto attrOptional = ::mlir::relalg::symbolizeOuterJoinType(attrStr);
+      auto attrOptional = ::mlir::relalg::symbolizeJoinDirection(attrStr);
       if (!attrOptional)
          return parser.emitError(loc, "invalid ")
             << "type attribute specification: \"" << attrStr << '"';
       ;
 
       typeAttr = parser.getBuilder().getI64IntegerAttr(static_cast<int64_t>(attrOptional.getValue()));
-      result.addAttribute("type", typeAttr);
+      result.addAttribute("join_direction", typeAttr);
    }
    return success();
+}
+void printJoinDirection(OpAsmPrinter& p, mlir::relalg::JoinDirection semantic) {
+   std::string sem(mlir::relalg::stringifyJoinDirection(semantic));
+   p << sem;
 }
 ::mlir::ParseResult parseAggrFn(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    ::mlir::IntegerAttr typeAttr;
@@ -142,39 +146,6 @@ void printSetSemantic(OpAsmPrinter& p, mlir::relalg::SetSemantic semantic) {
    std::string sem(mlir::relalg::stringifySetSemantic(semantic));
    p << sem;
 }
-::mlir::ParseResult parseJoinType(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
-   ::mlir::IntegerAttr typeAttr;
-
-   ::llvm::StringRef attrStr;
-   ::mlir::NamedAttrList attrStorage;
-   auto loc = parser.getCurrentLocation();
-   if (parser.parseOptionalKeyword(&attrStr, {"inner", "semi", "antisemi"})) {
-      ::mlir::StringAttr attrVal;
-      ::mlir::OptionalParseResult parseResult =
-         parser.parseOptionalAttribute(attrVal,
-                                       parser.getBuilder().getNoneType(),
-                                       "type", attrStorage);
-      if (parseResult.hasValue()) {
-         if (failed(*parseResult))
-            return ::mlir::failure();
-         attrStr = attrVal.getValue();
-      } else {
-         return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'type' [inner, semi, antisemi]");
-      }
-   }
-   if (!attrStr.empty()) {
-      auto attrOptional = ::mlir::relalg::symbolizeNormalJoinType(attrStr);
-      if (!attrOptional)
-         return parser.emitError(loc, "invalid ")
-            << "type attribute specification: \"" << attrStr << '"';
-      ;
-
-      typeAttr = parser.getBuilder().getI64IntegerAttr(static_cast<int64_t>(attrOptional.getValue()));
-      result.addAttribute("type", typeAttr);
-   }
-   return success();
-}
-
 static ParseResult parseAttributeRefAttr(OpAsmParser& parser, OperationState& result, mlir::relalg::RelationalAttributeRefAttr& attr) {
    ::mlir::SymbolRefAttr parsedSymbolRefAttr;
    if (parser.parseAttribute(parsedSymbolRefAttr, parser.getBuilder().getType<::mlir::NoneType>())) { return failure(); }
@@ -701,54 +672,34 @@ static void print(OpAsmPrinter& p, relalg::MaterializeOp& op) {
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
-// JoinOp
+// InnerJoinOp
 ///////////////////////////////////////////////////////////////////////////////////
-static ParseResult parseJoinOp(OpAsmParser& parser, OperationState& result) {
-   parseJoinType(parser, result);
+static ParseResult parseInnerJoinOp(OpAsmParser& parser, OperationState& result) {
    parseRelationalInputs(parser, result, 2);
    parseCustomRegion(parser, result);
    return addRelationOutput(parser, result);
 }
-static void print(OpAsmPrinter& p, relalg::JoinOp& op) {
-   std::string jt(mlir::relalg::stringifyEnum(op.type()));
-   p << op.getOperationName() << " " << jt << " " << op.left() << ", " << op.right();
+static void print(OpAsmPrinter& p, relalg::InnerJoinOp& op) {
+   p << op.getOperationName()  << " " << op.left() << ", " << op.right();
    printCustomRegion(p, op.getRegion());
 }
-Region& mlir::relalg::JoinOp::getLoopBody() { return getRegion(); }
-
-bool mlir::relalg::JoinOp::isDefinedOutsideOfLoop(Value value) {
-   return !getRegion().isAncestor(value.getParentRegion());
-}
-
-LogicalResult mlir::relalg::JoinOp::moveOutOfLoop(ArrayRef<Operation*> ops) {
-   for (auto op : ops)
-      op->moveBefore(*this);
+///////////////////////////////////////////////////////////////////////////////////
+// NonCommutativeJoins: OuterJoin,SemiJoin,AntiSemiJoin,SingleJoin
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseNonCommutativeJoin(OpAsmParser& parser, OperationState& result) {
+   if(parseJoinDirection(parser, result) ||
+   parseRelationalInputs(parser, result, 2)||
+   parseCustomRegion(parser, result)||
+   addRelationOutput(parser, result)){
+      return failure();
+   }
    return success();
 }
-///////////////////////////////////////////////////////////////////////////////////
-// OuterJoinOp
-///////////////////////////////////////////////////////////////////////////////////
-static ParseResult parseOuterJoinOp(OpAsmParser& parser, OperationState& result) {
-   parseOuterJoinType(parser, result);
-   parseRelationalInputs(parser, result, 2);
-   parseCustomRegion(parser, result);
-   return addRelationOutput(parser, result);
-}
-static void print(OpAsmPrinter& p, relalg::OuterJoinOp& op) {
-   std::string ojt(mlir::relalg::stringifyEnum(op.type()));
-   p << op.getOperationName() << " " << ojt << " " << op.left() << ", " << op.right();
-   printCustomRegion(p, op.getRegion());
-}
-Region& mlir::relalg::OuterJoinOp::getLoopBody() { return getRegion(); }
-
-bool mlir::relalg::OuterJoinOp::isDefinedOutsideOfLoop(Value value) {
-   return !getRegion().isAncestor(value.getParentRegion());
-}
-
-LogicalResult mlir::relalg::OuterJoinOp::moveOutOfLoop(ArrayRef<Operation*> ops) {
-   for (auto op : ops)
-      op->moveBefore(*this);
-   return success();
+static void printNonCommutativeJoin(Operation *op,OpAsmPrinter& p) {
+   p << op->getName() << " ";
+   printJoinDirection(p,mlir::relalg::symbolizeJoinDirection(op->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt()).getValue());
+   p << " " << op->getOperand(0) << ", " << op->getOperand(1);
+   printCustomRegion(p, op->getRegion(0));
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // ProjectionOp

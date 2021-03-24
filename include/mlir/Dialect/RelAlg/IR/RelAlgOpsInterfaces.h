@@ -12,9 +12,11 @@ llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getUsedAttributes(mlir::
 llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes(mlir::Operation* op);
 llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getFreeAttributes(mlir::Operation* op);
 llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes(mlir::Operation* op);
+bool isDependentJoin(mlir::Operation* op);
 
 
 }
+class Operator;
 #define GET_OP_CLASSES
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h.inc"
 

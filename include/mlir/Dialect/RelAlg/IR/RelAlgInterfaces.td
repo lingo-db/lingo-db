@@ -30,6 +30,28 @@ return mlir::relalg::detail::getCreatedAttributes(this->getOperation());
 >
 ];
 }
+def Join : OpInterface<"Join"> {
+let methods = [
+InterfaceMethod<
+        "get all attributes that are used directly by this operator",
+        "bool", "isDependentJoin",(ins ),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::isDependentJoin(this->getOperation());
+}]
+>,
+InterfaceMethod<
+        "get all attributes that are used directly by this operator",
+        "mlir::Operation*", "leftChild",(ins ),"", /*defaultImplementation=*/[{
+return this->getOperation()->getOperand(0).getDefiningOp();
+}]
+>,
+InterfaceMethod<
+        "get all attributes that are used directly by this operator",
+        "mlir::Operation*", "rightChild",(ins ),"", /*defaultImplementation=*/[{
+return this->getOperation()->getOperand(1).getDefiningOp();
+}]
+>
+];
+}
 def TupleLamdaOperator : OpInterface<"TupleLamdaOperator"> {
 let methods = [
 InterfaceMethod<
