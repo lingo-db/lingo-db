@@ -5,9 +5,27 @@ include "mlir/IR/OpBase.td"
 def Operator : OpInterface<"Operator"> {
 let methods = [
 InterfaceMethod<
-        "Get Attribute Usage",
-        "std::vector<mlir::relalg::RelationalAttributeRefAttr>", "getAttributeUsage",(ins ),"", /*defaultImplementation=*/[{
-    return mlir::relalg::detail::getUsages(this->getOperation());
+        "get all attributes that are used directly by this operator",
+        "::llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*,8>", "getUsedAttributes",(ins ),"", /*defaultImplementation=*/[{
+    return mlir::relalg::detail::getUsedAttributes(this->getOperation());
+}]
+>,
+InterfaceMethod<
+        "get all attributes that are available after this operator",
+        "::llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*,8>", "getAvailableAttributes",(ins ),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::getAvailableAttributes(this->getOperation());
+}]
+>,
+InterfaceMethod<
+        "get all 'free' attributes",
+        "llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*,8>", "getFreeAttributes",(ins ),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::getFreeAttributes(this->getOperation());
+}]
+>,
+InterfaceMethod<
+        "get all attributes that are created by this operator",
+        "llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8>", "getCreatedAttributes",(ins ),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::getCreatedAttributes(this->getOperation());
 }]
 >
 ];
@@ -15,36 +33,25 @@ InterfaceMethod<
 def TupleLamdaOperator : OpInterface<"TupleLamdaOperator"> {
 let methods = [
 InterfaceMethod<
-        "Get Attribute Usage",
-        "mlir::Region&", "getLambdaRegion",(ins )
+        "",
+        "mlir::Region&", "getLambdaRegion",(ins ),""
         , /*op=*/[{
-return $_op->getRegion(0);
+return this->getOperation()->getRegion(0);
 }]
 >,
 InterfaceMethod<
         "",
-        "mlir::Block&", "getLambdaBlock",(ins )
+        "mlir::Block&", "getLambdaBlock",(ins ),""
         , /*op=*/[{
-return $_op->getRegion(0).front();
+return this->getOperation()->getRegion(0).front();
+}]>,
+InterfaceMethod<
+        "",
+        "mlir::BlockArgument", "getLambdaArgument",(ins ),""
+        , /*op=*/[{
+return this->getOperation()->getRegion(0).getArgument(0);
 }]
 >];
-}
-def AttributeCreating : OpInterface<"AttributeCreating"> {
-let methods = [
-InterfaceMethod<
-        "Get Attribute Usage",
-        "mlir::SymbolRefAttr", "getScopeName",(ins )
-        , /*op=*/[{
-return ::getScopeNameImpl($_op);
-}]
->,
-InterfaceMethod<
-        "get Attribute Creation",
-        "std::vector<mlir::relalg::RelationalAttributeDefAttr>", "getCreatedAttributes",(ins ),"", /*defaultImplementation=*/[{
-            return mlir::relalg::detail::getCreations(this->getOperation());
-}]
->,
-];
 }
 
 #endif// Interfaces

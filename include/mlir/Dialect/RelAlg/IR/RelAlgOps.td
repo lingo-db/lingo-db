@@ -141,8 +141,11 @@ let cppNamespace = "::mlir::relalg";
 def ConstRelationOp : RelAlg_Op<"const_relation",
         [ RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "constant relation";
-let arguments = (ins ArrayAttr:$value);
+let arguments = (ins SymbolNameAttr:$sym_name,ArrayAttr:$attributes,ArrayAttr:$values);
 let results = (outs RelAlg_Relation:$result);
+let extraClassDeclaration = [{
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes();
+}];
 }
 
 def BaseTableOp : RelAlg_Op<"basetable",
@@ -151,7 +154,7 @@ let summary = "base table operation";
 let arguments = (ins SymbolNameAttr:$sym_name, StrAttr: $table_identifier, DictionaryAttr: $columns);
 let results = (outs RelAlg_Relation:$result);
 let extraClassDeclaration = [{
-std::vector<mlir::relalg::RelationalAttributeDefAttr> getCreatedAttributes();
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes();
 }];
 }
 
@@ -186,20 +189,22 @@ let assemblyFormat =
 [{ $left `,` $right attr-dict }];
 }
 
-def AggregationOp : RelAlg_Op<"aggregation",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>,DeclareOpInterfaceMethods<LoopLikeOpInterface>,DeclareOpInterfaceMethods<AttributeCreating>]> {
+def AggregationOp : RelAlg_Op<"aggregation",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>,DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
 let summary = "aggregation operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel, ArrayAttr:$group_by_attrs);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$aggr_func);
 let extraClassDeclaration = [{
-std::vector<mlir::relalg::RelationalAttributeRefAttr> getAttributeUsage();
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getUsedAttributes();
 }];
-
 }
 def SortOp : RelAlg_Op<"sort",[NoSideEffect,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "sort operation";
 let arguments = (ins RelAlg_Relation:$rel, ArrayAttr:$sortspecs);
 let results = (outs RelAlg_Relation:$result);
+let extraClassDeclaration = [{
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getUsedAttributes();
+}];
 }
 
 def JoinOp : RelAlg_Op<"join",[RecursiveSideEffects,DeclareOpInterfaceMethods<LoopLikeOpInterface>,DeclareOpInterfaceMethods<Operator>,TupleLamdaOperator]> {

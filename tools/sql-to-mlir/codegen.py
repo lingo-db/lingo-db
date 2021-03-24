@@ -212,8 +212,9 @@ class CodeGen:
         var=self.newVar()
         self.addExistingOp(Operation(var,type,["db.constant ","(\"",const,"\") :", TypeRef(var)]))
         return var
-    def create_relalg_const_relation(self,values):
-        return self.addOp("relation",["relalg.const_relation ","[%s]" % (",".join(map(lambda x: "\""+x+"\"" if type(x) == str else str(x),values)))])
+    def create_relalg_const_relation(self,scope,attrs,values):
+        attr_defs=",".join(list(map(lambda val:val.def_to_string(),attrs)))
+        return self.addOp("relation",["relalg.const_relation ","@",scope, " attributes:[%s]" %(attr_defs) ," values: [%s]" % (",".join(map(lambda x: "\""+x+"\"" if type(x) == str else str(x),values)))])
 
 
 

@@ -48,8 +48,8 @@ class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, 
             mlir::BlockAndValueMapping mapping;
 
             while (o) {
-               if (inner_operator->getNumRegions() == 1 && !inner_operator->getRegion(0).empty() && !(inner_operator->getRegion(0).front().getNumArguments() > 1)) {
-                  mapping.map(o.getLambdaBlock().getArgument(0), inner_operator->getRegion(0).front().getArgument(0));
+               if (auto inner_lambda=mlir::dyn_cast_or_null<TupleLamdaOperator>(inner_operator.getOperation())) {
+                  mapping.map(o.getLambdaArgument(), inner_lambda.getLambdaArgument());
                }
                o = o->getParentOfType<TupleLamdaOperator>();
             }

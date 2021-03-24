@@ -11,9 +11,13 @@ class Translator:
     def __init__(self, query):
         self.query = query
         self.basetables = {}
+        self.attrnumber=0
         self.with_defs = {}
         self.mapnumber=0
         self.aggrnumber=0
+    def uniqueAttrName(self):
+        self.attrnumber+=1
+        return "attr"+str(self.attrnumber)
     def uniqueMapName(self):
         self.mapnumber+=1
         return "map"+str(self.mapnumber)
@@ -209,15 +213,17 @@ class Translator:
             tree_var=codegen.create_relalg_limit(tree_var,stmt["limit"])
 
         return tree_var, results
-
+    def getScopeName(self,base):
+        if base in self.basetables:
+            self.basetables[base] += 1
+            base += str(self.basetables[base])
+        else:
+            self.basetables[base] = 0
+        return base
     def addJoinTable(self, codegen, from_value, resolver):
         if type(from_value["value"]) is str and not from_value["value"] in self.with_defs:
-            scope_name=from_value["value"]
-            if scope_name in self.basetables:
-                self.basetables[scope_name]+=1
-                scope_name+=str(self.basetables[scope_name])
-            else:
-                self.basetables[scope_name]=0
+            scope_name=self.getScopeName(from_value["value"])
+
 
             table = getTPCHTable(from_value["value"],scope_name)
             prefixes = [from_value["value"]]
@@ -227,7 +233,9 @@ class Translator:
                 resolver.add(prefixes, col_name, table.columns[col_name])
             var = codegen.create_relalg_base_table(table)
         elif  "values" in from_value["value"]:
-            var = codegen.create_relalg_const_relation(from_value["value"]["values"]["literal"])
+            t= DBType("string") if type(from_value["value"]["values"]["literal"][0]) == str else DBType("int",["32"])
+            scope_name=self.getScopeName("constrel")
+            var = codegen.create_relalg_const_relation(scope_name,[Attribute(scope_name,self.uniqueMapName(),t)],from_value["value"]["values"]["literal"])
         else:
             if type(from_value["value"]) is str and from_value["value"] in self.with_defs:
                 with_def = self.with_defs[from_value["value"]]

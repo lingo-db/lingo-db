@@ -28,7 +28,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
       extracted.push_back(op);
    }
    void decomposeSelection(mlir::Value v,mlir::Value& tree ){
-      auto currentSel=v.getDefiningOp()->getParentOp();
+      auto currentSel=mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(v.getDefiningOp()->getParentOp());
       using namespace mlir;
       if(auto andop=dyn_cast_or_null<mlir::db::AndOp>(v.getDefiningOp())){
          Value toReturn;
@@ -45,7 +45,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
          tree=newsel;
          newsel.predicate().push_back(new Block);
          newsel.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
-         mapping.map(currentSel->getRegion(0).getArgument(0),newsel.predicate().getArgument(0));
+         mapping.map(currentSel.getLambdaArgument(),newsel.getLambdaArgument());
          builder.setInsertionPointToStart(&newsel.predicate().front());
          auto returnop=builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
          builder.setInsertionPointToStart(&newsel.predicate().front());
@@ -68,7 +68,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
         tree=newmap;
         newmap.predicate().push_back(new Block);
         newmap.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
-        mapping.map(currentMap->getRegion(0).getArgument(0),newmap.predicate().getArgument(0));
+        mapping.map(currentMap.getLambdaArgument(),newmap.getLambdaArgument());
         builder.setInsertionPointToStart(&newmap.predicate().front());
         auto returnop=builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
         builder.setInsertionPointToStart(&newmap.predicate().front());
