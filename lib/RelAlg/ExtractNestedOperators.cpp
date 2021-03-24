@@ -40,27 +40,30 @@ class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, 
       }
    }
    void runOnFunction() override {
-      auto funcOp = getFunction();
+      bool changed=true;
+      while(changed) {
+         changed=false;
+         getFunction().walk([&](Operator inner_operator) {
+            if (inner_operator->getParentOfType<TupleLamdaOperator>()) {
+               TupleLamdaOperator o = inner_operator->getParentOfType<TupleLamdaOperator>();
+               mlir::BlockAndValueMapping mapping;
 
-      getFunction().walk([&](Operator inner_operator) {
-         if (inner_operator->getParentOfType<TupleLamdaOperator>()) {
-            TupleLamdaOperator o = inner_operator->getParentOfType<TupleLamdaOperator>();
-            mlir::BlockAndValueMapping mapping;
-
-            while (o) {
-               if (auto inner_lambda=mlir::dyn_cast_or_null<TupleLamdaOperator>(inner_operator.getOperation())) {
-                  mapping.map(o.getLambdaArgument(), inner_lambda.getLambdaArgument());
+               while (o) {
+                  if (auto inner_lambda = mlir::dyn_cast_or_null<TupleLamdaOperator>(inner_operator.getOperation())) {
+                     mapping.map(o.getLambdaArgument(), inner_lambda.getLambdaArgument());
+                  }
+                  o = o->getParentOfType<TupleLamdaOperator>();
                }
-               o = o->getParentOfType<TupleLamdaOperator>();
+               inner_operator->walk([&](mlir::Operation* op) {
+                  if (!mlir::isa<Operator>(op)) {
+                     sanitizeOp(inner_operator, mapping, op);
+                  }
+               });
+               inner_operator->moveBefore(inner_operator->getParentOfType<Operator>());
+               changed=true;
             }
-            inner_operator->walk([&](mlir::Operation* op) {
-               if (!mlir::isa<Operator>(op)) {
-                  sanitizeOp(inner_operator, mapping, op);
-               }
-            });
-            inner_operator->moveBefore(inner_operator->getParentOfType<Operator>());
-         }
-      });
+         });
+      }
    }
 };
 } // end anonymous namespace

@@ -240,7 +240,7 @@ class Translator:
         elif  "values" in from_value["value"]:
             t= DBType("string") if type(from_value["value"]["values"]["literal"][0]) == str else DBType("int",["32"])
             scope_name=self.getScopeName("constrel")
-            attrname=self.uniqueMapName()
+            attrname=self.uniqueAttrName()
             attr=Attribute(scope_name,attrname,t,[],attrname)
             var = codegen.create_relalg_const_relation(scope_name,[attr],from_value["value"]["values"]["literal"])
             all_from_attributes.append(attr)

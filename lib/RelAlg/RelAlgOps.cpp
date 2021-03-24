@@ -317,6 +317,7 @@ static ParseResult parseAttributeDefArr(OpAsmParser& parser, OperationState& res
       if (parseAttributeDefAttr(parser, result, attr_def_attr)) {
          return failure();
       }
+      attributes.push_back(attr_def_attr);
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRSquare()) { return failure(); }
       break;
@@ -334,7 +335,7 @@ static void printAttributeDefArr(OpAsmPrinter& p, ArrayAttr arrayAttr) {
          p << ",";
       }
       mlir::relalg::RelationalAttributeDefAttr parsedSymbolRefAttr = a.dyn_cast<mlir::relalg::RelationalAttributeDefAttr>();
-      printAttributeDefAttr(p,parsedSymbolRefAttr);
+      printAttributeDefAttr(p, parsedSymbolRefAttr);
    }
    p << "]";
 }
@@ -680,26 +681,56 @@ static ParseResult parseInnerJoinOp(OpAsmParser& parser, OperationState& result)
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::InnerJoinOp& op) {
-   p << op.getOperationName()  << " " << op.left() << ", " << op.right();
+   p << op.getOperationName() << " " << op.left() << ", " << op.right();
    printCustomRegion(p, op.getRegion());
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // NonCommutativeJoins: OuterJoin,SemiJoin,AntiSemiJoin,SingleJoin
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseNonCommutativeJoin(OpAsmParser& parser, OperationState& result) {
-   if(parseJoinDirection(parser, result) ||
-   parseRelationalInputs(parser, result, 2)||
-   parseCustomRegion(parser, result)||
-   addRelationOutput(parser, result)){
+   if (parseJoinDirection(parser, result) ||
+       parseRelationalInputs(parser, result, 2) ||
+       parseCustomRegion(parser, result) ||
+       addRelationOutput(parser, result)) {
       return failure();
    }
    return success();
 }
-static void printNonCommutativeJoin(Operation *op,OpAsmPrinter& p) {
+static void printNonCommutativeJoin(Operation* op, OpAsmPrinter& p) {
    p << op->getName() << " ";
-   printJoinDirection(p,mlir::relalg::symbolizeJoinDirection(op->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt()).getValue());
+   printJoinDirection(p, mlir::relalg::symbolizeJoinDirection(op->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt()).getValue());
    p << " " << op->getOperand(0) << ", " << op->getOperand(1);
    printCustomRegion(p, op->getRegion(0));
+}
+
+///////////////////////////////////////////////////////////////////////////////////
+// MarkJoinOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseMarkJoinOp(OpAsmParser& parser, OperationState& result) {
+   if (parseJoinDirection(parser, result))
+      return failure();
+
+   StringAttr nameAttr;
+   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
+      return failure();
+   }
+
+   relalg::RelationalAttributeDefAttr defAttr;
+   parseAttributeDefAttr(parser, result, defAttr);
+   result.addAttribute("markattr", defAttr);
+   parseRelationalInputs(parser, result, 2);
+   parseCustomRegion(parser, result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::MarkJoinOp& op) {
+   p << op.getOperationName() << " ";
+   printJoinDirection(p, op.join_direction());
+   p <<" ";
+   p.printSymbolName(op.sym_name());
+   p << " ";
+   printAttributeDefAttr(p, op.markattr());
+   p << " " << op.left() << ", " << op.right();
+   printCustomRegion(p, op.getRegion());
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // ProjectionOp
@@ -717,7 +748,7 @@ static ParseResult parseProjectionOp(OpAsmParser& parser, OperationState& result
 static void print(OpAsmPrinter& p, relalg::ProjectionOp& op) {
    p << op.getOperationName() << " ";
    printSetSemantic(p, op.set_semantic());
-   p<<" ";
+   p << " ";
    printAttributeRefArr(p, op.attrs());
    p << " " << op.rel();
 }
@@ -818,7 +849,7 @@ static void print(OpAsmPrinter& p, relalg::ConstRelationOp& op) {
    if (op->getAttrs().size() > 1) p << ' ';
    p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"sym_name", "attributes", "values"});
    p << " attributes: ";
-   printAttributeDefArr(p,op.attributes());
+   printAttributeDefArr(p, op.attributes());
    p << " values: " << op.values();
 }
 
