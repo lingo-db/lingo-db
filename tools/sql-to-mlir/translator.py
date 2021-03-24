@@ -167,7 +167,7 @@ class Translator:
             for name, aggrfunc in AFM.aggr.items():
                 if len(aggrfunc["names"]) > 0:
                     if aggrfunc["distinct"] == True:
-                        rel=codegen.create_relalg_distinct(relation,[resolver.resolve(aggrfunc["names"][0])])
+                        rel=codegen.create_relalg_projection("distinct",relation,[resolver.resolve(aggrfunc["names"][0])])
                     else:
                         rel=relation
                     res = codegen.create_relalg_aggr_func(aggrfunc["type"], resolver.resolve(aggrfunc["names"][0]),

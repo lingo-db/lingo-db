@@ -221,9 +221,9 @@ let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
 
-def DistinctOp : RelAlg_Op<"distinct",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
-let summary = "distinct operation";
-let arguments = (ins RelAlg_Relation:$rel, ArrayAttr:$attrs);
+def ProjectionOp : RelAlg_Op<"projection",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
+let summary = "projection operation";
+let arguments = (ins  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$rel, ArrayAttr:$attrs);
 let results = (outs RelAlg_Relation:$result);
 let extraClassDeclaration = [{
 llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();

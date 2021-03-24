@@ -188,9 +188,9 @@ class CodeGen:
         attr_types=list(map(lambda val:val.type.to_string(),attrs))
 
         return self.addOp(DBType("matcollection",attr_types),["relalg.materialize ",ValueRef(rel)," [",",".join(attr_refs),"]", " : ",DBType("matcollection",attr_types).to_string()])
-    def create_relalg_distinct(self,rel,attrs):
+    def create_relalg_projection(self,setsem,rel,attrs):
         attr_refs=list(map(lambda val:val.ref_to_string(),attrs))
-        return self.addOp("relation",["relalg.distinct ","[",",".join(attr_refs),"]",ValueRef(rel)])
+        return self.addOp("relation",["relalg.projection ",setsem," [",",".join(attr_refs),"]",ValueRef(rel)])
 
     def create_relalg_exists(self,rel):
         return self.addOp(DBType("bool"),["relalg.exists", ValueRef(rel)])

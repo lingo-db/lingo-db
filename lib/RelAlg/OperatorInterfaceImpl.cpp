@@ -96,7 +96,7 @@ llvm::SmallPtrSet<mlir::relalg::RelationalAttribute *, 8> mlir::relalg::Aggregat
    }
    return available;
 }
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute *, 8> mlir::relalg::DistinctOp::getAvailableAttributes() {
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute *, 8> mlir::relalg::ProjectionOp::getAvailableAttributes() {
    attribute_set available;
    for(Attribute a:attrs()){
       available.insert(&a.dyn_cast_or_null<RelationalAttributeRefAttr>().getRelationalAttribute());

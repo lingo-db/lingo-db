@@ -751,17 +751,22 @@ LogicalResult mlir::relalg::OuterJoinOp::moveOutOfLoop(ArrayRef<Operation*> ops)
    return success();
 }
 ///////////////////////////////////////////////////////////////////////////////////
-// DistinctOp
+// ProjectionOp
 ///////////////////////////////////////////////////////////////////////////////////
-static ParseResult parseDistinctOp(OpAsmParser& parser, OperationState& result) {
+static ParseResult parseProjectionOp(OpAsmParser& parser, OperationState& result) {
    Attribute attrs;
+   if (parseSetSemantic(parser, result)) {
+      return failure();
+   }
    parseAttributeRefArr(parser, result, attrs);
    result.addAttribute("attrs", attrs);
    parseRelationalInputs(parser, result, 1);
    return addRelationOutput(parser, result);
 }
-static void print(OpAsmPrinter& p, relalg::DistinctOp& op) {
+static void print(OpAsmPrinter& p, relalg::ProjectionOp& op) {
    p << op.getOperationName() << " ";
+   printSetSemantic(p, op.set_semantic());
+   p<<" ";
    printAttributeRefArr(p, op.attrs());
    p << " " << op.rel();
 }
