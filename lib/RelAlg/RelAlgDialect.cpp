@@ -19,6 +19,7 @@ void RelAlgDialect::initialize() {
    addAttributes<mlir::relalg::RelationalAttributeDefAttr>();
    addAttributes<mlir::relalg::RelationalAttributeRefAttr>();
    addAttributes<mlir::relalg::SortSpecificationAttr>();
+   relationalAttributeManager.setContext(getContext());
 
 }
 
@@ -50,10 +51,7 @@ RelAlgDialect::parseAttribute(::mlir::DialectAsmParser& parser,
       StringRef name;
       if (parser.parseLBrace() || parser.parseOptionalString(&name) || parser.parseRBrace())
          return mlir::Attribute();
-      return mlir::relalg::RelationalAttributeDefAttr::get(
-         parser.getBuilder().getContext(), name,
-         std::make_shared<RelationalAttribute>(mlir::db::BoolType::get(parser.getBuilder().getContext(), false)),
-            Attribute());
+      return parser.getBuilder().getContext()->getLoadedDialect<RelAlgDialect>()->getRelationalAttributeManager().createDef(parser.getBuilder().getSymbolRefAttr(name));
    }
    return mlir::Attribute();
 }

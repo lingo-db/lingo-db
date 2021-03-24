@@ -25,7 +25,7 @@ public:
   const StringRef getName() {
     return getImpl()->name;
   }
-  const RelationalAttribute &getRelationalAttribute() {
+  RelationalAttribute &getRelationalAttribute() {
     return *getImpl()->relationalAttribute;
   }
   const Attribute getFromExisting(){

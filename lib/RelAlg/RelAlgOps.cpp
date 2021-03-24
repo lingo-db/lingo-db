@@ -10,6 +10,10 @@ using namespace mlir;
 // Utility Functions
 ///////////////////////////////////////////////////////////////////////////////////
 
+
+mlir::relalg::RelationalAttributeManager& getRelationalAttributeManager(::mlir::OpAsmParser& parser){
+   return parser.getBuilder().getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
+}
 ::mlir::ParseResult parseOuterJoinType(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    ::mlir::IntegerAttr typeAttr;
 
@@ -171,14 +175,11 @@ void printSetSemantic(OpAsmPrinter& p, mlir::relalg::SetSemantic semantic) {
    }
    return success();
 }
-static void createAttributeRefAttr(MLIRContext* context, const SymbolRefAttr& parsedSymbolRefAttr, relalg::RelationalAttributeRefAttr& attr) {
-   attr = relalg::RelationalAttributeRefAttr::get(context, parsedSymbolRefAttr,
-                                                  std::shared_ptr<relalg::RelationalAttribute>());
-}
+
 static ParseResult parseAttributeRefAttr(OpAsmParser& parser, OperationState& result, mlir::relalg::RelationalAttributeRefAttr& attr) {
    ::mlir::SymbolRefAttr parsedSymbolRefAttr;
    if (parser.parseAttribute(parsedSymbolRefAttr, parser.getBuilder().getType<::mlir::NoneType>())) { return failure(); }
-   createAttributeRefAttr(parser.getBuilder().getContext(), parsedSymbolRefAttr, attr);
+   attr=getRelationalAttributeManager(parser).createRef(parsedSymbolRefAttr);
    return success();
 }
 static ParseResult parseCustomRegion(OpAsmParser& parser, OperationState& result) {
@@ -229,8 +230,7 @@ static ParseResult parseAttributeRefArr(OpAsmParser& parser, OperationState& res
    }
    for (auto a : parsed_attr) {
       SymbolRefAttr parsedSymbolRefAttr = a.dyn_cast<SymbolRefAttr>();
-      mlir::relalg::RelationalAttributeRefAttr attr;
-      createAttributeRefAttr(parser.getBuilder().getContext(), parsedSymbolRefAttr, attr);
+      mlir::relalg::RelationalAttributeRefAttr attr=getRelationalAttributeManager(parser).createRef(parsedSymbolRefAttr);
       attributes.push_back(attr);
    }
    attr = ArrayAttr::get(parser.getBuilder().getContext(), attributes);
@@ -303,15 +303,13 @@ static ParseResult parseRelationalInputs(OpAsmParser& parser, OperationState& re
    return success();
 }
 
-static ParseResult parseAttributeDefAttr(OpAsmParser& parser, OperationState& result, mlir::relalg::RelationalAttributeDefAttr& attr) {
+static ParseResult parseAttributeDefAttr(OpAsmParser& parser, OperationState& result,mlir::relalg::RelationalAttributeDefAttr& attr) {
    SymbolRefAttr attr_symbolAttr;
    if (parser.parseAttribute(attr_symbolAttr, parser.getBuilder().getType<::mlir::NoneType>())) { return failure(); }
    std::string attr_name(attr_symbolAttr.getLeafReference());
    if (parser.parseLParen()) { return failure(); }
    DictionaryAttr dictAttr;
    if (parser.parseAttribute(dictAttr)) { return failure(); }
-   auto prop_type = dictAttr.get("type").dyn_cast<TypeAttr>().getValue().dyn_cast<mlir::db::DBType>();
-   auto relationalAttribute = std::make_shared<mlir::relalg::RelationalAttribute>(prop_type);
    Attribute from_existing;
    if (parser.parseRParen()) { return failure(); }
    if (parser.parseOptionalEqual().succeeded()) {
@@ -319,7 +317,9 @@ static ParseResult parseAttributeDefAttr(OpAsmParser& parser, OperationState& re
          return failure();
       }
    }
-   attr = mlir::relalg::RelationalAttributeDefAttr::get(parser.getBuilder().getContext(), attr_name, relationalAttribute, from_existing);
+   attr = getRelationalAttributeManager(parser).createDef(attr_symbolAttr,from_existing);
+   auto prop_type = dictAttr.get("type").dyn_cast<TypeAttr>().getValue().dyn_cast<mlir::db::DBType>();
+   attr.getRelationalAttribute().type=prop_type;
    return success();
 }
 static void printAttributeDefAttr(OpAsmPrinter& p, mlir::relalg::RelationalAttributeDefAttr attr) {
@@ -377,6 +377,7 @@ static ParseResult parseBaseTableOp(OpAsmParser& parser, OperationState& result)
    if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
       return failure();
    }
+   getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
    if (parser.parseOptionalAttrDict(result.attributes)) return failure();
    if (parser.parseKeyword("columns") || parser.parseColon() || parser.parseLBrace()) return failure();
    std::vector<mlir::NamedAttribute> columns;
@@ -541,6 +542,7 @@ static ParseResult parseMapOp(OpAsmParser& parser, OperationState& result) {
    if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
       return failure();
    }
+   getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
    parseRelationalInputs(parser, result, 1);
    parseCustomRegion(parser, result);
    return addRelationOutput(parser, result);
@@ -571,6 +573,7 @@ static ParseResult parseAggregationOp(OpAsmParser& parser, OperationState& resul
    if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
       return failure();
    }
+   getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
    parseRelationalInputs(parser, result, 1);
    Attribute group_by_attrs;
    parseAttributeRefArr(parser, result, group_by_attrs);
@@ -753,6 +756,7 @@ static ParseResult parseUnionOp(OpAsmParser& parser, OperationState& result) {
    if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
       return failure();
    }
+   getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
    if (parseSetSemantic(parser, result)) {
       return failure();
    }
@@ -776,6 +780,8 @@ static ParseResult parseIntersectOp(OpAsmParser& parser, OperationState& result)
    if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
       return failure();
    }
+   getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
+
    if (parseSetSemantic(parser, result)) {
       return failure();
    }
@@ -799,6 +805,8 @@ static ParseResult parseExceptOp(OpAsmParser& parser, OperationState& result) {
    if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
       return failure();
    }
+   getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
+
    if (parseSetSemantic(parser, result)) {
       return failure();
    }

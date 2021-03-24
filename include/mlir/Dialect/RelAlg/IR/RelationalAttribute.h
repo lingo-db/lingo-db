@@ -3,11 +3,7 @@
 #include "mlir/Dialect/DB/IR/DBType.h"
 
 namespace mlir::relalg {
-class RelationalAttribute {
-
-public:
-  RelationalAttribute(mlir::db::DBType type)
-      : type(type) {}
+struct RelationalAttribute {
   mlir::db::DBType type;
 };
 } // namespace mlir::relalg

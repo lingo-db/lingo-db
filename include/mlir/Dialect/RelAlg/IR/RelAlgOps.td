@@ -17,6 +17,15 @@ def RelAlg_Dialect : Dialect {
 let name = "relalg";
 let summary = "A dialect for relational algebra";
 let cppNamespace = "::mlir::relalg";
+
+let extraClassDeclaration = [{
+private:
+RelationalAttributeManager relationalAttributeManager;
+public:
+RelationalAttributeManager& getRelationalAttributeManager(){
+    return relationalAttributeManager;
+}
+}];
 }
 
 //===----------------------------------------------------------------------===//

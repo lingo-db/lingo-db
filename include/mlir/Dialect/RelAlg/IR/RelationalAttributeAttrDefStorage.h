@@ -1,9 +1,6 @@
-//
-// Created by michael on 13.03.21.
-//
-
 #ifndef MLIR_GOES_RELATIONAL_RELATIONALATTRIBUTEATTRDEFSTORAGE_H
 #define MLIR_GOES_RELATIONAL_RELATIONALATTRIBUTEATTRDEFSTORAGE_H
+#include "mlir/IR/Attributes.h"
 namespace mlir::relalg {
 struct RelationalAttributeAttrDefStorage : public AttributeStorage {
   RelationalAttributeAttrDefStorage(
