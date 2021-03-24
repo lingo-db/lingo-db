@@ -579,7 +579,6 @@ static ParseResult parseAggregationOp(OpAsmParser& parser, OperationState& resul
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::AggregationOp& op) {
-   op.getCreatedAttributes();
    p << op.getOperationName() << " ";
    p.printSymbolName(op.sym_name());
    p << " " << op.rel() << " ";
@@ -718,6 +717,67 @@ LogicalResult mlir::relalg::OuterJoinOp::moveOutOfLoop(ArrayRef<Operation *> ops
       op->moveBefore(*this);
    return success();
 }
+///////////////////////////////////////////////////////////////////////////////////
+// OuterJoinOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseSingleJoinOp(OpAsmParser& parser, OperationState& result) {
+   parseOuterJoinType(parser, result);
+   parseRelationalInputs(parser, result, 2);
+   parseCustomRegion(parser, result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::SingleJoinOp& op) {
+   std::string ojt(mlir::relalg::stringifyEnum(op.type()));
+   p << op.getOperationName() << " " << ojt << " " << op.left() << ", " << op.right();
+   printCustomRegion(p, op.getRegion());
+}
+Region &mlir::relalg::SingleJoinOp::getLoopBody() { return getRegion(); }
+
+bool mlir::relalg::SingleJoinOp::isDefinedOutsideOfLoop(Value value) {
+   return !getRegion().isAncestor(value.getParentRegion());
+}
+
+LogicalResult mlir::relalg::SingleJoinOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
+   for (auto op : ops)
+      op->moveBefore(*this);
+   return success();
+}
+///////////////////////////////////////////////////////////////////////////////////
+// OuterJoinOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseMarkJoinOp(OpAsmParser& parser, OperationState& result) {
+   StringAttr nameAttr;
+   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
+      return failure();
+   }
+
+   relalg::RelationalAttributeDefAttr defAttr;
+   parseAttributeDefAttr(parser,result,defAttr);
+   result.addAttribute("markattr",defAttr);
+   parseRelationalInputs(parser, result, 2);
+   parseCustomRegion(parser, result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::MarkJoinOp& op) {
+   p << op.getOperationName() << " ";
+   p.printSymbolName(op.sym_name());
+   p<<" ";
+   printAttributeDefAttr(p,op.markattr());
+   p<<" " << op.left() << ", " << op.right();
+   printCustomRegion(p, op.getRegion());
+}
+Region &mlir::relalg::MarkJoinOp::getLoopBody() { return getRegion(); }
+
+bool mlir::relalg::MarkJoinOp::isDefinedOutsideOfLoop(Value value) {
+   return !getRegion().isAncestor(value.getParentRegion());
+}
+
+LogicalResult mlir::relalg::MarkJoinOp::moveOutOfLoop(ArrayRef<Operation *> ops) {
+   for (auto op : ops)
+      op->moveBefore(*this);
+   return success();
+}
+
 ///////////////////////////////////////////////////////////////////////////////////
 // DistinctOp
 ///////////////////////////////////////////////////////////////////////////////////

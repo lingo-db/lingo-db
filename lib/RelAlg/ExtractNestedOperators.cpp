@@ -40,8 +40,6 @@ class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, 
       }
    }
    void runOnFunction() override {
-      auto funcOp = getFunction();
-
       getFunction().walk([&](Operator inner_operator) {
          if (inner_operator->getParentOfType<TupleLamdaOperator>()) {
             TupleLamdaOperator o = inner_operator->getParentOfType<TupleLamdaOperator>();

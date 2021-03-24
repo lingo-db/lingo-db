@@ -17,7 +17,12 @@ def RelAlg_Dialect : Dialect {
 let name = "relalg";
 let summary = "A dialect for relational algebra";
 let cppNamespace = "::mlir::relalg";
-}
+let extraClassDeclaration = [{
+private:
+    int test;
+public:
+    int getTest(){}
+}];}
 
 //===----------------------------------------------------------------------===//
 // Base relAlg operation definition.
@@ -205,6 +210,18 @@ let arguments = (ins RelAlg_OuterJoinType:$type,RelAlg_Relation:$left,RelAlg_Rel
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
+def SingleJoinOp : RelAlg_Op<"singlejoin",[RecursiveSideEffects,DeclareOpInterfaceMethods<LoopLikeOpInterface>,DeclareOpInterfaceMethods<Operator>,TupleLamdaOperator]> {
+let summary = "outer join operation";
+let arguments = (ins RelAlg_OuterJoinType:$type,RelAlg_Relation:$left,RelAlg_Relation:$right);
+let results = (outs RelAlg_Relation:$result);
+let regions = (region SizedRegion<1>:$predicate);
+}
+def MarkJoinOp : RelAlg_Op<"markjoin",[RecursiveSideEffects,DeclareOpInterfaceMethods<LoopLikeOpInterface>,DeclareOpInterfaceMethods<Operator>,TupleLamdaOperator]> {
+let summary = "mark join operation";
+let arguments = (ins SymbolNameAttr:$sym_name,RelationalAttributeDefAttr:$markattr,RelAlg_Relation:$left,RelAlg_Relation:$right);
+let results = (outs RelAlg_Relation:$result);
+let regions = (region SizedRegion<1>:$predicate);
+}
 
 def DistinctOp : RelAlg_Op<"distinct",[RecursiveSideEffects,DeclareOpInterfaceMethods<Operator>]> {
 let summary = "distinct operation";
@@ -233,7 +250,7 @@ let results = (outs RelAlg_Relation:$result);
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
 def RelAlg_ReturnOp : RelAlg_Op<"return", [NoSideEffect, ReturnLike, Terminator,
-   ParentOneOf<["SelectionOp","AggregationOp","ForEachOp","MapOp","JoinOp","OuterJoinOp"]>
+   ParentOneOf<["SelectionOp","AggregationOp","ForEachOp","MapOp","JoinOp","OuterJoinOp","SingleJoinOp","MarkJoinOp"]>
         ]> {
 let summary = "loop yield and termination operation";
 let arguments = (ins Variadic<DBType>:$results);
