@@ -6,6 +6,7 @@
 #include "mlir/IR/BlockAndValueMapping.h"
 
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include <llvm/ADT/TypeSwitch.h>
 #include <iostream>
 #include <list>
 #include <queue>
@@ -25,6 +26,46 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       }
       return result;
    }
+   mlir::Operation* getFirstOfTree(mlir::Operation* tree) {
+      mlir::Operation* curr_first = tree;
+      for (auto operand : tree->getOperands()) {
+         if (operand.getType().isa<mlir::relalg::RelationType>()) {
+            mlir::Operation* other_first = getFirstOfTree(operand.getDefiningOp());
+            if (other_first->isBeforeInBlock(curr_first)) {
+               curr_first = other_first;
+            }
+         }
+      }
+      return curr_first;
+   }
+   void moveTreeBefore(mlir::Operation* tree, mlir::Operation* before) {
+      tree->moveBefore(before);
+      for (auto operand : tree->getOperands()) {
+         if (operand.getType().isa<mlir::relalg::RelationType>()) {
+            moveTreeBefore(operand.getDefiningOp(), tree);
+         }
+      }
+   }
+   Operator pushDependJoinDown(Operator D, Operator op) {
+      using namespace mlir::relalg;
+      auto rel_type = RelationType::get(&getContext());
+
+      if (op->isBeforeInBlock(D)) {
+         D->moveBefore(op);
+      }
+      mlir::OpBuilder builder(&getContext());
+      builder.setInsertionPointAfter(op.getOperation());
+      auto resulting_op = ::llvm::TypeSwitch<mlir::Operation*, mlir::Operation*>(op.getOperation())
+                             .Case<mlir::relalg::BaseTableOp, mlir::relalg::ConstRelationOp>([&](mlir::Operation* op) {
+                                return builder.create<CrossProductOp>(builder.getUnknownLoc(), rel_type, op->getResult(0), D->getResult(0));
+                             })
+                             .Default([&](mlir::Operation* others) {
+                                mlir::Value newRel = pushDependJoinDown(D, others->getOperand(0).getDefiningOp())->getResult(0);
+                                others->setOperand(0, newRel);
+                                return others;
+                             });
+      return mlir::dyn_cast_or_null<Operator>(resulting_op);
+   }
    void addPredicate(TupleLamdaOperator lambdaOperator, std::function<mlir::Value(mlir::Value, mlir::OpBuilder& builder)> predicate_producer) {
       auto terminator = lambdaOperator.getLambdaBlock().getTerminator();
       mlir::OpBuilder builder(terminator);
@@ -43,6 +84,8 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
    }
    void runOnFunction() override {
       using namespace mlir;
+      auto rel_type = relalg::RelationType::get(&getContext());
+
       auto attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
 
       getFunction()->walk([&](Join join) {
@@ -73,7 +116,6 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             dependent_attributes = dependent_right;
             joinoperandid = 1;
          }
-         auto rel_type = relalg::RelationType::get(&getContext());
 
          OpBuilder builder(join.getOperation());
          std::unordered_map<relalg::RelationalAttribute*, relalg::RelationalAttribute*> renamed;
@@ -83,7 +125,10 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             dependent_refs.push_back(attributeManager.createRef(attr));
             dependent_refs_as_attr.push_back(attributeManager.createRef(attr));
          }
-         builder.create<relalg::ProjectionOp>(builder.getUnknownLoc(), rel_type, relalg::SetSemantic::distinct, provider_child->getResult(0), builder.getArrayAttr(dependent_refs_as_attr));
+         moveTreeBefore(provider_child, getFirstOfTree(dependent_child));
+         builder.setInsertionPointAfter(provider_child);
+         auto proj = builder.create<relalg::ProjectionOp>(builder.getUnknownLoc(), rel_type, relalg::SetSemantic::distinct, provider_child->getResult(0), builder.getArrayAttr(dependent_refs_as_attr));
+         Operator D = mlir::dyn_cast_or_null<Operator>(proj.getOperation());
          std::string scope = attributeManager.getUniqueScope("renaming");
          attributeManager.setCurrentScope(scope);
          std::vector<relalg::RelationalAttributeDefAttr> renaming_defs;
@@ -97,7 +142,11 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             def.getRelationalAttribute().type = attr->type;
             renamed.insert({attr, &def.getRelationalAttribute()});
          }
-         Value renamingop = builder.create<relalg::RenamingOp>(builder.getUnknownLoc(), rel_type, scope, builder.getArrayAttr(renaming_defs_as_attr));
+
+         Operator unnested_child = pushDependJoinDown(D, dependent_child);
+         builder.setInsertionPointAfter(unnested_child);
+
+         Value renamingop = builder.create<relalg::RenamingOp>(builder.getUnknownLoc(), rel_type, unnested_child->getResult(0), scope, builder.getArrayAttr(renaming_defs_as_attr));
          join->setOperand(joinoperandid, renamingop);
          addPredicate(mlir::dyn_cast_or_null<TupleLamdaOperator>(join.getOperation()), [&](Value tuple, OpBuilder& builder) {
             std::vector<Value> to_and;

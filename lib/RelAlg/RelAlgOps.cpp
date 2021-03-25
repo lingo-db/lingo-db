@@ -880,6 +880,7 @@ static void print(OpAsmPrinter& p, relalg::RenamingOp& op) {
    p << op.getOperationName();
    p << " ";
    p.printSymbolName(op.sym_name());
+   p<<" "<<op.rel();
    if (op->getAttrs().size() > 1) p << ' ';
    p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"sym_name", "attributes"});
    p << " attributes: ";
@@ -893,6 +894,7 @@ static ParseResult parseRenamingOp(OpAsmParser& parser,
       return failure();
    }
    getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
+   parseRelationalInputs(parser, result, 1);
    Attribute attributes;
    if (parser.parseKeyword("attributes") || parser.parseColon() || parseAttributeDefArr(parser, result, attributes)) {
       return failure();

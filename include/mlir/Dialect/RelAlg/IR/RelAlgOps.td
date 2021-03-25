@@ -183,7 +183,7 @@ let assemblyFormat =
 def RenamingOp : RelAlg_Op<"renaming",
         [ RecursiveSideEffects,Operator]> {
 let summary = "renaming attributes in relation";
-let arguments = (ins SymbolNameAttr:$sym_name,ArrayAttr:$attributes);
+let arguments = (ins RelAlg_Relation:$rel,SymbolNameAttr:$sym_name,ArrayAttr:$attributes);
 let results = (outs RelAlg_Relation:$result);
 let extraClassDeclaration = [{
 //llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes();
