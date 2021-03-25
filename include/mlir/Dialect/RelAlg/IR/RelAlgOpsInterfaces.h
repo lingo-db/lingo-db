@@ -6,6 +6,7 @@
 #include "mlir/IR/OpDefinition.h"
 #include <mlir/IR/SymbolTable.h>
 #include "llvm/ADT/SmallPtrSet.h"
+#include "mlir/Dialect/RelAlg/IR/RelAlgTypes.h"
 
 namespace mlir::relalg::detail {
 llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getUsedAttributes(mlir::Operation* op);

@@ -26,51 +26,41 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       }
       return result;
    }
-   mlir::Operation* getFirstOfTree(mlir::Operation* tree) {
-      mlir::Operation* curr_first = tree;
-      for (auto operand : tree->getOperands()) {
-         if (operand.getType().isa<mlir::relalg::RelationType>()) {
-            mlir::Operation* other_first = getFirstOfTree(operand.getDefiningOp());
-            if (other_first->isBeforeInBlock(curr_first)) {
-               curr_first = other_first;
-            }
+   Operator getFirstOfTree(Operator tree) {
+      Operator curr_first = tree;
+      for (auto child : tree.getChildren()) {
+         mlir::Operation* other_first = getFirstOfTree(child);
+         if (other_first->isBeforeInBlock(curr_first)) {
+            curr_first = other_first;
          }
       }
       return curr_first;
    }
-   void moveTreeBefore(mlir::Operation* tree, mlir::Operation* before) {
+   void moveTreeBefore(Operator tree, mlir::Operation* before) {
       tree->moveBefore(before);
-      for (auto operand : tree->getOperands()) {
-         if (operand.getType().isa<mlir::relalg::RelationType>()) {
-            moveTreeBefore(operand.getDefiningOp(), tree);
-         }
+      for (auto child : tree.getChildren()) {
+            moveTreeBefore(child, tree);
       }
    }
    Operator pushDependJoinDown(Operator D, Operator op) {
       using namespace mlir::relalg;
       auto rel_type = RelationType::get(&getContext());
-
-      if (op->isBeforeInBlock(D)) {
-         D->moveBefore(op);
-      }
       mlir::OpBuilder builder(&getContext());
       builder.setInsertionPointAfter(op.getOperation());
-      auto resulting_op = ::llvm::TypeSwitch<mlir::Operation*, mlir::Operation*>(op.getOperation())
-                             .Case<mlir::relalg::BaseTableOp, mlir::relalg::ConstRelationOp>([&](mlir::Operation* op) {
-                                return builder.create<CrossProductOp>(builder.getUnknownLoc(), rel_type, op->getResult(0), D->getResult(0));
+      return ::llvm::TypeSwitch<mlir::Operation*, Operator>(op.getOperation())
+                             .Case<mlir::relalg::BaseTableOp, mlir::relalg::ConstRelationOp>([&](Operator baserelation) {
+                                return builder.create<CrossProductOp>(builder.getUnknownLoc(), rel_type, baserelation.asRelation(), D.asRelation()).getOperation();
                              })
-                             .Default([&](mlir::Operation* others) {
-                                mlir::Value newRel = pushDependJoinDown(D, others->getOperand(0).getDefiningOp())->getResult(0);
+                             .Default([&](Operator others) {
+                                mlir::Value newRel = pushDependJoinDown(D, others.getChildren()[0]).asRelation();
                                 others->setOperand(0, newRel);
                                 return others;
                              });
-      return mlir::dyn_cast_or_null<Operator>(resulting_op);
    }
    void addPredicate(TupleLamdaOperator lambdaOperator, std::function<mlir::Value(mlir::Value, mlir::OpBuilder& builder)> predicate_producer) {
       auto terminator = lambdaOperator.getLambdaBlock().getTerminator();
       mlir::OpBuilder builder(terminator);
       auto additional_pred = predicate_producer(lambdaOperator.getLambdaArgument(), builder);
-      mlir::Operation* newTerminator;
       if (terminator->getNumOperands() > 0) {
          mlir::Value oldValue = terminator->getOperand(0);
          bool nullable = oldValue.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable() || additional_pred.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable();
