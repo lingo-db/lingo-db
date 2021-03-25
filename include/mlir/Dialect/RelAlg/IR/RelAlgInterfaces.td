@@ -36,6 +36,24 @@ InterfaceMethod<
 }]
 >,
 InterfaceMethod<
+        "set children of operator",
+        "void ", "setChildren",(ins "llvm::SmallVector<Operator,4>":$children),"", /*defaultImplementation=*/[{
+    auto op=this->getOperation();
+    size_t i=0;
+    size_t j=0;
+    for (auto operand : op->getOperands()) {
+        mlir::Type t=operand.getType();
+        bool isreltype=t.isa<mlir::relalg::RelationType>();
+        auto childOp=operand.getDefiningOp();
+        if (isreltype&&childOp) {
+            op->setOperand(i,children[j].asRelation());
+            j++;
+        }
+        i++;
+    }
+}]
+>,
+InterfaceMethod<
         "get resulting relation of operator",
         "mlir::Value", "asRelation",(ins ),"", /*defaultImplementation=*/[{
 return this->getOperation()->getResult(0);
