@@ -180,6 +180,18 @@ let assemblyFormat =
 [{ $left `,` $right attr-dict }];
 }
 
+def RenamingOp : RelAlg_Op<"renaming",
+        [ RecursiveSideEffects,Operator]> {
+let summary = "renaming attributes in relation";
+let arguments = (ins SymbolNameAttr:$sym_name,ArrayAttr:$attributes);
+let results = (outs RelAlg_Relation:$result);
+let extraClassDeclaration = [{
+//llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes();
+//llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getUsedAttributes();
+
+}];
+}
+
 def AggregationOp : RelAlg_Op<"aggregation",[RecursiveSideEffects,Operator,DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
 let summary = "aggregation operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel, ArrayAttr:$group_by_attrs);

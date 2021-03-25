@@ -60,7 +60,6 @@ attribute_set mlir::relalg::detail::getFreeAttributes(mlir::Operation* op){
 
 bool mlir::relalg::detail::isDependentJoin(mlir::Operation* op) {
    if(auto join=mlir::dyn_cast_or_null<Join>(op)){
-      auto asOperator=mlir::dyn_cast_or_null<Operator>(op);
       auto left=mlir::dyn_cast_or_null<Operator>(join.leftChild());
       auto right=mlir::dyn_cast_or_null<Operator>(join.rightChild());
       auto available_left=left.getAvailableAttributes();

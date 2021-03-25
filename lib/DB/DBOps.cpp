@@ -5,72 +5,73 @@
 
 #include <queue>
 using namespace mlir;
-static void print(OpAsmPrinter &p, db::ConstantOp &op) {
-  p << op.getOperationName();
-  p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+static void print(OpAsmPrinter& p, db::ConstantOp& op) {
+   p << op.getOperationName();
+   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
 
-  if (op->getAttrs().size() > 1)
-    p << ' ';
-  p << "( ";
-  p.printAttributeWithoutType(op.getValue());
-  p << " )";
-  p << " : " << op.getType();
+   if (op->getAttrs().size() > 1)
+      p << ' ';
+   p << "( ";
+   p.printAttributeWithoutType(op.getValue());
+   p << " )";
+   p << " : " << op.getType();
 }
 
-static ParseResult parseConstantOp(OpAsmParser &parser,
-                                   OperationState &result) {
-  Attribute valueAttr;
-  if (parser.parseLParen() ||
-      parser.parseAttribute(valueAttr, "value", result.attributes) ||
-      parser.parseRParen())
-    return failure();
+static ParseResult parseConstantOp(OpAsmParser& parser,
+                                   OperationState& result) {
+   Attribute valueAttr;
+   if (parser.parseLParen() ||
+       parser.parseAttribute(valueAttr, "value", result.attributes) ||
+       parser.parseRParen())
+      return failure();
 
-  // If the attribute is a symbol reference, then we expect a trailing type.
-  Type type;
-  if (parser.parseColon()) {
-    return failure();
-  }
-  if (parser.parseType(type)) {
-    return failure();
-  }
-  // Add the attribute type to the list.
-  return parser.addTypeToList(type, result.types);
+   // If the attribute is a symbol reference, then we expect a trailing type.
+   Type type;
+   if (parser.parseColon()) {
+      return failure();
+   }
+   if (parser.parseType(type)) {
+      return failure();
+   }
+   // Add the attribute type to the list.
+   return parser.addTypeToList(type, result.types);
 }
 
-static void buildDBCmpOp(OpBuilder &build, OperationState &result,
-                        CmpIPredicate predicate, Value lhs, Value rhs) {
-  result.addOperands({lhs, rhs});
-  result.types.push_back(mlir::db::BoolType::get(build.getContext(),false));//TODO
-  result.addAttribute(CmpIOp::getPredicateAttrName(),
-                      build.getI64IntegerAttr(static_cast<int64_t>(predicate)));
+static void buildDBCmpOp(OpBuilder& build, OperationState& result,
+                         mlir::db::DBCmpPredicate predicate, Value lhs, Value rhs) {
+   result.addOperands({lhs, rhs});
+   bool nullable = lhs.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable() || rhs.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable();
+
+   result.types.push_back(mlir::db::BoolType::get(build.getContext(), nullable));
+   result.addAttribute("predicate",
+                       build.getI64IntegerAttr(static_cast<int64_t>(predicate)));
 }
 
-static mlir::db::DBType inferResultType(OpAsmParser &parser,ArrayRef<mlir::db::DBType> types){
+static mlir::db::DBType inferResultType(OpAsmParser& parser, ArrayRef<mlir::db::DBType> types) {
    assert(types.size());
-   bool anyNullables=llvm::any_of(types,[](mlir::db::DBType t){return t.isNullable();});
-   db::DBType baseType=types[0].getBaseType();
-   for(auto t:types){
-      if(t.getBaseType()!=baseType){
-         parser.emitError(parser.getCurrentLocation(),"types do not have same base type");
+   bool anyNullables = llvm::any_of(types, [](mlir::db::DBType t) { return t.isNullable(); });
+   db::DBType baseType = types[0].getBaseType();
+   for (auto t : types) {
+      if (t.getBaseType() != baseType) {
+         parser.emitError(parser.getCurrentLocation(), "types do not have same base type");
          return mlir::db::DBType();
       }
    }
-   if(anyNullables){
+   if (anyNullables) {
       return baseType.asNullable();
    }
    return baseType;
-
 }
-static ParseResult parseImplicitResultSameOperandBaseTypeOp(OpAsmParser &parser,
-                                                  OperationState &result) {
+static ParseResult parseImplicitResultSameOperandBaseTypeOp(OpAsmParser& parser,
+                                                            OperationState& result) {
    SmallVector<OpAsmParser::OperandType, 4> args;
    SmallVector<mlir::db::DBType, 4> argTypes;
 
    while (true) {
       OpAsmParser::OperandType arg;
       mlir::db::DBType argType;
-      auto parse_res=parser.parseOptionalOperand(arg);
-      if (!parse_res.hasValue()||parse_res.getValue().failed()) {
+      auto parse_res = parser.parseOptionalOperand(arg);
+      if (!parse_res.hasValue() || parse_res.getValue().failed()) {
          break;
       }
       if (parser.parseColonType(argType)) {
@@ -81,48 +82,46 @@ static ParseResult parseImplicitResultSameOperandBaseTypeOp(OpAsmParser &parser,
       if (!parser.parseOptionalComma()) { continue; }
       break;
    }
-   if(parser.resolveOperands(args,argTypes,parser.getCurrentLocation(),result.operands).failed()){
+   if (parser.resolveOperands(args, argTypes, parser.getCurrentLocation(), result.operands).failed()) {
       return failure();
    }
-   Type t=inferResultType(parser,argTypes);
-   parser.addTypeToList(t,result.types);
+   Type t = inferResultType(parser, argTypes);
+   parser.addTypeToList(t, result.types);
    return success();
 }
 
-static void printImplicitResultSameOperandBaseTypeOp(Operation *op, OpAsmPrinter &p){
-   bool first=true;
-   p<<op->getName()<<" ";
-   for(auto operand:op->getOperands()){
-
-      if(first){
-         first=false;
-      }else{
-         p<<",";
+static void printImplicitResultSameOperandBaseTypeOp(Operation* op, OpAsmPrinter& p) {
+   bool first = true;
+   p << op->getName() << " ";
+   for (auto operand : op->getOperands()) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
       }
-      p<<operand<<":"<<operand.getType();
+      p << operand << ":" << operand.getType();
    }
-
 }
-
 
 //////////////////////////////////////////////////////////////////////////////////////////
 // CmpOp
 //////////////////////////////////////////////////////////////////////////////////////////
 
-::mlir::ParseResult parseCmpOp(::mlir::OpAsmParser &parser, ::mlir::OperationState &result) {
+::mlir::ParseResult parseCmpOp(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    ::mlir::IntegerAttr predicateAttr;
-   ::mlir::OpAsmParser::OperandType leftOperand;::llvm::SMLoc lhsOperandsLoc;
-   (void)lhsOperandsLoc;
-   ::mlir::db::DBType leftType,rightType;
+   ::mlir::OpAsmParser::OperandType leftOperand;
+   ::llvm::SMLoc lhsOperandsLoc;
+   (void) lhsOperandsLoc;
+   ::mlir::db::DBType leftType, rightType;
    ::mlir::OpAsmParser::OperandType rightOperand;
    ::llvm::SMLoc rhsOperandsLoc;
-   (void)rhsOperandsLoc;
+   (void) rhsOperandsLoc;
 
    {
       ::llvm::StringRef attrStr;
       ::mlir::NamedAttrList attrStorage;
       auto loc = parser.getCurrentLocation();
-      if (parser.parseOptionalKeyword(&attrStr, {"eq","neq","lt","lte","gt","gte","like"})) {
+      if (parser.parseOptionalKeyword(&attrStr, {"eq", "neq", "lt", "lte", "gt", "gte", "like"})) {
          ::mlir::StringAttr attrVal;
          ::mlir::OptionalParseResult parseResult =
             parser.parseOptionalAttribute(attrVal,
@@ -140,7 +139,8 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation *op, OpAsmPrinter
          auto attrOptional = ::mlir::db::symbolizeDBCmpPredicate(attrStr);
          if (!attrOptional)
             return parser.emitError(loc, "invalid ")
-               << "predicate attribute specification: \"" << attrStr << '"';;
+               << "predicate attribute specification: \"" << attrStr << '"';
+         ;
 
          predicateAttr = parser.getBuilder().getI64IntegerAttr(static_cast<int64_t>(attrOptional.getValue()));
          result.addAttribute("predicate", predicateAttr);
@@ -172,12 +172,12 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation *op, OpAsmPrinter
       return ::mlir::failure();
    if (parser.resolveOperand(rightOperand, rightType, result.operands))
       return ::mlir::failure();
-   bool nullable=rightType.isNullable()||leftType.isNullable();
-   parser.addTypeToList(db::BoolType::get(parser.getBuilder().getContext(),nullable),result.types);
+   bool nullable = rightType.isNullable() || leftType.isNullable();
+   parser.addTypeToList(db::BoolType::get(parser.getBuilder().getContext(), nullable), result.types);
    return ::mlir::success();
 }
 
-static void print(::mlir::OpAsmPrinter &p,mlir::db::CmpOp& op) {
+static void print(::mlir::OpAsmPrinter& p, mlir::db::CmpOp& op) {
    p << "db.compare";
    p << ' ';
    {
@@ -185,51 +185,45 @@ static void print(::mlir::OpAsmPrinter &p,mlir::db::CmpOp& op) {
       auto caseValueStr = stringifyDBCmpPredicate(caseValue);
       p << caseValueStr;
    }
-   p << ' '<< op.lhs()<< " : "<<op.lhs().getType() << ", " << op.rhs()<<' ' << ": " << op.rhs().getType();
+   p << ' ' << op.lhs() << " : " << op.lhs().getType() << ", " << op.rhs() << ' ' << ": " << op.rhs().getType();
    p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"predicate"});
 }
 
-
-
-static ParseResult parseDateOp(OpAsmParser &parser,
-                                                            OperationState &result) {
-   OpAsmParser::OperandType left,right;
+static ParseResult parseDateOp(OpAsmParser& parser,
+                               OperationState& result) {
+   OpAsmParser::OperandType left, right;
    mlir::db::DBType leftType, rightType;
-   if(parser.parseOperand(left)||parser.parseColonType(leftType)||parser.parseComma()||parser.parseOperand(right)||parser.parseColonType(rightType)){
+   if (parser.parseOperand(left) || parser.parseColonType(leftType) || parser.parseComma() || parser.parseOperand(right) || parser.parseColonType(rightType)) {
       return failure();
    }
-   if(parser.resolveOperand(left, leftType,result.operands).failed()||parser.resolveOperand(right, rightType,result.operands).failed()){
+   if (parser.resolveOperand(left, leftType, result.operands).failed() || parser.resolveOperand(right, rightType, result.operands).failed()) {
       return failure();
    }
-   bool nullable=rightType.isNullable()||leftType.isNullable();
-   parser.addTypeToList(db::DateType::get(parser.getBuilder().getContext(),nullable),result.types);
+   bool nullable = rightType.isNullable() || leftType.isNullable();
+   parser.addTypeToList(db::DateType::get(parser.getBuilder().getContext(), nullable), result.types);
    return success();
 }
 
-static void printDateOp(Operation *op, OpAsmPrinter &p){
-   bool first=true;
-   p<<op->getName()<<" ";
-   for(auto operand:op->getOperands()){
-
-      if(first){
-         first=false;
-      }else{
-         p<<",";
+static void printDateOp(Operation* op, OpAsmPrinter& p) {
+   bool first = true;
+   p << op->getName() << " ";
+   for (auto operand : op->getOperands()) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
       }
-      p<<operand<<":"<<operand.getType();
+      p << operand << ":" << operand.getType();
    }
-
 }
 
-
-
-static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseIfOp(OpAsmParser& parser, OperationState& result) {
    // Create the regions for 'then'.
    result.regions.reserve(2);
-   Region *thenRegion = result.addRegion();
-   Region *elseRegion = result.addRegion();
+   Region* thenRegion = result.addRegion();
+   Region* elseRegion = result.addRegion();
 
-   auto &builder = parser.getBuilder();
+   auto& builder = parser.getBuilder();
    OpAsmParser::OperandType cond;
    Type condType;
    if (parser.parseOperand(cond) || parser.parseColonType(condType) ||
@@ -254,50 +248,49 @@ static ParseResult parseIfOp(OpAsmParser &parser, OperationState &result) {
    return success();
 }
 
-static void print(OpAsmPrinter &p, mlir::db::IfOp op) {
+static void print(OpAsmPrinter& p, mlir::db::IfOp op) {
    bool printBlockTerminators = false;
 
-   p << mlir::db::IfOp::getOperationName() << " " << op.condition() << " : "<<op.condition().getType();
+   p << mlir::db::IfOp::getOperationName() << " " << op.condition() << " : " << op.condition().getType();
    if (!op.results().empty()) {
       p << " -> (" << op.getResultTypes() << ")";
       // Print yield explicitly if the op defines values.
       printBlockTerminators = true;
    }
    p.printRegion(op.thenRegion(),
-      /*printEntryBlockArgs=*/false,
-      /*printBlockTerminators=*/printBlockTerminators);
+                 /*printEntryBlockArgs=*/false,
+                 /*printBlockTerminators=*/printBlockTerminators);
 
    // Print the 'else' regions if it exists and has a block.
-   auto &elseRegion = op.elseRegion();
+   auto& elseRegion = op.elseRegion();
    if (!elseRegion.empty()) {
       p << " else";
       p.printRegion(elseRegion,
-         /*printEntryBlockArgs=*/false,
-         /*printBlockTerminators=*/printBlockTerminators);
+                    /*printEntryBlockArgs=*/false,
+                    /*printBlockTerminators=*/printBlockTerminators);
    }
 
    p.printOptionalAttrDict(op->getAttrs());
 }
 
-static ParseResult parseDateExtractOp(OpAsmParser &parser,
-                               OperationState &result) {
+static ParseResult parseDateExtractOp(OpAsmParser& parser,
+                                      OperationState& result) {
    OpAsmParser::OperandType date;
    mlir::db::DBType dateType;
    StringAttr unit;
-   if(parser.parseAttribute(unit)||parser.parseComma()|| parser.parseOperand(date)||parser.parseColonType(dateType)){
+   if (parser.parseAttribute(unit) || parser.parseComma() || parser.parseOperand(date) || parser.parseColonType(dateType)) {
       return failure();
    }
-   if(parser.resolveOperand(date, dateType,result.operands).failed()){
+   if (parser.resolveOperand(date, dateType, result.operands).failed()) {
       return failure();
    }
-   result.addAttribute("unit",unit);
-   parser.addTypeToList(db::IntType::get(parser.getBuilder().getContext(),dateType.isNullable(),32),result.types);
+   result.addAttribute("unit", unit);
+   parser.addTypeToList(db::IntType::get(parser.getBuilder().getContext(), dateType.isNullable(), 32), result.types);
    return success();
 }
 
-static void print(OpAsmPrinter &p,mlir::db::DateExtractOp extractOp){
-   p<<extractOp.getOperationName()<<" "<<extractOp.unit()<<", "<<extractOp.date()<<" : "<<extractOp.date().getType();
-
+static void print(OpAsmPrinter& p, mlir::db::DateExtractOp extractOp) {
+   p << extractOp.getOperationName() << " " << extractOp.unit() << ", " << extractOp.date() << " : " << extractOp.date().getType();
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.cpp.inc"

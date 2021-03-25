@@ -9,6 +9,7 @@ namespace relalg {
 std::unique_ptr<Pass> createExtractNestedOperatorsPass();
 std::unique_ptr<Pass> createDecomposeLambdasPass();
 std::unique_ptr<Pass> createImplicitToExplicitJoinsPass();
+std::unique_ptr<Pass> createUnnestingPass();
 
 
 } // end namespace db

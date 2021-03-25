@@ -6,6 +6,7 @@ add_mlir_dialect_library(MLIRRelAlg
         ExtractNestedOperators.cpp
         DecomposeLambdas.cpp
         RelationalAttributeManager.cpp
+        Unnesting.cpp
         ImplicitToExplicitJoins.cpp
         ADDITIONAL_HEADER_DIRS
         ../../include/mlir/Dialect/RelAlg

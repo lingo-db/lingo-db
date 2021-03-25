@@ -75,6 +75,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
    void runOnFunction() override {
       auto attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       using namespace mlir;
+      Type tuple_type=mlir::relalg::TupleType::get(&getContext());
       SmallVector<mlir::Operation*> to_destroy;
       getFunction().walk([&](mlir::Operation* op) {
          TupleLamdaOperator surrounding_operator = op->getParentOfType<TupleLamdaOperator>();
@@ -88,6 +89,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             OpBuilder builder(surrounding_operator);
             auto mjop = builder.create<relalg::SingleJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), mlir::relalg::JoinDirection::left, tree_val, getscalarop.rel());
             mjop.getRegion().push_back(new Block);
+            mjop.getLambdaBlock().addArgument(tuple_type);
             builder.setInsertionPointToStart(&mjop.getRegion().front());
             builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
             builder.setInsertionPoint(getscalarop);
@@ -116,6 +118,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
                mjop = builder.create<relalg::MarkJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), mlir::relalg::JoinDirection::left, scope_name, defAttr, tree_val, existsop.rel());
             }
             mjop.getLambdaRegion().push_back(new Block);
+            mjop.getLambdaBlock().addArgument(tuple_type);
             builder.setInsertionPointToStart(&mjop.getLambdaBlock());
             builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
             builder.setInsertionPoint(existsop);
@@ -157,7 +160,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
                mjop= builder.create<relalg::MarkJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), mlir::relalg::JoinDirection::left, scope_name, markAttrDef, tree_val, inop.rel());
             }
             mjop.getLambdaRegion().push_back(new Block);
-            mjop.getLambdaBlock().addArgument(mlir::relalg::TupleType::get(&getContext()));
+            mjop.getLambdaBlock().addArgument(tuple_type);
             Value val = extract(inop.val(), surrounding_operator, mjop);
             builder.setInsertionPoint(mjop.getLambdaBlock().getTerminator());
             auto other_val = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), searchInAttr.getRelationalAttribute().type, searchInAttr, mjop.getLambdaArgument());

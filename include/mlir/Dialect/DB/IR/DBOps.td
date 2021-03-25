@@ -151,7 +151,7 @@ DBType:$rhs
 let results = (outs DB_BoolType:$result);
 
 let builders = [
-OpBuilderDAG<(ins "CmpIPredicate":$predicate, "Value":$lhs,
+OpBuilderDAG<(ins "mlir::db::DBCmpPredicate":$predicate, "Value":$lhs,
 "Value":$rhs), [{
 ::buildDBCmpOp($_builder, $_state, predicate, lhs, rhs);
 }]>];

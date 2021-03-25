@@ -874,6 +874,35 @@ static ParseResult parseConstRelationOp(OpAsmParser& parser,
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
+// RenamingOp
+///////////////////////////////////////////////////////////////////////////////////
+static void print(OpAsmPrinter& p, relalg::RenamingOp& op) {
+   p << op.getOperationName();
+   p << " ";
+   p.printSymbolName(op.sym_name());
+   if (op->getAttrs().size() > 1) p << ' ';
+   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"sym_name", "attributes"});
+   p << " attributes: ";
+   printAttributeDefArr(p, op.attributes());
+}
+
+static ParseResult parseRenamingOp(OpAsmParser& parser,
+                                        OperationState& result) {
+   StringAttr nameAttr;
+   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
+      return failure();
+   }
+   getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
+   Attribute attributes;
+   if (parser.parseKeyword("attributes") || parser.parseColon() || parseAttributeDefArr(parser, result, attributes)) {
+      return failure();
+   }
+
+   result.addAttribute("attributes", attributes);
+   return addRelationOutput(parser, result);
+}
+
+///////////////////////////////////////////////////////////////////////////////////
 // InOp
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseInOp(OpAsmParser& parser, OperationState& result) {

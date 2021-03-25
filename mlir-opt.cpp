@@ -27,6 +27,9 @@ int main(int argc, char** argv) {
    ::mlir::registerPass("relalg-implicit-to-explicit-joins", "implicit to explicit joins", []() -> std::unique_ptr<::mlir::Pass> {
      return mlir::relalg::createImplicitToExplicitJoinsPass();
    });
+   ::mlir::registerPass("relalg-unnesting", "unnest depending joins", []() -> std::unique_ptr<::mlir::Pass> {
+     return mlir::relalg::createUnnestingPass();
+   });
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
