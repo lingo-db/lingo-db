@@ -186,7 +186,7 @@ static void print(::mlir::OpAsmPrinter& p, mlir::db::CmpOp& op) {
       p << caseValueStr;
    }
    p << ' ' << op.lhs() << " : " << op.lhs().getType() << ", " << op.rhs() << ' ' << ": " << op.rhs().getType();
-   p.printOptionalAttrDict(op.getAttrs(), /*elidedAttrs=*/{"predicate"});
+   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"predicate"});
 }
 
 static ParseResult parseDateOp(OpAsmParser& parser,

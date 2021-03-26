@@ -1,7 +1,8 @@
 #include "mlir/Dialect/DB/IR/DBTypes.h"
+#include "mlir/Dialect/DB/IR/DBDialect.h"
+
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/DialectImplementation.h"
-#include "mlir/IR/OpImplementation.h"
 
 #include <llvm/ADT/TypeSwitch.h>
 
@@ -48,10 +49,10 @@ mlir::db::DBType mlir::db::DBType::getBaseType() const {
          return mlir::db::TimestampType::get(t.getContext(), false);
       })
       .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
-        return mlir::db::IntervalType::get(t.getContext(), false);
+         return mlir::db::IntervalType::get(t.getContext(), false);
       })
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
-        return mlir::db::FloatType::get(t.getContext(), false,t.getWidth());
+         return mlir::db::FloatType::get(t.getContext(), false, t.getWidth());
       })
       .Default([](::mlir::Type) { return mlir::db::DBType(); });
 }
@@ -76,10 +77,10 @@ mlir::db::DBType mlir::db::DBType::asNullable() const {
          return mlir::db::TimestampType::get(t.getContext(), true);
       })
       .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
-        return mlir::db::IntervalType::get(t.getContext(), true);
+         return mlir::db::IntervalType::get(t.getContext(), true);
       })
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
-        return mlir::db::FloatType::get(t.getContext(), true,t.getWidth());
+         return mlir::db::FloatType::get(t.getContext(), true, t.getWidth());
       })
       .Default([](::mlir::Type) { return mlir::db::DBType(); });
 }
@@ -261,23 +262,23 @@ void mlir::db::MaterializedCollectionType::print(mlir::DialectAsmPrinter& p) con
 namespace mlir {
 namespace db {
 namespace detail {
-struct MaterializedCollectionTypeStorage : public mlir::TypeStorage{
+struct MaterializedCollectionTypeStorage : public mlir::TypeStorage {
    MaterializedCollectionTypeStorage(std::vector<mlir::Type> types)
-      :types(types) {}
+      : types(types) {}
 
    /// The hash key used for uniquing.
    using KeyTy = mlir::TypeRange;
-   bool operator==(const KeyTy &key) const {
+   bool operator==(const KeyTy& key) const {
       return key == mlir::TypeRange(types);
    }
-   static ::llvm::hash_code hashKey(const KeyTy &key) {
+   static ::llvm::hash_code hashKey(const KeyTy& key) {
       return ::llvm::hash_combine(key);
    }
    /// Construction.
-   static MaterializedCollectionTypeStorage *construct(mlir::TypeStorageAllocator &allocator,
-                                                       const KeyTy &key) {
+   static MaterializedCollectionTypeStorage* construct(mlir::TypeStorageAllocator& allocator,
+                                                       const KeyTy& key) {
       std::vector<mlir::Type> v;
-      v.insert(v.begin(),key.begin(),key.end());
+      v.insert(v.begin(), key.begin(), key.end());
       return new (allocator.allocate<MaterializedCollectionTypeStorage>())
          MaterializedCollectionTypeStorage(v);
    }
@@ -299,10 +300,29 @@ mlir::TypeRange mlir::db::MaterializedCollectionType::getTypes() const {
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/DB/IR/DBOpsTypes.cpp.inc"
 namespace mlir::db {
-::mlir::Type DBTypeParse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser, ::llvm::StringRef mnemonic) {
-   return ::generatedTypeParser(context, parser, mnemonic);
+void DBDialect::registerTypes() {
+   addTypes<
+#define GET_TYPEDEF_LIST
+#include "mlir/Dialect/DB/IR/DBOpsTypes.cpp.inc"
+      >();
 }
-::mlir::LogicalResult DBTypePrint(::mlir::Type type, ::mlir::DialectAsmPrinter& printer) {
-   return ::generatedTypePrinter(type, printer);
+
+/// Parse a type registered to this dialect.
+::mlir::Type DBDialect::parseType(::mlir::DialectAsmParser& parser) const {
+   StringRef memnonic;
+   if (parser.parseKeyword(&memnonic)) {
+      return Type();
+   }
+   auto loc = parser.getCurrentLocation();
+   Type parsed;
+   ::generatedTypeParser(parser.getBuilder().getContext(), parser, memnonic, parsed);
+   if (!parsed) {
+      parser.emitError(loc, "unknown type");
+   }
+   return parsed;
+}
+void DBDialect::printType(::mlir::Type type,
+                          ::mlir::DialectAsmPrinter& os) const {
+   ::generatedTypePrinter(type, os);
 }
 }

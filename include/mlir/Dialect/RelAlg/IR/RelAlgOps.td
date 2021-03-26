@@ -310,7 +310,7 @@ let results = (outs RelAlg_Relation:$result);
 def RelAlg_ReturnOp : RelAlg_Op<"return", [NoSideEffect, ReturnLike, Terminator]> {
 let summary = "loop yield and termination operation";
 let arguments = (ins Variadic<DBType>:$results);
-let builders = [OpBuilderDAG<(ins), [{ /* nothing to do */ }]>];
+let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 let assemblyFormat =
 [{  attr-dict ($results^ `:` type($results))? }];
 }

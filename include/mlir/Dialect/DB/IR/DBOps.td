@@ -19,6 +19,12 @@ This dialect is an example of an out-of-tree MLIR dialect designed to
         working inside of the LLVM source tree.
 }];
 let cppNamespace = "::mlir::db";
+let extraClassDeclaration = [{
+private:
+void registerTypes();
+
+public:
+}];
 }
 
 class DB_Op<string mnemonic, list<OpTrait> traits = []> :
@@ -151,7 +157,7 @@ DBType:$rhs
 let results = (outs DB_BoolType:$result);
 
 let builders = [
-OpBuilderDAG<(ins "mlir::db::DBCmpPredicate":$predicate, "Value":$lhs,
+OpBuilder<(ins "mlir::db::DBCmpPredicate":$predicate, "Value":$lhs,
 "Value":$rhs), [{
 ::buildDBCmpOp($_builder, $_state, predicate, lhs, rhs);
 }]>];
@@ -258,7 +264,7 @@ def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
 let summary = "loop yield and termination operation";
 
 let arguments = (ins Variadic<AnyType>:$results);
-let builders = [OpBuilderDAG<(ins), [{ /* nothing to do */ }]>];
+let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 
 let assemblyFormat =
 [{  attr-dict ($results^ `:` type($results))? }];
