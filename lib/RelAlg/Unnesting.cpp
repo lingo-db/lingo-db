@@ -17,7 +17,7 @@ namespace {
 
 class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
    using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
-   attribute_set intersect(attribute_set& a, attribute_set& b) {
+   attribute_set intersect(const attribute_set& a, const attribute_set& b) {
       attribute_set result;
       for (auto x : a) {
          if (b.contains(x)) {
@@ -42,7 +42,21 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          moveTreeBefore(child, tree);
       }
    }
+   mlir::ArrayAttr addAttributes(mlir::ArrayAttr current, attribute_set to_add) {
+      auto attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
+      llvm::SmallVector<mlir::Attribute, 8> attributes;
+      for (auto attr : current) {
+         auto attr_ref = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>();
+         to_add.insert(&attr_ref.getRelationalAttribute());
+      }
+      for (auto attr : to_add) {
+         attributes.push_back(attributeManager.createRef(attr));
+      }
+      return mlir::ArrayAttr::get(&getContext(), attributes);
+   }
    Operator pushDependJoinDown(Operator D, Operator op) {
+      auto available_D = D.getAvailableAttributes();
+
       using namespace mlir::relalg;
       auto rel_type = RelationType::get(&getContext());
       mlir::OpBuilder builder(&getContext());
@@ -51,13 +65,29 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          .Case<mlir::relalg::BaseTableOp, mlir::relalg::ConstRelationOp>([&](Operator baserelation) {
             return builder.create<CrossProductOp>(builder.getUnknownLoc(), rel_type, baserelation.asRelation(), D.asRelation()).getOperation();
          })
-         //todo: handle crossjoin
-         //todo: handle projection
-         //todo: handle groupby
+         .Case<CrossProductOp>([&](Operator cp) {
+           llvm::SmallVector<Operator, 4> new_children;
+           for (auto childOp : cp.getChildren()) {
+              if(intersect(childOp.getFreeAttributes(),available_D).empty()){
+                 new_children.push_back(childOp);
+              }else {
+                 new_children.push_back(pushDependJoinDown(D, childOp));
+              }
+           }
+           cp.setChildren(new_children);
+           return cp;
+         })
+         .Case<AggregationOp>([&](AggregationOp projection) {
+            projection->setAttr("group_by_attrs", addAttributes(projection.group_by_attrs(), available_D));
+            return projection;
+         })
+         .Case<ProjectionOp>([&](ProjectionOp projection) {
+            projection->setAttr("attrs", addAttributes(projection.attrs(), available_D));
+            return projection;
+         })
          .Case<Join>([&](Join join) {
             auto left = mlir::dyn_cast_or_null<Operator>(join.leftChild());
             auto right = mlir::dyn_cast_or_null<Operator>(join.rightChild());
-            auto available_D = D.getAvailableAttributes();
             auto free_left = left.getFreeAttributes();
             auto free_right = right.getFreeAttributes();
             auto dependent_left = intersect(free_left, available_D);
