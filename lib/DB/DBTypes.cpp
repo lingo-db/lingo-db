@@ -323,6 +323,8 @@ void DBDialect::registerTypes() {
 }
 void DBDialect::printType(::mlir::Type type,
                           ::mlir::DialectAsmPrinter& os) const {
-   ::generatedTypePrinter(type, os);
+   if (::generatedTypePrinter(type, os).failed()) {
+      llvm::errs() << "could not print";
+   }
 }
 }

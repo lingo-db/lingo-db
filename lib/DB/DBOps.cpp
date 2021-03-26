@@ -223,7 +223,6 @@ static ParseResult parseIfOp(OpAsmParser& parser, OperationState& result) {
    Region* thenRegion = result.addRegion();
    Region* elseRegion = result.addRegion();
 
-   auto& builder = parser.getBuilder();
    OpAsmParser::OperandType cond;
    Type condType;
    if (parser.parseOperand(cond) || parser.parseColonType(condType) ||
