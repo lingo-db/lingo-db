@@ -49,6 +49,7 @@ set(LIBS
         MLIRIR
         MLIRParser
         MLIRPass
+        MLIRSupport
 
         MLIRTranslation
         MLIRSupport
@@ -59,5 +60,7 @@ set(LIBS
         )
 
 
-add_llvm_executable(mlir-db-opt mlir-opt.cpp)
+add_executable(mlir-db-opt mlir-opt.cpp)
+llvm_update_compile_flags(mlir-db-opt)
 target_link_libraries(mlir-db-opt PUBLIC ${LIBS})
+add_subdirectory(tools)
