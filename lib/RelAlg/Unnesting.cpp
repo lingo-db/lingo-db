@@ -43,7 +43,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       }
    }
    mlir::ArrayAttr addAttributes(mlir::ArrayAttr current, attribute_set to_add) {
-      auto attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
+      auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       llvm::SmallVector<mlir::Attribute, 8> attributes;
       for (auto attr : current) {
          auto attr_ref = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>();
@@ -53,6 +53,13 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          attributes.push_back(attributeManager.createRef(attr));
       }
       return mlir::ArrayAttr::get(&getContext(), attributes);
+   }
+   void handleChildren(Operator D,Operator others){
+      llvm::SmallVector<Operator, 4> new_children;
+      for (auto childOp : others.getChildren()) {
+         new_children.push_back(pushDependJoinDown(D, childOp));
+      }
+      others.setChildren(new_children);
    }
    Operator pushDependJoinDown(Operator D, Operator op) {
       auto available_D = D.getAvailableAttributes();
@@ -67,22 +74,29 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          })
          .Case<CrossProductOp>([&](Operator cp) {
            llvm::SmallVector<Operator, 4> new_children;
+           bool pushed_down_any=false;
            for (auto childOp : cp.getChildren()) {
               if(intersect(childOp.getFreeAttributes(),available_D).empty()){
                  new_children.push_back(childOp);
               }else {
+                 pushed_down_any=true;
                  new_children.push_back(pushDependJoinDown(D, childOp));
               }
+           }
+           if(!pushed_down_any){
+              new_children[0]=pushDependJoinDown(D, new_children[0]);
            }
            cp.setChildren(new_children);
            return cp;
          })
          .Case<AggregationOp>([&](AggregationOp projection) {
+            handleChildren(D,projection);
             projection->setAttr("group_by_attrs", addAttributes(projection.group_by_attrs(), available_D));
             return projection;
          })
          .Case<ProjectionOp>([&](ProjectionOp projection) {
-            projection->setAttr("attrs", addAttributes(projection.attrs(), available_D));
+           handleChildren(D,projection);
+           projection->setAttr("attrs", addAttributes(projection.attrs(), available_D));
             return projection;
          })
          .Case<Join>([&](Join join) {
@@ -122,11 +136,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             return mlir::dyn_cast_or_null<Operator>(join.getOperation());
          })
          .Default([&](Operator others) {
-            llvm::SmallVector<Operator, 4> new_children;
-            for (auto childOp : others.getChildren()) {
-               new_children.push_back(pushDependJoinDown(D, childOp));
-            }
-            others.setChildren(new_children);
+            handleChildren(D,others);
             return others;
          });
    }
@@ -148,7 +158,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
    void handleJoin(Join join, Operator newLeft, Operator newRight, bool join_dependent, bool rename_right, attribute_set& dependent_attributes) {
       using namespace mlir;
       auto rel_type = relalg::RelationType::get(&getContext());
-      auto attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
+      auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       Operator joinAsOperator = mlir::dyn_cast_or_null<Operator>(join.getOperation());
       mlir::OpBuilder builder(join.getOperation());
       if (join_dependent) {
@@ -198,7 +208,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       using namespace mlir;
       auto rel_type = relalg::RelationType::get(&getContext());
 
-      auto attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
+      auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
 
       getFunction()->walk([&](Join join) {
          if (!join.isDependentJoin()) return;
@@ -238,7 +248,6 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          builder.setInsertionPointAfter(provider_child);
          auto proj = builder.create<relalg::ProjectionOp>(builder.getUnknownLoc(), rel_type, relalg::SetSemantic::distinct, provider_child->getResult(0), builder.getArrayAttr(dependent_refs_as_attr));
          Operator D = mlir::dyn_cast_or_null<Operator>(proj.getOperation());
-         D.dump();
          Operator unnested_child = pushDependJoinDown(D, dependent_child);
 
          Operator newLeft, newRight;

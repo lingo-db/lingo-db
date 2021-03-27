@@ -6,7 +6,7 @@ void RelationalAttributeManager::setContext(MLIRContext* context) {
 std::shared_ptr<RelationalAttribute> RelationalAttributeManager::get(StringRef scope, StringRef attribute) {
    auto pair = std::make_pair(std::string(scope), std::string(attribute));
    if (!attributes.count(pair)) {
-      auto attr=std::make_shared<RelationalAttribute>();
+      auto attr = std::make_shared<RelationalAttribute>();
       attributes[pair] = attr;
       attributes_rev[attr.get()]=pair;
    }
@@ -36,4 +36,7 @@ RelationalAttributeRefAttr RelationalAttributeManager::createRef(RelationalAttri
    return createRef(scope,name);
 }
 
+std::pair<std::string, std::string> RelationalAttributeManager::getName(RelationalAttribute* attr) {
+   return attributes_rev[attr];
+}
 }

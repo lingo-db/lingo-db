@@ -165,7 +165,7 @@ let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
-def LimitOp : RelAlg_Op<"limit",[NoSideEffect]> {
+def LimitOp : RelAlg_Op<"limit",[NoSideEffect,Operator]> {
 let summary = "limit operation";
 let arguments = (ins I32Attr:$rows, RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
@@ -186,8 +186,9 @@ let summary = "renaming attributes in relation";
 let arguments = (ins RelAlg_Relation:$rel,SymbolNameAttr:$sym_name,ArrayAttr:$attributes);
 let results = (outs RelAlg_Relation:$result);
 let extraClassDeclaration = [{
-//llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes();
-//llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getUsedAttributes();
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes();
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getUsedAttributes();
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
 
 }];
 }
@@ -231,12 +232,18 @@ return parseNonCommutativeJoin(parser, result);
 let printer = [{
 return printNonCommutativeJoin(this->getOperation(), p);
 }];
+let extraClassDeclaration = [{
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
+}];
 }
 def AntiSemiJoinOp : RelAlg_Op<"antisemijoin",[RecursiveSideEffects,Operator,Join,TupleLamdaOperator]> {
 let summary = "antisemi join operation";
 let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
+let extraClassDeclaration = [{
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
+}];
 let parser = [{
 return parseNonCommutativeJoin(parser, result);
 }];
@@ -276,6 +283,9 @@ let summary = "mark join operation";
 let arguments = (ins RelAlg_JoinDirection:$join_direction,SymbolNameAttr:$sym_name,RelationalAttributeDefAttr:$markattr,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
+let extraClassDeclaration = [{
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
+}];
 }
 // Set Operations
 def ProjectionOp : RelAlg_Op<"projection",[RecursiveSideEffects,Operator]> {

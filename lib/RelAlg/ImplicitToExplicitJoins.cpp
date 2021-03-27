@@ -30,7 +30,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
    }
    mlir::Value extract(mlir::Value v, TupleLamdaOperator parent, TupleLamdaOperator newParent) {
       using namespace mlir;
-      auto attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
+      auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       std::string scope_name = attributeManager.getUniqueScope("extracted_map");
       attributeManager.setCurrentScope(scope_name);
       llvm::SmallVector<mlir::Operation*, 8> extracted;
@@ -73,7 +73,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
       return false;
    }
    void runOnFunction() override {
-      auto attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
+      auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       using namespace mlir;
       Type tuple_type=mlir::relalg::TupleType::get(&getContext());
       SmallVector<mlir::Operation*> to_destroy;

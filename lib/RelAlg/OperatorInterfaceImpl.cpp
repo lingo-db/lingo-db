@@ -92,6 +92,45 @@ llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*,8> ConstRelationOp::getCr
    }
    return creations;
 }
+llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*,8> AntiSemiJoinOp::getAvailableAttributes(){
+   return mlir::relalg::detail::getAvailableAttributes(leftChild());
+}
+llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*,8> SemiJoinOp::getAvailableAttributes(){
+   return mlir::relalg::detail::getAvailableAttributes(leftChild());
+}
+llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*,8> MarkJoinOp::getAvailableAttributes(){
+   return mlir::relalg::detail::getAvailableAttributes(leftChild());
+}
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute *, 8> RenamingOp::getCreatedAttributes() {
+   attribute_set created;
+
+   for(Attribute attr:attributes()){
+      auto relation_def_attr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
+      created.insert(&relation_def_attr.getRelationalAttribute());   }
+   return created;
+}
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute *, 8> RenamingOp::getUsedAttributes() {
+   attribute_set used;
+
+   for(Attribute attr:attributes()){
+      auto relation_def_attr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
+      auto from_existing =relation_def_attr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      for(Attribute existing:from_existing){
+         auto relation_ref_attr = existing.dyn_cast_or_null<RelationalAttributeRefAttr>();
+         used.insert(&relation_ref_attr.getRelationalAttribute());
+      }
+   }
+   return used;
+}
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute *, 8> RenamingOp::getAvailableAttributes() {
+   auto available_previously=collectAttributes(getChildOperators(*this),[](Operator op){return op.getAvailableAttributes();});
+   for(auto used: getUsedAttributes()) {
+      available_previously.erase(used);
+   }
+   auto created=getCreatedAttributes();
+   available_previously.insert(created.begin(),created.end());
+   return available_previously;
+}
 llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*,8> BaseTableOp::getCreatedAttributes(){
    attribute_set creations;
    for (auto mapping : columns()) {

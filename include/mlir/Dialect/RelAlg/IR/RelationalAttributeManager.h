@@ -16,6 +16,7 @@ class RelationalAttributeManager {
    RelationalAttributeRefAttr createRef(RelationalAttribute* attr);
 
    RelationalAttributeRefAttr createRef(StringRef scope, StringRef name);
+   std::pair<std::string,std::string> getName(RelationalAttribute* attr);
 
    void setCurrentScope(StringRef scope) {
       current_scope = scope;
