@@ -93,7 +93,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             builder.setInsertionPointToStart(&mjop.getRegion().front());
             builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
             builder.setInsertionPoint(getscalarop);
-            Operation* replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), db::BoolType::get(builder.getContext()), getscalarop.attr(), surrounding_operator.getLambdaRegion().getArgument(0));
+            Operation* replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), getscalarop.attr().getRelationalAttribute().type, getscalarop.attr(), surrounding_operator.getLambdaRegion().getArgument(0));
             getscalarop.replaceAllUsesWith(replacement);
             getscalarop->remove();
             getscalarop->destroy();

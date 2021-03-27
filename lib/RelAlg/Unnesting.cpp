@@ -183,8 +183,8 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             bool any_nullable = false;
             for (auto attr : dependent_attributes) {
                auto attref_dependent = attributeManager.createRef(renamed[attr]);
-               Value val_left = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), db::BoolType::get(builder.getContext()), attributeManager.createRef(attr), tuple);
-               Value val_right = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), db::BoolType::get(builder.getContext()), attref_dependent, tuple);
+               Value val_left = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), attr->type, attributeManager.createRef(attr), tuple);
+               Value val_right = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), attr->type, attref_dependent, tuple);
                Value cmp_eq = builder.create<db::CmpOp>(builder.getUnknownLoc(), db::DBCmpPredicate::eq, val_left, val_right);
                any_nullable |= cmp_eq.getType().dyn_cast_or_null<db::DBType>().isNullable();
                to_and.push_back(cmp_eq);
