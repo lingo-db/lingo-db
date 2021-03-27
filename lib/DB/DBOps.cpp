@@ -289,7 +289,7 @@ static ParseResult parseDateExtractOp(OpAsmParser& parser,
 }
 
 static void print(OpAsmPrinter& p, mlir::db::DateExtractOp extractOp) {
-   p << extractOp.getOperationName() << " " << extractOp.unit() << ", " << extractOp.date() << " : " << extractOp.date().getType();
+   p << extractOp.getOperationName() << " \"" << extractOp.unit() << "\", " << extractOp.date() << " : " << extractOp.date().getType();
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.cpp.inc"

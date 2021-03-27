@@ -52,6 +52,8 @@ class ToSQL {
    mlir::MLIRContext* context;
    mlir::ModuleOp moduleOp;
    std::unordered_map<mlir::Operation*, std::string> values;
+   std::unordered_map<mlir::Operation*, std::string> operators;
+
    std::string operator_name(mlir::Operation* op) {
       return "op_" + std::to_string((size_t) op);
    }
@@ -444,7 +446,8 @@ class ToSQL {
                   })
                   .Case<mlir::relalg::LimitOp>([&](mlir::relalg::LimitOp op) {
                      std::vector<std::string> attrs;
-                     output << "select * from " << operator_name(op.rel().getDefiningOp()) << " limit " << op.rows();
+                     op.rel().getDefiningOp()->dump();
+                     output << operators[op.rel().getDefiningOp()] << " limit " << op.rows();
                   })
 
                   .Case<mlir::relalg::SortOp>([&](mlir::relalg::SortOp op) {
@@ -473,6 +476,7 @@ class ToSQL {
                if (output.str().empty()) {
                   addComma = false;
                } else {
+                  operators.insert({operation,output.str()});
                   total_output << op_name << " as (";
                   total_output << output.str();
                   total_output << ") ";

@@ -172,6 +172,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             previous_return->destroy();
             builder.setInsertionPoint(inop);
             if(!directSelection) {
+               attributeManager.setCurrentScope(scope_name);
                relalg::RelationalAttributeRefAttr markAttrRef = attributeManager.createRef(scope_name, attribute_name);
                auto replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), db::BoolType::get(builder.getContext()), markAttrRef, surrounding_operator.getLambdaRegion().getArgument(0));
                inop->replaceAllUsesWith(replacement);

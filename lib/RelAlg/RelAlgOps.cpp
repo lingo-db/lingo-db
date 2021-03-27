@@ -714,6 +714,7 @@ static ParseResult parseMarkJoinOp(OpAsmParser& parser, OperationState& result) 
    if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
       return failure();
    }
+   getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
 
    relalg::RelationalAttributeDefAttr defAttr;
    parseAttributeDefAttr(parser, result, defAttr);
