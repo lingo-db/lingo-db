@@ -446,7 +446,6 @@ class ToSQL {
                   })
                   .Case<mlir::relalg::LimitOp>([&](mlir::relalg::LimitOp op) {
                      std::vector<std::string> attrs;
-                     op.rel().getDefiningOp()->dump();
                      output << operators[op.rel().getDefiningOp()] << " limit " << op.rows();
                   })
 

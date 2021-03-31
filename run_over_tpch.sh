@@ -1,8 +1,8 @@
 #!/bin/bash
 set -e
-FILES=tools/sql-to-mlir/mlir/tpch/*
+FILES=resources/sql/parseable/*
 for f in $FILES
 do
   echo "Process '$f':"
-  cmake-build-debugllvm-release/bin/mlir-db-opt  $f $@
+ python3 ./tools/sql-to-mlir/sql-to-mlir.py $f | build/build-debug-llvm-release/mlir-db-opt $@
 done

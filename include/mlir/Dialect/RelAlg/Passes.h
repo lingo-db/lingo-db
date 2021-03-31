@@ -10,6 +10,8 @@ std::unique_ptr<Pass> createExtractNestedOperatorsPass();
 std::unique_ptr<Pass> createDecomposeLambdasPass();
 std::unique_ptr<Pass> createImplicitToExplicitJoinsPass();
 std::unique_ptr<Pass> createUnnestingPass();
+std::unique_ptr<Pass> createPushdownPass();
+
 
 
 } // end namespace db

@@ -6,7 +6,7 @@ for qnum in range(1, 21):
     file2 = "resources/sql/hyper/" + str(qnum) + ".sql"
 
     proc1 = subprocess.run(
-        "python3 ./tools/sql-to-mlir/sql-to-mlir.py " + file1 + " | cmake-build-debugllvm-release/mlir-db-opt --loop-invariant-code-motion --relalg-extract-nested-operators --relalg-decompose-lambdas --relalg-implicit-to-explicit-joins --relalg-unnesting | cmake-build-debugllvm-release/tools/mlir-to-sql/mlir-to-sql",
+        "python3 ./tools/sql-to-mlir/sql-to-mlir.py " + file1 + " |build/build-debug-llvm-release/mlir-db-opt --relalg-extract-nested-operators --relalg-decompose-lambdas --relalg-implicit-to-explicit-joins --relalg-pushdown --relalg-unnesting |build/build-debug-llvm-release/tools/mlir-to-sql/mlir-to-sql",
         stdout=subprocess.PIPE, shell=True)
     mlir_query = proc1.stdout.decode('utf8')
     r1 = requests.post('https://hyper-db.de/interface/query', data={'query': mlir_query})
