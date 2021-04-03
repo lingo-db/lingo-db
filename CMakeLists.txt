@@ -35,7 +35,6 @@ add_subdirectory(include)
 add_subdirectory(lib)
 
 
-
 get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
 get_property(translation_libs GLOBAL PROPERTY MLIR_TRANSLATION_LIBS)
@@ -62,6 +61,11 @@ set(LIBS
 
 
 add_executable(mlir-db-opt mlir-opt.cpp)
+
 llvm_update_compile_flags(mlir-db-opt)
 target_link_libraries(mlir-db-opt PUBLIC ${LIBS})
 add_subdirectory(tools)
+
+add_executable(test test.cpp)
+llvm_update_compile_flags(test)
+target_link_libraries(test PUBLIC ${LIBS})

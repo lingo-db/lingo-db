@@ -33,6 +33,10 @@ int main(int argc, char** argv) {
     ::mlir::registerPass("relalg-pushdown", "pushdown ", []() -> std::unique_ptr<::mlir::Pass> {
         return mlir::relalg::createPushdownPass();
     });
+    /*::mlir::registerPass("relalg-joinorder", "joinorder", []() -> std::unique_ptr<::mlir::Pass> {
+        return mlir::relalg::createJoinOrderPass()
+        ;
+    });*/
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();

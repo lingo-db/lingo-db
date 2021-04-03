@@ -6,6 +6,10 @@
 #include "QueryGraph.h"
 
 namespace mlir::relalg {
+    class PlanVisualizer {
+        //std::string addNode();
+    };
+
     struct Plan {
         Plan(std::string p) : plan(p) {}
 
@@ -18,18 +22,10 @@ namespace mlir::relalg {
     };
 
     class DPHyp {
-        struct hash_dyn_bitset {
-            size_t operator()(const sul::dynamic_bitset<> &bitset) const {
-                size_t res = 0;
-                for (size_t i = 0; i < bitset.num_blocks(); i++) {
-                    res ^= bitset.data()[i];
-                }
-                return res;
-            }
-        };
+
 
         using node_set = QueryGraph::node_set;
-        std::unordered_map<node_set, std::shared_ptr<Plan>, hash_dyn_bitset> dp_table;
+        std::unordered_map<node_set, std::shared_ptr<Plan>, QueryGraph::hash_dyn_bitset> dp_table;
 
         QueryGraph &queryGraph;
         CostFunction &costFunction;
@@ -62,7 +58,7 @@ namespace mlir::relalg {
             auto p2 = dp_table[S2];
             auto S = S1 | S2;
             auto newplan = std::make_shared<Plan>("("+p1->plan+") join ("+p2->plan+")");//todo
-            //std::cout<<"newplan("<<S<<")="<<newplan->plan<<std::endl;
+            std::cout<<"newplan("<<S<<")="<<newplan->plan<<std::endl;
             if (!dp_table.count(S) || newplan->cost < dp_table[S]->cost) {
                 dp_table[S] = newplan;
             }
@@ -106,6 +102,7 @@ namespace mlir::relalg {
                 auto Bv = queryGraph.fill_until(v.id);
                 EnumerateCsgRec(only_v, Bv);
             });
+
         }
     };
 }

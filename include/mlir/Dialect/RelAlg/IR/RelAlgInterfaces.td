@@ -36,6 +36,19 @@ InterfaceMethod<
 }]
 >,
 InterfaceMethod<
+        "get children of operator",
+        "llvm::SmallVector<Operator,4>", "getAllSubOperators",(ins ),"", /*defaultImplementation=*/[{
+    llvm::SmallVector<Operator,4> suboperators;
+    suboperators.push_back(mlir::dyn_cast_or_null<Operator>(this->getOperation()));
+    auto children=this->getChildren();
+    for (auto child : children) {
+        auto subsub=child.getAllSubOperators();
+        suboperators.insert(suboperators.end(),subsub.begin(),subsub.end());
+    }
+    return suboperators;
+}]
+>,
+InterfaceMethod<
         "set children of operator",
         "void ", "setChildren",(ins "llvm::SmallVector<Operator,4>":$children),"", /*defaultImplementation=*/[{
     auto op=this->getOperation();
