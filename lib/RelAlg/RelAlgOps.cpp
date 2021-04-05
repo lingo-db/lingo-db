@@ -419,6 +419,7 @@ static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
       }
       p << column_name << " => ";
       printAttributeDefAttr(p, relation_def_attr);
+      p<<"\n";
    }
    p << "}";
 }

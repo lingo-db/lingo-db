@@ -2,6 +2,8 @@
 #define DB_DIALECTS_DPHYP_H
 
 #include "QueryGraph.h"
+#include <llvm/ADT/SmallBitVector.h>
+#include <llvm/ADT/SmallVector.h>
 #include <bitset>
 #include <memory>
 
@@ -11,9 +13,10 @@ class PlanVisualizer {
 };
 
 struct Plan {
-   Plan(std::string p) : plan(p) {}
-
-   std::string plan;
+   Plan(Operator op, std::vector<std::shared_ptr<Plan>> subplans, std::vector<Operator> additional_ops, size_t cost) : op(op), subplans(subplans), additional_ops(additional_ops), cost(cost) {}
+   Operator op;
+   std::vector<Operator> additional_ops;
+   std::vector<std::shared_ptr<Plan>> subplans;
    size_t cost;
 };
 
@@ -28,7 +31,8 @@ class DPHyp {
    CostFunction& costFunction;
 
    std::shared_ptr<Plan> createInitialPlan(QueryGraph::Node& n) {
-      return std::make_shared<Plan>(std::to_string(n.id));
+      auto curr_plan = std::make_shared<Plan>(n.op, std::vector<std::shared_ptr<Plan>>({}), std::vector<Operator>({n.additional_predicates}), 0);
+      return curr_plan;
    }
 
    public:
@@ -51,10 +55,39 @@ class DPHyp {
       auto p1 = dp_table[S1];
       auto p2 = dp_table[S2];
       auto S = S1 | S2;
-      auto newplan = std::make_shared<Plan>("(" + p1->plan + ") join (" + p2->plan + ")"); //todo
-      std::cout << "newplan(" << S << ")=" << newplan->plan << std::endl;
-      if (!dp_table.count(S) || newplan->cost < dp_table[S]->cost) {
-         dp_table[S] = newplan;
+      std::vector<Operator> predicates;
+      Operator implicit_operator{};
+      Operator special_join{};
+      for (auto& edge : queryGraph.edges) {
+         if ((edge.left.is_subset_of(S1) && edge.right.is_subset_of(S2)) || (edge.left.is_subset_of(S2) && edge.right.is_subset_of(S1))) {
+            if (edge.implicit_edge) {
+               auto& implicit_node = queryGraph.nodes[edge.right.find_first()];
+               implicit_operator = implicit_node.op;
+               predicates.insert(predicates.end(), implicit_node.additional_predicates.begin(), implicit_node.additional_predicates.end());
+            } else if (!mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation()) && !mlir::isa<mlir::relalg::InnerJoinOp>(edge.op.getOperation())) {
+               special_join = edge.op;
+               predicates.insert(predicates.end(), edge.additional_predicates.begin(), edge.additional_predicates.end());
+            } else {
+               predicates.push_back(edge.op);
+               predicates.insert(predicates.end(), edge.additional_predicates.begin(), edge.additional_predicates.end());
+            }
+         }
+      }
+      std::shared_ptr<Plan> curr_plan;
+      if (implicit_operator) {
+         auto subplans = std::vector<std::shared_ptr<Plan>>({p1});
+         if (p1->op == implicit_operator) {
+            subplans = std::vector<std::shared_ptr<Plan>>({p2});
+         }
+         curr_plan = std::make_shared<Plan>(implicit_operator, subplans, predicates, 0);
+      } else if (special_join) {
+         curr_plan = std::make_shared<Plan>(special_join, std::vector<std::shared_ptr<Plan>>({p1, p2}), predicates, 0);
+      } else {
+         curr_plan = std::make_shared<Plan>(predicates[0], std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>(predicates.begin() + 1, predicates.end()), 0);
+      }
+
+      if (!dp_table.count(S) || curr_plan->cost < dp_table[S]->cost) {
+         dp_table[S] = curr_plan;
       }
    }
 
@@ -85,7 +118,7 @@ class DPHyp {
       });
    }
 
-   void solve() {
+   std::shared_ptr<Plan> solve() {
       queryGraph.iterateNodes([&](QueryGraph::Node& v) {
          dp_table.insert({queryGraph.single(v.id), createInitialPlan(v)});
       });
@@ -95,6 +128,7 @@ class DPHyp {
          auto Bv = queryGraph.fill_until(v.id);
          EnumerateCsgRec(only_v, Bv);
       });
+      return dp_table[queryGraph.ones()];
    }
 };
 }

@@ -20,6 +20,7 @@
 
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <llvm/ADT/TypeSwitch.h>
+#include <iomanip>
 #include <iostream>
 #include <list>
 #include <queue>
@@ -134,14 +135,11 @@ class JoinOrder {
             auto node_id = SES.find_first();
             qg.nodes[node_id].additional_predicates.push_back(op);
          } else {
-            op.dump();
             auto to_join = SES;
             std::unordered_map<size_t, node_set> representations;
             for (auto subop : op.getAllSubOperators()) {
                auto subop_TES = qg.calcTES(subop, resolver);
                if (SES.intersects(subop_TES) && !qg.canPushSelection(op, subop, resolver)) {
-                  llvm::dbgs() << "can not push:";
-                  subop.dump();
                   auto representator = (subop_TES & SES).find_first();
                   subop_TES.set(representator, false);
                   if (representations.count(representator)) {
@@ -161,9 +159,6 @@ class JoinOrder {
             //    if(TES(subop) intersects SES(sel)) and pushdown not possible:
             //       representator=min(TES(subop) & SES(sel))
             //       representations[representator]=TES(subop)
-            llvm::dbgs() << "to_join:";
-            qg.print_readable(to_join, llvm::dbgs());
-            llvm::dbgs() << "\n";
             if (to_join.count() == 1) {
                auto& edges = qg.available_edges[expand_rep(qg.expand(to_join), representations)];
                assert(edges.size() == 1);
@@ -217,7 +212,49 @@ class JoinOrder {
       }
       return isUnsupportedOp(op);
    }
+   std::string printPlanOp(Operator op) {
+      static size_t nodeid = 0;
+      std::string opstr;
+      llvm::raw_string_ostream strstream(opstr);
+      op.print(strstream);
+      std::string nodename = "n" + std::to_string(nodeid++);
+      std::string nodelabel = strstream.str();
 
+      std::cout << " node [label=" << std::quoted(nodelabel) << "] " << nodename << ";" << std::endl;
+      return nodename;
+   }
+   std::string printPlanNode(std::shared_ptr<mlir::relalg::Plan> plan) {
+      std::string firstNodeName;
+      std::string lastNodeName;
+      for (auto op : plan->additional_ops) {
+         std::string nodename = printPlanOp(op);
+         if (!lastNodeName.empty()) {
+            std::cout << lastNodeName << " -> " << nodename << ";" << std::endl;
+         }
+         lastNodeName = nodename;
+         if (firstNodeName.empty()) {
+            firstNodeName = nodename;
+         }
+      }
+      std::string nodename = printPlanOp(plan->op);
+      if (!lastNodeName.empty()) {
+         std::cout << lastNodeName << " -> " << nodename << ";" << std::endl;
+      }
+      if (firstNodeName.empty()) {
+         firstNodeName = nodename;
+      }
+      for (auto subplan : plan->subplans) {
+         std::string subnode = printPlanNode(subplan);
+         std::cout << nodename << " -> " << subnode << ";" << std::endl;
+      }
+      return firstNodeName;
+   }
+
+   void printPlan(std::shared_ptr<mlir::relalg::Plan> plan) {
+      std::cout << "digraph{" << std::endl;
+      printPlanNode(plan);
+      std::cout << "}" << std::endl;
+   }
    Operator optimize(Operator op) {
       if (already_optimized.count(op.getOperation())) {
          return op;
@@ -231,14 +268,12 @@ class JoinOrder {
          already_optimized.insert(op.getOperation());
          return op;
       } else {
-         llvm::outs() << "optimize:";
-         op->print(llvm::outs());
          mlir::relalg::QueryGraph qg(countCreatingOperators(op), already_optimized);
          populateQueryGraph(op, qg);
-         qg.dump();
          mlir::relalg::CostFunction cf;
          mlir::relalg::DPHyp solver(qg, cf);
-         solver.solve();
+         auto solution = solver.solve();
+         printPlan(solution);
          already_optimized.insert(op.getOperation());
          return op;
       }

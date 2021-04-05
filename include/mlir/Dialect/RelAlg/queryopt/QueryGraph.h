@@ -81,6 +81,7 @@ class QueryGraph {
    std::vector<Node> nodes;
    std::vector<Edge> edges;
    std::unordered_map<node_set, std::vector<size_t>, hash_dyn_bitset> available_edges;
+
    //std::unordered_map<relalg::RelationalAttribute *, size_t> attr_to_nodes;
 
    QueryGraph(size_t num_nodes, std::unordered_set<mlir::Operation*>& already_optimized) : num_nodes(num_nodes), already_optimized(already_optimized) {}
@@ -143,11 +144,6 @@ class QueryGraph {
    }
 
    void addEdge(node_set left, node_set right, Operator op, bool implicit_edge) {
-      llvm::dbgs() << "addEdge(";
-      print_readable(left, llvm::dbgs());
-      llvm::dbgs() << ",";
-      print_readable(right, llvm::dbgs());
-      llvm::dbgs() << ")\n";
       size_t edgeid = edges.size();
       edges.push_back(Edge());
       Edge& e = edges.back();
@@ -450,14 +446,8 @@ class QueryGraph {
             if (curr.getChildren().size() == 1) {
                return true;
             }
-            llvm::dbgs() << "try push:";
-            curr.dump();
             auto SES = calcSES(sel, resolver);
-            llvm::dbgs() << "SES:";
-            print_readable(SES, llvm::dbgs());
             auto TES = calcTES(curr, resolver);
-            llvm::dbgs() << "TES:";
-            print_readable(TES, llvm::dbgs());
             auto [b_left, b_right] = normalizeChildren(curr);
             node_set left_TES = calcT(b_left, resolver) & TES;
             node_set right_TES = calcT(b_right, resolver) & TES;
@@ -473,6 +463,11 @@ class QueryGraph {
                default:
                   return true;
             }
+         }
+         node_set ones() {
+            node_set x = mlir::relalg::QueryGraph::node_set(num_nodes);
+            x.set();
+            return x;
          }
 };
 }
