@@ -194,7 +194,6 @@ class QueryGraph {
       e.arbitrary = arbitrary;
       left.iterate_bits_on([&](size_t n) { nodes[n].edges.push_back(edgeid); });
       right.iterate_bits_on([&](size_t n) { nodes[n].edges.push_back(edgeid); });
-
    }
 
    void iterateNodes(std::function<void(Node&)> fn) {
@@ -359,19 +358,11 @@ class QueryGraph {
                if (b.isLeader()) {
                   if (a.getData() != b.getData()) {
                      //std::cout << a.getData() << " vs " << b.getData() << "\n";
-                     node_set left(num_nodes);
-                     auto already_connected_a = already_connected.findLeader(a.getData());
-                     for (auto me = already_connected.member_end(); already_connected_a != me; ++already_connected_a) {
-                        left.set(*already_connected_a);
-                     }
+                     node_set left = getNodeSetFromClass(already_connected, a.getData());
                      if (expand(left) != left) {
                         continue;
                      }
-                     node_set right(num_nodes);
-                     auto already_connected_b = already_connected.findLeader(b.getData());
-                     for (auto me = already_connected.member_end(); already_connected_b != me; ++already_connected_b) {
-                        right.set(*already_connected_b);
-                     }
+                     node_set right = getNodeSetFromClass(already_connected, b.getData());
                      if (expand(right) != right) {
                         continue;
                      }
@@ -401,6 +392,24 @@ class QueryGraph {
             }
          }
       }
+   }
+   node_set getNodeSetFromClass(llvm::EquivalenceClasses<size_t> classes, size_t val) {
+      node_set res(num_nodes);
+      auto eqclass = classes.findLeader(val);
+      for (auto me = classes.member_end(); eqclass != me; ++eqclass) {
+         res.set(*eqclass);
+      }
+      return res;
+   }
+   node_set getNodeSetFromClasses(llvm::EquivalenceClasses<size_t> classes, node_set S) {
+      node_set res(num_nodes);
+      S.iterate_bits_on([&](size_t pos) {
+         auto eqclass = classes.findLeader(pos);
+         for (auto me = classes.member_end(); eqclass != me; ++eqclass) {
+            res.set(*eqclass);
+         }
+      });
+      return res;
    }
    enum OpType {
       None,
@@ -562,11 +571,10 @@ class QueryGraph {
                return init;
             }
          }
-         bool canPushSelection(Operator sel, Operator curr, NodeResolver& resolver) {
+         bool canPushSelection(node_set SES, Operator curr, NodeResolver& resolver) {
             if (curr.getChildren().size() == 1) {
                return true;
             }
-            auto SES = calcSES(sel, resolver);
             auto TES = calcTES(curr, resolver);
             auto [b_left, b_right] = normalizeChildren(curr);
             node_set left_TES = calcT(b_left, resolver) & TES;

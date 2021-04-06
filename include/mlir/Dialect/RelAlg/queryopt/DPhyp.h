@@ -89,7 +89,7 @@ class DPHyp {
                predicates.insert(edge.additional_predicates.begin(), edge.additional_predicates.end());
             }
          } else if ((edge.left | edge.right | edge.arbitrary).is_subset_of(S1 | S2) && !(edge.left | edge.right | edge.arbitrary).is_subset_of(S1) && !(edge.left | edge.right | edge.arbitrary).is_subset_of(S2)  ) {
-            if (edge.op && mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation())) {
+            if (edge.op && (mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation())||mlir::isa<mlir::relalg::InnerJoinOp>(edge.op.getOperation()))) {
                single_predicates.insert(edge.op);
             }
          }

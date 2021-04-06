@@ -112,7 +112,7 @@ class JoinOrder {
       }
       if (mlir::isa<mlir::relalg::CrossProductOp>(op.getOperation())) {
          //do not construct crossproducts in the querygraph
-      } else if (mlir::isa<Join>(op.getOperation())) {
+      } else if (mlir::isa<Join>(op.getOperation()) && !mlir::isa<mlir::relalg::InnerJoinOp>(op.getOperation())) {
          //add join edges into the query graph
          node_set TES = qg.calcTES(op, resolver);
          node_set left_TES = qg.calcT(children[0], resolver) & TES;
@@ -139,48 +139,48 @@ class JoinOrder {
             qg.nodes[new_node].dependencies = qg.expand(TES);
             qg.addEdge(qg.expand(TES), qg.single(new_node), qg.empty_node(), op, mlir::relalg::QueryGraph::EdgeType::IMPLICIT);
          }
-      } else if (mlir::isa<mlir::relalg::SelectionOp>(op.getOperation())) {
+      } else if (mlir::isa<mlir::relalg::SelectionOp>(op.getOperation()) || mlir::isa<mlir::relalg::InnerJoinOp>(op.getOperation())) {
          node_set SES = qg.calcSES(op, resolver);
-
          if (SES.count() == 1) {
             //if selection is only based on one node -> add selection to node
             auto node_id = SES.find_first();
             qg.nodes[node_id].additional_predicates.push_back(op);
          } else {
-            auto to_join = SES;
-            std::unordered_map<size_t, node_set> representations;
+            auto first = SES.find_first();
+            llvm::EquivalenceClasses<size_t> cannot_be_seperated;
+            SES.iterate_bits_on([&](size_t pos) {
+               cannot_be_seperated.insert(pos);
+               qg.nodes[pos].dependencies.iterate_bits_on([&](size_t dep) {
+                  cannot_be_seperated.unionSets(pos, dep);
+               });
+            });
+
             for (auto subop : op.getAllSubOperators()) {
-               auto subop_TES = qg.calcTES(subop, resolver);
-               if (SES.intersects(subop_TES) && !qg.canPushSelection(op, subop, resolver)) {
-                  auto representator = (subop_TES & SES).find_first();
-                  subop_TES.set(representator, false);
-                  if (representations.count(representator)) {
-                     representations[representator] |= subop_TES;
-                  } else {
-                     representations[representator] = subop_TES;
+               if (subop != op) {
+                  auto subop_TES = qg.calcTES(subop, resolver);
+                  if (SES.intersects(subop_TES) && !qg.canPushSelection(SES, subop, resolver)) {
+                     auto first = (subop_TES & SES).find_first();
+                     (subop_TES & SES).iterate_bits_on([&](size_t pos) {
+                        cannot_be_seperated.unionSets(first, pos);
+                     });
                   }
-                  to_join &= ~subop_TES;
                }
             }
-            for (auto& x : representations) {
-               auto a = x.second;
-               a.iterate_bits_on([&](size_t p) {
-                  if (representations.count(p)) { x.second |= representations[p]; } });
-            }
-            // for all subop in suboperators:
-            //    if(TES(subop) intersects SES(sel)) and pushdown not possible:
-            //       representator=min(TES(subop) & SES(sel))
-            //       representations[representator]=TES(subop)
-            if (to_join.count() == 1) {
-               qg.addEdge(expand_rep(qg.expand(to_join),representations),qg.empty_node(),qg.empty_node(),op,mlir::relalg::QueryGraph::EdgeType::REAL);
+            if (cannot_be_seperated.getNumClasses() == 1) {
+               qg.addEdge(qg.getNodeSetFromClass(cannot_be_seperated, first), qg.empty_node(), qg.empty_node(), op, mlir::relalg::QueryGraph::EdgeType::REAL);
             } else {
-               qg.iterateSubsets(to_join, [&](node_set left) {
-                  node_set right = to_join & ~left;
+               node_set decisions = qg.empty_node();
+               for (auto& a : cannot_be_seperated) {
+                  if (a.isLeader()) {
+                     decisions.set(a.getData());
+                  }
+               }
+               qg.iterateSubsets(decisions, [&](node_set left) {
+                  node_set right = decisions & ~left;
                   if (left < right) {
-                     left = qg.expand(left);
-                     right = qg.expand(right) & ~left;
-                     left = expand_rep(left, representations);
-                     right = expand_rep(right, representations);
+                     left = qg.getNodeSetFromClasses(cannot_be_seperated, left);
+                     right = qg.getNodeSetFromClasses(cannot_be_seperated, right);
+
                      qg.addEdge(left, right, qg.empty_node(), op, mlir::relalg::QueryGraph::EdgeType::REAL);
                   }
                });
@@ -191,12 +191,7 @@ class JoinOrder {
       }
       return resolver;
    }
-   node_set expand_rep(node_set S, std::unordered_map<size_t, node_set>& representations) {
-      node_set res = S;
-      S.iterate_bits_on([&](size_t p) {
-        if (representations.count(p)) { res |= representations[p]; } });
-      return res;
-   }
+
    bool isUnsupportedOp(mlir::Operation* op) {
       return ::llvm::TypeSwitch<mlir::Operation*, bool>(op)
          .Case<mlir::relalg::CrossProductOp, Join, mlir::relalg::SelectionOp, mlir::relalg::AggregationOp, mlir::relalg::MapOp, mlir::relalg::RenamingOp>(
@@ -272,13 +267,6 @@ class JoinOrder {
    void moveTreeBefore(Operator tree, mlir::Operation* before) {
       auto children = tree.getChildren();
       tree->moveBefore(before);
-
-      if (!children.empty()) {
-         auto child_children = children[0].getChildren();
-         if (!child_children.empty() && child_children[0].getOperation() == tree.getOperation()) {
-            llvm::dbgs() << "detected!!\n";
-         }
-      }
       for (auto child : tree.getChildren()) {
          moveTreeBefore(child, tree.getOperation());
       }
@@ -325,6 +313,8 @@ class JoinOrder {
                x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), selop.getLambdaBlock().getOperations());
                //selop.replaceAllUsesWith(x.getOperation());
                currop = x;
+            } else if (mlir::isa<mlir::relalg::InnerJoinOp>(currop.getOperation()) && children.size() == 1) {
+               assert(false && "need to implement Join -> Selection transition");
             }
          } else if (!currop && children.size() == 2) {
             mlir::OpBuilder builder(children[0].getOperation());
@@ -337,8 +327,8 @@ class JoinOrder {
                firstNode = children[0];
             }
             return firstNode;
-         }else{
-            assert(false&&"should not happen");
+         } else {
+            assert(false && "should not happen");
          }
       }
       if (lastNode) {
