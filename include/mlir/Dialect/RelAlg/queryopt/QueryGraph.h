@@ -72,6 +72,31 @@ class QueryGraph {
       EdgeType edgeType;
       node_set right;
       node_set left;
+      node_set arbitrary;
+      bool connects(node_set S1, node_set S2) {
+         if (left.is_subset_of(S1) && right.is_subset_of(S2) && arbitrary.is_subset_of(S1 | S2)) {
+            return true;
+         }
+         if (left.is_subset_of(S2) && right.is_subset_of(S1) && arbitrary.is_subset_of(S1 | S2)) {
+            return true;
+         }
+         return false;
+      }
+
+      std::pair<bool,size_t> findNeighbor(node_set S, node_set X) {
+         if (left.is_subset_of(S) && !S.intersects(right)) {
+            auto otherside = right | (arbitrary & ~S);
+            if (!X.intersects(otherside)) {
+               return {true,otherside.find_first()};
+            }
+         } else if (right.is_subset_of(S) && !S.intersects(left)) {
+            auto otherside = left | (arbitrary & ~S);
+            if (!X.intersects(otherside)) {
+               return {true,otherside.find_first()};
+            }
+         }
+         return {false,0};
+      }
    };
 
    struct Node {
@@ -130,6 +155,8 @@ class QueryGraph {
          print_readable(e.left, out);
          out << ", u=";
          print_readable(e.right, out);
+         out << ", w=";
+         print_readable(e.arbitrary, out);
          out << ", op=\n";
          if (e.op) {
             e.op->print(out);
@@ -151,7 +178,7 @@ class QueryGraph {
       print(llvm::dbgs());
    }
 
-   void addEdge(node_set left, node_set right, Operator op, EdgeType edgeType) {
+   void addEdge(node_set left, node_set right, node_set arbitrary, Operator op, EdgeType edgeType) {
       size_t edgeid = edges.size();
       edges.push_back(Edge());
       Edge& e = edges.back();
@@ -161,6 +188,7 @@ class QueryGraph {
       e.edgeType = edgeType;
       e.left = left;
       e.right = right;
+      e.arbitrary = arbitrary;
       left.iterate_bits_on([&](size_t n) { nodes[n].edges.push_back(edgeid); });
       right.iterate_bits_on([&](size_t n) { nodes[n].edges.push_back(edgeid); });
 
@@ -200,12 +228,7 @@ class QueryGraph {
          Node& n = nodes[v];
          for (auto edgeid : n.edges) {
             auto& edge = edges[edgeid];
-            if (edge.left.is_subset_of(S1) && edge.right.is_subset_of(S2)) {
-               found = true;
-            }
-            if (edge.left.is_subset_of(S2) && edge.right.is_subset_of(S1)) {
-               found = true;
-            }
+            found |= edge.connects(S1, S2);
          }
       });
       return found;
@@ -230,10 +253,9 @@ class QueryGraph {
    node_set getNeighbors(node_set S, node_set X) {
       node_set res(num_nodes);
       iterateEdges(S, [&](Edge& edge) {
-         if (edge.left.is_subset_of(S) && !S.intersects(edge.right) && !X.intersects(edge.right)) {
-            res.set(edge.right.find_first());
-         } else if (edge.right.is_subset_of(S) && !S.intersects(edge.left) && !X.intersects(edge.left)) {
-            res.set(edge.left.find_first());
+         auto [found, representative] = edge.findNeighbor(S, X);
+         if(found){
+            res.set(representative);
          }
       });
       return res;
@@ -368,7 +390,7 @@ class QueryGraph {
                         }
                      }
                      if (!connecting_edge_exists) {
-                        addEdge(left, right, Operator(), EdgeType::REAL);
+                        addEdge(left, right, empty_node(),Operator(), EdgeType::REAL);
                      }
                   }
                }
@@ -562,6 +584,9 @@ class QueryGraph {
             node_set x = mlir::relalg::QueryGraph::node_set(num_nodes);
             x.set();
             return x;
+         }
+         node_set empty_node() {
+            return mlir::relalg::QueryGraph::node_set(num_nodes);
          }
 };
 }

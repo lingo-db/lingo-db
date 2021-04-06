@@ -59,19 +59,19 @@ class DPHyp {
       auto S = S1 | S2;
       struct hash_op {
          size_t operator()(const Operator& op) const {
-            return (size_t) op.operator mlir::Operation *();
+            return (size_t) op.operator mlir::Operation*();
          }
       };
-      std::unordered_set<Operator,hash_op> predicates;
-      std::unordered_set<Operator,hash_op> single_predicates;
+      std::unordered_set<Operator, hash_op> predicates;
+      std::unordered_set<Operator, hash_op> single_predicates;
 
       Operator implicit_operator{};
       Operator special_join{};
       bool ignore = false;
       bool edgeInverted = false;
       for (auto& edge : queryGraph.edges) {
-         if ((edge.left.is_subset_of(S1) && edge.right.is_subset_of(S2)) || (edge.left.is_subset_of(S2) && edge.right.is_subset_of(S1))) {
-            edgeInverted = (edge.left.is_subset_of(S2) && edge.right.is_subset_of(S1));
+         if (edge.connects(S1, S2)) {
+            edgeInverted = (edge.left.is_subset_of(S2) && edge.right.is_subset_of(S1)); //todo
             if (edge.edgeType == QueryGraph::EdgeType::IMPLICIT) {
                auto& implicit_node = queryGraph.nodes[edge.right.find_first()];
                implicit_operator = implicit_node.op;
@@ -88,26 +88,26 @@ class DPHyp {
                predicates.insert(edge.op);
                predicates.insert(edge.additional_predicates.begin(), edge.additional_predicates.end());
             }
-         } else if ((edge.left | edge.right).is_subset_of(S1 | S2)) {
-            if (edge.op&&mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation())) {
+         } else if ((edge.left | edge.right | edge.arbitrary).is_subset_of(S1 | S2)) {
+            if (edge.op && mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation())) {
                single_predicates.insert(edge.op);
             }
          }
       }
       std::shared_ptr<Plan> curr_plan;
       if (ignore) {
-         predicates.insert(single_predicates.begin(),single_predicates.end());
+         predicates.insert(single_predicates.begin(), single_predicates.end());
          auto child = edgeInverted ? p2 : p1;
-         curr_plan = std::make_shared<Plan>(Operator(), std::vector<std::shared_ptr<Plan>>({child}), std::vector<Operator>(predicates.begin(),predicates.end()), 0);
+         curr_plan = std::make_shared<Plan>(Operator(), std::vector<std::shared_ptr<Plan>>({child}), std::vector<Operator>(predicates.begin(), predicates.end()), 0);
       } else if (implicit_operator) {
          //predicates.insert(predicates.end(),single_predicates.begin(),single_predicates.end());
          auto subplans = std::vector<std::shared_ptr<Plan>>({p1});
          if (edgeInverted) {
             subplans = std::vector<std::shared_ptr<Plan>>({p2});
          }
-         curr_plan = std::make_shared<Plan>(implicit_operator, subplans, std::vector<Operator>(predicates.begin(),predicates.end()), 0);
+         curr_plan = std::make_shared<Plan>(implicit_operator, subplans, std::vector<Operator>(predicates.begin(), predicates.end()), 0);
       } else if (special_join) {
-         curr_plan = std::make_shared<Plan>(special_join, std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>(predicates.begin(),predicates.end()), 0);
+         curr_plan = std::make_shared<Plan>(special_join, std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>(predicates.begin(), predicates.end()), 0);
       } else if (!predicates.empty()) {
          curr_plan = std::make_shared<Plan>(*predicates.begin(), std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>(++predicates.begin(), predicates.end()), 0);
       } else {

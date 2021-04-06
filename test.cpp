@@ -117,14 +117,14 @@ class JoinOrder {
          node_set TES = qg.calcTES(op, resolver);
          node_set left_TES = qg.calcT(children[0], resolver) & TES;
          node_set right_TES = qg.calcT(children[1], resolver) & TES;
-         qg.addEdge(qg.expand(left_TES), qg.expand(right_TES), op, mlir::relalg::QueryGraph::EdgeType::REAL);
+         qg.addEdge(qg.expand(left_TES), qg.expand(right_TES), qg.empty_node(), op, mlir::relalg::QueryGraph::EdgeType::REAL);
          if (created.size()) {
             size_t new_node = qg.addNode(op);
             for (auto attr : op.getCreatedAttributes()) {
                resolver.add(attr, new_node);
             }
             qg.nodes[new_node].dependencies = qg.expand(TES);
-            qg.addEdge(qg.expand(TES), qg.single(new_node), op, mlir::relalg::QueryGraph::EdgeType::IGNORE);
+            qg.addEdge(qg.expand(TES), qg.single(new_node), qg.empty_node(), op, mlir::relalg::QueryGraph::EdgeType::IGNORE);
          }
       } else if (created.size()) {
          //add node for operators that create attributes
@@ -137,7 +137,7 @@ class JoinOrder {
             // -> create "implicit" hyperedge
             node_set TES = qg.calcTES(op, resolver);
             qg.nodes[new_node].dependencies = qg.expand(TES);
-            qg.addEdge(qg.expand(TES), qg.single(new_node), op, mlir::relalg::QueryGraph::EdgeType::IMPLICIT);
+            qg.addEdge(qg.expand(TES), qg.single(new_node), qg.empty_node(), op, mlir::relalg::QueryGraph::EdgeType::IMPLICIT);
          }
       } else if (mlir::isa<mlir::relalg::SelectionOp>(op.getOperation())) {
          node_set SES = qg.calcSES(op, resolver);
@@ -172,6 +172,7 @@ class JoinOrder {
             //       representator=min(TES(subop) & SES(sel))
             //       representations[representator]=TES(subop)
             if (to_join.count() == 1) {
+               //todo
                auto& edges = qg.available_edges[expand_rep(qg.expand(to_join), representations)];
                assert(edges.size() == 1);
                qg.edges[edges[0]].additional_predicates.push_back(op);
@@ -183,7 +184,7 @@ class JoinOrder {
                      right = qg.expand(right) & ~left;
                      left = expand_rep(left, representations);
                      right = expand_rep(right, representations);
-                     qg.addEdge(left, right, op, mlir::relalg::QueryGraph::EdgeType::REAL);
+                     qg.addEdge(left, right, qg.empty_node(), op, mlir::relalg::QueryGraph::EdgeType::REAL);
                   }
                });
             }

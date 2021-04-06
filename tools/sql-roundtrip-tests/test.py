@@ -1,7 +1,7 @@
 import requests
 import subprocess
 
-for qnum in range(1, 21):
+for qnum in range(1, 22):
     print("processing:",qnum)
     file1 = "resources/sql/parseable/" + str(qnum) + ".sql"
     file2 = "resources/sql/hyper/" + str(qnum) + ".sql"
