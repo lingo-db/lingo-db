@@ -88,19 +88,18 @@ class DPHyp {
                predicates.insert(edge.op);
                predicates.insert(edge.additional_predicates.begin(), edge.additional_predicates.end());
             }
-         } else if ((edge.left | edge.right | edge.arbitrary).is_subset_of(S1 | S2)) {
+         } else if ((edge.left | edge.right | edge.arbitrary).is_subset_of(S1 | S2) && !(edge.left | edge.right | edge.arbitrary).is_subset_of(S1) && !(edge.left | edge.right | edge.arbitrary).is_subset_of(S2)  ) {
             if (edge.op && mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation())) {
                single_predicates.insert(edge.op);
             }
          }
       }
       std::shared_ptr<Plan> curr_plan;
+      predicates.insert(single_predicates.begin(),single_predicates.end());
       if (ignore) {
-         predicates.insert(single_predicates.begin(), single_predicates.end());
          auto child = edgeInverted ? p2 : p1;
          curr_plan = std::make_shared<Plan>(Operator(), std::vector<std::shared_ptr<Plan>>({child}), std::vector<Operator>(predicates.begin(), predicates.end()), 0);
       } else if (implicit_operator) {
-         //predicates.insert(predicates.end(),single_predicates.begin(),single_predicates.end());
          auto subplans = std::vector<std::shared_ptr<Plan>>({p1});
          if (edgeInverted) {
             subplans = std::vector<std::shared_ptr<Plan>>({p2});

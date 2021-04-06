@@ -74,6 +74,10 @@ class QueryGraph {
       node_set left;
       node_set arbitrary;
       bool connects(node_set S1, node_set S2) {
+         auto alltogether = left.count() + right.count() + arbitrary.count();
+         if (alltogether == left.count() || alltogether == right.count()) {
+            return false;
+         }
          if (left.is_subset_of(S1) && right.is_subset_of(S2) && arbitrary.is_subset_of(S1 | S2)) {
             return true;
          }
@@ -83,19 +87,19 @@ class QueryGraph {
          return false;
       }
 
-      std::pair<bool,size_t> findNeighbor(node_set S, node_set X) {
+      std::pair<bool, size_t> findNeighbor(node_set S, node_set X) {
          if (left.is_subset_of(S) && !S.intersects(right)) {
             auto otherside = right | (arbitrary & ~S);
-            if (!X.intersects(otherside)) {
-               return {true,otherside.find_first()};
+            if (!X.intersects(otherside) && otherside.count()) {
+               return {true, otherside.find_first()};
             }
          } else if (right.is_subset_of(S) && !S.intersects(left)) {
             auto otherside = left | (arbitrary & ~S);
-            if (!X.intersects(otherside)) {
-               return {true,otherside.find_first()};
+            if (!X.intersects(otherside) && otherside.count()) {
+               return {true, otherside.find_first()};
             }
          }
-         return {false,0};
+         return {false, 0};
       }
    };
 
@@ -113,7 +117,6 @@ class QueryGraph {
 
    std::vector<Node> nodes;
    std::vector<Edge> edges;
-   std::unordered_map<node_set, std::vector<size_t>, hash_dyn_bitset> available_edges;
 
    //std::unordered_map<relalg::RelationalAttribute *, size_t> attr_to_nodes;
 
@@ -192,7 +195,6 @@ class QueryGraph {
       left.iterate_bits_on([&](size_t n) { nodes[n].edges.push_back(edgeid); });
       right.iterate_bits_on([&](size_t n) { nodes[n].edges.push_back(edgeid); });
 
-      available_edges[left | right].push_back(edgeid);
    }
 
    void iterateNodes(std::function<void(Node&)> fn) {
@@ -254,7 +256,7 @@ class QueryGraph {
       node_set res(num_nodes);
       iterateEdges(S, [&](Edge& edge) {
          auto [found, representative] = edge.findNeighbor(S, X);
-         if(found){
+         if (found) {
             res.set(representative);
          }
       });
@@ -312,7 +314,7 @@ class QueryGraph {
       return S;
    }
    bool isConnected(llvm::EquivalenceClasses<size_t>& connections, node_set& S) {
-      assert(!S.empty());
+      assert(S.count());
       size_t first_class = num_nodes;
       bool connected = true;
       S.iterate_bits_on([&](size_t pos) {
@@ -335,7 +337,9 @@ class QueryGraph {
 
       std::list<size_t> edges_to_process;
       for (size_t i = 0; i < edges.size(); i++) {
-         edges_to_process.push_back(i);
+         if (edges[i].left.count() && edges[i].right.count()) {
+            edges_to_process.push_back(i);
+         }
       }
       for (size_t i = 0; i < edges.size(); i++) {
          std::list<size_t> new_list;
@@ -390,7 +394,7 @@ class QueryGraph {
                         }
                      }
                      if (!connecting_edge_exists) {
-                        addEdge(left, right, empty_node(),Operator(), EdgeType::REAL);
+                        addEdge(left, right, empty_node(), Operator(), EdgeType::REAL);
                      }
                   }
                }

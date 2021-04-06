@@ -172,10 +172,7 @@ class JoinOrder {
             //       representator=min(TES(subop) & SES(sel))
             //       representations[representator]=TES(subop)
             if (to_join.count() == 1) {
-               //todo
-               auto& edges = qg.available_edges[expand_rep(qg.expand(to_join), representations)];
-               assert(edges.size() == 1);
-               qg.edges[edges[0]].additional_predicates.push_back(op);
+               qg.addEdge(expand_rep(qg.expand(to_join),representations),qg.empty_node(),qg.empty_node(),op,mlir::relalg::QueryGraph::EdgeType::REAL);
             } else {
                qg.iterateSubsets(to_join, [&](node_set left) {
                   node_set right = to_join & ~left;
@@ -340,6 +337,8 @@ class JoinOrder {
                firstNode = children[0];
             }
             return firstNode;
+         }else{
+            assert(false&&"should not happen");
          }
       }
       if (lastNode) {
