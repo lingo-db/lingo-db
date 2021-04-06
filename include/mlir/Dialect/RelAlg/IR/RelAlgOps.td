@@ -285,6 +285,7 @@ let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 let extraClassDeclaration = [{
 llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes();
 }];
 }
 // Set Operations

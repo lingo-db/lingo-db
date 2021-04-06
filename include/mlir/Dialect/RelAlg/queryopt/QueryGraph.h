@@ -3,9 +3,13 @@
 
 #include "dynamic_bitset.h"
 #include "llvm/Support/Debug.h"
+#include <llvm/ADT/EquivalenceClasses.h>
 #include <llvm/ADT/TypeSwitch.h>
+
 #include <functional>
 #include <iostream>
+#include <list>
+#include <queue>
 #include <unordered_set>
 #include <mlir/Dialect/RelAlg/IR/RelAlgOps.h>
 
@@ -57,11 +61,15 @@ class QueryGraph {
          return attr_to_nodes[attr];
       }
    };
-
+   enum class EdgeType {
+      REAL,
+      IMPLICIT,
+      IGNORE
+   };
    struct Edge {
       Operator op;
       std::vector<Operator> additional_predicates;
-      bool implicit_edge;
+      EdgeType edgeType;
       node_set right;
       node_set left;
    };
@@ -143,14 +151,14 @@ class QueryGraph {
       print(llvm::dbgs());
    }
 
-   void addEdge(node_set left, node_set right, Operator op, bool implicit_edge) {
+   void addEdge(node_set left, node_set right, Operator op, EdgeType edgeType) {
       size_t edgeid = edges.size();
       edges.push_back(Edge());
       Edge& e = edges.back();
       if (op) {
          e.op = op;
       }
-      e.implicit_edge = implicit_edge;
+      e.edgeType = edgeType;
       e.left = left;
       e.right = right;
       left.iterate_bits_on([&](size_t n) { nodes[n].edges.push_back(edgeid); });
@@ -281,7 +289,93 @@ class QueryGraph {
       });
       return S;
    }
+   bool isConnected(llvm::EquivalenceClasses<size_t>& connections, node_set& S) {
+      assert(!S.empty());
+      size_t first_class = num_nodes;
+      bool connected = true;
+      S.iterate_bits_on([&](size_t pos) {
+         if (first_class == num_nodes) {
+            first_class = connections.getLeaderValue(pos);
+         } else {
+            if (first_class != connections.getLeaderValue(pos)) {
+               connected = false;
+            }
+         }
+      });
+      return connected;
+   }
 
+   void ensureConnected() {
+      llvm::EquivalenceClasses<size_t> already_connected;
+      for (size_t i = 0; i < nodes.size(); i++) {
+         already_connected.insert(i);
+      }
+
+      std::list<size_t> edges_to_process;
+      for (size_t i = 0; i < edges.size(); i++) {
+         edges_to_process.push_back(i);
+      }
+      for (size_t i = 0; i < edges.size(); i++) {
+         std::list<size_t> new_list;
+         for (auto edgeid : edges_to_process) {
+            if (isConnected(already_connected, edges[edgeid].left) && isConnected(already_connected, edges[edgeid].right)) {
+               already_connected.unionSets(edges[edgeid].left.find_first(), edges[edgeid].right.find_first());
+            } else {
+               new_list.push_back(edgeid);
+            }
+         }
+
+         std::swap(edges_to_process, new_list);
+      }
+      for (auto& a : already_connected) {
+         if (a.isLeader()) {
+            for (auto& b : already_connected) {
+               if (b.isLeader()) {
+                  if (a.getData() != b.getData()) {
+                     //std::cout << a.getData() << " vs " << b.getData() << "\n";
+                     node_set left(num_nodes);
+                     auto already_connected_a = already_connected.findLeader(a.getData());
+                     for (auto me = already_connected.member_end(); already_connected_a != me; ++already_connected_a) {
+                        left.set(*already_connected_a);
+                     }
+                     if (expand(left) != left) {
+                        continue;
+                     }
+                     node_set right(num_nodes);
+                     auto already_connected_b = already_connected.findLeader(b.getData());
+                     for (auto me = already_connected.member_end(); already_connected_b != me; ++already_connected_b) {
+                        right.set(*already_connected_b);
+                     }
+                     if (expand(right) != right) {
+                        continue;
+                     }
+                     //std::cout << "would lead to edge (" << left << "," << right << ")\n";
+                     bool connecting_edge_exists = false;
+                     for (auto& edge : edges) {
+                        if ((left.intersects(edge.left) && right.intersects(edge.right)) || (left.intersects(edge.right) && right.intersects(edge.left))) {
+                           if (edge.op && !mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation()) && !mlir::isa<mlir::relalg::InnerJoinOp>(edge.op.getOperation())) {
+                              //std::cout << "but prohibited by edge (" << edge.left << "," << edge.right << ")\n";
+                              connecting_edge_exists = true;
+                           }
+                           break;
+                        }
+                        if (left == edge.left || right == edge.right || left == edge.right || right == edge.left) {
+                           if (edge.op && !mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation()) && !mlir::isa<mlir::relalg::InnerJoinOp>(edge.op.getOperation())) {
+                              //std::cout << "but prohibited by edge (" << edge.left << "," << edge.right << ")\n";
+                              connecting_edge_exists = true;
+                           }
+                           break;
+                        }
+                     }
+                     if (!connecting_edge_exists) {
+                        addEdge(left, right, Operator(), EdgeType::REAL);
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
    enum OpType {
       None,
       CP = 1,

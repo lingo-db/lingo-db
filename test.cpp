@@ -82,6 +82,9 @@ class JoinOrder {
       if (mlir::isa<mlir::relalg::CrossProductOp>(op.getOperation())) {
          //do not construct crossproducts in the querygraph
       } else if (mlir::isa<Join>(op.getOperation())) {
+         if (created.size()) {
+            res += 1;
+         }
       } else if (created.size()) {
          res += 1;
 
@@ -114,7 +117,15 @@ class JoinOrder {
          node_set TES = qg.calcTES(op, resolver);
          node_set left_TES = qg.calcT(children[0], resolver) & TES;
          node_set right_TES = qg.calcT(children[1], resolver) & TES;
-         qg.addEdge(qg.expand(left_TES), qg.expand(right_TES), op, false);
+         qg.addEdge(qg.expand(left_TES), qg.expand(right_TES), op, mlir::relalg::QueryGraph::EdgeType::REAL);
+         if (created.size()) {
+            size_t new_node = qg.addNode(op);
+            for (auto attr : op.getCreatedAttributes()) {
+               resolver.add(attr, new_node);
+            }
+            qg.nodes[new_node].dependencies = qg.expand(TES);
+            qg.addEdge(qg.expand(TES), qg.single(new_node), op, mlir::relalg::QueryGraph::EdgeType::IGNORE);
+         }
       } else if (created.size()) {
          //add node for operators that create attributes
          size_t new_node = qg.addNode(op);
@@ -126,7 +137,7 @@ class JoinOrder {
             // -> create "implicit" hyperedge
             node_set TES = qg.calcTES(op, resolver);
             qg.nodes[new_node].dependencies = qg.expand(TES);
-            qg.addEdge(qg.expand(TES), qg.single(new_node), op, true);
+            qg.addEdge(qg.expand(TES), qg.single(new_node), op, mlir::relalg::QueryGraph::EdgeType::IMPLICIT);
          }
       } else if (mlir::isa<mlir::relalg::SelectionOp>(op.getOperation())) {
          node_set SES = qg.calcSES(op, resolver);
@@ -172,8 +183,7 @@ class JoinOrder {
                      right = qg.expand(right) & ~left;
                      left = expand_rep(left, representations);
                      right = expand_rep(right, representations);
-
-                     qg.addEdge(left, right, op, false);
+                     qg.addEdge(left, right, op, mlir::relalg::QueryGraph::EdgeType::REAL);
                   }
                });
             }
@@ -217,7 +227,12 @@ class JoinOrder {
       static size_t nodeid = 0;
       std::string opstr;
       llvm::raw_string_ostream strstream(opstr);
-      op.print(strstream);
+      if (op) {
+         op.print(strstream);
+      } else {
+         strstream << "crossproduct";
+      }
+
       std::string nodename = "n" + std::to_string(nodeid++);
       std::string nodelabel = strstream.str();
 
@@ -301,16 +316,29 @@ class JoinOrder {
       }
       auto currop = plan->op;
       if (!isLeaf) {
-         if (mlir::isa<mlir::relalg::SelectionOp>(currop.getOperation()) && children.size() == 2) {
-            auto selop = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(currop.getOperation());
-            mlir::OpBuilder builder(currop.getOperation());
-            auto x = builder.create<mlir::relalg::InnerJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
-            x.predicate().push_back(new mlir::Block);
-            x.getLambdaBlock().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
-            selop.getLambdaArgument().replaceAllUsesWith(x.getLambdaArgument());
-            x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), selop.getLambdaBlock().getOperations());
-            //selop.replaceAllUsesWith(x.getOperation());
-            currop = x;
+         if (currop) {
+            if (mlir::isa<mlir::relalg::SelectionOp>(currop.getOperation()) && children.size() == 2) {
+               auto selop = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(currop.getOperation());
+               mlir::OpBuilder builder(currop.getOperation());
+               auto x = builder.create<mlir::relalg::InnerJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
+               x.predicate().push_back(new mlir::Block);
+               x.getLambdaBlock().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
+               selop.getLambdaArgument().replaceAllUsesWith(x.getLambdaArgument());
+               x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), selop.getLambdaBlock().getOperations());
+               //selop.replaceAllUsesWith(x.getOperation());
+               currop = x;
+            }
+         } else if (!currop && children.size() == 2) {
+            mlir::OpBuilder builder(children[0].getOperation());
+            currop = builder.create<mlir::relalg::CrossProductOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
+         } else if (!currop && children.size() == 1) {
+            if (lastNode) {
+               lastNode.setChildren({children[0]});
+            }
+            if (!firstNode) {
+               firstNode = children[0];
+            }
+            return firstNode;
          }
       }
       if (lastNode) {
@@ -343,9 +371,11 @@ class JoinOrder {
          mlir::relalg::QueryGraph qg(countCreatingOperators(op), already_optimized);
          populateQueryGraph(op, qg);
          mlir::relalg::CostFunction cf;
+         qg.ensureConnected();
          //qg.dump();
          mlir::relalg::DPHyp solver(qg, cf);
          auto solution = solver.solve();
+         //std::cout << "plan descr:" << solution->descr << std::endl;
          //printPlan(solution);
          Operator realized = realizePlan(solution);
          llvm::SmallVector<Operator, 4> after = realized.getAllSubOperators();

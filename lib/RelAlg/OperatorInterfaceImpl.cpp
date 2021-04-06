@@ -101,7 +101,9 @@ llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> SemiJoinOp::getAvaila
    return mlir::relalg::detail::getAvailableAttributes(leftChild());
 }
 llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> MarkJoinOp::getAvailableAttributes() {
-   return mlir::relalg::detail::getAvailableAttributes(leftChild());
+   auto available = mlir::relalg::detail::getAvailableAttributes(leftChild());
+   available.insert(&markattr().getRelationalAttribute());
+   return available;
 }
 llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> RenamingOp::getCreatedAttributes() {
    attribute_set created;
@@ -110,6 +112,11 @@ llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> RenamingOp::getCreatedA
       auto relation_def_attr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
       created.insert(&relation_def_attr.getRelationalAttribute());
    }
+   return created;
+}
+llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> MarkJoinOp::getCreatedAttributes() {
+   attribute_set created;
+   created.insert(&markattr().getRelationalAttribute());
    return created;
 }
 llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> RenamingOp::getUsedAttributes() {
