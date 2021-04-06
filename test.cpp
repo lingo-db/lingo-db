@@ -26,6 +26,7 @@
 #include <queue>
 #include <unordered_set>
 #include <mlir/Dialect/RelAlg/IR/RelAlgDialect.h>
+#include <mlir/Transforms/DialectConversion.h>
 
 namespace cl = llvm::cl;
 
@@ -255,6 +256,74 @@ class JoinOrder {
       printPlanNode(plan);
       std::cout << "}" << std::endl;
    }
+   void moveTreeBefore(Operator tree, mlir::Operation* before) {
+      auto children = tree.getChildren();
+      tree->moveBefore(before);
+
+      if (!children.empty()) {
+         auto child_children = children[0].getChildren();
+         if (!child_children.empty() && child_children[0].getOperation() == tree.getOperation()) {
+            llvm::dbgs() << "detected!!\n";
+         }
+      }
+      for (auto child : tree.getChildren()) {
+         moveTreeBefore(child, tree.getOperation());
+      }
+   }
+   void fix(Operator tree) {
+      for (auto child : tree.getChildren()) {
+         moveTreeBefore(child, tree);
+         fix(child);
+      }
+   }
+   Operator realizePlan(std::shared_ptr<mlir::relalg::Plan> plan) {
+      Operator tree = realizePlan_(plan);
+      fix(tree);
+      return tree;
+   }
+   Operator realizePlan_(std::shared_ptr<mlir::relalg::Plan> plan) {
+      bool isLeaf = plan->subplans.empty();
+      Operator firstNode{};
+      Operator lastNode{};
+      for (auto op : plan->additional_ops) {
+         if (lastNode) {
+            lastNode.setChildren({op});
+         }
+         lastNode = op;
+         if (!firstNode) {
+            firstNode = op;
+         }
+      }
+      llvm::SmallVector<Operator, 4> children;
+      for (auto subplan : plan->subplans) {
+         auto subop = realizePlan(subplan);
+         children.push_back(subop);
+      }
+      auto currop = plan->op;
+      if (!isLeaf) {
+         if (mlir::isa<mlir::relalg::SelectionOp>(currop.getOperation()) && children.size() == 2) {
+            auto selop = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(currop.getOperation());
+            mlir::OpBuilder builder(currop.getOperation());
+            auto x = builder.create<mlir::relalg::InnerJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
+            x.predicate().push_back(new mlir::Block);
+            x.getLambdaBlock().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
+            selop.getLambdaArgument().replaceAllUsesWith(x.getLambdaArgument());
+            x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), selop.getLambdaBlock().getOperations());
+            //selop.replaceAllUsesWith(x.getOperation());
+            currop = x;
+         }
+      }
+      if (lastNode) {
+         lastNode.setChildren({currop});
+      }
+      if (!firstNode) {
+         firstNode = currop;
+      }
+      if (!isLeaf) {
+         currop.setChildren(children);
+      }
+      return firstNode;
+   }
    Operator optimize(Operator op) {
       if (already_optimized.count(op.getOperation())) {
          return op;
@@ -268,14 +337,37 @@ class JoinOrder {
          already_optimized.insert(op.getOperation());
          return op;
       } else {
+         llvm::SmallPtrSet<mlir::Operation*, 8> prev_users{op->user_begin(), op->user_end()};
+
+         llvm::SmallVector<Operator, 4> before = op.getAllSubOperators();
          mlir::relalg::QueryGraph qg(countCreatingOperators(op), already_optimized);
          populateQueryGraph(op, qg);
          mlir::relalg::CostFunction cf;
+         //qg.dump();
          mlir::relalg::DPHyp solver(qg, cf);
          auto solution = solver.solve();
-         printPlan(solution);
-         already_optimized.insert(op.getOperation());
-         return op;
+         //printPlan(solution);
+         Operator realized = realizePlan(solution);
+         llvm::SmallVector<Operator, 4> after = realized.getAllSubOperators();
+         llvm::SmallPtrSet<mlir::Operation*, 8> after_ht;
+         for (auto op : after) {
+            after_ht.insert(op.getOperation());
+         }
+         if (realized != op) {
+            op->getResult(0).replaceUsesWithIf(realized->getResult(0), [&](mlir::OpOperand& operand) {
+               return prev_users.contains(operand.getOwner());
+            });
+         }
+         for (auto op : before) {
+            if (!after_ht.contains(op.getOperation())) {
+               op->dropAllUses();
+               op->remove();
+               //op->destroy();
+            }
+         }
+
+         already_optimized.insert(realized);
+         return realized;
       }
    }
 
@@ -283,10 +375,7 @@ class JoinOrder {
       mlir::FuncOp func = mlir::dyn_cast_or_null<mlir::FuncOp>(&moduleOp.getRegion().front().front());
       func.walk([&](Operator op) {
          if (isOptimizationRoot(op.getOperation())) {
-            Operator optimized = optimize(op);
-            if (optimized != op) {
-               op->replaceAllUsesWith(optimized);
-            }
+            optimize(op);
          }
       });
    }
@@ -306,4 +395,5 @@ int main(int argc, char** argv) {
    if (int error = loadMLIR(context, module))
       return error;
    JoinOrder(&context, module.get()).run();
+   module->print(llvm::outs());
 }

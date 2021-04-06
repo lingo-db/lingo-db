@@ -291,6 +291,15 @@ class ToSQL {
                         output << " on true";
                      }
                   })
+                  .Case<mlir::relalg::InnerJoinOp>([&](mlir::relalg::InnerJoinOp op) {
+                    output << " select * from " << operator_name(op.left().getDefiningOp()) << " inner join " << operator_name(op.right().getDefiningOp()) << " ";
+                    auto returnop = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(op.predicate().front().getTerminator());
+                    if (returnop->getNumOperands() > 0) {
+                       output << " on " << resolve_val(returnop.getOperand(0));
+                    } else {
+                       output << " on true";
+                    }
+                  })
                   .Case<mlir::relalg::OuterJoinOp>([&](mlir::relalg::OuterJoinOp op) {
                      output << " select * from " << operator_name(op.left().getDefiningOp()) << " " << std::string(mlir::relalg::stringifyJoinDirection(op.join_direction())) << " outer join " << operator_name(op.right().getDefiningOp()) << " ";
                      auto returnop = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(op.predicate().front().getTerminator());
