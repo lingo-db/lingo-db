@@ -2,7 +2,6 @@
 #define DB_DIALECTS_QUERYGRAPHBUILDER_H
 namespace mlir::relalg {
 class QueryGraphBuilder {
-   using node_set = mlir::relalg::QueryGraph::node_set;
    using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
 
    Operator root;
@@ -239,14 +238,14 @@ class QueryGraphBuilder {
          node_set TES = calcTES(op, resolver);
          node_set left_TES = calcT(children[0], resolver) & TES;
          node_set right_TES = calcT(children[1], resolver) & TES;
-         qg.addEdge(qg.expand(left_TES), qg.expand(right_TES), empty_node, op, mlir::relalg::QueryGraph::EdgeType::REAL);
+         qg.addEdge(expand(left_TES), expand(right_TES), empty_node, op, mlir::relalg::QueryGraph::EdgeType::REAL);
          if (created.size()) {
             size_t new_node = addNode(op);
             for (auto attr : op.getCreatedAttributes()) {
                resolver.add(attr, new_node);
             }
-            qg.nodes[new_node].dependencies = qg.expand(TES);
-            qg.addEdge(qg.expand(TES), node_set::single(num_nodes,new_node), empty_node, op, mlir::relalg::QueryGraph::EdgeType::IGNORE);
+            qg.nodes[new_node].dependencies = expand(TES);
+            qg.addEdge(expand(TES), node_set::single(num_nodes,new_node), empty_node, op, mlir::relalg::QueryGraph::EdgeType::IGNORE);
          }
       } else if (created.size()) {
          //add node for operators that create attributes
@@ -258,8 +257,8 @@ class QueryGraphBuilder {
             //if operator has one child e.g. aggregation/renaming/map
             // -> create "implicit" hyperedge
             node_set TES = calcTES(op, resolver);
-            qg.nodes[new_node].dependencies = qg.expand(TES);
-            qg.addEdge(qg.expand(TES), node_set::single(num_nodes,new_node), empty_node, op, mlir::relalg::QueryGraph::EdgeType::IMPLICIT);
+            qg.nodes[new_node].dependencies = expand(TES);
+            qg.addEdge(expand(TES), node_set::single(num_nodes,new_node), empty_node, op, mlir::relalg::QueryGraph::EdgeType::IMPLICIT);
          }
       } else if (mlir::isa<mlir::relalg::SelectionOp>(op.getOperation()) || mlir::isa<mlir::relalg::InnerJoinOp>(op.getOperation())) {
          node_set SES = calcSES(op, resolver);
@@ -289,7 +288,7 @@ class QueryGraphBuilder {
                }
             }
             if (cannot_be_seperated.getNumClasses() == 1) {
-               qg.addEdge(qg.getNodeSetFromClass(cannot_be_seperated, first), empty_node, empty_node, op, mlir::relalg::QueryGraph::EdgeType::REAL);
+               qg.addEdge(getNodeSetFromClass(cannot_be_seperated, first), empty_node, empty_node, op, mlir::relalg::QueryGraph::EdgeType::REAL);
             } else {
                node_set decisions = empty_node;
                for (auto& a : cannot_be_seperated) {
@@ -300,8 +299,8 @@ class QueryGraphBuilder {
                decisions.iterateSubsets( [&](node_set left) {
                   node_set right = decisions & ~left;
                   if (left < right) {
-                     left = qg.getNodeSetFromClasses(cannot_be_seperated, left);
-                     right = qg.getNodeSetFromClasses(cannot_be_seperated, right);
+                     left = getNodeSetFromClasses(cannot_be_seperated, left);
+                     right = getNodeSetFromClasses(cannot_be_seperated, right);
 
                      qg.addEdge(left, right,empty_node, op, mlir::relalg::QueryGraph::EdgeType::REAL);
                   }
@@ -364,12 +363,119 @@ class QueryGraphBuilder {
             return true;
       }
    }
+   void ensureConnected() {
+      llvm::EquivalenceClasses<size_t> already_connected;
+      for (size_t i = 0; i < qg.getNodes().size(); i++) {
+         already_connected.insert(i);
+      }
+
+      std::list<size_t> edges_to_process;
+      for (size_t i = 0; i < qg.getEdges().size(); i++) {
+         if (qg.getEdges()[i].left.any() && qg.getEdges()[i].right.any()) {
+            edges_to_process.push_back(i);
+         }
+      }
+      for (size_t i = 0; i < qg.getEdges().size(); i++) {
+         std::list<size_t> new_list;
+         for (auto edgeid : edges_to_process) {
+            auto& edge=qg.getEdges()[edgeid];
+            if (isConnected(already_connected, edge.left) && isConnected(already_connected, edge.right)) {
+               already_connected.unionSets(edge.left.find_first(), edge.right.find_first());
+            } else {
+               new_list.push_back(edgeid);
+            }
+         }
+
+         std::swap(edges_to_process, new_list);
+      }
+      for (auto& a : already_connected) {
+         if (a.isLeader()) {
+            for (auto& b : already_connected) {
+               if (b.isLeader()) {
+                  if (a.getData() != b.getData()) {
+                     //std::cout << a.getData() << " vs " << b.getData() << "\n";
+                     node_set left = getNodeSetFromClass(already_connected, a.getData());
+                     if (expand(left) != left) {
+                        continue;
+                     }
+                     node_set right = getNodeSetFromClass(already_connected, b.getData());
+                     if (expand(right) != right) {
+                        continue;
+                     }
+                     //std::cout << "would lead to edge (" << left << "," << right << ")\n";
+                     bool connecting_edge_exists = false;
+                     for (auto& edge : qg.getEdges()) {
+                        if ((left.intersects(edge.left) && right.intersects(edge.right)) || (left.intersects(edge.right) && right.intersects(edge.left))) {
+                           if (edge.op && !mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation()) && !mlir::isa<mlir::relalg::InnerJoinOp>(edge.op.getOperation())) {
+                              //std::cout << "but prohibited by edge (" << edge.left << "," << edge.right << ")\n";
+                              connecting_edge_exists = true;
+                           }
+                           break;
+                        }
+                        if (left == edge.left || right == edge.right || left == edge.right || right == edge.left) {
+                           if (edge.op && !mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation()) && !mlir::isa<mlir::relalg::InnerJoinOp>(edge.op.getOperation())) {
+                              //std::cout << "but prohibited by edge (" << edge.left << "," << edge.right << ")\n";
+                              connecting_edge_exists = true;
+                           }
+                           break;
+                        }
+                     }
+                     if (!connecting_edge_exists) {
+                        qg.addEdge(left, right, node_set(num_nodes), Operator(), QueryGraph::EdgeType::REAL);
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+   node_set getNodeSetFromClass(llvm::EquivalenceClasses<size_t> classes, size_t val) {
+      node_set res(num_nodes);
+      auto eqclass = classes.findLeader(val);
+      for (auto me = classes.member_end(); eqclass != me; ++eqclass) {
+         res.set(*eqclass);
+      }
+      return res;
+   }
+   node_set getNodeSetFromClasses(llvm::EquivalenceClasses<size_t> classes, node_set S) {
+      node_set res(num_nodes);
+      for (auto pos : S) {
+         auto eqclass = classes.findLeader(pos);
+         for (auto me = classes.member_end(); eqclass != me; ++eqclass) {
+            res.set(*eqclass);
+         }
+      }
+      return res;
+   }
+   bool isConnected(llvm::EquivalenceClasses<size_t>& connections, node_set& S) {
+      assert(S.any());
+      size_t first_class = num_nodes;
+      bool connected = true;
+      for (auto pos : S) {
+         if (first_class == num_nodes) {
+            first_class = connections.getLeaderValue(pos);
+         } else {
+            if (first_class != connections.getLeaderValue(pos)) {
+               connected = false;
+            }
+         }
+      }
+      return connected;
+   }
+   node_set expand(node_set S) {
+      qg.iterateNodes(S, [&](QueryGraph::Node& n) {
+        if (n.dependencies.valid()) {
+           S |= n.dependencies;
+        }
+      });
+      return S;
+   }
 
    public:
    QueryGraphBuilder(Operator root, std::unordered_set<mlir::Operation*>& already_optimized) : root(root), already_optimized(already_optimized), num_nodes(countCreatingOperators(root)), qg(num_nodes, already_optimized),empty_node(num_nodes) {}
    void generate() {
       populateQueryGraph(root);
-      qg.ensureConnected();
+      ensureConnected();
    }
    QueryGraph& getQueryGraph() {
       return qg;

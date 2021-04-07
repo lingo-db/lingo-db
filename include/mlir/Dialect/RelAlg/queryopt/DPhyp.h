@@ -21,8 +21,7 @@ class CostFunction {
 };
 
 class DPHyp {
-   using node_set = QueryGraph::node_set;
-   std::unordered_map<node_set, std::shared_ptr<Plan>, QueryGraph::hash_node_set> dp_table;
+   std::unordered_map<node_set, std::shared_ptr<Plan>, hash_node_set> dp_table;
 
    QueryGraph& queryGraph;
    CostFunction& costFunction;
@@ -142,12 +141,12 @@ class DPHyp {
 
    std::shared_ptr<Plan> solve() {
       queryGraph.iterateNodes([&](QueryGraph::Node& v) {
-         dp_table.insert({node_set::single(queryGraph.num_nodes,v.id), createInitialPlan(v)});
+         dp_table.insert({node_set::single(queryGraph.num_nodes, v.id), createInitialPlan(v)});
       });
       queryGraph.iterateNodesDesc([&](QueryGraph::Node& v) {
-         auto only_v = node_set::single(queryGraph.num_nodes,v.id);
+         auto only_v = node_set::single(queryGraph.num_nodes, v.id);
          EmitCsg(only_v);
-         auto Bv = node_set::fill_until(queryGraph.num_nodes,v.id);
+         auto Bv = node_set::fill_until(queryGraph.num_nodes, v.id);
          EnumerateCsgRec(only_v, Bv);
       });
       return dp_table[node_set::ones(queryGraph.num_nodes)];
