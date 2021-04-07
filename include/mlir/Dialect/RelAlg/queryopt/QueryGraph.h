@@ -16,51 +16,147 @@
 namespace mlir::relalg {
 class QueryGraph {
    public:
-   struct hash_dyn_bitset {
-      size_t operator()(const sul::dynamic_bitset<>& bitset) const {
+   class node_set {
+      public:
+      sul::dynamic_bitset<> storage;
+      class bit_iterator
+         : public std::iterator<std::forward_iterator_tag, size_t> {
+         typedef bit_iterator iterator;
+         sul::dynamic_bitset<>& bitset;
+         size_t pos;
+
+         public:
+         bit_iterator(sul::dynamic_bitset<>& bitset, size_t pos) : bitset(bitset), pos(pos) {}
+         ~bit_iterator() {}
+
+         iterator operator++(int) /* postfix */ { return bit_iterator(bitset, bitset.find_next(pos)); }
+         iterator& operator++() /* prefix */ {
+            pos = bitset.find_next(pos);
+            return *this;
+         }
+         reference operator*() { return pos; }
+         pointer operator->() { return &pos; }
+         bool operator==(const iterator& rhs) const { return pos == rhs.pos; }
+         bool operator!=(const iterator& rhs) const { return pos != rhs.pos; }
+      };
+
+      public:
+      node_set() {
+      }
+      node_set(size_t size) : storage(size) {}
+      node_set negate() const {
+         node_set res = *this;
+         size_t pos = res.find_first();
+         size_t flip_len = res.storage.size() - pos - 1;
+         if (flip_len) {
+            res.storage.flip(pos + 1, flip_len);
+         }
+         return res;
+      }
+      static node_set ones(size_t size) {
+         node_set res(size);
+         res.storage.set();
+         return res;
+      }
+      static node_set fill_until(size_t num_nodes, size_t n) {
+         auto res = node_set(num_nodes);
+         res.storage.set(0, n + 1, true);
+         return res;
+      }
+
+      static node_set single(size_t num_nodes, size_t pos) {
+         auto res = node_set(num_nodes);
+         res.set(pos);
+         return res;
+      }
+      bool is_subset_of(const node_set& S) const{
+         return storage.is_subset_of(S.storage);
+      }
+      bool intersects(const node_set& rhs) const{
+         return storage.intersects(rhs.storage);
+      }
+      void set(size_t pos) {
+         storage.set(pos);
+      }
+      auto begin() {
+         return bit_iterator(storage, storage.find_first());
+      }
+      auto end() {
+         return bit_iterator(storage, storage.npos);
+      }
+      size_t find_first() {
+         return storage.find_first();
+      }
+      bool operator==(const node_set& rhs) const { return storage == rhs.storage; }
+      bool operator!=(const node_set& rhs) const { return storage != rhs.storage; }
+      bool operator<(const node_set& rhs) const { return storage < rhs.storage; }
+
+      bool any() {
+         return storage.any();
+      }
+      node_set& operator|=(const node_set& rhs) {
+         storage |= rhs.storage;
+         return *this;
+      }
+      node_set& operator&=(const node_set& rhs) {
+         storage &= rhs.storage;
+         return *this;
+      }
+      node_set operator&(
+         const node_set& rhs) {
+         node_set result = *this;
+         result &= rhs;
+         return result;
+      }
+      node_set operator~() const {
+         node_set res = flip();
+         return res;
+      }
+      node_set operator|(
+         const node_set& rhs) {
+         node_set result = *this;
+         result |= rhs;
+         return result;
+      }
+      bool valid() {
+         return !storage.empty();
+      }
+      size_t count() {
+         return storage.count();
+      }
+      node_set flip() const{
+         node_set res = *this;
+         res.storage.flip();
+         return res;
+      }
+      void iterateSubsets(std::function<void(node_set)> fn) const {
+         if (!storage.any()) return;
+         node_set S = *this;
+         auto S1 = S & S.negate();
+         while (S1 != S) {
+            fn(S1);
+            auto S1flipped = S1.flip();
+            auto S2 = S & S1flipped;
+            S1 = S & S2.negate();
+         }
+         fn(S);
+      }
+      size_t hash() const {
          size_t res = 0;
-         for (size_t i = 0; i < bitset.num_blocks(); i++) {
-            res ^= bitset.data()[i];
+         for (size_t i = 0; i < storage.num_blocks(); i++) {
+            res ^= storage.data()[i];
          }
          return res;
       }
    };
-   using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
-
-   using node_set = sul::dynamic_bitset<>;
-   size_t num_nodes;
-
-   class NodeResolver {
-      QueryGraph& qg;
-
-      std::unordered_map<relalg::RelationalAttribute*, size_t> attr_to_nodes;
-
-      public:
-      NodeResolver(QueryGraph& qg) : qg(qg) {}
-
-      void add(relalg::RelationalAttribute* attr, size_t nodeid) {
-         attr_to_nodes[attr] = nodeid;
-      }
-
-      void merge(const NodeResolver& other) {
-         for (auto x : other.attr_to_nodes) {
-            auto [attr, nodeid] = x;
-            if (attr_to_nodes.count(attr)) {
-               auto currid = attr_to_nodes[attr];
-               if (qg.nodes[nodeid].op->isBeforeInBlock(qg.nodes[currid].op.getOperation())) {
-                  currid = nodeid;
-               }
-               attr_to_nodes[attr] = currid;
-            } else {
-               attr_to_nodes[attr] = nodeid;
-            }
-         }
-      }
-
-      size_t resolve(relalg::RelationalAttribute* attr) {
-         return attr_to_nodes[attr];
+   struct hash_node_set {
+      size_t operator()(const node_set& bitset) const {
+         return bitset.hash();
       }
    };
+   using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
+
+   size_t num_nodes;
    enum class EdgeType {
       REAL,
       IMPLICIT,
@@ -68,14 +164,12 @@ class QueryGraph {
    };
    struct Edge {
       Operator op;
-      std::vector<Operator> additional_predicates;
       EdgeType edgeType;
       node_set right;
       node_set left;
       node_set arbitrary;
       bool connects(node_set S1, node_set S2) {
-         auto alltogether = left.count() + right.count() + arbitrary.count();
-         if (alltogether == left.count() || alltogether == right.count()) {
+         if (!((left.any() && right.any()) || (left.any() && arbitrary.any()) || (arbitrary.any() && right.any()))) {
             return false;
          }
          if (left.is_subset_of(S1) && right.is_subset_of(S2) && arbitrary.is_subset_of(S1 | S2)) {
@@ -90,12 +184,12 @@ class QueryGraph {
       std::pair<bool, size_t> findNeighbor(node_set S, node_set X) {
          if (left.is_subset_of(S) && !S.intersects(right)) {
             auto otherside = right | (arbitrary & ~S);
-            if (!X.intersects(otherside) && otherside.count()) {
+            if (!X.intersects(otherside) && otherside.any()) {
                return {true, otherside.find_first()};
             }
          } else if (right.is_subset_of(S) && !S.intersects(left)) {
             auto otherside = left | (arbitrary & ~S);
-            if (!X.intersects(otherside) && otherside.count()) {
+            if (!X.intersects(otherside) && otherside.any()) {
                return {true, otherside.find_first()};
             }
          }
@@ -118,17 +212,7 @@ class QueryGraph {
    std::vector<Node> nodes;
    std::vector<Edge> edges;
 
-   //std::unordered_map<relalg::RelationalAttribute *, size_t> attr_to_nodes;
-
-   QueryGraph(size_t num_nodes, std::unordered_set<mlir::Operation*>& already_optimized) : num_nodes(num_nodes), already_optimized(already_optimized) {}
-
-   size_t addNode(Operator op) {
-      Node n = Node(op);
-      n.id = nodes.size();
-      nodes.push_back(n);
-      node_for_op[op.getOperation()] = n.id;
-      return n.id;
-   }
+   QueryGraph(size_t num_nodes, std::unordered_set<mlir::Operation*>& already_optimized) : num_nodes(num_nodes) {}
 
    void print_readable(node_set S, llvm::raw_ostream& out) {
       out << "{";
@@ -164,12 +248,6 @@ class QueryGraph {
          if (e.op) {
             e.op->print(out);
          }
-         out << ", predicates={";
-         for (auto op : e.additional_predicates) {
-            op->print(out);
-            out << ",";
-         }
-
          out << "}";
          out << "},\n";
       }
@@ -182,6 +260,10 @@ class QueryGraph {
    }
 
    void addEdge(node_set left, node_set right, node_set arbitrary, Operator op, EdgeType edgeType) {
+      assert(left.valid());
+      assert(right.valid());
+      assert(arbitrary.valid());
+
       size_t edgeid = edges.size();
       edges.push_back(Edge());
       Edge& e = edges.back();
@@ -192,8 +274,12 @@ class QueryGraph {
       e.left = left;
       e.right = right;
       e.arbitrary = arbitrary;
-      left.iterate_bits_on([&](size_t n) { nodes[n].edges.push_back(edgeid); });
-      right.iterate_bits_on([&](size_t n) { nodes[n].edges.push_back(edgeid); });
+      for (auto n : left) {
+         nodes[n].edges.push_back(edgeid);
+      }
+      for (auto n : right) {
+         nodes[n].edges.push_back(edgeid);
+      }
    }
 
    void iterateNodes(std::function<void(Node&)> fn) {
@@ -215,9 +301,9 @@ class QueryGraph {
 
    void iterateSetDec(node_set S, std::function<void(size_t)> fn) {
       std::vector<size_t> positions;
-      S.iterate_bits_on([&](size_t v) {
+      for (auto v : S) {
          positions.push_back(v);
-      });
+      }
       for (auto it = positions.rbegin(); it != positions.rend(); it++) {
          fn(*it);
       }
@@ -225,21 +311,21 @@ class QueryGraph {
 
    bool isConnected(node_set S1, node_set S2) {
       bool found = false;
-      S1.iterate_bits_on([&](size_t v) {
+      for (auto v : S1) {
          Node& n = nodes[v];
          for (auto edgeid : n.edges) {
             auto& edge = edges[edgeid];
             found |= edge.connects(S1, S2);
          }
-      });
+      }
       return found;
    }
 
    void iterateNodes(node_set S, std::function<void(Node&)> fn) {
-      S.iterate_bits_on([&](size_t v) {
+      for (auto v : S) {
          Node& n = nodes[v];
          fn(n);
-      });
+      }
    }
 
    void iterateEdges(node_set S, std::function<void(Edge&)> fn) {
@@ -262,61 +348,19 @@ class QueryGraph {
       return res;
    }
 
-   node_set fill_until(size_t n) {
-      auto res = node_set(num_nodes);
-      res.set(0, n + 1, true);
-      return res;
-   }
-
-   node_set negate(node_set S) {
-      size_t pos = S.find_first();
-      size_t flip_len = num_nodes - pos - 1;
-      if (flip_len) {
-         S.flip(pos + 1, flip_len);
-      }
-      return S;
-   }
-
-   node_set single(size_t pos) {
-      auto res = node_set(num_nodes);
-      res.set(pos);
-      return res;
-   }
-
-   void iterateSubsets(node_set S, std::function<void(node_set)> fn) {
-      if (!S.any()) return;
-      auto S1 = S & negate(S);
-      while (S1 != S) {
-         fn(S1);
-         auto S1flipped = S1;
-         S1flipped.flip();
-         auto S2 = S & S1flipped;
-         S1 = S & negate(S2);
-      }
-      fn(S);
-   }
-
-   node_set calcSES(Operator op, NodeResolver& resolver) {
-      node_set res = node_set(num_nodes);
-      for (auto attr : op.getUsedAttributes()) {
-         res.set(resolver.resolve(attr));
-      }
-      return res;
-   }
-
    node_set expand(node_set S) {
       iterateNodes(S, [&](Node& n) {
-         if (n.dependencies.size() > 0) {
+         if (n.dependencies.valid()) {
             S |= n.dependencies;
          }
       });
       return S;
    }
    bool isConnected(llvm::EquivalenceClasses<size_t>& connections, node_set& S) {
-      assert(S.count());
+      assert(S.any());
       size_t first_class = num_nodes;
       bool connected = true;
-      S.iterate_bits_on([&](size_t pos) {
+      for (auto pos : S) {
          if (first_class == num_nodes) {
             first_class = connections.getLeaderValue(pos);
          } else {
@@ -324,7 +368,7 @@ class QueryGraph {
                connected = false;
             }
          }
-      });
+      }
       return connected;
    }
 
@@ -336,7 +380,7 @@ class QueryGraph {
 
       std::list<size_t> edges_to_process;
       for (size_t i = 0; i < edges.size(); i++) {
-         if (edges[i].left.count() && edges[i].right.count()) {
+         if (edges[i].left.any() && edges[i].right.any()) {
             edges_to_process.push_back(i);
          }
       }
@@ -385,7 +429,7 @@ class QueryGraph {
                         }
                      }
                      if (!connecting_edge_exists) {
-                        addEdge(left, right, empty_node(), Operator(), EdgeType::REAL);
+                        addEdge(left, right, node_set(num_nodes), Operator(), EdgeType::REAL);
                      }
                   }
                }
@@ -403,203 +447,14 @@ class QueryGraph {
    }
    node_set getNodeSetFromClasses(llvm::EquivalenceClasses<size_t> classes, node_set S) {
       node_set res(num_nodes);
-      S.iterate_bits_on([&](size_t pos) {
+      for (auto pos : S) {
          auto eqclass = classes.findLeader(pos);
          for (auto me = classes.member_end(); eqclass != me; ++eqclass) {
             res.set(*eqclass);
          }
-      });
+      }
       return res;
    }
-   enum OpType {
-      None,
-      CP = 1,
-      InnerJoin,
-      SemiJoin,
-      AntiSemiJoin,
-      OuterJoin,
-      FullOuterJoin,
-      LAST
-   };
-   // @formatter:off
-        // clang-format off
-         bool assoc[OpType::LAST][OpType::LAST] = {
-                /* None =  */{},
-                /* CP           =  */{/*None=*/false,/*CP=*/true,/*InnerJoin=*/true,/*SemiJoin=*/true,/*AntiSemiJoin=*/true,/*OuterJoin=*/true,/*FullOuterJoin=*/false},
-                /* InnerJoin    =  */{/*None=*/false,/*CP=*/true,/*InnerJoin=*/true,/*SemiJoin=*/true,/*AntiSemiJoin=*/true,/*OuterJoin=*/true,/*FullOuterJoin=*/false},
-                /* SemiJoin     =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false},
-                /* AntiSemiJoin =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false},
-                /* OuterJoin    =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false},
-                /* FullOuterJoin=  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false}
-         };
-         bool l_asscom[OpType::LAST][OpType::LAST] = {
-                /* None =  */{},
-                /* CP           =  */{/*None=*/false,/*CP=*/true,/*InnerJoin=*/true,/*SemiJoin=*/true,/*AntiSemiJoin=*/true,/*OuterJoin=*/true,/*FullOuterJoin=*/false},
-                /* InnerJoin    =  */{/*None=*/false,/*CP=*/true,/*InnerJoin=*/true,/*SemiJoin=*/true,/*AntiSemiJoin=*/true,/*OuterJoin=*/true,/*FullOuterJoin=*/false},
-                /* SemiJoin     =  */{/*None=*/false,/*CP=*/true,/*InnerJoin=*/true,/*SemiJoin=*/true,/*AntiSemiJoin=*/true,/*OuterJoin=*/true,/*FullOuterJoin=*/false},
-                /* AntiSemiJoin =  */{/*None=*/false,/*CP=*/true,/*InnerJoin=*/true,/*SemiJoin=*/true,/*AntiSemiJoin=*/true,/*OuterJoin=*/true,/*FullOuterJoin=*/false},
-                /* OuterJoin    =  */{/*None=*/false,/*CP=*/true,/*InnerJoin=*/true,/*SemiJoin=*/true,/*AntiSemiJoin=*/true,/*OuterJoin=*/true,/*FullOuterJoin=*/false},
-                /* FullOuterJoin=  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false}
-         };
-         bool r_asscom[OpType::LAST][OpType::LAST] = {
-            /* None =  */{},
-            /* CP           =  */{/*None=*/false,/*CP=*/true,/*InnerJoin=*/true,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false},
-            /* InnerJoin    =  */{/*None=*/false,/*CP=*/true,/*InnerJoin=*/true,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false},
-            /* SemiJoin     =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false},
-            /* AntiSemiJoin =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false},
-            /* OuterJoin    =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false},
-            /* FullOuterJoin=  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false}
-         };
-        // @formatter:on
-         // clang-format on
-         OpType getOpType(Operator op) {
-            return ::llvm::TypeSwitch<mlir::Operation*, OpType>(op.getOperation())
-               .Case<mlir::relalg::CrossProductOp>([&](mlir::Operation* op) { return CP; })
-               .Case<mlir::relalg::InnerJoinOp>([&](mlir::Operation* op) { return InnerJoin; })
-               .Case<mlir::relalg::SemiJoinOp>([&](mlir::Operation* op) { return SemiJoin; })
-               .Case<mlir::relalg::AntiSemiJoinOp>([&](mlir::Operation* op) { return AntiSemiJoin; })
-               .Case<mlir::relalg::SingleJoinOp>([&](mlir::Operation* op) { return OuterJoin; })
-               .Case<mlir::relalg::MarkJoinOp>([&](mlir::Operation* op) { return SemiJoin; }) //todo is this correct?
-               .Case<mlir::relalg::OuterJoinOp>([&](mlir::relalg::OuterJoinOp op) {
-                  return op.join_direction() == mlir::relalg::JoinDirection::full ? FullOuterJoin : OuterJoin;
-               })
-
-               .Default([&](auto x) {
-                  return None;
-               });
-         }
-         bool intersects(const attribute_set& a, const attribute_set& b) {
-            for (auto x : a) {
-               if (b.contains(x)) {
-                  return true;
-               }
-            }
-            return false;
-         }
-         bool is(const bool (&table)[OpType::LAST][OpType::LAST], Operator a, Operator b) {
-            return table[getOpType(a)][getOpType(b)];
-         }
-         std::pair<Operator, Operator> normalizeChildren(Operator op) {
-            size_t left = 0;
-            size_t right = 1;
-            if (op->hasAttr("join_direction")) {
-               mlir::relalg::JoinDirection joinDirection = mlir::relalg::symbolizeJoinDirection(
-                                                              op->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt())
-                                                              .getValue();
-               if (joinDirection == mlir::relalg::JoinDirection::right) {
-                  std::swap(left, right);
-               }
-            }
-            return {op.getChildren()[left], op.getChildren()[right]};
-         }
-         node_set calcTES(Operator b, NodeResolver& resolver) {
-            if (TESs.count(b.getOperation())) {
-               return TESs[b.getOperation()];
-            } else {
-               node_set TES = calcSES(b, resolver);
-               auto children = b.getChildren();
-               if (children.size() == 2) {
-                  auto [b_left, b_right] = normalizeChildren(b);
-                  for (auto a : b_left.getAllSubOperators()) {
-                     if (a.getChildren().size() == 2) {
-                        auto [a_left, a_right] = normalizeChildren(a);
-                        if (!is(assoc, a, b)) {
-                           TES |= calcT(a_left, resolver);
-                        }
-                        if (!is(l_asscom, a, b)) {
-                           TES |= calcT(a_right, resolver);
-                        }
-                     } else {
-                        if (mlir::isa<mlir::relalg::AggregationOp>(a.getOperation())) {
-                           TES |= calcT(a, resolver);
-                        }
-                     }
-                  }
-                  for (auto a : b_right.getAllSubOperators()) {
-                     if (a.getChildren().size() == 2) {
-                        auto [a_left, a_right] = normalizeChildren(a);
-                        if (!is(assoc, b, a)) {
-                           TES |= calcT(a_right, resolver);
-                        }
-                        if (!is(r_asscom, b, a)) {
-                           TES |= calcT(a_left, resolver);
-                        }
-                     } else {
-                        if (mlir::isa<mlir::relalg::AggregationOp>(a.getOperation())) {
-                           TES |= calcT(a, resolver);
-                        }
-                     }
-                  }
-
-               } else if (children.size() == 1) {
-                  auto only_child = children[0];
-                  if (mlir::isa<mlir::relalg::AggregationOp>(b.getOperation())) {
-                     TES |= calcT(only_child, resolver);
-                  }
-                  if (auto renameop = mlir::dyn_cast_or_null<mlir::relalg::RenamingOp>(b.getOperation())) {
-                     for (auto a : only_child.getAllSubOperators()) {
-                        if (intersects(a.getUsedAttributes(), renameop.getUsedAttributes()) || intersects(a.getCreatedAttributes(), renameop.getCreatedAttributes())) {
-                           TES |= calcT(only_child, resolver);
-                        }
-                     }
-                  }
-               }
-               TESs[b.getOperation()] = TES;
-               return TES;
-            }
-         }
-
-         std::unordered_map<mlir::Operation*, node_set> Ts;
-         std::unordered_map<mlir::Operation*, node_set> TESs;
-         std::unordered_map<mlir::Operation*, size_t> node_for_op;
-         std::unordered_set<mlir::Operation*>& already_optimized;
-
-         node_set calcT(Operator op, NodeResolver& resolver) {
-            if (Ts.count(op.getOperation())) {
-               return Ts[op.getOperation()];
-            } else {
-               node_set init = node_set(num_nodes);
-               if (node_for_op.count(op.getOperation())) {
-                  init.set(node_for_op[op.getOperation()]);
-               }
-               if (!already_optimized.count(op.getOperation())) {
-                  for (auto child : op.getChildren()) {
-                     init |= calcT(child, resolver);
-                  }
-               }
-               Ts[op.getOperation()] = init;
-               return init;
-            }
-         }
-         bool canPushSelection(node_set SES, Operator curr, NodeResolver& resolver) {
-            if (curr.getChildren().size() == 1) {
-               return true;
-            }
-            auto TES = calcTES(curr, resolver);
-            auto [b_left, b_right] = normalizeChildren(curr);
-            node_set left_TES = calcT(b_left, resolver) & TES;
-            node_set right_TES = calcT(b_right, resolver) & TES;
-            if (left_TES.intersects(SES) && right_TES.intersects(SES)) {
-               return false;
-            }
-            switch (getOpType(curr)) {
-               case SemiJoin:
-               case AntiSemiJoin:
-               case OuterJoin:
-                  return !right_TES.intersects(SES);
-               case FullOuterJoin: return false;
-               default:
-                  return true;
-            }
-         }
-         node_set ones() {
-            node_set x = mlir::relalg::QueryGraph::node_set(num_nodes);
-            x.set();
-            return x;
-         }
-         node_set empty_node() {
-            return mlir::relalg::QueryGraph::node_set(num_nodes);
-         }
 };
 }
 #endif //DB_DIALECTS_QUERYGRAPH_H

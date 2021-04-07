@@ -1,5 +1,6 @@
 #include "mlir/Dialect/RelAlg/queryopt/DPhyp.h"
 #include "mlir/Dialect/RelAlg/queryopt/QueryGraph.h"
+#include "mlir/Dialect/RelAlg/queryopt/QueryGraphBuilder.h"
 
 #include "llvm/Support/CommandLine.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
@@ -55,142 +56,12 @@ int loadMLIR(mlir::MLIRContext& context, mlir::OwningModuleRef& module) {
 }
 
 class JoinOrder {
-   using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
-   using node_set = mlir::relalg::QueryGraph::node_set;
-   using NodeResolver = mlir::relalg::QueryGraph::NodeResolver;
-
    mlir::MLIRContext* context;
    mlir::ModuleOp moduleOp;
    std::unordered_set<mlir::Operation*> already_optimized;
 
    public:
    JoinOrder(mlir::MLIRContext* context, mlir::ModuleOp moduleOp) : context(context), moduleOp(moduleOp) {}
-
-   size_t countCreatingOperators(Operator op) {
-      size_t res = 0;
-      auto children = op.getChildren();
-      auto used = op.getUsedAttributes();
-      auto created = op.getCreatedAttributes();
-      if (already_optimized.count(op.getOperation())) {
-         res += 1;
-         return res;
-      }
-      for (auto child : children) {
-         res += countCreatingOperators(child);
-      }
-
-      if (mlir::isa<mlir::relalg::CrossProductOp>(op.getOperation())) {
-         //do not construct crossproducts in the querygraph
-      } else if (mlir::isa<Join>(op.getOperation())) {
-         if (created.size()) {
-            res += 1;
-         }
-      } else if (created.size()) {
-         res += 1;
-
-      } else if (mlir::isa<mlir::relalg::SelectionOp>(op.getOperation())) {
-      } else {
-         assert(false && " should not happen");
-      }
-      return res;
-   }
-
-   NodeResolver populateQueryGraph(Operator op, mlir::relalg::QueryGraph& qg) {
-      auto children = op.getChildren();
-      auto used = op.getUsedAttributes();
-      auto created = op.getCreatedAttributes();
-      NodeResolver resolver(qg);
-      if (already_optimized.count(op.getOperation())) {
-         size_t new_node = qg.addNode(op);
-         for (auto attr : op.getAvailableAttributes()) {
-            resolver.add(attr, new_node);
-         }
-         return resolver;
-      }
-      for (auto child : children) {
-         resolver.merge(populateQueryGraph(child, qg));
-      }
-      if (mlir::isa<mlir::relalg::CrossProductOp>(op.getOperation())) {
-         //do not construct crossproducts in the querygraph
-      } else if (mlir::isa<Join>(op.getOperation()) && !mlir::isa<mlir::relalg::InnerJoinOp>(op.getOperation())) {
-         //add join edges into the query graph
-         node_set TES = qg.calcTES(op, resolver);
-         node_set left_TES = qg.calcT(children[0], resolver) & TES;
-         node_set right_TES = qg.calcT(children[1], resolver) & TES;
-         qg.addEdge(qg.expand(left_TES), qg.expand(right_TES), qg.empty_node(), op, mlir::relalg::QueryGraph::EdgeType::REAL);
-         if (created.size()) {
-            size_t new_node = qg.addNode(op);
-            for (auto attr : op.getCreatedAttributes()) {
-               resolver.add(attr, new_node);
-            }
-            qg.nodes[new_node].dependencies = qg.expand(TES);
-            qg.addEdge(qg.expand(TES), qg.single(new_node), qg.empty_node(), op, mlir::relalg::QueryGraph::EdgeType::IGNORE);
-         }
-      } else if (created.size()) {
-         //add node for operators that create attributes
-         size_t new_node = qg.addNode(op);
-         for (auto attr : op.getCreatedAttributes()) {
-            resolver.add(attr, new_node);
-         }
-         if (children.size() == 1) {
-            //if operator has one child e.g. aggregation/renaming/map
-            // -> create "implicit" hyperedge
-            node_set TES = qg.calcTES(op, resolver);
-            qg.nodes[new_node].dependencies = qg.expand(TES);
-            qg.addEdge(qg.expand(TES), qg.single(new_node), qg.empty_node(), op, mlir::relalg::QueryGraph::EdgeType::IMPLICIT);
-         }
-      } else if (mlir::isa<mlir::relalg::SelectionOp>(op.getOperation()) || mlir::isa<mlir::relalg::InnerJoinOp>(op.getOperation())) {
-         node_set SES = qg.calcSES(op, resolver);
-         if (SES.count() == 1) {
-            //if selection is only based on one node -> add selection to node
-            auto node_id = SES.find_first();
-            qg.nodes[node_id].additional_predicates.push_back(op);
-         } else {
-            auto first = SES.find_first();
-            llvm::EquivalenceClasses<size_t> cannot_be_seperated;
-            SES.iterate_bits_on([&](size_t pos) {
-               cannot_be_seperated.insert(pos);
-               qg.nodes[pos].dependencies.iterate_bits_on([&](size_t dep) {
-                  cannot_be_seperated.unionSets(pos, dep);
-               });
-            });
-
-            for (auto subop : op.getAllSubOperators()) {
-               if (subop != op) {
-                  auto subop_TES = qg.calcTES(subop, resolver);
-                  if (SES.intersects(subop_TES) && !qg.canPushSelection(SES, subop, resolver)) {
-                     auto first = (subop_TES & SES).find_first();
-                     (subop_TES & SES).iterate_bits_on([&](size_t pos) {
-                        cannot_be_seperated.unionSets(first, pos);
-                     });
-                  }
-               }
-            }
-            if (cannot_be_seperated.getNumClasses() == 1) {
-               qg.addEdge(qg.getNodeSetFromClass(cannot_be_seperated, first), qg.empty_node(), qg.empty_node(), op, mlir::relalg::QueryGraph::EdgeType::REAL);
-            } else {
-               node_set decisions = qg.empty_node();
-               for (auto& a : cannot_be_seperated) {
-                  if (a.isLeader()) {
-                     decisions.set(a.getData());
-                  }
-               }
-               qg.iterateSubsets(decisions, [&](node_set left) {
-                  node_set right = decisions & ~left;
-                  if (left < right) {
-                     left = qg.getNodeSetFromClasses(cannot_be_seperated, left);
-                     right = qg.getNodeSetFromClasses(cannot_be_seperated, right);
-
-                     qg.addEdge(left, right, qg.empty_node(), op, mlir::relalg::QueryGraph::EdgeType::REAL);
-                  }
-               });
-            }
-         }
-      } else {
-         assert(false && " should not happen");
-      }
-      return resolver;
-   }
 
    bool isUnsupportedOp(mlir::Operation* op) {
       return ::llvm::TypeSwitch<mlir::Operation*, bool>(op)
@@ -358,12 +229,10 @@ class JoinOrder {
          llvm::SmallPtrSet<mlir::Operation*, 8> prev_users{op->user_begin(), op->user_end()};
 
          llvm::SmallVector<Operator, 4> before = op.getAllSubOperators();
-         mlir::relalg::QueryGraph qg(countCreatingOperators(op), already_optimized);
-         populateQueryGraph(op, qg);
+         mlir::relalg::QueryGraphBuilder queryGraphBuilder(op,already_optimized);
+         queryGraphBuilder.generate();
          mlir::relalg::CostFunction cf;
-         qg.ensureConnected();
-         //qg.dump();
-         mlir::relalg::DPHyp solver(qg, cf);
+         mlir::relalg::DPHyp solver(queryGraphBuilder.getQueryGraph(), cf);
          auto solution = solver.solve();
          //std::cout << "plan descr:" << solution->descr << std::endl;
          //printPlan(solution);
