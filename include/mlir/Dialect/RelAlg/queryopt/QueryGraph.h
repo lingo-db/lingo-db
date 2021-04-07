@@ -24,11 +24,11 @@ class QueryGraph {
    };
    struct Edge {
       Operator op;
-      EdgeType edgeType;
+      EdgeType edgeType = EdgeType::REAL;
       node_set right;
       node_set left;
       node_set arbitrary;
-      bool connects(node_set S1, node_set S2) {
+      [[nodiscard]] bool connects(const node_set& S1, const node_set& S2) const {
          if (!((left.any() && right.any()) || (left.any() && arbitrary.any()) || (arbitrary.any() && right.any()))) {
             return false;
          }
@@ -41,7 +41,7 @@ class QueryGraph {
          return false;
       }
 
-      std::pair<bool, size_t> findNeighbor(node_set S, node_set X) {
+      std::pair<bool, size_t> findNeighbor(const node_set& S, const node_set& X) {
          if (left.is_subset_of(S) && !S.intersects(right)) {
             auto otherside = right | (arbitrary & ~S);
             if (!X.intersects(otherside) && otherside.any()) {
@@ -61,10 +61,9 @@ class QueryGraph {
       size_t id;
       Operator op;
       std::vector<Operator> additional_predicates;
-      size_t cardinality;
       node_set dependencies;
 
-      Node(Operator op) : op(op) {}
+      explicit Node(Operator op) : op(op) {}
 
       std::vector<size_t> edges;
    };
@@ -74,9 +73,11 @@ class QueryGraph {
 
    QueryGraph(size_t num_nodes, std::unordered_set<mlir::Operation*>& already_optimized) : num_nodes(num_nodes) {}
 
-   void print_readable(node_set S, llvm::raw_ostream& out) {
+   static void print_readable(const node_set& S, llvm::raw_ostream& out) {
       out << "{";
-      iterateNodes(S, [&](Node& n) { out << n.id << ","; });
+      for (auto s : S) {
+         out << s << ",";
+      }
       out << "}";
    }
 
@@ -125,7 +126,7 @@ class QueryGraph {
       assert(arbitrary.valid());
 
       size_t edgeid = edges.size();
-      edges.push_back(Edge());
+      edges.emplace_back();
       Edge& e = edges.back();
       if (op) {
          e.op = op;
@@ -142,17 +143,13 @@ class QueryGraph {
       }
    }
 
-   void iterateNodes(std::function<void(Node&)> fn) {
-      iterateNodesDesc(fn);
-   }
-
-   void iterateNodesDesc(std::function<void(Node&)> fn) {
+   void iterateNodesDesc(const std::function<void(Node&)>& fn) {
       for (auto it = nodes.rbegin(); it != nodes.rend(); it++) {
          fn(*it);
       }
    }
 
-   void iterateSetDec(node_set S, std::function<void(size_t)> fn) {
+   static void iterateSetDec(const node_set& S, const std::function<void(size_t)>& fn) {
       std::vector<size_t> positions;
       for (auto v : S) {
          positions.push_back(v);
@@ -162,7 +159,7 @@ class QueryGraph {
       }
    }
 
-   bool isConnected(node_set S1, node_set S2) {
+   bool isConnected(const node_set& S1, const node_set& S2) {
       bool found = false;
       for (auto v : S1) {
          Node& n = nodes[v];
@@ -173,20 +170,20 @@ class QueryGraph {
       }
       return found;
    }
-   const std::vector<Node>& getNodes() const {
+   [[nodiscard]] const std::vector<Node>& getNodes() const {
       return nodes;
    }
    std::vector<Edge>& getEdges() {
       return edges;
    }
-   void iterateNodes(node_set S, std::function<void(Node&)> fn) {
+   void iterateNodes(node_set& S, const std::function<void(Node&)>& fn) {
       for (auto v : S) {
          Node& n = nodes[v];
          fn(n);
       }
    }
 
-   void iterateEdges(node_set S, std::function<void(Edge&)> fn) {
+   void iterateEdges(node_set& S, const std::function<void(Edge&)>& fn) {
       iterateNodes(S, [&](Node& n) {
          for (auto edgeid : n.edges) {
             auto& edge = edges[edgeid];
@@ -195,7 +192,7 @@ class QueryGraph {
       });
    }
 
-   node_set getNeighbors(node_set S, node_set X) {
+   node_set getNeighbors(node_set& S, node_set X) {
       node_set res(num_nodes);
       iterateEdges(S, [&](Edge& edge) {
          auto [found, representative] = edge.findNeighbor(S, X);

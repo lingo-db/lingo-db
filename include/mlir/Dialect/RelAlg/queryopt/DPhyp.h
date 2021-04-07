@@ -9,7 +9,7 @@
 
 namespace mlir::relalg {
 struct Plan {
-   Plan(Operator op, std::vector<std::shared_ptr<Plan>> subplans, std::vector<Operator> additional_ops, size_t cost) : op(op), subplans(subplans), additional_ops(additional_ops), cost(cost) {}
+   Plan(Operator op, const std::vector<std::shared_ptr<Plan>>& subplans, const std::vector<Operator>& additional_ops, size_t cost) : op(op), subplans(subplans), additional_ops(additional_ops), cost(cost) {}
    Operator op;
    std::vector<std::shared_ptr<Plan>> subplans;
    std::vector<Operator> additional_ops;
@@ -24,22 +24,21 @@ class DPHyp {
    std::unordered_map<node_set, std::shared_ptr<Plan>, hash_node_set> dp_table;
 
    QueryGraph& queryGraph;
-   CostFunction& costFunction;
 
-   std::shared_ptr<Plan> createInitialPlan(QueryGraph::Node& n) {
+   static std::shared_ptr<Plan> createInitialPlan(QueryGraph::Node& n) {
       auto curr_plan = std::make_shared<Plan>(n.op, std::vector<std::shared_ptr<Plan>>({}), std::vector<Operator>({n.additional_predicates}), 0);
       curr_plan->descr = std::to_string(n.id);
       return curr_plan;
    }
 
    public:
-   DPHyp(QueryGraph& qg, CostFunction& costFunction) : queryGraph(qg), costFunction(costFunction) {}
+   DPHyp(QueryGraph& qg, CostFunction& costFunction) : queryGraph(qg) {}
 
    void EmitCsg(node_set S1) {
       node_set X = S1 | node_set::fill_until(queryGraph.num_nodes, S1.find_first());
       auto neighbors = queryGraph.getNeighbors(S1, X);
 
-      queryGraph.iterateSetDec(neighbors, [&](size_t pos) {
+      QueryGraph::iterateSetDec(neighbors, [&](size_t pos) {
          auto S2 = node_set::single(queryGraph.num_nodes, pos);
          if (queryGraph.isConnected(S1, S2)) {
             EmitCsgCmp(S1, S2);
@@ -48,7 +47,7 @@ class DPHyp {
       });
    }
 
-   void EmitCsgCmp(node_set S1, node_set S2) {
+   void EmitCsgCmp(const node_set& S1, const node_set& S2) {
       auto p1 = dp_table[S1];
       auto p2 = dp_table[S2];
       auto S = S1 | S2;
@@ -114,35 +113,35 @@ class DPHyp {
 
    void EnumerateCsgRec(node_set S1, node_set X) {
       auto neighbors = queryGraph.getNeighbors(S1, X);
-      neighbors.iterateSubsets([&](node_set N) {
+      neighbors.iterateSubsets([&](const node_set& N) {
          auto S1N = S1 | N;
          if (dp_table.count(S1N)) {
             EmitCsg(S1N);
          }
       });
-      neighbors.iterateSubsets([&](node_set N) {
+      neighbors.iterateSubsets([&](const node_set& N) {
          EnumerateCsgRec(S1 | N, X | neighbors);
       });
    }
 
    void EnumerateCmpRec(node_set S1, node_set S2, node_set X) {
       auto neighbors = queryGraph.getNeighbors(S2, X);
-      neighbors.iterateSubsets([&](node_set N) {
+      neighbors.iterateSubsets([&](const node_set& N) {
          auto S2N = S2 | N;
          if (dp_table.count(S2N) && queryGraph.isConnected(S1, S2N)) {
             EmitCsgCmp(S1, S2N);
          }
       });
       X = X | neighbors;
-      neighbors.iterateSubsets([&](node_set N) {
+      neighbors.iterateSubsets([&](const node_set& N) {
          EnumerateCmpRec(S1, S2 | N, X);
       });
    }
 
    std::shared_ptr<Plan> solve() {
-      queryGraph.iterateNodes([&](QueryGraph::Node& v) {
+      for (auto v : queryGraph.getNodes()) {
          dp_table.insert({node_set::single(queryGraph.num_nodes, v.id), createInitialPlan(v)});
-      });
+      }
       queryGraph.iterateNodesDesc([&](QueryGraph::Node& v) {
          auto only_v = node_set::single(queryGraph.num_nodes, v.id);
          EmitCsg(only_v);

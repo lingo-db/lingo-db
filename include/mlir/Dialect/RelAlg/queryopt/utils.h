@@ -7,14 +7,14 @@ class node_set {
    class bit_iterator
       : public std::iterator<std::forward_iterator_tag, size_t> {
       typedef bit_iterator iterator;
-      sul::dynamic_bitset<>& bitset;
+      const sul::dynamic_bitset<>& bitset;
       size_t pos;
 
       public:
-      bit_iterator(sul::dynamic_bitset<>& bitset, size_t pos) : bitset(bitset), pos(pos) {}
-      ~bit_iterator() {}
+      bit_iterator(const sul::dynamic_bitset<>& bitset, size_t pos) : bitset(bitset), pos(pos) {}
+      ~bit_iterator() = default;
 
-      iterator operator++(int) /* postfix */ { return bit_iterator(bitset, bitset.find_next(pos)); }
+      iterator operator++(int) /* postfix */ const { return bit_iterator(bitset, bitset.find_next(pos)); }
       iterator& operator++() /* prefix */ {
          pos = bitset.find_next(pos);
          return *this;
@@ -26,10 +26,9 @@ class node_set {
    };
 
    public:
-   node_set() {
-   }
-   node_set(size_t size) : storage(size) {}
-   node_set negate() const {
+   node_set() = default;
+   explicit node_set(size_t size) : storage(size) {}
+   [[nodiscard]] node_set negate() const {
       node_set res = *this;
       size_t pos = res.find_first();
       size_t flip_len = res.storage.size() - pos - 1;
@@ -54,29 +53,29 @@ class node_set {
       res.set(pos);
       return res;
    }
-   bool is_subset_of(const node_set& S) const {
+   [[nodiscard]] bool is_subset_of(const node_set& S) const {
       return storage.is_subset_of(S.storage);
    }
-   bool intersects(const node_set& rhs) const {
+   [[nodiscard]] bool intersects(const node_set& rhs) const {
       return storage.intersects(rhs.storage);
    }
    void set(size_t pos) {
       storage.set(pos);
    }
-   auto begin() {
+   [[nodiscard]] auto begin() const {
       return bit_iterator(storage, storage.find_first());
    }
-   auto end() {
-      return bit_iterator(storage, storage.npos);
+   [[nodiscard]] auto end() const {
+      return bit_iterator(storage, sul::dynamic_bitset<>::npos);
    }
-   size_t find_first() const {
+   [[nodiscard]] size_t find_first() const {
       return storage.find_first();
    }
    bool operator==(const node_set& rhs) const { return storage == rhs.storage; }
    bool operator!=(const node_set& rhs) const { return storage != rhs.storage; }
    bool operator<(const node_set& rhs) const { return storage < rhs.storage; }
 
-   bool any() const {
+   [[nodiscard]] bool any() const {
       return storage.any();
    }
    node_set& operator|=(const node_set& rhs) {
@@ -88,7 +87,7 @@ class node_set {
       return *this;
    }
    node_set operator&(
-      const node_set& rhs) {
+      const node_set& rhs) const {
       node_set result = *this;
       result &= rhs;
       return result;
@@ -97,24 +96,23 @@ class node_set {
       node_set res = flip();
       return res;
    }
-   node_set operator|(
-      const node_set& rhs) {
+   node_set operator|(const node_set& rhs) const {
       node_set result = *this;
       result |= rhs;
       return result;
    }
-   bool valid() {
+   [[nodiscard]] bool valid() const {
       return !storage.empty();
    }
-   size_t count() {
+   [[nodiscard]] size_t count() const {
       return storage.count();
    }
-   node_set flip() const {
+   [[nodiscard]] node_set flip() const {
       node_set res = *this;
       res.storage.flip();
       return res;
    }
-   void iterateSubsets(std::function<void(node_set)> fn) const {
+   void iterateSubsets(const std::function<void(node_set)>& fn) const {
       if (!storage.any()) return;
       node_set S = *this;
       auto S1 = S & S.negate();
@@ -126,12 +124,15 @@ class node_set {
       }
       fn(S);
    }
-   size_t hash() const {
+   [[nodiscard]] size_t hash() const {
       size_t res = 0;
       for (size_t i = 0; i < storage.num_blocks(); i++) {
          res ^= storage.data()[i];
       }
       return res;
+   }
+   [[nodiscard]] size_t size() const {
+      return storage.size();
    }
 };
 struct hash_node_set {
