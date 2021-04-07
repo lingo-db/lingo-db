@@ -107,12 +107,11 @@ let cppNamespace = "::mlir::relalg";
 
 def RelAlg_JoinDirection_Left  : I64EnumAttrCase<"left", 0>;
 def RelAlg_JoinDirection_Right  : I64EnumAttrCase<"right", 1>;
-def RelAlg_JoinDirection_Full  : I64EnumAttrCase<"full", 2>;
 
 
 def RelAlg_JoinDirection : I64EnumAttr<
         "JoinDirection", "",
-        [RelAlg_JoinDirection_Left,RelAlg_JoinDirection_Right,RelAlg_JoinDirection_Full]> {
+        [RelAlg_JoinDirection_Left,RelAlg_JoinDirection_Right]> {
 let cppNamespace = "::mlir::relalg";
 }
 
@@ -212,14 +211,14 @@ llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getUsedAttributes();
 }];
 }
 // Joins
-def InnerJoinOp : RelAlg_Op<"join",[RecursiveSideEffects,Operator,Join,TupleLamdaOperator]> {
+def InnerJoinOp : RelAlg_Op<"join",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
 let summary = "inner join operation";
 let arguments = (ins RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
 
-def SemiJoinOp : RelAlg_Op<"semijoin",[RecursiveSideEffects,Operator,Join,TupleLamdaOperator]> {
+def SemiJoinOp : RelAlg_Op<"semijoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
 let summary = "semi join operation";
 let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
@@ -236,7 +235,7 @@ let extraClassDeclaration = [{
 llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
 }];
 }
-def AntiSemiJoinOp : RelAlg_Op<"antisemijoin",[RecursiveSideEffects,Operator,Join,TupleLamdaOperator]> {
+def AntiSemiJoinOp : RelAlg_Op<"antisemijoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
 let summary = "antisemi join operation";
 let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
@@ -252,7 +251,7 @@ let printer = [{
 return printNonCommutativeJoin(this->getOperation(), p);
 }];
 }
-def OuterJoinOp : RelAlg_Op<"outerjoin",[RecursiveSideEffects,Operator,Join,TupleLamdaOperator]> {
+def OuterJoinOp : RelAlg_Op<"outerjoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
 let summary = "outer join operation";
 let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
@@ -265,8 +264,15 @@ let printer = [{
 return printNonCommutativeJoin(this->getOperation(), p);
 }];
 }
-def SingleJoinOp : RelAlg_Op<"singlejoin",[RecursiveSideEffects,Operator,Join,TupleLamdaOperator]> {
-let summary = "outer join operation";
+def FullOuterJoinOp : RelAlg_Op<"fullouterjoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
+let summary = "full outer join operation";
+let arguments = (ins RelAlg_Relation:$left,RelAlg_Relation:$right);
+let results = (outs RelAlg_Relation:$result);
+let regions = (region SizedRegion<1>:$predicate);
+
+}
+def SingleJoinOp : RelAlg_Op<"singlejoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
+let summary = "single join operation";
 let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
@@ -278,7 +284,7 @@ let printer = [{
 return printNonCommutativeJoin(this->getOperation(), p);
 }];
 }
-def MarkJoinOp : RelAlg_Op<"markjoin",[RecursiveSideEffects,Operator,Join,TupleLamdaOperator]> {
+def MarkJoinOp : RelAlg_Op<"markjoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
 let summary = "mark join operation";
 let arguments = (ins RelAlg_JoinDirection:$join_direction,SymbolNameAttr:$sym_name,RelationalAttributeDefAttr:$markattr,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
@@ -298,17 +304,17 @@ llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes()
 }];
 }
 
-def UnionOp :  RelAlg_Op<"union",[RecursiveSideEffects,Operator]> {
+def UnionOp :  RelAlg_Op<"union",[RecursiveSideEffects,Operator,BinaryOperator]> {
 let summary = "union operation";
 let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_Relation:$result);
 }
-def IntersectOp :  RelAlg_Op<"intersect",[RecursiveSideEffects,Operator]> {
+def IntersectOp :  RelAlg_Op<"intersect",[RecursiveSideEffects,Operator,BinaryOperator]> {
 let summary = "intersect operation";
 let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_Relation:$result);
 }
-def ExceptOp :  RelAlg_Op<"except",[RecursiveSideEffects,Operator]> {
+def ExceptOp :  RelAlg_Op<"except",[RecursiveSideEffects,Operator,BinaryOperator]> {
 let summary = "except operation";
 let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_Relation:$result);

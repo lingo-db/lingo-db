@@ -1,20 +1,6 @@
-#include "mlir/Dialect/RelAlg/queryopt/DPhyp.h"
-#include "mlir/Dialect/RelAlg/queryopt/QueryGraph.h"
-#include "mlir/Dialect/RelAlg/queryopt/QueryGraphBuilder.h"
 
-#include "llvm/Support/CommandLine.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/IR/Dialect.h"
-#include "mlir/Parser.h"
-#include <llvm/Support/ErrorOr.h>
-#include <iostream>
-#include <mlir/Dialect/DB/IR/DBDialect.h>
-#include <mlir/Dialect/RelAlg/IR/RelAlgDialect.h>
-#include <mlir/IR/BuiltinOps.h>
-#include <mlir/IR/MLIRContext.h>
-#include <mlir/Pass/PassManager.h>
 
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
@@ -27,48 +13,24 @@
 #include <queue>
 #include <unordered_set>
 #include <mlir/Dialect/RelAlg/IR/RelAlgDialect.h>
-#include <mlir/Transforms/DialectConversion.h>
+#include <mlir/Dialect/RelAlg/queryopt/DPhyp.h>
+#include <mlir/Dialect/RelAlg/queryopt/QueryGraph.h>
+#include <mlir/Dialect/RelAlg/queryopt/QueryGraphBuilder.h>
 
-namespace cl = llvm::cl;
+namespace {
 
-static cl::opt<std::string> inputFilename(cl::Positional,
-                                          cl::desc("<input mlir file>"),
-                                          cl::init("-"),
-                                          cl::value_desc("filename"));
-
-int loadMLIR(mlir::MLIRContext& context, mlir::OwningModuleRef& module) {
-   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
-      llvm::MemoryBuffer::getFileOrSTDIN(inputFilename);
-   if (std::error_code EC = fileOrErr.getError()) {
-      llvm::errs() << "Could not open input file: " << EC.message() << "\n";
-      return -1;
-   }
-
-   // Parse the input mlir.
-   llvm::SourceMgr sourceMgr;
-   sourceMgr.AddNewSourceBuffer(std::move(*fileOrErr), llvm::SMLoc());
-   module = mlir::parseSourceFile(sourceMgr, &context);
-   if (!module) {
-      llvm::errs() << "Error can't load file " << inputFilename << "\n";
-      return 3;
-   }
-   return 0;
-}
-
-class JoinOrder {
-   mlir::MLIRContext* context;
-   mlir::ModuleOp moduleOp;
+class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::FunctionPass> {
    std::unordered_set<mlir::Operation*> already_optimized;
-
-   public:
-   JoinOrder(mlir::MLIRContext* context, mlir::ModuleOp moduleOp) : context(context), moduleOp(moduleOp) {}
 
    bool isUnsupportedOp(mlir::Operation* op) {
       return ::llvm::TypeSwitch<mlir::Operation*, bool>(op)
-         .Case<mlir::relalg::CrossProductOp, Join, mlir::relalg::SelectionOp, mlir::relalg::AggregationOp, mlir::relalg::MapOp, mlir::relalg::RenamingOp>(
+         .Case<mlir::relalg::CrossProductOp, mlir::relalg::SelectionOp, mlir::relalg::AggregationOp, mlir::relalg::MapOp, mlir::relalg::RenamingOp>(
             [&](mlir::Operation* op) {
                return false;
             })
+         .Case<BinaryOperator>([&](mlir::Operation* op) {
+            return !mlir::relalg::detail::isJoin(op);
+         })
          .Default([&](auto x) {
             return true;
          });
@@ -229,10 +191,9 @@ class JoinOrder {
          llvm::SmallPtrSet<mlir::Operation*, 8> prev_users{op->user_begin(), op->user_end()};
 
          llvm::SmallVector<Operator, 4> before = op.getAllSubOperators();
-         mlir::relalg::QueryGraphBuilder queryGraphBuilder(op,already_optimized);
+         mlir::relalg::QueryGraphBuilder queryGraphBuilder(op, already_optimized);
          queryGraphBuilder.generate();
-         mlir::relalg::CostFunction cf;
-         mlir::relalg::DPHyp solver(queryGraphBuilder.getQueryGraph(), cf);
+         mlir::relalg::DPHyp solver(queryGraphBuilder.getQueryGraph());
          auto solution = solver.solve();
          //std::cout << "plan descr:" << solution->descr << std::endl;
          //printPlan(solution);
@@ -260,29 +221,18 @@ class JoinOrder {
       }
    }
 
-   void run() {
-      mlir::FuncOp func = mlir::dyn_cast_or_null<mlir::FuncOp>(&moduleOp.getRegion().front().front());
-      func.walk([&](Operator op) {
+   void runOnFunction() override {
+      getFunction()->walk([&](Operator op) {
          if (isOptimizationRoot(op.getOperation())) {
             optimize(op);
          }
       });
    }
 };
+} // end anonymous namespace
 
-int main(int argc, char** argv) {
-   cl::ParseCommandLineOptions(argc, argv, "toy compiler\n");
-   mlir::DialectRegistry registry;
-   registry.insert<mlir::relalg::RelAlgDialect>();
-   registry.insert<mlir::db::DBDialect>();
-   registry.insert<mlir::StandardOpsDialect>();
-   mlir::MLIRContext context;
-   context.appendDialectRegistry(registry);
-   mlir::OwningModuleRef module;
-   llvm::SourceMgr sourceMgr;
-   mlir::SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
-   if (int error = loadMLIR(context, module))
-      return error;
-   JoinOrder(&context, module.get()).run();
-   module->print(llvm::outs());
-}
+namespace mlir {
+namespace relalg {
+std::unique_ptr<Pass> createOptimizeJoinOrderPass() { return std::make_unique<OptimizeJoinOrder>(); }
+} // end namespace relalg
+} // end namespace mlir

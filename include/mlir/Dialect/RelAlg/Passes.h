@@ -11,8 +11,7 @@ std::unique_ptr<Pass> createDecomposeLambdasPass();
 std::unique_ptr<Pass> createImplicitToExplicitJoinsPass();
 std::unique_ptr<Pass> createUnnestingPass();
 std::unique_ptr<Pass> createPushdownPass();
-
-
+std::unique_ptr<Pass> createOptimizeJoinOrderPass();
 
 } // end namespace db
 } // end namespace mlir

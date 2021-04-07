@@ -54,7 +54,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       }
       return mlir::ArrayAttr::get(&getContext(), attributes);
    }
-   void handleChildren(Operator D,Operator others){
+   void handleChildren(Operator D, Operator others) {
       llvm::SmallVector<Operator, 4> new_children;
       for (auto childOp : others.getChildren()) {
          new_children.push_back(pushDependJoinDown(D, childOp));
@@ -73,70 +73,74 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             return builder.create<CrossProductOp>(builder.getUnknownLoc(), rel_type, baserelation.asRelation(), D.asRelation()).getOperation();
          })
          .Case<CrossProductOp>([&](Operator cp) {
-           llvm::SmallVector<Operator, 4> new_children;
-           bool pushed_down_any=false;
-           for (auto childOp : cp.getChildren()) {
-              if(intersect(childOp.getFreeAttributes(),available_D).empty()){
-                 new_children.push_back(childOp);
-              }else {
-                 pushed_down_any=true;
-                 new_children.push_back(pushDependJoinDown(D, childOp));
-              }
-           }
-           if(!pushed_down_any){
-              new_children[0]=pushDependJoinDown(D, new_children[0]);
-           }
-           cp.setChildren(new_children);
-           return cp;
+            llvm::SmallVector<Operator, 4> new_children;
+            bool pushed_down_any = false;
+            for (auto childOp : cp.getChildren()) {
+               if (intersect(childOp.getFreeAttributes(), available_D).empty()) {
+                  new_children.push_back(childOp);
+               } else {
+                  pushed_down_any = true;
+                  new_children.push_back(pushDependJoinDown(D, childOp));
+               }
+            }
+            if (!pushed_down_any) {
+               new_children[0] = pushDependJoinDown(D, new_children[0]);
+            }
+            cp.setChildren(new_children);
+            return cp;
          })
          .Case<AggregationOp>([&](AggregationOp projection) {
-            handleChildren(D,projection);
+            handleChildren(D, projection);
             projection->setAttr("group_by_attrs", addAttributes(projection.group_by_attrs(), available_D));
             return projection;
          })
          .Case<ProjectionOp>([&](ProjectionOp projection) {
-           handleChildren(D,projection);
-           projection->setAttr("attrs", addAttributes(projection.attrs(), available_D));
+            handleChildren(D, projection);
+            projection->setAttr("attrs", addAttributes(projection.attrs(), available_D));
             return projection;
          })
-         .Case<Join>([&](Join join) {
-            auto left = mlir::dyn_cast_or_null<Operator>(join.leftChild());
-            auto right = mlir::dyn_cast_or_null<Operator>(join.rightChild());
-            auto free_left = left.getFreeAttributes();
-            auto free_right = right.getFreeAttributes();
-            auto dependent_left = intersect(free_left, available_D);
-            auto dependent_right = intersect(free_right, available_D);
+         .Case<BinaryOperator>([&](BinaryOperator join) {
+            if (mlir::relalg::detail::isJoin(join.getOperation())) {
+               auto left = mlir::dyn_cast_or_null<Operator>(join.leftChild());
+               auto right = mlir::dyn_cast_or_null<Operator>(join.rightChild());
+               auto free_left = left.getFreeAttributes();
+               auto free_right = right.getFreeAttributes();
+               auto dependent_left = intersect(free_left, available_D);
+               auto dependent_right = intersect(free_right, available_D);
 
-            bool push_down_left = !dependent_left.empty();
-            bool push_down_right = !dependent_right.empty();
-            bool rename_right = true;
-            if (!mlir::isa<InnerJoinOp>(join.getOperation())) {
-               JoinDirection joinDirection = symbolizeJoinDirection(join->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt()).getValue();
-               switch (joinDirection) {
-                  case JoinDirection::left:
-                     if (push_down_right) {
-                        push_down_left = true;
-                     }
-                     break;
-                  case JoinDirection::right:
-                     if (push_down_left) {
-                        push_down_right = true;
-                        rename_right = false;
-                     }
-                     break;
-                  case JoinDirection::full:
-                     if (push_down_left || push_down_right) {
-                        push_down_left = true;
-                        push_down_right = true;
-                     }
-                     break;
+               bool push_down_left = !dependent_left.empty();
+               bool push_down_right = !dependent_right.empty();
+               bool rename_right = true;
+               if (!mlir::isa<InnerJoinOp>(join.getOperation()) || !mlir::isa<FullOuterJoinOp>(join.getOperation())) {
+                  JoinDirection joinDirection = symbolizeJoinDirection(join->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt()).getValue();
+                  switch (joinDirection) {
+                     case JoinDirection::left:
+                        if (push_down_right) {
+                           push_down_left = true;
+                        }
+                        break;
+                     case JoinDirection::right:
+                        if (push_down_left) {
+                           push_down_right = true;
+                           rename_right = false;
+                        }
+                        break;
+                  }
+               } else if (!mlir::isa<FullOuterJoinOp>(join.getOperation())) {
+                  if (push_down_left || push_down_right) {
+                     push_down_left = true;
+                     push_down_right = true;
+                  }
                }
+               handleJoin(join, push_down_left ? pushDependJoinDown(D, left) : left, push_down_right ? pushDependJoinDown(D, right) : right, push_down_left && push_down_right, rename_right, available_D);
+               return mlir::dyn_cast_or_null<Operator>(join.getOperation());
+            } else {
+               handleChildren(D, mlir::dyn_cast_or_null<Operator>(join.getOperation()));
+               return mlir::dyn_cast_or_null<Operator>(join.getOperation());
             }
-            handleJoin(join, push_down_left ? pushDependJoinDown(D, left) : left, push_down_right ? pushDependJoinDown(D, right) : right, push_down_left && push_down_right, rename_right, available_D);
-            return mlir::dyn_cast_or_null<Operator>(join.getOperation());
          })
          .Default([&](Operator others) {
-            handleChildren(D,others);
+            handleChildren(D, others);
             return others;
          });
    }
@@ -155,7 +159,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       terminator->remove();
       terminator->destroy();
    }
-   void handleJoin(Join join, Operator newLeft, Operator newRight, bool join_dependent, bool rename_right, attribute_set& dependent_attributes) {
+   void handleJoin(BinaryOperator join, Operator newLeft, Operator newRight, bool join_dependent, bool rename_right, attribute_set& dependent_attributes) {
       using namespace mlir;
       auto rel_type = relalg::RelationType::get(&getContext());
       auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
@@ -210,10 +214,11 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
 
       auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
 
-      getFunction()->walk([&](Join join) {
-         if (!join.isDependentJoin()) return;
-         auto left = mlir::dyn_cast_or_null<Operator>(join.leftChild());
-         auto right = mlir::dyn_cast_or_null<Operator>(join.rightChild());
+      getFunction()->walk([&](BinaryOperator binaryOperator) {
+         if (!mlir::relalg::detail::isJoin(binaryOperator.getOperation())) return;
+         if (!mlir::relalg::detail::isDependentJoin(binaryOperator.getOperation())) return;
+         auto left = mlir::dyn_cast_or_null<Operator>(binaryOperator.leftChild());
+         auto right = mlir::dyn_cast_or_null<Operator>(binaryOperator.rightChild());
          auto available_left = left.getAvailableAttributes();
          auto available_right = right.getAvailableAttributes();
          auto free_left = left.getFreeAttributes();
@@ -238,7 +243,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             dependent_attributes = dependent_right;
          }
 
-         OpBuilder builder(join.getOperation());
+         OpBuilder builder(binaryOperator.getOperation());
          std::vector<Attribute> dependent_refs_as_attr;
          for (auto attr : dependent_attributes) {
             dependent_refs_as_attr.push_back(attributeManager.createRef(attr));
@@ -258,7 +263,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             newLeft = unnested_child;
             newRight = provider_child;
          }
-         handleJoin(join, newLeft, newRight, true, dependent_on_right, dependent_attributes);
+         handleJoin(binaryOperator, newLeft, newRight, true, dependent_on_right, dependent_attributes);
       });
    }
 };

@@ -86,14 +86,8 @@ return mlir::relalg::detail::getCreatedAttributes(this->getOperation());
 >
 ];
 }
-def Join : OpInterface<"Join"> {
+def BinaryOperator : OpInterface<"BinaryOperator"> {
 let methods = [
-InterfaceMethod<
-        "get all attributes that are used directly by this operator",
-        "bool", "isDependentJoin",(ins ),"", /*defaultImplementation=*/[{
-return mlir::relalg::detail::isDependentJoin(this->getOperation());
-}]
->,
 InterfaceMethod<
         "get all attributes that are used directly by this operator",
         "mlir::Operation*", "leftChild",(ins ),"", /*defaultImplementation=*/[{

@@ -314,6 +314,9 @@ class CodeGen:
     def startJoin(self, outer,type,left,right):
         tuple = self.newParam("tuple")
         joinop= "outerjoin" if outer else "join"
+        if type =="full":
+        	type=""
+        	joinop="fullouterjoin"
         return self.startRegionOp("relation",
                                   ["relalg."+joinop," ",type," ", ValueRef(left),", ",ValueRef(right), "(", tuple, ": !relalg.tuple) "]), tuple
 

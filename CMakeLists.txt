@@ -64,7 +64,3 @@ add_executable(mlir-db-opt mlir-opt.cpp)
 llvm_update_compile_flags(mlir-db-opt)
 target_link_libraries(mlir-db-opt PUBLIC ${LIBS})
 add_subdirectory(tools)
-
-add_executable(test test.cpp)
-llvm_update_compile_flags(test)
-target_link_libraries(test PUBLIC ${LIBS})

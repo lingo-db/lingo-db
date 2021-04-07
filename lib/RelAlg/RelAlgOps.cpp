@@ -19,7 +19,7 @@ mlir::relalg::RelationalAttributeManager& getRelationalAttributeManager(::mlir::
    ::llvm::StringRef attrStr;
    ::mlir::NamedAttrList attrStorage;
    auto loc = parser.getCurrentLocation();
-   if (parser.parseOptionalKeyword(&attrStr, {"left", "right", "full"})) {
+   if (parser.parseOptionalKeyword(&attrStr, {"left", "right"})) {
       ::mlir::StringAttr attrVal;
       ::mlir::OptionalParseResult parseResult =
          parser.parseOptionalAttribute(attrVal,
@@ -30,7 +30,7 @@ mlir::relalg::RelationalAttributeManager& getRelationalAttributeManager(::mlir::
             return ::mlir::failure();
          attrStr = attrVal.getValue();
       } else {
-         return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'type' [left, right, full]");
+         return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'type' [left, right]");
       }
    }
    if (!attrStr.empty()) {
@@ -681,6 +681,18 @@ static ParseResult parseInnerJoinOp(OpAsmParser& parser, OperationState& result)
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::InnerJoinOp& op) {
+   p << op.getOperationName() << " " << op.left() << ", " << op.right();
+   printCustomRegion(p, op.getRegion());
+}
+///////////////////////////////////////////////////////////////////////////////////
+// FullOuterJoinOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseFullOuterJoinOp(OpAsmParser& parser, OperationState& result) {
+   parseRelationalInputs(parser, result, 2);
+   parseCustomRegion(parser, result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::FullOuterJoinOp& op) {
    p << op.getOperationName() << " " << op.left() << ", " << op.right();
    printCustomRegion(p, op.getRegion());
 }

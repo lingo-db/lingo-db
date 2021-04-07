@@ -9,6 +9,10 @@ add_mlir_dialect_library(MLIRRelAlg
         Unnesting.cpp
         Pushdown.cpp
         ImplicitToExplicitJoins.cpp
+        OptimizeJoinOrder.cpp
+        queryopt/utils.cpp
+        queryopt/QueryGraphBuilder.cpp
+        queryopt/DPhyp.cpp
         ADDITIONAL_HEADER_DIRS
         ../../include/mlir/Dialect/RelAlg
 

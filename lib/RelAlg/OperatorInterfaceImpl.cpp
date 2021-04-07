@@ -1,6 +1,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/IR/OpImplementation.h"
+#include <llvm/ADT/TypeSwitch.h>
 #include <functional>
 using namespace mlir::relalg;
 using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
@@ -58,15 +59,31 @@ attribute_set mlir::relalg::detail::getFreeAttributes(mlir::Operation* op) {
 }
 
 bool mlir::relalg::detail::isDependentJoin(mlir::Operation* op) {
-   if (auto join = mlir::dyn_cast_or_null<Join>(op)) {
-      auto left = mlir::dyn_cast_or_null<Operator>(join.leftChild());
-      auto right = mlir::dyn_cast_or_null<Operator>(join.rightChild());
-      auto available_left = left.getAvailableAttributes();
-      auto available_right = right.getAvailableAttributes();
-      return llvm::any_of(left.getFreeAttributes(), [&](auto ra) { return available_right.contains(ra); }) ||
-         llvm::any_of(right.getFreeAttributes(), [&](auto ra) { return available_left.contains(ra); });
+   if (auto join = mlir::dyn_cast_or_null<BinaryOperator>(op)) {
+      if (isJoin(op)) {
+         auto left = mlir::dyn_cast_or_null<Operator>(join.leftChild());
+         auto right = mlir::dyn_cast_or_null<Operator>(join.rightChild());
+         auto available_left = left.getAvailableAttributes();
+         auto available_right = right.getAvailableAttributes();
+         return llvm::any_of(left.getFreeAttributes(), [&](auto ra) { return available_right.contains(ra); }) ||
+            llvm::any_of(right.getFreeAttributes(), [&](auto ra) { return available_left.contains(ra); });
+      }
    }
    return false;
+}
+mlir::relalg::detail::BinaryOperatorType mlir::relalg::detail::getBinaryOperatorType(Operation* op) {
+   return ::llvm::TypeSwitch<mlir::Operation*, BinaryOperatorType>(op)
+      .Case<mlir::relalg::CrossProductOp>([&](mlir::Operation* op) { return CP; })
+      .Case<mlir::relalg::InnerJoinOp>([&](mlir::Operation* op) { return InnerJoin; })
+      .Case<mlir::relalg::SemiJoinOp>([&](mlir::Operation* op) { return SemiJoin; })
+      .Case<mlir::relalg::AntiSemiJoinOp>([&](mlir::Operation* op) { return AntiSemiJoin; })
+      .Case<mlir::relalg::SingleJoinOp>([&](mlir::Operation* op) { return OuterJoin; })
+      .Case<mlir::relalg::MarkJoinOp>([&](mlir::Operation* op) { return MarkJoin; })
+      .Case<mlir::relalg::OuterJoinOp>([&](mlir::relalg::OuterJoinOp op) { return OuterJoin; })
+      .Case<mlir::relalg::FullOuterJoinOp>([&](mlir::relalg::FullOuterJoinOp op) { return FullOuterJoin; })
+      .Default([&](auto x) {
+         return None;
+      });
 }
 
 llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> AggregationOp::getUsedAttributes() {
@@ -164,4 +181,49 @@ llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> mlir::relalg::Projectio
    }
    return available;
 }
+
+// @formatter:off
+// clang-format off
+const bool mlir::relalg::detail::assoc[mlir::relalg::detail::BinaryOperatorType::LAST][mlir::relalg::detail::BinaryOperatorType::LAST] = {
+   /* None =  */{},
+   /* CP           =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true,},
+   /* InnerJoin    =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true,},
+   /* SemiJoin     =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+   /* AntiSemiJoin =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+   /* OuterJoin    =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+   /* FullOuterJoin=  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+   /* MarkJoin     =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+
+};
+const bool mlir::relalg::detail::l_asscom[mlir::relalg::detail::BinaryOperatorType::LAST][mlir::relalg::detail::BinaryOperatorType::LAST] = {
+   /* None =  */{},
+   /* CP           =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
+   /* InnerJoin    =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
+   /* SemiJoin     =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
+   /* AntiSemiJoin =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
+   /* OuterJoin    =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
+   /* FullOuterJoin=  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+   /* MarkJoin     =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
+};
+const bool mlir::relalg::detail::r_asscom[mlir::relalg::detail::BinaryOperatorType::LAST][mlir::relalg::detail::BinaryOperatorType::LAST] = {
+   /* None =  */{},
+   /* CP           =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+   /* InnerJoin    =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+   /* SemiJoin     =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+   /* AntiSemiJoin =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+   /* OuterJoin    =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+   /* FullOuterJoin=  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+   /* MarkJoin     =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
+};
+// @formatter:on
+// clang-format on
+bool mlir::relalg::detail::BinaryOperatorIs(const bool (&table)[BinaryOperatorType::LAST][BinaryOperatorType::LAST], Operation* a, Operation* b) {
+   return table[getBinaryOperatorType(a)][getBinaryOperatorType(b)];
+}
+bool mlir::relalg::detail::isJoin(Operation* op){
+   auto opType=getBinaryOperatorType(op);
+   return InnerJoin<=opType&&opType<=MarkJoin;
+}
+
+
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"

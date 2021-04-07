@@ -309,6 +309,15 @@ class ToSQL {
                         output << " on true";
                      }
                   })
+                  .Case<mlir::relalg::FullOuterJoinOp>([&](mlir::relalg::FullOuterJoinOp op) {
+                    output << " select * from " << operator_name(op.left().getDefiningOp()) << " full outer join " << operator_name(op.right().getDefiningOp()) << " ";
+                    auto returnop = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(op.predicate().front().getTerminator());
+                    if (returnop->getNumOperands() > 0) {
+                       output << " on " << resolve_val(returnop.getOperand(0));
+                    } else {
+                       output << " on true";
+                    }
+                  })
                   .Case<mlir::relalg::SemiJoinOp>([&](mlir::relalg::SemiJoinOp op) {
                      output << " select * from " << operator_name(op.left().getDefiningOp()) << " where exists(select * from " << operator_name(op.right().getDefiningOp()) << " ";
                      auto returnop = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(op.predicate().front().getTerminator());
