@@ -1,29 +1,15 @@
 #ifndef DB_DIALECTS_UTILS_H
 #define DB_DIALECTS_UTILS_H
+#include <llvm/ADT/SmallBitVector.h>
+#include <llvm/ADT/EquivalenceClasses.h>
+#include <llvm/ADT/TypeSwitch.h>
+#include <cstddef>
+#include <iterator>
+
 namespace mlir::relalg {
 class node_set {
    public:
-   sul::dynamic_bitset<> storage;
-   class bit_iterator
-      : public std::iterator<std::forward_iterator_tag, size_t> {
-      typedef bit_iterator iterator;
-      const sul::dynamic_bitset<>& bitset;
-      size_t pos;
-
-      public:
-      bit_iterator(const sul::dynamic_bitset<>& bitset, size_t pos) : bitset(bitset), pos(pos) {}
-      ~bit_iterator() = default;
-
-      iterator operator++(int) /* postfix */ const { return bit_iterator(bitset, bitset.find_next(pos)); }
-      iterator& operator++() /* prefix */ {
-         pos = bitset.find_next(pos);
-         return *this;
-      }
-      reference operator*() { return pos; }
-      pointer operator->() { return &pos; }
-      bool operator==(const iterator& rhs) const { return pos == rhs.pos; }
-      bool operator!=(const iterator& rhs) const { return pos != rhs.pos; }
-   };
+   llvm::SmallBitVector storage;
 
    public:
    node_set() = default;
@@ -33,7 +19,9 @@ class node_set {
       size_t pos = res.find_first();
       size_t flip_len = res.storage.size() - pos - 1;
       if (flip_len) {
-         res.storage.flip(pos + 1, flip_len);
+         llvm::SmallBitVector flip_vector(res.storage.size());
+         flip_vector.set(pos + 1, res.storage.size());
+         res.storage ^= flip_vector;
       }
       return res;
    }
@@ -44,7 +32,7 @@ class node_set {
    }
    static node_set fill_until(size_t num_nodes, size_t n) {
       auto res = node_set(num_nodes);
-      res.storage.set(0, n + 1, true);
+      res.storage.set(0, n + 1);
       return res;
    }
 
@@ -54,26 +42,29 @@ class node_set {
       return res;
    }
    [[nodiscard]] bool is_subset_of(const node_set& S) const {
-      return storage.is_subset_of(S.storage);
+      return (storage & S.storage) == storage;
    }
    [[nodiscard]] bool intersects(const node_set& rhs) const {
-      return storage.intersects(rhs.storage);
+      return (storage & rhs.storage).any();
    }
    void set(size_t pos) {
       storage.set(pos);
    }
    [[nodiscard]] auto begin() const {
-      return bit_iterator(storage, storage.find_first());
+      return storage.set_bits_begin();
    }
    [[nodiscard]] auto end() const {
-      return bit_iterator(storage, sul::dynamic_bitset<>::npos);
+      return storage.set_bits_end();
    }
    [[nodiscard]] size_t find_first() const {
       return storage.find_first();
    }
    bool operator==(const node_set& rhs) const { return storage == rhs.storage; }
    bool operator!=(const node_set& rhs) const { return storage != rhs.storage; }
-   bool operator<(const node_set& rhs) const { return storage < rhs.storage; }
+   bool operator<(const node_set& rhs) const {
+      int diff = (storage ^ rhs.storage).find_last();
+      return diff >= 0 ? rhs.storage.test(diff) : false;
+   }
 
    [[nodiscard]] bool any() const {
       return storage.any();
@@ -125,11 +116,7 @@ class node_set {
       fn(S);
    }
    [[nodiscard]] size_t hash() const {
-      size_t res = 0;
-      for (size_t i = 0; i < storage.num_blocks(); i++) {
-         res ^= storage.data()[i];
-      }
-      return res;
+      return llvm::DenseMapInfo<llvm::SmallBitVector>::getHashValue(storage);
    }
    [[nodiscard]] size_t size() const {
       return storage.size();

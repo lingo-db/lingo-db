@@ -1,10 +1,8 @@
 #ifndef DB_DIALECTS_QUERYGRAPH_H
 #define DB_DIALECTS_QUERYGRAPH_H
 
-#include "dynamic_bitset.h"
 #include "llvm/Support/Debug.h"
-#include <llvm/ADT/EquivalenceClasses.h>
-#include <llvm/ADT/TypeSwitch.h>
+
 
 #include <functional>
 #include <iostream>
