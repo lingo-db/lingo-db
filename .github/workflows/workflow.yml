@@ -1,0 +1,99 @@
+name: MLIR Test
+
+on: push
+
+jobs:
+  build-llvm:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Get llvm commit id
+      id: llvm-commit
+      run: | 
+        echo "::set-output name=commit::$(git submodule status llvm-project | tr ' ' '-' )"
+    - name: Cache LLVM Build
+      id: llvm-build
+      uses: actions/cache@v2
+      with:
+        path: llvm-build
+        key: ${{ runner.os }}-llvm-build-${{ steps.llvm-commit.outputs.commit }}
+    - uses: seanmiddleditch/gha-setup-ninja@master
+    - name: Build LLVM
+      if: steps.llvm-build.outputs.cache-hit != 'true'
+      run: |
+        git submodule init
+        git submodule update
+        mkdir -p llvm-build
+        cmake -G Ninja llvm-project/llvm  -B llvm-build \
+        -DLLVM_ENABLE_PROJECTS=mlir \
+        -DLLVM_BUILD_EXAMPLES=OFF \
+        -DLLVM_TARGETS_TO_BUILD="" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DLLVM_ENABLE_ASSERTIONS=ON
+        cmake --build llvm-build
+  build:
+    needs: build-llvm
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: seanmiddleditch/gha-setup-ninja@master
+      - name: Get llvm commit id
+        id: llvm-commit
+        run: | 
+          echo "::set-output name=commit::$(git submodule status llvm-project | tr ' ' '-' )"
+      - name: Fetch LLVM Build
+        id: llvm-build
+        uses: actions/cache@v2
+        with:
+          path: llvm-build
+          key: ${{ runner.os }}-llvm-build-${{ steps.llvm-commit.outputs.commit }}
+      - name: Fetch Cached LLVM sources
+        id: llvm-sources
+        uses: actions/cache@v2
+        with:
+          path: llvm-project
+          key: ${{ runner.os }}-llvm-sources-${{ steps.llvm-commit.outputs.commit }}
+      - name: Clone LLVM sources
+        if: steps.llvm-sources.outputs.cache-hit != 'true'
+        run: |
+          git submodule init
+          git submodule update
+      - name: Cache Build
+        id: build
+        uses: actions/cache@v2
+        with:
+          path: build
+          key: ${{ runner.os }}-build-${{ github.sha }}
+      - name: Build
+        run: |
+          mkdir -p build 
+          cmake -G Ninja . -B build  -DMLIR_DIR=llvm-build/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/home/runner/work/db-dialects/db-dialects/llvm-build/bin/llvm-lit
+          cmake --build build
+  test:
+    needs: build
+    runs-on: ubuntu-latest 
+    steps:
+      - uses: actions/checkout@v2
+      - uses: seanmiddleditch/gha-setup-ninja@master
+      - name: Fetch LLVM Build
+        id: llvm-build
+        uses: actions/cache@v2
+        with:
+          path: llvm-build
+          key: ${{ runner.os }}-llvm-build-${{ steps.llvm-commit.outputs.commit }}
+      - name: Fetch Cached LLVM sources
+        id: llvm-sources
+        uses: actions/cache@v2
+        with:
+          path: llvm-project
+          key: ${{ runner.os }}-llvm-sources-${{ steps.llvm-commit.outputs.commit }}
+      - name: Fetch Cached Build
+        uses: actions/cache@v2
+        with:
+          path: build
+          key: ${{ runner.os }}-build-${{ github.sha }}
+      - name: Run Test
+        run: |
+          /home/runner/work/db-dialects/db-dialects/llvm-build/bin/llvm-lit build/test
+      
