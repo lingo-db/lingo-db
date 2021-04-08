@@ -1,4 +1,4 @@
-name: MLIR Test
+name: build+test
 
 on: push
 
@@ -70,7 +70,7 @@ jobs:
           mkdir -p build 
           cmake -G Ninja . -B build  -DMLIR_DIR=llvm-build/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/home/runner/work/db-dialects/db-dialects/llvm-build/bin/llvm-lit
           cmake --build build
-  test:
+  filecheck-tests:
     needs: build
     runs-on: ubuntu-latest 
     steps:
@@ -96,4 +96,32 @@ jobs:
       - name: Run Test
         run: |
           /home/runner/work/db-dialects/db-dialects/llvm-build/bin/llvm-lit build/test
+  sql-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install Python packages
+        run: |
+          pip3 install requests moz_sql_parser
+      - name: Fetch LLVM Build
+        id: llvm-build
+        uses: actions/cache@v2
+        with:
+          path: llvm-build
+          key: ${{ runner.os }}-llvm-build-${{ steps.llvm-commit.outputs.commit }}
+      - name: Fetch Cached LLVM sources
+        id: llvm-sources
+        uses: actions/cache@v2
+        with:
+          path: llvm-project
+          key: ${{ runner.os }}-llvm-sources-${{ steps.llvm-commit.outputs.commit }}
+      - name: Fetch Cached Build
+        uses: actions/cache@v2
+        with:
+          path: build
+          key: ${{ runner.os }}-build-${{ github.sha }}
+      - name: Run Test
+        run: |
+          python3 tools/sql-roundtrip-tests/test.py build
       
