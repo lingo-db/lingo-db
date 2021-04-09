@@ -203,6 +203,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Func
          for (auto op : before) {
             if (!afterHt.contains(op.getOperation())) {
                op->dropAllUses();
+               op->dropAllReferences();
                op->remove();
                //op->destroy();
             }

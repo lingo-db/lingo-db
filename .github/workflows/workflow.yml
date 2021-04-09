@@ -26,7 +26,7 @@ jobs:
           git submodule update
           mkdir -p llvm-build
           cmake -G Ninja llvm-project/llvm  -B llvm-build \
-          -DLLVM_ENABLE_PROJECTS="mlir;clang-tools-extra" \
+          -DLLVM_ENABLE_PROJECTS="mlir" \
           -DLLVM_BUILD_EXAMPLES=OFF \
           -DLLVM_TARGETS_TO_BUILD="" \
           -DCMAKE_BUILD_TYPE=Release \
@@ -129,6 +129,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Install clang-tidy
+        run: |
+          sudo apt-get install -y clang-tidy
       - name: Fetch Cached LLVM sources
         id: llvm-sources
         uses: actions/cache@v2
@@ -148,5 +151,5 @@ jobs:
           key: ${{ runner.os }}-build-${{ github.sha }}
       - name: Run Test
         run: |
-          python3 tools/scripts/run-clang-tidy.py -p build/build-tidy/ -quiet -clang-tidy-binary=llvm-build/bin/clang-tidy
+          python3 tools/scripts/run-clang-tidy.py -p build/build-tidy/ -quiet
       
