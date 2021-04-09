@@ -49,9 +49,9 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
          builder.setInsertionPointToStart(&newsel.predicate().front());
          auto returnop=builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
          builder.setInsertionPointToStart(&newsel.predicate().front());
-         for(auto op:extracted){
-            auto clone_op=builder.clone(*op,mapping);
-            clone_op->moveBefore(returnop);
+         for(auto *op:extracted){
+            auto *cloneOp=builder.clone(*op,mapping);
+            cloneOp->moveBefore(returnop);
          }
          builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(),mapping.lookup(v));
          returnop->remove();
@@ -75,9 +75,9 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
         builder.setInsertionPointToStart(&newmap.predicate().front());
         auto returnop=builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
         builder.setInsertionPointToStart(&newmap.predicate().front());
-        for(auto op:extracted){
-           auto clone_op=builder.clone(*op,mapping);
-           clone_op->moveBefore(returnop);
+        for(auto *op:extracted){
+           auto *cloneOp=builder.clone(*op,mapping);
+           cloneOp->moveBefore(returnop);
         }
       });
 
@@ -85,7 +85,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
    }
    void runOnFunction() override {
       getFunction().walk([&](mlir::relalg::SelectionOp op) {
-         auto terminator=op.getRegion().front().getTerminator();
+         auto *terminator=op.getRegion().front().getTerminator();
          auto retval=terminator->getOperand(0);
          mlir::Value val=op.rel();
          decomposeSelection(retval, val);

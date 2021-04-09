@@ -1,5 +1,4 @@
 
-#include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 
 #include "mlir/Dialect/RelAlg/Passes.h"
@@ -7,10 +6,6 @@
 
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <llvm/ADT/TypeSwitch.h>
-#include <iostream>
-#include <list>
-#include <queue>
-#include <unordered_set>
 #include <mlir/Dialect/RelAlg/IR/RelAlgDialect.h>
 
 namespace {
@@ -19,7 +14,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
    using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
 
    bool intersects(const attribute_set& a, const attribute_set& b) {
-      for (auto x : a) {
+      for (auto* x : a) {
          if (b.contains(x)) {
             return true;
          }
@@ -28,7 +23,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
    }
 
    bool subset(const attribute_set& a, const attribute_set& b) {
-      for (auto x : a) {
+      for (auto* x : a) {
          if (!b.contains(x)) {
             return false;
          }
@@ -38,23 +33,23 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
 
    void print(const attribute_set& a) {
       auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
-      for (auto x : a) {
+      for (auto* x : a) {
          auto [scope, name] = attributeManager.getName(x);
          llvm::dbgs() << x << "(" << scope << "," << name << "),";
       }
    }
 
    Operator pushdown(Operator topush, Operator curr) {
-      attribute_set used_attributes = topush.getUsedAttributes();
+      attribute_set usedAttributes = topush.getUsedAttributes();
       auto res = ::llvm::TypeSwitch<mlir::Operation*, Operator>(curr.getOperation())
                     .Case<mlir::relalg::CrossProductOp>([&](Operator cp) {
                        auto children = cp.getChildren();
-                       if (subset(used_attributes, children[0].getAvailableAttributes())) {
+                       if (subset(usedAttributes, children[0].getAvailableAttributes())) {
                           topush->moveBefore(cp.getOperation());
                           children[0] = pushdown(topush, children[0]);
                           cp.setChildren(children);
                           return cp;
-                       } else if (subset(used_attributes, children[1].getAvailableAttributes())) {
+                       } else if (subset(usedAttributes, children[1].getAvailableAttributes())) {
                           topush->moveBefore(cp.getOperation());
                           children[1] = pushdown(topush, children[1]);
                           cp.setChildren(children);
@@ -78,7 +73,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                                                                             .getValue();
                              switch (joinDirection) {
                                 case mlir::relalg::JoinDirection::left:
-                                   if (subset(used_attributes, left.getAvailableAttributes())) {
+                                   if (subset(usedAttributes, left.getAvailableAttributes())) {
                                       topush->moveBefore(opjoin.getOperation());
                                       left = pushdown(topush, left);
                                       opjoin.setChildren({left, right});
@@ -86,7 +81,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                                    }
                                    [[fallthrough]];
                                 case mlir::relalg::JoinDirection::right:
-                                   if (subset(used_attributes, right.getAvailableAttributes())) {
+                                   if (subset(usedAttributes, right.getAvailableAttributes())) {
                                       topush->moveBefore(opjoin.getOperation());
                                       right = pushdown(topush, right);
                                       opjoin.setChildren({left, right});
@@ -99,12 +94,12 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                              }
                           } else {
                              auto children = opjoin.getChildren();
-                             if (subset(used_attributes, children[0].getAvailableAttributes())) {
+                             if (subset(usedAttributes, children[0].getAvailableAttributes())) {
                                 topush->moveBefore(opjoin.getOperation());
                                 children[0] = pushdown(topush, children[0]);
                                 opjoin.setChildren(children);
                                 return opjoin;
-                             } else if (subset(used_attributes, children[1].getAvailableAttributes())) {
+                             } else if (subset(usedAttributes, children[1].getAvailableAttributes())) {
                                 topush->moveBefore(opjoin.getOperation());
                                 children[1] = pushdown(topush, children[1]);
                                 opjoin.setChildren(children);
@@ -135,13 +130,13 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
       using namespace mlir;
       getFunction()->walk([&](mlir::relalg::SelectionOp sel) {
          SmallPtrSet<mlir::Operation*, 4> users;
-         for (auto u : sel->getUsers()) {
+         for (auto* u : sel->getUsers()) {
             users.insert(u);
          }
-         Operator pushed_down = pushdown(sel, sel.getChildren()[0]);
-         if (sel.getOperation() != pushed_down.getOperation()) {
+         Operator pushedDown = pushdown(sel, sel.getChildren()[0]);
+         if (sel.getOperation() != pushedDown.getOperation()) {
             //sel.replaceAllUsesWith(pushed_down.getOperation());
-            sel.getResult().replaceUsesWithIf(pushed_down->getResult(0), [&](mlir::OpOperand& operand) {
+            sel.getResult().replaceUsesWithIf(pushedDown->getResult(0), [&](mlir::OpOperand& operand) {
                return users.contains(operand.getOwner());
             });
          }

@@ -39,4 +39,4 @@ RelationalAttributeRefAttr RelationalAttributeManager::createRef(RelationalAttri
 std::pair<std::string, std::string> RelationalAttributeManager::getName(RelationalAttribute* attr) {
    return attributes_rev[attr];
 }
-}
+} // namespace mlir::relalg

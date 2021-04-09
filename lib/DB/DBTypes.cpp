@@ -86,9 +86,9 @@ mlir::db::DBType mlir::db::DBType::asNullable() const {
 }
 
 template <class X>
-struct parseSingleImpl {};
+struct ParseSingleImpl {};
 template <>
-struct parseSingleImpl<unsigned> {
+struct ParseSingleImpl<unsigned> {
    static unsigned apply(bool& error, ::mlir::DialectAsmParser& parser) {
       unsigned res;
       if (parser.parseInteger(res)) {
@@ -105,7 +105,7 @@ X parseSingle(bool& first, bool& error, ::mlir::DialectAsmParser& parser) {
       error = true;
       return X();
    }
-   return parseSingleImpl<X>::apply(error, parser);
+   return ParseSingleImpl<X>::apply(error, parser);
 }
 template <class T, class... ParamT>
 mlir::Type parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
@@ -290,8 +290,8 @@ struct MaterializedCollectionTypeStorage : public mlir::TypeStorage {
    std::vector<mlir::Type> types;
 };
 } // namespace detail
-}
-}
+} // namespace db
+} // namespace mlir
 
 mlir::TypeRange mlir::db::MaterializedCollectionType::getTypes() const {
    return getImpl()->getTypes();
@@ -327,4 +327,4 @@ void DBDialect::printType(::mlir::Type type,
       llvm::errs() << "could not print";
    }
 }
-}
+} // namespace mlir::db

@@ -28,10 +28,10 @@ enum BinaryOperatorType {
 };
 
 extern const bool assoc[BinaryOperatorType::LAST][BinaryOperatorType::LAST];
-extern const bool l_asscom[BinaryOperatorType::LAST][BinaryOperatorType::LAST];
-extern const bool r_asscom[BinaryOperatorType::LAST][BinaryOperatorType::LAST];
+extern const bool lAsscom[BinaryOperatorType::LAST][BinaryOperatorType::LAST];
+extern const bool rAsscom[BinaryOperatorType::LAST][BinaryOperatorType::LAST];
 BinaryOperatorType getBinaryOperatorType(Operation* op);
-bool BinaryOperatorIs(const bool (&table)[BinaryOperatorType::LAST][BinaryOperatorType::LAST], Operation* a, Operation* b);
+bool binaryOperatorIs(const bool (&table)[BinaryOperatorType::LAST][BinaryOperatorType::LAST], Operation* a, Operation* b);
 bool isJoin(Operation* op);
 }
 class Operator;

@@ -1,10 +1,4 @@
-#include "llvm/Support/CommandLine.h"
-#include "llvm/Support/InitLLVM.h"
-#include "llvm/Support/SourceMgr.h"
-#include "llvm/Support/ToolOutputFile.h"
 #include "mlir/IR/Dialect.h"
-#include "mlir/IR/MLIRContext.h"
-#include "mlir/InitAllDialects.h"
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
@@ -22,21 +16,20 @@ int main(int argc, char** argv) {
       return mlir::relalg::createExtractNestedOperatorsPass();
    });
    ::mlir::registerPass("relalg-decompose-lambdas", "extract nested operators", []() -> std::unique_ptr<::mlir::Pass> {
-     return mlir::relalg::createDecomposeLambdasPass();
+      return mlir::relalg::createDecomposeLambdasPass();
    });
    ::mlir::registerPass("relalg-implicit-to-explicit-joins", "implicit to explicit joins", []() -> std::unique_ptr<::mlir::Pass> {
-     return mlir::relalg::createImplicitToExplicitJoinsPass();
+      return mlir::relalg::createImplicitToExplicitJoinsPass();
    });
    ::mlir::registerPass("relalg-unnesting", "unnest depending joins", []() -> std::unique_ptr<::mlir::Pass> {
-     return mlir::relalg::createUnnestingPass();
+      return mlir::relalg::createUnnestingPass();
    });
-    ::mlir::registerPass("relalg-pushdown", "pushdown ", []() -> std::unique_ptr<::mlir::Pass> {
-        return mlir::relalg::createPushdownPass();
-    });
-    ::mlir::registerPass("relalg-optimize-join-order", "joinorder", []() -> std::unique_ptr<::mlir::Pass> {
-        return mlir::relalg::createOptimizeJoinOrderPass()
-        ;
-    });
+   ::mlir::registerPass("relalg-pushdown", "pushdown ", []() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::relalg::createPushdownPass();
+   });
+   ::mlir::registerPass("relalg-optimize-join-order", "joinorder", []() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::relalg::createOptimizeJoinOrderPass();
+   });
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();

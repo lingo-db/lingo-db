@@ -70,8 +70,8 @@ static ParseResult parseImplicitResultSameOperandBaseTypeOp(OpAsmParser& parser,
    while (true) {
       OpAsmParser::OperandType arg;
       mlir::db::DBType argType;
-      auto parse_res = parser.parseOptionalOperand(arg);
-      if (!parse_res.hasValue() || parse_res.getValue().failed()) {
+      auto parseRes = parser.parseOptionalOperand(arg);
+      if (!parseRes.hasValue() || parseRes.getValue().failed()) {
          break;
       }
       if (parser.parseColonType(argType)) {

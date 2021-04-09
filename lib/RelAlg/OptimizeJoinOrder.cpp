@@ -1,26 +1,18 @@
-
-#include "mlir/Dialect/DB/IR/DBOps.h"
+#include "llvm/ADT/TypeSwitch.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
-
 #include "mlir/Dialect/RelAlg/Passes.h"
-#include "mlir/IR/BlockAndValueMapping.h"
-
+#include "mlir/Dialect/RelAlg/queryopt/DPhyp.h"
+#include "mlir/Dialect/RelAlg/queryopt/QueryGraphBuilder.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include <llvm/ADT/TypeSwitch.h>
 #include <iomanip>
 #include <iostream>
 #include <list>
-#include <queue>
 #include <unordered_set>
-#include <mlir/Dialect/RelAlg/IR/RelAlgDialect.h>
-#include <mlir/Dialect/RelAlg/queryopt/DPhyp.h>
-#include <mlir/Dialect/RelAlg/queryopt/QueryGraph.h>
-#include <mlir/Dialect/RelAlg/queryopt/QueryGraphBuilder.h>
 
 namespace {
 
 class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::FunctionPass> {
-   std::unordered_set<mlir::Operation*> already_optimized;
+   std::unordered_set<mlir::Operation*> alreadyOptimized;
 
    bool isUnsupportedOp(mlir::Operation* op) {
       return ::llvm::TypeSwitch<mlir::Operation*, bool>(op)
@@ -111,11 +103,11 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Func
       }
    }
    Operator realizePlan(std::shared_ptr<mlir::relalg::Plan> plan) {
-      Operator tree = realizePlan_(plan);
+      Operator tree = realizePlanRec(plan);
       fix(tree);
       return tree;
    }
-   Operator realizePlan_(std::shared_ptr<mlir::relalg::Plan> plan) {
+   Operator realizePlanRec(std::shared_ptr<mlir::relalg::Plan> plan) {
       bool isLeaf = plan->subplans.empty();
       Operator firstNode{};
       Operator lastNode{};
@@ -176,7 +168,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Func
       return firstNode;
    }
    Operator optimize(Operator op) {
-      if (already_optimized.count(op.getOperation())) {
+      if (alreadyOptimized.count(op.getOperation())) {
          return op;
       }
       if (isUnsupportedOp(op)) {
@@ -185,13 +177,13 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Func
             children[i] = optimize(children[i]);
          }
          op.setChildren(children);
-         already_optimized.insert(op.getOperation());
+         alreadyOptimized.insert(op.getOperation());
          return op;
       } else {
-         llvm::SmallPtrSet<mlir::Operation*, 8> prev_users{op->user_begin(), op->user_end()};
+         llvm::SmallPtrSet<mlir::Operation*, 8> prevUsers{op->user_begin(), op->user_end()};
 
          llvm::SmallVector<Operator, 4> before = op.getAllSubOperators();
-         mlir::relalg::QueryGraphBuilder queryGraphBuilder(op, already_optimized);
+         mlir::relalg::QueryGraphBuilder queryGraphBuilder(op, alreadyOptimized);
          queryGraphBuilder.generate();
          mlir::relalg::DPHyp solver(queryGraphBuilder.getQueryGraph());
          auto solution = solver.solve();
@@ -199,24 +191,24 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Func
          //printPlan(solution);
          Operator realized = realizePlan(solution);
          llvm::SmallVector<Operator, 4> after = realized.getAllSubOperators();
-         llvm::SmallPtrSet<mlir::Operation*, 8> after_ht;
+         llvm::SmallPtrSet<mlir::Operation*, 8> afterHt;
          for (auto op : after) {
-            after_ht.insert(op.getOperation());
+            afterHt.insert(op.getOperation());
          }
          if (realized != op) {
-            op->getResult(0).replaceUsesWithIf(realized->getResult(0), [&](mlir::OpOperand& operand) {
-               return prev_users.contains(operand.getOwner());
+            op->getResult(0).replaceUsesWithIf(realized->getResult(0), [prevUsers](mlir::OpOperand& operand) {
+               return prevUsers.contains(operand.getOwner());
             });
          }
          for (auto op : before) {
-            if (!after_ht.contains(op.getOperation())) {
+            if (!afterHt.contains(op.getOperation())) {
                op->dropAllUses();
                op->remove();
                //op->destroy();
             }
          }
 
-         already_optimized.insert(realized);
+         alreadyOptimized.insert(realized);
          return realized;
       }
    }

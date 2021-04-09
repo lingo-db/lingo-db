@@ -23,7 +23,7 @@ static operator_list getChildOperators(mlir::Operation* parent) {
    return children;
 }
 static void except(attribute_set& set, attribute_set& except) {
-   for (auto x : except) {
+   for (auto *x : except) {
       set.erase(x);
    }
 }
@@ -45,17 +45,17 @@ attribute_set mlir::relalg::detail::getUsedAttributes(mlir::Operation* op) {
 attribute_set mlir::relalg::detail::getAvailableAttributes(mlir::Operation* op) {
    Operator asOperator = mlir::dyn_cast_or_null<Operator>(op);
    auto collected = collectAttributes(getChildOperators(op), [](Operator op) { return op.getAvailableAttributes(); });
-   auto self_created = asOperator.getCreatedAttributes();
-   collected.insert(self_created.begin(), self_created.end());
+   auto selfCreated = asOperator.getCreatedAttributes();
+   collected.insert(selfCreated.begin(), selfCreated.end());
    return collected;
 }
 attribute_set mlir::relalg::detail::getFreeAttributes(mlir::Operation* op) {
    auto available = getAvailableAttributes(op);
-   auto collected_free = collectAttributes(getChildOperators(op), [](Operator op) { return op.getFreeAttributes(); });
+   auto collectedFree = collectAttributes(getChildOperators(op), [](Operator op) { return op.getFreeAttributes(); });
    auto used = getUsedAttributes(op);
-   collected_free.insert(used.begin(), used.end());
-   except(collected_free, available);
-   return collected_free;
+   collectedFree.insert(used.begin(), used.end());
+   except(collectedFree, available);
+   return collectedFree;
 }
 
 bool mlir::relalg::detail::isDependentJoin(mlir::Operation* op) {
@@ -63,10 +63,10 @@ bool mlir::relalg::detail::isDependentJoin(mlir::Operation* op) {
       if (isJoin(op)) {
          auto left = mlir::dyn_cast_or_null<Operator>(join.leftChild());
          auto right = mlir::dyn_cast_or_null<Operator>(join.rightChild());
-         auto available_left = left.getAvailableAttributes();
-         auto available_right = right.getAvailableAttributes();
-         return llvm::any_of(left.getFreeAttributes(), [&](auto ra) { return available_right.contains(ra); }) ||
-            llvm::any_of(right.getFreeAttributes(), [&](auto ra) { return available_left.contains(ra); });
+         auto availableLeft = left.getAvailableAttributes();
+         auto availableRight = right.getAvailableAttributes();
+         return llvm::any_of(left.getFreeAttributes(), [availableRight](auto ra) { return availableRight.contains(ra); }) ||
+            llvm::any_of(right.getFreeAttributes(), [availableLeft](auto ra) { return availableLeft.contains(ra); });
       }
    }
    return false;
@@ -126,8 +126,8 @@ llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> RenamingOp::getCreatedA
    attribute_set created;
 
    for (Attribute attr : attributes()) {
-      auto relation_def_attr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
-      created.insert(&relation_def_attr.getRelationalAttribute());
+      auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
+      created.insert(&relationDefAttr.getRelationalAttribute());
    }
    return created;
 }
@@ -140,30 +140,30 @@ llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> RenamingOp::getUsedAttr
    attribute_set used;
 
    for (Attribute attr : attributes()) {
-      auto relation_def_attr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
-      auto from_existing = relation_def_attr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
-      for (Attribute existing : from_existing) {
-         auto relation_ref_attr = existing.dyn_cast_or_null<RelationalAttributeRefAttr>();
-         used.insert(&relation_ref_attr.getRelationalAttribute());
+      auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
+      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      for (Attribute existing : fromExisting) {
+         auto relationRefAttr = existing.dyn_cast_or_null<RelationalAttributeRefAttr>();
+         used.insert(&relationRefAttr.getRelationalAttribute());
       }
    }
    return used;
 }
 llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> RenamingOp::getAvailableAttributes() {
-   auto available_previously = collectAttributes(getChildOperators(*this), [](Operator op) { return op.getAvailableAttributes(); });
-   for (auto used : getUsedAttributes()) {
-      available_previously.erase(used);
+   auto availablePreviously = collectAttributes(getChildOperators(*this), [](Operator op) { return op.getAvailableAttributes(); });
+   for (auto *used : getUsedAttributes()) {
+      availablePreviously.erase(used);
    }
    auto created = getCreatedAttributes();
-   available_previously.insert(created.begin(), created.end());
-   return available_previously;
+   availablePreviously.insert(created.begin(), created.end());
+   return availablePreviously;
 }
 llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> BaseTableOp::getCreatedAttributes() {
    attribute_set creations;
    for (auto mapping : columns()) {
       auto [_, attr] = mapping;
-      auto relation_def_attr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
-      creations.insert(&relation_def_attr.getRelationalAttribute());
+      auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
+      creations.insert(&relationDefAttr.getRelationalAttribute());
    }
    return creations;
 }
@@ -195,7 +195,7 @@ const bool mlir::relalg::detail::assoc[mlir::relalg::detail::BinaryOperatorType:
    /* MarkJoin     =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
 
 };
-const bool mlir::relalg::detail::l_asscom[mlir::relalg::detail::BinaryOperatorType::LAST][mlir::relalg::detail::BinaryOperatorType::LAST] = {
+const bool mlir::relalg::detail::lAsscom[mlir::relalg::detail::BinaryOperatorType::LAST][mlir::relalg::detail::BinaryOperatorType::LAST] = {
    /* None =  */{},
    /* CP           =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
    /* InnerJoin    =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
@@ -205,7 +205,7 @@ const bool mlir::relalg::detail::l_asscom[mlir::relalg::detail::BinaryOperatorTy
    /* FullOuterJoin=  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
    /* MarkJoin     =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
 };
-const bool mlir::relalg::detail::r_asscom[mlir::relalg::detail::BinaryOperatorType::LAST][mlir::relalg::detail::BinaryOperatorType::LAST] = {
+const bool mlir::relalg::detail::rAsscom[mlir::relalg::detail::BinaryOperatorType::LAST][mlir::relalg::detail::BinaryOperatorType::LAST] = {
    /* None =  */{},
    /* CP           =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
    /* InnerJoin    =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
@@ -217,7 +217,7 @@ const bool mlir::relalg::detail::r_asscom[mlir::relalg::detail::BinaryOperatorTy
 };
 // @formatter:on
 // clang-format on
-bool mlir::relalg::detail::BinaryOperatorIs(const bool (&table)[BinaryOperatorType::LAST][BinaryOperatorType::LAST], Operation* a, Operation* b) {
+bool mlir::relalg::detail::binaryOperatorIs(const bool (&table)[BinaryOperatorType::LAST][BinaryOperatorType::LAST], Operation* a, Operation* b) {
    return table[getBinaryOperatorType(a)][getBinaryOperatorType(b)];
 }
 bool mlir::relalg::detail::isJoin(Operation* op){

@@ -12,53 +12,53 @@
 namespace {
 class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, mlir::FunctionPass> {
    public:
-   void sanitizeOp(Operator& inner_operator, TupleLamdaOperator move_before, mlir::BlockAndValueMapping& mapping, mlir::Operation* op) const {
+   void sanitizeOp(Operator& innerOperator, TupleLamdaOperator moveBefore, mlir::BlockAndValueMapping& mapping, mlir::Operation* op) const {
       for (size_t i = 0; i < op->getNumOperands(); i++) {
          mlir::Value v = op->getOperand(i);
          if (mapping.contains(v)) {
             op->setOperand(i, mapping.lookup(v));
             continue;
          }
-         if (inner_operator->getRegion(0).isAncestor(v.getParentRegion())) {
+         if (innerOperator->getRegion(0).isAncestor(v.getParentRegion())) {
             continue;
          }
          mlir::Operation* definingOp = v.getDefiningOp();
-         if (definingOp && move_before->isAncestor(definingOp)) {
+         if (definingOp && moveBefore->isAncestor(definingOp)) {
             mlir::OpBuilder builder(op);
-            auto cloned_op = builder.clone(*definingOp, mapping);
-            cloned_op->moveBefore(op);
+            auto* clonedOp = builder.clone(*definingOp, mapping);
+            clonedOp->moveBefore(op);
             for (size_t i = 0; i < op->getNumResults(); i++) {
-               definingOp->getResult(i).replaceUsesWithIf(cloned_op->getResult(i), [&](mlir::OpOperand& operand) {
-                  return operand.getOwner()->getParentOfType<Operator>() == inner_operator;
+               definingOp->getResult(i).replaceUsesWithIf(clonedOp->getResult(i), [innerOperator](mlir::OpOperand& operand) {
+                  return operand.getOwner()->getParentOfType<Operator>() == innerOperator;
                });
             }
             for (size_t i = 0; i < definingOp->getNumResults(); i++) {
-               mapping.map(definingOp->getResult(i), cloned_op->getResult(i));
+               mapping.map(definingOp->getResult(i), clonedOp->getResult(i));
             }
-            sanitizeOp(inner_operator, move_before,mapping, cloned_op);
+            sanitizeOp(innerOperator, moveBefore, mapping, clonedOp);
          }
       }
    }
    void runOnFunction() override {
-      getFunction().walk([&](Operator inner_operator) {
-         if (inner_operator->getParentOfType<TupleLamdaOperator>()) {
-            TupleLamdaOperator o = inner_operator->getParentOfType<TupleLamdaOperator>();
+      getFunction().walk([&](Operator innerOperator) {
+         if (innerOperator->getParentOfType<TupleLamdaOperator>()) {
+            TupleLamdaOperator o = innerOperator->getParentOfType<TupleLamdaOperator>();
             mlir::BlockAndValueMapping mapping;
-            TupleLamdaOperator to_move_before;
+            TupleLamdaOperator toMoveBefore;
 
             while (o) {
-               if (auto inner_lambda = mlir::dyn_cast_or_null<TupleLamdaOperator>(inner_operator.getOperation())) {
-                  mapping.map(o.getLambdaArgument(), inner_lambda.getLambdaArgument());
+               if (auto innerLambda = mlir::dyn_cast_or_null<TupleLamdaOperator>(innerOperator.getOperation())) {
+                  mapping.map(o.getLambdaArgument(), innerLambda.getLambdaArgument());
                }
-               to_move_before = o;
+               toMoveBefore = o;
                o = o->getParentOfType<TupleLamdaOperator>();
             }
-            inner_operator->walk([&](mlir::Operation* op) {
+            innerOperator->walk([&](mlir::Operation* op) {
                if (!mlir::isa<Operator>(op)) {
-                  sanitizeOp(inner_operator, to_move_before,mapping, op);
+                  sanitizeOp(innerOperator, toMoveBefore, mapping, op);
                }
             });
-            inner_operator->moveBefore(to_move_before);
+            innerOperator->moveBefore(toMoveBefore);
          }
       });
    }

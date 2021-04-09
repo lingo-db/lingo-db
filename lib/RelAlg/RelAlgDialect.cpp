@@ -57,7 +57,7 @@ RelAlgDialect::parseAttribute(::mlir::DialectAsmParser& parser,
 }
 void RelAlgDialect::printAttribute(::mlir::Attribute attr,
                                    ::mlir::DialectAsmPrinter& os) const {
-   if (auto attr_def = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>()) {
-      os << "attr_def(\\\"" << attr_def.getName() << "\\\")";
+   if (auto attrDef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>()) {
+      os << "attr_def(\\\"" << attrDef.getName() << "\\\")";
    }
 }

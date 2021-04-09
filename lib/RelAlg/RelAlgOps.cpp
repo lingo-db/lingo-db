@@ -82,8 +82,6 @@ void printJoinDirection(OpAsmPrinter& p, mlir::relalg::JoinDirection semantic) {
    return success();
 }
 ::mlir::ParseResult parseSortSpec(::mlir::OpAsmParser& parser, mlir::relalg::SortSpec& spec) {
-   ::mlir::IntegerAttr typeAttr;
-
    ::llvm::StringRef attrStr;
    ::mlir::NamedAttrList attrStorage;
    auto loc = parser.getCurrentLocation();
@@ -102,11 +100,11 @@ void printJoinDirection(OpAsmPrinter& p, mlir::relalg::JoinDirection semantic) {
       }
    }
    if (!attrStr.empty()) {
-      auto spec_ = ::mlir::relalg::symbolizeSortSpec(attrStr);
-      if (!spec_)
+      auto parsedSpec = ::mlir::relalg::symbolizeSortSpec(attrStr);
+      if (!parsedSpec)
          return parser.emitError(loc, "invalid ")
             << "type attribute specification: \"" << attrStr << '"';
-      spec = spec_.getValue();
+      spec = parsedSpec.getValue();
    }
    return success();
 }
@@ -153,8 +151,8 @@ static ParseResult parseAttributeRefAttr(OpAsmParser& parser, OperationState& re
    return success();
 }
 static ParseResult parseCustomRegion(OpAsmParser& parser, OperationState& result) {
-   OpAsmParser::OperandType pred_argument;
-   Type pred_arg_type;
+   OpAsmParser::OperandType predArgument;
+   Type predArgType;
    SmallVector<OpAsmParser::OperandType, 4> regionArgs;
    SmallVector<Type, 4> argTypes;
    if (parser.parseLParen()) {
@@ -164,11 +162,11 @@ static ParseResult parseCustomRegion(OpAsmParser& parser, OperationState& result
       if (!parser.parseOptionalRParen()) {
          break;
       }
-      if (parser.parseRegionArgument(pred_argument) || parser.parseColonType(pred_arg_type)) {
+      if (parser.parseRegionArgument(predArgument) || parser.parseColonType(predArgType)) {
          return failure();
       }
-      regionArgs.push_back(pred_argument);
-      argTypes.push_back(pred_arg_type);
+      regionArgs.push_back(predArgument);
+      argTypes.push_back(predArgType);
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRParen()) { return failure(); }
       break;
@@ -193,12 +191,12 @@ static void printCustomRegion(OpAsmPrinter& p, Region& r) {
    p.printRegion(r, false, true);
 }
 static ParseResult parseAttributeRefArr(OpAsmParser& parser, OperationState& result, Attribute& attr) {
-   ArrayAttr parsed_attr;
+   ArrayAttr parsedAttr;
    std::vector<Attribute> attributes;
-   if (parser.parseAttribute(parsed_attr, parser.getBuilder().getType<::mlir::NoneType>())) {
+   if (parser.parseAttribute(parsedAttr, parser.getBuilder().getType<::mlir::NoneType>())) {
       return failure();
    }
-   for (auto a : parsed_attr) {
+   for (auto a : parsedAttr) {
       SymbolRefAttr parsedSymbolRefAttr = a.dyn_cast<SymbolRefAttr>();
       mlir::relalg::RelationalAttributeRefAttr attr = getRelationalAttributeManager(parser).createRef(parsedSymbolRefAttr);
       attributes.push_back(attr);
@@ -208,7 +206,6 @@ static ParseResult parseAttributeRefArr(OpAsmParser& parser, OperationState& res
 }
 
 static void printAttributeRefArr(OpAsmPrinter& p, ArrayAttr arrayAttr) {
-   ArrayAttr parsed_attr;
    p << "[";
    std::vector<Attribute> attributes;
    bool first = true;
@@ -228,15 +225,15 @@ static ParseResult parseSortSpecs(OpAsmParser& parser, OperationState& result) {
    std::vector<mlir::Attribute> mapping;
    while (true) {
       if (!parser.parseOptionalRSquare()) { break; }
-      mlir::relalg::RelationalAttributeRefAttr attr_ref_attr;
-      if (parser.parseLParen() || parseAttributeRefAttr(parser, result, attr_ref_attr) || parser.parseComma()) {
+      mlir::relalg::RelationalAttributeRefAttr attrRefAttr;
+      if (parser.parseLParen() || parseAttributeRefAttr(parser, result, attrRefAttr) || parser.parseComma()) {
          return failure();
       }
       mlir::relalg::SortSpec spec;
       if (parseSortSpec(parser, spec) || parser.parseRParen()) {
          return failure();
       }
-      mapping.push_back(mlir::relalg::SortSpecificationAttr::get(parser.getBuilder().getContext(), attr_ref_attr, spec));
+      mapping.push_back(mlir::relalg::SortSpecificationAttr::get(parser.getBuilder().getContext(), attrRefAttr, spec));
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRSquare()) { return failure(); }
       break;
@@ -245,7 +242,6 @@ static ParseResult parseSortSpecs(OpAsmParser& parser, OperationState& result) {
    return success();
 }
 static void printSortSpecs(OpAsmPrinter& p, ArrayAttr arrayAttr) {
-   ArrayAttr parsed_attr;
    p << "[";
    std::vector<Attribute> attributes;
    bool first = true;
@@ -275,36 +271,36 @@ static ParseResult parseRelationalInputs(OpAsmParser& parser, OperationState& re
 }
 
 static ParseResult parseAttributeDefAttr(OpAsmParser& parser, OperationState& result, mlir::relalg::RelationalAttributeDefAttr& attr) {
-   SymbolRefAttr attr_symbolAttr;
-   if (parser.parseAttribute(attr_symbolAttr, parser.getBuilder().getType<::mlir::NoneType>())) { return failure(); }
-   std::string attr_name(attr_symbolAttr.getLeafReference());
+   SymbolRefAttr attrSymbolAttr;
+   if (parser.parseAttribute(attrSymbolAttr, parser.getBuilder().getType<::mlir::NoneType>())) { return failure(); }
+   std::string attrName(attrSymbolAttr.getLeafReference());
    if (parser.parseLParen()) { return failure(); }
    DictionaryAttr dictAttr;
    if (parser.parseAttribute(dictAttr)) { return failure(); }
-   Attribute from_existing;
+   Attribute fromExisting;
    if (parser.parseRParen()) { return failure(); }
    if (parser.parseOptionalEqual().succeeded()) {
-      if (parseAttributeRefArr(parser, result, from_existing)) {
+      if (parseAttributeRefArr(parser, result, fromExisting)) {
          return failure();
       }
    }
-   attr = getRelationalAttributeManager(parser).createDef(attr_symbolAttr, from_existing);
-   auto prop_type = dictAttr.get("type").dyn_cast<TypeAttr>().getValue().dyn_cast<mlir::db::DBType>();
-   attr.getRelationalAttribute().type = prop_type;
+   attr = getRelationalAttributeManager(parser).createDef(attrSymbolAttr, fromExisting);
+   auto propType = dictAttr.get("type").dyn_cast<TypeAttr>().getValue().dyn_cast<mlir::db::DBType>();
+   attr.getRelationalAttribute().type = propType;
    return success();
 }
 static void printAttributeDefAttr(OpAsmPrinter& p, mlir::relalg::RelationalAttributeDefAttr attr) {
    p.printSymbolName(attr.getName());
-   std::vector<mlir::NamedAttribute> rel_attr_def_props;
+   std::vector<mlir::NamedAttribute> relAttrDefProps;
    MLIRContext* context = attr.getContext();
    const mlir::relalg::RelationalAttribute& relationalAttribute = attr.getRelationalAttribute();
-   rel_attr_def_props.push_back({mlir::Identifier::get("type", context), mlir::TypeAttr::get(relationalAttribute.type)});
-   p << "(" << mlir::DictionaryAttr::get(context, rel_attr_def_props) << ")";
-   Attribute from_existing = attr.getFromExisting();
-   if (from_existing) {
-      ArrayAttr from_existing_arr = from_existing.dyn_cast_or_null<ArrayAttr>();
+   relAttrDefProps.push_back({mlir::Identifier::get("type", context), mlir::TypeAttr::get(relationalAttribute.type)});
+   p << "(" << mlir::DictionaryAttr::get(context, relAttrDefProps) << ")";
+   Attribute fromExisting = attr.getFromExisting();
+   if (fromExisting) {
+      ArrayAttr fromExistingArr = fromExisting.dyn_cast_or_null<ArrayAttr>();
       p << "=";
-      printAttributeRefArr(p, from_existing_arr);
+      printAttributeRefArr(p, fromExistingArr);
    }
 }
 
@@ -313,11 +309,11 @@ static ParseResult parseAttributeDefArr(OpAsmParser& parser, OperationState& res
    if (parser.parseLSquare()) return failure();
    while (true) {
       if (!parser.parseOptionalRSquare()) { break; }
-      mlir::relalg::RelationalAttributeDefAttr attr_def_attr;
-      if (parseAttributeDefAttr(parser, result, attr_def_attr)) {
+      mlir::relalg::RelationalAttributeDefAttr attrDefAttr;
+      if (parseAttributeDefAttr(parser, result, attrDefAttr)) {
          return failure();
       }
-      attributes.push_back(attr_def_attr);
+      attributes.push_back(attrDefAttr);
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRSquare()) { return failure(); }
       break;
@@ -345,11 +341,11 @@ static ParseResult parseAttrMapping(OpAsmParser& parser, OperationState& result)
    std::vector<mlir::Attribute> mapping;
    while (true) {
       if (!parser.parseOptionalRBrace()) { break; }
-      mlir::relalg::RelationalAttributeDefAttr attr_def_attr;
-      if (parseAttributeDefAttr(parser, result, attr_def_attr)) {
+      mlir::relalg::RelationalAttributeDefAttr attrDefAttr;
+      if (parseAttributeDefAttr(parser, result, attrDefAttr)) {
          return failure();
       }
-      mapping.push_back(attr_def_attr);
+      mapping.push_back(attrDefAttr);
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRBrace()) { return failure(); }
       break;
@@ -361,13 +357,13 @@ static void printMapping(OpAsmPrinter& p, Attribute mapping) {
    p << " mapping: {";
    auto first = true;
    for (auto attr : mapping.dyn_cast_or_null<ArrayAttr>()) {
-      auto relation_def_attr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+      auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
       if (first) {
          first = false;
       } else {
          p << ", ";
       }
-      printAttributeDefAttr(p, relation_def_attr);
+      printAttributeDefAttr(p, relationDefAttr);
    }
    p << "}";
 }
@@ -386,14 +382,14 @@ static ParseResult parseBaseTableOp(OpAsmParser& parser, OperationState& result)
    std::vector<mlir::NamedAttribute> columns;
    while (true) {
       if (!parser.parseOptionalRBrace()) { break; }
-      StringRef col_name;
-      if (parser.parseKeyword(&col_name)) { return failure(); }
+      StringRef colName;
+      if (parser.parseKeyword(&colName)) { return failure(); }
       if (parser.parseEqual() || parser.parseGreater()) { return failure(); }
-      mlir::relalg::RelationalAttributeDefAttr attr_def_attr;
-      if (parseAttributeDefAttr(parser, result, attr_def_attr)) {
+      mlir::relalg::RelationalAttributeDefAttr attrDefAttr;
+      if (parseAttributeDefAttr(parser, result, attrDefAttr)) {
          return failure();
       }
-      columns.push_back({Identifier::get(col_name, parser.getBuilder().getContext()), attr_def_attr});
+      columns.push_back({Identifier::get(colName, parser.getBuilder().getContext()), attrDefAttr});
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRBrace()) { return failure(); }
       break;
@@ -411,14 +407,14 @@ static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
    auto first = true;
    for (auto mapping : op.columns()) {
       auto [column_name, attr] = mapping;
-      auto relation_def_attr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+      auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
       if (first) {
          first = false;
       } else {
          p << ", ";
       }
       p << column_name << " => ";
-      printAttributeDefAttr(p, relation_def_attr);
+      printAttributeDefAttr(p, relationDefAttr);
    }
    p << "}";
 }
@@ -427,12 +423,12 @@ static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
 // GetAttrOp
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseGetAttrOp(OpAsmParser& parser, OperationState& result) {
-   OpAsmParser::OperandType input_tuple;
+   OpAsmParser::OperandType inputTuple;
    ::mlir::Type resultType;
-   if (parser.parseOperand(input_tuple)) {
+   if (parser.parseOperand(inputTuple)) {
       return failure();
    }
-   if (parser.resolveOperand(input_tuple, mlir::relalg::TupleType::get(parser.getBuilder().getContext()), result.operands)) {
+   if (parser.resolveOperand(inputTuple, mlir::relalg::TupleType::get(parser.getBuilder().getContext()), result.operands)) {
       return failure();
    }
    mlir::relalg::RelationalAttributeRefAttr refAttr;
@@ -531,7 +527,7 @@ bool mlir::relalg::SelectionOp::isDefinedOutsideOfLoop(Value value) {
 }
 
 LogicalResult mlir::relalg::SelectionOp::moveOutOfLoop(ArrayRef<Operation*> ops) {
-   for (auto op : ops)
+   for (auto* op : ops)
       op->moveBefore(*this);
    return success();
 }
@@ -562,7 +558,7 @@ bool mlir::relalg::MapOp::isDefinedOutsideOfLoop(Value value) {
 }
 
 LogicalResult mlir::relalg::MapOp::moveOutOfLoop(ArrayRef<Operation*> ops) {
-   for (auto op : ops)
+   for (auto* op : ops)
       op->moveBefore(*this);
    return success();
 }
@@ -577,9 +573,9 @@ static ParseResult parseAggregationOp(OpAsmParser& parser, OperationState& resul
    }
    getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
    parseRelationalInputs(parser, result, 1);
-   Attribute group_by_attrs;
-   parseAttributeRefArr(parser, result, group_by_attrs);
-   result.addAttribute("group_by_attrs", group_by_attrs);
+   Attribute groupByAttrs;
+   parseAttributeRefArr(parser, result, groupByAttrs);
+   result.addAttribute("group_by_attrs", groupByAttrs);
    parseCustomRegion(parser, result);
    return addRelationOutput(parser, result);
 }
@@ -598,7 +594,7 @@ bool mlir::relalg::AggregationOp::isDefinedOutsideOfLoop(Value value) {
 }
 
 LogicalResult mlir::relalg::AggregationOp::moveOutOfLoop(ArrayRef<Operation*> ops) {
-   for (auto op : ops)
+   for (auto* op : ops)
       op->moveBefore(*this);
    return success();
 }
@@ -738,7 +734,7 @@ static ParseResult parseMarkJoinOp(OpAsmParser& parser, OperationState& result) 
 static void print(OpAsmPrinter& p, relalg::MarkJoinOp& op) {
    p << op.getOperationName() << " ";
    printJoinDirection(p, op.join_direction());
-   p <<" ";
+   p << " ";
    p.printSymbolName(op.sym_name());
    p << " ";
    printAttributeDefAttr(p, op.markattr());
@@ -893,7 +889,7 @@ static void print(OpAsmPrinter& p, relalg::RenamingOp& op) {
    p << op.getOperationName();
    p << " ";
    p.printSymbolName(op.sym_name());
-   p<<" "<<op.rel();
+   p << " " << op.rel();
    if (op->getAttrs().size() > 1) p << ' ';
    p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"sym_name", "attributes"});
    p << " attributes: ";
@@ -901,7 +897,7 @@ static void print(OpAsmPrinter& p, relalg::RenamingOp& op) {
 }
 
 static ParseResult parseRenamingOp(OpAsmParser& parser,
-                                        OperationState& result) {
+                                   OperationState& result) {
    StringAttr nameAttr;
    if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
       return failure();
@@ -921,7 +917,6 @@ static ParseResult parseRenamingOp(OpAsmParser& parser,
 // InOp
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseInOp(OpAsmParser& parser, OperationState& result) {
-   ::mlir::db::DBType resultType;
    OpAsmParser::OperandType val;
    ::mlir::Type valType;
    if (parser.parseOperand(val) || parser.parseColonType(valType) || parser.parseComma()) {

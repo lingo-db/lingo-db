@@ -25,13 +25,13 @@ class DPHyp {
    public:
    DPHyp(QueryGraph& qg) : queryGraph(qg) {}
 
-   void EmitCsg(node_set S1);
+   void emitCsg(node_set S1);
 
-   void EmitCsgCmp(const node_set& S1, const node_set& S2);
+   void emitCsgCmp(const node_set& S1, const node_set& S2);
 
-   void EnumerateCsgRec(node_set S1, node_set X);
+   void enumerateCsgRec(node_set S1, node_set X);
 
-   void EnumerateCmpRec(node_set S1, node_set S2, node_set X);
+   void enumerateCmpRec(node_set S1, node_set S2, node_set X);
 
    std::shared_ptr<Plan> solve();
 };
