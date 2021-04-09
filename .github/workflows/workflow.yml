@@ -7,31 +7,31 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v2
-    - name: Get llvm commit id
-      id: llvm-commit
-      run: | 
-        echo "::set-output name=commit::$(git submodule status llvm-project | tr ' ' '-' )"
-    - name: Cache LLVM Build
-      id: llvm-build
-      uses: actions/cache@v2
-      with:
-        path: llvm-build
-        key: ${{ runner.os }}-llvm-build-${{ steps.llvm-commit.outputs.commit }}
-    - uses: seanmiddleditch/gha-setup-ninja@master
-    - name: Build LLVM
-      if: steps.llvm-build.outputs.cache-hit != 'true'
-      run: |
-        git submodule init
-        git submodule update
-        mkdir -p llvm-build
-        cmake -G Ninja llvm-project/llvm  -B llvm-build \
-        -DLLVM_ENABLE_PROJECTS=mlir \
-        -DLLVM_BUILD_EXAMPLES=OFF \
-        -DLLVM_TARGETS_TO_BUILD="" \
-        -DCMAKE_BUILD_TYPE=Release \
-        -DLLVM_ENABLE_ASSERTIONS=ON
-        cmake --build llvm-build
+      - uses: actions/checkout@v2
+      - name: Get llvm commit id
+        id: llvm-commit
+        run: |
+          echo "::set-output name=commit::$(git submodule status llvm-project | tr ' ' '-' )"
+      - name: Cache LLVM Build
+        id: llvm-build
+        uses: actions/cache@v2
+        with:
+          path: llvm-build
+          key: ${{ runner.os }}-llvm-build-${{ steps.llvm-commit.outputs.commit }}
+      - uses: seanmiddleditch/gha-setup-ninja@master
+      - name: Build LLVM
+        if: steps.llvm-build.outputs.cache-hit != 'true'
+        run: |
+          git submodule init
+          git submodule update
+          mkdir -p llvm-build
+          cmake -G Ninja llvm-project/llvm  -B llvm-build \
+          -DLLVM_ENABLE_PROJECTS="mlir;clang-tools-extra" \
+          -DLLVM_BUILD_EXAMPLES=OFF \
+          -DLLVM_TARGETS_TO_BUILD="" \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DLLVM_ENABLE_ASSERTIONS=ON
+          cmake --build llvm-build
   build:
     needs: build-llvm
     runs-on: ubuntu-latest
@@ -40,7 +40,7 @@ jobs:
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: Get llvm commit id
         id: llvm-commit
-        run: | 
+        run: |
           echo "::set-output name=commit::$(git submodule status llvm-project | tr ' ' '-' )"
       - name: Fetch LLVM Build
         id: llvm-build
@@ -72,7 +72,7 @@ jobs:
           cmake --build build
   filecheck-tests:
     needs: build
-    runs-on: ubuntu-latest 
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: seanmiddleditch/gha-setup-ninja@master
@@ -135,6 +135,12 @@ jobs:
         with:
           path: llvm-project
           key: ${{ runner.os }}-llvm-sources-${{ steps.llvm-commit.outputs.commit }}
+      - name: Fetch LLVM Build
+        id: llvm-build
+        uses: actions/cache@v2
+        with:
+          path: llvm-build
+          key: ${{ runner.os }}-llvm-build-${{ steps.llvm-commit.outputs.commit }}
       - name: Fetch Cached Build
         uses: actions/cache@v2
         with:
@@ -142,5 +148,5 @@ jobs:
           key: ${{ runner.os }}-build-${{ github.sha }}
       - name: Run Test
         run: |
-          python3 tools/scripts/run-clang-tidy.py -p build/build-tidy/ -quiet
+          python3 tools/scripts/run-clang-tidy.py -p build/build-tidy/ -quiet -clang-tidy-binary=llvm-build/bin/clang-tidy
       
