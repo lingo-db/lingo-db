@@ -151,5 +151,5 @@ jobs:
           key: ${{ runner.os }}-build-${{ github.sha }}
       - name: Run Test
         run: |
-          python3 tools/scripts/run-clang-tidy.py -p build/build-tidy/ -quiet
+          python3 tools/scripts/run-clang-tidy.py -p build/ -quiet
       
