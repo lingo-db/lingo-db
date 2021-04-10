@@ -20,18 +20,7 @@ mlir::relalg::RelationalAttributeManager& getRelationalAttributeManager(::mlir::
    ::mlir::NamedAttrList attrStorage;
    auto loc = parser.getCurrentLocation();
    if (parser.parseOptionalKeyword(&attrStr, {"left", "right"})) {
-      ::mlir::StringAttr attrVal;
-      ::mlir::OptionalParseResult parseResult =
-         parser.parseOptionalAttribute(attrVal,
-                                       parser.getBuilder().getNoneType(),
-                                       "type", attrStorage);
-      if (parseResult.hasValue()) {
-         if (failed(*parseResult))
-            return ::mlir::failure();
-         attrStr = attrVal.getValue();
-      } else {
-         return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'type' [left, right]");
-      }
+         return parser.emitError(loc, "expected keyword containing one of the following enum values for attribute 'type' [left, right]");
    }
    if (!attrStr.empty()) {
       auto attrOptional = ::mlir::relalg::symbolizeJoinDirection(attrStr);
@@ -56,18 +45,7 @@ void printJoinDirection(OpAsmPrinter& p, mlir::relalg::JoinDirection semantic) {
    ::mlir::NamedAttrList attrStorage;
    auto loc = parser.getCurrentLocation();
    if (parser.parseOptionalKeyword(&attrStr, {"min", "max", "sum", "avg", "count"})) {
-      ::mlir::StringAttr attrVal;
-      ::mlir::OptionalParseResult parseResult =
-         parser.parseOptionalAttribute(attrVal,
-                                       parser.getBuilder().getNoneType(),
-                                       "type", attrStorage);
-      if (parseResult.hasValue()) {
-         if (failed(*parseResult))
-            return ::mlir::failure();
-         attrStr = attrVal.getValue();
-      } else {
-         return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'type' [min, max, sum, avg, count]");
-      }
+         return parser.emitError(loc, "expected keyword containing one of the following enum values for attribute 'type' [min, max, sum, avg, count]");
    }
    if (!attrStr.empty()) {
       auto attrOptional = ::mlir::relalg::symbolizeAggrFunc(attrStr);
@@ -86,18 +64,7 @@ void printJoinDirection(OpAsmPrinter& p, mlir::relalg::JoinDirection semantic) {
    ::mlir::NamedAttrList attrStorage;
    auto loc = parser.getCurrentLocation();
    if (parser.parseOptionalKeyword(&attrStr, {"desc", "asc"})) {
-      ::mlir::StringAttr attrVal;
-      ::mlir::OptionalParseResult parseResult =
-         parser.parseOptionalAttribute(attrVal,
-                                       parser.getBuilder().getNoneType(),
-                                       "type", attrStorage);
-      if (parseResult.hasValue()) {
-         if (failed(*parseResult))
-            return ::mlir::failure();
-         attrStr = attrVal.getValue();
-      } else {
-         return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'sortSpec' [desc,asc]");
-      }
+         return parser.emitError(loc, "expected keyword containing one of the following enum values for attribute 'sortSpec' [desc,asc]");
    }
    if (!attrStr.empty()) {
       auto parsedSpec = ::mlir::relalg::symbolizeSortSpec(attrStr);
@@ -115,18 +82,7 @@ void printJoinDirection(OpAsmPrinter& p, mlir::relalg::JoinDirection semantic) {
    ::mlir::NamedAttrList attrStorage;
    auto loc = parser.getCurrentLocation();
    if (parser.parseOptionalKeyword(&attrStr, {"distinct", "all"})) {
-      ::mlir::StringAttr attrVal;
-      ::mlir::OptionalParseResult parseResult =
-         parser.parseOptionalAttribute(attrVal,
-                                       parser.getBuilder().getNoneType(),
-                                       "set_semantic", attrStorage);
-      if (parseResult.hasValue()) {
-         if (failed(*parseResult))
-            return ::mlir::failure();
-         attrStr = attrVal.getValue();
-      } else {
-         return parser.emitError(loc, "expected string or keyword containing one of the following enum values for attribute 'type' [distinct, all]");
-      }
+         return parser.emitError(loc, "expected keyword containing one of the following enum values for attribute 'type' [distinct, all]");
    }
    if (!attrStr.empty()) {
       auto attrOptional = ::mlir::relalg::symbolizeSetSemantic(attrStr);
@@ -520,17 +476,6 @@ static void print(OpAsmPrinter& p, relalg::SelectionOp& op) {
    p << op.getOperationName() << " " << op.rel() << " ";
    printCustomRegion(p, op.getRegion());
 }
-Region& mlir::relalg::SelectionOp::getLoopBody() { return getRegion(); }
-
-bool mlir::relalg::SelectionOp::isDefinedOutsideOfLoop(Value value) {
-   return !getRegion().isAncestor(value.getParentRegion());
-}
-
-LogicalResult mlir::relalg::SelectionOp::moveOutOfLoop(ArrayRef<Operation*> ops) {
-   for (auto* op : ops)
-      op->moveBefore(*this);
-   return success();
-}
 
 ///////////////////////////////////////////////////////////////////////////////////
 // MapOp
@@ -550,17 +495,6 @@ static void print(OpAsmPrinter& p, relalg::MapOp& op) {
    p.printSymbolName(op.sym_name());
    p << " " << op.rel() << " ";
    printCustomRegion(p, op.getRegion());
-}
-Region& mlir::relalg::MapOp::getLoopBody() { return getRegion(); }
-
-bool mlir::relalg::MapOp::isDefinedOutsideOfLoop(Value value) {
-   return !getRegion().isAncestor(value.getParentRegion());
-}
-
-LogicalResult mlir::relalg::MapOp::moveOutOfLoop(ArrayRef<Operation*> ops) {
-   for (auto* op : ops)
-      op->moveBefore(*this);
-   return success();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -586,17 +520,6 @@ static void print(OpAsmPrinter& p, relalg::AggregationOp& op) {
    printAttributeRefArr(p, op.group_by_attrs());
    p << " ";
    printCustomRegion(p, op.getRegion());
-}
-Region& mlir::relalg::AggregationOp::getLoopBody() { return getRegion(); }
-
-bool mlir::relalg::AggregationOp::isDefinedOutsideOfLoop(Value value) {
-   return !getRegion().isAncestor(value.getParentRegion());
-}
-
-LogicalResult mlir::relalg::AggregationOp::moveOutOfLoop(ArrayRef<Operation*> ops) {
-   for (auto* op : ops)
-      op->moveBefore(*this);
-   return success();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -624,28 +547,6 @@ static void print(OpAsmPrinter& p, relalg::AggrFuncOp& op) {
    p << " " << op.rel();
    p << " : ";
    p << op.getType();
-}
-///////////////////////////////////////////////////////////////////////////////////
-// ForEachOp
-///////////////////////////////////////////////////////////////////////////////////
-static void print(mlir::OpAsmPrinter& p, mlir::relalg::ForEachOp op) {
-   p << mlir::relalg::ForEachOp::getOperationName() << " " << op.rel() << " ";
-   printAttributeRefArr(p, op.attrs());
-   printCustomRegion(p, op.region());
-}
-static mlir::ParseResult parseForEachOp(mlir::OpAsmParser& parser, mlir::OperationState& result) {
-   if (parseRelationalInputs(parser, result, 1)) {
-      return failure();
-   }
-   Attribute attrs;
-   if (parseAttributeRefArr(parser, result, attrs)) {
-      return failure();
-   }
-   result.addAttribute("attrs", attrs);
-   if (parseCustomRegion(parser, result)) {
-      return failure();
-   }
-   return success();
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -677,7 +578,7 @@ static ParseResult parseInnerJoinOp(OpAsmParser& parser, OperationState& result)
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::InnerJoinOp& op) {
-   p << op.getOperationName() << " " << op.left() << ", " << op.right();
+   p << op.getOperationName() << " " << op.left() << ", " << op.right()<<" ";
    printCustomRegion(p, op.getRegion());
 }
 ///////////////////////////////////////////////////////////////////////////////////
@@ -689,7 +590,7 @@ static ParseResult parseFullOuterJoinOp(OpAsmParser& parser, OperationState& res
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::FullOuterJoinOp& op) {
-   p << op.getOperationName() << " " << op.left() << ", " << op.right();
+   p << op.getOperationName() << " " << op.left() << ", " << op.right()<<" ";
    printCustomRegion(p, op.getRegion());
 }
 ///////////////////////////////////////////////////////////////////////////////////
@@ -707,7 +608,7 @@ static ParseResult parseNonCommutativeJoin(OpAsmParser& parser, OperationState& 
 static void printNonCommutativeJoin(Operation* op, OpAsmPrinter& p) {
    p << op->getName() << " ";
    printJoinDirection(p, mlir::relalg::symbolizeJoinDirection(op->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt()).getValue());
-   p << " " << op->getOperand(0) << ", " << op->getOperand(1);
+   p << " " << op->getOperand(0) << ", " << op->getOperand(1)<<" ";
    printCustomRegion(p, op->getRegion(0));
 }
 
@@ -738,7 +639,7 @@ static void print(OpAsmPrinter& p, relalg::MarkJoinOp& op) {
    p.printSymbolName(op.sym_name());
    p << " ";
    printAttributeDefAttr(p, op.markattr());
-   p << " " << op.left() << ", " << op.right();
+   p << " " << op.left() << ", " << op.right()<<" ";
    printCustomRegion(p, op.getRegion());
 }
 ///////////////////////////////////////////////////////////////////////////////////

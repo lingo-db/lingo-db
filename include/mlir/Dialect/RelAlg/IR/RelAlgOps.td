@@ -3,7 +3,6 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
-include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/IR/SymbolInterfaces.td"
 
@@ -152,13 +151,13 @@ llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes();
 // Operators
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,Operator,DeclareOpInterfaceMethods<LoopLikeOpInterface>,TupleLamdaOperator]> {
+def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,Operator,TupleLamdaOperator]> {
 let summary = "selection operation";
 let arguments = (ins RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
-def MapOp : RelAlg_Op<"map",[RecursiveSideEffects,Operator,DeclareOpInterfaceMethods<LoopLikeOpInterface>,TupleLamdaOperator]> {
+def MapOp : RelAlg_Op<"map",[RecursiveSideEffects,Operator,TupleLamdaOperator]> {
 let summary = "map operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
@@ -192,7 +191,7 @@ llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes()
 }];
 }
 
-def AggregationOp : RelAlg_Op<"aggregation",[RecursiveSideEffects,Operator,DeclareOpInterfaceMethods<LoopLikeOpInterface>]> {
+def AggregationOp : RelAlg_Op<"aggregation",[RecursiveSideEffects,Operator]> {
 let summary = "aggregation operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel, ArrayAttr:$group_by_attrs);
 let results = (outs RelAlg_Relation:$result);
@@ -358,12 +357,6 @@ let assemblyFormat =
 [{  $rel attr-dict }];
 }
 
-
-def ForEachOp : RelAlg_Op<"foreach",
-[RecursiveSideEffects]> {
-let arguments = (ins RelAlg_Relation: $rel,ArrayAttr:$attrs);
-let regions = (region SizedRegion<1>:$region);
-}
 
 def ExistsOp : RelAlg_Op<"exists"> {
 let summary = "exists operation";
