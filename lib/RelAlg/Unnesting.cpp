@@ -109,7 +109,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
                bool pushDownLeft = !dependentLeft.empty();
                bool pushDownRight = !dependentRight.empty();
                bool renameRight = true;
-               if (!mlir::isa<InnerJoinOp>(join.getOperation()) || !mlir::isa<FullOuterJoinOp>(join.getOperation())) {
+               if (!mlir::isa<InnerJoinOp>(join.getOperation()) && !mlir::isa<FullOuterJoinOp>(join.getOperation())) {
                   JoinDirection joinDirection = symbolizeJoinDirection(join->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt()).getValue();
                   switch (joinDirection) {
                      case JoinDirection::left:
@@ -124,14 +124,20 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
                         }
                         break;
                   }
-               } else if (!mlir::isa<FullOuterJoinOp>(join.getOperation())) {
+               } else if (mlir::isa<FullOuterJoinOp>(join.getOperation())) {
                   if (pushDownLeft || pushDownRight) {
                      pushDownLeft = true;
                      pushDownRight = true;
                   }
                }
-               handleJoin(join, pushDownLeft ? pushDependJoinDown(d, left) : left, pushDownRight ? pushDependJoinDown(d, right) : right, pushDownLeft && pushDownRight, renameRight, availableD);
-               return mlir::dyn_cast_or_null<Operator>(join.getOperation());
+               if (!pushDownLeft && !pushDownRight) {
+                  //handle case when no pushdown would be necessary
+                  return mlir::dyn_cast_or_null<Operator>(builder.create<CrossProductOp>(builder.getUnknownLoc(), relType, mlir::dyn_cast_or_null<Operator>(join.getOperation()).asRelation(), d.asRelation()).getOperation());
+
+               } else {
+                  handleJoin(join, pushDownLeft ? pushDependJoinDown(d, left) : left, pushDownRight ? pushDependJoinDown(d, right) : right, pushDownLeft && pushDownRight, renameRight, availableD);
+                  return mlir::dyn_cast_or_null<Operator>(join.getOperation());
+               }
             } else {
                handleChildren(d, mlir::dyn_cast_or_null<Operator>(join.getOperation()));
                return mlir::dyn_cast_or_null<Operator>(join.getOperation());
