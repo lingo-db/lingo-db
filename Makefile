@@ -22,5 +22,19 @@ build/llvm-build-debug:
 build-llvm-debug: build/llvm-build-debug
 	cmake --build build/llvm-build-debug -j1
 
+test-coverage:
+	cmake --build build/build-debug-llvm-release-coverage --target mlir-db-opt -- -j 6
+	./build/llvm-build/bin/llvm-lit build/build-debug-llvm-release-coverage/test
+	lcov --no-external --capture --directory build/build-debug-llvm-release-coverage -b . --output-file build/build-debug-llvm-release-coverage/coverage.info
+		lcov --remove build/build-debug-llvm-release-coverage/coverage.info -o build/build-debug-llvm-release-coverage/filtered-coverage.info \
+            '**/build/llvm-build/*' '**/llvm-project/*' '*.inc'
+	genhtml  --ignore-errors source build/build-debug-llvm-release-coverage/filtered-coverage.info --legend --title "lcov-test" --output-directory=build/build-debug-llvm-release-coverage/coverage-report
+
+run-test:
+	cmake --build build/build-debug-llvm-release --target mlir-db-opt -- -j 6
+	./build/llvm-build/bin/llvm-lit -v build/build-debug-llvm-release/test
+coverage-clean:
+	rm -rf build/build-debug-llvm-release-coverage/coverage
+
 clean:
 	rm -rf build
