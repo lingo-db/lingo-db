@@ -64,7 +64,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                        if (mlir::relalg::detail::isJoin(binop.getOperation())) {
                           auto left = mlir::dyn_cast_or_null<Operator>(binop.leftChild());
                           auto right = mlir::dyn_cast_or_null<Operator>(binop.rightChild());
-                          if (!mlir::isa<mlir::relalg::InnerJoinOp>(binop.getOperation())) {
+                          if (!mlir::isa<mlir::relalg::InnerJoinOp>(binop.getOperation())&&!mlir::isa<mlir::relalg::FullOuterJoinOp>(binop.getOperation())) {
                              mlir::relalg::JoinDirection joinDirection = mlir::relalg::symbolizeJoinDirection(
                                                                             binop->getAttr(
                                                                                     "join_direction")
@@ -79,7 +79,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                                       opjoin.setChildren({left, right});
                                       return opjoin;
                                    }
-                                   [[fallthrough]];
+                                   break;
                                 case mlir::relalg::JoinDirection::right:
                                    if (subset(usedAttributes, right.getAvailableAttributes())) {
                                       topush->moveBefore(opjoin.getOperation());
@@ -87,12 +87,11 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                                       opjoin.setChildren({left, right});
                                       return opjoin;
                                    }
-                                   [[fallthrough]];
-                                default:
-                                   topush.setChildren({curr});
-                                   return topush;
+                                   break;
                              }
-                          } else {
+                             topush.setChildren({opjoin});
+                             return topush;
+                          } else if(mlir::isa<mlir::relalg::InnerJoinOp>(binop.getOperation())){
                              auto children = opjoin.getChildren();
                              if (subset(usedAttributes, children[0].getAvailableAttributes())) {
                                 topush->moveBefore(opjoin.getOperation());
@@ -108,6 +107,9 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                                 topush.setChildren({curr});
                                 return topush;
                              }
+                          }else{
+                             topush.setChildren({opjoin});
+                             return topush;
                           }
                        } else {
                           topush.setChildren({opjoin});
