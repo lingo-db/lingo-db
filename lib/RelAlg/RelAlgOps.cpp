@@ -831,7 +831,7 @@ static ParseResult parseInOp(OpAsmParser& parser, OperationState& result) {
 }
 static void print(OpAsmPrinter& p, relalg::InOp& op) {
    p << op.getOperationName();
-   p << " " << op.val() << " : " << op.val().getType() << ", " << op.rel() << ":" << op.getType();
+   p << " " << op.val() << " : " << op.val().getType() << ", " << op.rel();
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.cpp.inc"
