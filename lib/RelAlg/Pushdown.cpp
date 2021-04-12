@@ -1,55 +1,25 @@
-
+#include "llvm/ADT/TypeSwitch.h"
+#include "mlir/Dialect/RelAlg/Attributes.h"
+#include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
-
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
-
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include <llvm/ADT/TypeSwitch.h>
-#include <mlir/Dialect/RelAlg/IR/RelAlgDialect.h>
 
 namespace {
 
 class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
-   using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
-
-   bool intersects(const attribute_set& a, const attribute_set& b) {
-      for (auto* x : a) {
-         if (b.contains(x)) {
-            return true;
-         }
-      }
-      return false;
-   }
-
-   bool subset(const attribute_set& a, const attribute_set& b) {
-      for (auto* x : a) {
-         if (!b.contains(x)) {
-            return false;
-         }
-      }
-      return true;
-   }
-
-   void print(const attribute_set& a) {
-      auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
-      for (auto* x : a) {
-         auto [scope, name] = attributeManager.getName(x);
-         llvm::dbgs() << x << "(" << scope << "," << name << "),";
-      }
-   }
-
    Operator pushdown(Operator topush, Operator curr) {
-      attribute_set usedAttributes = topush.getUsedAttributes();
+      mlir::relalg::Attributes usedAttributes = topush.getUsedAttributes();
       auto res = ::llvm::TypeSwitch<mlir::Operation*, Operator>(curr.getOperation())
                     .Case<mlir::relalg::CrossProductOp>([&](Operator cp) {
                        auto children = cp.getChildren();
-                       if (subset(usedAttributes, children[0].getAvailableAttributes())) {
+                       if (usedAttributes.is_subset_of(children[0].getAvailableAttributes())) {
                           topush->moveBefore(cp.getOperation());
                           children[0] = pushdown(topush, children[0]);
                           cp.setChildren(children);
                           return cp;
-                       } else if (subset(usedAttributes, children[1].getAvailableAttributes())) {
+                       } else if (usedAttributes.is_subset_of(children[1].getAvailableAttributes())) {
                           topush->moveBefore(cp.getOperation());
                           children[1] = pushdown(topush, children[1]);
                           cp.setChildren(children);
@@ -64,7 +34,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                        if (mlir::relalg::detail::isJoin(binop.getOperation())) {
                           auto left = mlir::dyn_cast_or_null<Operator>(binop.leftChild());
                           auto right = mlir::dyn_cast_or_null<Operator>(binop.rightChild());
-                          if (!mlir::isa<mlir::relalg::InnerJoinOp>(binop.getOperation())&&!mlir::isa<mlir::relalg::FullOuterJoinOp>(binop.getOperation())) {
+                          if (!mlir::isa<mlir::relalg::InnerJoinOp>(binop.getOperation()) && !mlir::isa<mlir::relalg::FullOuterJoinOp>(binop.getOperation())) {
                              mlir::relalg::JoinDirection joinDirection = mlir::relalg::symbolizeJoinDirection(
                                                                             binop->getAttr(
                                                                                     "join_direction")
@@ -73,7 +43,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                                                                             .getValue();
                              switch (joinDirection) {
                                 case mlir::relalg::JoinDirection::left:
-                                   if (subset(usedAttributes, left.getAvailableAttributes())) {
+                                   if (usedAttributes.is_subset_of(left.getAvailableAttributes())) {
                                       topush->moveBefore(opjoin.getOperation());
                                       left = pushdown(topush, left);
                                       opjoin.setChildren({left, right});
@@ -81,7 +51,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                                    }
                                    break;
                                 case mlir::relalg::JoinDirection::right:
-                                   if (subset(usedAttributes, right.getAvailableAttributes())) {
+                                   if (usedAttributes.is_subset_of(right.getAvailableAttributes())) {
                                       topush->moveBefore(opjoin.getOperation());
                                       right = pushdown(topush, right);
                                       opjoin.setChildren({left, right});
@@ -91,14 +61,14 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                              }
                              topush.setChildren({opjoin});
                              return topush;
-                          } else if(mlir::isa<mlir::relalg::InnerJoinOp>(binop.getOperation())){
+                          } else if (mlir::isa<mlir::relalg::InnerJoinOp>(binop.getOperation())) {
                              auto children = opjoin.getChildren();
-                             if (subset(usedAttributes, children[0].getAvailableAttributes())) {
+                             if (usedAttributes.is_subset_of(children[0].getAvailableAttributes())) {
                                 topush->moveBefore(opjoin.getOperation());
                                 children[0] = pushdown(topush, children[0]);
                                 opjoin.setChildren(children);
                                 return opjoin;
-                             } else if (subset(usedAttributes, children[1].getAvailableAttributes())) {
+                             } else if (usedAttributes.is_subset_of(children[1].getAvailableAttributes())) {
                                 topush->moveBefore(opjoin.getOperation());
                                 children[1] = pushdown(topush, children[1]);
                                 opjoin.setChildren(children);
@@ -107,7 +77,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                                 topush.setChildren({curr});
                                 return topush;
                              }
-                          }else{
+                          } else {
                              topush.setChildren({opjoin});
                              return topush;
                           }

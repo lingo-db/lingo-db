@@ -6,13 +6,13 @@ def Operator : OpInterface<"Operator"> {
 let methods = [
 InterfaceMethod<
         "get all attributes that are used directly by this operator",
-        "::llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*,8>", "getUsedAttributes",(ins ),"", /*defaultImplementation=*/[{
+        "mlir::relalg::Attributes", "getUsedAttributes",(ins ),"", /*defaultImplementation=*/[{
     return mlir::relalg::detail::getUsedAttributes(this->getOperation());
 }]
 >,
 InterfaceMethod<
         "get all attributes that are available after this operator",
-        "::llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*,8>", "getAvailableAttributes",(ins ),"", /*defaultImplementation=*/[{
+        "mlir::relalg::Attributes", "getAvailableAttributes",(ins ),"", /*defaultImplementation=*/[{
 return mlir::relalg::detail::getAvailableAttributes(this->getOperation());
 }]
 >,
@@ -74,13 +74,13 @@ return this->getOperation()->getResult(0);
 >,
 InterfaceMethod<
         "get all 'free' attributes",
-        "llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*,8>", "getFreeAttributes",(ins ),"", /*defaultImplementation=*/[{
+        "mlir::relalg::Attributes", "getFreeAttributes",(ins ),"", /*defaultImplementation=*/[{
 return mlir::relalg::detail::getFreeAttributes(this->getOperation());
 }]
 >,
 InterfaceMethod<
         "get all attributes that are created by this operator",
-        "llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8>", "getCreatedAttributes",(ins ),"", /*defaultImplementation=*/[{
+        "mlir::relalg::Attributes", "getCreatedAttributes",(ins ),"", /*defaultImplementation=*/[{
 return mlir::relalg::detail::getCreatedAttributes(this->getOperation());
 }]
 >

@@ -4,10 +4,9 @@
 #include <llvm/ADT/TypeSwitch.h>
 #include <functional>
 using namespace mlir::relalg;
-using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
 using operator_list = llvm::SmallVector<Operator, 4>;
-attribute_set mlir::relalg::detail::getCreatedAttributes(mlir::Operation* op) {
-   attribute_set creations;
+Attributes mlir::relalg::detail::getCreatedAttributes(mlir::Operation* op) {
+   Attributes creations;
    op->walk([&](AddAttrOp attrOp) {
       creations.insert(&attrOp.attr().getRelationalAttribute());
    });
@@ -22,39 +21,35 @@ static operator_list getChildOperators(mlir::Operation* parent) {
    }
    return children;
 }
-static void except(attribute_set& set, attribute_set& except) {
-   for (auto *x : except) {
-      set.erase(x);
-   }
-}
-static attribute_set collectAttributes(operator_list operators, std::function<attribute_set(Operator)> fn) {
-   attribute_set collected;
+
+static Attributes collectAttributes(operator_list operators, std::function<Attributes(Operator)> fn) {
+   Attributes collected;
    for (auto op : operators) {
       auto res = fn(op);
-      collected.insert(res.begin(), res.end());
+      collected.insert(res);
    }
    return collected;
 }
-attribute_set mlir::relalg::detail::getUsedAttributes(mlir::Operation* op) {
-   attribute_set creations;
+Attributes mlir::relalg::detail::getUsedAttributes(mlir::Operation* op) {
+   Attributes creations;
    op->walk([&](GetAttrOp attrOp) {
       creations.insert(&attrOp.attr().getRelationalAttribute());
    });
    return creations;
 }
-attribute_set mlir::relalg::detail::getAvailableAttributes(mlir::Operation* op) {
+Attributes mlir::relalg::detail::getAvailableAttributes(mlir::Operation* op) {
    Operator asOperator = mlir::dyn_cast_or_null<Operator>(op);
    auto collected = collectAttributes(getChildOperators(op), [](Operator op) { return op.getAvailableAttributes(); });
    auto selfCreated = asOperator.getCreatedAttributes();
-   collected.insert(selfCreated.begin(), selfCreated.end());
+   collected.insert(selfCreated);
    return collected;
 }
-attribute_set mlir::relalg::detail::getFreeAttributes(mlir::Operation* op) {
+Attributes mlir::relalg::detail::getFreeAttributes(mlir::Operation* op) {
    auto available = getAvailableAttributes(op);
    auto collectedFree = collectAttributes(getChildOperators(op), [](Operator op) { return op.getFreeAttributes(); });
    auto used = getUsedAttributes(op);
-   collectedFree.insert(used.begin(), used.end());
-   except(collectedFree, available);
+   collectedFree.insert(used);
+   collectedFree.remove(available);
    return collectedFree;
 }
 
@@ -65,8 +60,7 @@ bool mlir::relalg::detail::isDependentJoin(mlir::Operation* op) {
          auto right = mlir::dyn_cast_or_null<Operator>(join.rightChild());
          auto availableLeft = left.getAvailableAttributes();
          auto availableRight = right.getAvailableAttributes();
-         return llvm::any_of(left.getFreeAttributes(), [availableRight](auto ra) { return availableRight.contains(ra); }) ||
-            llvm::any_of(right.getFreeAttributes(), [availableLeft](auto ra) { return availableLeft.contains(ra); });
+         return left.getFreeAttributes().intersects(availableRight) || right.getFreeAttributes().intersects(availableLeft);
       }
    }
    return false;
@@ -86,7 +80,7 @@ mlir::relalg::detail::BinaryOperatorType mlir::relalg::detail::getBinaryOperator
       });
 }
 
-llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> AggregationOp::getUsedAttributes() {
+Attributes AggregationOp::getUsedAttributes() {
    auto used = mlir::relalg::detail::getUsedAttributes(getOperation());
    for (Attribute a : group_by_attrs()) {
       used.insert(&a.dyn_cast_or_null<RelationalAttributeRefAttr>().getRelationalAttribute());
@@ -96,34 +90,34 @@ llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> AggregationOp::getUse
    });
    return used;
 }
-llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> SortOp::getUsedAttributes() {
-   attribute_set used;
+Attributes SortOp::getUsedAttributes() {
+   Attributes used;
    for (Attribute a : sortspecs()) {
       used.insert(&a.dyn_cast_or_null<SortSpecificationAttr>().getAttr().getRelationalAttribute());
    }
    return used;
 }
 
-llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> ConstRelationOp::getCreatedAttributes() {
-   attribute_set creations;
+Attributes ConstRelationOp::getCreatedAttributes() {
+   Attributes creations;
    for (Attribute a : attributes()) {
       creations.insert(&a.dyn_cast_or_null<RelationalAttributeDefAttr>().getRelationalAttribute());
    }
    return creations;
 }
-llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> AntiSemiJoinOp::getAvailableAttributes() {
+Attributes AntiSemiJoinOp::getAvailableAttributes() {
    return mlir::relalg::detail::getAvailableAttributes(leftChild());
 }
-llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> SemiJoinOp::getAvailableAttributes() {
+Attributes SemiJoinOp::getAvailableAttributes() {
    return mlir::relalg::detail::getAvailableAttributes(leftChild());
 }
-llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> MarkJoinOp::getAvailableAttributes() {
+Attributes MarkJoinOp::getAvailableAttributes() {
    auto available = mlir::relalg::detail::getAvailableAttributes(leftChild());
    available.insert(&markattr().getRelationalAttribute());
    return available;
 }
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> RenamingOp::getCreatedAttributes() {
-   attribute_set created;
+Attributes RenamingOp::getCreatedAttributes() {
+   Attributes created;
 
    for (Attribute attr : attributes()) {
       auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
@@ -131,13 +125,13 @@ llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> RenamingOp::getCreatedA
    }
    return created;
 }
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> MarkJoinOp::getCreatedAttributes() {
-   attribute_set created;
+Attributes MarkJoinOp::getCreatedAttributes() {
+   Attributes created;
    created.insert(&markattr().getRelationalAttribute());
    return created;
 }
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> RenamingOp::getUsedAttributes() {
-   attribute_set used;
+Attributes RenamingOp::getUsedAttributes() {
+   Attributes used;
 
    for (Attribute attr : attributes()) {
       auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
@@ -149,17 +143,15 @@ llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> RenamingOp::getUsedAttr
    }
    return used;
 }
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> RenamingOp::getAvailableAttributes() {
+Attributes RenamingOp::getAvailableAttributes() {
    auto availablePreviously = collectAttributes(getChildOperators(*this), [](Operator op) { return op.getAvailableAttributes(); });
-   for (auto *used : getUsedAttributes()) {
-      availablePreviously.erase(used);
-   }
+   availablePreviously.remove(getUsedAttributes());
    auto created = getCreatedAttributes();
-   availablePreviously.insert(created.begin(), created.end());
+   availablePreviously.insert(created);
    return availablePreviously;
 }
-llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> BaseTableOp::getCreatedAttributes() {
-   attribute_set creations;
+Attributes BaseTableOp::getCreatedAttributes() {
+   Attributes creations;
    for (auto mapping : columns()) {
       auto [_, attr] = mapping;
       auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
@@ -167,15 +159,15 @@ llvm::SmallPtrSet<::mlir::relalg::RelationalAttribute*, 8> BaseTableOp::getCreat
    }
    return creations;
 }
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> mlir::relalg::AggregationOp::getAvailableAttributes() {
-   attribute_set available = getCreatedAttributes();
+Attributes mlir::relalg::AggregationOp::getAvailableAttributes() {
+   Attributes available = getCreatedAttributes();
    for (Attribute a : group_by_attrs()) {
       available.insert(&a.dyn_cast_or_null<RelationalAttributeRefAttr>().getRelationalAttribute());
    }
    return available;
 }
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> mlir::relalg::ProjectionOp::getAvailableAttributes() {
-   attribute_set available;
+Attributes mlir::relalg::ProjectionOp::getAvailableAttributes() {
+   Attributes available;
    for (Attribute a : attrs()) {
       available.insert(&a.dyn_cast_or_null<RelationalAttributeRefAttr>().getRelationalAttribute());
    }
@@ -220,10 +212,9 @@ const bool mlir::relalg::detail::rAsscom[mlir::relalg::detail::BinaryOperatorTyp
 bool mlir::relalg::detail::binaryOperatorIs(const bool (&table)[BinaryOperatorType::LAST][BinaryOperatorType::LAST], Operation* a, Operation* b) {
    return table[getBinaryOperatorType(a)][getBinaryOperatorType(b)];
 }
-bool mlir::relalg::detail::isJoin(Operation* op){
-   auto opType=getBinaryOperatorType(op);
-   return InnerJoin<=opType&&opType<=MarkJoin;
+bool mlir::relalg::detail::isJoin(Operation* op) {
+   auto opType = getBinaryOperatorType(op);
+   return InnerJoin <= opType && opType <= MarkJoin;
 }
-
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"

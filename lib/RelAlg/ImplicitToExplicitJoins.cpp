@@ -136,7 +136,6 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             //get attribute of relation to search in
             Operator relOperator = inop.rel().getDefiningOp();
             auto availableAttrs = relOperator.getAvailableAttributes();
-            assert(availableAttrs.size() == 1);
             auto* attr = *availableAttrs.begin();
             auto searchInAttr = attributeManager.createRef(attr);
             //get attribute f relation to search in

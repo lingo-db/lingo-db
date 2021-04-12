@@ -6,13 +6,14 @@
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
+#include <mlir/Dialect/RelAlg/Attributes.h>
 #include <mlir/IR/SymbolTable.h>
 
 namespace mlir::relalg::detail {
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> getUsedAttributes(mlir::Operation* op);
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> getAvailableAttributes(mlir::Operation* op);
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> getFreeAttributes(mlir::Operation* op);
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> getCreatedAttributes(mlir::Operation* op);
+Attributes getUsedAttributes(mlir::Operation* op);
+Attributes getAvailableAttributes(mlir::Operation* op);
+Attributes getFreeAttributes(mlir::Operation* op);
+Attributes getCreatedAttributes(mlir::Operation* op);
 bool isDependentJoin(mlir::Operation* op);
 
 enum BinaryOperatorType {

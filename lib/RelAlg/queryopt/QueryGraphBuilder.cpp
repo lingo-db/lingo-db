@@ -56,7 +56,7 @@ QueryGraphBuilder::NodeResolver mlir::relalg::QueryGraphBuilder::populateQueryGr
    NodeResolver resolver(qg);
    if (already_optimized.count(op.getOperation())) {
       size_t newNode = addNode(op);
-      for (auto *attr : op.getAvailableAttributes()) {
+      for (auto* attr : op.getAvailableAttributes()) {
          resolver.add(attr, newNode);
       }
       return resolver;
@@ -74,7 +74,7 @@ QueryGraphBuilder::NodeResolver mlir::relalg::QueryGraphBuilder::populateQueryGr
       qg.addEdge(expand(leftTes), expand(rightTes), empty_node, op, mlir::relalg::QueryGraph::EdgeType::REAL);
       if (!created.empty()) {
          size_t newNode = addNode(op);
-         for (auto *attr : op.getCreatedAttributes()) {
+         for (auto* attr : op.getCreatedAttributes()) {
             resolver.add(attr, newNode);
          }
          qg.nodes[newNode].dependencies = expand(tes);
@@ -83,7 +83,7 @@ QueryGraphBuilder::NodeResolver mlir::relalg::QueryGraphBuilder::populateQueryGr
    } else if (!created.empty()) {
       //add node for operators that create attributes
       size_t newNode = addNode(op);
-      for (auto *attr : op.getCreatedAttributes()) {
+      for (auto* attr : op.getCreatedAttributes()) {
          resolver.add(attr, newNode);
       }
       if (children.size() == 1) {
@@ -124,7 +124,7 @@ QueryGraphBuilder::NodeResolver mlir::relalg::QueryGraphBuilder::populateQueryGr
             qg.addEdge(getNodeSetFromClass(cannotBeSeperated, first, num_nodes), empty_node, empty_node, op, mlir::relalg::QueryGraph::EdgeType::REAL);
          } else {
             node_set decisions = empty_node;
-            for (const auto & a : cannotBeSeperated) {
+            for (const auto& a : cannotBeSeperated) {
                if (a.isLeader()) {
                   decisions.set(a.getData());
                }
@@ -170,9 +170,9 @@ void QueryGraphBuilder::ensureConnected() {
 
       std::swap(edgesToProcess, newList);
    }
-   for (const auto & a : alreadyConnected) {
+   for (const auto& a : alreadyConnected) {
       if (a.isLeader()) {
-         for (const auto & b : alreadyConnected) {
+         for (const auto& b : alreadyConnected) {
             if (b.isLeader()) {
                if (a.getData() != b.getData()) {
                   //std::cout << a.getData() << " vs " << b.getData() << "\n";
@@ -257,7 +257,7 @@ node_set QueryGraphBuilder::calcTES(Operator b, NodeResolver& resolver) {
          }
          if (auto renameop = mlir::dyn_cast_or_null<mlir::relalg::RenamingOp>(b.getOperation())) {
             for (auto a : onlyChild.getAllSubOperators()) {
-               if (intersects(a.getUsedAttributes(), renameop.getUsedAttributes()) || intersects(a.getCreatedAttributes(), renameop.getCreatedAttributes())) {
+               if (a.getUsedAttributes().intersects(renameop.getUsedAttributes()) || a.getCreatedAttributes().intersects(renameop.getCreatedAttributes())) {
                   tes |= calcT(onlyChild, resolver);
                }
             }
@@ -269,16 +269,16 @@ node_set QueryGraphBuilder::calcTES(Operator b, NodeResolver& resolver) {
 }
 node_set QueryGraphBuilder::calcSES(Operator op, NodeResolver& resolver) const {
    node_set res = node_set(num_nodes);
-   for (auto *attr : op.getUsedAttributes()) {
+   for (auto* attr : op.getUsedAttributes()) {
       res.set(resolver.resolve(attr));
    }
    return res;
 }
 
 QueryGraphBuilder::QueryGraphBuilder(Operator root, std::unordered_set<mlir::Operation*>& alreadyOptimized) : root(root),
-                                                                                                               already_optimized(alreadyOptimized),
-                                                                                                               num_nodes(countCreatingOperators(root, alreadyOptimized)),
-                                                                                                               qg(num_nodes, alreadyOptimized),
-                                                                                                               empty_node(num_nodes) {}
+                                                                                                              already_optimized(alreadyOptimized),
+                                                                                                              num_nodes(countCreatingOperators(root, alreadyOptimized)),
+                                                                                                              qg(num_nodes, alreadyOptimized),
+                                                                                                              empty_node(num_nodes) {}
 
 } // namespace mlir::relalg

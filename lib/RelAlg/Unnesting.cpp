@@ -14,16 +14,6 @@
 namespace {
 
 class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
-   using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
-   attribute_set intersect(const attribute_set& a, const attribute_set& b) {
-      attribute_set result;
-      for (auto* x : a) {
-         if (b.contains(x)) {
-            result.insert(x);
-         }
-      }
-      return result;
-   }
    Operator getFirstOfTree(Operator tree) {
       Operator currFirst = tree;
       for (auto child : tree.getChildren()) {
@@ -40,7 +30,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          moveTreeBefore(child, tree);
       }
    }
-   mlir::ArrayAttr addAttributes(mlir::ArrayAttr current, attribute_set toAdd) {
+   mlir::ArrayAttr addAttributes(mlir::ArrayAttr current, mlir::relalg::Attributes toAdd) {
       auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       llvm::SmallVector<mlir::Attribute, 8> attributes;
       for (auto attr : current) {
@@ -74,7 +64,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             llvm::SmallVector<Operator, 4> newChildren;
             bool pushedDownAny = false;
             for (auto childOp : cp.getChildren()) {
-               if (intersect(childOp.getFreeAttributes(), availableD).empty()) {
+               if (!childOp.getFreeAttributes().intersects(availableD)) {
                   newChildren.push_back(childOp);
                } else {
                   pushedDownAny = true;
@@ -103,8 +93,8 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
                auto right = mlir::dyn_cast_or_null<Operator>(join.rightChild());
                auto freeLeft = left.getFreeAttributes();
                auto freeRight = right.getFreeAttributes();
-               auto dependentLeft = intersect(freeLeft, availableD);
-               auto dependentRight = intersect(freeRight, availableD);
+               auto dependentLeft = freeLeft.intersect(availableD);
+               auto dependentRight = freeRight.intersect(availableD);
 
                bool pushDownLeft = !dependentLeft.empty();
                bool pushDownRight = !dependentRight.empty();
@@ -163,7 +153,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       terminator->remove();
       terminator->destroy();
    }
-   void handleJoin(BinaryOperator join, Operator newLeft, Operator newRight, bool joinDependent, bool renameRight, attribute_set& dependentAttributes) {
+   void handleJoin(BinaryOperator join, Operator newLeft, Operator newRight, bool joinDependent, bool renameRight, mlir::relalg::Attributes& dependentAttributes) {
       using namespace mlir;
       auto relType = relalg::RelationType::get(&getContext());
       auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
@@ -227,14 +217,14 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          auto availableRight = right.getAvailableAttributes();
          auto freeLeft = left.getFreeAttributes();
          auto freeRight = right.getFreeAttributes();
-         auto dependentLeft = intersect(freeLeft, availableRight);
-         auto dependentRight = intersect(freeRight, availableLeft);
+         auto dependentLeft = freeLeft.intersect(availableRight);
+         auto dependentRight = freeRight.intersect(availableLeft);
          if (!dependentLeft.empty() && !dependentRight.empty()) {
             return;
          }
          Operator dependentChild;
          Operator providerChild;
-         attribute_set dependentAttributes;
+         mlir::relalg::Attributes dependentAttributes;
          bool dependentOnRight = true;
          if (!dependentLeft.empty()) {
             dependentChild = left;

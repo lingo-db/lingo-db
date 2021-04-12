@@ -133,7 +133,7 @@ let summary = "constant relation";
 let arguments = (ins SymbolNameAttr:$sym_name,ArrayAttr:$attributes,ArrayAttr:$values);
 let results = (outs RelAlg_Relation:$result);
 let extraClassDeclaration = [{
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes();
+Attributes getCreatedAttributes();
 }];
 }
 
@@ -143,7 +143,7 @@ let summary = "base table operation";
 let arguments = (ins SymbolNameAttr:$sym_name, StrAttr: $table_identifier, DictionaryAttr: $columns);
 let results = (outs RelAlg_Relation:$result);
 let extraClassDeclaration = [{
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes();
+Attributes getCreatedAttributes();
 }];
 }
 
@@ -184,9 +184,9 @@ let summary = "renaming attributes in relation";
 let arguments = (ins RelAlg_Relation:$rel,SymbolNameAttr:$sym_name,ArrayAttr:$attributes);
 let results = (outs RelAlg_Relation:$result);
 let extraClassDeclaration = [{
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes();
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getUsedAttributes();
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
+Attributes getCreatedAttributes();
+Attributes getUsedAttributes();
+Attributes getAvailableAttributes();
 
 }];
 }
@@ -197,8 +197,8 @@ let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel, ArrayAttr:$
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$aggr_func);
 let extraClassDeclaration = [{
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getUsedAttributes();
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
+Attributes getUsedAttributes();
+Attributes getAvailableAttributes();
 }];
 }
 def SortOp : RelAlg_Op<"sort",[NoSideEffect,Operator]> {
@@ -206,7 +206,7 @@ let summary = "sort operation";
 let arguments = (ins RelAlg_Relation:$rel, ArrayAttr:$sortspecs);
 let results = (outs RelAlg_Relation:$result);
 let extraClassDeclaration = [{
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getUsedAttributes();
+Attributes getUsedAttributes();
 }];
 }
 // Joins
@@ -231,7 +231,7 @@ let printer = [{
 return printNonCommutativeJoin(this->getOperation(), p);
 }];
 let extraClassDeclaration = [{
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
+Attributes getAvailableAttributes();
 }];
 }
 def AntiSemiJoinOp : RelAlg_Op<"antisemijoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
@@ -240,7 +240,7 @@ let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 let extraClassDeclaration = [{
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
+Attributes getAvailableAttributes();
 }];
 let parser = [{
 return parseNonCommutativeJoin(parser, result);
@@ -289,8 +289,8 @@ let arguments = (ins RelAlg_JoinDirection:$join_direction,SymbolNameAttr:$sym_na
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 let extraClassDeclaration = [{
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getCreatedAttributes();
+Attributes getAvailableAttributes();
+Attributes getCreatedAttributes();
 }];
 }
 // Set Operations
@@ -299,7 +299,7 @@ let summary = "projection operation";
 let arguments = (ins  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$rel, ArrayAttr:$attrs);
 let results = (outs RelAlg_Relation:$result);
 let extraClassDeclaration = [{
-llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*,8> getAvailableAttributes();
+Attributes getAvailableAttributes();
 }];
 }
 
