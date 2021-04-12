@@ -128,7 +128,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             mjop.addPredicate([&](Value tuple, OpBuilder& builder) {
                llvm::SmallVector<mlir::Operation*, 8> extracted;
                llvm::SmallPtrSet<mlir::Operation*, 8> alreadyPresent;
-               addRequirements(inop.getOperation(), &surroundingOperator.getLambdaBlock(), extracted, alreadyPresent);
+               addRequirements(inop.val().getDefiningOp(), &surroundingOperator.getLambdaBlock(), extracted, alreadyPresent);
                mlir::BlockAndValueMapping mapping;
                auto terminator = mjop.getPredicateBlock().getTerminator();
                mapping.map(surroundingOperator.getLambdaArgument(), mjop.getPredicateArgument());
