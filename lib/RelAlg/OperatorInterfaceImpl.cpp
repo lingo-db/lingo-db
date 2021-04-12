@@ -236,13 +236,13 @@ void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir:
 }
 void mlir::relalg::detail::initPredicate(mlir::Operation* op) {
 
-   auto context=op->getContext();
+   auto *context=op->getContext();
    mlir::Type tupleType = mlir::relalg::TupleType::get(context);
-   auto b=new mlir::Block;
-   op->getRegion(0).push_back(b);
-   b->addArgument(tupleType);
+   auto *block=new mlir::Block;
+   op->getRegion(0).push_back(block);
+   block->addArgument(tupleType);
    mlir::OpBuilder builder(context);
-   builder.setInsertionPointToStart(b);
+   builder.setInsertionPointToStart(block);
    builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc());
 }
 

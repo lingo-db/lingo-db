@@ -130,7 +130,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
                llvm::SmallPtrSet<mlir::Operation*, 8> alreadyPresent;
                addRequirements(inop.val().getDefiningOp(), &surroundingOperator.getLambdaBlock(), extracted, alreadyPresent);
                mlir::BlockAndValueMapping mapping;
-               auto terminator = mjop.getPredicateBlock().getTerminator();
+               auto *terminator = mjop.getPredicateBlock().getTerminator();
                mapping.map(surroundingOperator.getLambdaArgument(), mjop.getPredicateArgument());
                for (auto* op : extracted) {
                   auto* cloneOp = builder.clone(*op, mapping);
