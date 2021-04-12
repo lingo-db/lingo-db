@@ -8,6 +8,8 @@
 #include "mlir/IR/OpDefinition.h"
 #include <mlir/Dialect/RelAlg/Attributes.h>
 #include <mlir/IR/SymbolTable.h>
+#include "mlir/IR/Builders.h"
+
 
 namespace mlir::relalg::detail {
 Attributes getUsedAttributes(mlir::Operation* op);
@@ -36,6 +38,7 @@ bool binaryOperatorIs(const bool (&table)[BinaryOperatorType::LAST][BinaryOperat
 bool isJoin(Operation* op);
 
 void addPredicate(mlir::Operation* op, std::function<mlir::Value(mlir::Value, mlir::OpBuilder& builder)> predicateProducer);
+void initPredicate(mlir::Operation* op);
 }
 class Operator;
 #define GET_OP_CLASSES

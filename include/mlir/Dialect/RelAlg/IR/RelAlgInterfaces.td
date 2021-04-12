@@ -170,6 +170,13 @@ InterfaceMethod<
         , /*op=*/[{
 return this->getOperation()->getRegion(0).getArgument(0);
 }]
+>,
+InterfaceMethod<
+        "",
+        "void", "initPredicate",(ins ),""
+        , /*op=*/[{
+mlir::relalg::detail::initPredicate(this->getOperation());
+}]
 >];
 }
 

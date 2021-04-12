@@ -6,7 +6,6 @@
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include <list>
 #include <unordered_set>
 
 namespace {
@@ -24,28 +23,6 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
       }
       alreadyPresent.insert(op);
       extracted.push_back(op);
-   }
-   mlir::Value extract(mlir::Value v, TupleLamdaOperator parent, TupleLamdaOperator newParent) {
-      using namespace mlir;
-      auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
-      std::string scopeName = attributeManager.getUniqueScope("extracted_map");
-      attributeManager.setCurrentScope(scopeName);
-      llvm::SmallVector<mlir::Operation*, 8> extracted;
-      llvm::SmallPtrSet<mlir::Operation*, 8> alreadyPresent;
-      addRequirements(v.getDefiningOp(), &parent.getLambdaBlock(), extracted, alreadyPresent);
-      OpBuilder builder(parent.getOperation());
-      mlir::BlockAndValueMapping mapping;
-
-      mapping.map(parent.getLambdaArgument(), newParent.getLambdaArgument());
-      builder.setInsertionPointToStart(&newParent.getLambdaBlock());
-      auto returnop = builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
-      builder.setInsertionPointToStart(&newParent.getLambdaBlock());
-      for (auto* op : extracted) {
-         auto* cloneOp = builder.clone(*op, mapping);
-         cloneOp->moveBefore(returnop);
-      }
-      builder.setInsertionPoint(returnop);
-      return mapping.lookup(v);
    }
    bool isDirectSelection(mlir::Operation* op, bool& negated) {
       if (!mlir::isa<mlir::relalg::SelectionOp>(op->getParentOp())) {
@@ -72,7 +49,6 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
    void runOnFunction() override {
       auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       using namespace mlir;
-      Type tupleType = mlir::relalg::TupleType::get(&getContext());
       SmallVector<mlir::Operation*> toDestroy;
       getFunction().walk([&](mlir::Operation* op) {
          TupleLamdaOperator surroundingOperator = op->getParentOfType<TupleLamdaOperator>();
@@ -85,10 +61,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
          if (auto getscalarop = mlir::dyn_cast_or_null<mlir::relalg::GetScalarOp>(op)) {
             OpBuilder builder(surroundingOperator);
             auto mjop = builder.create<relalg::SingleJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), mlir::relalg::JoinDirection::left, treeVal, getscalarop.rel());
-            mjop.getRegion().push_back(new Block);
-            mjop.getLambdaBlock().addArgument(tupleType);
-            builder.setInsertionPointToStart(&mjop.getRegion().front());
-            builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
+            mjop.initPredicate();
             builder.setInsertionPoint(getscalarop);
             Operation* replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), getscalarop.attr().getRelationalAttribute().type, getscalarop.attr(), surroundingOperator.getLambdaRegion().getArgument(0));
             getscalarop.replaceAllUsesWith(replacement);
@@ -102,7 +75,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             std::string attributeName = "markattr";
             attributeManager.setCurrentScope(scopeName);
 
-            TupleLamdaOperator mjop;
+            PredicateOperator mjop;
             if (directSelection && negated) {
                mjop = builder.create<relalg::AntiSemiJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), mlir::relalg::JoinDirection::left, treeVal, existsop.rel());
             } else if (directSelection && !negated) {
@@ -113,10 +86,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
                ra.type = mlir::db::BoolType::get(&getContext());
                mjop = builder.create<relalg::MarkJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), mlir::relalg::JoinDirection::left, scopeName, defAttr, treeVal, existsop.rel());
             }
-            mjop.getLambdaRegion().push_back(new Block);
-            mjop.getLambdaBlock().addArgument(tupleType);
-            builder.setInsertionPointToStart(&mjop.getLambdaBlock());
-            builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
+            mjop.initPredicate();
             builder.setInsertionPoint(existsop);
             if (!directSelection) {
                relalg::RelationalAttributeRefAttr refAttr = attributeManager.createRef(scopeName, attributeName);
@@ -143,7 +113,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             std::string scopeName = attributeManager.getUniqueScope("markjoin");
             std::string attributeName = "markattr";
             attributeManager.setCurrentScope(scopeName);
-            TupleLamdaOperator mjop;
+            PredicateOperator mjop;
             if (directSelection && negated) {
                mjop = builder.create<relalg::AntiSemiJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), mlir::relalg::JoinDirection::left, treeVal, inop.rel());
             } else if (directSelection && !negated) {
@@ -154,17 +124,23 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
                ra.type = mlir::db::BoolType::get(&getContext());
                mjop = builder.create<relalg::MarkJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), mlir::relalg::JoinDirection::left, scopeName, markAttrDef, treeVal, inop.rel());
             }
-            mjop.getLambdaRegion().push_back(new Block);
-            mjop.getLambdaBlock().addArgument(tupleType);
-            Value val = extract(inop.val(), surroundingOperator, mjop);
-            builder.setInsertionPoint(mjop.getLambdaBlock().getTerminator());
-            auto otherVal = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), searchInAttr.getRelationalAttribute().type, searchInAttr, mjop.getLambdaArgument());
-            bool nullable = val.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable() || otherVal.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable();
-            Value predicate = builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(&getContext(), nullable), mlir::db::DBCmpPredicate::eq, val, otherVal);
-            auto* previousReturn = mjop.getLambdaBlock().getTerminator();
-            builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), predicate);
-            previousReturn->remove();
-            previousReturn->destroy();
+            mjop.initPredicate();
+            mjop.addPredicate([&](Value tuple, OpBuilder& builder) {
+               llvm::SmallVector<mlir::Operation*, 8> extracted;
+               llvm::SmallPtrSet<mlir::Operation*, 8> alreadyPresent;
+               addRequirements(inop.getOperation(), &surroundingOperator.getLambdaBlock(), extracted, alreadyPresent);
+               mlir::BlockAndValueMapping mapping;
+               auto terminator = mjop.getPredicateBlock().getTerminator();
+               mapping.map(surroundingOperator.getLambdaArgument(), mjop.getPredicateArgument());
+               for (auto* op : extracted) {
+                  auto* cloneOp = builder.clone(*op, mapping);
+                  cloneOp->moveBefore(terminator);
+               }
+               auto val = mapping.lookup(inop.val());
+               auto otherVal = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), searchInAttr.getRelationalAttribute().type, searchInAttr, tuple);
+               Value predicate = builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::eq, val, otherVal);
+               return predicate;
+            });
             builder.setInsertionPoint(inop);
             if (!directSelection) {
                attributeManager.setCurrentScope(scopeName);

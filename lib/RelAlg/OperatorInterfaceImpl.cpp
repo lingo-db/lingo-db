@@ -234,5 +234,17 @@ void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir:
    terminator->remove();
    terminator->destroy();
 }
+void mlir::relalg::detail::initPredicate(mlir::Operation* op) {
+
+   auto context=op->getContext();
+   mlir::Type tupleType = mlir::relalg::TupleType::get(context);
+   auto b=new mlir::Block;
+   op->getRegion(0).push_back(b);
+   b->addArgument(tupleType);
+   mlir::OpBuilder builder(context);
+   builder.setInsertionPointToStart(b);
+   builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc());
+}
+
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"
