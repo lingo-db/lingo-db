@@ -234,18 +234,18 @@ node_set QueryGraphBuilder::calcTES(Operator op, NodeResolver& resolver) {
                }
             }
          }
-         for (auto a : b_right.getAllSubOperators()) {
-            if (auto a_binop = mlir::dyn_cast_or_null<BinaryOperator>(a.getOperation())) {
-               auto [a_left, a_right] = normalizeChildren(a);
-               if (!b.isAssoc(a_binop)) {
+         for (auto subOp : b_right.getAllSubOperators()) {
+            if (auto a = mlir::dyn_cast_or_null<BinaryOperator>(subOp.getOperation())) {
+               auto [a_left, a_right] = normalizeChildren(subOp);
+               if (!b.isAssoc(a)) {
                   tes |= calcT(a_right, resolver);
                }
-               if (!b.isRAsscom(a_binop)) {
+               if (!b.isRAsscom(a)) {
                   tes |= calcT(a_left, resolver);
                }
             } else {
-               if (mlir::isa<mlir::relalg::AggregationOp>(a.getOperation())) {
-                  tes |= calcT(a, resolver);
+               if (mlir::isa<mlir::relalg::AggregationOp>(subOp.getOperation())) {
+                  tes |= calcT(subOp, resolver);
                }
             }
          }
