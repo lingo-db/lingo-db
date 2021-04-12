@@ -211,36 +211,36 @@ void QueryGraphBuilder::ensureConnected() {
       }
    }
 }
-node_set QueryGraphBuilder::calcTES(Operator b, NodeResolver& resolver) {
-   if (TESs.count(b.getOperation())) {
-      return TESs[b.getOperation()];
+node_set QueryGraphBuilder::calcTES(Operator op, NodeResolver& resolver) {
+   if (TESs.count(op.getOperation())) {
+      return TESs[op.getOperation()];
    } else {
-      node_set tes = calcSES(b, resolver);
-      auto children = b.getChildren();
-      if (children.size() == 2) {
-         auto [b_left, b_right] = normalizeChildren(b);
-         for (auto a : b_left.getAllSubOperators()) {
-            if (a.getChildren().size() == 2) {
-               auto [a_left, a_right] = normalizeChildren(a);
-               if (!detail::binaryOperatorIs(detail::assoc, a, b)) {
+      node_set tes = calcSES(op, resolver);
+      auto children = op.getChildren();
+      if (auto b = mlir::dyn_cast_or_null<BinaryOperator>(op.getOperation())) {
+         auto [b_left, b_right] = normalizeChildren(op);
+         for (auto subOp : b_left.getAllSubOperators()) {
+            if (auto a = mlir::dyn_cast_or_null<BinaryOperator>(subOp.getOperation())) {
+               auto [a_left, a_right] = normalizeChildren(subOp);
+               if (!a.isAssoc(b)) {
                   tes |= calcT(a_left, resolver);
                }
-               if (!detail::binaryOperatorIs(detail::lAsscom, a, b)) {
+               if (!a.isLAsscom(b)) {
                   tes |= calcT(a_right, resolver);
                }
             } else {
-               if (mlir::isa<mlir::relalg::AggregationOp>(a.getOperation())) {
-                  tes |= calcT(a, resolver);
+               if (mlir::isa<mlir::relalg::AggregationOp>(subOp.getOperation())) {
+                  tes |= calcT(subOp, resolver);
                }
             }
          }
          for (auto a : b_right.getAllSubOperators()) {
-            if (a.getChildren().size() == 2) {
+            if (auto a_binop = mlir::dyn_cast_or_null<BinaryOperator>(a.getOperation())) {
                auto [a_left, a_right] = normalizeChildren(a);
-               if (!detail::binaryOperatorIs(detail::assoc, b, a)) {
+               if (!b.isAssoc(a_binop)) {
                   tes |= calcT(a_right, resolver);
                }
-               if (!detail::binaryOperatorIs(detail::rAsscom, b, a)) {
+               if (!b.isRAsscom(a_binop)) {
                   tes |= calcT(a_left, resolver);
                }
             } else {
@@ -252,10 +252,10 @@ node_set QueryGraphBuilder::calcTES(Operator b, NodeResolver& resolver) {
 
       } else if (children.size() == 1) {
          auto onlyChild = children[0];
-         if (mlir::isa<mlir::relalg::AggregationOp>(b.getOperation())) {
+         if (mlir::isa<mlir::relalg::AggregationOp>(op.getOperation())) {
             tes |= calcT(onlyChild, resolver);
          }
-         if (auto renameop = mlir::dyn_cast_or_null<mlir::relalg::RenamingOp>(b.getOperation())) {
+         if (auto renameop = mlir::dyn_cast_or_null<mlir::relalg::RenamingOp>(op.getOperation())) {
             for (auto a : onlyChild.getAllSubOperators()) {
                if (a.getUsedAttributes().intersects(renameop.getUsedAttributes()) || a.getCreatedAttributes().intersects(renameop.getCreatedAttributes())) {
                   tes |= calcT(onlyChild, resolver);
@@ -263,7 +263,7 @@ node_set QueryGraphBuilder::calcTES(Operator b, NodeResolver& resolver) {
             }
          }
       }
-      TESs[b.getOperation()] = tes;
+      TESs[op.getOperation()] = tes;
       return tes;
    }
 }

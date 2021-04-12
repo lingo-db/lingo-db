@@ -91,13 +91,9 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             if (mlir::relalg::detail::isJoin(join.getOperation())) {
                auto left = mlir::dyn_cast_or_null<Operator>(join.leftChild());
                auto right = mlir::dyn_cast_or_null<Operator>(join.rightChild());
-               auto freeLeft = left.getFreeAttributes();
                auto freeRight = right.getFreeAttributes();
-               auto dependentLeft = freeLeft.intersect(availableD);
-               auto dependentRight = freeRight.intersect(availableD);
-
-               bool pushDownLeft = !dependentLeft.empty();
-               bool pushDownRight = !dependentRight.empty();
+               auto pushDownLeft = left.getFreeAttributes().intersects(availableD);
+               auto pushDownRight = right.getFreeAttributes().intersects(availableD);
                bool renameRight = true;
                if (!mlir::isa<InnerJoinOp>(join.getOperation()) && !mlir::isa<FullOuterJoinOp>(join.getOperation())) {
                   JoinDirection joinDirection = symbolizeJoinDirection(join->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt()).getValue();
@@ -138,21 +134,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             return others;
          });
    }
-   void addPredicate(TupleLamdaOperator lambdaOperator, std::function<mlir::Value(mlir::Value, mlir::OpBuilder& builder)> predicateProducer) {
-      auto* terminator = lambdaOperator.getLambdaBlock().getTerminator();
-      mlir::OpBuilder builder(terminator);
-      auto additionalPred = predicateProducer(lambdaOperator.getLambdaArgument(), builder);
-      if (terminator->getNumOperands() > 0) {
-         mlir::Value oldValue = terminator->getOperand(0);
-         bool nullable = oldValue.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable() || additionalPred.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable();
-         mlir::Value anded = builder.create<mlir::db::AndOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext(), nullable), mlir::ValueRange({oldValue, additionalPred}));
-         builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), anded);
-      } else {
-         builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), additionalPred);
-      }
-      terminator->remove();
-      terminator->destroy();
-   }
+
    void handleJoin(BinaryOperator join, Operator newLeft, Operator newRight, bool joinDependent, bool renameRight, mlir::relalg::Attributes& dependentAttributes) {
       using namespace mlir;
       auto relType = relalg::RelationType::get(&getContext());
@@ -176,24 +158,16 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             renamed.insert({attr, &def.getRelationalAttribute()});
          }
          Operator renamingop = builder.create<relalg::RenamingOp>(builder.getUnknownLoc(), relType, toRename->getResult(0), scope, builder.getArrayAttr(renamingDefsAsAttr));
-         addPredicate(mlir::dyn_cast_or_null<TupleLamdaOperator>(join.getOperation()), [&](Value tuple, OpBuilder& builder) {
-            std::vector<Value> toAnd;
-            bool anyNullable = false;
-            for (auto* attr : dependentAttributes) {
+         for (auto* attr : dependentAttributes) {
+            mlir::dyn_cast_or_null<PredicateOperator>(join.getOperation()).addPredicate([&](Value tuple, OpBuilder& builder) {
                auto attrefDependent = attributeManager.createRef(renamed[attr]);
                Value valLeft = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), attr->type, attributeManager.createRef(attr), tuple);
                Value valRight = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), attr->type, attrefDependent, tuple);
                Value cmpEq = builder.create<db::CmpOp>(builder.getUnknownLoc(), db::DBCmpPredicate::eq, valLeft, valRight);
-               anyNullable |= cmpEq.getType().dyn_cast_or_null<db::DBType>().isNullable();
-               toAnd.push_back(cmpEq);
-            }
-            if (toAnd.size() == 1) {
-               return toAnd[0];
-            } else {
-               Value anded = builder.create<db::AndOp>(builder.getUnknownLoc(), db::BoolType::get(builder.getContext(), anyNullable), toAnd);
-               return anded;
-            }
-         });
+               return cmpEq;
+            });
+         }
+
          if (renameRight) {
             newRight = renamingop;
          } else {
@@ -213,12 +187,8 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          if (!mlir::relalg::detail::isDependentJoin(binaryOperator.getOperation())) return;
          auto left = mlir::dyn_cast_or_null<Operator>(binaryOperator.leftChild());
          auto right = mlir::dyn_cast_or_null<Operator>(binaryOperator.rightChild());
-         auto availableLeft = left.getAvailableAttributes();
-         auto availableRight = right.getAvailableAttributes();
-         auto freeLeft = left.getFreeAttributes();
-         auto freeRight = right.getFreeAttributes();
-         auto dependentLeft = freeLeft.intersect(availableRight);
-         auto dependentRight = freeRight.intersect(availableLeft);
+         auto dependentLeft = left.getFreeAttributes().intersect(right.getAvailableAttributes());
+         auto dependentRight = right.getFreeAttributes().intersect(left.getAvailableAttributes());
          if (!dependentLeft.empty() && !dependentRight.empty()) {
             return;
          }

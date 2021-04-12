@@ -151,7 +151,7 @@ Attributes getCreatedAttributes();
 // Operators
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,Operator,TupleLamdaOperator]> {
+def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,Operator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "selection operation";
 let arguments = (ins RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
@@ -210,14 +210,14 @@ Attributes getUsedAttributes();
 }];
 }
 // Joins
-def InnerJoinOp : RelAlg_Op<"join",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
+def InnerJoinOp : RelAlg_Op<"join",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "inner join operation";
 let arguments = (ins RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
 
-def SemiJoinOp : RelAlg_Op<"semijoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
+def SemiJoinOp : RelAlg_Op<"semijoin",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "semi join operation";
 let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
@@ -234,7 +234,7 @@ let extraClassDeclaration = [{
 Attributes getAvailableAttributes();
 }];
 }
-def AntiSemiJoinOp : RelAlg_Op<"antisemijoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
+def AntiSemiJoinOp : RelAlg_Op<"antisemijoin",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "antisemi join operation";
 let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
@@ -250,7 +250,7 @@ let printer = [{
 return printNonCommutativeJoin(this->getOperation(), p);
 }];
 }
-def OuterJoinOp : RelAlg_Op<"outerjoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
+def OuterJoinOp : RelAlg_Op<"outerjoin",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "outer join operation";
 let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
@@ -263,14 +263,14 @@ let printer = [{
 return printNonCommutativeJoin(this->getOperation(), p);
 }];
 }
-def FullOuterJoinOp : RelAlg_Op<"fullouterjoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
+def FullOuterJoinOp : RelAlg_Op<"fullouterjoin",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "full outer join operation";
 let arguments = (ins RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 
 }
-def SingleJoinOp : RelAlg_Op<"singlejoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
+def SingleJoinOp : RelAlg_Op<"singlejoin",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "single join operation";
 let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
@@ -283,7 +283,7 @@ let printer = [{
 return printNonCommutativeJoin(this->getOperation(), p);
 }];
 }
-def MarkJoinOp : RelAlg_Op<"markjoin",[RecursiveSideEffects,Operator,BinaryOperator,TupleLamdaOperator]> {
+def MarkJoinOp : RelAlg_Op<"markjoin",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "mark join operation";
 let arguments = (ins RelAlg_JoinDirection:$join_direction,SymbolNameAttr:$sym_name,RelationalAttributeDefAttr:$markattr,RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);

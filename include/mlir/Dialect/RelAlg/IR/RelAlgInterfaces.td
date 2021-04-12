@@ -95,6 +95,24 @@ return this->getOperation()->getOperand(0).getDefiningOp();
 }]
 >,
 InterfaceMethod<
+        "assoc",
+        "bool", "isAssoc",(ins "BinaryOperator":$binop),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::binaryOperatorIs(mlir::relalg::detail::assoc,this->getOperation(),binop.getOperation());
+}]
+>,
+InterfaceMethod<
+"assoc",
+"bool", "isLAsscom",(ins "BinaryOperator":$binop),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::binaryOperatorIs(mlir::relalg::detail::lAsscom,this->getOperation(),binop.getOperation());
+}]
+>,
+InterfaceMethod<
+"assoc",
+"bool", "isRAsscom",(ins "BinaryOperator":$binop),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::binaryOperatorIs(mlir::relalg::detail::rAsscom,this->getOperation(),binop.getOperation());
+}]
+>,
+InterfaceMethod<
         "get all attributes that are used directly by this operator",
         "mlir::Operation*", "rightChild",(ins ),"", /*defaultImplementation=*/[{
 return this->getOperation()->getOperand(1).getDefiningOp();
@@ -120,6 +138,35 @@ return this->getOperation()->getRegion(0).front();
 InterfaceMethod<
         "",
         "mlir::BlockArgument", "getLambdaArgument",(ins ),""
+        , /*op=*/[{
+return this->getOperation()->getRegion(0).getArgument(0);
+}]
+>];
+}
+def PredicateOperator : OpInterface<"PredicateOperator"> {
+let methods = [
+InterfaceMethod<
+        "",
+        "mlir::Region&", "getPredicateRegion",(ins ),""
+        , /*op=*/[{
+return this->getOperation()->getRegion(0);
+}]
+>,
+InterfaceMethod<
+        "",
+        "mlir::Block&", "getPredicateBlock",(ins ),""
+        , /*op=*/[{
+return this->getOperation()->getRegion(0).front();
+}]>,
+InterfaceMethod<
+        "",
+        "void", "addPredicate",(ins "std::function<mlir::Value(mlir::Value, mlir::OpBuilder& builder)>":$producer),""
+        , /*op=*/[{
+mlir::relalg::detail::addPredicate(this->getOperation(),producer);
+}]>,
+InterfaceMethod<
+        "",
+        "mlir::BlockArgument", "getPredicateArgument",(ins ),""
         , /*op=*/[{
 return this->getOperation()->getRegion(0).getArgument(0);
 }]

@@ -1,7 +1,8 @@
+#include "llvm/ADT/TypeSwitch.h"
+#include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/IR/OpImplementation.h"
-#include <llvm/ADT/TypeSwitch.h>
 #include <functional>
 using namespace mlir::relalg;
 using operator_list = llvm::SmallVector<Operator, 4>;
@@ -215,6 +216,23 @@ bool mlir::relalg::detail::binaryOperatorIs(const bool (&table)[BinaryOperatorTy
 bool mlir::relalg::detail::isJoin(Operation* op) {
    auto opType = getBinaryOperatorType(op);
    return InnerJoin <= opType && opType <= MarkJoin;
+}
+
+void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir::Value(mlir::Value, mlir::OpBuilder& builder)> predicateProducer) {
+   auto lambdaOperator = mlir::dyn_cast_or_null<PredicateOperator>(op);
+   auto* terminator = lambdaOperator.getPredicateBlock().getTerminator();
+   mlir::OpBuilder builder(terminator);
+   auto additionalPred = predicateProducer(lambdaOperator.getPredicateArgument(), builder);
+   if (terminator->getNumOperands() > 0) {
+      mlir::Value oldValue = terminator->getOperand(0);
+      bool nullable = oldValue.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable() || additionalPred.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable();
+      mlir::Value anded = builder.create<mlir::db::AndOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext(), nullable), mlir::ValueRange({oldValue, additionalPred}));
+      builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), anded);
+   } else {
+      builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), additionalPred);
+   }
+   terminator->remove();
+   terminator->destroy();
 }
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"

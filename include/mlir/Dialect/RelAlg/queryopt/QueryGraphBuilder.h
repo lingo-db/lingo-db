@@ -67,7 +67,7 @@ class QueryGraphBuilder {
    static bool intersects(const attribute_set& a, const attribute_set& b) {
       return llvm::any_of(a, [&](auto x) { return b.contains(x); });
    }
-   node_set calcTES(Operator b, NodeResolver& resolver);
+   node_set calcTES(Operator op, NodeResolver& resolver);
 
    NodeResolver populateQueryGraph(Operator op);
 

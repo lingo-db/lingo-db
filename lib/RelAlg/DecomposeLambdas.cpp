@@ -1,6 +1,6 @@
 
-#include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
@@ -14,91 +14,87 @@
 namespace {
 class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::FunctionPass> {
    public:
-   void addRequirements(mlir::Operation* op,mlir::Block* b,llvm::SmallVector<mlir::Operation*,8>& extracted, llvm::SmallPtrSet<mlir::Operation*,8>& alreadyPresent){
-      if(!op)
+   void addRequirements(mlir::Operation* op, mlir::Block* b, llvm::SmallVector<mlir::Operation*, 8>& extracted, llvm::SmallPtrSet<mlir::Operation*, 8>& alreadyPresent) {
+      if (!op)
          return;
-      if(op->getBlock()!=b)
+      if (op->getBlock() != b)
          return;
-      if(alreadyPresent.contains(op))
+      if (alreadyPresent.contains(op))
          return;
-      for(auto operand:op->getOperands()) {
+      for (auto operand : op->getOperands()) {
          addRequirements(operand.getDefiningOp(), b, extracted, alreadyPresent);
       }
       alreadyPresent.insert(op);
       extracted.push_back(op);
    }
-   void decomposeSelection(mlir::Value v,mlir::Value& tree ){
-      auto currentSel=mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(v.getDefiningOp()->getParentOp());
+   void decomposeSelection(mlir::Value v, mlir::Value& tree) {
+      auto currentSel = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(v.getDefiningOp()->getParentOp());
       using namespace mlir;
-      if(auto andop=dyn_cast_or_null<mlir::db::AndOp>(v.getDefiningOp())){
-         Value toReturn;
-         for(auto operand:andop.vals()){
+      if (auto andop = dyn_cast_or_null<mlir::db::AndOp>(v.getDefiningOp())) {
+         for (auto operand : andop.vals()) {
             decomposeSelection(operand, tree);
          }
-      }else{
-         llvm::SmallVector<mlir::Operation*,8> extracted;
-         llvm::SmallPtrSet<mlir::Operation*,8> alreadyPresent;
-         addRequirements(v.getDefiningOp(),v.getDefiningOp()->getBlock(),extracted,alreadyPresent);
+      } else {
+         llvm::SmallVector<mlir::Operation*, 8> extracted;
+         llvm::SmallPtrSet<mlir::Operation*, 8> alreadyPresent;
+         addRequirements(v.getDefiningOp(), v.getDefiningOp()->getBlock(), extracted, alreadyPresent);
          OpBuilder builder(currentSel);
          mlir::BlockAndValueMapping mapping;
-         auto newsel=builder.create<relalg::SelectionOp>(builder.getUnknownLoc(),mlir::relalg::RelationType::get(builder.getContext()),tree);
-         tree=newsel;
+         auto newsel = builder.create<relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), tree);
+         tree = newsel;
          newsel.predicate().push_back(new Block);
          newsel.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
-         mapping.map(currentSel.getLambdaArgument(),newsel.getLambdaArgument());
+         mapping.map(currentSel.getPredicateArgument(), newsel.getPredicateArgument());
          builder.setInsertionPointToStart(&newsel.predicate().front());
-         auto returnop=builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
+         auto returnop = builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
          builder.setInsertionPointToStart(&newsel.predicate().front());
-         for(auto *op:extracted){
-            auto *cloneOp=builder.clone(*op,mapping);
+         for (auto* op : extracted) {
+            auto* cloneOp = builder.clone(*op, mapping);
             cloneOp->moveBefore(returnop);
          }
-         builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(),mapping.lookup(v));
+         builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), mapping.lookup(v));
          returnop->remove();
          returnop->destroy();
-
       }
    }
-   void decomposeMap(mlir::relalg::MapOp currentMap,mlir::Value& tree ){
+   void decomposeMap(mlir::relalg::MapOp currentMap, mlir::Value& tree) {
       using namespace mlir;
-      currentMap->walk([&](mlir::relalg::AddAttrOp addAttrOp){
-        llvm::SmallVector<mlir::Operation*,8> extracted;
-        llvm::SmallPtrSet<mlir::Operation*,8> alreadyPresent;
-        addRequirements(addAttrOp.getOperation(),addAttrOp->getBlock(),extracted,alreadyPresent);
-        OpBuilder builder(currentMap);
-        mlir::BlockAndValueMapping mapping;
-        auto newmap=builder.create<relalg::MapOp>(builder.getUnknownLoc(),mlir::relalg::RelationType::get(builder.getContext()),currentMap.sym_name(),tree);
-        tree=newmap;
-        newmap.predicate().push_back(new Block);
-        newmap.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
-        mapping.map(currentMap.getLambdaArgument(),newmap.getLambdaArgument());
-        builder.setInsertionPointToStart(&newmap.predicate().front());
-        auto returnop=builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
-        builder.setInsertionPointToStart(&newmap.predicate().front());
-        for(auto *op:extracted){
-           auto *cloneOp=builder.clone(*op,mapping);
-           cloneOp->moveBefore(returnop);
-        }
+      currentMap->walk([&](mlir::relalg::AddAttrOp addAttrOp) {
+         llvm::SmallVector<mlir::Operation*, 8> extracted;
+         llvm::SmallPtrSet<mlir::Operation*, 8> alreadyPresent;
+         addRequirements(addAttrOp.getOperation(), addAttrOp->getBlock(), extracted, alreadyPresent);
+         OpBuilder builder(currentMap);
+         mlir::BlockAndValueMapping mapping;
+         auto newmap = builder.create<relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), currentMap.sym_name(), tree);
+         tree = newmap;
+         newmap.predicate().push_back(new Block);
+         newmap.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
+         mapping.map(currentMap.getLambdaArgument(), newmap.getLambdaArgument());
+         builder.setInsertionPointToStart(&newmap.predicate().front());
+         auto returnop = builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
+         builder.setInsertionPointToStart(&newmap.predicate().front());
+         for (auto* op : extracted) {
+            auto* cloneOp = builder.clone(*op, mapping);
+            cloneOp->moveBefore(returnop);
+         }
       });
-
-
    }
    void runOnFunction() override {
       getFunction().walk([&](mlir::relalg::SelectionOp op) {
-         auto *terminator=op.getRegion().front().getTerminator();
-         auto retval=terminator->getOperand(0);
-         mlir::Value val=op.rel();
+         auto* terminator = op.getRegion().front().getTerminator();
+         auto retval = terminator->getOperand(0);
+         mlir::Value val = op.rel();
          decomposeSelection(retval, val);
          op.replaceAllUsesWith(val);
          op->remove();
          op->destroy();
       });
       getFunction().walk([&](mlir::relalg::MapOp op) {
-        mlir::Value val=op.rel();
-        decomposeMap(op, val);
-        op.replaceAllUsesWith(val);
-        op->remove();
-        op->destroy();
+         mlir::Value val = op.rel();
+         decomposeMap(op, val);
+         op.replaceAllUsesWith(val);
+         op->remove();
+         op->destroy();
       });
    }
 };

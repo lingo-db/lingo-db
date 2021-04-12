@@ -34,6 +34,8 @@ extern const bool rAsscom[BinaryOperatorType::LAST][BinaryOperatorType::LAST];
 BinaryOperatorType getBinaryOperatorType(Operation* op);
 bool binaryOperatorIs(const bool (&table)[BinaryOperatorType::LAST][BinaryOperatorType::LAST], Operation* a, Operation* b);
 bool isJoin(Operation* op);
+
+void addPredicate(mlir::Operation* op, std::function<mlir::Value(mlir::Value, mlir::OpBuilder& builder)> predicateProducer);
 }
 class Operator;
 #define GET_OP_CLASSES

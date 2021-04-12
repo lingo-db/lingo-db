@@ -107,13 +107,10 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
          }
          Operator pushedDown = pushdown(sel, sel.getChildren()[0]);
          if (sel.getOperation() != pushedDown.getOperation()) {
-            //sel.replaceAllUsesWith(pushed_down.getOperation());
             sel.getResult().replaceUsesWithIf(pushedDown->getResult(0), [&](mlir::OpOperand& operand) {
                return users.contains(operand.getOwner());
             });
          }
-
-         //return WalkResult::interrupt();
       });
    }
 };
