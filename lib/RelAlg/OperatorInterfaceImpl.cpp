@@ -218,7 +218,7 @@ bool mlir::relalg::detail::isJoin(Operation* op) {
    return InnerJoin <= opType && opType <= MarkJoin;
 }
 
-void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir::Value(mlir::Value, mlir::OpBuilder& builder)> predicateProducer) {
+void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir::Value(mlir::Value, mlir::OpBuilder&)> predicateProducer) {
    auto lambdaOperator = mlir::dyn_cast_or_null<PredicateOperator>(op);
    auto* terminator = lambdaOperator.getPredicateBlock().getTerminator();
    mlir::OpBuilder builder(terminator);
