@@ -1,13 +1,7 @@
-
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
-
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include <iostream>
-#include <list>
-#include <queue>
-#include <unordered_set>
 
 namespace {
 class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, mlir::FunctionPass> {
@@ -26,7 +20,6 @@ class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, 
          if (auto o = mlir::dyn_cast_or_null<TupleLamdaOperator>(innerOperator->getParentOp())) {
             mlir::BlockAndValueMapping mapping;
             TupleLamdaOperator toMoveBefore;
-
             while (o) {
                if (auto innerLambda = mlir::dyn_cast_or_null<TupleLamdaOperator>(innerOperator.getOperation())) {
                   mapping.map(o.getLambdaArgument(), innerLambda.getLambdaArgument());
@@ -37,7 +30,7 @@ class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, 
             innerOperator->walk([&](mlir::Operation* op) {
                if (!mlir::isa<Operator>(op)) {
                   mlir::relalg::detail::inlineOpIntoBlock(op, toMoveBefore, innerOperator, op->getBlock(), mapping);
-                  sanitizeOp(mapping,op);
+                  sanitizeOp(mapping, op);
                }
             });
             innerOperator->moveBefore(toMoveBefore);

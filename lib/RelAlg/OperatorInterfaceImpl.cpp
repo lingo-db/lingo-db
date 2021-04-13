@@ -2,6 +2,7 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/OpImplementation.h"
 #include <functional>
 using namespace mlir::relalg;
@@ -235,10 +236,9 @@ void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir:
    terminator->destroy();
 }
 void mlir::relalg::detail::initPredicate(mlir::Operation* op) {
-
-   auto *context=op->getContext();
+   auto* context = op->getContext();
    mlir::Type tupleType = mlir::relalg::TupleType::get(context);
-   auto *block=new mlir::Block;
+   auto* block = new mlir::Block;
    op->getRegion(0).push_back(block);
    block->addArgument(tupleType);
    mlir::OpBuilder builder(context);
@@ -246,7 +246,7 @@ void mlir::relalg::detail::initPredicate(mlir::Operation* op) {
    builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc());
 }
 
-void mlir::relalg::detail::addRequirements(mlir::Operation* op, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, llvm::SmallVector<mlir::Operation*, 8>& extracted, llvm::SmallPtrSet<mlir::Operation*, 8>& alreadyPresent) {
+static void addRequirements(mlir::Operation* op, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, llvm::SmallVector<mlir::Operation*, 8>& extracted, llvm::SmallPtrSet<mlir::Operation*, 8>& alreadyPresent) {
    if (!op)
       return;
    if (alreadyPresent.contains(op))
@@ -273,6 +273,5 @@ void mlir::relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operati
       cloneOp->moveBefore(first);
    }
 }
-
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"

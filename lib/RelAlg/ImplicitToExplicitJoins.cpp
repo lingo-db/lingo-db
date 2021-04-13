@@ -1,12 +1,9 @@
-
 #include "mlir/Dialect/DB/IR/DBOps.h"
-#include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
-
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
+#include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include <unordered_set>
 
 namespace {
 
@@ -107,9 +104,9 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             auto searchInAttr = attributeManager.createRef(attr);
             handleScalarBoolOp(surroundingOperator, op, relOperator, [&](PredicateOperator predicateOperator) {
                predicateOperator.addPredicate([&](Value tuple, OpBuilder& builder) {
-                 mlir::BlockAndValueMapping mapping;
-                 mapping.map(surroundingOperator.getLambdaArgument(), predicateOperator.getPredicateArgument());
-                  mlir::relalg::detail::inlineOpIntoBlock(inop.val().getDefiningOp(),surroundingOperator.getOperation(), predicateOperator.getOperation(),&predicateOperator.getPredicateBlock(),mapping);
+                  mlir::BlockAndValueMapping mapping;
+                  mapping.map(surroundingOperator.getLambdaArgument(), predicateOperator.getPredicateArgument());
+                  mlir::relalg::detail::inlineOpIntoBlock(inop.val().getDefiningOp(), surroundingOperator.getOperation(), predicateOperator.getOperation(), &predicateOperator.getPredicateBlock(), mapping);
                   auto val = mapping.lookup(inop.val());
                   auto otherVal = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), searchInAttr.getRelationalAttribute().type, searchInAttr, tuple);
                   Value predicate = builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::eq, val, otherVal);
