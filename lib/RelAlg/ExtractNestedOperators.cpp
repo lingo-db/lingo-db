@@ -12,30 +12,12 @@
 namespace {
 class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, mlir::FunctionPass> {
    public:
-   void sanitizeOp(Operator& innerOperator, TupleLamdaOperator moveBefore, mlir::BlockAndValueMapping& mapping, mlir::Operation* op) const {
+   void sanitizeOp(mlir::BlockAndValueMapping& mapping, mlir::Operation* op) const {
       for (size_t i = 0; i < op->getNumOperands(); i++) {
          mlir::Value v = op->getOperand(i);
          if (mapping.contains(v)) {
             op->setOperand(i, mapping.lookup(v));
             continue;
-         }
-         if (innerOperator->getRegion(0).isAncestor(v.getParentRegion())) {
-            continue;
-         }
-         mlir::Operation* definingOp = v.getDefiningOp();
-         if (definingOp && moveBefore->isAncestor(definingOp)) {
-            mlir::OpBuilder builder(op);
-            auto* clonedOp = builder.clone(*definingOp, mapping);
-            clonedOp->moveBefore(op);
-            for (size_t i = 0; i < op->getNumResults(); i++) {
-               definingOp->getResult(i).replaceUsesWithIf(clonedOp->getResult(i), [innerOperator](mlir::OpOperand& operand) {
-                  return operand.getOwner()->getParentOfType<Operator>() == innerOperator;
-               });
-            }
-            for (size_t i = 0; i < definingOp->getNumResults(); i++) {
-               mapping.map(definingOp->getResult(i), clonedOp->getResult(i));
-            }
-            sanitizeOp(innerOperator, moveBefore, mapping, clonedOp);
          }
       }
    }
@@ -54,7 +36,8 @@ class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, 
             }
             innerOperator->walk([&](mlir::Operation* op) {
                if (!mlir::isa<Operator>(op)) {
-                  sanitizeOp(innerOperator, toMoveBefore, mapping, op);
+                  mlir::relalg::detail::inlineOpIntoBlock(op, toMoveBefore, innerOperator, op->getBlock(), mapping);
+                  sanitizeOp(mapping,op);
                }
             });
             innerOperator->moveBefore(toMoveBefore);

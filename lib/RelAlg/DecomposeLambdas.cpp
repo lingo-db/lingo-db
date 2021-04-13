@@ -39,7 +39,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
          newmap.predicate().push_back(new Block);
          newmap.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
          builder.setInsertionPointToStart(&newmap.predicate().front());
-         auto returnop = builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
+         builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
          mapping.map(currentMap.getLambdaArgument(), newmap.getLambdaArgument());
          mlir::relalg::detail::inlineOpIntoBlock(addAttrOp.getOperation(), addAttrOp->getParentOp(), newmap.getOperation(), &newmap.getLambdaBlock(), mapping);
       });

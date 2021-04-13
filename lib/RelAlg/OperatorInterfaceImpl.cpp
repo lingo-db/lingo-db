@@ -249,17 +249,17 @@ void mlir::relalg::detail::initPredicate(mlir::Operation* op) {
 void mlir::relalg::detail::addRequirements(mlir::Operation* op, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, llvm::SmallVector<mlir::Operation*, 8>& extracted, llvm::SmallPtrSet<mlir::Operation*, 8>& alreadyPresent) {
    if (!op)
       return;
-   if (!includeChildren->isAncestor(op))
-      return;
-   if (excludeChildren->isAncestor(op))
-      return;
    if (alreadyPresent.contains(op))
+      return;
+   if (!includeChildren->isAncestor(op))
       return;
    for (auto operand : op->getOperands()) {
       addRequirements(operand.getDefiningOp(), includeChildren, excludeChildren, extracted, alreadyPresent);
    }
    alreadyPresent.insert(op);
-   extracted.push_back(op);
+   if (!excludeChildren->isAncestor(op)) {
+      extracted.push_back(op);
+   }
 }
 void mlir::relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, mlir::Block* newBlock, mlir::BlockAndValueMapping& mapping) {
    llvm::SmallVector<mlir::Operation*, 8> extracted;
