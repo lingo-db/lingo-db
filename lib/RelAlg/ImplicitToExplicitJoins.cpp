@@ -12,19 +12,6 @@ namespace {
 
 class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins, mlir::FunctionPass> {
    llvm::SmallVector<mlir::Operation*> toDestroy;
-   void addRequirements(mlir::Operation* op, mlir::Block* b, llvm::SmallVector<mlir::Operation*, 8>& extracted, llvm::SmallPtrSet<mlir::Operation*, 8>& alreadyPresent) {
-      if (!op)
-         return;
-      if (op->getBlock() != b)
-         return;
-      if (alreadyPresent.contains(op))
-         return;
-      for (auto operand : op->getOperands()) {
-         addRequirements(operand.getDefiningOp(), b, extracted, alreadyPresent);
-      }
-      alreadyPresent.insert(op);
-      extracted.push_back(op);
-   }
    bool isDirectSelection(mlir::Operation* op, bool& negated) {
       if (!mlir::isa<mlir::relalg::SelectionOp>(op->getParentOp())) {
          return false;
@@ -118,18 +105,11 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             //get attribute of relation to search in
             auto* attr = *relOperator.getAvailableAttributes().begin();
             auto searchInAttr = attributeManager.createRef(attr);
-            handleScalarBoolOp(surroundingOperator, op, relOperator, [&](PredicateOperator mjop) {
-               mjop.addPredicate([&](Value tuple, OpBuilder& builder) {
-                  llvm::SmallVector<mlir::Operation*, 8> extracted;
-                  llvm::SmallPtrSet<mlir::Operation*, 8> alreadyPresent;
-                  addRequirements(inop.val().getDefiningOp(), &surroundingOperator.getLambdaBlock(), extracted, alreadyPresent);
-                  mlir::BlockAndValueMapping mapping;
-                  auto* terminator = mjop.getPredicateBlock().getTerminator();
-                  mapping.map(surroundingOperator.getLambdaArgument(), mjop.getPredicateArgument());
-                  for (auto* op : extracted) {
-                     auto* cloneOp = builder.clone(*op, mapping);
-                     cloneOp->moveBefore(terminator);
-                  }
+            handleScalarBoolOp(surroundingOperator, op, relOperator, [&](PredicateOperator predicateOperator) {
+               predicateOperator.addPredicate([&](Value tuple, OpBuilder& builder) {
+                 mlir::BlockAndValueMapping mapping;
+                 mapping.map(surroundingOperator.getLambdaArgument(), predicateOperator.getPredicateArgument());
+                  mlir::relalg::detail::inlineOpIntoBlock(inop.val().getDefiningOp(),surroundingOperator.getOperation(), predicateOperator.getOperation(),&predicateOperator.getPredicateBlock(),mapping);
                   auto val = mapping.lookup(inop.val());
                   auto otherVal = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), searchInAttr.getRelationalAttribute().type, searchInAttr, tuple);
                   Value predicate = builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::eq, val, otherVal);
