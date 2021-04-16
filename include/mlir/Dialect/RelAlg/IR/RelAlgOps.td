@@ -151,26 +151,26 @@ Attributes getCreatedAttributes();
 // Operators
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,Operator,PredicateOperator,TupleLamdaOperator]> {
+def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,Operator,PredicateOperator,TupleLamdaOperator,UnaryOperator]> {
 let summary = "selection operation";
 let arguments = (ins RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
-def MapOp : RelAlg_Op<"map",[RecursiveSideEffects,Operator,TupleLamdaOperator]> {
+def MapOp : RelAlg_Op<"map",[RecursiveSideEffects,Operator,TupleLamdaOperator,UnaryOperator]> {
 let summary = "map operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
-def LimitOp : RelAlg_Op<"limit",[NoSideEffect,Operator]> {
+def LimitOp : RelAlg_Op<"limit",[NoSideEffect,Operator,UnaryOperator]> {
 let summary = "limit operation";
 let arguments = (ins I32Attr:$rows, RelAlg_Relation:$rel);
 let results = (outs RelAlg_Relation:$result);
 let assemblyFormat =
 [{ $rows $rel attr-dict }];
 }
-def CrossProductOp : RelAlg_Op<"crossproduct",[RecursiveSideEffects,Operator]> {
+def CrossProductOp : RelAlg_Op<"crossproduct",[RecursiveSideEffects,Operator,BinaryOperator]> {
 let summary = "crossproduct operation";
 let arguments = (ins RelAlg_Relation:$left,RelAlg_Relation:$right);
 let results = (outs RelAlg_Relation:$result);
@@ -179,7 +179,7 @@ let assemblyFormat =
 }
 
 def RenamingOp : RelAlg_Op<"renaming",
-        [ RecursiveSideEffects,Operator]> {
+        [ RecursiveSideEffects,Operator,UnaryOperator]> {
 let summary = "renaming attributes in relation";
 let arguments = (ins RelAlg_Relation:$rel,SymbolNameAttr:$sym_name,ArrayAttr:$attributes);
 let results = (outs RelAlg_Relation:$result);
@@ -191,7 +191,7 @@ Attributes getAvailableAttributes();
 }];
 }
 
-def AggregationOp : RelAlg_Op<"aggregation",[RecursiveSideEffects,Operator]> {
+def AggregationOp : RelAlg_Op<"aggregation",[RecursiveSideEffects,Operator,UnaryOperator]> {
 let summary = "aggregation operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel, ArrayAttr:$group_by_attrs);
 let results = (outs RelAlg_Relation:$result);
@@ -201,7 +201,7 @@ Attributes getUsedAttributes();
 Attributes getAvailableAttributes();
 }];
 }
-def SortOp : RelAlg_Op<"sort",[NoSideEffect,Operator]> {
+def SortOp : RelAlg_Op<"sort",[NoSideEffect,Operator,UnaryOperator]> {
 let summary = "sort operation";
 let arguments = (ins RelAlg_Relation:$rel, ArrayAttr:$sortspecs);
 let results = (outs RelAlg_Relation:$result);
@@ -294,7 +294,7 @@ Attributes getCreatedAttributes();
 }];
 }
 // Set Operations
-def ProjectionOp : RelAlg_Op<"projection",[RecursiveSideEffects,Operator]> {
+def ProjectionOp : RelAlg_Op<"projection",[RecursiveSideEffects,Operator,UnaryOperator]> {
 let summary = "projection operation";
 let arguments = (ins  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$rel, ArrayAttr:$attrs);
 let results = (outs RelAlg_Relation:$result);
@@ -303,7 +303,7 @@ Attributes getAvailableAttributes();
 }];
 }
 
-def UnionOp :  RelAlg_Op<"union",[RecursiveSideEffects,Operator,BinaryOperator]> {
+def UnionOp :  RelAlg_Op<"union",[RecursiveSideEffects,Operator,BinaryOperator,UnaryOperator]> {
 let summary = "union operation";
 let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_Relation:$result);

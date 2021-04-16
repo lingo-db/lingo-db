@@ -84,6 +84,16 @@ mlir::relalg::detail::BinaryOperatorType mlir::relalg::detail::getBinaryOperator
          return BinaryOperatorType::None;
       });
 }
+mlir::relalg::detail::UnaryOperatorType mlir::relalg::detail::getUnaryOperatorType(Operation* op) {
+   return ::llvm::TypeSwitch<mlir::Operation*, UnaryOperatorType>(op)
+      .Case<mlir::relalg::SelectionOp>([&](mlir::Operation* op) { return UnaryOperatorType::Selection; })
+      .Case<mlir::relalg::MapOp>([&](mlir::Operation* op) { return UnaryOperatorType::Map; })
+      .Case<mlir::relalg::ProjectionOp>([&](mlir::relalg::ProjectionOp op) { return op.set_semantic() == mlir::relalg::SetSemantic::distinct ? UnaryOperatorType::DistinctProjection : UnaryOperatorType::Projection; })
+      .Case<mlir::relalg::AggregationOp>([&](mlir::Operation* op) { return UnaryOperatorType::Aggregation; })
+      .Default([&](auto x) {
+         return UnaryOperatorType::None;
+      });
+}
 
 Attributes AggregationOp::getUsedAttributes() {
    auto used = mlir::relalg::detail::getUsedAttributes(getOperation());
@@ -179,9 +189,6 @@ Attributes mlir::relalg::ProjectionOp::getAvailableAttributes() {
    return available;
 }
 
-bool mlir::relalg::detail::binaryOperatorIs(const CompatibilityTable<BinaryOperatorType, BinaryOperatorType>& table, Operation* a, Operation* b) {
-   return table.contains(getBinaryOperatorType(a), getBinaryOperatorType(b));
-}
 bool mlir::relalg::detail::isJoin(Operation* op) {
    auto opType = getBinaryOperatorType(op);
    return BinaryOperatorType::InnerJoin <= opType && opType <= BinaryOperatorType::MarkJoin;

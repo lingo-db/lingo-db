@@ -97,25 +97,53 @@ return this->getOperation()->getOperand(0).getDefiningOp();
 InterfaceMethod<
         "assoc",
         "bool", "isAssoc",(ins "BinaryOperator":$binop),"", /*defaultImplementation=*/[{
-return mlir::relalg::detail::binaryOperatorIs(mlir::relalg::detail::assoc,this->getOperation(),binop.getOperation());
+return mlir::relalg::detail::assoc.contains(mlir::relalg::detail::getBinaryOperatorType(this->getOperation()), mlir::relalg::detail::getBinaryOperatorType(binop.getOperation()));
 }]
 >,
 InterfaceMethod<
 "assoc",
 "bool", "isLAsscom",(ins "BinaryOperator":$binop),"", /*defaultImplementation=*/[{
-return mlir::relalg::detail::binaryOperatorIs(mlir::relalg::detail::lAsscom,this->getOperation(),binop.getOperation());
+return mlir::relalg::detail::lAsscom.contains(mlir::relalg::detail::getBinaryOperatorType(this->getOperation()), mlir::relalg::detail::getBinaryOperatorType(binop.getOperation()));
 }]
 >,
 InterfaceMethod<
 "assoc",
 "bool", "isRAsscom",(ins "BinaryOperator":$binop),"", /*defaultImplementation=*/[{
-return mlir::relalg::detail::binaryOperatorIs(mlir::relalg::detail::rAsscom,this->getOperation(),binop.getOperation());
+return mlir::relalg::detail::rAsscom.contains(mlir::relalg::detail::getBinaryOperatorType(this->getOperation()), mlir::relalg::detail::getBinaryOperatorType(binop.getOperation()));
 }]
 >,
 InterfaceMethod<
         "get all attributes that are used directly by this operator",
         "mlir::Operation*", "rightChild",(ins ),"", /*defaultImplementation=*/[{
 return this->getOperation()->getOperand(1).getDefiningOp();
+}]
+>
+];
+}
+def UnaryOperator : OpInterface<"UnaryOperator"> {
+let methods = [
+InterfaceMethod<
+        "get all attributes that are used directly by this operator",
+        "mlir::Operation*", "child",(ins ),"", /*defaultImplementation=*/[{
+return this->getOperation()->getOperand(0).getDefiningOp();
+}]
+>,
+InterfaceMethod<
+"assoc",
+"bool", "reorderable",(ins "UnaryOperator":$binop),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::reorderable.contains(mlir::relalg::detail::getUnaryOperatorType(this->getOperation()), mlir::relalg::detail::getUnaryOperatorType(binop.getOperation()));
+}]
+>,
+InterfaceMethod<
+"assoc",
+"bool", "lPushable",(ins "BinaryOperator":$binop),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::lPushable.contains(mlir::relalg::detail::getUnaryOperatorType(this->getOperation()), mlir::relalg::detail::getBinaryOperatorType(binop.getOperation()));
+}]
+>,
+InterfaceMethod<
+"assoc",
+"bool", "rPushable",(ins "BinaryOperator":$binop),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::rPushable.contains(mlir::relalg::detail::getUnaryOperatorType(this->getOperation()), mlir::relalg::detail::getBinaryOperatorType(binop.getOperation()));
 }]
 >
 ];

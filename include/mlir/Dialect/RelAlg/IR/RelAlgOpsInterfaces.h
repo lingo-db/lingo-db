@@ -31,6 +31,15 @@ enum class BinaryOperatorType : unsigned char {
    MarkJoin,
    LAST
 };
+enum UnaryOperatorType : unsigned char {
+   None = 0,
+   DistinctProjection,
+   Projection,
+   Map,
+   Selection,
+   Aggregation,
+   LAST
+};
 
 template <class A, class B>
 class CompatibilityTable {
@@ -124,9 +133,55 @@ constexpr CompatibilityTable<BinaryOperatorType, BinaryOperatorType> rAsscom{
    {BinaryOperatorType::CP, BinaryOperatorType::CP},
    {BinaryOperatorType::CP, BinaryOperatorType::InnerJoin},
 };
+constexpr CompatibilityTable<UnaryOperatorType, BinaryOperatorType> lPushable{
+   {UnaryOperatorType::DistinctProjection, BinaryOperatorType::Intersection},
+   {UnaryOperatorType::DistinctProjection, BinaryOperatorType::Except},
+   {UnaryOperatorType::DistinctProjection, BinaryOperatorType::SemiJoin},
+   {UnaryOperatorType::DistinctProjection, BinaryOperatorType::AntiSemiJoin},
+   {UnaryOperatorType::Projection, BinaryOperatorType::SemiJoin},
+   {UnaryOperatorType::Projection, BinaryOperatorType::AntiSemiJoin},
+   {UnaryOperatorType::Selection, BinaryOperatorType::Intersection},
+   {UnaryOperatorType::Selection, BinaryOperatorType::Except},
+   {UnaryOperatorType::Selection, BinaryOperatorType::CP},
+   {UnaryOperatorType::Selection, BinaryOperatorType::InnerJoin},
+   {UnaryOperatorType::Selection, BinaryOperatorType::SemiJoin},
+   {UnaryOperatorType::Selection, BinaryOperatorType::AntiSemiJoin},
+   {UnaryOperatorType::Selection, BinaryOperatorType::OuterJoin},
+   {UnaryOperatorType::Map, BinaryOperatorType::CP},
+   {UnaryOperatorType::Map, BinaryOperatorType::InnerJoin},
+   {UnaryOperatorType::Map, BinaryOperatorType::SemiJoin},
+   {UnaryOperatorType::Map, BinaryOperatorType::AntiSemiJoin},
+   {UnaryOperatorType::Map, BinaryOperatorType::OuterJoin},
+   {UnaryOperatorType::Aggregation, BinaryOperatorType::SemiJoin},
+   {UnaryOperatorType::Aggregation, BinaryOperatorType::AntiSemiJoin},
+};
+constexpr CompatibilityTable<UnaryOperatorType, BinaryOperatorType> rPushable{
+   {UnaryOperatorType::DistinctProjection, BinaryOperatorType::Intersection},
+   {UnaryOperatorType::Map, BinaryOperatorType::CP},
+   {UnaryOperatorType::Map, BinaryOperatorType::InnerJoin},
+   {UnaryOperatorType::Selection, BinaryOperatorType::Intersection},
+   {UnaryOperatorType::Selection, BinaryOperatorType::CP},
+   {UnaryOperatorType::Selection, BinaryOperatorType::InnerJoin},
+};
+constexpr CompatibilityTable<UnaryOperatorType, UnaryOperatorType> reorderable{
+   {UnaryOperatorType::DistinctProjection, UnaryOperatorType::DistinctProjection},
+   {UnaryOperatorType::DistinctProjection, UnaryOperatorType::Selection},
+   {UnaryOperatorType::DistinctProjection, UnaryOperatorType::Map},
+   {UnaryOperatorType::Projection, UnaryOperatorType::Selection},
+   {UnaryOperatorType::Projection, UnaryOperatorType::Map},
+   {UnaryOperatorType::Selection, UnaryOperatorType::DistinctProjection},
+   {UnaryOperatorType::Selection, UnaryOperatorType::Projection},
+   {UnaryOperatorType::Selection, UnaryOperatorType::Selection},
+   {UnaryOperatorType::Selection, UnaryOperatorType::Map},
+   {UnaryOperatorType::Map, UnaryOperatorType::DistinctProjection},
+   {UnaryOperatorType::Map, UnaryOperatorType::Projection},
+   {UnaryOperatorType::Map, UnaryOperatorType::Selection},
+   {UnaryOperatorType::Map, UnaryOperatorType::Map},
+};
 
 BinaryOperatorType getBinaryOperatorType(Operation* op);
-bool binaryOperatorIs(const CompatibilityTable<BinaryOperatorType, BinaryOperatorType>& table, Operation* a, Operation* b);
+UnaryOperatorType getUnaryOperatorType(Operation* op);
+
 bool isJoin(Operation* op);
 
 void addPredicate(mlir::Operation* op, std::function<mlir::Value(mlir::Value, mlir::OpBuilder& builder)> predicateProducer);
