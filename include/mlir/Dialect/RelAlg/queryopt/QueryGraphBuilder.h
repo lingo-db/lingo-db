@@ -106,12 +106,12 @@ class QueryGraphBuilder {
          return false;
       }
       switch (mlir::relalg::detail::getBinaryOperatorType(curr)) {
-         case detail::SemiJoin:
-         case detail::MarkJoin:
-         case detail::AntiSemiJoin:
-         case detail::OuterJoin:
+         case detail::BinaryOperatorType::SemiJoin:
+         case detail::BinaryOperatorType::MarkJoin:
+         case detail::BinaryOperatorType::AntiSemiJoin:
+         case detail::BinaryOperatorType::OuterJoin:
             return !right_TES.intersects(SES);
-         case detail::FullOuterJoin: return false;
+         case detail::BinaryOperatorType::FullOuterJoin: return false;
          default:
             return true;
       }

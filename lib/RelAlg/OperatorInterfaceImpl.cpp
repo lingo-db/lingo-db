@@ -69,16 +69,19 @@ bool mlir::relalg::detail::isDependentJoin(mlir::Operation* op) {
 }
 mlir::relalg::detail::BinaryOperatorType mlir::relalg::detail::getBinaryOperatorType(Operation* op) {
    return ::llvm::TypeSwitch<mlir::Operation*, BinaryOperatorType>(op)
-      .Case<mlir::relalg::CrossProductOp>([&](mlir::Operation* op) { return CP; })
-      .Case<mlir::relalg::InnerJoinOp>([&](mlir::Operation* op) { return InnerJoin; })
-      .Case<mlir::relalg::SemiJoinOp>([&](mlir::Operation* op) { return SemiJoin; })
-      .Case<mlir::relalg::AntiSemiJoinOp>([&](mlir::Operation* op) { return AntiSemiJoin; })
-      .Case<mlir::relalg::SingleJoinOp>([&](mlir::Operation* op) { return OuterJoin; })
-      .Case<mlir::relalg::MarkJoinOp>([&](mlir::Operation* op) { return MarkJoin; })
-      .Case<mlir::relalg::OuterJoinOp>([&](mlir::relalg::OuterJoinOp op) { return OuterJoin; })
-      .Case<mlir::relalg::FullOuterJoinOp>([&](mlir::relalg::FullOuterJoinOp op) { return FullOuterJoin; })
+      .Case<mlir::relalg::UnionOp>([&](mlir::Operation* op) { return BinaryOperatorType::Union; })
+      .Case<mlir::relalg::IntersectOp>([&](mlir::Operation* op) { return BinaryOperatorType::Intersection; })
+      .Case<mlir::relalg::ExceptOp>([&](mlir::Operation* op) { return BinaryOperatorType::Except; })
+      .Case<mlir::relalg::CrossProductOp>([&](mlir::Operation* op) { return BinaryOperatorType::CP; })
+      .Case<mlir::relalg::InnerJoinOp>([&](mlir::Operation* op) { return BinaryOperatorType::InnerJoin; })
+      .Case<mlir::relalg::SemiJoinOp>([&](mlir::Operation* op) { return BinaryOperatorType::SemiJoin; })
+      .Case<mlir::relalg::AntiSemiJoinOp>([&](mlir::Operation* op) { return BinaryOperatorType::AntiSemiJoin; })
+      .Case<mlir::relalg::SingleJoinOp>([&](mlir::Operation* op) { return BinaryOperatorType::OuterJoin; })
+      .Case<mlir::relalg::MarkJoinOp>([&](mlir::Operation* op) { return BinaryOperatorType::MarkJoin; })
+      .Case<mlir::relalg::OuterJoinOp>([&](mlir::relalg::OuterJoinOp op) { return BinaryOperatorType::OuterJoin; })
+      .Case<mlir::relalg::FullOuterJoinOp>([&](mlir::relalg::FullOuterJoinOp op) { return BinaryOperatorType::FullOuterJoin; })
       .Default([&](auto x) {
-         return None;
+         return BinaryOperatorType::None;
       });
 }
 
@@ -176,47 +179,12 @@ Attributes mlir::relalg::ProjectionOp::getAvailableAttributes() {
    return available;
 }
 
-// @formatter:off
-// clang-format off
-const bool mlir::relalg::detail::assoc[mlir::relalg::detail::BinaryOperatorType::LAST][mlir::relalg::detail::BinaryOperatorType::LAST] = {
-   /* None =  */{},
-   /* CP           =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true,},
-   /* InnerJoin    =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true,},
-   /* SemiJoin     =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-   /* AntiSemiJoin =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-   /* OuterJoin    =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-   /* FullOuterJoin=  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-   /* MarkJoin     =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-
-};
-const bool mlir::relalg::detail::lAsscom[mlir::relalg::detail::BinaryOperatorType::LAST][mlir::relalg::detail::BinaryOperatorType::LAST] = {
-   /* None =  */{},
-   /* CP           =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
-   /* InnerJoin    =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
-   /* SemiJoin     =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
-   /* AntiSemiJoin =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
-   /* OuterJoin    =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
-   /* FullOuterJoin=  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-   /* MarkJoin     =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/true, /*AntiSemiJoin=*/true, /*OuterJoin=*/true, /*FullOuterJoin=*/false,/*MarkJoin=*/true},
-};
-const bool mlir::relalg::detail::rAsscom[mlir::relalg::detail::BinaryOperatorType::LAST][mlir::relalg::detail::BinaryOperatorType::LAST] = {
-   /* None =  */{},
-   /* CP           =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-   /* InnerJoin    =  */{/*None=*/false,/*CP=*/true, /*InnerJoin=*/true, /*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-   /* SemiJoin     =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-   /* AntiSemiJoin =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-   /* OuterJoin    =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-   /* FullOuterJoin=  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-   /* MarkJoin     =  */{/*None=*/false,/*CP=*/false,/*InnerJoin=*/false,/*SemiJoin=*/false,/*AntiSemiJoin=*/false,/*OuterJoin=*/false,/*FullOuterJoin=*/false,/*MarkJoin=*/false},
-};
-// @formatter:on
-// clang-format on
-bool mlir::relalg::detail::binaryOperatorIs(const bool (&table)[BinaryOperatorType::LAST][BinaryOperatorType::LAST], Operation* a, Operation* b) {
-   return table[getBinaryOperatorType(a)][getBinaryOperatorType(b)];
+bool mlir::relalg::detail::binaryOperatorIs(const CompatibilityTable<BinaryOperatorType, BinaryOperatorType>& table, Operation* a, Operation* b) {
+   return table.contains(getBinaryOperatorType(a), getBinaryOperatorType(b));
 }
 bool mlir::relalg::detail::isJoin(Operation* op) {
    auto opType = getBinaryOperatorType(op);
-   return InnerJoin <= opType && opType <= MarkJoin;
+   return BinaryOperatorType::InnerJoin <= opType && opType <= BinaryOperatorType::MarkJoin;
 }
 
 void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir::Value(mlir::Value, mlir::OpBuilder&)> predicateProducer) {
