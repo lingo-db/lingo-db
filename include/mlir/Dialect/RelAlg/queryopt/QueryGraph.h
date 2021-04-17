@@ -3,7 +3,6 @@
 
 #include "llvm/Support/Debug.h"
 
-
 #include <functional>
 #include <iostream>
 #include <list>
@@ -69,7 +68,7 @@ class QueryGraph {
    std::vector<Node> nodes;
    std::vector<Edge> edges;
 
-   QueryGraph(size_t num_nodes, std::unordered_set<mlir::Operation*>& already_optimized) : num_nodes(num_nodes) {}
+   QueryGraph(size_t num_nodes) : num_nodes(num_nodes) {}
 
    static void print_readable(const node_set& S, llvm::raw_ostream& out) {
       out << "{";

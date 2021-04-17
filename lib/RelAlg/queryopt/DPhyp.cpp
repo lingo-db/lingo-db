@@ -57,9 +57,9 @@ void mlir::relalg::DPHyp::emitCsgCmp(const node_set& s1, const node_set& s2) {
    } else {
       currPlan = std::make_shared<Plan>(Operator(), std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>({}), 0);
    }
-   currPlan->descr = "(" + p1->descr + ") join (" + p2->descr + ")";
+   currPlan->setDescription("(" + p1->getDescription() + ") join (" + p2->getDescription() + ")");
 
-   if (!dp_table.count(s) || currPlan->cost < dp_table[s]->cost) {
+   if (!dp_table.count(s) || currPlan->getCost() < dp_table[s]->getCost()) {
       dp_table[s] = currPlan;
    }
 }
@@ -102,7 +102,7 @@ void mlir::relalg::DPHyp::emitCsg(node_set s1) {
 }
 static std::shared_ptr<mlir::relalg::Plan> createInitialPlan(mlir::relalg::QueryGraph::Node& n) {
    auto currPlan = std::make_shared<mlir::relalg::Plan>(n.op, std::vector<std::shared_ptr<mlir::relalg::Plan>>({}), std::vector<Operator>({n.additional_predicates}), 0);
-   currPlan->descr = std::to_string(n.id);
+   currPlan->setDescription(std::to_string(n.id));
    return currPlan;
 }
 

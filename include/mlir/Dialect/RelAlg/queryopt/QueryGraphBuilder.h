@@ -8,7 +8,7 @@ class QueryGraphBuilder {
    using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
 
    Operator root;
-   std::unordered_set<mlir::Operation*>& already_optimized;
+   llvm::SmallPtrSet<mlir::Operation*,12>& already_optimized;
    size_t num_nodes;
    QueryGraph qg;
    node_set empty_node;
@@ -128,7 +128,7 @@ class QueryGraphBuilder {
    }
 
    public:
-   QueryGraphBuilder(Operator root, std::unordered_set<mlir::Operation*>& already_optimized);
+   QueryGraphBuilder(Operator root, llvm::SmallPtrSet<mlir::Operation*,12>& already_optimized);
    void generate() {
       populateQueryGraph(root);
       ensureConnected();

@@ -9,15 +9,6 @@
 #include <memory>
 
 namespace mlir::relalg {
-struct Plan {
-   Plan(Operator op, const std::vector<std::shared_ptr<Plan>>& subplans, const std::vector<Operator>& additional_ops, size_t cost) : op(op), subplans(subplans), additional_ops(additional_ops), cost(cost) {}
-   Operator op;
-   std::vector<std::shared_ptr<Plan>> subplans;
-   std::vector<Operator> additional_ops;
-   size_t cost;
-   std::string descr;
-};
-
 class DPHyp {
    std::unordered_map<node_set, std::shared_ptr<Plan>, hash_node_set> dp_table;
    QueryGraph& queryGraph;

@@ -1,10 +1,12 @@
 #ifndef DB_DIALECTS_UTILS_H
 #define DB_DIALECTS_UTILS_H
-#include <llvm/ADT/SmallBitVector.h>
 #include <llvm/ADT/EquivalenceClasses.h>
+#include <llvm/ADT/SmallBitVector.h>
 #include <llvm/ADT/TypeSwitch.h>
 #include <cstddef>
+#include <iomanip>
 #include <iterator>
+#include <mlir/Dialect/RelAlg/IR/RelAlgOps.h>
 
 namespace mlir::relalg {
 class node_set {
@@ -106,6 +108,22 @@ struct hash_node_set {
       return bitset.hash();
    }
 };
+class Plan {
+   Operator op;
+   std::vector<std::shared_ptr<Plan>> subplans;
+   std::vector<Operator> additional_ops;
+   size_t cost;
+   std::string description;
+   std::string dumpNode();
+   Operator realizePlanRec();
 
+   public:
+   Plan(Operator op, const std::vector<std::shared_ptr<Plan>>& subplans, const std::vector<Operator>& additional_ops, size_t cost) : op(op), subplans(subplans), additional_ops(additional_ops), cost(cost) {}
+   Operator realizePlan();
+   void dump();
+   size_t getCost() const;
+   void setDescription(const std::string& descr);
+   const std::string& getDescription() const;
+};
 }
 #endif //DB_DIALECTS_UTILS_H

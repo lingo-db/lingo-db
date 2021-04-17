@@ -34,7 +34,7 @@ static bool isConnected(llvm::EquivalenceClasses<size_t>& connections, node_set&
    }
    return connected;
 }
-size_t countCreatingOperators(Operator op, std::unordered_set<mlir::Operation*>& alreadyOptimized) {
+size_t countCreatingOperators(Operator op, llvm::SmallPtrSet<mlir::Operation*,12>& alreadyOptimized) {
    size_t res = 0;
    auto children = op.getChildren();
    auto used = op.getUsedAttributes();
@@ -275,10 +275,10 @@ node_set QueryGraphBuilder::calcSES(Operator op, NodeResolver& resolver) const {
    return res;
 }
 
-QueryGraphBuilder::QueryGraphBuilder(Operator root, std::unordered_set<mlir::Operation*>& alreadyOptimized) : root(root),
+QueryGraphBuilder::QueryGraphBuilder(Operator root, llvm::SmallPtrSet<mlir::Operation*,12>& alreadyOptimized) : root(root),
                                                                                                               already_optimized(alreadyOptimized),
                                                                                                               num_nodes(countCreatingOperators(root, alreadyOptimized)),
-                                                                                                              qg(num_nodes, alreadyOptimized),
+                                                                                                              qg(num_nodes),
                                                                                                               empty_node(num_nodes) {}
 
 } // namespace mlir::relalg
