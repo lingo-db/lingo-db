@@ -16,8 +16,8 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                     .Case<UnaryOperator>([&](UnaryOperator unaryOperator) {
                        Operator asOp = mlir::dyn_cast_or_null<Operator>(unaryOperator.getOperation());
                        auto child = mlir::dyn_cast_or_null<Operator>(unaryOperator.child());
-                       auto available_child = child.getAvailableAttributes();
-                       if (topushUnary.reorderable(unaryOperator) && usedAttributes.is_subset_of(available_child)) {
+                       auto availableChild = child.getAvailableAttributes();
+                       if (topushUnary.reorderable(unaryOperator) && usedAttributes.is_subset_of(availableChild)) {
                           topush->moveBefore(asOp.getOperation());
                           asOp.setChildren({pushdown(topush, child)});
                           return asOp;
@@ -40,10 +40,10 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                              }
                           }
                        }
-                       auto available_left = left.getAvailableAttributes();
-                       auto available_right = right.getAvailableAttributes();
-                       auto pushableLeft = topushUnary.lPushable(binop) && usedAttributes.is_subset_of(available_left);
-                       auto pushableRight = topushUnary.rPushable(binop) && usedAttributes.is_subset_of(available_right);
+                       auto availableLeft = left.getAvailableAttributes();
+                       auto availableRight = right.getAvailableAttributes();
+                       auto pushableLeft = topushUnary.lPushable(binop) && usedAttributes.is_subset_of(availableLeft);
+                       auto pushableRight = topushUnary.rPushable(binop) && usedAttributes.is_subset_of(availableRight);
                        if (!pushableLeft && !pushableRight) {
                           topush.setChildren({asOp});
                           return topush;
