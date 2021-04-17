@@ -9,33 +9,27 @@ namespace {
 
 class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins, mlir::FunctionPass> {
    llvm::SmallVector<mlir::Operation*> toDestroy;
-   bool isDirectSelection(mlir::Operation* op, bool& negated) {
-      if (!mlir::isa<mlir::relalg::SelectionOp>(op->getParentOp())) {
-         return false;
-      }
-      auto users = op->getUsers();
-      if (users.begin() == users.end() || ++users.begin() != users.end()) {
-         return false;
-      }
-      mlir::Operation* user = *users.begin();
-      if (mlir::isa<mlir::db::NotOp>(user)) {
-         auto users = user->getUsers();
-         if (users.begin() == users.end() || ++users.begin() != users.end()) {
-            return false;
-         }
-         negated = true;
-         user = *users.begin();
-      }
-      if (mlir::isa<mlir::relalg::ReturnOp>(user)) {
-         return true;
-      }
-      return false;
-   }
    void handleScalarBoolOp(TupleLamdaOperator surroundingOperator, mlir::Operation* op, Operator relOperator, std::function<void(PredicateOperator)> apply) {
       using namespace mlir;
       auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       bool negated = false;
-      bool directSelection = isDirectSelection(op, negated);
+      bool directSelection = false;
+      if (mlir::isa<mlir::relalg::SelectionOp>(op->getParentOp())) {
+         auto users = op->getUsers();
+         if (users.begin() != users.end() && ++users.begin() == users.end()) {
+            mlir::Operation* user = *users.begin();
+            if (mlir::isa<mlir::db::NotOp>(user)) {
+               auto negationUsers = user->getUsers();
+               if (negationUsers.begin() != negationUsers.end() && ++negationUsers.begin() == negationUsers.end()) {
+                  negated = true;
+                  user = *negationUsers.begin();
+               }
+            }
+            if (mlir::isa<mlir::relalg::ReturnOp>(user)) {
+               directSelection = true;
+            }
+         }
+      }
       Value treeVal = surroundingOperator->getOperand(0);
 
       //get attribute f relation to search in
