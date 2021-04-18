@@ -97,9 +97,7 @@ mlir::relalg::detail::UnaryOperatorType mlir::relalg::detail::getUnaryOperatorTy
 
 Attributes AggregationOp::getUsedAttributes() {
    auto used = mlir::relalg::detail::getUsedAttributes(getOperation());
-   for (Attribute a : group_by_attrs()) {
-      used.insert(&a.dyn_cast_or_null<RelationalAttributeRefAttr>().getRelationalAttribute());
-   }
+   used.insert(Attributes::fromArrayAttr(group_by_attrs()));
    getOperation()->walk([&](mlir::relalg::AggrFuncOp aggrFn) {
       used.insert(&aggrFn.attr().getRelationalAttribute());
    });
@@ -114,11 +112,7 @@ Attributes SortOp::getUsedAttributes() {
 }
 
 Attributes ConstRelationOp::getCreatedAttributes() {
-   Attributes creations;
-   for (Attribute a : attributes()) {
-      creations.insert(&a.dyn_cast_or_null<RelationalAttributeDefAttr>().getRelationalAttribute());
-   }
-   return creations;
+   return Attributes::fromArrayAttr(attributes());
 }
 Attributes AntiSemiJoinOp::getAvailableAttributes() {
    return mlir::relalg::detail::getAvailableAttributes(leftChild());
@@ -151,10 +145,7 @@ Attributes RenamingOp::getUsedAttributes() {
    for (Attribute attr : attributes()) {
       auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
       auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
-      for (Attribute existing : fromExisting) {
-         auto relationRefAttr = existing.dyn_cast_or_null<RelationalAttributeRefAttr>();
-         used.insert(&relationRefAttr.getRelationalAttribute());
-      }
+      used.insert(Attributes::fromArrayAttr(fromExisting));
    }
    return used;
 }
@@ -176,17 +167,11 @@ Attributes BaseTableOp::getCreatedAttributes() {
 }
 Attributes mlir::relalg::AggregationOp::getAvailableAttributes() {
    Attributes available = getCreatedAttributes();
-   for (Attribute a : group_by_attrs()) {
-      available.insert(&a.dyn_cast_or_null<RelationalAttributeRefAttr>().getRelationalAttribute());
-   }
+   available.insert(Attributes::fromArrayAttr(group_by_attrs()));
    return available;
 }
 Attributes mlir::relalg::ProjectionOp::getAvailableAttributes() {
-   Attributes available;
-   for (Attribute a : attrs()) {
-      available.insert(&a.dyn_cast_or_null<RelationalAttributeRefAttr>().getRelationalAttribute());
-   }
-   return available;
+   return Attributes::fromArrayAttr(attrs());
 }
 
 bool mlir::relalg::detail::isJoin(Operation* op) {
