@@ -73,16 +73,9 @@ void Plan::dump() {
    llvm::dbgs() << "}\n";
 }
 
-static void moveTreeBefore(Operator tree, mlir::Operation* before) {
-   auto children = tree.getChildren();
-   tree->moveBefore(before);
-   for (auto child : tree.getChildren()) {
-      moveTreeBefore(child, tree.getOperation());
-   }
-}
 static void fix(Operator tree) {
    for (auto child : tree.getChildren()) {
-      moveTreeBefore(child, tree);
+      child.moveSubTreeBefore(tree);
       fix(child);
    }
 }

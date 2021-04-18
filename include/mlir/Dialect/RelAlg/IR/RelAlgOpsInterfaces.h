@@ -16,6 +16,7 @@ Attributes getAvailableAttributes(mlir::Operation* op);
 Attributes getFreeAttributes(mlir::Operation* op);
 Attributes getCreatedAttributes(mlir::Operation* op);
 bool isDependentJoin(mlir::Operation* op);
+void moveSubTreeBefore(mlir::Operation* tree, mlir::Operation* before);
 
 enum class BinaryOperatorType : unsigned char {
    None = 0,

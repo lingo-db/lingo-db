@@ -17,6 +17,12 @@ return mlir::relalg::detail::getAvailableAttributes(this->getOperation());
 }]
 >,
 InterfaceMethod<
+        "",
+        "void", "moveSubTreeBefore",(ins "Operator":$before),"", /*defaultImplementation=*/[{
+mlir::relalg::detail::moveSubTreeBefore(this->getOperation(),before);
+}]
+>,
+InterfaceMethod<
         "get children of operator",
         "llvm::SmallVector<Operator,4>", "getChildren",(ins ),"", /*defaultImplementation=*/[{
     llvm::SmallVector<Operator,4> children;

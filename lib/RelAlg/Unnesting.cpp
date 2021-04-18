@@ -24,24 +24,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       }
       return currFirst;
    }
-   void moveTreeBefore(Operator tree, mlir::Operation* before) {
-      tree->moveBefore(before);
-      for (auto child : tree.getChildren()) {
-         moveTreeBefore(child, tree);
-      }
-   }
-   mlir::ArrayAttr addAttributes(mlir::ArrayAttr current, mlir::relalg::Attributes toAdd) {
-      auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
-      llvm::SmallVector<mlir::Attribute, 8> attributes;
-      for (auto attr : current) {
-         auto attrRef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>();
-         toAdd.insert(&attrRef.getRelationalAttribute());
-      }
-      for (auto* attr : toAdd) {
-         attributes.push_back(attributeManager.createRef(attr));
-      }
-      return mlir::ArrayAttr::get(&getContext(), attributes);
-   }
+
    void handleChildren(Operator d, Operator others) {
       llvm::SmallVector<Operator, 4> newChildren;
       for (auto childOp : others.getChildren()) {
@@ -79,12 +62,12 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          })
          .Case<AggregationOp>([&](AggregationOp projection) {
             handleChildren(d, projection);
-            projection->setAttr("group_by_attrs", addAttributes(projection.group_by_attrs(), availableD));
+            projection->setAttr("group_by_attrs", Attributes::fromArrayAttr(projection.group_by_attrs()).insert(availableD).asRefArrayAttr(&getContext()));
             return projection;
          })
          .Case<ProjectionOp>([&](ProjectionOp projection) {
             handleChildren(d, projection);
-            projection->setAttr("attrs", addAttributes(projection.attrs(), availableD));
+            projection->setAttr("attrs", Attributes::fromArrayAttr(projection.attrs()).insert(availableD).asRefArrayAttr(&getContext()));
             return projection;
          })
          .Case<BinaryOperator>([&](BinaryOperator join) {
@@ -134,7 +117,6 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             return others;
          });
    }
-
    void handleJoin(BinaryOperator join, Operator newLeft, Operator newRight, bool joinDependent, bool renameRight, mlir::relalg::Attributes& dependentAttributes) {
       using namespace mlir;
       auto relType = relalg::RelationType::get(&getContext());
@@ -146,13 +128,10 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          std::unordered_map<relalg::RelationalAttribute*, relalg::RelationalAttribute*> renamed;
          std::string scope = attributeManager.getUniqueScope("renaming");
          attributeManager.setCurrentScope(scope);
-         std::vector<relalg::RelationalAttributeDefAttr> renamingDefs;
          std::vector<Attribute> renamingDefsAsAttr;
          size_t i = 0;
          for (auto* attr : dependentAttributes) {
-            std::vector<Attribute> fromExistingVec = {attributeManager.createRef(attr)};
-            auto def = attributeManager.createDef("renamed" + std::to_string(i++), builder.getArrayAttr(fromExistingVec));
-            renamingDefs.push_back(def);
+            auto def = attributeManager.createDef("renamed" + std::to_string(i++), builder.getArrayAttr({attributeManager.createRef(attr)}));
             renamingDefsAsAttr.push_back(def);
             def.getRelationalAttribute().type = attr->type;
             renamed.insert({attr, &def.getRelationalAttribute()});
@@ -178,10 +157,6 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
    }
    void runOnFunction() override {
       using namespace mlir;
-      auto relType = relalg::RelationType::get(&getContext());
-
-      auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
-
       getFunction()->walk([&](BinaryOperator binaryOperator) {
          if (!mlir::relalg::detail::isJoin(binaryOperator.getOperation())) return;
          if (!mlir::relalg::detail::isDependentJoin(binaryOperator.getOperation())) return;
@@ -192,42 +167,20 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          if (!dependentLeft.empty() && !dependentRight.empty()) {
             return;
          }
-         Operator dependentChild;
-         Operator providerChild;
-         mlir::relalg::Attributes dependentAttributes;
-         bool dependentOnRight = true;
-         if (!dependentLeft.empty()) {
-            dependentChild = left;
-            providerChild = right;
-            dependentAttributes = dependentLeft;
-            dependentOnRight = false;
-         } else {
-            dependentChild = right;
-            providerChild = left;
-            dependentAttributes = dependentRight;
-         }
-
+         mlir::relalg::Attributes dependentAttributes = dependentLeft;
+         dependentAttributes.insert(dependentRight);
+         bool leftProvides = dependentLeft.empty();
+         Operator providerChild = leftProvides ? left : right;
+         Operator dependentChild = leftProvides ? right : left;
          OpBuilder builder(binaryOperator.getOperation());
-         std::vector<Attribute> dependentRefsAsAttr;
-         for (auto* attr : dependentAttributes) {
-            dependentRefsAsAttr.push_back(attributeManager.createRef(attr));
-         }
-
-         moveTreeBefore(providerChild, getFirstOfTree(dependentChild));
+         providerChild.moveSubTreeBefore(getFirstOfTree(dependentChild));
          builder.setInsertionPointAfter(providerChild);
-         auto proj = builder.create<relalg::ProjectionOp>(builder.getUnknownLoc(), relType, relalg::SetSemantic::distinct, providerChild->getResult(0), builder.getArrayAttr(dependentRefsAsAttr));
+         auto proj = builder.create<relalg::ProjectionOp>(builder.getUnknownLoc(), relalg::RelationType::get(&getContext()), relalg::SetSemantic::distinct, providerChild.asRelation(), dependentAttributes.asRefArrayAttr(&getContext()));
          Operator d = mlir::dyn_cast_or_null<Operator>(proj.getOperation());
          Operator unnestedChild = pushDependJoinDown(d, dependentChild);
-
-         Operator newLeft, newRight;
-         if (dependentOnRight) {
-            newLeft = providerChild;
-            newRight = unnestedChild;
-         } else {
-            newLeft = unnestedChild;
-            newRight = providerChild;
-         }
-         handleJoin(binaryOperator, newLeft, newRight, true, dependentOnRight, dependentAttributes);
+         Operator newLeft = leftProvides ? providerChild : unnestedChild;
+         Operator newRight = leftProvides ? unnestedChild : providerChild;
+         handleJoin(binaryOperator, newLeft, newRight, true, leftProvides, dependentAttributes);
       });
    }
 };
