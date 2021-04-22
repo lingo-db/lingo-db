@@ -36,7 +36,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       auto availableD = d.getAvailableAttributes();
 
       using namespace mlir::relalg;
-      auto relType = RelationType::get(&getContext());
+      auto relType = TupleStreamType::get(&getContext());
       mlir::OpBuilder builder(&getContext());
       builder.setInsertionPointAfter(op.getOperation());
       return ::llvm::TypeSwitch<mlir::Operation*, Operator>(op.getOperation())
@@ -119,7 +119,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
    }
    void handleJoin(BinaryOperator join, Operator newLeft, Operator newRight, bool joinDependent, bool renameRight, mlir::relalg::Attributes& dependentAttributes) {
       using namespace mlir;
-      auto relType = relalg::RelationType::get(&getContext());
+      auto relType = relalg::TupleStreamType::get(&getContext());
       auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       Operator joinAsOperator = mlir::dyn_cast_or_null<Operator>(join.getOperation());
       mlir::OpBuilder builder(join.getOperation());
@@ -175,7 +175,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          OpBuilder builder(binaryOperator.getOperation());
          providerChild.moveSubTreeBefore(getFirstOfTree(dependentChild));
          builder.setInsertionPointAfter(providerChild);
-         auto proj = builder.create<relalg::ProjectionOp>(builder.getUnknownLoc(), relalg::RelationType::get(&getContext()), relalg::SetSemantic::distinct, providerChild.asRelation(), dependentAttributes.asRefArrayAttr(&getContext()));
+         auto proj = builder.create<relalg::ProjectionOp>(builder.getUnknownLoc(), relalg::TupleStreamType::get(&getContext()), relalg::SetSemantic::distinct, providerChild.asRelation(), dependentAttributes.asRefArrayAttr(&getContext()));
          Operator d = mlir::dyn_cast_or_null<Operator>(proj.getOperation());
          Operator unnestedChild = pushDependJoinDown(d, dependentChild);
          Operator newLeft = leftProvides ? providerChild : unnestedChild;

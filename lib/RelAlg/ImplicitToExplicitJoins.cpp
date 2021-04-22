@@ -34,7 +34,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
 
       //get attribute f relation to search in
       OpBuilder builder(surroundingOperator);
-      auto relType = mlir::relalg::RelationType::get(&getContext());
+      auto relType = mlir::relalg::TupleStreamType::get(&getContext());
       auto leftDir = mlir::relalg::JoinDirection::left;
       auto loc = builder.getUnknownLoc();
       if (directSelection) {
@@ -80,7 +80,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
          Value treeVal = surroundingOperator->getOperand(0);
          if (auto getscalarop = mlir::dyn_cast_or_null<mlir::relalg::GetScalarOp>(op)) {
             OpBuilder builder(surroundingOperator);
-            auto singleJoin = builder.create<relalg::SingleJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), mlir::relalg::JoinDirection::left, treeVal, getscalarop.rel());
+            auto singleJoin = builder.create<relalg::SingleJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), mlir::relalg::JoinDirection::left, treeVal, getscalarop.rel());
             singleJoin.initPredicate();
             builder.setInsertionPoint(getscalarop);
             Operation* replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), getscalarop.attr().getRelationalAttribute().type, getscalarop.attr(), surroundingOperator.getLambdaRegion().getArgument(0));

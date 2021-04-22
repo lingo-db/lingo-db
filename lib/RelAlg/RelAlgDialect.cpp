@@ -3,7 +3,6 @@
 #include "mlir/Dialect/DB/IR/DBTypes.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/IR/DialectImplementation.h"
-#include "mlir/IR/OpImplementation.h"
 
 using namespace mlir;
 using namespace mlir::relalg;
@@ -26,7 +25,7 @@ void RelAlgDialect::initialize() {
 /// Parse a type registered to this dialect.
 ::mlir::Type RelAlgDialect::parseType(::mlir::DialectAsmParser& parser) const {
    if (!parser.parseOptionalKeyword("relation")) {
-      return mlir::relalg::RelationType::get(parser.getBuilder().getContext());
+      return mlir::relalg::TupleStreamType::get(parser.getBuilder().getContext());
    }
    if (!parser.parseOptionalKeyword("tuple")) {
       return mlir::relalg::TupleType::get(parser.getBuilder().getContext());
@@ -37,7 +36,7 @@ void RelAlgDialect::initialize() {
 /// Print a type registered to this dialect.
 void RelAlgDialect::printType(::mlir::Type type,
                               ::mlir::DialectAsmPrinter& os) const {
-   if (type.isa<mlir::relalg::RelationType>()) {
+   if (type.isa<mlir::relalg::TupleStreamType>()) {
       os << "relation";
    }
    if (type.isa<mlir::relalg::TupleType>()) {

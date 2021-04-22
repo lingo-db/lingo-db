@@ -108,7 +108,7 @@ Operator Plan::realizePlanRec() {
          if (mlir::isa<mlir::relalg::SelectionOp>(currop.getOperation()) && children.size() == 2) {
             auto selop = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(currop.getOperation());
             mlir::OpBuilder builder(currop.getOperation());
-            auto x = builder.create<mlir::relalg::InnerJoinOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
+            auto x = builder.create<mlir::relalg::InnerJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
             x.predicate().push_back(new mlir::Block);
             x.getLambdaBlock().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
             selop.getLambdaArgument().replaceAllUsesWith(x.getLambdaArgument());
@@ -120,7 +120,7 @@ Operator Plan::realizePlanRec() {
          }
       } else if (!currop && children.size() == 2) {
          mlir::OpBuilder builder(children[0].getOperation());
-         currop = builder.create<mlir::relalg::CrossProductOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
+         currop = builder.create<mlir::relalg::CrossProductOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
       } else if (!currop && children.size() == 1) {
          if (lastNode) {
             lastNode.setChildren({children[0]});

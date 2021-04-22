@@ -17,7 +17,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
       } else {
          OpBuilder builder(currentSel);
          mlir::BlockAndValueMapping mapping;
-         auto newsel = builder.create<relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), tree);
+         auto newsel = builder.create<relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), tree);
          tree = newsel;
          newsel.initPredicate();
          mapping.map(currentSel.getPredicateArgument(), newsel.getPredicateArgument());
@@ -34,7 +34,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
       currentMap->walk([&](mlir::relalg::AddAttrOp addAttrOp) {
          OpBuilder builder(currentMap);
          mlir::BlockAndValueMapping mapping;
-         auto newmap = builder.create<relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::RelationType::get(builder.getContext()), currentMap.sym_name(), tree);
+         auto newmap = builder.create<relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), currentMap.sym_name(), tree);
          tree = newmap;
          newmap.predicate().push_back(new Block);
          newmap.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()));

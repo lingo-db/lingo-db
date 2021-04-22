@@ -213,14 +213,14 @@ static void printSortSpecs(OpAsmPrinter& p, ArrayAttr arrayAttr) {
    p << "]";
 }
 static ParseResult addRelationOutput(OpAsmParser& parser, OperationState& result) {
-   return parser.addTypeToList(mlir::relalg::RelationType::get(parser.getBuilder().getContext()), result.types);
+   return parser.addTypeToList(mlir::relalg::TupleStreamType::get(parser.getBuilder().getContext()), result.types);
 }
 static ParseResult parseRelationalInputs(OpAsmParser& parser, OperationState& result, size_t inputs) {
    SmallVector<OpAsmParser::OperandType, 4> operands;
    if (parser.parseOperandList(operands)) {
       return failure();
    }
-   if (parser.resolveOperands(operands, mlir::relalg::RelationType::get(parser.getBuilder().getContext()), result.operands)) {
+   if (parser.resolveOperands(operands, mlir::relalg::TupleStreamType::get(parser.getBuilder().getContext()), result.operands)) {
       return failure();
    }
    return success();
@@ -351,7 +351,7 @@ static ParseResult parseBaseTableOp(OpAsmParser& parser, OperationState& result)
       break;
    }
    result.addAttribute("columns", mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns));
-   return parser.addTypeToList(mlir::relalg::RelationType::get(parser.getBuilder().getContext()), result.types);
+   return parser.addTypeToList(mlir::relalg::TupleStreamType::get(parser.getBuilder().getContext()), result.types);
 }
 static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
    p << op.getOperationName();

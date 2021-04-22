@@ -49,8 +49,8 @@ def DB_IntType : Type<CPred<"$_self.isa<::mlir::db::IntType>()">,"DB int type">{
 let builderCall = "::mlir::db::IntType::get($_builder.getContext(),false,64)";
 }
 
-def RelAlg_Relation :  TypeDef<RelAlg_Dialect, "Relation"> {
-let summary = "relation type";
+def RelAlg_TupleStream :  TypeDef<RelAlg_Dialect, "TupleStream"> {
+let summary = "tuple stream type";
 }
 def RelAlg_Tuple :  TypeDef<RelAlg_Dialect, "Tuple"> {
 let summary = "tuple type";
@@ -131,7 +131,7 @@ def ConstRelationOp : RelAlg_Op<"const_relation",
         [ RecursiveSideEffects,Operator]> {
 let summary = "constant relation";
 let arguments = (ins SymbolNameAttr:$sym_name,ArrayAttr:$attributes,ArrayAttr:$values);
-let results = (outs RelAlg_Relation:$result);
+let results = (outs RelAlg_TupleStream:$result);
 let extraClassDeclaration = [{
 Attributes getCreatedAttributes();
 }];
@@ -141,7 +141,7 @@ def BaseTableOp : RelAlg_Op<"basetable",
 [SingleBlockImplicitTerminator<"relalg::ReturnOp">,RecursiveSideEffects,Operator]> {
 let summary = "base table operation";
 let arguments = (ins SymbolNameAttr:$sym_name, StrAttr: $table_identifier, DictionaryAttr: $columns);
-let results = (outs RelAlg_Relation:$result);
+let results = (outs RelAlg_TupleStream:$result);
 let extraClassDeclaration = [{
 Attributes getCreatedAttributes();
 }];
@@ -153,27 +153,27 @@ Attributes getCreatedAttributes();
 
 def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,Operator,PredicateOperator,TupleLamdaOperator,UnaryOperator]> {
 let summary = "selection operation";
-let arguments = (ins RelAlg_Relation:$rel);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins RelAlg_TupleStream:$rel);
+let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
 def MapOp : RelAlg_Op<"map",[RecursiveSideEffects,Operator,TupleLamdaOperator,UnaryOperator]> {
 let summary = "map operation";
-let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_TupleStream:$rel);
+let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
 def LimitOp : RelAlg_Op<"limit",[NoSideEffect,Operator,UnaryOperator]> {
 let summary = "limit operation";
-let arguments = (ins I32Attr:$rows, RelAlg_Relation:$rel);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins I32Attr:$rows, RelAlg_TupleStream:$rel);
+let results = (outs RelAlg_TupleStream:$result);
 let assemblyFormat =
 [{ $rows $rel attr-dict }];
 }
 def CrossProductOp : RelAlg_Op<"crossproduct",[RecursiveSideEffects,Operator,BinaryOperator]> {
 let summary = "crossproduct operation";
-let arguments = (ins RelAlg_Relation:$left,RelAlg_Relation:$right);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let results = (outs RelAlg_TupleStream:$result);
 let assemblyFormat =
 [{ $left `,` $right attr-dict }];
 }
@@ -181,8 +181,8 @@ let assemblyFormat =
 def RenamingOp : RelAlg_Op<"renaming",
         [ RecursiveSideEffects,Operator,UnaryOperator]> {
 let summary = "renaming attributes in relation";
-let arguments = (ins RelAlg_Relation:$rel,SymbolNameAttr:$sym_name,ArrayAttr:$attributes);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins RelAlg_TupleStream:$rel,SymbolNameAttr:$sym_name,ArrayAttr:$attributes);
+let results = (outs RelAlg_TupleStream:$result);
 let extraClassDeclaration = [{
 Attributes getCreatedAttributes();
 Attributes getUsedAttributes();
@@ -193,8 +193,8 @@ Attributes getAvailableAttributes();
 
 def AggregationOp : RelAlg_Op<"aggregation",[RecursiveSideEffects,Operator,UnaryOperator]> {
 let summary = "aggregation operation";
-let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_Relation:$rel, ArrayAttr:$group_by_attrs);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_TupleStream:$rel, ArrayAttr:$group_by_attrs);
+let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$aggr_func);
 let extraClassDeclaration = [{
 Attributes getUsedAttributes();
@@ -203,8 +203,8 @@ Attributes getAvailableAttributes();
 }
 def SortOp : RelAlg_Op<"sort",[NoSideEffect,Operator,UnaryOperator]> {
 let summary = "sort operation";
-let arguments = (ins RelAlg_Relation:$rel, ArrayAttr:$sortspecs);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins RelAlg_TupleStream:$rel, ArrayAttr:$sortspecs);
+let results = (outs RelAlg_TupleStream:$result);
 let extraClassDeclaration = [{
 Attributes getUsedAttributes();
 }];
@@ -212,15 +212,15 @@ Attributes getUsedAttributes();
 // Joins
 def InnerJoinOp : RelAlg_Op<"join",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "inner join operation";
-let arguments = (ins RelAlg_Relation:$left,RelAlg_Relation:$right);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
 
 def SemiJoinOp : RelAlg_Op<"semijoin",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "semi join operation";
-let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 
 let parser = [{
@@ -236,8 +236,8 @@ Attributes getAvailableAttributes();
 }
 def AntiSemiJoinOp : RelAlg_Op<"antisemijoin",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "antisemi join operation";
-let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 let extraClassDeclaration = [{
 Attributes getAvailableAttributes();
@@ -252,8 +252,8 @@ return printNonCommutativeJoin(this->getOperation(), p);
 }
 def OuterJoinOp : RelAlg_Op<"outerjoin",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "outer join operation";
-let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 let parser = [{
 return parseNonCommutativeJoin(parser, result);
@@ -265,15 +265,15 @@ return printNonCommutativeJoin(this->getOperation(), p);
 }
 def FullOuterJoinOp : RelAlg_Op<"fullouterjoin",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "full outer join operation";
-let arguments = (ins RelAlg_Relation:$left,RelAlg_Relation:$right);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 
 }
 def SingleJoinOp : RelAlg_Op<"singlejoin",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "single join operation";
-let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_Relation:$left,RelAlg_Relation:$right);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 let parser = [{
 return parseNonCommutativeJoin(parser, result);
@@ -285,8 +285,8 @@ return printNonCommutativeJoin(this->getOperation(), p);
 }
 def MarkJoinOp : RelAlg_Op<"markjoin",[RecursiveSideEffects,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "mark join operation";
-let arguments = (ins RelAlg_JoinDirection:$join_direction,SymbolNameAttr:$sym_name,RelationalAttributeDefAttr:$markattr,RelAlg_Relation:$left,RelAlg_Relation:$right);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins RelAlg_JoinDirection:$join_direction,SymbolNameAttr:$sym_name,RelationalAttributeDefAttr:$markattr,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 let extraClassDeclaration = [{
 Attributes getAvailableAttributes();
@@ -296,8 +296,8 @@ Attributes getCreatedAttributes();
 // Set Operations
 def ProjectionOp : RelAlg_Op<"projection",[RecursiveSideEffects,Operator,UnaryOperator]> {
 let summary = "projection operation";
-let arguments = (ins  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$rel, ArrayAttr:$attrs);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins  RelAlg_SetSemantic:$set_semantic,RelAlg_TupleStream:$rel, ArrayAttr:$attrs);
+let results = (outs RelAlg_TupleStream:$result);
 let extraClassDeclaration = [{
 Attributes getAvailableAttributes();
 }];
@@ -305,18 +305,18 @@ Attributes getAvailableAttributes();
 
 def UnionOp :  RelAlg_Op<"union",[RecursiveSideEffects,Operator,BinaryOperator,UnaryOperator]> {
 let summary = "union operation";
-let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
+let results = (outs RelAlg_TupleStream:$result);
 }
 def IntersectOp :  RelAlg_Op<"intersect",[RecursiveSideEffects,Operator,BinaryOperator]> {
 let summary = "intersect operation";
-let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
+let results = (outs RelAlg_TupleStream:$result);
 }
 def ExceptOp :  RelAlg_Op<"except",[RecursiveSideEffects,Operator,BinaryOperator]> {
 let summary = "except operation";
-let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_Relation:$left,RelAlg_Relation:$right,ArrayAttr:$mapping);
-let results = (outs RelAlg_Relation:$result);
+let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
+let results = (outs RelAlg_TupleStream:$result);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -346,12 +346,12 @@ let arguments = (ins RelationalAttributeDefAttr:$attr, DBType:$val);
 
 def AggrFuncOp : RelAlg_Op<"aggrfn"> {
 let summary = "aggregation operation";
-let arguments = (ins RelAlg_AggrFunc:$fn,RelAlg_Relation:$rel,RelationalAttributeRefAttr:$attr);
+let arguments = (ins RelAlg_AggrFunc:$fn,RelAlg_TupleStream:$rel,RelationalAttributeRefAttr:$attr);
 let results = (outs DBType:$result);
 }
 def CountRowsOp : RelAlg_Op<"count"> {
 let summary = "count rows";
-let arguments = (ins RelAlg_Relation:$rel);
+let arguments = (ins RelAlg_TupleStream:$rel);
 let results = (outs DB_IntType:$res);
 let assemblyFormat =
 [{  $rel attr-dict }];
@@ -360,24 +360,24 @@ let assemblyFormat =
 
 def ExistsOp : RelAlg_Op<"exists"> {
 let summary = "exists operation";
-let arguments = (ins RelAlg_Relation:$rel);
+let arguments = (ins RelAlg_TupleStream:$rel);
 let results = (outs DB_BoolType:$result);
 let assemblyFormat =
 [{  $rel attr-dict }];
 }
 def MaterializeOp : RelAlg_Op<"materialize"> {
 let summary = "materialize operation";
-let arguments = (ins RelAlg_Relation:$rel,ArrayAttr:$attrs);
+let arguments = (ins RelAlg_TupleStream:$rel,ArrayAttr:$attrs);
 let results = (outs DB_CollectionType:$result);
 }
 def GetScalarOp : RelAlg_Op<"getscalar"> {
 let summary = "get attribute operation";
-let arguments = (ins RelationalAttributeRefAttr:$attr, RelAlg_Relation:$rel);
+let arguments = (ins RelationalAttributeRefAttr:$attr, RelAlg_TupleStream:$rel);
 let results = (outs DBType : $res);
 }
 def InOp : RelAlg_Op<"in"> {
 let summary = "in operation";
-let arguments = (ins DBType:$val, RelAlg_Relation:$rel);
+let arguments = (ins DBType:$val, RelAlg_TupleStream:$rel);
 let results = (outs DB_BoolType : $res);
 }
 #endif// OPS
