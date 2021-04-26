@@ -76,7 +76,7 @@ class Translator:
             elif key == "extract":
                 return codegen.create_db_extract(expr[key][0], translateSubExpressions(expr[key][1])[0])
             elif key == "interval":
-                return codegen.create_db_const("%d %s" % (expr[key][0], expr[key][1]), DBType("interval", [], False))
+                return codegen.create_db_const(int(expr[key][0]), DBType("interval", [expr[key][1]], False))
             elif key == "literal":
                 return codegen.create_db_const(expr[key], DBType("string", [], False))
             elif key == "in":

@@ -100,12 +100,11 @@ struct ParseSingleImpl<unsigned> {
 template<>
 struct ParseSingleImpl<std::string> {
    static std::string apply(bool& error, ::mlir::DialectAsmParser& parser) {
-      std::string res;
-      llvm::StringRef ref(res);
-      if (parser.parseKeyword(&ref)) {
+      llvm::StringRef ref;
+      if (parser.parseKeyword(&ref).failed()) {
          error = true;
       }
-      return res;
+      return ref.str();
    }
 };
 template <class X>
@@ -214,7 +213,7 @@ void mlir::db::DateType::print(::mlir::DialectAsmPrinter& printer) const {
    return ::parse<mlir::db::IntervalType,std::string>(context, parser);
 }
 void mlir::db::IntervalType::print(::mlir::DialectAsmPrinter& printer) const {
-   ::print<mlir::db::IntervalType>(printer, getNullable());
+   ::print<mlir::db::IntervalType,std::string>(printer, getNullable(),getUnit());
 }
 
 ::mlir::Type mlir::db::TimestampType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {

@@ -79,6 +79,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: seanmiddleditch/gha-setup-ninja@master
+      - name: Install Apache Arrows
+        run: |
+          bash tools/scripts/install-apache-arrow.sh
       - name: Fetch LLVM Build
         id: llvm-build
         uses: actions/cache@v2
@@ -132,6 +135,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Install Apache Arrows
+        run: |
+          bash tools/scripts/install-apache-arrow.sh
       - name: Install clang-tidy
         run: |
           sudo apt-get install -y clang-tidy
