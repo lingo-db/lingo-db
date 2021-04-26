@@ -3,6 +3,7 @@ add_mlir_dialect_library(MLIRDB
         DBOps.cpp
         DBOpsEnums.cpp
         DBTypes.cpp
+        LowerToStd.cpp
         ADDITIONAL_HEADER_DIRS
         ../../include/mlir/Dialect/DB
 

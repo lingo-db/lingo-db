@@ -28,6 +28,8 @@ add_definitions(${LLVM_DEFINITIONS})
 set(LLVM_LINK_COMPONENTS
         Support
         Core
+        nativecodegen
+        OrcJIT
         )
 
 add_subdirectory(include)
@@ -44,12 +46,15 @@ set(LIBS
         ${translation_libs}
         MLIROptLib
         MLIRRelAlg
+        MLIRUtil
         MLIRDB
         MLIRIR
         MLIRParser
         MLIRPass
         MLIRSupport
-
+        MLIRExecutionEngine
+        MLIRLLVMToLLVMIRTranslation
+        MLIRTargetLLVMIRExport
         MLIRTranslation
         MLIRSupport
         MLIRAnalysis
@@ -60,8 +65,15 @@ set(LIBS
 
 
 add_executable(mlir-db-opt mlir-opt.cpp)
+find_package(Arrow REQUIRED)
+
+add_executable(db-run db-run.cpp)
+llvm_update_compile_flags(db-run)
+target_link_libraries(db-run PUBLIC ${LIBS} PRIVATE arrow_shared)
+target_link_options(db-run PUBLIC -export-dynamic)
+
 
 llvm_update_compile_flags(mlir-db-opt)
-target_link_libraries(mlir-db-opt PUBLIC ${LIBS})
+target_link_libraries(mlir-db-opt PUBLIC ${LIBS} PRIVATE arrow_shared)
 add_subdirectory(tools)
 add_subdirectory(test)

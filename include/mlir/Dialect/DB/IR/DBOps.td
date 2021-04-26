@@ -69,7 +69,7 @@ let parameters = (ins "bool":$nullable);
 }
 def DB_IntervalType : DB_Type<"Interval","interval"> {
 let summary = "database interval type";
-let parameters = (ins "bool":$nullable);
+let parameters = (ins "bool":$nullable,"std::string":$unit);
 }
 def DB_TimeType : DB_Type<"Timestamp","timestamp"> {
 let summary = "database date type";
@@ -85,7 +85,7 @@ let parameters = (ins "bool":$nullable);
 }
 
 def DB_ConstantOp : DB_Op<"constant",
-    [ConstantLike, NoSideEffect]> {
+    [NoSideEffect]> {
 let summary = "constant";
 
 
@@ -173,10 +173,10 @@ CmpIPredicate getPredicate() {
 }];
 }
 
-def PrintOp : DB_Op<"print"> {
-let summary = "print function";
-let arguments = (ins StrAttr:$format, Variadic<DBType>: $to_print);
-let assemblyFormat = "$format `,` $to_print `:` type($to_print) attr-dict";
+def DumpOp : DB_Op<"dump"> {
+let summary = "dump function";
+let arguments = (ins DBType: $val);
+let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
 

@@ -17,7 +17,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm-build
-          key: ${{ runner.os }}-llvm-build-${{ steps.llvm-commit.outputs.commit }}
+          key: ${{ runner.os }}-llvm-build-codegen-${{ steps.llvm-commit.outputs.commit }}
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: Build LLVM
         if: steps.llvm-build.outputs.cache-hit != 'true'
@@ -28,7 +28,7 @@ jobs:
           cmake -G Ninja llvm-project/llvm  -B llvm-build \
           -DLLVM_ENABLE_PROJECTS="mlir" \
           -DLLVM_BUILD_EXAMPLES=OFF \
-          -DLLVM_TARGETS_TO_BUILD="" \
+          -DLLVM_TARGETS_TO_BUILD="X86;NVPTX;AMDGPU" \
           -DCMAKE_BUILD_TYPE=Release \
           -DLLVM_ENABLE_ASSERTIONS=ON
           cmake --build llvm-build
@@ -38,6 +38,9 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: seanmiddleditch/gha-setup-ninja@master
+      - name: Install Apache Arrows
+        run: |
+          bash tools/scripts/install-apache-arrow.sh
       - name: Get llvm commit id
         id: llvm-commit
         run: |
@@ -47,7 +50,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm-build
-          key: ${{ runner.os }}-llvm-build-${{ steps.llvm-commit.outputs.commit }}
+          key: ${{ runner.os }}-llvm-build-codegen-${{ steps.llvm-commit.outputs.commit }}
       - name: Fetch Cached LLVM sources
         id: llvm-sources
         uses: actions/cache@v2
@@ -81,7 +84,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm-build
-          key: ${{ runner.os }}-llvm-build-${{ steps.llvm-commit.outputs.commit }}
+          key: ${{ runner.os }}-llvm-build-codegen-${{ steps.llvm-commit.outputs.commit }}
       - name: Fetch Cached LLVM sources
         id: llvm-sources
         uses: actions/cache@v2
@@ -109,7 +112,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm-build
-          key: ${{ runner.os }}-llvm-build-${{ steps.llvm-commit.outputs.commit }}
+          key: ${{ runner.os }}-llvm-build-codegen-${{ steps.llvm-commit.outputs.commit }}
       - name: Fetch Cached LLVM sources
         id: llvm-sources
         uses: actions/cache@v2
@@ -143,7 +146,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: llvm-build
-          key: ${{ runner.os }}-llvm-build-${{ steps.llvm-commit.outputs.commit }}
+          key: ${{ runner.os }}-llvm-build-codegen-${{ steps.llvm-commit.outputs.commit }}
       - name: Fetch Cached Build
         uses: actions/cache@v2
         with:

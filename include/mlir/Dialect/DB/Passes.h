@@ -6,7 +6,7 @@
 
 namespace mlir {
     namespace db {
-        std::unique_ptr<Pass> createLowerToLLVMPass(db::Database &db);
+        std::unique_ptr<Pass> createLowerToStdPass();
     }// end namespace db
 }// end namespace mlir
 

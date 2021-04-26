@@ -49,7 +49,7 @@ mlir::db::DBType mlir::db::DBType::getBaseType() const {
          return mlir::db::TimestampType::get(t.getContext(), false);
       })
       .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
-         return mlir::db::IntervalType::get(t.getContext(), false);
+         return mlir::db::IntervalType::get(t.getContext(), false,t.getUnit());
       })
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
          return mlir::db::FloatType::get(t.getContext(), false, t.getWidth());
@@ -77,7 +77,7 @@ mlir::db::DBType mlir::db::DBType::asNullable() const {
          return mlir::db::TimestampType::get(t.getContext(), true);
       })
       .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
-         return mlir::db::IntervalType::get(t.getContext(), true);
+         return mlir::db::IntervalType::get(t.getContext(), true,t.getUnit());
       })
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
          return mlir::db::FloatType::get(t.getContext(), true, t.getWidth());
@@ -92,6 +92,17 @@ struct ParseSingleImpl<unsigned> {
    static unsigned apply(bool& error, ::mlir::DialectAsmParser& parser) {
       unsigned res;
       if (parser.parseInteger(res)) {
+         error = true;
+      }
+      return res;
+   }
+};
+template<>
+struct ParseSingleImpl<std::string> {
+   static std::string apply(bool& error, ::mlir::DialectAsmParser& parser) {
+      std::string res;
+      llvm::StringRef ref(res);
+      if (parser.parseKeyword(&ref)) {
          error = true;
       }
       return res;
@@ -200,7 +211,7 @@ void mlir::db::DateType::print(::mlir::DialectAsmPrinter& printer) const {
    ::print<mlir::db::DateType>(printer, getNullable());
 }
 ::mlir::Type mlir::db::IntervalType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
-   return ::parse<mlir::db::IntervalType>(context, parser);
+   return ::parse<mlir::db::IntervalType,std::string>(context, parser);
 }
 void mlir::db::IntervalType::print(::mlir::DialectAsmPrinter& printer) const {
    ::print<mlir::db::IntervalType>(printer, getNullable());
