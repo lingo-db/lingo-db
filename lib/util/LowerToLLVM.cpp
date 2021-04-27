@@ -20,64 +20,15 @@ using namespace mlir;
 //===----------------------------------------------------------------------===//
 
 namespace {
-/// Return a value representing an access into a global string with the given
-/// name, creating the string if necessary.
-static Value getOrCreateGlobalString(Location loc, OpBuilder& builder, StringRef value,
-                                     ModuleOp module) {
-   static std::unordered_map<std::string, std::string> names;
-   if (!names.count(value.str())) {
-      names[value.str()] = std::string("print_str_") + std::to_string(names.size());
-   }
-   StringRef name = StringRef(names[value.str()]);
 
-   // Create the global at the entry of the module.
-   LLVM::GlobalOp global;
-   if (!(global = module.lookupSymbol<LLVM::GlobalOp>(name))) {
-      OpBuilder::InsertionGuard insertGuard(builder);
-      builder.setInsertionPointToStart(module.getBody());
-      auto type = LLVM::LLVMArrayType::get(
-         builder.getIntegerType(8), value.size());
-      global = builder.create<LLVM::GlobalOp>(loc, type, /*isConstant=*/true,
-                                              LLVM::Linkage::Internal, name,
-                                              builder.getStringAttr(value));
-   }
-
-   // Get the pointer to the first character in the global string.
-   Value globalPtr = builder.create<LLVM::AddressOfOp>(loc, global);
-   Value cst0 = builder.create<LLVM::ConstantOp>(
-      loc, builder.getI64Type(),
-      builder.getIntegerAttr(builder.getIndexType(), 0));
-   return builder.create<LLVM::GEPOp>(
-      loc, LLVM::LLVMPointerType::get(builder.getIntegerType(8)), globalPtr,
-      ArrayRef<Value>({cst0, cst0}));
-}
 static mlir::LLVM::LLVMStructType convertTuple(TupleType tupleType, TypeConverter& typeConverter) {
    std::vector<Type> types;
    for (auto t : tupleType.getTypes()) {
-      t.dump();
       types.push_back(typeConverter.convertType(t));
    }
    return mlir::LLVM::LLVMStructType::getLiteral(tupleType.getContext(), types);
 }
-/// Lowers `toy.print` to a loop nest calling `printf` on each of the individual
-/// elements of the array.
-class StringConstOpLowering : public ConversionPattern {
-   public:
-   explicit StringConstOpLowering(MLIRContext* context)
-      : ConversionPattern(mlir::util::StringConstantOp::getOperationName(), 1, context) {}
 
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto constop = mlir::dyn_cast_or_null<mlir::util::StringConstantOp>(op);
-      auto ptr = getOrCreateGlobalString(rewriter.getUnknownLoc(), rewriter, constop.val(), op->getParentOfType<ModuleOp>());
-      auto len = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI32Type(), constop.val().size()));
-      constop.ptr().replaceAllUsesWith(ptr);
-      constop.len().replaceAllUsesWith(len);
-      rewriter.eraseOp(op);
-      return success();
-   }
-};
 class CombineOpLowering : public ConversionPattern {
    public:
    explicit CombineOpLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -96,6 +47,77 @@ class CombineOpLowering : public ConversionPattern {
                                                     rewriter.getI64ArrayAttr(pos++));
       }
       rewriter.replaceOp(op, tpl);
+      return success();
+   }
+};
+class UndefTupleOpLowering : public ConversionPattern {
+   public:
+   explicit UndefTupleOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::UndefTupleOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto undefTupleOp = mlir::dyn_cast_or_null<mlir::util::UndefTupleOp>(op);
+      auto tupleType = undefTupleOp.tuple().getType().dyn_cast_or_null<TupleType>();
+      auto structType = convertTuple(tupleType, *typeConverter);
+      Value tpl = rewriter.create<LLVM::UndefOp>(rewriter.getUnknownLoc(), structType);
+      rewriter.replaceOp(op, tpl);
+      return success();
+   }
+};
+class SetTupleOpLowering : public ConversionPattern {
+   public:
+   explicit SetTupleOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::SetTupleOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto setTupleOp = mlir::dyn_cast_or_null<mlir::util::SetTupleOp>(op);
+      auto tupleType = setTupleOp.tuple().getType().dyn_cast_or_null<TupleType>();
+      auto structType = convertTuple(tupleType, *typeConverter);
+      Value tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), structType, setTupleOp.tuple(), setTupleOp.val(),
+                                                       rewriter.getI64ArrayAttr(setTupleOp.offset()));
+
+      rewriter.replaceOp(op, tpl);
+      return success();
+   }
+};
+class GetTupleOpLowering : public ConversionPattern {
+   public:
+   explicit GetTupleOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::SetTupleOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto getTupleOp = mlir::dyn_cast_or_null<mlir::util::GetTupleOp>(op);
+      auto resType = typeConverter->convertType(getTupleOp.val().getType());
+      Value tpl = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), resType, getTupleOp.tuple(),
+                                                        rewriter.getI64ArrayAttr(getTupleOp.offset()));
+
+      rewriter.replaceOp(op, tpl);
+      return success();
+   }
+};
+class SplitOpLowering : public ConversionPattern {
+   public:
+   explicit SplitOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::SplitOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto splitOp = mlir::dyn_cast_or_null<mlir::util::SplitOp>(op);
+      auto tupleType = splitOp.tuple().getType().dyn_cast_or_null<TupleType>();
+      auto structType = convertTuple(tupleType, *typeConverter);
+      unsigned pos = 0;
+      std::vector<Value> values;
+      for (auto type : structType.getBody()) {
+         values.push_back(rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), type, splitOp.tuple(), rewriter.getI64ArrayAttr(pos++)));
+      }
+      rewriter.replaceOp(op, values);
       return success();
    }
 };
@@ -119,7 +141,9 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
-
-   patterns.add<StringConstOpLowering>(patterns.getContext());
+   patterns.add<GetTupleOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<SetTupleOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<UndefTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<CombineOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<SplitOpLowering>(typeConverter, patterns.getContext());
 }

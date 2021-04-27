@@ -54,6 +54,8 @@ def DB_BoolType : DB_Type<"Bool","bool"> {
     return $_get($_ctxt, false);
     }]>
     ];
+let builderCall = "$_builder.getType<" # dialect.cppNamespace #
+"::" # cppClassName # ">()";
 }
 def DB_IntType : DB_Type<"Int","int"> {
 let summary = "database integer type";
@@ -97,6 +99,23 @@ Attribute getValue() { return (*this)->getAttr("value"); }
 }];
 
 }
+def DB_NullOp : DB_Op<"null",
+[NoSideEffect]> {
+let summary = "null";
+let results = (outs DBType:$res);
+let assemblyFormat = "`:` type($res) attr-dict";
+
+}
+
+def DB_IsNullOp : DB_Op<"isnull",
+[NoSideEffect]> {
+let summary = "isnull";
+let arguments = (ins DBType:$val);
+let results = (outs DB_BoolType:$result);
+let assemblyFormat = "$val `:` type($val) attr-dict";
+
+}
+
 
 class DB_BinaryOp<string mnemonic, list<OpTrait> traits = []> :
 Op<DB_Dialect, mnemonic,
@@ -128,7 +147,6 @@ def DB_SubOp : DB_BinaryOp<"sub"> {}
 def DB_MulOp : DB_BinaryOp<"mul"> {}
 def DB_DivOp : DB_BinaryOp<"div"> {}
 def DB_ModOp : DB_BinaryOp<"mod"> {}
-def DB_NegOp : DB_BinaryOp<"neg"> {}
 
 def DB_CMP_P_EQ  : I64EnumAttrCase<"eq", 0>;
 def DB_CMP_P_NEQ  : I64EnumAttrCase<"neq", 1>;
@@ -173,6 +191,7 @@ CmpIPredicate getPredicate() {
 }];
 }
 
+
 def DumpOp : DB_Op<"dump"> {
 let summary = "dump function";
 let arguments = (ins DBType: $val);
@@ -200,15 +219,10 @@ let printer = [{
 return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
 }];
 }
-def NotOp : DB_Op<"not", [NoSideEffect]> {
-let arguments = (ins DB_BoolType: $vals);
+def NotOp : DB_Op<"not", [NoSideEffect,SameOperandsAndResultType]> {
+let arguments = (ins DB_BoolType: $val);
 let results = (outs  DB_BoolType : $res);
-let parser = [{
-return parseImplicitResultSameOperandBaseTypeOp(parser, result);
-}];
-let printer = [{
-return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
-}];
+let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
 def DateAddOp : DB_Op<"date_add"> {

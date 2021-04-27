@@ -222,39 +222,70 @@ void ToLLVMLoweringPass::runOnOperation() {
 std::unique_ptr<mlir::Pass> createLowerToLLVMPass() {
    return std::make_unique<ToLLVMLoweringPass>();
 }
-extern "C" __attribute__((visibility("default"))) void dumpInt(int64_t val) {
-   std::cout << "int(" << val << ")" << std::endl;
+extern "C" __attribute__((visibility("default"))) void dumpInt(bool null, int64_t val) {
+   if (null) {
+      std::cout << "int(NULL)" << std::endl;
+   } else {
+      std::cout << "int(" << val << ")" << std::endl;
+   }
 }
-extern "C" __attribute__((visibility("default"))) void dumpBool(bool val) {
-   std::cout << "bool(" << std::boolalpha << val << ")" << std::endl;
+extern "C" __attribute__((visibility("default"))) void dumpBool(bool null, bool val) {
+   if (null) {
+      std::cout << "bool(NULL)" << std::endl;
+   } else {
+      std::cout << "bool(" << std::boolalpha << val << ")" << std::endl;
+   }
 }
-extern "C" __attribute__((visibility("default"))) void dumpDecimal(uint64_t low, uint64_t high, int32_t scale) {
-   arrow::Decimal128 decimalrep(arrow::BasicDecimal128(high, low));
-   std::cout << "decimal(" << decimalrep.ToString(scale) << ")" << std::endl;
+extern "C" __attribute__((visibility("default"))) void dumpDecimal(bool null, uint64_t low, uint64_t high, int32_t scale) {
+   if (null) {
+      std::cout << "decimal(NULL)" << std::endl;
+   } else {
+      arrow::Decimal128 decimalrep(arrow::BasicDecimal128(high, low));
+      std::cout << "decimal(" << decimalrep.ToString(scale) << ")" << std::endl;
+   }
 }
-extern "C" __attribute__((visibility("default"))) void dumpDate(uint32_t date) {
-   time_t time = date;
-   tm tmStruct;
-   time *= 24 * 60 * 60;
-   auto* x = gmtime_r(&time, &tmStruct);
+extern "C" __attribute__((visibility("default"))) void dumpDate(bool null, uint32_t date) {
+   if (null) {
+      std::cout << "date(NULL)" << std::endl;
+   } else {
+      time_t time = date;
+      tm tmStruct;
+      time *= 24 * 60 * 60;
+      auto* x = gmtime_r(&time, &tmStruct);
 
-   std::cout << "date(" << (x->tm_year + 1900) << "-" << std::setw(2) << std::setfill('0') << (x->tm_mon + 1) << "-" << std::setw(2) << std::setfill('0') << x->tm_mday << ")" << std::endl;
+      std::cout << "date(" << (x->tm_year + 1900) << "-" << std::setw(2) << std::setfill('0') << (x->tm_mon + 1) << "-" << std::setw(2) << std::setfill('0') << x->tm_mday << ")" << std::endl;
+   }
 }
-extern "C" __attribute__((visibility("default"))) void dumpTimestamp(uint64_t date) {
-   time_t time = date;
-   tm tmStruct;
-   auto* x = gmtime_r(&time, &tmStruct);
-
-   std::cout << "timestamp(" << (x->tm_year + 1900) << "-" << std::setw(2) << std::setfill('0') << (x->tm_mon + 1) << "-" << std::setw(2) << std::setfill('0') << x->tm_mday << " " << std::setw(2) << std::setfill('0') << x->tm_hour << ":" << std::setw(2) << std::setfill('0') << x->tm_min << ":" << std::setw(2) << std::setfill('0') << x->tm_sec << ")" << std::endl;
+extern "C" __attribute__((visibility("default"))) void dumpTimestamp(bool null, uint64_t date) {
+   if (null) {
+      std::cout << "timestamp(NULL)" << std::endl;
+   } else {
+      time_t time = date;
+      tm tmStruct;
+      auto* x = gmtime_r(&time, &tmStruct);
+      std::cout << "timestamp(" << (x->tm_year + 1900) << "-" << std::setw(2) << std::setfill('0') << (x->tm_mon + 1) << "-" << std::setw(2) << std::setfill('0') << x->tm_mday << " " << std::setw(2) << std::setfill('0') << x->tm_hour << ":" << std::setw(2) << std::setfill('0') << x->tm_min << ":" << std::setw(2) << std::setfill('0') << x->tm_sec << ")" << std::endl;
+   }
 }
-extern "C" __attribute__((visibility("default"))) void dumpInterval(uint64_t interval) {
-   std::cout << "interval(" << interval << ")" << std::endl;
+extern "C" __attribute__((visibility("default"))) void dumpInterval(bool null, uint64_t interval) {
+   if (null) {
+      std::cout << "interval(NULL)" << std::endl;
+   } else {
+      std::cout << "interval(" << interval << ")" << std::endl;
+   }
 }
-extern "C" __attribute__((visibility("default"))) void dumpFloat(double val) {
-   std::cout << "float(" << val << ")" << std::endl;
+extern "C" __attribute__((visibility("default"))) void dumpFloat(bool null, double val) {
+   if (null) {
+      std::cout << "float(NULL)" << std::endl;
+   } else {
+      std::cout << "float(" << val << ")" << std::endl;
+   }
 }
-extern "C" __attribute__((visibility("default"))) void dumpString(char* ptr, size_t len) {
-   std::cout << "string(\"" << std::string(ptr, len) << "\")" << std::endl;
+extern "C" __attribute__((visibility("default"))) void dumpString(bool null, char* ptr, size_t len) {
+   if (null) {
+      std::cout << "string(NULL)" << std::endl;
+   } else {
+      std::cout << "string(\"" << std::string(ptr, len) << "\")" << std::endl;
+   }
 }
 
 int main(int argc, char** argv) {
@@ -272,7 +303,7 @@ int main(int argc, char** argv) {
    mlir::registerLLVMDialectTranslation(context);
    mlir::OwningModuleRef module;
    llvm::SourceMgr sourceMgr;
-   llvm::DebugFlag = true;
+   llvm::DebugFlag = false;
    mlir::SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
    if (int error = loadMLIR(context, module))
       return error;

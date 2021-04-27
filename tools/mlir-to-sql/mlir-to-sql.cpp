@@ -172,7 +172,7 @@ class ToSQL {
             output << resolveVal(op.val());
          })
          .Case<NotOp>([&](NotOp op) {
-            output << "not " << resolveVal(op.vals());
+            output << "not " << resolveVal(op.val());
          })
          .Case<mlir::db::IfOp>([&](mlir::db::IfOp op) {
             output << " case \n";

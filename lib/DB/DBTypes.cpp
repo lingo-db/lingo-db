@@ -6,6 +6,34 @@
 
 #include <llvm/ADT/TypeSwitch.h>
 
+bool mlir::db::DBType::classof(Type t) {
+   return ::llvm::TypeSwitch<Type, bool>(t)
+      .Case<::mlir::db::BoolType>([&](::mlir::db::BoolType t) {
+         return true;
+      })
+      .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) {
+         return true;
+      })
+      .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
+         return true;
+      })
+      .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
+         return true;
+      })
+      .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
+         return true;
+      })
+      .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
+         return true;
+      })
+      .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
+         return true;
+      })
+      .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
+         return true;
+      })
+      .Default([](::mlir::Type) { return false; });
+}
 bool mlir::db::DBType::isNullable() {
    return ::llvm::TypeSwitch<::mlir::db::DBType, bool>(*this)
       .Case<::mlir::db::BoolType>([&](::mlir::db::BoolType t) {
@@ -24,6 +52,12 @@ bool mlir::db::DBType::isNullable() {
          return t.getNullable();
       })
       .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
+         return t.getNullable();
+      })
+      .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
+         return t.getNullable();
+      })
+      .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
          return t.getNullable();
       })
       .Default([](::mlir::Type) { return false; });
@@ -49,7 +83,7 @@ mlir::db::DBType mlir::db::DBType::getBaseType() const {
          return mlir::db::TimestampType::get(t.getContext(), false);
       })
       .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
-         return mlir::db::IntervalType::get(t.getContext(), false,t.getUnit());
+         return mlir::db::IntervalType::get(t.getContext(), false, t.getUnit());
       })
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
          return mlir::db::FloatType::get(t.getContext(), false, t.getWidth());
@@ -77,7 +111,7 @@ mlir::db::DBType mlir::db::DBType::asNullable() const {
          return mlir::db::TimestampType::get(t.getContext(), true);
       })
       .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
-         return mlir::db::IntervalType::get(t.getContext(), true,t.getUnit());
+         return mlir::db::IntervalType::get(t.getContext(), true, t.getUnit());
       })
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
          return mlir::db::FloatType::get(t.getContext(), true, t.getWidth());
@@ -97,7 +131,7 @@ struct ParseSingleImpl<unsigned> {
       return res;
    }
 };
-template<>
+template <>
 struct ParseSingleImpl<std::string> {
    static std::string apply(bool& error, ::mlir::DialectAsmParser& parser) {
       llvm::StringRef ref;
@@ -210,10 +244,10 @@ void mlir::db::DateType::print(::mlir::DialectAsmPrinter& printer) const {
    ::print<mlir::db::DateType>(printer, getNullable());
 }
 ::mlir::Type mlir::db::IntervalType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
-   return ::parse<mlir::db::IntervalType,std::string>(context, parser);
+   return ::parse<mlir::db::IntervalType, std::string>(context, parser);
 }
 void mlir::db::IntervalType::print(::mlir::DialectAsmPrinter& printer) const {
-   ::print<mlir::db::IntervalType,std::string>(printer, getNullable(),getUnit());
+   ::print<mlir::db::IntervalType, std::string>(printer, getNullable(), getUnit());
 }
 
 ::mlir::Type mlir::db::TimestampType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
