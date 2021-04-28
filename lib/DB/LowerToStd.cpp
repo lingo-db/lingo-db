@@ -141,7 +141,8 @@ class ConstantLowering : public ConversionPattern {
             rewriter.setInsertionPointToStart(op->getParentOfType<ModuleOp>().getBody());
             auto initialValue = DenseIntElementsAttr::get(
                RankedTensorType::get({strLen}, i8Type), vec);
-            auto globalop = rewriter.create<mlir::memref::GlobalOp>(rewriter.getUnknownLoc(), "abc", rewriter.getStringAttr("private"), strStaticType, initialValue, true);
+            static int id = 0;
+            auto globalop = rewriter.create<mlir::memref::GlobalOp>(rewriter.getUnknownLoc(), "db_constant_string" + std::to_string(id++), rewriter.getStringAttr("private"), strStaticType, initialValue, true);
             rewriter.restoreInsertionPoint(insertionPoint);
             Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
             rewriter.replaceOpWithNewOp<memref::CastOp>(op, conststr, strDynamicType);
@@ -212,7 +213,7 @@ class BinOpLowering : public ConversionPattern {
       return failure();
    }
 };
-template<class DBOp,class Op>
+template <class DBOp, class Op>
 class DecimalOpScaledLowering : public ConversionPattern {
    public:
    explicit DecimalOpScaledLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -238,6 +239,58 @@ class DecimalOpScaledLowering : public ConversionPattern {
          return success();
       }
       return failure();
+   }
+};
+//lower dbexec::If to scf::If
+class IfLowering : public ConversionPattern {
+   public:
+   explicit IfLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::IfOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto ifOp = cast<mlir::db::IfOp>(op);
+      auto loc = op->getLoc();
+      std::vector<Type> resultTypes;
+      for (auto res : ifOp.results()) {
+         resultTypes.push_back(typeConverter->convertType(res.getType()));
+      }
+      auto newIfOp = rewriter.create<mlir::scf::IfOp>(loc, TypeRange(resultTypes), ifOp.condition(), !ifOp.elseRegion().empty());
+      {
+         scf::IfOp::ensureTerminator(newIfOp.thenRegion(), rewriter, loc);
+         auto insertPt = rewriter.saveInsertionPoint();
+         rewriter.setInsertionPointToStart(&newIfOp.thenRegion().front());
+         Block* originalThenBlock = &ifOp.thenRegion().front();
+         auto *terminator = rewriter.getInsertionBlock()->getTerminator();
+         rewriter.mergeBlockBefore(originalThenBlock, terminator, {});
+         rewriter.eraseOp(terminator);
+         rewriter.restoreInsertionPoint(insertPt);
+      }
+      if (!ifOp.elseRegion().empty()) {
+         scf::IfOp::ensureTerminator(newIfOp.elseRegion(), rewriter, loc);
+         auto insertPt = rewriter.saveInsertionPoint();
+         rewriter.setInsertionPointToStart(&newIfOp.elseRegion().front());
+         Block* originalElseBlock = &ifOp.elseRegion().front();
+         auto *terminator = rewriter.getInsertionBlock()->getTerminator();
+         rewriter.mergeBlockBefore(originalElseBlock, terminator, {});
+         rewriter.eraseOp(terminator);
+         rewriter.restoreInsertionPoint(insertPt);
+      }
+      llvm::dbgs() << newIfOp.results().size() << "\n";
+      llvm::dbgs() << ifOp->getNumResults() << "\n";
+
+      rewriter.replaceOp(ifOp, newIfOp.results());
+
+      return success();
+   }
+};
+class YieldLowering : public ConversionPattern {
+   public:
+   explicit YieldLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::YieldOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOpWithNewOp<scf::YieldOp>(op, operands);
+      return success();
    }
 };
 //Lower Print Operation to an actual printf call
@@ -432,6 +485,8 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<IsNullOpLowering>(typeConverter, &getContext());
    patterns.insert<DumpOpLowering>(typeConverter, &getContext());
    patterns.insert<ConstantLowering>(typeConverter, &getContext());
+   patterns.insert<IfLowering>(typeConverter, &getContext());
+   patterns.insert<YieldLowering>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::db::IntType, mlir::AddIOp>>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::IntType, mlir::SubIOp>>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::MulOp, mlir::db::IntType, mlir::MulIOp>>(typeConverter, &getContext());
@@ -447,8 +502,8 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::db::DecimalType, mlir::AddIOp>>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::DecimalType, mlir::SubIOp>>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::MulOp, mlir::db::DecimalType, mlir::MulIOp>>(typeConverter, &getContext());
-   patterns.insert<DecimalOpScaledLowering<mlir::db::DivOp,mlir::SignedDivIOp>>(typeConverter, &getContext());
-   patterns.insert<DecimalOpScaledLowering<mlir::db::ModOp,mlir::SignedRemIOp>>(typeConverter, &getContext());
+   patterns.insert<DecimalOpScaledLowering<mlir::db::DivOp, mlir::SignedDivIOp>>(typeConverter, &getContext());
+   patterns.insert<DecimalOpScaledLowering<mlir::db::ModOp, mlir::SignedRemIOp>>(typeConverter, &getContext());
 
    // We want to completely lower to LLVM, so we use a `FullConversion`. This
    // ensures that only legal operations will remain after the conversion.
