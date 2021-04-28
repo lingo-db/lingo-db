@@ -87,7 +87,7 @@ class SetTupleOpLowering : public ConversionPattern {
 class GetTupleOpLowering : public ConversionPattern {
    public:
    explicit GetTupleOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::util::SetTupleOp::getOperationName(), 1, context) {}
+      : ConversionPattern(typeConverter, mlir::util::GetTupleOp::getOperationName(), 1, context) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,

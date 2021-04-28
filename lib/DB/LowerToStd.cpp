@@ -260,7 +260,7 @@ class IfLowering : public ConversionPattern {
          auto insertPt = rewriter.saveInsertionPoint();
          rewriter.setInsertionPointToStart(&newIfOp.thenRegion().front());
          Block* originalThenBlock = &ifOp.thenRegion().front();
-         auto *terminator = rewriter.getInsertionBlock()->getTerminator();
+         auto* terminator = rewriter.getInsertionBlock()->getTerminator();
          rewriter.mergeBlockBefore(originalThenBlock, terminator, {});
          rewriter.eraseOp(terminator);
          rewriter.restoreInsertionPoint(insertPt);
@@ -270,7 +270,7 @@ class IfLowering : public ConversionPattern {
          auto insertPt = rewriter.saveInsertionPoint();
          rewriter.setInsertionPointToStart(&newIfOp.elseRegion().front());
          Block* originalElseBlock = &ifOp.elseRegion().front();
-         auto *terminator = rewriter.getInsertionBlock()->getTerminator();
+         auto* terminator = rewriter.getInsertionBlock()->getTerminator();
          rewriter.mergeBlockBefore(originalElseBlock, terminator, {});
          rewriter.eraseOp(terminator);
          rewriter.restoreInsertionPoint(insertPt);
@@ -290,6 +290,183 @@ class YieldLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       rewriter.replaceOpWithNewOp<scf::YieldOp>(op, operands);
+      return success();
+   }
+};
+class NotOpLowering : public ConversionPattern {
+   public:
+   explicit NotOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::NotOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto notOp = cast<mlir::db::NotOp>(op);
+      Value trueValue = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      mlir::db::DBType valType = notOp.val().getType().cast<mlir::db::DBType>();
+      if (valType.isNullable()) {
+         auto tupleType = typeConverter->convertType(notOp.val().getType());
+         Value val = rewriter.create<util::GetTupleOp>(rewriter.getUnknownLoc(), rewriter.getI1Type(), operands[0], 1);
+         val = rewriter.create<XOrOp>(rewriter.getUnknownLoc(), val, trueValue);
+         rewriter.replaceOpWithNewOp<util::SetTupleOp>(op, tupleType, operands[0], val, 1);
+         return success();
+      } else {
+         rewriter.replaceOpWithNewOp<XOrOp>(op, operands[0], trueValue);
+         return success();
+      }
+   }
+};
+class AndOpLowering : public ConversionPattern {
+   public:
+   explicit AndOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::AndOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto andOp = cast<mlir::db::AndOp>(op);
+
+      Value result;
+      Value isNull;
+      auto loc = rewriter.getUnknownLoc();
+      Value falseValue = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+      Value trueValue = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+
+      for (size_t i = 0; i < operands.size(); i++) {
+         auto currType = andOp.vals()[i].getType();
+         bool currNullable = currType.dyn_cast_or_null<mlir::db::DBType>().isNullable();
+         Value currNull;
+         Value currVal;
+         if (currNullable) {
+            TupleType tupleType = typeConverter->convertType(currType).dyn_cast_or_null<TupleType>();
+            auto splitOp = rewriter.create<mlir::util::SplitOp>(loc, tupleType.getTypes(), operands[i]);
+            currNull = splitOp.vals()[0];
+            currVal = splitOp.vals()[1];
+         } else {
+            currVal = operands[i];
+         }
+         if (i == 0) {
+            if (currNullable) {
+               result = rewriter.create<SelectOp>(loc, currNull, trueValue, currVal);
+            } else {
+               result = currVal;
+            }
+            isNull = currNull;
+         } else {
+            if (currNullable) {
+               if (isNull) {
+                  isNull = rewriter.create<OrOp>(loc, isNull, currNull);
+               } else {
+                  isNull = currNull;
+               }
+            }
+            if (currNullable) {
+               result = rewriter.create<SelectOp>(loc, currNull, result, rewriter.create<SelectOp>(loc, currVal, result, falseValue));
+            } else {
+               result = rewriter.create<SelectOp>(loc, currVal, result, falseValue);
+            }
+         }
+      }
+      if (andOp.getResult().getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
+         isNull = rewriter.create<SelectOp>(loc, result, isNull, falseValue);
+         Value combined = rewriter.create<mlir::util::CombineOp>(loc, typeConverter->convertType(andOp.getResult().getType()), ValueRange({isNull, result}));
+         rewriter.replaceOp(op, combined);
+      } else {
+         rewriter.replaceOp(op, result);
+      }
+      return success();
+   }
+};
+class OrOpLowering : public ConversionPattern {
+   public:
+   explicit OrOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::OrOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto orOp = cast<mlir::db::OrOp>(op);
+
+      Value result;
+      Value isNull;
+      auto loc = rewriter.getUnknownLoc();
+      Value falseValue = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+      Value trueValue = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+
+      for (size_t i = 0; i < operands.size(); i++) {
+         auto currType = orOp.vals()[i].getType();
+         bool currNullable = currType.dyn_cast_or_null<mlir::db::DBType>().isNullable();
+         Value currNull;
+         Value currVal;
+         if (currNullable) {
+            TupleType tupleType = typeConverter->convertType(currType).dyn_cast_or_null<TupleType>();
+            auto splitOp = rewriter.create<mlir::util::SplitOp>(loc, tupleType.getTypes(), operands[i]);
+            currNull = splitOp.vals()[0];
+            currVal = splitOp.vals()[1];
+         } else {
+            currVal = operands[i];
+         }
+         if (i == 0) {
+            if (currNullable) {
+               result = rewriter.create<SelectOp>(loc, currNull, falseValue, currVal);
+            } else {
+               result = currVal;
+            }
+            isNull = currNull;
+         } else {
+            if (currNullable) {
+               if (isNull) {
+                  isNull = rewriter.create<OrOp>(loc, isNull, currNull);
+               } else {
+                  isNull = currNull;
+               }
+            }
+            if (currNullable) {
+               result = rewriter.create<SelectOp>(loc, currNull, result, rewriter.create<SelectOp>(loc, currVal, trueValue, result));
+            } else {
+               result = rewriter.create<SelectOp>(loc, currVal, trueValue, result);
+            }
+         }
+      }
+      if (orOp.getResult().getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
+         isNull = rewriter.create<SelectOp>(loc, result, falseValue, isNull);
+         Value combined = rewriter.create<mlir::util::CombineOp>(loc, typeConverter->convertType(orOp.getResult().getType()), ValueRange({isNull, result}));
+         rewriter.replaceOp(op, combined);
+      } else {
+         rewriter.replaceOp(op, result);
+      }
+      return success();
+   }
+};
+class CastOpLowering : public ConversionPattern {
+   public:
+   explicit CastOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CastOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto castOp = cast<mlir::db::CastOp>(op);
+      auto loc = rewriter.getUnknownLoc();
+      auto sourceType = castOp.val().getType().cast<db::DBType>();
+      auto targetType = castOp.getType().cast<db::DBType>();
+      //auto scalarSourceType = sourceType.getBaseType();
+      //auto scalarTargetType = targetType.getBaseType();
+      Value isNull;
+      Value value;
+      if (sourceType.isNullable()) {
+         auto splitOp = rewriter.create<mlir::util::SplitOp>(loc, typeConverter->convertType(sourceType).dyn_cast_or_null<TupleType>().getTypes(), operands[0]);
+         isNull = splitOp.vals()[0];
+         value = splitOp.vals()[1];
+      } else {
+         isNull = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+         value = operands[0];
+      }
+      //todo convert types
+      if (targetType.isNullable()) {
+         Value combined = rewriter.create<mlir::util::CombineOp>(loc, typeConverter->convertType(targetType), ValueRange({isNull, value}));
+         rewriter.replaceOp(op, combined);
+      } else {
+         rewriter.replaceOp(op, value);
+      }
       return success();
    }
 };
@@ -487,6 +664,12 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<ConstantLowering>(typeConverter, &getContext());
    patterns.insert<IfLowering>(typeConverter, &getContext());
    patterns.insert<YieldLowering>(typeConverter, &getContext());
+   patterns.insert<AndOpLowering>(typeConverter, &getContext());
+   patterns.insert<OrOpLowering>(typeConverter, &getContext());
+   patterns.insert<NotOpLowering>(typeConverter, &getContext());
+
+   patterns.insert<CastOpLowering>(typeConverter, &getContext());
+
    patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::db::IntType, mlir::AddIOp>>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::IntType, mlir::SubIOp>>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::MulOp, mlir::db::IntType, mlir::MulIOp>>(typeConverter, &getContext());

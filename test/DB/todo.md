@@ -1,5 +1,5 @@
-- [ ] db.null
-- [ ] db.isnull
+- [x] db.null
+- [x] db.isnull
 
 - [x] db.add int
 - [x] db.sub int
@@ -20,12 +20,12 @@
 - [x] db.mod decimal
 - [ ] db.compare decimal
 - [ ] db.dump
-- [ ] db.and
-- [ ] db.or
-- [ ] db.not
+- [x] db.and
+- [x] db.or
+- [x] db.not
 - [ ] db.date_add
 - [ ] db.date_sub
 - [ ] db.date_extract
 - [ ] db.cast
-- [ ] db.if
-- [ ] db.yield
+- [x] db.if
+- [x] db.yield
