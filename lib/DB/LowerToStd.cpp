@@ -185,7 +185,7 @@ class NullHandler {
          isNull = nullValues.front();
       }
       for (size_t i = 1; i < nullValues.size(); i++) {
-         isNull = builder.create<mlir::AndOp>(builder.getUnknownLoc(), isNull.getType(), isNull, nullValues[i]);
+         isNull = builder.create<mlir::OrOp>(builder.getUnknownLoc(), isNull.getType(), isNull, nullValues[i]);
       }
       return builder.create<mlir::util::CombineOp>(builder.getUnknownLoc(), mlir::TupleType::get(builder.getContext(), {i1Type, res.getType()}), ValueRange({isNull, res}));
    }
@@ -436,6 +436,74 @@ class OrOpLowering : public ConversionPattern {
       return success();
    }
 };
+class CmpOpLowering : public ConversionPattern {
+   public:
+   explicit CmpOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CmpOp::getOperationName(), 1, context) {}
+   CmpIPredicate translateIPredicate(db::DBCmpPredicate pred) const {
+      switch (pred) {
+         case db::DBCmpPredicate::eq:
+            return CmpIPredicate::eq;
+         case db::DBCmpPredicate::neq:
+            return CmpIPredicate::ne;
+         case db::DBCmpPredicate::lt:
+            return CmpIPredicate::slt;
+         case db::DBCmpPredicate::gt:
+            return CmpIPredicate::sgt;
+         case db::DBCmpPredicate::lte:
+            return CmpIPredicate::sle;
+         case db::DBCmpPredicate::gte:
+            return CmpIPredicate::sge;
+         case db::DBCmpPredicate::like:
+            assert(false && "can not evaluate like on integers");
+            return CmpIPredicate::ne;
+      }
+      assert(false && "unexpected case");
+      return CmpIPredicate::eq;
+   }
+   CmpFPredicate translateFPredicate(db::DBCmpPredicate pred) const {
+      switch (pred) {
+         case db::DBCmpPredicate::eq:
+            return CmpFPredicate::OEQ;
+         case db::DBCmpPredicate::neq:
+            return CmpFPredicate::ONE;
+         case db::DBCmpPredicate::lt:
+            return CmpFPredicate::OLT;
+         case db::DBCmpPredicate::gt:
+            return CmpFPredicate::OGT;
+         case db::DBCmpPredicate::lte:
+            return CmpFPredicate::OLE;
+         case db::DBCmpPredicate::gte:
+            return CmpFPredicate::OGE;
+         case db::DBCmpPredicate::like:
+            assert(false && "can not evaluate like on integers");
+            return CmpFPredicate::OEQ;
+      }
+      assert(false && "unexpected case");
+      return CmpFPredicate::OEQ;
+   }
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto loc = rewriter.getUnknownLoc();
+      NullHandler nullHandler(*typeConverter, rewriter);
+      auto cmpOp = cast<db::CmpOp>(op);
+
+      auto type = cmpOp.lhs().getType().cast<db::DBType>().getBaseType();
+      Value left = nullHandler.getValue(cmpOp.lhs());
+      Value right = nullHandler.getValue(cmpOp.rhs());
+      if (type.isa<db::BoolType>() || type.isa<db::IntType>() || type.isa<db::DecimalType>() || type.isa<db::DateType>() || type.isa<db::TimestampType>() || type.isa<db::IntervalType>()) {
+         Value res = rewriter.create<CmpIOp>(loc, translateIPredicate(cmpOp.predicate()), left, right);
+         rewriter.replaceOp(op, nullHandler.combineResult(res));
+         return success();
+      }else if(type.isa<db::FloatType>()){
+         Value res = rewriter.create<CmpFOp>(loc, translateFPredicate(cmpOp.predicate()), left, right);
+         rewriter.replaceOp(op, nullHandler.combineResult(res));
+         return success();
+      }
+      return failure();
+   }
+};
 class CastOpLowering : public ConversionPattern {
    public:
    explicit CastOpLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -667,6 +735,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<AndOpLowering>(typeConverter, &getContext());
    patterns.insert<OrOpLowering>(typeConverter, &getContext());
    patterns.insert<NotOpLowering>(typeConverter, &getContext());
+   patterns.insert<CmpOpLowering>(typeConverter, &getContext());
 
    patterns.insert<CastOpLowering>(typeConverter, &getContext());
 

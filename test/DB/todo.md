@@ -6,20 +6,20 @@
 - [x] db.mul int
 - [x] db.div int
 - [x] db.mod int
-- [ ] db.compare int
+- [x] db.compare int
 - [x] db.add float
 - [x] db.sub float
 - [x] db.mul float
 - [x] db.div float
 - [x] db.mod float
-- [ ] db.compare float
+- [x] db.compare float
 - [x] db.add decimal
 - [x] db.sub decimal
 - [x] db.mul decimal
 - [x] db.div decimal
 - [x] db.mod decimal
-- [ ] db.compare decimal
-- [ ] db.dump
+- [x] db.compare decimal
+- [x] db.dump
 - [x] db.and
 - [x] db.or
 - [x] db.not
