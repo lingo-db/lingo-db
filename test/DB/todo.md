@@ -26,6 +26,14 @@
 - [ ] db.date_add
 - [ ] db.date_sub
 - [ ] db.date_extract
-- [ ] db.cast
+
+- [x] db.cast int -> decimal
+- [x] db.cast int -> float
+- [x] db.cast decimal -> decimal (apply scale factor)
+- [x] db.cast decimal -> int (apply scale factor / truncate)
+- [x] db.cast decimal -> float (intval->float and divide by scale factor)
+- [x] db.cast float -> int
+- [x] db.cast float -> decimal
+
 - [x] db.if
 - [x] db.yield

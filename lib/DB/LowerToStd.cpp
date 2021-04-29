@@ -496,7 +496,7 @@ class CmpOpLowering : public ConversionPattern {
          Value res = rewriter.create<CmpIOp>(loc, translateIPredicate(cmpOp.predicate()), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(res));
          return success();
-      }else if(type.isa<db::FloatType>()){
+      } else if (type.isa<db::FloatType>()) {
          Value res = rewriter.create<CmpFOp>(loc, translateFPredicate(cmpOp.predicate()), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(res));
          return success();
@@ -516,8 +516,10 @@ class CastOpLowering : public ConversionPattern {
       auto loc = rewriter.getUnknownLoc();
       auto sourceType = castOp.val().getType().cast<db::DBType>();
       auto targetType = castOp.getType().cast<db::DBType>();
-      //auto scalarSourceType = sourceType.getBaseType();
-      //auto scalarTargetType = targetType.getBaseType();
+      auto scalarSourceType = sourceType.getBaseType();
+      auto scalarTargetType = targetType.getBaseType();
+      auto convertedSourceType = typeConverter->convertType(scalarSourceType);
+      auto convertedTargetType = typeConverter->convertType(scalarTargetType);
       Value isNull;
       Value value;
       if (sourceType.isNullable()) {
@@ -527,6 +529,65 @@ class CastOpLowering : public ConversionPattern {
       } else {
          isNull = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
          value = operands[0];
+      }
+      if (scalarSourceType == scalarTargetType) {
+         //nothing to do here
+      } else if (auto intType=scalarSourceType.dyn_cast_or_null<db::IntType>()) {
+         if (scalarTargetType.isa<db::FloatType>()) {
+            value = rewriter.create<mlir::SIToFPOp>(loc, value, convertedTargetType);
+         }else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
+            auto sourceScale = decimalTargetType.getS();
+            auto decimalrep = arrow::Decimal128::GetScaleMultiplier(sourceScale);
+            std::vector<uint64_t> parts = {decimalrep.low_bits(), (uint64_t) decimalrep.high_bits()};
+            auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(128, parts)));
+            if (intType.getWidth() < 128) {
+               value = rewriter.create<SignExtendIOp>(loc, value, convertedTargetType);
+            }
+            value = rewriter.create<mlir::MulIOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
+
+         } else {
+            return failure();
+         }
+      } else if (scalarSourceType.isa<db::FloatType>()) {
+         if (scalarTargetType.isa<db::IntType>()) {
+            value = rewriter.create<mlir::FPToSIOp>(loc, value, convertedTargetType);
+         } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
+            auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedSourceType, FloatAttr::get(convertedSourceType, powf(10, decimalTargetType.getS())));
+            value = rewriter.create<mlir::MulFOp>(rewriter.getUnknownLoc(), convertedSourceType, value, multiplier);
+            value = rewriter.create<mlir::FPToSIOp>(loc, value, convertedTargetType);
+         } else {
+            return failure();
+         }
+      } else if (auto decimalSourceType = scalarSourceType.dyn_cast_or_null<db::DecimalType>()) {
+         if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
+            auto sourceScale = decimalSourceType.getS();
+            auto targetScale = decimalTargetType.getS();
+            auto decimalrep = arrow::Decimal128::GetScaleMultiplier(std::max(sourceScale, targetScale) - std::min(sourceScale, targetScale));
+            std::vector<uint64_t> parts = {decimalrep.low_bits(), (uint64_t) decimalrep.high_bits()};
+            auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(128, parts)));
+            if (sourceScale < targetScale) {
+               value = rewriter.create<mlir::MulIOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
+            } else {
+               value = rewriter.create<mlir::SignedDivIOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
+            }
+         } else if (scalarTargetType.isa<db::FloatType>()) {
+            auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedTargetType, FloatAttr::get(convertedTargetType, powf(10, decimalSourceType.getS())));
+            value = rewriter.create<mlir::SIToFPOp>(loc, value, convertedTargetType);
+            value = rewriter.create<mlir::DivFOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
+         } else if (auto intType = scalarTargetType.dyn_cast_or_null<db::IntType>()) {
+            auto sourceScale = decimalSourceType.getS();
+            auto decimalrep = arrow::Decimal128::GetScaleMultiplier(sourceScale);
+            std::vector<uint64_t> parts = {decimalrep.low_bits(), (uint64_t) decimalrep.high_bits()};
+            auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedSourceType, rewriter.getIntegerAttr(convertedSourceType, APInt(128, parts)));
+            value = rewriter.create<mlir::SignedDivIOp>(rewriter.getUnknownLoc(), convertedSourceType, value, multiplier);
+            if(intType.getWidth()<128){
+               value = rewriter.create<TruncateIOp>(loc, value, convertedTargetType);
+            }
+         } else {
+            return failure();
+         }
+      } else {
+         return failure();
       }
       //todo convert types
       if (targetType.isNullable()) {
