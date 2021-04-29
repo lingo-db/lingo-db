@@ -31,10 +31,12 @@ set(LLVM_LINK_COMPONENTS
         nativecodegen
         OrcJIT
         )
+find_package(Arrow REQUIRED)
 
 add_subdirectory(include)
-add_subdirectory(lib)
-
+add_subdirectory(lib/RelAlg)
+add_subdirectory(lib/DB)
+add_subdirectory(lib/util)
 
 get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
@@ -62,14 +64,14 @@ set(LIBS
         MLIRSideEffectInterfaces
         MLIRTransforms
         )
+add_subdirectory(lib/runtime)
+add_subdirectory(lib/runner)
 
 
 add_executable(mlir-db-opt mlir-opt.cpp)
-find_package(Arrow REQUIRED)
 
 add_executable(db-run db-run.cpp)
-llvm_update_compile_flags(db-run)
-target_link_libraries(db-run PUBLIC ${LIBS} PRIVATE arrow_shared)
+target_link_libraries(db-run runner runtime)
 target_link_options(db-run PUBLIC -export-dynamic)
 
 
