@@ -14,4 +14,17 @@ EXPORT void dumpInterval(bool null, uint64_t interval);
 EXPORT void dumpFloat(bool null, double val);
 EXPORT void dumpString(bool null, char* ptr, size_t len);
 
+enum time_unit : uint8_t {
+   YEAR,
+   MONTH,
+   DAY,
+   HOUR,
+   MINUTES,
+   SECONDS,
+   UNKNOWN
+};
+EXPORT uint32_t dateAdd(uint32_t,uint32_t amount,time_unit unit);
+EXPORT uint32_t dateSub(uint32_t,uint32_t amount,time_unit unit);
+EXPORT uint32_t dateExtract(uint32_t,time_unit unit);
+
 #endif //DB_DIALECTS_RUNTIME_H

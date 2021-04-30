@@ -68,3 +68,60 @@ EXPORT void dumpString(bool null, char* ptr, size_t len) {
       std::cout << "string(\"" << std::string(ptr, len) << "\")" << std::endl;
    }
 }
+EXPORT uint32_t dateAdd(uint32_t date, uint32_t amount, time_unit unit) {
+   //todo!!!
+   time_t time = date;
+   tm tmStruct;
+   time *= 24 * 60 * 60;
+   auto* x = gmtime_r(&time, &tmStruct);
+   switch (unit) {
+      case YEAR:
+         x->tm_year += amount;
+         return timegm(&tmStruct) / (24 * 60 * 60);
+      case MONTH:
+         x->tm_mon += amount;
+         return timegm(&tmStruct) / (24 * 60 * 60);
+      case DAY:
+         time += 24 * 60 * 60 * amount;
+         return time / (24 * 60 * 60);
+      default:
+         return date;
+   }
+}
+EXPORT uint32_t dateSub(uint32_t date, uint32_t amount, time_unit unit) {
+   //todo!!!
+   time_t time = date;
+   tm tmStruct;
+   time *= 24 * 60 * 60;
+   auto* x = gmtime_r(&time, &tmStruct);
+   switch (unit) {
+      case YEAR:
+         x->tm_year -= amount;
+         return timegm(&tmStruct) / (24 * 60 * 60);
+      case MONTH:
+         x->tm_mon -= amount;
+         return timegm(&tmStruct) / (24 * 60 * 60);
+      case DAY:
+         time -= 24 * 60 * 60 * amount;
+         return time / (24 * 60 * 60);
+      default:
+         return date;
+   }
+}
+EXPORT uint32_t dateExtract(uint32_t date, time_unit unit) {
+   //todo!!
+   time_t time = date;
+   tm tmStruct;
+   time *= 24 * 60 * 60;
+   auto* x = gmtime_r(&time, &tmStruct);
+   switch (unit) {
+      case YEAR:
+         return x->tm_year+1900;
+      case MONTH:
+         return x->tm_mon+1;
+      case DAY:
+         return x->tm_mday;
+      default:
+         return 0;
+   }
+}

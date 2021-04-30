@@ -23,9 +23,9 @@
 - [x] db.and
 - [x] db.or
 - [x] db.not
-- [ ] db.date_add
-- [ ] db.date_sub
-- [ ] db.date_extract
+- [x] db.date_add
+- [x] db.date_sub
+- [x] db.date_extract
 
 - [x] db.cast int -> decimal
 - [x] db.cast int -> float
@@ -37,3 +37,13 @@
 
 - [x] db.if
 - [x] db.yield
+
+
+- [ ] db.cast int -> string
+- [ ] db.cast float -> string
+- [ ] db.cast decimal -> string
+- [ ] db.cast date -> string
+- [ ] db.cast string -> int
+- [ ] db.cast string -> float
+- [ ] db.cast string -> decimal
+
