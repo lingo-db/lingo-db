@@ -7,9 +7,10 @@
 #include <mlir/Transforms/DialectConversion.h>
 
 namespace mlir {
-    namespace util {
-    void populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeConverter,RewritePatternSet &patterns);
-    }// end namespace util
-}// end namespace mlir
+namespace util {
+void populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeConverter, RewritePatternSet& patterns);
+void populateUtilTypeConversionPatterns(TypeConverter& typeConverter, RewritePatternSet& patterns);
+} // end namespace util
+} // end namespace mlir
 
-#endif// MLIR_UTIL_PASSES_H
+#endif // MLIR_UTIL_PASSES_H

@@ -19,6 +19,7 @@
 #include "runtime/runtime.h"
 #include <llvm/ADT/TypeSwitch.h>
 #include <iostream>
+#include <mlir/Dialect/util/Passes.h>
 
 using namespace mlir;
 
@@ -539,9 +540,9 @@ class DateAddLowering : public ConversionPattern {
 
       auto printRef = getOrInsertFn(rewriter, parentModule, "dateAdd", rewriter.getFunctionType({i32Type, i32Type, i8Type}, {i32Type}));
       right = rewriter.create<TruncateIOp>(loc, right, i32Type);
-      auto call = rewriter.create<CallOp>(loc, printRef, ValueRange({left, right,unit}));
+      auto call = rewriter.create<CallOp>(loc, printRef, ValueRange({left, right, unit}));
       Value res = call.getResult(0);
-      rewriter.replaceOp(op,nullHandler.combineResult(res));
+      rewriter.replaceOp(op, nullHandler.combineResult(res));
       return success();
    }
 };
@@ -569,9 +570,9 @@ class DateSubLowering : public ConversionPattern {
 
       auto printRef = getOrInsertFn(rewriter, parentModule, "dateSub", rewriter.getFunctionType({i32Type, i32Type, i8Type}, {i32Type}));
       right = rewriter.create<TruncateIOp>(loc, right, i32Type);
-      auto call = rewriter.create<CallOp>(loc, printRef, ValueRange({left, right,unit}));
+      auto call = rewriter.create<CallOp>(loc, printRef, ValueRange({left, right, unit}));
       Value res = call.getResult(0);
-      rewriter.replaceOp(op,nullHandler.combineResult(res));
+      rewriter.replaceOp(op, nullHandler.combineResult(res));
       return success();
    }
 };
@@ -595,11 +596,10 @@ class DateExtractLowering : public ConversionPattern {
       Value unit = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(i8Type, timeUnitFromStr(dateExtractOp.unit().str())));
 
       auto printRef = getOrInsertFn(rewriter, parentModule, "dateExtract", rewriter.getFunctionType({i32Type, i8Type}, {i32Type}));
-      auto call = rewriter.create<CallOp>(loc, printRef, ValueRange({value,unit}));
+      auto call = rewriter.create<CallOp>(loc, printRef, ValueRange({value, unit}));
       Value res = call.getResult(0);
-      rewriter.replaceOp(op,nullHandler.combineResult(res));
+      rewriter.replaceOp(op, nullHandler.combineResult(res));
       return success();
-
    }
 };
 class CastOpLowering : public ConversionPattern {
@@ -795,8 +795,27 @@ struct DBToStdLoweringPass
    }
    void runOnOperation() final;
 };
+static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter) {
+   std::vector<Type> types;
+   for (auto t : tupleType.getTypes()) {
+      Type converted = typeConverter.convertType(t);
+      converted = converted ? converted : t;
+      types.push_back(converted);
+   }
+   return TupleType::get(tupleType.getContext(), TypeRange(types));
+}
 } // end anonymous namespace
-
+static bool hasDBType(TypeRange types) {
+   for (Type type : types) {
+      if (type.isa<db::DBType>()) {
+         type.dump();
+         return true;
+      } else if (auto tupleType = type.dyn_cast_or_null<TupleType>()) {
+         return hasDBType(tupleType.getTypes());
+      }
+   }
+   return false;
+}
 void DBToStdLoweringPass::runOnOperation() {
    // Define Conversion Target
    ConversionTarget target(getContext());
@@ -806,27 +825,21 @@ void DBToStdLoweringPass::runOnOperation() {
 
    target.addLegalDialect<scf::SCFDialect>();
    target.addLegalDialect<util::UtilDialect>();
-   auto hasDBType = [](TypeRange types) {
-      for (Type type : types)
-         if (type.isa<db::DBType>()) {
-            type.dump();
-            return true;
-         }
-      return false;
-   };
    target.addDynamicallyLegalOp<FuncOp>([&](FuncOp op) {
       auto isLegal = !hasDBType(op.getType().getInputs()) &&
          !hasDBType(op.getType().getResults());
-      op.dump();
-      llvm::dbgs() << "isLegal:" << isLegal << "\n";
       return isLegal;
    });
    target.addDynamicallyLegalOp<CallOp, CallIndirectOp, ReturnOp>(
-      [hasDBType](Operation* op) {
+      [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());
-         op->dump();
-         llvm::dbgs() << "isLegal:" << isLegal << "\n";
+         return isLegal;
+      });
+   target.addDynamicallyLegalOp<util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::CombineOp, util::SplitOp>(
+      [](Operation* op) {
+         auto isLegal = !hasDBType(op->getOperandTypes()) &&
+            !hasDBType(op->getResultTypes());
          return isLegal;
       });
    //Add own types to LLVMTypeConverter
@@ -870,6 +883,9 @@ void DBToStdLoweringPass::runOnOperation() {
          return rawType;
       }
    });
+   typeConverter.addConversion([&](mlir::TupleType tupleType) {
+      return convertTuple(tupleType, typeConverter);
+   });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::DBType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
@@ -884,6 +900,7 @@ void DBToStdLoweringPass::runOnOperation() {
    mlir::populateFuncOpTypeConversionPattern(patterns, typeConverter);
    mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
    mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
+   mlir::util::populateUtilTypeConversionPatterns(typeConverter, patterns);
    // Add own Lowering Patterns
    patterns.insert<NullOpLowering>(typeConverter, &getContext());
    patterns.insert<IsNullOpLowering>(typeConverter, &getContext());

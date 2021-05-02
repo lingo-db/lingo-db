@@ -30,13 +30,13 @@ def CombineOp : Util_Op<"combine"> {
 let summary = "string constant";
 let arguments = (ins Variadic<AnyType>:$vals);
 let results =(outs TupleOf<[AnyType]>:$tuple);
-let assemblyFormat = "$vals `:` type($vals) attr-dict `:` type($tuple) ";
+let assemblyFormat = "$vals `:` type($vals) attr-dict `->` type($tuple) ";
 }
 def SplitOp : Util_Op<"split_tuple"> {
 let summary = "split tuple";
 let arguments = (ins TupleOf<[AnyType]>:$tuple);
 let results =(outs Variadic<AnyType>:$vals);
-let assemblyFormat = "$tuple `:` type($tuple) attr-dict `:` type($vals)";
+let assemblyFormat = "$tuple `:` type($tuple) attr-dict `->` type($vals)";
 }
 def UndefTupleOp : Util_Op<"undef_tuple"> {
 let summary = "undef Tuple";
@@ -48,7 +48,7 @@ def SetTupleOp : Util_Op<"set_tuple"> {
 let summary = "set tuple";
 let arguments = (ins TupleOf<[AnyType]>:$tuple, AnyType: $val, I32Attr:$offset);
 let results =(outs TupleOf<[AnyType]>:$tuple_out);
-let assemblyFormat = "$tuple `:` `[` $offset `]` `=` $val `:` `(` type($tuple)`,` type($val)`)` `->` type($tuple_out) attr-dict";
+let assemblyFormat = "$tuple `[` $offset `]` `=` $val `:` `(` type($tuple)`,` type($val)`)` `->` type($tuple_out) attr-dict";
 }
 def GetTupleOp : Util_Op<"get_tuple"> {
 let summary = "get tuple";
