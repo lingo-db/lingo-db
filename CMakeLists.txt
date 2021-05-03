@@ -31,7 +31,11 @@ set(LLVM_LINK_COMPONENTS
         nativecodegen
         OrcJIT
         )
-find_package(Arrow REQUIRED)
+
+include(${Arrow_DIR}/FindArrow.cmake)
+include_directories(${ARROW_INCLUDE_DIR})
+include(${Arrow_DIR}/FindGandiva.cmake)
+include_directories(${GANDIVA_INCLUDE_DIR})
 
 add_subdirectory(include)
 add_subdirectory(lib/RelAlg)

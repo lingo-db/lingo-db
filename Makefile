@@ -7,6 +7,14 @@ build/llvm-build:
        -DCMAKE_BUILD_TYPE=Release \
        -DLLVM_ENABLE_ASSERTIONS=ON
 
+build/arrow:
+	mkdir -p build/arrow
+	cmake arrow/cpp  -B build/arrow -DARROW_GANDIVA=1
+
+build-arrow: build/arrow
+	cmake --build build/arrow
+	cmake --install build/arrow --prefix build/arrow/install
+
 build-llvm: build/llvm-build
 	cmake --build build/llvm-build -j4
 

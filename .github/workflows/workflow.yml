@@ -3,6 +3,32 @@ name: build+test
 on: push
 
 jobs:
+  build-arrow:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+      - name: Get arrow ommit id
+        id: arrow-commit
+        run: |
+          echo "::set-output name=commit::$(git submodule status arrow | tr ' ' '-' )"
+      - name: Cache Arrow Build
+        id: arrow-build
+        uses: actions/cache@v2
+        with:
+          path: arrow-build
+          key: ${{ runner.os }}-arrow-build-${{ steps.arrow-commit.outputs.commit }}
+      - uses: seanmiddleditch/gha-setup-ninja@master
+      - name: Build Arrow
+        if: steps.arrow-build.outputs.cache-hit != 'true'
+        run: |
+          git submodule init
+          git submodule update
+          mkdir -p arrow-build
+          cmake arrow/cpp  -B arrow-build -DARROW_GANDIVA=1
+          cmake --build arrow-build
+          cmake --install arrow-build --prefix arrow-build/install
+
   build-llvm:
     runs-on: ubuntu-latest
 
@@ -33,14 +59,21 @@ jobs:
           -DLLVM_ENABLE_ASSERTIONS=ON
           cmake --build llvm-build
   build:
-    needs: build-llvm
+    needs: [build-llvm,build-arrow]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: seanmiddleditch/gha-setup-ninja@master
-      - name: Install Apache Arrows
+      - name: Get arrow ommit id
+        id: arrow-commit
         run: |
-          bash tools/scripts/install-apache-arrow.sh
+          echo "::set-output name=commit::$(git submodule status arrow | tr ' ' '-' )"
+      - name: Cache Arrow Build
+        id: arrow-build
+        uses: actions/cache@v2
+        with:
+          path: arrow-build
+          key: ${{ runner.os }}-arrow-build-${{ steps.arrow-commit.outputs.commit }}
       - name: Get llvm commit id
         id: llvm-commit
         run: |
@@ -71,7 +104,12 @@ jobs:
       - name: Build
         run: |
           mkdir -p build 
-          cmake -G Ninja . -B build  -DMLIR_DIR=llvm-build/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/home/runner/work/db-dialects/db-dialects/llvm-build/bin/llvm-lit -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+          cmake -G Ninja . -B build\
+          -DMLIR_DIR=llvm-build/lib/cmake/mlir\
+          -DLLVM_EXTERNAL_LIT=/home/runner/work/db-dialects/db-dialects/llvm-build/bin/llvm-lit\
+          -DArrow_DIR="arrow-build/install/lib/cmake/arrow"\
+          -DGandiva_DIR="arrow-build/install/lib/cmake/arrow"\
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           cmake --build build
   filecheck-tests:
     needs: build
@@ -79,9 +117,16 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: seanmiddleditch/gha-setup-ninja@master
-      - name: Install Apache Arrows
+      - name: Get arrow ommit id
+        id: arrow-commit
         run: |
-          bash tools/scripts/install-apache-arrow.sh
+          echo "::set-output name=commit::$(git submodule status arrow | tr ' ' '-' )"
+      - name: Cache Arrow Build
+        id: arrow-build
+        uses: actions/cache@v2
+        with:
+          path: arrow-build
+          key: ${{ runner.os }}-arrow-build-${{ steps.arrow-commit.outputs.commit }}
       - name: Fetch LLVM Build
         id: llvm-build
         uses: actions/cache@v2
@@ -135,9 +180,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Install Apache Arrows
+      - name: Get arrow ommit id
+        id: arrow-commit
         run: |
-          bash tools/scripts/install-apache-arrow.sh
+          echo "::set-output name=commit::$(git submodule status arrow | tr ' ' '-' )"
+      - name: Cache Arrow Build
+        id: arrow-build
+        uses: actions/cache@v2
+        with:
+          path: arrow-build
+          key: ${{ runner.os }}-arrow-build-${{ steps.arrow-commit.outputs.commit }}
       - name: Install clang-tidy
         run: |
           sudo apt-get install -y clang-tidy
