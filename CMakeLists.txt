@@ -38,6 +38,7 @@ include(${Arrow_DIR}/FindGandiva.cmake)
 include_directories(${GANDIVA_INCLUDE_DIR})
 
 add_subdirectory(include)
+add_subdirectory(lib/mlir-support)
 add_subdirectory(lib/RelAlg)
 add_subdirectory(lib/DB)
 add_subdirectory(lib/util)

@@ -1,5 +1,4 @@
-#include "arrow/util/decimal.h"
-#include "arrow/util/value_parsing.h"
+#include "mlir-support/mlir-support.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
@@ -91,31 +90,20 @@ class ConstantLowering : public ConversionPattern {
          return success();
       } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
          if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            std::cout << strAttr.getValue().str() << std::endl;
-            int32_t precision;
-            int32_t scale;
-            arrow::Decimal128 decimalrep;
-            if (arrow::Decimal128::FromString(strAttr.getValue().str(), &decimalrep, &precision, &scale) != arrow::Status::OK()) {
-               return failure();
-            }
-            auto x = decimalrep.Rescale(scale, decimalType.getS());
-            decimalrep = x.ValueUnsafe();
-            std::vector<uint64_t> parts = {decimalrep.low_bits(), (uint64_t) decimalrep.high_bits()};
+            auto [low, high] = support::parseDecimal(strAttr.getValue().str(), decimalType.getS());
+            std::vector<uint64_t> parts = {low, high};
             rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, APInt(128, parts)));
-
             return success();
          }
       } else if (type.isa<mlir::db::DateType>()) {
          if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            int32_t integerVal;
-            arrow::internal::ParseValue<arrow::Date32Type>(strAttr.getValue().data(), strAttr.getValue().str().length(), &integerVal);
+            int32_t integerVal = support::parseDate32(strAttr.getValue().str());
             rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, integerVal));
             return success();
          }
       } else if (type.isa<mlir::db::TimestampType>()) {
          if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            int64_t integerVal;
-            arrow::internal::ParseValue<arrow::TimestampType>(arrow::TimestampType(), strAttr.getValue().data(), strAttr.getValue().str().length(), &integerVal);
+            int64_t integerVal = support::parseTimestamp(strAttr.getValue().str());
             integerVal /= 1000;
             rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, integerVal));
             return success();
@@ -232,8 +220,8 @@ class DecimalOpScaledLowering : public ConversionPattern {
       }
       auto type = left.getType();
       if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
-         auto decimalrep = arrow::Decimal128::GetScaleMultiplier(decimalType.getS());
-         std::vector<uint64_t> parts = {decimalrep.low_bits(), (uint64_t) decimalrep.high_bits()};
+         auto [low, high] = support::getDecimalScaleMultiplier(decimalType.getS());
+         std::vector<uint64_t> parts = {low, high};
          auto stdType = typeConverter->convertType(type);
          auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), stdType, rewriter.getIntegerAttr(stdType, APInt(128, parts)));
          left = rewriter.create<mlir::MulIOp>(rewriter.getUnknownLoc(), stdType, left, multiplier);
@@ -635,8 +623,8 @@ class CastOpLowering : public ConversionPattern {
             value = rewriter.create<mlir::SIToFPOp>(loc, value, convertedTargetType);
          } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto sourceScale = decimalTargetType.getS();
-            auto decimalrep = arrow::Decimal128::GetScaleMultiplier(sourceScale);
-            std::vector<uint64_t> parts = {decimalrep.low_bits(), (uint64_t) decimalrep.high_bits()};
+            auto [low, high] = support::getDecimalScaleMultiplier(sourceScale);
+            std::vector<uint64_t> parts = {low, high};
             auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(128, parts)));
             if (intType.getWidth() < 128) {
                value = rewriter.create<SignExtendIOp>(loc, value, convertedTargetType);
@@ -660,8 +648,8 @@ class CastOpLowering : public ConversionPattern {
          if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto sourceScale = decimalSourceType.getS();
             auto targetScale = decimalTargetType.getS();
-            auto decimalrep = arrow::Decimal128::GetScaleMultiplier(std::max(sourceScale, targetScale) - std::min(sourceScale, targetScale));
-            std::vector<uint64_t> parts = {decimalrep.low_bits(), (uint64_t) decimalrep.high_bits()};
+            auto [low, high] = support::getDecimalScaleMultiplier(std::max(sourceScale, targetScale) - std::min(sourceScale, targetScale));
+            std::vector<uint64_t> parts = {low, high};
             auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(128, parts)));
             if (sourceScale < targetScale) {
                value = rewriter.create<mlir::MulIOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
@@ -674,8 +662,8 @@ class CastOpLowering : public ConversionPattern {
             value = rewriter.create<mlir::DivFOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
          } else if (auto intType = scalarTargetType.dyn_cast_or_null<db::IntType>()) {
             auto sourceScale = decimalSourceType.getS();
-            auto decimalrep = arrow::Decimal128::GetScaleMultiplier(sourceScale);
-            std::vector<uint64_t> parts = {decimalrep.low_bits(), (uint64_t) decimalrep.high_bits()};
+            auto [low, high] = support::getDecimalScaleMultiplier(sourceScale);
+            std::vector<uint64_t> parts = {low, high};
             auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedSourceType, rewriter.getIntegerAttr(convertedSourceType, APInt(128, parts)));
             value = rewriter.create<mlir::SignedDivIOp>(rewriter.getUnknownLoc(), convertedSourceType, value, multiplier);
             if (intType.getWidth() < 128) {

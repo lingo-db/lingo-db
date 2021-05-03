@@ -10,6 +10,6 @@ add_mlir_dialect_library(MLIRDB
         DEPENDS
         MLIRDBOpsIncGen
 
-        LINK_LIBS arrow_shared PUBLIC
+        LINK_LIBS mlir-support PUBLIC
         MLIRIR
         )
