@@ -105,11 +105,11 @@ jobs:
         run: |
           mkdir -p build 
           cmake -G Ninja . -B build\
-          -DMLIR_DIR=llvm-build/lib/cmake/mlir\
-          -DLLVM_EXTERNAL_LIT=/home/runner/work/db-dialects/db-dialects/llvm-build/bin/llvm-lit\
-          -DArrow_DIR="arrow-build/install/lib/cmake/arrow"\
-          -DGandiva_DIR="arrow-build/install/lib/cmake/arrow"\
-          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+           -DMLIR_DIR=llvm-build/lib/cmake/mlir\
+           -DLLVM_EXTERNAL_LIT=/home/runner/work/db-dialects/db-dialects/llvm-build/bin/llvm-lit\
+           -DArrow_DIR="arrow-build/install/lib/cmake/arrow"\
+           -DGandiva_DIR="arrow-build/install/lib/cmake/arrow"\
+           -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           cmake --build build
   filecheck-tests:
     needs: build
