@@ -42,7 +42,7 @@ class Translator:
             elif key in ["lt", "gt", "lte", "gte", "eq", "neq","like"]:
                 return codegen.create_db_cmp(key, translateSubExpressions(expr[key]))
             elif key == "date":
-                return codegen.create_db_const(expr["date"]["literal"], DBType("date", [], False))
+                return codegen.create_db_const(expr["date"]["literal"], DBType("date", ["day"], False))
             elif key == "exists":
                 subquery, _ = self.translateSelectStmt(expr["exists"], codegen, stacked_resolver)
                 return codegen.create_relalg_exists(subquery)
@@ -76,7 +76,13 @@ class Translator:
             elif key == "extract":
                 return codegen.create_db_extract(expr[key][0], translateSubExpressions(expr[key][1])[0])
             elif key == "interval":
-                return codegen.create_db_const(int(expr[key][0]), DBType("interval", [expr[key][1]], False))
+                tu=expr[key][1]
+                timeunit=""
+                if tu=="days":
+                    timeunit="daytime"
+                else:
+                    timeunit="months"
+                return codegen.create_db_const(int(expr[key][0]), DBType("interval", [timeunit], False))
             elif key == "literal":
                 return codegen.create_db_const(expr[key], DBType("string", [], False))
             elif key == "in":

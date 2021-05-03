@@ -189,7 +189,7 @@ static ParseResult parseDateOp(OpAsmParser& parser,
       return failure();
    }
    bool nullable = rightType.isNullable() || leftType.isNullable();
-   parser.addTypeToList(db::DateType::get(parser.getBuilder().getContext(), nullable), result.types);
+   parser.addTypeToList(db::DateType::get(parser.getBuilder().getContext(), nullable, leftType.dyn_cast_or_null<db::DateType>().getUnit()), result.types);
    return success();
 }
 

@@ -4,6 +4,7 @@
 #include "mlir/Dialect/DB/IR/DBCollectionType.h"
 #include "mlir/Dialect/DB/IR/DBType.h"
 
+#include "mlir/Dialect/DB/IR/DBOpsEnums.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
 

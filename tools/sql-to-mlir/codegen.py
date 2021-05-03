@@ -174,7 +174,7 @@ class CodeGen:
     def create_db_date_binary_op(self, name,values):
         args=["db.date_"+name+" "]
         self.addValuesWithTypes(args,values)
-        return self.addOp(DBType("date"),args)
+        return self.addOp(DBType("date",["day"]),args)
     def create_db_extract(self, key,value):
         return self.addOp(DBType("int",["32"],self.getType(value).nullable),["db.date_extract"," \"",key,"\", ",ValueRef(value)," : ",TypeRef(value)])
     def create_db_cast(self, value, targetType):

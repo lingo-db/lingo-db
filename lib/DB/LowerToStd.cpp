@@ -81,7 +81,14 @@ class ConstantLowering : public ConversionPattern {
       auto stdType = typeConverter->convertType(type);
       auto i8Type = IntegerType::get(rewriter.getContext(), 8);
       auto loc = op->getLoc();
-      if (constantOp.getType().isa<mlir::db::IntType>() || constantOp.getType().isa<mlir::db::BoolType>()) {
+      if (constantOp.getType().isa<mlir::db::UIntType>()) {
+         if (!constantOp.value().isa<IntegerAttr>()) {
+            return failure();
+         }
+         auto integerVal = constantOp.value().dyn_cast_or_null<IntegerAttr>().getInt();
+         rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, integerVal));
+         return success();
+      } else if (constantOp.getType().isa<mlir::db::IntType>() || constantOp.getType().isa<mlir::db::BoolType>()) {
          if (!constantOp.value().isa<IntegerAttr>()) {
             return failure();
          }
@@ -110,7 +117,7 @@ class ConstantLowering : public ConversionPattern {
          }
       } else if (type.isa<mlir::db::IntervalType>()) {
          if (auto intAttr = constantOp.value().dyn_cast_or_null<IntegerAttr>()) {
-            rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, intAttr.getValue()));
+            rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, intAttr.getInt()));
             return success();
          }
       } else if (type.isa<mlir::db::FloatType>()) {
@@ -504,6 +511,15 @@ static TimeUnit timeUnitFromStr(std::string str) {
    } else
       return TimeUnit::UNKNOWN;
 }
+static TimeUnit timeUnitFromIntervalUnitAttr(mlir::db::IntervalUnitAttr unit) {
+   if (unit == mlir::db::IntervalUnitAttr::daytime) {
+      return TimeUnit::DAY;
+   } else if (unit == mlir::db::IntervalUnitAttr::months) {
+      return TimeUnit::MONTH;
+   } else {
+      return TimeUnit::UNKNOWN;
+   }
+}
 class DateAddLowering : public ConversionPattern {
    public:
    explicit DateAddLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -524,10 +540,9 @@ class DateAddLowering : public ConversionPattern {
       Value left = nullHandler.getValue(dateAddOp.left(), dateAddAdaptor.left());
       Value right = nullHandler.getValue(dateAddOp.right(), dateAddAdaptor.right());
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      Value unit = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(i8Type, timeUnitFromStr(intervalType.getUnit())));
+      Value unit = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(i8Type, timeUnitFromIntervalUnitAttr(intervalType.getUnit())));
 
       auto printRef = getOrInsertFn(rewriter, parentModule, "dateAdd", rewriter.getFunctionType({i32Type, i32Type, i8Type}, {i32Type}));
-      right = rewriter.create<TruncateIOp>(loc, right, i32Type);
       auto call = rewriter.create<CallOp>(loc, printRef, ValueRange({left, right, unit}));
       Value res = call.getResult(0);
       rewriter.replaceOp(op, nullHandler.combineResult(res));
@@ -554,10 +569,9 @@ class DateSubLowering : public ConversionPattern {
       Value left = nullHandler.getValue(dateAddOp.left(), dateSubAdaptor.left());
       Value right = nullHandler.getValue(dateAddOp.right(), dateSubAdaptor.right());
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      Value unit = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(i8Type, timeUnitFromStr(intervalType.getUnit())));
+      Value unit = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(i8Type, timeUnitFromIntervalUnitAttr(intervalType.getUnit())));
 
       auto printRef = getOrInsertFn(rewriter, parentModule, "dateSub", rewriter.getFunctionType({i32Type, i32Type, i8Type}, {i32Type}));
-      right = rewriter.create<TruncateIOp>(loc, right, i32Type);
       auto call = rewriter.create<CallOp>(loc, printRef, ValueRange({left, right, unit}));
       Value res = call.getResult(0);
       rewriter.replaceOp(op, nullHandler.combineResult(res));
@@ -717,14 +731,18 @@ class DumpOpLowering : public ConversionPattern {
          val = dumpOpAdaptor.val();
       }
 
-      operands[0].getType().dump();
-
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
       // Get a symbol reference to the printf function, inserting it if necessary.
       if (auto dbIntType = type.dyn_cast_or_null<mlir::db::IntType>()) {
          auto printRef = getOrInsertFn(rewriter, parentModule, "dumpInt", rewriter.getFunctionType({i1Type, i64Type}, {}));
          if (dbIntType.getWidth() < 64) {
             val = rewriter.create<SignExtendIOp>(loc, val, i64Type);
+         }
+         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
+      } else if (auto dbUIntType = type.dyn_cast_or_null<mlir::db::UIntType>()) {
+         auto printRef = getOrInsertFn(rewriter, parentModule, "dumpUInt", rewriter.getFunctionType({i1Type, i64Type}, {}));
+         if (dbUIntType.getWidth() < 64) {
+            val = rewriter.create<ZeroExtendIOp>(loc, val, i64Type);
          }
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       } else if (type.isa<mlir::db::BoolType>()) {
@@ -745,9 +763,15 @@ class DumpOpLowering : public ConversionPattern {
       } else if (type.isa<mlir::db::TimestampType>()) {
          auto printRef = getOrInsertFn(rewriter, parentModule, "dumpTimestamp", rewriter.getFunctionType({i1Type, i64Type}, {}));
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
-      } else if (type.isa<mlir::db::IntervalType>()) {
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dumpInterval", rewriter.getFunctionType({i1Type, i64Type}, {}));
-         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
+      } else if (auto intervalType = type.dyn_cast_or_null<mlir::db::IntervalType>()) {
+         if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
+            auto printRef = getOrInsertFn(rewriter, parentModule, "dumpIntervalMonths", rewriter.getFunctionType({i1Type, i32Type}, {}));
+            rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
+         } else {
+            auto printRef = getOrInsertFn(rewriter, parentModule, "dumpIntervalDaytime", rewriter.getFunctionType({i1Type, i64Type}, {}));
+            rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
+         }
+
       } else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
          auto printRef = getOrInsertFn(rewriter, parentModule, "dumpFloat", rewriter.getFunctionType({i1Type, f64Type}, {}));
          if (floatType.getWidth() < 64) {
@@ -838,12 +862,26 @@ void DBToStdLoweringPass::runOnOperation() {
                            return IntegerType::get(&getContext(), 1);
                         })
                         .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) {
-                           return IntegerType::get(&getContext(), 32);
+                           if (t.getUnit() == mlir::db::DateUnitAttr::day) {
+                              return IntegerType::get(&getContext(), 32);
+                           } else {
+                              return IntegerType::get(&getContext(), 64);
+                           }
+                        })
+                        .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
+                           if (t.getUnit() == mlir::db::TimeUnitAttr::second && t.getUnit() == mlir::db::TimeUnitAttr::millisecond) {
+                              return IntegerType::get(&getContext(), 32);
+                           } else {
+                              return IntegerType::get(&getContext(), 64);
+                           }
                         })
                         .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
                            return IntegerType::get(&getContext(), 128);
                         })
                         .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
+                           return IntegerType::get(&getContext(), t.getWidth());
+                        })
+                        .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
                            return IntegerType::get(&getContext(), t.getWidth());
                         })
                         .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
@@ -861,8 +899,15 @@ void DBToStdLoweringPass::runOnOperation() {
                         .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
                            return IntegerType::get(&getContext(), 64);
                         })
-                        .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
+                        .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
                            return IntegerType::get(&getContext(), 64);
+                        })
+                        .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
+                           if (t.getUnit() == mlir::db::IntervalUnitAttr::daytime) {
+                              return IntegerType::get(&getContext(), 64);
+                           } else {
+                              return IntegerType::get(&getContext(), 32);
+                           }
                         })
                         .Default([](::mlir::Type) { return Type(); });
       if (type.isNullable()) {
@@ -911,6 +956,12 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<BinOpLowering<mlir::db::MulOp, mlir::db::IntType, mlir::MulIOp>>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::DivOp, mlir::db::IntType, mlir::SignedDivIOp>>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::ModOp, mlir::db::IntType, mlir::SignedRemIOp>>(typeConverter, &getContext());
+
+   patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::db::UIntType, mlir::AddIOp>>(typeConverter, &getContext());
+   patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::UIntType, mlir::SubIOp>>(typeConverter, &getContext());
+   patterns.insert<BinOpLowering<mlir::db::MulOp, mlir::db::UIntType, mlir::MulIOp>>(typeConverter, &getContext());
+   patterns.insert<BinOpLowering<mlir::db::DivOp, mlir::db::UIntType, mlir::UnsignedDivIOp>>(typeConverter, &getContext());
+   patterns.insert<BinOpLowering<mlir::db::ModOp, mlir::db::UIntType, mlir::UnsignedRemIOp>>(typeConverter, &getContext());
 
    patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::db::FloatType, mlir::AddFOp>>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::FloatType, mlir::SubFOp>>(typeConverter, &getContext());

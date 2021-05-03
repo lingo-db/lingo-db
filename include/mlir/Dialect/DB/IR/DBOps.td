@@ -57,6 +57,42 @@ def DB_BoolType : DB_Type<"Bool","bool"> {
 let builderCall = "$_builder.getType<" # dialect.cppNamespace #
 "::" # cppClassName # ">()";
 }
+
+def DB_TimeUnit_S  : I64EnumAttrCase<"second", 0>;
+def DB_TimeUnit_MS  : I64EnumAttrCase<"millisecond", 1>;
+def DB_TimeUnit_MUS : I64EnumAttrCase<"microsecond", 2>;
+def DB_TimeUnit_NS : I64EnumAttrCase<"nanosecond", 3>;
+
+def DB_TimeUnitAttr : I64EnumAttr<
+        "TimeUnitAttr", "",
+        [DB_TimeUnit_S,DB_TimeUnit_MS,DB_TimeUnit_MUS,DB_TimeUnit_NS]> {
+let cppNamespace = "::mlir::db";
+
+}
+def DB_DateUnit_DAY  : I64EnumAttrCase<"day", 0>;
+def DB_DateUnit_MS : I64EnumAttrCase<"millisecond", 1>;
+
+def DB_DateUnitAttr : I64EnumAttr<
+        "DateUnitAttr", "",
+        [DB_DateUnit_DAY,DB_DateUnit_MS]> {
+let cppNamespace = "::mlir::db";
+
+}
+def DB_IntervalUnit_MONTH  : I64EnumAttrCase<"months", 0>;
+def DB_IntervalUnit_DAYTIME : I64EnumAttrCase<"daytime", 1>;
+
+def DB_IntervalUnitAttr : I64EnumAttr<
+        "IntervalUnitAttr", "",
+        [DB_IntervalUnit_MONTH,DB_IntervalUnit_DAYTIME]> {
+let cppNamespace = "::mlir::db";
+
+}
+
+
+def DB_UIntType : DB_Type<"UInt","uint"> {
+let summary = "database unsigned integer type";
+let parameters = (ins "bool":$nullable,"unsigned":$width);
+}
 def DB_IntType : DB_Type<"Int","int"> {
 let summary = "database integer type";
 let parameters = (ins "bool":$nullable,"unsigned":$width);
@@ -67,15 +103,28 @@ let parameters = (ins "bool":$nullable,"unsigned":$width);
 }
 def DB_DateType : DB_Type<"Date","date"> {
 let summary = "database date type";
-let parameters = (ins "bool":$nullable);
+let parameters = (ins "bool":$nullable,"DateUnitAttr":$unit);
 }
 def DB_IntervalType : DB_Type<"Interval","interval"> {
 let summary = "database interval type";
-let parameters = (ins "bool":$nullable,"std::string":$unit);
+let parameters = (ins "bool":$nullable,"IntervalUnitAttr":$unit);
 }
-def DB_TimeType : DB_Type<"Timestamp","timestamp"> {
+def DB_TimestampType : DB_Type<"Timestamp","timestamp"> {
 let summary = "database date type";
-let parameters = (ins "bool":$nullable);
+let parameters = (ins "bool":$nullable,"TimeUnitAttr":$unit,"std::string":$tz);
+let builders = [
+TypeBuilder<(ins "bool":$nullable,"TimeUnitAttr":$unit), [{
+return $_get($_ctxt, nullable,unit,"");
+}]>
+];
+}
+def DB_TimeType : DB_Type<"Time","time"> {
+let summary = "database time type";
+let parameters = (ins "bool":$nullable,"TimeUnitAttr":$unit);
+}
+def DB_DurationType : DB_Type<"Duration","duration"> {
+let summary = "database duration type";
+let parameters = (ins "bool":$nullable,"TimeUnitAttr":$unit);
 }
 def DB_DecimalType : DB_Type<"Decimal","decimal"> {
 let summary = "database date type";

@@ -7,8 +7,8 @@
 //CHECK: decimal(100.0000000001)
 //CHECK: date(2020-06-11)
 //CHECK: timestamp(2020-06-11 12:30:00)
-//CHECK: interval(90)
-//CHECK: interval(12)
+//CHECK: interval(90 daytime)
+//CHECK: interval(12 months)
 //CHECK: float(100)
 //CHECK: float(100)
 //CHECK: string("hello world!")
@@ -40,9 +40,9 @@
 		 %bool_false_const = db.constant ( 0 ) : !db.bool
 		 %decimal10_const = db.constant ( "100.0000000001" ):!db.decimal<15,10>
 		 %decimal2_const = db.constant ( "100.01" ):!db.decimal<15,2>
-		 %date_const = db.constant ( "2020-06-11") : !db.date
-		 %timestamp_const = db.constant ( "2020-06-11 12:30:00" ) :!db.timestamp
-		 %interval_days_const = db.constant ( 90 ) :!db.interval<days>
+		 %date_const = db.constant ( "2020-06-11") : !db.date<day>
+		 %timestamp_const = db.constant ( "2020-06-11 12:30:00" ) :!db.timestamp<second>
+		 %interval_days_const = db.constant ( 90 ) :!db.interval<daytime>
 		 %interval_months_const = db.constant ( 12 ) :!db.interval<months>
 		 %float32_const = db.constant ( 100.0000000001 ) :!db.float<32>
 		 %float64_const = db.constant ( 100.0000000001 ) :!db.float<64>
@@ -74,9 +74,9 @@
  		 db.dump %bool_true_const : !db.bool
  		 db.dump %bool_false_const : !db.bool
  		 db.dump %decimal10_const : !db.decimal<15,10>
- 		 db.dump %date_const : !db.date
- 		 db.dump %timestamp_const : !db.timestamp
- 		 db.dump %interval_days_const : !db.interval<days>
+ 		 db.dump %date_const : !db.date<day>
+ 		 db.dump %timestamp_const : !db.timestamp<second>
+ 		 db.dump %interval_days_const : !db.interval<daytime>
  		 db.dump %interval_months_const : !db.interval<months>
  		 db.dump %float32_const : !db.float<32>
  		 db.dump %float64_const : !db.float<64>

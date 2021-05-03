@@ -10,6 +10,13 @@ EXPORT void dumpInt(bool null, int64_t val) {
       std::cout << "int(" << val << ")" << std::endl;
    }
 }
+EXPORT void dumpUInt(bool null, uint64_t val) {
+   if (null) {
+      std::cout << "uint(NULL)" << std::endl;
+   } else {
+      std::cout << "uint(" << val << ")" << std::endl;
+   }
+}
 EXPORT void dumpBool(bool null, bool val) {
    if (null) {
       std::cout << "bool(NULL)" << std::endl;
@@ -47,11 +54,19 @@ EXPORT void dumpTimestamp(bool null, uint64_t date) {
       std::cout << "timestamp(" << (x->tm_year + 1900) << "-" << std::setw(2) << std::setfill('0') << (x->tm_mon + 1) << "-" << std::setw(2) << std::setfill('0') << x->tm_mday << " " << std::setw(2) << std::setfill('0') << x->tm_hour << ":" << std::setw(2) << std::setfill('0') << x->tm_min << ":" << std::setw(2) << std::setfill('0') << x->tm_sec << ")" << std::endl;
    }
 }
-EXPORT void dumpInterval(bool null, uint64_t interval) {
+
+EXPORT void dumpIntervalMonths(bool null, uint32_t interval){
    if (null) {
       std::cout << "interval(NULL)" << std::endl;
    } else {
-      std::cout << "interval(" << interval << ")" << std::endl;
+      std::cout << "interval(" << interval << " months)" << std::endl;
+   }
+}
+EXPORT void dumpIntervalDaytime(bool null, uint64_t interval){
+   if (null) {
+      std::cout << "interval(NULL)" << std::endl;
+   } else {
+      std::cout << "interval(" << interval << " daytime)" << std::endl;
    }
 }
 EXPORT void dumpFloat(bool null, double val) {

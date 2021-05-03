@@ -5,6 +5,7 @@
 #include "mlir/IR/DialectImplementation.h"
 
 #include <llvm/ADT/TypeSwitch.h>
+#include <llvm/Support/Debug.h>
 
 bool mlir::db::DBType::classof(Type t) {
    return ::llvm::TypeSwitch<Type, bool>(t)
@@ -20,6 +21,9 @@ bool mlir::db::DBType::classof(Type t) {
       .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
          return true;
       })
+      .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
+        return true;
+      })
       .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
          return true;
       })
@@ -31,6 +35,12 @@ bool mlir::db::DBType::classof(Type t) {
       })
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
          return true;
+      })
+      .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
+        return true;
+      })
+      .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
+        return true;
       })
       .Default([](::mlir::Type) { return false; });
 }
@@ -48,6 +58,9 @@ bool mlir::db::DBType::isNullable() {
       .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
          return t.getNullable();
       })
+      .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
+        return t.getNullable();
+      })
       .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
          return t.getNullable();
       })
@@ -60,6 +73,12 @@ bool mlir::db::DBType::isNullable() {
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
          return t.getNullable();
       })
+      .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
+        return t.getNullable();
+      })
+      .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
+        return t.getNullable();
+      })
       .Default([](::mlir::Type) { return false; });
 }
 mlir::db::DBType mlir::db::DBType::getBaseType() const {
@@ -68,7 +87,7 @@ mlir::db::DBType mlir::db::DBType::getBaseType() const {
          return mlir::db::BoolType::get(t.getContext(), false);
       })
       .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) {
-         return mlir::db::DateType::get(t.getContext(), false);
+         return mlir::db::DateType::get(t.getContext(), false, t.getUnit());
       })
       .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
          return mlir::db::DecimalType::get(t.getContext(), false, t.getP(), t.getS());
@@ -76,14 +95,23 @@ mlir::db::DBType mlir::db::DBType::getBaseType() const {
       .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
          return mlir::db::IntType::get(t.getContext(), false, t.getWidth());
       })
+      .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
+        return mlir::db::UIntType::get(t.getContext(), false, t.getWidth());
+      })
       .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
          return mlir::db::StringType::get(t.getContext(), false);
       })
       .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
-         return mlir::db::TimestampType::get(t.getContext(), false);
+         return mlir::db::TimestampType::get(t.getContext(), false, t.getUnit(), t.getTz());
       })
       .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
          return mlir::db::IntervalType::get(t.getContext(), false, t.getUnit());
+      })
+      .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
+         return mlir::db::TimeType::get(t.getContext(), false, t.getUnit());
+      })
+      .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
+         return mlir::db::DurationType::get(t.getContext(), false, t.getUnit());
       })
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
          return mlir::db::FloatType::get(t.getContext(), false, t.getWidth());
@@ -96,7 +124,7 @@ mlir::db::DBType mlir::db::DBType::asNullable() const {
          return mlir::db::BoolType::get(t.getContext(), true);
       })
       .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) {
-         return mlir::db::DateType::get(t.getContext(), true);
+         return mlir::db::DateType::get(t.getContext(), true, t.getUnit());
       })
       .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
          return mlir::db::DecimalType::get(t.getContext(), true, t.getP(), t.getS());
@@ -108,10 +136,16 @@ mlir::db::DBType mlir::db::DBType::asNullable() const {
          return mlir::db::StringType::get(t.getContext(), true);
       })
       .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
-         return mlir::db::TimestampType::get(t.getContext(), true);
+         return mlir::db::TimestampType::get(t.getContext(), true, t.getUnit(), t.getTz());
       })
       .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
          return mlir::db::IntervalType::get(t.getContext(), true, t.getUnit());
+      })
+      .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
+         return mlir::db::TimeType::get(t.getContext(), true, t.getUnit());
+      })
+      .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
+         return mlir::db::DurationType::get(t.getContext(), true, t.getUnit());
       })
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
          return mlir::db::FloatType::get(t.getContext(), true, t.getWidth());
@@ -139,6 +173,87 @@ struct ParseSingleImpl<std::string> {
          error = true;
       }
       return ref.str();
+   }
+};
+template <>
+struct ParseSingleImpl<mlir::db::TimeUnitAttr> {
+   static mlir::db::TimeUnitAttr apply(bool& error, ::mlir::DialectAsmParser& parser) {
+      mlir::db::TimeUnitAttr unit=mlir::db::TimeUnitAttr::second;
+
+      ::llvm::StringRef attrStr;
+      ::mlir::NamedAttrList attrStorage;
+      auto loc = parser.getCurrentLocation();
+      if (parser.parseKeyword(&attrStr)) {
+         parser.emitError(loc, "expected keyword but none found");
+         error = true;
+         return unit;
+      }
+      if (!attrStr.empty()) {
+         std::string str = attrStr.str();
+         auto attrOptional = ::mlir::db::symbolizeTimeUnitAttr(attrStr);
+         if (!attrOptional) {
+            parser.emitError(loc, "invalid ")
+               << "type attribute specification: \"" << attrStr << '"';
+            return unit;
+         }
+
+         return attrOptional.getValue();
+      }
+      return unit;
+   }
+};
+template <>
+struct ParseSingleImpl<mlir::db::DateUnitAttr> {
+   static mlir::db::DateUnitAttr apply(bool& error, ::mlir::DialectAsmParser& parser) {
+      mlir::db::DateUnitAttr unit=mlir::db::DateUnitAttr::millisecond;
+
+      ::llvm::StringRef attrStr;
+      ::mlir::NamedAttrList attrStorage;
+      auto loc = parser.getCurrentLocation();
+      if (parser.parseKeyword(&attrStr)) {
+         parser.emitError(loc, "expected keyword but none found");
+         error = true;
+         return unit;
+      }
+      if (!attrStr.empty()) {
+         std::string str = attrStr.str();
+         auto attrOptional = ::mlir::db::symbolizeDateUnitAttr(attrStr);
+         if (!attrOptional) {
+            parser.emitError(loc, "invalid ")
+               << "type attribute specification: \"" << attrStr << '"';
+            return unit;
+         }
+
+         return attrOptional.getValue();
+      }
+      return unit;
+   }
+};
+template <>
+struct ParseSingleImpl<mlir::db::IntervalUnitAttr> {
+   static mlir::db::IntervalUnitAttr apply(bool& error, ::mlir::DialectAsmParser& parser) {
+      mlir::db::IntervalUnitAttr unit=mlir::db::IntervalUnitAttr::months;
+
+      ::llvm::StringRef attrStr;
+      ::mlir::NamedAttrList attrStorage;
+      auto loc = parser.getCurrentLocation();
+      if (parser.parseKeyword(&attrStr)) {
+         parser.emitError(loc, "expected keyword but none found");
+         error = true;
+         return unit;
+      }
+      if (!attrStr.empty()) {
+         std::string str = attrStr.str();
+         auto attrOptional = ::mlir::db::symbolizeIntervalUnitAttr(attrStr);
+         if (!attrOptional) {
+            parser.emitError(loc, "invalid ")
+               << "type attribute specification: \"" << attrStr << '"';
+            return unit;
+         }
+
+         return attrOptional.getValue();
+      }
+      return unit;
    }
 };
 template <class X>
@@ -225,6 +340,12 @@ void print(::mlir::DialectAsmPrinter& printer, bool nullable, ParamT... params) 
 void mlir::db::IntType::print(::mlir::DialectAsmPrinter& printer) const {
    ::print<mlir::db::IntType, unsigned>(printer, getNullable(), getWidth());
 }
+::mlir::Type mlir::db::UIntType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
+   return ::parse<mlir::db::UIntType, unsigned>(context, parser);
+}
+void mlir::db::UIntType::print(::mlir::DialectAsmPrinter& printer) const {
+   ::print<mlir::db::UIntType, unsigned>(printer, getNullable(), getWidth());
+}
 ::mlir::Type mlir::db::FloatType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
    return ::parse<mlir::db::FloatType, unsigned>(context, parser);
 }
@@ -238,23 +359,35 @@ void mlir::db::BoolType::print(::mlir::DialectAsmPrinter& printer) const {
    ::print<mlir::db::BoolType>(printer, getNullable());
 }
 ::mlir::Type mlir::db::DateType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
-   return ::parse<mlir::db::DateType>(context, parser);
+   return ::parse<mlir::db::DateType, DateUnitAttr>(context, parser);
 }
 void mlir::db::DateType::print(::mlir::DialectAsmPrinter& printer) const {
-   ::print<mlir::db::DateType>(printer, getNullable());
+   ::print<mlir::db::DateType>(printer, getNullable(), mlir::db::stringifyDateUnitAttr(getUnit()).str());
 }
 ::mlir::Type mlir::db::IntervalType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
-   return ::parse<mlir::db::IntervalType, std::string>(context, parser);
+   return ::parse<mlir::db::IntervalType, IntervalUnitAttr>(context, parser);
 }
 void mlir::db::IntervalType::print(::mlir::DialectAsmPrinter& printer) const {
-   ::print<mlir::db::IntervalType, std::string>(printer, getNullable(), getUnit());
+   ::print<mlir::db::IntervalType, std::string>(printer, getNullable(), mlir::db::stringifyIntervalUnitAttr(getUnit()).str());
 }
 
 ::mlir::Type mlir::db::TimestampType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
-   return ::parse<mlir::db::TimestampType>(context, parser);
+   return ::parse<mlir::db::TimestampType, TimeUnitAttr>(context, parser);
 }
 void mlir::db::TimestampType::print(::mlir::DialectAsmPrinter& printer) const {
-   ::print<mlir::db::TimestampType>(printer, getNullable());
+   ::print<mlir::db::TimestampType>(printer, getNullable(), mlir::db::stringifyTimeUnitAttr(getUnit()).str());
+}
+::mlir::Type mlir::db::TimeType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
+   return ::parse<mlir::db::TimeType, TimeUnitAttr>(context, parser);
+}
+void mlir::db::TimeType::print(::mlir::DialectAsmPrinter& printer) const {
+   ::print<mlir::db::TimeType>(printer, getNullable(), mlir::db::stringifyTimeUnitAttr(getUnit()).str());
+}
+::mlir::Type mlir::db::DurationType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
+   return ::parse<mlir::db::DurationType, TimeUnitAttr>(context, parser);
+}
+void mlir::db::DurationType::print(::mlir::DialectAsmPrinter& printer) const {
+   ::print<mlir::db::DurationType>(printer, getNullable(), mlir::db::stringifyTimeUnitAttr(getUnit()).str());
 }
 ::mlir::Type mlir::db::DecimalType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
    return ::parse<mlir::db::DecimalType, unsigned, unsigned>(context, parser);
