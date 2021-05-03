@@ -1,5 +1,5 @@
-#ifndef MLIR_DB_PASSES_H
-#define MLIR_DB_PASSES_H
+#ifndef MLIR_DIALECT_RELALG_PASSES_H
+#define MLIR_DIALECT_RELALG_PASSES_H
 
 #include "mlir/Pass/Pass.h"
 #include <memory>
@@ -13,7 +13,7 @@ std::unique_ptr<Pass> createUnnestingPass();
 std::unique_ptr<Pass> createPushdownPass();
 std::unique_ptr<Pass> createOptimizeJoinOrderPass();
 
-} // end namespace db
+} // namespace relalg
 } // end namespace mlir
 
-#endif // MLIR_DB_PASSES_H
+#endif // MLIR_DIALECT_RELALG_PASSES_H

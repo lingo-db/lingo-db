@@ -2,8 +2,8 @@
 // Created by michael on 13.03.21.
 //
 
-#ifndef MLIR_GOES_RELATIONAL_RELATIONALATTRIBUTEATTRREFSTORAGE_H
-#define MLIR_GOES_RELATIONAL_RELATIONALATTRIBUTEATTRREFSTORAGE_H
+#ifndef MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEATTRREFSTORAGE_H
+#define MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEATTRREFSTORAGE_H
 namespace mlir::relalg {
 struct RelationalAttributeAttrRefStorage : public AttributeStorage {
   RelationalAttributeAttrRefStorage(
@@ -27,4 +27,4 @@ struct RelationalAttributeAttrRefStorage : public AttributeStorage {
   std::shared_ptr<RelationalAttribute> relationalAttribute;
 };
 } // namespace mlir::relalg
-#endif // MLIR_GOES_RELATIONAL_RELATIONALATTRIBUTEATTRREFSTORAGE_H
+#endif // MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEATTRREFSTORAGE_H

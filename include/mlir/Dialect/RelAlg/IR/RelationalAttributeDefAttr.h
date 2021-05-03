@@ -2,8 +2,8 @@
 // Created by michael on 13.03.21.
 //
 
-#ifndef MLIR_GOES_RELATIONAL_RELATIONALATTRIBUTEDEFATTR_H
-#define MLIR_GOES_RELATIONAL_RELATIONALATTRIBUTEDEFATTR_H
+#ifndef MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEDEFATTR_H
+#define MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEDEFATTR_H
 #include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"
 #include "mlir/Dialect/RelAlg/IR/RelationalAttributeAttrDefStorage.h"
 
@@ -35,4 +35,4 @@ public:
 } // namespace relalg
 } // namespace mlir
 
-#endif // MLIR_GOES_RELATIONAL_RELATIONALATTRIBUTEDEFATTR_H
+#endif // MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEDEFATTR_H

@@ -1,5 +1,5 @@
-#ifndef DB_DIALECTS_RUNNER_H
-#define DB_DIALECTS_RUNNER_H
+#ifndef RUNNER_RUNNER_H
+#define RUNNER_RUNNER_H
 
 #include <string>
 class Runner {
@@ -16,4 +16,4 @@ class Runner {
    private:
    void* context;
 };
-#endif //DB_DIALECTS_RUNNER_H
+#endif // RUNNER_RUNNER_H

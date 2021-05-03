@@ -1,6 +1,6 @@
 
-#ifndef DB_DIALECTS_ATTRIBUTES_H
-#define DB_DIALECTS_ATTRIBUTES_H
+#ifndef MLIR_DIALECT_RELALG_ATTRIBUTES_H
+#define MLIR_DIALECT_RELALG_ATTRIBUTES_H
 #include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/Support/Debug.h>
 #include <mlir/Dialect/RelAlg/IR/RelAlgDialect.h>
@@ -13,7 +13,7 @@ class Attributes {
    public:
    Attributes intersect(const Attributes& other) const {
       Attributes result;
-      for (auto x : attributes) {
+      for (auto *x : attributes) {
          if (other.attributes.contains(x)) {
             result.insert(x);
          }
@@ -31,7 +31,7 @@ class Attributes {
       return *this;
    }
    void remove(const Attributes& other) {
-      for (auto elem : other.attributes) {
+      for (auto *elem : other.attributes) {
          attributes.erase(elem);
       }
    }
@@ -44,7 +44,7 @@ class Attributes {
       return false;
    }
 
-   bool is_subset_of(const Attributes& others) const {
+   bool isSubsetOf(const Attributes& others) const {
       for (auto* x : attributes) {
          if (!others.attributes.contains(x)) {
             return false;
@@ -86,5 +86,5 @@ class Attributes {
       return res;
    }
 };
-}
-#endif //DB_DIALECTS_ATTRIBUTES_H
+} // namespace mlir::relalg
+#endif // MLIR_DIALECT_RELALG_ATTRIBUTES_H

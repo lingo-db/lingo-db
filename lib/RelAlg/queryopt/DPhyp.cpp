@@ -1,8 +1,9 @@
 #include "mlir/Dialect/RelAlg/queryopt/DPhyp.h"
+#include <unordered_set>
 
-void mlir::relalg::DPHyp::emitCsgCmp(const node_set& s1, const node_set& s2) {
-   auto p1 = dp_table[s1];
-   auto p2 = dp_table[s2];
+void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
+   auto p1 = dpTable[s1];
+   auto p2 = dpTable[s2];
    auto s = s1 | s2;
    struct HashOp {
       size_t operator()(const Operator& op) const {
@@ -18,11 +19,11 @@ void mlir::relalg::DPHyp::emitCsgCmp(const node_set& s1, const node_set& s2) {
    bool edgeInverted = false;
    for (auto& edge : queryGraph.edges) {
       if (edge.connects(s1, s2)) {
-         edgeInverted = (edge.left.is_subset_of(s2) && edge.right.is_subset_of(s1)); //todo also include arbitrary?
+         edgeInverted = (edge.left.isSubsetOf(s2) && edge.right.isSubsetOf(s1)); //todo also include arbitrary?
          if (edge.edgeType == QueryGraph::EdgeType::IMPLICIT) {
-            auto& implicitNode = queryGraph.nodes[edge.right.find_first()];
+            auto& implicitNode = queryGraph.nodes[edge.right.findFirst()];
             implicitOperator = implicitNode.op;
-            predicates.insert(implicitNode.additional_predicates.begin(), implicitNode.additional_predicates.end());
+            predicates.insert(implicitNode.additionalPredicates.begin(), implicitNode.additionalPredicates.end());
          } else if (edge.edgeType == QueryGraph::EdgeType::IGNORE) {
             ignore = true;
          } else if (!edge.op) {
@@ -33,7 +34,7 @@ void mlir::relalg::DPHyp::emitCsgCmp(const node_set& s1, const node_set& s2) {
          } else {
             predicates.insert(edge.op);
          }
-      } else if ((edge.left | edge.right | edge.arbitrary).is_subset_of(s1 | s2) && !(edge.left | edge.right | edge.arbitrary).is_subset_of(s1) && !(edge.left | edge.right | edge.arbitrary).is_subset_of(s2)) {
+      } else if ((edge.left | edge.right | edge.arbitrary).isSubsetOf(s1 | s2) && !(edge.left | edge.right | edge.arbitrary).isSubsetOf(s1) && !(edge.left | edge.right | edge.arbitrary).isSubsetOf(s2)) {
          if (edge.op && (mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation()) || mlir::isa<mlir::relalg::InnerJoinOp>(edge.op.getOperation()))) {
             singlePredicates.insert(edge.op);
          }
@@ -59,41 +60,41 @@ void mlir::relalg::DPHyp::emitCsgCmp(const node_set& s1, const node_set& s2) {
    }
    currPlan->setDescription("(" + p1->getDescription() + ") join (" + p2->getDescription() + ")");
 
-   if (!dp_table.count(s) || currPlan->getCost() < dp_table[s]->getCost()) {
-      dp_table[s] = currPlan;
+   if (!dpTable.count(s) || currPlan->getCost() < dpTable[s]->getCost()) {
+      dpTable[s] = currPlan;
    }
 }
-void mlir::relalg::DPHyp::enumerateCsgRec(node_set s1, node_set x) {
+void mlir::relalg::DPHyp::enumerateCsgRec(NodeSet s1, NodeSet x) {
    auto neighbors = queryGraph.getNeighbors(s1, x);
-   neighbors.iterateSubsets([&](const node_set& n) {
+   neighbors.iterateSubsets([&](const NodeSet& n) {
       auto s1N = s1 | n;
-      if (dp_table.count(s1N)) {
+      if (dpTable.count(s1N)) {
          emitCsg(s1N);
       }
    });
-   neighbors.iterateSubsets([&](const node_set& n) {
+   neighbors.iterateSubsets([&](const NodeSet& n) {
       enumerateCsgRec(s1 | n, x | neighbors);
    });
 }
-void mlir::relalg::DPHyp::enumerateCmpRec(node_set s1, node_set s2, node_set x) {
+void mlir::relalg::DPHyp::enumerateCmpRec(NodeSet s1, NodeSet s2, NodeSet x) {
    auto neighbors = queryGraph.getNeighbors(s2, x);
-   neighbors.iterateSubsets([&](const node_set& n) {
+   neighbors.iterateSubsets([&](const NodeSet& n) {
       auto s2N = s2 | n;
-      if (dp_table.count(s2N) && queryGraph.isConnected(s1, s2N)) {
+      if (dpTable.count(s2N) && queryGraph.isConnected(s1, s2N)) {
          emitCsgCmp(s1, s2N);
       }
    });
    x = x | neighbors;
-   neighbors.iterateSubsets([&](const node_set& n) {
+   neighbors.iterateSubsets([&](const NodeSet& n) {
       enumerateCmpRec(s1, s2 | n, x);
    });
 }
-void mlir::relalg::DPHyp::emitCsg(node_set s1) {
-   node_set x = s1 | node_set::fill_until(queryGraph.num_nodes, s1.find_first());
+void mlir::relalg::DPHyp::emitCsg(NodeSet s1) {
+   NodeSet x = s1 | NodeSet::fillUntil(queryGraph.numNodes, s1.findFirst());
    auto neighbors = queryGraph.getNeighbors(s1, x);
 
    QueryGraph::iterateSetDec(neighbors, [&](size_t pos) {
-      auto s2 = node_set::single(queryGraph.num_nodes, pos);
+      auto s2 = NodeSet::single(queryGraph.numNodes, pos);
       if (queryGraph.isConnected(s1, s2)) {
          emitCsgCmp(s1, s2);
       }
@@ -101,20 +102,20 @@ void mlir::relalg::DPHyp::emitCsg(node_set s1) {
    });
 }
 static std::shared_ptr<mlir::relalg::Plan> createInitialPlan(mlir::relalg::QueryGraph::Node& n) {
-   auto currPlan = std::make_shared<mlir::relalg::Plan>(n.op, std::vector<std::shared_ptr<mlir::relalg::Plan>>({}), std::vector<Operator>({n.additional_predicates}), 0);
+   auto currPlan = std::make_shared<mlir::relalg::Plan>(n.op, std::vector<std::shared_ptr<mlir::relalg::Plan>>({}), std::vector<Operator>({n.additionalPredicates}), 0);
    currPlan->setDescription(std::to_string(n.id));
    return currPlan;
 }
 
 std::shared_ptr<mlir::relalg::Plan> mlir::relalg::DPHyp::solve() {
    for (auto v : queryGraph.getNodes()) {
-      dp_table.insert({node_set::single(queryGraph.num_nodes, v.id), createInitialPlan(v)});
+      dpTable.insert({NodeSet::single(queryGraph.numNodes, v.id), createInitialPlan(v)});
    }
    queryGraph.iterateNodesDesc([&](QueryGraph::Node& v) {
-      auto onlyV = node_set::single(queryGraph.num_nodes, v.id);
+      auto onlyV = NodeSet::single(queryGraph.numNodes, v.id);
       emitCsg(onlyV);
-      auto bv = node_set::fill_until(queryGraph.num_nodes, v.id);
+      auto bv = NodeSet::fillUntil(queryGraph.numNodes, v.id);
       enumerateCsgRec(onlyV, bv);
    });
-   return dp_table[node_set::ones(queryGraph.num_nodes)];
+   return dpTable[NodeSet::ones(queryGraph.numNodes)];
 }

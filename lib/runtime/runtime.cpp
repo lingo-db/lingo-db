@@ -68,7 +68,7 @@ EXPORT void dumpString(bool null, char* ptr, size_t len) {
       std::cout << "string(\"" << std::string(ptr, len) << "\")" << std::endl;
    }
 }
-EXPORT uint32_t dateAdd(uint32_t date, uint32_t amount, time_unit unit) {
+EXPORT uint32_t dateAdd(uint32_t date, uint32_t amount, TimeUnit unit) {
    //todo!!!
    time_t time = date;
    tm tmStruct;
@@ -88,7 +88,7 @@ EXPORT uint32_t dateAdd(uint32_t date, uint32_t amount, time_unit unit) {
          return date;
    }
 }
-EXPORT uint32_t dateSub(uint32_t date, uint32_t amount, time_unit unit) {
+EXPORT uint32_t dateSub(uint32_t date, uint32_t amount, TimeUnit unit) {
    //todo!!!
    time_t time = date;
    tm tmStruct;
@@ -108,7 +108,7 @@ EXPORT uint32_t dateSub(uint32_t date, uint32_t amount, time_unit unit) {
          return date;
    }
 }
-EXPORT uint32_t dateExtract(uint32_t date, time_unit unit) {
+EXPORT uint32_t dateExtract(uint32_t date, TimeUnit unit) {
    //todo!!
    time_t time = date;
    tm tmStruct;

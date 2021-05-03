@@ -1,5 +1,5 @@
-#ifndef DB_DIALECTS_RELATIONALATTRIBUTEMANAGER_H
-#define DB_DIALECTS_RELATIONALATTRIBUTEMANAGER_H
+#ifndef MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEMANAGER_H
+#define MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEMANAGER_H
 #include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"
 #include "mlir/Dialect/RelAlg/IR/RelationalAttributeDefAttr.h"
 #include "mlir/Dialect/RelAlg/IR/RelationalAttributeRefAttr.h"
@@ -19,25 +19,25 @@ class RelationalAttributeManager {
    std::pair<std::string,std::string> getName(RelationalAttribute* attr);
 
    void setCurrentScope(StringRef scope) {
-      current_scope = scope;
-      if (!scope_unifier.count(std::string(scope))) {
-         scope_unifier[std::string(scope)] = 0;
+      currentScope = scope;
+      if (!scopeUnifier.count(std::string(scope))) {
+         scopeUnifier[std::string(scope)] = 0;
       }
    }
    std::string getUniqueScope(StringRef base) {
-      if (scope_unifier.count(std::string(base))) {
-         scope_unifier[std::string(base)] += 1;
-         return std::string(base) + std::to_string(scope_unifier[std::string(base)]);
+      if (scopeUnifier.count(std::string(base))) {
+         scopeUnifier[std::string(base)] += 1;
+         return std::string(base) + std::to_string(scopeUnifier[std::string(base)]);
       } else {
-         scope_unifier[std::string(base)] = 0;
+         scopeUnifier[std::string(base)] = 0;
          return std::string(base);
       }
    }
 
    private:
    MLIRContext* context;
-   std::string current_scope;
-   struct hash_pair {
+   std::string currentScope;
+   struct HashPair {
       template <class T1, class T2>
       size_t operator()(const std::pair<T1, T2>& p) const {
          auto hash1 = std::hash<T1>{}(p.first);
@@ -45,11 +45,11 @@ class RelationalAttributeManager {
          return hash1 ^ hash2;
       }
    };
-   std::unordered_map<std::pair<std::string, std::string>, std::shared_ptr<RelationalAttribute>, hash_pair> attributes;
-   std::unordered_map<RelationalAttribute*, std::pair<std::string, std::string>> attributes_rev;
+   std::unordered_map<std::pair<std::string, std::string>, std::shared_ptr<RelationalAttribute>, HashPair> attributes;
+   std::unordered_map<RelationalAttribute*, std::pair<std::string, std::string>> attributesRev;
 
-   std::unordered_map<std::string, size_t> scope_unifier;
+   std::unordered_map<std::string, size_t> scopeUnifier;
 };
-}
+} // namespace mlir::relalg
 
-#endif //DB_DIALECTS_RELATIONALATTRIBUTEMANAGER_H
+#endif // MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEMANAGER_H

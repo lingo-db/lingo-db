@@ -212,5 +212,5 @@ jobs:
           key: ${{ runner.os }}-build-${{ github.sha }}
       - name: Run Test
         run: |
-          python3 tools/scripts/run-clang-tidy.py -p build/ -quiet
+          python3 tools/scripts/run-clang-tidy.py -p build/ -quiet  -header-filter="$PWD/include/.*"
       

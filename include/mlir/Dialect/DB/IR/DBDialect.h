@@ -1,8 +1,8 @@
-#ifndef DB_DBDIALECT_H
-#define DB_DBDIALECT_H
+#ifndef MLIR_DIALECT_DB_IR_DBDIALECT_H
+#define MLIR_DIALECT_DB_IR_DBDIALECT_H
 
 #include "mlir/IR/Dialect.h"
 
 #include "mlir/Dialect/DB/IR/DBOpsDialect.h.inc"
 
-#endif// DB_DBDIALECT_H
+#endif // MLIR_DIALECT_DB_IR_DBDIALECT_H

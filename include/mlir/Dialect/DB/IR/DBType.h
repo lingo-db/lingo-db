@@ -1,5 +1,5 @@
-#ifndef MLIR_GOES_RELATIONAL_DBTYPE_H
-#define MLIR_GOES_RELATIONAL_DBTYPE_H
+#ifndef MLIR_DIALECT_DB_IR_DBTYPE_H
+#define MLIR_DIALECT_DB_IR_DBTYPE_H
 #include "mlir/IR/Types.h"
 namespace mlir::db {
 class DBType : public mlir::Type {
@@ -11,6 +11,6 @@ class DBType : public mlir::Type {
    DBType asNullable() const;
    static bool classof(Type);
 };
-}
+} // namespace mlir::db
 
-#endif // MLIR_GOES_RELATIONAL_DBTYPE_H
+#endif // MLIR_DIALECT_DB_IR_DBTYPE_H

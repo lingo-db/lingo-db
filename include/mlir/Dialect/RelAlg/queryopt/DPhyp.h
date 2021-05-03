@@ -1,5 +1,5 @@
-#ifndef DB_DIALECTS_DPHYP_H
-#define DB_DIALECTS_DPHYP_H
+#ifndef MLIR_DIALECT_RELALG_QUERYOPT_DPHYP_H
+#define MLIR_DIALECT_RELALG_QUERYOPT_DPHYP_H
 
 #include "QueryGraph.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
@@ -10,22 +10,22 @@
 
 namespace mlir::relalg {
 class DPHyp {
-   std::unordered_map<node_set, std::shared_ptr<Plan>, hash_node_set> dp_table;
+   std::unordered_map<NodeSet, std::shared_ptr<Plan>, HashNodeSet> dpTable;
    QueryGraph& queryGraph;
 
    public:
    DPHyp(QueryGraph& qg) : queryGraph(qg) {}
 
-   void emitCsg(node_set S1);
+   void emitCsg(NodeSet s1);
 
-   void emitCsgCmp(const node_set& S1, const node_set& S2);
+   void emitCsgCmp(const NodeSet& s1, const NodeSet& s2);
 
-   void enumerateCsgRec(node_set S1, node_set X);
+   void enumerateCsgRec(NodeSet s1, NodeSet x);
 
-   void enumerateCmpRec(node_set S1, node_set S2, node_set X);
+   void enumerateCmpRec(NodeSet s1, NodeSet s2, NodeSet x);
 
    std::shared_ptr<Plan> solve();
 };
-}
+} // namespace mlir::relalg
 
-#endif //DB_DIALECTS_DPHYP_H
+#endif // MLIR_DIALECT_RELALG_QUERYOPT_DPHYP_H

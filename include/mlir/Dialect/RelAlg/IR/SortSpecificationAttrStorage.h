@@ -1,5 +1,5 @@
-#ifndef MLIR_GOES_RELATIONAL_SORTSPECIFICATIONATTRSTORAGE_H
-#define MLIR_GOES_RELATIONAL_SORTSPECIFICATIONATTRSTORAGE_H
+#ifndef MLIR_DIALECT_RELALG_IR_SORTSPECIFICATIONATTRSTORAGE_H
+#define MLIR_DIALECT_RELALG_IR_SORTSPECIFICATIONATTRSTORAGE_H
 namespace mlir::relalg {
 struct SortSpecificationAttrStorage : public AttributeStorage {
    SortSpecificationAttrStorage(RelationalAttributeRefAttr attr, SortSpec sortSpec)
@@ -22,4 +22,4 @@ struct SortSpecificationAttrStorage : public AttributeStorage {
   SortSpec sortSpec;
 };
 } // namespace mlir::relalg
-#endif // MLIR_GOES_RELATIONAL_SORTSPECIFICATIONATTRSTORAGE_H
+#endif // MLIR_DIALECT_RELALG_IR_SORTSPECIFICATIONATTRSTORAGE_H

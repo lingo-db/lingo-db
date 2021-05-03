@@ -1,19 +1,13 @@
-#ifndef DB_DIALECTS_QUERYGRAPH_H
-#define DB_DIALECTS_QUERYGRAPH_H
+#ifndef MLIR_DIALECT_RELALG_QUERYOPT_QUERYGRAPH_H
+#define MLIR_DIALECT_RELALG_QUERYOPT_QUERYGRAPH_H
 
 #include "llvm/Support/Debug.h"
-
-#include <functional>
-#include <iostream>
-#include <list>
-#include <queue>
-#include <unordered_set>
 #include <mlir/Dialect/RelAlg/IR/RelAlgOps.h>
 #include <mlir/Dialect/RelAlg/queryopt/utils.h>
 namespace mlir::relalg {
 class QueryGraph {
    public:
-   size_t num_nodes;
+   size_t numNodes;
    enum class EdgeType {
       REAL,
       IMPLICIT,
@@ -22,32 +16,32 @@ class QueryGraph {
    struct Edge {
       Operator op;
       EdgeType edgeType = EdgeType::REAL;
-      node_set right;
-      node_set left;
-      node_set arbitrary;
-      [[nodiscard]] bool connects(const node_set& S1, const node_set& S2) const {
+      NodeSet right;
+      NodeSet left;
+      NodeSet arbitrary;
+      [[nodiscard]] bool connects(const NodeSet& s1, const NodeSet& s2) const {
          if (!((left.any() && right.any()) || (left.any() && arbitrary.any()) || (arbitrary.any() && right.any()))) {
             return false;
          }
-         if (left.is_subset_of(S1) && right.is_subset_of(S2) && arbitrary.is_subset_of(S1 | S2)) {
+         if (left.isSubsetOf(s1) && right.isSubsetOf(s2) && arbitrary.isSubsetOf(s1 | s2)) {
             return true;
          }
-         if (left.is_subset_of(S2) && right.is_subset_of(S1) && arbitrary.is_subset_of(S1 | S2)) {
+         if (left.isSubsetOf(s2) && right.isSubsetOf(s1) && arbitrary.isSubsetOf(s1 | s2)) {
             return true;
          }
          return false;
       }
 
-      std::pair<bool, size_t> findNeighbor(const node_set& S, const node_set& X) {
-         if (left.is_subset_of(S) && !S.intersects(right)) {
-            auto otherside = right | (arbitrary & ~S);
-            if (!X.intersects(otherside) && otherside.any()) {
-               return {true, otherside.find_first()};
+      std::pair<bool, size_t> findNeighbor(const NodeSet& s, const NodeSet& x) {
+         if (left.isSubsetOf(s) && !s.intersects(right)) {
+            auto otherside = right | (arbitrary & ~s);
+            if (!x.intersects(otherside) && otherside.any()) {
+               return {true, otherside.findFirst()};
             }
-         } else if (right.is_subset_of(S) && !S.intersects(left)) {
-            auto otherside = left | (arbitrary & ~S);
-            if (!X.intersects(otherside) && otherside.any()) {
-               return {true, otherside.find_first()};
+         } else if (right.isSubsetOf(s) && !s.intersects(left)) {
+            auto otherside = left | (arbitrary & ~s);
+            if (!x.intersects(otherside) && otherside.any()) {
+               return {true, otherside.findFirst()};
             }
          }
          return {false, 0};
@@ -57,8 +51,8 @@ class QueryGraph {
    struct Node {
       size_t id;
       Operator op;
-      std::vector<Operator> additional_predicates;
-      node_set dependencies;
+      std::vector<Operator> additionalPredicates;
+      NodeSet dependencies;
 
       explicit Node(Operator op) : op(op) {}
 
@@ -68,11 +62,11 @@ class QueryGraph {
    std::vector<Node> nodes;
    std::vector<Edge> edges;
 
-   QueryGraph(size_t num_nodes) : num_nodes(num_nodes) {}
+   QueryGraph(size_t numNodes) : numNodes(numNodes) {}
 
-   static void print_readable(const node_set& S, llvm::raw_ostream& out) {
+   static void printReadable(const NodeSet& s, llvm::raw_ostream& out) {
       out << "{";
-      for (auto s : S) {
+      for (auto s : s) {
          out << s << ",";
       }
       out << "}";
@@ -85,7 +79,7 @@ class QueryGraph {
          out << "{" << n.id << ",";
          n.op->print(out);
          out << ", predicates={";
-         for (auto op : n.additional_predicates) {
+         for (auto op : n.additionalPredicates) {
             op->print(out);
             out << ",";
          }
@@ -97,11 +91,11 @@ class QueryGraph {
       out << "Edges: [\n";
       for (auto& e : edges) {
          out << "{ v=";
-         print_readable(e.left, out);
+         printReadable(e.left, out);
          out << ", u=";
-         print_readable(e.right, out);
+         printReadable(e.right, out);
          out << ", w=";
-         print_readable(e.arbitrary, out);
+         printReadable(e.arbitrary, out);
          out << ", op=\n";
          if (e.op) {
             e.op->print(out);
@@ -117,7 +111,7 @@ class QueryGraph {
       print(llvm::dbgs());
    }
 
-   void addEdge(node_set left, node_set right, node_set arbitrary, Operator op, EdgeType edgeType) {
+   void addEdge(NodeSet left, NodeSet right, NodeSet arbitrary, Operator op, EdgeType edgeType) {
       assert(left.valid());
       assert(right.valid());
       assert(arbitrary.valid());
@@ -146,9 +140,9 @@ class QueryGraph {
       }
    }
 
-   static void iterateSetDec(const node_set& S, const std::function<void(size_t)>& fn) {
+   static void iterateSetDec(const NodeSet& s, const std::function<void(size_t)>& fn) {
       std::vector<size_t> positions;
-      for (auto v : S) {
+      for (auto v : s) {
          positions.push_back(v);
       }
       for (auto it = positions.rbegin(); it != positions.rend(); it++) {
@@ -156,13 +150,13 @@ class QueryGraph {
       }
    }
 
-   bool isConnected(const node_set& S1, const node_set& S2) {
+   bool isConnected(const NodeSet& s1, const NodeSet& s2) {
       bool found = false;
-      for (auto v : S1) {
+      for (auto v : s1) {
          Node& n = nodes[v];
          for (auto edgeid : n.edges) {
             auto& edge = edges[edgeid];
-            found |= edge.connects(S1, S2);
+            found |= edge.connects(s1, s2);
          }
       }
       return found;
@@ -173,15 +167,15 @@ class QueryGraph {
    std::vector<Edge>& getEdges() {
       return edges;
    }
-   void iterateNodes(node_set& S, const std::function<void(Node&)>& fn) {
-      for (auto v : S) {
+   void iterateNodes(NodeSet& s, const std::function<void(Node&)>& fn) {
+      for (auto v : s) {
          Node& n = nodes[v];
          fn(n);
       }
    }
 
-   void iterateEdges(node_set& S, const std::function<void(Edge&)>& fn) {
-      iterateNodes(S, [&](Node& n) {
+   void iterateEdges(NodeSet& s, const std::function<void(Edge&)>& fn) {
+      iterateNodes(s, [&](Node& n) {
          for (auto edgeid : n.edges) {
             auto& edge = edges[edgeid];
             fn(edge);
@@ -189,10 +183,10 @@ class QueryGraph {
       });
    }
 
-   node_set getNeighbors(node_set& S, node_set X) {
-      node_set res(num_nodes);
-      iterateEdges(S, [&](Edge& edge) {
-         auto [found, representative] = edge.findNeighbor(S, X);
+   NodeSet getNeighbors(NodeSet& s, NodeSet x) {
+      NodeSet res(numNodes);
+      iterateEdges(s, [&](Edge& edge) {
+         auto [found, representative] = edge.findNeighbor(s, x);
          if (found) {
             res.set(representative);
          }
@@ -200,5 +194,5 @@ class QueryGraph {
       return res;
    }
 };
-}
-#endif //DB_DIALECTS_QUERYGRAPH_H
+} // namespace mlir::relalg
+#endif // MLIR_DIALECT_RELALG_QUERYOPT_QUERYGRAPH_H

@@ -1,8 +1,8 @@
 #include "mlir/Dialect/RelAlg/queryopt/utils.h"
 namespace mlir::relalg {
-void node_set::iterateSubsets(const std::function<void(node_set)>& fn) const {
+void NodeSet::iterateSubsets(const std::function<void(NodeSet)>& fn) const {
    if (!storage.any()) return;
-   node_set s = *this;
+   NodeSet s = *this;
    auto s1 = s & s.negate();
    while (s1 != s) {
       fn(s1);
@@ -12,9 +12,9 @@ void node_set::iterateSubsets(const std::function<void(node_set)>& fn) const {
    }
    fn(s);
 }
-node_set node_set::negate() const {
-   node_set res = *this;
-   size_t pos = res.find_first();
+NodeSet NodeSet::negate() const {
+   NodeSet res = *this;
+   size_t pos = res.findFirst();
    size_t flipLen = res.storage.size() - pos - 1;
    if (flipLen) {
       llvm::SmallBitVector flipVector(res.storage.size());
@@ -43,7 +43,7 @@ static std::string printPlanOp(Operator op) {
 std::string Plan::dumpNode() {
    std::string firstNodeName;
    std::string lastNodeName;
-   for (auto op : additional_ops) {
+   for (auto op : additionalOps) {
       std::string nodename = printPlanOp(op);
       if (!lastNodeName.empty()) {
          llvm::dbgs() << lastNodeName << " -> " << nodename << ";\n";
@@ -88,7 +88,7 @@ Operator Plan::realizePlanRec() {
    bool isLeaf = subplans.empty();
    Operator firstNode{};
    Operator lastNode{};
-   for (auto op : additional_ops) {
+   for (auto op : additionalOps) {
       if (lastNode) {
          lastNode.setChildren({op});
       }

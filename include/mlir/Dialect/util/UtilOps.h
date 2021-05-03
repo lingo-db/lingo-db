@@ -1,5 +1,5 @@
-#ifndef UTIL_UTILOPS_H
-#define UTIL_UTILOPS_H
+#ifndef MLIR_DIALECT_UTIL_UTILOPS_H
+#define MLIR_DIALECT_UTIL_UTILOPS_H
 
 
 #include "mlir/IR/Dialect.h"
@@ -14,4 +14,4 @@
 #define GET_OP_CLASSES
 #include "mlir/Dialect/util/UtilOps.h.inc"
 
-#endif// UTIL_UTILOPS_H
+#endif // MLIR_DIALECT_UTIL_UTILOPS_H

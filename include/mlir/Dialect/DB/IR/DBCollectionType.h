@@ -1,5 +1,5 @@
-#ifndef MLIR_GOES_RELATIONAL_DBCOLLECTIONTYPE_H
-#define MLIR_GOES_RELATIONAL_DBCOLLECTIONTYPE_H
+#ifndef MLIR_DIALECT_DB_IR_DBCOLLECTIONTYPE_H
+#define MLIR_DIALECT_DB_IR_DBCOLLECTIONTYPE_H
 #include "mlir/IR/Types.h"
 namespace mlir::db {
 class CollectionType : public mlir::Type {
@@ -14,6 +14,6 @@ class CollectionType : public mlir::Type {
    bool offersParallelIteration();
    bool isOrdered();
 };
-}
+} // namespace mlir::db
 
-#endif // MLIR_GOES_RELATIONAL_DBCOLLECTIONTYPE_H
+#endif // MLIR_DIALECT_DB_IR_DBCOLLECTIONTYPE_H

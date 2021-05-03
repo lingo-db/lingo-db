@@ -8,16 +8,16 @@ std::shared_ptr<RelationalAttribute> RelationalAttributeManager::get(StringRef s
    if (!attributes.count(pair)) {
       auto attr = std::make_shared<RelationalAttribute>();
       attributes[pair] = attr;
-      attributes_rev[attr.get()]=pair;
+      attributesRev[attr.get()]=pair;
    }
    return attributes[pair];
 }
 RelationalAttributeDefAttr RelationalAttributeManager::createDef(SymbolRefAttr name, Attribute fromExisting) {
-   auto attribute = get(current_scope, name.getRootReference());
+   auto attribute = get(currentScope, name.getRootReference());
    return mlir::relalg::RelationalAttributeDefAttr::get(context, name.getRootReference(), attribute, fromExisting);
 }
 RelationalAttributeDefAttr RelationalAttributeManager::createDef(StringRef name, Attribute fromExisting) {
-   auto attribute = get(current_scope, name);
+   auto attribute = get(currentScope, name);
    return mlir::relalg::RelationalAttributeDefAttr::get(context, name, attribute, fromExisting);
 }
 RelationalAttributeRefAttr RelationalAttributeManager::createRef(SymbolRefAttr name) {
@@ -32,11 +32,11 @@ RelationalAttributeRefAttr RelationalAttributeManager::createRef(StringRef scope
    return relalg::RelationalAttributeRefAttr::get(context, SymbolRefAttr::get(context, scope, nested), attribute);
 }
 RelationalAttributeRefAttr RelationalAttributeManager::createRef(RelationalAttribute* attr){
-   auto [scope,name]=attributes_rev[attr];
+   auto [scope,name]=attributesRev[attr];
    return createRef(scope,name);
 }
 
 std::pair<std::string, std::string> RelationalAttributeManager::getName(RelationalAttribute* attr) {
-   return attributes_rev[attr];
+   return attributesRev[attr];
 }
 } // namespace mlir::relalg

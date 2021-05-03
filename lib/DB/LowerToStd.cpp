@@ -506,15 +506,15 @@ class CmpOpLowering : public ConversionPattern {
       return failure();
    }
 };
-static time_unit timeUnitFromStr(std::string str) {
+static TimeUnit timeUnitFromStr(std::string str) {
    if (str == "days" || str == "day") {
-      return time_unit::DAY;
+      return TimeUnit::DAY;
    } else if (str == "months" || str == "month") {
-      return time_unit::MONTH;
+      return TimeUnit::MONTH;
    } else if (str == "years" || str == "year") {
-      return time_unit::YEAR;
+      return TimeUnit::YEAR;
    } else
-      return time_unit::UNKNOWN;
+      return TimeUnit::UNKNOWN;
 }
 class DateAddLowering : public ConversionPattern {
    public:

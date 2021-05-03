@@ -1,5 +1,5 @@
-#ifndef DB_DIALECTS_QUERYGRAPHBUILDER_H
-#define DB_DIALECTS_QUERYGRAPHBUILDER_H
+#ifndef MLIR_DIALECT_RELALG_QUERYOPT_QUERYGRAPHBUILDER_H
+#define MLIR_DIALECT_RELALG_QUERYOPT_QUERYGRAPHBUILDER_H
 #include "QueryGraph.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 
@@ -8,47 +8,47 @@ class QueryGraphBuilder {
    using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
 
    Operator root;
-   llvm::SmallPtrSet<mlir::Operation*,12>& already_optimized;
-   size_t num_nodes;
+   llvm::SmallPtrSet<mlir::Operation*,12>& alreadyOptimized;
+   size_t numNodes;
    QueryGraph qg;
-   node_set empty_node;
+   NodeSet emptyNode;
 
    class NodeResolver {
       QueryGraph& qg;
 
-      std::unordered_map<relalg::RelationalAttribute*, size_t> attr_to_nodes;
+      std::unordered_map<relalg::RelationalAttribute*, size_t> attrToNodes;
 
       public:
       explicit NodeResolver(QueryGraph& qg) : qg(qg) {}
 
       void add(relalg::RelationalAttribute* attr, size_t nodeid) {
-         attr_to_nodes[attr] = nodeid;
+         attrToNodes[attr] = nodeid;
       }
 
       void merge(const NodeResolver& other) {
-         for (auto x : other.attr_to_nodes) {
+         for (auto x : other.attrToNodes) {
             auto [attr, nodeid] = x;
-            if (attr_to_nodes.count(attr)) {
-               auto currid = attr_to_nodes[attr];
+            if (attrToNodes.count(attr)) {
+               auto currid = attrToNodes[attr];
                if (qg.nodes[nodeid].op->isBeforeInBlock(qg.nodes[currid].op.getOperation())) {
                   currid = nodeid;
                }
-               attr_to_nodes[attr] = currid;
+               attrToNodes[attr] = currid;
             } else {
-               attr_to_nodes[attr] = nodeid;
+               attrToNodes[attr] = nodeid;
             }
          }
       }
 
       size_t resolve(relalg::RelationalAttribute* attr) {
-         return attr_to_nodes[attr];
+         return attrToNodes[attr];
       }
    };
    size_t addNode(Operator op) {
       QueryGraph::Node n(op);
       n.id = qg.nodes.size();
       qg.nodes.push_back(n);
-      node_for_op[op.getOperation()] = n.id;
+      nodeForOp[op.getOperation()] = n.id;
       return n.id;
    }
    static std::pair<Operator, Operator> normalizeChildren(Operator op) {
@@ -67,42 +67,42 @@ class QueryGraphBuilder {
    static bool intersects(const attribute_set& a, const attribute_set& b) {
       return llvm::any_of(a, [&](auto x) { return b.contains(x); });
    }
-   node_set calcTES(Operator op, NodeResolver& resolver);
+   NodeSet calcTES(Operator op, NodeResolver& resolver);
 
    NodeResolver populateQueryGraph(Operator op);
 
-   node_set calcSES(Operator op, NodeResolver& resolver) const;
+   NodeSet calcSES(Operator op, NodeResolver& resolver) const;
 
-   std::unordered_map<mlir::Operation*, node_set> Ts;
-   std::unordered_map<mlir::Operation*, node_set> TESs;
-   std::unordered_map<mlir::Operation*, size_t> node_for_op;
+   std::unordered_map<mlir::Operation*, NodeSet> ts;
+   std::unordered_map<mlir::Operation*, NodeSet> teSs;
+   std::unordered_map<mlir::Operation*, size_t> nodeForOp;
 
-   node_set calcT(Operator op, NodeResolver& resolver) {
-      if (Ts.count(op.getOperation())) {
-         return Ts[op.getOperation()];
+   NodeSet calcT(Operator op, NodeResolver& resolver) {
+      if (ts.count(op.getOperation())) {
+         return ts[op.getOperation()];
       } else {
-         node_set init = node_set(num_nodes);
-         if (node_for_op.count(op.getOperation())) {
-            init.set(node_for_op[op.getOperation()]);
+         NodeSet init = NodeSet(numNodes);
+         if (nodeForOp.count(op.getOperation())) {
+            init.set(nodeForOp[op.getOperation()]);
          }
-         if (!already_optimized.count(op.getOperation())) {
+         if (!alreadyOptimized.count(op.getOperation())) {
             for (auto child : op.getChildren()) {
                init |= calcT(child, resolver);
             }
          }
-         Ts[op.getOperation()] = init;
+         ts[op.getOperation()] = init;
          return init;
       }
    }
-   bool canPushSelection(const node_set& SES, Operator curr, NodeResolver& resolver) {
+   bool canPushSelection(const NodeSet& ses, Operator curr, NodeResolver& resolver) {
       if (curr.getChildren().size() == 1) {
          return true;
       }
-      auto TES = calcTES(curr, resolver);
+      auto tes = calcTES(curr, resolver);
       auto [b_left, b_right] = normalizeChildren(curr);
-      node_set left_TES = calcT(b_left, resolver) & TES;
-      node_set right_TES = calcT(b_right, resolver) & TES;
-      if (left_TES.intersects(SES) && right_TES.intersects(SES)) {
+      NodeSet leftTes = calcT(b_left, resolver) & tes;
+      NodeSet rightTes = calcT(b_right, resolver) & tes;
+      if (leftTes.intersects(ses) && rightTes.intersects(ses)) {
          return false;
       }
       switch (mlir::relalg::detail::getBinaryOperatorType(curr)) {
@@ -110,7 +110,7 @@ class QueryGraphBuilder {
          case detail::BinaryOperatorType::MarkJoin:
          case detail::BinaryOperatorType::AntiSemiJoin:
          case detail::BinaryOperatorType::OuterJoin:
-            return !right_TES.intersects(SES);
+            return !rightTes.intersects(ses);
          case detail::BinaryOperatorType::FullOuterJoin: return false;
          default:
             return true;
@@ -118,17 +118,17 @@ class QueryGraphBuilder {
    }
    void ensureConnected();
 
-   node_set expand(node_set S) {
-      qg.iterateNodes(S, [&](QueryGraph::Node& n) {
+   NodeSet expand(NodeSet s) {
+      qg.iterateNodes(s, [&](QueryGraph::Node& n) {
          if (n.dependencies.valid()) {
-            S |= n.dependencies;
+            s |= n.dependencies;
          }
       });
-      return S;
+      return s;
    }
 
    public:
-   QueryGraphBuilder(Operator root, llvm::SmallPtrSet<mlir::Operation*,12>& already_optimized);
+   QueryGraphBuilder(Operator root, llvm::SmallPtrSet<mlir::Operation*,12>& alreadyOptimized);
    void generate() {
       populateQueryGraph(root);
       ensureConnected();
@@ -137,5 +137,5 @@ class QueryGraphBuilder {
       return qg;
    }
 };
-}
-#endif //DB_DIALECTS_QUERYGRAPHBUILDER_H
+} // namespace mlir::relalg
+#endif // MLIR_DIALECT_RELALG_QUERYOPT_QUERYGRAPHBUILDER_H

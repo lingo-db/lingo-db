@@ -1,5 +1,5 @@
-#ifndef MLIR_UTIL_PASSES_H
-#define MLIR_UTIL_PASSES_H
+#ifndef MLIR_DIALECT_UTIL_PASSES_H
+#define MLIR_DIALECT_UTIL_PASSES_H
 
 #include "mlir/Pass/Pass.h"
 #include <memory>
@@ -13,4 +13,4 @@ void populateUtilTypeConversionPatterns(TypeConverter& typeConverter, RewritePat
 } // end namespace util
 } // end namespace mlir
 
-#endif // MLIR_UTIL_PASSES_H
+#endif // MLIR_DIALECT_UTIL_PASSES_H

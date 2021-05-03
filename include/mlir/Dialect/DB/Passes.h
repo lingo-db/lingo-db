@@ -1,5 +1,5 @@
-#ifndef MLIR_DB_PASSES_H
-#define MLIR_DB_PASSES_H
+#ifndef MLIR_DIALECT_DB_PASSES_H
+#define MLIR_DIALECT_DB_PASSES_H
 
 #include "mlir/Pass/Pass.h"
 #include <memory>
@@ -10,4 +10,4 @@ namespace mlir {
     }// end namespace db
 }// end namespace mlir
 
-#endif// MLIR_DB_PASSES_H
+#endif // MLIR_DIALECT_DB_PASSES_H

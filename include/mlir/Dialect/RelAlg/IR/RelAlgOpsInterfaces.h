@@ -1,14 +1,15 @@
-#ifndef RelAlg_RelAlgInterfaces
-#define RelAlg_RelAlgInterfaces
+#ifndef MLIR_DIALECT_RELALG_IR_RELALGOPSINTERFACES_H
+#define MLIR_DIALECT_RELALG_IR_RELALGOPSINTERFACES_H
 
 #include "llvm/ADT/SmallPtrSet.h"
+
+#include "mlir/Dialect/RelAlg/Attributes.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
-#include <mlir/Dialect/RelAlg/Attributes.h>
-#include <mlir/IR/SymbolTable.h>
+#include "mlir/IR/SymbolTable.h"
 
 namespace mlir::relalg::detail {
 Attributes getUsedAttributes(mlir::Operation* op);
@@ -189,9 +190,9 @@ void addPredicate(mlir::Operation* op, std::function<mlir::Value(mlir::Value, ml
 void initPredicate(mlir::Operation* op);
 
 void inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, mlir::Block* newBlock, mlir::BlockAndValueMapping& mapping);
-}
+} // namespace mlir::relalg::detail
 class Operator;
 #define GET_OP_CLASSES
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h.inc"
 
-#endif // RelAlg_RelAlgInterfaces
+#endif // MLIR_DIALECT_RELALG_IR_RELALGOPSINTERFACES_H

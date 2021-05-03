@@ -1,5 +1,5 @@
-#ifndef DB_DIALECTS_RUNTIME_H
-#define DB_DIALECTS_RUNTIME_H
+#ifndef RUNTIME_RUNTIME_H
+#define RUNTIME_RUNTIME_H
 
 #include <cstddef>
 #include <cstdint>
@@ -14,7 +14,7 @@ EXPORT void dumpInterval(bool null, uint64_t interval);
 EXPORT void dumpFloat(bool null, double val);
 EXPORT void dumpString(bool null, char* ptr, size_t len);
 
-enum time_unit : uint8_t {
+enum TimeUnit : uint8_t {
    YEAR,
    MONTH,
    DAY,
@@ -23,8 +23,8 @@ enum time_unit : uint8_t {
    SECONDS,
    UNKNOWN
 };
-EXPORT uint32_t dateAdd(uint32_t,uint32_t amount,time_unit unit);
-EXPORT uint32_t dateSub(uint32_t,uint32_t amount,time_unit unit);
-EXPORT uint32_t dateExtract(uint32_t,time_unit unit);
+EXPORT uint32_t dateAdd(uint32_t,uint32_t amount,TimeUnit unit);
+EXPORT uint32_t dateSub(uint32_t,uint32_t amount,TimeUnit unit);
+EXPORT uint32_t dateExtract(uint32_t,TimeUnit unit);
 
-#endif //DB_DIALECTS_RUNTIME_H
+#endif // RUNTIME_RUNTIME_H

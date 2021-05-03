@@ -17,7 +17,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                        Operator asOp = mlir::dyn_cast_or_null<Operator>(unaryOperator.getOperation());
                        auto child = mlir::dyn_cast_or_null<Operator>(unaryOperator.child());
                        auto availableChild = child.getAvailableAttributes();
-                       if (topushUnary.reorderable(unaryOperator) && usedAttributes.is_subset_of(availableChild)) {
+                       if (topushUnary.reorderable(unaryOperator) && usedAttributes.isSubsetOf(availableChild)) {
                           topush->moveBefore(asOp.getOperation());
                           asOp.setChildren({pushdown(topush, child)});
                           return asOp;
@@ -42,8 +42,8 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                        }
                        auto availableLeft = left.getAvailableAttributes();
                        auto availableRight = right.getAvailableAttributes();
-                       auto pushableLeft = topushUnary.lPushable(binop) && usedAttributes.is_subset_of(availableLeft);
-                       auto pushableRight = topushUnary.rPushable(binop) && usedAttributes.is_subset_of(availableRight);
+                       auto pushableLeft = topushUnary.lPushable(binop) && usedAttributes.isSubsetOf(availableLeft);
+                       auto pushableRight = topushUnary.rPushable(binop) && usedAttributes.isSubsetOf(availableRight);
                        if (!pushableLeft && !pushableRight) {
                           topush.setChildren({asOp});
                           return topush;
