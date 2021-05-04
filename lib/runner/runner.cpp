@@ -1,3 +1,4 @@
+#include "llvm/Linker/Linker.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/TargetSelect.h"
@@ -26,53 +27,11 @@
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Support/ErrorOr.h>
+#include <iostream>
 #include <runner/runner.h>
 
-int loadMLIR(std::string inputFilename, mlir::MLIRContext& context, mlir::OwningModuleRef& module) {
-   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
-      llvm::MemoryBuffer::getFileOrSTDIN(inputFilename);
-   if (std::error_code ec = fileOrErr.getError()) {
-      llvm::errs() << "Could not open input file: " << ec.message() << "\n";
-      return -1;
-   }
-
-   // Parse the input mlir.
-   llvm::SourceMgr sourceMgr;
-   sourceMgr.AddNewSourceBuffer(std::move(*fileOrErr), llvm::SMLoc());
-   module = mlir::parseSourceFile(sourceMgr, &context);
-   if (!module) {
-      llvm::errs() << "Error can't load file " << inputFilename << "\n";
-      return 3;
-   }
-   return 0;
-}
-
-int dumpLLVMIR(mlir::ModuleOp module) {
-   // Convert the module to LLVM IR in a new LLVM IR context.
-   llvm::LLVMContext llvmContext;
-   auto llvmModule = mlir::translateModuleToLLVMIR(module, llvmContext);
-   if (!llvmModule) {
-      llvm::errs() << "Failed to emit LLVM IR\n";
-      return -1;
-   }
-
-   // Initialize LLVM targets.
-   llvm::InitializeNativeTarget();
-   llvm::InitializeNativeTargetAsmPrinter();
-   mlir::ExecutionEngine::setupTargetTriple(llvmModule.get());
-
-   /// Optionally run an optimization pipeline over the llvm module.
-   auto optPipeline = mlir::makeOptimizingTransformer(
-      /*optLevel=*/false ? 3 : 0, /*sizeLevel=*/0,
-      /*targetMachine=*/nullptr);
-   if (auto err = optPipeline(llvmModule.get())) {
-      llvm::errs() << "Failed to optimize LLVM IR " << err << "\n";
-      return -1;
-   }
-   llvm::errs() << *llvmModule << "\n";
-   return 0;
-}
 namespace {
 struct ToLLVMLoweringPass
    : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
@@ -119,17 +78,98 @@ void ToLLVMLoweringPass::runOnOperation() {
       signalPassFailure();
 }
 
-/// Create a pass for lowering operations the remaining `Toy` operations, as
-/// well as `Affine` and `Std`, to the LLVM dialect for codegen.
+namespace runner {
+
+extern const unsigned char kPrecompiledGandivaBitcode[];
+extern const size_t kPrecompiledGandivaBitcodeSize;
 std::unique_ptr<mlir::Pass> createLowerToLLVMPass() {
    return std::make_unique<ToLLVMLoweringPass>();
+}
+int loadMLIR(std::string inputFilename, mlir::MLIRContext& context, mlir::OwningModuleRef& module) {
+   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
+      llvm::MemoryBuffer::getFileOrSTDIN(inputFilename);
+   if (std::error_code ec = fileOrErr.getError()) {
+      llvm::errs() << "Could not open input file: " << ec.message() << "\n";
+      return -1;
+   }
+
+   // Parse the input mlir.
+   llvm::SourceMgr sourceMgr;
+   sourceMgr.AddNewSourceBuffer(std::move(*fileOrErr), llvm::SMLoc());
+   module = mlir::parseSourceFile(sourceMgr, &context);
+   if (!module) {
+      llvm::errs() << "Error can't load file " << inputFilename << "\n";
+      return 3;
+   }
+   return 0;
+}
+
+int dumpLLVMIR(mlir::ModuleOp module) {
+   // Convert the module to LLVM IR in a new LLVM IR context.
+   llvm::LLVMContext llvmContext;
+   auto llvmModule = mlir::translateModuleToLLVMIR(module, llvmContext);
+   if (!llvmModule) {
+      llvm::errs() << "Failed to emit LLVM IR\n";
+      return -1;
+   }
+
+   // Initialize LLVM targets.
+   llvm::InitializeNativeTarget();
+   llvm::InitializeNativeTargetAsmPrinter();
+   mlir::ExecutionEngine::setupTargetTriple(llvmModule.get());
+
+   /// Optionally run an optimization pipeline over the llvm module.
+   auto optPipeline = mlir::makeOptimizingTransformer(
+      /*optLevel=*/false ? 3 : 0, /*sizeLevel=*/0,
+      /*targetMachine=*/nullptr);
+   if (auto err = optPipeline(llvmModule.get())) {
+      llvm::errs() << "Failed to optimize LLVM IR " << err << "\n";
+      return -1;
+   }
+   llvm::errs() << *llvmModule << "\n";
+   return 0;
+}
+static std::unique_ptr<llvm::Module>
+convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context) {
+   //////////////////////////////////////////////////////////////////////////////////////
+   auto bitcode = llvm::StringRef(reinterpret_cast<const char*>(kPrecompiledGandivaBitcode),
+                                  kPrecompiledGandivaBitcodeSize);
+
+   /// Read from file into memory buffer.
+   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> bufferOrError =
+      llvm::MemoryBuffer::getMemBuffer(bitcode, "precompiled", false);
+
+   std::unique_ptr<llvm::MemoryBuffer> buffer = move(bufferOrError.get());
+
+   /// Parse the IR module.
+   llvm::Expected<std::unique_ptr<llvm::Module>> moduleOrError =
+      llvm::getOwningLazyBitcodeModule(move(buffer), context);
+   if (!moduleOrError) {
+      // NOTE: llvm::handleAllErrors() fails linking with RTTI-disabled LLVM builds
+      // (ARROW-5148)
+      std::string str;
+      llvm::raw_string_ostream stream(str);
+      stream << moduleOrError.takeError();
+      llvm::dbgs() << stream.str() << "\n";
+   }
+   std::unique_ptr<llvm::Module> irModule = move(moduleOrError.get());
+
+   //////////////////////////////////////////////////////////////////////////////////////
+   std::unique_ptr<llvm::Module> mainModule =
+      translateModuleToLLVMIR(module, context);
+   llvm::Linker::linkModules(*mainModule, std::move(irModule), llvm::Linker::LinkOnlyNeeded);
+   std::cout << "linking done" << std::endl;
+   mainModule->dump();
+   return mainModule;
 }
 
 struct RunnerContext {
    mlir::MLIRContext context;
    mlir::OwningModuleRef module;
 };
-Runner::Runner() : context(nullptr) {}
+Runner::Runner() : context(nullptr) {
+   std::cout << "gandiva:" << kPrecompiledGandivaBitcodeSize << std::endl;
+}
 bool Runner::load(std::string file) {
    RunnerContext* ctxt = new RunnerContext;
    this->context = (void*) ctxt;
@@ -181,6 +221,7 @@ void Runner::dumpLLVM() {
    dumpLLVMIR(ctxt->module.get());
 }
 bool Runner::runJit() {
+   std::cout << "running jit" << std::endl;
    RunnerContext* ctxt = (RunnerContext*) this->context;
    // Initialize LLVM targets.
    llvm::InitializeNativeTarget();
@@ -194,7 +235,7 @@ bool Runner::runJit() {
    // Create an MLIR execution engine. The execution engine eagerly JIT-compiles
    // the module.
    auto maybeEngine = mlir::ExecutionEngine::create(
-      ctxt->module.get(), /*llvmModuleBuilder=*/nullptr, optPipeline);
+      ctxt->module.get(), /*llvmModuleBuilder=*/convertMLIRModule, optPipeline);
    assert(maybeEngine && "failed to construct an execution engine");
    auto& engine = maybeEngine.get();
 
@@ -214,3 +255,4 @@ Runner::~Runner() {
       delete (RunnerContext*) this->context;
    }
 }
+} // namespace runner

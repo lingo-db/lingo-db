@@ -2,6 +2,7 @@
 #define RUNNER_RUNNER_H
 
 #include <string>
+namespace runner {
 class Runner {
    public:
    Runner();
@@ -16,4 +17,5 @@ class Runner {
    private:
    void* context;
 };
+}  // namespace runner
 #endif // RUNNER_RUNNER_H

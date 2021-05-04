@@ -6,7 +6,7 @@ int main(int argc, char** argv) {
    if (argc > 1) {
       inputFileName = std::string(argv[1]);
    }
-   Runner runner;
+   runner::Runner runner;
    runner.load(inputFileName);
    runner.lower();
    runner.lowerToLLVM();

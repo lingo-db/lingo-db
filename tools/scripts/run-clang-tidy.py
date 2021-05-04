@@ -208,6 +208,11 @@ def main():
                       'headers to output diagnostics from. Diagnostics from '
                       'the main file of each translation unit are always '
                       'displayed.')
+  parser.add_argument('-exclude',default=None,
+   help='regular expression matching the names of the '
+   'headers to output diagnostics from. Diagnostics from '
+   'the main file of each translation unit are always '
+   'displayed.')
   if yaml:
     parser.add_argument('-export-fixes', metavar='filename', dest='export_fixes',
                         help='Create a yaml file to store suggested fixes in, '
@@ -277,7 +282,7 @@ def main():
 
   # Build up a big regexy filter from all command line arguments.
   file_name_re = re.compile('|'.join(args.files))
-
+  exclude_re = re.compile(args.exclude) if args.exclude else None
   return_code = 0
   try:
     # Spin up a bunch of tidy-launching threads.
@@ -294,7 +299,8 @@ def main():
     # Fill the queue with files.
     for name in files:
       if file_name_re.search(name):
-        task_queue.put(name)
+         if not exclude_re or not exclude_re.search(name):
+            task_queue.put(name)
 
     # Wait for all threads to be done.
     task_queue.join()
