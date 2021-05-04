@@ -34,13 +34,25 @@ EXPORT void dumpDecimal(bool null, uint64_t low, uint64_t high, int32_t scale) {
       std::cout << "decimal(" << decimalrep.ToString(scale) << ")" << std::endl;
    }
 }
-EXPORT void dumpDate(bool null, uint32_t date) {
+EXPORT void dumpDate32(bool null, uint32_t date) {
    if (null) {
       std::cout << "date(NULL)" << std::endl;
    } else {
       time_t time = date;
       tm tmStruct;
       time *= 24 * 60 * 60;
+      auto* x = gmtime_r(&time, &tmStruct);
+
+      std::cout << "date(" << (x->tm_year + 1900) << "-" << std::setw(2) << std::setfill('0') << (x->tm_mon + 1) << "-" << std::setw(2) << std::setfill('0') << x->tm_mday << ")" << std::endl;
+   }
+}
+EXPORT void dumpDate64(bool null, uint64_t date) {
+   if (null) {
+      std::cout << "date(NULL)" << std::endl;
+   } else {
+      time_t time = date;
+      tm tmStruct;
+      time /= 1000;
       auto* x = gmtime_r(&time, &tmStruct);
 
       std::cout << "date(" << (x->tm_year + 1900) << "-" << std::setw(2) << std::setfill('0') << (x->tm_mon + 1) << "-" << std::setw(2) << std::setfill('0') << x->tm_mday << ")" << std::endl;

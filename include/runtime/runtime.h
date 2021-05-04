@@ -9,7 +9,9 @@ EXPORT void dumpInt(bool null, int64_t val);
 EXPORT void dumpUInt(bool null, uint64_t val);
 EXPORT void dumpBool(bool null, bool val);
 EXPORT void dumpDecimal(bool null, uint64_t low, uint64_t high, int32_t scale);
-EXPORT void dumpDate(bool null, uint32_t date);
+EXPORT void dumpDate32(bool null, uint32_t date);
+EXPORT void dumpDate64(bool null, uint64_t date);
+
 EXPORT void dumpTimestamp(bool null, uint64_t date);
 EXPORT void dumpIntervalMonths(bool null, uint32_t interval);
 EXPORT void dumpIntervalDaytime(bool null, uint64_t interval);
