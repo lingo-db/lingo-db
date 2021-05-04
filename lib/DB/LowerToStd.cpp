@@ -102,14 +102,14 @@ class ConstantLowering : public ConversionPattern {
             rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, APInt(128, parts)));
             return success();
          }
-      } else if (auto dateType=type.dyn_cast_or_null<mlir::db::DateType>()) {
+      } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
          if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            if(dateType.getUnit()==db::DateUnitAttr::day) {
+            if (dateType.getUnit() == db::DateUnitAttr::day) {
                int32_t integerVal = support::parseDate32(strAttr.getValue().str());
                rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, integerVal));
-            }else{
+            } else {
                int64_t integerVal = support::parseDate32(strAttr.getValue().str());
-               integerVal*=24*60*60*1000;
+               integerVal *= 24 * 60 * 60 * 1000;
                rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, integerVal));
             }
             return success();
@@ -204,10 +204,10 @@ class BinOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto addOp = cast<OpClass>(op);
       NullHandler nullHandler(*typeConverter, rewriter);
-      auto type = addOp.lhs().getType();
+      auto type = addOp.left().getType();
       Type resType = addOp.result().getType().template cast<db::DBType>().getBaseType();
-      Value left = nullHandler.getValue(addOp.lhs());
-      Value right = nullHandler.getValue(addOp.rhs());
+      Value left = nullHandler.getValue(addOp.left());
+      Value right = nullHandler.getValue(addOp.right());
       if (type.template isa<OperandType>()) {
          Value replacement = rewriter.create<StdOpClass>(rewriter.getUnknownLoc(), typeConverter->convertType(resType), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(replacement));
@@ -226,8 +226,8 @@ class DecimalOpScaledLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto addOp = cast<DBOp>(op);
-      Value left = addOp.lhs();
-      Value right = addOp.rhs();
+      Value left = addOp.left();
+      Value right = addOp.right();
       if (left.getType() != right.getType()) {
          return failure();
       }
@@ -492,9 +492,9 @@ class CmpOpLowering : public ConversionPattern {
       NullHandler nullHandler(*typeConverter, rewriter);
       auto cmpOp = cast<db::CmpOp>(op);
 
-      auto type = cmpOp.lhs().getType().cast<db::DBType>().getBaseType();
-      Value left = nullHandler.getValue(cmpOp.lhs());
-      Value right = nullHandler.getValue(cmpOp.rhs());
+      auto type = cmpOp.left().getType().cast<db::DBType>().getBaseType();
+      Value left = nullHandler.getValue(cmpOp.left());
+      Value right = nullHandler.getValue(cmpOp.right());
       if (type.isa<db::BoolType>() || type.isa<db::IntType>() || type.isa<db::DecimalType>() || type.isa<db::DateType>() || type.isa<db::TimestampType>() || type.isa<db::IntervalType>()) {
          Value res = rewriter.create<CmpIOp>(loc, translateIPredicate(cmpOp.predicate()), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(res));
@@ -534,7 +534,6 @@ class DateAddLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       db::DateAddOp::Adaptor dateAddAdaptor(operands);
-      auto i8Type = IntegerType::get(rewriter.getContext(), 8);
       auto i32Type = IntegerType::get(rewriter.getContext(), 32);
       auto i64Type = IntegerType::get(rewriter.getContext(), 64);
 
@@ -543,28 +542,29 @@ class DateAddLowering : public ConversionPattern {
       auto dateAddOp = cast<db::DateAddOp>(op);
       auto dateType = dateAddOp.left().getType().cast<db::DateType>();
 
-      auto intervalType = dateAddOp.right().getType().cast<db::IntervalType>();
+      //auto intervalType = dateAddOp.right().getType().cast<db::IntervalType>();
 
       Value left = nullHandler.getValue(dateAddOp.left(), dateAddAdaptor.left());
       Value right = nullHandler.getValue(dateAddOp.right(), dateAddAdaptor.right());
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
       Value multiplier;
-      if(dateType.getUnit()==db::DateUnitAttr::day) {
-         left=rewriter.create<ZeroExtendIOp>(loc, left, i64Type);
-         multiplier= rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(i64Type, 24*60*60*1000));
-         left=rewriter.create<MulIOp>(loc,left,multiplier);
+      if (dateType.getUnit() == db::DateUnitAttr::day) {
+         left = rewriter.create<ZeroExtendIOp>(loc, left, i64Type);
+         multiplier = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(i64Type, 24 * 60 * 60 * 1000));
+         left = rewriter.create<MulIOp>(loc, left, multiplier);
       }
-      auto printRef = getOrInsertFn(rewriter, parentModule, "timestampaddMonth_int32_date64", rewriter.getFunctionType({i32Type,i64Type}, {i64Type}));
-      auto call = rewriter.create<CallOp>(loc, printRef, ValueRange({ right,left}));
+      auto printRef = getOrInsertFn(rewriter, parentModule, "timestampaddMonth_int32_date64", rewriter.getFunctionType({i32Type, i64Type}, {i64Type}));
+      auto call = rewriter.create<CallOp>(loc, printRef, ValueRange({right, left}));
       Value res = call.getResult(0);
-      if(dateType.getUnit()==db::DateUnitAttr::day) {
-         res=rewriter.create<UnsignedDivIOp>(loc,res,multiplier);
-         res=rewriter.create<TruncateIOp>(loc, res,i32Type);
+      if (dateType.getUnit() == db::DateUnitAttr::day) {
+         res = rewriter.create<UnsignedDivIOp>(loc, res, multiplier);
+         res = rewriter.create<TruncateIOp>(loc, res, i32Type);
       }
       rewriter.replaceOp(op, nullHandler.combineResult(res));
       return success();
    }
 };
+
 class DateSubLowering : public ConversionPattern {
    public:
    explicit DateSubLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -773,14 +773,13 @@ class DumpOpLowering : public ConversionPattern {
 
          auto printRef = getOrInsertFn(rewriter, parentModule, "dumpDecimal", rewriter.getFunctionType({i1Type, i64Type, i64Type, i32Type}, {}));
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, low, high, scale}));
-      } else if (auto dateType=type.dyn_cast_or_null<mlir::db::DateType>()) {
+      } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
          FuncOp printRef;
 
-         if(dateType.getUnit()==mlir::db::DateUnitAttr::millisecond) {
+         if (dateType.getUnit() == mlir::db::DateUnitAttr::millisecond) {
             printRef = getOrInsertFn(rewriter, parentModule, "dumpDate64", rewriter.getFunctionType({i1Type, i64Type}, {}));
-         }else{
+         } else {
             printRef = getOrInsertFn(rewriter, parentModule, "dumpDate32", rewriter.getFunctionType({i1Type, i32Type}, {}));
-
          }
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       } else if (type.isa<mlir::db::TimestampType>()) {

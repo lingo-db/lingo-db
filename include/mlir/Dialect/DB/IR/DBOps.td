@@ -168,7 +168,7 @@ let assemblyFormat = "$val `:` type($val) attr-dict";
 
 class DB_BinaryOp<string mnemonic, list<OpTrait> traits = []> :
 Op<DB_Dialect, mnemonic,
-    !listconcat(traits, [NoSideEffect])>,Arguments<(ins DBType:$lhs, DBType:$rhs)> {
+    !listconcat(traits, [NoSideEffect])>,Arguments<(ins DBType:$left, DBType:$right)> {
 let results = (outs AnyType:$result);
 let parser = [{
 return parseImplicitResultSameOperandBaseTypeOp(parser, result);
@@ -218,15 +218,15 @@ let summary = "integer comparison operation";
 
 let arguments = (ins
 DB_CmpPredicateAttr:$predicate,
-DBType:$lhs,
-DBType:$rhs
+DBType:$left,
+DBType:$right
 );
 let results = (outs DB_BoolType:$result);
 
 let builders = [
-OpBuilder<(ins "mlir::db::DBCmpPredicate":$predicate, "Value":$lhs,
-"Value":$rhs), [{
-::buildDBCmpOp($_builder, $_state, predicate, lhs, rhs);
+OpBuilder<(ins "mlir::db::DBCmpPredicate":$predicate, "Value":$left,
+"Value":$right), [{
+::buildDBCmpOp($_builder, $_state, predicate, left, right);
 }]>];
 
 let extraClassDeclaration = [{

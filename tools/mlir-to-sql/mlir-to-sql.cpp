@@ -116,16 +116,16 @@ class ToSQL {
             handleBinOp(output, "-", op.left(), op.right());
          })
          .Case<AddOp>([&](AddOp op) {
-            handleBinOp(output, "+", op.lhs(), op.rhs());
+            handleBinOp(output, "+", op.left(), op.right());
          })
          .Case<SubOp>([&](SubOp op) {
-            handleBinOp(output, "-", op.lhs(), op.rhs());
+            handleBinOp(output, "-", op.left(), op.right());
          })
          .Case<MulOp>([&](MulOp op) {
-            handleBinOp(output, "*", op.lhs(), op.rhs());
+            handleBinOp(output, "*", op.left(), op.right());
          })
          .Case<DivOp>([&](DivOp op) {
-            handleBinOp(output, "/", op.lhs(), op.rhs());
+            handleBinOp(output, "/", op.left(), op.right());
          })
          .Case<CmpOp>([&](CmpOp op) {
             std::string pred = "<unknown pred>";
@@ -152,7 +152,7 @@ class ToSQL {
                   pred = "like";
                   break;
             }
-            handleBinOp(output, pred, op.lhs(), op.rhs());
+            handleBinOp(output, pred, op.left(), op.right());
          })
          .Case<AggrFuncOp>([&](AggrFuncOp op) {
             std::string fnname(mlir::relalg::stringifyAggrFunc(op.fn()));

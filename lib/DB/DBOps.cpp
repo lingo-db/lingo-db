@@ -38,9 +38,9 @@ static ParseResult parseConstantOp(OpAsmParser& parser,
 }
 
 static void buildDBCmpOp(OpBuilder& build, OperationState& result,
-                         mlir::db::DBCmpPredicate predicate, Value lhs, Value rhs) {
-   result.addOperands({lhs, rhs});
-   bool nullable = lhs.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable() || rhs.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable();
+                         mlir::db::DBCmpPredicate predicate, Value left, Value right) {
+   result.addOperands({left, right});
+   bool nullable = left.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable() || right.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable();
 
    result.types.push_back(mlir::db::BoolType::get(build.getContext(), nullable));
    result.addAttribute("predicate",
@@ -110,12 +110,12 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation* op, OpAsmPrinter
 ::mlir::ParseResult parseCmpOp(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    ::mlir::IntegerAttr predicateAttr;
    ::mlir::OpAsmParser::OperandType leftOperand;
-   ::llvm::SMLoc lhsOperandsLoc;
-   (void) lhsOperandsLoc;
+   ::llvm::SMLoc leftOperandsLoc;
+   (void) leftOperandsLoc;
    ::mlir::db::DBType leftType, rightType;
    ::mlir::OpAsmParser::OperandType rightOperand;
-   ::llvm::SMLoc rhsOperandsLoc;
-   (void) rhsOperandsLoc;
+   ::llvm::SMLoc rightOperandsLoc;
+   (void) rightOperandsLoc;
 
    {
       ::llvm::StringRef attrStr;
@@ -136,7 +136,7 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation* op, OpAsmPrinter
       }
    }
 
-   lhsOperandsLoc = parser.getCurrentLocation();
+   leftOperandsLoc = parser.getCurrentLocation();
    if (parser.parseOperand(leftOperand))
       return ::mlir::failure();
    if (parser.parseColon())
@@ -147,7 +147,7 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation* op, OpAsmPrinter
    if (parser.parseComma())
       return ::mlir::failure();
 
-   rhsOperandsLoc = parser.getCurrentLocation();
+   rightOperandsLoc = parser.getCurrentLocation();
    if (parser.parseOperand(rightOperand))
       return ::mlir::failure();
    if (parser.parseColon())
@@ -174,7 +174,7 @@ static void print(::mlir::OpAsmPrinter& p, mlir::db::CmpOp& op) {
       auto caseValueStr = stringifyDBCmpPredicate(caseValue);
       p << caseValueStr;
    }
-   p << ' ' << op.lhs() << " : " << op.lhs().getType() << ", " << op.rhs() << ' ' << ": " << op.rhs().getType();
+   p << ' ' << op.left() << " : " << op.left().getType() << ", " << op.right() << ' ' << ": " << op.right().getType();
    p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"predicate"});
 }
 
