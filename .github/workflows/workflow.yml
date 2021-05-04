@@ -111,7 +111,7 @@ jobs:
            -DLLVM_EXTERNAL_LIT=/home/runner/work/db-dialects/db-dialects/llvm-build/bin/llvm-lit\
            -DArrow_DIR="arrow-build/install/lib/cmake/arrow"\
            -DGandiva_DIR="arrow-build/install/lib/cmake/arrow"\
-           -DARROW_BUILD_DIR="build/arrow"\
+           -DARROW_BUILD_DIR="arrow-build"\
            -DBoost_INCLUDE_DIR="/home/runner/work/db-dialects/db-dialects/arrow-build/boost_ep-prefix/src/boost_ep"\
            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
           cmake --build build
