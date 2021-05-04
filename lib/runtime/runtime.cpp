@@ -34,39 +34,40 @@ EXPORT void dumpDecimal(bool null, uint64_t low, uint64_t high, int32_t scale) {
       std::cout << "decimal(" << decimalrep.ToString(scale) << ")" << std::endl;
    }
 }
-EXPORT void dumpDate32(bool null, uint32_t date) {
+arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
+EXPORT void dumpDateDay(bool null, uint32_t date) {
    if (null) {
       std::cout << "date(NULL)" << std::endl;
    } else {
-      time_t time = date;
-      tm tmStruct;
-      time *= 24 * 60 * 60;
-      auto* x = gmtime_r(&time, &tmStruct);
-
-      std::cout << "date(" << (x->tm_year + 1900) << "-" << std::setw(2) << std::setfill('0') << (x->tm_mon + 1) << "-" << std::setw(2) << std::setfill('0') << x->tm_mday << ")" << std::endl;
+      std::cout << "date(" << arrow_vendored::date::format("%F", epoch + arrow_vendored::date::days{date}) << ")" << std::endl;
    }
 }
-EXPORT void dumpDate64(bool null, uint64_t date) {
+EXPORT void dumpDateMillisecond(bool null, int64_t date) {
    if (null) {
       std::cout << "date(NULL)" << std::endl;
    } else {
-      time_t time = date;
-      tm tmStruct;
-      time /= 1000;
-      auto* x = gmtime_r(&time, &tmStruct);
-
-      std::cout << "date(" << (x->tm_year + 1900) << "-" << std::setw(2) << std::setfill('0') << (x->tm_mon + 1) << "-" << std::setw(2) << std::setfill('0') << x->tm_mday << ")" << std::endl;
+      std::cout << "date(" << arrow_vendored::date::format("%F", epoch + std::chrono::milliseconds{date}) << ")" << std::endl;
    }
 }
-EXPORT void dumpTimestamp(bool null, uint64_t date) {
+template <class Unit>
+void dumpTimestamp(bool null, uint64_t date) {
    if (null) {
       std::cout << "timestamp(NULL)" << std::endl;
    } else {
-      time_t time = date;
-      tm tmStruct;
-      auto* x = gmtime_r(&time, &tmStruct);
-      std::cout << "timestamp(" << (x->tm_year + 1900) << "-" << std::setw(2) << std::setfill('0') << (x->tm_mon + 1) << "-" << std::setw(2) << std::setfill('0') << x->tm_mday << " " << std::setw(2) << std::setfill('0') << x->tm_hour << ":" << std::setw(2) << std::setfill('0') << x->tm_min << ":" << std::setw(2) << std::setfill('0') << x->tm_sec << ")" << std::endl;
+      std::cout << "timestamp(" << arrow_vendored::date::format("%F %T", epoch + Unit{date}) << ")" << std::endl;
    }
+}
+EXPORT void dumpTimestampSecond(bool null, uint64_t date) {
+   dumpTimestamp<std::chrono::seconds>(null, date);
+}
+EXPORT void dumpTimestampMillisecond(bool null, uint64_t date) {
+   dumpTimestamp<std::chrono::milliseconds>(null, date);
+}
+EXPORT void dumpTimestampMicrosecond(bool null, uint64_t date) {
+   dumpTimestamp<std::chrono::microseconds>(null, date);
+}
+EXPORT void dumpTimestampNanosecond(bool null, uint64_t date) {
+   dumpTimestamp<std::chrono::nanoseconds>(null, date);
 }
 
 EXPORT void dumpIntervalMonths(bool null, uint32_t interval) {
@@ -95,63 +96,6 @@ EXPORT void dumpString(bool null, char* ptr, size_t len) {
       std::cout << "string(NULL)" << std::endl;
    } else {
       std::cout << "string(\"" << std::string(ptr, len) << "\")" << std::endl;
-   }
-}
-EXPORT uint32_t dateAdd(uint32_t date, uint32_t amount, TimeUnit unit) {
-   //todo!!!
-   time_t time = date;
-   tm tmStruct;
-   time *= 24 * 60 * 60;
-   auto* x = gmtime_r(&time, &tmStruct);
-   switch (unit) {
-      case YEAR:
-         x->tm_year += amount;
-         return timegm(&tmStruct) / (24 * 60 * 60);
-      case MONTH:
-         x->tm_mon += amount;
-         return timegm(&tmStruct) / (24 * 60 * 60);
-      case DAY:
-         time += 24 * 60 * 60 * amount;
-         return time / (24 * 60 * 60);
-      default:
-         return date;
-   }
-}
-EXPORT uint32_t dateSub(uint32_t date, uint32_t amount, TimeUnit unit) {
-   //todo!!!
-   time_t time = date;
-   tm tmStruct;
-   time *= 24 * 60 * 60;
-   auto* x = gmtime_r(&time, &tmStruct);
-   switch (unit) {
-      case YEAR:
-         x->tm_year -= amount;
-         return timegm(&tmStruct) / (24 * 60 * 60);
-      case MONTH:
-         x->tm_mon -= amount;
-         return timegm(&tmStruct) / (24 * 60 * 60);
-      case DAY:
-         time -= 24 * 60 * 60 * amount;
-         return time / (24 * 60 * 60);
-      default:
-         return date;
-   }
-}
-EXPORT uint32_t dateExtract(uint32_t date, TimeUnit unit) {
-   //todo!!
-   time_t time = date;
-   tm tmStruct;
-   time *= 24 * 60 * 60;
-   auto* x = gmtime_r(&time, &tmStruct);
-   switch (unit) {
-      case YEAR:
-         return x->tm_year + 1900;
-      case MONTH:
-         return x->tm_mon + 1;
-      case DAY:
-         return x->tm_mday;
-      default:
-         return 0;
    }
 }
 

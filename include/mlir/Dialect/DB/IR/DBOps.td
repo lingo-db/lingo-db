@@ -285,6 +285,29 @@ let printer = [{
 return printDateOp(this->getOperation(), p);
 }];
 }
+
+def DB_ExtractableTimeUnit_S  : I64EnumAttrCase<"second", 0>;
+def DB_ExtractableTimeUnit_MIN  : I64EnumAttrCase<"minute", 1>;
+def DB_ExtractableTimeUnit_H  : I64EnumAttrCase<"hour", 2>;
+def DB_ExtractableTimeUnit_D  : I64EnumAttrCase<"day", 3>;
+def DB_ExtractableTimeUnit_DOW  : I64EnumAttrCase<"dow", 4>;
+def DB_ExtractableTimeUnit_W  : I64EnumAttrCase<"week", 5>;
+def DB_ExtractableTimeUnit_MON  : I64EnumAttrCase<"month", 6>;
+def DB_ExtractableTimeUnit_Q  : I64EnumAttrCase<"quarter", 7>;
+def DB_ExtractableTimeUnit_DOY  : I64EnumAttrCase<"doy", 8>;
+def DB_ExtractableTimeUnit_Y  : I64EnumAttrCase<"year", 9>;
+def DB_ExtractableTimeUnit_DEC  : I64EnumAttrCase<"decade", 10>;
+def DB_ExtractableTimeUnit_CEN  : I64EnumAttrCase<"century", 11>;
+def DB_ExtractableTimeUnit_MIL  : I64EnumAttrCase<"millennium", 12>;
+
+def DB_ExtractableTimeUnitAttr : I64EnumAttr<
+        "ExtractableTimeUnitAttr", "",
+        [DB_ExtractableTimeUnit_S,DB_ExtractableTimeUnit_MIN,DB_ExtractableTimeUnit_H,DB_ExtractableTimeUnit_D,
+                DB_ExtractableTimeUnit_DOW,DB_ExtractableTimeUnit_W,DB_ExtractableTimeUnit_MON,DB_ExtractableTimeUnit_Q,
+                DB_ExtractableTimeUnit_DOY,DB_ExtractableTimeUnit_Y,DB_ExtractableTimeUnit_DEC,DB_ExtractableTimeUnit_CEN,
+                DB_ExtractableTimeUnit_MIL]> {
+let cppNamespace = "::mlir::db";
+}
 def DateSubOp : DB_Op<"date_sub"> {
 let summary = "date sub function";
 let arguments = (ins DB_DateType:$left, DB_IntervalType:$right );
@@ -296,9 +319,10 @@ let printer = [{
 return printDateOp(this->getOperation(), p);
 }];
 }
+
 def DateExtractOp : DB_Op<"date_extract"> {
 let summary = "date sub function";
-let arguments = (ins StrAttr:$unit, DB_DateType:$date );
+let arguments = (ins DB_ExtractableTimeUnitAttr:$unit, DB_DateType:$val );
 let results = (outs  DB_IntType : $res);
 }
 def CastOp : DB_Op<"cast"> {

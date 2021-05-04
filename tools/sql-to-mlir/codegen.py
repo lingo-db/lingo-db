@@ -176,7 +176,7 @@ class CodeGen:
         self.addValuesWithTypes(args,values)
         return self.addOp(DBType("date",["day"]),args)
     def create_db_extract(self, key,value):
-        return self.addOp(DBType("int",["32"],self.getType(value).nullable),["db.date_extract"," \"",key,"\", ",ValueRef(value)," : ",TypeRef(value)])
+        return self.addOp(DBType("int",["64"],self.getType(value).nullable),["db.date_extract"," ",key,", ",ValueRef(value)," : ",TypeRef(value)])
     def create_db_cast(self, value, targetType):
         return self.addOp(targetType,["db.cast ",ValueRef(value)," : ",TypeRef(value)," -> ",targetType.to_string()])
     def create_relalg_getattr(self,tuple,attr):

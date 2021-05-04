@@ -5,6 +5,23 @@
 
 #include <queue>
 using namespace mlir;
+
+::mlir::ParseResult parseExtractableTimeUnit(::mlir::OpAsmParser& parser, mlir::db::ExtractableTimeUnitAttrAttr& result) {
+   ::llvm::StringRef attrStr;
+   ::mlir::NamedAttrList attrStorage;
+   auto loc = parser.getCurrentLocation();
+   if (parser.parseOptionalKeyword(&attrStr)) {
+      return parser.emitError(loc, "expected extractable time unit");
+   }
+   if (!attrStr.empty()) {
+      auto attrOptional = ::mlir::db::symbolizeExtractableTimeUnitAttr(attrStr);
+      if (!attrOptional)
+         return parser.emitError(loc, "invalid ")
+            << "extractable time unit specification: \"" << attrStr << '"';
+      result = mlir::db::ExtractableTimeUnitAttrAttr::get(parser.getBuilder().getContext(), attrOptional.getValue());
+   }
+   return success();
+}
 static void print(OpAsmPrinter& p, db::ConstantOp& op) {
    p << op.getOperationName();
    p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
@@ -265,20 +282,20 @@ static ParseResult parseDateExtractOp(OpAsmParser& parser,
                                       OperationState& result) {
    OpAsmParser::OperandType date;
    mlir::db::DBType dateType;
-   StringAttr unit;
-   if (parser.parseAttribute(unit) || parser.parseComma() || parser.parseOperand(date) || parser.parseColonType(dateType)) {
+   mlir::db::ExtractableTimeUnitAttrAttr unit;
+   if (parseExtractableTimeUnit(parser, unit) || parser.parseComma() || parser.parseOperand(date) || parser.parseColonType(dateType)) {
       return failure();
    }
    if (parser.resolveOperand(date, dateType, result.operands).failed()) {
       return failure();
    }
    result.addAttribute("unit", unit);
-   parser.addTypeToList(db::IntType::get(parser.getBuilder().getContext(), dateType.isNullable(), 32), result.types);
+   parser.addTypeToList(db::IntType::get(parser.getBuilder().getContext(), dateType.isNullable(), 64), result.types);
    return success();
 }
 
 static void print(OpAsmPrinter& p, mlir::db::DateExtractOp extractOp) {
-   p << extractOp.getOperationName() << " \"" << extractOp.unit() << "\", " << extractOp.date() << " : " << extractOp.date().getType();
+   p << extractOp.getOperationName() << " " << mlir::db::stringifyExtractableTimeUnitAttr(extractOp.unit()) << ", " << extractOp.val() << " : " << extractOp.val().getType();
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.cpp.inc"

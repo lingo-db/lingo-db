@@ -168,6 +168,7 @@ struct RunnerContext {
    mlir::OwningModuleRef module;
 };
 Runner::Runner() : context(nullptr) {
+   llvm::DebugFlag=true;
    std::cout << "gandiva:" << kPrecompiledGandivaBitcodeSize << std::endl;
 }
 bool Runner::load(std::string file) {

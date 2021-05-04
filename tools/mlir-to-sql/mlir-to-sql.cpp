@@ -184,7 +184,7 @@ class ToSQL {
             output << "\n end";
          })
          .Case<mlir::db::DateExtractOp>([&](mlir::db::DateExtractOp op) {
-            output << "extract(" << op.unit().str() << " from " << resolveVal(op.date()) << " )";
+            output << "extract(" << mlir::db::stringifyExtractableTimeUnitAttr(op.unit()).str() << " from " << resolveVal(op.val()) << " )";
          })
          .Case<MaterializeOp>([&](MaterializeOp op) {
             std::vector<std::string> attrs;
