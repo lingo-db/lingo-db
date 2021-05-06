@@ -1,9 +1,9 @@
-#include "runtime/dynamic_runtime_calls.h"
 #include "arrow/util/decimal.h"
 #include "arrow/vendored/datetime.h"
 #include <boost/multiprecision/cpp_int.hpp>
 #include <iomanip>
 #include <iostream>
+#define EXPORT extern "C" __attribute__((visibility("default")))
 
 EXPORT void dumpInt(bool null, int64_t val) {
    if (null) {
