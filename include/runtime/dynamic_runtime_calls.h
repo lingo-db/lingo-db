@@ -1,5 +1,5 @@
-#ifndef RUNTIME_RUNTIME_H
-#define RUNTIME_RUNTIME_H
+#ifndef RUNTIME_DYNAMIC_RUNTIME_CALLS_H
+#define RUNTIME_DYNAMIC_RUNTIME_CALLS_H
 
 #include <cstddef>
 #include <cstdint>
@@ -50,4 +50,4 @@ EXPORT int gdvFnTimeWithZone(int* timeFields, const char* zone, int zoneLen,
 EXPORT void gdvFnContextSetErrorMsg(int64_t contextPtr, const char* errMsg);
 EXPORT uint8_t* gdvFnContextArenaMalloc(int64_t contextPtr, int32_t dataLen);
 
-#endif // RUNTIME_RUNTIME_H
+#endif // RUNTIME_DYNAMIC_RUNTIME_CALLS_H

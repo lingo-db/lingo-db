@@ -15,7 +15,6 @@
 
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "runtime/runtime.h"
 #include <llvm/ADT/TypeSwitch.h>
 #include <iostream>
 #include <mlir/Dialect/util/Passes.h>

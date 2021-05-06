@@ -79,6 +79,9 @@ add_executable(db-run db-run.cpp)
 target_link_libraries(db-run runner runtime)
 target_link_options(db-run PUBLIC -export-dynamic)
 
+add_executable(arrow-experiments arrow-experiments.cpp)
+target_link_libraries(arrow-experiments PUBLIC runtime PRIVATE arrow_shared)
+
 
 llvm_update_compile_flags(mlir-db-opt)
 target_link_libraries(mlir-db-opt PUBLIC ${LIBS} PRIVATE arrow_shared)

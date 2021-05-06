@@ -10,22 +10,22 @@ class Table:
 def getTPCHTable(name, scope_name):
     if name == "nation":
         return Table("nation",scope_name, {
-            "n_nationkey": Attribute(scope_name, "n_nationkey", DBType("int", ["32"])),
+            "n_nationkey": Attribute(scope_name, "n_nationkey", DBType("int", ["64"])),
             "n_name": Attribute(scope_name, "n_name", DBType("string", [])),
-            "n_regionkey": Attribute(scope_name, "n_regionkey", DBType("int", ["32"])),
+            "n_regionkey": Attribute(scope_name, "n_regionkey", DBType("int", ["64"])),
             "n_comment": Attribute(scope_name, "n_comment", DBType("string", ["nullable"])),
         })
 
     if name == "region":
         return Table("region",scope_name, {
-            "r_regionkey": Attribute(scope_name, "r_regionkey", DBType("int", ["32"])),
+            "r_regionkey": Attribute(scope_name, "r_regionkey", DBType("int", ["64"])),
             "r_name": Attribute(scope_name, "r_name", DBType("string", [])),
             "r_comment": Attribute(scope_name, "r_comment", DBType("string", ["nullable"])),
         })
 
     if name == "part":
         return Table("part",scope_name, {
-            "p_partkey": Attribute(scope_name, "p_partkey", DBType("int", ["32"])),
+            "p_partkey": Attribute(scope_name, "p_partkey", DBType("int", ["64"])),
             "p_name": Attribute(scope_name, "p_name", DBType("string", [])),
             "p_mfgr": Attribute(scope_name, "p_mfgr", DBType("string", [])),
             "p_brand": Attribute(scope_name, "p_brand", DBType("string", [])),
@@ -38,10 +38,10 @@ def getTPCHTable(name, scope_name):
 
     if name == "supplier":
         return Table("supplier",scope_name, {
-            "s_suppkey": Attribute(scope_name, "s_suppkey", DBType("int", ["32"])),
+            "s_suppkey": Attribute(scope_name, "s_suppkey", DBType("int", ["64"])),
             "s_name": Attribute(scope_name, "s_name", DBType("string", [])),
             "s_address": Attribute(scope_name, "s_address", DBType("string", [])),
-            "s_nationkey": Attribute(scope_name, "s_nationkey", DBType("int", ["32"])),
+            "s_nationkey": Attribute(scope_name, "s_nationkey", DBType("int", ["64"])),
             "s_phone": Attribute(scope_name, "s_phone", DBType("string", [])),
             "s_acctbal": Attribute(scope_name, "s_acctbal", DBType("decimal", ["15", "2"])),
             "s_comment": Attribute(scope_name, "s_comment", DBType("string", [])),
@@ -49,8 +49,8 @@ def getTPCHTable(name, scope_name):
 
     if name == "partsupp":
         return Table("partsupp",scope_name, {
-            "ps_partkey": Attribute(scope_name, "ps_partkey", DBType("int", ["32"])),
-            "ps_suppkey": Attribute(scope_name, "ps_suppkey", DBType("int", ["32"])),
+            "ps_partkey": Attribute(scope_name, "ps_partkey", DBType("int", ["64"])),
+            "ps_suppkey": Attribute(scope_name, "ps_suppkey", DBType("int", ["64"])),
             "ps_availqty": Attribute(scope_name, "ps_availqty", DBType("int", ["32"])),
             "ps_supplycost": Attribute(scope_name, "ps_supplycost", DBType("decimal", ["15", "2"])),
             "ps_comment": Attribute(scope_name, "ps_comment", DBType("string", [])),
@@ -58,10 +58,10 @@ def getTPCHTable(name, scope_name):
 
     if name == "customer":
         return Table("customer",scope_name, {
-            "c_custkey": Attribute(scope_name, "c_custkey", DBType("int", ["32"])),
+            "c_custkey": Attribute(scope_name, "c_custkey", DBType("int", ["64"])),
             "c_name": Attribute(scope_name, "c_name", DBType("string", [])),
             "c_address": Attribute(scope_name, "c_address", DBType("string", [])),
-            "c_nationkey": Attribute(scope_name, "c_nationkey", DBType("int", ["32"])),
+            "c_nationkey": Attribute(scope_name, "c_nationkey", DBType("int", ["64"])),
             "c_phone": Attribute(scope_name, "c_phone", DBType("string", [])),
             "c_acctbal": Attribute(scope_name, "c_acctbal", DBType("decimal", ["15", "2"])),
             "c_mktsegment": Attribute(scope_name, "c_mktsegment", DBType("string", [])),
@@ -70,8 +70,8 @@ def getTPCHTable(name, scope_name):
 
     if name == "orders":
         return Table("orders",scope_name, {
-            "o_orderkey": Attribute(scope_name, "o_orderkey", DBType("int", ["32"])),
-            "o_custkey": Attribute(scope_name, "o_custkey", DBType("int", ["32"])),
+            "o_orderkey": Attribute(scope_name, "o_orderkey", DBType("int", ["64"])),
+            "o_custkey": Attribute(scope_name, "o_custkey", DBType("int", ["64"])),
             "o_orderstatus": Attribute(scope_name, "o_orderstatus", DBType("string", [])),
             "o_totalprice": Attribute(scope_name, "o_totalprice", DBType("decimal", ["15", "2"])),
             "o_orderdate": Attribute(scope_name, "o_orderdate", DBType("date", ["day"])),
@@ -83,9 +83,9 @@ def getTPCHTable(name, scope_name):
 
     if name == "lineitem":
         return Table("lineitem",scope_name, {
-            "l_orderkey": Attribute(scope_name, "l_orderkey", DBType("int", ["32"])),
-            "l_partkey": Attribute(scope_name, "l_partkey", DBType("int", ["32"])),
-            "l_suppkey": Attribute(scope_name, "l_suppkey", DBType("int", ["32"])),
+            "l_orderkey": Attribute(scope_name, "l_orderkey", DBType("int", ["64"])),
+            "l_partkey": Attribute(scope_name, "l_partkey", DBType("int", ["64"])),
+            "l_suppkey": Attribute(scope_name, "l_suppkey", DBType("int", ["64"])),
             "l_linenumber": Attribute(scope_name, "l_linenumber", DBType("int", ["32"])),
             "l_quantity": Attribute(scope_name, "l_quantity", DBType("decimal", ["15", "2"])),
             "l_extendedprice": Attribute(scope_name, "l_extendedprice", DBType("decimal", ["15", "2"])),

@@ -1,4 +1,4 @@
-#include "runtime/runtime.h"
+#include "runtime/dynamic_runtime_calls.h"
 #include "arrow/util/decimal.h"
 #include "arrow/vendored/datetime.h"
 #include <boost/multiprecision/cpp_int.hpp>
