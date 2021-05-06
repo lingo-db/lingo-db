@@ -80,8 +80,8 @@ void ToLLVMLoweringPass::runOnOperation() {
 
 namespace runner {
 
-extern const unsigned char kPrecompiledGandivaBitcode[];
-extern const size_t kPrecompiledGandivaBitcodeSize;
+extern const unsigned char kPrecompiledBitcode[];
+extern const size_t kPrecompiledBitcodeSize;
 std::unique_ptr<mlir::Pass> createLowerToLLVMPass() {
    return std::make_unique<ToLLVMLoweringPass>();
 }
@@ -132,8 +132,8 @@ int dumpLLVMIR(mlir::ModuleOp module) {
 static std::unique_ptr<llvm::Module>
 convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context) {
    //////////////////////////////////////////////////////////////////////////////////////
-   auto bitcode = llvm::StringRef(reinterpret_cast<const char*>(kPrecompiledGandivaBitcode),
-                                  kPrecompiledGandivaBitcodeSize);
+   auto bitcode = llvm::StringRef(reinterpret_cast<const char*>(kPrecompiledBitcode),
+                                  kPrecompiledBitcodeSize);
 
    /// Read from file into memory buffer.
    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> bufferOrError =
@@ -158,8 +158,6 @@ convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context) {
    std::unique_ptr<llvm::Module> mainModule =
       translateModuleToLLVMIR(module, context);
    llvm::Linker::linkModules(*mainModule, std::move(irModule), llvm::Linker::LinkOnlyNeeded);
-   std::cout << "linking done" << std::endl;
-   mainModule->dump();
    return mainModule;
 }
 
@@ -168,8 +166,7 @@ struct RunnerContext {
    mlir::OwningModuleRef module;
 };
 Runner::Runner() : context(nullptr) {
-   llvm::DebugFlag=true;
-   std::cout << "gandiva:" << kPrecompiledGandivaBitcodeSize << std::endl;
+   llvm::DebugFlag=false;
 }
 bool Runner::load(std::string file) {
    RunnerContext* ctxt = new RunnerContext;
@@ -222,7 +219,6 @@ void Runner::dumpLLVM() {
    dumpLLVMIR(ctxt->module.get());
 }
 bool Runner::runJit() {
-   std::cout << "running jit" << std::endl;
    RunnerContext* ctxt = (RunnerContext*) this->context;
    // Initialize LLVM targets.
    llvm::InitializeNativeTarget();

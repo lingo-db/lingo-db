@@ -823,7 +823,6 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 static bool hasDBType(TypeRange types) {
    for (Type type : types) {
       if (type.isa<db::DBType>()) {
-         type.dump();
          return true;
       } else if (auto tupleType = type.dyn_cast_or_null<TupleType>()) {
          return hasDBType(tupleType.getTypes());
@@ -990,7 +989,6 @@ void DBToStdLoweringPass::runOnOperation() {
       return rewriter.template create<MulIOp>(rewriter.getUnknownLoc(), v, multiplier);
    };
    auto transformDateBack = [](mlir::db::DateType dateType, Value v, ConversionPatternRewriter& rewriter) {
-      dateType.dump();
       if (dateType.getUnit() == db::DateUnitAttr::day) {
          auto i64Type = IntegerType::get(rewriter.getContext(), 64);
          auto i32Type = IntegerType::get(rewriter.getContext(), 32);

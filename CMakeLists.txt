@@ -69,6 +69,8 @@ set(LIBS
         MLIRSideEffectInterfaces
         MLIRTransforms
         )
+set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
+
 add_subdirectory(lib/runtime)
 add_subdirectory(lib/runner)
 

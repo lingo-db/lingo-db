@@ -20,7 +20,7 @@
 namespace runner {
 
 // Content of precompiled bitcode file.
-extern const unsigned char kPrecompiledGandivaBitcode[] = { <DATA_CHARS> };
-extern const size_t kPrecompiledGandivaBitcodeSize = sizeof(kPrecompiledGandivaBitcode);
+extern const unsigned char kPrecompiledBitcode[] = { <DATA_CHARS> };
+extern const size_t kPrecompiledBitcodeSize = sizeof(kPrecompiledBitcode);
 
 } // namespace runner
