@@ -84,11 +84,11 @@ class UnPackOpLowering : public ConversionPattern {
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      mlir::util::UnPackOpAdaptor UnPackOpAdaptor(operands);
+      mlir::util::UnPackOpAdaptor unPackOpAdaptor(operands);
 
-      auto UnPackOp = mlir::dyn_cast_or_null<mlir::util::UnPackOp>(op);
+      auto unPackOp = mlir::dyn_cast_or_null<mlir::util::UnPackOp>(op);
       llvm::SmallVector<Type> valTypes;
-      for(auto v:UnPackOp.vals()){
+      for(auto v:unPackOp.vals()){
          Type converted=typeConverter->convertType(v.getType());
          converted=converted?converted:v.getType();
          valTypes.push_back(converted);

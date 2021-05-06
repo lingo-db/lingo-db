@@ -61,8 +61,8 @@ class IsNullOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto nullOp = cast<mlir::db::IsNullOp>(op);
       auto tupleType = typeConverter->convertType(nullOp.val().getType()).dyn_cast_or_null<TupleType>();
-      auto UnPackOp = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), tupleType.getTypes(), nullOp.val());
-      rewriter.replaceOp(op, UnPackOp.vals()[0]);
+      auto unPackOp = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), tupleType.getTypes(), nullOp.val());
+      rewriter.replaceOp(op, unPackOp.vals()[0]);
       return success();
    }
 };
@@ -176,9 +176,9 @@ class NullHandler {
       if (auto dbType = type.dyn_cast_or_null<mlir::db::DBType>()) {
          if (dbType.isNullable()) {
             TupleType tupleType = typeConverter.convertType(v.getType()).dyn_cast_or_null<TupleType>();
-            auto UnPackOp = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
-            nullValues.push_back(UnPackOp.vals()[0]);
-            return UnPackOp.vals()[1];
+            auto unPackOp = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
+            nullValues.push_back(unPackOp.vals()[0]);
+            return unPackOp.vals()[1];
          } else {
             return operand ? operand : v;
          }
@@ -348,9 +348,9 @@ class AndOpLowering : public ConversionPattern {
          Value currVal;
          if (currNullable) {
             TupleType tupleType = typeConverter->convertType(currType).dyn_cast_or_null<TupleType>();
-            auto UnPackOp = rewriter.create<mlir::util::UnPackOp>(loc, tupleType.getTypes(), operands[i]);
-            currNull = UnPackOp.vals()[0];
-            currVal = UnPackOp.vals()[1];
+            auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, tupleType.getTypes(), operands[i]);
+            currNull = unPackOp.vals()[0];
+            currVal = unPackOp.vals()[1];
          } else {
             currVal = operands[i];
          }
@@ -409,9 +409,9 @@ class OrOpLowering : public ConversionPattern {
          Value currVal;
          if (currNullable) {
             TupleType tupleType = typeConverter->convertType(currType).dyn_cast_or_null<TupleType>();
-            auto UnPackOp = rewriter.create<mlir::util::UnPackOp>(loc, tupleType.getTypes(), operands[i]);
-            currNull = UnPackOp.vals()[0];
-            currVal = UnPackOp.vals()[1];
+            auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, tupleType.getTypes(), operands[i]);
+            currNull = unPackOp.vals()[0];
+            currVal = unPackOp.vals()[1];
          } else {
             currVal = operands[i];
          }
@@ -619,9 +619,9 @@ class CastOpLowering : public ConversionPattern {
       Value isNull;
       Value value;
       if (sourceType.isNullable()) {
-         auto UnPackOp = rewriter.create<mlir::util::UnPackOp>(loc, typeConverter->convertType(sourceType).dyn_cast_or_null<TupleType>().getTypes(), operands[0]);
-         isNull = UnPackOp.vals()[0];
-         value = UnPackOp.vals()[1];
+         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, typeConverter->convertType(sourceType).dyn_cast_or_null<TupleType>().getTypes(), operands[0]);
+         isNull = unPackOp.vals()[0];
+         value = unPackOp.vals()[1];
       } else {
          isNull = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
          value = operands[0];
@@ -719,9 +719,9 @@ class DumpOpLowering : public ConversionPattern {
       Value isNull;
       if (val.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
          TupleType tupleType = typeConverter->convertType(val.getType()).dyn_cast_or_null<TupleType>();
-         auto UnPackOp = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), tupleType.getTypes(), dumpOpAdaptor.val());
-         isNull = UnPackOp.vals()[0];
-         val = UnPackOp.vals()[1];
+         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), tupleType.getTypes(), dumpOpAdaptor.val());
+         isNull = unPackOp.vals()[0];
+         val = unPackOp.vals()[1];
       } else {
          isNull = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
          val = dumpOpAdaptor.val();

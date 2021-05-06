@@ -109,13 +109,13 @@ class UnPackOpLowering : public ConversionPattern {
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      auto UnPackOp = mlir::dyn_cast_or_null<mlir::util::UnPackOp>(op);
-      auto tupleType = UnPackOp.tuple().getType().dyn_cast_or_null<TupleType>();
+      auto unPackOp = mlir::dyn_cast_or_null<mlir::util::UnPackOp>(op);
+      auto tupleType = unPackOp.tuple().getType().dyn_cast_or_null<TupleType>();
       auto structType = convertTuple(tupleType, *typeConverter);
       unsigned pos = 0;
       std::vector<Value> values;
       for (auto type : structType.getBody()) {
-         values.push_back(rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), type, UnPackOp.tuple(), rewriter.getI64ArrayAttr(pos++)));
+         values.push_back(rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), type, unPackOp.tuple(), rewriter.getI64ArrayAttr(pos++)));
       }
       rewriter.replaceOp(op, values);
       return success();
