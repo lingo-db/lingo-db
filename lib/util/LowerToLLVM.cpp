@@ -29,15 +29,15 @@ static mlir::LLVM::LLVMStructType convertTuple(TupleType tupleType, TypeConverte
    return mlir::LLVM::LLVMStructType::getLiteral(tupleType.getContext(), types);
 }
 
-class CombineOpLowering : public ConversionPattern {
+class PackOpLowering : public ConversionPattern {
    public:
-   explicit CombineOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::util::CombineOp::getOperationName(), 1, context) {}
+   explicit PackOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::PackOp::getOperationName(), 1, context) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      auto constop = mlir::dyn_cast_or_null<mlir::util::CombineOp>(op);
+      auto constop = mlir::dyn_cast_or_null<mlir::util::PackOp>(op);
       auto tupleType = constop.tuple().getType().dyn_cast_or_null<TupleType>();
       auto structType = convertTuple(tupleType, *typeConverter);
       Value tpl = rewriter.create<LLVM::UndefOp>(rewriter.getUnknownLoc(), structType);
@@ -101,21 +101,21 @@ class GetTupleOpLowering : public ConversionPattern {
       return success();
    }
 };
-class SplitOpLowering : public ConversionPattern {
+class UnPackOpLowering : public ConversionPattern {
    public:
-   explicit SplitOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::util::SplitOp::getOperationName(), 1, context) {}
+   explicit UnPackOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::UnPackOp::getOperationName(), 1, context) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      auto splitOp = mlir::dyn_cast_or_null<mlir::util::SplitOp>(op);
-      auto tupleType = splitOp.tuple().getType().dyn_cast_or_null<TupleType>();
+      auto UnPackOp = mlir::dyn_cast_or_null<mlir::util::UnPackOp>(op);
+      auto tupleType = UnPackOp.tuple().getType().dyn_cast_or_null<TupleType>();
       auto structType = convertTuple(tupleType, *typeConverter);
       unsigned pos = 0;
       std::vector<Value> values;
       for (auto type : structType.getBody()) {
-         values.push_back(rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), type, splitOp.tuple(), rewriter.getI64ArrayAttr(pos++)));
+         values.push_back(rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), type, UnPackOp.tuple(), rewriter.getI64ArrayAttr(pos++)));
       }
       rewriter.replaceOp(op, values);
       return success();
@@ -144,6 +144,6 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<GetTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<SetTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<UndefTupleOpLowering>(typeConverter, patterns.getContext());
-   patterns.add<CombineOpLowering>(typeConverter, patterns.getContext());
-   patterns.add<SplitOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<PackOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<UnPackOpLowering>(typeConverter, patterns.getContext());
 }

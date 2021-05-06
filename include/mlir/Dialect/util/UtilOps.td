@@ -26,14 +26,14 @@ Op<Util_Dialect, mnemonic, traits>{
 let printer = [{ return ::print(p, *this); }];
 let parser = [{ return ::parse$cppClass(parser, result); }];
 }
-def CombineOp : Util_Op<"combine"> {
+def PackOp : Util_Op<"pack"> {
 let summary = "string constant";
 let arguments = (ins Variadic<AnyType>:$vals);
 let results =(outs TupleOf<[AnyType]>:$tuple);
 let assemblyFormat = "$vals `:` type($vals) attr-dict `->` type($tuple) ";
 }
-def SplitOp : Util_Op<"split_tuple"> {
-let summary = "split tuple";
+def UnPackOp : Util_Op<"unpack"> {
+let summary = "unpack tuple";
 let arguments = (ins TupleOf<[AnyType]>:$tuple);
 let results =(outs Variadic<AnyType>:$vals);
 let assemblyFormat = "$tuple `:` type($tuple) attr-dict `->` type($vals)";

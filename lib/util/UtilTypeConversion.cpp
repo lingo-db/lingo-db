@@ -21,16 +21,16 @@ using namespace mlir;
 
 namespace {
 
-class CombineOpLowering : public ConversionPattern {
+class PackOpLowering : public ConversionPattern {
    public:
-   explicit CombineOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::util::CombineOp::getOperationName(), 1, context) {}
+   explicit PackOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::PackOp::getOperationName(), 1, context) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      auto constop = mlir::dyn_cast_or_null<mlir::util::CombineOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::util::CombineOp>(op, typeConverter->convertType(constop.tuple().getType()), ValueRange(operands));
+      auto constop = mlir::dyn_cast_or_null<mlir::util::PackOp>(op);
+      rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, typeConverter->convertType(constop.tuple().getType()), ValueRange(operands));
       return success();
    }
 };
@@ -76,25 +76,25 @@ class GetTupleOpLowering : public ConversionPattern {
       return success();
    }
 };
-class SplitOpLowering : public ConversionPattern {
+class UnPackOpLowering : public ConversionPattern {
    public:
-   explicit SplitOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::util::SplitOp::getOperationName(), 1, context) {}
+   explicit UnPackOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::UnPackOp::getOperationName(), 1, context) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      mlir::util::SplitOpAdaptor splitOpAdaptor(operands);
+      mlir::util::UnPackOpAdaptor UnPackOpAdaptor(operands);
 
-      auto splitOp = mlir::dyn_cast_or_null<mlir::util::SplitOp>(op);
+      auto UnPackOp = mlir::dyn_cast_or_null<mlir::util::UnPackOp>(op);
       llvm::SmallVector<Type> valTypes;
-      for(auto v:splitOp.vals()){
+      for(auto v:UnPackOp.vals()){
          Type converted=typeConverter->convertType(v.getType());
          converted=converted?converted:v.getType();
          valTypes.push_back(converted);
       }
 
-      rewriter.replaceOpWithNewOp<mlir::util::SplitOp>(op, valTypes,operands);
+      rewriter.replaceOpWithNewOp<mlir::util::UnPackOp>(op, valTypes,operands);
 
       return success();
    }
@@ -119,6 +119,6 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    patterns.add<GetTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<SetTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<UndefTupleOpLowering>(typeConverter, patterns.getContext());
-   patterns.add<CombineOpLowering>(typeConverter, patterns.getContext());
-   patterns.add<SplitOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<PackOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<UnPackOpLowering>(typeConverter, patterns.getContext());
 }

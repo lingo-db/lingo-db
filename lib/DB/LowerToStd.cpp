@@ -61,8 +61,8 @@ class IsNullOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto nullOp = cast<mlir::db::IsNullOp>(op);
       auto tupleType = typeConverter->convertType(nullOp.val().getType()).dyn_cast_or_null<TupleType>();
-      auto splitOp = rewriter.create<mlir::util::SplitOp>(rewriter.getUnknownLoc(), tupleType.getTypes(), nullOp.val());
-      rewriter.replaceOp(op, splitOp.vals()[0]);
+      auto UnPackOp = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), tupleType.getTypes(), nullOp.val());
+      rewriter.replaceOp(op, UnPackOp.vals()[0]);
       return success();
    }
 };
@@ -74,6 +74,7 @@ arrow::TimeUnit::type toArrowTimeUnit(mlir::db::TimeUnitAttr attr) {
       case mlir::db::TimeUnitAttr::microsecond: return arrow::TimeUnit::MICRO;
       case mlir::db::TimeUnitAttr::nanosecond: return arrow::TimeUnit::NANO;
    }
+   return arrow::TimeUnit::SECOND;
 }
 //Lower Print Operation to an actual printf call
 class ConstantLowering : public ConversionPattern {
@@ -122,9 +123,9 @@ class ConstantLowering : public ConversionPattern {
             }
             return success();
          }
-      } else if (auto timestampType=type.dyn_cast_or_null<mlir::db::TimestampType>()) {
+      } else if (auto timestampType = type.dyn_cast_or_null<mlir::db::TimestampType>()) {
          if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            int64_t integerVal = support::parseTimestamp(strAttr.getValue().str(),toArrowTimeUnit(timestampType.getUnit()));
+            int64_t integerVal = support::parseTimestamp(strAttr.getValue().str(), toArrowTimeUnit(timestampType.getUnit()));
             rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, integerVal));
             return success();
          }
@@ -175,9 +176,9 @@ class NullHandler {
       if (auto dbType = type.dyn_cast_or_null<mlir::db::DBType>()) {
          if (dbType.isNullable()) {
             TupleType tupleType = typeConverter.convertType(v.getType()).dyn_cast_or_null<TupleType>();
-            auto splitOp = builder.create<mlir::util::SplitOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
-            nullValues.push_back(splitOp.vals()[0]);
-            return splitOp.vals()[1];
+            auto UnPackOp = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
+            nullValues.push_back(UnPackOp.vals()[0]);
+            return UnPackOp.vals()[1];
          } else {
             return operand ? operand : v;
          }
@@ -197,7 +198,7 @@ class NullHandler {
       for (size_t i = 1; i < nullValues.size(); i++) {
          isNull = builder.create<mlir::OrOp>(builder.getUnknownLoc(), isNull.getType(), isNull, nullValues[i]);
       }
-      return builder.create<mlir::util::CombineOp>(builder.getUnknownLoc(), mlir::TupleType::get(builder.getContext(), {i1Type, res.getType()}), ValueRange({isNull, res}));
+      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), mlir::TupleType::get(builder.getContext(), {i1Type, res.getType()}), ValueRange({isNull, res}));
    }
 };
 template <class OpClass, class OperandType, class StdOpClass>
@@ -347,9 +348,9 @@ class AndOpLowering : public ConversionPattern {
          Value currVal;
          if (currNullable) {
             TupleType tupleType = typeConverter->convertType(currType).dyn_cast_or_null<TupleType>();
-            auto splitOp = rewriter.create<mlir::util::SplitOp>(loc, tupleType.getTypes(), operands[i]);
-            currNull = splitOp.vals()[0];
-            currVal = splitOp.vals()[1];
+            auto UnPackOp = rewriter.create<mlir::util::UnPackOp>(loc, tupleType.getTypes(), operands[i]);
+            currNull = UnPackOp.vals()[0];
+            currVal = UnPackOp.vals()[1];
          } else {
             currVal = operands[i];
          }
@@ -377,7 +378,7 @@ class AndOpLowering : public ConversionPattern {
       }
       if (andOp.getResult().getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
          isNull = rewriter.create<SelectOp>(loc, result, isNull, falseValue);
-         Value combined = rewriter.create<mlir::util::CombineOp>(loc, typeConverter->convertType(andOp.getResult().getType()), ValueRange({isNull, result}));
+         Value combined = rewriter.create<mlir::util::PackOp>(loc, typeConverter->convertType(andOp.getResult().getType()), ValueRange({isNull, result}));
          rewriter.replaceOp(op, combined);
       } else {
          rewriter.replaceOp(op, result);
@@ -408,9 +409,9 @@ class OrOpLowering : public ConversionPattern {
          Value currVal;
          if (currNullable) {
             TupleType tupleType = typeConverter->convertType(currType).dyn_cast_or_null<TupleType>();
-            auto splitOp = rewriter.create<mlir::util::SplitOp>(loc, tupleType.getTypes(), operands[i]);
-            currNull = splitOp.vals()[0];
-            currVal = splitOp.vals()[1];
+            auto UnPackOp = rewriter.create<mlir::util::UnPackOp>(loc, tupleType.getTypes(), operands[i]);
+            currNull = UnPackOp.vals()[0];
+            currVal = UnPackOp.vals()[1];
          } else {
             currVal = operands[i];
          }
@@ -438,7 +439,7 @@ class OrOpLowering : public ConversionPattern {
       }
       if (orOp.getResult().getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
          isNull = rewriter.create<SelectOp>(loc, result, falseValue, isNull);
-         Value combined = rewriter.create<mlir::util::CombineOp>(loc, typeConverter->convertType(orOp.getResult().getType()), ValueRange({isNull, result}));
+         Value combined = rewriter.create<mlir::util::PackOp>(loc, typeConverter->convertType(orOp.getResult().getType()), ValueRange({isNull, result}));
          rewriter.replaceOp(op, combined);
       } else {
          rewriter.replaceOp(op, result);
@@ -618,9 +619,9 @@ class CastOpLowering : public ConversionPattern {
       Value isNull;
       Value value;
       if (sourceType.isNullable()) {
-         auto splitOp = rewriter.create<mlir::util::SplitOp>(loc, typeConverter->convertType(sourceType).dyn_cast_or_null<TupleType>().getTypes(), operands[0]);
-         isNull = splitOp.vals()[0];
-         value = splitOp.vals()[1];
+         auto UnPackOp = rewriter.create<mlir::util::UnPackOp>(loc, typeConverter->convertType(sourceType).dyn_cast_or_null<TupleType>().getTypes(), operands[0]);
+         isNull = UnPackOp.vals()[0];
+         value = UnPackOp.vals()[1];
       } else {
          isNull = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
          value = operands[0];
@@ -686,7 +687,7 @@ class CastOpLowering : public ConversionPattern {
       }
       //todo convert types
       if (targetType.isNullable()) {
-         Value combined = rewriter.create<mlir::util::CombineOp>(loc, typeConverter->convertType(targetType), ValueRange({isNull, value}));
+         Value combined = rewriter.create<mlir::util::PackOp>(loc, typeConverter->convertType(targetType), ValueRange({isNull, value}));
          rewriter.replaceOp(op, combined);
       } else {
          rewriter.replaceOp(op, value);
@@ -718,9 +719,9 @@ class DumpOpLowering : public ConversionPattern {
       Value isNull;
       if (val.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
          TupleType tupleType = typeConverter->convertType(val.getType()).dyn_cast_or_null<TupleType>();
-         auto splitOp = rewriter.create<mlir::util::SplitOp>(rewriter.getUnknownLoc(), tupleType.getTypes(), dumpOpAdaptor.val());
-         isNull = splitOp.vals()[0];
-         val = splitOp.vals()[1];
+         auto UnPackOp = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), tupleType.getTypes(), dumpOpAdaptor.val());
+         isNull = UnPackOp.vals()[0];
+         val = UnPackOp.vals()[1];
       } else {
          isNull = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
          val = dumpOpAdaptor.val();
@@ -761,10 +762,10 @@ class DumpOpLowering : public ConversionPattern {
             printRef = getOrInsertFn(rewriter, parentModule, "dumpDateDay", rewriter.getFunctionType({i1Type, i32Type}, {}));
          }
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
-      } else if (auto timestampType=type.dyn_cast_or_null<mlir::db::TimestampType>()) {
-         std::string unit=mlir::db::stringifyTimeUnitAttr(timestampType.getUnit()).str();
-         unit[0]=toupper(unit[0]);
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dumpTimestamp"+unit, rewriter.getFunctionType({i1Type, i64Type}, {}));
+      } else if (auto timestampType = type.dyn_cast_or_null<mlir::db::TimestampType>()) {
+         std::string unit = mlir::db::stringifyTimeUnitAttr(timestampType.getUnit()).str();
+         unit[0] = toupper(unit[0]);
+         auto printRef = getOrInsertFn(rewriter, parentModule, "dumpTimestamp" + unit, rewriter.getFunctionType({i1Type, i64Type}, {}));
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       } else if (auto intervalType = type.dyn_cast_or_null<mlir::db::IntervalType>()) {
          if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
@@ -851,7 +852,7 @@ void DBToStdLoweringPass::runOnOperation() {
             !hasDBType(op->getResultTypes());
          return isLegal;
       });
-   target.addDynamicallyLegalOp<util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::CombineOp, util::SplitOp>(
+   target.addDynamicallyLegalOp<util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp>(
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());
@@ -973,7 +974,6 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<BinOpLowering<mlir::db::MulOp, mlir::db::DecimalType, mlir::MulIOp>>(typeConverter, &getContext());
    patterns.insert<DecimalOpScaledLowering<mlir::db::DivOp, mlir::SignedDivIOp>>(typeConverter, &getContext());
    patterns.insert<DecimalOpScaledLowering<mlir::db::ModOp, mlir::SignedRemIOp>>(typeConverter, &getContext());
-
 
    auto ensureDate64 = [](mlir::db::DateType dateType, Value v, ConversionPatternRewriter& rewriter) {
       if (dateType.getUnit() == db::DateUnitAttr::day) {
