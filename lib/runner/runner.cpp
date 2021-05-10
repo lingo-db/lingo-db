@@ -189,7 +189,7 @@ bool Runner::load(std::string file) {
    llvm::SourceMgr sourceMgr;
    llvm::DebugFlag = false;
    mlir::SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
-   if (int error = loadMLIR(file, context, ctxt->module))
+   if (loadMLIR(file, context, ctxt->module))
       return false;
    return true;
 }

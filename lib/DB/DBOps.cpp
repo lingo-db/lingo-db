@@ -297,6 +297,95 @@ static ParseResult parseDateExtractOp(OpAsmParser& parser,
 static void print(OpAsmPrinter& p, mlir::db::DateExtractOp extractOp) {
    p << extractOp.getOperationName() << " " << mlir::db::stringifyExtractableTimeUnitAttr(extractOp.unit()) << ", " << extractOp.val() << " : " << extractOp.val().getType();
 }
+static void printInitializationList(OpAsmPrinter &p,
+                                    Block::BlockArgListType blocksArgs,
+                                    ValueRange initializers,
+                                    StringRef prefix = "") {
+   assert(blocksArgs.size() == initializers.size() &&
+          "expected same length of arguments and initializers");
+   if (initializers.empty())
+      return;
+
+   p << prefix << '(';
+   llvm::interleaveComma(llvm::zip(blocksArgs, initializers), p, [&](auto it) {
+     p << std::get<0>(it) << " = " << std::get<1>(it);
+   });
+   p << ")";
+}
+
+static void print(OpAsmPrinter &p, mlir::db::ForOp op) {
+   p << op.getOperationName() << " " << op.getInductionVar() << " in "
+     << op.collection() <<" : "<<op.collection().getType()<<" ";
+
+   printInitializationList(p, op.getRegionIterArgs(), op.getIterOperands(),
+                           " iter_args");
+   if (!op.getIterOperands().empty())
+      p << " -> (" << op.getIterOperands().getTypes() << ')';
+   p.printRegion(op.region(),
+      /*printEntryBlockArgs=*/false,
+      /*printBlockTerminators=*/op.hasIterOperands());
+   p.printOptionalAttrDict(op->getAttrs());
+}
+
+static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
+   auto &builder = parser.getBuilder();
+   OpAsmParser::OperandType inductionVariable, collection;
+   Type collType;
+   mlir::db::CollectionType collectionType;
+   // Parse the induction variable followed by '='.
+   if (parser.parseRegionArgument(inductionVariable) || parser.parseKeyword("in"))
+      return failure();
+
+   // Parse loop bounds.
+   if (parser.parseOperand(collection) ||
+       parser.parseColonType(collType))
+      return failure();
+
+   if(!(collectionType=collType.dyn_cast_or_null<mlir::db::CollectionType>())){
+      return failure();
+   }
+   parser.resolveOperand(collection, collectionType, result.operands);
+
+   // Parse the optional initial iteration arguments.
+   SmallVector<OpAsmParser::OperandType, 4> regionArgs, operands;
+   SmallVector<Type, 4> argTypes;
+   regionArgs.push_back(inductionVariable);
+
+   if (succeeded(parser.parseOptionalKeyword("iter_args"))) {
+      // Parse assignment list and results type list.
+      if (parser.parseAssignmentList(regionArgs, operands) ||
+          parser.parseArrowTypeList(result.types))
+         return failure();
+      // Resolve input operands.
+      for (auto operandType : llvm::zip(operands, result.types))
+         if (parser.resolveOperand(std::get<0>(operandType),
+                                   std::get<1>(operandType), result.operands))
+            return failure();
+   }
+   // Induction variable.
+   argTypes.push_back(collectionType.getElementType());
+   // Loop carried variables
+   argTypes.append(result.types.begin(), result.types.end());
+   // Parse the body region.
+   Region *body = result.addRegion();
+   if (regionArgs.size() != argTypes.size())
+      return parser.emitError(
+         parser.getNameLoc(),
+         "mismatch in number of loop-carried values and defined values");
+
+   if (parser.parseRegion(*body, regionArgs, argTypes))
+      return failure();
+
+   mlir::db::ForOp::ensureTerminator(*body, builder, result.location);
+
+   // Parse the optional attribute list.
+   if (parser.parseOptionalAttrDict(result.attributes))
+      return failure();
+
+   return success();
+}
+
+
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.cpp.inc"
 #include "mlir/Dialect/DB/IR/DBOpsInterfaces.cpp.inc"

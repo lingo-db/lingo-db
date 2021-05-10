@@ -75,6 +75,32 @@ arrow::TimeUnit::type toArrowTimeUnit(mlir::db::TimeUnitAttr attr) {
    }
    return arrow::TimeUnit::SECOND;
 }
+static std::pair<Value, Value> splitString(Value v, ConversionPatternRewriter& rewriter) {
+   auto i8Type = IntegerType::get(rewriter.getContext(), 8);
+   Value len = rewriter.create<memref::DimOp>(v.getLoc(), v, 0);
+   Value val = rewriter.create<memref::ReinterpretCastOp>(v.getLoc(), MemRefType::get({}, i8Type), v, (int64_t) 0, ArrayRef<int64_t>({}), ArrayRef<int64_t>({}));
+   return {val, len};
+}
+static Value insertConstString(std::string str, ModuleOp module, ConversionPatternRewriter& rewriter) {
+   auto loc = rewriter.getUnknownLoc();
+   auto i8Type = IntegerType::get(rewriter.getContext(), 8);
+   auto insertionPoint = rewriter.saveInsertionPoint();
+   int64_t strLen = str.size();
+   std::vector<uint8_t> vec;
+   for (auto c : str) {
+      vec.push_back(c);
+   }
+   auto strStaticType = MemRefType::get({strLen}, i8Type);
+   auto strDynamicType = MemRefType::get({-1}, IntegerType::get(rewriter.getContext(), 8));
+   rewriter.setInsertionPointToStart(module.getBody());
+   auto initialValue = DenseIntElementsAttr::get(
+      RankedTensorType::get({strLen}, i8Type), vec);
+   static int id = 0;
+   auto globalop = rewriter.create<mlir::memref::GlobalOp>(rewriter.getUnknownLoc(), "db_constant_string" + std::to_string(id++), rewriter.getStringAttr("private"), strStaticType, initialValue, true);
+   rewriter.restoreInsertionPoint(insertionPoint);
+   Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
+   return rewriter.create<memref::CastOp>(loc, conststr, strDynamicType);
+}
 //Lower Print Operation to an actual printf call
 class ConstantLowering : public ConversionPattern {
    public:
@@ -87,8 +113,6 @@ class ConstantLowering : public ConversionPattern {
       auto constantOp = cast<mlir::db::ConstantOp>(op);
       auto type = constantOp.getType();
       auto stdType = typeConverter->convertType(type);
-      auto i8Type = IntegerType::get(rewriter.getContext(), 8);
-      auto loc = op->getLoc();
       if (constantOp.getType().isa<mlir::db::UIntType>()) {
          if (!constantOp.value().isa<IntegerAttr>()) {
             return failure();
@@ -140,22 +164,8 @@ class ConstantLowering : public ConversionPattern {
          }
       } else if (type.isa<mlir::db::StringType>()) {
          if (auto stringAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            auto insertionPoint = rewriter.saveInsertionPoint();
-            int64_t strLen = stringAttr.getValue().size();
-            std::vector<uint8_t> vec;
-            for (auto c : stringAttr.getValue()) {
-               vec.push_back(c);
-            }
-            auto strStaticType = MemRefType::get({strLen}, i8Type);
-            auto strDynamicType = MemRefType::get({-1}, IntegerType::get(getContext(), 8));
-            rewriter.setInsertionPointToStart(op->getParentOfType<ModuleOp>().getBody());
-            auto initialValue = DenseIntElementsAttr::get(
-               RankedTensorType::get({strLen}, i8Type), vec);
-            static int id = 0;
-            auto globalop = rewriter.create<mlir::memref::GlobalOp>(rewriter.getUnknownLoc(), "db_constant_string" + std::to_string(id++), rewriter.getStringAttr("private"), strStaticType, initialValue, true);
-            rewriter.restoreInsertionPoint(insertionPoint);
-            Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
-            rewriter.replaceOpWithNewOp<memref::CastOp>(op, conststr, strDynamicType);
+            ModuleOp parentModule = op->getParentOfType<ModuleOp>();
+            rewriter.replaceOp(op, insertConstString(stringAttr.getValue().str(), parentModule, rewriter));
             return success();
          }
       }
@@ -322,6 +332,62 @@ class NotOpLowering : public ConversionPattern {
          rewriter.replaceOpWithNewOp<XOrOp>(op, operands[0], trueValue);
          return success();
       }
+   }
+};
+
+class ForOpLowering : public ConversionPattern {
+   public:
+   explicit ForOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::ForOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto forOp = cast<mlir::db::ForOp>(op);
+      forOp->dump();
+      auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::db::CollectionType>();
+
+      auto iterator = collectionType.getIterator(forOp.collection());
+      ModuleOp parentModule = op->getParentOfType<ModuleOp>();
+      auto *terminator = forOp.getBody()->getTerminator();
+      iterator->implementLoop({}, *typeConverter, rewriter, parentModule, [&](auto val, OpBuilder builder) {
+         rewriter.mergeBlockBefore(forOp.getBody(),&*builder.getInsertionPoint(),val);
+        rewriter.eraseOp(terminator);
+        return std::vector<Value>({}); });
+      rewriter.eraseOp(op);
+      return success();
+   }
+};
+class TableScanLowering : public ConversionPattern {
+   public:
+   explicit TableScanLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::TableScan::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto tablescan = cast<mlir::db::TableScan>(op);
+      std::vector<Type> types;
+      ModuleOp parentModule = op->getParentOfType<ModuleOp>();
+      auto i8Type = IntegerType::get(rewriter.getContext(), 8);
+      auto ptrType = MemRefType::get({}, i8Type);
+      auto indexType = IndexType::get(rewriter.getContext());
+      auto getTableFn = getOrInsertFn(rewriter, parentModule, "get_table", rewriter.getFunctionType({ptrType, ptrType, indexType}, {ptrType}));
+      auto getColumnIdFn = getOrInsertFn(rewriter, parentModule, "get_column_id", rewriter.getFunctionType({ptrType, ptrType, indexType}, {indexType}));
+
+      std::vector<Value> values;
+      types.push_back(ptrType);
+      auto tableName = insertConstString(tablescan.tablename().str(), parentModule, rewriter);
+      auto [tableStr, tableStrLen] = splitString(tableName, rewriter);
+      auto call = rewriter.create<CallOp>(rewriter.getUnknownLoc(), getTableFn, mlir::ValueRange({tablescan.execution_context(), tableStr, tableStrLen}));
+      Value tablePtr = call->getResult(0);
+      values.push_back(tablePtr);
+      for (auto c : tablescan.columns()) {
+         auto stringAttr = c.cast<StringAttr>();
+         types.push_back(indexType);
+         auto colName = insertConstString(stringAttr.getValue().str(), parentModule, rewriter);
+         auto [colStr, colStrLen] = splitString(colName, rewriter);
+         auto call = rewriter.create<CallOp>(rewriter.getUnknownLoc(), getColumnIdFn, mlir::ValueRange({tablePtr, colStr, colStrLen}));
+         values.push_back(call->getResult(0));
+      }
+      rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, mlir::TupleType::get(rewriter.getContext(), types), values);
+      return success();
    }
 };
 class AndOpLowering : public ConversionPattern {
@@ -711,7 +777,6 @@ class DumpOpLowering : public ConversionPattern {
       auto i64Type = IntegerType::get(rewriter.getContext(), 64);
       auto i32Type = IntegerType::get(rewriter.getContext(), 32);
       auto i1Type = IntegerType::get(rewriter.getContext(), 1);
-      auto i8Type = IntegerType::get(rewriter.getContext(), 8);
       auto type = val.getType().dyn_cast_or_null<mlir::db::DBType>().getBaseType();
 
       auto f64Type = FloatType::getF64(rewriter.getContext());
@@ -781,13 +846,12 @@ class DumpOpLowering : public ConversionPattern {
          }
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       } else if (type.isa<mlir::db::StringType>()) {
+         auto indexType = IndexType::get(rewriter.getContext());
          auto strType = MemRefType::get({}, IntegerType::get(getContext(), 8));
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_string", rewriter.getFunctionType({i1Type, strType, i64Type}, {}));
-         Value len = rewriter.create<memref::DimOp>(loc, val, 0);
-         len = rewriter.create<IndexCastOp>(loc, len, i64Type);
-         val = rewriter.create<memref::ReinterpretCastOp>(loc, MemRefType::get({}, i8Type), val, (int64_t) 0, ArrayRef<int64_t>({}), ArrayRef<int64_t>({}));
 
-         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val, len}));
+         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_string", rewriter.getFunctionType({i1Type, strType, indexType}, {}));
+         auto [v, len] = splitString(val, rewriter);
+         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, v, len}));
       }
       rewriter.eraseOp(op);
 
@@ -821,7 +885,6 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 } // end anonymous namespace
 static bool hasDBType(TypeRange types) {
    for (Type type : types) {
-      type.dump();
       if (type.isa<db::DBType>()) {
          return true;
       } else if (auto tupleType = type.dyn_cast_or_null<TupleType>()) {
@@ -842,7 +905,6 @@ void DBToStdLoweringPass::runOnOperation() {
    target.addDynamicallyLegalOp<FuncOp>([&](FuncOp op) {
       auto isLegal = !hasDBType(op.getType().getInputs()) &&
          !hasDBType(op.getType().getResults());
-      llvm::dbgs() << "isLegal:" << isLegal << "\n";
       return isLegal;
    });
    target.addDynamicallyLegalOp<CallOp, CallIndirectOp, ReturnOp>(
@@ -922,15 +984,54 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
-   typeConverter.addConversion([&](mlir::IntegerType iType){return iType;});
-   typeConverter.addConversion([&](mlir::IndexType iType){return iType;});
-   typeConverter.addConversion([&](mlir::FloatType fType){return fType;});
-   typeConverter.addConversion([&](mlir::MemRefType refType){return refType;});
+   typeConverter.addConversion([&](mlir::db::GenericIterableType genericIterableType) {
+      Type elementType = genericIterableType.getElementType();
+      Type nestedElementType = elementType;
+      if (auto nested = elementType.dyn_cast_or_null<mlir::db::GenericIterableType>()) {
+         nestedElementType = nested.getElementType();
+      }
+      if (genericIterableType.getIteratorName() == "table_chunk_iterator") {
+         std::vector<Type> types;
+         auto i8Type = IntegerType::get(&getContext(), 8);
+         auto ptrType = MemRefType::get({}, i8Type);
+         auto indexType = IndexType::get(&getContext());
+         types.push_back(ptrType);
+         if (auto tupleT = nestedElementType.dyn_cast_or_null<TupleType>()) {
+            for (size_t i =0;i<tupleT.getTypes().size();i++) {
+               types.push_back(indexType);
+            }
+         }
+         return (Type) TupleType::get(&getContext(), types);
+      }else if (genericIterableType.getIteratorName() == "table_row_iterator") {
+         std::vector<Type> types;
+         auto i8Type = IntegerType::get(&getContext(), 8);
+         auto ptrType = MemRefType::get({}, i8Type);
+         auto indexType = IndexType::get(&getContext());
+         types.push_back(ptrType);
+         if (auto tupleT = nestedElementType.dyn_cast_or_null<TupleType>()) {
+            for (size_t i =0;i<tupleT.getTypes().size();i++) {
+               types.push_back(indexType);
+            }
+         }
+         return (Type) TupleType::get(&getContext(), types);
+      }
+      return Type();
+   });
+   typeConverter.addConversion([&](mlir::IntegerType iType) { return iType; });
+   typeConverter.addConversion([&](mlir::IndexType iType) { return iType; });
+   typeConverter.addConversion([&](mlir::FloatType fType) { return fType; });
+   typeConverter.addConversion([&](mlir::MemRefType refType) { return refType; });
 
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::DBType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::DBType type, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::GenericIterableType type, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, db::GenericIterableType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
    OwningRewritePatternList patterns(&getContext());
@@ -954,6 +1055,8 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<NotOpLowering>(typeConverter, &getContext());
    patterns.insert<CmpOpLowering>(typeConverter, &getContext());
    patterns.insert<CastOpLowering>(typeConverter, &getContext());
+   patterns.insert<TableScanLowering>(typeConverter, &getContext());
+   patterns.insert<ForOpLowering>(typeConverter, &getContext());
 
    patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::db::IntType, mlir::AddIOp>>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::IntType, mlir::SubIOp>>(typeConverter, &getContext());

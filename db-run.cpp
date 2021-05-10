@@ -26,7 +26,9 @@ int main(int argc, char** argv) {
    runner::Runner runner;
    runner.load(inputFileName);
    runner.lower();
+   runner.dump();
    runner.lowerToLLVM();
+   runner.dumpLLVM();
    runner.runJit(&context);
    return 0;
 }

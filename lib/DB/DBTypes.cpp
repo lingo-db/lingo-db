@@ -22,7 +22,7 @@ bool mlir::db::DBType::classof(Type t) {
          return true;
       })
       .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
-        return true;
+         return true;
       })
       .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
          return true;
@@ -37,10 +37,10 @@ bool mlir::db::DBType::classof(Type t) {
          return true;
       })
       .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
-        return true;
+         return true;
       })
       .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
-        return true;
+         return true;
       })
       .Default([](::mlir::Type) { return false; });
 }
@@ -59,7 +59,7 @@ bool mlir::db::DBType::isNullable() {
          return t.getNullable();
       })
       .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
-        return t.getNullable();
+         return t.getNullable();
       })
       .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
          return t.getNullable();
@@ -74,10 +74,17 @@ bool mlir::db::DBType::isNullable() {
          return t.getNullable();
       })
       .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
-        return t.getNullable();
+         return t.getNullable();
       })
       .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
-        return t.getNullable();
+         return t.getNullable();
+      })
+      .Default([](::mlir::Type) { return false; });
+}
+bool mlir::db::DBType::isVarLen() const {
+   return ::llvm::TypeSwitch<::mlir::db::DBType, bool>(*this)
+      .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
+         return true;
       })
       .Default([](::mlir::Type) { return false; });
 }
@@ -96,7 +103,7 @@ mlir::db::DBType mlir::db::DBType::getBaseType() const {
          return mlir::db::IntType::get(t.getContext(), false, t.getWidth());
       })
       .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
-        return mlir::db::UIntType::get(t.getContext(), false, t.getWidth());
+         return mlir::db::UIntType::get(t.getContext(), false, t.getWidth());
       })
       .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
          return mlir::db::StringType::get(t.getContext(), false);
@@ -152,7 +159,26 @@ mlir::db::DBType mlir::db::DBType::asNullable() const {
       })
       .Default([](::mlir::Type) { return mlir::db::DBType(); });
 }
-
+mlir::Type mlir::db::CollectionType::getElementType() const {
+   return ::llvm::TypeSwitch<::mlir::db::CollectionType, Type>(*this)
+      .Case<::mlir::db::GenericIterableType>([&](::mlir::db::GenericIterableType t) {
+         return t.getElementType();
+      })
+      .Case<::mlir::db::MaterializedCollectionType>([&](::mlir::db::MaterializedCollectionType t) {
+         return t.getElementType();
+      })
+      .Default([](::mlir::Type) { return Type(); });
+}
+std::unique_ptr<mlir::db::CollectionIterator> mlir::db::CollectionType::getIterator(Value collection) const {
+   return ::llvm::TypeSwitch<::mlir::db::CollectionType, std::unique_ptr<mlir::db::CollectionIterator>>(*this)
+      .Case<::mlir::db::GenericIterableType>([&](::mlir::db::GenericIterableType t) {
+         return t.getIterator(collection);
+      })
+      .Case<::mlir::db::MaterializedCollectionType>([&](::mlir::db::MaterializedCollectionType t) {
+         return t.getIterator(collection);
+      })
+      .Default([](::mlir::Type) { return std::unique_ptr<CollectionIterator>(); });
+}
 template <class X>
 struct ParseSingleImpl {};
 template <>
@@ -178,7 +204,7 @@ struct ParseSingleImpl<std::string> {
 template <>
 struct ParseSingleImpl<mlir::db::TimeUnitAttr> {
    static mlir::db::TimeUnitAttr apply(bool& error, ::mlir::DialectAsmParser& parser) {
-      mlir::db::TimeUnitAttr unit=mlir::db::TimeUnitAttr::second;
+      mlir::db::TimeUnitAttr unit = mlir::db::TimeUnitAttr::second;
 
       ::llvm::StringRef attrStr;
       ::mlir::NamedAttrList attrStorage;
@@ -205,7 +231,7 @@ struct ParseSingleImpl<mlir::db::TimeUnitAttr> {
 template <>
 struct ParseSingleImpl<mlir::db::DateUnitAttr> {
    static mlir::db::DateUnitAttr apply(bool& error, ::mlir::DialectAsmParser& parser) {
-      mlir::db::DateUnitAttr unit=mlir::db::DateUnitAttr::millisecond;
+      mlir::db::DateUnitAttr unit = mlir::db::DateUnitAttr::millisecond;
 
       ::llvm::StringRef attrStr;
       ::mlir::NamedAttrList attrStorage;
@@ -232,7 +258,7 @@ struct ParseSingleImpl<mlir::db::DateUnitAttr> {
 template <>
 struct ParseSingleImpl<mlir::db::IntervalUnitAttr> {
    static mlir::db::IntervalUnitAttr apply(bool& error, ::mlir::DialectAsmParser& parser) {
-      mlir::db::IntervalUnitAttr unit=mlir::db::IntervalUnitAttr::months;
+      mlir::db::IntervalUnitAttr unit = mlir::db::IntervalUnitAttr::months;
 
       ::llvm::StringRef attrStr;
       ::mlir::NamedAttrList attrStorage;
@@ -403,77 +429,28 @@ void mlir::db::StringType::print(::mlir::DialectAsmPrinter& printer) const {
 }
 
 ::mlir::Type mlir::db::MaterializedCollectionType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
-   if (parser.parseLess()) {
+   Type type;
+   if (parser.parseLess() || parser.parseType(type) || parser.parseGreater()) {
       return mlir::Type();
    }
-   SmallVector<Type> types;
-   while (true) {
-      if (!parser.parseOptionalGreater()) {
-         break;
-      }
-      DBType type;
-      if (parser.parseType(type)) {
-         return Type();
-      }
-      types.push_back(type);
-      if (!parser.parseOptionalComma()) { continue; }
-      if (parser.parseGreater()) { return Type(); }
-      break;
-   }
-   return mlir::db::MaterializedCollectionType::get(parser.getBuilder().getContext(), TypeRange(ArrayRef<Type>(types)));
+   return mlir::db::MaterializedCollectionType::get(parser.getBuilder().getContext(), type);
 }
 void mlir::db::MaterializedCollectionType::print(mlir::DialectAsmPrinter& p) const {
    p << getMnemonic() << "<";
-   bool first = true;
-   for (auto t : getTypes()) {
-      if (first) {
-         first = false;
-      } else {
-         p << ",";
-      }
-      p << t;
-   }
+   p << getElementType();
    p << ">";
 }
-
-namespace mlir {
-namespace db {
-namespace detail {
-struct MaterializedCollectionTypeStorage : public mlir::TypeStorage {
-   MaterializedCollectionTypeStorage(std::vector<mlir::Type> types)
-      : types(types) {}
-
-   /// The hash key used for uniquing.
-   using KeyTy = mlir::TypeRange;
-   bool operator==(const KeyTy& key) const {
-      return key == mlir::TypeRange(types);
+::mlir::Type mlir::db::GenericIterableType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
+   Type type;
+   StringRef parserName;
+   if (parser.parseLess() || parser.parseType(type) || parser.parseComma(), parser.parseKeyword(&parserName) || parser.parseGreater()) {
+      return mlir::Type();
    }
-   static ::llvm::hash_code hashKey(const KeyTy& key) {
-      return ::llvm::hash_combine(key);
-   }
-   /// Construction.
-   static MaterializedCollectionTypeStorage* construct(mlir::TypeStorageAllocator& allocator,
-                                                       const KeyTy& key) {
-      std::vector<mlir::Type> v;
-      v.insert(v.begin(), key.begin(), key.end());
-      return new (allocator.allocate<MaterializedCollectionTypeStorage>())
-         MaterializedCollectionTypeStorage(v);
-   }
-
-   llvm::ArrayRef<mlir::Type> getTypes() const {
-      return llvm::ArrayRef<mlir::Type>(types);
-   }
-
-   std::vector<mlir::Type> types;
-};
-} // namespace detail
-} // namespace db
-} // namespace mlir
-
-mlir::TypeRange mlir::db::MaterializedCollectionType::getTypes() const {
-   return getImpl()->getTypes();
+   return mlir::db::GenericIterableType::get(parser.getBuilder().getContext(), type, parserName.str());
 }
-
+void mlir::db::GenericIterableType::print(mlir::DialectAsmPrinter& p) const {
+   p << getMnemonic() << "<" << getElementType() << "," << getIteratorName() << ">";
+}
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/DB/IR/DBOpsTypes.cpp.inc"
 namespace mlir::db {

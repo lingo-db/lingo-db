@@ -11,12 +11,12 @@
 
 #define EXPORT extern "C" __attribute__((visibility("default")))
 
-EXPORT db_table get_table(db_execution_context executionContext, char* name, int len) {
+EXPORT db_table get_table(db_execution_context executionContext, char* name, size_t len) {
    std::string tablename(name, len);
    return (db_table)((runtime::ExecutionContext*) executionContext)->db->getTable(tablename).get();
 }
 
-EXPORT db_column_id get_column_id(db_table table, char* name, int len) {
+EXPORT db_column_id get_column_id(db_table table, char* name, size_t len) {
    std::string column_name(name, len);
    auto column_names = ((arrow::Table*) table)->ColumnNames();
    size_t column_id = 0;

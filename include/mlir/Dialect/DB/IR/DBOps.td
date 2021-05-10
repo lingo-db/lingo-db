@@ -40,11 +40,22 @@ def DBType : Type<CPred<"$_self.isa<::mlir::db::DBType>()">,"DB dialect type">;
 
 class DB_Collection<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,"::mlir::db::CollectionType"> {
     let mnemonic = typeMnemonic;
-    let parameters = (ins "TypeRange":$types);
-    let genStorageClass = 0;
 }
-def DB_MaterializedCollection : DB_Collection<"MaterializedCollection","matcollection"> {
+
+def DBCollection : Type<CPred<"$_self.isa<::mlir::db::CollectionType>()">,"DB dialect collection">;
+
+def DB_GenericIterable : DB_Collection<"GenericIterable","iterable"> {
+let summary = "generic iterable";
+let parameters = (ins "Type":$elementType,"std::string":$iteratorName);
+let extraClassDeclaration = [{
+std::unique_ptr<CollectionIterator> getIterator(Value collection) const;
+
+}];
+}
+def DB_MaterializedCollection  : DB_Collection<"MaterializedCollection","matcollection"> {
 let summary = "materialized collection";
+let parameters = (ins "Type":$elementType);
+
 }
 def DB_BoolType : DB_Type<"Bool","bool"> {
   let summary = "database boolean type";
@@ -155,6 +166,64 @@ let results = (outs DBType:$res);
 let assemblyFormat = "`:` type($res) attr-dict";
 
 }
+
+def DB_TableScan : DB_Op<"tablescan",
+[NoSideEffect]> {
+let summary = "tablescan";
+let arguments = (ins StrAttr:$tablename,ArrayAttr:$columns,AnyType:$execution_context);
+let results = (outs DB_GenericIterable:$iterable);
+let assemblyFormat = "$tablename $columns $execution_context `:` type($execution_context) `:` type($iterable) attr-dict";
+
+}
+
+
+def ForOp : DB_Op<"for",
+[SingleBlockImplicitTerminator<"db::YieldOp">,
+RecursiveSideEffects]> {
+let summary = "for operation";
+
+let arguments = (ins DBCollection:$collection,Variadic<AnyType>:$initArgs);
+let results = (outs Variadic<AnyType>:$results);
+let regions = (region SizedRegion<1>:$region);
+
+let skipDefaultBuilders = 1;
+let builders = [
+OpBuilder<(ins "Value":$collection,
+CArg<"ValueRange", "llvm::None">:$iterArgs)>
+];
+
+let extraClassDeclaration = [{
+
+Value getInductionVar() { return getBody()->getArgument(0); }
+Block::BlockArgListType getRegionIterArgs() {
+    return getBody()->getArguments().drop_front();
+}
+Operation::operand_range getIterOperands() {
+    return getOperands().drop_front(getNumControlOperands());
+}
+
+
+/// Number of region arguments for loop-carried values
+unsigned getNumRegionIterArgs() {
+    return getBody()->getNumArguments() - 1;
+}
+/// Number of operands controlling the loop: lb, ub, step
+unsigned getNumControlOperands() { return 1; }
+/// Does the operation hold operands for loop-carried values
+bool hasIterOperands() {
+    return getOperation()->getNumOperands() > getNumControlOperands();
+}
+/// Get Number of loop-carried values
+unsigned getNumIterOperands() {
+    return getOperation()->getNumOperands() - getNumControlOperands();
+}
+
+
+}];
+
+}
+
+
 
 def DB_IsNullOp : DB_Op<"isnull",
 [NoSideEffect]> {
@@ -347,7 +416,7 @@ let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
 
 
 def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
-        ParentOneOf<["IfOp"]>]> {
+        ParentOneOf<["IfOp","ForOp"]>]> {
 let summary = "loop yield and termination operation";
 
 let arguments = (ins Variadic<AnyType>:$results);

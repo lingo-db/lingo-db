@@ -9,6 +9,7 @@ class DBType : public mlir::Type {
    bool isNullable();
    DBType getBaseType() const;
    DBType asNullable() const;
+   bool isVarLen() const;
    static bool classof(Type);
 };
 } // namespace mlir::db
