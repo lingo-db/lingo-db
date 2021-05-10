@@ -1,5 +1,5 @@
 set(PRECOMPILED_SRCS
-        test.cpp)
+        test.cpp tables.cpp)
 
 find_program(LLVM_LINK_EXECUTABLE llvm-link HINTS ${LLVM_TOOLS_BINARY_DIR})
 
@@ -8,6 +8,10 @@ find_program(CLANG_EXECUTABLE
         clang-${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}
         clang-${LLVM_VERSION_MAJOR} clang
         HINTS ${LLVM_TOOLS_BINARY_DIR})
+
+get_property(dirs DIRECTORY ${CMAKE_SOURCE_DIR} PROPERTY INCLUDE_DIRECTORIES)
+
+
 # Create bitcode for each of the source files.
 foreach(SRC_FILE ${PRECOMPILED_SRCS})
     get_filename_component(SRC_BASE ${SRC_FILE} NAME_WE)
@@ -35,7 +39,14 @@ foreach(SRC_FILE ${PRECOMPILED_SRCS})
                 -o
                 ${BC_FILE}
                 -I${CMAKE_SOURCE_DIR}/src
-                -I${ARROW_BINARY_DIR}/src)
+                -I${ARROW_BINARY_DIR}/src
+    )
+    foreach(dir ${dirs})
+        list(
+                APPEND PRECOMPILE_COMMAND
+                -I ${dir}
+        )
+    endforeach()
     if(NOT ARROW_USE_NATIVE_INT128)
         list(APPEND PRECOMPILE_COMMAND -I${Boost_INCLUDE_DIR})
     endif()
@@ -63,3 +74,4 @@ add_custom_command(OUTPUT ${PRECOMPILED_CC_PATH}
         DEPENDS ${PRECOMPILED_CC_IN_PATH} ${PRECOMPILED_BC_PATH})
 add_custom_target(precompiled ALL
         DEPENDS ${PRECOMPILED_CC_PATH})
+

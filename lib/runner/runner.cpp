@@ -29,7 +29,6 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Support/ErrorOr.h>
-#include <iostream>
 #include <runner/runner.h>
 
 namespace {
@@ -104,31 +103,6 @@ int loadMLIR(std::string inputFilename, mlir::MLIRContext& context, mlir::Owning
    return 0;
 }
 
-int dumpLLVMIR(mlir::ModuleOp module) {
-   // Convert the module to LLVM IR in a new LLVM IR context.
-   llvm::LLVMContext llvmContext;
-   auto llvmModule = mlir::translateModuleToLLVMIR(module, llvmContext);
-   if (!llvmModule) {
-      llvm::errs() << "Failed to emit LLVM IR\n";
-      return -1;
-   }
-
-   // Initialize LLVM targets.
-   llvm::InitializeNativeTarget();
-   llvm::InitializeNativeTargetAsmPrinter();
-   mlir::ExecutionEngine::setupTargetTriple(llvmModule.get());
-
-   /// Optionally run an optimization pipeline over the llvm module.
-   auto optPipeline = mlir::makeOptimizingTransformer(
-      /*optLevel=*/false ? 3 : 0, /*sizeLevel=*/0,
-      /*targetMachine=*/nullptr);
-   if (auto err = optPipeline(llvmModule.get())) {
-      llvm::errs() << "Failed to optimize LLVM IR " << err << "\n";
-      return -1;
-   }
-   llvm::errs() << *llvmModule << "\n";
-   return 0;
-}
 static std::unique_ptr<llvm::Module>
 convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context) {
    //////////////////////////////////////////////////////////////////////////////////////
@@ -155,10 +129,36 @@ convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context) {
    std::unique_ptr<llvm::Module> irModule = move(moduleOrError.get());
 
    //////////////////////////////////////////////////////////////////////////////////////
+
    std::unique_ptr<llvm::Module> mainModule =
       translateModuleToLLVMIR(module, context);
    llvm::Linker::linkModules(*mainModule, std::move(irModule), llvm::Linker::LinkOnlyNeeded);
    return mainModule;
+}
+int dumpLLVMIR(mlir::ModuleOp module) {
+   // Convert the module to LLVM IR in a new LLVM IR context.
+   llvm::LLVMContext llvmContext;
+   auto llvmModule = convertMLIRModule(module, llvmContext);
+   if (!llvmModule) {
+      llvm::errs() << "Failed to emit LLVM IR\n";
+      return -1;
+   }
+
+   // Initialize LLVM targets.
+   llvm::InitializeNativeTarget();
+   llvm::InitializeNativeTargetAsmPrinter();
+   mlir::ExecutionEngine::setupTargetTriple(llvmModule.get());
+
+   /// Optionally run an optimization pipeline over the llvm module.
+   auto optPipeline = mlir::makeOptimizingTransformer(
+      /*optLevel=*/false ? 3 : 0, /*sizeLevel=*/0,
+      /*targetMachine=*/nullptr);
+   if (auto err = optPipeline(llvmModule.get())) {
+      llvm::errs() << "Failed to optimize LLVM IR " << err << "\n";
+      return -1;
+   }
+   llvm::errs() << *llvmModule << "\n";
+   return 0;
 }
 
 struct RunnerContext {
@@ -166,7 +166,7 @@ struct RunnerContext {
    mlir::OwningModuleRef module;
 };
 Runner::Runner() : context(nullptr) {
-   llvm::DebugFlag=false;
+   llvm::DebugFlag = true;
 }
 bool Runner::load(std::string file) {
    RunnerContext* ctxt = new RunnerContext;
@@ -176,6 +176,8 @@ bool Runner::load(std::string file) {
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::StandardOpsDialect>();
+   registry.insert<mlir::scf::SCFDialect>();
+
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::LLVM::LLVMDialect>();
    registry.insert<mlir::memref::MemRefDialect>();
@@ -218,7 +220,7 @@ void Runner::dumpLLVM() {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    dumpLLVMIR(ctxt->module.get());
 }
-bool Runner::runJit() {
+bool Runner::runJit(runtime::ExecutionContext* context) {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    // Initialize LLVM targets.
    llvm::InitializeNativeTarget();
@@ -236,8 +238,7 @@ bool Runner::runJit() {
    assert(maybeEngine && "failed to construct an execution engine");
    auto& engine = maybeEngine.get();
 
-   //int32_t res=0;
-   std::vector<void*> args = {}; // {&res};
+   std::vector<void*> args = {(void*) &context};
    // Invoke the JIT-compiled function.
    auto invocationResult = engine->invokePacked("main", args);
    if (invocationResult) {

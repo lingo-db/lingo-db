@@ -729,19 +729,19 @@ class DumpOpLowering : public ConversionPattern {
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
       // Get a symbol reference to the printf function, inserting it if necessary.
       if (auto dbIntType = type.dyn_cast_or_null<mlir::db::IntType>()) {
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dumpInt", rewriter.getFunctionType({i1Type, i64Type}, {}));
+         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_int", rewriter.getFunctionType({i1Type, i64Type}, {}));
          if (dbIntType.getWidth() < 64) {
             val = rewriter.create<SignExtendIOp>(loc, val, i64Type);
          }
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       } else if (auto dbUIntType = type.dyn_cast_or_null<mlir::db::UIntType>()) {
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dumpUInt", rewriter.getFunctionType({i1Type, i64Type}, {}));
+         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_uint", rewriter.getFunctionType({i1Type, i64Type}, {}));
          if (dbUIntType.getWidth() < 64) {
             val = rewriter.create<ZeroExtendIOp>(loc, val, i64Type);
          }
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       } else if (type.isa<mlir::db::BoolType>()) {
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dumpBool", rewriter.getFunctionType({i1Type, i1Type}, {}));
+         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_bool", rewriter.getFunctionType({i1Type, i1Type}, {}));
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       } else if (auto decType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
          Value low = rewriter.create<TruncateIOp>(loc, val, i64Type);
@@ -750,40 +750,39 @@ class DumpOpLowering : public ConversionPattern {
          Value high = rewriter.create<UnsignedShiftRightOp>(loc, i128Type, val, shift);
          high = rewriter.create<TruncateIOp>(loc, high, i64Type);
 
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dumpDecimal", rewriter.getFunctionType({i1Type, i64Type, i64Type, i32Type}, {}));
+         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_decimal", rewriter.getFunctionType({i1Type, i64Type, i64Type, i32Type}, {}));
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, low, high, scale}));
       } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
          FuncOp printRef;
 
          if (dateType.getUnit() == mlir::db::DateUnitAttr::millisecond) {
-            printRef = getOrInsertFn(rewriter, parentModule, "dumpDateMillisecond", rewriter.getFunctionType({i1Type, i64Type}, {}));
+            printRef = getOrInsertFn(rewriter, parentModule, "dump_date_millisecond", rewriter.getFunctionType({i1Type, i64Type}, {}));
          } else {
-            printRef = getOrInsertFn(rewriter, parentModule, "dumpDateDay", rewriter.getFunctionType({i1Type, i32Type}, {}));
+            printRef = getOrInsertFn(rewriter, parentModule, "dump_date_day", rewriter.getFunctionType({i1Type, i32Type}, {}));
          }
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       } else if (auto timestampType = type.dyn_cast_or_null<mlir::db::TimestampType>()) {
          std::string unit = mlir::db::stringifyTimeUnitAttr(timestampType.getUnit()).str();
-         unit[0] = toupper(unit[0]);
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dumpTimestamp" + unit, rewriter.getFunctionType({i1Type, i64Type}, {}));
+         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_timestamp_" + unit, rewriter.getFunctionType({i1Type, i64Type}, {}));
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       } else if (auto intervalType = type.dyn_cast_or_null<mlir::db::IntervalType>()) {
          if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
-            auto printRef = getOrInsertFn(rewriter, parentModule, "dumpIntervalMonths", rewriter.getFunctionType({i1Type, i32Type}, {}));
+            auto printRef = getOrInsertFn(rewriter, parentModule, "dump_interval_months", rewriter.getFunctionType({i1Type, i32Type}, {}));
             rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
          } else {
-            auto printRef = getOrInsertFn(rewriter, parentModule, "dumpIntervalDaytime", rewriter.getFunctionType({i1Type, i64Type}, {}));
+            auto printRef = getOrInsertFn(rewriter, parentModule, "dump_interval_daytime", rewriter.getFunctionType({i1Type, i64Type}, {}));
             rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
          }
 
       } else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dumpFloat", rewriter.getFunctionType({i1Type, f64Type}, {}));
+         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_float", rewriter.getFunctionType({i1Type, f64Type}, {}));
          if (floatType.getWidth() < 64) {
             val = rewriter.create<FPExtOp>(loc, val, f64Type);
          }
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       } else if (type.isa<mlir::db::StringType>()) {
          auto strType = MemRefType::get({}, IntegerType::get(getContext(), 8));
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dumpString", rewriter.getFunctionType({i1Type, strType, i64Type}, {}));
+         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_string", rewriter.getFunctionType({i1Type, strType, i64Type}, {}));
          Value len = rewriter.create<memref::DimOp>(loc, val, 0);
          len = rewriter.create<IndexCastOp>(loc, len, i64Type);
          val = rewriter.create<memref::ReinterpretCastOp>(loc, MemRefType::get({}, i8Type), val, (int64_t) 0, ArrayRef<int64_t>({}), ArrayRef<int64_t>({}));
@@ -822,6 +821,7 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 } // end anonymous namespace
 static bool hasDBType(TypeRange types) {
    for (Type type : types) {
+      type.dump();
       if (type.isa<db::DBType>()) {
          return true;
       } else if (auto tupleType = type.dyn_cast_or_null<TupleType>()) {
@@ -842,6 +842,7 @@ void DBToStdLoweringPass::runOnOperation() {
    target.addDynamicallyLegalOp<FuncOp>([&](FuncOp op) {
       auto isLegal = !hasDBType(op.getType().getInputs()) &&
          !hasDBType(op.getType().getResults());
+      llvm::dbgs() << "isLegal:" << isLegal << "\n";
       return isLegal;
    });
    target.addDynamicallyLegalOp<CallOp, CallIndirectOp, ReturnOp>(
@@ -921,6 +922,11 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
+   typeConverter.addConversion([&](mlir::IntegerType iType){return iType;});
+   typeConverter.addConversion([&](mlir::IndexType iType){return iType;});
+   typeConverter.addConversion([&](mlir::FloatType fType){return fType;});
+   typeConverter.addConversion([&](mlir::MemRefType refType){return refType;});
+
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::DBType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });

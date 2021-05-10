@@ -47,11 +47,13 @@ config.test_source_root = os.path.dirname(__file__)
 
 # test_exec_root: The root path where tests should be run.
 config.test_exec_root = os.path.join(config.mlirdb_obj_root, 'test')
+print(config.test_exec_root)
+
 config.mlirdb_tools_dir = config.mlirdb_obj_root
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
-
+#llvm_config.with_environment('DATABASE_DIR', os.path.join(config.mlirdb_src_root,'resources/data/uni'))
 tool_dirs = [config.mlirdb_tools_dir, config.llvm_tools_dir]
 tools = [
     'mlir-db-opt',
