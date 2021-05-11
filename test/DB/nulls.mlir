@@ -20,8 +20,9 @@
  		//CHECK: bool(true)
  		%not_null_value =db.cast %not_null :  !db.bool<nullable> -> !db.bool
  		db.dump %not_null_value : !db.bool
-
-
+		//CHECK: bool(NULL)
+		%const_null = db.combine_null %const : !db.bool,%const : !db.bool<nullable>
+		db.dump %const_null : !db.bool<nullable>
 		return
 	}
  }

@@ -26,5 +26,13 @@ FORCE_INLINE uint8_t* table_column_get_binary(db_table_column_buffer offsetBuffe
    *len = offsets[i + 1] - pos;
    return data + pos;
 }
+FORCE_INLINE bool table_column_is_null(db_table_column_buffer buffer, int64_t offset, int64_t i) {
+   auto null_bitmap_data_=((arrow::Buffer*) buffer)->data();
+   return null_bitmap_data_ != NULLPTR &&
+          !arrow::BitUtil::GetBit(null_bitmap_data_, i + offset);
+}
+FORCE_INLINE bool table_column_get_bool(db_table_column_buffer buffer, int64_t offset, int64_t i) {
+   return arrow::BitUtil::GetBit(((arrow::Buffer*) buffer)->data(), i + offset);
+}
 
 }

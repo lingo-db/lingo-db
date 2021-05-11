@@ -167,6 +167,11 @@ let assemblyFormat = "`:` type($res) attr-dict";
 
 }
 
+def DB_CombineNullOp : DB_Op<"combine_null", [NoSideEffect]> {
+let arguments = (ins DBType: $val,DB_BoolType: $null);
+let results = (outs  DBType : $res);
+let assemblyFormat = "$val `:` type($val) `,` $null  `:` type($res) attr-dict";
+}
 def DB_TableScan : DB_Op<"tablescan",
 [NoSideEffect]> {
 let summary = "tablescan";

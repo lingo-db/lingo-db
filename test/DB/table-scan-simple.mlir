@@ -1,17 +1,41 @@
- // RUN: db-run %s %S/../../resources/data/uni | FileCheck %s
+ // RUN: db-run %s %S/../../resources/data/test | FileCheck %s
  module {
-	//CHECK: int(24002)
-    //CHECK: int(18)
-    //CHECK: string("Xenokrates")
+    //CHECK: string("str")
+    //CHECK: float(1.1)
+    //CHECK: float(1.1)
+    //CHECK: decimal(1.10)
+    //CHECK: int(1)
+    //CHECK: int(1)
+    //CHECK: bool(true)
+    //CHECK: date(1996-01-02)
+    //CHECK: date(1996-01-02)
+    //CHECK: string("---------------")
+    //CHECK: string(NULL)
+    //CHECK: float(NULL)
+    //CHECK: float(NULL)
+    //CHECK: decimal(NULL)
+    //CHECK: int(NULL)
+    //CHECK: int(NULL)
+    //CHECK: bool(NULL)
+    //CHECK: date(NULL)
+    //CHECK: date(NULL)
+    //CHECK: string("---------------")
 	func @main (%execution_context: memref<i8>) {
 			%str_const = db.constant ( "---------------" ) :!db.string
-	 		%0 = db.tablescan "studenten" ["matrnr","semester","name"] %execution_context: memref<i8> : !db.iterable<!db.iterable<tuple<!db.int<64>,!db.int<64>,!db.string>,table_row_iterator>,table_chunk_iterator>
-			db.for %table_chunk in %0 : !db.iterable<!db.iterable<tuple<!db.int<64>,!db.int<64>,!db.string>,table_row_iterator>,table_chunk_iterator>{
-				db.for %table_row in %table_chunk : !db.iterable<tuple<!db.int<64>,!db.int<64>,!db.string>,table_row_iterator>{
-					%3,%4,%5 = util.unpack %table_row : tuple<!db.int<64>, !db.int<64>,!db.string> -> !db.int<64>, !db.int<64>,!db.string
-					db.dump %3 : !db.int<64>
-					db.dump %4 : !db.int<64>
-					db.dump %5 : !db.string
+	 		%0 = db.tablescan "test" ["str","float32","float64","decimal","int32","int64","bool","date32","date64"] %execution_context: memref<i8> : !db.iterable<!db.iterable<tuple<!db.string<nullable>,!db.float<32,nullable>,!db.float<64,nullable>,!db.decimal<5,2,nullable>,!db.int<32,nullable>,!db.int<64,nullable>,!db.bool<nullable>,!db.date<day,nullable>,!db.date<millisecond,nullable>>,table_row_iterator>,table_chunk_iterator>
+			db.for %table_chunk in %0 : !db.iterable<!db.iterable<tuple<!db.string<nullable>,!db.float<32,nullable>,!db.float<64,nullable>,!db.decimal<5,2,nullable>,!db.int<32,nullable>,!db.int<64,nullable>,!db.bool<nullable>,!db.date<day,nullable>,!db.date<millisecond,nullable>>,table_row_iterator>,table_chunk_iterator>{
+				db.for %table_row in %table_chunk : !db.iterable<tuple<!db.string<nullable>,!db.float<32,nullable>,!db.float<64,nullable>,!db.decimal<5,2,nullable>,!db.int<32,nullable>,!db.int<64,nullable>,!db.bool<nullable>,!db.date<day,nullable>,!db.date<millisecond,nullable>>,table_row_iterator>{
+					%1,%2,%3,%4,%5,%6,%7,%8,%9 = util.unpack %table_row : tuple<!db.string<nullable>,!db.float<32,nullable>,!db.float<64,nullable>,!db.decimal<5,2,nullable>,!db.int<32,nullable>,!db.int<64,nullable>,!db.bool<nullable>,!db.date<day,nullable>,!db.date<millisecond,nullable>> -> !db.string<nullable>,!db.float<32,nullable>,!db.float<64,nullable>,!db.decimal<5,2,nullable>,!db.int<32,nullable>,!db.int<64,nullable>,!db.bool<nullable>,!db.date<day,nullable>,!db.date<millisecond,nullable>
+					db.dump %1 : !db.string<nullable>
+					db.dump %2 : !db.float<32,nullable>
+					db.dump %3 : !db.float<64,nullable>
+					db.dump %4 : !db.decimal<5,2,nullable>
+					db.dump %5 : !db.int<32,nullable>
+					db.dump %6 : !db.int<64,nullable>
+					db.dump %7 : !db.bool<nullable>
+					db.dump %8 : !db.date<day,nullable>
+					db.dump %9 : !db.date<millisecond,nullable>
+
 					db.dump %str_const : !db.string
 				}
 			}

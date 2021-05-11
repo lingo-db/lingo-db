@@ -65,6 +65,19 @@ class IsNullOpLowering : public ConversionPattern {
       return success();
    }
 };
+class CombineNullOpLowering : public ConversionPattern {
+   public:
+   explicit CombineNullOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CombineNullOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      mlir::db::CombineNullOpAdaptor adaptor(operands);
+      auto combineNullOp = cast<mlir::db::CombineNullOp>(op);
+      auto packOp = rewriter.create<mlir::util::PackOp>(rewriter.getUnknownLoc(), typeConverter->convertType(combineNullOp.getType()),ValueRange({adaptor.null(),adaptor.val()}));
+      rewriter.replaceOp(op, packOp.tuple());
+      return success();
+   }
+};
 arrow::TimeUnit::type toArrowTimeUnit(mlir::db::TimeUnitAttr attr) {
    switch (attr) {
       case mlir::db::TimeUnitAttr::second: return arrow::TimeUnit::SECOND;
@@ -1046,6 +1059,8 @@ void DBToStdLoweringPass::runOnOperation() {
    // Add own Lowering Patterns
    patterns.insert<NullOpLowering>(typeConverter, &getContext());
    patterns.insert<IsNullOpLowering>(typeConverter, &getContext());
+   patterns.insert<CombineNullOpLowering>(typeConverter, &getContext());
+
    patterns.insert<DumpOpLowering>(typeConverter, &getContext());
    patterns.insert<ConstantLowering>(typeConverter, &getContext());
    patterns.insert<IfLowering>(typeConverter, &getContext());
