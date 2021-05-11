@@ -66,7 +66,7 @@ EXPORT uint64_t table_chunk_num_rows(db_table_chunk tableChunk) {
 }
 
 EXPORT db_table_column_buffer table_chunk_get_column_buffer(db_table_chunk tableChunk, db_column_id columnId, db_buffer_id bufferId) {
-   auto* res = ((arrow::RecordBatch*) tableChunk)->column_data(columnId)->buffers[bufferId].get();
+   auto* res = ((arrow::RecordBatch*) tableChunk)->column_data(columnId)->buffers[bufferId].get()->data();
    return (db_table_column_buffer) res;
 }
 EXPORT uint64_t table_chunk_get_column_offset(db_table_chunk tableChunk, db_column_id columnId) {

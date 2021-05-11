@@ -99,14 +99,14 @@ class TableRowIterator : public mlir::db::CollectionIterator {
       auto tableChunkNumRowsFn = getOrInsertFn(builder, parentModule, "table_chunk_num_rows", builder.getFunctionType({ptrType}, {indexType}));
       auto tableChunkColumnBufferFn = getOrInsertFn(builder, parentModule, "table_chunk_get_column_buffer", builder.getFunctionType({ptrType, indexType, indexType}, {ptrType}));
       auto tableChunkColumnOffsetFn = getOrInsertFn(builder, parentModule, "table_chunk_get_column_offset", builder.getFunctionType({ptrType, indexType}, {indexType}));
-      auto tableColumnGetInt64 = getOrInsertFn(builder, parentModule, "table_column_get_int_64", builder.getFunctionType({ptrType, indexType, indexType}, {mlir::db::IntType::get(builder.getContext(), false, 64)}));
-      auto tableColumnGetInt32 = getOrInsertFn(builder, parentModule, "table_column_get_int_32", builder.getFunctionType({ptrType, indexType, indexType}, {mlir::db::IntType::get(builder.getContext(), false, 32)}));
-      auto tableColumnGetFloat64 = getOrInsertFn(builder, parentModule, "table_column_get_float_64", builder.getFunctionType({ptrType, indexType, indexType}, {mlir::db::FloatType::get(builder.getContext(), false, 64)}));
-      auto tableColumnGetFloat32 = getOrInsertFn(builder, parentModule, "table_column_get_float_32", builder.getFunctionType({ptrType, indexType, indexType}, {mlir::db::FloatType::get(builder.getContext(), false, 32)}));
-      auto tableColumnGetDecimal = getOrInsertFn(builder, parentModule, "table_column_get_decimal", builder.getFunctionType({ptrType, indexType, indexType}, {mlir::db::IntType::get(builder.getContext(), false, 128)}));
-      auto tableColumnGetBinary = getOrInsertFn(builder, parentModule, "table_column_get_binary", builder.getFunctionType({ptrType, ptrType, indexType, indexType, ptr64Type}, {ptrType}));
+      auto tableColumnGetInt64 = getOrInsertFn(builder, parentModule, "buffer_get_int_64", builder.getFunctionType({ptrType, indexType, indexType}, {mlir::db::IntType::get(builder.getContext(), false, 64)}));
+      auto tableColumnGetInt32 = getOrInsertFn(builder, parentModule, "buffer_get_int_32", builder.getFunctionType({ptrType, indexType, indexType}, {mlir::db::IntType::get(builder.getContext(), false, 32)}));
+      auto tableColumnGetFloat64 = getOrInsertFn(builder, parentModule, "buffer_get_float_64", builder.getFunctionType({ptrType, indexType, indexType}, {mlir::db::FloatType::get(builder.getContext(), false, 64)}));
+      auto tableColumnGetFloat32 = getOrInsertFn(builder, parentModule, "buffer_get_float_32", builder.getFunctionType({ptrType, indexType, indexType}, {mlir::db::FloatType::get(builder.getContext(), false, 32)}));
+      auto tableColumnGetDecimal = getOrInsertFn(builder, parentModule, "buffer_get_decimal", builder.getFunctionType({ptrType, indexType, indexType}, {mlir::db::IntType::get(builder.getContext(), false, 128)}));
+      auto tableColumnGetBinary = getOrInsertFn(builder, parentModule, "buffer_get_binary", builder.getFunctionType({ptrType, ptrType, indexType, indexType, ptr64Type}, {ptrType}));
       auto tableColumnIsNull = getOrInsertFn(builder, parentModule, "table_column_is_null", builder.getFunctionType({ptrType, indexType, indexType}, {i1Type}));
-      auto tableColumnGetBool = getOrInsertFn(builder, parentModule, "table_column_get_bool", builder.getFunctionType({ptrType, indexType, indexType}, {mlir::db::BoolType::get(builder.getContext())}));
+      auto tableColumnGetBool = getOrInsertFn(builder, parentModule, "buffer_get_bool", builder.getFunctionType({ptrType, indexType, indexType}, {mlir::db::BoolType::get(builder.getContext())}));
 
       Value numRows = builder.create<mlir::CallOp>(builder.getUnknownLoc(), tableChunkNumRowsFn, mlir::ValueRange({chunk})).getResult(0);
       Value const0 = builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), indexType, builder.getIntegerAttr(indexType, 0));
