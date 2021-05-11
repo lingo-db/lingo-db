@@ -1,7 +1,7 @@
 #include "mlir/Dialect/DB/IR/DBCollectionType.h"
 #include "mlir/Dialect/DB/IR/DBTypes.h"
-#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/SCF/SCF.h"
 
 #include "mlir/Dialect/util/UtilOps.h"
 
@@ -138,14 +138,14 @@ class TableRowIterator : public mlir::db::CollectionIterator {
             values.push_back(v);
          } else if (dbtype.isa<db::StringType>()) {
             types.push_back(dbtype);
-            Value lenPtr=builder.create<mlir::memref::AllocaOp>(builder.getUnknownLoc(),ptr64Type);
-            Value v = builder.create<mlir::CallOp>(builder.getUnknownLoc(), tableColumnGetBinary, mlir::ValueRange({valueBuffer, varLenBuffer, offset, forOp.getInductionVar(),lenPtr})).getResult(0);
-            Value len=builder.create<mlir::memref::LoadOp>(builder.getUnknownLoc(),lenPtr);
+            Value lenPtr = builder.create<mlir::memref::AllocaOp>(builder.getUnknownLoc(), ptr64Type);
+            Value v = builder.create<mlir::CallOp>(builder.getUnknownLoc(), tableColumnGetBinary, mlir::ValueRange({valueBuffer, varLenBuffer, offset, forOp.getInductionVar(), lenPtr})).getResult(0);
+            Value len = builder.create<mlir::memref::LoadOp>(builder.getUnknownLoc(), lenPtr);
             auto strDynamicType = MemRefType::get({-1}, IntegerType::get(builder.getContext(), 8));
 
-            Value str=builder.create<mlir::memref::ReinterpretCastOp>(builder.getUnknownLoc(),strDynamicType,v,const0,len,const0);
+            Value str = builder.create<mlir::memref::ReinterpretCastOp>(builder.getUnknownLoc(), strDynamicType, v, const0, len, const0);
             values.push_back(str);
-         }else if(dbtype.isa<db::DecimalType>()){
+         } else if (dbtype.isa<db::DecimalType>()) {
             types.push_back(dbtype);
             Value v = builder.create<mlir::CallOp>(builder.getUnknownLoc(), tableColumnGetDecimal, mlir::ValueRange({valueBuffer, offset, forOp.getInductionVar()})).getResult(0);
             values.push_back(v);
