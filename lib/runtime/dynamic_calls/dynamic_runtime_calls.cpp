@@ -11,12 +11,12 @@
 
 #define EXPORT extern "C" __attribute__((visibility("default")))
 
-EXPORT db_table get_table(db_execution_context executionContext, char* name, size_t len) {
+EXPORT arrow::Table* get_table(runtime::ExecutionContext* executionContext, char* name, size_t len) {
    std::string tablename(name, len);
-   return (db_table)((runtime::ExecutionContext*) executionContext)->db->getTable(tablename).get();
+   return executionContext->db->getTable(tablename).get();
 }
 
-EXPORT db_column_id get_column_id(db_table table, char* name, size_t len) {
+EXPORT db_column_id get_column_id(arrow::Table* table, char* name, size_t len) {
    std::string column_name(name, len);
    auto column_names = ((arrow::Table*) table)->ColumnNames();
    size_t column_id = 0;
@@ -34,43 +34,41 @@ struct tableChunkIteratorStruct {
    tableChunkIteratorStruct(arrow::Table& table) : reader(table), curr_chunk() {}
 };
 
-EXPORT db_table_chunk_iterator table_chunk_iterator_init(db_table table) {
+EXPORT tableChunkIteratorStruct* table_chunk_iterator_init(db_table table) {
    auto* tableChunkIterator = new tableChunkIteratorStruct(*((arrow::Table*) table));
    tableChunkIterator->reader.set_chunksize(3);
    if (tableChunkIterator->reader.ReadNext(&tableChunkIterator->curr_chunk) != arrow::Status::OK()) {
       tableChunkIterator->curr_chunk.reset();
    }
-   return (db_table_chunk_iterator) tableChunkIterator;
+   return tableChunkIterator;
 }
-EXPORT db_table_chunk_iterator table_chunk_iterator_next(db_table_chunk_iterator iterator) {
-   auto* tableChunkIterator = (tableChunkIteratorStruct*) iterator;
-   if (tableChunkIterator->reader.ReadNext(&tableChunkIterator->curr_chunk) != arrow::Status::OK()) {
-      tableChunkIterator->curr_chunk.reset();
+EXPORT tableChunkIteratorStruct* table_chunk_iterator_next(tableChunkIteratorStruct* iterator) {
+   if (iterator->reader.ReadNext(&iterator->curr_chunk) != arrow::Status::OK()) {
+      iterator->curr_chunk.reset();
    }
    return iterator;
 }
-EXPORT db_table_chunk table_chunk_iterator_curr(db_table_chunk_iterator iterator) {
-   auto* tableChunkIterator = (tableChunkIteratorStruct*) iterator;
-   return (db_table_chunk) tableChunkIterator->curr_chunk.get();
+EXPORT arrow::RecordBatch* table_chunk_iterator_curr(tableChunkIteratorStruct* iterator) {
+   return iterator->curr_chunk.get();
 }
 
-EXPORT bool table_chunk_iterator_valid(db_table_chunk_iterator chunk) {
-   auto valid = ((tableChunkIteratorStruct*) chunk)->curr_chunk.operator bool();
+EXPORT bool table_chunk_iterator_valid(tableChunkIteratorStruct* iterator) {
+   auto valid = iterator->curr_chunk.operator bool();
    return valid;
 }
-EXPORT void table_chunk_iterator_free(db_table_chunk_iterator iterator) {
-   return delete ((tableChunkIteratorStruct*) iterator);
+EXPORT void table_chunk_iterator_free(tableChunkIteratorStruct* iterator) {
+   return delete iterator;
 }
-EXPORT uint64_t table_chunk_num_rows(db_table_chunk tableChunk) {
-   return ((arrow::RecordBatch*) tableChunk)->num_rows();
+EXPORT uint64_t table_chunk_num_rows(arrow::RecordBatch* tableChunk) {
+   return tableChunk->num_rows();
 }
 
-EXPORT db_table_column_buffer table_chunk_get_column_buffer(db_table_chunk tableChunk, db_column_id columnId, db_buffer_id bufferId) {
-   auto* res = ((arrow::RecordBatch*) tableChunk)->column_data(columnId)->buffers[bufferId].get()->data();
-   return (db_table_column_buffer) res;
+
+EXPORT const uint8_t* table_chunk_get_column_buffer(arrow::RecordBatch* tableChunk, db_column_id columnId, db_buffer_id bufferId) {
+   return tableChunk->column_data(columnId)->buffers[bufferId].get()->data();
 }
-EXPORT uint64_t table_chunk_get_column_offset(db_table_chunk tableChunk, db_column_id columnId) {
-   return ((arrow::RecordBatch*) tableChunk)->column_data(columnId)->offset;
+EXPORT uint64_t table_chunk_get_column_offset(arrow::RecordBatch* tableChunk, db_column_id columnId) {
+   return tableChunk->column_data(columnId)->offset;
 }
 EXPORT void dump_int(bool null, int64_t val) {
    if (null) {
