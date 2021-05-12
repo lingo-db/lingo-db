@@ -35,6 +35,17 @@ static FuncOp getOrInsertFn(PatternRewriter& rewriter,
    PatternRewriter::InsertionGuard insertGuard(rewriter);
    rewriter.setInsertionPointToStart(module.getBody());
    FuncOp funcOp = rewriter.create<FuncOp>(module.getLoc(), name, fnType, rewriter.getStringAttr("private"));
+   funcOp->setAttr("llvm.emit_c_interface",rewriter.getUnitAttr());
+   return funcOp;
+}
+//declare external function or return reference to already existing one
+static FuncOp getOrInsertGandivaFn(PatternRewriter& rewriter,
+                            ModuleOp module, const std::string& name, FunctionType fnType) {
+   if (FuncOp funcOp = module.lookupSymbol<FuncOp>(name))
+      return funcOp;
+   PatternRewriter::InsertionGuard insertGuard(rewriter);
+   rewriter.setInsertionPointToStart(module.getBody());
+   FuncOp funcOp = rewriter.create<FuncOp>(module.getLoc(), name, fnType, rewriter.getStringAttr("private"));
    return funcOp;
 }
 class NullOpLowering : public ConversionPattern {
@@ -88,12 +99,7 @@ arrow::TimeUnit::type toArrowTimeUnit(mlir::db::TimeUnitAttr attr) {
    }
    return arrow::TimeUnit::SECOND;
 }
-static std::pair<Value, Value> splitString(Value v, ConversionPatternRewriter& rewriter) {
-   auto i8Type = IntegerType::get(rewriter.getContext(), 8);
-   Value len = rewriter.create<memref::DimOp>(v.getLoc(), v, 0);
-   Value val = rewriter.create<memref::ReinterpretCastOp>(v.getLoc(), MemRefType::get({}, i8Type), v, (int64_t) 0, ArrayRef<int64_t>({}), ArrayRef<int64_t>({}));
-   return {val, len};
-}
+
 static Value insertConstString(std::string str, ModuleOp module, ConversionPatternRewriter& rewriter) {
    auto loc = rewriter.getUnknownLoc();
    auto i8Type = IntegerType::get(rewriter.getContext(), 8);
@@ -380,23 +386,23 @@ class TableScanLowering : public ConversionPattern {
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
       auto i8Type = IntegerType::get(rewriter.getContext(), 8);
       auto ptrType = MemRefType::get({}, i8Type);
+      auto strType = MemRefType::get({-1}, i8Type);
+
       auto indexType = IndexType::get(rewriter.getContext());
-      auto getTableFn = getOrInsertFn(rewriter, parentModule, "get_table", rewriter.getFunctionType({ptrType, ptrType, indexType}, {ptrType}));
-      auto getColumnIdFn = getOrInsertFn(rewriter, parentModule, "get_column_id", rewriter.getFunctionType({ptrType, ptrType, indexType}, {indexType}));
+      auto getTableFn = getOrInsertFn(rewriter, parentModule, "get_table", rewriter.getFunctionType({ptrType, strType}, {ptrType}));
+      auto getColumnIdFn = getOrInsertFn(rewriter, parentModule, "get_column_id", rewriter.getFunctionType({ptrType, strType}, {indexType}));
 
       std::vector<Value> values;
       types.push_back(ptrType);
       auto tableName = insertConstString(tablescan.tablename().str(), parentModule, rewriter);
-      auto [tableStr, tableStrLen] = splitString(tableName, rewriter);
-      auto call = rewriter.create<CallOp>(rewriter.getUnknownLoc(), getTableFn, mlir::ValueRange({tablescan.execution_context(), tableStr, tableStrLen}));
+      auto call = rewriter.create<CallOp>(rewriter.getUnknownLoc(), getTableFn, mlir::ValueRange({tablescan.execution_context(), tableName}));
       Value tablePtr = call->getResult(0);
       values.push_back(tablePtr);
       for (auto c : tablescan.columns()) {
          auto stringAttr = c.cast<StringAttr>();
          types.push_back(indexType);
          auto colName = insertConstString(stringAttr.getValue().str(), parentModule, rewriter);
-         auto [colStr, colStrLen] = splitString(colName, rewriter);
-         auto call = rewriter.create<CallOp>(rewriter.getUnknownLoc(), getColumnIdFn, mlir::ValueRange({tablePtr, colStr, colStrLen}));
+         auto call = rewriter.create<CallOp>(rewriter.getUnknownLoc(), getColumnIdFn, mlir::ValueRange({tablePtr, colName}));
          values.push_back(call->getResult(0));
       }
       rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, mlir::TupleType::get(rewriter.getContext(), types), values);
@@ -859,12 +865,9 @@ class DumpOpLowering : public ConversionPattern {
          }
          rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       } else if (type.isa<mlir::db::StringType>()) {
-         auto indexType = IndexType::get(rewriter.getContext());
-         auto strType = MemRefType::get({}, IntegerType::get(getContext(), 8));
-
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_string", rewriter.getFunctionType({i1Type, strType, indexType}, {}));
-         auto [v, len] = splitString(val, rewriter);
-         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, v, len}));
+         auto strType = MemRefType::get({-1}, IntegerType::get(getContext(), 8));
+         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_string", rewriter.getFunctionType({i1Type, strType}, {}));
+         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       }
       rewriter.eraseOp(op);
 
@@ -1128,13 +1131,13 @@ void DBToStdLoweringPass::runOnOperation() {
    auto dateAddFunction = [](Operation* op, mlir::db::DateType dateType, mlir::db::IntervalType intervalType, ConversionPatternRewriter& rewriter) {
       auto i64Type = IntegerType::get(rewriter.getContext(), 64);
       auto i32Type = IntegerType::get(rewriter.getContext(), 32);
-      return getOrInsertFn(rewriter, op->getParentOfType<ModuleOp>(), "timestampaddMonth_int32_date64", rewriter.getFunctionType({i32Type, i64Type}, {i64Type}));
+      return getOrInsertGandivaFn(rewriter, op->getParentOfType<ModuleOp>(), "timestampaddMonth_int32_date64", rewriter.getFunctionType({i32Type, i64Type}, {i64Type}));
    };
    auto dateExtractFunction = [](mlir::db::DateExtractOp dateExtractOp, mlir::db::DateType dateType, ConversionPatternRewriter& rewriter) {
       auto i64Type = IntegerType::get(rewriter.getContext(), 64);
       std::string unitString = mlir::db::stringifyExtractableTimeUnitAttr(dateExtractOp.unit()).str();
       unitString[0] = toupper(unitString[0]);
-      return getOrInsertFn(rewriter, dateExtractOp->getParentOfType<ModuleOp>(), "extract" + unitString + "_date64", rewriter.getFunctionType({i64Type}, {i64Type}));
+      return getOrInsertGandivaFn(rewriter, dateExtractOp->getParentOfType<ModuleOp>(), "extract" + unitString + "_date64", rewriter.getFunctionType({i64Type}, {i64Type}));
    };
 
    patterns.insert<SimpleBinOpToFuncLowering<mlir::db::DateAddOp, mlir::db::DateType, mlir::db::IntervalType, mlir::db::DateType>>(

@@ -22,6 +22,7 @@ static mlir::FuncOp getOrInsertFn(mlir::OpBuilder& rewriter,
    PatternRewriter::InsertionGuard insertGuard(rewriter);
    rewriter.setInsertionPointToStart(module.getBody());
    FuncOp funcOp = rewriter.create<FuncOp>(module.getLoc(), name, fnType, rewriter.getStringAttr("private"));
+   funcOp->setAttr("llvm.emit_c_interface",rewriter.getUnitAttr());
    return funcOp;
 }
 } // end namespace

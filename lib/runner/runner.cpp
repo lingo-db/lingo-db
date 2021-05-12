@@ -54,7 +54,7 @@ void ToLLVMLoweringPass::runOnOperation() {
    // details how one type maps to another. This is necessary now that we will be
    // doing more complicated lowerings, involving loop region arguments.
    mlir::LowerToLLVMOptions options(&getContext());
-   options.useBarePtrCallConv = true;
+   //options.emitCWrappers = true;
    mlir::LLVMTypeConverter typeConverter(&getContext(), options);
 
    // Now that the conversion target has been defined, we need to provide the
@@ -73,6 +73,9 @@ void ToLLVMLoweringPass::runOnOperation() {
    // We want to completely lower to LLVM, so we use a `FullConversion`. This
    // ensures that only legal operations will remain after the conversion.
    auto module = getOperation();
+   if (auto mainFunc = module.lookupSymbol<mlir::FuncOp>("main")) {
+      mainFunc->setAttr("llvm.emit_c_interface", mlir::UnitAttr::get(&getContext()));
+   }
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }
@@ -237,10 +240,9 @@ bool Runner::runJit(runtime::ExecutionContext* context) {
       ctxt->module.get(), /*llvmModuleBuilder=*/convertMLIRModule, optPipeline);
    assert(maybeEngine && "failed to construct an execution engine");
    auto& engine = maybeEngine.get();
-
-   std::vector<void*> args = {(void*) &context};
+   runtime::Pointer<runtime::ExecutionContext> contextPtr(context);
    // Invoke the JIT-compiled function.
-   auto invocationResult = engine->invokePacked("main", args);
+   auto invocationResult = engine->invoke("main", &contextPtr);
    if (invocationResult) {
       llvm::errs() << "JIT invocation failed\n";
       return false;

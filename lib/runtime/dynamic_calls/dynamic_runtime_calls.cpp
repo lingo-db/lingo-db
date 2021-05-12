@@ -11,17 +11,15 @@
 
 #define EXPORT extern "C" __attribute__((visibility("default")))
 
-EXPORT arrow::Table* get_table(runtime::ExecutionContext* executionContext, char* name, size_t len) {
-   std::string tablename(name, len);
-   return executionContext->db->getTable(tablename).get();
+EXPORT  runtime::Pointer<arrow::Table> _mlir_ciface_get_table(runtime::Pointer<runtime::ExecutionContext>* executionContext, runtime::String* tableName) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return (*executionContext)->db->getTable(*tableName).get();
 }
 
-EXPORT db_column_id get_column_id(arrow::Table* table, char* name, size_t len) {
-   std::string column_name(name, len);
-   auto column_names = ((arrow::Table*) table)->ColumnNames();
+EXPORT uint64_t _mlir_ciface_get_column_id(runtime::Pointer<arrow::Table>* table, runtime::String* columnName) {
+   auto column_names =  (*table)->ColumnNames();
    size_t column_id = 0;
    for (auto column : column_names) {
-      if (column == column_name) {
+      if (column == columnName->str()) {
          return column_id;
       }
       column_id++;
@@ -34,64 +32,63 @@ struct tableChunkIteratorStruct {
    tableChunkIteratorStruct(arrow::Table& table) : reader(table), curr_chunk() {}
 };
 
-EXPORT tableChunkIteratorStruct* table_chunk_iterator_init(db_table table) {
-   auto* tableChunkIterator = new tableChunkIteratorStruct(*((arrow::Table*) table));
+EXPORT runtime::Pointer<tableChunkIteratorStruct> _mlir_ciface_table_chunk_iterator_init(runtime::Pointer<arrow::Table>* table) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   auto* tableChunkIterator = new tableChunkIteratorStruct(**table);
    tableChunkIterator->reader.set_chunksize(3);
    if (tableChunkIterator->reader.ReadNext(&tableChunkIterator->curr_chunk) != arrow::Status::OK()) {
       tableChunkIterator->curr_chunk.reset();
    }
    return tableChunkIterator;
 }
-EXPORT tableChunkIteratorStruct* table_chunk_iterator_next(tableChunkIteratorStruct* iterator) {
-   if (iterator->reader.ReadNext(&iterator->curr_chunk) != arrow::Status::OK()) {
-      iterator->curr_chunk.reset();
+EXPORT runtime::Pointer<tableChunkIteratorStruct> _mlir_ciface_table_chunk_iterator_next(runtime::Pointer<tableChunkIteratorStruct>* iterator) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   if ((*iterator)->reader.ReadNext(&(*iterator)->curr_chunk) != arrow::Status::OK()) {
+      (*iterator)->curr_chunk.reset();
    }
-   return iterator;
+   return *iterator;
 }
-EXPORT arrow::RecordBatch* table_chunk_iterator_curr(tableChunkIteratorStruct* iterator) {
-   return iterator->curr_chunk.get();
+EXPORT runtime::Pointer<arrow::RecordBatch> _mlir_ciface_table_chunk_iterator_curr(runtime::Pointer<tableChunkIteratorStruct>* iterator) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return (*iterator)->curr_chunk.get();
 }
 
-EXPORT bool table_chunk_iterator_valid(tableChunkIteratorStruct* iterator) {
-   auto valid = iterator->curr_chunk.operator bool();
+EXPORT bool _mlir_ciface_table_chunk_iterator_valid(runtime::Pointer<tableChunkIteratorStruct>* iterator) {
+   auto valid = (*iterator)->curr_chunk.operator bool();
    return valid;
 }
-EXPORT void table_chunk_iterator_free(tableChunkIteratorStruct* iterator) {
-   return delete iterator;
+EXPORT void _mlir_ciface_table_chunk_iterator_free(runtime::Pointer<tableChunkIteratorStruct>* iterator) {
+   return delete iterator->get();
 }
-EXPORT uint64_t table_chunk_num_rows(arrow::RecordBatch* tableChunk) {
-   return tableChunk->num_rows();
+EXPORT uint64_t _mlir_ciface_table_chunk_num_rows(runtime::Pointer<arrow::RecordBatch>* tableChunk) {
+   return (*tableChunk)->num_rows();
 }
 
-
-EXPORT const uint8_t* table_chunk_get_column_buffer(arrow::RecordBatch* tableChunk, db_column_id columnId, db_buffer_id bufferId) {
-   return tableChunk->column_data(columnId)->buffers[bufferId].get()->data();
+EXPORT runtime::Pointer<const uint8_t> _mlir_ciface_table_chunk_get_column_buffer(runtime::Pointer<arrow::RecordBatch>* tableChunk, uint64_t columnId, uint64_t bufferId) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return (*tableChunk)->column_data(columnId)->buffers[bufferId].get()->data();
 }
-EXPORT uint64_t table_chunk_get_column_offset(arrow::RecordBatch* tableChunk, db_column_id columnId) {
-   return tableChunk->column_data(columnId)->offset;
+EXPORT uint64_t _mlir_ciface_table_chunk_get_column_offset(runtime::Pointer<arrow::RecordBatch>* tableChunk, uint64_t columnId) {
+   return (*tableChunk)->column_data(columnId)->offset;
 }
-EXPORT void dump_int(bool null, int64_t val) {
+EXPORT void _mlir_ciface_dump_int(bool null, int64_t val) {
    if (null) {
       std::cout << "int(NULL)" << std::endl;
    } else {
       std::cout << "int(" << val << ")" << std::endl;
    }
 }
-EXPORT void dump_uint(bool null, uint64_t val) {
+EXPORT void _mlir_ciface_dump_uint(bool null, uint64_t val) {
    if (null) {
       std::cout << "uint(NULL)" << std::endl;
    } else {
       std::cout << "uint(" << val << ")" << std::endl;
    }
 }
-EXPORT void dump_bool(bool null, bool val) {
+EXPORT void _mlir_ciface_dump_bool(bool null, bool val) {
    if (null) {
       std::cout << "bool(NULL)" << std::endl;
    } else {
       std::cout << "bool(" << std::boolalpha << val << ")" << std::endl;
    }
 }
-EXPORT void dump_decimal(bool null, uint64_t low, uint64_t high, int32_t scale) {
+EXPORT void _mlir_ciface_dump_decimal(bool null, uint64_t low, uint64_t high, int32_t scale) {
    if (null) {
       std::cout << "decimal(NULL)" << std::endl;
    } else {
@@ -100,14 +97,14 @@ EXPORT void dump_decimal(bool null, uint64_t low, uint64_t high, int32_t scale) 
    }
 }
 arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
-EXPORT void dump_date_day(bool null, uint32_t date) {
+EXPORT void _mlir_ciface_dump_date_day(bool null, uint32_t date) {
    if (null) {
       std::cout << "date(NULL)" << std::endl;
    } else {
       std::cout << "date(" << arrow_vendored::date::format("%F", epoch + arrow_vendored::date::days{date}) << ")" << std::endl;
    }
 }
-EXPORT void dump_date_millisecond(bool null, int64_t date) {
+EXPORT void _mlir_ciface_dump_date_millisecond(bool null, int64_t date) {
    if (null) {
       std::cout << "date(NULL)" << std::endl;
    } else {
@@ -122,45 +119,46 @@ void dump_timestamp(bool null, uint64_t date) {
       std::cout << "timestamp(" << arrow_vendored::date::format("%F %T", epoch + Unit{date}) << ")" << std::endl;
    }
 }
-EXPORT void dump_timestamp_second(bool null, uint64_t date) {
+EXPORT void _mlir_ciface_dump_timestamp_second(bool null, uint64_t date) {
    dump_timestamp<std::chrono::seconds>(null, date);
 }
-EXPORT void dump_timestamp_millisecond(bool null, uint64_t date) {
+EXPORT void _mlir_ciface_dump_timestamp_millisecond(bool null, uint64_t date) {
    dump_timestamp<std::chrono::milliseconds>(null, date);
 }
-EXPORT void dump_timestamp_microsecond(bool null, uint64_t date) {
+EXPORT void _mlir_ciface_dump_timestamp_microsecond(bool null, uint64_t date) {
    dump_timestamp<std::chrono::microseconds>(null, date);
 }
-EXPORT void dump_timestamp_nanosecond(bool null, uint64_t date) {
+EXPORT void _mlir_ciface_dump_timestamp_nanosecond(bool null, uint64_t date) {
    dump_timestamp<std::chrono::nanoseconds>(null, date);
 }
 
-EXPORT void dump_interval_months(bool null, uint32_t interval) {
+EXPORT void _mlir_ciface_dump_interval_months(bool null, uint32_t interval) {
    if (null) {
       std::cout << "interval(NULL)" << std::endl;
    } else {
       std::cout << "interval(" << interval << " months)" << std::endl;
    }
 }
-EXPORT void dump_interval_daytime(bool null, uint64_t interval) {
+EXPORT void _mlir_ciface_dump_interval_daytime(bool null, uint64_t interval) {
    if (null) {
       std::cout << "interval(NULL)" << std::endl;
    } else {
       std::cout << "interval(" << interval << " daytime)" << std::endl;
    }
 }
-EXPORT void dump_float(bool null, double val) {
+EXPORT void _mlir_ciface_dump_float(bool null, double val) {
    if (null) {
       std::cout << "float(NULL)" << std::endl;
    } else {
       std::cout << "float(" << val << ")" << std::endl;
    }
 }
-EXPORT void dump_string(bool null, char* ptr, size_t len) {
+
+EXPORT void _mlir_ciface_dump_string(bool null, runtime::String* string) {
    if (null) {
       std::cout << "string(NULL)" << std::endl;
    } else {
-      std::cout << "string(\"" << std::string(ptr, len) << "\")" << std::endl;
+      std::cout << "string(\"" << string->str() << "\")" << std::endl;
    }
 }
 
