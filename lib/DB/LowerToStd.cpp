@@ -364,7 +364,7 @@ class ForOpLowering : public ConversionPattern {
       forOp->dump();
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::db::CollectionType>();
 
-      auto iterator = collectionType.getIterator(forOp.collection());
+      auto iterator = collectionType.getIterationImpl(forOp.collection());
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
       auto *terminator = forOp.getBody()->getTerminator();
       iterator->implementLoop({}, *typeConverter, rewriter, parentModule, [&](auto val, OpBuilder builder) {

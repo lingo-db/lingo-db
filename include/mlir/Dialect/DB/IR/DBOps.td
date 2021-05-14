@@ -48,7 +48,7 @@ def DB_GenericIterable : DB_Collection<"GenericIterable","iterable"> {
 let summary = "generic iterable";
 let parameters = (ins "Type":$elementType,"std::string":$iteratorName);
 let extraClassDeclaration = [{
-std::unique_ptr<CollectionIterator> getIterator(Value collection) const;
+std::unique_ptr<CollectionIterationImpl> getIterationImpl(Value collection) const;
 
 }];
 }

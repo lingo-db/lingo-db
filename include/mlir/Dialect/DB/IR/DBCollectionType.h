@@ -8,10 +8,10 @@
 #include <mlir/Transforms/DialectConversion.h>
 
 namespace mlir::db {
-class CollectionIterator {
+class CollectionIterationImpl {
    public:
    virtual std::vector<Value> implementLoop(mlir::TypeRange iterArgTypes,  mlir::TypeConverter& typeConverter,OpBuilder builder, mlir::ModuleOp parentModule, std::function<std::vector<Value>(ValueRange,OpBuilder)> bodyBuilder) = 0;
-   virtual ~CollectionIterator(){
+   virtual ~CollectionIterationImpl(){
 
    }
 };
@@ -19,7 +19,7 @@ class CollectionType : public mlir::Type {
    public:
    using Type::Type;
    Type getElementType() const;
-   std::unique_ptr<CollectionIterator> getIterator(Value collection) const;
+   std::unique_ptr<CollectionIterationImpl> getIterationImpl(Value collection) const;
 };
 } // namespace mlir::db
 

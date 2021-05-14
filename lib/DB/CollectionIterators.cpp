@@ -26,66 +26,73 @@ static mlir::FuncOp getOrInsertFn(mlir::OpBuilder& rewriter,
    return funcOp;
 }
 } // end namespace
-class TableChunkIterator : public mlir::db::CollectionIterator {
-   Value tableInfo;
+class WhileIterator {
+   protected:
+   ModuleOp parentModule;
+   mlir::TypeConverter* typeConverter;
 
    public:
-   TableChunkIterator(Value tableInfo) : tableInfo(tableInfo) {
+   void setParentModule(const ModuleOp& parentModule) {
+      WhileIterator::parentModule = parentModule;
    }
-   virtual std::vector<Value> implementLoop(mlir::TypeRange iterArgTypes, mlir::TypeConverter& typeConverter, OpBuilder builder, ModuleOp parentModule, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) {
-      auto insertionPoint = builder.saveInsertionPoint();
+   void setTypeConverter(TypeConverter* typeConverter) {
+      WhileIterator::typeConverter = typeConverter;
+   }
+
+   public:
+   virtual void init(OpBuilder builder) = 0;
+   virtual Value iterator(OpBuilder builder) = 0;
+   virtual Value iteratorNext(OpBuilder builder, Value iterator) = 0;
+   virtual Value iteratorGetCurrentElement(OpBuilder builder, Value iterator) = 0;
+   virtual Value iteratorValid(OpBuilder builder, Value iterator) = 0;
+   virtual void iteratorFree(OpBuilder builder, Value iterator) = 0;
+   virtual ~WhileIterator() {}
+};
+class TableIterator : public WhileIterator {
+   Value tableInfo;
+   Type ptrType;
+   Type i1Type;
+
+   public:
+   TableIterator(Value tableInfo) : tableInfo(tableInfo) {
+   }
+   virtual void init(OpBuilder builder) {
       auto i8Type = IntegerType::get(builder.getContext(), 8);
-      auto i1Type = IntegerType::get(builder.getContext(), 1);
+      ptrType = MemRefType::get({}, i8Type);
+      i1Type = IntegerType::get(builder.getContext(), 1);
+   }
 
-      auto ptrType = MemRefType::get({}, i8Type);
-      Value tablePtr = builder.create<util::GetTupleOp>(builder.getUnknownLoc(), ptrType, tableInfo, 0);
-
+   virtual Value iterator(OpBuilder builder) {
       auto iteratorInitFn = getOrInsertFn(builder, parentModule, "table_chunk_iterator_init", builder.getFunctionType({ptrType}, {ptrType}));
-      auto iteratorValidFn = getOrInsertFn(builder, parentModule, "table_chunk_iterator_valid", builder.getFunctionType({ptrType}, {i1Type}));
-      auto iteratorNextFn = getOrInsertFn(builder, parentModule, "table_chunk_iterator_next", builder.getFunctionType({ptrType}, {ptrType}));
-      auto iteratorCurrFn = getOrInsertFn(builder, parentModule, "table_chunk_iterator_curr", builder.getFunctionType({ptrType}, {ptrType}));
 
-      auto iteratorFreeFn = getOrInsertFn(builder, parentModule, "table_chunk_iterator_free", builder.getFunctionType({ptrType}, {}));
-
+      Value tablePtr = builder.create<util::GetTupleOp>(builder.getUnknownLoc(), ptrType, tableInfo, 0);
       Value initialIterator = builder.create<mlir::CallOp>(builder.getUnknownLoc(), iteratorInitFn, mlir::ValueRange({tablePtr})).getResult(0);
-      auto whileOp = builder.create<mlir::scf::WhileOp>(builder.getUnknownLoc(), TypeRange({ptrType}), ValueRange({initialIterator}));
-      Block* before = new Block;
-      Block* after = new Block;
-      whileOp.before().push_back(before);
-      whileOp.after().push_back(after);
-      before->addArgument(ptrType);
-      after->addArgument(ptrType);
-
-      builder.setInsertionPointToStart(&whileOp.before().front());
-      auto arg1 = whileOp.before().front().getArgument(0);
-      Value valid = builder.create<mlir::CallOp>(builder.getUnknownLoc(), iteratorValidFn, mlir::ValueRange({arg1})).getResult(0);
-      builder.create<mlir::scf::ConditionOp>(builder.getUnknownLoc(), valid, arg1);
-      builder.setInsertionPointToStart(&whileOp.after().front());
-      auto arg2 = whileOp.after().front().getArgument(0);
-      Value currElementPtr = builder.create<mlir::CallOp>(builder.getUnknownLoc(), iteratorCurrFn, mlir::ValueRange({arg2})).getResult(0);
-      Value currElement = builder.create<mlir::util::SetTupleOp>(builder.getUnknownLoc(), typeConverter.convertType(tableInfo.getType()), tableInfo, currElementPtr, 0);
-      Value nextIterator = builder.create<mlir::CallOp>(builder.getUnknownLoc(), iteratorNextFn, mlir::ValueRange({arg2})).getResult(0);
-
-      builder.create<mlir::scf::YieldOp>(builder.getUnknownLoc(), nextIterator);
-      builder.setInsertionPoint(nextIterator.getDefiningOp());
-      bodyBuilder(currElement, builder);
-      Value finalIterator = whileOp.getResult(0);
-      builder.restoreInsertionPoint(insertionPoint);
-      builder.create<mlir::CallOp>(builder.getUnknownLoc(), iteratorFreeFn, mlir::ValueRange({finalIterator}));
-      return {};
+      return initialIterator;
+   }
+   virtual Value iteratorNext(OpBuilder builder, Value iterator) {
+      auto iteratorNextFn = getOrInsertFn(builder, parentModule, "table_chunk_iterator_next", builder.getFunctionType({ptrType}, {ptrType}));
+      Value nextIterator = builder.create<mlir::CallOp>(builder.getUnknownLoc(), iteratorNextFn, mlir::ValueRange({iterator})).getResult(0);
+      return nextIterator;
+   }
+   virtual Value iteratorGetCurrentElement(OpBuilder builder, Value iterator) {
+      auto iteratorCurrFn = getOrInsertFn(builder, parentModule, "table_chunk_iterator_curr", builder.getFunctionType({ptrType}, {ptrType}));
+      Value currElementPtr = builder.create<mlir::CallOp>(builder.getUnknownLoc(), iteratorCurrFn, mlir::ValueRange({iterator})).getResult(0);
+      Value currElement = builder.create<mlir::util::SetTupleOp>(builder.getUnknownLoc(), typeConverter->convertType(tableInfo.getType()), tableInfo, currElementPtr, 0);
+      return currElement;
+   }
+   virtual Value iteratorValid(OpBuilder builder, Value iterator) {
+      auto iteratorValidFn = getOrInsertFn(builder, parentModule, "table_chunk_iterator_valid", builder.getFunctionType({ptrType}, {i1Type}));
+      Value valid = builder.create<mlir::CallOp>(builder.getUnknownLoc(), iteratorValidFn, mlir::ValueRange({iterator})).getResult(0);
+      return valid;
+   }
+   virtual void iteratorFree(OpBuilder builder, Value iterator) {
+      auto iteratorFreeFn = getOrInsertFn(builder, parentModule, "table_chunk_iterator_free", builder.getFunctionType({ptrType}, {}));
+      builder.create<mlir::CallOp>(builder.getUnknownLoc(), iteratorFreeFn, mlir::ValueRange({iterator}));
    }
 };
-class TableRowIterator : public mlir::db::CollectionIterator {
-   Value tableChunkInfo;
-   Type elementType;
-   Type getValueBufferType(mlir::TypeConverter& typeConverter, OpBuilder builder, mlir::db::DBType type) {
-      if (type.isa<mlir::db::StringType>()) {
-         return builder.getI32Type();
-      }
-      return typeConverter.convertType(type.getBaseType());
-   }
-
-   Value getBit(OpBuilder builder, Value bits, Value pos) {
+class BitUtil {
+   public:
+   static Value getBit(OpBuilder builder, Value bits, Value pos, bool negated = false) {
       auto i1Type = IntegerType::get(builder.getContext(), 1);
       auto i8Type = IntegerType::get(builder.getContext(), 8);
 
@@ -96,20 +103,81 @@ class TableRowIterator : public mlir::db::CollectionIterator {
       Value div8 = builder.create<UnsignedShiftRightOp>(builder.getUnknownLoc(), indexType, pos, const3);
       Value rem8 = builder.create<AndOp>(builder.getUnknownLoc(), indexType, pos, const7);
       Value loadedByte = builder.create<memref::LoadOp>(builder.getUnknownLoc(), bits, ValueRange({div8}));
-      Value rem8AsByte=builder.create<IndexCastOp>(builder.getUnknownLoc(),rem8,i8Type);
+      Value rem8AsByte = builder.create<IndexCastOp>(builder.getUnknownLoc(), rem8, i8Type);
       Value shifted = builder.create<UnsignedShiftRightOp>(builder.getUnknownLoc(), i8Type, loadedByte, rem8AsByte);
       Value res = builder.create<TruncateIOp>(builder.getUnknownLoc(), i1Type, shifted);
+      if (negated) {
+         Value constTrue = builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), i1Type, builder.getIntegerAttr(i1Type, 1));
+         res = builder.create<XOrOp>(builder.getUnknownLoc(), res, constTrue); //negate
+      }
       return res;
    }
+};
+class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
+   std::unique_ptr<WhileIterator> iterator;
+
+   public:
+   WhileIteratorIterationImpl(std::unique_ptr<WhileIterator> iterator) : iterator(std::move(iterator)) {
+   }
+   virtual std::vector<Value> implementLoop(mlir::TypeRange iterArgTypes, mlir::TypeConverter& typeConverter, OpBuilder builder, ModuleOp parentModule, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) {
+      auto insertionPoint = builder.saveInsertionPoint();
+      auto i8Type = IntegerType::get(builder.getContext(), 8);
+
+      auto ptrType = MemRefType::get({}, i8Type);
+      iterator->setParentModule(parentModule);
+      iterator->setTypeConverter(&typeConverter);
+      iterator->init(builder);
+
+      Value initialIterator = iterator->iterator(builder);
+      auto whileOp = builder.create<mlir::scf::WhileOp>(builder.getUnknownLoc(), TypeRange({ptrType}), ValueRange({initialIterator}));
+      Block* before = new Block;
+      Block* after = new Block;
+      whileOp.before().push_back(before);
+      whileOp.after().push_back(after);
+      before->addArgument(ptrType);
+      after->addArgument(ptrType);
+
+      builder.setInsertionPointToStart(&whileOp.before().front());
+      auto arg1 = whileOp.before().front().getArgument(0);
+      builder.create<mlir::scf::ConditionOp>(builder.getUnknownLoc(), iterator->iteratorValid(builder, arg1), arg1);
+      builder.setInsertionPointToStart(&whileOp.after().front());
+      auto arg2 = whileOp.after().front().getArgument(0);
+      Value currElement = iterator->iteratorGetCurrentElement(builder, arg2);
+      Value nextIterator = iterator->iteratorNext(builder, arg2);
+      builder.create<mlir::scf::YieldOp>(builder.getUnknownLoc(), nextIterator);
+      builder.setInsertionPoint(nextIterator.getDefiningOp());
+      bodyBuilder(currElement, builder);
+      Value finalIterator = whileOp.getResult(0);
+      builder.restoreInsertionPoint(insertionPoint);
+      iterator->iteratorFree(builder, finalIterator);
+      return {};
+   }
+};
+class TableRowIterator : public mlir::db::CollectionIterationImpl {
+   Value tableChunkInfo;
+   Type elementType;
+   Type getValueBufferType(mlir::TypeConverter& typeConverter, OpBuilder builder, mlir::db::DBType type) {
+      if (type.isa<mlir::db::StringType>()) {
+         return builder.getI32Type();
+      }
+      return typeConverter.convertType(type.getBaseType());
+   }
+   struct Column {
+      mlir::db::DBType type;
+      Type stdType;
+      Value offset;
+      Value nullBitmap;
+      Value values;
+      Value varLenBuffer;
+   };
 
    public:
    TableRowIterator(Value tableChunkInfo, Type elementType) : tableChunkInfo(tableChunkInfo), elementType(elementType) {
    }
    virtual std::vector<Value> implementLoop(mlir::TypeRange iterArgTypes, mlir::TypeConverter& typeConverter, OpBuilder builder, ModuleOp parentModule, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) {
       auto insertionPoint = builder.saveInsertionPoint();
-      auto i1Type = IntegerType::get(builder.getContext(), 1);
       auto i8Type = IntegerType::get(builder.getContext(), 8);
-      std::vector<std::tuple<Value, Value, Value, Value, mlir::db::DBType>> columnInfo;
+      std::vector<Column> columnInfo;
       auto ptrType = MemRefType::get({}, i8Type);
       auto byteRange = MemRefType::get({-1}, i8Type);
       auto indexType = IndexType::get(builder.getContext());
@@ -153,7 +221,7 @@ class TableRowIterator : public mlir::db::CollectionIterator {
          if (dbtype.isVarLen()) {
             varLenBuffer = builder.create<mlir::CallOp>(builder.getUnknownLoc(), tableChunkColumnBufferFn, mlir::ValueRange({chunk, columnId, const2})).getResult(0);
          }
-         columnInfo.push_back({offset, bitmapBuffer, valueBuffer, varLenBuffer, dbtype});
+         columnInfo.push_back({dbtype, convertedType, offset, bitmapBuffer, valueBuffer, varLenBuffer});
          columnIdx++;
       }
 
@@ -162,33 +230,28 @@ class TableRowIterator : public mlir::db::CollectionIterator {
       std::vector<Type> types;
       std::vector<Value> values;
       for (auto column : columnInfo) {
-         auto [offset, bitmapBuffer, valueBuffer, varLenBuffer, dbtype] = column;
-         types.push_back(dbtype);
+         types.push_back(column.type);
          Value val;
-         auto convertedType = typeConverter.convertType(dbtype.getBaseType());
-         if (dbtype.isa<db::StringType>()) {
-            Value pos1 = builder.create<memref::LoadOp>(builder.getUnknownLoc(), valueBuffer, ValueRange({forOp.getInductionVar()}));
+         if (column.type.isa<db::StringType>()) {
+            Value pos1 = builder.create<memref::LoadOp>(builder.getUnknownLoc(), column.values, ValueRange({forOp.getInductionVar()}));
             Value ip1 = builder.create<mlir::AddIOp>(builder.getUnknownLoc(), indexType, forOp.getInductionVar(), const1);
-            Value pos2 = builder.create<memref::LoadOp>(builder.getUnknownLoc(), valueBuffer, ValueRange({ip1}));
-            Value len=builder.create<mlir::SubIOp>(builder.getUnknownLoc(),builder.getI32Type(),pos2,pos1);
-            Value pos1AsIndex=builder.create<IndexCastOp>(builder.getUnknownLoc(),pos1,indexType);
-            Value lenAsIndex=builder.create<IndexCastOp>(builder.getUnknownLoc(),len,indexType);
-            val = builder.create<mlir::memref::SubViewOp>(builder.getUnknownLoc(), varLenBuffer, mlir::ValueRange({pos1AsIndex}),mlir::ValueRange({lenAsIndex}),mlir::ValueRange({const0}));
-         } else if (dbtype.isa<db::BoolType>()) {
-            Value realPos = builder.create<mlir::AddIOp>(builder.getUnknownLoc(), indexType, offset, forOp.getInductionVar());
-            val = getBit(builder, bitmapBuffer, realPos);
-         } else if (convertedType.isa<mlir::IntegerType>() || convertedType.isa<mlir::FloatType>()) {
-            val = builder.create<memref::LoadOp>(builder.getUnknownLoc(), valueBuffer, ValueRange({forOp.getInductionVar()}));
+            Value pos2 = builder.create<memref::LoadOp>(builder.getUnknownLoc(), column.values, ValueRange({ip1}));
+            Value len = builder.create<mlir::SubIOp>(builder.getUnknownLoc(), builder.getI32Type(), pos2, pos1);
+            Value pos1AsIndex = builder.create<IndexCastOp>(builder.getUnknownLoc(), pos1, indexType);
+            Value lenAsIndex = builder.create<IndexCastOp>(builder.getUnknownLoc(), len, indexType);
+            val = builder.create<mlir::memref::SubViewOp>(builder.getUnknownLoc(), column.varLenBuffer, mlir::ValueRange({pos1AsIndex}), mlir::ValueRange({lenAsIndex}), mlir::ValueRange({const0}));
+         } else if (column.type.isa<db::BoolType>()) {
+            Value realPos = builder.create<mlir::AddIOp>(builder.getUnknownLoc(), indexType, column.offset, forOp.getInductionVar());
+            val = BitUtil::getBit(builder, column.values, realPos);
+         } else if (column.stdType.isa<mlir::IntegerType>() || column.stdType.isa<mlir::FloatType>()) {
+            val = builder.create<memref::LoadOp>(builder.getUnknownLoc(), column.values, ValueRange({forOp.getInductionVar()}));
          } else {
             assert(val && "unhandled type!!");
          }
-
-         if (dbtype.isNullable()) {
-            Value realPos = builder.create<mlir::AddIOp>(builder.getUnknownLoc(), indexType, offset, forOp.getInductionVar());
-            Value notnull = getBit(builder, bitmapBuffer, realPos);
-            Value constTrue = builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), i1Type, builder.getIntegerAttr(i1Type, 1));
-            Value isnull= builder.create<XOrOp>(builder.getUnknownLoc(), notnull, constTrue);//negate
-            val = builder.create<mlir::db::CombineNullOp>(builder.getUnknownLoc(), dbtype, val, isnull);
+         if (column.type.isNullable()) {
+            Value realPos = builder.create<mlir::AddIOp>(builder.getUnknownLoc(), indexType, column.offset, forOp.getInductionVar());
+            Value isnull = BitUtil::getBit(builder, column.nullBitmap, realPos, true);
+            val = builder.create<mlir::db::CombineNullOp>(builder.getUnknownLoc(), column.type, val, isnull);
             values.push_back(val);
          }
       }
@@ -199,11 +262,11 @@ class TableRowIterator : public mlir::db::CollectionIterator {
       return {};
    }
 };
-std::unique_ptr<mlir::db::CollectionIterator> mlir::db::GenericIterableType::getIterator(Value collection) const {
+std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::GenericIterableType::getIterationImpl(Value collection) const {
    if (getIteratorName() == "table_chunk_iterator") {
-      return std::make_unique<TableChunkIterator>(collection);
+      return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<TableIterator>(collection));
    } else if (getIteratorName() == "table_row_iterator") {
       return std::make_unique<TableRowIterator>(collection, getElementType());
    }
-   return std::unique_ptr<CollectionIterator>();
+   return std::unique_ptr<CollectionIterationImpl>();
 }
