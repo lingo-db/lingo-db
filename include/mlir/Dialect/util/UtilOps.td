@@ -26,6 +26,11 @@ Op<Util_Dialect, mnemonic, traits>{
 let printer = [{ return ::print(p, *this); }];
 let parser = [{ return ::parse$cppClass(parser, result); }];
 }
+def SizeOfOp  : Util_Op<"sizeof"> {
+let arguments = (ins TypeAttr:$type);
+let results=(outs Index:$res);
+let assemblyFormat = "$type attr-dict";
+}
 def PackOp : Util_Op<"pack"> {
 let summary = "string constant";
 let arguments = (ins Variadic<AnyType>:$vals);

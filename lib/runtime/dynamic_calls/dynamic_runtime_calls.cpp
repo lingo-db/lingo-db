@@ -11,12 +11,12 @@
 
 #define EXPORT extern "C" __attribute__((visibility("default")))
 
-EXPORT  runtime::Pointer<arrow::Table> _mlir_ciface_get_table(runtime::Pointer<runtime::ExecutionContext>* executionContext, runtime::String* tableName) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT runtime::Pointer<arrow::Table> _mlir_ciface_get_table(runtime::Pointer<runtime::ExecutionContext>* executionContext, runtime::String* tableName) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return (*executionContext)->db->getTable(*tableName).get();
 }
 
 EXPORT uint64_t _mlir_ciface_get_column_id(runtime::Pointer<arrow::Table>* table, runtime::String* columnName) {
-   auto column_names =  (*table)->ColumnNames();
+   auto column_names = (*table)->ColumnNames();
    size_t column_id = 0;
    for (auto column : column_names) {
       if (column == columnName->str()) {
@@ -61,8 +61,10 @@ EXPORT uint64_t _mlir_ciface_table_chunk_num_rows(runtime::Pointer<arrow::Record
    return (*tableChunk)->num_rows();
 }
 
-EXPORT runtime::Pointer<const uint8_t> _mlir_ciface_table_chunk_get_column_buffer(runtime::Pointer<arrow::RecordBatch>* tableChunk, uint64_t columnId, uint64_t bufferId) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return (*tableChunk)->column_data(columnId)->buffers[bufferId].get()->data();
+EXPORT runtime::ByteRange _mlir_ciface_table_chunk_get_column_buffer(runtime::Pointer<arrow::RecordBatch>* tableChunk, uint64_t columnId, uint64_t bufferId) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   uint8_t* data=(uint8_t*)(*tableChunk)->column_data(columnId)->buffers[bufferId].get()->address();
+   size_t len=(*tableChunk)->column_data(columnId)->buffers[bufferId].get()->size();
+   return {data,len};
 }
 EXPORT uint64_t _mlir_ciface_table_chunk_get_column_offset(runtime::Pointer<arrow::RecordBatch>* tableChunk, uint64_t columnId) {
    return (*tableChunk)->column_data(columnId)->offset;

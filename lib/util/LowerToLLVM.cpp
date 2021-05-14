@@ -1,4 +1,3 @@
-#include "llvm/ADT/Sequence.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
@@ -11,6 +10,7 @@
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Target/LLVMIR/TypeTranslation.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
@@ -101,6 +101,22 @@ class GetTupleOpLowering : public ConversionPattern {
       return success();
    }
 };
+class SizeOfOpLowering : public ConversionPattern {
+   public:
+   explicit SizeOfOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::SizeOfOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto sizeOfOp = mlir::dyn_cast_or_null<mlir::util::SizeOfOp>(op);
+      LLVMTypeConverter* llvmTypeConverter = static_cast<LLVMTypeConverter*>(typeConverter);
+      llvm::LLVMContext llvmContext;
+      auto *convertedType = mlir::LLVM::TypeToLLVMIRTranslator(llvmContext).translateType(sizeOfOp.type());
+      rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, rewriter.getIndexType(), rewriter.getIndexAttr(llvmTypeConverter->getDataLayout().getTypeAllocSize(convertedType)));
+      return success();
+   }
+};
 class UnPackOpLowering : public ConversionPattern {
    public:
    explicit UnPackOpLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -141,6 +157,7 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
+   patterns.add<SizeOfOpLowering>(typeConverter, patterns.getContext());
    patterns.add<GetTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<SetTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<UndefTupleOpLowering>(typeConverter, patterns.getContext());
