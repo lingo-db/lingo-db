@@ -1,23 +1,23 @@
 #include "mlir-support/mlir-support.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include "mlir/Conversion/DBToArrowStd/CollectionIteration.h"
+#include "mlir/Conversion/DBToArrowStd/DBToArrowStdPass.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
-#include "mlir/Dialect/DB/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/StandardOps/Transforms/FuncConversions.h"
+#include "mlir/Dialect/util/Passes.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
-
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include <llvm/ADT/TypeSwitch.h>
 #include <iostream>
-#include <mlir/Dialect/util/Passes.h>
 
 using namespace mlir;
 
@@ -35,12 +35,12 @@ static FuncOp getOrInsertFn(PatternRewriter& rewriter,
    PatternRewriter::InsertionGuard insertGuard(rewriter);
    rewriter.setInsertionPointToStart(module.getBody());
    FuncOp funcOp = rewriter.create<FuncOp>(module.getLoc(), name, fnType, rewriter.getStringAttr("private"));
-   funcOp->setAttr("llvm.emit_c_interface",rewriter.getUnitAttr());
+   funcOp->setAttr("llvm.emit_c_interface", rewriter.getUnitAttr());
    return funcOp;
 }
 //declare external function or return reference to already existing one
 static FuncOp getOrInsertGandivaFn(PatternRewriter& rewriter,
-                            ModuleOp module, const std::string& name, FunctionType fnType) {
+                                   ModuleOp module, const std::string& name, FunctionType fnType) {
    if (FuncOp funcOp = module.lookupSymbol<FuncOp>(name))
       return funcOp;
    PatternRewriter::InsertionGuard insertGuard(rewriter);
@@ -84,7 +84,7 @@ class CombineNullOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::CombineNullOpAdaptor adaptor(operands);
       auto combineNullOp = cast<mlir::db::CombineNullOp>(op);
-      auto packOp = rewriter.create<mlir::util::PackOp>(rewriter.getUnknownLoc(), typeConverter->convertType(combineNullOp.getType()),ValueRange({adaptor.null(),adaptor.val()}));
+      auto packOp = rewriter.create<mlir::util::PackOp>(rewriter.getUnknownLoc(), typeConverter->convertType(combineNullOp.getType()), ValueRange({adaptor.null(), adaptor.val()}));
       rewriter.replaceOp(op, packOp.tuple());
       return success();
    }
@@ -364,9 +364,9 @@ class ForOpLowering : public ConversionPattern {
       forOp->dump();
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::db::CollectionType>();
 
-      auto iterator = collectionType.getIterationImpl(forOp.collection());
+      auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection());
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      auto *terminator = forOp.getBody()->getTerminator();
+      auto* terminator = forOp.getBody()->getTerminator();
       iterator->implementLoop({}, *typeConverter, rewriter, parentModule, [&](auto val, OpBuilder builder) {
          rewriter.mergeBlockBefore(forOp.getBody(),&*builder.getInsertionPoint(),val);
         rewriter.eraseOp(terminator);
@@ -1013,19 +1013,19 @@ void DBToStdLoweringPass::runOnOperation() {
          auto indexType = IndexType::get(&getContext());
          types.push_back(ptrType);
          if (auto tupleT = nestedElementType.dyn_cast_or_null<TupleType>()) {
-            for (size_t i =0;i<tupleT.getTypes().size();i++) {
+            for (size_t i = 0; i < tupleT.getTypes().size(); i++) {
                types.push_back(indexType);
             }
          }
          return (Type) TupleType::get(&getContext(), types);
-      }else if (genericIterableType.getIteratorName() == "table_row_iterator") {
+      } else if (genericIterableType.getIteratorName() == "table_row_iterator") {
          std::vector<Type> types;
          auto i8Type = IntegerType::get(&getContext(), 8);
          auto ptrType = MemRefType::get({}, i8Type);
          auto indexType = IndexType::get(&getContext());
          types.push_back(ptrType);
          if (auto tupleT = nestedElementType.dyn_cast_or_null<TupleType>()) {
-            for (size_t i =0;i<tupleT.getTypes().size();i++) {
+            for (size_t i = 0; i < tupleT.getTypes().size(); i++) {
                types.push_back(indexType);
             }
          }

@@ -47,10 +47,7 @@ def DBCollection : Type<CPred<"$_self.isa<::mlir::db::CollectionType>()">,"DB di
 def DB_GenericIterable : DB_Collection<"GenericIterable","iterable"> {
 let summary = "generic iterable";
 let parameters = (ins "Type":$elementType,"std::string":$iteratorName);
-let extraClassDeclaration = [{
-std::unique_ptr<CollectionIterationImpl> getIterationImpl(Value collection) const;
 
-}];
 }
 def DB_MaterializedCollection  : DB_Collection<"MaterializedCollection","matcollection"> {
 let summary = "materialized collection";

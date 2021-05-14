@@ -42,6 +42,7 @@ add_subdirectory(lib/mlir-support)
 add_subdirectory(lib/RelAlg)
 add_subdirectory(lib/DB)
 add_subdirectory(lib/util)
+add_subdirectory(lib/Conversion/DBToArrowStd)
 
 get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)

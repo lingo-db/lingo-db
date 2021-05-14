@@ -3,14 +3,14 @@ add_mlir_dialect_library(MLIRDB
         DBOps.cpp
         DBOpsEnums.cpp
         DBTypes.cpp
-        LowerToStd.cpp
-        CollectionIterators.cpp
         ADDITIONAL_HEADER_DIRS
         ../../include/mlir/Dialect/DB
 
         DEPENDS
         MLIRDBOpsIncGen
 
-        LINK_LIBS mlir-support PUBLIC
+        LINK_LIBS PUBLIC
         MLIRIR
+        MLIRStandardOpsTransforms
+        MLIRUtil
         )

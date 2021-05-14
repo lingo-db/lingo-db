@@ -169,16 +169,6 @@ mlir::Type mlir::db::CollectionType::getElementType() const {
       })
       .Default([](::mlir::Type) { return Type(); });
 }
-std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionType::getIterationImpl(Value collection) const {
-   return ::llvm::TypeSwitch<::mlir::db::CollectionType, std::unique_ptr<mlir::db::CollectionIterationImpl>>(*this)
-      .Case<::mlir::db::GenericIterableType>([&](::mlir::db::GenericIterableType t) {
-         return t.getIterationImpl(collection);
-      })
-      .Case<::mlir::db::MaterializedCollectionType>([&](::mlir::db::MaterializedCollectionType t) {
-         return t.getIterationImpl(collection);
-      })
-      .Default([](::mlir::Type) { return std::unique_ptr<CollectionIterationImpl>(); });
-}
 template <class X>
 struct ParseSingleImpl {};
 template <>
