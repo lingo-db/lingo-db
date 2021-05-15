@@ -2,6 +2,7 @@
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/DBToArrowStd/CollectionIteration.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStdPass.h"
+#include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
@@ -18,6 +19,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include <llvm/ADT/TypeSwitch.h>
 #include <iostream>
+#include <mlir/IR/BuiltinTypes.h>
 
 using namespace mlir;
 
@@ -27,27 +29,6 @@ using namespace mlir;
 
 namespace {
 
-//declare external function or return reference to already existing one
-static FuncOp getOrInsertFn(PatternRewriter& rewriter,
-                            ModuleOp module, const std::string& name, FunctionType fnType) {
-   if (FuncOp funcOp = module.lookupSymbol<FuncOp>(name))
-      return funcOp;
-   PatternRewriter::InsertionGuard insertGuard(rewriter);
-   rewriter.setInsertionPointToStart(module.getBody());
-   FuncOp funcOp = rewriter.create<FuncOp>(module.getLoc(), name, fnType, rewriter.getStringAttr("private"));
-   funcOp->setAttr("llvm.emit_c_interface", rewriter.getUnitAttr());
-   return funcOp;
-}
-//declare external function or return reference to already existing one
-static FuncOp getOrInsertGandivaFn(PatternRewriter& rewriter,
-                                   ModuleOp module, const std::string& name, FunctionType fnType) {
-   if (FuncOp funcOp = module.lookupSymbol<FuncOp>(name))
-      return funcOp;
-   PatternRewriter::InsertionGuard insertGuard(rewriter);
-   rewriter.setInsertionPointToStart(module.getBody());
-   FuncOp funcOp = rewriter.create<FuncOp>(module.getLoc(), name, fnType, rewriter.getStringAttr("private"));
-   return funcOp;
-}
 class NullOpLowering : public ConversionPattern {
    public:
    explicit NullOpLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -100,26 +81,6 @@ arrow::TimeUnit::type toArrowTimeUnit(mlir::db::TimeUnitAttr attr) {
    return arrow::TimeUnit::SECOND;
 }
 
-static Value insertConstString(std::string str, ModuleOp module, ConversionPatternRewriter& rewriter) {
-   auto loc = rewriter.getUnknownLoc();
-   auto i8Type = IntegerType::get(rewriter.getContext(), 8);
-   auto insertionPoint = rewriter.saveInsertionPoint();
-   int64_t strLen = str.size();
-   std::vector<uint8_t> vec;
-   for (auto c : str) {
-      vec.push_back(c);
-   }
-   auto strStaticType = MemRefType::get({strLen}, i8Type);
-   auto strDynamicType = MemRefType::get({-1}, IntegerType::get(rewriter.getContext(), 8));
-   rewriter.setInsertionPointToStart(module.getBody());
-   auto initialValue = DenseIntElementsAttr::get(
-      RankedTensorType::get({strLen}, i8Type), vec);
-   static int id = 0;
-   auto globalop = rewriter.create<mlir::memref::GlobalOp>(rewriter.getUnknownLoc(), "db_constant_string" + std::to_string(id++), rewriter.getStringAttr("private"), strStaticType, initialValue, true);
-   rewriter.restoreInsertionPoint(insertionPoint);
-   Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
-   return rewriter.create<memref::CastOp>(loc, conststr, strDynamicType);
-}
 //Lower Print Operation to an actual printf call
 class ConstantLowering : public ConversionPattern {
    public:
@@ -183,8 +144,29 @@ class ConstantLowering : public ConversionPattern {
          }
       } else if (type.isa<mlir::db::StringType>()) {
          if (auto stringAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-            rewriter.replaceOp(op, insertConstString(stringAttr.getValue().str(), parentModule, rewriter));
+            const std::string& str = stringAttr.getValue().str();
+            Value result;
+            ModuleOp parentModule = rewriter.getInsertionPoint()->getParentOfType<ModuleOp>();
+            auto loc = rewriter.getUnknownLoc();
+            auto* context = rewriter.getContext();
+            auto i8Type = IntegerType::get(context, 8);
+            auto insertionPoint = rewriter.saveInsertionPoint();
+            int64_t strLen = str.size();
+            std::vector<uint8_t> vec;
+            for (auto c : str) {
+               vec.push_back(c);
+            }
+            auto strStaticType = MemRefType::get({strLen}, i8Type);
+            auto strDynamicType = MemRefType::get({-1}, IntegerType::get(context, 8));
+            rewriter.setInsertionPointToStart(parentModule.getBody());
+            auto initialValue = DenseIntElementsAttr::get(
+               RankedTensorType::get({strLen}, i8Type), vec);
+            static int id = 0;
+            auto globalop = rewriter.create<mlir::memref::GlobalOp>(loc, "db_constant_string" + std::to_string(id++), rewriter.getStringAttr("private"), strStaticType, initialValue, true);
+            rewriter.restoreInsertionPoint(insertionPoint);
+            Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
+            result = rewriter.create<memref::CastOp>(loc, conststr, strDynamicType);
+            rewriter.replaceOp(op, result);
             return success();
          }
       }
@@ -355,16 +337,18 @@ class NotOpLowering : public ConversionPattern {
 };
 
 class ForOpLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
    public:
-   explicit ForOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::ForOp::getOperationName(), 1, context) {}
+   explicit ForOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::ForOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto forOp = cast<mlir::db::ForOp>(op);
       forOp->dump();
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::db::CollectionType>();
 
-      auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection());
+      auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), functionRegistry);
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
       auto* terminator = forOp.getBody()->getTerminator();
       iterator->implementLoop({}, *typeConverter, rewriter, parentModule, [&](auto val, OpBuilder builder) {
@@ -376,34 +360,30 @@ class ForOpLowering : public ConversionPattern {
    }
 };
 class TableScanLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
    public:
-   explicit TableScanLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::TableScan::getOperationName(), 1, context) {}
+   explicit TableScanLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::TableScan::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto tablescan = cast<mlir::db::TableScan>(op);
       std::vector<Type> types;
-      ModuleOp parentModule = op->getParentOfType<ModuleOp>();
       auto i8Type = IntegerType::get(rewriter.getContext(), 8);
       auto ptrType = MemRefType::get({}, i8Type);
-      auto strType = MemRefType::get({-1}, i8Type);
-
       auto indexType = IndexType::get(rewriter.getContext());
-      auto getTableFn = getOrInsertFn(rewriter, parentModule, "get_table", rewriter.getFunctionType({ptrType, strType}, {ptrType}));
-      auto getColumnIdFn = getOrInsertFn(rewriter, parentModule, "get_column_id", rewriter.getFunctionType({ptrType, strType}, {indexType}));
 
       std::vector<Value> values;
       types.push_back(ptrType);
-      auto tableName = insertConstString(tablescan.tablename().str(), parentModule, rewriter);
-      auto call = rewriter.create<CallOp>(rewriter.getUnknownLoc(), getTableFn, mlir::ValueRange({tablescan.execution_context(), tableName}));
-      Value tablePtr = call->getResult(0);
+      auto tableName = rewriter.create<mlir::db::ConstantOp>(rewriter.getUnknownLoc(), mlir::db::StringType::get(rewriter.getContext(), false), rewriter.getStringAttr(tablescan.tablename()));
+      auto tablePtr = functionRegistry.call(rewriter, db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({tablescan.execution_context(), tableName}))[0];
       values.push_back(tablePtr);
       for (auto c : tablescan.columns()) {
          auto stringAttr = c.cast<StringAttr>();
          types.push_back(indexType);
-         auto colName = insertConstString(stringAttr.getValue().str(), parentModule, rewriter);
-         auto call = rewriter.create<CallOp>(rewriter.getUnknownLoc(), getColumnIdFn, mlir::ValueRange({tablePtr, colName}));
-         values.push_back(call->getResult(0));
+         auto columnName = rewriter.create<mlir::db::ConstantOp>(rewriter.getUnknownLoc(), mlir::db::StringType::get(rewriter.getContext(), false), stringAttr);
+         auto columnId = functionRegistry.call(rewriter, db::codegen::FunctionRegistry::FunctionId::TableGetColumnId, mlir::ValueRange({tablePtr, columnName}))[0];
+         values.push_back(columnId);
       }
       rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, mlir::TupleType::get(rewriter.getContext(), types), values);
       return success();
@@ -781,21 +761,22 @@ class CastOpLowering : public ConversionPattern {
 };
 //Lower Print Operation to an actual printf call
 class DumpOpLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
    public:
-   explicit DumpOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::DumpOp::getOperationName(), 1, context) {}
+   explicit DumpOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::DumpOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
+      using FunctionId = mlir::db::codegen::FunctionRegistry::FunctionId;
       mlir::db::DumpOp::Adaptor dumpOpAdaptor(operands);
       auto loc = op->getLoc();
       auto printOp = cast<mlir::db::DumpOp>(op);
       Value val = printOp.val();
       auto i128Type = IntegerType::get(rewriter.getContext(), 128);
       auto i64Type = IntegerType::get(rewriter.getContext(), 64);
-      auto i32Type = IntegerType::get(rewriter.getContext(), 32);
-      auto i1Type = IntegerType::get(rewriter.getContext(), 1);
       auto type = val.getType().dyn_cast_or_null<mlir::db::DBType>().getBaseType();
 
       auto f64Type = FloatType::getF64(rewriter.getContext());
@@ -810,64 +791,54 @@ class DumpOpLowering : public ConversionPattern {
          val = dumpOpAdaptor.val();
       }
 
-      ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      // Get a symbol reference to the printf function, inserting it if necessary.
       if (auto dbIntType = type.dyn_cast_or_null<mlir::db::IntType>()) {
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_int", rewriter.getFunctionType({i1Type, i64Type}, {}));
          if (dbIntType.getWidth() < 64) {
             val = rewriter.create<SignExtendIOp>(loc, val, i64Type);
          }
-         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
+         functionRegistry.call(rewriter, FunctionId::DumpInt, ValueRange({isNull, val}));
       } else if (auto dbUIntType = type.dyn_cast_or_null<mlir::db::UIntType>()) {
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_uint", rewriter.getFunctionType({i1Type, i64Type}, {}));
          if (dbUIntType.getWidth() < 64) {
             val = rewriter.create<ZeroExtendIOp>(loc, val, i64Type);
          }
-         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
+         functionRegistry.call(rewriter, FunctionId::DumpUInt, ValueRange({isNull, val}));
       } else if (type.isa<mlir::db::BoolType>()) {
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_bool", rewriter.getFunctionType({i1Type, i1Type}, {}));
-         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
+         functionRegistry.call(rewriter, FunctionId::DumpBool, ValueRange({isNull, val}));
       } else if (auto decType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
          Value low = rewriter.create<TruncateIOp>(loc, val, i64Type);
          Value shift = rewriter.create<ConstantOp>(loc, rewriter.getIntegerAttr(i128Type, 64));
          Value scale = rewriter.create<ConstantOp>(loc, rewriter.getI32IntegerAttr(decType.getS()));
          Value high = rewriter.create<UnsignedShiftRightOp>(loc, i128Type, val, shift);
          high = rewriter.create<TruncateIOp>(loc, high, i64Type);
-
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_decimal", rewriter.getFunctionType({i1Type, i64Type, i64Type, i32Type}, {}));
-         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, low, high, scale}));
+         functionRegistry.call(rewriter, FunctionId::DumpDecimal, ValueRange({isNull, low, high, scale}));
       } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
-         FuncOp printRef;
-
          if (dateType.getUnit() == mlir::db::DateUnitAttr::millisecond) {
-            printRef = getOrInsertFn(rewriter, parentModule, "dump_date_millisecond", rewriter.getFunctionType({i1Type, i64Type}, {}));
+            functionRegistry.call(rewriter, FunctionId::DumpDateMillisecond, ValueRange({isNull, val}));
          } else {
-            printRef = getOrInsertFn(rewriter, parentModule, "dump_date_day", rewriter.getFunctionType({i1Type, i32Type}, {}));
+            functionRegistry.call(rewriter, FunctionId::DumpDateDay, ValueRange({isNull, val}));
          }
-         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
       } else if (auto timestampType = type.dyn_cast_or_null<mlir::db::TimestampType>()) {
-         std::string unit = mlir::db::stringifyTimeUnitAttr(timestampType.getUnit()).str();
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_timestamp_" + unit, rewriter.getFunctionType({i1Type, i64Type}, {}));
-         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
+         FunctionId functionId;
+         switch (timestampType.getUnit()) {
+            case mlir::db::TimeUnitAttr::second: functionId = FunctionId::DumpTimestampSecond; break;
+            case mlir::db::TimeUnitAttr::millisecond: functionId = FunctionId::DumpTimestampMillisecond; break;
+            case mlir::db::TimeUnitAttr::microsecond: functionId = FunctionId::DumpTimestampMicrosecond; break;
+            case mlir::db::TimeUnitAttr::nanosecond: functionId = FunctionId::DumpTimestampNanosecond; break;
+         }
+         functionRegistry.call(rewriter, functionId, ValueRange({isNull, val}));
       } else if (auto intervalType = type.dyn_cast_or_null<mlir::db::IntervalType>()) {
          if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
-            auto printRef = getOrInsertFn(rewriter, parentModule, "dump_interval_months", rewriter.getFunctionType({i1Type, i32Type}, {}));
-            rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
+            functionRegistry.call(rewriter, FunctionId::DumpIntervalMonths, ValueRange({isNull, val}));
          } else {
-            auto printRef = getOrInsertFn(rewriter, parentModule, "dump_interval_daytime", rewriter.getFunctionType({i1Type, i64Type}, {}));
-            rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
+            functionRegistry.call(rewriter, FunctionId::DumpIntervalDayTime, ValueRange({isNull, val}));
          }
 
       } else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_float", rewriter.getFunctionType({i1Type, f64Type}, {}));
          if (floatType.getWidth() < 64) {
             val = rewriter.create<FPExtOp>(loc, val, f64Type);
          }
-         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
+         functionRegistry.call(rewriter, FunctionId::DumpFloat, ValueRange({isNull, val}));
       } else if (type.isa<mlir::db::StringType>()) {
-         auto strType = MemRefType::get({-1}, IntegerType::get(getContext(), 8));
-         auto printRef = getOrInsertFn(rewriter, parentModule, "dump_string", rewriter.getFunctionType({i1Type, strType}, {}));
-         rewriter.create<CallOp>(loc, printRef, ValueRange({isNull, val}));
+         functionRegistry.call(rewriter, FunctionId::DumpString, ValueRange({isNull, val}));
       }
       rewriter.eraseOp(op);
 
@@ -910,6 +881,11 @@ static bool hasDBType(TypeRange types) {
    return false;
 }
 void DBToStdLoweringPass::runOnOperation() {
+   auto module = getOperation();
+   mlir::db::codegen::FunctionRegistry functionRegistry(&getContext());
+   functionRegistry.registerFunctions();
+   using FunctionId = mlir::db::codegen::FunctionRegistry::FunctionId;
+
    // Define Conversion Target
    ConversionTarget target(getContext());
    target.addLegalOp<ModuleOp>();
@@ -1064,7 +1040,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<IsNullOpLowering>(typeConverter, &getContext());
    patterns.insert<CombineNullOpLowering>(typeConverter, &getContext());
 
-   patterns.insert<DumpOpLowering>(typeConverter, &getContext());
+   patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<ConstantLowering>(typeConverter, &getContext());
    patterns.insert<IfLowering>(typeConverter, &getContext());
    patterns.insert<YieldLowering>(typeConverter, &getContext());
@@ -1073,8 +1049,8 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<NotOpLowering>(typeConverter, &getContext());
    patterns.insert<CmpOpLowering>(typeConverter, &getContext());
    patterns.insert<CastOpLowering>(typeConverter, &getContext());
-   patterns.insert<TableScanLowering>(typeConverter, &getContext());
-   patterns.insert<ForOpLowering>(typeConverter, &getContext());
+   patterns.insert<TableScanLowering>(functionRegistry, typeConverter, &getContext());
+   patterns.insert<ForOpLowering>(functionRegistry, typeConverter, &getContext());
 
    patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::db::IntType, mlir::AddIOp>>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::IntType, mlir::SubIOp>>(typeConverter, &getContext());
@@ -1128,16 +1104,27 @@ void DBToStdLoweringPass::runOnOperation() {
    };
    auto identity = [](auto, Value v, auto&) { return v; };
    auto rightleft = [](Value left, Value right) { return std::vector<Value>({right, left}); };
-   auto dateAddFunction = [](Operation* op, mlir::db::DateType dateType, mlir::db::IntervalType intervalType, ConversionPatternRewriter& rewriter) {
-      auto i64Type = IntegerType::get(rewriter.getContext(), 64);
-      auto i32Type = IntegerType::get(rewriter.getContext(), 32);
-      return getOrInsertGandivaFn(rewriter, op->getParentOfType<ModuleOp>(), "timestampaddMonth_int32_date64", rewriter.getFunctionType({i32Type, i64Type}, {i64Type}));
+   auto dateAddFunction = [&](Operation* op, mlir::db::DateType dateType, mlir::db::IntervalType intervalType, ConversionPatternRewriter& rewriter) {
+      return functionRegistry.getFunction(rewriter, FunctionId::TimestampAddMonth);
    };
-   auto dateExtractFunction = [](mlir::db::DateExtractOp dateExtractOp, mlir::db::DateType dateType, ConversionPatternRewriter& rewriter) {
-      auto i64Type = IntegerType::get(rewriter.getContext(), 64);
-      std::string unitString = mlir::db::stringifyExtractableTimeUnitAttr(dateExtractOp.unit()).str();
-      unitString[0] = toupper(unitString[0]);
-      return getOrInsertGandivaFn(rewriter, dateExtractOp->getParentOfType<ModuleOp>(), "extract" + unitString + "_date64", rewriter.getFunctionType({i64Type}, {i64Type}));
+   auto dateExtractFunction = [&](mlir::db::DateExtractOp dateExtractOp, mlir::db::DateType dateType, ConversionPatternRewriter& rewriter) {
+      FunctionId functionId;
+      switch (dateExtractOp.unit()) {
+         case mlir::db::ExtractableTimeUnitAttr::second: functionId = FunctionId::DateExtractSecond; break;
+         case mlir::db::ExtractableTimeUnitAttr::minute: functionId = FunctionId::DateExtractMinute; break;
+         case mlir::db::ExtractableTimeUnitAttr::hour: functionId = FunctionId::DateExtractHour; break;
+         case mlir::db::ExtractableTimeUnitAttr::dow: functionId = FunctionId::DateExtractDow; break;
+         case mlir::db::ExtractableTimeUnitAttr::week: functionId = FunctionId::DateExtractWeek; break;
+         case mlir::db::ExtractableTimeUnitAttr::day: functionId = FunctionId::DateExtractDay; break;
+         case mlir::db::ExtractableTimeUnitAttr::month: functionId = FunctionId::DateExtractMonth; break;
+         case mlir::db::ExtractableTimeUnitAttr::doy: functionId = FunctionId::DateExtractDoy; break;
+         case mlir::db::ExtractableTimeUnitAttr::quarter: functionId = FunctionId::DateExtractQuarter; break;
+         case mlir::db::ExtractableTimeUnitAttr::year: functionId = FunctionId::DateExtractYear; break;
+         case mlir::db::ExtractableTimeUnitAttr::decade: functionId = FunctionId::DateExtractDecade; break;
+         case mlir::db::ExtractableTimeUnitAttr::century: functionId = FunctionId::DateExtractCentury; break;
+         case mlir::db::ExtractableTimeUnitAttr::millennium: functionId = FunctionId::DateExtractMillenium; break;
+      }
+      return functionRegistry.getFunction(rewriter, functionId);
    };
 
    patterns.insert<SimpleBinOpToFuncLowering<mlir::db::DateAddOp, mlir::db::DateType, mlir::db::IntervalType, mlir::db::DateType>>(
@@ -1149,7 +1136,6 @@ void DBToStdLoweringPass::runOnOperation() {
 
    // We want to completely lower to LLVM, so we use a `FullConversion`. This
    // ensures that only legal operations will remain after the conversion.
-   auto module = getOperation();
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }
