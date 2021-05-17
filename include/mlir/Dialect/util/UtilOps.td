@@ -2,6 +2,8 @@
 #define OPS
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/OpBase.td"
+
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 
@@ -18,13 +20,63 @@ This dialect is an example of an out-of-tree MLIR dialect designed to
         working inside of the LLVM source tree.
 }];
 let cppNamespace = "::mlir::util";
+let extraClassDeclaration = [{
+private:
+void registerTypes();
 
+public:
+}];
 }
 
 class Util_Op<string mnemonic, list<OpTrait> traits = []> :
 Op<Util_Dialect, mnemonic, traits>{
 let printer = [{ return ::print(p, *this); }];
 let parser = [{ return ::parse$cppClass(parser, result); }];
+}
+
+class Util_Type<string name, string typeMnemonic> : TypeDef<Util_Dialect, name> {
+    let mnemonic = typeMnemonic;
+}
+
+
+def GenericMemrefType : Util_Type<"GenericMemref","generic_memref"> {
+let summary = "generic memref type";
+let parameters = (ins "Type":$elementType,"llvm::Optional<int64_t>": $size);
+}
+
+def ToGenericMemrefOp  : Util_Op<"to_generic_memref"> {
+let arguments = (ins I8MemRef:$memref);
+let results=(outs GenericMemrefType:$generic_memref);
+let assemblyFormat = "$memref `:` type($memref) `->` type($generic_memref) attr-dict";
+}
+def ToMemrefOp  : Util_Op<"to_memref"> {
+let arguments = (ins GenericMemrefType:$generic_memref);
+let results=(outs I8MemRef:$memref);
+let assemblyFormat = "$generic_memref `:` type($generic_memref) `->` type($memref) attr-dict";
+}
+def StoreOp  : Util_Op<"store"> {
+let arguments = (ins AnyType:$val,GenericMemrefType:$generic_memref,Optional<Index>:$idx);
+let assemblyFormat = "$val `:` type($val) `,` $generic_memref `[` $idx `]` `:`type($generic_memref) attr-dict";
+}
+def LoadOp  : Util_Op<"load"> {
+let arguments = (ins GenericMemrefType:$generic_memref,Optional<Index>:$idx);
+let results=(outs AnyType:$val);
+let assemblyFormat = "$generic_memref `[` $idx `]` `:`type($generic_memref) `->` type($val) attr-dict";
+}
+def MemberRefOp  : Util_Op<"member_ref"> {
+let arguments = (ins GenericMemrefType:$source_ref,Optional<Index>:$memref_idx,IndexAttr:$tuple_idx);
+let results=(outs GenericMemrefType:$result_ref);
+let assemblyFormat = "$source_ref `[` $memref_idx `]` `[` $tuple_idx `]` `:`type($source_ref) `->` type($result_ref) attr-dict";
+}
+def ToRawPointerOp  : Util_Op<"to_raw_ptr"> {
+let arguments = (ins GenericMemrefType:$ref);
+let results=(outs Index:$ptr);
+let assemblyFormat = "$ref `:`type($ref) attr-dict";
+}
+def FromRawPointerOp  : Util_Op<"from_raw_ptr"> {
+let arguments = (ins Index:$ptr);
+let results=(outs GenericMemrefType:$ref);
+let assemblyFormat = "$ptr `->` type($ref) attr-dict";
 }
 def SizeOfOp  : Util_Op<"sizeof"> {
 let arguments = (ins TypeAttr:$type);

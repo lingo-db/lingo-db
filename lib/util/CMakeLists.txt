@@ -1,6 +1,7 @@
 add_mlir_dialect_library(MLIRUtil
         UtilDialect.cpp
         UtilOps.cpp
+        UtilTypes.cpp
         LowerToLLVM.cpp
         UtilTypeConversion.cpp
         ADDITIONAL_HEADER_DIRS

@@ -876,6 +876,8 @@ static bool hasDBType(TypeRange types) {
          return true;
       } else if (auto tupleType = type.dyn_cast_or_null<TupleType>()) {
          return hasDBType(tupleType.getTypes());
+      } else if (auto genericMemrefType = type.dyn_cast_or_null<util::GenericMemrefType>()) {
+         return hasDBType(genericMemrefType.getElementType());
       }
    }
    return false;
@@ -905,12 +907,15 @@ void DBToStdLoweringPass::runOnOperation() {
             !hasDBType(op->getResultTypes());
          return isLegal;
       });
-   target.addDynamicallyLegalOp<util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp>(
+   target.addDynamicallyLegalOp<util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::StoreOp, util::LoadOp,util::MemberRefOp,util::FromRawPointerOp,util::ToRawPointerOp>(
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());
+         //op->dump();
+         //llvm::dbgs()<<"isLegal:"<<isLegal<<"\n";
          return isLegal;
       });
+
    //Add own types to LLVMTypeConverter
    TypeConverter typeConverter;
    typeConverter.addConversion([&](mlir::db::DBType type) {

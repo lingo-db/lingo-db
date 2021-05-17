@@ -9,4 +9,5 @@ void UtilDialect::initialize() {
 #define GET_OP_LIST
 #include "mlir/Dialect/util/UtilOps.cpp.inc"
       >();
+   registerTypes();
 }

@@ -1,14 +1,12 @@
 #ifndef MLIR_DIALECT_UTIL_UTILOPS_H
 #define MLIR_DIALECT_UTIL_UTILOPS_H
 
-
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
-
-
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/util/UtilTypes.h"
 #include "mlir/IR/Builders.h"
 
 #define GET_OP_CLASSES
