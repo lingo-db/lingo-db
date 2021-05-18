@@ -44,6 +44,20 @@ let summary = "generic memref type";
 let parameters = (ins "Type":$elementType,"llvm::Optional<int64_t>": $size);
 }
 
+def AllocOp  : Util_Op<"alloc"> {
+let arguments = (ins Optional<Index>:$size);
+let results=(outs GenericMemrefType:$generic_memref);
+let assemblyFormat = " `(` $size `)` `:` type($generic_memref) attr-dict";
+}
+def AllocaOp  : Util_Op<"alloca"> {
+let arguments = (ins Optional<Index>:$size);
+let results=(outs GenericMemrefType:$generic_memref);
+let assemblyFormat = " `(` $size `)` `:` type($generic_memref) attr-dict";
+}
+def DeAllocOp  : Util_Op<"dealloc"> {
+let arguments = (ins GenericMemrefType:$generic_memref);
+let assemblyFormat = "$generic_memref `:` type($generic_memref) attr-dict";
+}
 def ToGenericMemrefOp  : Util_Op<"to_generic_memref"> {
 let arguments = (ins I8MemRef:$memref);
 let results=(outs GenericMemrefType:$generic_memref);

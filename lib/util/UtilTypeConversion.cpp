@@ -119,6 +119,24 @@ class ToGenericMemrefOpLowering : public ConversionPattern {
       return success();
    }
 };
+template <class UtilOp>
+class AllocOpLowering : public ConversionPattern {
+   public:
+   explicit AllocOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, UtilOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      typename UtilOp::Adaptor adaptor(operands);
+
+      auto castedOp = mlir::dyn_cast_or_null<UtilOp>(op);
+      auto genericMemrefType = castedOp.generic_memref().getType().template cast<mlir::util::GenericMemrefType>();
+      auto loweredGenericMemrefType = mlir::util::GenericMemrefType::get(getContext(), typeConverter->convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());
+      rewriter.replaceOpWithNewOp<UtilOp>(op, loweredGenericMemrefType, adaptor.size());
+      return success();
+   }
+};
 class StoreOpLowering : public ConversionPattern {
    public:
    explicit StoreOpLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -129,6 +147,35 @@ class StoreOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::StoreOpAdaptor adaptor(operands);
       rewriter.replaceOpWithNewOp<mlir::util::StoreOp>(op, adaptor.val(), adaptor.generic_memref(), adaptor.idx());
+
+      return success();
+   }
+};
+class DeAllocOpLowering : public ConversionPattern {
+   public:
+   explicit DeAllocOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::DeAllocOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      mlir::util::DeAllocOpAdaptor adaptor(operands);
+      rewriter.replaceOpWithNewOp<mlir::util::DeAllocOp>(op, adaptor.generic_memref());
+
+      return success();
+   }
+};
+class SizeOfLowering : public ConversionPattern {
+   public:
+   explicit SizeOfLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::SizeOfOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto castedOp = mlir::dyn_cast_or_null<mlir::util::SizeOfOp>(op);
+
+      rewriter.replaceOpWithNewOp<mlir::util::SizeOfOp>(op, rewriter.getIndexType(), TypeAttr::get(typeConverter->convertType(castedOp.type())));
 
       return success();
    }
@@ -173,7 +220,7 @@ class ToRawPtrLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::ToRawPointerOpAdaptor adaptor(operands);
       auto castedOp = mlir::dyn_cast_or_null<mlir::util::ToRawPointerOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::util::ToRawPointerOp>(op, castedOp.ptr().getType(),adaptor.ref());
+      rewriter.replaceOpWithNewOp<mlir::util::ToRawPointerOp>(op, castedOp.ptr().getType(), adaptor.ref());
       return success();
    }
 };
@@ -187,7 +234,7 @@ class FromRawPtrLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::FromRawPointerOpAdaptor adaptor(operands);
       auto castedOp = mlir::dyn_cast_or_null<mlir::util::FromRawPointerOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::util::FromRawPointerOp>(op, typeConverter->convertType(castedOp.ref().getType()),adaptor.ptr());
+      rewriter.replaceOpWithNewOp<mlir::util::FromRawPointerOp>(op, typeConverter->convertType(castedOp.ref().getType()), adaptor.ptr());
       return success();
    }
 };
@@ -213,6 +260,11 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    patterns.add<UnPackOpLowering>(typeConverter, patterns.getContext());
    patterns.add<ToGenericMemrefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<StoreOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<AllocOpLowering<util::AllocOp>>(typeConverter, patterns.getContext());
+   patterns.add<AllocOpLowering<util::AllocaOp>>(typeConverter, patterns.getContext());
+   patterns.add<DeAllocOpLowering>(typeConverter, patterns.getContext());
+
+   patterns.add<SizeOfLowering>(typeConverter, patterns.getContext());
    patterns.add<LoadOpLowering>(typeConverter, patterns.getContext());
    patterns.add<MemberRefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<ToRawPtrLowering>(typeConverter, patterns.getContext());

@@ -907,7 +907,7 @@ void DBToStdLoweringPass::runOnOperation() {
             !hasDBType(op->getResultTypes());
          return isLegal;
       });
-   target.addDynamicallyLegalOp<util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::StoreOp, util::LoadOp,util::MemberRefOp,util::FromRawPointerOp,util::ToRawPointerOp>(
+   target.addDynamicallyLegalOp<util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::StoreOp, util::LoadOp,util::MemberRefOp,util::FromRawPointerOp,util::ToRawPointerOp,util::AllocOp,util::DeAllocOp,util::AllocaOp,util::AllocaOp>(
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());
