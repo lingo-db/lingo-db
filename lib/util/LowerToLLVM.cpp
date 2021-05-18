@@ -364,9 +364,9 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
-   typeConverter.addConversion([&](mlir::util::BufferType bufferType) {
+   /*typeConverter.addConversion([&](mlir::util::BufferType bufferType) {
       return TupleType::get(&typeConverter.getContext(), TypeRange({MemRefType::get({-1}, bufferType.getElementType()), IndexType::get(&typeConverter.getContext())}));
-   });
+   });*/
    typeConverter.addConversion([&](mlir::util::GenericMemrefType genericMemrefType) {
       MLIRContext* context = &typeConverter.getContext();
       auto allocatedPtrType = mlir::LLVM::LLVMPointerType::get(IntegerType::get(context, 8));
@@ -380,12 +380,12 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
       }
       return mlir::LLVM::LLVMStructType::getLiteral(context, types);
    });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, util::BufferType type, ValueRange valueRange, Location loc) {
+   /*typeConverter.addSourceMaterialization([&](OpBuilder&, util::BufferType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, util::BufferType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
-   });
+   });*/
    patterns.add<SizeOfOpLowering>(typeConverter, patterns.getContext());
    patterns.add<GetTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<SetTupleOpLowering>(typeConverter, patterns.getContext());

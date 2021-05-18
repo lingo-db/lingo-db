@@ -171,6 +171,16 @@ jobs:
         with:
           path: llvm-project
           key: ${{ runner.os }}-llvm-sources-${{ steps.llvm-commit.outputs.commit }}
+      - name: Get arrow ommit id
+        id: arrow-commit
+        run: |
+          echo "::set-output name=commit::$(git submodule status arrow | tr ' ' '-' )"
+      - name: Cache Arrow Build
+        id: arrow-build
+        uses: actions/cache@v2
+        with:
+          path: arrow-build
+          key: ${{ runner.os }}-arrow-build-${{ steps.arrow-commit.outputs.commit }}
       - name: Fetch Cached Build
         uses: actions/cache@v2
         with:
