@@ -344,18 +344,23 @@ class ForOpLowering : public ConversionPattern {
       : ConversionPattern(typeConverter, mlir::db::ForOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      mlir::db::ForOpAdaptor forOpAdaptor(operands);
       auto forOp = cast<mlir::db::ForOp>(op);
       forOp->dump();
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::db::CollectionType>();
 
       auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), functionRegistry);
+
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      auto* terminator = forOp.getBody()->getTerminator();
-      iterator->implementLoop({}, *typeConverter, rewriter, parentModule, [&](auto val, OpBuilder builder) {
-         rewriter.mergeBlockBefore(forOp.getBody(),&*builder.getInsertionPoint(),val);
-        rewriter.eraseOp(terminator);
-        return std::vector<Value>({}); });
-      rewriter.eraseOp(op);
+      std::vector<Value> results = iterator->implementLoop(forOpAdaptor.initArgs(), *typeConverter, rewriter, parentModule, [&](ValueRange values, OpBuilder builder) {
+         auto yieldOp = cast<mlir::db::YieldOp>(forOp.getBody()->getTerminator());
+         rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
+         std::vector<Value> results(yieldOp.results().begin(), yieldOp.results().end());
+         rewriter.eraseOp(yieldOp);
+         return results;
+      });
+
+      rewriter.replaceOp(op,results);
       return success();
    }
 };
@@ -907,7 +912,7 @@ void DBToStdLoweringPass::runOnOperation() {
             !hasDBType(op->getResultTypes());
          return isLegal;
       });
-   target.addDynamicallyLegalOp<util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::StoreOp, util::LoadOp,util::MemberRefOp,util::FromRawPointerOp,util::ToRawPointerOp,util::AllocOp,util::DeAllocOp,util::AllocaOp,util::AllocaOp>(
+   target.addDynamicallyLegalOp<util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::StoreOp, util::LoadOp, util::MemberRefOp, util::FromRawPointerOp, util::ToRawPointerOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp>(
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());
@@ -1023,6 +1028,12 @@ void DBToStdLoweringPass::runOnOperation() {
       return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::DBType type, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, IntegerType type, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, IntegerType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::GenericIterableType type, ValueRange valueRange, Location loc) {
