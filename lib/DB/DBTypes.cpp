@@ -167,6 +167,9 @@ mlir::Type mlir::db::CollectionType::getElementType() const {
       .Case<::mlir::db::MaterializedCollectionType>([&](::mlir::db::MaterializedCollectionType t) {
          return t.getElementType();
       })
+      .Case<::mlir::db::RangeType>([&](::mlir::db::RangeType t) {
+        return t.getElementType();
+      })
       .Default([](::mlir::Type) { return Type(); });
 }
 template <class X>
@@ -440,6 +443,16 @@ void mlir::db::MaterializedCollectionType::print(mlir::DialectAsmPrinter& p) con
 }
 void mlir::db::GenericIterableType::print(mlir::DialectAsmPrinter& p) const {
    p << getMnemonic() << "<" << getElementType() << "," << getIteratorName() << ">";
+}
+::mlir::Type mlir::db::RangeType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
+   Type type;
+   if (parser.parseLess() || parser.parseType(type) || parser.parseGreater()) {
+      return mlir::Type();
+   }
+   return mlir::db::RangeType::get(parser.getBuilder().getContext(), type);
+}
+void mlir::db::RangeType::print(mlir::DialectAsmPrinter& p) const {
+   p << getMnemonic() << "<" << getElementType()  << ">";
 }
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/DB/IR/DBOpsTypes.cpp.inc"

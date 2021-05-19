@@ -52,7 +52,10 @@ let parameters = (ins "Type":$elementType,"std::string":$iteratorName);
 def DB_MaterializedCollection  : DB_Collection<"MaterializedCollection","matcollection"> {
 let summary = "materialized collection";
 let parameters = (ins "Type":$elementType);
-
+}
+def DB_Range  : DB_Collection<"Range","range"> {
+let summary = "range";
+let parameters = (ins "Type":$elementType);
 }
 def DB_BoolType : DB_Type<"Bool","bool"> {
   let summary = "database boolean type";
@@ -175,6 +178,15 @@ let summary = "tablescan";
 let arguments = (ins StrAttr:$tablename,ArrayAttr:$columns,AnyType:$execution_context);
 let results = (outs DB_GenericIterable:$iterable);
 let assemblyFormat = "$tablename $columns $execution_context `:` type($execution_context) `:` type($iterable) attr-dict";
+
+}
+
+def DB_CreateRange : DB_Op<"range",
+[SameTypeOperands,NoSideEffect]> {
+let summary = "create a range of values";
+let arguments = (ins DBType:$lower,DBType:$upper,DBType:$step);
+let results = (outs DB_Range:$range);
+let assemblyFormat = "$lower `,` $upper `,` $step `:` type($lower) `->` type($range) attr-dict";
 
 }
 
@@ -409,16 +421,38 @@ def IfOp : DB_Op<"if",
 NoRegionArguments]> {
 let summary = "if-then-else operation";
 
-let arguments = (ins DB_BoolType:$condition);
+let arguments = (ins AnyType:$condition);
 let results = (outs Variadic<AnyType>:$results);
 let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
 }
 
+def ConditionOp : DB_Op<"condition",
+[HasParent<"WhileOp">, NoSideEffect, Terminator]> {
+let summary = "loop continuation condition";
 
 
+let arguments = (ins AnyType:$condition, Variadic<AnyType>:$args);
+
+let assemblyFormat =
+[{ `(` $condition `:` type($condition) `)` attr-dict ($args^ `:` type($args))? }];
+}
+
+def WhileOp : DB_Op<"while",
+[RecursiveSideEffects]> {
+let summary = "a generic 'while' loop";
+
+
+let arguments = (ins Variadic<AnyType>:$inits);
+let results = (outs Variadic<AnyType>:$results);
+let regions = (region SizedRegion<1>:$before, SizedRegion<1>:$after);
+
+let extraClassDeclaration = [{
+OperandRange getSuccessorEntryOperands(unsigned index);
+}];
+}
 
 def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
-        ParentOneOf<["IfOp","ForOp"]>]> {
+        ParentOneOf<["IfOp","ForOp","WhileOp"]>]> {
 let summary = "loop yield and termination operation";
 
 let arguments = (ins Variadic<AnyType>:$results);

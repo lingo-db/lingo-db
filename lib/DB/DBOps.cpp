@@ -312,7 +312,7 @@ static void printInitializationList(OpAsmPrinter &p,
    });
    p << ")";
 }
-
+//adapted from scf::ForOp
 static void print(OpAsmPrinter &p, mlir::db::ForOp op) {
    p << op.getOperationName() << " " << op.getInductionVar() << " in "
      << op.collection() <<" : "<<op.collection().getType()<<" ";
@@ -326,7 +326,7 @@ static void print(OpAsmPrinter &p, mlir::db::ForOp op) {
       /*printBlockTerminators=*/op.hasIterOperands());
    p.printOptionalAttrDict(op->getAttrs());
 }
-
+//adapted from scf::ForOp
 static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
    auto &builder = parser.getBuilder();
    OpAsmParser::OperandType inductionVariable, collection;
@@ -383,6 +383,57 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
       return failure();
 
    return success();
+}
+
+
+//taken from scf::WhileOp
+static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
+   SmallVector<OpAsmParser::OperandType, 4> regionArgs, operands;
+   Region *before = result.addRegion();
+   Region *after = result.addRegion();
+
+   OptionalParseResult listResult =
+      parser.parseOptionalAssignmentList(regionArgs, operands);
+   if (listResult.hasValue() && failed(listResult.getValue()))
+      return failure();
+
+   FunctionType functionType;
+   llvm::SMLoc typeLoc = parser.getCurrentLocation();
+   if (failed(parser.parseColonType(functionType)))
+      return failure();
+
+   result.addTypes(functionType.getResults());
+
+   if (functionType.getNumInputs() != operands.size()) {
+      return parser.emitError(typeLoc)
+         << "expected as many input types as operands "
+         << "(expected " << operands.size() << " got "
+         << functionType.getNumInputs() << ")";
+   }
+
+   // Resolve input operands.
+   if (failed(parser.resolveOperands(operands, functionType.getInputs(),
+                                     parser.getCurrentLocation(),
+                                     result.operands)))
+      return failure();
+
+   return failure(
+      parser.parseRegion(*before, regionArgs, functionType.getInputs()) ||
+      parser.parseKeyword("do") || parser.parseRegion(*after) ||
+      parser.parseOptionalAttrDictWithKeyword(result.attributes));
+}
+
+//taken from scf::WhileOp
+static void print(OpAsmPrinter &p, db::WhileOp op) {
+   p << op.getOperationName();
+   printInitializationList(p, op.before().front().getArguments(), op.inits(),
+                           " ");
+   p << " : ";
+   p.printFunctionalType(op.inits().getTypes(), op.results().getTypes());
+   p.printRegion(op.before(), /*printEntryBlockArgs=*/false);
+   p << " do";
+   p.printRegion(op.after());
+   p.printOptionalAttrDictWithKeyword(op->getAttrs());
 }
 
 

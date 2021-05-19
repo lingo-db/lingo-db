@@ -10,6 +10,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
+#include "mlir/Dialect/SCF/Transforms.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/StandardOps/Transforms/FuncConversions.h"
 #include "mlir/Dialect/util/Passes.h"
@@ -275,7 +276,19 @@ class IfLowering : public ConversionPattern {
       for (auto res : ifOp.results()) {
          resultTypes.push_back(typeConverter->convertType(res.getType()));
       }
-      auto newIfOp = rewriter.create<mlir::scf::IfOp>(loc, TypeRange(resultTypes), ifOp.condition(), !ifOp.elseRegion().empty());
+      Value condition;
+      auto boolType=ifOp.condition().getType().dyn_cast_or_null<db::BoolType>();
+      if (boolType&&boolType.isNullable()) {
+         auto i1Type = rewriter.getI1Type();
+         auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange({i1Type, i1Type}), ifOp.condition());
+         Value constTrue = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), i1Type, rewriter.getIntegerAttr(i1Type, 1));
+         auto negated  = rewriter.create<XOrOp>(rewriter.getUnknownLoc(), unpacked.getResult(0), constTrue); //negate
+         auto anded = rewriter.create<mlir::AndOp>(rewriter.getUnknownLoc(), i1Type, negated, unpacked.getResult(1));
+         condition=anded;
+      } else {
+        condition=ifOp.condition();
+      }
+      auto newIfOp = rewriter.create<mlir::scf::IfOp>(loc, TypeRange(resultTypes), condition, !ifOp.elseRegion().empty());
       {
          scf::IfOp::ensureTerminator(newIfOp.thenRegion(), rewriter, loc);
          auto insertPt = rewriter.saveInsertionPoint();
@@ -304,6 +317,57 @@ class IfLowering : public ConversionPattern {
       return success();
    }
 };
+class WhileLowering : public ConversionPattern {
+   public:
+   explicit WhileLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::WhileOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto whileOp = cast<mlir::db::WhileOp>(op);
+      auto loc = op->getLoc();
+      std::vector<Type> resultTypes;
+      llvm::dbgs() << "num_res:" << whileOp.getNumResults() << "\n";
+      for (auto res : whileOp.results()) {
+         resultTypes.push_back(typeConverter->convertType(res.getType()));
+      }
+      auto newWhileOp = rewriter.create<mlir::scf::WhileOp>(loc, TypeRange(resultTypes), whileOp.inits());
+      Block* before = new Block;
+      Block* after = new Block;
+      newWhileOp.before().push_back(before);
+      newWhileOp.after().push_back(after);
+      for (auto t : resultTypes) {
+         before->addArgument(t);
+         after->addArgument(t);
+      }
+      llvm::dbgs() << "num_res:" << whileOp.getNumResults() << "\n";
+
+      {
+         scf::IfOp::ensureTerminator(newWhileOp.before(), rewriter, loc);
+         auto insertPt = rewriter.saveInsertionPoint();
+         rewriter.setInsertionPointToStart(&newWhileOp.before().front());
+         Block* originalThenBlock = &whileOp.before().front();
+         auto* terminator = rewriter.getInsertionBlock()->getTerminator();
+         llvm::dbgs() << newWhileOp.before().front().getArguments().size();
+         rewriter.mergeBlockBefore(originalThenBlock, terminator, newWhileOp.before().front().getArguments());
+         rewriter.eraseOp(terminator);
+         rewriter.restoreInsertionPoint(insertPt);
+      }
+      {
+         scf::IfOp::ensureTerminator(newWhileOp.after(), rewriter, loc);
+         auto insertPt = rewriter.saveInsertionPoint();
+         rewriter.setInsertionPointToStart(&newWhileOp.after().front());
+         Block* originalElseBlock = &whileOp.after().front();
+         auto* terminator = rewriter.getInsertionBlock()->getTerminator();
+         rewriter.mergeBlockBefore(originalElseBlock, terminator, newWhileOp.after().front().getArguments());
+         rewriter.eraseOp(terminator);
+         rewriter.restoreInsertionPoint(insertPt);
+      }
+
+      rewriter.replaceOp(whileOp, newWhileOp.results());
+
+      return success();
+   }
+};
 class YieldLowering : public ConversionPattern {
    public:
    explicit YieldLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -311,6 +375,28 @@ class YieldLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       rewriter.replaceOpWithNewOp<scf::YieldOp>(op, operands);
+      return success();
+   }
+};
+class ConditionLowering : public ConversionPattern {
+   public:
+   explicit ConditionLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::ConditionOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      db::ConditionOpAdaptor adaptor(operands);
+      db::ConditionOp conditionOp = cast<db::ConditionOp>(op);
+      auto boolType=conditionOp.condition().getType().dyn_cast_or_null<db::BoolType>();
+      if (boolType&&boolType.isNullable()) {
+         auto i1Type = rewriter.getI1Type();
+         auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange({i1Type, i1Type}), adaptor.condition());
+         Value constTrue = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), i1Type, rewriter.getIntegerAttr(i1Type, 1));
+         auto negated  = rewriter.create<XOrOp>(rewriter.getUnknownLoc(), unpacked.getResult(0), constTrue); //negate
+         auto anded = rewriter.create<mlir::AndOp>(rewriter.getUnknownLoc(), i1Type, negated, unpacked.getResult(1));
+         rewriter.replaceOpWithNewOp<scf::ConditionOp>(op, anded, adaptor.args());
+      } else {
+         rewriter.replaceOpWithNewOp<scf::ConditionOp>(op, adaptor.condition(), adaptor.args());
+      }
       return success();
    }
 };
@@ -360,7 +446,7 @@ class ForOpLowering : public ConversionPattern {
          return results;
       });
 
-      rewriter.replaceOp(op,results);
+      rewriter.replaceOp(op, results);
       return success();
    }
 };
@@ -391,6 +477,21 @@ class TableScanLowering : public ConversionPattern {
          values.push_back(columnId);
       }
       rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, mlir::TupleType::get(rewriter.getContext(), types), values);
+      return success();
+   }
+};
+class CreateRangeLowering : public ConversionPattern {
+   public:
+   explicit CreateRangeLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CreateRange::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto loc = rewriter.getUnknownLoc();
+      auto createRangeOp = cast<mlir::db::CreateRange>(op);
+      Type storageType = createRangeOp.range().getType().cast<mlir::db::RangeType>().getElementType();
+      Value combined = rewriter.create<mlir::util::PackOp>(loc, TypeRange(TupleType::get(getContext(), {storageType, storageType, storageType})), ValueRange({createRangeOp.lower(), createRangeOp.upper(), createRangeOp.step()}));
+      rewriter.replaceOp(op, combined);
+
       return success();
    }
 };
@@ -896,6 +997,8 @@ void DBToStdLoweringPass::runOnOperation() {
    // Define Conversion Target
    ConversionTarget target(getContext());
    target.addLegalOp<ModuleOp>();
+   target.addLegalOp<UnrealizedConversionCastOp>();
+
    target.addLegalDialect<StandardOpsDialect>();
    target.addLegalDialect<memref::MemRefDialect>();
 
@@ -986,6 +1089,10 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
+   typeConverter.addConversion([&](mlir::db::RangeType rangeType) {
+      auto convertedType = typeConverter.convertType(rangeType.getElementType());
+      return TupleType::get(&getContext(), {convertedType, convertedType, convertedType});
+   });
    typeConverter.addConversion([&](mlir::db::GenericIterableType genericIterableType) {
       Type elementType = genericIterableType.getElementType();
       Type nestedElementType = elementType;
@@ -1059,6 +1166,8 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<ConstantLowering>(typeConverter, &getContext());
    patterns.insert<IfLowering>(typeConverter, &getContext());
+   patterns.insert<WhileLowering>(typeConverter, &getContext());
+   patterns.insert<ConditionLowering>(typeConverter, &getContext());
    patterns.insert<YieldLowering>(typeConverter, &getContext());
    patterns.insert<AndOpLowering>(typeConverter, &getContext());
    patterns.insert<OrOpLowering>(typeConverter, &getContext());
@@ -1067,6 +1176,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<CastOpLowering>(typeConverter, &getContext());
    patterns.insert<TableScanLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<ForOpLowering>(functionRegistry, typeConverter, &getContext());
+   patterns.insert<CreateRangeLowering>(functionRegistry, typeConverter, &getContext());
 
    patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::db::IntType, mlir::AddIOp>>(typeConverter, &getContext());
    patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::IntType, mlir::SubIOp>>(typeConverter, &getContext());

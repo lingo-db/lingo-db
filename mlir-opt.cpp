@@ -101,6 +101,7 @@ int main(int argc, char** argv) {
    registry.insert<mlir::StandardOpsDialect>();
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<mlir::util::UtilDialect>();
+   registry.insert<mlir::scf::SCFDialect>();
 
    return failed(
       mlir::MlirOptMain(argc, argv, "DB dialects optimization driver\n", registry));
