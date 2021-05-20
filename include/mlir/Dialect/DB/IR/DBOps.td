@@ -57,6 +57,9 @@ def DB_Range  : DB_Collection<"Range","range"> {
 let summary = "range";
 let parameters = (ins "Type":$elementType);
 }
+def DB_Table  : DB_Type<"Table","table"> {
+let summary = "table";
+}
 def DB_BoolType : DB_Type<"Bool","bool"> {
   let summary = "database boolean type";
   let parameters = (ins "bool":$nullable);
@@ -172,13 +175,19 @@ let arguments = (ins DBType: $val,DB_BoolType: $null);
 let results = (outs  DBType : $res);
 let assemblyFormat = "$val `:` type($val) `,` $null  `:` type($res) attr-dict";
 }
+def DB_GetTable : DB_Op<"get_table",
+[NoSideEffect]> {
+let summary = "get table";
+let arguments = (ins StrAttr:$tablename,AnyType:$execution_context);
+let results = (outs DB_Table:$table);
+let assemblyFormat = "$tablename $execution_context `:` type($execution_context) attr-dict";
+}
 def DB_TableScan : DB_Op<"tablescan",
 [NoSideEffect]> {
 let summary = "tablescan";
-let arguments = (ins StrAttr:$tablename,ArrayAttr:$columns,AnyType:$execution_context);
+let arguments = (ins DB_Table:$table,ArrayAttr:$columns);
 let results = (outs DB_GenericIterable:$iterable);
-let assemblyFormat = "$tablename $columns $execution_context `:` type($execution_context) `:` type($iterable) attr-dict";
-
+let assemblyFormat = "$table $columns `:` type($iterable) attr-dict";
 }
 
 def DB_CreateRange : DB_Op<"range",

@@ -23,8 +23,9 @@
     //CHECK: string("---------------")
 	func @main (%execution_context: memref<i8>) {
 			%str_const = db.constant ( "---------------" ) :!db.string
-	 		%0 = db.tablescan "test" ["str","float32","float64","decimal","int32","int64","bool","date32","date64"] %execution_context: memref<i8> : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator>
-			db.for %table_chunk in %0 : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator>{
+	 		%table=db.get_table "test" %execution_context: memref<i8>
+            %0 = db.tablescan %table ["str","float32","float64","decimal","int32","int64","bool","date32","date64"] : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator>
+            db.for %table_chunk in %0 : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator>{
 				db.for %table_row in %table_chunk : !db.iterable<!test_table_tuple,table_row_iterator>{
 					%1,%2,%3,%4,%5,%6,%7,%8,%9 = util.unpack %table_row : !test_table_tuple -> !db.string<nullable>,!db.float<32,nullable>,!db.float<64,nullable>,!db.decimal<5,2,nullable>,!db.int<32,nullable>,!db.int<64,nullable>,!db.bool<nullable>,!db.date<day,nullable>,!db.date<millisecond,nullable>
 					db.dump %1 : !db.string<nullable>

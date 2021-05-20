@@ -450,6 +450,21 @@ class ForOpLowering : public ConversionPattern {
       return success();
    }
 };
+class GetTableLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
+   public:
+   explicit GetTableLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::GetTable::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto getTableOp = cast<mlir::db::GetTable>(op);
+      auto tableName = rewriter.create<mlir::db::ConstantOp>(rewriter.getUnknownLoc(), mlir::db::StringType::get(rewriter.getContext(), false), rewriter.getStringAttr(getTableOp.tablename()));
+      auto tablePtr = functionRegistry.call(rewriter, db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({getTableOp.execution_context(), tableName}))[0];
+      rewriter.replaceOp(getTableOp,tablePtr);
+      return success();
+   }
+};
 class TableScanLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
 
@@ -458,6 +473,7 @@ class TableScanLowering : public ConversionPattern {
       : ConversionPattern(typeConverter, mlir::db::TableScan::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      mlir::db::TableScanAdaptor adaptor(operands);
       auto tablescan = cast<mlir::db::TableScan>(op);
       std::vector<Type> types;
       auto i8Type = IntegerType::get(rewriter.getContext(), 8);
@@ -466,8 +482,7 @@ class TableScanLowering : public ConversionPattern {
 
       std::vector<Value> values;
       types.push_back(ptrType);
-      auto tableName = rewriter.create<mlir::db::ConstantOp>(rewriter.getUnknownLoc(), mlir::db::StringType::get(rewriter.getContext(), false), rewriter.getStringAttr(tablescan.tablename()));
-      auto tablePtr = functionRegistry.call(rewriter, db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({tablescan.execution_context(), tableName}))[0];
+      auto tablePtr = adaptor.table();
       values.push_back(tablePtr);
       for (auto c : tablescan.columns()) {
          auto stringAttr = c.cast<StringAttr>();
@@ -984,6 +999,8 @@ static bool hasDBType(TypeRange types) {
          return hasDBType(tupleType.getTypes());
       } else if (auto genericMemrefType = type.dyn_cast_or_null<util::GenericMemrefType>()) {
          return hasDBType(genericMemrefType.getElementType());
+      }else if (type.isa<mlir::db::TableType>()){
+         return true;
       }
    }
    return false;
@@ -1089,6 +1106,9 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
+   typeConverter.addConversion([&](mlir::db::TableType tableType) {
+     return MemRefType::get({},IntegerType::get(&getContext(),8));
+   });
    typeConverter.addConversion([&](mlir::db::RangeType rangeType) {
       auto convertedType = typeConverter.convertType(rangeType.getElementType());
       return TupleType::get(&getContext(), {convertedType, convertedType, convertedType});
@@ -1149,6 +1169,19 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::GenericIterableType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::TableType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, db::TableType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
+   });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, MemRefType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, MemRefType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
+   });
+
    OwningRewritePatternList patterns(&getContext());
    /*patterns.add<FunctionLikeSignatureConversion>(&getContext(), typeConverter);
    patterns.add<ForwardOperands<CallOp>,
@@ -1175,6 +1208,8 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<CmpOpLowering>(typeConverter, &getContext());
    patterns.insert<CastOpLowering>(typeConverter, &getContext());
    patterns.insert<TableScanLowering>(functionRegistry, typeConverter, &getContext());
+   patterns.insert<GetTableLowering>(functionRegistry, typeConverter, &getContext());
+
    patterns.insert<ForOpLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<CreateRangeLowering>(functionRegistry, typeConverter, &getContext());
 
