@@ -5,6 +5,9 @@
 #include <iostream>
 
 #include <arrow/array.h>
+#include <arrow/array/builder_primitive.h>
+
+#include <arrow/table_builder.h>
 #include <arrow/util/bit_util.h>
 #include <arrow/util/decimal.h>
 #include <arrow/vendored/datetime.h>
@@ -71,8 +74,8 @@ EXPORT uint64_t _mlir_ciface_table_chunk_get_column_offset(runtime::Pointer<arro
    return (*tableChunk)->column_data(columnId)->offset;
 }
 
-EXPORT runtime::Pointer<std::shared_ptr<arrow::DataType>> _mlir_ciface_arrow_type2(uint32_t typeVal, uint32_t p1, uint32_t p2) {// NOLINT (clang-diagnostic-return-type-c-linkage)
-   auto *ptr = new std::shared_ptr<arrow::DataType>;
+EXPORT runtime::Pointer<std::shared_ptr<arrow::DataType>> _mlir_ciface_arrow_type2(uint32_t typeVal, uint32_t p1, uint32_t p2) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   auto* ptr = new std::shared_ptr<arrow::DataType>;
    arrow::Type::type type = static_cast<arrow::Type::type>(typeVal);
    switch (type) {
       case arrow::Type::BOOL: *ptr = arrow::boolean(); break;
@@ -91,10 +94,10 @@ EXPORT runtime::Pointer<std::shared_ptr<arrow::DataType>> _mlir_ciface_arrow_typ
    return ptr;
 }
 
-EXPORT runtime::Pointer<std::shared_ptr<arrow::DataType>> _mlir_ciface_arrow_type1(uint32_t typeVal, uint32_t p1) {// NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT runtime::Pointer<std::shared_ptr<arrow::DataType>> _mlir_ciface_arrow_type1(uint32_t typeVal, uint32_t p1) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return _mlir_ciface_arrow_type2(typeVal, 0, 0);
 }
-EXPORT runtime::Pointer<std::shared_ptr<arrow::DataType>> _mlir_ciface_arrow_type(uint32_t typeVal) {// NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT runtime::Pointer<std::shared_ptr<arrow::DataType>> _mlir_ciface_arrow_type(uint32_t typeVal) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return _mlir_ciface_arrow_type1(typeVal, 0);
 }
 struct SchemaBuilder {
@@ -103,65 +106,66 @@ struct SchemaBuilder {
       return new std::shared_ptr<arrow::Schema>(std::make_shared<arrow::Schema>(fields));
    }
 };
-EXPORT runtime::Pointer<SchemaBuilder> _mlir_ciface_arrow_schema_create_builder() {// NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT runtime::Pointer<SchemaBuilder> _mlir_ciface_arrow_schema_create_builder() { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return new SchemaBuilder;
 }
-EXPORT void _mlir_ciface_arrow_schema_add_field(runtime::Pointer<SchemaBuilder>* builder, runtime::Pointer<std::shared_ptr<arrow::DataType>>* datatype, runtime::String* columnName) {// NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT void _mlir_ciface_arrow_schema_add_field(runtime::Pointer<SchemaBuilder>* builder, runtime::Pointer<std::shared_ptr<arrow::DataType>>* datatype, runtime::String* columnName) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    (*builder)->fields.push_back(std::make_shared<arrow::Field>(columnName->str(), (*datatype).ref(), false));
 }
-EXPORT runtime::Pointer<std::shared_ptr<arrow::Schema>> _mlir_ciface_arrow_schema_build(runtime::Pointer<SchemaBuilder>* builder) {// NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT runtime::Pointer<std::shared_ptr<arrow::Schema>> _mlir_ciface_arrow_schema_build(runtime::Pointer<SchemaBuilder>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return (*builder)->build();
 }
-EXPORT runtime::Pointer<std::shared_ptr<arrow::Table>> _mlir_ciface_arrow_table_build(runtime::Pointer<std::shared_ptr<arrow::Schema>>* schema,runtime::Pointer<std::shared_ptr<arrow::RecordBatch>>* batch) {// NOLINT (clang-diagnostic-return-type-c-linkage)
-   auto table = arrow::Table::FromRecordBatches((*schema).ref(), {(*batch).ref()}).ValueOrDie();
-   return new std::shared_ptr<arrow::Table>(table);
-}
-
-EXPORT runtime::Pointer<std::shared_ptr<arrow::ResizableBuffer>> _mlir_ciface_create_resizeable_buffer(uint64_t size) {// NOLINT (clang-diagnostic-return-type-c-linkage)
-   std::shared_ptr<arrow::ResizableBuffer>* resizable_buffer = new std::shared_ptr<arrow::ResizableBuffer>;
-   *resizable_buffer = arrow::AllocateResizableBuffer(size).ValueOrDie();
-   return resizable_buffer;
-}
-EXPORT runtime::Pointer<std::shared_ptr<arrow::ResizableBuffer>> _mlir_ciface_empty_resizeable_buffer() {// NOLINT (clang-diagnostic-return-type-c-linkage)
-   std::shared_ptr<arrow::ResizableBuffer>* resizable_buffer = new std::shared_ptr<arrow::ResizableBuffer>;
-   return resizable_buffer;
-}
-EXPORT runtime::ByteRange _mlir_ciface_resizeable_buffer_get(runtime::Pointer<std::shared_ptr<arrow::ResizableBuffer>>* bufferParam) {// NOLINT (clang-diagnostic-return-type-c-linkage)
-   return {(*bufferParam).ref()->mutable_data(), (size_t)(*(*bufferParam).get())->size()};
-}
-EXPORT runtime::ByteRange _mlir_ciface_resize_resizeable_buffer(runtime::Pointer<std::shared_ptr<arrow::ResizableBuffer>>* bufferParam, uint64_t newSize) {// NOLINT (clang-diagnostic-return-type-c-linkage)
-   ((*bufferParam).ref())->Resize(newSize); // NOLINT (clang-diagnostic-unused-result)
-   return {(*bufferParam).ref()->mutable_data(), (size_t)(*(*bufferParam).get())->size()};
-}
-EXPORT runtime::Pointer<std::shared_ptr<arrow::ArrayData>> _mlir_ciface_create_column_data(runtime::Pointer<std::shared_ptr<arrow::DataType>>* type, runtime::Pointer<std::shared_ptr<arrow::ResizableBuffer>>* bitmapBuffer, runtime::Pointer<std::shared_ptr<arrow::ResizableBuffer>>* valueBuffer, runtime::Pointer<std::shared_ptr<arrow::ResizableBuffer>>* varBuffer,uint64_t entries) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   std::vector<std::shared_ptr<arrow::Buffer>> buffers;
-   buffers.push_back((*bitmapBuffer).ref());
-   buffers.push_back((*valueBuffer).ref());
-   buffers.push_back((*varBuffer).ref());
-   std::shared_ptr<arrow::ArrayData>* array_data = new std::shared_ptr<arrow::ArrayData>;
-   *array_data = arrow::ArrayData::Make((*type).ref(), entries, buffers);
-   return array_data;
-}
-struct BatchBuilder {
+struct TableBuilder {
+   static constexpr size_t max_batch_size = 2;
    std::shared_ptr<arrow::Schema> schema;
-   std::vector<std::shared_ptr<arrow::ArrayData>> columns;
-   size_t size;
-   std::shared_ptr<arrow::RecordBatch>* build() {
-      return new std::shared_ptr<arrow::RecordBatch>(arrow::RecordBatch::Make(schema,size,columns));
+   std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+   std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder;
+   size_t current_batch_size;
+   TableBuilder(std::shared_ptr<arrow::Schema> schema):schema(schema) {
+      arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), &batchBuilder);//NOLINT (clang-diagnostic-unused-result)
+   }
+   void flushBatch(){
+      if(current_batch_size>0) {
+         std::shared_ptr<arrow::RecordBatch> recordBatch;
+         batchBuilder->Flush(&recordBatch);//NOLINT (clang-diagnostic-unused-result)
+         current_batch_size = 0;
+         batches.push_back(recordBatch);
+      }
+   }
+   void nextRow() {
+      if (current_batch_size >= max_batch_size) {
+         flushBatch();
+      }
+      current_batch_size++;
+   }
+   template <typename T>
+   T* GetBuilderForColumn(int column) {
+      return batchBuilder->GetFieldAs<T>(column);
+   }
+   std::shared_ptr<arrow::Table> build(){
+      flushBatch();
+      return arrow::Table::FromRecordBatches(schema,batches).ValueOrDie();
    }
 };
-EXPORT runtime::Pointer<BatchBuilder> _mlir_ciface_create_batch_builder(runtime::Pointer<std::shared_ptr<arrow::Schema>>* schema, uint64_t entries) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   auto *builder = new BatchBuilder;
-   builder->schema = (*schema).ref();
-   builder->size = entries;
-   return builder;
+EXPORT runtime::Pointer<TableBuilder> _mlir_ciface_arrow_create_table_builder(runtime::Pointer<std::shared_ptr<arrow::Schema>>* schema) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return new TableBuilder((*schema).ref());
 }
-EXPORT void _mlir_ciface_batch_builder_add_column_data(runtime::Pointer<BatchBuilder>* builder, runtime::Pointer<std::shared_ptr<arrow::ArrayData>>* column_data) {
-   (*builder)->columns.push_back((*column_data).ref());
+EXPORT void _mlir_ciface_table_builder_add_int_32(runtime::Pointer<TableBuilder>* builder,int column,bool isNull,int32_t val){
+   auto *typed_builder=(*builder)->GetBuilderForColumn<arrow::NumericBuilder<arrow::Int32Type>>(column);
+   if(isNull){
+      typed_builder->AppendNull();//NOLINT (clang-diagnostic-unused-result)
+   }else{
+      typed_builder->Append(val);//NOLINT (clang-diagnostic-unused-result)
+   }
+
 }
-EXPORT runtime::Pointer<std::shared_ptr<arrow::RecordBatch>> _mlir_ciface_batch_builder_build(runtime::Pointer<BatchBuilder>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return (*builder)->build();
+EXPORT void _mlir_ciface_table_builder_finish_row(runtime::Pointer<TableBuilder>* builder) {
+   (*builder)->nextRow();
 }
+EXPORT runtime::Pointer<std::shared_ptr<arrow::Table>> _mlir_ciface_table_builder_build(runtime::Pointer<TableBuilder>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return new std::shared_ptr<arrow::Table>((*builder)->build());
+}
+
 EXPORT void _mlir_ciface_dump_int(bool null, int64_t val) {
    if (null) {
       std::cout << "int(NULL)" << std::endl;
