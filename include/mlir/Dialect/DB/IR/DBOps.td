@@ -41,8 +41,12 @@ def DBType : Type<CPred<"$_self.isa<::mlir::db::DBType>()">,"DB dialect type">;
 class DB_Collection<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,"::mlir::db::CollectionType"> {
     let mnemonic = typeMnemonic;
 }
+class DB_Builder<string name, string typeMnemonic>  : TypeDef<DB_Dialect, name,"::mlir::db::BuilderType"> {
+    let mnemonic = typeMnemonic;
+}
 
 def DBCollection : Type<CPred<"$_self.isa<::mlir::db::CollectionType>()">,"DB dialect collection">;
+def DBBuilder : Type<CPred<"$_self.isa<::mlir::db::BuilderType>()">,"DB dialect builder">;
 
 def DB_GenericIterable : DB_Collection<"GenericIterable","iterable"> {
 let summary = "generic iterable";
@@ -57,8 +61,12 @@ def DB_Range  : DB_Collection<"Range","range"> {
 let summary = "range";
 let parameters = (ins "Type":$elementType);
 }
-def DB_Table  : DB_Type<"Table","table"> {
+def DB_Table: DB_Type<"Table","table"> {
 let summary = "table";
+}
+def DB_TableBuilder : DB_Builder<"TableBuilder","table_builder"> {
+let summary = "builder for table";
+let parameters = (ins "TupleType":$rowType);
 }
 def DB_BoolType : DB_Type<"Bool","bool"> {
   let summary = "database boolean type";
@@ -174,6 +182,27 @@ def DB_CombineNullOp : DB_Op<"combine_null", [NoSideEffect]> {
 let arguments = (ins DBType: $val,DB_BoolType: $null);
 let results = (outs  DBType : $res);
 let assemblyFormat = "$val `:` type($val) `,` $null  `:` type($res) attr-dict";
+}
+def DB_CreateTableBuilder : DB_Op<"create_table_builder",
+[NoSideEffect]> {
+let summary = "create table builder";
+let arguments = (ins ArrayAttr:$columns);
+let results = (outs DB_TableBuilder:$builder);
+let assemblyFormat = "$columns `:` type($builder) attr-dict";
+}
+def DB_BuilderMerge : DB_Op<"builder_merge",
+[NoSideEffect]> {
+let summary = "merge value";
+let arguments = (ins DBBuilder:$builder,AnyType:$val);
+let results = (outs DBBuilder:$result_builder);
+let assemblyFormat = "$builder `:` type($builder) `,` $val `:`  type($val) `->` type($result_builder) attr-dict";
+}
+def DB_BuilderBuild : DB_Op<"builder_build",
+[NoSideEffect]> {
+let summary = "build builder";
+let arguments = (ins DBBuilder:$builder);
+let results = (outs AnyType:$builded);
+let assemblyFormat = "$builder `:` type($builder) `->` type($builded) attr-dict";
 }
 def DB_GetTable : DB_Op<"get_table",
 [NoSideEffect]> {

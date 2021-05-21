@@ -1,7 +1,9 @@
 #ifndef MLIR_DIALECT_DB_IR_DBTYPES_H
 #define MLIR_DIALECT_DB_IR_DBTYPES_H
 
+#include "mlir/Dialect/DB/IR/DBBuilderType.h"
 #include "mlir/Dialect/DB/IR/DBCollectionType.h"
+
 #include "mlir/Dialect/DB/IR/DBType.h"
 
 #include "mlir/Dialect/DB/IR/DBOpsEnums.h"

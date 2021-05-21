@@ -168,7 +168,7 @@ mlir::Type mlir::db::CollectionType::getElementType() const {
          return t.getElementType();
       })
       .Case<::mlir::db::RangeType>([&](::mlir::db::RangeType t) {
-        return t.getElementType();
+         return t.getElementType();
       })
       .Default([](::mlir::Type) { return Type(); });
 }
@@ -452,7 +452,17 @@ void mlir::db::GenericIterableType::print(mlir::DialectAsmPrinter& p) const {
    return mlir::db::RangeType::get(parser.getBuilder().getContext(), type);
 }
 void mlir::db::RangeType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getElementType()  << ">";
+   p << getMnemonic() << "<" << getElementType() << ">";
+}
+::mlir::Type mlir::db::TableBuilderType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
+   Type type;
+   if (parser.parseLess() || parser.parseType(type) || parser.parseGreater()) {
+      return mlir::Type();
+   }
+   return mlir::db::TableBuilderType::get(parser.getBuilder().getContext(), type.dyn_cast<TupleType>());
+}
+void mlir::db::TableBuilderType::print(mlir::DialectAsmPrinter& p) const {
+   p << getMnemonic() << "<" << getRowType() << ">";
 }
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/DB/IR/DBOpsTypes.cpp.inc"

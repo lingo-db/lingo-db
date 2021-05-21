@@ -277,16 +277,16 @@ class IfLowering : public ConversionPattern {
          resultTypes.push_back(typeConverter->convertType(res.getType()));
       }
       Value condition;
-      auto boolType=ifOp.condition().getType().dyn_cast_or_null<db::BoolType>();
-      if (boolType&&boolType.isNullable()) {
+      auto boolType = ifOp.condition().getType().dyn_cast_or_null<db::BoolType>();
+      if (boolType && boolType.isNullable()) {
          auto i1Type = rewriter.getI1Type();
          auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange({i1Type, i1Type}), ifOp.condition());
          Value constTrue = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), i1Type, rewriter.getIntegerAttr(i1Type, 1));
-         auto negated  = rewriter.create<XOrOp>(rewriter.getUnknownLoc(), unpacked.getResult(0), constTrue); //negate
+         auto negated = rewriter.create<XOrOp>(rewriter.getUnknownLoc(), unpacked.getResult(0), constTrue); //negate
          auto anded = rewriter.create<mlir::AndOp>(rewriter.getUnknownLoc(), i1Type, negated, unpacked.getResult(1));
-         condition=anded;
+         condition = anded;
       } else {
-        condition=ifOp.condition();
+         condition = ifOp.condition();
       }
       auto newIfOp = rewriter.create<mlir::scf::IfOp>(loc, TypeRange(resultTypes), condition, !ifOp.elseRegion().empty());
       {
@@ -386,12 +386,12 @@ class ConditionLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       db::ConditionOpAdaptor adaptor(operands);
       db::ConditionOp conditionOp = cast<db::ConditionOp>(op);
-      auto boolType=conditionOp.condition().getType().dyn_cast_or_null<db::BoolType>();
-      if (boolType&&boolType.isNullable()) {
+      auto boolType = conditionOp.condition().getType().dyn_cast_or_null<db::BoolType>();
+      if (boolType && boolType.isNullable()) {
          auto i1Type = rewriter.getI1Type();
          auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange({i1Type, i1Type}), adaptor.condition());
          Value constTrue = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), i1Type, rewriter.getIntegerAttr(i1Type, 1));
-         auto negated  = rewriter.create<XOrOp>(rewriter.getUnknownLoc(), unpacked.getResult(0), constTrue); //negate
+         auto negated = rewriter.create<XOrOp>(rewriter.getUnknownLoc(), unpacked.getResult(0), constTrue); //negate
          auto anded = rewriter.create<mlir::AndOp>(rewriter.getUnknownLoc(), i1Type, negated, unpacked.getResult(1));
          rewriter.replaceOpWithNewOp<scf::ConditionOp>(op, anded, adaptor.args());
       } else {
@@ -461,7 +461,7 @@ class GetTableLowering : public ConversionPattern {
       auto getTableOp = cast<mlir::db::GetTable>(op);
       auto tableName = rewriter.create<mlir::db::ConstantOp>(rewriter.getUnknownLoc(), mlir::db::StringType::get(rewriter.getContext(), false), rewriter.getStringAttr(getTableOp.tablename()));
       auto tablePtr = functionRegistry.call(rewriter, db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({getTableOp.execution_context(), tableName}))[0];
-      rewriter.replaceOp(getTableOp,tablePtr);
+      rewriter.replaceOp(getTableOp, tablePtr);
       return success();
    }
 };
@@ -492,6 +492,83 @@ class TableScanLowering : public ConversionPattern {
          values.push_back(columnId);
       }
       rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, mlir::TupleType::get(rewriter.getContext(), types), values);
+      return success();
+   }
+};
+class CreateTableBuilderLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
+   public:
+   explicit CreateTableBuilderLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CreateTableBuilder::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+      auto createTB = cast<mlir::db::CreateTableBuilder>(op);
+      auto loc = rewriter.getUnknownLoc();
+
+      Value schema = functionRegistry.call(rewriter, FunctionId::ArrowTableSchemaCreate, {})[0];
+      for (auto c : createTB.columns()) {
+         auto stringAttr = c.cast<StringAttr>();
+         auto columnName = rewriter.create<mlir::db::ConstantOp>(loc, mlir::db::StringType::get(rewriter.getContext(), false), stringAttr);
+         Value arrowTypeConstant = rewriter.create<mlir::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(7));
+         Value arrowType = functionRegistry.call(rewriter, FunctionId::ArrowGetType, arrowTypeConstant)[0];
+         functionRegistry.call(rewriter, FunctionId::ArrowTableSchemaAddField, ValueRange({schema, arrowType, columnName}));
+      }
+      schema = functionRegistry.call(rewriter, FunctionId::ArrowTableSchemaBuild, schema)[0];
+      Value tableBuilder = functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderCreate, schema)[0];
+      rewriter.replaceOp(op, tableBuilder);
+      return success();
+   }
+};
+class BuilderMergeLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
+   public:
+   explicit BuilderMergeLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::BuilderMerge::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+      mlir::db::BuilderMergeAdaptor mergeOpAdaptor(operands);
+      auto mergeOp = cast<mlir::db::BuilderMerge>(op);
+      auto loc = rewriter.getUnknownLoc();
+      if(auto tableBuilderType=mergeOp.builder().getType().dyn_cast<mlir::db::TableBuilderType>()){
+         auto loweredTypes=mergeOpAdaptor.val().getType().cast<TupleType>().getTypes();
+         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, loweredTypes, mergeOpAdaptor.val());
+         size_t i=0;
+         Value falseValue = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+
+         for(auto v:unPackOp.vals()){
+            Value columnId = rewriter.create<mlir::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(i));
+            functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderAddInt32, ValueRange({mergeOpAdaptor.builder(),columnId,falseValue,v}));
+            i++;
+         }
+         functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderFinishRow, mergeOpAdaptor.builder());
+      }
+      rewriter.replaceOp(op,mergeOpAdaptor.builder());
+
+
+      return success();
+   }
+};
+class BuilderBuildLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
+   public:
+   explicit BuilderBuildLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::BuilderBuild::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+      mlir::db::BuilderBuildAdaptor buildAdaptor(operands);
+      auto buildOp = cast<mlir::db::BuilderBuild>(op);
+      if(auto tableBuilderType=buildOp.builder().getType().dyn_cast<mlir::db::TableBuilderType>()){
+         Value table = functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderBuild, buildAdaptor.builder())[0];
+         rewriter.replaceOp(op,table);
+      }
+
+
       return success();
    }
 };
@@ -999,7 +1076,7 @@ static bool hasDBType(TypeRange types) {
          return hasDBType(tupleType.getTypes());
       } else if (auto genericMemrefType = type.dyn_cast_or_null<util::GenericMemrefType>()) {
          return hasDBType(genericMemrefType.getElementType());
-      }else if (type.isa<mlir::db::TableType>()){
+      } else if (type.isa<mlir::db::TableType>()) {
          return true;
       }
    }
@@ -1107,7 +1184,10 @@ void DBToStdLoweringPass::runOnOperation() {
       return convertTuple(tupleType, typeConverter);
    });
    typeConverter.addConversion([&](mlir::db::TableType tableType) {
-     return MemRefType::get({},IntegerType::get(&getContext(),8));
+      return MemRefType::get({}, IntegerType::get(&getContext(), 8));
+   });
+   typeConverter.addConversion([&](mlir::db::TableBuilderType tableType) {
+     return MemRefType::get({}, IntegerType::get(&getContext(), 8));
    });
    typeConverter.addConversion([&](mlir::db::RangeType rangeType) {
       auto convertedType = typeConverter.convertType(rangeType.getElementType());
@@ -1170,16 +1250,16 @@ void DBToStdLoweringPass::runOnOperation() {
       return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::TableType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::TableType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, MemRefType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, MemRefType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
 
    OwningRewritePatternList patterns(&getContext());
@@ -1208,6 +1288,10 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<CmpOpLowering>(typeConverter, &getContext());
    patterns.insert<CastOpLowering>(typeConverter, &getContext());
    patterns.insert<TableScanLowering>(functionRegistry, typeConverter, &getContext());
+   patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, &getContext());
+   patterns.insert<BuilderMergeLowering>(functionRegistry, typeConverter, &getContext());
+   patterns.insert<BuilderBuildLowering>(functionRegistry, typeConverter, &getContext());
+
    patterns.insert<GetTableLowering>(functionRegistry, typeConverter, &getContext());
 
    patterns.insert<ForOpLowering>(functionRegistry, typeConverter, &getContext());
