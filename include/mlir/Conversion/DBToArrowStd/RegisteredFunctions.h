@@ -30,11 +30,13 @@
    F(ArrowGetType1Param, arrow_type1, OPERANDS(INT_TYPE(32), INT_TYPE(32)), RETURNS(POINTER_TYPE))                                   \
    F(ArrowGetType, arrow_type, OPERANDS(INT_TYPE(32)), RETURNS(POINTER_TYPE))                                                        \
    F(ArrowTableSchemaCreate, arrow_schema_create_builder, OPERANDS(), RETURNS(POINTER_TYPE))                                         \
-   F(ArrowTableSchemaAddField, arrow_schema_add_field, OPERANDS(POINTER_TYPE, POINTER_TYPE, STRING_TYPE), RETURNS())                 \
+   F(ArrowTableSchemaAddField, arrow_schema_add_field, OPERANDS(POINTER_TYPE, POINTER_TYPE, BOOL_TYPE, STRING_TYPE), RETURNS())      \
    F(ArrowTableSchemaBuild, arrow_schema_build, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                       \
    F(ArrowTableBuilderCreate, arrow_create_table_builder, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                             \
    F(ArrowTableBuilderAddInt32, table_builder_add_int_32, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(32)), RETURNS())  \
-   F(ArrowTableBuilderFinishRow, table_builder_finish_row,OPERANDS(POINTER_TYPE), RETURNS())                                                  \
+   F(ArrowTableBuilderAddBool, table_builder_add_bool, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, BOOL_TYPE), RETURNS())        \
+   F(ArrowTableBuilderAddBinary, table_builder_add_binary, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, STRING_TYPE), RETURNS())  \
+   F(ArrowTableBuilderFinishRow, table_builder_finish_row, OPERANDS(POINTER_TYPE), RETURNS())                                        \
    F(ArrowTableBuilderBuild, table_builder_build, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))
 
 #define PLAIN_FUNC_LIST(F, OPERANDS, RETURNS)                                                                        \

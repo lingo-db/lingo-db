@@ -495,6 +495,45 @@ class TableScanLowering : public ConversionPattern {
       return success();
    }
 };
+static Value getArrowDataType(OpBuilder& builder, db::codegen::FunctionRegistry& functionRegistry, db::DBType type) {
+   using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+   int typeConstant = 0;
+   int param1 = 0;
+   int param2 = 0;
+   auto loc = builder.getUnknownLoc();
+   if (auto intType = type.dyn_cast_or_null<mlir::db::IntType>()) {
+      switch (intType.getWidth()) {
+         case 8: typeConstant = arrow::Type::type::INT32; break;
+         case 16: typeConstant = arrow::Type::type::INT32; break;
+         case 32: typeConstant = arrow::Type::type::INT32; break;
+         case 64: typeConstant = arrow::Type::type::INT32; break;
+      }
+   } else if (auto boolType = type.dyn_cast_or_null<mlir::db::BoolType>()) {
+      typeConstant = arrow::Type::type::BOOL;
+   } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
+      typeConstant = arrow::Type::type::DECIMAL128;
+      param1 = decimalType.getP();
+      param2 = decimalType.getS();
+   } else if (auto boolType = type.dyn_cast_or_null<mlir::db::BoolType>()) {
+      typeConstant = arrow::Type::type::BOOL;
+   } else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
+      switch (floatType.getWidth()) {
+         case 16: typeConstant = arrow::Type::type::HALF_FLOAT; break;
+         case 32: typeConstant = arrow::Type::type::FLOAT; break;
+         case 64: typeConstant = arrow::Type::type::DOUBLE; break;
+      }
+   } else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {
+      typeConstant = arrow::Type::type::STRING;
+   }
+   //TODO: also implement date types etc
+
+   Value arrowTypeConstant = builder.create<mlir::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(typeConstant));
+   Value arrowTypeParam1 = builder.create<mlir::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(param1));
+   Value arrowTypeParam2 = builder.create<mlir::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(param2));
+
+   Value arrowType = functionRegistry.call(builder, FunctionId::ArrowGetType2Param, ValueRange({arrowTypeConstant, arrowTypeParam1, arrowTypeParam2}))[0];
+   return arrowType;
+}
 class CreateTableBuilderLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
 
@@ -508,12 +547,16 @@ class CreateTableBuilderLowering : public ConversionPattern {
       auto loc = rewriter.getUnknownLoc();
 
       Value schema = functionRegistry.call(rewriter, FunctionId::ArrowTableSchemaCreate, {})[0];
+      TupleType rowType = createTB.builder().getType().dyn_cast<mlir::db::TableBuilderType>().getRowType();
+      size_t i = 0;
       for (auto c : createTB.columns()) {
          auto stringAttr = c.cast<StringAttr>();
+         auto arrowType = getArrowDataType(rewriter, functionRegistry, rowType.getType(i).cast<mlir::db::DBType>());
          auto columnName = rewriter.create<mlir::db::ConstantOp>(loc, mlir::db::StringType::get(rewriter.getContext(), false), stringAttr);
-         Value arrowTypeConstant = rewriter.create<mlir::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(7));
-         Value arrowType = functionRegistry.call(rewriter, FunctionId::ArrowGetType, arrowTypeConstant)[0];
-         functionRegistry.call(rewriter, FunctionId::ArrowTableSchemaAddField, ValueRange({schema, arrowType, columnName}));
+         Value typeNullable = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+
+         functionRegistry.call(rewriter, FunctionId::ArrowTableSchemaAddField, ValueRange({schema, arrowType, typeNullable, columnName}));
+         i += 1;
       }
       schema = functionRegistry.call(rewriter, FunctionId::ArrowTableSchemaBuild, schema)[0];
       Value tableBuilder = functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderCreate, schema)[0];
@@ -521,6 +564,32 @@ class CreateTableBuilderLowering : public ConversionPattern {
       return success();
    }
 };
+
+static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::FunctionRegistry& functionRegistry, db::DBType type) {
+   using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+   if (auto intType = type.dyn_cast_or_null<mlir::db::IntType>()) {
+      switch (intType.getWidth()) {
+         case 32: return FunctionId::ArrowTableBuilderAddInt32;
+      }
+   } else if (auto boolType = type.dyn_cast_or_null<mlir::db::BoolType>()) {
+      return FunctionId::ArrowTableBuilderAddBool;
+   } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
+      //typeConstant = arrow::Type::type::DECIMAL128;
+      //param1 = decimalType.getP();
+      //param2 = decimalType.getS();
+   } /* else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
+      switch (floatType.getWidth()) {
+         case 16: typeConstant = arrow::Type::type::HALF_FLOAT; break;
+         case 32: typeConstant = arrow::Type::type::FLOAT; break;
+         case 64: typeConstant = arrow::Type::type::DOUBLE; break;
+      }
+   }*/
+   else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {
+      return FunctionId::ArrowTableBuilderAddBinary;
+   }
+   //TODO: implement other types too
+   return FunctionId::ArrowTableBuilderAddInt32;
+}
 class BuilderMergeLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
 
@@ -533,21 +602,21 @@ class BuilderMergeLowering : public ConversionPattern {
       mlir::db::BuilderMergeAdaptor mergeOpAdaptor(operands);
       auto mergeOp = cast<mlir::db::BuilderMerge>(op);
       auto loc = rewriter.getUnknownLoc();
-      if(auto tableBuilderType=mergeOp.builder().getType().dyn_cast<mlir::db::TableBuilderType>()){
-         auto loweredTypes=mergeOpAdaptor.val().getType().cast<TupleType>().getTypes();
+      TupleType rowType = mergeOp.builder().getType().dyn_cast<mlir::db::TableBuilderType>().getRowType();
+      if (auto tableBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::TableBuilderType>()) {
+         auto loweredTypes = mergeOpAdaptor.val().getType().cast<TupleType>().getTypes();
          auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, loweredTypes, mergeOpAdaptor.val());
-         size_t i=0;
+         size_t i = 0;
          Value falseValue = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
 
-         for(auto v:unPackOp.vals()){
+         for (auto v : unPackOp.vals()) {
             Value columnId = rewriter.create<mlir::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(i));
-            functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderAddInt32, ValueRange({mergeOpAdaptor.builder(),columnId,falseValue,v}));
+            functionRegistry.call(rewriter, getStoreFunc(functionRegistry, rowType.getType(i).cast<mlir::db::DBType>()), ValueRange({mergeOpAdaptor.builder(), columnId, falseValue, v}));
             i++;
          }
          functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderFinishRow, mergeOpAdaptor.builder());
       }
-      rewriter.replaceOp(op,mergeOpAdaptor.builder());
-
+      rewriter.replaceOp(op, mergeOpAdaptor.builder());
 
       return success();
    }
@@ -563,11 +632,10 @@ class BuilderBuildLowering : public ConversionPattern {
       using FunctionId = db::codegen::FunctionRegistry::FunctionId;
       mlir::db::BuilderBuildAdaptor buildAdaptor(operands);
       auto buildOp = cast<mlir::db::BuilderBuild>(op);
-      if(auto tableBuilderType=buildOp.builder().getType().dyn_cast<mlir::db::TableBuilderType>()){
+      if (auto tableBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::TableBuilderType>()) {
          Value table = functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderBuild, buildAdaptor.builder())[0];
-         rewriter.replaceOp(op,table);
+         rewriter.replaceOp(op, table);
       }
-
 
       return success();
    }
@@ -1187,7 +1255,7 @@ void DBToStdLoweringPass::runOnOperation() {
       return MemRefType::get({}, IntegerType::get(&getContext(), 8));
    });
    typeConverter.addConversion([&](mlir::db::TableBuilderType tableType) {
-     return MemRefType::get({}, IntegerType::get(&getContext(), 8));
+      return MemRefType::get({}, IntegerType::get(&getContext(), 8));
    });
    typeConverter.addConversion([&](mlir::db::RangeType rangeType) {
       auto convertedType = typeConverter.convertType(rangeType.getElementType());
