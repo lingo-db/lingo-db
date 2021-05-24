@@ -135,9 +135,11 @@ class TableRowIterator : public ForIterator {
       mlir::db::DBType type;
       Type stdType;
       Value offset;
+      Value nullMultiplier;
       Value nullBitmap;
       Value values;
       Value varLenBuffer;
+
    };
    std::vector<Column> columnInfo;
 
@@ -175,13 +177,17 @@ class TableRowIterator : public ForIterator {
             valueBuffer = valueBuffer0;
          }
          Value varLenBuffer{};
+         Value nullMultiplier;
          if (dbtype.isNullable()) {
             bitmapBuffer = functionRegistry.call(builder, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const0}))[0];
+            Value bitmapSize = builder.create<memref::DimOp>(builder.getUnknownLoc(), bitmapBuffer, 0);
+            Value emptyBitmap = builder.create<mlir::CmpIOp>(builder.getUnknownLoc(),mlir::CmpIPredicate::eq,const0,bitmapSize);
+            nullMultiplier=builder.create<mlir::SelectOp>(builder.getUnknownLoc(),emptyBitmap,const0,const1);
          }
          if (dbtype.isVarLen()) {
             varLenBuffer = functionRegistry.call(builder, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const2}))[0];
          }
-         columnInfo.push_back({dbtype, convertedType, offset, bitmapBuffer, valueBuffer, varLenBuffer});
+         columnInfo.push_back({dbtype, convertedType, offset, nullMultiplier,bitmapBuffer, valueBuffer, varLenBuffer});
          columnIdx++;
       }
    }
@@ -215,6 +221,7 @@ class TableRowIterator : public ForIterator {
          }
          if (column.type.isNullable()) {
             Value realPos = builder.create<mlir::AddIOp>(builder.getUnknownLoc(), indexType, column.offset, index);
+            realPos = builder.create<mlir::MulIOp>(builder.getUnknownLoc(), indexType, column.nullMultiplier, realPos);
             Value isnull = mlir::db::codegen::BitUtil::getBit(builder, column.nullBitmap, realPos, true);
             val = builder.create<mlir::db::CombineNullOp>(builder.getUnknownLoc(), column.type, val, isnull);
          }

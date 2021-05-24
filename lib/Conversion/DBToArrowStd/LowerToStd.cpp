@@ -503,10 +503,10 @@ static Value getArrowDataType(OpBuilder& builder, db::codegen::FunctionRegistry&
    auto loc = builder.getUnknownLoc();
    if (auto intType = type.dyn_cast_or_null<mlir::db::IntType>()) {
       switch (intType.getWidth()) {
-         case 8: typeConstant = arrow::Type::type::INT32; break;
-         case 16: typeConstant = arrow::Type::type::INT32; break;
+         case 8: typeConstant = arrow::Type::type::INT8; break;
+         case 16: typeConstant = arrow::Type::type::INT16; break;
          case 32: typeConstant = arrow::Type::type::INT32; break;
-         case 64: typeConstant = arrow::Type::type::INT32; break;
+         case 64: typeConstant = arrow::Type::type::INT64; break;
       }
    } else if (auto boolType = type.dyn_cast_or_null<mlir::db::BoolType>()) {
       typeConstant = arrow::Type::type::BOOL;
@@ -524,6 +524,12 @@ static Value getArrowDataType(OpBuilder& builder, db::codegen::FunctionRegistry&
       }
    } else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {
       typeConstant = arrow::Type::type::STRING;
+   }else if(auto dateType=type.dyn_cast_or_null<mlir::db::DateType>()){
+      if(dateType.getUnit()==mlir::db::DateUnitAttr::day){
+         typeConstant = arrow::Type::type::DATE32;
+      }else{
+         typeConstant = arrow::Type::type::DATE64;
+      }
    }
    //TODO: also implement date types etc
 
@@ -551,9 +557,10 @@ class CreateTableBuilderLowering : public ConversionPattern {
       size_t i = 0;
       for (auto c : createTB.columns()) {
          auto stringAttr = c.cast<StringAttr>();
-         auto arrowType = getArrowDataType(rewriter, functionRegistry, rowType.getType(i).cast<mlir::db::DBType>());
+         auto dbType= rowType.getType(i).cast<mlir::db::DBType>();
+         auto arrowType = getArrowDataType(rewriter, functionRegistry,dbType);
          auto columnName = rewriter.create<mlir::db::ConstantOp>(loc, mlir::db::StringType::get(rewriter.getContext(), false), stringAttr);
-         Value typeNullable = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+         Value typeNullable = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), dbType.isNullable()));
 
          functionRegistry.call(rewriter, FunctionId::ArrowTableSchemaAddField, ValueRange({schema, arrowType, typeNullable, columnName}));
          i += 1;
@@ -569,23 +576,29 @@ static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::Funct
    using FunctionId = db::codegen::FunctionRegistry::FunctionId;
    if (auto intType = type.dyn_cast_or_null<mlir::db::IntType>()) {
       switch (intType.getWidth()) {
+         case 8: return FunctionId::ArrowTableBuilderAddInt8;
+         case 16: return FunctionId::ArrowTableBuilderAddInt16;
          case 32: return FunctionId::ArrowTableBuilderAddInt32;
+         case 64: return FunctionId::ArrowTableBuilderAddInt64;
       }
    } else if (auto boolType = type.dyn_cast_or_null<mlir::db::BoolType>()) {
       return FunctionId::ArrowTableBuilderAddBool;
    } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
-      //typeConstant = arrow::Type::type::DECIMAL128;
-      //param1 = decimalType.getP();
-      //param2 = decimalType.getS();
-   } /* else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
+      return FunctionId::ArrowTableBuilderAddDecimal;
+   }  else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
       switch (floatType.getWidth()) {
-         case 16: typeConstant = arrow::Type::type::HALF_FLOAT; break;
-         case 32: typeConstant = arrow::Type::type::FLOAT; break;
-         case 64: typeConstant = arrow::Type::type::DOUBLE; break;
+         case 32: return FunctionId ::ArrowTableBuilderAddFloat32;
+         case 64: return FunctionId ::ArrowTableBuilderAddFloat64;
       }
-   }*/
+   }
    else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {
       return FunctionId::ArrowTableBuilderAddBinary;
+   }else if(auto dateType=type.dyn_cast_or_null<mlir::db::DateType>()){
+      if(dateType.getUnit()==mlir::db::DateUnitAttr::day){
+         return FunctionId::ArrowTableBuilderAddDate32;
+      }else{
+         return FunctionId::ArrowTableBuilderAddDate64;
+      }
    }
    //TODO: implement other types too
    return FunctionId::ArrowTableBuilderAddInt32;
@@ -610,8 +623,16 @@ class BuilderMergeLowering : public ConversionPattern {
          Value falseValue = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
 
          for (auto v : unPackOp.vals()) {
+            Value isNull;
+            if(mergeOp.val().getType().cast<TupleType>().getType(i).cast<db::DBType>().isNullable()){
+               auto nullUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, v.getType().cast<TupleType>().getTypes(), v);
+               isNull=nullUnpacked.getResult(0);
+               v=nullUnpacked->getResult(1);
+            }else{
+               isNull=falseValue;
+            }
             Value columnId = rewriter.create<mlir::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(i));
-            functionRegistry.call(rewriter, getStoreFunc(functionRegistry, rowType.getType(i).cast<mlir::db::DBType>()), ValueRange({mergeOpAdaptor.builder(), columnId, falseValue, v}));
+            functionRegistry.call(rewriter, getStoreFunc(functionRegistry, rowType.getType(i).cast<mlir::db::DBType>()), ValueRange({mergeOpAdaptor.builder(), columnId, isNull, v}));
             i++;
          }
          functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderFinishRow, mergeOpAdaptor.builder());
@@ -1322,6 +1343,12 @@ void DBToStdLoweringPass::runOnOperation() {
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::TableType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
+   });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::TableBuilderType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, db::TableBuilderType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, MemRefType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
