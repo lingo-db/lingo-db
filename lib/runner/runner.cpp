@@ -30,6 +30,7 @@
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Support/ErrorOr.h>
 #include <runner/runner.h>
+#include <runtime/helpers.h>
 
 namespace {
 struct ToLLVMLoweringPass
