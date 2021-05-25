@@ -573,6 +573,7 @@ static ParseResult parseMaterializeOp(OpAsmParser& parser, OperationState& resul
 static void print(OpAsmPrinter& p, relalg::MaterializeOp& op) {
    p << op.getOperationName() << " " << op.rel() << " ";
    printAttributeRefArr(p, op.attrs());
+   p << " => "<< op.columns();
    p << " : " << op.getType();
 }
 
