@@ -185,9 +185,9 @@ class CodeGen:
         return self.addExistingOp(Operation(None,None,["relalg.addattr ",attr.def_to_string()," ", ValueRef(val)]))
     def create_relalg_materialize(self,rel,attrs):
         attr_refs=list(map(lambda val:val.ref_to_string(),attrs))
-        attr_types=list(map(lambda val:val.type.to_string(),attrs))
-        t=DBType("matcollection",["tuple<" + (",".join(attr_types))+">"])
-        return self.addOp(t,["relalg.materialize ",ValueRef(rel)," [",",".join(attr_refs),"]", " : ",t.to_string()])
+        columns=list(map(lambda val:'"'+val.print_name+'"',attrs))
+        t=DBType("table",[])
+        return self.addOp(t,["relalg.materialize ",ValueRef(rel)," [",",".join(attr_refs),"]"," => [",",".join(columns),"]", " : ",t.to_string()])
     def create_relalg_projection(self,setsem,rel,attrs):
         attr_refs=list(map(lambda val:val.ref_to_string(),attrs))
         return self.addOp("relation",["relalg.projection ",setsem," [",",".join(attr_refs),"]",ValueRef(rel)])

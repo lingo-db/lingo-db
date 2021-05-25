@@ -557,6 +557,13 @@ static ParseResult parseMaterializeOp(OpAsmParser& parser, OperationState& resul
    Attribute attrs;
    parseAttributeRefArr(parser, result, attrs);
    result.addAttribute("attrs", attrs);
+   ArrayAttr columns;
+   if(parser.parseEqual()||parser.parseGreater()){
+      return failure();
+   }
+   parser.parseAttribute(columns);
+   result.addAttribute("columns",columns);
+
    mlir::db::CollectionType collectionType;
    if (parser.parseColonType(collectionType)) {
       return failure();

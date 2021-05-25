@@ -367,7 +367,7 @@ let assemblyFormat =
 }
 def MaterializeOp : RelAlg_Op<"materialize"> {
 let summary = "materialize operation";
-let arguments = (ins RelAlg_TupleStream:$rel,ArrayAttr:$attrs);
+let arguments = (ins RelAlg_TupleStream:$rel,ArrayAttr:$attrs,ArrayAttr:$columns);
 let results = (outs DB_CollectionType:$result);
 }
 def GetScalarOp : RelAlg_Op<"getscalar"> {

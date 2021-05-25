@@ -164,9 +164,6 @@ mlir::Type mlir::db::CollectionType::getElementType() const {
       .Case<::mlir::db::GenericIterableType>([&](::mlir::db::GenericIterableType t) {
          return t.getElementType();
       })
-      .Case<::mlir::db::MaterializedCollectionType>([&](::mlir::db::MaterializedCollectionType t) {
-         return t.getElementType();
-      })
       .Case<::mlir::db::RangeType>([&](::mlir::db::RangeType t) {
          return t.getElementType();
       })
@@ -421,18 +418,6 @@ void mlir::db::StringType::print(::mlir::DialectAsmPrinter& printer) const {
    ::print<mlir::db::StringType>(printer, getNullable());
 }
 
-::mlir::Type mlir::db::MaterializedCollectionType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
-   Type type;
-   if (parser.parseLess() || parser.parseType(type) || parser.parseGreater()) {
-      return mlir::Type();
-   }
-   return mlir::db::MaterializedCollectionType::get(parser.getBuilder().getContext(), type);
-}
-void mlir::db::MaterializedCollectionType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<";
-   p << getElementType();
-   p << ">";
-}
 ::mlir::Type mlir::db::GenericIterableType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
    Type type;
    StringRef parserName;

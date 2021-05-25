@@ -43,7 +43,7 @@ module{
 // -----
 module{
 %0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.string})] values: ["A", "B"]
-%1 = relalg.materialize %0 [@constrel::@attr1] : !db.matcollection<!db.string>
+%1 = relalg.materialize %0 [@constrel::@attr1] => ["col1"] : !db.table
 }
 
 //renaming:

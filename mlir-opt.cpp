@@ -18,6 +18,8 @@
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/SCF/SCF.h"
 
+#include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
+
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 
 namespace {
@@ -88,6 +90,9 @@ int main(int argc, char** argv) {
    });
    ::mlir::registerPass("relalg-optimize-join-order", "joinorder", []() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createOptimizeJoinOrderPass();
+   });
+   ::mlir::registerPass("relalg-to-db", "Relalg to DB dialect conversion", []() -> std::unique_ptr<::mlir::Pass> {
+     return mlir::relalg::createLowerToDBPass();
    });
    ::mlir::registerPass("to-arrow-std", "tostd", []() -> std::unique_ptr<::mlir::Pass> {
       return mlir::db::createLowerToStdPass();

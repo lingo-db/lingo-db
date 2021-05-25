@@ -53,10 +53,7 @@ let summary = "generic iterable";
 let parameters = (ins "Type":$elementType,"std::string":$iteratorName);
 
 }
-def DB_MaterializedCollection  : DB_Collection<"MaterializedCollection","matcollection"> {
-let summary = "materialized collection";
-let parameters = (ins "Type":$elementType);
-}
+
 def DB_Range  : DB_Collection<"Range","range"> {
 let summary = "range";
 let parameters = (ins "Type":$elementType);
