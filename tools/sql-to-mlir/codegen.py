@@ -234,8 +234,8 @@ class CodeGen:
         op=self.stacked_ops.pop()
         op.print_args.append(self.endRegion())
         self.getCurrentRegion().addOp(op)
-    def startFunction(self,name):
-        self.stacked_ops.append(Operation(None,None,["func ","@",name," () "]))
+    def startFunction(self,name,params):
+        self.stacked_ops.append(Operation(None,None,["func ","@",name," (",",".join(params),") "]))
         self.startRegion()
     def endFunction(self,res):
         op = self.stacked_ops.pop()

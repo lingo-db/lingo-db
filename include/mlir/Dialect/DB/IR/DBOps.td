@@ -235,11 +235,7 @@ let arguments = (ins DBCollection:$collection,Variadic<AnyType>:$initArgs);
 let results = (outs Variadic<AnyType>:$results);
 let regions = (region SizedRegion<1>:$region);
 
-let skipDefaultBuilders = 1;
-let builders = [
-OpBuilder<(ins "Value":$collection,
-CArg<"ValueRange", "llvm::None">:$iterArgs)>
-];
+
 
 let extraClassDeclaration = [{
 

@@ -196,7 +196,6 @@ class TableRowIterator : public ForIterator {
    }
    virtual Value getElement(OpBuilder& builder, Value index) {
       auto indexType = IndexType::get(builder.getContext());
-      Value const0 = builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), indexType, builder.getIntegerAttr(indexType, 1));
       Value const1 = builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), indexType, builder.getIntegerAttr(indexType, 1));
       std::vector<Type> types;
       std::vector<Value> values;
@@ -210,7 +209,7 @@ class TableRowIterator : public ForIterator {
             Value len = builder.create<mlir::SubIOp>(builder.getUnknownLoc(), builder.getI32Type(), pos2, pos1);
             Value pos1AsIndex = builder.create<IndexCastOp>(builder.getUnknownLoc(), pos1, indexType);
             Value lenAsIndex = builder.create<IndexCastOp>(builder.getUnknownLoc(), len, indexType);
-            val = builder.create<mlir::memref::SubViewOp>(builder.getUnknownLoc(), column.varLenBuffer, mlir::ValueRange({pos1AsIndex}), mlir::ValueRange({lenAsIndex}), mlir::ValueRange({const0}));
+            val = builder.create<mlir::memref::ViewOp>(builder.getUnknownLoc(), MemRefType::get({-1},builder.getIntegerType(8)),column.varLenBuffer, pos1AsIndex, mlir::ValueRange({lenAsIndex}));
          } else if (column.type.isa<db::BoolType>()) {
             Value realPos = builder.create<mlir::AddIOp>(builder.getUnknownLoc(), indexType, column.offset, index);
             val = mlir::db::codegen::BitUtil::getBit(builder, column.values, realPos);

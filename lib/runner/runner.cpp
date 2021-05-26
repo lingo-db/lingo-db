@@ -168,6 +168,8 @@ int dumpLLVMIR(mlir::ModuleOp module) {
 struct RunnerContext {
    mlir::MLIRContext context;
    mlir::OwningModuleRef module;
+   size_t numArgs;
+   size_t numResults;
 };
 Runner::Runner() : context(nullptr) {
    llvm::DebugFlag = true;
@@ -208,6 +210,11 @@ bool Runner::lower() {
 }
 bool Runner::lowerToLLVM() {
    RunnerContext* ctxt = (RunnerContext*) this->context;
+   mlir::ModuleOp moduleOp = ctxt->module.get();
+   if(auto mainFunc = moduleOp.lookupSymbol<mlir::FuncOp>("main")){
+      ctxt->numArgs=mainFunc.getNumArguments();
+      ctxt->numResults=mainFunc.getNumResults();
+   }
    mlir::PassManager pm2(&ctxt->context);
    pm2.addPass(mlir::createLowerToCFGPass());
    pm2.addPass(createLowerToLLVMPass());
@@ -224,7 +231,7 @@ void Runner::dumpLLVM() {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    dumpLLVMIR(ctxt->module.get());
 }
-bool Runner::runJit(runtime::ExecutionContext* context) {
+bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8_t*)> callback) {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    // Initialize LLVM targets.
    llvm::InitializeNativeTarget();
@@ -242,11 +249,25 @@ bool Runner::runJit(runtime::ExecutionContext* context) {
    assert(maybeEngine && "failed to construct an execution engine");
    auto& engine = maybeEngine.get();
    runtime::Pointer<runtime::ExecutionContext> contextPtr(context);
+   runtime::Pointer<uint8_t> res(nullptr);
+   auto *contextPtrPtr = &contextPtr;
+   auto *resPtr = &res;
+   std::vector<void*> args;
+   if (ctxt->numResults== 1) {
+      args.push_back((void*) &resPtr);
+   }
+   if (ctxt->numArgs == 1) {
+      args.push_back((void*) &contextPtrPtr);
+   }
+
    // Invoke the JIT-compiled function.
-   auto invocationResult = engine->invoke("main", &contextPtr);
+   auto invocationResult = engine->invokePacked("_mlir_ciface_main", args);
    if (invocationResult) {
       llvm::errs() << "JIT invocation failed\n";
       return false;
+   }
+   if (ctxt->numResults== 1) {
+      callback(res.get());
    }
 
    return true;

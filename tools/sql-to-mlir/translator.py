@@ -270,7 +270,7 @@ class Translator:
                 self.with_defs[with_query["name"]] = with_query["value"]
         codegen = CodeGen()
         codegen.startModule("querymodule")
-        codegen.startFunction("query")
+        codegen.startFunction("main",["%executionContext: memref<i8>"])
         var, results = self.translateSelectStmt(parsed, codegen)
         res = codegen.create_relalg_materialize(var, results)
         codegen.endFunction(res)

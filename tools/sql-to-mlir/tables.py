@@ -2,14 +2,15 @@ from mlir import Attribute, DBType
 
 
 class Table:
-    def __init__(self, table_identifier,scope_name, columns):
+    def __init__(self, table_identifier, scope_name, columns):
         self.table_identifier = table_identifier
-        self.scope_name=scope_name
+        self.scope_name = scope_name
         self.columns = columns
+
 
 def getTPCHTable(name, scope_name):
     if name == "nation":
-        return Table("nation",scope_name, {
+        return Table("nation", scope_name, {
             "n_nationkey": Attribute(scope_name, "n_nationkey", DBType("int", ["64"])),
             "n_name": Attribute(scope_name, "n_name", DBType("string", [])),
             "n_regionkey": Attribute(scope_name, "n_regionkey", DBType("int", ["64"])),
@@ -17,14 +18,14 @@ def getTPCHTable(name, scope_name):
         })
 
     if name == "region":
-        return Table("region",scope_name, {
+        return Table("region", scope_name, {
             "r_regionkey": Attribute(scope_name, "r_regionkey", DBType("int", ["64"])),
             "r_name": Attribute(scope_name, "r_name", DBType("string", [])),
             "r_comment": Attribute(scope_name, "r_comment", DBType("string", ["nullable"])),
         })
 
     if name == "part":
-        return Table("part",scope_name, {
+        return Table("part", scope_name, {
             "p_partkey": Attribute(scope_name, "p_partkey", DBType("int", ["64"])),
             "p_name": Attribute(scope_name, "p_name", DBType("string", [])),
             "p_mfgr": Attribute(scope_name, "p_mfgr", DBType("string", [])),
@@ -37,7 +38,7 @@ def getTPCHTable(name, scope_name):
         })
 
     if name == "supplier":
-        return Table("supplier",scope_name, {
+        return Table("supplier", scope_name, {
             "s_suppkey": Attribute(scope_name, "s_suppkey", DBType("int", ["64"])),
             "s_name": Attribute(scope_name, "s_name", DBType("string", [])),
             "s_address": Attribute(scope_name, "s_address", DBType("string", [])),
@@ -48,7 +49,7 @@ def getTPCHTable(name, scope_name):
         })
 
     if name == "partsupp":
-        return Table("partsupp",scope_name, {
+        return Table("partsupp", scope_name, {
             "ps_partkey": Attribute(scope_name, "ps_partkey", DBType("int", ["64"])),
             "ps_suppkey": Attribute(scope_name, "ps_suppkey", DBType("int", ["64"])),
             "ps_availqty": Attribute(scope_name, "ps_availqty", DBType("int", ["32"])),
@@ -57,7 +58,7 @@ def getTPCHTable(name, scope_name):
         })
 
     if name == "customer":
-        return Table("customer",scope_name, {
+        return Table("customer", scope_name, {
             "c_custkey": Attribute(scope_name, "c_custkey", DBType("int", ["64"])),
             "c_name": Attribute(scope_name, "c_name", DBType("string", [])),
             "c_address": Attribute(scope_name, "c_address", DBType("string", [])),
@@ -69,7 +70,7 @@ def getTPCHTable(name, scope_name):
         })
 
     if name == "orders":
-        return Table("orders",scope_name, {
+        return Table("orders", scope_name, {
             "o_orderkey": Attribute(scope_name, "o_orderkey", DBType("int", ["64"])),
             "o_custkey": Attribute(scope_name, "o_custkey", DBType("int", ["64"])),
             "o_orderstatus": Attribute(scope_name, "o_orderstatus", DBType("string", [])),
@@ -82,7 +83,7 @@ def getTPCHTable(name, scope_name):
         })
 
     if name == "lineitem":
-        return Table("lineitem",scope_name, {
+        return Table("lineitem", scope_name, {
             "l_orderkey": Attribute(scope_name, "l_orderkey", DBType("int", ["64"])),
             "l_partkey": Attribute(scope_name, "l_partkey", DBType("int", ["64"])),
             "l_suppkey": Attribute(scope_name, "l_suppkey", DBType("int", ["64"])),
@@ -100,5 +101,49 @@ def getTPCHTable(name, scope_name):
             "l_shipmode": Attribute(scope_name, "l_shipmode", DBType("string", [])),
             "l_comment": Attribute(scope_name, "l_comment", DBType("string", [])),
         })
+    if name == "assistenten":
+        return Table("assistenten", scope_name, {
+            "persnr": Attribute(scope_name, "persnr", DBType("int", ["64"])),
+            "name": Attribute(scope_name, "name", DBType("string", [])),
+            "fachgebiet": Attribute(scope_name, "fachgebiet", DBType("string", [])),
+            "boss": Attribute(scope_name, "boss", DBType("int", ["64"]))
+        })
+    if name == "hoeren":
+        return Table("hoeren", scope_name, {
+            "matrnr": Attribute(scope_name, "matrnr", DBType("int", ["64"])),
+            "vorlnr": Attribute(scope_name, "vorlnr", DBType("int", ["64"])),
+        })
+    if name == "studenten":
+        return Table("studenten", scope_name, {
+            "matrnr": Attribute(scope_name, "matrnr", DBType("int", ["64"])),
+            "name": Attribute(scope_name, "name", DBType("string", [])),
+            "semester": Attribute(scope_name, "semester", DBType("int", ["64"])),
+        })
+    if name == "professoren":
+        return Table("professoren", scope_name, {
+            "persnr": Attribute(scope_name, "persnr", DBType("int", ["64"])),
+            "name": Attribute(scope_name, "name", DBType("string", [])),
+            "rang": Attribute(scope_name, "rang", DBType("string", [])),
+            "raum": Attribute(scope_name, "raum", DBType("int", ["64"])),
+        })
+    if name == "vorlesungen":
+        return Table("vorlesungen", scope_name, {
+            "vorlnr": Attribute(scope_name, "vorlnr", DBType("int", ["64"])),
+            "titel": Attribute(scope_name, "titel", DBType("string", [])),
+            "sws": Attribute(scope_name, "sws", DBType("int", ["64"])),
+            "gelesenvon": Attribute(scope_name, "gelesenvon", DBType("int", ["64"])),
+        })
+    if name == "voraussetzen":
+        return Table("voraussetzen", scope_name, {
+            "vorgaenger": Attribute(scope_name, "vorgaenger", DBType("int", ["64"])),
+            "nachfolger": Attribute(scope_name, "nachfolger", DBType("int", ["64"])),
+        })
+    if name == "pruefen":
+        return Table("pruefen", scope_name, {
+            "matrnr": Attribute(scope_name, "matrnr", DBType("int", ["64"])),
+            "vorlnr": Attribute(scope_name, "vorlnr", DBType("int", ["64"])),
+            "persnr": Attribute(scope_name, "persnr", DBType("int", ["64"])),
+            "note": Attribute(scope_name, "note", DBType("decimal", ["2", "1"]))
+        })
     else:
-        raise Exception("unknown table: "+ name)
+        raise Exception("unknown table: " + name)

@@ -365,7 +365,7 @@ let results = (outs DB_BoolType:$result);
 let assemblyFormat =
 [{  $rel attr-dict }];
 }
-def MaterializeOp : RelAlg_Op<"materialize"> {
+def MaterializeOp : RelAlg_Op<"materialize",[NoSideEffect]> {
 let summary = "materialize operation";
 let arguments = (ins RelAlg_TupleStream:$rel,ArrayAttr:$attrs,ArrayAttr:$columns);
 let results = (outs DB_CollectionType:$result);

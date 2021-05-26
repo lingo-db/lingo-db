@@ -1,6 +1,5 @@
 #include "arrow/array.h"
 #include "runner/runner.h"
-#include <filesystem>
 #include <iostream>
 #include <string>
 
@@ -21,9 +20,9 @@ int main(int argc, char** argv) {
    runner::Runner runner;
    runner.load(inputFileName);
    runner.lower();
-   runner.dump();
+   //runner.dump();
    runner.lowerToLLVM();
-   runner.dumpLLVM();
-   runner.runJit(&context);
+   //runner.dumpLLVM();
+   runner.runJit(&context, runner::Runner::printTable);
    return 0;
 }
