@@ -150,7 +150,7 @@ jobs:
           key: ${{ runner.os }}-build-${{ github.sha }}
       - name: Run Test
         run: |
-          /home/runner/work/db-dialects/db-dialects/llvm-build/bin/llvm-lit build/test
+          /home/runner/work/db-dialects/db-dialects/llvm-build/bin/llvm-lit -v build/test
   sql-tests:
     needs: build
     runs-on: ubuntu-latest
