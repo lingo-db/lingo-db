@@ -120,6 +120,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - name: Install Python packages
+        run: |
+          pip3 install requests moz_sql_parser
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: Get arrow ommit id
         id: arrow-commit
