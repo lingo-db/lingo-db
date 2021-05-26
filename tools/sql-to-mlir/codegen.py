@@ -210,7 +210,10 @@ class CodeGen:
 
     def create_db_const(self,const,type):
         var=self.newVar()
-        self.addExistingOp(Operation(var,type,["db.constant ","(\"",const,"\") :", TypeRef(var)]))
+        const_str="(\""+str(const)+"\")"
+        if type.name=="int":
+            const_str="("+str(const)+")"
+        self.addExistingOp(Operation(var,type,["db.constant ",const_str," :", TypeRef(var)]))
         return var
     def create_relalg_const_relation(self,scope,attrs,values):
         attr_defs=",".join(list(map(lambda val:val.def_to_string(),attrs)))

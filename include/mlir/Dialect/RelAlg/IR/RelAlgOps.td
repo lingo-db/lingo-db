@@ -151,13 +151,13 @@ Attributes getCreatedAttributes();
 // Operators
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def SelectionOp : RelAlg_Op<"selection",[RecursiveSideEffects,Operator,PredicateOperator,TupleLamdaOperator,UnaryOperator]> {
+def SelectionOp : RelAlg_Op<"selection",[NoSideEffect,Operator,PredicateOperator,TupleLamdaOperator,UnaryOperator]> {
 let summary = "selection operation";
 let arguments = (ins RelAlg_TupleStream:$rel);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 }
-def MapOp : RelAlg_Op<"map",[RecursiveSideEffects,Operator,TupleLamdaOperator,UnaryOperator]> {
+def MapOp : RelAlg_Op<"map",[NoSideEffect,Operator,TupleLamdaOperator,UnaryOperator]> {
 let summary = "map operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_TupleStream:$rel);
 let results = (outs RelAlg_TupleStream:$result);

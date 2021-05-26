@@ -114,9 +114,9 @@ class Translator:
             else:
                 raise Exception("unknown expression:", expr)
         elif type(expr) is int:
-            return codegen.create_db_const(expr, DBType("int", ["32"], False))
+            return codegen.create_db_const(expr, DBType("int", ["64"], False))
         elif type(expr) is float:
-            return codegen.create_db_const(expr, DBType("float", ["32"], False))
+            return codegen.create_db_const(expr, DBType("float", ["64"], False))
         else:
             attr, tuple = stacked_resolver.resolve(expr)
             return codegen.create_relalg_getattr(tuple, attr)

@@ -34,6 +34,24 @@ class LoweringContext {
 class ProducerConsumerBuilder : public mlir::OpBuilder {
    public:
    using mlir::OpBuilder::OpBuilder;
+
+   void mergeRelatinalBlock(mlir::Block* source, LoweringContext& context) {
+      mlir::Block* dest = getBlock();
+
+      // Splice the operations of the 'source' block into the 'dest' block and erase
+      // it.
+      llvm::iplist<mlir::Operation> translated;
+      std::vector<mlir::Operation*> toErase;
+      for (auto getAttrOp : source->getOps<mlir::relalg::GetAttrOp>()) {
+         getAttrOp.replaceAllUsesWith(context.getValueForAttribute(&getAttrOp.attr().getRelationalAttribute()));
+         toErase.push_back(getAttrOp.getOperation());
+      }
+
+      dest->getOperations().splice(dest->end(), source->getOperations());
+      for (auto *op : toErase) {
+         op->erase();
+      }
+   }
 };
 class ProducerConsumerNode {
    protected:
@@ -73,6 +91,9 @@ class ProducerConsumerNode {
    ProducerConsumerNode(mlir::ValueRange children);
    void setRequiredBuilders(std::vector<size_t> requiredBuilders) {
       this->requiredBuilders = requiredBuilders;
+      for (auto& child : children) {
+         child->setRequiredBuilders(requiredBuilders);
+      }
    }
    virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) = 0;
    virtual mlir::relalg::Attributes getAvailableAttributes() = 0;
@@ -192,6 +213,56 @@ class MaterializeLowering : public ProducerConsumerNode {
    virtual ~MaterializeLowering() {}
 };
 
+class SelectionLowering : public ProducerConsumerNode {
+   mlir::relalg::SelectionOp selectionOp;
+
+   public:
+   SelectionLowering(mlir::relalg::SelectionOp selectionOp) : ProducerConsumerNode(selectionOp.rel()), selectionOp(selectionOp) {
+   }
+   virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
+      this->consumer = consumer;
+      this->requiredAttributes = requiredAttributes;
+      propagateInfo();
+   }
+   virtual mlir::relalg::Attributes getAvailableAttributes() override {
+      return this->children[0]->getAvailableAttributes();
+   }
+   virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) override {
+      mlir::relalg::SelectionOp clonedSelectionOp = mlir::dyn_cast<mlir::relalg::SelectionOp>(selectionOp->clone());
+      mlir::Block* block = &clonedSelectionOp.predicate().getBlocks().front();
+      auto *terminator = block->getTerminator();
+
+      builder.mergeRelatinalBlock(block, context);
+
+      auto ifOp = builder.create<mlir::db::IfOp>(selectionOp->getLoc(), getRequiredBuilderTypes(context), mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0]);
+      mlir::Block* ifBlock = new mlir::Block;
+
+      ifOp.thenRegion().push_back(ifBlock);
+
+      ProducerConsumerBuilder builder1(ifOp.thenRegion());
+      if (!requiredBuilders.empty()) {
+         mlir::Block* elseBlock = new mlir::Block;
+         ifOp.elseRegion().push_back(elseBlock);
+         ProducerConsumerBuilder builder2(ifOp.elseRegion());
+         builder2.create<mlir::db::YieldOp>(selectionOp->getLoc(), getRequiredBuilderValues(context));
+      }
+      consumer->consume(this, builder1, context);
+      builder1.create<mlir::db::YieldOp>(selectionOp->getLoc(), getRequiredBuilderValues(context));
+
+      size_t i = 0;
+      for (auto b : requiredBuilders) {
+         context.builders[b] = ifOp.getResult(i++);
+      }
+      terminator->erase();
+      clonedSelectionOp->destroy();
+   }
+   virtual void produce(LoweringContext& context, ProducerConsumerBuilder& builder) override {
+      children[0]->produce(context, builder);
+   }
+
+   virtual ~SelectionLowering() {}
+};
+
 std::unique_ptr<ProducerConsumerNode> createNodeFor(mlir::Operation* o) {
    std::unique_ptr<ProducerConsumerNode> res;
    llvm::TypeSwitch<mlir::Operation*>(o)
@@ -200,6 +271,9 @@ std::unique_ptr<ProducerConsumerNode> createNodeFor(mlir::Operation* o) {
       })
       .Case<mlir::relalg::MaterializeOp>([&](mlir::relalg::MaterializeOp materializeOp) {
          res = std::make_unique<MaterializeLowering>(materializeOp);
+      })
+      .Case<mlir::relalg::SelectionOp>([&](mlir::relalg::SelectionOp selectionOp) {
+         res = std::make_unique<SelectionLowering>(selectionOp);
       })
       .Default([&](mlir::Operation*) {});
 
@@ -239,6 +313,7 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
             node->done();
          }
       });
+      getFunction().dump();
    }
 };
 } // end anonymous namespace
