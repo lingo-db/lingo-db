@@ -238,7 +238,7 @@ class SelectionLowering : public ProducerConsumerNode {
       mlir::Block* block = &clonedSelectionOp.predicate().getBlocks().front();
       auto* terminator = block->getTerminator();
 
-      builder.mergeRelatinalBlock(block, context,scope);
+      builder.mergeRelatinalBlock(block, context, scope);
 
       auto ifOp = builder.create<mlir::db::IfOp>(selectionOp->getLoc(), getRequiredBuilderTypes(context), mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0]);
       mlir::Block* ifBlock = new mlir::Block;
@@ -288,7 +288,7 @@ class MapLowering : public ProducerConsumerNode {
       mlir::Block* block = &clonedSelectionOp.predicate().getBlocks().front();
       auto* terminator = block->getTerminator();
 
-      builder.mergeRelatinalBlock(block, context,scope);
+      builder.mergeRelatinalBlock(block, context, scope);
       consumer->consume(this, builder, context);
       terminator->erase();
       clonedSelectionOp->destroy();
@@ -299,7 +299,33 @@ class MapLowering : public ProducerConsumerNode {
 
    virtual ~MapLowering() {}
 };
+class CrossProductLowering : public ProducerConsumerNode {
+   mlir::relalg::CrossProductOp crossProductOp;
 
+   public:
+   CrossProductLowering(mlir::relalg::CrossProductOp crossProductOp) : ProducerConsumerNode(mlir::ValueRange({crossProductOp.left(), crossProductOp.right()})), crossProductOp(crossProductOp) {
+   }
+   virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
+      this->consumer = consumer;
+      this->requiredAttributes = requiredAttributes;
+      propagateInfo();
+   }
+   virtual mlir::relalg::Attributes getAvailableAttributes() override {
+      return this->children[0]->getAvailableAttributes().insert(this->children[1]->getAvailableAttributes());
+   }
+   virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) override {
+      if (child == this->children[0].get()) {
+         children[1]->produce(context, builder);
+      } else if (child == this->children[1].get()) {
+         consumer->consume(this, builder, context);
+      }
+   }
+   virtual void produce(LoweringContext& context, ProducerConsumerBuilder& builder) override {
+      children[0]->produce(context, builder);
+   }
+
+   virtual ~CrossProductLowering() {}
+};
 std::unique_ptr<ProducerConsumerNode> createNodeFor(mlir::Operation* o) {
    std::unique_ptr<ProducerConsumerNode> res;
    llvm::TypeSwitch<mlir::Operation*>(o)
@@ -314,6 +340,9 @@ std::unique_ptr<ProducerConsumerNode> createNodeFor(mlir::Operation* o) {
       })
       .Case<mlir::relalg::MapOp>([&](mlir::relalg::MapOp mapOp) {
          res = std::make_unique<MapLowering>(mapOp);
+      })
+      .Case<mlir::relalg::CrossProductOp>([&](mlir::relalg::CrossProductOp crossProductOp) {
+        res = std::make_unique<CrossProductLowering>(crossProductOp);
       })
       .Default([&](mlir::Operation*) {});
 
