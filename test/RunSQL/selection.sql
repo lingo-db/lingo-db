@@ -7,4 +7,4 @@
 
 select *
 from studenten
-where matrnr=28106
+where name='Carnap'

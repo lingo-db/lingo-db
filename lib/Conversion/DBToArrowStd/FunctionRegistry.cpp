@@ -2,7 +2,7 @@
 void mlir::db::codegen::FunctionRegistry::registerFunctions() {
 #define INT_TYPE(W) IntegerType::get(context, W)
 #define FLOAT_TYPE FloatType::getF32(context)
-#define DOUBlE_TYPE FloatType::getF64(context)
+#define DOUBLE_TYPE FloatType::getF64(context)
 
 #define BOOL_TYPE INT_TYPE(1)
 

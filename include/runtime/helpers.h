@@ -51,6 +51,20 @@ class String : public MemRef<char, 1> {
    String(char* ptr, size_t len) : MemRef<char, 1>(ptr, {len}) {}
    operator std::string() { return std::string(pointer, dimensions[0]); }
    std::string str() { return std::string(pointer, dimensions[0]); }
+   size_t len() {
+      return dimensions[0];
+   }
+   char* data(){
+      return pointer;
+   }
+};
+template<class T1,class T2>
+class Pair{
+   T1 first;
+   T2 second;
+
+   public:
+   Pair(T1 first,T2 second){}
 };
 } // end namespace runtime
 #endif // RUNTIME_HELPERS_H

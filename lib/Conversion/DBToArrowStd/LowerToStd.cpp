@@ -197,6 +197,19 @@ class NullHandler {
          return operand ? operand : v;
       }
    }
+   Value isNull() {
+      if (nullValues.empty()) {
+         return builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), builder.getI1Type(), builder.getIntegerAttr(builder.getI1Type(), 0));
+      }
+      Value isNull;
+      if (nullValues.size() >= 1) {
+         isNull = nullValues.front();
+      }
+      for (size_t i = 1; i < nullValues.size(); i++) {
+         isNull = builder.create<mlir::OrOp>(builder.getUnknownLoc(), isNull.getType(), isNull, nullValues[i]);
+      }
+      return isNull;
+   };
    Value combineResult(Value res) {
       auto i1Type = IntegerType::get(builder.getContext(), 1);
       if (nullValues.empty()) {
@@ -518,10 +531,10 @@ static Value getArrowDataType(OpBuilder& builder, db::codegen::FunctionRegistry&
       }
    } else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {
       typeConstant = arrow::Type::type::STRING;
-   }else if(auto dateType=type.dyn_cast_or_null<mlir::db::DateType>()){
-      if(dateType.getUnit()==mlir::db::DateUnitAttr::day){
+   } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
+      if (dateType.getUnit() == mlir::db::DateUnitAttr::day) {
          typeConstant = arrow::Type::type::DATE32;
-      }else{
+      } else {
          typeConstant = arrow::Type::type::DATE64;
       }
    }
@@ -551,8 +564,8 @@ class CreateTableBuilderLowering : public ConversionPattern {
       size_t i = 0;
       for (auto c : createTB.columns()) {
          auto stringAttr = c.cast<StringAttr>();
-         auto dbType= rowType.getType(i).cast<mlir::db::DBType>();
-         auto arrowType = getArrowDataType(rewriter, functionRegistry,dbType);
+         auto dbType = rowType.getType(i).cast<mlir::db::DBType>();
+         auto arrowType = getArrowDataType(rewriter, functionRegistry, dbType);
          auto columnName = rewriter.create<mlir::db::ConstantOp>(loc, mlir::db::StringType::get(rewriter.getContext(), false), stringAttr);
          Value typeNullable = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), dbType.isNullable()));
 
@@ -579,18 +592,17 @@ static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::Funct
       return FunctionId::ArrowTableBuilderAddBool;
    } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
       return FunctionId::ArrowTableBuilderAddDecimal;
-   }  else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
+   } else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
       switch (floatType.getWidth()) {
          case 32: return FunctionId ::ArrowTableBuilderAddFloat32;
          case 64: return FunctionId ::ArrowTableBuilderAddFloat64;
       }
-   }
-   else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {
+   } else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {
       return FunctionId::ArrowTableBuilderAddBinary;
-   }else if(auto dateType=type.dyn_cast_or_null<mlir::db::DateType>()){
-      if(dateType.getUnit()==mlir::db::DateUnitAttr::day){
+   } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
+      if (dateType.getUnit() == mlir::db::DateUnitAttr::day) {
          return FunctionId::ArrowTableBuilderAddDate32;
-      }else{
+      } else {
          return FunctionId::ArrowTableBuilderAddDate64;
       }
    }
@@ -618,12 +630,12 @@ class BuilderMergeLowering : public ConversionPattern {
 
          for (auto v : unPackOp.vals()) {
             Value isNull;
-            if(mergeOp.val().getType().cast<TupleType>().getType(i).cast<db::DBType>().isNullable()){
+            if (mergeOp.val().getType().cast<TupleType>().getType(i).cast<db::DBType>().isNullable()) {
                auto nullUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, v.getType().cast<TupleType>().getTypes(), v);
-               isNull=nullUnpacked.getResult(0);
-               v=nullUnpacked->getResult(1);
-            }else{
-               isNull=falseValue;
+               isNull = nullUnpacked.getResult(0);
+               v = nullUnpacked->getResult(1);
+            } else {
+               isNull = falseValue;
             }
             Value columnId = rewriter.create<mlir::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(i));
             functionRegistry.call(rewriter, getStoreFunc(functionRegistry, rowType.getType(i).cast<mlir::db::DBType>()), ValueRange({mergeOpAdaptor.builder(), columnId, isNull, v}));
@@ -793,9 +805,11 @@ class OrOpLowering : public ConversionPattern {
    }
 };
 class CmpOpLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
    public:
-   explicit CmpOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CmpOp::getOperationName(), 1, context) {}
+   explicit CmpOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CmpOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
    CmpIPredicate translateIPredicate(db::DBCmpPredicate pred) const {
       switch (pred) {
          case db::DBCmpPredicate::eq:
@@ -838,6 +852,27 @@ class CmpOpLowering : public ConversionPattern {
       assert(false && "unexpected case");
       return CmpFPredicate::OEQ;
    }
+   mlir::db::codegen::FunctionRegistry::FunctionId funcForStrCompare(db::DBCmpPredicate pred) const {
+      using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
+      switch (pred) {
+         case db::DBCmpPredicate::eq:
+            return FuncId::CmpStringEQ;
+         case db::DBCmpPredicate::neq:
+            return FuncId::CmpStringNEQ;
+         case db::DBCmpPredicate::lt:
+            return FuncId::CmpStringLT;
+         case db::DBCmpPredicate::gt:
+            return FuncId::CmpStringGT;
+         case db::DBCmpPredicate::lte:
+            return FuncId::CmpStringLTE;
+         case db::DBCmpPredicate::gte:
+            return FuncId::CmpStringGTE;
+         case db::DBCmpPredicate::like:
+            return FuncId::CmpStringLike;
+      }
+      assert(false && "unexpected case");
+      return FuncId::CmpStringEQ;
+   }
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
@@ -854,6 +889,12 @@ class CmpOpLowering : public ConversionPattern {
          return success();
       } else if (type.isa<db::FloatType>()) {
          Value res = rewriter.create<CmpFOp>(loc, translateFPredicate(cmpOp.predicate()), left, right);
+         rewriter.replaceOp(op, nullHandler.combineResult(res));
+         return success();
+      } else if (type.isa<db::StringType>()) {
+         using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
+         FuncId cmpFunc = funcForStrCompare(cmpOp.predicate());
+         Value res = functionRegistry.call(rewriter, cmpFunc, ValueRange({nullHandler.isNull(), cmpOp.left(), cmpOp.right()}))[0];
          rewriter.replaceOp(op, nullHandler.combineResult(res));
          return success();
       }
@@ -946,13 +987,17 @@ class SimpleUnOpToFuncLowering : public ConversionPattern {
 };
 
 class CastOpLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
    public:
-   explicit CastOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CastOp::getOperationName(), 1, context) {}
+   explicit CastOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CastOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
+      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+
       auto castOp = cast<mlir::db::CastOp>(op);
       auto loc = rewriter.getUnknownLoc();
       auto sourceType = castOp.val().getType().cast<db::DBType>();
@@ -973,6 +1018,19 @@ class CastOpLowering : public ConversionPattern {
       }
       if (scalarSourceType == scalarTargetType) {
          //nothing to do here
+      } else if (auto stringType = scalarSourceType.dyn_cast_or_null<db::StringType>()) {
+         if (auto intType = scalarTargetType.dyn_cast_or_null<db::IntType>()) {
+            value = functionRegistry.call(rewriter, FunctionId::CastStringToInt64, ValueRange({isNull, value}))[0];
+            if (intType.getWidth() < 64) {
+               value = rewriter.create<TruncateIOp>(loc, value, convertedTargetType);
+            }
+         } else if (auto floatType = scalarTargetType.dyn_cast_or_null<db::FloatType>()) {
+            FunctionId castFn = floatType.getWidth() == 32 ? FunctionId ::CastStringToFloat32 : FunctionId ::CastStringToFloat64;
+            value = functionRegistry.call(rewriter, castFn, ValueRange({isNull, value}))[0];
+         } else if (auto decimalType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
+            auto scale = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalType.getS()));
+            value = functionRegistry.call(rewriter, FunctionId ::CastStringToDecimal, ValueRange({isNull, value, scale}))[0];
+         }
       } else if (auto intType = scalarSourceType.dyn_cast_or_null<db::IntType>()) {
          if (scalarTargetType.isa<db::FloatType>()) {
             value = rewriter.create<mlir::SIToFPOp>(loc, value, convertedTargetType);
@@ -985,17 +1043,24 @@ class CastOpLowering : public ConversionPattern {
                value = rewriter.create<SignExtendIOp>(loc, value, convertedTargetType);
             }
             value = rewriter.create<mlir::MulIOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
-
+         } else if (scalarTargetType.isa<db::StringType>()) {
+            if (intType.getWidth() < 64) {
+               value = rewriter.create<SignExtendIOp>(loc, value, rewriter.getI64Type());
+            }
+            value = functionRegistry.call(rewriter, FunctionId ::CastInt64ToString, ValueRange({isNull, value}))[0];
          } else {
             return failure();
          }
-      } else if (scalarSourceType.isa<db::FloatType>()) {
+      } else if (auto floatType = scalarSourceType.dyn_cast_or_null<db::FloatType>()) {
          if (scalarTargetType.isa<db::IntType>()) {
             value = rewriter.create<mlir::FPToSIOp>(loc, value, convertedTargetType);
          } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedSourceType, FloatAttr::get(convertedSourceType, powf(10, decimalTargetType.getS())));
             value = rewriter.create<mlir::MulFOp>(rewriter.getUnknownLoc(), convertedSourceType, value, multiplier);
             value = rewriter.create<mlir::FPToSIOp>(loc, value, convertedTargetType);
+         } else if (scalarTargetType.isa<db::StringType>()) {
+            FunctionId castFn = floatType.getWidth() == 32 ? FunctionId ::CastFloat32ToString : FunctionId ::CastFloat64ToString;
+            value = functionRegistry.call(rewriter, castFn, ValueRange({isNull, value}))[0];
          } else {
             return failure();
          }
@@ -1024,6 +1089,10 @@ class CastOpLowering : public ConversionPattern {
             if (intType.getWidth() < 128) {
                value = rewriter.create<TruncateIOp>(loc, value, convertedTargetType);
             }
+         } else if (scalarTargetType.isa<db::StringType>()) {
+            auto scale = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalSourceType.getS()));
+
+            value = functionRegistry.call(rewriter, FunctionId ::CastDecimalToString, ValueRange({isNull, value, scale}))[0];
          } else {
             return failure();
          }
@@ -1339,10 +1408,10 @@ void DBToStdLoweringPass::runOnOperation() {
       return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::TableBuilderType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::TableBuilderType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, MemRefType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
@@ -1374,8 +1443,8 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<AndOpLowering>(typeConverter, &getContext());
    patterns.insert<OrOpLowering>(typeConverter, &getContext());
    patterns.insert<NotOpLowering>(typeConverter, &getContext());
-   patterns.insert<CmpOpLowering>(typeConverter, &getContext());
-   patterns.insert<CastOpLowering>(typeConverter, &getContext());
+   patterns.insert<CmpOpLowering>(functionRegistry, typeConverter, &getContext());
+   patterns.insert<CastOpLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<TableScanLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<BuilderMergeLowering>(functionRegistry, typeConverter, &getContext());

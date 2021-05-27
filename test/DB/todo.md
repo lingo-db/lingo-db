@@ -43,7 +43,8 @@
 - [ ] db.cast float -> string
 - [ ] db.cast decimal -> string
 - [ ] db.cast date -> string
-- [ ] db.cast string -> int
-- [ ] db.cast string -> float
-- [ ] db.cast string -> decimal
+- [x] db.cast string -> int
+- [x] db.cast string -> float
+- [x] db.cast string -> decimal
+- [x] db.compare string
 
