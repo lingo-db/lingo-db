@@ -309,8 +309,6 @@ class IfLowering : public ConversionPattern {
          rewriter.eraseOp(terminator);
          rewriter.restoreInsertionPoint(insertPt);
       }
-      llvm::dbgs() << newIfOp.results().size() << "\n";
-      llvm::dbgs() << ifOp->getNumResults() << "\n";
 
       rewriter.replaceOp(ifOp, newIfOp.results());
 
@@ -326,7 +324,6 @@ class WhileLowering : public ConversionPattern {
       auto whileOp = cast<mlir::db::WhileOp>(op);
       auto loc = op->getLoc();
       std::vector<Type> resultTypes;
-      llvm::dbgs() << "num_res:" << whileOp.getNumResults() << "\n";
       for (auto res : whileOp.results()) {
          resultTypes.push_back(typeConverter->convertType(res.getType()));
       }
@@ -339,7 +336,6 @@ class WhileLowering : public ConversionPattern {
          before->addArgument(t);
          after->addArgument(t);
       }
-      llvm::dbgs() << "num_res:" << whileOp.getNumResults() << "\n";
 
       {
          scf::IfOp::ensureTerminator(newWhileOp.before(), rewriter, loc);
@@ -347,7 +343,6 @@ class WhileLowering : public ConversionPattern {
          rewriter.setInsertionPointToStart(&newWhileOp.before().front());
          Block* originalThenBlock = &whileOp.before().front();
          auto* terminator = rewriter.getInsertionBlock()->getTerminator();
-         llvm::dbgs() << newWhileOp.before().front().getArguments().size();
          rewriter.mergeBlockBefore(originalThenBlock, terminator, newWhileOp.before().front().getArguments());
          rewriter.eraseOp(terminator);
          rewriter.restoreInsertionPoint(insertPt);
@@ -432,7 +427,6 @@ class ForOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::ForOpAdaptor forOpAdaptor(operands);
       auto forOp = cast<mlir::db::ForOp>(op);
-      forOp->dump();
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::db::CollectionType>();
 
       auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), functionRegistry);

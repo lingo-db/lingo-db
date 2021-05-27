@@ -11,9 +11,10 @@ namespace {
 
 class LoweringContext {
    llvm::ScopedHashTable<const mlir::relalg::RelationalAttribute*, mlir::Value> symbolTable;
-   using AttributeResolverScope = llvm::ScopedHashTableScope<const mlir::relalg::RelationalAttribute*, mlir::Value>;
 
    public:
+   using AttributeResolverScope = llvm::ScopedHashTableScope<const mlir::relalg::RelationalAttribute*, mlir::Value>;
+
    mlir::Value getValueForAttribute(const mlir::relalg::RelationalAttribute* attribute) const {
       assert(symbolTable.count(attribute));
       return symbolTable.lookup(attribute);
@@ -35,7 +36,7 @@ class ProducerConsumerBuilder : public mlir::OpBuilder {
    public:
    using mlir::OpBuilder::OpBuilder;
 
-   void mergeRelatinalBlock(mlir::Block* source, LoweringContext& context) {
+   void mergeRelatinalBlock(mlir::Block* source, LoweringContext& context, LoweringContext::AttributeResolverScope& scope) {
       mlir::Block* dest = getBlock();
 
       // Splice the operations of the 'source' block into the 'dest' block and erase
@@ -46,9 +47,13 @@ class ProducerConsumerBuilder : public mlir::OpBuilder {
          getAttrOp.replaceAllUsesWith(context.getValueForAttribute(&getAttrOp.attr().getRelationalAttribute()));
          toErase.push_back(getAttrOp.getOperation());
       }
+      for (auto addAttrOp : source->getOps<mlir::relalg::AddAttrOp>()) {
+         context.setValueForAttribute(scope, &addAttrOp.attr().getRelationalAttribute(), addAttrOp.val());
+         toErase.push_back(addAttrOp.getOperation());
+      }
 
       dest->getOperations().splice(dest->end(), source->getOperations());
-      for (auto *op : toErase) {
+      for (auto* op : toErase) {
          op->erase();
       }
    }
@@ -228,11 +233,12 @@ class SelectionLowering : public ProducerConsumerNode {
       return this->children[0]->getAvailableAttributes();
    }
    virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) override {
+      auto scope = context.createScope();
       mlir::relalg::SelectionOp clonedSelectionOp = mlir::dyn_cast<mlir::relalg::SelectionOp>(selectionOp->clone());
       mlir::Block* block = &clonedSelectionOp.predicate().getBlocks().front();
-      auto *terminator = block->getTerminator();
+      auto* terminator = block->getTerminator();
 
-      builder.mergeRelatinalBlock(block, context);
+      builder.mergeRelatinalBlock(block, context,scope);
 
       auto ifOp = builder.create<mlir::db::IfOp>(selectionOp->getLoc(), getRequiredBuilderTypes(context), mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0]);
       mlir::Block* ifBlock = new mlir::Block;
@@ -262,6 +268,37 @@ class SelectionLowering : public ProducerConsumerNode {
 
    virtual ~SelectionLowering() {}
 };
+class MapLowering : public ProducerConsumerNode {
+   mlir::relalg::MapOp mapOp;
+
+   public:
+   MapLowering(mlir::relalg::MapOp mapOp) : ProducerConsumerNode(mapOp.rel()), mapOp(mapOp) {
+   }
+   virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
+      this->consumer = consumer;
+      this->requiredAttributes = requiredAttributes;
+      propagateInfo();
+   }
+   virtual mlir::relalg::Attributes getAvailableAttributes() override {
+      return this->children[0]->getAvailableAttributes().insert(mapOp.getCreatedAttributes());
+   }
+   virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) override {
+      auto scope = context.createScope();
+      mlir::relalg::MapOp clonedSelectionOp = mlir::dyn_cast<mlir::relalg::MapOp>(mapOp->clone());
+      mlir::Block* block = &clonedSelectionOp.predicate().getBlocks().front();
+      auto* terminator = block->getTerminator();
+
+      builder.mergeRelatinalBlock(block, context,scope);
+      consumer->consume(this, builder, context);
+      terminator->erase();
+      clonedSelectionOp->destroy();
+   }
+   virtual void produce(LoweringContext& context, ProducerConsumerBuilder& builder) override {
+      children[0]->produce(context, builder);
+   }
+
+   virtual ~MapLowering() {}
+};
 
 std::unique_ptr<ProducerConsumerNode> createNodeFor(mlir::Operation* o) {
    std::unique_ptr<ProducerConsumerNode> res;
@@ -274,6 +311,9 @@ std::unique_ptr<ProducerConsumerNode> createNodeFor(mlir::Operation* o) {
       })
       .Case<mlir::relalg::SelectionOp>([&](mlir::relalg::SelectionOp selectionOp) {
          res = std::make_unique<SelectionLowering>(selectionOp);
+      })
+      .Case<mlir::relalg::MapOp>([&](mlir::relalg::MapOp mapOp) {
+         res = std::make_unique<MapLowering>(mapOp);
       })
       .Default([&](mlir::Operation*) {});
 

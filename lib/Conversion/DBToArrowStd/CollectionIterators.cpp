@@ -159,7 +159,6 @@ class TableRowIterator : public ForIterator {
 
       size_t columnIdx = 0;
       for (auto columnType : columnTypes) {
-         columnType.dump();
          auto dbtype = columnType.dyn_cast_or_null<mlir::db::DBType>();
          Value columnId = unpackOp.getResult(1 + columnIdx);
          Value offset = functionRegistry.call(builder, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnOffset, mlir::ValueRange({chunk, columnId}))[0];
