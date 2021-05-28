@@ -54,17 +54,26 @@ class String : public MemRef<char, 1> {
    size_t len() {
       return dimensions[0];
    }
-   char* data(){
+   char* data() {
       return pointer;
    }
 };
-template<class T1,class T2>
-class Pair{
+template <class T1, class T2>
+class Pair {
    T1 first;
    T2 second;
 
    public:
-   Pair(T1 first,T2 second){}
+   Pair(T1 first, T2 second) : first(first), second(second) {}
+};
+template <class T1, class T2, class T3>
+class Triple {
+   T1 first;
+   T2 second;
+   T3 third;
+
+   public:
+   Triple(T1 first, T2 second, T3 third) : first(first), second(second), third(third) {}
 };
 } // end namespace runtime
 #endif // RUNTIME_HELPERS_H

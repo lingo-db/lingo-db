@@ -65,6 +65,14 @@ def DB_TableBuilder : DB_Builder<"TableBuilder","table_builder"> {
 let summary = "builder for table";
 let parameters = (ins "TupleType":$rowType);
 }
+def DB_Vector : DB_Collection<"Vector","vector"> {
+let summary = "vector";
+let parameters = (ins "Type":$elementType);
+}
+def DB_VectorBuilder : DB_Builder<"VectorBuilder","vector_builder"> {
+let summary = "builder for vector";
+let parameters = (ins "Type":$elementType);
+}
 def DB_BoolType : DB_Type<"Bool","bool"> {
   let summary = "database boolean type";
   let parameters = (ins "bool":$nullable);
@@ -186,6 +194,12 @@ let summary = "create table builder";
 let arguments = (ins ArrayAttr:$columns);
 let results = (outs DB_TableBuilder:$builder);
 let assemblyFormat = "$columns `:` type($builder) attr-dict";
+}
+def DB_CreateVectorBuilder : DB_Op<"create_vector_builder",
+[NoSideEffect]> {
+let summary = "create vector builder";
+let results = (outs DB_VectorBuilder:$builder);
+let assemblyFormat = " `:` type($builder) attr-dict";
 }
 def DB_BuilderMerge : DB_Op<"builder_merge",
 [NoSideEffect]> {

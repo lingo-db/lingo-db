@@ -1,4 +1,6 @@
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
+#include "mlir/Dialect/util/UtilOps.h"
+
 void mlir::db::codegen::FunctionRegistry::registerFunctions() {
 #define INT_TYPE(W) IntegerType::get(context, W)
 #define FLOAT_TYPE FloatType::getF32(context)
@@ -10,6 +12,7 @@ void mlir::db::codegen::FunctionRegistry::registerFunctions() {
 
 #define POINTER_TYPE MemRefType::get({}, IntegerType::get(context, 8))
 #define STRING_TYPE MemRefType::get({-1}, IntegerType::get(context, 8))
+#define TUPLE_TYPE(...) TupleType::get(context, TypeRange({__VA_ARGS__}))
 #define OPERANDS_(...)  { __VA_ARGS__ }
 #define RETURNS_(...)  { __VA_ARGS__ }
 #define REGISTER_FUNC(inst, name, operands, returns) registerFunction(FunctionId::inst, #name, operands, returns);

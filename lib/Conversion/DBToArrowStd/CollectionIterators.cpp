@@ -113,8 +113,6 @@ class RangeIterator : public WhileIterator {
       return iterator;
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
-      iterator.dump();
-      iterator.getType().dump();
       return builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::lt, iterator, upper);
    }
    virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
@@ -139,7 +137,6 @@ class TableRowIterator : public ForIterator {
       Value nullBitmap;
       Value values;
       Value varLenBuffer;
-
    };
    std::vector<Column> columnInfo;
 
@@ -180,13 +177,13 @@ class TableRowIterator : public ForIterator {
          if (dbtype.isNullable()) {
             bitmapBuffer = functionRegistry.call(builder, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const0}))[0];
             Value bitmapSize = builder.create<memref::DimOp>(builder.getUnknownLoc(), bitmapBuffer, 0);
-            Value emptyBitmap = builder.create<mlir::CmpIOp>(builder.getUnknownLoc(),mlir::CmpIPredicate::eq,const0,bitmapSize);
-            nullMultiplier=builder.create<mlir::SelectOp>(builder.getUnknownLoc(),emptyBitmap,const0,const1);
+            Value emptyBitmap = builder.create<mlir::CmpIOp>(builder.getUnknownLoc(), mlir::CmpIPredicate::eq, const0, bitmapSize);
+            nullMultiplier = builder.create<mlir::SelectOp>(builder.getUnknownLoc(), emptyBitmap, const0, const1);
          }
          if (dbtype.isVarLen()) {
             varLenBuffer = functionRegistry.call(builder, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const2}))[0];
          }
-         columnInfo.push_back({dbtype, convertedType, offset, nullMultiplier,bitmapBuffer, valueBuffer, varLenBuffer});
+         columnInfo.push_back({dbtype, convertedType, offset, nullMultiplier, bitmapBuffer, valueBuffer, varLenBuffer});
          columnIdx++;
       }
    }
@@ -208,7 +205,7 @@ class TableRowIterator : public ForIterator {
             Value len = builder.create<mlir::SubIOp>(builder.getUnknownLoc(), builder.getI32Type(), pos2, pos1);
             Value pos1AsIndex = builder.create<IndexCastOp>(builder.getUnknownLoc(), pos1, indexType);
             Value lenAsIndex = builder.create<IndexCastOp>(builder.getUnknownLoc(), len, indexType);
-            val = builder.create<mlir::memref::ViewOp>(builder.getUnknownLoc(), MemRefType::get({-1},builder.getIntegerType(8)),column.varLenBuffer, pos1AsIndex, mlir::ValueRange({lenAsIndex}));
+            val = builder.create<mlir::memref::ViewOp>(builder.getUnknownLoc(), MemRefType::get({-1}, builder.getIntegerType(8)), column.varLenBuffer, pos1AsIndex, mlir::ValueRange({lenAsIndex}));
          } else if (column.type.isa<db::BoolType>()) {
             Value realPos = builder.create<mlir::AddIOp>(builder.getUnknownLoc(), indexType, column.offset, index);
             val = mlir::db::codegen::BitUtil::getBit(builder, column.values, realPos);
@@ -238,6 +235,99 @@ class TableRowIterator : public ForIterator {
    virtual void down(OpBuilder& builder) {
    }
 };
+class VectorIterator : public ForIterator {
+   Value vector;
+   Type elementType;
+   Type serializedElementType;
+   Value values;
+   Value rawValues;
+   Type ptrType;
+   Type typedPtrType;
+   Type serializedType(OpBuilder& builder, Type type) {
+      if (auto originalTupleType = type.dyn_cast_or_null<TupleType>()) {
+         std::vector<Type> types;
+         for (size_t i = 0; i < originalTupleType.size(); i++) {
+            Type t = serializedType(builder, originalTupleType.getType(i));
+            types.push_back(t);
+         }
+         return TupleType::get(builder.getContext(), types);
+      } else if (auto stringType = type.dyn_cast_or_null<db::StringType>()) {
+         if (stringType.isNullable()) {
+            return TupleType::get(builder.getContext(), TypeRange({builder.getI1Type(), builder.getI64Type(), builder.getI64Type()}));
+         } else {
+            return TupleType::get(builder.getContext(), TypeRange({builder.getI64Type(), builder.getI64Type()}));
+         }
+      } else {
+         return typeConverter->convertType(type);
+      }
+   }
+   Value deserialize(OpBuilder& builder, Value rawValues, Value element, Type type) {
+      if (auto originalTupleType = type.dyn_cast_or_null<TupleType>()) {
+         auto tupleType = element.getType().dyn_cast_or_null<TupleType>();
+         std::vector<Value> serializedValues;
+         std::vector<Type> types;
+         auto unPackOp = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), element);
+         for (size_t i = 0; i < tupleType.size(); i++) {
+            Value currVal = unPackOp.getResult(i);
+            Value serialized = deserialize(builder, rawValues, currVal, originalTupleType.getType(i));
+            serializedValues.push_back(serialized);
+            types.push_back(serialized.getType());
+         }
+         return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), types), serializedValues);
+      } else if (auto stringType = type.dyn_cast_or_null<db::StringType>()) {
+         Value pos, len, isNull;
+         if (stringType.isNullable()) {
+            auto unPackOp = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), TypeRange({builder.getI1Type(), builder.getIndexType(), builder.getIndexType()}), element);
+            isNull = unPackOp.getResult(0);
+            pos = unPackOp.getResult(1);
+            len = unPackOp.getResult(2);
+         } else {
+            auto unPackOp = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), TypeRange({builder.getIndexType(), builder.getIndexType()}), element);
+            pos = unPackOp.getResult(0);
+            len = unPackOp.getResult(1);
+         }
+         Value val = builder.create<mlir::memref::ViewOp>(builder.getUnknownLoc(), MemRefType::get({-1}, builder.getIntegerType(8)), rawValues, pos, mlir::ValueRange({len}));
+         if (isNull) {
+            val = builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), {builder.getI1Type(), val.getType()}), ValueRange({isNull, val}));
+         }
+         return val;
+      } else {
+         return element;
+      }
+   }
+
+   public:
+   VectorIterator(Value vector, Type elementType) : vector(vector), elementType(elementType){
+   }
+   virtual void init(OpBuilder& builder) {
+      serializedElementType = serializedType(builder, elementType);
+      Type ptrType = MemRefType::get({-1}, builder.getIntegerType(8));
+      Type typedPtrType = util::GenericMemrefType::get(builder.getContext(), serializedElementType, -1);
+      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({ptrType, ptrType}), vector);
+      values = unpacked.getResult(0);
+      values = builder.create<util::ToGenericMemrefOp>(builder.getUnknownLoc(), typedPtrType, values);
+
+      rawValues = unpacked.getResult(1);
+   }
+   virtual Value upper(OpBuilder& builder) {
+      return builder.create<util::DimOp>(builder.getUnknownLoc(), builder.getIndexType(), values);
+   }
+   virtual Value getElement(OpBuilder& builder, Value index) {
+      Value loaded = builder.create<util::LoadOp>(builder.getUnknownLoc(), serializedElementType, values, index);
+      Value deserialized = deserialize(builder, rawValues, loaded, elementType);
+      return deserialized;
+   }
+   virtual Value lower(OpBuilder& builder) {
+      return builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0));
+   }
+   virtual Value step(OpBuilder& builder) {
+      return builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(1));
+   }
+   virtual void destroyElement(OpBuilder& builder, Value elem) {
+   }
+   virtual void down(OpBuilder& builder) {
+   }
+};
 class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
    std::unique_ptr<WhileIterator> iterator;
 
@@ -249,7 +339,7 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
 
       iterator->setTypeConverter(&typeConverter);
       iterator->init(builder);
-      Type iteratorType=iterator->iteratorType(builder);
+      Type iteratorType = iterator->iteratorType(builder);
       Value initialIterator = iterator->iterator(builder);
       std::vector<Type> results = {iteratorType};
       std::vector<Value> iterValues = {initialIterator};
@@ -332,6 +422,8 @@ std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIteration
       }
    } else if (auto range = collectionType.dyn_cast_or_null<mlir::db::RangeType>()) {
       return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<RangeIterator>(range.getElementType().cast<DBType>(), collection));
+   } else if (auto vector = collectionType.dyn_cast_or_null<mlir::db::VectorType>()) {
+      return std::make_unique<ForIteratorIterationImpl>(std::make_unique<VectorIterator>(collection, vector.getElementType()));
    }
    return std::unique_ptr<mlir::db::CollectionIterationImpl>();
 }

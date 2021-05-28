@@ -167,6 +167,9 @@ mlir::Type mlir::db::CollectionType::getElementType() const {
       .Case<::mlir::db::RangeType>([&](::mlir::db::RangeType t) {
          return t.getElementType();
       })
+      .Case<::mlir::db::VectorType>([&](::mlir::db::VectorType t) {
+        return t.getElementType();
+      })
       .Default([](::mlir::Type) { return Type(); });
 }
 template <class X>
@@ -448,6 +451,26 @@ void mlir::db::RangeType::print(mlir::DialectAsmPrinter& p) const {
 }
 void mlir::db::TableBuilderType::print(mlir::DialectAsmPrinter& p) const {
    p << getMnemonic() << "<" << getRowType() << ">";
+}
+::mlir::Type mlir::db::VectorBuilderType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
+   Type type;
+   if (parser.parseLess() || parser.parseType(type) || parser.parseGreater()) {
+      return mlir::Type();
+   }
+   return mlir::db::VectorBuilderType::get(parser.getBuilder().getContext(), type);
+}
+void mlir::db::VectorBuilderType::print(mlir::DialectAsmPrinter& p) const {
+   p << getMnemonic() << "<" << getElementType() << ">";
+}
+::mlir::Type mlir::db::VectorType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
+   Type type;
+   if (parser.parseLess() || parser.parseType(type) || parser.parseGreater()) {
+      return mlir::Type();
+   }
+   return mlir::db::VectorType::get(parser.getBuilder().getContext(), type);
+}
+void mlir::db::VectorType::print(mlir::DialectAsmPrinter& p) const {
+   p << getMnemonic() << "<" << getElementType() << ">";
 }
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/DB/IR/DBOpsTypes.cpp.inc"

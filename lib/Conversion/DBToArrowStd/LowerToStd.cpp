@@ -578,6 +578,20 @@ class CreateTableBuilderLowering : public ConversionPattern {
       return success();
    }
 };
+class CreateVectorBuilderLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
+   public:
+   explicit CreateVectorBuilderLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CreateVectorBuilder::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+      Value vectorBuilder = functionRegistry.call(rewriter, FunctionId::VectorBuilderCreate, {})[0];
+      rewriter.replaceOp(op, vectorBuilder);
+      return success();
+   }
+};
 
 static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::FunctionRegistry& functionRegistry, db::DBType type) {
    using FunctionId = db::codegen::FunctionRegistry::FunctionId;
@@ -609,6 +623,31 @@ static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::Funct
    //TODO: implement other types too
    return FunctionId::ArrowTableBuilderAddInt32;
 }
+Value serialize(OpBuilder& builder, TypeConverter* converter, Value vectorBuilder, Value element, Type type, db::codegen::FunctionRegistry& functionRegistry) {
+   if (auto originalTupleType = type.dyn_cast_or_null<TupleType>()) {
+      auto tupleType = element.getType().dyn_cast_or_null<TupleType>();
+      std::vector<Value> serializedValues;
+      std::vector<Type> types;
+      auto unPackOp = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), element);
+      for (size_t i = 0; i < tupleType.size(); i++) {
+         Value currVal = unPackOp.getResult(i);
+         Value serialized = serialize(builder, converter, vectorBuilder, currVal, originalTupleType.getType(i), functionRegistry);
+         serializedValues.push_back(serialized);
+         types.push_back(serialized.getType());
+      }
+      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), types), serializedValues);
+   } else if (auto stringType = type.dyn_cast_or_null<db::StringType>()) {
+      if (stringType.isNullable()) {
+         auto unPackOp = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), TypeRange({builder.getI1Type(), converter->convertType(stringType.getBaseType())}), element);
+         return functionRegistry.call(builder, db::codegen::FunctionRegistry::FunctionId::VectorBuilderAddNullableVarLen, ValueRange({vectorBuilder, unPackOp.getResult(0), unPackOp.getResult(1)}))[0];
+      } else {
+         return functionRegistry.call(builder, db::codegen::FunctionRegistry::FunctionId::VectorBuilderAddVarLen, ValueRange({vectorBuilder, element}))[0];
+      }
+   } else {
+      return element;
+   }
+}
+
 class BuilderMergeLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
 
@@ -621,8 +660,8 @@ class BuilderMergeLowering : public ConversionPattern {
       mlir::db::BuilderMergeAdaptor mergeOpAdaptor(operands);
       auto mergeOp = cast<mlir::db::BuilderMerge>(op);
       auto loc = rewriter.getUnknownLoc();
-      TupleType rowType = mergeOp.builder().getType().dyn_cast<mlir::db::TableBuilderType>().getRowType();
       if (auto tableBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::TableBuilderType>()) {
+         TupleType rowType = mergeOp.builder().getType().dyn_cast<mlir::db::TableBuilderType>().getRowType();
          auto loweredTypes = mergeOpAdaptor.val().getType().cast<TupleType>().getTypes();
          auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, loweredTypes, mergeOpAdaptor.val());
          size_t i = 0;
@@ -642,8 +681,15 @@ class BuilderMergeLowering : public ConversionPattern {
             i++;
          }
          functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderFinishRow, mergeOpAdaptor.builder());
+         rewriter.replaceOp(op, mergeOpAdaptor.builder());
+      } else if (auto vectorBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::VectorBuilderType>()) {
+         Value v = serialize(rewriter, typeConverter, mergeOpAdaptor.builder(), mergeOpAdaptor.val(), mergeOp.val().getType(), functionRegistry);
+         Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), v.getType());
+         Value ptr = functionRegistry.call(rewriter, FunctionId::VectorBuilderMerge, ValueRange({mergeOpAdaptor.builder(), elementSize}))[0];
+         Value typedPtr = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), v.getType(), llvm::Optional<int64_t>()), ptr);
+         rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), v, typedPtr, Value());
+         rewriter.replaceOp(op, mergeOpAdaptor.builder());
       }
-      rewriter.replaceOp(op, mergeOpAdaptor.builder());
 
       return success();
    }
@@ -662,6 +708,10 @@ class BuilderBuildLowering : public ConversionPattern {
       if (auto tableBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::TableBuilderType>()) {
          Value table = functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderBuild, buildAdaptor.builder())[0];
          rewriter.replaceOp(op, table);
+      } else if (auto vectorBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::VectorBuilderType>()) {
+         Value vector = functionRegistry.call(rewriter, FunctionId::VectorBuilderBuild, buildAdaptor.builder())[0];
+
+         rewriter.replaceOp(op, vector);
       }
 
       return success();
@@ -1261,12 +1311,17 @@ void DBToStdLoweringPass::runOnOperation() {
             !hasDBType(op->getResultTypes());
          return isLegal;
       });
-   target.addDynamicallyLegalOp<util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::StoreOp, util::LoadOp, util::MemberRefOp, util::FromRawPointerOp, util::ToRawPointerOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp>(
+   target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::StoreOp, util::LoadOp, util::MemberRefOp, util::FromRawPointerOp, util::ToRawPointerOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp>(
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());
          //op->dump();
-         //llvm::dbgs()<<"isLegal:"<<isLegal<<"\n";
+         //llvm::dbgs() << "isLegal:" << isLegal << "\n";
+         return isLegal;
+      });
+   target.addDynamicallyLegalOp<util::SizeOfOp>(
+      [](util::SizeOfOp op) {
+         auto isLegal = !hasDBType(op.type());
          return isLegal;
       });
 
@@ -1341,6 +1396,13 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::db::TableBuilderType tableType) {
       return MemRefType::get({}, IntegerType::get(&getContext(), 8));
    });
+   typeConverter.addConversion([&](mlir::db::VectorBuilderType vectorBuilderType) {
+      return MemRefType::get({}, IntegerType::get(&getContext(), 8));
+   });
+   typeConverter.addConversion([&](mlir::db::VectorType vectorType) {
+      auto ptrType = MemRefType::get({-1}, IntegerType::get(&getContext(), 8));
+      return TupleType::get(&getContext(), {ptrType, ptrType});
+   });
    typeConverter.addConversion([&](mlir::db::RangeType rangeType) {
       auto convertedType = typeConverter.convertType(rangeType.getElementType());
       return TupleType::get(&getContext(), {convertedType, convertedType, convertedType});
@@ -1413,6 +1475,18 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::TableBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::VectorBuilderType type, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, db::VectorBuilderType type, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::VectorType type, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, db::VectorType type, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
    typeConverter.addSourceMaterialization([&](OpBuilder&, MemRefType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
@@ -1447,6 +1521,8 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<CastOpLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<TableScanLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, &getContext());
+   patterns.insert<CreateVectorBuilderLowering>(functionRegistry, typeConverter, &getContext());
+
    patterns.insert<BuilderMergeLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<BuilderBuildLowering>(functionRegistry, typeConverter, &getContext());
 
