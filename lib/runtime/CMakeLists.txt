@@ -8,6 +8,7 @@ add_library(runtime OBJECT
         dynamic_calls/execution_context.cpp
         dynamic_calls/string.cpp
         dynamic_calls/vector_builder.cpp
+        dynamic_calls/sort.cpp
         database.cpp ${CMAKE_SOURCE_DIR}/arrow/cpp/src/arrow/vendored/datetime/tz.cpp)
 find_package(Boost REQUIRED)
 target_link_libraries(runtime PUBLIC arrow_shared Boost::headers)

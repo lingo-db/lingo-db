@@ -1245,6 +1245,38 @@ class DumpOpLowering : public ConversionPattern {
       return success();
    }
 };
+static Type convertFunctionType(FunctionType type, TypeConverter& typeConverter) {
+   TypeConverter::SignatureConversion result(type.getNumInputs());
+   SmallVector<Type, 1> newResults;
+   if (failed(typeConverter.convertSignatureArgs(type.getInputs(), result)) ||
+       failed(typeConverter.convertTypes(type.getResults(), newResults))) {
+      return Type();
+   }
+
+   auto newType = FunctionType::get(type.getContext(),
+                                    result.getConvertedTypes(), newResults);
+   return newType;
+}
+class FuncConstLowering : public ConversionPattern {
+   public:
+   explicit FuncConstLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::ConstantOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      mlir::ConstantOp constantOp = mlir::cast<mlir::ConstantOp>(op);
+      if (auto type = constantOp.getType().dyn_cast_or_null<mlir::FunctionType>()) {
+         // Convert the original function types.
+
+         rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, convertFunctionType(type,*typeConverter), constantOp.value());
+         return success();
+
+      } else {
+         return failure();
+      }
+   }
+};
 } // end anonymous namespace
 
 //===----------------------------------------------------------------------===//
@@ -1271,18 +1303,22 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 }
 } // end anonymous namespace
 static bool hasDBType(TypeRange types) {
+   bool res=false;
    for (Type type : types) {
       if (type.isa<db::DBType>()) {
-         return true;
+         res|= true;
       } else if (auto tupleType = type.dyn_cast_or_null<TupleType>()) {
-         return hasDBType(tupleType.getTypes());
+         res|= hasDBType(tupleType.getTypes());
       } else if (auto genericMemrefType = type.dyn_cast_or_null<util::GenericMemrefType>()) {
-         return hasDBType(genericMemrefType.getElementType());
-      } else if (type.isa<mlir::db::TableType>()) {
-         return true;
+         res|= hasDBType(genericMemrefType.getElementType());
+      } else if (auto functionType = type.dyn_cast_or_null<mlir::FunctionType>()) {
+         res|= hasDBType(functionType.getInputs()) ||
+            hasDBType(functionType.getResults());
+      } else if (type.isa<mlir::db::TableType>()||type.isa<mlir::db::VectorType>()) {
+         res= true;
       }
    }
-   return false;
+   return res;
 }
 void DBToStdLoweringPass::runOnOperation() {
    auto module = getOperation();
@@ -1303,7 +1339,18 @@ void DBToStdLoweringPass::runOnOperation() {
    target.addDynamicallyLegalOp<FuncOp>([&](FuncOp op) {
       auto isLegal = !hasDBType(op.getType().getInputs()) &&
          !hasDBType(op.getType().getResults());
+      //op->dump();
+      //llvm::dbgs() << "isLegal:" << isLegal << "\n";
       return isLegal;
+   });
+   target.addDynamicallyLegalOp<ConstantOp>([&](ConstantOp op) {
+      if (auto functionType = op.getType().dyn_cast_or_null<mlir::FunctionType>()) {
+         auto isLegal = !hasDBType(functionType.getInputs()) &&
+            !hasDBType(functionType.getResults());
+         return isLegal;
+      } else {
+         return true;
+      }
    });
    target.addDynamicallyLegalOp<CallOp, CallIndirectOp, ReturnOp>(
       [](Operation* op) {
@@ -1315,8 +1362,8 @@ void DBToStdLoweringPass::runOnOperation() {
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());
-         //op->dump();
-         //llvm::dbgs() << "isLegal:" << isLegal << "\n";
+         op->dump();
+         llvm::dbgs() << "isLegal:" << isLegal << "\n";
          return isLegal;
       });
    target.addDynamicallyLegalOp<util::SizeOfOp>(
@@ -1389,6 +1436,12 @@ void DBToStdLoweringPass::runOnOperation() {
    });
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
+   });
+   typeConverter.addConversion([&](mlir::FunctionType functionType) {
+      return convertFunctionType(functionType, typeConverter);
+   });
+   typeConverter.addConversion([&](mlir::FunctionType functionType) {
+     return convertFunctionType(functionType, typeConverter);
    });
    typeConverter.addConversion([&](mlir::db::TableType tableType) {
       return MemRefType::get({}, IntegerType::get(&getContext(), 8));
@@ -1493,6 +1546,12 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addTargetMaterialization([&](OpBuilder&, MemRefType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, TupleType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, TupleType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
+   });
 
    OwningRewritePatternList patterns(&getContext());
    /*patterns.add<FunctionLikeSignatureConversion>(&getContext(), typeConverter);
@@ -1507,6 +1566,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<NullOpLowering>(typeConverter, &getContext());
    patterns.insert<IsNullOpLowering>(typeConverter, &getContext());
    patterns.insert<CombineNullOpLowering>(typeConverter, &getContext());
+   patterns.insert<FuncConstLowering>(typeConverter, &getContext());
 
    patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<ConstantLowering>(typeConverter, &getContext());
