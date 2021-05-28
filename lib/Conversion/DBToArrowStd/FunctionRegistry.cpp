@@ -15,6 +15,7 @@ void mlir::db::codegen::FunctionRegistry::registerFunctions() {
 #define TUPLE_TYPE(...) TupleType::get(context, TypeRange({__VA_ARGS__}))
 #define OPERANDS_(...)  { __VA_ARGS__ }
 #define RETURNS_(...)  { __VA_ARGS__ }
+#define FUNCTION_TYPE(operands,returns)  FunctionType::get(context,operands,returns)
 #define REGISTER_FUNC(inst, name, operands, returns) registerFunction(FunctionId::inst, #name, operands, returns);
    FUNC_LIST(REGISTER_FUNC, OPERANDS_, RETURNS_)
 #undef REGISTER_FUNC

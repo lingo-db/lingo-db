@@ -3,6 +3,7 @@
 #include "mlir/Conversion/DBToArrowStd/CollectionIteration.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStdPass.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
+#include "mlir/Conversion/DBToArrowStd/SerializationUtil.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
@@ -694,6 +695,69 @@ class BuilderMergeLowering : public ConversionPattern {
       return success();
    }
 };
+class SortOpLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
+   public:
+   explicit SortOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::SortOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      static size_t id = 0;
+      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+      mlir::db::SortOpAdaptor sortOpAdaptor(operands);
+      auto loweredVectorType = sortOpAdaptor.toSort().getType();
+      auto sortOp = cast<mlir::db::SortOp>(op);
+      ModuleOp parentModule = op->getParentOfType<ModuleOp>();
+      auto ptrType = MemRefType::get({}, rewriter.getIntegerType(8));
+      Type elementType = sortOp.toSort().getType().cast<mlir::db::VectorType>().getElementType();
+      Type serializedType = mlir::db::codegen::SerializationUtil::serializedType(rewriter, *typeConverter, elementType);
+      FuncOp funcOp;
+      {
+         OpBuilder::InsertionGuard insertionGuard(rewriter);
+         rewriter.setInsertionPointToStart(parentModule.getBody());
+         auto byteRangeType = MemRefType::get({-1}, rewriter.getIntegerType(8));
+         funcOp = rewriter.create<FuncOp>(parentModule.getLoc(), "db_sort_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({byteRangeType, ptrType, ptrType}), TypeRange(mlir::db::BoolType::get(rewriter.getContext()))));
+         funcOp->setAttr("llvm.emit_c_interface", rewriter.getUnitAttr());
+         auto* funcBody = new Block;
+         funcBody->addArguments(TypeRange({byteRangeType, ptrType, ptrType}));
+         funcOp.body().push_back(funcBody);
+         rewriter.setInsertionPointToStart(funcBody);
+         Value varLenData = funcBody->getArgument(0);
+         Value left = funcBody->getArgument(1);
+         Value right = funcBody->getArgument(2);
+
+         Value genericMemrefLeft = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), serializedType, llvm::Optional<int64_t>()), left);
+         Value genericMemrefRight = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), serializedType, llvm::Optional<int64_t>()), right);
+         Value serializedTupleLeft = rewriter.create<util::LoadOp>(sortOp.getLoc(), serializedType, genericMemrefLeft, Value());
+         Value serializedTupleRight = rewriter.create<util::LoadOp>(sortOp.getLoc(), serializedType, genericMemrefRight, Value());
+         Value tupleLeft = mlir::db::codegen::SerializationUtil::deserialize(rewriter, varLenData, serializedTupleLeft, elementType);
+         Value tupleRight = mlir::db::codegen::SerializationUtil::deserialize(rewriter, varLenData, serializedTupleRight, elementType);
+         auto terminator = rewriter.create<mlir::ReturnOp>(sortOp.getLoc());
+         Block* sortLambda = &sortOp.region().front();
+         auto* sortLambdaTerminator = sortLambda->getTerminator();
+         rewriter.mergeBlockBefore(sortLambda, terminator, {tupleLeft, tupleRight});
+         mlir::db::YieldOp yieldOp = mlir::cast<mlir::db::YieldOp>(terminator->getPrevNode());
+         Value x = yieldOp.results()[0];
+         x.setType(rewriter.getI1Type()); //todo: bad hack ;)
+         rewriter.create<mlir::ReturnOp>(sortOp.getLoc(), x);
+         rewriter.eraseOp(sortLambdaTerminator);
+         rewriter.eraseOp(terminator);
+      }
+      Value functionPointer = rewriter.create<mlir::ConstantOp>(sortOp->getLoc(), funcOp.type(), rewriter.getSymbolRefAttr(funcOp.sym_name()));
+      Type vectorMemrefType = util::GenericMemrefType::get(rewriter.getContext(), loweredVectorType, llvm::Optional<int64_t>());
+      Value allocaVec = rewriter.create<mlir::util::AllocaOp>(sortOp->getLoc(), vectorMemrefType, Value());
+      Value allocaNewVec = rewriter.create<mlir::util::AllocaOp>(sortOp->getLoc(), vectorMemrefType, Value());
+      rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), sortOpAdaptor.toSort(), allocaVec, Value());
+      Value plainMemref = rewriter.create<mlir::util::ToMemrefOp>(sortOp->getLoc(), ptrType, allocaVec);
+      Value plainMemrefNew = rewriter.create<mlir::util::ToMemrefOp>(sortOp->getLoc(), ptrType, allocaNewVec);
+      Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), serializedType);
+      functionRegistry.call(rewriter, FunctionId::SortVector, {plainMemref, elementSize, functionPointer, plainMemrefNew});
+      Value newVector = rewriter.create<util::LoadOp>(sortOp.getLoc(), loweredVectorType, allocaNewVec, Value());
+      rewriter.replaceOp(op, newVector);
+      return success();
+   }
+};
 class BuilderBuildLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
 
@@ -1269,7 +1333,7 @@ class FuncConstLowering : public ConversionPattern {
       if (auto type = constantOp.getType().dyn_cast_or_null<mlir::FunctionType>()) {
          // Convert the original function types.
 
-         rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, convertFunctionType(type,*typeConverter), constantOp.value());
+         rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, convertFunctionType(type, *typeConverter), constantOp.value());
          return success();
 
       } else {
@@ -1303,19 +1367,19 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 }
 } // end anonymous namespace
 static bool hasDBType(TypeRange types) {
-   bool res=false;
+   bool res = false;
    for (Type type : types) {
       if (type.isa<db::DBType>()) {
-         res|= true;
+         res |= true;
       } else if (auto tupleType = type.dyn_cast_or_null<TupleType>()) {
-         res|= hasDBType(tupleType.getTypes());
+         res |= hasDBType(tupleType.getTypes());
       } else if (auto genericMemrefType = type.dyn_cast_or_null<util::GenericMemrefType>()) {
-         res|= hasDBType(genericMemrefType.getElementType());
+         res |= hasDBType(genericMemrefType.getElementType());
       } else if (auto functionType = type.dyn_cast_or_null<mlir::FunctionType>()) {
-         res|= hasDBType(functionType.getInputs()) ||
+         res |= hasDBType(functionType.getInputs()) ||
             hasDBType(functionType.getResults());
-      } else if (type.isa<mlir::db::TableType>()||type.isa<mlir::db::VectorType>()) {
-         res= true;
+      } else if (type.isa<mlir::db::TableType>() || type.isa<mlir::db::VectorType>()) {
+         res = true;
       }
    }
    return res;
@@ -1356,14 +1420,15 @@ void DBToStdLoweringPass::runOnOperation() {
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());
+         op->dump();
+         llvm::dbgs() << "isLegal:" << isLegal << "\n";
          return isLegal;
       });
    target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::StoreOp, util::LoadOp, util::MemberRefOp, util::FromRawPointerOp, util::ToRawPointerOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp>(
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());
-         op->dump();
-         llvm::dbgs() << "isLegal:" << isLegal << "\n";
+
          return isLegal;
       });
    target.addDynamicallyLegalOp<util::SizeOfOp>(
@@ -1441,7 +1506,7 @@ void DBToStdLoweringPass::runOnOperation() {
       return convertFunctionType(functionType, typeConverter);
    });
    typeConverter.addConversion([&](mlir::FunctionType functionType) {
-     return convertFunctionType(functionType, typeConverter);
+      return convertFunctionType(functionType, typeConverter);
    });
    typeConverter.addConversion([&](mlir::db::TableType tableType) {
       return MemRefType::get({}, IntegerType::get(&getContext(), 8));
@@ -1547,10 +1612,10 @@ void DBToStdLoweringPass::runOnOperation() {
       return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, TupleType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, TupleType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
 
    OwningRewritePatternList patterns(&getContext());
@@ -1587,6 +1652,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<BuilderBuildLowering>(functionRegistry, typeConverter, &getContext());
 
    patterns.insert<GetTableLowering>(functionRegistry, typeConverter, &getContext());
+   patterns.insert<SortOpLowering>(functionRegistry, typeConverter, &getContext());
 
    patterns.insert<ForOpLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<CreateRangeLowering>(functionRegistry, typeConverter, &getContext());

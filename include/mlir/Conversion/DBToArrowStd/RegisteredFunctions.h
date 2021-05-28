@@ -65,7 +65,8 @@
    F(VectorBuilderAddVarLen, vector_builder_add_var_len, OPERANDS(POINTER_TYPE, STRING_TYPE), RETURNS(TUPLE_TYPE(INT_TYPE(64), INT_TYPE(64))))                                        \
    F(VectorBuilderAddNullableVarLen, vector_builder_add_nullable_var_len, OPERANDS(POINTER_TYPE, BOOL_TYPE, STRING_TYPE), RETURNS(TUPLE_TYPE(BOOL_TYPE, INT_TYPE(64), INT_TYPE(64)))) \
    F(VectorBuilderMerge, vector_builder_merge, OPERANDS(POINTER_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                             \
-   F(VectorBuilderBuild, vector_builder_build, OPERANDS(POINTER_TYPE), RETURNS(TUPLE_TYPE(STRING_TYPE, STRING_TYPE)))
+   F(VectorBuilderBuild, vector_builder_build, OPERANDS(POINTER_TYPE), RETURNS(TUPLE_TYPE(STRING_TYPE, STRING_TYPE)))                                                                 \
+   F(SortVector, sort, OPERANDS(POINTER_TYPE,INDEX_TYPE,FUNCTION_TYPE(OPERANDS(STRING_TYPE,POINTER_TYPE,POINTER_TYPE),RETURNS(BOOL_TYPE)),POINTER_TYPE), RETURNS())
 
 #define PLAIN_FUNC_LIST(F, OPERANDS, RETURNS)                                                                        \
    F(TimestampAddMonth, timestampaddMonth_int32_date64, OPERANDS(INT_TYPE(32), INT_TYPE(64)), RETURNS(INT_TYPE(64))) \

@@ -437,6 +437,41 @@ static void print(OpAsmPrinter &p, db::WhileOp op) {
 }
 
 
+static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
+   //parseRelationalInputs(parser, result, 1);
+   //parseCustomRegion(parser, result);
+   //return addRelationOutput(parser, result);
+   OpAsmParser::OperandType toSort;
+   db::VectorType vecType;
+   if(parser.parseOperand(toSort)||parser.parseColonType(vecType)){
+      return failure();
+   }
+   parser.resolveOperand(toSort,vecType,result.operands);
+   parser.addTypeToList(vecType,result.types);
+   OpAsmParser::OperandType left,right;
+   if (parser.parseLParen()||parser.parseRegionArgument(left)||parser.parseComma()||parser.parseRegionArgument(right)||parser.parseRParen()){
+      return failure();
+   }
+   Region* body = result.addRegion();
+   if (parser.parseRegion(*body, {left,right}, {vecType.getElementType(),vecType.getElementType()})) return failure();
+   return success();
+}
+static void print(OpAsmPrinter& p, db::SortOp& op) {
+   p << op.getOperationName() << " " << op.toSort() <<":"<<op.toSort().getType() << " ";
+   p << "(";
+   bool first = true;
+   for (auto arg : op.region().front().getArguments()) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      p << arg << ": " << arg.getType();
+   }
+   p << ")";
+   p.printRegion(op.region(), false, true);
+}
+
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.cpp.inc"
 #include "mlir/Dialect/DB/IR/DBOpsInterfaces.cpp.inc"

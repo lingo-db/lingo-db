@@ -238,6 +238,13 @@ let results = (outs DB_Range:$range);
 let assemblyFormat = "$lower `,` $upper `,` $step `:` type($lower) `->` type($range) attr-dict";
 
 }
+def DB_SortOp : DB_Op<"sort",
+[NoSideEffect]> {
+let summary = "sort";
+let arguments = (ins DB_Vector:$toSort);
+let results = (outs DB_Vector:$sorted);
+let regions = (region SizedRegion<1>:$region);
+}
 
 
 def ForOp : DB_Op<"for",
@@ -497,7 +504,7 @@ OperandRange getSuccessorEntryOperands(unsigned index);
 }
 
 def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
-        ParentOneOf<["IfOp","ForOp","WhileOp"]>]> {
+        ParentOneOf<["IfOp","ForOp","WhileOp","SortOp"]>]> {
 let summary = "loop yield and termination operation";
 
 let arguments = (ins Variadic<AnyType>:$results);
