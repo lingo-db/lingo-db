@@ -174,8 +174,24 @@ class SizeOfLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto castedOp = mlir::dyn_cast_or_null<mlir::util::SizeOfOp>(op);
+      auto converted=typeConverter->convertType(castedOp.type());
+      rewriter.replaceOpWithNewOp<mlir::util::SizeOfOp>(op, rewriter.getIndexType(), TypeAttr::get(converted));
 
-      rewriter.replaceOpWithNewOp<mlir::util::SizeOfOp>(op, rewriter.getIndexType(), TypeAttr::get(typeConverter->convertType(castedOp.type())));
+      return success();
+   }
+};
+class DimOpLowering : public ConversionPattern {
+   public:
+   explicit DimOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::DimOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      mlir::util::DimOpAdaptor adaptor(operands);
+
+
+      rewriter.replaceOpWithNewOp<mlir::util::DimOp>(op, rewriter.getIndexType(), adaptor.generic_memref());
 
       return success();
    }
@@ -263,6 +279,7 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    patterns.add<AllocOpLowering<util::AllocOp>>(typeConverter, patterns.getContext());
    patterns.add<AllocOpLowering<util::AllocaOp>>(typeConverter, patterns.getContext());
    patterns.add<DeAllocOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<DimOpLowering>(typeConverter, patterns.getContext());
 
    patterns.add<SizeOfLowering>(typeConverter, patterns.getContext());
    patterns.add<LoadOpLowering>(typeConverter, patterns.getContext());

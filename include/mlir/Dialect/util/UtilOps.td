@@ -72,6 +72,11 @@ def StoreOp  : Util_Op<"store"> {
 let arguments = (ins AnyType:$val,GenericMemrefType:$generic_memref,Optional<Index>:$idx);
 let assemblyFormat = "$val `:` type($val) `,` $generic_memref `[` $idx `]` `:`type($generic_memref) attr-dict";
 }
+def DimOp  : Util_Op<"dim"> {
+let arguments = (ins GenericMemrefType:$generic_memref);
+let results=(outs Index:$size);
+let assemblyFormat = "$generic_memref `:`type($generic_memref) attr-dict";
+}
 def LoadOp  : Util_Op<"load"> {
 let arguments = (ins GenericMemrefType:$generic_memref,Optional<Index>:$idx);
 let results=(outs AnyType:$val);

@@ -111,10 +111,34 @@ class SizeOfOpLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto sizeOfOp = mlir::dyn_cast_or_null<mlir::util::SizeOfOp>(op);
-      LLVMTypeConverter* llvmTypeConverter = static_cast<LLVMTypeConverter*>(typeConverter);
-      llvm::LLVMContext llvmContext;
-      auto* convertedType = mlir::LLVM::TypeToLLVMIRTranslator(llvmContext).translateType(typeConverter->convertType(sizeOfOp.type()));
-      rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, rewriter.getIndexType(), rewriter.getIndexAttr(llvmTypeConverter->getDataLayout().getTypeAllocSize(convertedType)));
+      Value const1 = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(1));
+      Type ptrType = mlir::LLVM::LLVMPointerType::get(typeConverter->convertType(sizeOfOp.type()));
+      Value nullPtr = rewriter.create<mlir::LLVM::NullOp>(rewriter.getUnknownLoc(), ptrType);
+      Value size1 = rewriter.create<LLVM::GEPOp>(rewriter.getUnknownLoc(), ptrType, nullPtr, const1);
+      rewriter.replaceOpWithNewOp<mlir::LLVM::PtrToIntOp>(op, rewriter.getI64Type(), size1);
+      return success();
+   }
+};
+class DimOpLowering : public ConversionPattern {
+   public:
+   explicit DimOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::DimOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto idxType = typeConverter->convertType(IndexType::get(rewriter.getContext()));
+      mlir::util::DimOpAdaptor adaptor(operands);
+      auto dimOp = mlir::dyn_cast_or_null<mlir::util::DimOp>(op);
+      auto genericMemrefType = dimOp.generic_memref().getType().cast<mlir::util::GenericMemrefType>();
+
+      Value size;
+      if (genericMemrefType.getSize() && genericMemrefType.getSize().getValue() == -1) {
+         size = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), idxType, operands[0], rewriter.getI64ArrayAttr({3, 0}));
+      }else{
+         size = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(1));
+      }
+      rewriter.replaceOp(op,size);
       return success();
    }
 };
@@ -164,7 +188,8 @@ class ToGenericMemrefOpLowering : public ConversionPattern {
       auto genericMemrefType = toGenericMemrefOp.generic_memref().getType().cast<mlir::util::GenericMemrefType>();
       auto targetType = typeConverter->convertType(genericMemrefType);
       auto i8PointerType = mlir::LLVM::LLVMPointerType::get(IntegerType::get(context, 8));
-      auto elemPtrType = mlir::LLVM::LLVMPointerType::get(typeConverter->convertType(genericMemrefType.getElementType()));
+      auto elemType = typeConverter->convertType(genericMemrefType.getElementType());
+      auto elemPtrType = mlir::LLVM::LLVMPointerType::get(elemType);
       auto idxType = typeConverter->convertType(IndexType::get(context));
       auto arrType = LLVM::LLVMArrayType::get(idxType, 1);
       Value tpl = rewriter.create<LLVM::UndefOp>(rewriter.getUnknownLoc(), targetType);
@@ -180,8 +205,10 @@ class ToGenericMemrefOpLowering : public ConversionPattern {
       tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), targetType, tpl, offset, rewriter.getI64ArrayAttr(2));
       if (genericMemrefType.getSize() && genericMemrefType.getSize().getValue() == -1) {
          Value stride = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), arrType, operands[0], rewriter.getI64ArrayAttr(4));
-         Value size = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), arrType, operands[0], rewriter.getI64ArrayAttr(3));
-         tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), targetType, tpl, size, rewriter.getI64ArrayAttr({3}));
+         Value size = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), idxType, operands[0], rewriter.getI64ArrayAttr({3, 0}));
+         Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), idxType, elemType);
+         size = rewriter.create<LLVM::UDivOp>(rewriter.getUnknownLoc(), idxType, size, elementSize);
+         tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), targetType, tpl, size, rewriter.getI64ArrayAttr({3, 0}));
          tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), targetType, tpl, stride, rewriter.getI64ArrayAttr({4}));
       }
       rewriter.replaceOp(op, tpl);
@@ -204,7 +231,8 @@ class ToMemrefOpLowering : public ConversionPattern {
       auto targetType = typeConverter->convertType(memrefType);
 
       auto i8PointerType = mlir::LLVM::LLVMPointerType::get(IntegerType::get(context, 8));
-      auto elemPtrType = mlir::LLVM::LLVMPointerType::get(typeConverter->convertType(genericMemrefType.getElementType()));
+      auto elemType = typeConverter->convertType(genericMemrefType.getElementType());
+      auto elemPtrType = mlir::LLVM::LLVMPointerType::get(elemType);
       auto idxType = typeConverter->convertType(IndexType::get(context));
       auto arrType = LLVM::LLVMArrayType::get(idxType, 1);
       Value tpl = rewriter.create<LLVM::UndefOp>(rewriter.getUnknownLoc(), targetType);
@@ -218,10 +246,12 @@ class ToMemrefOpLowering : public ConversionPattern {
       tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), targetType, tpl, allocatedPtr, rewriter.getI64ArrayAttr(0));
       tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), targetType, tpl, alignedPtr, rewriter.getI64ArrayAttr(1));
       tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), targetType, tpl, offset, rewriter.getI64ArrayAttr(2));
-      if (genericMemrefType.getSize() && genericMemrefType.getSize().getValue() == -1 && memrefType.getRank()==1&&memrefType.isDynamicDim(0)) {
-         Value size = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), arrType, operands[0], rewriter.getI64ArrayAttr(3));
+      if (genericMemrefType.getSize() && genericMemrefType.getSize().getValue() == -1 && memrefType.getRank() == 1 && memrefType.isDynamicDim(0)) {
+         Value size = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), idxType, operands[0], rewriter.getI64ArrayAttr({3, 0}));
          Value stride = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), arrType, operands[0], rewriter.getI64ArrayAttr(4));
-         tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), targetType, tpl, size, rewriter.getI64ArrayAttr({3}));
+         Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), idxType, elemType);
+         size = rewriter.create<LLVM::MulOp>(rewriter.getUnknownLoc(), idxType, size, elementSize);
+         tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), targetType, tpl, size, rewriter.getI64ArrayAttr({3, 0}));
          tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), targetType, tpl, stride, rewriter.getI64ArrayAttr({4}));
       }
       rewriter.replaceOp(op, tpl);
@@ -335,7 +365,6 @@ class MemberRefOpLowering : public ConversionPattern {
       auto elemType = typeConverter->convertType(genericMemrefType.getElementType());
       auto elemPtrType = mlir::LLVM::LLVMPointerType::get(elemType);
       auto resultType = memberRefOp.result_ref().getType().cast<mlir::util::GenericMemrefType>();
-      resultType.getElementType().dump();
       auto memberType = typeConverter->convertType(resultType.getElementType());
       auto memberPtrType = LLVM::LLVMPointerType::get(memberType);
 
@@ -436,6 +465,7 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    typeConverter.addTargetMaterialization([&](OpBuilder&, util::BufferType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });*/
+   patterns.add<DimOpLowering>(typeConverter, patterns.getContext());
    patterns.add<SizeOfOpLowering>(typeConverter, patterns.getContext());
    patterns.add<GetTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<SetTupleOpLowering>(typeConverter, patterns.getContext());
