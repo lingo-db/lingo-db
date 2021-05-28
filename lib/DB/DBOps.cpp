@@ -466,7 +466,7 @@ static void print(OpAsmPrinter& p, db::SortOp& op) {
       } else {
          p << ",";
       }
-      p << arg << ": " << arg.getType();
+      p << arg;
    }
    p << ")";
    p.printRegion(op.region(), false, true);
