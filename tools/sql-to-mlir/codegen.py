@@ -215,9 +215,22 @@ class CodeGen:
             const_str="("+str(const)+")"
         self.addExistingOp(Operation(var,type,["db.constant ",const_str," :", TypeRef(var)]))
         return var
+    def serializeVal(self,val,addParen):
+        res=""
+        res += "[" if addParen else ""
+        if type(val)==list:
+            res += "[" if not addParen else ""
+            res+=",".join(map(lambda x: self.serializeVal(x,False),val))
+            res += "]" if not addParen else ""
+        elif type(val)==str:
+            res+="\"" + val + "\""
+        else:
+            res+=str(val)
+        res += "]" if addParen else ""
+        return res
     def create_relalg_const_relation(self,scope,attrs,values):
         attr_defs=",".join(list(map(lambda val:val.def_to_string(),attrs)))
-        return self.addOp("relation",["relalg.const_relation ","@",scope, " attributes:[%s]" %(attr_defs) ," values: [%s]" % (",".join(map(lambda x: "\""+x+"\"" if type(x) == str else str(x),values)))])
+        return self.addOp("relation",["relalg.const_relation ","@",scope, " attributes:[%s]" %(attr_defs) ," values: [%s]" % (",".join(map(lambda x: self.serializeVal(x,True),values)))])
 
 
 

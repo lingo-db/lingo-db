@@ -229,6 +229,8 @@ class Translator:
         else:
             self.basetables[base] = 0
         return base
+    def estimateType(self,val):
+        return DBType("string") if type(val) == str else DBType("int", ["32"])
     def addJoinTable(self, codegen, from_value, resolver,all_from_attributes):
         if type(from_value["value"]) is str and not from_value["value"] in self.with_defs:
             scope_name=self.getScopeName(from_value["value"])
@@ -244,12 +246,31 @@ class Translator:
                 all_from_attributes.append(table.columns[col_name]);
             var = codegen.create_relalg_base_table(table)
         elif  "values" in from_value["value"]:
-            t= DBType("string") if type(from_value["value"]["values"]["literal"][0]) == str else DBType("int",["32"])
+            attrs= []
+            base =from_value["value"]["values"]
+            base =base["literal"] if (type(base)==dict) and "literal" in base else base
+            probeelement=base[0]
             scope_name=self.getScopeName("constrel")
-            attrname=self.uniqueAttrName()
-            attr=Attribute(scope_name,attrname,t,[],attrname)
-            var = codegen.create_relalg_const_relation(scope_name,[attr],from_value["value"]["values"]["literal"])
-            all_from_attributes.append(attr)
+            if type(probeelement)==list:
+                for val in probeelement:
+                    attrname = self.uniqueAttrName()
+                    attr = Attribute(scope_name, attrname, self.estimateType(val), [], attrname)
+                    attrs.append(attr)
+            else:
+                attrname = self.uniqueAttrName()
+                attr=Attribute(scope_name,attrname,self.estimateType(probeelement),[],attrname)
+                attrs.append(attr)
+            var = codegen.create_relalg_const_relation(scope_name,attrs,base)
+            if "name" in from_value:
+                prefixes=list(from_value['name'].keys())
+                column_names = from_value['name'][prefixes[0]]
+                i=0
+                for attr in attrs:
+                    attr.print_name=column_names[i]
+                    resolver.add(prefixes, column_names[i], attr)
+                    i+=1
+            for attr in attrs:
+                all_from_attributes.append(attr)
         else:
             if type(from_value["value"]) is str and from_value["value"] in self.with_defs:
                 with_def = self.with_defs[from_value["value"]]

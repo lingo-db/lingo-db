@@ -167,6 +167,68 @@ class BaseTableLowering : public ProducerConsumerNode {
    }
    virtual ~BaseTableLowering() {}
 };
+class ConstRelLowering : public ProducerConsumerNode {
+   mlir::relalg::ConstRelationOp constRelationOp;
+
+   public:
+   ConstRelLowering(mlir::relalg::ConstRelationOp constRelationOp) : ProducerConsumerNode({}), constRelationOp(constRelationOp) {
+   }
+   virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
+      this->consumer = consumer;
+      this->requiredAttributes = requiredAttributes;
+   }
+   virtual mlir::relalg::Attributes getAvailableAttributes() override {
+      return constRelationOp.getCreatedAttributes();
+   }
+   virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) override {
+      assert(false && "should not happen");
+   }
+   virtual void produce(LoweringContext& context, ProducerConsumerBuilder& builder) override {
+      auto scope = context.createScope();
+      using namespace mlir;
+      std::vector<mlir::Type> types;
+      std::vector<const mlir::relalg::RelationalAttribute*> attrs;
+      for (auto attr : constRelationOp.attributes().getValue()) {
+         auto attrDef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+         types.push_back(attrDef.getRelationalAttribute().type);
+         attrs.push_back(&attrDef.getRelationalAttribute());
+      }
+      auto tupleType = mlir::TupleType::get(builder.getContext(), types);
+      mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(constRelationOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType));
+      for (auto rowAttr:constRelationOp.valuesAttr()){
+         auto row=rowAttr.cast<ArrayAttr>();
+         std::vector<Value> values;
+         size_t i=0;
+         for(auto entryAttr:row.getValue()){
+            entryAttr.dump();
+            auto entryVal=builder.create<mlir::db::ConstantOp>(constRelationOp->getLoc(),types[i],entryAttr);
+            values.push_back(entryVal);
+            i++;
+         }
+         mlir::Value packed = builder.create<mlir::util::PackOp>(constRelationOp->getLoc(), tupleType, values);
+         vectorBuilder = builder.create<mlir::db::BuilderMerge>(constRelationOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
+      }
+      Value vector = builder.create<mlir::db::BuilderBuild>(constRelationOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), vectorBuilder);
+      {
+         auto forOp2 = builder.create<mlir::db::ForOp>(constRelationOp->getLoc(), getRequiredBuilderTypes(context), vector, getRequiredBuilderValues(context));
+         mlir::Block* block2 = new mlir::Block;
+         block2->addArgument(tupleType);
+         block2->addArguments(getRequiredBuilderTypes(context));
+         forOp2.getBodyRegion().push_back(block2);
+         ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
+         setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
+         auto unpacked = builder2.create<mlir::util::UnPackOp>(constRelationOp->getLoc(), types, forOp2.getInductionVar());
+         size_t i = 0;
+         for (const auto* attr : attrs) {
+            context.setValueForAttribute(scope, attr, unpacked.getResult(i++));
+         }
+         consumer->consume(this, builder2, context);
+         builder2.create<mlir::db::YieldOp>(constRelationOp->getLoc(), getRequiredBuilderValues(context));
+         setRequiredBuilderValues(context, forOp2.results());
+      }
+   }
+   virtual ~ConstRelLowering() {}
+};
 class MaterializeLowering : public ProducerConsumerNode {
    mlir::relalg::MaterializeOp materializeOp;
    size_t builderId;
@@ -454,6 +516,9 @@ std::unique_ptr<ProducerConsumerNode> createNodeFor(mlir::Operation* o) {
    llvm::TypeSwitch<mlir::Operation*>(o)
       .Case<mlir::relalg::BaseTableOp>([&](mlir::relalg::BaseTableOp baseTableOp) {
          res = std::make_unique<BaseTableLowering>(baseTableOp);
+      })
+      .Case<mlir::relalg::ConstRelationOp>([&](mlir::relalg::ConstRelationOp constRelationOp) {
+        res = std::make_unique<ConstRelLowering>(constRelationOp);
       })
       .Case<mlir::relalg::MaterializeOp>([&](mlir::relalg::MaterializeOp materializeOp) {
          res = std::make_unique<MaterializeLowering>(materializeOp);
