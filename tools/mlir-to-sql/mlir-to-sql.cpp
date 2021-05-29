@@ -243,11 +243,20 @@ class ToSQL {
                   } else {
                      output << ", ";
                   }
+                  auto first2 = true;
                   output << "(";
-                  if (auto strAttr = val.dyn_cast_or_null<mlir::StringAttr>()) {
-                     output << "'" << std::string(strAttr.getValue()) << "'";
-                  } else if (auto intAttr = val.dyn_cast_or_null<mlir::IntegerAttr>()) {
-                     output << intAttr.getInt();
+                  auto row=val.cast<mlir::ArrayAttr>();
+                  for(auto entryAttr:row.getValue()) {
+                     if (first2) {
+                        first2 = false;
+                     } else {
+                        output << ", ";
+                     }
+                     if (auto strAttr = entryAttr.dyn_cast_or_null<mlir::StringAttr>()) {
+                        output << "'" << std::string(strAttr.getValue()) << "'";
+                     } else if (auto intAttr = entryAttr.dyn_cast_or_null<mlir::IntegerAttr>()) {
+                        output << intAttr.getInt();
+                     }
                   }
                   output << ")";
                }
