@@ -1,4 +1,4 @@
-build/llvm-build:
+l   build/llvm-build:
 	mkdir -p build/llvm-build
 	cmake -G Ninja llvm-project/llvm  -B build/llvm-build \
        -DLLVM_ENABLE_PROJECTS=mlir \

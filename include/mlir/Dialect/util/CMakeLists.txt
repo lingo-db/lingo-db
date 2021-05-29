@@ -6,6 +6,6 @@ mlir_tablegen(UtilOps.cpp.inc -gen-op-defs)
 mlir_tablegen(UtilOpsTypes.h.inc --gen-typedef-decls)
 mlir_tablegen(UtilOpsTypes.cpp.inc --gen-typedef-defs)
 add_public_tablegen_target(MLIRUtilOpsIncGen)
-add_mlir_doc(UtilDialect -gen-dialect-doc UtilDialect Util/)
-add_mlir_doc(UtilOps -gen-op-doc UtilOps Util/)
+#add_mlir_doc(UtilDialect -gen-dialect-doc UtilDialect Util/)
+#add_mlir_doc(UtilOps -gen-op-doc UtilOps Util/)
 

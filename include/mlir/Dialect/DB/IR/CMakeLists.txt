@@ -12,6 +12,6 @@ set(LLVM_TARGET_DEFINITIONS DBInterfaces.td)
 mlir_tablegen(DBOpsInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(DBOpsInterfaces.cpp.inc -gen-op-interface-defs)
 add_public_tablegen_target(MLIRDBOpsIncGen)
-add_mlir_doc(DBDialect -gen-dialect-doc DBDialect DB/)
-add_mlir_doc(DBOps -gen-op-doc DBOps DB/)
+#add_mlir_doc(DBDialect -gen-dialect-doc DBDialect DB/)
+#add_mlir_doc(DBOps -gen-op-doc DBOps DB/)
 

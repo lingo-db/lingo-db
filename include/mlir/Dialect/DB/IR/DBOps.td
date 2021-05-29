@@ -33,15 +33,15 @@ let printer = [{ return ::print(p, *this); }];
 let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-class DB_Type<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,"::mlir::db::DBType"> {
+class DB_Type<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,[],"::mlir::db::DBType"> {
   let mnemonic = typeMnemonic;
 }
 def DBType : Type<CPred<"$_self.isa<::mlir::db::DBType>()">,"DB dialect type">;
 
-class DB_Collection<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,"::mlir::db::CollectionType"> {
+class DB_Collection<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,[],"::mlir::db::CollectionType"> {
     let mnemonic = typeMnemonic;
 }
-class DB_Builder<string name, string typeMnemonic>  : TypeDef<DB_Dialect, name,"::mlir::db::BuilderType"> {
+class DB_Builder<string name, string typeMnemonic>  : TypeDef<DB_Dialect, name,[],"::mlir::db::BuilderType"> {
     let mnemonic = typeMnemonic;
 }
 

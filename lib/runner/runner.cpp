@@ -29,6 +29,8 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/Support/ErrorOr.h>
+#include <llvm/Support/MemoryBuffer.h>
+#include <llvm/Support/SourceMgr.h>
 #include <runner/runner.h>
 #include <runtime/helpers.h>
 
@@ -211,9 +213,9 @@ bool Runner::lower() {
 bool Runner::lowerToLLVM() {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::ModuleOp moduleOp = ctxt->module.get();
-   if(auto mainFunc = moduleOp.lookupSymbol<mlir::FuncOp>("main")){
-      ctxt->numArgs=mainFunc.getNumArguments();
-      ctxt->numResults=mainFunc.getNumResults();
+   if (auto mainFunc = moduleOp.lookupSymbol<mlir::FuncOp>("main")) {
+      ctxt->numArgs = mainFunc.getNumArguments();
+      ctxt->numResults = mainFunc.getNumResults();
    }
    mlir::PassManager pm2(&ctxt->context);
    pm2.addPass(mlir::createLowerToCFGPass());
@@ -250,10 +252,10 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    auto& engine = maybeEngine.get();
    runtime::Pointer<runtime::ExecutionContext> contextPtr(context);
    runtime::Pointer<uint8_t> res(nullptr);
-   auto *contextPtrPtr = &contextPtr;
-   auto *resPtr = &res;
+   auto* contextPtrPtr = &contextPtr;
+   auto* resPtr = &res;
    std::vector<void*> args;
-   if (ctxt->numResults== 1) {
+   if (ctxt->numResults == 1) {
       args.push_back((void*) &resPtr);
    }
    if (ctxt->numArgs == 1) {
@@ -266,7 +268,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
       llvm::errs() << "JIT invocation failed\n";
       return false;
    }
-   if (ctxt->numResults== 1) {
+   if (ctxt->numResults == 1) {
       callback(res.get());
    }
 
