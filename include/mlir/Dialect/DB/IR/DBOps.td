@@ -73,6 +73,14 @@ def DB_VectorBuilder : DB_Builder<"VectorBuilder","vector_builder"> {
 let summary = "builder for vector";
 let parameters = (ins "Type":$elementType);
 }
+def DB_AggregationHashtable : DB_Collection<"AggregationHashtable","aggr_ht"> {
+let summary = "aggregation hashtable";
+let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
+}
+def DB_AggrHTBuilder : DB_Builder<"AggrHTBuilder","aggr_ht_builder"> {
+let summary = "builder for aggregation hashtable";
+let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
+}
 def DB_BoolType : DB_Type<"Bool","bool"> {
   let summary = "database boolean type";
   let parameters = (ins "bool":$nullable);
@@ -248,6 +256,13 @@ def DB_SortOp : DB_Op<"sort",
 let summary = "sort";
 let arguments = (ins DB_Vector:$toSort);
 let results = (outs DB_Vector:$sorted);
+let regions = (region SizedRegion<1>:$region);
+}
+
+def DB_CreateAggrHTBuilder : DB_Op<"create_aggr_ht_builder",
+[NoSideEffect]> {
+let summary = "create aggr hashtable builder";
+let results = (outs DB_AggrHTBuilder:$builder);
 let regions = (region SizedRegion<1>:$region);
 }
 
@@ -514,7 +529,7 @@ OperandRange getSuccessorEntryOperands(unsigned index);
 }
 
 def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
-        ParentOneOf<["IfOp","ForOp","WhileOp","SortOp"]>]> {
+        ParentOneOf<["IfOp","ForOp","WhileOp","SortOp","CreateAggrHTBuilder"]>]> {
 let summary = "loop yield and termination operation";
 
 let arguments = (ins Variadic<AnyType>:$results);

@@ -438,9 +438,6 @@ static void print(OpAsmPrinter &p, db::WhileOp op) {
 
 
 static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
-   //parseRelationalInputs(parser, result, 1);
-   //parseCustomRegion(parser, result);
-   //return addRelationOutput(parser, result);
    OpAsmParser::OperandType toSort;
    db::VectorType vecType;
    if(parser.parseOperand(toSort)||parser.parseColonType(vecType)){
@@ -470,6 +467,38 @@ static void print(OpAsmPrinter& p, db::SortOp& op) {
    }
    p << ")";
    p.printRegion(op.region(), false, true);
+}
+static ParseResult parseCreateAggrHTBuilder(OpAsmParser& parser, OperationState& result) {
+   OpAsmParser::OperandType toSort;
+   db::AggrHTBuilderType builderType;
+
+   OpAsmParser::OperandType left,right;
+   Type leftArgType;
+   Type rightArgType;
+   if (parser.parseLParen()||parser.parseRegionArgument(left)||parser.parseColonType(leftArgType)||parser.parseComma()||parser.parseRegionArgument(right),parser.parseColonType(rightArgType)||parser.parseRParen()){
+      return failure();
+   }
+   Region* body = result.addRegion();
+   if (parser.parseRegion(*body, {left,right}, {leftArgType,rightArgType})) return failure();
+   if(parser.parseArrow()||parser.parseType(builderType)) return failure();
+   parser.addTypeToList(builderType,result.types);
+   return success();
+}
+static void print(OpAsmPrinter& p, db::CreateAggrHTBuilder& op) {
+   p << op.getOperationName() << " ";
+   p << "(";
+   bool first = true;
+   for (auto arg : op.region().front().getArguments()) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      p << arg << ":" << arg.getType();
+   }
+   p << ")";
+   p.printRegion(op.region(), false, true);
+   p<< " -> "<< op.getType();
 }
 
 #define GET_OP_CLASSES

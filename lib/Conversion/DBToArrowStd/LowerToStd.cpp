@@ -758,6 +758,103 @@ class SortOpLowering : public ConversionPattern {
       return success();
    }
 };
+class CreateAggrHTBuilderLowering : public ConversionPattern {
+
+   public:
+   explicit CreateAggrHTBuilderLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CreateAggrHTBuilder::getOperationName(), 1, context){}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      static size_t id = 0;
+      mlir::db::SortOpAdaptor createAdaptor(operands);
+      auto createOp = cast<mlir::db::CreateAggrHTBuilder>(op);
+      auto clonedCreateOp = cast<mlir::db::CreateAggrHTBuilder>(op->clone());
+
+      ModuleOp parentModule = op->getParentOfType<ModuleOp>();
+      auto ptrType = MemRefType::get({}, rewriter.getIntegerType(8));
+      Type keyType = createOp.builder().getType().cast<mlir::db::AggrHTBuilderType>().getKeyType();
+      TupleType keyTupleType = keyType.cast<mlir::TupleType>();
+      Type valType = createOp.builder().getType().cast<mlir::db::AggrHTBuilderType>().getValType();
+
+      Type serializedValType = mlir::db::codegen::SerializationUtil::serializedType(rewriter, *typeConverter, valType);
+      Type serializedKeyType = mlir::db::codegen::SerializationUtil::serializedType(rewriter, *typeConverter, keyType);
+      FuncOp compareFunc;
+      {
+         OpBuilder::InsertionGuard insertionGuard(rewriter);
+         rewriter.setInsertionPointToStart(parentModule.getBody());
+         auto byteRangeType = MemRefType::get({-1}, rewriter.getIntegerType(8));
+         compareFunc = rewriter.create<FuncOp>(parentModule.getLoc(), "db_ht_aggr_builder_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({byteRangeType, ptrType, ptrType}), TypeRange(mlir::db::BoolType::get(rewriter.getContext()))));
+         compareFunc->setAttr("llvm.emit_c_interface", rewriter.getUnitAttr());
+         auto* funcBody = new Block;
+         funcBody->addArguments(TypeRange({byteRangeType, ptrType, ptrType}));
+         compareFunc.body().push_back(funcBody);
+         rewriter.setInsertionPointToStart(funcBody);
+         Value varLenData = funcBody->getArgument(0);
+         Value left = funcBody->getArgument(1);
+         Value right = funcBody->getArgument(2);
+
+         Value genericMemrefLeft = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), serializedKeyType, llvm::Optional<int64_t>()), left);
+         Value genericMemrefRight = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), serializedKeyType, llvm::Optional<int64_t>()), right);
+         Value serializedTupleLeft = rewriter.create<util::LoadOp>(createOp.getLoc(), serializedKeyType, genericMemrefLeft, Value());
+         Value serializedTupleRight = rewriter.create<util::LoadOp>(createOp.getLoc(), serializedKeyType, genericMemrefRight, Value());
+         Value tupleLeft = mlir::db::codegen::SerializationUtil::deserialize(rewriter, varLenData, serializedTupleLeft, keyType);
+         Value tupleRight = mlir::db::codegen::SerializationUtil::deserialize(rewriter, varLenData, serializedTupleRight, keyType);
+         Value equal = rewriter.create<mlir::db::ConstantOp>(rewriter.getUnknownLoc(), mlir::db::BoolType::get(rewriter.getContext()),rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+         auto leftUnpacked = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), keyTupleType.getTypes(), tupleLeft);
+         auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), keyTupleType.getTypes(), tupleRight);
+         for (size_t i = 0; i < leftUnpacked.getNumResults(); i++) {
+            auto compared = rewriter.create<mlir::db::CmpOp>(rewriter.getUnknownLoc(), mlir::db::DBCmpPredicate::eq, leftUnpacked->getResult(i), rightUnpacked.getResult(i));
+
+            Value localEqual = rewriter.create<mlir::db::AndOp>(rewriter.getUnknownLoc(), mlir::db::BoolType::get(rewriter.getContext(), equal.getType().cast<mlir::db::BoolType>().getNullable() || compared.getType().cast<mlir::db::BoolType>().getNullable()), ValueRange({equal, compared}));
+            equal=localEqual;
+         }
+         //equal.setType(rewriter.getI1Type()); //todo: bad hack ;)
+         rewriter.create<mlir::ReturnOp>(createOp->getLoc(), equal);
+      }
+      FuncOp funcOp;
+      {
+         OpBuilder::InsertionGuard insertionGuard(rewriter);
+         rewriter.setInsertionPointToStart(parentModule.getBody());
+         auto byteRangeType = MemRefType::get({-1}, rewriter.getIntegerType(8));
+         funcOp = rewriter.create<FuncOp>(parentModule.getLoc(), "db_ht_aggr_builder_update" + std::to_string(id++), rewriter.getFunctionType(TypeRange({byteRangeType, ptrType, ptrType}), TypeRange()));
+         funcOp->setAttr("llvm.emit_c_interface", rewriter.getUnitAttr());
+         auto* funcBody = new Block;
+         funcBody->addArguments(TypeRange({byteRangeType, ptrType, ptrType}));
+         funcOp.body().push_back(funcBody);
+         rewriter.setInsertionPointToStart(funcBody);
+         Value varLenData = funcBody->getArgument(0);
+         Value left = funcBody->getArgument(1);
+         Value right = funcBody->getArgument(2);
+
+         Value genericMemrefLeft = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), serializedValType, llvm::Optional<int64_t>()), left);
+         Value genericMemrefRight = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), serializedValType, llvm::Optional<int64_t>()), right);
+         Value serializedTupleLeft = rewriter.create<util::LoadOp>(createOp.getLoc(), serializedValType, genericMemrefLeft, Value());
+         Value serializedTupleRight = rewriter.create<util::LoadOp>(createOp.getLoc(), serializedValType, genericMemrefRight, Value());
+         Value tupleLeft = mlir::db::codegen::SerializationUtil::deserialize(rewriter, varLenData, serializedTupleLeft, valType);
+         Value tupleRight = mlir::db::codegen::SerializationUtil::deserialize(rewriter, varLenData, serializedTupleRight, valType);
+         auto terminator = rewriter.create<mlir::ReturnOp>(createOp.getLoc());
+         Block* sortLambda = &clonedCreateOp.region().front();
+         auto* sortLambdaTerminator = sortLambda->getTerminator();
+         rewriter.mergeBlockBefore(sortLambda, terminator, {tupleLeft, tupleRight});
+         mlir::db::YieldOp yieldOp = mlir::cast<mlir::db::YieldOp>(terminator->getPrevNode());
+         Value x = yieldOp.results()[0];
+         rewriter.setInsertionPoint(terminator);
+         //todo: serialize!!
+         x.setType(serializedValType); //todo: hacky
+         rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), x, genericMemrefLeft, Value());
+
+         funcOp->dump();
+         rewriter.eraseOp(sortLambdaTerminator);
+      }
+
+      Value updateFunctionPointer = rewriter.create<mlir::ConstantOp>(createOp->getLoc(), funcOp.type(), rewriter.getSymbolRefAttr(funcOp.sym_name()));
+      Value compareFunctionPointer = rewriter.create<mlir::ConstantOp>(createOp->getLoc(), compareFunc.type(), rewriter.getSymbolRefAttr(compareFunc.sym_name()));
+
+      Value packOp = rewriter.create<mlir::util::PackOp>(rewriter.getUnknownLoc(), TupleType::get(rewriter.getContext(), {compareFunc.type(), funcOp.type()}), ValueRange({compareFunctionPointer, updateFunctionPointer}));
+      rewriter.replaceOp(op, packOp);
+      return success();
+   }
+};
 class BuilderBuildLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
 
@@ -792,46 +889,43 @@ class DumpIndexOpLowering : public ConversionPattern {
       using FunctionId = db::codegen::FunctionRegistry::FunctionId;
       functionRegistry.call(rewriter, FunctionId::DumpIndex, operands[0]);
 
-         rewriter.eraseOp(op);
-
+      rewriter.eraseOp(op);
 
       return success();
    }
 };
 class HashLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
-   Value xorImpl(OpBuilder& builder, Value v,Value totalHash) const {
-      return builder.create<mlir::XOrOp>(builder.getUnknownLoc(),v,totalHash);
+   Value xorImpl(OpBuilder& builder, Value v, Value totalHash) const {
+      return builder.create<mlir::XOrOp>(builder.getUnknownLoc(), v, totalHash);
    }
-   Value hashImpl(OpBuilder& builder, Value v,Value totalHash) const {
+   Value hashImpl(OpBuilder& builder, Value v, Value totalHash) const {
       //todo: more checks:
       using FunctionId = db::codegen::FunctionRegistry::FunctionId;
       if (auto intType = v.getType().dyn_cast_or_null<mlir::IntegerType>()) {
          switch (intType.getWidth()) {
-            case 1: return xorImpl(builder,totalHash,functionRegistry.call(builder, FunctionId::HashBool, v)[0]);
-            case 8: return xorImpl(builder,totalHash,functionRegistry.call(builder, FunctionId::HashInt8, v)[0]);
-            case 16: return xorImpl(builder,totalHash,functionRegistry.call(builder, FunctionId::HashInt16, v)[0]);
-            case 32: return xorImpl(builder,totalHash,functionRegistry.call(builder, FunctionId::HashInt32, v)[0]);
-            case 64: return xorImpl(builder,totalHash,functionRegistry.call(builder, FunctionId::HashInt64, v)[0]);
-            case 128: return xorImpl(builder,totalHash,functionRegistry.call(builder, FunctionId::HashInt128, v)[0]);
+            case 1: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashBool, v)[0]);
+            case 8: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt8, v)[0]);
+            case 16: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt16, v)[0]);
+            case 32: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt32, v)[0]);
+            case 64: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt64, v)[0]);
+            case 128: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt128, v)[0]);
          }
-      }else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
+      } else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
          switch (floatType.getWidth()) {
-            case 32: return xorImpl(builder,totalHash,functionRegistry.call(builder, FunctionId::HashFloat32, v)[0]);
-            case 64: return xorImpl(builder,totalHash,functionRegistry.call(builder, FunctionId::HashFloat64, v)[0]);
+            case 32: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashFloat32, v)[0]);
+            case 64: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashFloat64, v)[0]);
          }
-      }else if(auto memrefType=v.getType().dyn_cast_or_null<mlir::MemRefType>()){
-         return xorImpl(builder,totalHash,functionRegistry.call(builder, FunctionId::HashBinary, v)[0]);
-      }
-      else if(auto tupleType=v.getType().dyn_cast_or_null<mlir::TupleType>()){
-         auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(),v);
-         for(auto v:unpacked->getResults()){
-            totalHash=hashImpl(builder,v,totalHash);
+      } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::MemRefType>()) {
+         return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashBinary, v)[0]);
+      } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
+         auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
+         for (auto v : unpacked->getResults()) {
+            totalHash = hashImpl(builder, v, totalHash);
          }
          return totalHash;
-
       }
-      assert(false&&"should not happen");
+      assert(false && "should not happen");
       return Value();
    }
 
@@ -842,7 +936,7 @@ class HashLowering : public ConversionPattern {
       mlir::db::HashAdaptor hashAdaptor(operands);
       hashAdaptor.val().getType().dump();
       Value const0 = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0));
-      rewriter.replaceOp(op, hashImpl(rewriter,hashAdaptor.val(),const0));
+      rewriter.replaceOp(op, hashImpl(rewriter, hashAdaptor.val(), const0));
       return success();
    }
 };
@@ -1582,6 +1676,14 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::db::VectorBuilderType vectorBuilderType) {
       return MemRefType::get({}, IntegerType::get(&getContext(), 8));
    });
+   typeConverter.addConversion([&](mlir::db::AggrHTBuilderType aggrHtBuilderType) {
+      auto ptrType = MemRefType::get({}, IntegerType::get(&getContext(), 8));
+      auto strType = MemRefType::get({-1}, IntegerType::get(&getContext(), 8));
+      auto compareFuncType = FunctionType::get(&getContext(), {strType, ptrType, ptrType}, {IntegerType::get(&getContext(), 1)});
+     auto updateFuncType = FunctionType::get(&getContext(), {strType, ptrType, ptrType}, {});
+
+     return TupleType::get(&getContext(), {compareFuncType, updateFuncType});
+   });
    typeConverter.addConversion([&](mlir::db::VectorType vectorType) {
       auto ptrType = MemRefType::get({-1}, IntegerType::get(&getContext(), 8));
       return TupleType::get(&getContext(), {ptrType, ptrType});
@@ -1714,6 +1816,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<TableScanLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<CreateVectorBuilderLowering>(functionRegistry, typeConverter, &getContext());
+   patterns.insert<CreateAggrHTBuilderLowering>(typeConverter, &getContext());
 
    patterns.insert<BuilderMergeLowering>(functionRegistry, typeConverter, &getContext());
    patterns.insert<BuilderBuildLowering>(functionRegistry, typeConverter, &getContext());
