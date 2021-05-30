@@ -5,6 +5,7 @@
    F(ExecutionContextGetTable, get_table, OPERANDS(POINTER_TYPE, STRING_TYPE), RETURNS(POINTER_TYPE))                                                                                 \
    F(TableGetColumnId, get_column_id, OPERANDS(POINTER_TYPE, STRING_TYPE), RETURNS(INDEX_TYPE))                                                                                       \
    F(DumpInt, dump_int, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                                                                                 \
+   F(DumpIndex, dump_index, OPERANDS(INDEX_TYPE), RETURNS())                                                                                                                 \
    F(DumpUInt, dump_uint, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                                                                               \
    F(DumpBool, dump_bool, OPERANDS(BOOL_TYPE, BOOL_TYPE), RETURNS())                                                                                                                  \
    F(DumpDecimal, dump_decimal, OPERANDS(BOOL_TYPE, INT_TYPE(64), INT_TYPE(64), INT_TYPE(32)), RETURNS())                                                                             \
@@ -66,7 +67,16 @@
    F(VectorBuilderAddNullableVarLen, vector_builder_add_nullable_var_len, OPERANDS(POINTER_TYPE, BOOL_TYPE, STRING_TYPE), RETURNS(TUPLE_TYPE(BOOL_TYPE, INT_TYPE(64), INT_TYPE(64)))) \
    F(VectorBuilderMerge, vector_builder_merge, OPERANDS(POINTER_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                             \
    F(VectorBuilderBuild, vector_builder_build, OPERANDS(POINTER_TYPE), RETURNS(TUPLE_TYPE(STRING_TYPE, STRING_TYPE)))                                                                 \
-   F(SortVector, sort, OPERANDS(POINTER_TYPE,INDEX_TYPE,FUNCTION_TYPE(OPERANDS(STRING_TYPE,POINTER_TYPE,POINTER_TYPE),RETURNS(BOOL_TYPE)),POINTER_TYPE), RETURNS())
+   F(SortVector, sort, OPERANDS(POINTER_TYPE, INDEX_TYPE, FUNCTION_TYPE(OPERANDS(STRING_TYPE, POINTER_TYPE, POINTER_TYPE), RETURNS(BOOL_TYPE)), POINTER_TYPE), RETURNS())             \
+   F(HashInt64, hash_int_64, OPERANDS(INT_TYPE(64)), RETURNS(INDEX_TYPE))                                                                                                             \
+   F(HashInt32, hash_int_32, OPERANDS(INT_TYPE(32)), RETURNS(INDEX_TYPE))                                                                                                             \
+   F(HashInt16, hash_int_16, OPERANDS(INT_TYPE(16)), RETURNS(INDEX_TYPE))                                                                                                             \
+   F(HashInt8, hash_int_8, OPERANDS(INT_TYPE(8)), RETURNS(INDEX_TYPE))                                                                                                                \
+   F(HashInt128, hash_int_128, OPERANDS(INT_TYPE(128)), RETURNS(INDEX_TYPE))                                                                                                          \
+   F(HashBool, hash_bool, OPERANDS(BOOL_TYPE), RETURNS(INDEX_TYPE))                                                                                                              \
+   F(HashFloat64, hash_float_64, OPERANDS(DOUBLE_TYPE), RETURNS(INDEX_TYPE))                                                                                                          \
+   F(HashFloat32, hash_float_32, OPERANDS(FLOAT_TYPE), RETURNS(INDEX_TYPE))                                                                                                           \
+   F(HashBinary, hash_binary, OPERANDS(STRING_TYPE), RETURNS(INDEX_TYPE))
 
 #define PLAIN_FUNC_LIST(F, OPERANDS, RETURNS)                                                                        \
    F(TimestampAddMonth, timestampaddMonth_int32_date64, OPERANDS(INT_TYPE(32), INT_TYPE(64)), RETURNS(INT_TYPE(64))) \

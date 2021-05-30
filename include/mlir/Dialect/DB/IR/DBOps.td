@@ -182,6 +182,11 @@ let results = (outs DBType:$res);
 let assemblyFormat = "`:` type($res) attr-dict";
 
 }
+def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
+let arguments = (ins AnyType: $val);
+let results = (outs  Index : $hash);
+let assemblyFormat = "$val `:` type($val) attr-dict";
+}
 
 def DB_CombineNullOp : DB_Op<"combine_null", [NoSideEffect]> {
 let arguments = (ins DBType: $val,DB_BoolType: $null);
@@ -380,6 +385,11 @@ def DumpOp : DB_Op<"dump"> {
 let summary = "dump function";
 let arguments = (ins DBType: $val);
 let assemblyFormat = "$val `:` type($val) attr-dict";
+}
+def DumpIndexOp : DB_Op<"dump_index"> {
+let summary = "dump index";
+let arguments = (ins Index: $val);
+let assemblyFormat = "$val attr-dict";
 }
 
 

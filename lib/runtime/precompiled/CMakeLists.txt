@@ -1,5 +1,5 @@
 set(PRECOMPILED_SRCS
-        test.cpp string.cpp )
+        test.cpp string.cpp hash.cpp )
 
 find_program(LLVM_LINK_EXECUTABLE llvm-link HINTS ${LLVM_TOOLS_BINARY_DIR})
 

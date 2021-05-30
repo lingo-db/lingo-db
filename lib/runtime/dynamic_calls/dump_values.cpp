@@ -12,6 +12,9 @@ EXPORT void _mlir_ciface_dump_int(bool null, int64_t val) {
       std::cout << "int(" << val << ")" << std::endl;
    }
 }
+EXPORT void _mlir_ciface_dump_index(uint64_t val) {
+      std::cout << "index(" << val << ")" << std::endl;
+}
 EXPORT void _mlir_ciface_dump_uint(bool null, uint64_t val) {
    if (null) {
       std::cout << "uint(NULL)" << std::endl;
