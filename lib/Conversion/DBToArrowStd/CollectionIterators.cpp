@@ -278,6 +278,63 @@ class VectorIterator : public ForIterator {
    virtual void down(OpBuilder& builder) {
    }
 };
+class AggrHTIterator : public ForIterator {
+   Value ht;
+   Type keyType;
+   Type valType;
+   Type serializedKeyType;
+   Type serializedValType;
+
+   Value values;
+   Value keys;
+   Value rawValues;
+   Type ptrType;
+   Type typedKeyPtrType;
+   Type typedValPtrType;
+   db::codegen::FunctionRegistry& functionRegistry;
+
+   public:
+   AggrHTIterator( db::codegen::FunctionRegistry& functionRegistry,Value ht, Type keyType,Type valType) : ht(ht), keyType(keyType),valType(valType),functionRegistry(functionRegistry){
+   }
+   virtual void init(OpBuilder& builder) {
+      serializedKeyType = mlir::db::codegen::SerializationUtil::serializedType(builder,*typeConverter, keyType);
+      serializedValType = mlir::db::codegen::SerializationUtil::serializedType(builder,*typeConverter, valType);
+
+      Type ptrType = MemRefType::get({-1}, builder.getIntegerType(8));
+      Type typedKeyPtrType = util::GenericMemrefType::get(builder.getContext(), serializedKeyType, -1);
+      Type typedValPtrType = util::GenericMemrefType::get(builder.getContext(), serializedValType, -1);
+      Value scanned=functionRegistry.call(builder,mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtScan,ht)[0];
+      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({ptrType, ptrType,ptrType}), scanned);
+      keys = unpacked.getResult(0);
+      values = unpacked.getResult(1);
+      keys = builder.create<util::ToGenericMemrefOp>(builder.getUnknownLoc(), typedKeyPtrType, keys);
+      values = builder.create<util::ToGenericMemrefOp>(builder.getUnknownLoc(), typedValPtrType, values);
+
+      rawValues = unpacked.getResult(2);
+   }
+   virtual Value upper(OpBuilder& builder) {
+      return builder.create<util::DimOp>(builder.getUnknownLoc(), builder.getIndexType(), values);
+   }
+   virtual Value getElement(OpBuilder& builder, Value index) {
+      Value loadedKey = builder.create<util::LoadOp>(builder.getUnknownLoc(), serializedKeyType, keys, index);
+      Value loadedVal = builder.create<util::LoadOp>(builder.getUnknownLoc(), serializedValType, values, index);
+
+      Value deserializedKey = mlir::db::codegen::SerializationUtil::deserialize(builder, rawValues, loadedKey, keyType);
+      Value deserializedVal = mlir::db::codegen::SerializationUtil::deserialize(builder, rawValues, loadedVal, valType);
+      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), {keyType,valType}), ValueRange({deserializedKey,deserializedVal}));
+   }
+   virtual Value lower(OpBuilder& builder) {
+      return builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0));
+   }
+   virtual Value step(OpBuilder& builder) {
+      return builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(1));
+   }
+   virtual void destroyElement(OpBuilder& builder, Value elem) {
+   }
+   virtual void down(OpBuilder& builder) {
+   }
+};
+
 class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
    std::unique_ptr<WhileIterator> iterator;
 
@@ -374,6 +431,8 @@ std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIteration
       return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<RangeIterator>(range.getElementType().cast<DBType>(), collection));
    } else if (auto vector = collectionType.dyn_cast_or_null<mlir::db::VectorType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<VectorIterator>(collection, vector.getElementType()));
+   } else if (auto aggrHt = collectionType.dyn_cast_or_null<mlir::db::AggregationHashtableType>()) {
+      return std::make_unique<ForIteratorIterationImpl>(std::make_unique<AggrHTIterator>(functionRegistry,collection, aggrHt.getKeyType(),aggrHt.getValType()));
    }
    return std::unique_ptr<mlir::db::CollectionIterationImpl>();
 }

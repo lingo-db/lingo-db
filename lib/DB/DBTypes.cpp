@@ -170,6 +170,9 @@ mlir::Type mlir::db::CollectionType::getElementType() const {
       .Case<::mlir::db::VectorType>([&](::mlir::db::VectorType t) {
         return t.getElementType();
       })
+      .Case<::mlir::db::AggregationHashtableType>([&](::mlir::db::AggregationHashtableType t) {
+        return TupleType::get(t.getContext(),{t.getKeyType(),t.getValType()});
+      })
       .Default([](::mlir::Type) { return Type(); });
 }
 template <class X>
