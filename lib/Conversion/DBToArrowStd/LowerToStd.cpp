@@ -373,7 +373,26 @@ class WhileLowering : public ConversionPattern {
          rewriter.eraseOp(terminator);
          rewriter.restoreInsertionPoint(insertPt);
       }
-
+      {
+         OpBuilder::InsertionGuard insertionGuard(rewriter);
+         llvm::dbgs() << whileOp.before().getBlocks().size() << "\n";
+         whileOp.before().push_back(new Block());
+         for (auto t : resultTypes) {
+            whileOp.before().addArgument(t);
+         }
+         rewriter.setInsertionPointToStart(&whileOp.before().front());
+         rewriter.create<mlir::db::YieldOp>(whileOp.getLoc());
+      }
+      {
+         OpBuilder::InsertionGuard insertionGuard(rewriter);
+         llvm::dbgs() << whileOp.after().getBlocks().size() << "\n";
+         whileOp.after().push_back(new Block());
+         for (auto t : resultTypes) {
+            whileOp.after().addArgument(t);
+         }
+         rewriter.setInsertionPointToStart(&whileOp.after().front());
+         rewriter.create<mlir::db::YieldOp>(whileOp.getLoc());
+      }
       rewriter.replaceOp(whileOp, newWhileOp.results());
 
       return success();
@@ -443,6 +462,7 @@ class ForOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::ForOpAdaptor forOpAdaptor(operands);
       auto forOp = cast<mlir::db::ForOp>(op);
+      auto argumentTypes=forOp.region().getArgumentTypes();
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::db::CollectionType>();
 
       auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), functionRegistry);
@@ -459,7 +479,7 @@ class ForOpLowering : public ConversionPattern {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
          llvm::dbgs() << forOp.region().getBlocks().size() << "\n";
          forOp.region().push_back(new Block());
-         forOp.region().front().addArgument(collectionType.getElementType());
+         forOp.region().front().addArguments(argumentTypes);
          rewriter.setInsertionPointToStart(&forOp.region().front());
          rewriter.create<mlir::db::YieldOp>(forOp.getLoc());
       }

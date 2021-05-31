@@ -191,7 +191,7 @@ Attributes getAvailableAttributes();
 }];
 }
 
-def AggregationOp : RelAlg_Op<"aggregation",[RecursiveSideEffects,Operator,UnaryOperator]> {
+def AggregationOp : RelAlg_Op<"aggregation",[NoSideEffect,Operator,UnaryOperator]> {
 let summary = "aggregation operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_TupleStream:$rel, ArrayAttr:$group_by_attrs);
 let results = (outs RelAlg_TupleStream:$result);

@@ -6,7 +6,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
-
+#include <iostream>
 namespace {
 
 class LoweringContext {
@@ -195,13 +195,13 @@ class ConstRelLowering : public ProducerConsumerNode {
       }
       auto tupleType = mlir::TupleType::get(builder.getContext(), types);
       mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(constRelationOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType));
-      for (auto rowAttr:constRelationOp.valuesAttr()){
-         auto row=rowAttr.cast<ArrayAttr>();
+      for (auto rowAttr : constRelationOp.valuesAttr()) {
+         auto row = rowAttr.cast<ArrayAttr>();
          std::vector<Value> values;
-         size_t i=0;
-         for(auto entryAttr:row.getValue()){
+         size_t i = 0;
+         for (auto entryAttr : row.getValue()) {
             entryAttr.dump();
-            auto entryVal=builder.create<mlir::db::ConstantOp>(constRelationOp->getLoc(),types[i],entryAttr);
+            auto entryVal = builder.create<mlir::db::ConstantOp>(constRelationOp->getLoc(), types[i], entryAttr);
             values.push_back(entryVal);
             i++;
          }
@@ -408,7 +408,7 @@ class SortLowering : public ProducerConsumerNode {
    virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) override {
       std::vector<mlir::Type> types;
       std::vector<mlir::Value> values;
-      for (auto *attr : requiredAttributes) {
+      for (auto* attr : requiredAttributes) {
          types.push_back(attr->type);
          values.push_back(context.getValueForAttribute(attr));
       }
@@ -418,9 +418,9 @@ class SortLowering : public ProducerConsumerNode {
       mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(sortOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
       context.builders[builderId] = mergedBuilder;
    }
-   mlir::Value createSortPredicate(mlir::OpBuilder& builder,std::vector<std::pair<mlir::Value,mlir::Value>> sortCriteria,mlir::Value trueVal,mlir::Value falseVal,size_t pos){
-      if(pos<sortCriteria.size()){
-         auto lt  =builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(),mlir::db::DBCmpPredicate::lt,sortCriteria[pos].first,sortCriteria[pos].second);
+   mlir::Value createSortPredicate(mlir::OpBuilder& builder, std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria, mlir::Value trueVal, mlir::Value falseVal, size_t pos) {
+      if (pos < sortCriteria.size()) {
+         auto lt = builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::lt, sortCriteria[pos].first, sortCriteria[pos].second);
          auto ifOp = builder.create<mlir::db::IfOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), lt);
          mlir::Block* ifBlock = new mlir::Block;
          ifOp.thenRegion().push_back(ifBlock);
@@ -429,34 +429,32 @@ class SortLowering : public ProducerConsumerNode {
          mlir::Block* elseBlock = new mlir::Block;
          ifOp.elseRegion().push_back(elseBlock);
          ProducerConsumerBuilder builder2(ifOp.elseRegion());
-         auto eq  =builder2.create<mlir::db::CmpOp>(builder.getUnknownLoc(),mlir::db::DBCmpPredicate::eq,sortCriteria[pos].first,sortCriteria[pos].second);
+         auto eq = builder2.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::eq, sortCriteria[pos].first, sortCriteria[pos].second);
          auto ifOp2 = builder2.create<mlir::db::IfOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), eq);
          mlir::Block* ifBlock2 = new mlir::Block;
          ifOp2.thenRegion().push_back(ifBlock2);
          ProducerConsumerBuilder builder3(ifOp2.thenRegion());
-         builder3.create<mlir::db::YieldOp>(builder.getUnknownLoc(),createSortPredicate(builder3,sortCriteria,trueVal,falseVal,pos+1));
+         builder3.create<mlir::db::YieldOp>(builder.getUnknownLoc(), createSortPredicate(builder3, sortCriteria, trueVal, falseVal, pos + 1));
          mlir::Block* elseBlock2 = new mlir::Block;
          ifOp2.elseRegion().push_back(elseBlock2);
          ProducerConsumerBuilder builder4(ifOp2.elseRegion());
          builder4.create<mlir::db::YieldOp>(builder.getUnknownLoc(), falseVal);
 
-
-         builder2.create<mlir::db::YieldOp>(builder.getUnknownLoc(),ifOp2.getResult(0));
+         builder2.create<mlir::db::YieldOp>(builder.getUnknownLoc(), ifOp2.getResult(0));
 
          return ifOp.getResult(0);
-      }else{
+      } else {
          return falseVal;
-
       }
    }
    virtual void produce(LoweringContext& context, ProducerConsumerBuilder& builder) override {
       auto scope = context.createScope();
-      std::unordered_map<const mlir::relalg::RelationalAttribute*,size_t> attributePos;
+      std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> attributePos;
       std::vector<mlir::Type> types;
-      size_t i=0;
-      for (auto *attr : requiredAttributes) {
+      size_t i = 0;
+      for (auto* attr : requiredAttributes) {
          types.push_back(attr->type);
-         attributePos[attr]=i++;
+         attributePos[attr] = i++;
       }
       auto tupleType = mlir::TupleType::get(builder.getContext(), types);
       mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(sortOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType));
@@ -466,7 +464,7 @@ class SortLowering : public ProducerConsumerNode {
       children[0]->produce(context, builder);
       vector = builder.create<mlir::db::BuilderBuild>(sortOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), vectorBuilder);
       {
-         auto dbSortOp = builder.create<mlir::db::SortOp>(sortOp->getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType),vector);
+         auto dbSortOp = builder.create<mlir::db::SortOp>(sortOp->getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), vector);
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType);
          block2->addArguments(tupleType);
@@ -474,21 +472,21 @@ class SortLowering : public ProducerConsumerNode {
          ProducerConsumerBuilder builder2(dbSortOp.region());
          auto unpackedLeft = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), types, block2->getArgument(0));
          auto unpackedRight = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), types, block2->getArgument(1));
-         std::vector<std::pair<mlir::Value,mlir::Value>> sortCriteria;
-         for(auto attr:sortOp.sortspecs()){
-            auto sortspecAttr=attr.cast<mlir::relalg::SortSpecificationAttr>();
-            mlir::Value left=unpackedLeft.getResult(attributePos[&sortspecAttr.getAttr().getRelationalAttribute()]);
-            mlir::Value right=unpackedRight.getResult(attributePos[&sortspecAttr.getAttr().getRelationalAttribute()]);
-            if(sortspecAttr.getSortSpec()==mlir::relalg::SortSpec::desc){
-               std::swap(left,right);
+         std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria;
+         for (auto attr : sortOp.sortspecs()) {
+            auto sortspecAttr = attr.cast<mlir::relalg::SortSpecificationAttr>();
+            mlir::Value left = unpackedLeft.getResult(attributePos[&sortspecAttr.getAttr().getRelationalAttribute()]);
+            mlir::Value right = unpackedRight.getResult(attributePos[&sortspecAttr.getAttr().getRelationalAttribute()]);
+            if (sortspecAttr.getSortSpec() == mlir::relalg::SortSpec::desc) {
+               std::swap(left, right);
             }
-            sortCriteria.push_back({left,right});
+            sortCriteria.push_back({left, right});
          }
-         auto trueVal=builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(),mlir::db::BoolType::get(builder.getContext()),builder.getIntegerAttr(builder.getI64Type(),1));
-         auto falseVal=builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(),mlir::db::BoolType::get(builder.getContext()),builder.getIntegerAttr(builder.getI64Type(),0));
+         auto trueVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
+         auto falseVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 0));
 
-         builder2.create<mlir::db::YieldOp>(sortOp->getLoc(),createSortPredicate(builder2,sortCriteria,trueVal,falseVal,0));
-         vector=dbSortOp.sorted();
+         builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), createSortPredicate(builder2, sortCriteria, trueVal, falseVal, 0));
+         vector = dbSortOp.sorted();
       }
       {
          auto forOp2 = builder.create<mlir::db::ForOp>(sortOp->getLoc(), getRequiredBuilderTypes(context), vector, getRequiredBuilderValues(context));
@@ -511,6 +509,147 @@ class SortLowering : public ProducerConsumerNode {
 
    virtual ~SortLowering() {}
 };
+
+class AggregationLowering : public ProducerConsumerNode {
+   mlir::relalg::AggregationOp aggregationOp;
+   size_t builderId;
+   mlir::Value table;
+   enum AggWorkFn {
+      SUM
+   };
+   struct AggWork {
+      const mlir::relalg::RelationalAttribute* source;
+      const mlir::relalg::RelationalAttribute* res;
+      AggWorkFn workfn;
+   };
+   std::vector<mlir::Type> keyTypes;
+   std::vector<mlir::Type> valTypes;
+   mlir::TupleType keyTupleType;
+   mlir::TupleType valTupleType;
+   mlir::TupleType entryType;
+
+   std::vector<AggWork> work;
+   std::vector<const mlir::relalg::RelationalAttribute*> groupAttributes;
+   std::vector<const mlir::relalg::RelationalAttribute*> valAttributes;
+   std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> keyMapping;
+   std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> sourceMapping;
+   std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> targetMapping;
+
+   public:
+   AggregationLowering(mlir::relalg::AggregationOp aggregationOp) : ProducerConsumerNode(aggregationOp.rel()), aggregationOp(aggregationOp) {
+   }
+   virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
+      this->consumer = consumer;
+      this->requiredAttributes = requiredAttributes;
+      this->requiredAttributes.insert(aggregationOp.getUsedAttributes());
+      propagateInfo();
+   }
+   virtual mlir::relalg::Attributes getAvailableAttributes() override {
+      return aggregationOp.getCreatedAttributes(); //todo: fix
+   }
+   virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) override {
+      std::vector<mlir::Value> keys,values;
+      for(auto *attr:groupAttributes){
+         keys.push_back(context.getValueForAttribute(attr));
+      }
+      for(auto *attr:valAttributes){
+         values.push_back(context.getValueForAttribute(attr));
+      }
+      mlir::Value htBuilder = context.builders[builderId];
+      mlir::Value packedKey = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), keyTupleType, keys);
+      mlir::Value packedVal = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), valTupleType, values);
+      mlir::Value packed = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), entryType, mlir::ValueRange({packedKey,packedVal}));
+
+      mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(aggregationOp->getLoc(), htBuilder.getType(), htBuilder, packed);
+      context.builders[builderId] = mergedBuilder;
+   }
+
+   virtual void produce(LoweringContext& context, ProducerConsumerBuilder& builder) override {
+      auto scope = context.createScope();
+
+      for (auto attr : aggregationOp.group_by_attrs()) {
+         if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
+            keyMapping[&attrRef.getRelationalAttribute()]=keyTypes.size();
+            keyTypes.push_back(attrRef.getRelationalAttribute().type);
+            groupAttributes.push_back(&attrRef.getRelationalAttribute());
+         }
+      }
+      //todo arguments of aggr_builder can be different?
+      size_t i = 0;
+      aggregationOp.aggr_func().walk([&](mlir::relalg::AddAttrOp addAttrOp) {
+         addAttrOp->dump();
+         if (auto aggrFn = mlir::dyn_cast_or_null<mlir::relalg::AggrFuncOp>(addAttrOp.val().getDefiningOp())) {
+            if (aggrFn.fn() == mlir::relalg::AggrFunc::sum) {
+               AggWork aggWork;
+               aggWork.workfn = AggWorkFn::SUM;
+               aggWork.source = &aggrFn.attr().getRelationalAttribute();
+               aggWork.res = &addAttrOp.attr().getRelationalAttribute();
+               valTypes.push_back(aggWork.source->type);
+               valAttributes.push_back(aggWork.source);
+               sourceMapping[aggWork.source] = i;
+               targetMapping[aggWork.res] = i;
+               i++;
+               work.push_back(aggWork);
+            }
+         }
+      });
+      keyTupleType = mlir::TupleType::get(builder.getContext(), keyTypes);
+      valTupleType = mlir::TupleType::get(builder.getContext(), valTypes);
+      auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(aggregationOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType));
+      mlir::Block* aggrBuilderBlock = new mlir::Block;
+      aggrBuilder.region().push_back(aggrBuilderBlock);
+      aggrBuilderBlock->addArguments({valTupleType, valTupleType});
+      ProducerConsumerBuilder builder2(builder.getContext());
+      builder2.setInsertionPointToStart(aggrBuilderBlock);
+      auto unpackedCurr = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), valTypes, aggrBuilderBlock->getArgument(0))->getResults();
+      auto unpackedNew = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), valTypes, aggrBuilderBlock->getArgument(1)).getResults();
+      std::vector<mlir::Value> values;
+      for (auto w : work) {
+         if (w.workfn == SUM) {
+            values.push_back(builder2.create<mlir::db::AddOp>(aggregationOp->getLoc(), w.source->type, unpackedCurr[sourceMapping[w.source]], unpackedNew[sourceMapping[w.source]]));
+         }
+      }
+
+      mlir::Value packed = builder2.create<mlir::util::PackOp>(aggregationOp->getLoc(), valTupleType, values);
+
+      builder2.create<mlir::db::YieldOp>(builder.getUnknownLoc(), packed);
+      builderId = context.getBuilderId();
+      context.builders[builderId] = aggrBuilder;
+      entryType=mlir::TupleType::get(builder.getContext(),{keyTupleType,valTupleType});
+      children[0]->setRequiredBuilders({builderId});
+      children[0]->produce(context, builder);
+      mlir::Value hashtable = builder.create<mlir::db::BuilderBuild>(aggregationOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), aggrBuilder);
+      {
+         auto forOp2 = builder.create<mlir::db::ForOp>(aggregationOp->getLoc(), getRequiredBuilderTypes(context), hashtable, getRequiredBuilderValues(context));
+         mlir::Block* block2 = new mlir::Block;
+         block2->addArgument(entryType);
+         block2->addArguments(getRequiredBuilderTypes(context));
+         forOp2.getBodyRegion().push_back(block2);
+         ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
+         setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
+         auto unpacked = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), entryType.getTypes(), forOp2.getInductionVar()).getResults();
+         auto unpackedKey = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), keyTypes, unpacked[0]).getResults();
+         auto unpackedVal = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), valTypes, unpacked[1]).getResults();
+
+         for (const auto* attr : requiredAttributes) {
+
+            if(targetMapping.count(attr)){
+               mlir::Value casted=builder2.create<mlir::db::CastOp>(aggregationOp->getLoc(),unpackedVal[targetMapping[attr]].getType().dyn_cast_or_null<mlir::db::DBType>().asNullable(),unpackedVal[targetMapping[attr]]); //unpackedVal[targetMapping[attr]]
+               context.setValueForAttribute(scope, attr, casted);
+            }else if(keyMapping.count(attr)){
+
+               context.setValueForAttribute(scope, attr, unpackedKey[keyMapping[attr]]);
+            }
+         }
+         consumer->consume(this, builder2, context);
+         builder2.create<mlir::db::YieldOp>(aggregationOp->getLoc(), getRequiredBuilderValues(context));
+         setRequiredBuilderValues(context, forOp2.results());
+      }
+   }
+   virtual void done() override {
+   }
+   virtual ~AggregationLowering() {}
+};
 std::unique_ptr<ProducerConsumerNode> createNodeFor(mlir::Operation* o) {
    std::unique_ptr<ProducerConsumerNode> res;
    llvm::TypeSwitch<mlir::Operation*>(o)
@@ -518,7 +657,7 @@ std::unique_ptr<ProducerConsumerNode> createNodeFor(mlir::Operation* o) {
          res = std::make_unique<BaseTableLowering>(baseTableOp);
       })
       .Case<mlir::relalg::ConstRelationOp>([&](mlir::relalg::ConstRelationOp constRelationOp) {
-        res = std::make_unique<ConstRelLowering>(constRelationOp);
+         res = std::make_unique<ConstRelLowering>(constRelationOp);
       })
       .Case<mlir::relalg::MaterializeOp>([&](mlir::relalg::MaterializeOp materializeOp) {
          res = std::make_unique<MaterializeLowering>(materializeOp);
@@ -534,6 +673,9 @@ std::unique_ptr<ProducerConsumerNode> createNodeFor(mlir::Operation* o) {
       })
       .Case<mlir::relalg::SortOp>([&](mlir::relalg::SortOp sortOp) {
          res = std::make_unique<SortLowering>(sortOp);
+      })
+      .Case<mlir::relalg::AggregationOp>([&](mlir::relalg::AggregationOp sortOp) {
+         res = std::make_unique<AggregationLowering>(sortOp);
       })
       .Default([&](mlir::Operation*) {});
 
