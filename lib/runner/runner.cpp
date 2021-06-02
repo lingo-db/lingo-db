@@ -4,7 +4,7 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
-#include "mlir/Conversion/DBToArrowStd/DBToArrowStdPass.h"
+#include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"

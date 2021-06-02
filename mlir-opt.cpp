@@ -13,7 +13,7 @@
 #include "mlir/Dialect/util/Passes.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 
-#include "mlir/Conversion/DBToArrowStd/DBToArrowStdPass.h"
+#include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/SCF/SCF.h"

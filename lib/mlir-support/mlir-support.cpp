@@ -6,9 +6,18 @@ int32_t support::parseDate32(std::string str) {
    arrow::internal::ParseValue<arrow::Date32Type>(str.data(), str.length(), &res);
    return res;
 }
-int64_t support::parseTimestamp(std::string str,arrow::TimeUnit::type unit) {
+arrow::TimeUnit::type convertTimeUnit(support::TimeUnit unit){
+   switch (unit) {
+      case support::TimeUnit::SECOND: return arrow::TimeUnit::SECOND;
+      case support::TimeUnit::MILLI: return arrow::TimeUnit::MILLI;
+      case support::TimeUnit::MICRO: return arrow::TimeUnit::MICRO;
+      case support::TimeUnit::NANO: return arrow::TimeUnit::NANO;
+   }
+   return arrow::TimeUnit::SECOND;
+}
+int64_t support::parseTimestamp(std::string str,TimeUnit unit) {
    int64_t res;
-   arrow::internal::ParseValue<arrow::TimestampType>(arrow::TimestampType(unit), str.data(), str.length(), &res);
+   arrow::internal::ParseValue<arrow::TimestampType>(arrow::TimestampType(convertTimeUnit(unit)), str.data(), str.length(), &res);
    return res;
 }
 std::pair<uint64_t, uint64_t> support::getDecimalScaleMultiplier(unsigned scale) {
