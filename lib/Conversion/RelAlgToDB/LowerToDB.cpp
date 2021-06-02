@@ -408,7 +408,7 @@ class SortLowering : public ProducerConsumerNode {
    virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) override {
       std::vector<mlir::Type> types;
       std::vector<mlir::Value> values;
-      for (auto* attr : requiredAttributes) {
+      for (const auto* attr : requiredAttributes) {
          types.push_back(attr->type);
          values.push_back(context.getValueForAttribute(attr));
       }
@@ -452,7 +452,7 @@ class SortLowering : public ProducerConsumerNode {
       std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> attributePos;
       std::vector<mlir::Type> types;
       size_t i = 0;
-      for (auto* attr : requiredAttributes) {
+      for (const auto* attr : requiredAttributes) {
          types.push_back(attr->type);
          attributePos[attr] = i++;
       }
@@ -549,10 +549,10 @@ class AggregationLowering : public ProducerConsumerNode {
    }
    virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) override {
       std::vector<mlir::Value> keys,values;
-      for(auto *attr:groupAttributes){
+      for(const auto *attr:groupAttributes){
          keys.push_back(context.getValueForAttribute(attr));
       }
-      for(auto *attr:valAttributes){
+      for(const auto *attr:valAttributes){
          values.push_back(context.getValueForAttribute(attr));
       }
       mlir::Value htBuilder = context.builders[builderId];
