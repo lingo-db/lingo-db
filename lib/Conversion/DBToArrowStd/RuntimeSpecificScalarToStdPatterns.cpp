@@ -325,6 +325,53 @@ class DumpIndexOpLowering : public ConversionPattern {
       return success();
    }
 };
+
+class HashLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+   Value xorImpl(OpBuilder& builder, Value v, Value totalHash) const {
+      return builder.create<mlir::XOrOp>(builder.getUnknownLoc(), v, totalHash);
+   }
+   Value hashImpl(OpBuilder& builder, Value v, Value totalHash) const {
+      //todo: more checks:
+      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+      if (auto intType = v.getType().dyn_cast_or_null<mlir::IntegerType>()) {
+         switch (intType.getWidth()) {
+            case 1: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashBool, v)[0]);
+            case 8: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt8, v)[0]);
+            case 16: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt16, v)[0]);
+            case 32: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt32, v)[0]);
+            case 64: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt64, v)[0]);
+            case 128: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt128, v)[0]);
+         }
+      } else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
+         switch (floatType.getWidth()) {
+            case 32: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashFloat32, v)[0]);
+            case 64: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashFloat64, v)[0]);
+         }
+      } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::MemRefType>()) {
+         return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashBinary, v)[0]);
+      } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
+         auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
+         for (auto v : unpacked->getResults()) {
+            totalHash = hashImpl(builder, v, totalHash);
+         }
+         return totalHash;
+      }
+      assert(false && "should not happen");
+      return Value();
+   }
+
+   public:
+   explicit HashLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::Hash::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      mlir::db::HashAdaptor hashAdaptor(operands);
+      hashAdaptor.val().getType().dump();
+      Value const0 = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0));
+      rewriter.replaceOp(op, hashImpl(rewriter, hashAdaptor.val(), const0));
+      return success();
+   }
+};
 } // namespace
 
 
@@ -392,5 +439,6 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
    patterns.insert<StringCastOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DumpIndexOpLowering>(functionRegistry, typeConverter, patterns.getContext());
+   patterns.insert<HashLowering>(functionRegistry, typeConverter, patterns.getContext());
 
 }
