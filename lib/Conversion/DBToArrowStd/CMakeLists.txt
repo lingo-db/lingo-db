@@ -5,6 +5,7 @@ add_mlir_conversion_library(MLIRDBToArrowStd
         ScalarDBToStdPatterns.cpp
         ControlFlowToStdPatterns.cpp
         RuntimeSpecificScalarToStdPatterns.cpp
+        BuildersToStdPatterns.cpp
         NullHandler.cpp
 
         ADDITIONAL_HEADER_DIRS

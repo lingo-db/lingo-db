@@ -1,10 +1,11 @@
 #include "mlir-support/mlir-support.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/NullHandler.h"
-
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include <llvm/ADT/TypeSwitch.h>
 
 using namespace mlir;
 namespace {
@@ -514,6 +515,66 @@ class CastOpLowering : public ConversionPattern {
 };
 } // namespace
 void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, RewritePatternSet& patterns) {
+   typeConverter.addConversion([&](mlir::db::DBType type) {
+      Type rawType = ::llvm::TypeSwitch<::mlir::db::DBType, mlir::Type>(type)
+                        .Case<::mlir::db::BoolType>([&](::mlir::db::BoolType t) {
+                           return mlir::IntegerType::get(patterns.getContext(), 1);
+                        })
+                        .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) {
+                           if (t.getUnit() == mlir::db::DateUnitAttr::day) {
+                              return mlir::IntegerType::get(patterns.getContext(), 32);
+                           } else {
+                              return mlir::IntegerType::get(patterns.getContext(), 64);
+                           }
+                        })
+                        .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
+                           if (t.getUnit() == mlir::db::TimeUnitAttr::second && t.getUnit() == mlir::db::TimeUnitAttr::millisecond) {
+                              return mlir::IntegerType::get(patterns.getContext(), 32);
+                           } else {
+                              return mlir::IntegerType::get(patterns.getContext(), 64);
+                           }
+                        })
+                        .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
+                           return mlir::IntegerType::get(patterns.getContext(), 128);
+                        })
+                        .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
+                           return mlir::IntegerType::get(patterns.getContext(), t.getWidth());
+                        })
+                        .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
+                           return mlir::IntegerType::get(patterns.getContext(), t.getWidth());
+                        })
+                        .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
+                           mlir::Type res;
+                           if (t.getWidth() == 32) {
+                              res = mlir::FloatType::getF32(patterns.getContext());
+                           } else if (t.getWidth() == 64) {
+                              res = mlir::FloatType::getF64(patterns.getContext());
+                           }
+                           return res;
+                        })
+                        .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
+                           return mlir::MemRefType::get({-1}, IntegerType::get(patterns.getContext(), 8));
+                        })
+                        .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
+                           return mlir::IntegerType::get(patterns.getContext(), 64);
+                        })
+                        .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
+                           return mlir::IntegerType::get(patterns.getContext(), 64);
+                        })
+                        .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
+                           if (t.getUnit() == mlir::db::IntervalUnitAttr::daytime) {
+                              return mlir::IntegerType::get(patterns.getContext(), 64);
+                           } else {
+                              return mlir::IntegerType::get(patterns.getContext(), 32);
+                           }
+                        })
+                        .Default([](::mlir::Type) { return Type(); });
+      if (type.isNullable()) {
+         return (Type) TupleType::get(patterns.getContext(), {IntegerType::get(patterns.getContext(), 1), rawType});
+      } else {
+         return rawType;
+      }
+   });
    patterns.insert<CmpOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<NotOpLowering>(typeConverter, patterns.getContext());
 
