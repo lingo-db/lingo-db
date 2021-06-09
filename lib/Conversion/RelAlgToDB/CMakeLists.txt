@@ -8,6 +8,7 @@ add_mlir_conversion_library(MLIRRelAlgToDB
         MaterializeOp.cpp
         SelectionOp.cpp
         SortOp.cpp
+        InnerJoinOp.cpp
         ADDITIONAL_HEADER_DIRS
         ../../../mlir/Conversion/RelAlgToDB
 
