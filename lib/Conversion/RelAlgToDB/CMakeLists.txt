@@ -1,6 +1,13 @@
 add_mlir_conversion_library(MLIRRelAlgToDB
         LowerToDB.cpp
-
+        BaseTableOp.cpp
+        AggregationOp.cpp
+        ConstRelationOp.cpp
+        CrossProductOp.cpp
+        MapOp.cpp
+        MaterializeOp.cpp
+        SelectionOp.cpp
+        SortOp.cpp
         ADDITIONAL_HEADER_DIRS
         ../../../mlir/Conversion/RelAlgToDB
 
