@@ -129,6 +129,7 @@ class ProducerConsumerNodeRegistry {
    static bool registeredSemiJoinOp;
    static bool registeredAntiSemiJoinOp;
    static bool registeredRenamingOp;
+   static bool registeredProjectionOp;
    std::unordered_map<std::string, std::function<std::unique_ptr<mlir::relalg::ProducerConsumerNode>(mlir::Operation*)>> nodes;
    ProducerConsumerNodeRegistry() {
       bool res = true;
@@ -144,6 +145,7 @@ class ProducerConsumerNodeRegistry {
       res &= registeredSemiJoinOp;
       res &= registeredAntiSemiJoinOp;
       res &=registeredRenamingOp;
+      res &=registeredProjectionOp;
    }
 
    public:

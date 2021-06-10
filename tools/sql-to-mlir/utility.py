@@ -20,6 +20,8 @@ def getAttributeList(resolver, maybe_list):
 
 def getPrintNames(l):
     res=[]
+    if type(l) !=list:
+        l=[l]
     for expr_ in l:
         expr=ensure_value_dict(expr_)
         if "name" in expr:

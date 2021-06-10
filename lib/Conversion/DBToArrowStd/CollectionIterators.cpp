@@ -314,7 +314,7 @@ class AggrHTIterator : public ForIterator {
       rawValues = unpacked.getResult(2);
    }
    virtual Value upper(OpBuilder& builder) {
-      return builder.create<util::DimOp>(builder.getUnknownLoc(), builder.getIndexType(), values);
+      return builder.create<util::DimOp>(builder.getUnknownLoc(), builder.getIndexType(), keys);
    }
    virtual Value getElement(OpBuilder& builder, Value index) {
       Value loadedKey = builder.create<util::LoadOp>(builder.getUnknownLoc(), serializedKeyType, keys, index);
