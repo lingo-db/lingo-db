@@ -132,7 +132,7 @@ class ProducerConsumerNodeRegistry {
       res &= registeredSortOp;
       res &= registeredAggregationOp;
       res &= registeredInnerJoinOp;
-      res &= registeredSemiJoinOp;
+//      res &= registeredSemiJoinOp;
 
    }
 

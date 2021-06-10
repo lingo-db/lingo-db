@@ -513,6 +513,51 @@ class CastOpLowering : public ConversionPattern {
       return success();
    }
 };
+class CreateFlagLowering : public ConversionPattern {
+   public:
+   explicit CreateFlagLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CreateFlag::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto boolType= mlir::db::BoolType::get(rewriter.getContext());
+      Type memrefType = util::GenericMemrefType::get(rewriter.getContext(), boolType, llvm::Optional<int64_t>());
+
+      Value alloca = rewriter.create<mlir::util::AllocaOp>(op->getLoc(), memrefType, Value());
+      Value falseVal = rewriter.create<mlir::db::ConstantOp>(op->getLoc(),boolType, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+      rewriter.create<util::StoreOp>(op->getLoc(), falseVal, alloca, Value());
+      rewriter.replaceOp(op,alloca);
+      return success();
+   }
+};
+class SetFlagLowering : public ConversionPattern {
+   public:
+   explicit SetFlagLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::SetFlag::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      mlir::db::SetFlagAdaptor adaptor(operands);
+         auto boolType= mlir::db::BoolType::get(rewriter.getContext());
+
+      Value trueVal = rewriter.create<mlir::db::ConstantOp>(op->getLoc(),boolType, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      rewriter.create<util::StoreOp>(op->getLoc(), trueVal, adaptor.flag(), Value());
+      rewriter.eraseOp(op);
+      return success();
+   }
+};
+class GetFlagLowering : public ConversionPattern {
+   public:
+   explicit GetFlagLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::GetFlag::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      mlir::db::GetFlagAdaptor adaptor(operands);
+      auto boolType= mlir::db::BoolType::get(rewriter.getContext());
+
+      Value flagValue=rewriter.create<util::LoadOp>(op->getLoc(), boolType, adaptor.flag(), Value());
+      rewriter.replaceOp(op,flagValue);
+      return success();
+   }
+};
 } // namespace
 void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, RewritePatternSet& patterns) {
    typeConverter.addConversion([&](mlir::db::DBType type) {
@@ -575,7 +620,13 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
          return rawType;
       }
    });
-   patterns.insert<CmpOpLowering>(typeConverter, patterns.getContext());
+   typeConverter.addConversion([&](mlir::db::FlagType type) {
+     auto boolType= mlir::db::BoolType::get(patterns.getContext());
+     Type memrefType = util::GenericMemrefType::get(patterns.getContext(), boolType, llvm::Optional<int64_t>());
+      return memrefType;
+   });
+
+     patterns.insert<CmpOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<NotOpLowering>(typeConverter, patterns.getContext());
 
    patterns.insert<AndOpLowering>(typeConverter, patterns.getContext());
@@ -610,4 +661,9 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
 
    patterns.insert<ConstantLowering>(typeConverter, patterns.getContext());
    patterns.insert<CastOpLowering>(typeConverter, patterns.getContext());
+
+   patterns.insert<CreateFlagLowering>(typeConverter, patterns.getContext());
+   patterns.insert<SetFlagLowering>(typeConverter, patterns.getContext());
+   patterns.insert<GetFlagLowering>(typeConverter, patterns.getContext());
+
 }

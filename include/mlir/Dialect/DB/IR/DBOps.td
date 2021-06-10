@@ -61,6 +61,9 @@ let parameters = (ins "Type":$elementType);
 def DB_Table: DB_Type<"Table","table"> {
 let summary = "table";
 }
+def DB_Flag: DB_Type<"Flag","flag"> {
+let summary = "flag";
+}
 def DB_TableBuilder : DB_Builder<"TableBuilder","table_builder"> {
 let summary = "builder for table";
 let parameters = (ins "TupleType":$rowType);
@@ -188,7 +191,25 @@ def DB_NullOp : DB_Op<"null",
 let summary = "null";
 let results = (outs DBType:$res);
 let assemblyFormat = "`:` type($res) attr-dict";
-
+}
+def DB_CreateFlag : DB_Op<"createflag",
+[NoSideEffect]> {
+let summary = "create flag";
+let results = (outs DB_Flag:$flag);
+let assemblyFormat = "attr-dict";
+}
+def DB_SetFlag : DB_Op<"setflag",
+[NoSideEffect]> {
+let summary = "set flag to true";
+let arguments = (ins DB_Flag:$flag);
+let assemblyFormat = "$flag attr-dict";
+}
+def DB_GetFlag : DB_Op<"getflag",
+[NoSideEffect]> {
+let summary = "get flag value";
+let arguments = (ins DB_Flag:$flag);
+let results= (outs DB_BoolType:$res);
+let assemblyFormat = "$flag attr-dict";
 }
 def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
 let arguments = (ins AnyType: $val);
