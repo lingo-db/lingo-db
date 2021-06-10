@@ -103,7 +103,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
          vector = dbSortOp.sorted();
       }
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(sortOp->getLoc(), getRequiredBuilderTypes(context), vector,mlir::Value()/*todo*/, getRequiredBuilderValues(context));
+         auto forOp2 = builder.create<mlir::db::ForOp>(sortOp->getLoc(), getRequiredBuilderTypes(context), vector,flag, getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType);
          block2->addArguments(getRequiredBuilderTypes(context));

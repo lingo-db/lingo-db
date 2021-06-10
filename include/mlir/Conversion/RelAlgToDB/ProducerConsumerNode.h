@@ -66,6 +66,7 @@ class ProducerConsumerNode {
    std::vector<std::unique_ptr<ProducerConsumerNode>> children;
    std::vector<size_t> requiredBuilders;
    mlir::relalg::Attributes requiredAttributes;
+   Value flag;
    void propagateInfo() {
       for (auto& c : children) {
          auto available = c->getAvailableAttributes();
@@ -102,6 +103,12 @@ class ProducerConsumerNode {
          child->addRequiredBuilders(requiredBuilders);
       }
    }
+   void setFlag(mlir::Value flag){
+      this->flag=flag;
+      for (auto& child : children) {
+         child->addRequiredBuilders(requiredBuilders);
+      }
+   }
    virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) = 0;
    virtual mlir::relalg::Attributes getAvailableAttributes() = 0;
    virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) = 0;
@@ -120,6 +127,7 @@ class ProducerConsumerNodeRegistry {
    static bool registeredAggregationOp;
    static bool registeredInnerJoinOp;
    static bool registeredSemiJoinOp;
+   static bool registeredAntiSemiJoinOp;
    std::unordered_map<std::string, std::function<std::unique_ptr<mlir::relalg::ProducerConsumerNode>(mlir::Operation*)>> nodes;
    ProducerConsumerNodeRegistry() {
       bool res = true;
@@ -132,8 +140,8 @@ class ProducerConsumerNodeRegistry {
       res &= registeredSortOp;
       res &= registeredAggregationOp;
       res &= registeredInnerJoinOp;
-//      res &= registeredSemiJoinOp;
-
+      res &= registeredSemiJoinOp;
+      res &= registeredAntiSemiJoinOp;
    }
 
    public:

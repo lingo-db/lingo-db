@@ -198,8 +198,7 @@ let summary = "create flag";
 let results = (outs DB_Flag:$flag);
 let assemblyFormat = "attr-dict";
 }
-def DB_SetFlag : DB_Op<"setflag",
-[NoSideEffect]> {
+def DB_SetFlag : DB_Op<"setflag"> {
 let summary = "set flag to true";
 let arguments = (ins DB_Flag:$flag,  DB_BoolType:$val);
 let assemblyFormat = "$flag `,` $val attr-dict";

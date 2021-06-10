@@ -38,13 +38,13 @@ class BaseTableLowering : public mlir::relalg::ProducerConsumerNode {
       mlir::Type rowIterable = mlir::db::GenericIterableType::get(builder.getContext(), tupleType, "table_row_iterator");
       mlir::Type chunkIterable = mlir::db::GenericIterableType::get(builder.getContext(), rowIterable, "table_chunk_iterator");
       auto chunkIterator = builder.create<mlir::db::TableScan>(baseTableOp->getLoc(), chunkIterable, table, builder.getArrayAttr(columnNames));
-      auto forOp = builder.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), chunkIterator,Value()/*todo*/, getRequiredBuilderValues(context));
+      auto forOp = builder.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), chunkIterator,flag, getRequiredBuilderValues(context));
       mlir::Block* block = new mlir::Block;
       block->addArgument(rowIterable);
       block->addArguments(getRequiredBuilderTypes(context));
       forOp.getBodyRegion().push_back(block);
       mlir::OpBuilder builder1(forOp.getBodyRegion());
-      auto forOp2 = builder1.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), forOp.getInductionVar(),Value()/*todo*/, block->getArguments().drop_front(1));
+      auto forOp2 = builder1.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), forOp.getInductionVar(),flag, block->getArguments().drop_front(1));
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(tupleType);
       block2->addArguments(getRequiredBuilderTypes(context));

@@ -79,7 +79,9 @@ class TableIterator : public WhileIterator {
       return currElement;
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
-      return functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorValid, iterator)[0];
+      Value rawValue= functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorValid, iterator)[0];
+      Value dbValue =builder.create<mlir::db::TypeCastOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()),rawValue);
+      return dbValue;
    }
    virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
       functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorFree, iterator);
@@ -369,6 +371,7 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       if (flag) {
          Value flagValue=builder.create<mlir::db::GetFlag>(builder.getUnknownLoc(),mlir::db::BoolType::get(builder.getContext()),flag);
          Value shouldContinue=builder.create<mlir::db::NotOp>(builder.getUnknownLoc(),mlir::db::BoolType::get(builder.getContext()),flagValue);
+         condition.getType().dump();
          Value anded = builder.create<mlir::db::AndOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), ValueRange({condition, shouldContinue}));
          condition = anded;
       }

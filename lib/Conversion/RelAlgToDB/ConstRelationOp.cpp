@@ -45,7 +45,7 @@ class ConstRelLowering : public mlir::relalg::ProducerConsumerNode {
       }
       Value vector = builder.create<mlir::db::BuilderBuild>(constRelationOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), vectorBuilder);
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(constRelationOp->getLoc(), getRequiredBuilderTypes(context), vector, Value()/*todo*/,getRequiredBuilderValues(context));
+         auto forOp2 = builder.create<mlir::db::ForOp>(constRelationOp->getLoc(), getRequiredBuilderTypes(context), vector, flag,getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType);
          block2->addArguments(getRequiredBuilderTypes(context));
