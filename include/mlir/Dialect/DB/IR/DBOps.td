@@ -491,7 +491,12 @@ let arguments = (ins DBType:$val);
 let results=(outs DBType:$res);
 let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
 }
-
+def TypeCastOp : DB_Op<"type_cast"> {
+let summary = "type cast function";
+let arguments = (ins AnyType:$val);
+let results=(outs AnyType:$res);
+let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
+}
 
 def IfOp : DB_Op<"if",
 [SingleBlockImplicitTerminator<"db::YieldOp">, RecursiveSideEffects,
