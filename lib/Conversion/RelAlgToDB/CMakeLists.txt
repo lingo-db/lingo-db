@@ -11,6 +11,7 @@ add_mlir_conversion_library(MLIRRelAlgToDB
         InnerJoinOp.cpp
         SemiJoinOp.cpp
         AntiSemiJoinOp.cpp
+        RenamingOp.cpp
         ADDITIONAL_HEADER_DIRS
         ../../../mlir/Conversion/RelAlgToDB
 
