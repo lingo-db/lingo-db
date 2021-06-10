@@ -79,8 +79,6 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
             groupAttributes.push_back(&attrRef.getRelationalAttribute());
          }
       }
-      //todo arguments of aggr_builder can be different?
-      size_t i = 0;
       keyTupleType = mlir::TupleType::get(builder.getContext(), keyTypes);
       valTupleType = mlir::TupleType::get(builder.getContext(), valTypes);
       auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(projectionOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType));
