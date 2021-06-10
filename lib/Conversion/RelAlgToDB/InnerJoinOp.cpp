@@ -58,6 +58,6 @@ class NLInnerJoinLowering : public mlir::relalg::ProducerConsumerNode {
    virtual ~NLInnerJoinLowering() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredNLInnerJoinOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::InnerJoinOp joinOp) {
+bool mlir::relalg::ProducerConsumerNodeRegistry::registeredInnerJoinOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::InnerJoinOp joinOp) {
   return std::make_unique<NLInnerJoinLowering>(joinOp);
 });

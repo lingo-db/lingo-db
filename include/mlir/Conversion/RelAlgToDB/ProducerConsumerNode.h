@@ -96,10 +96,10 @@ class ProducerConsumerNode {
 
    public:
    ProducerConsumerNode(mlir::ValueRange children);
-   virtual void setRequiredBuilders(std::vector<size_t> requiredBuilders) {
-      this->requiredBuilders = requiredBuilders;
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) {
+      this->requiredBuilders.insert(this->requiredBuilders.end(),requiredBuilders.begin(),requiredBuilders.end());
       for (auto& child : children) {
-         child->setRequiredBuilders(requiredBuilders);
+         child->addRequiredBuilders(requiredBuilders);
       }
    }
    virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) = 0;
@@ -118,7 +118,8 @@ class ProducerConsumerNodeRegistry {
    static bool registeredCrossProductOp;
    static bool registeredSortOp;
    static bool registeredAggregationOp;
-   static bool registeredNLInnerJoinOp;
+   static bool registeredInnerJoinOp;
+   static bool registeredSemiJoinOp;
    std::unordered_map<std::string, std::function<std::unique_ptr<mlir::relalg::ProducerConsumerNode>(mlir::Operation*)>> nodes;
    ProducerConsumerNodeRegistry() {
       bool res = true;
@@ -130,7 +131,8 @@ class ProducerConsumerNodeRegistry {
       res &= registeredCrossProductOp;
       res &= registeredSortOp;
       res &= registeredAggregationOp;
-      res &= registeredNLInnerJoinOp;
+      res &= registeredInnerJoinOp;
+      res &= registeredSemiJoinOp;
 
    }
 

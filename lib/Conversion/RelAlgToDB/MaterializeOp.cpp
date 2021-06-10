@@ -45,7 +45,7 @@ class MaterializeLowering : public mlir::relalg::ProducerConsumerNode {
       mlir::Value tableBuilder = builder.create<mlir::db::CreateTableBuilder>(materializeOp.getLoc(), mlir::db::TableBuilderType::get(builder.getContext(), mlir::TupleType::get(builder.getContext(), types)), materializeOp.columns());
       builderId = context.getBuilderId();
       context.builders[builderId] = tableBuilder;
-      children[0]->setRequiredBuilders({builderId});
+      children[0]->addRequiredBuilders({builderId});
       children[0]->produce(context, builder);
       table = builder.create<mlir::db::BuilderBuild>(materializeOp.getLoc(), mlir::db::TableType::get(builder.getContext()), tableBuilder);
    }

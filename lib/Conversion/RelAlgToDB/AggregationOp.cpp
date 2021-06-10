@@ -109,7 +109,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
       builderId = context.getBuilderId();
       context.builders[builderId] = aggrBuilder;
       entryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, valTupleType});
-      children[0]->setRequiredBuilders({builderId});
+      children[0]->addRequiredBuilders({builderId});
       children[0]->produce(context, builder);
       mlir::Value hashtable = builder.create<mlir::db::BuilderBuild>(aggregationOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), aggrBuilder);
       {
