@@ -245,12 +245,11 @@ class VectorIterator : public ForIterator {
    Type ptrType;
    Type typedPtrType;
 
-
    public:
-   VectorIterator(Value vector, Type elementType) : vector(vector), elementType(elementType){
+   VectorIterator(Value vector, Type elementType) : vector(vector), elementType(elementType) {
    }
    virtual void init(OpBuilder& builder) {
-      serializedElementType = mlir::db::codegen::SerializationUtil::serializedType(builder,*typeConverter, elementType);
+      serializedElementType = mlir::db::codegen::SerializationUtil::serializedType(builder, *typeConverter, elementType);
       Type ptrType = MemRefType::get({-1}, builder.getIntegerType(8));
       Type typedPtrType = util::GenericMemrefType::get(builder.getContext(), serializedElementType, -1);
       auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({ptrType, ptrType}), vector);
@@ -294,17 +293,17 @@ class AggrHTIterator : public ForIterator {
    db::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   AggrHTIterator( db::codegen::FunctionRegistry& functionRegistry,Value ht, Type keyType,Type valType) : ht(ht), keyType(keyType),valType(valType),functionRegistry(functionRegistry){
+   AggrHTIterator(db::codegen::FunctionRegistry& functionRegistry, Value ht, Type keyType, Type valType) : ht(ht), keyType(keyType), valType(valType), functionRegistry(functionRegistry) {
    }
    virtual void init(OpBuilder& builder) {
-      serializedKeyType = mlir::db::codegen::SerializationUtil::serializedType(builder,*typeConverter, keyType);
-      serializedValType = mlir::db::codegen::SerializationUtil::serializedType(builder,*typeConverter, valType);
+      serializedKeyType = mlir::db::codegen::SerializationUtil::serializedType(builder, *typeConverter, keyType);
+      serializedValType = mlir::db::codegen::SerializationUtil::serializedType(builder, *typeConverter, valType);
 
       Type ptrType = MemRefType::get({-1}, builder.getIntegerType(8));
       Type typedKeyPtrType = util::GenericMemrefType::get(builder.getContext(), serializedKeyType, -1);
       Type typedValPtrType = util::GenericMemrefType::get(builder.getContext(), serializedValType, -1);
-      Value scanned=functionRegistry.call(builder,mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtScan,ht)[0];
-      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({ptrType, ptrType,ptrType}), scanned);
+      Value scanned = functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtScan, ht)[0];
+      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({ptrType, ptrType, ptrType}), scanned);
       keys = unpacked.getResult(0);
       values = unpacked.getResult(1);
       keys = builder.create<util::ToGenericMemrefOp>(builder.getUnknownLoc(), typedKeyPtrType, keys);
@@ -321,7 +320,7 @@ class AggrHTIterator : public ForIterator {
 
       Value deserializedKey = mlir::db::codegen::SerializationUtil::deserialize(builder, rawValues, loadedKey, keyType);
       Value deserializedVal = mlir::db::codegen::SerializationUtil::deserialize(builder, rawValues, loadedVal, valType);
-      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), {keyType,valType}), ValueRange({deserializedKey,deserializedVal}));
+      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), {keyType, valType}), ValueRange({deserializedKey, deserializedVal}));
    }
    virtual Value lower(OpBuilder& builder) {
       return builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0));
@@ -341,7 +340,7 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
    public:
    WhileIteratorIterationImpl(std::unique_ptr<WhileIterator> iterator) : iterator(std::move(iterator)) {
    }
-   virtual std::vector<Value> implementLoop(mlir::ValueRange iterArgs, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) override {
+   virtual std::vector<Value> implementLoop(mlir::ValueRange iterArgs, Value flag, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) override {
       auto insertionPoint = builder.saveInsertionPoint();
 
       iterator->setTypeConverter(&typeConverter);
@@ -366,7 +365,14 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
 
       builder.setInsertionPointToStart(&whileOp.before().front());
       auto arg1 = whileOp.before().front().getArgument(0);
-      builder.create<mlir::db::ConditionOp>(builder.getUnknownLoc(), iterator->iteratorValid(builder, arg1), whileOp.before().front().getArguments());
+      Value condition = iterator->iteratorValid(builder, arg1);
+      if (flag) {
+         Value flagValue=builder.create<mlir::db::GetFlag>(builder.getUnknownLoc(),mlir::db::BoolType::get(builder.getContext()),flag);
+         Value shouldContinue=builder.create<mlir::db::NotOp>(builder.getUnknownLoc(),mlir::db::BoolType::get(builder.getContext()),flagValue);
+         Value anded = builder.create<mlir::db::AndOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), ValueRange({condition, shouldContinue}));
+         condition = anded;
+      }
+      builder.create<mlir::db::ConditionOp>(builder.getUnknownLoc(), condition, whileOp.before().front().getArguments());
       builder.setInsertionPointToStart(&whileOp.after().front());
       auto arg2 = whileOp.after().front().getArgument(0);
       Value currElement = iterator->iteratorGetCurrentElement(builder, arg2);
@@ -376,7 +382,7 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       std::vector<Value> bodyParams = {currElement};
       auto additionalArgs = whileOp.after().front().getArguments().drop_front();
       bodyParams.insert(bodyParams.end(), additionalArgs.begin(), additionalArgs.end());
-      std::vector<Value> returnValues = bodyBuilder(bodyParams, builder);
+      auto returnValues = bodyBuilder(bodyParams, builder);
       returnValues.insert(returnValues.begin(), nextIterator);
       builder.setInsertionPoint(terminator);
       builder.create<mlir::db::YieldOp>(builder.getUnknownLoc(), returnValues);
@@ -394,11 +400,18 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
    public:
    ForIteratorIterationImpl(std::unique_ptr<ForIterator> iterator) : iterator(std::move(iterator)) {
    }
-   virtual std::vector<Value> implementLoop(mlir::ValueRange iterArgs, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) override {
+   virtual std::vector<Value> implementLoop(mlir::ValueRange iterArgs, Value flag, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) override {
+      if (flag) {
+         return implementLoopCondition(iterArgs, flag,typeConverter, builder, bodyBuilder);
+      } else {
+         return implementLoopSimple(iterArgs, typeConverter, builder, bodyBuilder);
+      }
+   }
+   std::vector<Value> implementLoopSimple(const ValueRange& iterArgs, TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) {
       auto insertionPoint = builder.saveInsertionPoint();
       iterator->setTypeConverter(&typeConverter);
       iterator->init(builder);
-      auto forOp = builder.create<mlir::scf::ForOp>(builder.getUnknownLoc(), iterator->lower(builder), iterator->upper(builder), iterator->step(builder), iterArgs.size() ? iterArgs : llvm::None);
+      auto forOp = builder.create<scf::ForOp>(builder.getUnknownLoc(), iterator->lower(builder), iterator->upper(builder), iterator->step(builder), iterArgs.size() ? iterArgs : llvm::None);
       if (iterArgs.size()) {
          builder.setInsertionPointToStart(forOp.getBody());
          builder.create<scf::YieldOp>(builder.getUnknownLoc());
@@ -409,7 +422,7 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       std::vector<Value> bodyArguments = {element};
 
       bodyArguments.insert(bodyArguments.end(), forOp.getRegionIterArgs().begin(), forOp.getRegionIterArgs().end());
-      std::vector<Value> results = bodyBuilder(bodyArguments, builder);
+      auto results = bodyBuilder(bodyArguments, builder);
       iterator->destroyElement(builder, element);
       if (iterArgs.size()) {
          builder.create<scf::YieldOp>(builder.getUnknownLoc(), results);
@@ -419,6 +432,60 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       iterator->down(builder);
       return std::vector<Value>(forOp.results().begin(), forOp.results().end());
    }
+   std::vector<Value> implementLoopCondition(const ValueRange& iterArgs, Value flag, TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) {
+      auto insertionPoint = builder.saveInsertionPoint();
+
+      iterator->setTypeConverter(&typeConverter);
+      iterator->init(builder);
+      Type iteratorType = builder.getIndexType();
+      Value initialIterator = iterator->lower(builder);
+      std::vector<Type> results = {iteratorType};
+      std::vector<Value> iterValues = {initialIterator};
+      for (auto iterArg : iterArgs) {
+         results.push_back(iterArg.getType());
+         iterValues.push_back(iterArg);
+      }
+      Value upper=iterator->upper(builder);
+      Value step=iterator->step(builder);
+      auto whileOp = builder.create<mlir::db::WhileOp>(builder.getUnknownLoc(), results, iterValues);
+      Block* before = new Block;
+      Block* after = new Block;
+
+      whileOp.before().push_back(before);
+      whileOp.after().push_back(after);
+      for (auto t : results) {
+         before->addArgument(t);
+         after->addArgument(t);
+      }
+
+      builder.setInsertionPointToStart(&whileOp.before().front());
+      auto arg1 = whileOp.before().front().getArgument(0);
+      Value condition = builder.create<mlir::CmpIOp>(builder.getUnknownLoc(),mlir::CmpIPredicate::ult,arg1,upper) ;
+      Value dbcondition =builder.create<mlir::db::TypeCastOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()),condition);
+      if (flag) {
+         Value flagValue=builder.create<mlir::db::GetFlag>(builder.getUnknownLoc(),mlir::db::BoolType::get(builder.getContext()),flag);
+         Value shouldContinue=builder.create<mlir::db::NotOp>(builder.getUnknownLoc(),mlir::db::BoolType::get(builder.getContext()),flagValue);
+         Value anded = builder.create<mlir::db::AndOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), ValueRange({dbcondition, shouldContinue}));
+         dbcondition = anded;
+      }
+      builder.create<mlir::db::ConditionOp>(builder.getUnknownLoc(), dbcondition, whileOp.before().front().getArguments());
+      builder.setInsertionPointToStart(&whileOp.after().front());
+      auto arg2 = whileOp.after().front().getArgument(0);
+      Value currElement = iterator->getElement(builder, arg2);
+      Value nextIterator = builder.create<mlir::AddIOp>(builder.getUnknownLoc(),builder.getIndexType(),arg2,step);
+      auto terminator = builder.create<mlir::db::YieldOp>(builder.getUnknownLoc());
+      builder.setInsertionPoint(nextIterator.getDefiningOp());
+      std::vector<Value> bodyParams = {currElement};
+      auto additionalArgs = whileOp.after().front().getArguments().drop_front();
+      bodyParams.insert(bodyParams.end(), additionalArgs.begin(), additionalArgs.end());
+      auto returnValues = bodyBuilder(bodyParams, builder);
+      returnValues.insert(returnValues.begin(), nextIterator);
+      builder.setInsertionPoint(terminator);
+      builder.create<mlir::db::YieldOp>(builder.getUnknownLoc(), returnValues);
+      builder.eraseOp(terminator);
+      builder.restoreInsertionPoint(insertionPoint);
+      auto loopResultValues = whileOp.results().drop_front();
+      return std::vector<Value>(loopResultValues.begin(), loopResultValues.end());   }
 };
 std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIterationImpl::getImpl(Type collectionType, Value collection, mlir::db::codegen::FunctionRegistry& functionRegistry) {
    if (auto generic = collectionType.dyn_cast_or_null<mlir::db::GenericIterableType>()) {
@@ -432,7 +499,7 @@ std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIteration
    } else if (auto vector = collectionType.dyn_cast_or_null<mlir::db::VectorType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<VectorIterator>(collection, vector.getElementType()));
    } else if (auto aggrHt = collectionType.dyn_cast_or_null<mlir::db::AggregationHashtableType>()) {
-      return std::make_unique<ForIteratorIterationImpl>(std::make_unique<AggrHTIterator>(functionRegistry,collection, aggrHt.getKeyType(),aggrHt.getValType()));
+      return std::make_unique<ForIteratorIterationImpl>(std::make_unique<AggrHTIterator>(functionRegistry, collection, aggrHt.getKeyType(), aggrHt.getValType()));
    }
    return std::unique_ptr<mlir::db::CollectionIterationImpl>();
 }

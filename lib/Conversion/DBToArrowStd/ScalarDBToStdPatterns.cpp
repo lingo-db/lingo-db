@@ -536,10 +536,8 @@ class SetFlagLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::SetFlagAdaptor adaptor(operands);
-         auto boolType= mlir::db::BoolType::get(rewriter.getContext());
 
-      Value trueVal = rewriter.create<mlir::db::ConstantOp>(op->getLoc(),boolType, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-      rewriter.create<util::StoreOp>(op->getLoc(), trueVal, adaptor.flag(), Value());
+      rewriter.create<util::StoreOp>(op->getLoc(), adaptor.val(), adaptor.flag(), Value());
       rewriter.eraseOp(op);
       return success();
    }

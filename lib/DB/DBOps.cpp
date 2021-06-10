@@ -318,7 +318,9 @@ static void print(OpAsmPrinter &p, mlir::db::ForOp op) {
    llvm::dbgs()<<op.region().getBlocks().size()<<"\n";
    p << op.getOperationName() << " " << op.getInductionVar() << " in "
      << op.collection() <<" : "<<op.collection().getType()<<" ";
-
+   if(op.until()){
+      p<<"until "<<op.until()<<" ";
+   }
    printInitializationList(p, op.getRegionIterArgs(), op.getIterOperands(),
                            " iter_args");
    if (!op.getIterOperands().empty())
@@ -326,7 +328,7 @@ static void print(OpAsmPrinter &p, mlir::db::ForOp op) {
    p.printRegion(op.region(),
       /*printEntryBlockArgs=*/false,
       /*printBlockTerminators=*/op.hasIterOperands());
-   p.printOptionalAttrDict(op->getAttrs());
+   p.printOptionalAttrDict(op->getAttrs(),{"operand_segment_sizes"});
 }
 //adapted from scf::ForOp
 static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
@@ -352,17 +354,28 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
    SmallVector<OpAsmParser::OperandType, 4> regionArgs, operands;
    SmallVector<Type, 4> argTypes;
    regionArgs.push_back(inductionVariable);
-
+   bool hasUntil=false;
+   if (succeeded(parser.parseOptionalKeyword("until"))){
+      OpAsmParser::OperandType until;
+      if(parser.parseOperand(until)||parser.resolveOperand(until,mlir::db::FlagType::get(parser.getBuilder().getContext()),result.operands)){
+         return failure();
+      }
+      hasUntil=true;
+   }
+   size_t iterArgs=0;
    if (succeeded(parser.parseOptionalKeyword("iter_args"))) {
       // Parse assignment list and results type list.
       if (parser.parseAssignmentList(regionArgs, operands) ||
           parser.parseArrowTypeList(result.types))
          return failure();
       // Resolve input operands.
-      for (auto operandType : llvm::zip(operands, result.types))
+      for (auto operandType : llvm::zip(operands, result.types)) {
          if (parser.resolveOperand(std::get<0>(operandType),
-                                   std::get<1>(operandType), result.operands))
+                                   std::get<1>(operandType), result.operands)) {
             return failure();
+         }
+         iterArgs++;
+      }
    }
    // Induction variable.
    argTypes.push_back(collectionType.getElementType());
@@ -379,6 +392,7 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
       return failure();
 
    mlir::db::ForOp::ensureTerminator(*body, builder, result.location);
+   result.addAttribute("operand_segment_sizes", builder.getI32VectorAttr({1, (hasUntil ? 1 : 0), static_cast<int32_t>(iterArgs)}));
 
    // Parse the optional attribute list.
    if (parser.parseOptionalAttrDict(result.attributes))

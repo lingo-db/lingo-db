@@ -80,7 +80,7 @@ class ForOpLowering : public ConversionPattern {
       : ConversionPattern(typeConverter, mlir::db::ForOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::db::ForOpAdaptor forOpAdaptor(operands);
+      mlir::db::ForOpAdaptor forOpAdaptor(operands,op->getAttrDictionary());
       auto forOp = cast<mlir::db::ForOp>(op);
       auto argumentTypes = forOp.region().getArgumentTypes();
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::db::CollectionType>();
@@ -88,7 +88,7 @@ class ForOpLowering : public ConversionPattern {
       auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), functionRegistry);
 
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      std::vector<Value> results = iterator->implementLoop(forOpAdaptor.initArgs(), *typeConverter, rewriter, parentModule, [&](ValueRange values, OpBuilder builder) {
+      std::vector<Value> results = iterator->implementLoop(forOpAdaptor.initArgs(), forOp.until(),*typeConverter, rewriter, parentModule, [&](ValueRange values, OpBuilder builder) {
          auto yieldOp = cast<mlir::db::YieldOp>(forOp.getBody()->getTerminator());
          rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
          std::vector<Value> results(yieldOp.results().begin(), yieldOp.results().end());

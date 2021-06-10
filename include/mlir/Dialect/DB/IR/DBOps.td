@@ -201,8 +201,8 @@ let assemblyFormat = "attr-dict";
 def DB_SetFlag : DB_Op<"setflag",
 [NoSideEffect]> {
 let summary = "set flag to true";
-let arguments = (ins DB_Flag:$flag);
-let assemblyFormat = "$flag attr-dict";
+let arguments = (ins DB_Flag:$flag,  DB_BoolType:$val);
+let assemblyFormat = "$flag `,` $val attr-dict";
 }
 def DB_GetFlag : DB_Op<"getflag",
 [NoSideEffect]> {
@@ -290,10 +290,10 @@ let regions = (region SizedRegion<1>:$region);
 
 def ForOp : DB_Op<"for",
 [SingleBlockImplicitTerminator<"db::YieldOp">,
-RecursiveSideEffects]> {
+RecursiveSideEffects,AttrSizedOperandSegments]> {
 let summary = "for operation";
 
-let arguments = (ins DBCollection:$collection,Variadic<AnyType>:$initArgs);
+let arguments = (ins DBCollection:$collection,Optional<DB_Flag>:$until,Variadic<AnyType>:$initArgs);
 let results = (outs Variadic<AnyType>:$results);
 let regions = (region SizedRegion<1>:$region);
 
@@ -315,7 +315,7 @@ unsigned getNumRegionIterArgs() {
     return getBody()->getNumArguments() - 1;
 }
 /// Number of operands controlling the loop: lb, ub, step
-unsigned getNumControlOperands() { return 1; }
+unsigned getNumControlOperands() { return until()?2:1; }
 /// Does the operation hold operands for loop-carried values
 bool hasIterOperands() {
     return getOperation()->getNumOperands() > getNumControlOperands();

@@ -8,7 +8,7 @@
 namespace mlir::db {
 class CollectionIterationImpl {
    public:
-   virtual std::vector<Value> implementLoop(mlir::ValueRange iterArgs, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, mlir::ModuleOp parentModule, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) = 0;
+   virtual std::vector<Value> implementLoop(mlir::ValueRange iterArgs, Value flag, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, mlir::ModuleOp parentModule, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) = 0;
    virtual ~CollectionIterationImpl() {
    }
    static std::unique_ptr<mlir::db::CollectionIterationImpl> getImpl(mlir::Type collectionType, mlir::Value collection, mlir::db::codegen::FunctionRegistry& functionRegistry);
