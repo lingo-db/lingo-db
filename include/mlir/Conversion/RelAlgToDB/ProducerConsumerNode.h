@@ -21,6 +21,9 @@ class LoweringContext {
       assert(symbolTable.count(attribute));
       return symbolTable.lookup(attribute);
    }
+   mlir::Value getUnsafeValueForAttribute(const mlir::relalg::RelationalAttribute* attribute) const {
+      return symbolTable.lookup(attribute);
+   }
    void setValueForAttribute(AttributeResolverScope& scope, const mlir::relalg::RelationalAttribute* iu, mlir::Value v) {
       symbolTable.insertIntoScope(&scope, iu, v);
    }
@@ -45,10 +48,10 @@ class ProducerConsumerBuilder : public mlir::OpBuilder {
       // it.
       llvm::iplist<mlir::Operation> translated;
       std::vector<mlir::Operation*> toErase;
-      for (auto getAttrOp : source->getOps<mlir::relalg::GetAttrOp>()) {
-         getAttrOp.replaceAllUsesWith(context.getValueForAttribute(&getAttrOp.attr().getRelationalAttribute()));
-         toErase.push_back(getAttrOp.getOperation());
-      }
+      source->walk([&](mlir::relalg::GetAttrOp getAttrOp) {
+            getAttrOp.replaceAllUsesWith(context.getValueForAttribute(&getAttrOp.attr().getRelationalAttribute()));
+            toErase.push_back(getAttrOp.getOperation());
+      });
       for (auto addAttrOp : source->getOps<mlir::relalg::AddAttrOp>()) {
          context.setValueForAttribute(scope, &addAttrOp.attr().getRelationalAttribute(), addAttrOp.val());
          toErase.push_back(addAttrOp.getOperation());
@@ -106,7 +109,7 @@ class ProducerConsumerNode {
    void setFlag(mlir::Value flag){
       this->flag=flag;
       for (auto& child : children) {
-         child->addRequiredBuilders(requiredBuilders);
+         child->setFlag(flag);
       }
    }
    virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) = 0;
@@ -166,6 +169,7 @@ class ProducerConsumerNodeRegistry {
       if (getRegistry().nodes.count(opName)) {
          return getRegistry().nodes[opName](operation);
       } else {
+         assert("could not create node"&&false);
          return std::unique_ptr<mlir::relalg::ProducerConsumerNode>();
       }
    }

@@ -11,7 +11,7 @@ EXPORT uint64_t _mlir_ciface_get_column_id(runtime::Pointer<std::shared_ptr<arro
       }
       column_id++;
    }
-   return column_id;
+   throw std::runtime_error("column not found: "+columnName->str());
 }
 struct tableChunkIteratorStruct {
    arrow::TableBatchReader reader;

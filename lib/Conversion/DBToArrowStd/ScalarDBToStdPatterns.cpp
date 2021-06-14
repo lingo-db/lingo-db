@@ -281,12 +281,18 @@ class ConstantLowering : public ConversionPattern {
          rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, integerVal));
          return success();
       } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
+         std::string stringRep;
          if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            auto [low, high] = support::parseDecimal(strAttr.getValue().str(), decimalType.getS());
-            std::vector<uint64_t> parts = {low, high};
-            rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, APInt(128, parts)));
-            return success();
+            stringRep=strAttr.getValue().str();
+         }else if(auto intAttr=constantOp.value().dyn_cast_or_null<IntegerAttr>()){
+            stringRep=std::to_string(intAttr.getInt());
+         }else{
+            return failure();
          }
+         auto [low, high] = support::parseDecimal(stringRep, decimalType.getS());
+         std::vector<uint64_t> parts = {low, high};
+         rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, APInt(128, parts)));
+         return success();
       } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
          if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
             if (dateType.getUnit() == db::DateUnitAttr::day) {
@@ -521,8 +527,13 @@ class CreateFlagLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto boolType= mlir::db::BoolType::get(rewriter.getContext());
       Type memrefType = util::GenericMemrefType::get(rewriter.getContext(), boolType, llvm::Optional<int64_t>());
-
-      Value alloca = rewriter.create<mlir::util::AllocaOp>(op->getLoc(), memrefType, Value());
+      Value alloca;
+      {
+         OpBuilder::InsertionGuard insertionGuard(rewriter);
+         auto func = op->getParentOfType<mlir::FuncOp>();
+         rewriter.setInsertionPointToStart(&func.getBody().front());
+         alloca = rewriter.create<mlir::util::AllocaOp>(op->getLoc(), memrefType, Value());
+      }
       Value falseVal = rewriter.create<mlir::db::ConstantOp>(op->getLoc(),boolType, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
       rewriter.create<util::StoreOp>(op->getLoc(), falseVal, alloca, Value());
       rewriter.replaceOp(op,alloca);

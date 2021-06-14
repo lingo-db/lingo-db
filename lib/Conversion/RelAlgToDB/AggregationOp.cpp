@@ -38,7 +38,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
       propagateInfo();
    }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return aggregationOp.getCreatedAttributes(); //todo: fix
+      return aggregationOp.getAvailableAttributes();
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
       std::vector<mlir::Value> keys, values;

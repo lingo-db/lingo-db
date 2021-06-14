@@ -14,6 +14,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
    virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
+      this->requiredAttributes.insert(sortOp.getUsedAttributes());
       propagateInfo();
    }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {

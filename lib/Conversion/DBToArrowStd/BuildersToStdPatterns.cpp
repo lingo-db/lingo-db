@@ -156,8 +156,14 @@ class BuilderMergeLowering : public ConversionPattern {
 
          Type keyMemrefType = util::GenericMemrefType::get(rewriter.getContext(), serializedKey.getType(), llvm::Optional<int64_t>());
          Type valMemrefType = util::GenericMemrefType::get(rewriter.getContext(), serializedVal.getType(), llvm::Optional<int64_t>());
-         Value allocaKey = rewriter.create<mlir::util::AllocaOp>(loc, keyMemrefType, Value());
-         Value allocaVal = rewriter.create<mlir::util::AllocaOp>(loc, valMemrefType, Value());
+         Value allocaKey,allocaVal;
+         {
+            OpBuilder::InsertionGuard insertionGuard(rewriter);
+            auto func=op->getParentOfType<mlir::FuncOp>();
+            rewriter.setInsertionPointToStart(&func.getBody().front());
+            allocaKey = rewriter.create<mlir::util::AllocaOp>(loc, keyMemrefType, Value());
+            allocaVal = rewriter.create<mlir::util::AllocaOp>(loc, valMemrefType, Value());
+         }
          rewriter.create<util::StoreOp>(loc, serializedKey, allocaKey, Value());
          rewriter.create<util::StoreOp>(loc, serializedVal, allocaVal, Value());
          Value plainMemrefKey = rewriter.create<mlir::util::ToMemrefOp>(loc, ptrType, allocaKey);

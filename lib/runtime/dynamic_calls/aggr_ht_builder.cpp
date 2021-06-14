@@ -49,7 +49,7 @@ struct AggrHashtableBuilder {
       return string_to_hex(std::string((char*)bytes,len));
    }
    void insert(uint64_t hash, std::byte* key, std::byte* val) {
-      std::cout<<"insert ("<<hash<<", "<<hex(key,keySize)<<", "<<hex(val,valSize)<<std::endl;
+//      std::cout<<"insert ("<<hash<<", "<<hex(key,keySize)<<", "<<hex(val,valSize)<<std::endl;
       auto range = hashtable.equal_range(hash);
       for (auto i = range.first; i != range.second; ++i) {
          auto [hash, offset] = *i;
