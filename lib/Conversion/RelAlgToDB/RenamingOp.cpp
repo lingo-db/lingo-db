@@ -37,7 +37,7 @@ class RenamingLowering : public mlir::relalg::ProducerConsumerNode {
          auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
          mlir::Attribute from=relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[0];
          auto relationRefAttr = from.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>();
-         auto attrptr=&relationRefAttr.getRelationalAttribute();
+         auto *attrptr=&relationRefAttr.getRelationalAttribute();
          auto val=context.getUnsafeValueForAttribute(attrptr);
          saved.push_back({attrptr,val});
       }
