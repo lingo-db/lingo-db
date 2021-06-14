@@ -485,9 +485,11 @@ static void print(OpAsmPrinter& p, db::SortOp& op) {
    p.printRegion(op.region(), false, true);
 }
 static ParseResult parseCreateAggrHTBuilder(OpAsmParser& parser, OperationState& result) {
-   OpAsmParser::OperandType toSort;
+   OpAsmParser::OperandType initial;
    db::AggrHTBuilderType builderType;
-
+   if(parser.parseOperand(initial)){
+      return failure();
+   }
    OpAsmParser::OperandType left,right;
    Type leftArgType;
    Type rightArgType;
@@ -497,11 +499,12 @@ static ParseResult parseCreateAggrHTBuilder(OpAsmParser& parser, OperationState&
    Region* body = result.addRegion();
    if (parser.parseRegion(*body, {left,right}, {leftArgType,rightArgType})) return failure();
    if(parser.parseArrow()||parser.parseType(builderType)) return failure();
+   parser.resolveOperand(initial,leftArgType,result.operands);
    parser.addTypeToList(builderType,result.types);
    return success();
 }
 static void print(OpAsmPrinter& p, db::CreateAggrHTBuilder& op) {
-   p << op.getOperationName() << " ";
+   p << op.getOperationName() << " "<< op.initial() <<" ";
    p << "(";
    bool first = true;
    for (auto arg : op.region().front().getArguments()) {

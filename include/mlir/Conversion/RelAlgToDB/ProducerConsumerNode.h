@@ -7,6 +7,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
+#include <iostream>
 #include <memory>
 
 namespace mlir {

@@ -282,6 +282,7 @@ let regions = (region SizedRegion<1>:$region);
 def DB_CreateAggrHTBuilder : DB_Op<"create_aggr_ht_builder",
 [NoSideEffect]> {
 let summary = "create aggr hashtable builder";
+let arguments = (ins AnyType: $initial);
 let results = (outs DB_AggrHTBuilder:$builder);
 let regions = (region SizedRegion<1>:$region);
 }

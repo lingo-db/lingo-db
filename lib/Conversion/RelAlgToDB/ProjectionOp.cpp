@@ -82,7 +82,8 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
       }
       keyTupleType = mlir::TupleType::get(builder.getContext(), keyTypes);
       valTupleType = mlir::TupleType::get(builder.getContext(), valTypes);
-      auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(projectionOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType));
+      mlir::Value emptyTuple=builder.create<mlir::util::UndefTupleOp>(projectionOp.getLoc(),mlir::TupleType::get(builder.getContext()));
+      auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(projectionOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType),emptyTuple);
       mlir::Block* aggrBuilderBlock = new mlir::Block;
       aggrBuilder.region().push_back(aggrBuilderBlock);
       aggrBuilderBlock->addArguments({valTupleType, valTupleType});
