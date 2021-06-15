@@ -29,8 +29,8 @@
 //CHECK: decimal(1000200.01)
 //CHECK: int(1)
 //CHECK: int(1)
-//CHECK: float(10000)
-//CHECK: float(10000)
+//CHECK: float(1)
+//CHECK: float(1)
 //CHECK: decimal(1.00)
  module {
  	func @main () {

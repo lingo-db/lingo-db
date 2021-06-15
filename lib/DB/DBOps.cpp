@@ -520,6 +520,28 @@ static void print(OpAsmPrinter& p, db::CreateAggrHTBuilder& op) {
    p<< " -> "<< op.getType();
 }
 
+
+static void print(OpAsmPrinter &p, mlir::db::SelectOp op) {
+   p << op.getOperationName()<<" " << op.condition() <<" : "<<op.condition().getType() << ", "<<op.true_value()<<", "<<op.false_value();
+   p.printOptionalAttrDict(op->getAttrs());
+   p << " : ";
+   p << op.getType();
+}
+
+static ParseResult parseSelectOp(OpAsmParser &parser, OperationState &result) {
+   Type conditionType, resultType;
+   OpAsmParser::OperandType condition, trueVal,falseVal;
+      if (parser.parseOperand(condition)  ||parser.parseColonType(conditionType) || parser.parseComma() || parser.parseOperand(trueVal) ||   parser.parseComma() || parser.parseOperand(falseVal) ||
+       parser.parseOptionalAttrDict(result.attributes) ||
+       parser.parseColonType(resultType))
+      return failure();
+
+
+   result.addTypes(resultType);
+   return parser.resolveOperands({condition,trueVal,falseVal},
+                                 {conditionType, resultType, resultType},
+                                 parser.getNameLoc(), result.operands);
+}
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.cpp.inc"
 #include "mlir/Dialect/DB/IR/DBOpsInterfaces.cpp.inc"

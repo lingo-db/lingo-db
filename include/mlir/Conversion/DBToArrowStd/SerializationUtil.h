@@ -33,17 +33,21 @@ class SerializationUtil {
    }
    static Value deserialize(OpBuilder& builder, Value rawValues, Value element, Type type) {
       if (auto originalTupleType = type.dyn_cast_or_null<TupleType>()) {
-         auto tupleType = element.getType().dyn_cast_or_null<TupleType>();
-         std::vector<Value> serializedValues;
-         std::vector<Type> types;
-         auto unPackOp = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), element);
-         for (size_t i = 0; i < tupleType.size(); i++) {
-            Value currVal = unPackOp.getResult(i);
-            Value serialized = deserialize(builder, rawValues, currVal, originalTupleType.getType(i));
-            serializedValues.push_back(serialized);
-            types.push_back(serialized.getType());
+         if(originalTupleType.getTypes().empty()) {
+            return element;
+         }else{
+            auto tupleType = element.getType().dyn_cast_or_null<TupleType>();
+            std::vector<Value> serializedValues;
+            std::vector<Type> types;
+            auto unPackOp = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), element);
+            for (size_t i = 0; i < tupleType.size(); i++) {
+               Value currVal = unPackOp.getResult(i);
+               Value serialized = deserialize(builder, rawValues, currVal, originalTupleType.getType(i));
+               serializedValues.push_back(serialized);
+               types.push_back(serialized.getType());
+            }
+            return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), types), serializedValues);
          }
-         return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), types), serializedValues);
       } else if (auto stringType = type.dyn_cast_or_null<db::StringType>()) {
          Value pos, len, isNull;
          if (stringType.isNullable()) {

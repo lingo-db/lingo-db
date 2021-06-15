@@ -155,6 +155,28 @@ class ConditionLowering : public ConversionPattern {
       return success();
    }
 };
+class SelectLowering : public ConversionPattern {
+   public:
+   explicit SelectLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::SelectOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      db::SelectOpAdaptor adaptor(operands);
+      db::SelectOp conditionOp = cast<db::SelectOp>(op);
+      auto boolType = conditionOp.condition().getType().dyn_cast_or_null<db::BoolType>();
+      if (boolType && boolType.isNullable()) {
+         auto i1Type = rewriter.getI1Type();
+         auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange({i1Type, i1Type}), adaptor.condition());
+         Value constTrue = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), i1Type, rewriter.getIntegerAttr(i1Type, 1));
+         auto negated = rewriter.create<XOrOp>(rewriter.getUnknownLoc(), unpacked.getResult(0), constTrue); //negate
+         auto anded = rewriter.create<mlir::AndOp>(rewriter.getUnknownLoc(), i1Type, negated, unpacked.getResult(1));
+         rewriter.replaceOpWithNewOp<mlir::SelectOp>(op, anded,adaptor.true_value(),adaptor.false_value());
+      } else {
+         rewriter.replaceOpWithNewOp<mlir::SelectOp>(op, adaptor.condition(), adaptor.true_value(),adaptor.false_value());
+      }
+      return success();
+   }
+};
 
 } // namespace
 void mlir::db::populateControlFlowToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
@@ -162,4 +184,5 @@ void mlir::db::populateControlFlowToStdPatterns(mlir::TypeConverter& typeConvert
    patterns.insert<WhileLowering>(typeConverter, patterns.getContext());
    patterns.insert<ConditionLowering>(typeConverter, patterns.getContext());
    patterns.insert<YieldLowering>(typeConverter, patterns.getContext());
+   patterns.insert<SelectLowering>(typeConverter, patterns.getContext());
 }

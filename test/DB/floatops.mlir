@@ -43,10 +43,10 @@
 		db.dump %5 : !db.float<32>
 
   		%6 = db.div %constm10 : !db.float<32>,%constm10 : !db.float<32>
- 		//CHECK: float(102.01)
+ 		//CHECK: float(1)
  		db.dump %6 : !db.float<32>
 		%7 = db.div %const10 : !db.float<32>,%const10 : !db.float<32>
-		//CHECK: float(110.25)
+		//CHECK: float(1)
 		db.dump %7 : !db.float<32>
 
   		%8 = db.mod %constm10 : !db.float<32>,%const4 : !db.float<32>

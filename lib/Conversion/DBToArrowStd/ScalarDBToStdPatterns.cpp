@@ -320,6 +320,12 @@ class ConstantLowering : public ConversionPattern {
          if (auto floatAttr = constantOp.value().dyn_cast_or_null<FloatAttr>()) {
             rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getFloatAttr(stdType, floatAttr.getValueAsDouble()));
             return success();
+         }else if (auto intAttr = constantOp.value().dyn_cast_or_null<IntegerAttr>()) {
+            rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getFloatAttr(stdType, intAttr.getInt()));
+            return success();
+         }else if (auto stringAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
+            rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getFloatAttr(stdType, std::stod(stringAttr.getValue().str())));
+            return success();
          }
       } else if (type.isa<mlir::db::StringType>()) {
          if (auto stringAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
@@ -655,7 +661,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::db::FloatType, mlir::AddFOp>>(typeConverter, patterns.getContext());
    patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::FloatType, mlir::SubFOp>>(typeConverter, patterns.getContext());
    patterns.insert<BinOpLowering<mlir::db::MulOp, mlir::db::FloatType, mlir::MulFOp>>(typeConverter, patterns.getContext());
-   patterns.insert<BinOpLowering<mlir::db::DivOp, mlir::db::FloatType, mlir::MulFOp>>(typeConverter, patterns.getContext());
+   patterns.insert<BinOpLowering<mlir::db::DivOp, mlir::db::FloatType, mlir::DivFOp>>(typeConverter, patterns.getContext());
    patterns.insert<BinOpLowering<mlir::db::ModOp, mlir::db::FloatType, mlir::RemFOp>>(typeConverter, patterns.getContext());
 
    patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::db::DecimalType, mlir::AddIOp>>(typeConverter, patterns.getContext());

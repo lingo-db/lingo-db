@@ -540,6 +540,30 @@ let assemblyFormat =
 [{ `(` $condition `:` type($condition) `)` attr-dict ($args^ `:` type($args))? }];
 }
 
+def SelectOp : DB_Op<"select", [NoSideEffect,
+        AllTypesMatch<["true_value", "false_value", "result"]>] #
+ElementwiseMappable.traits> {
+
+
+let arguments = (ins DB_BoolType:$condition,
+AnyType:$true_value,
+AnyType:$false_value);
+let results = (outs AnyType:$result);
+
+let builders = [
+OpBuilder<(ins "Value":$condition, "Value":$trueValue,
+"Value":$falseValue), [{
+$_state.addOperands({condition, trueValue, falseValue});
+$_state.addTypes(trueValue.getType());
+}]>];
+
+let extraClassDeclaration = [{
+Value getCondition() { return condition(); }
+Value getTrueValue() { return true_value(); }
+Value getFalseValue() { return false_value(); }
+}];
+
+}
 def WhileOp : DB_Op<"while",
 [RecursiveSideEffects]> {
 let summary = "a generic 'while' loop";
