@@ -79,19 +79,8 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
                auto pushDownRight = right.getFreeAttributes().intersects(availableD);
                bool renameRight = true;
                if (!mlir::isa<InnerJoinOp>(join.getOperation()) && !mlir::isa<FullOuterJoinOp>(join.getOperation())) {
-                  JoinDirection joinDirection = symbolizeJoinDirection(join->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt()).getValue();
-                  switch (joinDirection) {
-                     case JoinDirection::left:
-                        if (pushDownRight) {
-                           pushDownLeft = true;
-                        }
-                        break;
-                     case JoinDirection::right:
-                        if (pushDownLeft) {
-                           pushDownRight = true;
-                           renameRight = false;
-                        }
-                        break;
+                  if (pushDownRight) {
+                     pushDownLeft = true;
                   }
                } else if (mlir::isa<FullOuterJoinOp>(join.getOperation())) {
                   if (pushDownLeft || pushDownRight) {

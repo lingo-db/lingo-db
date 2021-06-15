@@ -104,16 +104,6 @@ def RelAlg_AggrFunc : I64EnumAttr<
 let cppNamespace = "::mlir::relalg";
 }
 
-def RelAlg_JoinDirection_Left  : I64EnumAttrCase<"left", 0>;
-def RelAlg_JoinDirection_Right  : I64EnumAttrCase<"right", 1>;
-
-
-def RelAlg_JoinDirection : I64EnumAttr<
-        "JoinDirection", "",
-        [RelAlg_JoinDirection_Left,RelAlg_JoinDirection_Right]> {
-let cppNamespace = "::mlir::relalg";
-}
-
 def RelAlg_SetSemantic_Distinct  : I64EnumAttrCase<"distinct", 0>;
 def RelAlg_SetSemantic_All : I64EnumAttrCase<"all", 1>;
 
@@ -219,7 +209,7 @@ let regions = (region SizedRegion<1>:$predicate);
 
 def SemiJoinOp : RelAlg_Op<"semijoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "semi join operation";
-let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 
@@ -236,7 +226,7 @@ Attributes getAvailableAttributes();
 }
 def AntiSemiJoinOp : RelAlg_Op<"antisemijoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "antisemi join operation";
-let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 let extraClassDeclaration = [{
@@ -252,7 +242,7 @@ return printNonCommutativeJoin(this->getOperation(), p);
 }
 def OuterJoinOp : RelAlg_Op<"outerjoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "outer join operation";
-let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 let parser = [{
@@ -272,7 +262,7 @@ let regions = (region SizedRegion<1>:$predicate);
 }
 def SingleJoinOp : RelAlg_Op<"singlejoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "single join operation";
-let arguments = (ins RelAlg_JoinDirection:$join_direction,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 let parser = [{
@@ -285,7 +275,7 @@ return printNonCommutativeJoin(this->getOperation(), p);
 }
 def MarkJoinOp : RelAlg_Op<"markjoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "mark join operation";
-let arguments = (ins RelAlg_JoinDirection:$join_direction,SymbolNameAttr:$sym_name,RelationalAttributeDefAttr:$markattr,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let arguments = (ins SymbolNameAttr:$sym_name,RelationalAttributeDefAttr:$markattr,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
 let extraClassDeclaration = [{

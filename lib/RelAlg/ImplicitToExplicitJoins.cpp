@@ -35,14 +35,13 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
       //get attribute f relation to search in
       OpBuilder builder(surroundingOperator);
       auto relType = mlir::relalg::TupleStreamType::get(&getContext());
-      auto leftDir = mlir::relalg::JoinDirection::left;
       auto loc = builder.getUnknownLoc();
       if (directSelection) {
          PredicateOperator semijoin;
          if (negated) {
-            semijoin = builder.create<relalg::AntiSemiJoinOp>(loc, relType, leftDir, treeVal, relOperator.asRelation());
+            semijoin = builder.create<relalg::AntiSemiJoinOp>(loc, relType, treeVal, relOperator.asRelation());
          } else {
-            semijoin = builder.create<relalg::SemiJoinOp>(loc, relType, leftDir, treeVal, relOperator.asRelation());
+            semijoin = builder.create<relalg::SemiJoinOp>(loc, relType, treeVal, relOperator.asRelation());
          }
          semijoin.initPredicate();
          apply(semijoin);
@@ -56,7 +55,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
          relalg::RelationalAttributeDefAttr markAttrDef = attributeManager.createDef(attributeName);
          auto& ra = markAttrDef.getRelationalAttribute();
          ra.type = mlir::db::BoolType::get(&getContext());
-         PredicateOperator markJoin = builder.create<relalg::MarkJoinOp>(loc, relType, leftDir, scopeName, markAttrDef, treeVal, relOperator.asRelation());
+         PredicateOperator markJoin = builder.create<relalg::MarkJoinOp>(loc, relType, scopeName, markAttrDef, treeVal, relOperator.asRelation());
          markJoin.initPredicate();
          apply(markJoin);
          attributeManager.setCurrentScope(scopeName);
@@ -80,7 +79,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
          Value treeVal = surroundingOperator->getOperand(0);
          if (auto getscalarop = mlir::dyn_cast_or_null<mlir::relalg::GetScalarOp>(op)) {
             OpBuilder builder(surroundingOperator);
-            auto singleJoin = builder.create<relalg::SingleJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), mlir::relalg::JoinDirection::left, treeVal, getscalarop.rel());
+            auto singleJoin = builder.create<relalg::SingleJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), treeVal, getscalarop.rel());
             singleJoin.initPredicate();
             builder.setInsertionPoint(getscalarop);
             Operation* replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), getscalarop.attr().getRelationalAttribute().type, getscalarop.attr(), surroundingOperator.getLambdaRegion().getArgument(0));

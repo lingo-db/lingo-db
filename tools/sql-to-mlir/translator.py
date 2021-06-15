@@ -140,8 +140,15 @@ class Translator:
                     join_table_desc = ensure_value_dict(from_value[key])
                     var = self.addJoinTable(codegen, join_table_desc, resolver,all_from_attributes)
                     outer = "outer" in key
+                    left=tree_var
+                    right=var
                     jointype = key.split(" ")[0]
-                    tree_var, tuple = codegen.startJoin(outer, jointype, tree_var, var)
+                    if jointype == "left":
+                        jointype=""
+                    elif jointype == "right":
+                        jointype=""
+                        left,right=right,left
+                    tree_var, tuple = codegen.startJoin(outer, jointype, left , right)
                     stacked_resolver.push(tuple, resolver)
                     sel_res = self.translateExpression(from_value["on"], codegen, stacked_resolver)
                     stacked_resolver.pop()

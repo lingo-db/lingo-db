@@ -13,31 +13,6 @@ using namespace mlir;
 mlir::relalg::RelationalAttributeManager& getRelationalAttributeManager(::mlir::OpAsmParser& parser) {
    return parser.getBuilder().getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
 }
-::mlir::ParseResult parseJoinDirection(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
-   ::mlir::IntegerAttr typeAttr;
-
-   ::llvm::StringRef attrStr;
-   ::mlir::NamedAttrList attrStorage;
-   auto loc = parser.getCurrentLocation();
-   if (parser.parseOptionalKeyword(&attrStr, {"left", "right"})) {
-         return parser.emitError(loc, "expected keyword containing one of the following enum values for attribute 'type' [left, right]");
-   }
-   if (!attrStr.empty()) {
-      auto attrOptional = ::mlir::relalg::symbolizeJoinDirection(attrStr);
-      if (!attrOptional)
-         return parser.emitError(loc, "invalid ")
-            << "type attribute specification: \"" << attrStr << '"';
-      ;
-
-      typeAttr = parser.getBuilder().getI64IntegerAttr(static_cast<int64_t>(attrOptional.getValue()));
-      result.addAttribute("join_direction", typeAttr);
-   }
-   return success();
-}
-void printJoinDirection(OpAsmPrinter& p, mlir::relalg::JoinDirection semantic) {
-   std::string sem(mlir::relalg::stringifyJoinDirection(semantic));
-   p << sem;
-}
 ::mlir::ParseResult parseAggrFn(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    ::mlir::IntegerAttr typeAttr;
 
@@ -605,8 +580,7 @@ static void print(OpAsmPrinter& p, relalg::FullOuterJoinOp& op) {
 // NonCommutativeJoins: OuterJoin,SemiJoin,AntiSemiJoin,SingleJoin
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseNonCommutativeJoin(OpAsmParser& parser, OperationState& result) {
-   if (parseJoinDirection(parser, result) ||
-       parseRelationalInputs(parser, result, 2) ||
+   if (       parseRelationalInputs(parser, result, 2) ||
        parseCustomRegion(parser, result) ||
        addRelationOutput(parser, result)) {
       return failure();
@@ -615,7 +589,6 @@ static ParseResult parseNonCommutativeJoin(OpAsmParser& parser, OperationState& 
 }
 static void printNonCommutativeJoin(Operation* op, OpAsmPrinter& p) {
    p << op->getName() << " ";
-   printJoinDirection(p, mlir::relalg::symbolizeJoinDirection(op->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt()).getValue());
    p << " " << op->getOperand(0) << ", " << op->getOperand(1)<<" ";
    printCustomRegion(p, op->getRegion(0));
 }
@@ -624,8 +597,6 @@ static void printNonCommutativeJoin(Operation* op, OpAsmPrinter& p) {
 // MarkJoinOp
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseMarkJoinOp(OpAsmParser& parser, OperationState& result) {
-   if (parseJoinDirection(parser, result))
-      return failure();
 
    StringAttr nameAttr;
    if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
@@ -642,7 +613,6 @@ static ParseResult parseMarkJoinOp(OpAsmParser& parser, OperationState& result) 
 }
 static void print(OpAsmPrinter& p, relalg::MarkJoinOp& op) {
    p << op.getOperationName() << " ";
-   printJoinDirection(p, op.join_direction());
    p << " ";
    p.printSymbolName(op.sym_name());
    p << " ";

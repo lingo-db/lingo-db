@@ -51,19 +51,7 @@ class QueryGraphBuilder {
       nodeForOp[op.getOperation()] = n.id;
       return n.id;
    }
-   static std::pair<Operator, Operator> normalizeChildren(Operator op) {
-      size_t left = 0;
-      size_t right = 1;
-      if (op->hasAttr("join_direction")) {
-         mlir::relalg::JoinDirection joinDirection = mlir::relalg::symbolizeJoinDirection(
-                                                        op->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt())
-                                                        .getValue();
-         if (joinDirection == mlir::relalg::JoinDirection::right) {
-            std::swap(left, right);
-         }
-      }
-      return {op.getChildren()[left], op.getChildren()[right]};
-   }
+
    static bool intersects(const attribute_set& a, const attribute_set& b) {
       return llvm::any_of(a, [&](auto x) { return b.contains(x); });
    }
@@ -99,9 +87,10 @@ class QueryGraphBuilder {
          return true;
       }
       auto tes = calcTES(curr, resolver);
-      auto [b_left, b_right] = normalizeChildren(curr);
-      NodeSet leftTes = calcT(b_left, resolver) & tes;
-      NodeSet rightTes = calcT(b_right, resolver) & tes;
+      auto bLeft = curr.getChildren()[0];
+      auto bRight = curr.getChildren()[1];
+      NodeSet leftTes = calcT(bLeft, resolver) & tes;
+      NodeSet rightTes = calcT(bRight, resolver) & tes;
       if (leftTes.intersects(ses) && rightTes.intersects(ses)) {
          return false;
       }

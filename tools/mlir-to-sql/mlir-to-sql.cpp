@@ -306,7 +306,7 @@ class ToSQL {
                      }
                   })
                   .Case<mlir::relalg::OuterJoinOp>([&](mlir::relalg::OuterJoinOp op) {
-                     output << " select * from " << operatorName(op.left().getDefiningOp()) << " " << std::string(mlir::relalg::stringifyJoinDirection(op.join_direction())) << " outer join " << operatorName(op.right().getDefiningOp()) << " ";
+                     output << " select * from " << operatorName(op.left().getDefiningOp()) << " left outer join " << operatorName(op.right().getDefiningOp()) << " ";
                      auto returnop = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(op.predicate().front().getTerminator());
                      if (returnop->getNumOperands() > 0) {
                         output << " on " << resolveVal(returnop.getOperand(0));

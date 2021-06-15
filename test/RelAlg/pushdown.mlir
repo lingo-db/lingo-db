@@ -91,11 +91,11 @@ module @querymodule  {
     //CHECK: %0 = relalg.const_relation @constrel
     //CHECK: %1 = relalg.const_relation @constrel2
     //CHECK: %2 = relalg.selection %0
-    //CHECK: %3 = relalg.outerjoin left %2, %1
+    //CHECK: %3 = relalg.outerjoin %2, %1
     //CHECK: %4 = relalg.selection %3
   	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>}),@attr2({type = !db.int<32>})] values: [[1, 1], [2, 2]]
   	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>}),@attr2({type = !db.int<32>})] values: [[1, 1], [2, 2]]
-  	%2 = relalg.outerjoin left %0, %1 (%arg0: !relalg.tuple) {
+  	%2 = relalg.outerjoin %0, %1 (%arg0: !relalg.tuple) {
   		relalg.return
   	}
   	%3 = relalg.selection %2 (%arg0: !relalg.tuple) {
@@ -113,34 +113,7 @@ module @querymodule  {
     return
   }
 }
-// -----
-module @querymodule  {
-  func @query() {
-    //CHECK: %0 = relalg.const_relation @constrel
-    //CHECK: %1 = relalg.const_relation @constrel2
-    //CHECK: %2 = relalg.selection %1
-    //CHECK: %3 = relalg.outerjoin right %0, %2
-    //CHECK: %4 = relalg.selection %3
-  	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>}),@attr2({type = !db.int<32>})] values: [[1, 1], [2, 2]]
-  	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>}),@attr2({type = !db.int<32>})] values: [[1, 1], [2, 2]]
-  	%2 = relalg.outerjoin right %0, %1 (%arg0: !relalg.tuple) {
-  		relalg.return
-  	}
-  	%3 = relalg.selection %2 (%arg0: !relalg.tuple) {
-		%4 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
-		%5 = relalg.getattr %arg0 @constrel::@attr2 : !db.int<32>
-		%6 = db.compare eq %4 : !db.int<32>, %5 : !db.int<32>
-        relalg.return %6 : !db.bool
-  	}
-	%4 = relalg.selection %3 (%arg0: !relalg.tuple) {
-		%4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
-		%5 = relalg.getattr %arg0 @constrel2::@attr2 : !db.int<32>
-		%6 = db.compare eq %4 : !db.int<32>, %5 : !db.int<32>
-		relalg.return %6 : !db.bool
-	}
-    return
-  }
-}
+
 // -----
 module @querymodule  {
   func @query() {

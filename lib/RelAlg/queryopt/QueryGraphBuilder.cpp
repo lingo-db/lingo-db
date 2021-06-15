@@ -35,7 +35,7 @@ static bool isConnected(llvm::EquivalenceClasses<size_t>& connections, NodeSet& 
    }
    return connected;
 }
-size_t countCreatingOperators(Operator op, llvm::SmallPtrSet<mlir::Operation*,12>& alreadyOptimized) {
+size_t countCreatingOperators(Operator op, llvm::SmallPtrSet<mlir::Operation*, 12>& alreadyOptimized) {
    size_t res = 0;
    auto children = op.getChildren();
    auto used = op.getUsedAttributes();
@@ -219,15 +219,18 @@ NodeSet QueryGraphBuilder::calcTES(Operator op, NodeResolver& resolver) {
       NodeSet tes = calcSES(op, resolver);
       auto children = op.getChildren();
       if (auto b = mlir::dyn_cast_or_null<BinaryOperator>(op.getOperation())) {
-         auto [b_left, b_right] = normalizeChildren(op);
-         for (auto subOp : b_left.getAllSubOperators()) {
+         auto bLeft = mlir::cast<Operator>(b.getOperation()).getChildren()[0];
+         auto bRight = mlir::cast<Operator>(b.getOperation()).getChildren()[1];
+
+         for (auto subOp : bLeft.getAllSubOperators()) {
             if (auto a = mlir::dyn_cast_or_null<BinaryOperator>(subOp.getOperation())) {
-               auto [a_left, a_right] = normalizeChildren(subOp);
+               auto aLeft = subOp.getChildren()[0];
+               auto aRight = subOp.getChildren()[1];
                if (!a.isAssoc(b)) {
-                  tes |= calcT(a_left, resolver);
+                  tes |= calcT(aLeft, resolver);
                }
                if (!a.isLAsscom(b)) {
-                  tes |= calcT(a_right, resolver);
+                  tes |= calcT(aRight, resolver);
                }
             } else {
                if (mlir::isa<mlir::relalg::AggregationOp>(subOp.getOperation())) {
@@ -235,14 +238,15 @@ NodeSet QueryGraphBuilder::calcTES(Operator op, NodeResolver& resolver) {
                }
             }
          }
-         for (auto subOp : b_right.getAllSubOperators()) {
+         for (auto subOp : bRight.getAllSubOperators()) {
             if (auto a = mlir::dyn_cast_or_null<BinaryOperator>(subOp.getOperation())) {
-               auto [a_left, a_right] = normalizeChildren(subOp);
+               auto aLeft = subOp.getChildren()[0];
+               auto aRight = subOp.getChildren()[1];
                if (!b.isAssoc(a)) {
-                  tes |= calcT(a_right, resolver);
+                  tes |= calcT(aRight, resolver);
                }
                if (!b.isRAsscom(a)) {
-                  tes |= calcT(a_left, resolver);
+                  tes |= calcT(aLeft, resolver);
                }
             } else {
                if (mlir::isa<mlir::relalg::AggregationOp>(subOp.getOperation())) {
@@ -276,10 +280,10 @@ NodeSet QueryGraphBuilder::calcSES(Operator op, NodeResolver& resolver) const {
    return res;
 }
 
-QueryGraphBuilder::QueryGraphBuilder(Operator root, llvm::SmallPtrSet<mlir::Operation*,12>& alreadyOptimized) : root(root),
-                                                                                                              alreadyOptimized(alreadyOptimized),
-                                                                                                              numNodes(countCreatingOperators(root, alreadyOptimized)),
-                                                                                                              qg(numNodes),
-                                                                                                              emptyNode(numNodes) {}
+QueryGraphBuilder::QueryGraphBuilder(Operator root, llvm::SmallPtrSet<mlir::Operation*, 12>& alreadyOptimized) : root(root),
+                                                                                                                 alreadyOptimized(alreadyOptimized),
+                                                                                                                 numNodes(countCreatingOperators(root, alreadyOptimized)),
+                                                                                                                 qg(numNodes),
+                                                                                                                 emptyNode(numNodes) {}
 
 } // namespace mlir::relalg

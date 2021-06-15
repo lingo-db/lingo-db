@@ -18,7 +18,7 @@ module @querymodule{
             name => @name({type=!db.string}),
             semester => @semester({type=!db.int<64>})
         }
-        %3 = relalg.semijoin left %2, %1 (%6: !relalg.tuple) {
+        %3 = relalg.semijoin %2, %1 (%6: !relalg.tuple) {
                                                  %8 = relalg.getattr %6 @hoeren::@matrnr : !db.int<64>
                                                  %9 = relalg.getattr %6 @studenten::@matrnr : !db.int<64>
                                                  %10 = db.compare eq %8 : !db.int<64>,%9 : !db.int<64>

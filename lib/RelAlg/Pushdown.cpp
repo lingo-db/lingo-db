@@ -29,17 +29,6 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                        Operator asOp = mlir::dyn_cast_or_null<Operator>(binop.getOperation());
                        auto left = mlir::dyn_cast_or_null<Operator>(binop.leftChild());
                        auto right = mlir::dyn_cast_or_null<Operator>(binop.rightChild());
-
-                       bool swapped = false;
-                       if (mlir::relalg::detail::isJoin(binop.getOperation())) {
-                          if (!mlir::isa<mlir::relalg::InnerJoinOp>(binop.getOperation()) && !mlir::isa<mlir::relalg::FullOuterJoinOp>(binop.getOperation())) {
-                             mlir::relalg::JoinDirection joinDirection = mlir::relalg::symbolizeJoinDirection(binop->getAttr("join_direction").dyn_cast_or_null<mlir::IntegerAttr>().getInt()).getValue();
-                             if (joinDirection != mlir::relalg::JoinDirection::left) {
-                                std::swap(left, right);
-                                swapped = true;
-                             }
-                          }
-                       }
                        auto availableLeft = left.getAvailableAttributes();
                        auto availableRight = right.getAvailableAttributes();
                        auto pushableLeft = topushUnary.lPushable(binop) && usedAttributes.isSubsetOf(availableLeft);
@@ -53,9 +42,6 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
                        } else if (pushableRight) {
                           topush->moveBefore(asOp.getOperation());
                           right = pushdown(topush, right);
-                       }
-                       if (swapped) {
-                          std::swap(left, right);
                        }
                        asOp.setChildren({left, right});
                        return asOp;
