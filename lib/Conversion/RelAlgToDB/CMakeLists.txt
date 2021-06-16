@@ -13,6 +13,7 @@ add_mlir_conversion_library(MLIRRelAlgToDB
         AntiSemiJoinOp.cpp
         RenamingOp.cpp
         ProjectionOp.cpp
+        LimitOp.cpp
         ADDITIONAL_HEADER_DIRS
         ../../../mlir/Conversion/RelAlgToDB
 
