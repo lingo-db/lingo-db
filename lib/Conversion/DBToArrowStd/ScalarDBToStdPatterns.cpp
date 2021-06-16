@@ -196,19 +196,22 @@ class DecimalOpScaledLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto addOp = cast<DBOp>(op);
-      Value left = addOp.left();
-      Value right = addOp.right();
+      db::NullHandler nullHandler(*typeConverter, rewriter);
+      Value left = nullHandler.getValue(addOp.left());
+      Value right = nullHandler.getValue(addOp.right());
       if (left.getType() != right.getType()) {
          return failure();
       }
-      auto type = left.getType();
-      if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
+      auto type = addOp.getType();
+      if (auto decimalType = type.template dyn_cast_or_null<mlir::db::DecimalType>()) {
          auto [low, high] = support::getDecimalScaleMultiplier(decimalType.getS());
          std::vector<uint64_t> parts = {low, high};
-         auto stdType = typeConverter->convertType(type);
+         auto stdType=typeConverter->convertType(decimalType.getBaseType());
          auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), stdType, rewriter.getIntegerAttr(stdType, APInt(128, parts)));
          left = rewriter.create<mlir::MulIOp>(rewriter.getUnknownLoc(), stdType, left, multiplier);
-         rewriter.replaceOpWithNewOp<Op>(op, stdType, left, right);
+         auto replacement=rewriter.create<Op>(op->getLoc(), stdType, left, right);
+         rewriter.replaceOp(op, nullHandler.combineResult(replacement));
+
          return success();
       }
       return failure();
@@ -314,6 +317,10 @@ class ConstantLowering : public ConversionPattern {
       } else if (type.isa<mlir::db::IntervalType>()) {
          if (auto intAttr = constantOp.value().dyn_cast_or_null<IntegerAttr>()) {
             rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, intAttr.getInt()));
+            return success();
+         }
+         if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
+            rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, std::stoi(strAttr.getValue().str())));
             return success();
          }
       } else if (type.isa<mlir::db::FloatType>()) {

@@ -67,6 +67,7 @@ class Translator:
                         return_values.append(return_value)
                     else:
                         default=translateSubExpressions(case)[0]
+                        codegen.toCommonType(default,codegen.getType(then))
                         return_values.append(default)
                 while len(return_values)>1:
                     return_value=return_values.pop()

@@ -146,7 +146,8 @@ class CodeGen:
         return self.addOp(DBType("bool", [], self.is_any_nullable(values)), args)
     def create_db_cmp(self, type,values):
         args=["db.compare ",type," "]
-        self.addValuesWithTypes(args,values)
+        common_type=self.getCommonType(self.getTypesForValues(values))
+        self.addValuesWithTypes(args,self.toCommonTypes(values,common_type))
         return self.addOp(DBType("bool",[],self.is_any_nullable(values)),args)
     def addValuesWithTypes(self,arr,values):
         first=True
@@ -370,7 +371,7 @@ class CodeGen:
                 return DBType(left.name,[str(p),str(s)],nullable)
         if right.name=="string" or left.name=="string":
             return DBType("string",[],nullable)
-        return None
+        return left
     def getTypesForValues(self,values):
         return list(map(lambda x:self.getType(x),values))
     def getCommonType(self,types):

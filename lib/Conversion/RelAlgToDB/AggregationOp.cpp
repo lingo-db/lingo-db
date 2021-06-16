@@ -42,7 +42,12 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
       }else{
          packedKey=builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), keyTupleType, keys);
       }
-      mlir::Value packedVal = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), valTupleType, values);
+      mlir::Value packedVal;
+      if(valTupleType.getTypes().size()==0){
+         packedVal=builder.create<mlir::util::UndefTupleOp>(aggregationOp->getLoc(), valTupleType);
+      }else {
+         packedVal = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), valTupleType, values);
+      }
       mlir::Value packed = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), insertEntryType, mlir::ValueRange({packedKey, packedVal}));
 
       mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(aggregationOp->getLoc(), htBuilder.getType(), htBuilder, packed);
@@ -170,7 +175,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
          }
          if (auto countOp = mlir::dyn_cast_or_null<mlir::relalg::CountRowsOp>(addAttrOp.val().getDefiningOp())) {
             auto* destAttr = &addAttrOp.attr().getRelationalAttribute();
-            valTypes.push_back(counterType);
+            //valTypes.push_back(counterType);
             //mlir::Type resultingType = addAttrOp.attr().getRelationalAttribute().type;
             size_t currDestIdx = aggrTypes.size();
             aggrTypes.push_back(counterType);
@@ -198,7 +203,10 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
       mlir::relalg::ProducerConsumerBuilder builder2(builder.getContext());
       builder2.setInsertionPointToStart(aggrBuilderBlock);
       auto unpackedCurr = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), aggrTypes, aggrBuilderBlock->getArgument(0))->getResults();
-      auto unpackedNew = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), valTypes, aggrBuilderBlock->getArgument(1)).getResults();
+      mlir::ValueRange unpackedNew;
+      if(valTypes.size()>0) {
+         unpackedNew = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), valTypes, aggrBuilderBlock->getArgument(1)).getResults();
+      }
       std::vector<mlir::Value> values;
       for (auto aggrFn : aggregationFunctions) {
          auto vec = aggrFn(unpackedCurr, unpackedNew, builder2);
