@@ -85,6 +85,11 @@ class Attributes {
       }
       return res;
    }
+   static Attributes from(mlir::relalg::RelationalAttributeRefAttr attrRef) {
+      Attributes res;
+      res.insert(&attrRef.getRelationalAttribute());
+      return res;
+   }
 };
 } // namespace mlir::relalg
 #endif // MLIR_DIALECT_RELALG_ATTRIBUTES_H

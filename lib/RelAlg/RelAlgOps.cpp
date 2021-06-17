@@ -558,11 +558,13 @@ static void print(OpAsmPrinter& p, relalg::MaterializeOp& op) {
 static ParseResult parseInnerJoinOp(OpAsmParser& parser, OperationState& result) {
    parseRelationalInputs(parser, result, 2);
    parseCustomRegion(parser, result);
+   parser.parseOptionalAttrDictWithKeyword(result.attributes);
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::InnerJoinOp& op) {
    p << op.getOperationName() << " " << op.left() << ", " << op.right()<<" ";
    printCustomRegion(p, op.getRegion());
+   p.printOptionalAttrDict(op->getAttrs());
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // FullOuterJoinOp
