@@ -86,7 +86,7 @@ class ForOpLowering : public ConversionPattern {
       : ConversionPattern(typeConverter, mlir::db::ForOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::db::ForOpAdaptor forOpAdaptor(operands,op->getAttrDictionary());
+      mlir::db::ForOpAdaptor forOpAdaptor(operands, op->getAttrDictionary());
       auto forOp = cast<mlir::db::ForOp>(op);
       auto argumentTypes = forOp.region().getArgumentTypes();
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::db::CollectionType>();
@@ -94,7 +94,7 @@ class ForOpLowering : public ConversionPattern {
       auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), functionRegistry);
 
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      std::vector<Value> results = iterator->implementLoop(forOpAdaptor.initArgs(), forOp.until(),*typeConverter, rewriter, parentModule, [&](ValueRange values, OpBuilder builder) {
+      std::vector<Value> results = iterator->implementLoop(forOpAdaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, [&](ValueRange values, OpBuilder builder) {
          auto yieldOp = cast<mlir::db::YieldOp>(forOp.getBody()->getTerminator());
          rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
          std::vector<Value> results(yieldOp.results().begin(), yieldOp.results().end());
@@ -128,6 +128,25 @@ class CreateRangeLowering : public ConversionPattern {
       return success();
    }
 };
+class LookupOpLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+   public:
+   explicit LookupOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::Lookup::getOperationName(), 1, context),functionRegistry(functionRegistry) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto loc = rewriter.getUnknownLoc();
+      mlir::db::LookupAdaptor lookupAdaptor(operands);
+
+      Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.getIndexType(), lookupAdaptor.key());
+      Value rawValues=functionRegistry.call(rewriter,db::codegen::FunctionRegistry::FunctionId::JoinHtGetRawData,lookupAdaptor.collection())[0];
+      Value combined = rewriter.create<mlir::util::PackOp>(loc, TypeRange(TupleType::get(getContext(), {rewriter.getIndexType(),lookupAdaptor.collection().getType(),rawValues.getType()})), ValueRange({hashed,lookupAdaptor.collection(),rawValues}));
+
+      rewriter.replaceOp(op, combined);
+
+      return success();
+   }
+};
 } // namespace
 
 void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
@@ -135,67 +154,86 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
 
    patterns.insert<ForOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<CreateRangeLowering>(functionRegistry, typeConverter, patterns.getContext());
+   patterns.insert<LookupOpLowering>(functionRegistry, typeConverter, patterns.getContext());
+
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::AggregationHashtableType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::AggregationHashtableType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
+   });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::JoinHashtableType type, ValueRange valueRange, Location loc) {
+       return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, db::JoinHashtableType type, ValueRange valueRange, Location loc) {
+       return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::VectorType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::VectorType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::GenericIterableType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::GenericIterableType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addConversion([&](mlir::db::AggregationHashtableType aggregationHashtableType) {
+      auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
+      return ptrType;
+   });
+   typeConverter.addConversion([&](mlir::db::JoinHashtableType aggregationHashtableType) {
      auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
      return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::VectorType vectorType) {
-     auto ptrType = MemRefType::get({-1}, IntegerType::get(patterns.getContext(), 8));
-     return TupleType::get(patterns.getContext(), {ptrType, ptrType});
+      auto ptrType = MemRefType::get({-1}, IntegerType::get(patterns.getContext(), 8));
+      return TupleType::get(patterns.getContext(), {ptrType, ptrType});
    });
    typeConverter.addConversion([&](mlir::db::RangeType rangeType) {
-     auto convertedType = typeConverter.convertType(rangeType.getElementType());
-     return TupleType::get(patterns.getContext(), {convertedType, convertedType, convertedType});
+      auto convertedType = typeConverter.convertType(rangeType.getElementType());
+      return TupleType::get(patterns.getContext(), {convertedType, convertedType, convertedType});
    });
    typeConverter.addConversion([&](mlir::db::GenericIterableType genericIterableType) {
-     Type elementType = genericIterableType.getElementType();
-     Type nestedElementType = elementType;
-     if (auto nested = elementType.dyn_cast_or_null<mlir::db::GenericIterableType>()) {
-        nestedElementType = nested.getElementType();
-     }
-     if (genericIterableType.getIteratorName() == "table_chunk_iterator") {
-        std::vector<Type> types;
-        auto i8Type = IntegerType::get(patterns.getContext(), 8);
-        auto ptrType = MemRefType::get({}, i8Type);
-        auto indexType = IndexType::get(patterns.getContext());
-        types.push_back(ptrType);
-        if (auto tupleT = nestedElementType.dyn_cast_or_null<TupleType>()) {
-           for (size_t i = 0; i < tupleT.getTypes().size(); i++) {
-              types.push_back(indexType);
-           }
-        }
-        return (Type) TupleType::get(patterns.getContext(), types);
-     } else if (genericIterableType.getIteratorName() == "table_row_iterator") {
-        std::vector<Type> types;
-        auto i8Type = IntegerType::get(patterns.getContext(), 8);
-        auto ptrType = MemRefType::get({}, i8Type);
-        auto indexType = IndexType::get(patterns.getContext());
-        types.push_back(ptrType);
-        if (auto tupleT = nestedElementType.dyn_cast_or_null<TupleType>()) {
-           for (size_t i = 0; i < tupleT.getTypes().size(); i++) {
-              types.push_back(indexType);
-           }
-        }
-        return (Type) TupleType::get(patterns.getContext(), types);
-     }
-     return Type();
+      Type elementType = genericIterableType.getElementType();
+      Type nestedElementType = elementType;
+      if (auto nested = elementType.dyn_cast_or_null<mlir::db::GenericIterableType>()) {
+         nestedElementType = nested.getElementType();
+      }
+      if (genericIterableType.getIteratorName() == "table_chunk_iterator") {
+         std::vector<Type> types;
+         auto i8Type = IntegerType::get(patterns.getContext(), 8);
+         auto ptrType = MemRefType::get({}, i8Type);
+         auto indexType = IndexType::get(patterns.getContext());
+         types.push_back(ptrType);
+         if (auto tupleT = nestedElementType.dyn_cast_or_null<TupleType>()) {
+            for (size_t i = 0; i < tupleT.getTypes().size(); i++) {
+               types.push_back(indexType);
+            }
+         }
+         return (Type) TupleType::get(patterns.getContext(), types);
+      } else if (genericIterableType.getIteratorName() == "table_row_iterator") {
+         std::vector<Type> types;
+         auto i8Type = IntegerType::get(patterns.getContext(), 8);
+         auto ptrType = MemRefType::get({}, i8Type);
+         auto indexType = IndexType::get(patterns.getContext());
+         types.push_back(ptrType);
+         if (auto tupleT = nestedElementType.dyn_cast_or_null<TupleType>()) {
+            for (size_t i = 0; i < tupleT.getTypes().size(); i++) {
+               types.push_back(indexType);
+            }
+         }
+         return (Type) TupleType::get(patterns.getContext(), types);
+      } else if (genericIterableType.getIteratorName() == "join_ht_iterator") {
+         auto indexType = IndexType::get(patterns.getContext());
+         auto i8Type = IntegerType::get(patterns.getContext(), 8);
+         auto ptrType = MemRefType::get({}, i8Type);
+         auto rawDataType = MemRefType::get({-1}, i8Type);
+
+         return (Type) TupleType::get(patterns.getContext(), {indexType,ptrType,rawDataType});
+      }
+      return Type();
    });
 }

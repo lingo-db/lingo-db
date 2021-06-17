@@ -206,7 +206,7 @@ class ToGenericMemrefOpLowering : public ConversionPattern {
       if (genericMemrefType.getSize() && genericMemrefType.getSize().getValue() == -1) {
          Value stride = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), arrType, operands[0], rewriter.getI64ArrayAttr(4));
          Value size = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), idxType, operands[0], rewriter.getI64ArrayAttr({3, 0}));
-         Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), idxType, elemType);
+         Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), idxType, elemType);//Todo: needs fixing
          size = rewriter.create<LLVM::UDivOp>(rewriter.getUnknownLoc(), idxType, size, elementSize);
          tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), targetType, tpl, size, rewriter.getI64ArrayAttr({3, 0}));
          tpl = rewriter.create<LLVM::InsertValueOp>(rewriter.getUnknownLoc(), targetType, tpl, stride, rewriter.getI64ArrayAttr({4}));

@@ -475,6 +475,26 @@ void mlir::db::VectorBuilderType::print(mlir::DialectAsmPrinter& p) const {
 void mlir::db::AggrHTBuilderType::print(mlir::DialectAsmPrinter& p) const {
    p << getMnemonic() << "<" << getKeyType()<<","<<getValType() << ">";
 }
+::mlir::Type mlir::db::JoinHTBuilderType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
+   TupleType keyType, valType;
+   if (parser.parseLess() || parser.parseType(keyType)||parser.parseComma()||parser.parseType(valType) || parser.parseGreater()) {
+      return mlir::Type();
+   }
+   return mlir::db::JoinHTBuilderType::get(parser.getBuilder().getContext(), keyType,valType);
+}
+void mlir::db::JoinHTBuilderType::print(mlir::DialectAsmPrinter& p) const {
+   p << getMnemonic() << "<" << getKeyType()<<","<<getValType() << ">";
+}
+::mlir::Type mlir::db::JoinHashtableType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
+   TupleType keyType, valType;
+   if (parser.parseLess() || parser.parseType(keyType)||parser.parseComma()||parser.parseType(valType) || parser.parseGreater()) {
+      return mlir::Type();
+   }
+   return mlir::db::JoinHashtableType::get(parser.getBuilder().getContext(), keyType,valType);
+}
+void mlir::db::JoinHashtableType::print(mlir::DialectAsmPrinter& p) const {
+   p << getMnemonic() << "<" << getKeyType()<<","<<getValType() << ">";
+}
 ::mlir::Type mlir::db::AggregationHashtableType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
    TupleType keyType, valType;
    if (parser.parseLess() || parser.parseType(keyType)||parser.parseComma()||parser.parseType(valType) || parser.parseGreater()) {

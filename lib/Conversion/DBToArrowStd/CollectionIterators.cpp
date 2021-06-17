@@ -88,6 +88,62 @@ class TableIterator : public WhileIterator {
    }
 };
 
+class JoinHtIterator : public WhileIterator {
+   Value iteratorInfo;
+   Type elementType;
+   Type serializedElementType;
+   Value rawValues;
+   db::codegen::FunctionRegistry& functionRegistry;
+
+   public:
+   JoinHtIterator(Value tableInfo, Type elementType, db::codegen::FunctionRegistry& functionRegistry) : iteratorInfo(tableInfo),elementType(elementType), functionRegistry(functionRegistry) {
+   }
+   virtual void init(OpBuilder& builder) override {
+      serializedElementType = mlir::db::codegen::SerializationUtil::serializedType(builder, *typeConverter, elementType);
+
+   }
+   virtual Type iteratorType(OpBuilder& builder) override {
+
+      auto i8Type = IntegerType::get(builder.getContext(), 8);
+
+      auto ptrType = MemRefType::get({}, i8Type);
+
+      return ptrType;
+   }
+
+   virtual Value iterator(OpBuilder& builder) override {
+      auto i8Type = IntegerType::get(builder.getContext(), 8);
+
+      auto ptrType = MemRefType::get({}, i8Type);
+      auto rawDataType = MemRefType::get({-1}, i8Type);
+
+      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({builder.getIndexType(),ptrType,rawDataType}), iteratorInfo);
+      rawValues=unpacked.getResult(2);
+      unpacked->dump();
+      return functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::JoinHtIteratorInit, mlir::ValueRange({unpacked.getResult(1),unpacked.getResult(0)}))[0];
+   }
+   virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
+      return functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::JoinHtIteratorNext, iterator)[0];
+   }
+   virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
+      Type typedPtrType = util::GenericMemrefType::get(builder.getContext(), serializedElementType, llvm::Optional<int64_t>());
+      Value currElementPtr = functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::JoinHtIteratorCurr, iterator)[0];
+      mlir::Value data = builder.create<util::ToGenericMemrefOp>(builder.getUnknownLoc(), typedPtrType, currElementPtr);
+
+      Value loaded = builder.create<util::LoadOp>(builder.getUnknownLoc(), serializedElementType, data, Value());
+      Value deserialized = mlir::db::codegen::SerializationUtil::deserialize(builder, rawValues, loaded, elementType);
+      return deserialized;
+   }
+   virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
+      Value rawValue = functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::JoinHtIteratorValid, iterator)[0];
+      Value dbValue = builder.create<mlir::db::TypeCastOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), rawValue);
+      return dbValue;
+   }
+   virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
+      functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::JoinHtIteratorFree, iterator);
+   }
+};
+
 class RangeIterator : public WhileIterator {
    Value rangeTuple;
    Value upper;
@@ -503,6 +559,8 @@ std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIteration
          return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<TableIterator>(collection, functionRegistry));
       } else if (generic.getIteratorName() == "table_row_iterator") {
          return std::make_unique<ForIteratorIterationImpl>(std::make_unique<TableRowIterator>(collection, generic.getElementType(), functionRegistry));
+      } else if (generic.getIteratorName() == "join_ht_iterator") {
+         return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtIterator>(collection, generic.getElementType(), functionRegistry));
       }
    } else if (auto range = collectionType.dyn_cast_or_null<mlir::db::RangeType>()) {
       return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<RangeIterator>(range.getElementType().cast<DBType>(), collection));

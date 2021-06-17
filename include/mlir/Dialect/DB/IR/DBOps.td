@@ -80,8 +80,16 @@ def DB_AggregationHashtable : DB_Collection<"AggregationHashtable","aggr_ht"> {
 let summary = "aggregation hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
 }
+def DB_JoinHashtable : DB_Collection<"JoinHashtable","join_ht"> {
+let summary = "join hashtable";
+let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
+}
 def DB_AggrHTBuilder : DB_Builder<"AggrHTBuilder","aggr_ht_builder"> {
 let summary = "builder for aggregation hashtable";
+let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
+}
+def DB_JoinHTBuilder : DB_Builder<"JoinHTBuilder","join_ht_builder"> {
+let summary = "builder for join hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
 }
 def DB_BoolType : DB_Type<"Bool","bool"> {
@@ -262,6 +270,13 @@ let arguments = (ins DB_Table:$table,ArrayAttr:$columns);
 let results = (outs DB_GenericIterable:$iterable);
 let assemblyFormat = "$table $columns `:` type($iterable) attr-dict";
 }
+def DB_Lookup : DB_Op<"lookup",
+[NoSideEffect]> {
+let summary = "lookup";
+let arguments = (ins DBCollection:$collection,AnyType:$key);
+let results = (outs DB_GenericIterable:$iterable);
+let assemblyFormat = "$collection `:` type($collection) `,` $key `:` type($key) `->` type($iterable) attr-dict";
+}
 
 def DB_CreateRange : DB_Op<"range",
 [SameTypeOperands,NoSideEffect]> {
@@ -285,6 +300,12 @@ let summary = "create aggr hashtable builder";
 let arguments = (ins AnyType: $initial);
 let results = (outs DB_AggrHTBuilder:$builder);
 let regions = (region SizedRegion<1>:$region);
+}
+def DB_CreateJoinHTBuilder : DB_Op<"create_join_ht_builder",
+[NoSideEffect]> {
+let summary = "create join hashtable builder";
+let results = (outs DB_JoinHTBuilder:$builder);
+let assemblyFormat = " `:` type($builder) attr-dict";
 }
 
 

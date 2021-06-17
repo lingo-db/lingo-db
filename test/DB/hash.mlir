@@ -25,15 +25,15 @@ module {
          %tuple_hash = db.hash %tuple : tuple<!db.int<32>, !db.int<64>,!db.bool,!db.decimal<15,2>,!db.date<day>,!db.timestamp<second>,!db.float<64>,!db.string>
 
 
-         //CHECK: index(7233188113542599437)
-         //CHECK: index(7233188113542599437)
-         //CHECK: index(12994781566227106604)
-         //CHECK: index(12166885421929564524)
-         //CHECK: index(1625847626288237486)
-         //CHECK: index(1014121717312813912)
-         //CHECK: index(1288868254512927238)
-         //CHECK: index(3052491154091004975)
-         //CHECK: index(4590112364271318175)
+//CHECK: index(10071948712206390799)
+//CHECK: index(14456516954291514641)
+//CHECK: index(5161771770385946686)
+//CHECK: index(4684687102070716739)
+//CHECK: index(18197025341656604621)
+//CHECK: index(7793543308923603326)
+//CHECK: index(621161557985691062)
+//CHECK: index(4577883861590986596)
+//CHECK: index(16303516795538966018)
 
          db.dump_index %hash1
          db.dump_index %hash2
