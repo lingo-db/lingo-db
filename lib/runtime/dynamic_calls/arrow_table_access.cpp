@@ -21,7 +21,6 @@ struct tableChunkIteratorStruct {
 
 EXPORT runtime::Pointer<tableChunkIteratorStruct> _mlir_ciface_table_chunk_iterator_init(runtime::Pointer<std::shared_ptr<arrow::Table>>* table) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    auto* tableChunkIterator = new tableChunkIteratorStruct(*(*table).ref());
-   tableChunkIterator->reader.set_chunksize(3);
    if (tableChunkIterator->reader.ReadNext(&tableChunkIterator->curr_chunk) != arrow::Status::OK()) {
       tableChunkIterator->curr_chunk.reset();
    }

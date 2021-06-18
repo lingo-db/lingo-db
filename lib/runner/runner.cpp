@@ -263,7 +263,11 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    }
 
    // Invoke the JIT-compiled function.
+   auto start=std::chrono::high_resolution_clock::now();
    auto invocationResult = engine->invokePacked("_mlir_ciface_main", args);
+   auto end=std::chrono::high_resolution_clock::now();
+   std::cout<<"compilation+runtime:"<<std::chrono::duration_cast<std::chrono::milliseconds >(end-start).count()<< " ms"<<std::endl;
+
    if (invocationResult) {
       llvm::errs() << "JIT invocation failed\n";
       return false;
