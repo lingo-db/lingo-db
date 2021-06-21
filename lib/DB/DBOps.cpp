@@ -315,7 +315,6 @@ static void printInitializationList(OpAsmPrinter &p,
 }
 //adapted from scf::ForOp
 static void print(OpAsmPrinter &p, mlir::db::ForOp op) {
-   llvm::dbgs()<<op.region().getBlocks().size()<<"\n";
    p << op.getOperationName() << " " << op.getInductionVar() << " in "
      << op.collection() <<" : "<<op.collection().getType()<<" ";
    if(op.until()){

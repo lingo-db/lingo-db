@@ -118,9 +118,6 @@ Operator Plan::realizePlanRec() {
          } else if (mlir::isa<mlir::relalg::InnerJoinOp>(currop.getOperation()) && children.size() == 1) {
             assert(false && "need to implement Join -> Selection transition");
          }
-         if(hashImpl) {
-            currop->setAttr("impl", StringAttr::get(currop.getContext(), "hash"));
-         }
       } else if (!currop && children.size() == 2) {
          mlir::OpBuilder builder(children[0].getOperation());
          currop = builder.create<mlir::relalg::CrossProductOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));

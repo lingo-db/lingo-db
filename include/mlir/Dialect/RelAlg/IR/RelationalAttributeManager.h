@@ -16,7 +16,7 @@ class RelationalAttributeManager {
    RelationalAttributeRefAttr createRef(RelationalAttribute* attr);
 
    RelationalAttributeRefAttr createRef(StringRef scope, StringRef name);
-   std::pair<std::string,std::string> getName(RelationalAttribute* attr);
+   std::pair<std::string,std::string> getName(const RelationalAttribute* attr);
 
    void setCurrentScope(StringRef scope) {
       currentScope = scope;
@@ -46,7 +46,7 @@ class RelationalAttributeManager {
       }
    };
    std::unordered_map<std::pair<std::string, std::string>, std::shared_ptr<RelationalAttribute>, HashPair> attributes;
-   std::unordered_map<RelationalAttribute*, std::pair<std::string, std::string>> attributesRev;
+   std::unordered_map<const RelationalAttribute*, std::pair<std::string, std::string>> attributesRev;
 
    std::unordered_map<std::string, size_t> scopeUnifier;
 };

@@ -5,6 +5,8 @@
 #include "llvm/Support/ToolOutputFile.h"
 
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
+#include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
+
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
@@ -216,6 +218,15 @@ bool Runner::lowerToLLVM() {
    if (auto mainFunc = moduleOp.lookupSymbol<mlir::FuncOp>("main")) {
       ctxt->numArgs = mainFunc.getNumArguments();
       ctxt->numResults = mainFunc.getNumResults();
+      mlir::OpBuilder builder(mainFunc);
+      builder.setInsertionPointToStart(&mainFunc.getBody().front());
+      mlir::db::codegen::FunctionRegistry functionRegistry(mainFunc->getContext());
+      functionRegistry.registerFunctions();
+      using FuncId=mlir::db::codegen::FunctionRegistry::FunctionId;
+      auto startTime=functionRegistry.call(builder,FuncId::StartExecution,{})[0];
+      builder.setInsertionPoint(mainFunc.getBody().front().getTerminator());
+      functionRegistry.call(builder,FuncId::FinishExecution,{startTime});
+
    }
    mlir::PassManager pm2(&ctxt->context);
    pm2.addPass(mlir::createLowerToCFGPass());
@@ -241,7 +252,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
 
    // An optimization pipeline to use within the execution engine.
    auto optPipeline = mlir::makeOptimizingTransformer(
-      /*optLevel=*/false ? 3 : 0, /*sizeLevel=*/0,
+      /*optLevel=*/true ? 3 : 0, /*sizeLevel=*/0,
       /*targetMachine=*/nullptr);
 
    // Create an MLIR execution engine. The execution engine eagerly JIT-compiles
@@ -263,10 +274,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    }
 
    // Invoke the JIT-compiled function.
-   auto start=std::chrono::high_resolution_clock::now();
    auto invocationResult = engine->invokePacked("_mlir_ciface_main", args);
-   auto end=std::chrono::high_resolution_clock::now();
-   std::cout<<"compilation+runtime:"<<std::chrono::duration_cast<std::chrono::milliseconds >(end-start).count()<< " ms"<<std::endl;
 
    if (invocationResult) {
       llvm::errs() << "JIT invocation failed\n";

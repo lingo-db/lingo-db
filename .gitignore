@@ -2,3 +2,4 @@
 build/
 test.mlir
 test.sql
+resources/data/tpch-1

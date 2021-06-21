@@ -91,8 +91,14 @@ int main(int argc, char** argv) {
    ::mlir::registerPass("relalg-optimize-join-order", "joinorder", []() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createOptimizeJoinOrderPass();
    });
+   ::mlir::registerPass("relalg-combine-predicates", "extract nested operators", []() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::relalg::createCombinePredicatesPass();
+   });
+   ::mlir::registerPass("relalg-optimize-implementations", "extract nested operators", []() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::relalg::createOptimizeImplementationsPass();
+   });
    ::mlir::registerPass("relalg-to-db", "Relalg to DB dialect conversion", []() -> std::unique_ptr<::mlir::Pass> {
-     return mlir::relalg::createLowerToDBPass();
+      return mlir::relalg::createLowerToDBPass();
    });
    ::mlir::registerPass("to-arrow-std", "tostd", []() -> std::unique_ptr<::mlir::Pass> {
       return mlir::db::createLowerToStdPass();

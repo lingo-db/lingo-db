@@ -119,7 +119,6 @@ class JoinHtIterator : public WhileIterator {
 
       auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({builder.getIndexType(),ptrType,rawDataType}), iteratorInfo);
       rawValues=unpacked.getResult(2);
-      unpacked->dump();
       return functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::JoinHtIteratorInit, mlir::ValueRange({unpacked.getResult(1),unpacked.getResult(0)}))[0];
    }
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
@@ -433,7 +432,6 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       if (flag) {
          Value flagValue = builder.create<mlir::db::GetFlag>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), flag);
          Value shouldContinue = builder.create<mlir::db::NotOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), flagValue);
-         condition.getType().dump();
          Value anded = builder.create<mlir::db::AndOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), ValueRange({condition, shouldContinue}));
          condition = anded;
       }

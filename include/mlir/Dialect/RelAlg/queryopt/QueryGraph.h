@@ -15,7 +15,6 @@ class QueryGraph {
       IGNORE
    };
    struct Edge {
-      bool hashImpl=false;
       Operator op;
       EdgeType edgeType = EdgeType::REAL;
       NodeSet right;
@@ -336,7 +335,6 @@ class QueryGraph {
             predicatesRight.insert(predicate.right);
             anyEq|=predicate.isEq;
          }
-         edge.hashImpl=anyEq;
          for(auto p:pkeysLeft){
             auto [rows,pkey]=p;
             if(pkey.isSubsetOf(predicatesLeft)){
@@ -360,7 +358,6 @@ class QueryGraph {
                }
             }
          }
-         llvm::dbgs()<<"edge.selectivity="<<edge.selectivity<<"\n";
 
       }
    }

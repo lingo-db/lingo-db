@@ -20,12 +20,18 @@ class LoweringContext {
 
    mlir::Value getValueForAttribute(const mlir::relalg::RelationalAttribute* attribute) const {
       assert(symbolTable.count(attribute));
+      if (!symbolTable.lookup(attribute)) {
+         auto [a, b] = executionContext.getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager().getName(attribute);
+         llvm::dbgs()<<a<<","<<b<<"\n";
+      }
+
       return symbolTable.lookup(attribute);
    }
    mlir::Value getUnsafeValueForAttribute(const mlir::relalg::RelationalAttribute* attribute) const {
       return symbolTable.lookup(attribute);
    }
    void setValueForAttribute(AttributeResolverScope& scope, const mlir::relalg::RelationalAttribute* iu, mlir::Value v) {
+      //      assert(!!v);
       symbolTable.insertIntoScope(&scope, iu, v);
    }
    AttributeResolverScope createScope() {
@@ -50,8 +56,8 @@ class ProducerConsumerBuilder : public mlir::OpBuilder {
       llvm::iplist<mlir::Operation> translated;
       std::vector<mlir::Operation*> toErase;
       source->walk([&](mlir::relalg::GetAttrOp getAttrOp) {
-            getAttrOp.replaceAllUsesWith(context.getValueForAttribute(&getAttrOp.attr().getRelationalAttribute()));
-            toErase.push_back(getAttrOp.getOperation());
+         getAttrOp.replaceAllUsesWith(context.getValueForAttribute(&getAttrOp.attr().getRelationalAttribute()));
+         toErase.push_back(getAttrOp.getOperation());
       });
       for (auto addAttrOp : source->getOps<mlir::relalg::AddAttrOp>()) {
          context.setValueForAttribute(scope, &addAttrOp.attr().getRelationalAttribute(), addAttrOp.val());
@@ -102,13 +108,13 @@ class ProducerConsumerNode {
    public:
    ProducerConsumerNode(mlir::ValueRange children);
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) {
-      this->requiredBuilders.insert(this->requiredBuilders.end(),requiredBuilders.begin(),requiredBuilders.end());
+      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       for (auto& child : children) {
          child->addRequiredBuilders(requiredBuilders);
       }
    }
-   void setFlag(mlir::Value flag){
-      this->flag=flag;
+   void setFlag(mlir::Value flag) {
+      this->flag = flag;
       for (auto& child : children) {
          child->setFlag(flag);
       }
@@ -149,9 +155,10 @@ class ProducerConsumerNodeRegistry {
       res &= registeredInnerJoinOp;
       res &= registeredSemiJoinOp;
       res &= registeredAntiSemiJoinOp;
-      res &=registeredRenamingOp;
-      res &=registeredProjectionOp;
-      res &=registeredLimitOp;
+      res &= registeredRenamingOp;
+      res &= registeredProjectionOp;
+      res &= registeredLimitOp;
+      llvm::dbgs() << "registered=" << res << "\n";
    }
 
    public:
@@ -162,7 +169,6 @@ class ProducerConsumerNodeRegistry {
    template <typename FnT, typename T = typename llvm::function_traits<std::decay_t<FnT>>::template arg_t<0>>
    static bool registerNode(FnT&& callBack) {
       std::string x = T::getOperationName().str();
-      llvm::dbgs() << "inserting:" << x << "\n";
       getRegistry().nodes.insert({x, [callBack = callBack](mlir::Operation* op) { return callBack(mlir::cast<T>(op)); }});
       return true;
    }
@@ -172,7 +178,7 @@ class ProducerConsumerNodeRegistry {
       if (getRegistry().nodes.count(opName)) {
          return getRegistry().nodes[opName](operation);
       } else {
-         assert("could not create node"&&false);
+         assert("could not create node" && false);
          return std::unique_ptr<mlir::relalg::ProducerConsumerNode>();
       }
    }

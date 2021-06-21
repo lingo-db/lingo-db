@@ -114,13 +114,12 @@ class Plan {
    std::vector<Operator> additionalOps;
    double cost;
    double rows;
-   bool hashImpl;
    std::string description;
    std::string dumpNode();
    Operator realizePlanRec();
 
    public:
-   Plan(Operator op, const std::vector<std::shared_ptr<Plan>>& subplans, const std::vector<Operator>& additionalOps, double rows, bool hashImpl = false) : op(op), subplans(subplans), additionalOps(additionalOps), cost(rows), rows(rows), hashImpl(hashImpl) {
+   Plan(Operator op, const std::vector<std::shared_ptr<Plan>>& subplans, const std::vector<Operator>& additionalOps, double rows) : op(op), subplans(subplans), additionalOps(additionalOps), cost(rows), rows(rows) {
       for (auto subplan : subplans) {
          cost += subplan->getCost();
       }

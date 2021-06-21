@@ -35,7 +35,6 @@ class ConstRelLowering : public mlir::relalg::ProducerConsumerNode {
          std::vector<Value> values;
          size_t i = 0;
          for (auto entryAttr : row.getValue()) {
-            entryAttr.dump();
             auto entryVal = builder.create<mlir::db::ConstantOp>(constRelationOp->getLoc(), types[i], entryAttr);
             values.push_back(entryVal);
             i++;

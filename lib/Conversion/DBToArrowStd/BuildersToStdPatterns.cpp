@@ -298,8 +298,6 @@ class CreateAggrHTBuilderLowering : public ConversionPattern {
          rewriter.setInsertionPoint(terminator);
          Value castedVal = rewriter.create<mlir::db::TypeCastOp>(rewriter.getUnknownLoc(), typeConverter->convertType(aggrType), x);
          rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), castedVal, genericMemrefLeft, Value());
-
-         funcOp->dump();
          rewriter.eraseOp(sortLambdaTerminator);
       }
       {

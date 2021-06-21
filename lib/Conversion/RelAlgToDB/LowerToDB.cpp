@@ -33,7 +33,6 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
             node->done();
          }
       });
-      getFunction().dump();
    }
 };
 } // end anonymous namespace

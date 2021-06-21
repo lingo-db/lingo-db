@@ -17,7 +17,7 @@ class RenamingLowering : public mlir::relalg::ProducerConsumerNode {
       propagateInfo();
    }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes();
+      return renamingOp.getAvailableAttributes();
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
