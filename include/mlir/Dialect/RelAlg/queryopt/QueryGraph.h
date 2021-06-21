@@ -2,6 +2,7 @@
 #define MLIR_DIALECT_RELALG_QUERYOPT_QUERYGRAPH_H
 
 #include "llvm/Support/Debug.h"
+#include <mlir/Dialect/DB/IR/DBOps.h>
 #include <mlir/Dialect/RelAlg/IR/RelAlgOps.h>
 #include <mlir/Dialect/RelAlg/queryopt/utils.h>
 namespace mlir::relalg {
@@ -14,11 +15,13 @@ class QueryGraph {
       IGNORE
    };
    struct Edge {
+      bool hashImpl=false;
       Operator op;
       EdgeType edgeType = EdgeType::REAL;
       NodeSet right;
       NodeSet left;
       NodeSet arbitrary;
+      double selectivity = 1;
       [[nodiscard]] bool connects(const NodeSet& s1, const NodeSet& s2) const {
          if (!((left.any() && right.any()) || (left.any() && arbitrary.any()) || (arbitrary.any() && right.any()))) {
             return false;
@@ -53,6 +56,8 @@ class QueryGraph {
       Operator op;
       std::vector<Operator> additionalPredicates;
       NodeSet dependencies;
+      double selectivity;
+      double rows;
 
       explicit Node(Operator op) : op(op) {}
 
@@ -192,6 +197,172 @@ class QueryGraph {
          }
       });
       return res;
+   }
+   struct Predicate {
+      mlir::relalg::Attributes left, right;
+      bool isEq;
+      Predicate(mlir::relalg::Attributes left, mlir::relalg::Attributes right, bool isEq) : left(left), right(right), isEq(isEq) {}
+   };
+   std::vector<Predicate> analyzePred(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
+      llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;
+      std::vector<Predicate> predicates;
+      block->walk([&](mlir::Operation* op) {
+         if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
+            required.insert({getAttr.getResult(), mlir::relalg::Attributes::from(getAttr.attr())});
+         } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(op)) {
+            if (cmpOp.predicate() == mlir::db::DBCmpPredicate::eq) {
+               auto leftAttributes = required[cmpOp.left()];
+               auto rightAttributes = required[cmpOp.right()];
+               if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {
+                  predicates.push_back(Predicate(leftAttributes, rightAttributes, true));
+               } else if (leftAttributes.isSubsetOf(availableRight) && rightAttributes.isSubsetOf(availableLeft)) {
+                  predicates.push_back(Predicate(rightAttributes, leftAttributes, true));
+               }
+            } else {
+               auto leftAttributes = required[cmpOp.left()];
+               auto rightAttributes = required[cmpOp.right()];
+               if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {
+                  predicates.push_back(Predicate(leftAttributes, rightAttributes, false));
+               } else if (leftAttributes.isSubsetOf(availableRight) && rightAttributes.isSubsetOf(availableLeft)) {
+                  predicates.push_back(Predicate(rightAttributes, leftAttributes, false));
+               }
+            }
+         } else {
+            mlir::relalg::Attributes attributes;
+            for (auto operand : op->getOperands()) {
+               if (required.count(operand)) {
+                  attributes.insert(required[operand]);
+               }
+            }
+            for (auto result : op->getResults()) {
+               required.insert({result, attributes});
+            }
+         }
+      });
+      return predicates;
+   }
+   Attributes getAttributesForNodeSet(NodeSet& nodeSet) {
+      Attributes a;
+      iterateNodes(nodeSet, [&](Node& n) {
+         a.insert(n.op.getAvailableAttributes());
+      });
+      return a;
+   }
+   void addPredicates(std::vector<Predicate>& predicates, Operator op, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
+      if (auto predicateOp = mlir::dyn_cast_or_null<PredicateOperator>(op.getOperation())) {
+         auto newPredicates = analyzePred(&predicateOp.getPredicateBlock(), availableLeft, availableRight);
+         predicates.insert(predicates.end(), newPredicates.begin(), newPredicates.end());
+      }
+   }
+   Attributes getPKey(StringRef scope,mlir::Attribute pkeyAttribute){
+      Attributes res;
+      if(auto arrAttr=pkeyAttribute.dyn_cast_or_null<mlir::ArrayAttr>()){
+         for(auto attr:arrAttr){
+            if(auto stringAttr=attr.dyn_cast_or_null<mlir::StringAttr>()){
+               auto relAttrManager=pkeyAttribute.getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
+               res.insert(relAttrManager.get(scope,stringAttr.getValue()).get());
+            }
+         }
+      }
+      return res;
+   }
+
+   void estimate() {
+      for (auto& node : nodes) {
+         if(node.op) {
+            node.rows=0;
+            if(auto baseTableOp=mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())){
+               if(baseTableOp->hasAttr("rows")){
+                  node.rows=baseTableOp->getAttr("rows").dyn_cast_or_null<mlir::IntegerAttr>().getInt();
+               }
+            }
+            auto availableLeft = node.op.getAvailableAttributes();
+            mlir::relalg::Attributes availableRight;
+            std::vector<Predicate> predicates;
+            for(auto pred:node.additionalPredicates) {
+               addPredicates(predicates, pred, availableLeft, availableRight);
+            }
+            node.selectivity=1;
+            Attributes pkey;
+            if(auto baseTableOp=mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())){
+               pkey=getPKey(baseTableOp.sym_name(),baseTableOp->getAttr("pkey"));
+            }
+            Attributes predicatesLeft;
+            for(auto predicate:predicates){
+               predicatesLeft.insert(predicate.left);
+            }
+            bool pKeyIncluded =pkey.isSubsetOf(predicatesLeft);
+            if(pKeyIncluded){
+               node.selectivity=1/node.rows;
+            }else {
+               for (auto predicate : predicates) {
+                  if(predicate.isEq){
+                     node.selectivity*=0.1;
+                  }else{
+                     node.selectivity*=0.25;
+                  }
+               }
+            }
+         }
+      }
+      for (auto& edge : edges) {
+         auto availableLeft = getAttributesForNodeSet(edge.left);
+         auto availableRight = getAttributesForNodeSet(edge.right);
+         std::vector<Predicate> predicates;
+         addPredicates(predicates, edge.op, availableLeft, availableRight);
+         edge.selectivity=1.0;
+         std::vector<std::pair<double,Attributes>> pkeysLeft;
+         std::vector<std::pair<double,Attributes>> pkeysRight;
+         iterateNodes(edge.left,[&](auto node){
+            if(node.op){
+               if(auto baseTableOp=mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())){
+                  pkeysLeft.push_back({node.rows,getPKey(baseTableOp.sym_name(),baseTableOp->getAttr("pkey"))});
+               }
+            }
+         });
+         iterateNodes(edge.right,[&](auto node){
+           if(node.op){
+              if(auto baseTableOp=mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())){
+                 pkeysRight.push_back({node.rows,getPKey(baseTableOp.sym_name(),baseTableOp->getAttr("pkey"))});
+              }
+           }
+         });
+
+         Attributes predicatesLeft;
+         Attributes predicatesRight;
+         bool anyEq=false;
+         for(auto predicate:predicates){
+            predicatesLeft.insert(predicate.left);
+            predicatesRight.insert(predicate.right);
+            anyEq|=predicate.isEq;
+         }
+         edge.hashImpl=anyEq;
+         for(auto p:pkeysLeft){
+            auto [rows,pkey]=p;
+            if(pkey.isSubsetOf(predicatesLeft)){
+               edge.selectivity*=1/rows;
+               predicatesLeft.remove(pkey);
+            }
+         }
+         for(auto p:pkeysRight){
+            auto [rows,pkey]=p;
+            if(pkey.isSubsetOf(predicatesRight)){
+               edge.selectivity*=1/rows;
+               predicatesRight.remove(pkey);
+            }
+         }
+         for(auto predicate:predicates){
+            if(predicate.left.isSubsetOf(predicatesLeft)&&predicate.right.isSubsetOf(predicatesRight)){
+               if(predicate.isEq){
+                  edge.selectivity*=0.1;
+               }else{
+                  edge.selectivity*=0.25;
+               }
+            }
+         }
+         llvm::dbgs()<<"edge.selectivity="<<edge.selectivity<<"\n";
+
+      }
    }
 };
 } // namespace mlir::relalg

@@ -26,6 +26,9 @@ class Attributes {
    void insert(mlir::relalg::RelationalAttribute* attr) {
       attributes.insert(attr);
    }
+   bool contains(mlir::relalg::RelationalAttribute* attr) {
+      return attributes.contains(attr);
+   }
    Attributes& insert(const Attributes& other) {
       attributes.insert(other.attributes.begin(), other.attributes.end());
       return *this;

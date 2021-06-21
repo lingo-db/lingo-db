@@ -20,7 +20,7 @@ mlir::relalg::RelationalAttributeManager& getRelationalAttributeManager(::mlir::
    ::mlir::NamedAttrList attrStorage;
    auto loc = parser.getCurrentLocation();
    if (parser.parseOptionalKeyword(&attrStr, {"min", "max", "sum", "avg", "count"})) {
-         return parser.emitError(loc, "expected keyword containing one of the following enum values for attribute 'type' [min, max, sum, avg, count]");
+      return parser.emitError(loc, "expected keyword containing one of the following enum values for attribute 'type' [min, max, sum, avg, count]");
    }
    if (!attrStr.empty()) {
       auto attrOptional = ::mlir::relalg::symbolizeAggrFunc(attrStr);
@@ -39,7 +39,7 @@ mlir::relalg::RelationalAttributeManager& getRelationalAttributeManager(::mlir::
    ::mlir::NamedAttrList attrStorage;
    auto loc = parser.getCurrentLocation();
    if (parser.parseOptionalKeyword(&attrStr, {"desc", "asc"})) {
-         return parser.emitError(loc, "expected keyword containing one of the following enum values for attribute 'sortSpec' [desc,asc]");
+      return parser.emitError(loc, "expected keyword containing one of the following enum values for attribute 'sortSpec' [desc,asc]");
    }
    if (!attrStr.empty()) {
       auto parsedSpec = ::mlir::relalg::symbolizeSortSpec(attrStr);
@@ -57,7 +57,7 @@ mlir::relalg::RelationalAttributeManager& getRelationalAttributeManager(::mlir::
    ::mlir::NamedAttrList attrStorage;
    auto loc = parser.getCurrentLocation();
    if (parser.parseOptionalKeyword(&attrStr, {"distinct", "all"})) {
-         return parser.emitError(loc, "expected keyword containing one of the following enum values for attribute 'type' [distinct, all]");
+      return parser.emitError(loc, "expected keyword containing one of the following enum values for attribute 'type' [distinct, all]");
    }
    if (!attrStr.empty()) {
       auto attrOptional = ::mlir::relalg::symbolizeSetSemantic(attrStr);
@@ -533,11 +533,11 @@ static ParseResult parseMaterializeOp(OpAsmParser& parser, OperationState& resul
    parseAttributeRefArr(parser, result, attrs);
    result.addAttribute("attrs", attrs);
    ArrayAttr columns;
-   if(parser.parseEqual()||parser.parseGreater()){
+   if (parser.parseEqual() || parser.parseGreater()) {
       return failure();
    }
    parser.parseAttribute(columns);
-   result.addAttribute("columns",columns);
+   result.addAttribute("columns", columns);
 
    mlir::db::CollectionType collectionType;
    if (parser.parseColonType(collectionType)) {
@@ -548,7 +548,7 @@ static ParseResult parseMaterializeOp(OpAsmParser& parser, OperationState& resul
 static void print(OpAsmPrinter& p, relalg::MaterializeOp& op) {
    p << op.getOperationName() << " " << op.rel() << " ";
    printAttributeRefArr(p, op.attrs());
-   p << " => "<< op.columns();
+   p << " => " << op.columns();
    p << " : " << op.getType();
 }
 
@@ -562,9 +562,10 @@ static ParseResult parseInnerJoinOp(OpAsmParser& parser, OperationState& result)
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::InnerJoinOp& op) {
-   p << op.getOperationName() << " " << op.left() << ", " << op.right()<<" ";
+   p << op.getOperationName() << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
-   p.printOptionalAttrDict(op->getAttrs());
+   p << " ";
+   p.printOptionalAttrDictWithKeyword(op->getAttrs());
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // FullOuterJoinOp
@@ -575,31 +576,32 @@ static ParseResult parseFullOuterJoinOp(OpAsmParser& parser, OperationState& res
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::FullOuterJoinOp& op) {
-   p << op.getOperationName() << " " << op.left() << ", " << op.right()<<" ";
+   p << op.getOperationName() << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // NonCommutativeJoins: OuterJoin,SemiJoin,AntiSemiJoin,SingleJoin
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseNonCommutativeJoin(OpAsmParser& parser, OperationState& result) {
-   if (       parseRelationalInputs(parser, result, 2) ||
-       parseCustomRegion(parser, result) ||
-       addRelationOutput(parser, result)) {
+   if (parseRelationalInputs(parser, result, 2) ||
+          parseCustomRegion(parser, result) ||
+          addRelationOutput(parser, result) || parser.parseOptionalAttrDictWithKeyword(result.attributes)) {
       return failure();
    }
    return success();
 }
 static void printNonCommutativeJoin(Operation* op, OpAsmPrinter& p) {
    p << op->getName() << " ";
-   p << " " << op->getOperand(0) << ", " << op->getOperand(1)<<" ";
+   p << " " << op->getOperand(0) << ", " << op->getOperand(1) << " ";
    printCustomRegion(p, op->getRegion(0));
+   p << " ";
+   p.printOptionalAttrDictWithKeyword(op->getAttrs());
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
 // MarkJoinOp
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseMarkJoinOp(OpAsmParser& parser, OperationState& result) {
-
    StringAttr nameAttr;
    if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
       return failure();
@@ -619,7 +621,7 @@ static void print(OpAsmPrinter& p, relalg::MarkJoinOp& op) {
    p.printSymbolName(op.sym_name());
    p << " ";
    printAttributeDefAttr(p, op.markattr());
-   p << " " << op.left() << ", " << op.right()<<" ";
+   p << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
 }
 ///////////////////////////////////////////////////////////////////////////////////

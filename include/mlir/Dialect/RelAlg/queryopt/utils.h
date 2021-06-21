@@ -112,16 +112,25 @@ class Plan {
    Operator op;
    std::vector<std::shared_ptr<Plan>> subplans;
    std::vector<Operator> additionalOps;
-   size_t cost;
+   double cost;
+   double rows;
+   bool hashImpl;
    std::string description;
    std::string dumpNode();
    Operator realizePlanRec();
 
    public:
-   Plan(Operator op, const std::vector<std::shared_ptr<Plan>>& subplans, const std::vector<Operator>& additionalOps, size_t cost) : op(op), subplans(subplans), additionalOps(additionalOps), cost(cost) {}
+   Plan(Operator op, const std::vector<std::shared_ptr<Plan>>& subplans, const std::vector<Operator>& additionalOps, double rows, bool hashImpl = false) : op(op), subplans(subplans), additionalOps(additionalOps), cost(rows), rows(rows), hashImpl(hashImpl) {
+      for (auto subplan : subplans) {
+         cost += subplan->getCost();
+      }
+   }
    Operator realizePlan();
    void dump();
-   size_t getCost() const;
+   double getCost() const;
+   double getRows() const {
+      return rows;
+   }
    void setDescription(const std::string& descr);
    const std::string& getDescription() const;
 };

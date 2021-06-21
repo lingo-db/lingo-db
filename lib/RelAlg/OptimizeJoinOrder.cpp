@@ -58,6 +58,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Func
          mlir::relalg::QueryGraphBuilder queryGraphBuilder(op, alreadyOptimized);
          queryGraphBuilder.generate();
          mlir::relalg::QueryGraph& queryGraph = queryGraphBuilder.getQueryGraph();
+         queryGraph.estimate();
          //enumerates possible plans and find best one
          mlir::relalg::DPHyp solver(queryGraph);
          auto solution = solver.solve();

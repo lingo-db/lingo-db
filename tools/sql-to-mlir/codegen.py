@@ -45,7 +45,8 @@ class BaseTableOp:
             else:
                 column_str+=",\n"
             column_str+=column_name+" => "+attr.def_to_string();
-        str="%s = relalg.basetable @%s { table_identifier=\"%s\" } columns: {" % (self.var,self.table.scope_name,self.table.table_identifier)
+        pkeys= ", pkey=[\""+("\",\"".join(self.table.pkey))+"\"]" if self.table.pkey else ""
+        str="%s = relalg.basetable @%s { table_identifier=\"%s\", rows=%d %s} columns: {" % (self.var,self.table.scope_name,self.table.table_identifier,self.table.row_count,pkeys)
         codegen.print(str)
         codegen.indent+=1
         codegen.print(column_str)
