@@ -79,10 +79,19 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
          Value treeVal = surroundingOperator->getOperand(0);
          if (auto getscalarop = mlir::dyn_cast_or_null<mlir::relalg::GetScalarOp>(op)) {
             OpBuilder builder(surroundingOperator);
-            auto singleJoin = builder.create<relalg::SingleJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), treeVal, getscalarop.rel());
+            std::string scopeName = attributeManager.getUniqueScope("singlejoin");
+            std::string attributeName = "sjattr";
+            attributeManager.setCurrentScope(scopeName);
+            auto before=getscalarop.attr();
+            auto fromExisting=ArrayAttr::get(&getContext(),{before});
+
+            auto newDef=attributeManager.createDef(attributeName,fromExisting);
+            newDef.getRelationalAttribute().type=before.getRelationalAttribute().type.asNullable();
+            auto mapping=ArrayAttr::get(&getContext(),{newDef});
+            auto singleJoin = builder.create<relalg::SingleJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()),scopeName, treeVal, getscalarop.rel(),mapping);
             singleJoin.initPredicate();
             builder.setInsertionPoint(getscalarop);
-            Operation* replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), getscalarop.attr().getRelationalAttribute().type, getscalarop.attr(), surroundingOperator.getLambdaRegion().getArgument(0));
+            Operation* replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), getscalarop.attr().getRelationalAttribute().type, attributeManager.createRef(scopeName,attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
             getscalarop.replaceAllUsesWith(replacement);
             getscalarop->remove();
             getscalarop->destroy();

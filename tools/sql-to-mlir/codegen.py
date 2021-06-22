@@ -329,17 +329,25 @@ class CodeGen:
         self.endRegionOpWith(yieldOp)
 
 
-    def startJoin(self, outer,type,left,right):
+    def startJoin(self, outer,type,left,right, name):
         tuple = self.newParam("tuple")
         joinop= "outerjoin" if outer else "join"
         if type =="full":
         	type=""
         	joinop="fullouterjoin"
         return self.startRegionOp("relation",
-                                  ["relalg."+joinop," ",type," ", ValueRef(left),", ",ValueRef(right), "(", tuple, ": !relalg.tuple) "]), tuple
+                                  ["relalg."+joinop," @",name," ", ValueRef(left),", ",ValueRef(right), "(", tuple, ": !relalg.tuple) "]), tuple
 
-    def endJoin(self, res):
-        self.endRegionOpWith(Operation(None, None, ["relalg.return ", ValueRef(res), " : ", TypeRef(res)]))
+    def endJoin(self, res,mapping=[]):
+        current_region = self.getCurrentRegion()
+        current_region.addOp(Operation(None, None, ["relalg.return ", ValueRef(res), " : ", TypeRef(res)]))
+        op = self.stacked_ops.pop()
+        op.print_args.append(self.endRegion())
+        attr_defs=list(map(lambda val:val.def_to_string(),mapping))
+        op.print_args.extend([" mapping: ", "{",",".join(attr_defs),"}"])
+        self.addExistingOp(op)
+        #if len(mapping)>0:
+
     def startAggregation(self,name,rel, attributes):
         relation=self.newParam("relation")
         attr_refs=list(map(lambda val:val.ref_to_string(),attributes))

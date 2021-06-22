@@ -160,15 +160,17 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
                   std::vector<mlir::Value> res;
                   auto one = builder.create<mlir::db::ConstantOp>(builder.getUnknownLoc(), counterType, builder.getI64IntegerAttr(1));
                   mlir::Value value = builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), resultingType, aggr[currDestIdx], one);
+                  mlir::Value initialValue=builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), resultingType,one);
                   if(attr->type.isNullable()){
                      mlir::Value isNull2 = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), val[currValIdx]);
                      mlir::Value tmp=builder.create<mlir::db::SelectOp>(builder.getUnknownLoc(), isNull2, aggr[currDestIdx], value );
                      value=tmp;
+                     mlir::Value tmp2=builder.create<mlir::db::SelectOp>(builder.getUnknownLoc(), isNull2, val[currValIdx], initialValue );
+                     initialValue=tmp2;
                   }
                   mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), aggr[currDestIdx]);
-                 mlir::Value casted=builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), resultingType,one);
 
-                  res.push_back(builder.create<mlir::db::SelectOp>(builder.getUnknownLoc(), isNull1, casted, value));
+                  res.push_back(builder.create<mlir::db::SelectOp>(builder.getUnknownLoc(), isNull1, initialValue, value));
                   return res;
                });
             }

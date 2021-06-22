@@ -18,6 +18,11 @@ class Resolver:
         self.add_(name, attr)
         for prefix in prefixes:
             self.add_(prefix + "." + name, attr)
+    def replace(self, attr_old, attr_new):
+        for name in self.lookup_table:
+            attr=self.lookup_table[name]
+            if attr==attr_old:
+                self.lookup_table[name]=attr_new
     def addOverride(self,name,attr):
         self.lookup_table[name]=attr
 

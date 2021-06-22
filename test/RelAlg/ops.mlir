@@ -107,13 +107,13 @@ module{
 module{
 %0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.string}),@attr2({type = !db.string})] values: [["A1","B1"], ["A2","B2"]]
 %1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.string}),@attr2({type = !db.string})] values: [["A1","B1"], ["A2","B2"]]
-//CHECK: %2 = relalg.outerjoin %0, %1  (%arg0: !relalg.tuple) {
-%2 = relalg.outerjoin %0, %1  (%arg0: !relalg.tuple) {
+//CHECK: %2 = relalg.outerjoin @outerjoin %0, %1  (%arg0: !relalg.tuple) {
+%2 = relalg.outerjoin @outerjoin %0, %1  (%arg0: !relalg.tuple) {
     //CHECK:    %3 = db.constant( "true" ) : !db.bool
 	%3 = db.constant( "true" ) : !db.bool
 	//CHECK:    relalg.return %3 : !db.bool
 	relalg.return %3 : !db.bool
-}
+} mapping: {@attr1({type = !db.string})=[@constrel2::@attr1]}
 }
 
 // -----

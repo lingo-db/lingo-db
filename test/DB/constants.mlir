@@ -26,7 +26,7 @@
 //CHECK: int(100)
 //CHECK: float(10000)
 //CHECK: float(10000)
-//CHECK: decimal(1000200.01)
+//CHECK: decimal(10002.00)
 //CHECK: int(1)
 //CHECK: int(1)
 //CHECK: float(1)

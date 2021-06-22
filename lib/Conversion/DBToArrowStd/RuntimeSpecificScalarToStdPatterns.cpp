@@ -21,15 +21,15 @@ class SimpleBinOpToFuncLowering : public ConversionPattern {
    public:
    explicit SimpleBinOpToFuncLowering(MLIRContext* context,
                                       std::function<Value(LeftT, Value, ConversionPatternRewriter&)>
-                                      processLeft,
+                                         processLeft,
                                       std::function<Value(RightT, Value, ConversionPatternRewriter&)>
-                                      processRight,
+                                         processRight,
                                       std::function<std::vector<Value>(Value, Value)>
-                                      combine,
+                                         combine,
                                       std::function<FuncOp(OpClass, LeftT, RightT, ConversionPatternRewriter& rewriter)>
-                                      provideFunc,
+                                         provideFunc,
                                       std::function<Value(ResT, Value, ConversionPatternRewriter&)>
-                                      processResult)
+                                         processResult)
       : ConversionPattern(OpClass::getOperationName(), 1, context), processLeft(processLeft), processRight(processRight), combine(combine), provideFunc(provideFunc), processResult(processResult) {}
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
@@ -66,11 +66,11 @@ class SimpleUnOpToFuncLowering : public ConversionPattern {
    public:
    explicit SimpleUnOpToFuncLowering(MLIRContext* context,
                                      std::function<Value(ValT, Value, ConversionPatternRewriter&)>
-                                     processIn,
+                                        processIn,
                                      std::function<FuncOp(OpClass, ValT, ConversionPatternRewriter& rewriter)>
-                                     provideFunc,
+                                        provideFunc,
                                      std::function<Value(ResT, Value, ConversionPatternRewriter&)>
-                                     processResult)
+                                        processResult)
       : ConversionPattern(OpClass::getOperationName(), 1, context), processVal(processIn), provideFunc(provideFunc), processResult(processResult) {}
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
@@ -94,7 +94,6 @@ class SimpleUnOpToFuncLowering : public ConversionPattern {
    }
 };
 
-
 class StringCastOpLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
 
@@ -114,7 +113,7 @@ class StringCastOpLowering : public ConversionPattern {
       auto scalarSourceType = sourceType.getBaseType();
       auto scalarTargetType = targetType.getBaseType();
       auto convertedTargetType = typeConverter->convertType(scalarTargetType);
-      if (!scalarSourceType.isa<mlir::db::StringType>() && ! scalarTargetType.isa<mlir::db::StringType>()) return failure();
+      if (!scalarSourceType.isa<mlir::db::StringType>() && !scalarTargetType.isa<mlir::db::StringType>()) return failure();
 
       Value isNull;
       Value value;
@@ -331,7 +330,7 @@ class HashLowering : public ConversionPattern {
    Value xorImpl(OpBuilder& builder, Value v, Value totalHash) const {
       return builder.create<mlir::XOrOp>(builder.getUnknownLoc(), v, totalHash);
    }
-   Value hashImpl(OpBuilder& builder, Value v, Value totalHash) const {
+   Value hashImpl(OpBuilder& builder, Value v, Value totalHash, Type originalType) const {
       //todo: more checks:
       using FunctionId = db::codegen::FunctionRegistry::FunctionId;
       if (auto intType = v.getType().dyn_cast_or_null<mlir::IntegerType>()) {
@@ -351,11 +350,21 @@ class HashLowering : public ConversionPattern {
       } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::MemRefType>()) {
          return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashBinary, v)[0]);
       } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
-         auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
-         for (auto v : unpacked->getResults()) {
-            totalHash = hashImpl(builder, v, totalHash);
+         if (auto originalTupleType = originalType.dyn_cast_or_null<mlir::TupleType>()) {
+            auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
+            size_t i = 0;
+            for (auto v : unpacked->getResults()) {
+               totalHash = hashImpl(builder, v, totalHash, originalTupleType.getType(i++));
+            }
+            return totalHash;
+         } else if (auto dbType = originalType.dyn_cast_or_null<mlir::db::DBType>()) {
+            assert(dbType.isNullable());
+            auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
+            mlir::Value hashedIfNotNull = hashImpl(builder, unpacked.getResult(1), totalHash, dbType.getBaseType());
+            return builder.create<mlir::SelectOp>(builder.getUnknownLoc(), unpacked.getResult(0),totalHash,hashedIfNotNull);
          }
-         return totalHash;
+         assert(false && "should not happen");
+         return Value();
       }
       assert(false && "should not happen");
       return Value();
@@ -366,67 +375,68 @@ class HashLowering : public ConversionPattern {
       : ConversionPattern(typeConverter, mlir::db::Hash::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::HashAdaptor hashAdaptor(operands);
+      auto hashOp = mlir::cast<mlir::db::Hash>(op);
       hashAdaptor.val().getType().dump();
+      hashOp.val().getType().dump();
       Value const0 = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0));
-      rewriter.replaceOp(op, hashImpl(rewriter, hashAdaptor.val(), const0));
+      rewriter.replaceOp(op, hashImpl(rewriter, hashAdaptor.val(),const0, hashOp.val().getType()));
       return success();
    }
 };
 } // namespace
 
-
 void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    using FunctionId = db::codegen::FunctionRegistry::FunctionId;
 
    auto ensureDate64 = [](mlir::db::DateType dateType, Value v, ConversionPatternRewriter& rewriter) {
-     if (dateType.getUnit() == db::DateUnitAttr::day) {
-        auto i64Type = IntegerType::get(rewriter.getContext(), 64);
-        v = rewriter.template create<ZeroExtendIOp>(rewriter.getUnknownLoc(), v, i64Type);
-        Value multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(i64Type, 24 * 60 * 60 * 1000));
-        v = rewriter.template create<MulIOp>(rewriter.getUnknownLoc(), v, multiplier);
-        return v;
-     } else {
-        return v;
-     }
+      if (dateType.getUnit() == db::DateUnitAttr::day) {
+         auto i64Type = IntegerType::get(rewriter.getContext(), 64);
+         v = rewriter.template create<ZeroExtendIOp>(rewriter.getUnknownLoc(), v, i64Type);
+         Value multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(i64Type, 24 * 60 * 60 * 1000));
+         v = rewriter.template create<MulIOp>(rewriter.getUnknownLoc(), v, multiplier);
+         return v;
+      } else {
+         return v;
+      }
    };
    auto negateInterval = [](mlir::db::IntervalType dateType, Value v, ConversionPatternRewriter& rewriter) {
-     Value multiplier = rewriter.template create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(v.getType(), -1));
-     return rewriter.template create<MulIOp>(rewriter.getUnknownLoc(), v, multiplier);
+      Value multiplier = rewriter.template create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(v.getType(), -1));
+      return rewriter.template create<MulIOp>(rewriter.getUnknownLoc(), v, multiplier);
    };
    auto transformDateBack = [](mlir::db::DateType dateType, Value v, ConversionPatternRewriter& rewriter) {
-     if (dateType.getUnit() == db::DateUnitAttr::day) {
-        auto i64Type = IntegerType::get(rewriter.getContext(), 64);
-        auto i32Type = IntegerType::get(rewriter.getContext(), 32);
-        Value multiplier = rewriter.template create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(i64Type, 24 * 60 * 60 * 1000));
-        v = rewriter.template create<UnsignedDivIOp>(rewriter.getUnknownLoc(), v, multiplier);
-        v = rewriter.template create<TruncateIOp>(rewriter.getUnknownLoc(), v, i32Type);
-        return v;
-     }
-     return v;
+      if (dateType.getUnit() == db::DateUnitAttr::day) {
+         auto i64Type = IntegerType::get(rewriter.getContext(), 64);
+         auto i32Type = IntegerType::get(rewriter.getContext(), 32);
+         Value multiplier = rewriter.template create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(i64Type, 24 * 60 * 60 * 1000));
+         v = rewriter.template create<UnsignedDivIOp>(rewriter.getUnknownLoc(), v, multiplier);
+         v = rewriter.template create<TruncateIOp>(rewriter.getUnknownLoc(), v, i32Type);
+         return v;
+      }
+      return v;
    };
    auto identity = [](auto, Value v, auto&) { return v; };
    auto rightleft = [](Value left, Value right) { return std::vector<Value>({right, left}); };
    auto dateAddFunction = [&](Operation* op, mlir::db::DateType dateType, mlir::db::IntervalType intervalType, ConversionPatternRewriter& rewriter) {
-     return functionRegistry.getFunction(rewriter, FunctionId::TimestampAddMonth);
+      return functionRegistry.getFunction(rewriter, FunctionId::TimestampAddMonth);
    };
    auto dateExtractFunction = [&](mlir::db::DateExtractOp dateExtractOp, mlir::db::DateType dateType, ConversionPatternRewriter& rewriter) {
-     FunctionId functionId;
-     switch (dateExtractOp.unit()) {
-        case mlir::db::ExtractableTimeUnitAttr::second: functionId = FunctionId::DateExtractSecond; break;
-        case mlir::db::ExtractableTimeUnitAttr::minute: functionId = FunctionId::DateExtractMinute; break;
-        case mlir::db::ExtractableTimeUnitAttr::hour: functionId = FunctionId::DateExtractHour; break;
-        case mlir::db::ExtractableTimeUnitAttr::dow: functionId = FunctionId::DateExtractDow; break;
-        case mlir::db::ExtractableTimeUnitAttr::week: functionId = FunctionId::DateExtractWeek; break;
-        case mlir::db::ExtractableTimeUnitAttr::day: functionId = FunctionId::DateExtractDay; break;
-        case mlir::db::ExtractableTimeUnitAttr::month: functionId = FunctionId::DateExtractMonth; break;
-        case mlir::db::ExtractableTimeUnitAttr::doy: functionId = FunctionId::DateExtractDoy; break;
-        case mlir::db::ExtractableTimeUnitAttr::quarter: functionId = FunctionId::DateExtractQuarter; break;
-        case mlir::db::ExtractableTimeUnitAttr::year: functionId = FunctionId::DateExtractYear; break;
-        case mlir::db::ExtractableTimeUnitAttr::decade: functionId = FunctionId::DateExtractDecade; break;
-        case mlir::db::ExtractableTimeUnitAttr::century: functionId = FunctionId::DateExtractCentury; break;
-        case mlir::db::ExtractableTimeUnitAttr::millennium: functionId = FunctionId::DateExtractMillenium; break;
-     }
-     return functionRegistry.getFunction(rewriter, functionId);
+      FunctionId functionId;
+      switch (dateExtractOp.unit()) {
+         case mlir::db::ExtractableTimeUnitAttr::second: functionId = FunctionId::DateExtractSecond; break;
+         case mlir::db::ExtractableTimeUnitAttr::minute: functionId = FunctionId::DateExtractMinute; break;
+         case mlir::db::ExtractableTimeUnitAttr::hour: functionId = FunctionId::DateExtractHour; break;
+         case mlir::db::ExtractableTimeUnitAttr::dow: functionId = FunctionId::DateExtractDow; break;
+         case mlir::db::ExtractableTimeUnitAttr::week: functionId = FunctionId::DateExtractWeek; break;
+         case mlir::db::ExtractableTimeUnitAttr::day: functionId = FunctionId::DateExtractDay; break;
+         case mlir::db::ExtractableTimeUnitAttr::month: functionId = FunctionId::DateExtractMonth; break;
+         case mlir::db::ExtractableTimeUnitAttr::doy: functionId = FunctionId::DateExtractDoy; break;
+         case mlir::db::ExtractableTimeUnitAttr::quarter: functionId = FunctionId::DateExtractQuarter; break;
+         case mlir::db::ExtractableTimeUnitAttr::year: functionId = FunctionId::DateExtractYear; break;
+         case mlir::db::ExtractableTimeUnitAttr::decade: functionId = FunctionId::DateExtractDecade; break;
+         case mlir::db::ExtractableTimeUnitAttr::century: functionId = FunctionId::DateExtractCentury; break;
+         case mlir::db::ExtractableTimeUnitAttr::millennium: functionId = FunctionId::DateExtractMillenium; break;
+      }
+      return functionRegistry.getFunction(rewriter, functionId);
    };
 
    patterns.insert<SimpleBinOpToFuncLowering<mlir::db::DateAddOp, mlir::db::DateType, mlir::db::IntervalType, mlir::db::DateType>>(
@@ -440,5 +450,4 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
    patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DumpIndexOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<HashLowering>(functionRegistry, typeConverter, patterns.getContext());
-
 }

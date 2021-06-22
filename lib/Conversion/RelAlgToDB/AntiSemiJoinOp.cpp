@@ -111,8 +111,6 @@ class HashAntiSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
       auto scope = context.createScope();
       if (child == builderChild) {
          auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), leftKeys, builder.getInsertionBlock(), context);
-         llvm::dbgs() << "leftKeys:" << (!leftKeys.empty()) << ", inlinedKeys:" << (!inlinedKeys.empty()) << "\n";
-         joinOp.dump();
          mlir::Value packedKey = mlir::relalg::HashJoinUtils::pack(inlinedKeys, builder);
          mlir::Value packedValues =mlir::relalg::HashJoinUtils:: packAttrs(orderedValues, builder, context);
          mlir::Value htBuilder = context.builders[builderId];

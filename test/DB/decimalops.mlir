@@ -36,10 +36,10 @@
 		db.dump %3 : !db.decimal<12,8>
 
   		%4 = db.mul %constm10 : !db.decimal<12,8>,%constm10 : !db.decimal<12,8>
- 		//CHECK: decimal(10000000020.00000001)
+ 		//CHECK: decimal(100.00000020)
  		db.dump %4 : !db.decimal<12,8>
 		%5 = db.mul %const10 : !db.decimal<12,8>,%const10 : !db.decimal<12,8>
-		//CHECK: decimal(10000000100.00000025)
+		//CHECK: decimal(100.00000100)
 		db.dump %5 : !db.decimal<12,8>
 
   		%6 = db.div %constm10 : !db.decimal<12,8>,%constm10 : !db.decimal<12,8>

@@ -6,7 +6,7 @@ int32_t support::parseDate32(std::string str) {
    arrow::internal::ParseValue<arrow::Date32Type>(str.data(), str.length(), &res);
    return res;
 }
-arrow::TimeUnit::type convertTimeUnit(support::TimeUnit unit){
+arrow::TimeUnit::type convertTimeUnit(support::TimeUnit unit) {
    switch (unit) {
       case support::TimeUnit::SECOND: return arrow::TimeUnit::SECOND;
       case support::TimeUnit::MILLI: return arrow::TimeUnit::MILLI;
@@ -15,7 +15,7 @@ arrow::TimeUnit::type convertTimeUnit(support::TimeUnit unit){
    }
    return arrow::TimeUnit::SECOND;
 }
-int64_t support::parseTimestamp(std::string str,TimeUnit unit) {
+int64_t support::parseTimestamp(std::string str, TimeUnit unit) {
    int64_t res;
    arrow::internal::ParseValue<arrow::TimestampType>(arrow::TimestampType(convertTimeUnit(unit)), str.data(), str.length(), &res);
    return res;
@@ -29,9 +29,11 @@ std::pair<uint64_t, uint64_t> support::parseDecimal(std::string str, unsigned re
    int32_t scale;
    arrow::Decimal128 decimalrep;
    if (arrow::Decimal128::FromString(str, &decimalrep, &precision, &scale) != arrow::Status::OK()) {
-      //todo
+      assert(false&&"could not parse decimal const");
    }
    auto x = decimalrep.Rescale(scale, reqScale);
-   decimalrep = x.ValueUnsafe();
-   return {decimalrep.low_bits(), decimalrep.high_bits()};
+   decimalrep = x.ValueOrDie();
+   uint64_t low = decimalrep.low_bits();
+   uint64_t high = decimalrep.high_bits();
+   return {low, high};
 }

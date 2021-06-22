@@ -573,14 +573,65 @@ static void print(OpAsmPrinter& p, relalg::InnerJoinOp& op) {
 static ParseResult parseFullOuterJoinOp(OpAsmParser& parser, OperationState& result) {
    parseRelationalInputs(parser, result, 2);
    parseCustomRegion(parser, result);
+   parser.parseOptionalAttrDictWithKeyword(result.attributes);
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::FullOuterJoinOp& op) {
    p << op.getOperationName() << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
+   p << " ";
+   p.printOptionalAttrDictWithKeyword(op->getAttrs());
 }
 ///////////////////////////////////////////////////////////////////////////////////
-// NonCommutativeJoins: OuterJoin,SemiJoin,AntiSemiJoin,SingleJoin
+// OuterJoinOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseOuterJoinOp(OpAsmParser& parser, OperationState& result) {
+   StringAttr nameAttr;
+   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
+      return failure();
+   }
+   parseRelationalInputs(parser, result, 2);
+   parseCustomRegion(parser, result);
+   getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
+   parseAttrMapping(parser, result);
+   parser.parseOptionalAttrDictWithKeyword(result.attributes);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::OuterJoinOp& op) {
+   p << op.getOperationName() << " ";
+   p.printSymbolName(op.sym_name());
+   p<<" "<< op.left() << ", " << op.right() << " ";
+   printCustomRegion(p, op.getRegion());
+   printMapping(p, op.mapping());
+   p << " ";
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"mapping","sym_name"});
+}
+///////////////////////////////////////////////////////////////////////////////////
+// SingleJoinOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseSingleJoinOp(OpAsmParser& parser, OperationState& result) {
+   StringAttr nameAttr;
+   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
+      return failure();
+   }
+   parseRelationalInputs(parser, result, 2);
+   parseCustomRegion(parser, result);
+   getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
+   parseAttrMapping(parser, result);
+   parser.parseOptionalAttrDictWithKeyword(result.attributes);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::SingleJoinOp& op) {
+   p << op.getOperationName() << " ";
+   p.printSymbolName(op.sym_name());
+   p<<" "<< op.left() << ", " << op.right() << " ";
+   printCustomRegion(p, op.getRegion());
+   printMapping(p, op.mapping());
+   p << " ";
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"mapping","sym_name"});
+}
+///////////////////////////////////////////////////////////////////////////////////
+// NonCommutativeJoins: SemiJoin,AntiSemiJoin
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseNonCommutativeJoin(OpAsmParser& parser, OperationState& result) {
    if (parseRelationalInputs(parser, result, 2) ||

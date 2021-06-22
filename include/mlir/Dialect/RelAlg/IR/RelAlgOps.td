@@ -242,16 +242,13 @@ return printNonCommutativeJoin(this->getOperation(), p);
 }
 def OuterJoinOp : RelAlg_Op<"outerjoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "outer join operation";
-let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let arguments = (ins SymbolNameAttr:$sym_name,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
-let parser = [{
-return parseNonCommutativeJoin(parser, result);
-}];
-
-let printer = [{
-return printNonCommutativeJoin(this->getOperation(), p);
-}];
+let extraClassDeclaration = [{
+Attributes getCreatedAttributes();
+Attributes getUsedAttributes();
+Attributes getAvailableAttributes();}];
 }
 def FullOuterJoinOp : RelAlg_Op<"fullouterjoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "full outer join operation";
@@ -262,16 +259,13 @@ let regions = (region SizedRegion<1>:$predicate);
 }
 def SingleJoinOp : RelAlg_Op<"singlejoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "single join operation";
-let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+let arguments = (ins SymbolNameAttr:$sym_name,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
-let parser = [{
-return parseNonCommutativeJoin(parser, result);
-}];
-
-let printer = [{
-return printNonCommutativeJoin(this->getOperation(), p);
-}];
+let extraClassDeclaration = [{
+Attributes getCreatedAttributes();
+Attributes getUsedAttributes();
+Attributes getAvailableAttributes();}];
 }
 def MarkJoinOp : RelAlg_Op<"markjoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "mark join operation";

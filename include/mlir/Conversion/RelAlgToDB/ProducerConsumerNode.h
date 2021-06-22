@@ -22,7 +22,7 @@ class LoweringContext {
       assert(symbolTable.count(attribute));
       if (!symbolTable.lookup(attribute)) {
          auto [a, b] = executionContext.getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager().getName(attribute);
-         llvm::dbgs()<<a<<","<<b<<"\n";
+         llvm::dbgs() << a << "," << b << "\n";
       }
 
       return symbolTable.lookup(attribute);
@@ -141,6 +141,9 @@ class ProducerConsumerNodeRegistry {
    static bool registeredRenamingOp;
    static bool registeredProjectionOp;
    static bool registeredLimitOp;
+   static bool registeredOuterJoinOp;
+   static bool registeredSingleJoinOp;
+   static bool registeredMarkJoinOp;
    std::unordered_map<std::string, std::function<std::unique_ptr<mlir::relalg::ProducerConsumerNode>(mlir::Operation*)>> nodes;
    ProducerConsumerNodeRegistry() {
       bool res = true;
@@ -158,6 +161,9 @@ class ProducerConsumerNodeRegistry {
       res &= registeredRenamingOp;
       res &= registeredProjectionOp;
       res &= registeredLimitOp;
+      res &= registeredOuterJoinOp;
+      res &= registeredSingleJoinOp;
+      res &= registeredMarkJoinOp;
       llvm::dbgs() << "registered=" << res << "\n";
    }
 

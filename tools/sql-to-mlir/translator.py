@@ -1,5 +1,5 @@
 from moz_sql_parser import parse
-
+import copy
 from mlir import DBType, Attribute
 from codegen import CodeGen
 from resolver import StackedResolver, Resolver
@@ -15,13 +15,16 @@ class Translator:
         self.with_defs = {}
         self.mapnumber=0
         self.aggrnumber=0
+        self.ojnumber=0
     def uniqueAttrName(self):
         self.attrnumber+=1
         return "attr"+str(self.attrnumber)
     def uniqueMapName(self):
         self.mapnumber+=1
         return "map"+str(self.mapnumber)
-
+    def uniqueOuterJoinName(self):
+        self.ojnumber+=1
+        return "outerjoin"+str(self.ojnumber)
     def uniqueAggrName(self):
         self.aggrnumber += 1
         return "aggr" + str(self.aggrnumber)
@@ -117,7 +120,10 @@ class Translator:
         elif type(expr) is int:
             return codegen.create_db_const(expr, DBType("int", ["64"], False))
         elif type(expr) is float:
-            return codegen.create_db_const(expr, DBType("float", ["64"], False))
+            asstring=str(expr)
+            parts=asstring.split('.');
+            afterComma=len(parts[1])
+            return codegen.create_db_const(expr, DBType("decimal", ["15",str(afterComma)], False))
         else:
             attr, tuple = stacked_resolver.resolve(expr)
             return codegen.create_relalg_getattr(tuple, attr)
@@ -139,7 +145,10 @@ class Translator:
                 key = list(from_value.keys())[0]
                 if key.endswith("join"):
                     join_table_desc = ensure_value_dict(from_value[key])
-                    var = self.addJoinTable(codegen, join_table_desc, resolver,all_from_attributes)
+                    left_attributes=all_from_attributes
+                    right_attributes=[]
+                    var = self.addJoinTable(codegen, join_table_desc, resolver,right_attributes)
+                    all_from_attributes.extend(right_attributes)
                     outer = "outer" in key
                     left=tree_var
                     right=var
@@ -149,11 +158,21 @@ class Translator:
                     elif jointype == "right":
                         jointype=""
                         left,right=right,left
-                    tree_var, tuple = codegen.startJoin(outer, jointype, left , right)
+                    name=self.uniqueOuterJoinName()if outer else ""
+                    tree_var, tuple = codegen.startJoin(outer, jointype, left , right, name)
+
                     stacked_resolver.push(tuple, resolver)
                     sel_res = self.translateExpression(from_value["on"], codegen, stacked_resolver)
                     stacked_resolver.pop()
-                    codegen.endSelection(sel_res)
+                    mapping=[]
+                    if outer:
+                        for attr in right_attributes:
+                            new_type=copy.copy(attr.type)
+                            new_type.nullable=True
+                            new_attr=Attribute(name,attr.name,new_type,[attr],attr.print_name)
+                            mapping.append(new_attr)
+                            resolver.replace(attr,new_attr)
+                    codegen.endJoin(sel_res,mapping)
 
         if "where" in stmt:
             tree_var, tuple = codegen.startSelection(tree_var)

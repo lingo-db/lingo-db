@@ -8,6 +8,7 @@ void runner::Runner::printTable(uint8_t* ptr) {
    std::vector<size_t> positions;
    arrow::PrettyPrintOptions options;
    options.indent_size = 0;
+   options.window=100;
    std::cout << "|";
    std::string rowSep = "-";
    for (auto c : table->columns()) {

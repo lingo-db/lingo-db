@@ -134,11 +134,6 @@ Attributes RenamingOp::getCreatedAttributes() {
    }
    return created;
 }
-Attributes MarkJoinOp::getCreatedAttributes() {
-   Attributes created;
-   created.insert(&markattr().getRelationalAttribute());
-   return created;
-}
 Attributes RenamingOp::getUsedAttributes() {
    Attributes used;
 
@@ -156,6 +151,80 @@ Attributes RenamingOp::getAvailableAttributes() {
    availablePreviously.insert(created);
    return availablePreviously;
 }
+Attributes OuterJoinOp::getCreatedAttributes() {
+   Attributes created;
+
+   for (Attribute attr : mapping()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
+      created.insert(&relationDefAttr.getRelationalAttribute());
+   }
+   return created;
+}
+Attributes OuterJoinOp::getUsedAttributes() {
+   Attributes used;
+
+   for (Attribute attr : mapping()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
+      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      used.insert(Attributes::fromArrayAttr(fromExisting));
+   }
+   used.insert( mlir::relalg::detail::getUsedAttributes(getOperation()));
+   return used;
+}
+Attributes OuterJoinOp::getAvailableAttributes() {
+   Attributes renamed;
+
+   for (Attribute attr : mapping()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
+      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      renamed.insert(Attributes::fromArrayAttr(fromExisting));
+   }
+   auto availablePreviously = collectAttributes(getChildOperators(*this), [](Operator op) { return op.getAvailableAttributes(); });
+   availablePreviously.remove(renamed);
+   auto created = getCreatedAttributes();
+   availablePreviously.insert(created);
+   return availablePreviously;
+}
+Attributes SingleJoinOp::getCreatedAttributes() {
+   Attributes created;
+
+   for (Attribute attr : mapping()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
+      created.insert(&relationDefAttr.getRelationalAttribute());
+   }
+   return created;
+}
+Attributes SingleJoinOp::getUsedAttributes() {
+   Attributes used;
+
+   for (Attribute attr : mapping()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
+      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      used.insert(Attributes::fromArrayAttr(fromExisting));
+   }
+   used.insert( mlir::relalg::detail::getUsedAttributes(getOperation()));
+   return used;
+}
+Attributes SingleJoinOp::getAvailableAttributes() {
+   Attributes renamed;
+
+   for (Attribute attr : mapping()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
+      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      renamed.insert(Attributes::fromArrayAttr(fromExisting));
+   }
+   auto availablePreviously = collectAttributes(getChildOperators(*this), [](Operator op) { return op.getAvailableAttributes(); });
+   availablePreviously.remove(renamed);
+   auto created = getCreatedAttributes();
+   availablePreviously.insert(created);
+   return availablePreviously;
+}
+Attributes MarkJoinOp::getCreatedAttributes() {
+   Attributes created;
+   created.insert(&markattr().getRelationalAttribute());
+   return created;
+}
+
 Attributes BaseTableOp::getCreatedAttributes() {
    Attributes creations;
    for (auto mapping : columns()) {

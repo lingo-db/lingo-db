@@ -5,12 +5,12 @@
 #include <mlir/Conversion/RelAlgToDB/HashJoinUtils.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class NLSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
-   mlir::relalg::SemiJoinOp joinOp;
+class NLMarkJoinLowering : public mlir::relalg::ProducerConsumerNode {
+   mlir::relalg::MarkJoinOp joinOp;
    mlir::Value matchFoundFlag;
 
    public:
-   NLSemiJoinLowering(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::ProducerConsumerNode({innerJoinOp.left(), innerJoinOp.right()}), joinOp(innerJoinOp) {
+   NLMarkJoinLowering(mlir::relalg::MarkJoinOp markJoinOp) : mlir::relalg::ProducerConsumerNode({markJoinOp.left(), markJoinOp.right()}), joinOp(markJoinOp) {
    }
    virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
@@ -28,50 +28,33 @@ class NLSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
          children[1]->setFlag(matchFoundFlag);
          children[1]->produce(context, builder);
          mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-         auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matchFound);
-         mlir::Block* ifBlock = new mlir::Block;
-
-         ifOp.thenRegion().push_back(ifBlock);
-
-         mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
-         if (!requiredBuilders.empty()) {
-            mlir::Block* elseBlock = new mlir::Block;
-            ifOp.elseRegion().push_back(elseBlock);
-            mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
-            builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-         }
-         consumer->consume(this, builder1, context);
-         builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-
-         size_t i = 0;
-         for (auto b : requiredBuilders) {
-            context.builders[b] = ifOp.getResult(i++);
-         }
+         context.setValueForAttribute(scope,&joinOp.markattr().getRelationalAttribute(),matchFound);
+         consumer->consume(this, builder, context);
       } else if (child == this->children[1].get()) {
-         mlir::relalg::SemiJoinOp clonedSemiJoinOp = mlir::dyn_cast<mlir::relalg::SemiJoinOp>(joinOp->clone());
-         mlir::Block* block = &clonedSemiJoinOp.predicate().getBlocks().front();
+         mlir::relalg::MarkJoinOp clonedMarkJoinOp = mlir::dyn_cast<mlir::relalg::MarkJoinOp>(joinOp->clone());
+         mlir::Block* block = &clonedMarkJoinOp.predicate().getBlocks().front();
          auto* terminator = block->getTerminator();
 
          builder.mergeRelatinalBlock(block, context, scope);
          mlir::Value matched = mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0];
          builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
          terminator->erase();
-         clonedSemiJoinOp->destroy();
+         clonedMarkJoinOp->destroy();
       }
    }
    virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
       children[0]->produce(context, builder);
    }
 
-   virtual ~NLSemiJoinLowering() {}
+   virtual ~NLMarkJoinLowering() {}
 };
 
-class HashSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
+class HashMarkJoinLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::relalg::ProducerConsumerNode* builderChild;
    mlir::relalg::ProducerConsumerNode* lookupChild;
 
 
-   mlir::relalg::SemiJoinOp joinOp;
+   mlir::relalg::MarkJoinOp joinOp;
    mlir::relalg::Attributes leftKeys, rightKeys, leftValues;
    std::vector<mlir::relalg::RelationalAttribute*> orderedValues;
    mlir::TupleType keyTupleType, valTupleType, entryType;
@@ -79,7 +62,7 @@ class HashSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::Value joinHt;
 
    public:
-   HashSemiJoinLowering(mlir::relalg::SemiJoinOp semiJoinOp) : mlir::relalg::ProducerConsumerNode({semiJoinOp.left(), semiJoinOp.right()}), joinOp(semiJoinOp) {
+   HashMarkJoinLowering(mlir::relalg::MarkJoinOp markJoinOp) : mlir::relalg::ProducerConsumerNode({markJoinOp.left(), markJoinOp.right()}), joinOp(markJoinOp) {
       builderChild=children[1].get();
       lookupChild=children[0].get();
    }
@@ -134,7 +117,7 @@ class HashSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
                context.setValueForAttribute(scope, orderedValues[i], unpackedValue[i]);
             }
             {
-               mlir::relalg::SemiJoinOp clonedInnerJoinOp = mlir::dyn_cast<mlir::relalg::SemiJoinOp>(joinOp->clone());
+               mlir::relalg::MarkJoinOp clonedInnerJoinOp = mlir::dyn_cast<mlir::relalg::MarkJoinOp>(joinOp->clone());
                mlir::Block* block = &clonedInnerJoinOp.predicate().getBlocks().front();
                auto* terminator = block->getTerminator();
 
@@ -148,25 +131,8 @@ class HashSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
          }
          {
             mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-            auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matchFound);
-            mlir::Block* ifBlock = new mlir::Block;
-
-            ifOp.thenRegion().push_back(ifBlock);
-
-            mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
-            if (!requiredBuilders.empty()) {
-               mlir::Block* elseBlock = new mlir::Block;
-               ifOp.elseRegion().push_back(elseBlock);
-               mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
-               builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-            }
-            consumer->consume(this, builder1, context);
-            builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-
-            size_t i = 0;
-            for (auto b : requiredBuilders) {
-               context.builders[b] = ifOp.getResult(i++);
-            }
+            context.setValueForAttribute(scope,&joinOp.markattr().getRelationalAttribute(),matchFound);
+            consumer->consume(this, builder, context);
          }
       }
    }
@@ -180,15 +146,15 @@ class HashSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
       lookupChild->produce(context, builder);
    }
 
-   virtual ~HashSemiJoinLowering() {}
+   virtual ~HashMarkJoinLowering() {}
 };
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredSemiJoinOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::SemiJoinOp joinOp) {
+bool mlir::relalg::ProducerConsumerNodeRegistry::registeredMarkJoinOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::MarkJoinOp joinOp) {
    if (joinOp->hasAttr("impl")) {
       if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
          if (impl.getValue() == "hash") {
-            return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<HashSemiJoinLowering>(joinOp);
+            return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<HashMarkJoinLowering>(joinOp);
          }
       }
    }
-   return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<NLSemiJoinLowering>(joinOp);
+   return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<NLMarkJoinLowering>(joinOp);
 });
