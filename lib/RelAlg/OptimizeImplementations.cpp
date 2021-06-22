@@ -42,40 +42,44 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
    }
    void runOnFunction() override {
       getFunction().walk([&](Operator op) {
-         auto impl = ::llvm::TypeSwitch<mlir::Operation*, std::string>(op.getOperation())
-                        .Case<mlir::relalg::InnerJoinOp, mlir::relalg::SemiJoinOp, mlir::relalg::AntiSemiJoinOp, mlir::relalg::MarkJoinOp, mlir::relalg::OuterJoinOp>([&](PredicateOperator predicateOperator) {
-                           auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
-                           auto left = mlir::cast<Operator>(binOp.leftChild());
-                           auto right = mlir::cast<Operator>(binOp.rightChild());
-                           if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableAttributes(), right.getAvailableAttributes())) {
-                              return "hash";
-                           } else {
-                              return "";
-                           }
-                        })
-                        .Case<mlir::relalg::SingleJoinOp>([&](mlir::relalg::SingleJoinOp op) {
-                           if (auto returnOp = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(op.getPredicateBlock().getTerminator())) {
-                              if (returnOp.results().empty()) {
-                                 return "constant";
-                              }
-                           }
-                           auto left = mlir::cast<Operator>(op.leftChild());
-                           auto right = mlir::cast<Operator>(op.rightChild());
-                           if (hashImplPossible(&op.getPredicateBlock(), left.getAvailableAttributes(), right.getAvailableAttributes())) {
-                              return "hash";
-                           } else {
-                              return "";
-                           }
-                        })
+         ::llvm::TypeSwitch<mlir::Operation*, void>(op.getOperation())
+            .Case<mlir::relalg::InnerJoinOp, mlir::relalg::SemiJoinOp, mlir::relalg::AntiSemiJoinOp, mlir::relalg::MarkJoinOp, mlir::relalg::OuterJoinOp>([&](PredicateOperator predicateOperator) {
+               auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
+               auto left = mlir::cast<Operator>(binOp.leftChild());
+               auto right = mlir::cast<Operator>(binOp.rightChild());
+               if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableAttributes(), right.getAvailableAttributes())) {
+                  op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
+               }
+            })
+            .Case<mlir::relalg::SingleJoinOp>([&](mlir::relalg::SingleJoinOp op) {
+               if (auto returnOp = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(op.getPredicateBlock().getTerminator())) {
+                  if (returnOp.results().empty()) {
+                     op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "constant"));
+                  }
+               }
+               auto left = mlir::cast<Operator>(op.leftChild());
+               auto right = mlir::cast<Operator>(op.rightChild());
+               if (hashImplPossible(&op.getPredicateBlock(), left.getAvailableAttributes(), right.getAvailableAttributes())) {
+                  op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
+               }
+            })
 
-                        .Case<mlir::relalg::OuterJoinOp>([&](mlir::relalg::OuterJoinOp op) { return ""; })
-                        .Case<mlir::relalg::FullOuterJoinOp>([&](mlir::relalg::FullOuterJoinOp op) { return ""; })
-                        .Default([&](auto x) {
-                           return "";
-                        });
-         if (!impl.empty()) {
-            op->setAttr("impl", mlir::StringAttr::get(op.getContext(), impl));
-         }
+            .Case<mlir::relalg::OuterJoinOp>([&](mlir::relalg::OuterJoinOp op) {})
+            .Case<mlir::relalg::FullOuterJoinOp>([&](mlir::relalg::FullOuterJoinOp op) {})
+            .Case<mlir::relalg::LimitOp>([&](mlir::relalg::LimitOp op) {
+               if (auto sortOp = mlir::dyn_cast_or_null<mlir::relalg::SortOp>(op.rel().getDefiningOp())) {
+                  mlir::OpBuilder builder(op);
+                  auto topKVal=builder.create<mlir::relalg::TopKOp>(op->getLoc(),op.getType(),op.rows(),sortOp.rel(),sortOp.sortspecs());
+                  op.result().replaceAllUsesWith(topKVal);
+                  op->remove();
+                  op->destroy();
+                  sortOp->remove();
+                  sortOp->destroy();
+               }
+            })
+
+            .Default([&](auto x) {
+            });
       });
    }
 };

@@ -600,11 +600,11 @@ static ParseResult parseOuterJoinOp(OpAsmParser& parser, OperationState& result)
 static void print(OpAsmPrinter& p, relalg::OuterJoinOp& op) {
    p << op.getOperationName() << " ";
    p.printSymbolName(op.sym_name());
-   p<<" "<< op.left() << ", " << op.right() << " ";
+   p << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
    printMapping(p, op.mapping());
    p << " ";
-   p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"mapping","sym_name"});
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(), {"mapping", "sym_name"});
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // SingleJoinOp
@@ -624,19 +624,19 @@ static ParseResult parseSingleJoinOp(OpAsmParser& parser, OperationState& result
 static void print(OpAsmPrinter& p, relalg::SingleJoinOp& op) {
    p << op.getOperationName() << " ";
    p.printSymbolName(op.sym_name());
-   p<<" "<< op.left() << ", " << op.right() << " ";
+   p << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
    printMapping(p, op.mapping());
    p << " ";
-   p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"mapping","sym_name"});
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(), {"mapping", "sym_name"});
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // NonCommutativeJoins: SemiJoin,AntiSemiJoin
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseNonCommutativeJoin(OpAsmParser& parser, OperationState& result) {
    if (parseRelationalInputs(parser, result, 2) ||
-          parseCustomRegion(parser, result) ||
-          addRelationOutput(parser, result) || parser.parseOptionalAttrDictWithKeyword(result.attributes)) {
+       parseCustomRegion(parser, result) ||
+       addRelationOutput(parser, result) || parser.parseOptionalAttrDictWithKeyword(result.attributes)) {
       return failure();
    }
    return success();
@@ -705,6 +705,21 @@ static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
 }
 static void print(OpAsmPrinter& p, relalg::SortOp& op) {
    p << op.getOperationName() << " " << op.rel() << " ";
+   printSortSpecs(p, op.sortspecs());
+}
+///////////////////////////////////////////////////////////////////////////////////
+// TopKOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseTopKOp(OpAsmParser& parser, OperationState& result) {
+   mlir::IntegerAttr integerAttr;
+   parser.parseAttribute(integerAttr,parser.getBuilder().getI32Type());
+   result.addAttribute("rows",integerAttr);
+   parseRelationalInputs(parser, result, 1);
+   parseSortSpecs(parser, result);
+   return addRelationOutput(parser, result);
+}
+static void print(OpAsmPrinter& p, relalg::TopKOp& op) {
+   p << op.getOperationName() << " " << op.rows() << " " << op.rel() << " ";
    printSortSpecs(p, op.sortspecs());
 }
 ///////////////////////////////////////////////////////////////////////////////////

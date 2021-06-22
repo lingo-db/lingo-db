@@ -160,6 +160,11 @@ let results = (outs RelAlg_TupleStream:$result);
 let assemblyFormat =
 [{ $rows $rel attr-dict }];
 }
+def TopKOp : RelAlg_Op<"topk",[NoSideEffect,Operator,UnaryOperator]> {
+let summary = "top k operation";
+let arguments = (ins I32Attr:$rows, RelAlg_TupleStream:$rel,ArrayAttr:$sortspecs);
+let results = (outs RelAlg_TupleStream:$result);
+}
 def CrossProductOp : RelAlg_Op<"crossproduct",[RecursiveSideEffects,Operator,BinaryOperator]> {
 let summary = "crossproduct operation";
 let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
