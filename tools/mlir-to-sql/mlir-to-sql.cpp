@@ -96,6 +96,15 @@ class ToSQL {
                if (t.isa<mlir::db::IntType>() || t.isa<mlir::db::DecimalType>() || t.isa<mlir::db::FloatType>()) {
                   output << std::string(strAttr.getValue());
 
+               } else if (auto intervalType=t.dyn_cast_or_null<mlir::db::IntervalType>()) {
+                  if(intervalType.getUnit()==mlir::db::IntervalUnitAttr::months){
+                     output << "'" << std::string(strAttr.getValue()) << "' month";
+                  }else{
+                     uint64_t valAsInt=std::stoll(std::string(strAttr.getValue()));
+                     uint64_t valInDays=valAsInt/(24ll*60ll*60ll*1000ll);
+                     output << "'" << std::to_string(valInDays) << "' day";
+                  }
+
                } else {
                   output << "'" << std::string(strAttr.getValue()) << "'";
                }
@@ -288,39 +297,39 @@ class ToSQL {
                      output << resolveVal(mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(op.predicate().front().getTerminator()).getOperand(0));
                   })
                   .Case<mlir::relalg::SingleJoinOp>([&](mlir::relalg::SingleJoinOp op) {
-                    output << " select ";
-                    llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> alreadyPrinted;
-                    std::vector<std::string> attrs;
-                    auto first = true;
+                     output << " select ";
+                     llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> alreadyPrinted;
+                     std::vector<std::string> attrs;
+                     auto first = true;
 
-                    for (auto attr : op.mapping()) {
-                       if (first) {
-                          first = false;
-                       } else {
-                          output << ", ";
-                       }
-                       auto def = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
-                       auto ref = def.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[0].dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>();
-                       alreadyPrinted.insert(&def.getRelationalAttribute());
-                       output << attributeName(ref.getRelationalAttribute()) << " as " << attributeName(def.getRelationalAttribute());
-                    }
-                    for (auto* attr : op.getAvailableAttributes()) {
-                       if (!alreadyPrinted.contains(attr)) {
-                          if (first) {
-                             first = false;
-                          } else {
-                             output << ", ";
-                          }
-                          output << attributeName(*attr);
-                       }
-                    }
-                    output << " from " << operatorName(op.left().getDefiningOp()) << " left outer join " << operatorName(op.right().getDefiningOp()) << " ";
-                    auto returnop = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(op.predicate().front().getTerminator());
-                    if (returnop->getNumOperands() > 0) {
-                       output << " on " << resolveVal(returnop.getOperand(0));
-                    } else {
-                       output << " on true";
-                    }
+                     for (auto attr : op.mapping()) {
+                        if (first) {
+                           first = false;
+                        } else {
+                           output << ", ";
+                        }
+                        auto def = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+                        auto ref = def.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[0].dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>();
+                        alreadyPrinted.insert(&def.getRelationalAttribute());
+                        output << attributeName(ref.getRelationalAttribute()) << " as " << attributeName(def.getRelationalAttribute());
+                     }
+                     for (auto* attr : op.getAvailableAttributes()) {
+                        if (!alreadyPrinted.contains(attr)) {
+                           if (first) {
+                              first = false;
+                           } else {
+                              output << ", ";
+                           }
+                           output << attributeName(*attr);
+                        }
+                     }
+                     output << " from " << operatorName(op.left().getDefiningOp()) << " left outer join " << operatorName(op.right().getDefiningOp()) << " ";
+                     auto returnop = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(op.predicate().front().getTerminator());
+                     if (returnop->getNumOperands() > 0) {
+                        output << " on " << resolveVal(returnop.getOperand(0));
+                     } else {
+                        output << " on true";
+                     }
                   })
                   .Case<mlir::relalg::InnerJoinOp>([&](mlir::relalg::InnerJoinOp op) {
                      output << " select * from " << operatorName(op.left().getDefiningOp()) << " inner join " << operatorName(op.right().getDefiningOp()) << " ";
@@ -333,31 +342,31 @@ class ToSQL {
                   })
                   .Case<mlir::relalg::OuterJoinOp>([&](mlir::relalg::OuterJoinOp op) {
                      output << " select ";
-                    llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> alreadyPrinted;
-                    std::vector<std::string> attrs;
-                    auto first = true;
+                     llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8> alreadyPrinted;
+                     std::vector<std::string> attrs;
+                     auto first = true;
 
-                    for (auto attr : op.mapping()) {
-                       if (first) {
-                          first = false;
-                       } else {
-                          output << ", ";
-                       }
-                       auto def = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
-                       auto ref = def.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[0].dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>();
-                       alreadyPrinted.insert(&def.getRelationalAttribute());
-                       output << attributeName(ref.getRelationalAttribute()) << " as " << attributeName(def.getRelationalAttribute());
-                    }
-                    for (auto* attr : op.getAvailableAttributes()) {
-                       if (!alreadyPrinted.contains(attr)) {
-                          if (first) {
-                             first = false;
-                          } else {
-                             output << ", ";
-                          }
-                          output << attributeName(*attr);
-                       }
-                    }
+                     for (auto attr : op.mapping()) {
+                        if (first) {
+                           first = false;
+                        } else {
+                           output << ", ";
+                        }
+                        auto def = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+                        auto ref = def.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[0].dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>();
+                        alreadyPrinted.insert(&def.getRelationalAttribute());
+                        output << attributeName(ref.getRelationalAttribute()) << " as " << attributeName(def.getRelationalAttribute());
+                     }
+                     for (auto* attr : op.getAvailableAttributes()) {
+                        if (!alreadyPrinted.contains(attr)) {
+                           if (first) {
+                              first = false;
+                           } else {
+                              output << ", ";
+                           }
+                           output << attributeName(*attr);
+                        }
+                     }
                      output << " from " << operatorName(op.left().getDefiningOp()) << " left outer join " << operatorName(op.right().getDefiningOp()) << " ";
                      auto returnop = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(op.predicate().front().getTerminator());
                      if (returnop->getNumOperands() > 0) {
