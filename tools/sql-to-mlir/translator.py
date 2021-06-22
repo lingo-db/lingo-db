@@ -80,13 +80,15 @@ class Translator:
             elif key == "extract":
                 return codegen.create_db_extract(expr[key][0], translateSubExpressions(expr[key][1])[0])
             elif key == "interval":
+                val=int(expr[key][0])
                 tu=expr[key][1]
                 timeunit=""
-                if tu=="days":
+                if tu=="days" or tu=="day":
+                    val*=24*60*60*1000
                     timeunit="daytime"
                 else:
                     timeunit="months"
-                return codegen.create_db_const(int(expr[key][0]), DBType("interval", [timeunit], False))
+                return codegen.create_db_const(val, DBType("interval", [timeunit], False))
             elif key == "literal":
                 return codegen.create_db_const(expr[key], DBType("string", [], False))
             elif key == "in":

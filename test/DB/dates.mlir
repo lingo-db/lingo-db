@@ -5,6 +5,7 @@
  		%date_const = db.constant ( "2020-06-13") : !db.date<day>
  		%interval_1_month_const = db.constant ( 1 ) :!db.interval<months>
  		%interval_1_year_const = db.constant ( 12 ) :!db.interval<months>
+ 		%interval_90_days_const = db.constant ( 7776000000 ) :!db.interval<daytime>
   		//CHECK: date(2020-07-13)
   		%1 = db.date_add %date_const:!db.date<day>, %interval_1_month_const :!db.interval<months>
   		db.dump %1 : !db.date<day>
@@ -26,6 +27,9 @@
 		//CHECK: date(2019-06-13)
 		%8 = db.date_sub %date_const:!db.date<day>, %interval_1_year_const :!db.interval<months>
 		db.dump %8 : !db.date<day>
+		//CHECK: date(2020-03-15)
+		%9 = db.date_sub %date_const:!db.date<day>, %interval_90_days_const :!db.interval<daytime>
+		db.dump %9 : !db.date<day>
 		return
 	}
  }

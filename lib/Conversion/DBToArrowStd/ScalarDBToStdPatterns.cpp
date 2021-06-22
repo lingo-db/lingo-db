@@ -352,7 +352,7 @@ class ConstantLowering : public ConversionPattern {
             return success();
          }
          if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, std::stoi(strAttr.getValue().str())));
+            rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, std::stoll(strAttr.getValue().str())));
             return success();
          }
       } else if (type.isa<mlir::db::FloatType>()) {

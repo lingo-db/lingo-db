@@ -2,8 +2,8 @@
 #define MLIR_CONVERSION_DBTOARROWSTD_REGISTEREDFUNCTIONS_H
 
 #define FUNC_LIST(F, OPERANDS, RETURNS)                                                                                                                                                                                                                                                                 \
-   F(StartExecution, start_execution, OPERANDS(), RETURNS(POINTER_TYPE))                                                                                                                                                                                                   \
-   F(FinishExecution, finish_execution, OPERANDS(POINTER_TYPE), RETURNS())                                                                                                                                                                                                   \
+   F(StartExecution, start_execution, OPERANDS(), RETURNS(POINTER_TYPE))                                                                                                                                                                                                                                \
+   F(FinishExecution, finish_execution, OPERANDS(POINTER_TYPE), RETURNS())                                                                                                                                                                                                                              \
    F(ExecutionContextGetTable, get_table, OPERANDS(POINTER_TYPE, STRING_TYPE), RETURNS(POINTER_TYPE))                                                                                                                                                                                                   \
    F(TableGetColumnId, get_column_id, OPERANDS(POINTER_TYPE, STRING_TYPE), RETURNS(INDEX_TYPE))                                                                                                                                                                                                         \
    F(DumpInt, dump_int, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                                                                                                                                                                                                   \
@@ -95,7 +95,8 @@
    F(JoinHtIteratorCurr, join_ht_iterator_curr, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                                                                                                                                                                          \
    F(JoinHtIteratorValid, join_ht_iterator_valid, OPERANDS(POINTER_TYPE), RETURNS(BOOL_TYPE))                                                                                                                                                                                                           \
    F(JoinHtIteratorFree, join_ht_iterator_free, OPERANDS(POINTER_TYPE), RETURNS())                                                                                                                                                                                                                      \
-   F(JoinHtGetRawData, join_ht_get_raw_data, OPERANDS(POINTER_TYPE), RETURNS(STRING_TYPE))
+   F(JoinHtGetRawData, join_ht_get_raw_data, OPERANDS(POINTER_TYPE), RETURNS(STRING_TYPE))                                                                                                                                                                                                              \
+   F(TimestampAddMillis, timestamp_add_millis, OPERANDS(INT_TYPE(64), INT_TYPE(64)), RETURNS(INT_TYPE(64)))
 
 #define PLAIN_FUNC_LIST(F, OPERANDS, RETURNS)                                                                        \
    F(TimestampAddMonth, timestampaddMonth_int32_date64, OPERANDS(INT_TYPE(32), INT_TYPE(64)), RETURNS(INT_TYPE(64))) \

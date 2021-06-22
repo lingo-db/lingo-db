@@ -417,7 +417,11 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
    auto identity = [](auto, Value v, auto&) { return v; };
    auto rightleft = [](Value left, Value right) { return std::vector<Value>({right, left}); };
    auto dateAddFunction = [&](Operation* op, mlir::db::DateType dateType, mlir::db::IntervalType intervalType, ConversionPatternRewriter& rewriter) {
-      return functionRegistry.getFunction(rewriter, FunctionId::TimestampAddMonth);
+      if(intervalType.getUnit()==mlir::db::IntervalUnitAttr::daytime) {
+         return functionRegistry.getFunction(rewriter, FunctionId::TimestampAddMillis);
+      }else{
+         return functionRegistry.getFunction(rewriter, FunctionId::TimestampAddMonth);
+      }
    };
    auto dateExtractFunction = [&](mlir::db::DateExtractOp dateExtractOp, mlir::db::DateType dateType, ConversionPatternRewriter& rewriter) {
       FunctionId functionId;
