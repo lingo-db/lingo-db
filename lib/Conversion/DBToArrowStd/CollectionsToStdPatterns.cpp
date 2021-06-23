@@ -1,6 +1,5 @@
 #include "mlir/Conversion/DBToArrowStd/CollectionIteration.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
-#include "mlir/Conversion/DBToArrowStd/SerializationUtil.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
@@ -20,33 +19,27 @@ class SortOpLowering : public ConversionPattern {
       static size_t id = 0;
       using FunctionId = db::codegen::FunctionRegistry::FunctionId;
       mlir::db::SortOpAdaptor sortOpAdaptor(operands);
-      auto loweredVectorType = sortOpAdaptor.toSort().getType();
       auto sortOp = cast<mlir::db::SortOp>(op);
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
       auto ptrType = MemRefType::get({}, rewriter.getIntegerType(8));
       Type elementType = sortOp.toSort().getType().cast<mlir::db::VectorType>().getElementType();
-      Type serializedType = mlir::db::codegen::SerializationUtil::serializedType(rewriter, *typeConverter, elementType);
       FuncOp funcOp;
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(parentModule.getBody());
-         auto byteRangeType = MemRefType::get({-1}, rewriter.getIntegerType(8));
-         funcOp = rewriter.create<FuncOp>(parentModule.getLoc(), "db_sort_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({byteRangeType, ptrType, ptrType}), TypeRange(mlir::db::BoolType::get(rewriter.getContext()))));
+         funcOp = rewriter.create<FuncOp>(parentModule.getLoc(), "db_sort_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange(mlir::db::BoolType::get(rewriter.getContext()))));
          funcOp->setAttr("llvm.emit_c_interface", rewriter.getUnitAttr());
          auto* funcBody = new Block;
-         funcBody->addArguments(TypeRange({byteRangeType, ptrType, ptrType}));
+         funcBody->addArguments(TypeRange({ ptrType, ptrType}));
          funcOp.body().push_back(funcBody);
          rewriter.setInsertionPointToStart(funcBody);
-         Value varLenData = funcBody->getArgument(0);
-         Value left = funcBody->getArgument(1);
-         Value right = funcBody->getArgument(2);
+         Value left = funcBody->getArgument(0);
+         Value right = funcBody->getArgument(1);
 
-         Value genericMemrefLeft = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), serializedType, llvm::Optional<int64_t>()), left);
-         Value genericMemrefRight = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), serializedType, llvm::Optional<int64_t>()), right);
-         Value serializedTupleLeft = rewriter.create<util::LoadOp>(sortOp.getLoc(), serializedType, genericMemrefLeft, Value());
-         Value serializedTupleRight = rewriter.create<util::LoadOp>(sortOp.getLoc(), serializedType, genericMemrefRight, Value());
-         Value tupleLeft = mlir::db::codegen::SerializationUtil::deserialize(rewriter, varLenData, serializedTupleLeft, elementType);
-         Value tupleRight = mlir::db::codegen::SerializationUtil::deserialize(rewriter, varLenData, serializedTupleRight, elementType);
+         Value genericMemrefLeft = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), elementType, llvm::Optional<int64_t>()), left);
+         Value genericMemrefRight = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), elementType, llvm::Optional<int64_t>()), right);
+         Value tupleLeft = rewriter.create<util::LoadOp>(sortOp.getLoc(), elementType, genericMemrefLeft, Value());
+         Value tupleRight = rewriter.create<util::LoadOp>(sortOp.getLoc(), elementType, genericMemrefRight, Value());
          auto terminator = rewriter.create<mlir::ReturnOp>(sortOp.getLoc());
          Block* sortLambda = &sortOp.region().front();
          auto* sortLambdaTerminator = sortLambda->getTerminator();
@@ -59,22 +52,10 @@ class SortOpLowering : public ConversionPattern {
          rewriter.eraseOp(terminator);
       }
       Value functionPointer = rewriter.create<mlir::ConstantOp>(sortOp->getLoc(), funcOp.type(), rewriter.getSymbolRefAttr(funcOp.sym_name()));
-      Type vectorMemrefType = util::GenericMemrefType::get(rewriter.getContext(), loweredVectorType, llvm::Optional<int64_t>());
-      Value allocaVec, allocaNewVec;
-      {
-         OpBuilder::InsertionGuard insertionGuard(rewriter);
-         auto func = op->getParentOfType<mlir::FuncOp>();
-         rewriter.setInsertionPointToStart(&func.getBody().front());
-         allocaVec = rewriter.create<mlir::util::AllocaOp>(sortOp->getLoc(), vectorMemrefType, Value());
-         allocaNewVec = rewriter.create<mlir::util::AllocaOp>(sortOp->getLoc(), vectorMemrefType, Value());
-      }
-      rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), sortOpAdaptor.toSort(), allocaVec, Value());
-      Value plainMemref = rewriter.create<mlir::util::ToMemrefOp>(sortOp->getLoc(), ptrType, allocaVec);
-      Value plainMemrefNew = rewriter.create<mlir::util::ToMemrefOp>(sortOp->getLoc(), ptrType, allocaNewVec);
-      Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), serializedType);
-      functionRegistry.call(rewriter, FunctionId::SortVector, {plainMemref, elementSize, functionPointer, plainMemrefNew});
-      Value newVector = rewriter.create<util::LoadOp>(sortOp.getLoc(), loweredVectorType, allocaNewVec, Value());
-      rewriter.replaceOp(op, newVector);
+      Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), elementType);
+      functionRegistry.call(rewriter, FunctionId::SortVector, {sortOpAdaptor.toSort(), elementSize, functionPointer});
+      //rewriter.getBlock()->dump();
+      rewriter.eraseOp(op);
       return success();
    }
 };
@@ -129,18 +110,16 @@ class CreateRangeLowering : public ConversionPattern {
    }
 };
 class LookupOpLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
    public:
-   explicit LookupOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::Lookup::getOperationName(), 1, context),functionRegistry(functionRegistry) {}
+   explicit LookupOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::Lookup::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto loc = rewriter.getUnknownLoc();
       mlir::db::LookupAdaptor lookupAdaptor(operands);
 
       Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.getIndexType(), lookupAdaptor.key());
-      Value rawValues=functionRegistry.call(rewriter,db::codegen::FunctionRegistry::FunctionId::JoinHtGetRawData,lookupAdaptor.collection())[0];
-      Value combined = rewriter.create<mlir::util::PackOp>(loc, TypeRange(TupleType::get(getContext(), {rewriter.getIndexType(),lookupAdaptor.collection().getType(),rawValues.getType()})), ValueRange({hashed,lookupAdaptor.collection(),rawValues}));
+      Value combined = rewriter.create<mlir::util::PackOp>(loc, TypeRange(TupleType::get(getContext(), {rewriter.getIndexType(),lookupAdaptor.collection().getType()})), ValueRange({hashed,lookupAdaptor.collection()}));
 
       rewriter.replaceOp(op, combined);
 
@@ -154,7 +133,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
 
    patterns.insert<ForOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<CreateRangeLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<LookupOpLowering>(functionRegistry, typeConverter, patterns.getContext());
+   patterns.insert<LookupOpLowering>(typeConverter, patterns.getContext());
 
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::AggregationHashtableType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
@@ -189,8 +168,8 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
      return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::VectorType vectorType) {
-      auto ptrType = MemRefType::get({-1}, IntegerType::get(patterns.getContext(), 8));
-      return TupleType::get(patterns.getContext(), {ptrType, ptrType});
+      auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
+      return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::RangeType rangeType) {
       auto convertedType = typeConverter.convertType(rangeType.getElementType());
@@ -230,9 +209,8 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
          auto indexType = IndexType::get(patterns.getContext());
          auto i8Type = IntegerType::get(patterns.getContext(), 8);
          auto ptrType = MemRefType::get({}, i8Type);
-         auto rawDataType = MemRefType::get({-1}, i8Type);
 
-         return (Type) TupleType::get(patterns.getContext(), {indexType,ptrType,rawDataType});
+         return (Type) TupleType::get(patterns.getContext(), {indexType,ptrType});
       }
       return Type();
    });

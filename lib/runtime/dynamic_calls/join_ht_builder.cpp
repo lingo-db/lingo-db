@@ -98,7 +98,7 @@ class LazyMultiMap {
    std::pair<EqualRangeIterator, EqualRangeIterator> equal_range(size_t hash) {
       return std::make_pair(getIt(hash), EqualRangeIterator());
    }
-   std::vector<std::byte> rawData;
+   runtime::VarLenBuffer varLenBuffer;
    // Entries of the hash table.
    std::vector<std::byte> entries_;
    size_t dataSize;
@@ -123,22 +123,14 @@ class LazyMultiMap {
 EXPORT runtime::Pointer<LazyMultiMap> _mlir_ciface_join_ht_builder_create(size_t dataSize) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return new LazyMultiMap(dataSize);
 }
-EXPORT runtime::Triple<bool, uint64_t, uint64_t> _mlir_ciface_join_ht_builder_add_nullable_var_len(runtime::Pointer<LazyMultiMap>* builder, bool null, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   if (null) {
-      return {true, 0, 0};
-   }
-   auto& rawValues = (*builder)->rawData;
-   size_t sizeBefore = rawValues.size();
-   rawValues.resize(sizeBefore + (*data).getSize());
-   memcpy(&rawValues[sizeBefore], (*data).getPtr(), (*data).getSize());
-   return {false, sizeBefore, (*data).getSize()};
+EXPORT runtime::ByteRange _mlir_ciface_join_ht_builder_add_var_len(runtime::Pointer<LazyMultiMap>* builder, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return (*builder)->varLenBuffer.persist(*data);
 }
-EXPORT void _mlir_ciface_join_ht_builder_add_var_len(runtime::Pair<uint64_t, uint64_t>* result, runtime::Pointer<LazyMultiMap>* builder, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   auto& rawValues = (*builder)->rawData;
-   size_t sizeBefore = rawValues.size();
-   rawValues.resize(sizeBefore + (*data).getSize());
-   memcpy(&rawValues[sizeBefore], (*data).getPtr(), (*data).getSize());
-   *result = {sizeBefore, (*data).getSize()};
+EXPORT runtime::Pair<bool, runtime::ByteRange> _mlir_ciface_join_ht_builder_add_nullable_var_len(runtime::Pointer<LazyMultiMap>* builder, bool null, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   if (null) {
+      return {true, runtime::ByteRange(nullptr,0)};
+   }
+   return {false, (*builder)->varLenBuffer.persist(*data)};
 }
 
 EXPORT runtime::Pointer<std::byte> _mlir_ciface_join_ht_builder_merge(runtime::Pointer<LazyMultiMap>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
@@ -151,9 +143,6 @@ EXPORT runtime::Pointer<std::byte> _mlir_ciface_join_ht_builder_merge(runtime::P
 EXPORT runtime::Pointer<LazyMultiMap> _mlir_ciface_join_ht_builder_build(runtime::Pointer<LazyMultiMap>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    (*builder)->finalize();
    return *builder;
-}
-EXPORT runtime::ByteRange _mlir_ciface_join_ht_get_raw_data(runtime::Pointer<LazyMultiMap>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return runtime::ByteRange((uint8_t*) &(*builder)->rawData[0], (*builder)->rawData.size());
 }
 
 EXPORT runtime::Pointer<LazyMultiMap::EqualRangeIterator> _mlir_ciface_join_ht_iterator_init(runtime::Pointer<LazyMultiMap>* hashmap, size_t hash) { // NOLINT (clang-diagnostic-return-type-c-linkage)

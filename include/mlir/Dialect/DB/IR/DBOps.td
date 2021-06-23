@@ -287,10 +287,9 @@ let assemblyFormat = "$lower `,` $upper `,` $step `:` type($lower) `->` type($ra
 
 }
 def DB_SortOp : DB_Op<"sort",
-[NoSideEffect]> {
+[]> {
 let summary = "sort";
 let arguments = (ins DB_Vector:$toSort);
-let results = (outs DB_Vector:$sorted);
 let regions = (region SizedRegion<1>:$region);
 }
 

@@ -64,14 +64,14 @@
         db.dump %str_const : !db.string
         db.dump %str_const : !db.string
 
-        %sorted_vec=db.sort %vector : !db.vector<!test_tuple_type> (%left,%right) {
+        db.sort %vector : !db.vector<!test_tuple_type> (%left,%right) {
            %left1,%left2 = util.unpack %left : !test_tuple_type -> !db.string,!db.int<32>
            %right1,%right2 = util.unpack %right : !test_tuple_type -> !db.string,!db.int<32>
            %lt = db.compare gte %left1 : !db.string, %right1 : !db.string
            db.yield %lt : !db.bool
         }
 
-        db.for %row in %sorted_vec : !db.vector<!test_tuple_type> {
+        db.for %row in %vector : !db.vector<!test_tuple_type> {
             %1,%2 = util.unpack %row : !test_tuple_type -> !db.string,!db.int<32>
             db.dump %1 : !db.string
             db.dump %2 : !db.int<32>

@@ -459,7 +459,6 @@ static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
       return failure();
    }
    parser.resolveOperand(toSort,vecType,result.operands);
-   parser.addTypeToList(vecType,result.types);
    OpAsmParser::OperandType left,right;
    if (parser.parseLParen()||parser.parseRegionArgument(left)||parser.parseComma()||parser.parseRegionArgument(right)||parser.parseRParen()){
       return failure();

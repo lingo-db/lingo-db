@@ -3,48 +3,33 @@
 #include <iostream>
 #include <vector>
 
-struct VectorBuilder {
 
-   std::vector<std::byte> values;
-   std::vector<std::byte> rawValues;
-   runtime::Pair<runtime::ByteRange, runtime::ByteRange> build() {
-      auto* valuesArr = new uint8_t[values.size()];
-      auto* rawValuesArr = new uint8_t[rawValues.size()];
-      memcpy(valuesArr, &(values[0]), values.size());
-      memcpy(rawValuesArr, &(rawValues[0]), rawValues.size());
-      return runtime::Pair(runtime::ByteRange(valuesArr, values.size()), runtime::ByteRange(rawValuesArr, rawValues.size()));
-   }
-};
 
-EXPORT runtime::Pointer<VectorBuilder> _mlir_ciface_vector_builder_create() { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return new VectorBuilder;
+EXPORT runtime::Pointer<runtime::Vector> _mlir_ciface_vector_builder_create() { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return new runtime::Vector;
 }
-EXPORT void _mlir_ciface_vector_builder_add_var_len(runtime::Pair<uint64_t, uint64_t>* result, runtime::Pointer<VectorBuilder>* builder, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   auto& rawValues = (*builder)->rawValues;
-   size_t sizeBefore = rawValues.size();
-   rawValues.resize(sizeBefore + (*data).getSize());
-   memcpy(&rawValues[sizeBefore], (*data).getPtr(), (*data).getSize());
-   *result = {sizeBefore, (*data).getSize()};
+EXPORT runtime::ByteRange _mlir_ciface_vector_builder_add_var_len(runtime::Pointer<runtime::Vector>* builder, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return (*builder)->varLenBuffer.persist(*data);
 }
-EXPORT runtime::Triple<bool, uint64_t, uint64_t> _mlir_ciface_vector_builder_add_nullable_var_len(runtime::Pointer<VectorBuilder>* builder, bool null, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT runtime::Pair<bool, runtime::ByteRange> _mlir_ciface_vector_builder_add_nullable_var_len(runtime::Pointer<runtime::Vector>* builder, bool null, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    if (null) {
-      return {true, 0, 0};
+      return {true, runtime::ByteRange(nullptr,0)};
    }
-   auto& rawValues = (*builder)->rawValues;
-   size_t sizeBefore = rawValues.size();
-   rawValues.resize(sizeBefore + (*data).getSize());
-   memcpy(&rawValues[sizeBefore], (*data).getPtr(), (*data).getSize());
-   return {false, sizeBefore, (*data).getSize()};
+   return {false, (*builder)->varLenBuffer.persist(*data)};
 }
 
-EXPORT runtime::Pointer<std::byte> _mlir_ciface_vector_builder_merge(runtime::Pointer<VectorBuilder>* builder, size_t bytes) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT runtime::Pointer<uint8_t> _mlir_ciface_vector_builder_merge(runtime::Pointer<runtime::Vector>* builder, size_t bytes) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    auto& values = (*builder)->values;
    size_t sizeBefore = values.size();
    values.resize(sizeBefore + bytes);
-   std::byte* ptr = &values[sizeBefore];
+   auto* ptr = &values[sizeBefore];
 
    return ptr;
 }
-EXPORT runtime::Pair<runtime::ByteRange, runtime::ByteRange> _mlir_ciface_vector_builder_build(runtime::Pointer<VectorBuilder>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return (*builder)->build();
+EXPORT runtime::Pointer<runtime::Vector> _mlir_ciface_vector_builder_build(runtime::Pointer<runtime::Vector>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return (*builder).get();
+}
+EXPORT runtime::ByteRange _mlir_ciface_vector_get_values(runtime::Pointer<runtime::Vector>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   auto& values= (*builder).get()->values;
+   return runtime::ByteRange((uint8_t*) &values[0],values.size());
 }

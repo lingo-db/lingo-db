@@ -1,10 +1,11 @@
 #ifndef RUNTIME_HELPERS_H
 #define RUNTIME_HELPERS_H
+#include "string.h"
 #include <cstddef>
 #include <cstdint>
 #include <initializer_list>
 #include <string>
-
+#include <vector>
 #define EXPORT extern "C" __attribute__((visibility("default")))
 
 namespace runtime {
@@ -74,6 +75,53 @@ class Triple {
 
    public:
    Triple(T1 first, T2 second, T3 third) : first(first), second(second), third(third) {}
+};
+
+class VarLenBuffer {
+   class Part {
+      size_t len;
+      size_t capacity;
+      uint8_t* data;
+
+      public:
+      Part() : len(0),capacity(0) {
+         data = nullptr;
+      }
+      Part(size_t capacity) : len(0),capacity(capacity) {
+         data = new uint8_t[capacity];
+      }
+      bool fits(size_t required) {
+         return required <= (capacity - len);
+      }
+      ByteRange insert(ByteRange toInsert) {
+         uint8_t* ptr = reinterpret_cast<uint8_t*>(data + len);
+         memcpy(data + len, toInsert.getPtr(), toInsert.getSize());
+         len += toInsert.getSize();
+         return ByteRange(ptr, toInsert.getSize());
+      }
+      size_t getCapacity() const {
+         return capacity;
+      }
+   };
+   std::vector<Part*> parts;
+
+   public:
+   ByteRange persist(ByteRange string) {
+      auto *currPart = parts[parts.size() - 1];
+      if (!currPart->fits(string.getSize())) {
+         size_t newSize = std::max(currPart->getCapacity(), string.getSize()) * 2;
+         parts.push_back(new Part(newSize));
+         currPart = parts[parts.size() - 1];
+      }
+      return currPart->insert(string);
+   }
+   VarLenBuffer() {
+      parts.push_back(new Part(100000));
+   }
+};
+struct Vector {
+   std::vector<uint8_t> values;
+   runtime::VarLenBuffer varLenBuffer;
 };
 } // end namespace runtime
 #endif // RUNTIME_HELPERS_H

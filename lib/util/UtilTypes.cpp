@@ -12,9 +12,9 @@ using namespace mlir;
 void mlir::util::GenericMemrefType::print(::mlir::DialectAsmPrinter& printer) const {
    printer << getMnemonic() << "<";
    if (getSize() && getSize().getValue() == -1) {
-      printer << "?x";
+      printer << "? x ";
    } else if (getSize()) {
-      printer << getSize().getValue() << "x";
+      printer << getSize().getValue() << " x ";
    }
    printer << getElementType() << ">";
 }

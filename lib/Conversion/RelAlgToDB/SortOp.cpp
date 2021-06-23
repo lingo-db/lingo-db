@@ -79,7 +79,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
       children[0]->produce(context, builder);
       vector = builder.create<mlir::db::BuilderBuild>(sortOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), vectorBuilder);
       {
-         auto dbSortOp = builder.create<mlir::db::SortOp>(sortOp->getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), vector);
+         auto dbSortOp = builder.create<mlir::db::SortOp>(sortOp->getLoc(),  vector);
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType);
          block2->addArguments(tupleType);
@@ -101,7 +101,6 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
          auto falseVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 0));
 
          builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), createSortPredicate(builder2, sortCriteria, trueVal, falseVal, 0));
-         vector = dbSortOp.sorted();
       }
       {
          auto forOp2 = builder.create<mlir::db::ForOp>(sortOp->getLoc(), getRequiredBuilderTypes(context), vector,flag, getRequiredBuilderValues(context));
