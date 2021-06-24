@@ -21,6 +21,56 @@ class CreateVectorBuilderLowering : public ConversionPattern {
       return success();
    }
 };
+class CreateTopKBuilderLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
+   public:
+   explicit CreateTopKBuilderLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CreateTopKBuilder::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      static size_t id = 0;
+      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+      mlir::db::CreateTopKBuilderAdaptor createTopKBuilderAdaptor(operands);
+      auto createOp = cast<mlir::db::CreateTopKBuilder>(op);
+      ModuleOp parentModule = op->getParentOfType<ModuleOp>();
+      auto ptrType = MemRefType::get({}, rewriter.getIntegerType(8));
+      Type elementType = createOp.builder().getType().dyn_cast_or_null<mlir::db::TopKBuilderType>().getElementType();
+      FuncOp funcOp;
+      {
+         OpBuilder::InsertionGuard insertionGuard(rewriter);
+         rewriter.setInsertionPointToStart(parentModule.getBody());
+         funcOp = rewriter.create<FuncOp>(parentModule.getLoc(), "db_topk_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange(mlir::db::BoolType::get(rewriter.getContext()))));
+         funcOp->setAttr("llvm.emit_c_interface", rewriter.getUnitAttr());
+         auto* funcBody = new Block;
+         funcBody->addArguments(TypeRange({ptrType, ptrType}));
+         funcOp.body().push_back(funcBody);
+         rewriter.setInsertionPointToStart(funcBody);
+         Value left = funcBody->getArgument(0);
+         Value right = funcBody->getArgument(1);
+
+         Value genericMemrefLeft = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), elementType, llvm::Optional<int64_t>()), left);
+         Value genericMemrefRight = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), elementType, llvm::Optional<int64_t>()), right);
+         Value tupleLeft = rewriter.create<util::LoadOp>(createOp.getLoc(), elementType, genericMemrefLeft, Value());
+         Value tupleRight = rewriter.create<util::LoadOp>(createOp.getLoc(), elementType, genericMemrefRight, Value());
+         auto terminator = rewriter.create<mlir::ReturnOp>(createOp.getLoc());
+         Block* sortLambda = &createOp.region().front();
+         auto* sortLambdaTerminator = sortLambda->getTerminator();
+         rewriter.mergeBlockBefore(sortLambda, terminator, {tupleLeft, tupleRight});
+         mlir::db::YieldOp yieldOp = mlir::cast<mlir::db::YieldOp>(terminator->getPrevNode());
+         Value x = yieldOp.results()[0];
+         x.setType(rewriter.getI1Type()); //todo: bad hack ;)
+         rewriter.create<mlir::ReturnOp>(createOp.getLoc(), x);
+         rewriter.eraseOp(sortLambdaTerminator);
+         rewriter.eraseOp(terminator);
+      }
+      Value functionPointer = rewriter.create<mlir::ConstantOp>(createOp->getLoc(), funcOp.type(), rewriter.getSymbolRefAttr(funcOp.sym_name()));
+      Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), elementType);
+      Value builder = functionRegistry.call(rewriter, FunctionId::TopKBuilderCreate, {elementSize, createOp.max_rows(), functionPointer})[0];
+      rewriter.replaceOp(op, builder);
+      return success();
+   }
+};
 
 static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::FunctionRegistry& functionRegistry, db::DBType type) {
    using FunctionId = db::codegen::FunctionRegistry::FunctionId;
@@ -55,7 +105,7 @@ static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::Funct
 
 Value serializeForVector(OpBuilder& builder, TypeConverter* converter, Value vectorBuilder, Value element, Type type, db::codegen::FunctionRegistry& functionRegistry) {
    if (auto originalTupleType = type.dyn_cast_or_null<TupleType>()) {
-      if(originalTupleType.getTypes().empty()){
+      if (originalTupleType.getTypes().empty()) {
          return element;
       }
       auto tupleType = element.getType().dyn_cast_or_null<TupleType>();
@@ -82,7 +132,7 @@ Value serializeForVector(OpBuilder& builder, TypeConverter* converter, Value vec
 }
 Value serializeForAggrHT(OpBuilder& builder, TypeConverter* converter, Value vectorBuilder, Value element, Type type, db::codegen::FunctionRegistry& functionRegistry) {
    if (auto originalTupleType = type.dyn_cast_or_null<TupleType>()) {
-      if(originalTupleType.getTypes().empty()){
+      if (originalTupleType.getTypes().empty()) {
          return element;
       }
       auto tupleType = element.getType().dyn_cast_or_null<TupleType>();
@@ -107,9 +157,36 @@ Value serializeForAggrHT(OpBuilder& builder, TypeConverter* converter, Value vec
       return element;
    }
 }
+Value serializeForTopK(OpBuilder& builder, TypeConverter* converter, Value vectorBuilder, Value element, Type type, db::codegen::FunctionRegistry& functionRegistry) {
+   if (auto originalTupleType = type.dyn_cast_or_null<TupleType>()) {
+      if (originalTupleType.getTypes().empty()) {
+         return element;
+      }
+      auto tupleType = element.getType().dyn_cast_or_null<TupleType>();
+      std::vector<Value> serializedValues;
+      std::vector<Type> types;
+      auto unPackOp = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), element);
+      for (size_t i = 0; i < tupleType.size(); i++) {
+         Value currVal = unPackOp.getResult(i);
+         Value serialized = serializeForTopK(builder, converter, vectorBuilder, currVal, originalTupleType.getType(i), functionRegistry);
+         serializedValues.push_back(serialized);
+         types.push_back(serialized.getType());
+      }
+      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), types), serializedValues);
+   } else if (auto stringType = type.dyn_cast_or_null<db::StringType>()) {
+      if (stringType.isNullable()) {
+         auto unPackOp = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), TypeRange({builder.getI1Type(), converter->convertType(stringType.getBaseType())}), element);
+         return functionRegistry.call(builder, db::codegen::FunctionRegistry::FunctionId::TopKBuilderAddNullableVarLen, ValueRange({vectorBuilder, unPackOp.getResult(0), unPackOp.getResult(1)}))[0];
+      } else {
+         return functionRegistry.call(builder, db::codegen::FunctionRegistry::FunctionId::TopKBuilderAddVarLen, ValueRange({vectorBuilder, element}))[0];
+      }
+   } else {
+      return element;
+   }
+}
 Value serializeForJoinHT(OpBuilder& builder, TypeConverter* converter, Value vectorBuilder, Value element, Type type, db::codegen::FunctionRegistry& functionRegistry) {
    if (auto originalTupleType = type.dyn_cast_or_null<TupleType>()) {
-      if(originalTupleType.getTypes().empty()){
+      if (originalTupleType.getTypes().empty()) {
          return element;
       }
       auto tupleType = element.getType().dyn_cast_or_null<TupleType>();
@@ -216,6 +293,23 @@ class BuilderMergeLowering : public ConversionPattern {
          Value typedPtr = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), tupleType, llvm::Optional<int64_t>()), ptr);
          rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), bucket, typedPtr, Value());
          rewriter.replaceOp(op, mergeOpAdaptor.builder());
+      } else if (auto topKBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::TopKBuilderType>()) {
+         auto ptrType = MemRefType::get({}, rewriter.getIntegerType(8));
+
+         Value serialized = serializeForTopK(rewriter, typeConverter, mergeOpAdaptor.builder(), mergeOpAdaptor.val(), topKBuilderType.getElementType(), functionRegistry);
+
+         Type memrefType = util::GenericMemrefType::get(rewriter.getContext(), serialized.getType(), llvm::Optional<int64_t>());
+         Value alloca;
+         {
+            OpBuilder::InsertionGuard insertionGuard(rewriter);
+            auto func = op->getParentOfType<mlir::FuncOp>();
+            rewriter.setInsertionPointToStart(&func.getBody().front());
+            alloca = rewriter.create<mlir::util::AllocaOp>(loc, memrefType, Value());
+         }
+         rewriter.create<util::StoreOp>(loc, serialized, alloca, Value());
+         Value plainMemref = rewriter.create<mlir::util::ToMemrefOp>(loc, ptrType, alloca);
+         functionRegistry.call(rewriter, FunctionId::TopKBuilderMerge, ValueRange({mergeOpAdaptor.builder(), plainMemref}));
+         rewriter.replaceOp(op, mergeOpAdaptor.builder());
       }
 
       return success();
@@ -246,7 +340,7 @@ class CreateAggrHTBuilderLowering : public ConversionPattern {
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(parentModule.getBody());
-         compareFunc = rewriter.create<FuncOp>(parentModule.getLoc(), "db_ht_aggr_builder_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ ptrType, ptrType}), TypeRange(mlir::db::BoolType::get(rewriter.getContext()))));
+         compareFunc = rewriter.create<FuncOp>(parentModule.getLoc(), "db_ht_aggr_builder_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange(mlir::db::BoolType::get(rewriter.getContext()))));
          compareFunc->setAttr("llvm.emit_c_interface", rewriter.getUnitAttr());
          auto* funcBody = new Block;
          funcBody->addArguments(TypeRange({ptrType, ptrType}));
@@ -287,10 +381,10 @@ class CreateAggrHTBuilderLowering : public ConversionPattern {
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(parentModule.getBody());
-         funcOp = rewriter.create<FuncOp>(parentModule.getLoc(), "db_ht_aggr_builder_update" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ ptrType, ptrType}), TypeRange()));
+         funcOp = rewriter.create<FuncOp>(parentModule.getLoc(), "db_ht_aggr_builder_update" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange()));
          funcOp->setAttr("llvm.emit_c_interface", rewriter.getUnitAttr());
          auto* funcBody = new Block;
-         funcBody->addArguments(TypeRange({ ptrType, ptrType}));
+         funcBody->addArguments(TypeRange({ptrType, ptrType}));
          funcOp.body().push_back(funcBody);
          rewriter.setInsertionPointToStart(funcBody);
          Value left = funcBody->getArgument(0);
@@ -408,6 +502,9 @@ class BuilderBuildLowering : public ConversionPattern {
       } else if (auto joinHtBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::JoinHTBuilderType>()) {
          Value vector = functionRegistry.call(rewriter, FunctionId::JoinHtBuilderBuild, buildAdaptor.builder())[0];
          rewriter.replaceOp(op, vector);
+      } else if (auto topkBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::TopKBuilderType>()) {
+         Value vector = functionRegistry.call(rewriter, FunctionId::TopKBuilderBuild, buildAdaptor.builder())[0];
+         rewriter.replaceOp(op, vector);
       }
 
       return success();
@@ -467,6 +564,7 @@ class CreateJoinHtBuilderLowering : public ConversionPattern {
 } // namespace
 void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
+   patterns.insert<CreateTopKBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<CreateVectorBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<CreateAggrHTBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<BuilderMergeLowering>(functionRegistry, typeConverter, patterns.getContext());
@@ -496,6 +594,12 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::TableBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::TopKBuilderType type, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, db::TopKBuilderType type, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
    typeConverter.addConversion([&](mlir::db::TableBuilderType tableType) {
       return MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
    });
@@ -507,6 +611,9 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
       return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::JoinHTBuilderType joinHtBuilderType) {
+      return MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
+   });
+   typeConverter.addConversion([&](mlir::db::TopKBuilderType topKBuilderType) {
       return MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
    });
 }

@@ -72,8 +72,16 @@ def DB_Vector : DB_Collection<"Vector","vector"> {
 let summary = "vector";
 let parameters = (ins "Type":$elementType);
 }
+def DB_TopK : DB_Collection<"TopK","topk"> {
+let summary = "topk";
+let parameters = (ins "Type":$elementType);
+}
 def DB_VectorBuilder : DB_Builder<"VectorBuilder","vector_builder"> {
 let summary = "builder for vector";
+let parameters = (ins "Type":$elementType);
+}
+def DB_TopKBuilder : DB_Builder<"TopKBuilder","topk_builder"> {
+let summary = "builder for topk";
 let parameters = (ins "Type":$elementType);
 }
 def DB_AggregationHashtable : DB_Collection<"AggregationHashtable","aggr_ht"> {
@@ -293,6 +301,13 @@ let arguments = (ins DB_Vector:$toSort);
 let regions = (region SizedRegion<1>:$region);
 }
 
+def DB_CreateTopKBuilder : DB_Op<"create_topk_builder",
+[NoSideEffect]> {
+let summary = "create topk builder";
+let arguments = (ins Index: $max_rows);
+let results = (outs DB_TopKBuilder:$builder);
+let regions = (region SizedRegion<1>:$region);
+}
 def DB_CreateAggrHTBuilder : DB_Op<"create_aggr_ht_builder",
 [NoSideEffect]> {
 let summary = "create aggr hashtable builder";
@@ -599,7 +614,7 @@ OperandRange getSuccessorEntryOperands(unsigned index);
 }
 
 def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
-        ParentOneOf<["IfOp","ForOp","WhileOp","SortOp","CreateAggrHTBuilder"]>]> {
+        ParentOneOf<["IfOp","ForOp","WhileOp","SortOp","CreateAggrHTBuilder","CreateTopKBuilder"]>]> {
 let summary = "loop yield and termination operation";
 
 let arguments = (ins Variadic<AnyType>:$results);

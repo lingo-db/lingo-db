@@ -321,6 +321,41 @@ class VectorIterator : public ForIterator {
    virtual void down(OpBuilder& builder) {
    }
 };
+class TopKIterator : public ForIterator {
+   Value topK;
+   Type elementType;
+   Type ptrType;
+   Type typedPtrType;
+   mlir::db::codegen::FunctionRegistry& functionRegistry;
+   using FunctionId=mlir::db::codegen::FunctionRegistry::FunctionId;
+
+   public:
+   TopKIterator(mlir::db::codegen::FunctionRegistry& functionRegistry,Value topK, Type elementType) : topK(topK), elementType(elementType),functionRegistry(functionRegistry) {
+   }
+   virtual void init(OpBuilder& builder) {
+      typedPtrType = util::GenericMemrefType::get(builder.getContext(), elementType, llvm::Optional<int64_t>());
+   }
+   virtual Value upper(OpBuilder& builder) {
+      return functionRegistry.call(builder,FunctionId::TopKEntries,{topK})[0];
+   }
+   virtual Value getElement(OpBuilder& builder, Value index) {
+      Value rawPtr = functionRegistry.call(builder,FunctionId::TopKGetEntry,{topK,index})[0];
+      Value ptr = builder.create<util::ToGenericMemrefOp>(builder.getUnknownLoc(), typedPtrType, rawPtr);
+
+      Value loaded = builder.create<util::LoadOp>(builder.getUnknownLoc(), elementType, ptr, Value());
+      return loaded;
+   }
+   virtual Value lower(OpBuilder& builder) {
+      return builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0));
+   }
+   virtual Value step(OpBuilder& builder) {
+      return builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(1));
+   }
+   virtual void destroyElement(OpBuilder& builder, Value elem) {
+   }
+   virtual void down(OpBuilder& builder) {
+   }
+};
 class AggrHTIterator : public ForIterator {
    Value ht;
    Type keyType;
@@ -544,6 +579,8 @@ std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIteration
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<VectorIterator>(functionRegistry,collection, vector.getElementType()));
    } else if (auto aggrHt = collectionType.dyn_cast_or_null<mlir::db::AggregationHashtableType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<AggrHTIterator>(functionRegistry, collection, aggrHt.getKeyType(), aggrHt.getValType()));
+   } else if (auto topK = collectionType.dyn_cast_or_null<mlir::db::TopKType>()) {
+      return std::make_unique<ForIteratorIterationImpl>(std::make_unique<TopKIterator>(functionRegistry,collection, topK.getElementType()));
    }
    return std::unique_ptr<mlir::db::CollectionIterationImpl>();
 }

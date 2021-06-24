@@ -11,6 +11,7 @@ add_library(runtime OBJECT
         dynamic_calls/aggr_ht_builder.cpp
         dynamic_calls/join_ht_builder.cpp
         dynamic_calls/sort.cpp
+        dynamic_calls/heap.cpp
         dynamic_calls/measurement.cpp
         database.cpp ${CMAKE_SOURCE_DIR}/arrow/cpp/src/arrow/vendored/datetime/tz.cpp)
 find_package(Boost REQUIRED)

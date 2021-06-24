@@ -54,7 +54,6 @@ class SortOpLowering : public ConversionPattern {
       Value functionPointer = rewriter.create<mlir::ConstantOp>(sortOp->getLoc(), funcOp.type(), rewriter.getSymbolRefAttr(funcOp.sym_name()));
       Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), elementType);
       functionRegistry.call(rewriter, FunctionId::SortVector, {sortOpAdaptor.toSort(), elementSize, functionPointer});
-      //rewriter.getBlock()->dump();
       rewriter.eraseOp(op);
       return success();
    }
@@ -159,6 +158,12 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::GenericIterableType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::TopKType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, db::TopKType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
+   });
    typeConverter.addConversion([&](mlir::db::AggregationHashtableType aggregationHashtableType) {
       auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
       return ptrType;
@@ -170,6 +175,10 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
    typeConverter.addConversion([&](mlir::db::VectorType vectorType) {
       auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
       return ptrType;
+   });
+   typeConverter.addConversion([&](mlir::db::TopKType topKType) {
+     auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
+     return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::RangeType rangeType) {
       auto convertedType = typeConverter.convertType(rangeType.getElementType());

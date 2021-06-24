@@ -376,6 +376,7 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
          iterArgs++;
       }
    }
+   collectionType.getElementType().dump();
    // Induction variable.
    argTypes.push_back(collectionType.getElementType());
    // Loop carried variables
@@ -455,7 +456,7 @@ static void print(OpAsmPrinter &p, db::WhileOp op) {
 static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
    OpAsmParser::OperandType toSort;
    db::VectorType vecType;
-   if(parser.parseOperand(toSort)||parser.parseColonType(vecType)){
+   if (parser.parseOperand(toSort) || parser.parseColonType(vecType)) {
       return failure();
    }
    parser.resolveOperand(toSort,vecType,result.operands);
@@ -464,11 +465,11 @@ static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
       return failure();
    }
    Region* body = result.addRegion();
-   if (parser.parseRegion(*body, {left,right}, {vecType.getElementType(),vecType.getElementType()})) return failure();
+   if (parser.parseRegion(*body, {left, right}, {vecType.getElementType(), vecType.getElementType()})) return failure();
    return success();
 }
 static void print(OpAsmPrinter& p, db::SortOp& op) {
-   p << op.getOperationName() << " " << op.toSort() <<":"<<op.toSort().getType() << " ";
+   p << op.getOperationName() << " " << op.toSort() << ":" << op.toSort().getType() << " ";
    p << "(";
    bool first = true;
    for (auto arg : op.region().front().getArguments()) {
@@ -481,6 +482,42 @@ static void print(OpAsmPrinter& p, db::SortOp& op) {
    }
    p << ")";
    p.printRegion(op.region(), false, true);
+}
+static ParseResult parseCreateTopKBuilder(OpAsmParser& parser, OperationState& result) {
+   OpAsmParser::OperandType maxRows;
+   if (parser.parseOperand(maxRows)) {
+      return failure();
+   }
+   parser.resolveOperand(maxRows, parser.getBuilder().getIndexType(), result.operands);
+   OpAsmParser::OperandType left, right;
+   Type param1,param2;
+   if (parser.parseLParen() || parser.parseRegionArgument(left) ||parser.parseColonType(param1)|| parser.parseComma() || parser.parseRegionArgument(right)||parser.parseColonType(param2) || parser.parseRParen()) {
+      return failure();
+   }
+   if(param1!=param2)return failure();
+   Region* body = result.addRegion();
+   if (parser.parseRegion(*body, {left, right}, {param1,param2})) return failure();
+   Type builderType;
+   if (parser.parseColonType(builderType)) return failure();
+   parser.addTypeToList(builderType, result.types);
+
+   return success();
+}
+static void print(OpAsmPrinter& p, db::CreateTopKBuilder& op) {
+   p << op.getOperationName() << " " << op.max_rows() << " ";
+   p << "(";
+   bool first = true;
+   for (auto arg : op.region().front().getArguments()) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      p << arg;
+   }
+   p << ")";
+   p.printRegion(op.region(), false, true);
+   p << ":" << op.getType();
 }
 static ParseResult parseCreateAggrHTBuilder(OpAsmParser& parser, OperationState& result) {
    OpAsmParser::OperandType initial;
