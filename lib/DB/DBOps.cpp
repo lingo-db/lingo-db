@@ -513,7 +513,7 @@ static void print(OpAsmPrinter& p, db::CreateTopKBuilder& op) {
       } else {
          p << ",";
       }
-      p << arg;
+      p << arg << " : "<<arg.getType();
    }
    p << ")";
    p.printRegion(op.region(), false, true);

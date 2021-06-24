@@ -8,6 +8,7 @@ add_mlir_conversion_library(MLIRRelAlgToDB
         MaterializeOp.cpp
         SelectionOp.cpp
         SortOp.cpp
+        TopKOp.cpp
         InnerJoinOp.cpp
         OuterJoinOp.cpp
         SingleJoinOp.cpp

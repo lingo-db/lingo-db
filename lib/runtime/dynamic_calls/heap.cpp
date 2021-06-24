@@ -101,10 +101,11 @@ struct Heap {
    }
 
    runtime::ByteRange addVarLen(runtime::ByteRange byteRange) {
-      uint8_t* ptr = new uint8_t[byteRange.getSize()];
-      memcpy(ptr,byteRange.getPtr(),byteRange.getSize());
+      size_t len=byteRange.getSize();
+      uint8_t* ptr = new uint8_t[len];
+      memcpy(ptr,byteRange.getPtr(),len);
       curr->varLen.push_back(ptr);
-      return {ptr, byteRange.getSize()};
+      return {ptr, len};
    }
 };
 EXPORT runtime::Pointer<Heap> _mlir_ciface_topk_builder_create(size_t objSize, size_t maxRows, bool (*fun_ptr)(uint8_t*, uint8_t*, int64_t, uint8_t*, uint8_t*, int64_t)) {// NOLINT (clang-diagnostic-return-type-c-linkage)

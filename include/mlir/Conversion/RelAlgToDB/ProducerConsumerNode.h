@@ -144,6 +144,7 @@ class ProducerConsumerNodeRegistry {
    static bool registeredOuterJoinOp;
    static bool registeredSingleJoinOp;
    static bool registeredMarkJoinOp;
+   static bool registeredTopKOp;
    std::unordered_map<std::string, std::function<std::unique_ptr<mlir::relalg::ProducerConsumerNode>(mlir::Operation*)>> nodes;
    ProducerConsumerNodeRegistry() {
       bool res = true;
@@ -164,6 +165,7 @@ class ProducerConsumerNodeRegistry {
       res &= registeredOuterJoinOp;
       res &= registeredSingleJoinOp;
       res &= registeredMarkJoinOp;
+      res &= registeredTopKOp;
       llvm::dbgs() << "registered=" << res << "\n";
    }
 
