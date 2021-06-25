@@ -18,7 +18,7 @@ class NLInnerJoinLowering : public mlir::relalg::ProducerConsumerNode {
       propagateInfo();
    }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes();
+      return this->children[0]->getAvailableAttributes().insert(this->children[1]->getAvailableAttributes());
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();

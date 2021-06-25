@@ -29,22 +29,24 @@ class BaseTableLowering : public mlir::relalg::ProducerConsumerNode {
       std::vector<const mlir::relalg::RelationalAttribute*> attrs;
       for (auto namedAttr : baseTableOp.columnsAttr().getValue()) {
          auto [identifier, attr] = namedAttr;
-         columnNames.push_back(builder.getStringAttr(identifier.strref()));
          auto attrDef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
-         types.push_back(attrDef.getRelationalAttribute().type);
-         attrs.push_back(&attrDef.getRelationalAttribute());
+         if (requiredAttributes.contains(&attrDef.getRelationalAttribute())) {
+            columnNames.push_back(builder.getStringAttr(identifier.strref()));
+            types.push_back(attrDef.getRelationalAttribute().type);
+            attrs.push_back(&attrDef.getRelationalAttribute());
+         }
       }
       auto tupleType = mlir::TupleType::get(builder.getContext(), types);
       mlir::Type rowIterable = mlir::db::GenericIterableType::get(builder.getContext(), tupleType, "table_row_iterator");
       mlir::Type chunkIterable = mlir::db::GenericIterableType::get(builder.getContext(), rowIterable, "table_chunk_iterator");
       auto chunkIterator = builder.create<mlir::db::TableScan>(baseTableOp->getLoc(), chunkIterable, table, builder.getArrayAttr(columnNames));
-      auto forOp = builder.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), chunkIterator,flag, getRequiredBuilderValues(context));
+      auto forOp = builder.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), chunkIterator, flag, getRequiredBuilderValues(context));
       mlir::Block* block = new mlir::Block;
       block->addArgument(rowIterable);
       block->addArguments(getRequiredBuilderTypes(context));
       forOp.getBodyRegion().push_back(block);
       mlir::OpBuilder builder1(forOp.getBodyRegion());
-      auto forOp2 = builder1.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), forOp.getInductionVar(),flag, block->getArguments().drop_front(1));
+      auto forOp2 = builder1.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), forOp.getInductionVar(), flag, block->getArguments().drop_front(1));
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(tupleType);
       block2->addArguments(getRequiredBuilderTypes(context));
@@ -65,5 +67,5 @@ class BaseTableLowering : public mlir::relalg::ProducerConsumerNode {
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredBaseTableOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::BaseTableOp baseTableOp) {
-  return std::make_unique<BaseTableLowering>(baseTableOp);
+   return std::make_unique<BaseTableLowering>(baseTableOp);
 });
