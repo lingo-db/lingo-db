@@ -90,10 +90,10 @@ class VarLenBuffer {
       Part(size_t capacity) : len(0),capacity(capacity) {
          data = new uint8_t[capacity];
       }
-      bool fits(size_t required) {
+      inline bool fits(size_t required) {
          return required <= (capacity - len);
       }
-      ByteRange insert(ByteRange toInsert) {
+      inline ByteRange insert(ByteRange toInsert) {
          uint8_t* ptr = reinterpret_cast<uint8_t*>(data + len);
          memcpy(data + len, toInsert.getPtr(), toInsert.getSize());
          len += toInsert.getSize();
@@ -102,11 +102,12 @@ class VarLenBuffer {
       size_t getCapacity() const {
          return capacity;
       }
+
    };
    std::vector<Part*> parts;
 
    public:
-   ByteRange persist(ByteRange string) {
+   inline ByteRange persist(ByteRange string) {
       auto *currPart = parts[parts.size() - 1];
       if (!currPart->fits(string.getSize())) {
          size_t newSize = std::max(currPart->getCapacity(), string.getSize()) * 2;
@@ -114,7 +115,9 @@ class VarLenBuffer {
          currPart = parts[parts.size() - 1];
       }
       return currPart->insert(string);
+
    }
+
    VarLenBuffer() {
       parts.push_back(new Part(100000));
    }
