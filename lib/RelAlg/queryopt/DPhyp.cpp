@@ -60,6 +60,9 @@ void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
       currPlan = std::make_shared<Plan>(specialJoin, std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>(predicates.begin(), predicates.end()), estimatedResultSize);
    } else if (!predicates.empty()) {
       auto estimatedResultSize=p1->getRows()*p2->getRows()*totalSelectivity;
+      if(p1->getRows()>p2->getRows()){
+         std::swap(p1,p2);
+      }
       currPlan = std::make_shared<Plan>(*predicates.begin(), std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>(++predicates.begin(), predicates.end()), estimatedResultSize);
    } else {
       auto estimatedResultSize=p1->getRows()*p2->getRows()*totalSelectivity;
