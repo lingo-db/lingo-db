@@ -361,7 +361,7 @@ class HashLowering : public ConversionPattern {
             assert(dbType.isNullable());
             auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
             mlir::Value hashedIfNotNull = hashImpl(builder, unpacked.getResult(1), totalHash, dbType.getBaseType());
-            return builder.create<mlir::SelectOp>(builder.getUnknownLoc(), unpacked.getResult(0),totalHash,hashedIfNotNull);
+            return builder.create<mlir::SelectOp>(builder.getUnknownLoc(), unpacked.getResult(0), totalHash, hashedIfNotNull);
          }
          assert(false && "should not happen");
          return Value();
@@ -379,8 +379,48 @@ class HashLowering : public ConversionPattern {
       hashAdaptor.val().getType().dump();
       hashOp.val().getType().dump();
       Value const0 = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0));
-      rewriter.replaceOp(op, hashImpl(rewriter, hashAdaptor.val(),const0, hashOp.val().getType()));
+      rewriter.replaceOp(op, hashImpl(rewriter, hashAdaptor.val(), const0, hashOp.val().getType()));
       return success();
+   }
+};
+class DecimalMulLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+   public:
+   explicit DecimalMulLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::MulOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto addOp = cast<mlir::db::MulOp>(op);
+      typename mlir::db::MulOpAdaptor adaptor(operands);
+      db::NullHandler nullHandler(*typeConverter, rewriter);
+      Value left = nullHandler.getValue(addOp.left(), adaptor.left());
+      Value right = nullHandler.getValue(addOp.right(), adaptor.right());
+      if (left.getType() != right.getType()) {
+         return failure();
+      }
+      auto type = addOp.getType();
+      if (auto decimalType = type.template dyn_cast_or_null<mlir::db::DecimalType>()) {
+         assert(decimalType.getS()<=8);
+         auto stdType = typeConverter->convertType(decimalType.getBaseType());
+         auto multiplied = rewriter.create<mlir::MulIOp>(op->getLoc(), stdType, left, right);
+         mlir::Value replacement=multiplied;
+         switch(decimalType.getS()){
+            case 1: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv10,{multiplied})[0];break;
+            case 2: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv100,{multiplied})[0];break;
+            case 3: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv1000,{multiplied})[0];break;
+            case 4: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv10000,{multiplied})[0];break;
+            case 5: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv100000,{multiplied})[0];break;
+            case 6: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv1000000,{multiplied})[0];break;
+            case 7: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv10000000,{multiplied})[0];break;
+            case 8: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv100000000,{multiplied})[0];break;
+         }
+         rewriter.replaceOp(op, nullHandler.combineResult(replacement));
+
+         return success();
+      }
+      return failure();
    }
 };
 } // namespace
@@ -417,9 +457,9 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
    auto identity = [](auto, Value v, auto&) { return v; };
    auto rightleft = [](Value left, Value right) { return std::vector<Value>({right, left}); };
    auto dateAddFunction = [&](Operation* op, mlir::db::DateType dateType, mlir::db::IntervalType intervalType, ConversionPatternRewriter& rewriter) {
-      if(intervalType.getUnit()==mlir::db::IntervalUnitAttr::daytime) {
+      if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime) {
          return functionRegistry.getFunction(rewriter, FunctionId::TimestampAddMillis);
-      }else{
+      } else {
          return functionRegistry.getFunction(rewriter, FunctionId::TimestampAddMonth);
       }
    };
@@ -454,4 +494,6 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
    patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DumpIndexOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<HashLowering>(functionRegistry, typeConverter, patterns.getContext());
+   patterns.insert<DecimalMulLowering>(functionRegistry,typeConverter, patterns.getContext());
+
 }
