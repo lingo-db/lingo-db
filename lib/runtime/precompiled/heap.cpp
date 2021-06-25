@@ -1,8 +1,8 @@
 #include "runtime/helpers.h"
 #include "string.h"
 #include <algorithm>
-#include <iostream>
 #include <vector>
+//todo: optimize further, but not so important for tpch
 struct HeapEntry {
    uint8_t* data = nullptr;
    std::vector<uint8_t*> varLen;
@@ -24,7 +24,7 @@ struct Heap {
    HeapEntry* curr;
    size_t max_rows;
 
-   void insert(uint8_t* data) {
+   inline void insert(uint8_t* data) {
       std::uint8_t* clonedData = new uint8_t[objSize];
       memcpy(clonedData, data, objSize);
       curr->data = clonedData;
@@ -33,7 +33,7 @@ struct Heap {
       finish_insert();
    }
    //taken from noisepage
-   void finish_insert() {
+   inline void finish_insert() {
       // If the number of buffered tuples is less than top_k, we're done.
       if (heap.size() < max_rows) {
          return;
@@ -64,15 +64,15 @@ struct Heap {
       }
    }
 
-   int32_t cmp_fn_(const HeapEntry* left, const HeapEntry* right) {
+   inline int32_t cmp_fn_(const HeapEntry* left, const HeapEntry* right) {
       return compareFn(nullptr, left->data, 0, nullptr, right->data, 0)? -1:1;
    }
-   void buildHeap() {
+   inline void buildHeap() {
       const auto compare = [this](const HeapEntry* left, const HeapEntry* right) { return cmp_fn_(left, right) < 0; };
       std::make_heap(heap.begin(), heap.end(), compare);
    }
 
-   void siftDown() {
+   inline void siftDown() {
       const uint64_t size = heap.size();
       uint32_t idx = 0;
 
@@ -100,7 +100,7 @@ struct Heap {
       heap[idx] = top;
    }
 
-   runtime::ByteRange addVarLen(runtime::ByteRange byteRange) {
+   inline runtime::ByteRange addVarLen(runtime::ByteRange byteRange) {
       size_t len=byteRange.getSize();
       uint8_t* ptr = new uint8_t[len];
       memcpy(ptr,byteRange.getPtr(),len);
@@ -112,25 +112,25 @@ EXPORT runtime::Pointer<Heap> _mlir_ciface_topk_builder_create(size_t objSize, s
    return new Heap(maxRows, objSize, fun_ptr);
 }
 
-EXPORT runtime::ByteRange _mlir_ciface_topk_builder_add_var_len(runtime::Pointer<Heap>* builder, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT  __attribute__((always_inline)) runtime::ByteRange _mlir_ciface_topk_builder_add_var_len(runtime::Pointer<Heap>* builder, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return (*builder)->addVarLen(*data);
 }
-EXPORT runtime::Pair<bool, runtime::ByteRange> _mlir_ciface_topk_builder_add_nullable_var_len(runtime::Pointer<Heap>* builder, bool null, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT  __attribute__((always_inline)) runtime::Pair<bool, runtime::ByteRange> _mlir_ciface_topk_builder_add_nullable_var_len(runtime::Pointer<Heap>* builder, bool null, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    if (null) {
       return {true, runtime::ByteRange(nullptr, 0)};
    }
    return {false, (*builder)->addVarLen(*data)};
 }
 
-EXPORT void _mlir_ciface_topk_builder_merge(runtime::Pointer<Heap>* heap, runtime::Pointer<uint8_t>* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT  __attribute__((always_inline)) void _mlir_ciface_topk_builder_merge(runtime::Pointer<Heap>* heap, runtime::Pointer<uint8_t>* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    (*heap)->insert((*data).get());
 }
-EXPORT runtime::Pointer<Heap> _mlir_ciface_topk_builder_build(runtime::Pointer<Heap>* heap) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT __attribute__((always_inline))  runtime::Pointer<Heap> _mlir_ciface_topk_builder_build(runtime::Pointer<Heap>* heap) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return *heap;
 }
 EXPORT size_t _mlir_ciface_topk_entries(runtime::Pointer<Heap>* heap){// NOLINT (clang-diagnostic-return-type-c-linkage)
    return (*heap)->heap.size();
 }
-EXPORT runtime::Pointer<uint8_t> _mlir_ciface_topk_get_entry(runtime::Pointer<Heap>* heap, size_t i){// NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT  __attribute__((always_inline))  runtime::Pointer<uint8_t> _mlir_ciface_topk_get_entry(runtime::Pointer<Heap>* heap, size_t i){// NOLINT (clang-diagnostic-return-type-c-linkage)
    return (*heap)->heap[(*heap)->heap.size()-1-i]->data;
 }
