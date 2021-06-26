@@ -144,6 +144,88 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       }
       joinAsOperator.setChildren({newLeft, newRight});
    }
+   bool collectSimpleDependencies(Operator op, mlir::relalg::Attributes& attributes, std::vector<mlir::relalg::SelectionOp>& selectionOps) {
+      if (!op.getFreeAttributes().intersects(attributes)) {
+         return true;
+      }
+      return ::llvm::TypeSwitch<mlir::Operation*, bool>(op.getOperation())
+         .Case<mlir::relalg::BaseTableOp, mlir::relalg::ConstRelationOp>([&](Operator baserelation) {
+            return true;
+         })
+         .Case<mlir::relalg::CrossProductOp>([&](Operator cp) {
+            auto subOps = cp.getAllSubOperators();
+            return collectSimpleDependencies(subOps[0], attributes, selectionOps) && collectSimpleDependencies(subOps[1], attributes, selectionOps);
+         })
+         .Case<mlir::relalg::SelectionOp>([&](mlir::relalg::SelectionOp sel) {
+            auto x = sel.getUsedAttributes();
+            x.remove(sel.getAvailableAttributes());
+            if (x.isSubsetOf(attributes)) {
+               selectionOps.push_back(sel);
+            }
+            return collectSimpleDependencies(sel.getChildren()[0], attributes, selectionOps);
+         })
+         .Case<BinaryOperator>([&](BinaryOperator join) {
+            return false;
+         })
+         .Default([&](Operator others) {
+            return false;
+         });
+   }
+   void combine(std::vector<mlir::relalg::SelectionOp> selectionOps, PredicateOperator lower) {
+      using namespace mlir;
+      auto lowerTerminator = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(lower.getPredicateBlock().getTerminator());
+
+
+      OpBuilder builder(lower);
+
+      builder.setInsertionPointToEnd(&lower.getPredicateBlock());
+      std::vector<mlir::Value> values;
+      bool nullable = false;
+      if(!lowerTerminator.results().empty()) {
+         Value lowerPredVal = lowerTerminator.results()[0];
+         nullable|=lowerPredVal.getType().cast<mlir::db::DBType>().isNullable();
+         values.push_back(lowerPredVal);
+      }
+      for (auto selOp : selectionOps) {
+         auto higherTerminator = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(selOp.getPredicateBlock().getTerminator());
+         Value higherPredVal = higherTerminator.results()[0];
+         mlir::BlockAndValueMapping mapping;
+         mapping.map(selOp.getPredicateArgument(), lower.getPredicateArgument());
+         mlir::relalg::detail::inlineOpIntoBlock(higherPredVal.getDefiningOp(), higherPredVal.getDefiningOp()->getParentOp(), lower.getOperation(), &lower.getPredicateBlock(), mapping);
+         nullable |= higherPredVal.getType().cast<mlir::db::DBType>().isNullable();
+         values.push_back(mapping.lookup(higherPredVal));
+      }
+      mlir::Value combined = builder.create<mlir::db::AndOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext(), nullable), values);
+      builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), combined);
+      lowerTerminator->remove();
+      lowerTerminator->destroy();
+   }
+   bool trySimpleUnnesting(BinaryOperator binaryOperator) {
+      if (auto predicateOperator = mlir::dyn_cast_or_null<PredicateOperator>(binaryOperator.getOperation())) {
+         auto left = mlir::dyn_cast_or_null<Operator>(binaryOperator.leftChild());
+         auto right = mlir::dyn_cast_or_null<Operator>(binaryOperator.rightChild());
+         auto dependentLeft = left.getFreeAttributes().intersect(right.getAvailableAttributes());
+         auto dependentRight = right.getFreeAttributes().intersect(left.getAvailableAttributes());
+         mlir::relalg::Attributes dependentAttributes = dependentLeft;
+         dependentAttributes.insert(dependentRight);
+         bool leftProvides = dependentLeft.empty();
+         Operator providerChild = leftProvides ? left : right;
+         Operator dependentChild = leftProvides ? right : left;
+         mlir::relalg::Attributes providedAttrs = providerChild.getAvailableAttributes();
+         std::vector<mlir::relalg::SelectionOp> selectionOps;
+         if (!collectSimpleDependencies(dependentChild, providedAttrs, selectionOps)) {
+            return false;
+         }
+         combine(selectionOps, predicateOperator);
+         for (auto selOp : selectionOps) {
+            selOp.replaceAllUsesWith(selOp.rel());
+            selOp->remove();
+            selOp->destroy();
+         }
+         return true;
+      }
+      return false;
+   }
    void runOnFunction() override {
       using namespace mlir;
       getFunction()->walk([&](BinaryOperator binaryOperator) {
@@ -156,6 +238,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          if (!dependentLeft.empty() && !dependentRight.empty()) {
             return;
          }
+         if (trySimpleUnnesting(binaryOperator.getOperation())) return;
          mlir::relalg::Attributes dependentAttributes = dependentLeft;
          dependentAttributes.insert(dependentRight);
          bool leftProvides = dependentLeft.empty();
