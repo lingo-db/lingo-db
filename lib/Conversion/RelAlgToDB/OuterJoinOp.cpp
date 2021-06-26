@@ -16,10 +16,19 @@ class NLOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
       this->requiredAttributes.insert(joinOp.getUsedAttributes());
+      for (mlir::Attribute attr : joinOp.mapping()) {
+         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+         auto* defAttr = &relationDefAttr.getRelationalAttribute();
+         if(this->requiredAttributes.contains(defAttr)) {
+            auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
+            auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+            this->requiredAttributes.insert(refAttr);
+         }
+      }
       propagateInfo();
    }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes();
+      return joinOp.getAvailableAttributes();
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
@@ -43,9 +52,11 @@ class NLOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
          for (mlir::Attribute attr : joinOp.mapping()) {
             auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
             auto* defAttr = &relationDefAttr.getRelationalAttribute();
-            auto nullValue = builder1.create<mlir::db::NullOp>(joinOp.getLoc(), defAttr->type);
+            if(this->requiredAttributes.contains(defAttr)) {
+               auto nullValue = builder1.create<mlir::db::NullOp>(joinOp.getLoc(), defAttr->type);
 
-            context.setValueForAttribute(scope, defAttr, nullValue);
+               context.setValueForAttribute(scope, defAttr, nullValue);
+            }
          }
          consumer->consume(this, builder1, context);
          builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
@@ -72,14 +83,16 @@ class NLOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
          for (mlir::Attribute attr : joinOp.mapping()) {
             auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
             auto* defAttr = &relationDefAttr.getRelationalAttribute();
-            auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
-            auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
-            auto value = context.getValueForAttribute(refAttr);
-            if (refAttr->type != defAttr->type) {
-               mlir::Value tmp = builder1.create<mlir::db::CastOp>(builder.getUnknownLoc(), defAttr->type, value);
-               value = tmp;
+            if(this->requiredAttributes.contains(defAttr)) {
+               auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
+               auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+               auto value = context.getValueForAttribute(refAttr);
+               if (refAttr->type != defAttr->type) {
+                  mlir::Value tmp = builder1.create<mlir::db::CastOp>(builder.getUnknownLoc(), defAttr->type, value);
+                  value = tmp;
+               }
+               context.setValueForAttribute(scope, defAttr, value);
             }
-            context.setValueForAttribute(scope, defAttr, value);
          }
          consumer->consume(this, builder1, context);
          auto trueVal = builder1.create<mlir::db::ConstantOp>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
@@ -119,6 +132,15 @@ class HashOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
       this->requiredAttributes.insert(joinOp.getUsedAttributes());
+      for (mlir::Attribute attr : joinOp.mapping()) {
+         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+         auto* defAttr = &relationDefAttr.getRelationalAttribute();
+         if(this->requiredAttributes.contains(defAttr)) {
+            auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
+            auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+            this->requiredAttributes.insert(refAttr);
+         }
+      }
       propagateInfo();
       auto availableLeft = builderChild->getAvailableAttributes();
       auto availableRight = lookupChild->getAvailableAttributes();
@@ -138,7 +160,7 @@ class HashOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
 
    }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->builderChild->getAvailableAttributes().insert(this->lookupChild->getAvailableAttributes());
+      return joinOp.getAvailableAttributes();
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
@@ -194,14 +216,16 @@ class HashOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
                for (mlir::Attribute attr : joinOp.mapping()) {
                   auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
                   auto* defAttr = &relationDefAttr.getRelationalAttribute();
-                  auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
-                  auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
-                  auto value = context.getValueForAttribute(refAttr);
-                  if (refAttr->type != defAttr->type) {
-                     mlir::Value tmp = builder1.create<mlir::db::CastOp>(builder.getUnknownLoc(), defAttr->type, value);
-                     value = tmp;
+                  if(this->requiredAttributes.contains(defAttr)) {
+                     auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
+                     auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+                     auto value = context.getValueForAttribute(refAttr);
+                     if (refAttr->type != defAttr->type) {
+                        mlir::Value tmp = builder1.create<mlir::db::CastOp>(builder.getUnknownLoc(), defAttr->type, value);
+                        value = tmp;
+                     }
+                     context.setValueForAttribute(scope, defAttr, value);
                   }
-                  context.setValueForAttribute(scope, defAttr, value);
                }
                consumer->consume(this, builder1, context);
 
@@ -236,9 +260,10 @@ class HashOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
          for (mlir::Attribute attr : joinOp.mapping()) {
             auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
             auto* defAttr = &relationDefAttr.getRelationalAttribute();
-            auto nullValue = builder1.create<mlir::db::NullOp>(joinOp.getLoc(), defAttr->type);
-
-            context.setValueForAttribute(scope, defAttr, nullValue);
+            if(this->requiredAttributes.contains(defAttr)) {
+               auto nullValue = builder1.create<mlir::db::NullOp>(joinOp.getLoc(), defAttr->type);
+               context.setValueForAttribute(scope, defAttr, nullValue);
+            }
          }
          consumer->consume(this, builder1, context);
          builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));

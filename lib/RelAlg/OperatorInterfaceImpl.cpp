@@ -161,15 +161,7 @@ Attributes OuterJoinOp::getCreatedAttributes() {
    return created;
 }
 Attributes OuterJoinOp::getUsedAttributes() {
-   Attributes used;
-
-   for (Attribute attr : mapping()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
-      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
-      used.insert(Attributes::fromArrayAttr(fromExisting));
-   }
-   used.insert( mlir::relalg::detail::getUsedAttributes(getOperation()));
-   return used;
+   return mlir::relalg::detail::getUsedAttributes(getOperation());
 }
 Attributes OuterJoinOp::getAvailableAttributes() {
    Attributes renamed;
@@ -195,15 +187,7 @@ Attributes SingleJoinOp::getCreatedAttributes() {
    return created;
 }
 Attributes SingleJoinOp::getUsedAttributes() {
-   Attributes used;
-
-   for (Attribute attr : mapping()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
-      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
-      used.insert(Attributes::fromArrayAttr(fromExisting));
-   }
-   used.insert( mlir::relalg::detail::getUsedAttributes(getOperation()));
-   return used;
+   return mlir::relalg::detail::getUsedAttributes(getOperation());
 }
 Attributes SingleJoinOp::getAvailableAttributes() {
    Attributes renamed;
