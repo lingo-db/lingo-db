@@ -3,6 +3,7 @@
 #include "mlir/IR/OpImplementation.h"
 #include <unordered_set>
 
+#include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/Support/Debug.h>
 #include <queue>
 using namespace mlir;
@@ -63,6 +64,18 @@ static void buildDBCmpOp(OpBuilder& build, OperationState& result,
    result.types.push_back(mlir::db::BoolType::get(build.getContext(), nullable));
    result.addAttribute("predicate",
                        build.getI64IntegerAttr(static_cast<int64_t>(predicate)));
+}
+static void buildDBAndOp(OpBuilder& build, OperationState& result, ValueRange operands) {
+   result.addOperands(operands);
+   bool nullable = llvm::any_of(operands,[](auto operand){return operand.getType().template dyn_cast_or_null<mlir::db::DBType>().isNullable();});
+
+   result.types.push_back(mlir::db::BoolType::get(build.getContext(), nullable));
+}
+static void buildDBOrOp(OpBuilder& build, OperationState& result, ValueRange operands) {
+   result.addOperands(operands);
+   bool nullable = llvm::any_of(operands,[](auto operand){return operand.getType().template dyn_cast_or_null<mlir::db::DBType>().isNullable();});
+
+   result.types.push_back(mlir::db::BoolType::get(build.getContext(), nullable));
 }
 
 static mlir::db::DBType inferResultType(OpAsmParser& parser, ArrayRef<mlir::db::DBType> types) {
@@ -576,6 +589,54 @@ static ParseResult parseSelectOp(OpAsmParser &parser, OperationState &result) {
    return parser.resolveOperands({condition,trueVal,falseVal},
                                  {conditionType, resultType, resultType},
                                  parser.getNameLoc(), result.operands);
+}
+LogicalResult mlir::db::OrOp::canonicalize(mlir::db::OrOp orOp, mlir::PatternRewriter& rewriter){
+   llvm::SmallDenseMap<mlir::Value,size_t> usage;
+   for(auto val:orOp.vals()){
+      if(!val.getDefiningOp())return failure();
+      if(auto andOp=mlir::dyn_cast_or_null<mlir::db::AndOp>(val.getDefiningOp())){
+         llvm::SmallPtrSet<mlir::Value,4> alreadyUsed;
+         for(auto andOperand:andOp.vals()){
+            if(!alreadyUsed.contains(andOperand)) {
+               usage[andOperand]++;
+               alreadyUsed.insert(andOperand);
+            }
+         }
+      }else{
+         return failure();
+      }
+   }
+   size_t totalAnds=orOp.vals().size();
+   llvm::SmallPtrSet<mlir::Value,4> extracted;
+   std::vector<mlir::Value> newOrOperands;
+   for(auto val:orOp.vals()){
+      if(auto andOp=mlir::dyn_cast_or_null<mlir::db::AndOp>(val.getDefiningOp())){
+         std::vector<mlir::Value> keep;
+         for(auto andOperand:andOp.vals()){
+            if(usage[andOperand]==totalAnds){
+               extracted.insert(andOperand);
+            }else{
+               keep.push_back(andOperand);
+            }
+         }
+         if(keep.size()!=andOp.vals().size()){
+            if(keep.size()) {
+               newOrOperands.push_back(rewriter.create<mlir::db::AndOp>(rewriter.getUnknownLoc(), keep));
+            }
+         }else{
+            newOrOperands.push_back(andOp);
+         }
+      }
+   }
+   std::vector<Value> extractedAsVec;
+   extractedAsVec.insert(extractedAsVec.end(),extracted.begin(),extracted.end());
+   if(!extracted.empty()){
+      Value newOrOp=rewriter.create<mlir::db::OrOp>(rewriter.getUnknownLoc(),newOrOperands);
+      extractedAsVec.push_back(newOrOp);
+      rewriter.replaceOpWithNewOp<mlir::db::AndOp>(orOp,extractedAsVec);
+      return success();
+   }
+   return failure();
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.cpp.inc"

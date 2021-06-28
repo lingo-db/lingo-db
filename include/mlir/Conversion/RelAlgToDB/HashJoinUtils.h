@@ -19,7 +19,7 @@ class HashJoinUtils {
          if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
             required.insert({getAttr.getResult(), mlir::relalg::Attributes::from(getAttr.attr())});
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(op)) {
-            if (cmpOp.predicate() == mlir::db::DBCmpPredicate::eq) {
+            if (cmpOp.predicate() == mlir::db::DBCmpPredicate::eq&&isAndedResult(op)) {
                auto leftAttributes = required[cmpOp.left()];
                auto rightAttributes = required[cmpOp.right()];
                if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {
@@ -65,6 +65,19 @@ class HashJoinUtils {
       auto tupleType = mlir::TupleType::get(builder.getContext(), types);
       return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), tupleType, values);
    }
+   static bool isAndedResult(mlir::Operation* op,bool first=true){
+      if(mlir::isa<mlir::relalg::ReturnOp>(op)){
+         return true;
+      }
+      if(mlir::isa<mlir::db::AndOp>(op)||first) {
+         for (auto *user : op->getUsers()) {
+            if (!isAndedResult(user, false)) return false;
+         }
+         return true;
+      }else{
+         return false;
+      }
+   }
    static std::vector<mlir::Value> inlineKeys(mlir::Block* block, mlir::relalg::Attributes keyAttributes, mlir::Block* newBlock, mlir::relalg::LoweringContext& context) {
       llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;
       mlir::BlockAndValueMapping mapping;
@@ -76,7 +89,7 @@ class HashJoinUtils {
                mapping.map(getAttr.getResult(), context.getValueForAttribute(&getAttr.attr().getRelationalAttribute()));
             }
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(op)) {
-            if (cmpOp.predicate() == mlir::db::DBCmpPredicate::eq) {
+            if (cmpOp.predicate() == mlir::db::DBCmpPredicate::eq&&isAndedResult(op)) {
                auto leftAttributes = required[cmpOp.left()];
                auto rightAttributes = required[cmpOp.right()];
                mlir::Value keyVal;

@@ -473,6 +473,11 @@ return parseImplicitResultSameOperandBaseTypeOp(parser, result);
 let printer = [{
 return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
 }];
+let builders = [
+OpBuilder<(ins "ValueRange":$vals), [{
+::buildDBAndOp($_builder, $_state, vals);
+}]>
+];
 }
 def OrOp : DB_Op<"or", [NoSideEffect]> {
 let arguments = (ins Variadic<DB_BoolType>: $vals);
@@ -483,6 +488,12 @@ return parseImplicitResultSameOperandBaseTypeOp(parser, result);
 let printer = [{
 return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
 }];
+let builders = [
+OpBuilder<(ins "ValueRange":$vals), [{
+::buildDBOrOp($_builder, $_state, vals);
+}]>
+];
+let hasCanonicalizeMethod = 1;
 }
 def NotOp : DB_Op<"not", [NoSideEffect,SameOperandsAndResultType]> {
 let arguments = (ins DB_BoolType: $val);

@@ -280,10 +280,15 @@ void mlir::relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operati
    addRequirements(vop, includeChildren, excludeChildren, extracted, alreadyPresent);
    mlir::OpBuilder builder(vop->getContext());
    builder.setInsertionPointToStart(newBlock);
-   mlir::Operation* first = &newBlock->front();
+   mlir::Operation* first = newBlock->empty()?nullptr:&newBlock->front();
    for (auto* op : extracted) {
       auto* cloneOp = builder.clone(*op, mapping);
-      cloneOp->moveBefore(first);
+      if(first) {
+         cloneOp->moveBefore(first);
+      }else{
+         cloneOp->moveBefore(newBlock,newBlock->begin());
+         first=cloneOp;
+      }
    }
 }
 void mlir::relalg::detail::moveSubTreeBefore(mlir::Operation* op, mlir::Operation* before) {

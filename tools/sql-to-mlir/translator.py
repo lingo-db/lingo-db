@@ -97,11 +97,18 @@ class Translator:
                 query=vals
                 immediate=False
                 if "literal" in query:
-                    query={'select': '*', 'from': {'value': {'values': vals}}}
-                    immediate=True
-                elif type(query)==list:
-                    query={'select': '*', 'from': {'value': {'values': {"literal":vals}}}}
-                    immediate=True
+                    query=query["literal"]
+                if type(query)==list:
+                    if(len(query)<10):
+                        left=translateSubExpressions(attr)[0]
+                        comparisons=[]
+                        for val in query:
+                            right=codegen.create_db_const(val, codegen.getType(left))
+                            comparisons.append(codegen.create_db_cmp("eq",[left,right]))
+                        return codegen.create_db_or(comparisons)
+                    else:
+                        query={'select': '*', 'from': {'value': {'values': {"literal":vals}}}}
+                        immediate=True
                 rel, attrs = self.translateSelectStmt(query, codegen, stacked_resolver)
                 if not immediate:
                     rel=codegen.create_relalg_projection("all",rel,attrs)

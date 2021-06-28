@@ -323,7 +323,7 @@ let assemblyFormat =
 // Utility
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def GetAttrOp : RelAlg_Op<"getattr"> {
+def GetAttrOp : RelAlg_Op<"getattr",[NoSideEffect]> {
 let summary = "get attribute operation";
 let arguments = (ins RelationalAttributeRefAttr:$attr, RelAlg_Tuple:$tuple);
 let results = (outs DBType : $res);

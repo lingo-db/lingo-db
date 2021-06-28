@@ -1,4 +1,5 @@
 #include "llvm/ADT/TypeSwitch.h"
+#include "mlir/Conversion/RelAlgToDB/HashJoinUtils.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
@@ -17,7 +18,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
             required.insert({getAttr.getResult(), mlir::relalg::Attributes::from(getAttr.attr())});
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(op)) {
-            if (cmpOp.predicate() == mlir::db::DBCmpPredicate::eq) {
+            if (cmpOp.predicate() == mlir::db::DBCmpPredicate::eq && mlir::relalg::HashJoinUtils::isAndedResult(op)) {
                auto leftAttributes = required[cmpOp.left()];
                auto rightAttributes = required[cmpOp.right()];
                if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {
@@ -69,7 +70,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             .Case<mlir::relalg::LimitOp>([&](mlir::relalg::LimitOp op) {
                if (auto sortOp = mlir::dyn_cast_or_null<mlir::relalg::SortOp>(op.rel().getDefiningOp())) {
                   mlir::OpBuilder builder(op);
-                  auto topKVal=builder.create<mlir::relalg::TopKOp>(op->getLoc(),op.getType(),op.rows(),sortOp.rel(),sortOp.sortspecs());
+                  auto topKVal = builder.create<mlir::relalg::TopKOp>(op->getLoc(), op.getType(), op.rows(), sortOp.rel(), sortOp.sortspecs());
                   op.result().replaceAllUsesWith(topKVal);
                   op->remove();
                   op->destroy();
