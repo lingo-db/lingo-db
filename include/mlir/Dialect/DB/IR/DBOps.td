@@ -94,7 +94,7 @@ let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
 }
 def DB_AggrHTBuilder : DB_Builder<"AggrHTBuilder","aggr_ht_builder"> {
 let summary = "builder for aggregation hashtable";
-let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
+let parameters = (ins "TupleType":$keyType,"TupleType":$valType,"TupleType":$aggrType);
 }
 def DB_JoinHTBuilder : DB_Builder<"JoinHTBuilder","join_ht_builder"> {
 let summary = "builder for join hashtable";

@@ -34,15 +34,12 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
    size_t builderId;
    mlir::Value table;
    std::vector<mlir::Type> keyTypes;
-   std::vector<mlir::Type> valTypes;
    mlir::TupleType keyTupleType;
    mlir::TupleType valTupleType;
    mlir::TupleType entryType;
 
    std::vector<const mlir::relalg::RelationalAttribute*> groupAttributes;
    std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> keyMapping;
-   std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> sourceMapping;
-   std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> targetMapping;
 
    public:
    DistinctProjectionLowering(mlir::relalg::ProjectionOp projectionOp) : mlir::relalg::ProducerConsumerNode(projectionOp.rel()), projectionOp(projectionOp) {
@@ -81,9 +78,9 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
          }
       }
       keyTupleType = mlir::TupleType::get(builder.getContext(), keyTypes);
-      valTupleType = mlir::TupleType::get(builder.getContext(), valTypes);
+      valTupleType = mlir::TupleType::get(builder.getContext(), {});
       mlir::Value emptyTuple=builder.create<mlir::util::UndefTupleOp>(projectionOp.getLoc(),mlir::TupleType::get(builder.getContext()));
-      auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(projectionOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType),emptyTuple);
+      auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(projectionOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType,valTupleType),emptyTuple);
       mlir::Block* aggrBuilderBlock = new mlir::Block;
       aggrBuilder.region().push_back(aggrBuilderBlock);
       aggrBuilderBlock->addArguments({valTupleType, valTupleType});

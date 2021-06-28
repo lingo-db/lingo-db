@@ -198,7 +198,8 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
       auto initTuple = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), aggrTupleType, defaultValues);
       keyTupleType = mlir::TupleType::get(builder.getContext(), keyTypes);
       valTupleType = mlir::TupleType::get(builder.getContext(), valTypes);
-      auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(aggregationOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType), initTuple);
+      aggrTupleType = mlir::TupleType::get(builder.getContext(),aggrTypes);
+      auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(aggregationOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType,aggrTupleType), initTuple);
       mlir::Block* aggrBuilderBlock = new mlir::Block;
       aggrBuilder.region().push_back(aggrBuilderBlock);
       aggrBuilderBlock->addArguments({aggrTupleType, valTupleType});

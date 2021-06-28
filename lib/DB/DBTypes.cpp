@@ -489,14 +489,14 @@ void mlir::db::TopKType::print(mlir::DialectAsmPrinter& p) const {
    p << getMnemonic() << "<" << getElementType() << ">";
 }
 ::mlir::Type mlir::db::AggrHTBuilderType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
-   TupleType keyType, valType;
-   if (parser.parseLess() || parser.parseType(keyType)||parser.parseComma()||parser.parseType(valType) || parser.parseGreater()) {
+   TupleType keyType, valType,aggrType;
+   if (parser.parseLess() || parser.parseType(keyType)||parser.parseComma()||parser.parseType(valType) ||parser.parseComma()||parser.parseType(aggrType) || parser.parseGreater()) {
       return mlir::Type();
    }
-   return mlir::db::AggrHTBuilderType::get(parser.getBuilder().getContext(), keyType,valType);
+   return mlir::db::AggrHTBuilderType::get(parser.getBuilder().getContext(), keyType,valType,aggrType);
 }
 void mlir::db::AggrHTBuilderType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getKeyType()<<","<<getValType() << ">";
+   p << getMnemonic() << "<" << getKeyType()<<","<<getValType() << ","<<getAggrType()<<">";
 }
 ::mlir::Type mlir::db::JoinHTBuilderType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
    TupleType keyType, valType;
