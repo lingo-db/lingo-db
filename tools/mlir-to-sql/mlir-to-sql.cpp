@@ -119,10 +119,14 @@ class ToSQL {
             output << attributeName(op.attr().getRelationalAttribute());
          })
          .Case<mlir::db::AndOp>([&](mlir::db::AndOp op) {
+            output<<"(";
             joinstr(output, "and", op.vals());
+            output<<")";
          })
          .Case<mlir::db::OrOp>([&](mlir::db::OrOp op) {
+           output<<"(";
             joinstr(output, "or", op.vals());
+           output<< ")";
          })
          .Case<DateSubOp>([&](DateSubOp op) {
             handleBinOp(output, "-", op.left(), op.right());
