@@ -166,7 +166,7 @@ class HashInnerJoinLowering : public mlir::relalg::ProducerConsumerNode {
       context.builders[builderId]=joinHtBuilder;
       children[0]->addRequiredBuilders({builderId});
       children[0]->produce(context, builder);
-      joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::TableType::get(builder.getContext()), joinHtBuilder);
+      joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::JoinHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType), joinHtBuilder);
       children[1]->produce(context, builder);
    }
 

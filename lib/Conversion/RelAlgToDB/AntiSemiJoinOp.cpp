@@ -178,7 +178,7 @@ class HashAntiSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
       context.builders[builderId] = joinHtBuilder;
       builderChild->addRequiredBuilders({builderId});
       builderChild->produce(context, builder);
-      joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::TableType::get(builder.getContext()), joinHtBuilder);
+      joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::JoinHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType), joinHtBuilder);
       lookupChild->produce(context, builder);
    }
 

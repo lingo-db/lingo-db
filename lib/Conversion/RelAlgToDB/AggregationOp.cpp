@@ -226,7 +226,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
       auto iterEntryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, aggrTupleType});
       children[0]->addRequiredBuilders({builderId});
       children[0]->produce(context, builder);
-      mlir::Value hashtable = builder.create<mlir::db::BuilderBuild>(aggregationOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, aggrTupleType), aggrBuilder);
+      mlir::Value hashtable = builder.create<mlir::db::BuilderBuild>(aggregationOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, aggrTupleType), context.builders[builderId]);
       {
          auto forOp2 = builder.create<mlir::db::ForOp>(aggregationOp->getLoc(), getRequiredBuilderTypes(context), hashtable, flag, getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;

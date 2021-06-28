@@ -176,7 +176,7 @@ class HashSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
       context.builders[builderId] = joinHtBuilder;
       builderChild->addRequiredBuilders({builderId});
       builderChild->produce(context, builder);
-      joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::TableType::get(builder.getContext()), joinHtBuilder);
+      joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::JoinHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType), context.builders[builderId]);
       lookupChild->produce(context, builder);
    }
 

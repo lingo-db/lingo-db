@@ -92,7 +92,7 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
       entryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, valTupleType});
       children[0]->addRequiredBuilders({builderId});
       children[0]->produce(context, builder);
-      mlir::Value hashtable = builder.create<mlir::db::BuilderBuild>(projectionOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), aggrBuilder);
+      mlir::Value hashtable = builder.create<mlir::db::BuilderBuild>(projectionOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), context.builders[builderId]);
       {
          auto forOp2 = builder.create<mlir::db::ForOp>(projectionOp->getLoc(), getRequiredBuilderTypes(context), hashtable, flag, getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;

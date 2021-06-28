@@ -389,7 +389,6 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
          iterArgs++;
       }
    }
-   collectionType.getElementType().dump();
    // Induction variable.
    argTypes.push_back(collectionType.getElementType());
    // Loop carried variables

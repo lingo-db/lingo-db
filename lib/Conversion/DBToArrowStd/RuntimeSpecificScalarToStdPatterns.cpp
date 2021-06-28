@@ -376,8 +376,6 @@ class HashLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::HashAdaptor hashAdaptor(operands);
       auto hashOp = mlir::cast<mlir::db::Hash>(op);
-      hashAdaptor.val().getType().dump();
-      hashOp.val().getType().dump();
       Value const0 = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0));
       rewriter.replaceOp(op, hashImpl(rewriter, hashAdaptor.val(), const0, hashOp.val().getType()));
       return success();

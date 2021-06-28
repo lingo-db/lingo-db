@@ -47,7 +47,7 @@ class MaterializeLowering : public mlir::relalg::ProducerConsumerNode {
       context.builders[builderId] = tableBuilder;
       children[0]->addRequiredBuilders({builderId});
       children[0]->produce(context, builder);
-      table = builder.create<mlir::db::BuilderBuild>(materializeOp.getLoc(), mlir::db::TableType::get(builder.getContext()), tableBuilder);
+      table = builder.create<mlir::db::BuilderBuild>(materializeOp.getLoc(), mlir::db::TableType::get(builder.getContext()), context.builders[builderId]);
    }
    virtual void done() override {
       materializeOp.replaceAllUsesWith(table);
