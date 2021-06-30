@@ -18,7 +18,7 @@ EXPORT runtime::Pointer<std::shared_ptr<arrow::DataType>> _mlir_ciface_arrow_typ
       case arrow::Type::DATE32: *ptr = arrow::date32(); break;
       case arrow::Type::DATE64: *ptr = arrow::date64(); break;
 
-      default: break;
+      default: throw std::runtime_error("unknown arrow type!!");
    }
    return ptr;
 }

@@ -208,7 +208,7 @@ class DecimalOpScaledLowering : public ConversionPattern {
          auto [low, high] = support::getDecimalScaleMultiplier(decimalType.getS());
          std::vector<uint64_t> parts = {low, high};
          auto stdType=typeConverter->convertType(decimalType.getBaseType());
-         auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), stdType, rewriter.getIntegerAttr(stdType, APInt(128, parts)));
+         auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.template cast<mlir::IntegerType>().getWidth(), parts)));
          left = rewriter.create<mlir::MulIOp>(rewriter.getUnknownLoc(), stdType, left, multiplier);
          auto replacement=rewriter.create<Op>(op->getLoc(), stdType, left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(replacement));
@@ -296,7 +296,7 @@ class ConstantLowering : public ConversionPattern {
          }
          auto [low, high] = support::parseDecimal(stringRep, decimalType.getS());
          std::vector<uint64_t> parts = {low, high};
-         rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, APInt(128, parts)));
+         rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.cast<mlir::IntegerType>().getWidth(), parts)));
          return success();
       } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
          if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
@@ -473,10 +473,11 @@ class CastOpLowering : public ConversionPattern {
             value = rewriter.create<mlir::SIToFPOp>(loc, value, convertedTargetType);
          } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto sourceScale = decimalTargetType.getS();
+            size_t decimalWidth=typeConverter->convertType(decimalTargetType).cast<mlir::IntegerType>().getWidth();
             auto [low, high] = support::getDecimalScaleMultiplier(sourceScale);
             std::vector<uint64_t> parts = {low, high};
-            auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(128, parts)));
-            if (intType.getWidth() < 128) {
+            auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(decimalWidth, parts)));
+            if (intType.getWidth() < decimalWidth) {
                value = rewriter.create<SignExtendIOp>(loc, value, convertedTargetType);
             }
             value = rewriter.create<mlir::MulIOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
@@ -503,9 +504,10 @@ class CastOpLowering : public ConversionPattern {
          if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto sourceScale = decimalSourceType.getS();
             auto targetScale = decimalTargetType.getS();
+            size_t decimalWidth=convertedSourceType.cast<mlir::IntegerType>().getWidth();//TODO
             auto [low, high] = support::getDecimalScaleMultiplier(std::max(sourceScale, targetScale) - std::min(sourceScale, targetScale));
             std::vector<uint64_t> parts = {low, high};
-            auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(128, parts)));
+            auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(decimalWidth, parts)));
             if (sourceScale < targetScale) {
                value = rewriter.create<mlir::MulIOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
             } else {
@@ -518,10 +520,13 @@ class CastOpLowering : public ConversionPattern {
          } else if (auto intType = scalarTargetType.dyn_cast_or_null<db::IntType>()) {
             auto sourceScale = decimalSourceType.getS();
             auto [low, high] = support::getDecimalScaleMultiplier(sourceScale);
+            size_t decimalWidth=convertedSourceType.cast<mlir::IntegerType>().getWidth();
+
             std::vector<uint64_t> parts = {low, high};
-            auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedSourceType, rewriter.getIntegerAttr(convertedSourceType, APInt(128, parts)));
+
+            auto multiplier = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), convertedSourceType, rewriter.getIntegerAttr(convertedSourceType, APInt(decimalWidth, parts)));
             value = rewriter.create<mlir::SignedDivIOp>(rewriter.getUnknownLoc(), convertedSourceType, value, multiplier);
-            if (intType.getWidth() < 128) {
+            if (intType.getWidth() < decimalWidth) {
                value = rewriter.create<TruncateIOp>(loc, value, convertedTargetType);
             }
          } else {
@@ -610,6 +615,9 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
                            }
                         })
                         .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
+                           if(t.getP()<19){
+                              return mlir::IntegerType::get(patterns.getContext(), 64);
+                           }
                            return mlir::IntegerType::get(patterns.getContext(), 128);
                         })
                         .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {

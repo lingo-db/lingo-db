@@ -9,11 +9,11 @@
 #define EXPORT extern "C" __attribute__((visibility("default")))
 
 struct TableBuilder {
-   static constexpr size_t max_batch_size = 2;
+   static constexpr size_t max_batch_size = 100000;
    std::shared_ptr<arrow::Schema> schema;
    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
    std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder;
-   size_t current_batch_size;
+   size_t current_batch_size=0;
    TableBuilder(std::shared_ptr<arrow::Schema> schema) : schema(schema) {
       arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), &batchBuilder); //NOLINT (clang-diagnostic-unused-result)
    }
@@ -37,7 +37,11 @@ struct TableBuilder {
    }
    std::shared_ptr<arrow::Table> build() {
       flushBatch();
-      return arrow::Table::FromRecordBatches(schema, batches).ValueOrDie();
+      std::shared_ptr<arrow::Table> table;
+      if(arrow::Table::FromRecordBatches(schema, batches).Value(&table)!=arrow::Status::OK()) {
+         throw std::runtime_error("could not create table");
+      }
+      return table;
    }
 };
 EXPORT runtime::Pointer<TableBuilder> _mlir_ciface_arrow_create_table_builder(runtime::Pointer<std::shared_ptr<arrow::Schema>>* schema) { // NOLINT (clang-diagnostic-return-type-c-linkage)
@@ -71,6 +75,17 @@ TABLE_BUILDER_ADD_PRIMITIVE(float_64, DoubleType)
 TABLE_BUILDER_ADD_PRIMITIVE(date_32, Date32Type)
 TABLE_BUILDER_ADD_PRIMITIVE(date_64, Date64Type)
 EXPORT void _mlir_ciface_table_builder_add_decimal(runtime::Pointer<TableBuilder>* builder, int column, bool isNull, int64_t low, int64_t high) {
+   auto* typed_builder = (*builder)->GetBuilderForColumn<arrow::Decimal128Builder>(column);
+   if (isNull) {
+      typed_builder->AppendNull(); //NOLINT (clang-diagnostic-unused-result)
+   } else {
+      arrow::Decimal128 decimalrep(arrow::BasicDecimal128(high, low));
+      typed_builder->Append(decimalrep); //NOLINT (clang-diagnostic-unused-result)
+   }
+}
+EXPORT void _mlir_ciface_table_builder_add_small_decimal(runtime::Pointer<TableBuilder>* builder, int column, bool isNull, int64_t low) {
+   __int128 total=low;
+   int64_t high=total>>64;
    auto* typed_builder = (*builder)->GetBuilderForColumn<arrow::Decimal128Builder>(column);
    if (isNull) {
       typed_builder->AppendNull(); //NOLINT (clang-diagnostic-unused-result)

@@ -84,6 +84,9 @@ static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::Funct
    } else if (auto boolType = type.dyn_cast_or_null<mlir::db::BoolType>()) {
       return FunctionId::ArrowTableBuilderAddBool;
    } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
+      if(decimalType.getP()<19){
+         return FunctionId::ArrowTableBuilderAddSmallDecimal;
+      }
       return FunctionId::ArrowTableBuilderAddDecimal;
    } else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
       switch (floatType.getWidth()) {

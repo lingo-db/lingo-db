@@ -1,4 +1,5 @@
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
+#include <mlir-support/mlir-support.h>
 #include <mlir/Conversion/DBToArrowStd/NullHandler.h>
 #include <mlir/Dialect/util/UtilOps.h>
 
@@ -139,6 +140,10 @@ class StringCastOpLowering : public ConversionPattern {
          } else if (auto decimalType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto scale = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalType.getS()));
             value = functionRegistry.call(rewriter, FunctionId ::CastStringToDecimal, ValueRange({isNull, value, scale}))[0];
+            if(typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth()<128) {
+               auto converted = rewriter.create<mlir::TruncateIOp>(rewriter.getUnknownLoc(), typeConverter->convertType(decimalType), value);
+               value=converted;
+            }
          } else {
             return failure();
          }
@@ -161,7 +166,10 @@ class StringCastOpLowering : public ConversionPattern {
       } else if (auto decimalSourceType = scalarSourceType.dyn_cast_or_null<db::DecimalType>()) {
          if (scalarTargetType.isa<db::StringType>()) {
             auto scale = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalSourceType.getS()));
-
+            if(typeConverter->convertType(decimalSourceType).cast<mlir::IntegerType>().getWidth()<128) {
+               auto converted = rewriter.create<mlir::SignExtendIOp>(rewriter.getUnknownLoc(), rewriter.getIntegerType(128), value);
+               value=converted;
+            }
             value = functionRegistry.call(rewriter, FunctionId ::CastDecimalToString, ValueRange({isNull, value, scale}))[0];
          } else {
             return failure();
@@ -267,6 +275,10 @@ class DumpOpLowering : public ConversionPattern {
       } else if (type.isa<mlir::db::BoolType>()) {
          functionRegistry.call(rewriter, FunctionId::DumpBool, ValueRange({isNull, val}));
       } else if (auto decType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
+         if(typeConverter->convertType(decType).cast<mlir::IntegerType>().getWidth()<128){
+            auto converted=rewriter.create<mlir::SignExtendIOp>(rewriter.getUnknownLoc(),rewriter.getIntegerType(128),val);
+            val=converted;
+         }
          Value low = rewriter.create<TruncateIOp>(loc, val, i64Type);
          Value shift = rewriter.create<ConstantOp>(loc, rewriter.getIntegerAttr(i128Type, 64));
          Value scale = rewriter.create<ConstantOp>(loc, rewriter.getI32IntegerAttr(decType.getS()));
@@ -382,10 +394,9 @@ class HashLowering : public ConversionPattern {
    }
 };
 class DecimalMulLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
    public:
-   explicit DecimalMulLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::MulOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit DecimalMulLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::MulOp::getOperationName(), 1, context) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
@@ -400,20 +411,12 @@ class DecimalMulLowering : public ConversionPattern {
       }
       auto type = addOp.getType();
       if (auto decimalType = type.template dyn_cast_or_null<mlir::db::DecimalType>()) {
-         assert(decimalType.getS()<=8);
+         auto [low, high] = support::getDecimalScaleMultiplier(decimalType.getS());
+         std::vector<uint64_t> parts = {low, high};
          auto stdType = typeConverter->convertType(decimalType.getBaseType());
+         auto divider = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.cast<mlir::IntegerType>().getWidth(), parts)));
          auto multiplied = rewriter.create<mlir::MulIOp>(op->getLoc(), stdType, left, right);
-         mlir::Value replacement=multiplied;
-         switch(decimalType.getS()){
-            case 1: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv10,{multiplied})[0];break;
-            case 2: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv100,{multiplied})[0];break;
-            case 3: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv1000,{multiplied})[0];break;
-            case 4: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv10000,{multiplied})[0];break;
-            case 5: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv100000,{multiplied})[0];break;
-            case 6: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv1000000,{multiplied})[0];break;
-            case 7: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv10000000,{multiplied})[0];break;
-            case 8: replacement=functionRegistry.call(rewriter,mlir::db::codegen::FunctionRegistry::FunctionId::DecDiv100000000,{multiplied})[0];break;
-         }
+         auto replacement = rewriter.create<mlir::SignedDivIOp>(rewriter.getUnknownLoc(), stdType, multiplied, divider);
          rewriter.replaceOp(op, nullHandler.combineResult(replacement));
 
          return success();
@@ -492,6 +495,5 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
    patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DumpIndexOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<HashLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<DecimalMulLowering>(functionRegistry,typeConverter, patterns.getContext());
-
+   patterns.insert<DecimalMulLowering>(typeConverter, patterns.getContext());
 }

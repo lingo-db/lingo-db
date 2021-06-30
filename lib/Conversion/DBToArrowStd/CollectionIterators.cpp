@@ -176,6 +176,9 @@ class TableRowIterator : public ForIterator {
       if (type.isa<mlir::db::StringType>()) {
          return builder.getI32Type();
       }
+      if(type.isa<mlir::db::DecimalType>()){
+         return builder.getIntegerType(128);
+      }
       return typeConverter.convertType(type.getBaseType());
    }
    struct Column {
@@ -258,7 +261,13 @@ class TableRowIterator : public ForIterator {
          } else if (column.type.isa<db::BoolType>()) {
             Value realPos = builder.create<mlir::AddIOp>(builder.getUnknownLoc(), indexType, column.offset, index);
             val = mlir::db::codegen::BitUtil::getBit(builder, column.values, realPos);
-         } else if (column.stdType.isa<mlir::IntegerType>() || column.stdType.isa<mlir::FloatType>()) {
+         }  else if (auto decimalType=column.type.dyn_cast_or_null<db::DecimalType>()) {
+            val = builder.create<memref::LoadOp>(builder.getUnknownLoc(), column.values, ValueRange({index}));
+            if(typeConverter->convertType(decimalType.getBaseType()).cast<mlir::IntegerType>().getWidth()!=128){
+               auto converted = builder.create<mlir::TruncateIOp>(builder.getUnknownLoc(), typeConverter->convertType(decimalType.getBaseType()), val);
+               val=converted;
+            }
+         }else if (column.stdType.isa<mlir::IntegerType>() || column.stdType.isa<mlir::FloatType>()) {
             val = builder.create<memref::LoadOp>(builder.getUnknownLoc(), column.values, ValueRange({index}));
          } else {
             assert(val && "unhandled type!!");
