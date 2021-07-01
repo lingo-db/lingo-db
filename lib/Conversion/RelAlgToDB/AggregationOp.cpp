@@ -18,6 +18,10 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
    public:
    AggregationLowering(mlir::relalg::AggregationOp aggregationOp) : mlir::relalg::ProducerConsumerNode(aggregationOp.rel()), aggregationOp(aggregationOp) {
    }
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
+      //do not forwared requiredBuilders to children
+   }
    virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;

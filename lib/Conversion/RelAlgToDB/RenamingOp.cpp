@@ -16,6 +16,10 @@ class RenamingLowering : public mlir::relalg::ProducerConsumerNode {
       this->requiredAttributes.insert(renamingOp.getUsedAttributes());
       propagateInfo();
    }
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
+      children[0]->addRequiredBuilders(requiredBuilders);
+   }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return renamingOp.getAvailableAttributes();
    }

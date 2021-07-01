@@ -11,6 +11,10 @@ class MaterializeLowering : public mlir::relalg::ProducerConsumerNode {
    public:
    MaterializeLowering(mlir::relalg::MaterializeOp materializeOp) : mlir::relalg::ProducerConsumerNode(materializeOp.rel()), materializeOp(materializeOp) {
    }
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
+      children[0]->addRequiredBuilders(requiredBuilders);
+   }
    virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;

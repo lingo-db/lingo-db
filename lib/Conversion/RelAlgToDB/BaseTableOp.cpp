@@ -14,6 +14,9 @@ class BaseTableLowering : public mlir::relalg::ProducerConsumerNode {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
    }
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
+   }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return baseTableOp.getCreatedAttributes();
    }

@@ -148,6 +148,10 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
       }
       propagateInfo();
    }
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
+      children[0]->addRequiredBuilders(requiredBuilders);
+   }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return joinOp.getAvailableAttributes();
    }
@@ -232,9 +236,14 @@ class HashSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
       valTupleType = mlir::TupleType::get(joinOp.getContext(), valTypes);
       entryType = mlir::TupleType::get(joinOp.getContext(), {keyTupleType, valTupleType});
    }
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
+      lookupChild->addRequiredBuilders(requiredBuilders);
+   }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return joinOp.getAvailableAttributes();
    }
+
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == this->builderChild) {

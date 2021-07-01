@@ -94,6 +94,10 @@ class HashInnerJoinLowering : public mlir::relalg::ProducerConsumerNode {
       entryType=mlir::TupleType::get(joinOp.getContext(), {keyTupleType,valTupleType});
 
    }
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
+      children[1]->addRequiredBuilders(requiredBuilders);
+   }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return this->children[0]->getAvailableAttributes().insert(this->children[1]->getAvailableAttributes());
    }

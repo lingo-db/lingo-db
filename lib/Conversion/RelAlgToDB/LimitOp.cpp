@@ -19,6 +19,9 @@ class LimitLowering : public mlir::relalg::ProducerConsumerNode {
       this->requiredAttributes.insert(limitOp.getUsedAttributes());
       propagateInfo();
    }
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
+   }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return this->children[0]->getAvailableAttributes();
    }
