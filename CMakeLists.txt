@@ -81,7 +81,7 @@ add_executable(mlir-db-opt mlir-opt.cpp)
 
 add_executable(db-run db-run.cpp)
 target_link_libraries(db-run runner runtime)
-target_link_options(db-run PUBLIC -export-dynamic)
+target_link_options(db-run PUBLIC -Wl,--export-dynamic)
 
 
 llvm_update_compile_flags(mlir-db-opt)

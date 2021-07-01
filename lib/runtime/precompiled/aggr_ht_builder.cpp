@@ -130,8 +130,9 @@ struct AggrHashtableBuilder {
    size_t entries = 0;
    size_t keySize;
    size_t valSize;
-   size_t combinedSize;
    size_t aggrSize;
+   size_t combinedSize;
+
    size_t padding;
    size_t aggrOffset;
    compareFn compareFunction;
