@@ -26,7 +26,7 @@ class LazyMultiMap {
    public:
    // End of the equal range
 
-   LazyMultiMap(size_t dataSize) : dataSize(dataSize) {}
+   LazyMultiMap(size_t dataSize) : dataSize(dataSize),entries(0),entryBuffer(sizeof(Entry)+dataSize) {}
 
    // Insert an element into the hash table
    //  * Gather all entries with insert and build the hash table with finalize.
@@ -36,11 +36,11 @@ class LazyMultiMap {
    //  * Resize the hash table to that size.
    //  * For each entry in entries_, calculate the hash and prepend it to the collision list in the hash table.
    void finalize() {
-      size_t ht_size = entries_.empty() ? 1 : NextPow2_64(entries_.size() / dataSize);
+      size_t ht_size = entries==0? 1 : NextPow2_64(entries);
       hash_table_mask_ = ht_size - 1;
       hash_table_.resize(ht_size);
-      for (size_t i = 0; i < entries_.size(); i += dataSize) {
-         Entry* ptr = (Entry*) &entries_[i];
+      for (auto& e:entryBuffer) {
+         Entry* ptr = (Entry*) &e;
          size_t hash = (size_t) ptr->next;
          size_t pos = hash & hash_table_mask_;
 
@@ -57,8 +57,9 @@ class LazyMultiMap {
 
    runtime::VarLenBuffer varLenBuffer;
    // Entries of the hash table.
-   std::vector<uint8_t> entries_;
+   runtime::ObjectBuffer<Entry> entryBuffer;
    size_t dataSize;
+   size_t entries;
 
    protected:
    // The hash table.
@@ -90,11 +91,9 @@ EXPORT __attribute__((always_inline)) runtime::Pair<bool, runtime::ByteRange> _m
    return {false, (*builder)->varLenBuffer.persist(*data)};
 }
 
-EXPORT __attribute__((always_inline)) runtime::Pointer<uint8_t> _mlir_ciface_join_ht_builder_merge(runtime::Pointer<LazyMultiMap>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   auto& values = (*builder)->entries_;
-   size_t sizeBefore = values.size();
-   values.resize(sizeBefore + (*builder)->dataSize);
-   return &values[sizeBefore];
+EXPORT __attribute__((always_inline)) runtime::Pointer<LazyMultiMap::Entry> _mlir_ciface_join_ht_builder_merge(runtime::Pointer<LazyMultiMap>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   (*builder)->entries++;
+   return (*builder)->entryBuffer.alloc();
 }
 EXPORT runtime::Pointer<LazyMultiMap> _mlir_ciface_join_ht_builder_build(runtime::Pointer<LazyMultiMap>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    (*builder)->finalize();
