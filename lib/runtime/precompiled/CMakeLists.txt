@@ -6,6 +6,7 @@ set(PRECOMPILED_SRCS
         heap.cpp
         decimal-support.cpp
         join_ht_builder.cpp
+        aggr_ht_builder.cpp
         )
 
 find_program(LLVM_LINK_EXECUTABLE llvm-link HINTS ${LLVM_TOOLS_BINARY_DIR})
@@ -39,6 +40,7 @@ foreach(SRC_FILE ${PRECOMPILED_SRCS})
                 -DNDEBUG # DCHECK macros not implemented in precompiled code
                 -DARROW_STATIC # Do not set __declspec(dllimport) on MSVC on Arrow symbols
                 -fno-use-cxa-atexit # Workaround for unresolved __dso_handle
+                -msse4.2
                 -emit-llvm
                 -O3
                 -c

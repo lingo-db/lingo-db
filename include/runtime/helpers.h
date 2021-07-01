@@ -76,7 +76,100 @@ class Triple {
    public:
    Triple(T1 first, T2 second, T3 third) : first(first), second(second), third(third) {}
 };
+template <class T>
+class ObjectBuffer {
+   class Part {
+      public:
+      size_t len;
+      size_t capacity;
+      uint8_t* data;
 
+      Part() : len(0), capacity(0) {
+         data = nullptr;
+      }
+      Part(size_t capacity) : len(0), capacity(capacity) {
+         data = new uint8_t[capacity];
+      }
+      inline bool fits(size_t required) {
+         return required <= (capacity - len);
+      }
+      inline T* alloc(size_t size) {
+         uint8_t* ptr = reinterpret_cast<uint8_t*>(data + len);
+         this->len += size;
+         return (T*) ptr;
+      }
+
+      size_t getCapacity() const {
+         return capacity;
+      }
+   };
+
+   size_t objSize;
+   std::vector<Part*> parts;
+
+   public:
+   class RangeIterator : public std::iterator<std::forward_iterator_tag, T> {
+      public:
+      // Default constructor
+      RangeIterator(std::vector<Part*>& parts) : parts(parts), part(parts.size()), offset(0), objSize(0) {}
+      // Constructor
+      explicit RangeIterator(std::vector<Part*>& parts, size_t part, size_t offset, size_t objSize) : parts(parts), part(part), offset(offset), objSize(objSize) {
+      }
+      // Destructor
+      ~RangeIterator() = default;
+
+      // Postfix increment
+      RangeIterator operator++(int) {
+         RangeIterator copy = *this;
+         this->operator++();
+         return copy;
+      }
+      // Prefix increment
+      RangeIterator& operator++() {
+         offset += objSize;
+         if (offset > (parts[part]->len - objSize)) {
+            part++;
+            offset = 0;
+         }
+         return *this;
+      }
+      bool valid(){
+         return part<parts.size();
+      }
+      // Reference
+      T& operator*() { return *operator->(); }
+      // Pointer
+      T* operator->() { return (T*)&parts[part]->data[offset]; }
+      // Equality
+      bool operator==(const RangeIterator& other) const { return part == other.part && offset == other.offset; }
+      // Inequality
+      bool operator!=(const RangeIterator& other) const { return part != other.part || offset != other.offset; }
+
+      public:
+      std::vector<Part*>& parts;
+      size_t part;
+      size_t offset;
+      size_t objSize;
+   };
+   inline T* alloc() {
+      auto* currPart = parts[parts.size() - 1];
+      if (!currPart->fits(objSize)) {
+         size_t newSize = currPart->getCapacity() * 2;
+         parts.push_back(new Part(newSize));
+         currPart = parts[parts.size() - 1];
+      }
+      return (T*) currPart->alloc(objSize);
+   }
+   ObjectBuffer(size_t objSize) : objSize(objSize) {
+      parts.push_back(new Part(1024 * objSize));
+   }
+   RangeIterator end() { return RangeIterator(parts); }
+   RangeIterator begin() { return RangeIterator(parts, 0, 0, objSize); }
+   RangeIterator* beginPtr() {
+      return new RangeIterator(parts, 0, 0, objSize);
+   }
+
+};
 class VarLenBuffer {
    class Part {
       size_t len;
@@ -84,10 +177,10 @@ class VarLenBuffer {
       uint8_t* data;
 
       public:
-      Part() : len(0),capacity(0) {
+      Part() : len(0), capacity(0) {
          data = nullptr;
       }
-      Part(size_t capacity) : len(0),capacity(capacity) {
+      Part(size_t capacity) : len(0), capacity(capacity) {
          data = new uint8_t[capacity];
       }
       inline bool fits(size_t required) {
@@ -102,20 +195,18 @@ class VarLenBuffer {
       size_t getCapacity() const {
          return capacity;
       }
-
    };
    std::vector<Part*> parts;
 
    public:
    inline ByteRange persist(ByteRange string) {
-      auto *currPart = parts[parts.size() - 1];
+      auto* currPart = parts[parts.size() - 1];
       if (!currPart->fits(string.getSize())) {
          size_t newSize = std::max(currPart->getCapacity(), string.getSize()) * 2;
          parts.push_back(new Part(newSize));
          currPart = parts[parts.size() - 1];
       }
       return currPart->insert(string);
-
    }
 
    VarLenBuffer() {

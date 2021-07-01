@@ -339,28 +339,26 @@ class DumpIndexOpLowering : public ConversionPattern {
 
 class HashLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
-   Value xorImpl(OpBuilder& builder, Value v, Value totalHash) const {
-      return builder.create<mlir::XOrOp>(builder.getUnknownLoc(), v, totalHash);
-   }
+
    Value hashImpl(OpBuilder& builder, Value v, Value totalHash, Type originalType) const {
       //todo: more checks:
       using FunctionId = db::codegen::FunctionRegistry::FunctionId;
       if (auto intType = v.getType().dyn_cast_or_null<mlir::IntegerType>()) {
          switch (intType.getWidth()) {
-            case 1: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashBool, v)[0]);
-            case 8: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt8, v)[0]);
-            case 16: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt16, v)[0]);
-            case 32: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt32, v)[0]);
-            case 64: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt64, v)[0]);
-            case 128: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashInt128, v)[0]);
+            case 1: return functionRegistry.call(builder, FunctionId::HashBool,{totalHash,v})[0];
+            case 8: return functionRegistry.call(builder, FunctionId::HashInt8,{totalHash,v})[0];
+            case 16: return functionRegistry.call(builder, FunctionId::HashInt16,{totalHash,v})[0];
+            case 32: return functionRegistry.call(builder, FunctionId::HashInt32,{totalHash,v})[0];
+            case 64: return functionRegistry.call(builder, FunctionId::HashInt64,{totalHash,v})[0];
+            case 128: return functionRegistry.call(builder, FunctionId::HashInt128,{totalHash,v})[0];
          }
       } else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
          switch (floatType.getWidth()) {
-            case 32: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashFloat32, v)[0]);
-            case 64: return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashFloat64, v)[0]);
+            case 32: return functionRegistry.call(builder, FunctionId::HashFloat32,{totalHash,v})[0];
+            case 64: return functionRegistry.call(builder, FunctionId::HashFloat64,{totalHash,v})[0];
          }
       } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::MemRefType>()) {
-         return xorImpl(builder, totalHash, functionRegistry.call(builder, FunctionId::HashBinary, v)[0]);
+         return functionRegistry.call(builder, FunctionId::HashBinary,{totalHash,v})[0];
       } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
          if (auto originalTupleType = originalType.dyn_cast_or_null<mlir::TupleType>()) {
             auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);

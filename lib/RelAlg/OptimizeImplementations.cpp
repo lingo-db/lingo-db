@@ -68,7 +68,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             .Case<mlir::relalg::OuterJoinOp>([&](mlir::relalg::OuterJoinOp op) {})
             .Case<mlir::relalg::FullOuterJoinOp>([&](mlir::relalg::FullOuterJoinOp op) {})
             .Case<mlir::relalg::LimitOp>([&](mlir::relalg::LimitOp op) {
-               if (auto sortOp = mlir::dyn_cast_or_null<mlir::relalg::SortOp>(op.rel().getDefiningOp())) {
+               /*if (auto sortOp = mlir::dyn_cast_or_null<mlir::relalg::SortOp>(op.rel().getDefiningOp())) {
                   mlir::OpBuilder builder(op);
                   auto topKVal = builder.create<mlir::relalg::TopKOp>(op->getLoc(), op.getType(), op.rows(), sortOp.rel(), sortOp.sortspecs());
                   op.result().replaceAllUsesWith(topKVal);
@@ -76,7 +76,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   op->destroy();
                   sortOp->remove();
                   sortOp->destroy();
-               }
+               }*/
             })
 
             .Default([&](auto x) {

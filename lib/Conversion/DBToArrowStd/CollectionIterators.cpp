@@ -364,55 +364,49 @@ class TopKIterator : public ForIterator {
    virtual void down(OpBuilder& builder) {
    }
 };
-class AggrHTIterator : public ForIterator {
-   Value ht;
+class AggrHtIterator : public WhileIterator {
+   Value iteratorInfo;
    Type keyType;
    Type valType;
+   Type elementType;
 
-   Value values;
-   Value keys;
-   Type ptrType;
-   Type typedKeyPtrType;
-   Type typedValPtrType;
    db::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   AggrHTIterator(db::codegen::FunctionRegistry& functionRegistry, Value ht, Type keyType, Type valType) : ht(ht), keyType(keyType), valType(valType), functionRegistry(functionRegistry) {
+   AggrHtIterator(Value tableInfo, Type keyType,Type valType, db::codegen::FunctionRegistry& functionRegistry) : iteratorInfo(tableInfo), keyType(keyType),valType(valType), functionRegistry(functionRegistry) {
    }
-   virtual void init(OpBuilder& builder) {
-      Type ptrType = MemRefType::get({-1}, builder.getIntegerType(8));
-      Type typedKeyPtrType = util::GenericMemrefType::get(builder.getContext(), keyType, -1);
-      Type typedValPtrType = util::GenericMemrefType::get(builder.getContext(), valType, -1);
-      Value scanned = functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtScan, ht)[0];
-      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({ptrType, ptrType}), scanned);
-      keys = unpacked.getResult(0);
-      values = unpacked.getResult(1);
-      keys = builder.create<util::ToGenericMemrefOp>(builder.getUnknownLoc(), typedKeyPtrType, keys);
-      values = builder.create<util::ToGenericMemrefOp>(builder.getUnknownLoc(), typedValPtrType, values);
+   virtual void init(OpBuilder& builder) override {
+      elementType=TupleType::get(builder.getContext(),{keyType,valType});
    }
-   virtual Value upper(OpBuilder& builder) {
-      Value upper = builder.create<util::DimOp>(builder.getUnknownLoc(), builder.getIndexType(), keys);
-      if (auto tupleType = keyType.dyn_cast_or_null<mlir::TupleType>()) {
-         if (tupleType.getTypes().empty()) {
-            upper = builder.create<util::DimOp>(builder.getUnknownLoc(), builder.getIndexType(), values);
-         }
-      }
-      return upper;
+   virtual Type iteratorType(OpBuilder& builder) override {
+      auto i8Type = IntegerType::get(builder.getContext(), 8);
+
+      auto ptrType = MemRefType::get({}, i8Type);
+
+      return ptrType;
    }
-   virtual Value getElement(OpBuilder& builder, Value index) {
-      Value loadedKey = builder.create<util::LoadOp>(builder.getUnknownLoc(), keyType, keys, index);
-      Value loadedVal = builder.create<util::LoadOp>(builder.getUnknownLoc(), valType, values, index);
-      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), {keyType, valType}), ValueRange({loadedKey, loadedVal}));
+
+   virtual Value iterator(OpBuilder& builder) override {
+      return functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtIteratorInit, mlir::ValueRange({iteratorInfo}))[0];
    }
-   virtual Value lower(OpBuilder& builder) {
-      return builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0));
+   virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
+      return functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtIteratorNext, iterator)[0];
    }
-   virtual Value step(OpBuilder& builder) {
-      return builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(1));
+   virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
+      Type typedPtrType = util::GenericMemrefType::get(builder.getContext(), elementType, llvm::Optional<int64_t>());
+      Value currElementPtr = functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtIteratorCurr, iterator)[0];
+      mlir::Value data = builder.create<util::ToGenericMemrefOp>(builder.getUnknownLoc(), typedPtrType, currElementPtr);
+
+      Value loaded = builder.create<util::LoadOp>(builder.getUnknownLoc(), elementType, data, Value());
+      return loaded;
    }
-   virtual void destroyElement(OpBuilder& builder, Value elem) {
+   virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
+      Value rawValue = functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtIteratorValid, iterator)[0];
+      Value dbValue = builder.create<mlir::db::TypeCastOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), rawValue);
+      return dbValue;
    }
-   virtual void down(OpBuilder& builder) {
+   virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
+      functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtIteratorFree, iterator);
    }
 };
 
@@ -614,7 +608,7 @@ std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIteration
       if (aggrHt.getKeyType().getTypes().empty()) {
          return std::make_unique<ForIteratorIterationImpl>(std::make_unique<ValueOnlyAggrHTIterator>(functionRegistry, collection, aggrHt.getValType()));
       } else {
-         return std::make_unique<ForIteratorIterationImpl>(std::make_unique<AggrHTIterator>(functionRegistry, collection, aggrHt.getKeyType(), aggrHt.getValType()));
+         return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<AggrHtIterator>(collection, aggrHt.getKeyType(),aggrHt.getValType(), functionRegistry));
       }
    } else if (auto topK = collectionType.dyn_cast_or_null<mlir::db::TopKType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<TopKIterator>(functionRegistry, collection, topK.getElementType()));

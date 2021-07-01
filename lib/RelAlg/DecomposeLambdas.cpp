@@ -29,6 +29,64 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
          terminator->destroy();
       }
    }
+   static llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> analyze(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
+      llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;
+      mlir::relalg::Attributes leftKeys, rightKeys;
+      std::vector<mlir::Type> types;
+      block->walk([&](mlir::Operation* op) {
+         if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
+            required.insert({getAttr.getResult(), mlir::relalg::Attributes::from(getAttr.attr())});
+         } else {
+            mlir::relalg::Attributes attributes;
+            for (auto operand : op->getOperands()) {
+               if (required.count(operand)) {
+                  attributes.insert(required[operand]);
+               }
+            }
+            for (auto result : op->getResults()) {
+               required.insert({result, attributes});
+            }
+         }
+      });
+      return required;
+   }
+   mlir::Value decomposeOuterJoin(mlir::Value v, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight, llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required) {
+      auto currentJoinOp = mlir::dyn_cast_or_null<mlir::relalg::OuterJoinOp>(v.getDefiningOp()->getParentOp());
+      using namespace mlir;
+      if (auto andop = dyn_cast_or_null<mlir::db::AndOp>(v.getDefiningOp())) {
+         std::vector<Value> vals;
+         for (auto operand : andop.vals()) {
+            auto val=decomposeOuterJoin(operand, availableLeft,availableRight,required);
+            if(val){
+               vals.push_back(val);
+            }
+         }
+         OpBuilder builder(andop);
+         auto newAndOp=builder.create<mlir::db::AndOp>(andop->getLoc(),vals);
+         andop->remove();
+         andop->dropAllReferences();
+         //andop->destroy();
+         return newAndOp;
+      } else {
+         if (required[v].isSubsetOf(availableRight)) {
+            auto children = currentJoinOp.getChildren();
+            OpBuilder builder(currentJoinOp);
+            mlir::BlockAndValueMapping mapping;
+            auto newsel = builder.create<relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), children[1].asRelation());
+            newsel.initPredicate();
+            mapping.map(currentJoinOp.getPredicateArgument(), newsel.getPredicateArgument());
+            builder.setInsertionPointToStart(&newsel.predicate().front());
+            mlir::relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), newsel.getOperation(), &newsel.getPredicateBlock(), mapping);
+            builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), mapping.lookup(v));
+            auto* terminator = newsel.getLambdaBlock().getTerminator();
+            terminator->remove();
+            terminator->destroy();
+            currentJoinOp.setChildren({children[0], newsel});
+            return Value();
+         }
+         return v;
+      }
+   }
    void decomposeMap(mlir::relalg::MapOp currentMap, mlir::Value& tree) {
       using namespace mlir;
       currentMap->walk([&](mlir::relalg::AddAttrOp addAttrOp) {
@@ -60,6 +118,19 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
          op.replaceAllUsesWith(val);
          op->remove();
          op->destroy();
+      });
+      getFunction().walk([&](mlir::relalg::OuterJoinOp op) {
+        auto* terminator = op.getRegion().front().getTerminator();
+        auto retval = terminator->getOperand(0);
+         auto availableLeft = op.getChildren()[0].getAvailableAttributes();
+         auto availableRight = op.getChildren()[1].getAvailableAttributes();
+         auto mapped=analyze(&op.getPredicateBlock(),availableLeft,availableRight);
+         auto val=decomposeOuterJoin(retval,availableLeft,availableRight,mapped);
+         mlir::OpBuilder builder(terminator);
+         builder.create<mlir::relalg::ReturnOp>(terminator->getLoc(),val?mlir::ValueRange{val}:mlir::ValueRange{});
+         terminator->remove();
+         terminator->destroy();
+
       });
    }
 };
