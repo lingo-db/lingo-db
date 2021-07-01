@@ -1,25 +1,25 @@
---//RUN: python3 %S/../../tools/sql-to-mlir/sql-to-mlir.py %s | mlir-db-opt --relalg-extract-nested-operators --relalg-decompose-lambdas --relalg-implicit-to-explicit-joins --relalg-pushdown --relalg-unnesting | mlir-db-opt -relalg-to-db -canonicalize | db-run "-" %S/../../resources/data/uni | FileCheck %s
+--//RUN: python3 %S/../../tools/sql-to-mlir/sql-to-mlir.py %s | mlir-db-opt --relalg-extract-nested-operators --relalg-decompose-lambdas --relalg-implicit-to-explicit-joins --relalg-pushdown --relalg-unnesting --relalg-optimize-implementations | mlir-db-opt -relalg-to-db -canonicalize | db-run "-" %S/../../resources/data/uni | FileCheck %s
 
---//CHECK: |                        s.name  |                      h.matrnr  |
+--//CHECK: |                        s.name  |                      h.vorlnr  |
 --//CHECK: -------------------------------------------------------------------
 --//CHECK: |                  "Xenokrates"  |                          null  |
---//CHECK: |                       "Jonas"  |                         25403  |
---//CHECK: |                      "Fichte"  |                         26120  |
+--//CHECK: |                       "Jonas"  |                          5022  |
+--//CHECK: |                      "Fichte"  |                          5001  |
 --//CHECK: |                 "Aristoxenos"  |                          null  |
---//CHECK: |                "Schopenhauer"  |                         27550  |
---//CHECK: |                "Schopenhauer"  |                         27550  |
---//CHECK: |                      "Carnap"  |                         28106  |
---//CHECK: |                      "Carnap"  |                         28106  |
---//CHECK: |                      "Carnap"  |                         28106  |
---//CHECK: |                      "Carnap"  |                         28106  |
---//CHECK: |                "Theophrastos"  |                         29120  |
---//CHECK: |                "Theophrastos"  |                         29120  |
---//CHECK: |                "Theophrastos"  |                         29120  |
---//CHECK: |                   "Feuerbach"  |                         29555  |
---//CHECK: |                   "Feuerbach"  |                         29555  |
+--//CHECK: |                "Schopenhauer"  |                          4052  |
+--//CHECK: |                "Schopenhauer"  |                          5001  |
+--//CHECK: |                      "Carnap"  |                          5259  |
+--//CHECK: |                      "Carnap"  |                          5216  |
+--//CHECK: |                      "Carnap"  |                          5052  |
+--//CHECK: |                      "Carnap"  |                          5041  |
+--//CHECK: |                "Theophrastos"  |                          5049  |
+--//CHECK: |                "Theophrastos"  |                          5041  |
+--//CHECK: |                "Theophrastos"  |                          5001  |
+--//CHECK: |                   "Feuerbach"  |                          5001  |
+--//CHECK: |                   "Feuerbach"  |                          5022  |
 
 
 
-select s.name, h.matrnr
+select s.name, h.vorlnr
 from studenten s left outer join hoeren h on
                                 s.matrnr = h.matrnr
