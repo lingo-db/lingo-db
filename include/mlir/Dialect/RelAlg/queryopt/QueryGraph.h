@@ -268,8 +268,9 @@ class QueryGraph {
 
    void estimate() {
       for (auto& node : nodes) {
-         if(node.op) {
-            node.rows=0;
+          node.selectivity=1;
+          if(node.op) {
+            node.rows=1;
             if(auto baseTableOp=mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())){
                if(baseTableOp->hasAttr("rows")){
                   node.rows=baseTableOp->getAttr("rows").dyn_cast_or_null<mlir::IntegerAttr>().getInt();
@@ -281,7 +282,6 @@ class QueryGraph {
             for(auto pred:node.additionalPredicates) {
                addPredicates(predicates, pred, availableLeft, availableRight);
             }
-            node.selectivity=1;
             Attributes pkey;
             if(auto baseTableOp=mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())){
                pkey=getPKey(baseTableOp.sym_name(),baseTableOp->getAttr("pkey"));

@@ -1,4 +1,5 @@
 #include "mlir/Dialect/RelAlg/queryopt/DPhyp.h"
+#include <iostream>
 #include <unordered_set>
 
 void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
@@ -56,7 +57,14 @@ void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
       }
       currPlan = std::make_shared<Plan>(implicitOperator, subplans, std::vector<Operator>(predicates.begin(), predicates.end()), subplans[0]->getRows());
    } else if (specialJoin) {
-      auto estimatedResultSize=p1->getRows()*p2->getRows()*totalSelectivity;
+      double estimatedResultSize=p1->getRows()*p2->getRows()*totalSelectivity;
+      if(mlir::isa<mlir::relalg::SemiJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::SemiJoinOp>(specialJoin.getOperation())){
+         estimatedResultSize=p1->getRows()*totalSelectivity;
+      }
+      if(mlir::isa<mlir::relalg::OuterJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::MarkJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::SingleJoinOp>(specialJoin.getOperation())){
+         estimatedResultSize=p1->getRows();
+      }
+
       currPlan = std::make_shared<Plan>(specialJoin, std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>(predicates.begin(), predicates.end()), estimatedResultSize);
    } else if (!predicates.empty()) {
       auto estimatedResultSize=p1->getRows()*p2->getRows()*totalSelectivity;
