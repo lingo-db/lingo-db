@@ -61,17 +61,15 @@ class NLInnerJoinLowering : public mlir::relalg::ProducerConsumerNode {
    virtual ~NLInnerJoinLowering() {}
 };
 
-
 class HashInnerJoinLowering : public mlir::relalg::HJNode<mlir::relalg::InnerJoinOp> {
-
    public:
-   HashInnerJoinLowering(mlir::relalg::InnerJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::InnerJoinOp>(innerJoinOp,innerJoinOp.left(), innerJoinOp.right()) {
+   HashInnerJoinLowering(mlir::relalg::InnerJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::InnerJoinOp>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
    }
 
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return this->children[0]->getAvailableAttributes().insert(this->children[1]->getAvailableAttributes());
    }
-   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {
+   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
       auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matched);
       mlir::Block* ifBlock = new mlir::Block;
 

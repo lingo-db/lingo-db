@@ -27,9 +27,9 @@ class NLAntiSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
          matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
          children[1]->setFlag(matchFoundFlag);
          children[1]->produce(context, builder);
-         mlir::Value matchFound=builder.create<mlir::db::GetFlag>(joinOp->getLoc(),mlir::db::BoolType::get(builder.getContext()),matchFoundFlag);
-         mlir::Value noMatchFound=builder.create<mlir::db::NotOp>(joinOp->getLoc(),mlir::db::BoolType::get(builder.getContext()),matchFound);
-         auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context),noMatchFound);
+         mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
+         mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFound);
+         auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), noMatchFound);
          mlir::Block* ifBlock = new mlir::Block;
 
          ifOp.thenRegion().push_back(ifBlock);
@@ -55,7 +55,7 @@ class NLAntiSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
 
          builder.mergeRelatinalBlock(block, context, scope);
          mlir::Value matched = mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0];
-         builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag,matched);
+         builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
          terminator->erase();
          clonedAntiSemiJoinOp->destroy();
       }
@@ -69,22 +69,23 @@ class NLAntiSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
 
 class HashAntiSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::AntiSemiJoinOp> {
    mlir::Value matchFoundFlag;
+
    public:
-   HashAntiSemiJoinLowering(mlir::relalg::AntiSemiJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::AntiSemiJoinOp>(innerJoinOp,innerJoinOp.right(), innerJoinOp.left()) {
+   HashAntiSemiJoinLowering(mlir::relalg::AntiSemiJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::AntiSemiJoinOp>(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
-   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {
+   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
       builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
    }
-   mlir::Value getFlag() override{
+   mlir::Value getFlag() override {
       return matchFoundFlag;
    }
-   void beforeLookup(mlir::relalg::LoweringContext &context, mlir::relalg::ProducerConsumerBuilder &builder) override{
+   void beforeLookup(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
       matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
    }
-   void afterLookup(mlir::relalg::LoweringContext &context, mlir::relalg::ProducerConsumerBuilder &builder) override {
+   void afterLookup(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
       mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-      mlir::Value noMatchFound=builder.create<mlir::db::NotOp>(joinOp->getLoc(),mlir::db::BoolType::get(builder.getContext()),matchFound);
+      mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFound);
 
       auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), noMatchFound);
       mlir::Block* ifBlock = new mlir::Block;
@@ -109,12 +110,12 @@ class HashAntiSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::AntiS
    virtual ~HashAntiSemiJoinLowering() {}
 };
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredAntiSemiJoinOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::AntiSemiJoinOp joinOp) {
-  if (joinOp->hasAttr("impl")) {
-     if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
-        if (impl.getValue() == "hash") {
-           return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<HashAntiSemiJoinLowering>(joinOp);
-        }
-     }
-  }
-  return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<NLAntiSemiJoinLowering>(joinOp);
+   if (joinOp->hasAttr("impl")) {
+      if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
+         if (impl.getValue() == "hash") {
+            return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<HashAntiSemiJoinLowering>(joinOp);
+         }
+      }
+   }
+   return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<NLAntiSemiJoinLowering>(joinOp);
 });

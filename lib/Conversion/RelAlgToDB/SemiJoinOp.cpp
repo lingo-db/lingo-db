@@ -68,20 +68,21 @@ class NLSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
 
 class HashSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SemiJoinOp> {
    mlir::Value matchFoundFlag;
+
    public:
-   HashSemiJoinLowering(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::SemiJoinOp>(innerJoinOp,innerJoinOp.right(), innerJoinOp.left()) {
+   HashSemiJoinLowering(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::SemiJoinOp>(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
-   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {
+   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
       builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
    }
-   mlir::Value getFlag() override{
+   mlir::Value getFlag() override {
       return matchFoundFlag;
    }
-   void beforeLookup(mlir::relalg::LoweringContext &context, mlir::relalg::ProducerConsumerBuilder &builder) override{
+   void beforeLookup(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
       matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
    }
-   void afterLookup(mlir::relalg::LoweringContext &context, mlir::relalg::ProducerConsumerBuilder &builder) override {
+   void afterLookup(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
       mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
       auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matchFound);
       mlir::Block* ifBlock = new mlir::Block;

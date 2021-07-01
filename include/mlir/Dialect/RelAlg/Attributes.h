@@ -23,6 +23,9 @@ class Attributes {
    bool empty() const {
       return attributes.empty();
    }
+   size_t size() const {
+      return attributes.size();
+   }
    void insert(mlir::relalg::RelationalAttribute* attr) {
       attributes.insert(attr);
    }

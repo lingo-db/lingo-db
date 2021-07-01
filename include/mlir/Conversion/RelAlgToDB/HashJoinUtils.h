@@ -11,9 +11,10 @@
 namespace mlir::relalg {
 class HashJoinUtils {
    public:
-   static std::tuple<mlir::relalg::Attributes, mlir::relalg::Attributes, std::vector<mlir::Type>> analyzeHJPred(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
+   static std::tuple<mlir::relalg::Attributes, mlir::relalg::Attributes, std::vector<mlir::Type>, std::vector<Attributes>> analyzeHJPred(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
       llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;
       mlir::relalg::Attributes leftKeys, rightKeys;
+      std::vector<Attributes> leftKeyAttributes;
       std::vector<mlir::Type> types;
       block->walk([&](mlir::Operation* op) {
          if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
@@ -25,10 +26,12 @@ class HashJoinUtils {
                if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {
                   leftKeys.insert(leftAttributes);
                   rightKeys.insert(rightAttributes);
+                  leftKeyAttributes.push_back(leftAttributes);
                   types.push_back(cmpOp.left().getType());
                } else if (leftAttributes.isSubsetOf(availableRight) && rightAttributes.isSubsetOf(availableLeft)) {
                   leftKeys.insert(rightAttributes);
                   rightKeys.insert(leftAttributes);
+                  leftKeyAttributes.push_back(rightAttributes);
                   types.push_back(cmpOp.left().getType());
                }
             }
@@ -44,7 +47,7 @@ class HashJoinUtils {
             }
          }
       });
-      return {leftKeys, rightKeys, types};
+      return {leftKeys, rightKeys, types, leftKeyAttributes};
    }
    static mlir::Value pack(std::vector<mlir::Value> values, mlir::OpBuilder& builder) {
       std::vector<mlir::Type> types;
@@ -120,13 +123,14 @@ class HashJoinUtils {
       return keys;
    }
 };
-template<class T>
+template <class T>
 class HJNode : public mlir::relalg::ProducerConsumerNode {
    protected:
    mlir::relalg::ProducerConsumerNode* builderChild;
    mlir::relalg::ProducerConsumerNode* lookupChild;
    T joinOp;
    mlir::relalg::Attributes leftKeys, rightKeys, leftValues;
+   std::vector<mlir::relalg::RelationalAttribute*> orderedKeys;
    std::vector<mlir::relalg::RelationalAttribute*> orderedValues;
    mlir::TupleType keyTupleType, valTupleType, entryType;
    size_t builderId;
@@ -147,10 +151,18 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
       propagateInfo();
       auto availableLeft = builderChild->getAvailableAttributes();
       auto availableRight = lookupChild->getAvailableAttributes();
-      auto [leftKeys, rightKeys, keyTypes] = mlir::relalg::HashJoinUtils::analyzeHJPred(&joinOp.predicate().front(), availableLeft, availableRight);
+      auto [leftKeys, rightKeys, keyTypes, leftKeyAttributes] = mlir::relalg::HashJoinUtils::analyzeHJPred(&joinOp.predicate().front(), availableLeft, availableRight);
       this->leftKeys = leftKeys;
       this->rightKeys = rightKeys;
       auto leftValues = availableLeft.intersect(this->requiredAttributes);
+      for (mlir::relalg::Attributes& x : leftKeyAttributes) {
+         if (x.size() == 1) {
+            leftValues.remove(x);
+            orderedKeys.push_back(*x.begin());
+         } else {
+            orderedKeys.push_back(nullptr);
+         }
+      }
       this->leftValues = leftValues;
       std::vector<mlir::Type> valTypes;
       for (auto* x : leftValues) {
@@ -173,17 +185,22 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
       joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::JoinHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType), joinHtBuilder);
       children[1]->produce(context, builder);
    }
-   virtual void handleLookup(Value matched, LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder)=0;
-   virtual void beforeLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder){}
-   virtual void afterLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder){}
-   virtual mlir::Value getFlag(){return Value();}
+   virtual void handleLookup(Value matched, LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) = 0;
+   virtual void beforeLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {}
+   virtual void afterLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {}
+   virtual mlir::Value getFlag() { return Value(); }
 
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == builderChild) {
          auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), leftKeys, builder.getInsertionBlock(), context);
          mlir::Value packedKey = mlir::relalg::HashJoinUtils::pack(inlinedKeys, builder);
-         mlir::Value packedValues = mlir::relalg::HashJoinUtils::packAttrs(orderedValues, builder, context);
+         mlir::Value packedValues;
+         if (!valTupleType.getTypes().empty()) {
+            packedValues = mlir::relalg::HashJoinUtils::packAttrs(orderedValues, builder, context);
+         } else {
+            packedValues=builder.create<mlir::util::UndefTupleOp>(joinOp->getLoc(), valTupleType);
+         }
          mlir::Value htBuilder = context.builders[builderId];
          mlir::Value packed = builder.create<mlir::util::PackOp>(joinOp->getLoc(), entryType, mlir::ValueRange({packedKey, packedValues}));
          mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(joinOp->getLoc(), htBuilder.getType(), htBuilder, packed);
@@ -191,7 +208,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
       } else if (child == this->children[1].get()) {
          auto packedKey = mlir::relalg::HashJoinUtils::pack(mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), rightKeys, builder.getInsertionBlock(), context), builder);
          mlir::Type htIterable = mlir::db::GenericIterableType::get(builder.getContext(), entryType, "join_ht_iterator");
-         beforeLookup(context,builder);
+         beforeLookup(context, builder);
          auto matches = builder.create<mlir::db::Lookup>(joinOp->getLoc(), htIterable, joinHt, packedKey);
          {
             auto forOp2 = builder.create<mlir::db::ForOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matches, getFlag(), getRequiredBuilderValues(context));
@@ -202,10 +219,17 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
             mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
             setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
             auto unpacked = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), entryType.getTypes(), forOp2.getInductionVar()).getResults();
-            //mlir::ValueRange unpackedKey= builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), keyTupleType.getTypes(), unpacked[0]).getResults();
-            auto unpackedValue = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), valTupleType.getTypes(), unpacked[1]).getResults();
-            for (size_t i = 0; i < unpackedValue.size(); i++) {
-               context.setValueForAttribute(scope, orderedValues[i], unpackedValue[i]);
+            mlir::ValueRange unpackedKey = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), keyTupleType.getTypes(), unpacked[0]).getResults();
+            for (size_t i = 0; i < unpackedKey.size(); i++) {
+               if (orderedKeys[i]) {
+                  context.setValueForAttribute(scope, orderedKeys[i], unpackedKey[i]);
+               }
+            }
+            if (!valTupleType.getTypes().empty()) {
+               auto unpackedValue = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), valTupleType.getTypes(), unpacked[1]).getResults();
+               for (size_t i = 0; i < unpackedValue.size(); i++) {
+                  context.setValueForAttribute(scope, orderedValues[i], unpackedValue[i]);
+               }
             }
             {
                T clonedOp = mlir::dyn_cast<T>(joinOp->clone());
@@ -221,8 +245,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
             builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
             setRequiredBuilderValues(context, forOp2.results());
          }
-         afterLookup(context,builder);
-
+         afterLookup(context, builder);
       }
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
