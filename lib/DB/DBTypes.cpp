@@ -168,13 +168,16 @@ mlir::Type mlir::db::CollectionType::getElementType() const {
          return t.getElementType();
       })
       .Case<::mlir::db::VectorType>([&](::mlir::db::VectorType t) {
-        return t.getElementType();
+         return t.getElementType();
+      })
+      .Case<::mlir::db::MarkableJoinHashtableType>([&](::mlir::db::MarkableJoinHashtableType t) {
+        return TupleType::get(getContext(),{TupleType::get(getContext(),{t.getKeyType(),t.getValType()}),MemRefType::get({}, IntegerType::get(getContext(),8))});
       })
       .Case<::mlir::db::AggregationHashtableType>([&](::mlir::db::AggregationHashtableType t) {
-        return TupleType::get(t.getContext(),{t.getKeyType(),t.getValType()});
+         return TupleType::get(t.getContext(), {t.getKeyType(), t.getValType()});
       })
       .Case<::mlir::db::TopKType>([&](::mlir::db::TopKType t) {
-        return t.getElementType();
+         return t.getElementType();
       })
       .Default([](::mlir::Type) { return Type(); });
 }
@@ -489,44 +492,64 @@ void mlir::db::TopKType::print(mlir::DialectAsmPrinter& p) const {
    p << getMnemonic() << "<" << getElementType() << ">";
 }
 ::mlir::Type mlir::db::AggrHTBuilderType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
-   TupleType keyType, valType,aggrType;
-   if (parser.parseLess() || parser.parseType(keyType)||parser.parseComma()||parser.parseType(valType) ||parser.parseComma()||parser.parseType(aggrType) || parser.parseGreater()) {
+   TupleType keyType, valType, aggrType;
+   if (parser.parseLess() || parser.parseType(keyType) || parser.parseComma() || parser.parseType(valType) || parser.parseComma() || parser.parseType(aggrType) || parser.parseGreater()) {
       return mlir::Type();
    }
-   return mlir::db::AggrHTBuilderType::get(parser.getBuilder().getContext(), keyType,valType,aggrType);
+   return mlir::db::AggrHTBuilderType::get(parser.getBuilder().getContext(), keyType, valType, aggrType);
 }
 void mlir::db::AggrHTBuilderType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getKeyType()<<","<<getValType() << ","<<getAggrType()<<">";
+   p << getMnemonic() << "<" << getKeyType() << "," << getValType() << "," << getAggrType() << ">";
 }
 ::mlir::Type mlir::db::JoinHTBuilderType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
    TupleType keyType, valType;
-   if (parser.parseLess() || parser.parseType(keyType)||parser.parseComma()||parser.parseType(valType) || parser.parseGreater()) {
+   if (parser.parseLess() || parser.parseType(keyType) || parser.parseComma() || parser.parseType(valType) || parser.parseGreater()) {
       return mlir::Type();
    }
-   return mlir::db::JoinHTBuilderType::get(parser.getBuilder().getContext(), keyType,valType);
+   return mlir::db::JoinHTBuilderType::get(parser.getBuilder().getContext(), keyType, valType);
 }
 void mlir::db::JoinHTBuilderType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getKeyType()<<","<<getValType() << ">";
+   p << getMnemonic() << "<" << getKeyType() << "," << getValType() << ">";
 }
 ::mlir::Type mlir::db::JoinHashtableType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
    TupleType keyType, valType;
-   if (parser.parseLess() || parser.parseType(keyType)||parser.parseComma()||parser.parseType(valType) || parser.parseGreater()) {
+   if (parser.parseLess() || parser.parseType(keyType) || parser.parseComma() || parser.parseType(valType) || parser.parseGreater()) {
       return mlir::Type();
    }
-   return mlir::db::JoinHashtableType::get(parser.getBuilder().getContext(), keyType,valType);
+   return mlir::db::JoinHashtableType::get(parser.getBuilder().getContext(), keyType, valType);
 }
 void mlir::db::JoinHashtableType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getKeyType()<<","<<getValType() << ">";
+   p << getMnemonic() << "<" << getKeyType() << "," << getValType() << ">";
+}
+::mlir::Type mlir::db::MarkableJoinHTBuilderType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
+   TupleType keyType, valType;
+   if (parser.parseLess() || parser.parseType(keyType) || parser.parseComma() || parser.parseType(valType) || parser.parseGreater()) {
+      return mlir::Type();
+   }
+   return mlir::db::MarkableJoinHTBuilderType::get(parser.getBuilder().getContext(), keyType, valType);
+}
+void mlir::db::MarkableJoinHTBuilderType::print(mlir::DialectAsmPrinter& p) const {
+   p << getMnemonic() << "<" << getKeyType() << "," << getValType() << ">";
+}
+::mlir::Type mlir::db::MarkableJoinHashtableType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
+   TupleType keyType, valType;
+   if (parser.parseLess() || parser.parseType(keyType) || parser.parseComma() || parser.parseType(valType) || parser.parseGreater()) {
+      return mlir::Type();
+   }
+   return mlir::db::MarkableJoinHashtableType::get(parser.getBuilder().getContext(), keyType, valType);
+}
+void mlir::db::MarkableJoinHashtableType::print(mlir::DialectAsmPrinter& p) const {
+   p << getMnemonic() << "<" << getKeyType() << "," << getValType() << ">";
 }
 ::mlir::Type mlir::db::AggregationHashtableType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
    TupleType keyType, valType;
-   if (parser.parseLess() || parser.parseType(keyType)||parser.parseComma()||parser.parseType(valType) || parser.parseGreater()) {
+   if (parser.parseLess() || parser.parseType(keyType) || parser.parseComma() || parser.parseType(valType) || parser.parseGreater()) {
       return mlir::Type();
    }
-   return mlir::db::AggregationHashtableType::get(parser.getBuilder().getContext(), keyType,valType);
+   return mlir::db::AggregationHashtableType::get(parser.getBuilder().getContext(), keyType, valType);
 }
 void mlir::db::AggregationHashtableType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getKeyType()<<","<<getValType() << ">";
+   p << getMnemonic() << "<" << getKeyType() << "," << getValType() << ">";
 }
 ::mlir::Type mlir::db::VectorType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
    Type type;

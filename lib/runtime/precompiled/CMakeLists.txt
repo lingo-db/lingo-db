@@ -6,6 +6,7 @@ set(PRECOMPILED_SRCS
         heap.cpp
         decimal-support.cpp
         join_ht_builder.cpp
+        mjoin_ht_builder.cpp
         aggr_ht_builder.cpp
         )
 

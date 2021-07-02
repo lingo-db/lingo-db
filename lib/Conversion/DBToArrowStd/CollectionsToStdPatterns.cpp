@@ -30,7 +30,7 @@ class SortOpLowering : public ConversionPattern {
          funcOp = rewriter.create<FuncOp>(parentModule.getLoc(), "db_sort_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange(mlir::db::BoolType::get(rewriter.getContext()))));
          funcOp->setAttr("llvm.emit_c_interface", rewriter.getUnitAttr());
          auto* funcBody = new Block;
-         funcBody->addArguments(TypeRange({ ptrType, ptrType}));
+         funcBody->addArguments(TypeRange({ptrType, ptrType}));
          funcOp.body().push_back(funcBody);
          rewriter.setInsertionPointToStart(funcBody);
          Value left = funcBody->getArgument(0);
@@ -118,7 +118,7 @@ class LookupOpLowering : public ConversionPattern {
       mlir::db::LookupAdaptor lookupAdaptor(operands);
 
       Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.getIndexType(), lookupAdaptor.key());
-      Value combined = rewriter.create<mlir::util::PackOp>(loc, TypeRange(TupleType::get(getContext(), {rewriter.getIndexType(),lookupAdaptor.collection().getType()})), ValueRange({hashed,lookupAdaptor.collection()}));
+      Value combined = rewriter.create<mlir::util::PackOp>(loc, TypeRange(TupleType::get(getContext(), {rewriter.getIndexType(), lookupAdaptor.collection().getType()})), ValueRange({hashed, lookupAdaptor.collection()}));
 
       rewriter.replaceOp(op, combined);
 
@@ -141,10 +141,16 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::JoinHashtableType type, ValueRange valueRange, Location loc) {
-       return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::JoinHashtableType type, ValueRange valueRange, Location loc) {
-       return valueRange.front();
+      return valueRange.front();
+   });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::MarkableJoinHashtableType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, db::MarkableJoinHashtableType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::VectorType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
@@ -159,16 +165,20 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::TopKType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::TopKType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addConversion([&](mlir::db::AggregationHashtableType aggregationHashtableType) {
       auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
       return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::JoinHashtableType aggregationHashtableType) {
+      auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
+      return ptrType;
+   });
+   typeConverter.addConversion([&](mlir::db::MarkableJoinHashtableType aggregationHashtableType) {
      auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
      return ptrType;
    });
@@ -177,8 +187,8 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::TopKType topKType) {
-     auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
-     return ptrType;
+      auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
+      return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::RangeType rangeType) {
       auto convertedType = typeConverter.convertType(rangeType.getElementType());
@@ -214,12 +224,12 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
             }
          }
          return (Type) TupleType::get(patterns.getContext(), types);
-      } else if (genericIterableType.getIteratorName() == "join_ht_iterator") {
+      } else if (genericIterableType.getIteratorName() == "join_ht_iterator" || genericIterableType.getIteratorName() == "mjoin_ht_iterator") {
          auto indexType = IndexType::get(patterns.getContext());
          auto i8Type = IntegerType::get(patterns.getContext(), 8);
          auto ptrType = MemRefType::get({}, i8Type);
 
-         return (Type) TupleType::get(patterns.getContext(), {indexType,ptrType});
+         return (Type) TupleType::get(patterns.getContext(), {indexType, ptrType});
       }
       return Type();
    });
