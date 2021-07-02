@@ -97,6 +97,9 @@ int main(int argc, char** argv) {
    ::mlir::registerPass("relalg-optimize-implementations", "extract nested operators", []() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createOptimizeImplementationsPass();
    });
+   ::mlir::registerPass("relalg-introduce-tmp", "extract nested operators", []() -> std::unique_ptr<::mlir::Pass> {
+     return mlir::relalg::createIntroduceTmpPass();
+   });
    ::mlir::registerPass("relalg-to-db", "Relalg to DB dialect conversion", []() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createLowerToDBPass();
    });

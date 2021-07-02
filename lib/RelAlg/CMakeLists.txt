@@ -7,6 +7,7 @@ add_mlir_dialect_library(MLIRRelAlg
         DecomposeLambdas.cpp
         CombinePredicates.cpp
         OptimizeImplementations.cpp
+        IntroduceTmp.cpp
         RelationalAttributeManager.cpp
         Unnesting.cpp
         Pushdown.cpp

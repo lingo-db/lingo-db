@@ -551,7 +551,20 @@ static void print(OpAsmPrinter& p, relalg::MaterializeOp& op) {
    p << " => " << op.columns();
    p << " : " << op.getType();
 }
-
+///////////////////////////////////////////////////////////////////////////////////
+// TmpOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseTmpOp(OpAsmParser& parser, OperationState& result) {
+   parseRelationalInputs(parser, result, 1);
+   Attribute attrs;
+   parseAttributeRefArr(parser, result, attrs);
+   result.addAttribute("attrs", attrs);
+   return addRelationOutput(parser,result);
+}
+static void print(OpAsmPrinter& p, relalg::TmpOp& op) {
+   p << op.getOperationName() << " " << op.rel() << " ";
+   printAttributeRefArr(p, op.attrs());
+}
 ///////////////////////////////////////////////////////////////////////////////////
 // InnerJoinOp
 ///////////////////////////////////////////////////////////////////////////////////

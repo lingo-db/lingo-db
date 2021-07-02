@@ -14,6 +14,8 @@ std::unique_ptr<Pass> createPushdownPass();
 std::unique_ptr<Pass> createOptimizeJoinOrderPass();
 std::unique_ptr<Pass> createCombinePredicatesPass();
 std::unique_ptr<Pass> createOptimizeImplementationsPass();
+std::unique_ptr<Pass> createIntroduceTmpPass();
+
 
 } // namespace relalg
 } // end namespace mlir

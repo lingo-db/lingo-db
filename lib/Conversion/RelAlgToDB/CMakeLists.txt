@@ -18,6 +18,7 @@ add_mlir_conversion_library(MLIRRelAlgToDB
         RenamingOp.cpp
         ProjectionOp.cpp
         LimitOp.cpp
+        TmpOp.cpp
         ADDITIONAL_HEADER_DIRS
         ../../../mlir/Conversion/RelAlgToDB
 

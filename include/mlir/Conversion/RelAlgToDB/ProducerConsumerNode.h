@@ -19,10 +19,10 @@ class LoweringContext {
    using AttributeResolverScope = llvm::ScopedHashTableScope<const mlir::relalg::RelationalAttribute*, mlir::Value>;
 
    mlir::Value getValueForAttribute(const mlir::relalg::RelationalAttribute* attribute) const {
-      assert(symbolTable.count(attribute));
       if (!symbolTable.lookup(attribute)) {
          auto [a, b] = executionContext.getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager().getName(attribute);
-         llvm::dbgs() << a << "," << b << "\n";
+         llvm::dbgs() << " missing:" << a << "," << b << "\n";
+         assert(symbolTable.count(attribute));
       }
 
       return symbolTable.lookup(attribute);
@@ -43,6 +43,7 @@ class LoweringContext {
       static size_t id = 0;
       return id++;
    }
+   std::unordered_map<mlir::Operation*, std::pair<mlir::Value, std::vector<mlir::relalg::RelationalAttribute*>>> materializedTmp;
 };
 class ProducerConsumerBuilder : public mlir::OpBuilder {
    public:
@@ -145,6 +146,7 @@ class ProducerConsumerNodeRegistry {
    static bool registeredSingleJoinOp;
    static bool registeredMarkJoinOp;
    static bool registeredTopKOp;
+   static bool registeredTmpOp;
    std::unordered_map<std::string, std::function<std::unique_ptr<mlir::relalg::ProducerConsumerNode>(mlir::Operation*)>> nodes;
    ProducerConsumerNodeRegistry() {
       bool res = true;
@@ -166,6 +168,7 @@ class ProducerConsumerNodeRegistry {
       res &= registeredSingleJoinOp;
       res &= registeredMarkJoinOp;
       res &= registeredTopKOp;
+      res &= registeredTmpOp;
       llvm::dbgs() << "registered=" << res << "\n";
    }
 
