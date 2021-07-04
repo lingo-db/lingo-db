@@ -22,7 +22,7 @@ module @querymodule  {
   	//CHECK: %{{.*}} = relalg.selection %{{.*}}
   	//CHECK: relalg.return
   	//CHECK: %{{.*}} = relalg.fullouterjoin %{{.*}}, %{{.*}}
-	//CHECK: %{{.*}} = relalg.renaming @renaming{{.*}} %{{.*}}  attributes: [@renamed0({type = !db.int<32>})=[@constrel::@attr1]]
+	//CHECK: %{{.*}} = relalg.renaming @renaming{{.*}} %{{.*}}  renamed: [@renamed0({type = !db.int<32>})=[@constrel::@attr1]]
 	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple) {
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @renaming{{.*}}::@renamed0 : !db.int<32>
@@ -45,7 +45,7 @@ module @querymodule  {
   	//CHECK: %{{.*}} = relalg.selection %{{.*}}
   	//CHECK: relalg.return
   	//CHECK: %{{.*}} = relalg.aggregation @aggr %{{.*}} [{{.*}},{{.*}}]
-	//CHECK: %{{.*}} = relalg.renaming @renaming %{{.*}}  attributes: [@renamed0({type = !db.int<32>})=[@constrel::@attr1]]
+	//CHECK: %{{.*}} = relalg.renaming @renaming %{{.*}}  renamed: [@renamed0({type = !db.int<32>})=[@constrel::@attr1]]
 	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple) {
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @renaming::@renamed0 : !db.int<32>
@@ -77,7 +77,7 @@ module @querymodule  {
   	//CHECK: %{{.*}} = relalg.selection %{{.*}}
   	//CHECK: relalg.return
   	//CHECK: %{{.*}} = relalg.projection all [{{.*}},{{.*}}] %{{.*}}
-	//CHECK: %{{.*}} = relalg.renaming @renaming %{{.*}}  attributes: [@renamed0({type = !db.int<32>})=[@constrel::@attr1]]
+	//CHECK: %{{.*}} = relalg.renaming @renaming %{{.*}}  renamed: [@renamed0({type = !db.int<32>})=[@constrel::@attr1]]
 	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple) {
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @renaming::@renamed0 : !db.int<32>
@@ -158,7 +158,7 @@ module @querymodule  {
   	//CHECK: %{{.*}} = relalg.selection %{{.*}}
   	//CHECK: relalg.return
   	//CHECK: %{{.*}} = relalg.semijoin %{{.*}}, %{{.*}}
-	//CHECK: %{{.*}} = relalg.renaming @renaming{{.*}} %{{.*}}  attributes: [@renamed0({type = !db.int<32>})=[@constrel::@attr1]]
+	//CHECK: %{{.*}} = relalg.renaming @renaming{{.*}} %{{.*}}  renamed: [@renamed0({type = !db.int<32>})=[@constrel::@attr1]]
 	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple) {
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @renaming{{.*}}::@renamed0 : !db.int<32>

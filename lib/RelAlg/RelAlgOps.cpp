@@ -445,11 +445,13 @@ static void print(OpAsmPrinter& p, relalg::AddAttrOp& op) {
 static ParseResult parseSelectionOp(OpAsmParser& parser, OperationState& result) {
    parseRelationalInputs(parser, result, 1);
    parseCustomRegion(parser, result);
+   parser.parseOptionalAttrDictWithKeyword(result.attributes);
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::SelectionOp& op) {
    p << op.getOperationName() << " " << op.rel() << " ";
    printCustomRegion(p, op.getRegion());
+   p.printOptionalAttrDictWithKeyword(op->getAttrs());
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -463,6 +465,7 @@ static ParseResult parseMapOp(OpAsmParser& parser, OperationState& result) {
    getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
    parseRelationalInputs(parser, result, 1);
    parseCustomRegion(parser, result);
+   parser.parseOptionalAttrDictWithKeyword(result.attributes);
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::MapOp& op) {
@@ -470,6 +473,7 @@ static void print(OpAsmPrinter& p, relalg::MapOp& op) {
    p.printSymbolName(op.sym_name());
    p << " " << op.rel() << " ";
    printCustomRegion(p, op.getRegion());
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"sym_name"});
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -486,6 +490,7 @@ static ParseResult parseAggregationOp(OpAsmParser& parser, OperationState& resul
    parseAttributeRefArr(parser, result, groupByAttrs);
    result.addAttribute("group_by_attrs", groupByAttrs);
    parseCustomRegion(parser, result);
+   parser.parseOptionalAttrDictWithKeyword(result.attributes);
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::AggregationOp& op) {
@@ -495,6 +500,7 @@ static void print(OpAsmPrinter& p, relalg::AggregationOp& op) {
    printAttributeRefArr(p, op.group_by_attrs());
    p << " ";
    printCustomRegion(p, op.getRegion());
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"group_by_attrs","sym_name"});
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -677,7 +683,8 @@ static ParseResult parseMarkJoinOp(OpAsmParser& parser, OperationState& result) 
    result.addAttribute("markattr", defAttr);
    parseRelationalInputs(parser, result, 2);
    parseCustomRegion(parser, result);
-   return addRelationOutput(parser, result);
+   addRelationOutput(parser, result);
+   return parser.parseOptionalAttrDictWithKeyword(result.attributes);
 }
 static void print(OpAsmPrinter& p, relalg::MarkJoinOp& op) {
    p << op.getOperationName() << " ";
@@ -687,6 +694,7 @@ static void print(OpAsmPrinter& p, relalg::MarkJoinOp& op) {
    printAttributeDefAttr(p, op.markattr());
    p << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"markattr","sym_name"});
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // ProjectionOp
@@ -853,9 +861,9 @@ static void print(OpAsmPrinter& p, relalg::RenamingOp& op) {
    p.printSymbolName(op.sym_name());
    p << " " << op.rel();
    if (op->getAttrs().size() > 1) p << ' ';
-   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"sym_name", "attributes"});
-   p << " attributes: ";
+   p << " renamed: ";
    printAttributeDefArr(p, op.attributes());
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(), /*elidedAttrs=*/{"sym_name", "attributes"});
 }
 
 static ParseResult parseRenamingOp(OpAsmParser& parser,
@@ -867,11 +875,12 @@ static ParseResult parseRenamingOp(OpAsmParser& parser,
    getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
    parseRelationalInputs(parser, result, 1);
    Attribute attributes;
-   if (parser.parseKeyword("attributes") || parser.parseColon() || parseAttributeDefArr(parser, result, attributes)) {
+   if (parser.parseKeyword("renamed") || parser.parseColon() || parseAttributeDefArr(parser, result, attributes)) {
       return failure();
    }
 
    result.addAttribute("attributes", attributes);
+   parser.parseOptionalAttrDictWithKeyword(result.attributes);
    return addRelationOutput(parser, result);
 }
 

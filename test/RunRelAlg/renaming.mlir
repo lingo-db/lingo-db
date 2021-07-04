@@ -16,7 +16,7 @@ module @querymodule{
             name => @name({type=!db.string}),
             semester => @semester({type=!db.int<64>})
         }
-        %2 = relalg.renaming @renaming %1  attributes: [@matrnr({type = !db.int<64>})=[@studenten::@matrnr]]
+        %2 = relalg.renaming @renaming %1  renamed: [@matrnr({type = !db.int<64>})=[@studenten::@matrnr]]
         %3 = relalg.materialize %2 [@renaming::@matrnr,@studenten::@name] => ["matrnr","name"] : !db.table
         return %3 : !db.table
     }

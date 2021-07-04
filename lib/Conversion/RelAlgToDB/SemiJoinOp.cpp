@@ -1,7 +1,9 @@
 #include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
+
 #include <mlir/Conversion/RelAlgToDB/HashJoinUtils.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
@@ -106,12 +108,69 @@ class HashSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SemiJoinO
    }
    virtual ~HashSemiJoinLowering() {}
 };
+class MHashSemiJoinLowering : public mlir::relalg::MarkableHJNode<mlir::relalg::SemiJoinOp> {
+   public:
+   MHashSemiJoinLowering(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::MarkableHJNode<mlir::relalg::SemiJoinOp>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
+   }
+
+   virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+      auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matched);
+      mlir::Block* ifBlock = new mlir::Block;
+
+      ifOp.thenRegion().push_back(ifBlock);
+
+      mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+      if (!requiredBuilders.empty()) {
+         mlir::Block* elseBlock = new mlir::Block;
+         ifOp.elseRegion().push_back(elseBlock);
+         mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
+         builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
+      }
+      auto const1 = builder1.create<mlir::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), builder1.getI8IntegerAttr(1));
+      auto markerBefore = builder1.create<mlir::AtomicRMWOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
+      {
+         auto zero = builder1.create<mlir::ConstantOp>(builder1.getUnknownLoc(), markerBefore.getType(), builder1.getIntegerAttr(markerBefore.getType(), 0));
+         auto isZero = builder1.create<mlir::CmpIOp>(builder1.getUnknownLoc(), mlir::CmpIPredicate::eq, markerBefore, zero);
+         auto isZeroDB =builder1.create<mlir::db::TypeCastOp>(builder1.getUnknownLoc(),mlir::db::BoolType::get(builder1.getContext()),isZero);
+         auto ifOp = builder1.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), isZeroDB);
+         mlir::Block* ifBlock = new mlir::Block;
+
+         ifOp.thenRegion().push_back(ifBlock);
+
+         mlir::relalg::ProducerConsumerBuilder builder10(ifOp.thenRegion());
+         if (!requiredBuilders.empty()) {
+            mlir::Block* elseBlock = new mlir::Block;
+            ifOp.elseRegion().push_back(elseBlock);
+            mlir::relalg::ProducerConsumerBuilder builder20(ifOp.elseRegion());
+            builder20.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
+         }
+         consumer->consume(this, builder10, context);
+         builder10.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
+
+         size_t i = 0;
+         for (auto b : requiredBuilders) {
+            context.builders[b] = ifOp.getResult(i++);
+         }
+      }
+      builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
+
+      size_t i = 0;
+      for (auto b : requiredBuilders) {
+         context.builders[b] = ifOp.getResult(i++);
+      }
+   }
+
+   virtual ~MHashSemiJoinLowering() {}
+};
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredSemiJoinOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::SemiJoinOp joinOp) {
    if (joinOp->hasAttr("impl")) {
       if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
          if (impl.getValue() == "hash") {
             return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<HashSemiJoinLowering>(joinOp);
+         }
+         if (impl.getValue() == "markhash") {
+            return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<MHashSemiJoinLowering>(joinOp);
          }
       }
    }

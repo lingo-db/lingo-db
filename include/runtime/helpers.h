@@ -89,6 +89,7 @@ class ObjectBuffer {
       }
       Part(size_t capacity) : len(0), capacity(capacity) {
          data = new uint8_t[capacity];
+         memset(data,0,capacity);
       }
       inline bool fits(size_t required) {
          return required <= (capacity - len);
@@ -127,14 +128,14 @@ class ObjectBuffer {
       // Prefix increment
       RangeIterator& operator++() {
          offset += objSize;
-         if (offset > (parts[part]->len - objSize)) {
+         if (offset+objSize > (parts[part]->len)) {
             part++;
             offset = 0;
          }
          return *this;
       }
       bool valid(){
-         return part<parts.size();
+         return part<parts.size()&&offset+objSize<=parts[part]->len;
       }
       // Reference
       T& operator*() { return *operator->(); }
@@ -182,6 +183,7 @@ class VarLenBuffer {
       }
       Part(size_t capacity) : len(0), capacity(capacity) {
          data = new uint8_t[capacity];
+         memset(data,0,capacity);
       }
       inline bool fits(size_t required) {
          return required <= (capacity - len);

@@ -768,6 +768,12 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::JoinHTBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::MarkableJoinHTBuilderType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, db::MarkableJoinHTBuilderType type, ValueRange valueRange, Location loc) {
+     return valueRange.front();
+   });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::VectorBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });

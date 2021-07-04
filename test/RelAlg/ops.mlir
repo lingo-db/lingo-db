@@ -50,8 +50,8 @@ module{
 // -----
 module{
 %0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.string})] values: ["A", "B"]
-//CHECK: %1 = relalg.renaming @renamed %0 attributes: [@attr1({type = !db.string})=[@constrel::@attr1]]
-%1 = relalg.renaming @renamed %0 attributes: [@attr1({type = !db.string})=[@constrel::@attr1]]
+//CHECK: %1 = relalg.renaming @renamed %0 renamed: [@attr1({type = !db.string})=[@constrel::@attr1]]
+%1 = relalg.renaming @renamed %0 renamed: [@attr1({type = !db.string})=[@constrel::@attr1]]
 }
 
 

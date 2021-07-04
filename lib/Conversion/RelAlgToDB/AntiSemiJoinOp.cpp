@@ -109,11 +109,71 @@ class HashAntiSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::AntiS
    }
    virtual ~HashAntiSemiJoinLowering() {}
 };
+class MHashAntiSemiJoinLowering : public mlir::relalg::MarkableHJNode<mlir::relalg::AntiSemiJoinOp> {
+   public:
+   MHashAntiSemiJoinLowering(mlir::relalg::AntiSemiJoinOp innerJoinOp) : mlir::relalg::MarkableHJNode<mlir::relalg::AntiSemiJoinOp>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
+   }
+
+   virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+      auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matched);
+      mlir::Block* ifBlock = new mlir::Block;
+
+      ifOp.thenRegion().push_back(ifBlock);
+
+      mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+      if (!requiredBuilders.empty()) {
+         mlir::Block* elseBlock = new mlir::Block;
+         ifOp.elseRegion().push_back(elseBlock);
+         mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
+         builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
+      }
+      auto const1 = builder1.create<mlir::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), builder1.getI8IntegerAttr(1));
+      builder1.create<mlir::AtomicRMWOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
+      builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
+
+      size_t i = 0;
+      for (auto b : requiredBuilders) {
+         context.builders[b] = ifOp.getResult(i++);
+      }
+   }
+   virtual void after(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+      scanHT(context, builder);
+   }
+   void handleScanned(mlir::Value marker, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+      auto zero = builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
+      auto isZero = builder.create<mlir::CmpIOp>(builder.getUnknownLoc(), mlir::CmpIPredicate::eq, marker, zero);
+      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), isZero);
+      auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), isZeroDB);
+      mlir::Block* ifBlock = new mlir::Block;
+
+      ifOp.thenRegion().push_back(ifBlock);
+
+      mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+      if (!requiredBuilders.empty()) {
+         mlir::Block* elseBlock = new mlir::Block;
+         ifOp.elseRegion().push_back(elseBlock);
+         mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
+         builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
+      }
+      consumer->consume(this, builder1, context);
+      builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
+
+      size_t i = 0;
+      for (auto b : requiredBuilders) {
+         context.builders[b] = ifOp.getResult(i++);
+      }
+   }
+
+   virtual ~MHashAntiSemiJoinLowering() {}
+};
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredAntiSemiJoinOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::AntiSemiJoinOp joinOp) {
    if (joinOp->hasAttr("impl")) {
       if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
          if (impl.getValue() == "hash") {
             return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<HashAntiSemiJoinLowering>(joinOp);
+         }
+         if (impl.getValue() == "markhash") {
+            return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<MHashAntiSemiJoinLowering>(joinOp);
          }
       }
    }
