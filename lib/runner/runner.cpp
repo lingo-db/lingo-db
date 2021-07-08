@@ -6,13 +6,14 @@
 
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
-
+#include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
+#include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/util/Passes.h"
@@ -159,7 +160,7 @@ int dumpLLVMIR(mlir::ModuleOp module) {
 
    /// Optionally run an optimization pipeline over the llvm module.
    auto optPipeline = mlir::makeOptimizingTransformer(
-      /*optLevel=*/true ? 3 : 0, /*sizeLevel=*/0,
+      /*optLevel=*/true ? 0 : 0, /*sizeLevel=*/0,
       /*targetMachine=*/nullptr);
    if (auto err = optPipeline(llvmModule.get())) {
       llvm::errs() << "Failed to optimize LLVM IR " << err << "\n";
@@ -203,16 +204,46 @@ bool Runner::load(std::string file) {
       return false;
    return true;
 }
+bool Runner::optimize() {
+   auto start=std::chrono::high_resolution_clock::now();
+   RunnerContext* ctxt = (RunnerContext*) this->context;
+   mlir::PassManager pm(&ctxt->context);
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createExtractNestedOperatorsPass());
+   pm.addPass(mlir::createCSEPass());
+   pm.addPass(mlir::createCanonicalizerPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createDecomposeLambdasPass());
+   pm.addPass(mlir::createCanonicalizerPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createImplicitToExplicitJoinsPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createPushdownPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createUnnestingPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createOptimizeJoinOrderPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createCombinePredicatesPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createOptimizeImplementationsPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createIntroduceTmpPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createLowerToDBPass());
+   pm.addPass(mlir::createCanonicalizerPass());
+
+   if (mlir::failed(pm.run(ctxt->module.get()))) {
+      return false;
+   }
+   auto end=std::chrono::high_resolution_clock::now();
+   std::cout<<"optimization took:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<std::endl;
+   return true;
+}
 bool Runner::lower() {
+   auto start=std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
    pm.addPass(mlir::db::createLowerToStdPass());
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
    }
+   auto end=std::chrono::high_resolution_clock::now();
+   std::cout<<"lowering to std took:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<std::endl;
    return true;
 }
 bool Runner::lowerToLLVM() {
+   auto start=std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::ModuleOp moduleOp = ctxt->module.get();
    if (auto mainFunc = moduleOp.lookupSymbol<mlir::FuncOp>("main")) {
@@ -222,11 +253,10 @@ bool Runner::lowerToLLVM() {
       builder.setInsertionPointToStart(&mainFunc.getBody().front());
       mlir::db::codegen::FunctionRegistry functionRegistry(mainFunc->getContext());
       functionRegistry.registerFunctions();
-      using FuncId=mlir::db::codegen::FunctionRegistry::FunctionId;
-      auto startTime=functionRegistry.call(builder,FuncId::StartExecution,{})[0];
+      using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
+      auto startTime = functionRegistry.call(builder, FuncId::StartExecution, {})[0];
       builder.setInsertionPoint(mainFunc.getBody().front().getTerminator());
-      functionRegistry.call(builder,FuncId::FinishExecution,{startTime});
-
+      functionRegistry.call(builder, FuncId::FinishExecution, {startTime});
    }
    mlir::PassManager pm2(&ctxt->context);
    pm2.addPass(mlir::createLowerToCFGPass());
@@ -234,6 +264,8 @@ bool Runner::lowerToLLVM() {
    if (mlir::failed(pm2.run(ctxt->module.get()))) {
       return false;
    }
+   auto end=std::chrono::high_resolution_clock::now();
+   std::cout<<"lowering to llvm took:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<std::endl;
    return true;
 }
 void Runner::dump() {
@@ -257,6 +289,8 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
 
    // Create an MLIR execution engine. The execution engine eagerly JIT-compiles
    // the module.
+   auto start=std::chrono::high_resolution_clock::now();
+
    auto maybeEngine = mlir::ExecutionEngine::create(
       ctxt->module.get(), /*llvmModuleBuilder=*/convertMLIRModule, optPipeline);
    assert(maybeEngine && "failed to construct an execution engine");
@@ -275,6 +309,8 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
 
    // Invoke the JIT-compiled function.
    auto invocationResult = engine->invokePacked("_mlir_ciface_main", args);
+   auto end=std::chrono::high_resolution_clock::now();
+   std::cout<<"totaljit:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<std::endl;
 
    if (invocationResult) {
       llvm::errs() << "JIT invocation failed\n";

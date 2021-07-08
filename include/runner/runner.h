@@ -11,6 +11,7 @@ class Runner {
    public:
    Runner();
    bool load(std::string fileName);
+   bool optimize();
    bool lower();
    bool lowerToLLVM();
    void dump();
