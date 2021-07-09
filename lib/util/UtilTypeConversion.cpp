@@ -211,21 +211,6 @@ class LoadOpLowering : public ConversionPattern {
       return success();
    }
 };
-class MemberRefOpLowering : public ConversionPattern {
-   public:
-   explicit MemberRefOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::util::MemberRefOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      mlir::util::MemberRefOpAdaptor adaptor(operands);
-      auto castedOp = mlir::dyn_cast_or_null<mlir::util::MemberRefOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::util::MemberRefOp>(op, typeConverter->convertType(castedOp.result_ref().getType()), adaptor.source_ref(), adaptor.memref_idx(), castedOp.tuple_idxAttr());
-
-      return success();
-   }
-};
 class ToRawPtrLowering : public ConversionPattern {
    public:
    explicit ToRawPtrLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -283,7 +268,6 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
 
    patterns.add<SizeOfLowering>(typeConverter, patterns.getContext());
    patterns.add<LoadOpLowering>(typeConverter, patterns.getContext());
-   patterns.add<MemberRefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<ToRawPtrLowering>(typeConverter, patterns.getContext());
    patterns.add<FromRawPtrLowering>(typeConverter, patterns.getContext());
 

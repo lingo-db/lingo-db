@@ -82,11 +82,6 @@ let arguments = (ins GenericMemrefType:$generic_memref,Optional<Index>:$idx);
 let results=(outs AnyType:$val);
 let assemblyFormat = "$generic_memref `[` $idx `]` `:`type($generic_memref) `->` type($val) attr-dict";
 }
-def MemberRefOp  : Util_Op<"member_ref"> {
-let arguments = (ins GenericMemrefType:$source_ref,Optional<Index>:$memref_idx,IndexAttr:$tuple_idx);
-let results=(outs GenericMemrefType:$result_ref);
-let assemblyFormat = "$source_ref `[` $memref_idx `]` `[` $tuple_idx `]` `:`type($source_ref) `->` type($result_ref) attr-dict";
-}
 def ToRawPointerOp  : Util_Op<"to_raw_ptr"> {
 let arguments = (ins GenericMemrefType:$ref);
 let results=(outs Index:$ptr);
