@@ -239,6 +239,20 @@ class FromRawPtrLowering : public ConversionPattern {
       return success();
    }
 };
+class CastOpLowering : public ConversionPattern {
+   public:
+   explicit CastOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::GenericMemrefCastOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      mlir::util::GenericMemrefCastOpAdaptor adaptor(operands);
+      auto castedOp = mlir::dyn_cast_or_null<mlir::util::GenericMemrefCastOp>(op);
+      rewriter.replaceOpWithNewOp<mlir::util::GenericMemrefCastOp>(op, typeConverter->convertType(castedOp.res().getType()), adaptor.val());
+      return success();
+   }
+};
 //===----------------------------------------------------------------------===//
 // ToyToLLVMLoweringPass
 //===----------------------------------------------------------------------===//
@@ -265,6 +279,7 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    patterns.add<AllocOpLowering<util::AllocaOp>>(typeConverter, patterns.getContext());
    patterns.add<DeAllocOpLowering>(typeConverter, patterns.getContext());
    patterns.add<DimOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<CastOpLowering>(typeConverter, patterns.getContext());
 
    patterns.add<SizeOfLowering>(typeConverter, patterns.getContext());
    patterns.add<LoadOpLowering>(typeConverter, patterns.getContext());

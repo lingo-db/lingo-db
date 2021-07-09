@@ -26,6 +26,20 @@
         //CHECK: int(42)
         db.dump %res2 : !db.int<32,nullable>
         util.dealloc %generic_memref : !util.generic_memref<!db.int<32,nullable>>
+
+
+        %generic_memref_allocated=util.alloc(%c2) : !util.generic_memref<i8>
+        %generic_memref_casted = util.generic_memref_cast %generic_memref_allocated : !util.generic_memref<i8> -> !util.generic_memref<!db.int<32,nullable>>
+
+        util.store %testval1:!db.int<32,nullable>,%generic_memref_casted[%c1] :!util.generic_memref<!db.int<32,nullable>>
+        util.store %testval2:!db.int<32,nullable>,%generic_memref_casted[] :!util.generic_memref<!db.int<32,nullable>>
+        %res1casted=util.load %generic_memref_casted[%c1] :!util.generic_memref<!db.int<32,nullable>> -> !db.int<32,nullable>
+        %res2casted=util.load %generic_memref_casted[] :!util.generic_memref<!db.int<32,nullable>> -> !db.int<32,nullable>
+        //CHECK: int(NULL)
+        db.dump %res1casted : !db.int<32,nullable>
+        //CHECK: int(42)
+        db.dump %res2casted : !db.int<32,nullable>
+        util.dealloc %generic_memref_casted : !util.generic_memref<!db.int<32,nullable>>
 		return
 	}
  }

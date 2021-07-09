@@ -68,6 +68,12 @@ let arguments = (ins GenericMemrefType:$generic_memref);
 let results=(outs I8MemRef:$memref);
 let assemblyFormat = "$generic_memref `:` type($generic_memref) `->` type($memref) attr-dict";
 }
+def GenericMemrefCastOp : Util_Op<"generic_memref_cast"> {
+let summary = "generic memref cast function";
+let arguments = (ins GenericMemrefType:$val);
+let results=(outs GenericMemrefType:$res);
+let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
+}
 def StoreOp  : Util_Op<"store"> {
 let arguments = (ins AnyType:$val,GenericMemrefType:$generic_memref,Optional<Index>:$idx);
 let assemblyFormat = "$val `:` type($val) `,` $generic_memref `[` $idx `]` `:`type($generic_memref) attr-dict";
