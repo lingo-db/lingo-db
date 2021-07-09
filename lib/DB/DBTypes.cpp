@@ -176,9 +176,6 @@ mlir::Type mlir::db::CollectionType::getElementType() const {
       .Case<::mlir::db::AggregationHashtableType>([&](::mlir::db::AggregationHashtableType t) {
          return TupleType::get(t.getContext(), {t.getKeyType(), t.getValType()});
       })
-      .Case<::mlir::db::TopKType>([&](::mlir::db::TopKType t) {
-         return t.getElementType();
-      })
       .Default([](::mlir::Type) { return Type(); });
 }
 template <class X>
@@ -471,26 +468,7 @@ void mlir::db::TableBuilderType::print(mlir::DialectAsmPrinter& p) const {
 void mlir::db::VectorBuilderType::print(mlir::DialectAsmPrinter& p) const {
    p << getMnemonic() << "<" << getElementType() << ">";
 }
-::mlir::Type mlir::db::TopKBuilderType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
-   Type type;
-   if (parser.parseLess() || parser.parseType(type) || parser.parseGreater()) {
-      return mlir::Type();
-   }
-   return mlir::db::TopKBuilderType::get(parser.getBuilder().getContext(), type);
-}
-void mlir::db::TopKBuilderType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getElementType() << ">";
-}
-::mlir::Type mlir::db::TopKType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
-   Type type;
-   if (parser.parseLess() || parser.parseType(type) || parser.parseGreater()) {
-      return mlir::Type();
-   }
-   return mlir::db::TopKType::get(parser.getBuilder().getContext(), type);
-}
-void mlir::db::TopKType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getElementType() << ">";
-}
+
 ::mlir::Type mlir::db::AggrHTBuilderType::parse(mlir::MLIRContext*, mlir::DialectAsmParser& parser) {
    TupleType keyType, valType, aggrType;
    if (parser.parseLess() || parser.parseType(keyType) || parser.parseComma() || parser.parseType(valType) || parser.parseComma() || parser.parseType(aggrType) || parser.parseGreater()) {

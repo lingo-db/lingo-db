@@ -147,10 +147,10 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::MarkableJoinHashtableType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::MarkableJoinHashtableType type, ValueRange valueRange, Location loc) {
-     return valueRange.front();
+      return valueRange.front();
    });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::VectorType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
@@ -164,12 +164,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::GenericIterableType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::TopKType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-   typeConverter.addTargetMaterialization([&](OpBuilder&, db::TopKType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
+
    typeConverter.addConversion([&](mlir::db::AggregationHashtableType aggregationHashtableType) {
       auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
       return ptrType;
@@ -179,14 +174,10 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::MarkableJoinHashtableType aggregationHashtableType) {
-     auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
-     return ptrType;
-   });
-   typeConverter.addConversion([&](mlir::db::VectorType vectorType) {
       auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
       return ptrType;
    });
-   typeConverter.addConversion([&](mlir::db::TopKType topKType) {
+   typeConverter.addConversion([&](mlir::db::VectorType vectorType) {
       auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
       return ptrType;
    });

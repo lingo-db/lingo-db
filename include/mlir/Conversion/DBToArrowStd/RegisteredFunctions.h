@@ -118,13 +118,7 @@
    F(MJoinHtIteratorValid,mjoin_ht_iterator_valid, OPERANDS(POINTER_TYPE), RETURNS(BOOL_TYPE))                                                                                                                                                                                             \
    F(MJoinHtIteratorFree, mjoin_ht_iterator_free, OPERANDS(POINTER_TYPE), RETURNS())                                                                                                                                                                                                        \
    F(TimestampAddMillis, timestamp_add_millis, OPERANDS(INT_TYPE(64), INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                                                                                                                               \
-   F(TopKBuilderCreate, topk_builder_create, OPERANDS(INDEX_TYPE, INDEX_TYPE, FUNCTION_TYPE(OPERANDS(POINTER_TYPE, POINTER_TYPE), RETURNS(BOOL_TYPE))), RETURNS(POINTER_TYPE))                                                                                                            \
-   F(TopKBuilderAddVarLen, topk_builder_add_var_len, OPERANDS(POINTER_TYPE, STRING_TYPE), RETURNS(STRING_TYPE))                                                                                                                                                                           \
-   F(TopKBuilderAddNullableVarLen, topk_builder_add_nullable_var_len, OPERANDS(POINTER_TYPE, BOOL_TYPE, STRING_TYPE), RETURNS(TUPLE_TYPE(BOOL_TYPE, STRING_TYPE)))                                                                                                                        \
-   F(TopKBuilderMerge, topk_builder_merge, OPERANDS(POINTER_TYPE, POINTER_TYPE), RETURNS())                                                                                                                                                                                               \
-   F(TopKBuilderBuild, topk_builder_build, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                                                                                                                                                                 \
-   F(TopKEntries, topk_entries, OPERANDS(POINTER_TYPE), RETURNS(INDEX_TYPE))                                                                                                                                                                                                              \
-   F(TopKGetEntry, topk_get_entry, OPERANDS(POINTER_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))
+
 
 #define PLAIN_FUNC_LIST(F, OPERANDS, RETURNS)                                                                        \
    F(TimestampAddMonth, timestampaddMonth_int32_date64, OPERANDS(INT_TYPE(32), INT_TYPE(64)), RETURNS(INT_TYPE(64))) \

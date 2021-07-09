@@ -3,7 +3,6 @@ set(PRECOMPILED_SRCS
         string.cpp
         hash.cpp
         date.cpp
-        heap.cpp
         decimal-support.cpp
         join_ht_builder.cpp
         mjoin_ht_builder.cpp
