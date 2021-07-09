@@ -227,7 +227,7 @@ bool Runner::optimize() {
       return false;
    }
    auto end=std::chrono::high_resolution_clock::now();
-   std::cout<<"optimization took:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<std::endl;
+   std::cout<<"optimization took: "<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<" ms"<<std::endl;
    return true;
 }
 bool Runner::lower() {
@@ -239,7 +239,7 @@ bool Runner::lower() {
       return false;
    }
    auto end=std::chrono::high_resolution_clock::now();
-   std::cout<<"lowering to std took:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<std::endl;
+   std::cout<<"lowering to std took: "<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<" ms"<<std::endl;
    return true;
 }
 bool Runner::lowerToLLVM() {
@@ -265,7 +265,7 @@ bool Runner::lowerToLLVM() {
       return false;
    }
    auto end=std::chrono::high_resolution_clock::now();
-   std::cout<<"lowering to llvm took:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<std::endl;
+   std::cout<<"lowering to llvm took: "<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<" ms"<<std::endl;
    return true;
 }
 void Runner::dump() {
@@ -310,7 +310,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    // Invoke the JIT-compiled function.
    auto invocationResult = engine->invokePacked("_mlir_ciface_main", args);
    auto end=std::chrono::high_resolution_clock::now();
-   std::cout<<"totaljit:"<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<std::endl;
+   std::cout<<"totaljit: "<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<" ms"<<std::endl;
 
    if (invocationResult) {
       llvm::errs() << "JIT invocation failed\n";
