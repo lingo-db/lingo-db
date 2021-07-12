@@ -238,44 +238,21 @@ class MHashOuterJoinLowering : public mlir::relalg::MarkableHJNode<mlir::relalg:
       }
       auto const1 = builder1.create<mlir::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), builder1.getI8IntegerAttr(1));
       auto markerBefore = builder1.create<mlir::AtomicRMWOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
-      {
-         auto zero = builder1.create<mlir::ConstantOp>(builder1.getUnknownLoc(), markerBefore.getType(), builder1.getIntegerAttr(markerBefore.getType(), 0));
-         auto isZero = builder1.create<mlir::CmpIOp>(builder1.getUnknownLoc(), mlir::CmpIPredicate::eq, markerBefore, zero);
-         auto isZeroDB = builder1.create<mlir::db::TypeCastOp>(builder1.getUnknownLoc(), mlir::db::BoolType::get(builder1.getContext()), isZero);
-         auto ifOp = builder1.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), isZeroDB);
-         mlir::Block* ifBlock = new mlir::Block;
-
-         ifOp.thenRegion().push_back(ifBlock);
-
-         mlir::relalg::ProducerConsumerBuilder builder10(ifOp.thenRegion());
-         if (!requiredBuilders.empty()) {
-            mlir::Block* elseBlock = new mlir::Block;
-            ifOp.elseRegion().push_back(elseBlock);
-            mlir::relalg::ProducerConsumerBuilder builder20(ifOp.elseRegion());
-            builder20.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-         }
-         for (mlir::Attribute attr : joinOp.mapping()) {
-            auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
-            auto* defAttr = &relationDefAttr.getRelationalAttribute();
-            if (this->requiredAttributes.contains(defAttr)) {
-               auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
-               auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
-               auto value = context.getValueForAttribute(refAttr);
-               if (refAttr->type != defAttr->type) {
-                  mlir::Value tmp = builder10.create<mlir::db::CastOp>(builder.getUnknownLoc(), defAttr->type, value);
-                  value = tmp;
-               }
-               context.setValueForAttribute(scope, defAttr, value);
+      for (mlir::Attribute attr : joinOp.mapping()) {
+         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+         auto* defAttr = &relationDefAttr.getRelationalAttribute();
+         if (this->requiredAttributes.contains(defAttr)) {
+            auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
+            auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+            auto value = context.getValueForAttribute(refAttr);
+            if (refAttr->type != defAttr->type) {
+               mlir::Value tmp = builder1.create<mlir::db::CastOp>(builder.getUnknownLoc(), defAttr->type, value);
+               value = tmp;
             }
-         }
-         consumer->consume(this, builder10, context);
-         builder10.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-
-         size_t i = 0;
-         for (auto b : requiredBuilders) {
-            context.builders[b] = ifOp.getResult(i++);
+            context.setValueForAttribute(scope, defAttr, value);
          }
       }
+      consumer->consume(this, builder1, context);
       builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
 
       size_t i = 0;

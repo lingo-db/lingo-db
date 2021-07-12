@@ -317,7 +317,9 @@ class TableRowIterator : public ForIterator {
             Value byteSize = builder.create<util::DimOp>(builder.getUnknownLoc(),indexType, valueBuffer0);
             Value typedSize = builder.create<mlir::UnsignedDivIOp>(builder.getUnknownLoc(), indexType, byteSize, typeSize);
             Value asMemRef=builder.create<util::ToMemrefOp>(builder.getUnknownLoc(),MemRefType::get({-1},builder.getIntegerType(8)),valueBuffer0);
-            valueBuffer = builder.create<memref::ViewOp>(builder.getUnknownLoc(), MemRefType::get({-1}, convertedType), asMemRef, byteOffset, ValueRange({typedSize}));
+            Value view = builder.create<memref::ViewOp>(builder.getUnknownLoc(), MemRefType::get({-1}, builder.getIntegerType(8)), asMemRef, byteOffset, ValueRange({byteSize}));
+            valueBuffer =builder.create<mlir::util::ToGenericMemrefOp>(builder.getUnknownLoc(),mlir::util::GenericMemrefType::get(builder.getContext(),convertedType,-1),view);
+
          } else {
             valueBuffer = valueBuffer0;
          }
@@ -331,6 +333,8 @@ class TableRowIterator : public ForIterator {
          }
          if (dbtype.isVarLen()) {
             varLenBuffer = functionRegistry.call(builder, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const2}))[0];
+            Value asMemRef=builder.create<util::ToMemrefOp>(builder.getUnknownLoc(),MemRefType::get({-1},builder.getIntegerType(8)),varLenBuffer);
+            varLenBuffer=asMemRef;
          }
          columnInfo.push_back({dbtype, convertedType, offset, nullMultiplier, bitmapBuffer, valueBuffer, varLenBuffer});
          columnIdx++;
@@ -348,26 +352,25 @@ class TableRowIterator : public ForIterator {
          types.push_back(column.type);
          Value val;
          if (column.type.isa<db::StringType>()) {
-            Value pos1 = builder.create<memref::LoadOp>(builder.getUnknownLoc(), column.values, ValueRange({index}));
+            Value pos1 = builder.create<util::LoadOp>(builder.getUnknownLoc(),column.stdType, column.values, index);
             Value ip1 = builder.create<mlir::AddIOp>(builder.getUnknownLoc(), indexType, index, const1);
-            Value pos2 = builder.create<memref::LoadOp>(builder.getUnknownLoc(), column.values, ValueRange({ip1}));
+            Value pos2 = builder.create<util::LoadOp>(builder.getUnknownLoc(),column.stdType, column.values, ip1);
             Value len = builder.create<mlir::SubIOp>(builder.getUnknownLoc(), builder.getI32Type(), pos2, pos1);
             Value pos1AsIndex = builder.create<IndexCastOp>(builder.getUnknownLoc(), pos1, indexType);
             Value lenAsIndex = builder.create<IndexCastOp>(builder.getUnknownLoc(), len, indexType);
-            Value asMemRef=builder.create<util::ToMemrefOp>(builder.getUnknownLoc(),MemRefType::get({-1},builder.getIntegerType(8)),column.varLenBuffer);
-            Value view = builder.create<mlir::memref::ViewOp>(builder.getUnknownLoc(), MemRefType::get({-1}, builder.getIntegerType(8)), asMemRef, pos1AsIndex, mlir::ValueRange({lenAsIndex}));
+            Value view = builder.create<mlir::memref::ViewOp>(builder.getUnknownLoc(), MemRefType::get({-1}, builder.getIntegerType(8)), column.varLenBuffer, pos1AsIndex, mlir::ValueRange({lenAsIndex}));
             val =builder.create<mlir::util::ToGenericMemrefOp>(builder.getUnknownLoc(),mlir::util::GenericMemrefType::get(builder.getContext(),IntegerType::get(builder.getContext(), 8),-1),view);
          } else if (column.type.isa<db::BoolType>()) {
             Value realPos = builder.create<mlir::AddIOp>(builder.getUnknownLoc(), indexType, column.offset, index);
             val = mlir::db::codegen::BitUtil::getBit(builder, column.values, realPos);
          } else if (auto decimalType = column.type.dyn_cast_or_null<db::DecimalType>()) {
-            val = builder.create<memref::LoadOp>(builder.getUnknownLoc(), column.values, ValueRange({index}));
+            val = builder.create<util::LoadOp>(builder.getUnknownLoc(),column.stdType, column.values, index);
             if (typeConverter->convertType(decimalType.getBaseType()).cast<mlir::IntegerType>().getWidth() != 128) {
                auto converted = builder.create<mlir::TruncateIOp>(builder.getUnknownLoc(), typeConverter->convertType(decimalType.getBaseType()), val);
                val = converted;
             }
          } else if (column.stdType.isa<mlir::IntegerType>() || column.stdType.isa<mlir::FloatType>()) {
-            val = builder.create<memref::LoadOp>(builder.getUnknownLoc(), column.values, ValueRange({index}));
+            val = builder.create<util::LoadOp>(builder.getUnknownLoc(),column.stdType, column.values, index);
          } else {
             assert(val && "unhandled type!!");
          }

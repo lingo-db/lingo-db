@@ -134,14 +134,6 @@
    F(DateExtractDow, extractDow_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                               \
    F(DateExtractHour, extractHour_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                             \
    F(DateExtractMinute, extractMinute_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                         \
-   F(DateExtractSecond, extractSecond_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                         \
-   F(DecDiv10, rt_decimal_div_10, OPERANDS(INT_TYPE(128)), RETURNS(INT_TYPE(128)))                                   \
-   F(DecDiv100, rt_decimal_div_100, OPERANDS(INT_TYPE(128)), RETURNS(INT_TYPE(128)))                                 \
-   F(DecDiv1000, rt_decimal_div_1000, OPERANDS(INT_TYPE(128)), RETURNS(INT_TYPE(128)))                               \
-   F(DecDiv10000, rt_decimal_div_10000, OPERANDS(INT_TYPE(128)), RETURNS(INT_TYPE(128)))                             \
-   F(DecDiv100000, rt_decimal_div_100000, OPERANDS(INT_TYPE(128)), RETURNS(INT_TYPE(128)))                           \
-   F(DecDiv1000000, rt_decimal_div_1000000, OPERANDS(INT_TYPE(128)), RETURNS(INT_TYPE(128)))                         \
-   F(DecDiv10000000, rt_decimal_div_10000000, OPERANDS(INT_TYPE(128)), RETURNS(INT_TYPE(128)))                       \
-   F(DecDiv100000000, rt_decimal_div_100000000, OPERANDS(INT_TYPE(128)), RETURNS(INT_TYPE(128)))
+   F(DateExtractSecond, extractSecond_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))
 
 #endif // MLIR_CONVERSION_DBTOARROWSTD_REGISTEREDFUNCTIONS_H

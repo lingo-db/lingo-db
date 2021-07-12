@@ -302,7 +302,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    }
    auto optPipeline = mlir::makeOptimizingTransformer(
       /*optLevel=*/true ? 3 : 0, /*sizeLevel=*/0,
-      /*targetMachine=*/nullptr);
+      /*targetMachine=*/machine.get());
 
    // Create an MLIR execution engine. The execution engine eagerly JIT-compiles
    // the module.

@@ -59,11 +59,12 @@ class String : public MemRef<char, 1> {
       return pointer;
    }
 };
-class Str{
+class Str {
    char* pointer;
    size_t size;
+
    public:
-   Str(char* ptr, size_t len) : pointer(ptr),size(len) {}
+   Str(char* ptr, size_t len) : pointer(ptr), size(len) {}
    operator std::string() { return std::string(pointer, size); }
    std::string str() { return std::string(pointer, size); }
    size_t len() {
@@ -73,11 +74,12 @@ class Str{
       return pointer;
    }
 };
-class Bytes  {
-   uint8_t * pointer;
+class Bytes {
+   uint8_t* pointer;
    size_t size;
+
    public:
-   Bytes(uint8_t* ptr, size_t bytes) :pointer(ptr),size(bytes) {}
+   Bytes(uint8_t* ptr, size_t bytes) : pointer(ptr), size(bytes) {}
    uint8_t* getPtr() {
       return pointer;
    }
@@ -115,7 +117,7 @@ class ObjectBuffer {
       }
       Part(size_t capacity) : len(0), capacity(capacity) {
          data = new uint8_t[capacity];
-         memset(data,0,capacity);
+         memset(data, 0, capacity);
       }
       inline bool fits(size_t required) {
          return required <= (capacity - len);
@@ -154,19 +156,19 @@ class ObjectBuffer {
       // Prefix increment
       RangeIterator& operator++() {
          offset += objSize;
-         if (offset+objSize > (parts[part]->len)) {
+         if (offset + objSize > (parts[part]->len)) {
             part++;
             offset = 0;
          }
          return *this;
       }
-      bool valid(){
-         return part<parts.size()&&offset+objSize<=parts[part]->len;
+      bool valid() {
+         return part < parts.size() && offset + objSize <= parts[part]->len;
       }
       // Reference
       T& operator*() { return *operator->(); }
       // Pointer
-      T* operator->() { return (T*)&parts[part]->data[offset]; }
+      T* operator->() { return (T*) &parts[part]->data[offset]; }
       // Equality
       bool operator==(const RangeIterator& other) const { return part == other.part && offset == other.offset; }
       // Inequality
@@ -195,7 +197,6 @@ class ObjectBuffer {
    RangeIterator* beginPtr() {
       return new RangeIterator(parts, 0, 0, objSize);
    }
-
 };
 class VarLenBuffer {
    class Part {
@@ -209,7 +210,7 @@ class VarLenBuffer {
       }
       Part(size_t capacity) : len(0), capacity(capacity) {
          data = new uint8_t[capacity];
-         memset(data,0,capacity);
+         memset(data, 0, capacity);
       }
       inline bool fits(size_t required) {
          return required <= (capacity - len);
@@ -254,6 +255,62 @@ class VarLenBuffer {
 
    VarLenBuffer() {
       parts.push_back(new Part(100000));
+   }
+};
+struct ResizableBuffer {
+   uint8_t* ptr;
+   size_t len;
+   ResizableBuffer(size_t len) {
+      //std::cout<<"allocating:"<<len<<std::endl;
+      ptr = new uint8_t[len];
+      this->len = len;
+   }
+   ResizableBuffer() {
+      ptr = nullptr;
+      len = 0;
+   }
+   void resize(size_t newLen) {
+      if (newLen > len) {
+         //std::cout<<"allocating:"<<newLen<<std::endl;
+         uint8_t* newPtr = new uint8_t[newLen];
+         if (len > 0) {
+            memcpy(newPtr, ptr, len);
+            delete[] ptr;
+         }
+         ptr = newPtr;
+         len = newLen;
+      }
+   }
+   void zero(){
+      if(len>0){
+         memset(ptr,0,len);
+      }
+   }
+   ~ResizableBuffer() {
+      if (len > 0) {
+         delete[] ptr;
+      }
+   }
+};
+template <class T>
+struct Vec {
+   ResizableBuffer buffer;
+   Vec() : buffer() {
+   }
+   Vec(size_t initialSize) : buffer(initialSize*sizeof(T)) {
+   }
+   void resize(size_t newSize) {
+      buffer.resize(newSize*sizeof(T));
+   }
+
+   T& operator[](size_t __n) {
+      return ((T*)buffer.ptr)[__n];
+   }
+   size_t size() {
+      return buffer.len/sizeof(T);
+   }
+   void zero() {
+      buffer.zero();
    }
 };
 struct Vector {
