@@ -2,19 +2,18 @@
 #define RUNTIME_JOIN_HASHTABLES_H
 #include "runtime/helpers.h"
 namespace runtime {
+inline uint64_t nextPow2(uint64_t v) {
+   v--;
+   v |= v >> 1;
+   v |= v >> 2;
+   v |= v >> 4;
+   v |= v >> 8;
+   v |= v >> 16;
+   v |= v >> 32;
+   v++;
+   return v;
+}
 class LazyMultiMap {
-   inline uint64_t NextPow2_64(uint64_t v) {
-      v--;
-      v |= v >> 1;
-      v |= v >> 2;
-      v |= v >> 4;
-      v |= v >> 8;
-      v |= v >> 16;
-      v |= v >> 32;
-      v++;
-      return v;
-   }
-
    public:
    // Entry in the hash table
    struct Entry {
@@ -37,8 +36,8 @@ class LazyMultiMap {
    //  * For each entry in entries_, calculate the hash and prepend it to the collision list in the hash table.
    void finalize();
    inline Entry* getIt(size_t hash) {
-      size_t pos = hash & hash_table_mask_;
-      Entry* curr = hash_table_[pos];
+      size_t pos = hash & hashTableMask;
+      Entry* curr = hashTable[pos];
       return curr;
    }
 
@@ -60,22 +59,11 @@ class LazyMultiMap {
    //      | 0 |           | z | <-+
    //      +---+           +---+
    //
-   runtime::Vec<Entry*> hash_table_;
+   runtime::Vec<Entry*> hashTable;
    // The hash table mask.
-   uint32_t hash_table_mask_;
+   uint32_t hashTableMask;
 };
 class MarkableLazyMultiMap {
-   inline uint64_t NextPow2_64(uint64_t v) {
-      v--;
-      v |= v >> 1;
-      v |= v >> 2;
-      v |= v >> 4;
-      v |= v >> 8;
-      v |= v >> 16;
-      v |= v >> 32;
-      v++;
-      return v;
-   }
 
    public:
    // Entry in the hash table
@@ -100,8 +88,8 @@ class MarkableLazyMultiMap {
    //  * For each entry in entries_, calculate the hash and prepend it to the collision list in the hash table.
    void finalize();
    inline Entry* getIt(size_t hash) {
-      size_t pos = hash & hash_table_mask_;
-      Entry* curr = hash_table_[pos];
+      size_t pos = hash & hashTableMask;
+      Entry* curr = hashTable[pos];
       return curr;
    }
 
@@ -126,9 +114,9 @@ class MarkableLazyMultiMap {
    //      | 0 |           | z | <-+
    //      +---+           +---+
    //
-   runtime::Vec<Entry*> hash_table_;
+   runtime::Vec<Entry*> hashTable;
    // The hash table mask.
-   uint32_t hash_table_mask_;
+   uint32_t hashTableMask;
 };
-}
-#endif //RUNTIME_JOIN_HASHTABLES_H
+} // namespace runtime
+#endif // RUNTIME_JOIN_HASHTABLES_H

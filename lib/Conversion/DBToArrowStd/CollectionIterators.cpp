@@ -315,7 +315,6 @@ class TableRowIterator : public ForIterator {
          if (!dbtype.isa<mlir::db::BoolType>()) {
             Value byteOffset = builder.create<mlir::MulIOp>(builder.getUnknownLoc(), indexType, offset, typeSize);
             Value byteSize = builder.create<util::DimOp>(builder.getUnknownLoc(),indexType, valueBuffer0);
-            Value typedSize = builder.create<mlir::UnsignedDivIOp>(builder.getUnknownLoc(), indexType, byteSize, typeSize);
             Value asMemRef=builder.create<util::ToMemrefOp>(builder.getUnknownLoc(),MemRefType::get({-1},builder.getIntegerType(8)),valueBuffer0);
             Value view = builder.create<memref::ViewOp>(builder.getUnknownLoc(), MemRefType::get({-1}, builder.getIntegerType(8)), asMemRef, byteOffset, ValueRange({byteSize}));
             valueBuffer =builder.create<mlir::util::ToGenericMemrefOp>(builder.getUnknownLoc(),mlir::util::GenericMemrefType::get(builder.getContext(),convertedType,-1),view);

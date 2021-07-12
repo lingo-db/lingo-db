@@ -1,5 +1,5 @@
-#include "runtime/helpers.h"
 #include "runtime/aggr_hashtable.h"
+#include "runtime/helpers.h"
 
 using namespace runtime;
 
@@ -11,12 +11,12 @@ EXPORT __attribute__((always_inline)) runtime::Bytes _mlir_ciface_aggr_ht_builde
    (builder)->currVarLen += (data).getSize();
    return (builder)->varLenBuffer.persist(data);
 }
-EXPORT __attribute__((always_inline)) runtime::Pair<bool, runtime::Bytes> _mlir_ciface_aggr_ht_builder_add_nullable_var_len(AggrHashtableBuilder* builder, bool null, runtime::Bytes data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT __attribute__((always_inline)) runtime::Bytes _mlir_ciface_aggr_ht_builder_add_nullable_var_len(AggrHashtableBuilder* builder, bool null, runtime::Bytes data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    if (null) {
-      return {true, runtime::Bytes(nullptr, 0)};
+      return runtime::Bytes(nullptr, 0);
    }
    (builder)->currVarLen += (data).getSize();
-   return {false, (builder)->varLenBuffer.persist(data)};
+   return (builder)->varLenBuffer.persist(data);
 }
 EXPORT __attribute__((always_inline)) runtime::Pair<bool, uint8_t*> _mlir_ciface_aggr_ht_builder_fast_lookup(AggrHashtableBuilder* builder, uint64_t hash) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return (builder)->lookup(hash);

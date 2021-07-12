@@ -224,9 +224,11 @@ class StringCmpOpLowering : public ConversionPattern {
          return failure();
       }
       db::NullHandler nullHandler(*typeConverter, rewriter);
+      Value left = nullHandler.getValue(cmpOp.left());
+      Value right = nullHandler.getValue(cmpOp.right());
       using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
       FuncId cmpFunc = funcForStrCompare(cmpOp.predicate());
-      Value res = functionRegistry.call(rewriter, cmpFunc, ValueRange({nullHandler.isNull(), cmpOp.left(), cmpOp.right()}))[0];
+      Value res = functionRegistry.call(rewriter, cmpFunc, ValueRange({nullHandler.isNull(), left,right}))[0];
       rewriter.replaceOp(op, nullHandler.combineResult(res));
       return success();
    }

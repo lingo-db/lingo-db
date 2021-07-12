@@ -6,7 +6,7 @@ runtime::AggrHashtableBuilder::AggrHashtableBuilder(size_t keySize, size_t valSi
    this->aggrOffset = keySize + padding;
 }
 
-runtime::SimpleHashTable::SimpleHashTable(size_t objSize) : hashTable(initialSize),entries(0), buffer(sizeof(Entry) + objSize) {
+runtime::SimpleHashTable::SimpleHashTable(size_t objSize) : hashTable(initialSize), buffer(sizeof(Entry) + objSize), entries(0) {
    hashTable.zero();
    hashTableMask = initialSize - 1;
 }

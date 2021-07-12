@@ -303,8 +303,8 @@ struct Vec {
       buffer.resize(newSize*sizeof(T));
    }
 
-   T& operator[](size_t __n) {
-      return ((T*)buffer.ptr)[__n];
+   T& operator[](size_t n) {
+      return ((T*)buffer.ptr)[n];
    }
    size_t size() {
       return buffer.len/sizeof(T);

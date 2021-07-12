@@ -6,6 +6,7 @@ set(PRECOMPILED_SRCS
         join_ht_builder.cpp
         mjoin_ht_builder.cpp
         aggr_ht_builder.cpp
+        vector_builder.cpp
         )
 
 find_program(LLVM_LINK_EXECUTABLE llvm-link HINTS ${LLVM_TOOLS_BINARY_DIR})

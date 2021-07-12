@@ -1,5 +1,5 @@
-#ifndef DB_DIALECTS_AGGR_HASHTABLE_H
-#define DB_DIALECTS_AGGR_HASHTABLE_H
+#ifndef RUNTIME_AGGR_HASHTABLE_H
+#define RUNTIME_AGGR_HASHTABLE_H
 #include "runtime/helpers.h"
 using i8 = uint8_t;
 using i64 = uint64_t;
@@ -94,24 +94,14 @@ struct SimpleHashTable {
    }
 
    // To find an element, calculate the hash (Key::Hash), and search this list until you reach a nullptr;
-   std::pair<EqualRangeIterator, EqualRangeIterator> equal_range(size_t hash) {
+   std::pair<EqualRangeIterator, EqualRangeIterator> equalRange(size_t hash) {
       return std::make_pair(getIt(hash), EqualRangeIterator());
    }
    runtime::ObjectBuffer<Entry>& getBuffer() {
       return buffer;
    }
 };
-static std::string string_to_hex(const std::string& input) {
-   static const char hex_digits[] = "0123456789ABCDEF";
 
-   std::string output;
-   output.reserve(input.length() * 2);
-   for (unsigned char c : input) {
-      output.push_back(hex_digits[c >> 4]);
-      output.push_back(hex_digits[c & 15]);
-   }
-   return output;
-}
 struct AggrHashtableBuilder {
    SimpleHashTable hashTable;
    size_t entries = 0;
@@ -143,7 +133,7 @@ struct AggrHashtableBuilder {
       }
    }
    inline runtime::Pair<bool, uint8_t*> lookup(uint64_t hash) {
-      auto entry = hashTable.lookup(hash);
+      auto* entry = hashTable.lookup(hash);
       if (entry == nullptr) {
          return {false, nullptr};
       } else {
@@ -157,11 +147,9 @@ struct AggrHashtableBuilder {
       currVarLen = 0;
    }
 
-   std::string hex(uint8_t* bytes, size_t len) {
-      return string_to_hex(std::string((char*) bytes, len));
-   }
+
    inline void insert(uint64_t hash, uint8_t* key, uint8_t* val) {
-      auto range = hashTable.equal_range(hash);
+      auto range = hashTable.equalRange(hash);
       for (auto i = range.first; i != range.second; ++i) {
          auto& x = *i;
          uint8_t* entryKey = x.data;
@@ -179,5 +167,5 @@ struct AggrHashtableBuilder {
       update(ptr + aggrOffset, val);
    }
 };
-}
-#endif //DB_DIALECTS_AGGR_HASHTABLE_H
+} // namespace runtime
+#endif // RUNTIME_AGGR_HASHTABLE_H

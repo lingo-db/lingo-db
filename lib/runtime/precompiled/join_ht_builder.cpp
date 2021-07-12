@@ -9,11 +9,11 @@ EXPORT LazyMultiMap* _mlir_ciface_join_ht_builder_create(size_t dataSize) { // N
 EXPORT __attribute__((always_inline)) runtime::Bytes _mlir_ciface_join_ht_builder_add_var_len(LazyMultiMap* builder, runtime::Bytes data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return builder->varLenBuffer.persist(data);
 }
-EXPORT __attribute__((always_inline)) runtime::Pair<bool, runtime::Bytes> _mlir_ciface_join_ht_builder_add_nullable_var_len(LazyMultiMap* builder, bool null, runtime::Bytes data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT __attribute__((always_inline)) runtime::Bytes _mlir_ciface_join_ht_builder_add_nullable_var_len(LazyMultiMap* builder, bool null, runtime::Bytes data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    if (null) {
-      return {true, runtime::Bytes(nullptr, 0)};
+      return runtime::Bytes(nullptr, 0);
    }
-   return {false, builder->varLenBuffer.persist(data)};
+   return builder->varLenBuffer.persist(data);
 }
 
 EXPORT __attribute__((always_inline)) LazyMultiMap::Entry* _mlir_ciface_join_ht_builder_merge(LazyMultiMap* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)

@@ -6,14 +6,14 @@ using namespace runtime;
 EXPORT MarkableLazyMultiMap* _mlir_ciface_mjoin_ht_builder_create(size_t dataSize) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return new MarkableLazyMultiMap(dataSize);
 }
-EXPORT __attribute__((always_inline)) runtime::Bytes _mlir_ciface_mjoin_ht_builder_add_var_len(MarkableLazyMultiMap* builder, runtime::Bytes* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return (builder)->varLenBuffer.persist(*data);
+EXPORT __attribute__((always_inline)) runtime::Bytes _mlir_ciface_mjoin_ht_builder_add_var_len(MarkableLazyMultiMap* builder, runtime::Bytes data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return (builder)->varLenBuffer.persist(data);
 }
-EXPORT __attribute__((always_inline)) runtime::Pair<bool, runtime::ByteRange> _mlir_ciface_mjoin_ht_builder_add_nullable_var_len(MarkableLazyMultiMap* builder, bool null, runtime::ByteRange* data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT __attribute__((always_inline)) runtime::Bytes _mlir_ciface_mjoin_ht_builder_add_nullable_var_len(MarkableLazyMultiMap* builder, bool null, runtime::Bytes data) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    if (null) {
-      return {true, runtime::ByteRange(nullptr, 0)};
+      return runtime::Bytes(nullptr, 0);
    }
-   return {false, (builder)->varLenBuffer.persist(*data)};
+   return (builder)->varLenBuffer.persist(data);
 }
 
 EXPORT __attribute__((always_inline)) uint8_t* _mlir_ciface_mjoin_ht_builder_merge(MarkableLazyMultiMap* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)

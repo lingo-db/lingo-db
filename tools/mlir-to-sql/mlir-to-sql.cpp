@@ -4,6 +4,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/MLIRContext.h"
@@ -96,12 +97,12 @@ class ToSQL {
                if (t.isa<mlir::db::IntType>() || t.isa<mlir::db::DecimalType>() || t.isa<mlir::db::FloatType>()) {
                   output << std::string(strAttr.getValue());
 
-               } else if (auto intervalType=t.dyn_cast_or_null<mlir::db::IntervalType>()) {
-                  if(intervalType.getUnit()==mlir::db::IntervalUnitAttr::months){
+               } else if (auto intervalType = t.dyn_cast_or_null<mlir::db::IntervalType>()) {
+                  if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
                      output << "'" << std::string(strAttr.getValue()) << "' month";
-                  }else{
-                     uint64_t valAsInt=std::stoll(std::string(strAttr.getValue()));
-                     uint64_t valInDays=valAsInt/(24ll*60ll*60ll*1000ll);
+                  } else {
+                     uint64_t valAsInt = std::stoll(std::string(strAttr.getValue()));
+                     uint64_t valInDays = valAsInt / (24ll * 60ll * 60ll * 1000ll);
                      output << "'" << std::to_string(valInDays) << "' day";
                   }
 
@@ -119,14 +120,14 @@ class ToSQL {
             output << attributeName(op.attr().getRelationalAttribute());
          })
          .Case<mlir::db::AndOp>([&](mlir::db::AndOp op) {
-            output<<"(";
+            output << "(";
             joinstr(output, "and", op.vals());
-            output<<")";
+            output << ")";
          })
          .Case<mlir::db::OrOp>([&](mlir::db::OrOp op) {
-           output<<"(";
+            output << "(";
             joinstr(output, "or", op.vals());
-           output<< ")";
+            output << ")";
          })
          .Case<DateSubOp>([&](DateSubOp op) {
             handleBinOp(output, "-", op.left(), op.right());
@@ -585,6 +586,8 @@ int main(int argc, char** argv) {
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::StandardOpsDialect>();
+   registry.insert<mlir::util::UtilDialect>();
+
    mlir::MLIRContext context;
    context.appendDialectRegistry(registry);
    mlir::OwningModuleRef module;
