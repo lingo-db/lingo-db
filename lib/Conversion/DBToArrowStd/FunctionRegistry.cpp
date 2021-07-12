@@ -10,8 +10,8 @@ void mlir::db::codegen::FunctionRegistry::registerFunctions() {
 
 #define INDEX_TYPE IndexType::get(context)
 
-#define POINTER_TYPE MemRefType::get({}, IntegerType::get(context, 8))
-#define STRING_TYPE MemRefType::get({-1}, IntegerType::get(context, 8))
+#define POINTER_TYPE mlir::util::GenericMemrefType::get(context,IntegerType::get(context, 8),llvm::Optional<int64_t>())
+#define STRING_TYPE mlir::util::GenericMemrefType::get(context,IntegerType::get(context, 8),-1)
 #define TUPLE_TYPE(...) TupleType::get(context, TypeRange({__VA_ARGS__}))
 #define OPERANDS_(...)  { __VA_ARGS__ }
 #define RETURNS_(...)  { __VA_ARGS__ }
@@ -29,10 +29,8 @@ mlir::FuncOp mlir::db::codegen::FunctionRegistry::insertFunction(mlir::OpBuilder
    ModuleOp parentModule = builder.getBlock()->getParentOp()->getParentOfType<ModuleOp>();
    OpBuilder::InsertionGuard insertionGuard(builder);
    builder.setInsertionPointToStart(parentModule.getBody());
-   FuncOp funcOp = builder.create<FuncOp>(parentModule.getLoc(), function.name, builder.getFunctionType(function.operands, function.results), builder.getStringAttr("private"));
-   if (function.useWrapper) {
-      funcOp->setAttr("llvm.emit_c_interface", builder.getUnitAttr());
-   }
+   FuncOp funcOp = builder.create<FuncOp>(parentModule.getLoc(), function.useWrapper?"_mlir_ciface_"+function.name:function.name, builder.getFunctionType(function.operands, function.results), builder.getStringAttr("private"));
+   funcOp.dump();
    return funcOp;
 }
 

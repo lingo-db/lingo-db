@@ -44,12 +44,12 @@ struct TableBuilder {
       return table;
    }
 };
-EXPORT runtime::Pointer<TableBuilder> _mlir_ciface_arrow_create_table_builder(runtime::Pointer<std::shared_ptr<arrow::Schema>>* schema) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return new TableBuilder((*schema).ref());
+EXPORT TableBuilder* _mlir_ciface_arrow_create_table_builder(std::shared_ptr<arrow::Schema>* schema) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return new TableBuilder(*schema);
 }
 
-EXPORT void _mlir_ciface_table_builder_add_bool(runtime::Pointer<TableBuilder>* builder, int column, bool isNull, bool val) {
-   auto* typed_builder = (*builder)->GetBuilderForColumn<arrow::BooleanBuilder>(column);
+EXPORT void _mlir_ciface_table_builder_add_bool(TableBuilder* builder, int column, bool isNull, bool val) {
+   auto* typed_builder = (builder)->GetBuilderForColumn<arrow::BooleanBuilder>(column);
    if (isNull) {
       typed_builder->AppendNull(); //NOLINT (clang-diagnostic-unused-result)
    } else {
@@ -58,8 +58,8 @@ EXPORT void _mlir_ciface_table_builder_add_bool(runtime::Pointer<TableBuilder>* 
 }
 
 #define TABLE_BUILDER_ADD_PRIMITIVE(name, type)                                                                                                    \
-   EXPORT void _mlir_ciface_table_builder_add_##name(runtime::Pointer<TableBuilder>* builder, int column, bool isNull, arrow::type ::c_type val) { \
-      auto* typed_builder = (*builder)->GetBuilderForColumn<arrow::NumericBuilder<arrow::type>>(column);                                           \
+   EXPORT void _mlir_ciface_table_builder_add_##name(TableBuilder* builder, int column, bool isNull, arrow::type ::c_type val) { \
+      auto* typed_builder = (builder)->GetBuilderForColumn<arrow::NumericBuilder<arrow::type>>(column);                                           \
       if (isNull) {                                                                                                                                \
          typed_builder->AppendNull(); /*NOLINT (clang-diagnostic-unused-result)*/                                                                  \
       } else {                                                                                                                                     \
@@ -74,8 +74,8 @@ TABLE_BUILDER_ADD_PRIMITIVE(float_32, FloatType)
 TABLE_BUILDER_ADD_PRIMITIVE(float_64, DoubleType)
 TABLE_BUILDER_ADD_PRIMITIVE(date_32, Date32Type)
 TABLE_BUILDER_ADD_PRIMITIVE(date_64, Date64Type)
-EXPORT void _mlir_ciface_table_builder_add_decimal(runtime::Pointer<TableBuilder>* builder, int column, bool isNull, int64_t low, int64_t high) {
-   auto* typed_builder = (*builder)->GetBuilderForColumn<arrow::Decimal128Builder>(column);
+EXPORT void _mlir_ciface_table_builder_add_decimal(TableBuilder* builder, int column, bool isNull, int64_t low, int64_t high) {
+   auto* typed_builder = (builder)->GetBuilderForColumn<arrow::Decimal128Builder>(column);
    if (isNull) {
       typed_builder->AppendNull(); //NOLINT (clang-diagnostic-unused-result)
    } else {
@@ -83,10 +83,10 @@ EXPORT void _mlir_ciface_table_builder_add_decimal(runtime::Pointer<TableBuilder
       typed_builder->Append(decimalrep); //NOLINT (clang-diagnostic-unused-result)
    }
 }
-EXPORT void _mlir_ciface_table_builder_add_small_decimal(runtime::Pointer<TableBuilder>* builder, int column, bool isNull, int64_t low) {
+EXPORT void _mlir_ciface_table_builder_add_small_decimal(TableBuilder* builder, int column, bool isNull, int64_t low) {
    __int128 total=low;
    int64_t high=total>>64;
-   auto* typed_builder = (*builder)->GetBuilderForColumn<arrow::Decimal128Builder>(column);
+   auto* typed_builder = (builder)->GetBuilderForColumn<arrow::Decimal128Builder>(column);
    if (isNull) {
       typed_builder->AppendNull(); //NOLINT (clang-diagnostic-unused-result)
    } else {
@@ -94,18 +94,18 @@ EXPORT void _mlir_ciface_table_builder_add_small_decimal(runtime::Pointer<TableB
       typed_builder->Append(decimalrep); //NOLINT (clang-diagnostic-unused-result)
    }
 }
-EXPORT void _mlir_ciface_table_builder_add_binary(runtime::Pointer<TableBuilder>* builder, int column, bool isNull, runtime::String* string) {
-   auto* typed_builder = (*builder)->GetBuilderForColumn<arrow::BinaryBuilder>(column);
+EXPORT void _mlir_ciface_table_builder_add_binary(TableBuilder* builder, int column, bool isNull, runtime::Str string) {
+   auto* typed_builder = (builder)->GetBuilderForColumn<arrow::BinaryBuilder>(column);
    if (isNull) {
       typed_builder->AppendNull(); //NOLINT (clang-diagnostic-unused-result)
    } else {
-      std::string str = (*string).str();
+      std::string str = (string).str();
       typed_builder->Append(str.data(), str.size()); //NOLINT (clang-diagnostic-unused-result)
    }
 }
-EXPORT void _mlir_ciface_table_builder_finish_row(runtime::Pointer<TableBuilder>* builder) {
-   (*builder)->nextRow();
+EXPORT void _mlir_ciface_table_builder_finish_row(TableBuilder* builder) {
+   (builder)->nextRow();
 }
-EXPORT runtime::Pointer<std::shared_ptr<arrow::Table>> _mlir_ciface_table_builder_build(runtime::Pointer<TableBuilder>* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return new std::shared_ptr<arrow::Table>((*builder)->build());
+EXPORT std::shared_ptr<arrow::Table>* _mlir_ciface_table_builder_build(TableBuilder* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return new std::shared_ptr<arrow::Table>((builder)->build());
 }

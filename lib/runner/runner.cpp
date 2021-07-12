@@ -1,6 +1,7 @@
 #include "llvm/Linker/Linker.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
+#include "llvm/Support/Host.h"
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -35,7 +36,6 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/SourceMgr.h>
 #include <runner/runner.h>
-#include <runtime/helpers.h>
 
 namespace {
 struct ToLLVMLoweringPass
@@ -79,9 +79,6 @@ void ToLLVMLoweringPass::runOnOperation() {
    // We want to completely lower to LLVM, so we use a `FullConversion`. This
    // ensures that only legal operations will remain after the conversion.
    auto module = getOperation();
-   if (auto mainFunc = module.lookupSymbol<mlir::FuncOp>("main")) {
-      mainFunc->setAttr("llvm.emit_c_interface", mlir::UnitAttr::get(&getContext()));
-   }
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }
@@ -160,7 +157,7 @@ int dumpLLVMIR(mlir::ModuleOp module) {
 
    /// Optionally run an optimization pipeline over the llvm module.
    auto optPipeline = mlir::makeOptimizingTransformer(
-      /*optLevel=*/true ? 0 : 0, /*sizeLevel=*/0,
+      /*optLevel=*/false ? 3 : 0, /*sizeLevel=*/0,
       /*targetMachine=*/nullptr);
    if (auto err = optPipeline(llvmModule.get())) {
       llvm::errs() << "Failed to optimize LLVM IR " << err << "\n";
@@ -205,7 +202,7 @@ bool Runner::load(std::string file) {
    return true;
 }
 bool Runner::optimize() {
-   auto start=std::chrono::high_resolution_clock::now();
+   auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createExtractNestedOperatorsPass());
@@ -226,24 +223,25 @@ bool Runner::optimize() {
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
    }
-   auto end=std::chrono::high_resolution_clock::now();
-   std::cout<<"optimization took: "<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<" ms"<<std::endl;
+   auto end = std::chrono::high_resolution_clock::now();
+   std::cout << "optimization took: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
    return true;
 }
 bool Runner::lower() {
-   auto start=std::chrono::high_resolution_clock::now();
+   auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
    pm.addPass(mlir::db::createLowerToStdPass());
+   pm.addPass(mlir::createCanonicalizerPass());
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
    }
-   auto end=std::chrono::high_resolution_clock::now();
-   std::cout<<"lowering to std took: "<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<" ms"<<std::endl;
+   auto end = std::chrono::high_resolution_clock::now();
+   std::cout << "lowering to std took: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
    return true;
 }
 bool Runner::lowerToLLVM() {
-   auto start=std::chrono::high_resolution_clock::now();
+   auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::ModuleOp moduleOp = ctxt->module.get();
    if (auto mainFunc = moduleOp.lookupSymbol<mlir::FuncOp>("main")) {
@@ -264,8 +262,8 @@ bool Runner::lowerToLLVM() {
    if (mlir::failed(pm2.run(ctxt->module.get()))) {
       return false;
    }
-   auto end=std::chrono::high_resolution_clock::now();
-   std::cout<<"lowering to llvm took: "<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<" ms"<<std::endl;
+   auto end = std::chrono::high_resolution_clock::now();
+   std::cout << "lowering to llvm took: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
    return true;
 }
 void Runner::dump() {
@@ -281,43 +279,70 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    // Initialize LLVM targets.
    llvm::InitializeNativeTarget();
    llvm::InitializeNativeTargetAsmPrinter();
+   auto targetTriple = llvm::sys::getDefaultTargetTriple();
+   std::string errorMessage;
+   const auto* target = llvm::TargetRegistry::lookupTarget(targetTriple, errorMessage);
+   if (!target) {
+      assert(false && "could not get target");
+      return false;
+   }
+   std::string cpu(llvm::sys::getHostCPUName());
+   llvm::SubtargetFeatures features;
+   llvm::StringMap<bool> hostFeatures;
 
-   // An optimization pipeline to use within the execution engine.
+   if (llvm::sys::getHostCPUFeatures(hostFeatures))
+      for (auto& f : hostFeatures)
+         features.AddFeature(f.first(), f.second);
+
+   std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
+      targetTriple, cpu, features.getString(), {}, {}));
+   if (!machine) {
+      assert(false && "Unable to create target machine\n");
+      return false;
+   }
    auto optPipeline = mlir::makeOptimizingTransformer(
       /*optLevel=*/true ? 3 : 0, /*sizeLevel=*/0,
       /*targetMachine=*/nullptr);
 
    // Create an MLIR execution engine. The execution engine eagerly JIT-compiles
    // the module.
-   auto start=std::chrono::high_resolution_clock::now();
+   auto start = std::chrono::high_resolution_clock::now();
 
    auto maybeEngine = mlir::ExecutionEngine::create(
-      ctxt->module.get(), /*llvmModuleBuilder=*/convertMLIRModule, optPipeline);
+      ctxt->module.get(), /*llvmModuleBuilder=*/convertMLIRModule,optPipeline);
    assert(maybeEngine && "failed to construct an execution engine");
    auto& engine = maybeEngine.get();
-   runtime::Pointer<runtime::ExecutionContext> contextPtr(context);
-   runtime::Pointer<uint8_t> res(nullptr);
-   auto* contextPtrPtr = &contextPtr;
-   auto* resPtr = &res;
-   std::vector<void*> args;
-   if (ctxt->numResults == 1) {
-      args.push_back((void*) &resPtr);
-   }
-   if (ctxt->numArgs == 1) {
-      args.push_back((void*) &contextPtrPtr);
-   }
+   uint8_t* res;
+   auto** resPtr = &res;
+   auto** contextPtr = &context;
 
+   std::cout << "context:" << context << std::endl;
    // Invoke the JIT-compiled function.
-   auto invocationResult = engine->invokePacked("_mlir_ciface_main", args);
-   auto end=std::chrono::high_resolution_clock::now();
-   std::cout<<"totaljit: "<<std::chrono::duration_cast<std::chrono::milliseconds>(end-start).count()<<" ms"<<std::endl;
-
-   if (invocationResult) {
+   auto lookupResult = engine->lookup("main");
+   if (!lookupResult) {
       llvm::errs() << "JIT invocation failed\n";
       return false;
    }
+   void* data[] = {contextPtr, resPtr};
+   auto funcPtr = lookupResult.get();
+   if (ctxt->numArgs == 1 && ctxt->numResults == 1) {
+      typedef void (*myfunc)(void**);
+      auto fn = (myfunc) funcPtr;
+      fn(data);
+   } else if (ctxt->numArgs == 1) {
+      typedef void (*myfunc)(void*);
+      auto fn = (myfunc) funcPtr;
+      fn(&contextPtr);
+   } else {
+      typedef void (*myfunc)();
+      auto fn = (myfunc) funcPtr;
+      fn();
+   }
+   auto end = std::chrono::high_resolution_clock::now();
+   std::cout << "totaljit: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
+
    if (ctxt->numResults == 1) {
-      callback(res.get());
+      callback(res);
    }
 
    return true;

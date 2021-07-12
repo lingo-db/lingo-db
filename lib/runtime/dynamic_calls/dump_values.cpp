@@ -95,10 +95,10 @@ EXPORT void _mlir_ciface_dump_float(bool null, double val) {
    }
 }
 
-EXPORT void _mlir_ciface_dump_string(bool null, runtime::String* string) {
+EXPORT void _mlir_ciface_dump_string(bool null, runtime::Str string) {
    if (null) {
       std::cout << "string(NULL)" << std::endl;
    } else {
-      std::cout << "string(\"" << string->str() << "\")" << std::endl;
+      std::cout << "string(\"" << string.str() << "\")" << std::endl;
    }
 }

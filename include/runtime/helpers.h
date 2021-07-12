@@ -59,6 +59,32 @@ class String : public MemRef<char, 1> {
       return pointer;
    }
 };
+class Str{
+   char* pointer;
+   size_t size;
+   public:
+   Str(char* ptr, size_t len) : pointer(ptr),size(len) {}
+   operator std::string() { return std::string(pointer, size); }
+   std::string str() { return std::string(pointer, size); }
+   size_t len() {
+      return size;
+   }
+   char* data() {
+      return pointer;
+   }
+};
+class Bytes  {
+   uint8_t * pointer;
+   size_t size;
+   public:
+   Bytes(uint8_t* ptr, size_t bytes) :pointer(ptr),size(bytes) {}
+   uint8_t* getPtr() {
+      return pointer;
+   }
+   size_t getSize() {
+      return size;
+   }
+};
 template <class T1, class T2>
 class Pair {
    T1 first;
@@ -194,6 +220,12 @@ class VarLenBuffer {
          len += toInsert.getSize();
          return ByteRange(ptr, toInsert.getSize());
       }
+      inline Bytes insert(Bytes toInsert) {
+         uint8_t* ptr = reinterpret_cast<uint8_t*>(data + len);
+         memcpy(data + len, toInsert.getPtr(), toInsert.getSize());
+         len += toInsert.getSize();
+         return Bytes(ptr, toInsert.getSize());
+      }
       size_t getCapacity() const {
          return capacity;
       }
@@ -202,6 +234,15 @@ class VarLenBuffer {
 
    public:
    inline ByteRange persist(ByteRange string) {
+      auto* currPart = parts[parts.size() - 1];
+      if (!currPart->fits(string.getSize())) {
+         size_t newSize = std::max(currPart->getCapacity(), string.getSize()) * 2;
+         parts.push_back(new Part(newSize));
+         currPart = parts[parts.size() - 1];
+      }
+      return currPart->insert(string);
+   }
+   inline Bytes persist(Bytes string) {
       auto* currPart = parts[parts.size() - 1];
       if (!currPart->fits(string.getSize())) {
          size_t newSize = std::max(currPart->getCapacity(), string.getSize()) * 2;

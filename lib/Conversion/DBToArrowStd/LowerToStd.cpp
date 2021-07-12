@@ -49,8 +49,7 @@ class TableScanLowering : public ConversionPattern {
       mlir::db::TableScanAdaptor adaptor(operands);
       auto tablescan = cast<mlir::db::TableScan>(op);
       std::vector<Type> types;
-      auto i8Type = IntegerType::get(rewriter.getContext(), 8);
-      auto ptrType = MemRefType::get({}, i8Type);
+      auto ptrType = mlir::util::GenericMemrefType::get(rewriter.getContext(),IntegerType::get(rewriter.getContext(), 8),llvm::Optional<int64_t>());
       auto indexType = IndexType::get(rewriter.getContext());
 
       std::vector<Value> values;
@@ -219,7 +218,7 @@ void DBToStdLoweringPass::runOnOperation() {
       return convertFunctionType(functionType, typeConverter);
    });
    typeConverter.addConversion([&](mlir::db::TableType tableType) {
-      return MemRefType::get({}, IntegerType::get(&getContext(), 8));
+      return mlir::util::GenericMemrefType::get(&getContext(),IntegerType::get(&getContext(), 8),llvm::Optional<int64_t>());
    });
 
    typeConverter.addConversion([&](mlir::IntegerType iType) { return iType; });

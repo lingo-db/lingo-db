@@ -20,15 +20,14 @@ class SortOpLowering : public ConversionPattern {
       using FunctionId = db::codegen::FunctionRegistry::FunctionId;
       mlir::db::SortOpAdaptor sortOpAdaptor(operands);
       auto sortOp = cast<mlir::db::SortOp>(op);
+      auto ptrType = mlir::util::GenericMemrefType::get(getContext(),IntegerType::get(getContext(), 8),llvm::Optional<int64_t>());
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      auto ptrType = MemRefType::get({}, rewriter.getIntegerType(8));
       Type elementType = sortOp.toSort().getType().cast<mlir::db::VectorType>().getElementType();
       FuncOp funcOp;
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(parentModule.getBody());
          funcOp = rewriter.create<FuncOp>(parentModule.getLoc(), "db_sort_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange(mlir::db::BoolType::get(rewriter.getContext()))));
-         funcOp->setAttr("llvm.emit_c_interface", rewriter.getUnitAttr());
          auto* funcBody = new Block;
          funcBody->addArguments(TypeRange({ptrType, ptrType}));
          funcOp.body().push_back(funcBody);
@@ -36,8 +35,8 @@ class SortOpLowering : public ConversionPattern {
          Value left = funcBody->getArgument(0);
          Value right = funcBody->getArgument(1);
 
-         Value genericMemrefLeft = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), elementType, llvm::Optional<int64_t>()), left);
-         Value genericMemrefRight = rewriter.create<util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), elementType, llvm::Optional<int64_t>()), right);
+         Value genericMemrefLeft = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), elementType, llvm::Optional<int64_t>()), left);
+         Value genericMemrefRight = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), elementType, llvm::Optional<int64_t>()), right);
          Value tupleLeft = rewriter.create<util::LoadOp>(sortOp.getLoc(), elementType, genericMemrefLeft, Value());
          Value tupleRight = rewriter.create<util::LoadOp>(sortOp.getLoc(), elementType, genericMemrefRight, Value());
          auto terminator = rewriter.create<mlir::ReturnOp>(sortOp.getLoc());
@@ -193,8 +192,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       }
       if (genericIterableType.getIteratorName() == "table_chunk_iterator") {
          std::vector<Type> types;
-         auto i8Type = IntegerType::get(patterns.getContext(), 8);
-         auto ptrType = MemRefType::get({}, i8Type);
+         auto ptrType=mlir::util::GenericMemrefType::get(patterns.getContext(),IntegerType::get(patterns.getContext(), 8),llvm::Optional<int64_t>());
          auto indexType = IndexType::get(patterns.getContext());
          types.push_back(ptrType);
          if (auto tupleT = nestedElementType.dyn_cast_or_null<TupleType>()) {
@@ -205,8 +203,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
          return (Type) TupleType::get(patterns.getContext(), types);
       } else if (genericIterableType.getIteratorName() == "table_row_iterator") {
          std::vector<Type> types;
-         auto i8Type = IntegerType::get(patterns.getContext(), 8);
-         auto ptrType = MemRefType::get({}, i8Type);
+         auto ptrType=mlir::util::GenericMemrefType::get(patterns.getContext(),IntegerType::get(patterns.getContext(), 8),llvm::Optional<int64_t>());
          auto indexType = IndexType::get(patterns.getContext());
          types.push_back(ptrType);
          if (auto tupleT = nestedElementType.dyn_cast_or_null<TupleType>()) {
@@ -217,8 +214,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
          return (Type) TupleType::get(patterns.getContext(), types);
       } else if (genericIterableType.getIteratorName() == "join_ht_iterator" || genericIterableType.getIteratorName() == "mjoin_ht_iterator") {
          auto indexType = IndexType::get(patterns.getContext());
-         auto i8Type = IntegerType::get(patterns.getContext(), 8);
-         auto ptrType = MemRefType::get({}, i8Type);
+         auto ptrType=mlir::util::GenericMemrefType::get(patterns.getContext(),IntegerType::get(patterns.getContext(), 8),llvm::Optional<int64_t>());
 
          return (Type) TupleType::get(patterns.getContext(), {indexType, ptrType});
       }

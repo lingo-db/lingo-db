@@ -16,7 +16,7 @@
 //CHECK: |                         29555  |
 
 module @querymodule{
-    func @main (%executionContext: memref<i8>)  -> !db.table{
+    func @main (%executionContext: !util.generic_memref<i8>)  -> !db.table{
         %1 = relalg.basetable @hoeren { table_identifier="hoeren" } columns: {matrnr => @matrnr({type=!db.int<64>}),
             vorlnr => @vorlnr({type=!db.int<64>})
         }

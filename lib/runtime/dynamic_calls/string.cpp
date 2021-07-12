@@ -76,21 +76,21 @@ bool like(const char* str, size_t str_len, const char* pattern, size_t pattern_l
    }
    return slen == 0 && plen == 0;
 }
-extern "C" bool _mlir_ciface_cmp_string_like(bool null, runtime::String* str1, runtime::String* str2) {
+extern "C" bool _mlir_ciface_cmp_string_like(bool null, runtime::Str str1, runtime::Str str2) {
    if (null) {
       return false;
    } else {
-      return like((*str1).data(), (*str1).len(), (*str2).data(), (*str2).len(), '\\');
+      return like((str1).data(), (str1).len(), (str2).data(), (str2).len(), '\\');
    }
 }
 
 //taken from gandiva
 
 #define CAST_NUMERIC_FROM_STRING(OUT_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                   \
-   extern "C" OUT_TYPE _mlir_ciface_cast_string_##TYPE_NAME(bool null, runtime::String* str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
+   extern "C" OUT_TYPE _mlir_ciface_cast_string_##TYPE_NAME(bool null, runtime::Str str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       if (null) return (OUT_TYPE) 0;                                                                                                                \
-      char* data = (*str).data();                                                                                                                   \
-      int32_t len = (*str).len();                                                                                                                   \
+      char* data = (str).data();                                                                                                                   \
+      int32_t len = (str).len();                                                                                                                   \
       OUT_TYPE val = 0;                                                                                                                             \
       /* trim leading and trailing spaces */                                                                                                        \
       int32_t trimmed_len;                                                                                                                          \
@@ -115,14 +115,14 @@ CAST_NUMERIC_FROM_STRING(int64_t, arrow::Int64Type, int)
 CAST_NUMERIC_FROM_STRING(float, arrow::FloatType, float32)
 CAST_NUMERIC_FROM_STRING(double, arrow::DoubleType, float64)
 
-extern "C" __int128 _mlir_ciface_cast_string_decimal(bool null, runtime::String* string, unsigned reqScale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+extern "C" __int128 _mlir_ciface_cast_string_decimal(bool null, runtime::Str string, unsigned reqScale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    if (null) {
       return 0;
    }
    int32_t precision;
    int32_t scale;
    arrow::Decimal128 decimalrep;
-   if (arrow::Decimal128::FromString(string->str(), &decimalrep, &precision, &scale) != arrow::Status::OK()) {
+   if (arrow::Decimal128::FromString(string.str(), &decimalrep, &precision, &scale) != arrow::Status::OK()) {
       //todo
    }
    auto x = decimalrep.Rescale(scale, reqScale);
@@ -133,9 +133,9 @@ extern "C" __int128 _mlir_ciface_cast_string_decimal(bool null, runtime::String*
    return res;
 }
 #define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                        \
-   extern "C" runtime::String _mlir_ciface_cast_##TYPE_NAME##_string(bool null, IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
+   extern "C" runtime::Str _mlir_ciface_cast_##TYPE_NAME##_string(bool null, IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       if (null) {                                                                                                                                     \
-         return runtime::String(nullptr, 0);                                                                                                          \
+         return runtime::Str(nullptr, 0);                                                                                                          \
       }                                                                                                                                               \
       arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                                         \
       char* data = nullptr;                                                                                                                           \
@@ -146,16 +146,16 @@ extern "C" __int128 _mlir_ciface_cast_string_decimal(bool null, runtime::String*
          memcpy(data, v.data(), len);                                                                                                                 \
          return arrow::Status::OK();                                                                                                                  \
       });                                                                                                                                             \
-      return runtime::String(data, len);                                                                                                              \
+      return runtime::Str(data, len);                                                                                                              \
    }
 
 CAST_NUMERIC_TO_STRING(int64_t, arrow::Int64Type, int)
 CAST_NUMERIC_TO_STRING(float, arrow::FloatType, float32)
 CAST_NUMERIC_TO_STRING(double, arrow::DoubleType, float64)
 
-extern "C" runtime::String _mlir_ciface_cast_decimal_string(bool null, uint64_t low, uint64_t high, uint32_t scale) {// NOLINT (clang-diagnostic-return-type-c-linkage)
+extern "C" runtime::Str _mlir_ciface_cast_decimal_string(bool null, uint64_t low, uint64_t high, uint32_t scale) {// NOLINT (clang-diagnostic-return-type-c-linkage)
    if (null) {
-      return runtime::String(nullptr, 0);
+      return runtime::Str(nullptr, 0);
    }
    arrow::Decimal128 decimalrep(arrow::BasicDecimal128(high, low));
    std::string str = decimalrep.ToString(scale);
@@ -163,5 +163,5 @@ extern "C" runtime::String _mlir_ciface_cast_decimal_string(bool null, uint64_t 
    char* data = new char[len];
    memcpy(data, str.data(), len);
 
-   return runtime::String(data, len);
+   return runtime::Str(data, len);
 }

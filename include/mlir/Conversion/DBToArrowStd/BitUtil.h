@@ -2,7 +2,7 @@
 #define MLIR_CONVERSION_DBTOARROWSTD_BITUTIL_H
 #include "FunctionRegistry.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/util/UtilOps.h"
 
 namespace mlir::db::codegen {
 class BitUtil {
@@ -18,7 +18,7 @@ class BitUtil {
 
       Value div8 = builder.create<UnsignedShiftRightOp>(builder.getUnknownLoc(), indexType, pos, const3);
       Value rem8 = builder.create<mlir::AndOp>(builder.getUnknownLoc(), indexType, pos, const7);
-      Value loadedByte = builder.create<memref::LoadOp>(builder.getUnknownLoc(), bits, ValueRange({div8}));
+      Value loadedByte = builder.create<mlir::util::LoadOp>(builder.getUnknownLoc(),i8Type, bits, div8);
       Value rem8AsByte = builder.create<IndexCastOp>(builder.getUnknownLoc(), rem8, i8Type);
       Value shifted = builder.create<UnsignedShiftRightOp>(builder.getUnknownLoc(), i8Type, loadedByte, rem8AsByte);
       Value res1 = shifted;

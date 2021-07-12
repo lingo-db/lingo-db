@@ -360,7 +360,8 @@ class ConstantLowering : public ConversionPattern {
             rewriter.restoreInsertionPoint(insertionPoint);
             Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
             result = rewriter.create<memref::CastOp>(loc, conststr, strDynamicType);
-            rewriter.replaceOp(op, result);
+            Value strres = rewriter.create<mlir::util::ToGenericMemrefOp>(loc,mlir::util::GenericMemrefType::get(getContext(),rewriter.getIntegerType(8),-1),result);
+            rewriter.replaceOp(op, strres);
             return success();
          }
       }
@@ -636,7 +637,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
                            return res;
                         })
                         .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
-                           return mlir::MemRefType::get({-1}, IntegerType::get(patterns.getContext(), 8));
+                           return mlir::util::GenericMemrefType::get(patterns.getContext(),IntegerType::get(patterns.getContext(), 8),-1);
                         })
                         .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
                            return mlir::IntegerType::get(patterns.getContext(), 64);

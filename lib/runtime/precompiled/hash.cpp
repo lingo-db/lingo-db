@@ -27,16 +27,16 @@ uint64_t _mlir_ciface_hash_float_64(uint64_t h, double val) {
    return _mm_crc32_u64(h, *(uint64_t*) &val);
 }
 
-uint64_t _mlir_ciface_hash_binary(uint64_t hash, runtime::String* val) {
+uint64_t _mlir_ciface_hash_binary(uint64_t hash, runtime::Str val) {
    size_t i = 0;
-   for (; i < val->len() / 8; i++) {
-      hash = _mm_crc32_u64(hash,*((uint64_t*) &val->data()[i]));
+   for (; i < val.len() / 8; i++) {
+      hash = _mm_crc32_u64(hash,*((uint64_t*) &val.data()[i]));
    }
-   if (i < val->len()) {
+   if (i < val.len()) {
       uint64_t remaining = 0;
-      for (; i < val->len(); i++) {
+      for (; i < val.len(); i++) {
          remaining <<= 8;
-         uint64_t extended = val->data()[i];
+         uint64_t extended = val.data()[i];
          remaining |= extended;
       }
       hash = _mm_crc32_u64(hash,remaining);

@@ -11,7 +11,7 @@
 //CHECK: |                         29555  |                   "Feuerbach"  |
 
 module @querymodule{
-    func @main (%executionContext: memref<i8>)  -> !db.table{
+    func @main (%executionContext: !util.generic_memref<i8>)  -> !db.table{
         %1 = relalg.basetable @studenten { table_identifier="studenten" } columns: {matrnr => @matrnr({type=!db.int<64>}),
             name => @name({type=!db.string}),
             semester => @semester({type=!db.int<64>})

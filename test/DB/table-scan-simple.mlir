@@ -21,9 +21,9 @@
     //CHECK: date(NULL)
     //CHECK: date(NULL)
     //CHECK: string("---------------")
-	func @main (%execution_context: memref<i8>) {
+	func @main (%execution_context: !util.generic_memref<i8>) {
 			%str_const = db.constant ( "---------------" ) :!db.string
-	 		%table=db.get_table "test" %execution_context: memref<i8>
+	 		%table=db.get_table "test" %execution_context:  !util.generic_memref<i8>
             %0 = db.tablescan %table ["str","float32","float64","decimal","int32","int64","bool","date32","date64"] : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator>
             db.for %table_chunk in %0 : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator>{
 				db.for %table_row in %table_chunk : !db.iterable<!test_table_tuple,table_row_iterator>{

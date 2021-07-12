@@ -182,7 +182,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
       context.builders[builderId] = joinHtBuilder;
       children[0]->addRequiredBuilders({builderId});
       children[0]->produce(context, builder);
-      joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::JoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType), joinHtBuilder);
+      joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::JoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType), context.builders[builderId]);
       children[1]->produce(context, builder);
    }
    virtual void handleLookup(Value matched, LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) = 0;
@@ -313,7 +313,7 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
       context.builders[builderId] = joinHtBuilder;
       children[0]->addRequiredBuilders({builderId});
       children[0]->produce(context, builder);
-      joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::MarkableJoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType), joinHtBuilder);
+      joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::MarkableJoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType), context.builders[builderId]);
       children[1]->produce(context, builder);
       after(context,builder);
    }

@@ -80,7 +80,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
       context.builders[builderId] = vectorBuilder;
       children[0]->addRequiredBuilders({builderId});
       children[0]->produce(context, builder);
-      vector = builder.create<mlir::db::BuilderBuild>(sortOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), vectorBuilder);
+      vector = builder.create<mlir::db::BuilderBuild>(sortOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), context.builders[builderId]);
       {
          auto dbSortOp = builder.create<mlir::db::SortOp>(sortOp->getLoc(),  vector);
          mlir::Block* block2 = new mlir::Block;

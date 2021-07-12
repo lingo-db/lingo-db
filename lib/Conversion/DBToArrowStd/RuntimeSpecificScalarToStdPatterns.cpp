@@ -357,7 +357,7 @@ class HashLowering : public ConversionPattern {
             case 32: return functionRegistry.call(builder, FunctionId::HashFloat32,{totalHash,v})[0];
             case 64: return functionRegistry.call(builder, FunctionId::HashFloat64,{totalHash,v})[0];
          }
-      } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::MemRefType>()) {
+      } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::util::GenericMemrefType>()) {
          return functionRegistry.call(builder, FunctionId::HashBinary,{totalHash,v})[0];
       } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
          if (auto originalTupleType = originalType.dyn_cast_or_null<mlir::TupleType>()) {
