@@ -40,11 +40,11 @@ for qnum in range(1, 22):
         m = re.search(r'lowering to llvm took: ([\d,\.,e,\+]+) ms', output)
         assert m is not None, 'Unexpected output:\n' + output
         lower_to_llvm_time = float(m.group(1))
-        m = re.search(r'totaljit: ([\d,\.,e,\+]+) ms', output)
+        m = re.search(r'jit: ([\d,\.,e,\+]+) ms', output)
         assert m is not None, 'Unexpected output:\n' + output
-        totaljit = float(m.group(1))
+        jit = float(m.group(1))
         print(output)
-    results.append(QueryResult("tpch" + str(qnum), runtime,optimization_time,lower_to_std_time,lower_to_llvm_time,totaljit-runtime, returncode))
+    results.append(QueryResult("tpch" + str(qnum), runtime,optimization_time,lower_to_std_time,lower_to_llvm_time,jit, returncode))
 
 for res in results:
     print('%12s %5i %5i %5i %5i %5i %5i' % (res.query, res.runtime,res.optimization_time,res.lower_to_std_time,res.lower_to_llvm_time,res.llvm_time , res.return_code))

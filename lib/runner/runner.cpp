@@ -36,6 +36,7 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/SourceMgr.h>
 #include <runner/runner.h>
+#include <algorithm>
 
 namespace {
 struct ToLLVMLoweringPass
@@ -157,7 +158,7 @@ int dumpLLVMIR(mlir::ModuleOp module) {
 
    /// Optionally run an optimization pipeline over the llvm module.
    auto optPipeline = mlir::makeOptimizingTransformer(
-      /*optLevel=*/false ? 3 : 0, /*sizeLevel=*/0,
+      /*optLevel=*/true ? 3 : 0, /*sizeLevel=*/0,
       /*targetMachine=*/nullptr);
    if (auto err = optPipeline(llvmModule.get())) {
       llvm::errs() << "Failed to optimize LLVM IR " << err << "\n";
@@ -247,14 +248,6 @@ bool Runner::lowerToLLVM() {
    if (auto mainFunc = moduleOp.lookupSymbol<mlir::FuncOp>("main")) {
       ctxt->numArgs = mainFunc.getNumArguments();
       ctxt->numResults = mainFunc.getNumResults();
-      mlir::OpBuilder builder(mainFunc);
-      builder.setInsertionPointToStart(&mainFunc.getBody().front());
-      mlir::db::codegen::FunctionRegistry functionRegistry(mainFunc->getContext());
-      functionRegistry.registerFunctions();
-      using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
-      auto startTime = functionRegistry.call(builder, FuncId::StartExecution, {})[0];
-      builder.setInsertionPoint(mainFunc.getBody().front().getTerminator());
-      functionRegistry.call(builder, FuncId::FinishExecution, {startTime});
    }
    mlir::PassManager pm2(&ctxt->context);
    pm2.addPass(mlir::createLowerToCFGPass());
@@ -323,23 +316,32 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
       llvm::errs() << "JIT invocation failed\n";
       return false;
    }
+   auto end = std::chrono::high_resolution_clock::now();
+   std::cout << "jit: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
+
    void* data[] = {contextPtr, resPtr};
    auto funcPtr = lookupResult.get();
-   if (ctxt->numArgs == 1 && ctxt->numResults == 1) {
-      typedef void (*myfunc)(void**);
-      auto fn = (myfunc) funcPtr;
-      fn(data);
-   } else if (ctxt->numArgs == 1) {
-      typedef void (*myfunc)(void*);
-      auto fn = (myfunc) funcPtr;
-      fn(&contextPtr);
-   } else {
-      typedef void (*myfunc)();
-      auto fn = (myfunc) funcPtr;
-      fn();
+   std::vector<size_t> measuredTimes;
+   size_t repeats=5;
+   for(size_t i=0;i<repeats;i++) {
+      auto executionStart = std::chrono::high_resolution_clock::now();
+      if (ctxt->numArgs == 1 && ctxt->numResults == 1) {
+         typedef void (*myfunc)(void**);
+         auto fn = (myfunc) funcPtr;
+         fn(data);
+      } else if (ctxt->numArgs == 1) {
+         typedef void (*myfunc)(void*);
+         auto fn = (myfunc) funcPtr;
+         fn(&contextPtr);
+      } else {
+         typedef void (*myfunc)();
+         auto fn = (myfunc) funcPtr;
+         fn();
+      }
+      auto executionEnd = std::chrono::high_resolution_clock::now();
+      measuredTimes.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(executionEnd - executionStart).count());
    }
-   auto end = std::chrono::high_resolution_clock::now();
-   std::cout << "totaljit: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
+   std::cout<<"runtime: "<<*std::min_element(measuredTimes.begin()+1,measuredTimes.end())<<" ms"<<std::endl;
 
    if (ctxt->numResults == 1) {
       callback(res);

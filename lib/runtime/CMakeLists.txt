@@ -9,7 +9,6 @@ add_library(runtime OBJECT
         dynamic_calls/string.cpp
         dynamic_calls/vector_builder.cpp
         dynamic_calls/sort.cpp
-        dynamic_calls/measurement.cpp
         join_hashtables.cpp
         aggr_hashtable.cpp
         database.cpp ${CMAKE_SOURCE_DIR}/arrow/cpp/src/arrow/vendored/datetime/tz.cpp)
