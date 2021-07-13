@@ -207,6 +207,7 @@ bool Runner::optimize() {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createExtractNestedOperatorsPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createSimplifyAggregationsPass());
    pm.addPass(mlir::createCSEPass());
    pm.addPass(mlir::createCanonicalizerPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createDecomposeLambdasPass());

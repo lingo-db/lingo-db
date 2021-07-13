@@ -2,11 +2,11 @@
 #define MLIR_CONVERSION_RELALGTODB_HASHJOINUTILS_H
 #include "ProducerConsumerNode.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/Attributes.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include <tuple>
 
 namespace mlir::relalg {
@@ -316,15 +316,14 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
       children[0]->produce(context, builder);
       joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::MarkableJoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType), context.builders[builderId]);
       children[1]->produce(context, builder);
-      after(context,builder);
+      after(context, builder);
    }
    virtual void handleLookup(Value matched, Value markerBefore, LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) = 0;
    virtual void beforeLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {}
    virtual void afterLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {}
    virtual void handleScanned(Value marker, LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {
    }
-   virtual void after(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder){
-
+   virtual void after(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {
    }
    virtual mlir::Value getFlag() { return Value(); }
    void scanHT(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {

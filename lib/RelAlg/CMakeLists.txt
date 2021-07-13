@@ -4,6 +4,7 @@ add_mlir_dialect_library(MLIRRelAlg
         RelAlgOpsEnums.cpp
         OperatorInterfaceImpl.cpp
         ExtractNestedOperators.cpp
+        SimplifyAggregations.cpp
         DecomposeLambdas.cpp
         CombinePredicates.cpp
         OptimizeImplementations.cpp
