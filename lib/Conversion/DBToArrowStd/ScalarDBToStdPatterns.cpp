@@ -260,6 +260,24 @@ class NullOpLowering : public ConversionPattern {
       return success();
    }
 };
+class SubStrOpLowering : public ConversionPattern {
+   public:
+   explicit SubStrOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::SubStrOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto subStrOp = cast<mlir::db::SubStrOp>(op);
+      mlir::db::SubStrOpAdaptor adaptor(operands);
+      Value pos1AsIndex = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.from()-1));
+      Value lenAsIndex = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.to()-subStrOp.from()+1));
+      Value asMemRef=rewriter.create<util::ToMemrefOp>(rewriter.getUnknownLoc(),MemRefType::get({-1},rewriter.getIntegerType(8)),adaptor.val());
+      Value view = rewriter.create<mlir::memref::ViewOp>(rewriter.getUnknownLoc(), MemRefType::get({-1}, rewriter.getIntegerType(8)),asMemRef , pos1AsIndex, mlir::ValueRange({lenAsIndex}));
+      Value val =rewriter.create<mlir::util::ToGenericMemrefOp>(rewriter.getUnknownLoc(),mlir::util::GenericMemrefType::get(rewriter.getContext(),IntegerType::get(rewriter.getContext(), 8),-1),view);
+
+      rewriter.replaceOp(op,val);
+      return success();
+   }
+};
 class ConstantLowering : public ConversionPattern {
    public:
    explicit ConstantLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -692,7 +710,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::DecimalType, mlir::SubIOp>>(typeConverter, patterns.getContext());
    patterns.insert<DecimalOpScaledLowering<mlir::db::DivOp, mlir::SignedDivIOp>>(typeConverter, patterns.getContext());
    patterns.insert<DecimalOpScaledLowering<mlir::db::ModOp, mlir::SignedRemIOp>>(typeConverter, patterns.getContext());
-
+   patterns.insert<SubStrOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<NullOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<IsNullOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<CombineNullOpLowering>(typeConverter, patterns.getContext());

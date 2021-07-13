@@ -18,7 +18,19 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Func
                return false;
             })
          .Case<BinaryOperator>([&](mlir::Operation* op) {
-            return !mlir::relalg::detail::isJoin(op);
+            if (mlir::relalg::detail::isJoin(op)) {
+               Operator asOperator = mlir::cast<Operator>(op);
+               auto subOps = asOperator.getAllSubOperators();
+               auto used = asOperator.getUsedAttributes();
+               if (used.intersects(subOps[0].getAvailableAttributes()) && used.intersects(subOps[1].getAvailableAttributes())) {
+                  return false;
+               } else {
+                  return true;
+               }
+
+            } else {
+               return true;
+            }
          })
          .Default([&](auto x) {
             return true;

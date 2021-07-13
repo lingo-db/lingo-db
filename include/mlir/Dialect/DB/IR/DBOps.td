@@ -499,6 +499,11 @@ let arguments = (ins DB_BoolType: $val);
 let results = (outs  DB_BoolType : $res);
 let assemblyFormat = "$val `:` type($val) attr-dict";
 }
+def SubStrOp : DB_Op<"substr", [NoSideEffect,SameOperandsAndResultType]> {
+let arguments = (ins DB_StringType: $val,I32Attr:$from,I32Attr:$to);
+let results = (outs  DB_StringType : $res);
+let assemblyFormat = "$val `[` $from `:` $to `]` `:` type($val) attr-dict";
+}
 
 def DateAddOp : DB_Op<"date_add"> {
 let summary = "date add function";
