@@ -6,6 +6,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include <tuple>
 
 namespace mlir::relalg {

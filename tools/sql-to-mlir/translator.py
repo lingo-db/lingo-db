@@ -215,8 +215,14 @@ class Translator:
                         rel=codegen.create_relalg_projection("distinct",relation,[resolver.resolve(aggrfunc["names"][0])])
                     else:
                         rel=relation
+                    aggr_is_nullable=False
+                    if aggrfunc["type"]!="count":
+                        if len(attributeList)==0:
+                            aggr_is_nullable=True
+                        else:
+                            aggr_is_nullable=resolver.resolve(aggrfunc["names"][0]).type.nullable
                     res = codegen.create_relalg_aggr_func(aggrfunc["type"], resolver.resolve(aggrfunc["names"][0]),
-                                                          rel)
+                                                          rel,aggr_is_nullable)
                 elif aggrfunc["type"] == "count":
                     res = codegen.create_relalg_count_rows(relation)
                 attr = Attribute(scope_name, name, codegen.getType(res))

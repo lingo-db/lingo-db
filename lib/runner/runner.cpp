@@ -35,8 +35,8 @@
 #include <llvm/Support/ErrorOr.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/SourceMgr.h>
-#include <runner/runner.h>
 #include <algorithm>
+#include <runner/runner.h>
 
 namespace {
 struct ToLLVMLoweringPass
@@ -302,7 +302,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    auto start = std::chrono::high_resolution_clock::now();
 
    auto maybeEngine = mlir::ExecutionEngine::create(
-      ctxt->module.get(), /*llvmModuleBuilder=*/convertMLIRModule,optPipeline);
+      ctxt->module.get(), /*llvmModuleBuilder=*/convertMLIRModule, optPipeline);
    assert(maybeEngine && "failed to construct an execution engine");
    auto& engine = maybeEngine.get();
    uint8_t* res;
@@ -322,8 +322,8 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    void* data[] = {contextPtr, resPtr};
    auto funcPtr = lookupResult.get();
    std::vector<size_t> measuredTimes;
-   size_t repeats=5;
-   for(size_t i=0;i<repeats;i++) {
+   size_t repeats = 5;
+   for (size_t i = 0; i < repeats; i++) {
       auto executionStart = std::chrono::high_resolution_clock::now();
       if (ctxt->numArgs == 1 && ctxt->numResults == 1) {
          typedef void (*myfunc)(void**);
@@ -341,7 +341,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
       auto executionEnd = std::chrono::high_resolution_clock::now();
       measuredTimes.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(executionEnd - executionStart).count());
    }
-   std::cout<<"runtime: "<<*std::min_element(measuredTimes.begin()+1,measuredTimes.end())<<" ms"<<std::endl;
+   std::cout << "runtime: " << *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) << " ms" << std::endl;
 
    if (ctxt->numResults == 1) {
       callback(res);

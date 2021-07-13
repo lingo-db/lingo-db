@@ -200,8 +200,8 @@ class CodeGen:
         return self.addOp(DBType("bool",[],self.is_any_nullable([val])),["relalg.in ",ValueRef(val)," : ",TypeRef(val),", ",ValueRef(rel)])
     def create_relalg_getscalar(self,rel,attr):
         return self.addOp(attr.type,["relalg.getscalar ",attr.ref_to_string()," ",ValueRef(rel)," : ",attr.type.to_string()])
-    def create_relalg_aggr_func(self,type,attr,rel):
-        return self.addOp(DBType(attr.type.name,attr.type.baseprops,True),["relalg.aggrfn ",type," ",attr.ref_to_string()," ", ValueRef(rel), " : ",DBType(attr.type.name,attr.type.baseprops,True).to_string()])
+    def create_relalg_aggr_func(self,type,attr,rel,isNullable):
+        return self.addOp(DBType(attr.type.name,attr.type.baseprops,isNullable),["relalg.aggrfn ",type," ",attr.ref_to_string()," ", ValueRef(rel), " : ",DBType(attr.type.name,attr.type.baseprops,isNullable).to_string()])
     def create_relalg_count_rows(self,rel):
         return self.addOp(DBType("int",["64"]),["relalg.count ",ValueRef(rel)])
 
