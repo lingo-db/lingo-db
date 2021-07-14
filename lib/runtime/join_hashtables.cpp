@@ -33,3 +33,5 @@ void runtime::MarkableLazyMultiMap::finalize() {
       hashTable[pos] = ptr;
    }
 }
+runtime::MarkableLazyMultiMap::~MarkableLazyMultiMap(){}
+runtime::LazyMultiMap::~LazyMultiMap(){}

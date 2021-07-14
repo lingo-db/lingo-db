@@ -59,3 +59,6 @@ EXPORT __attribute__((always_inline)) bool _mlir_ciface_mjoin_ht_iterator_valid(
 EXPORT __attribute__((always_inline)) void _mlir_ciface_mjoin_ht_iterator_free(iterator_t* iterator) {
    delete iterator;
 }
+EXPORT __attribute__((always_inline)) void _mlir_ciface_mjoin_ht_free(MarkableLazyMultiMap* mjoinHt) {
+   delete mjoinHt;
+}

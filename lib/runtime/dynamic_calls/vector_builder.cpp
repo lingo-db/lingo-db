@@ -22,3 +22,6 @@ EXPORT runtime::Bytes _mlir_ciface_vector_get_values(runtime::Vector* builder) {
    auto& values= (builder)->values;
    return runtime::Bytes((uint8_t*) &values[0],values.size());
 }
+EXPORT void _mlir_ciface_vector_free(runtime::Vector* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   delete builder;
+}

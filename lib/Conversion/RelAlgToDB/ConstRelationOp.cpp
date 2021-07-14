@@ -63,6 +63,7 @@ class ConstRelLowering : public mlir::relalg::ProducerConsumerNode {
          builder2.create<mlir::db::YieldOp>(constRelationOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());
       }
+      builder.create<mlir::db::FreeOp>(constRelationOp->getLoc(),vector);
    }
    virtual ~ConstRelLowering() {}
 };

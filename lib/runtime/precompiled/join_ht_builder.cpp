@@ -40,3 +40,6 @@ EXPORT __attribute__((always_inline)) bool _mlir_ciface_join_ht_iterator_valid(L
 }
 EXPORT __attribute__((always_inline)) void _mlir_ciface_join_ht_iterator_free(LazyMultiMap::Entry* iterator) {
 }
+EXPORT __attribute__((always_inline)) void _mlir_ciface_join_ht_free(LazyMultiMap* joinHt) {
+   delete joinHt;
+}

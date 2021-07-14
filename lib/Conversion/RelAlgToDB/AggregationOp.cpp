@@ -337,6 +337,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
          builder2.create<mlir::db::YieldOp>(aggregationOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());
       }
+      builder.create<mlir::db::FreeOp>(aggregationOp->getLoc(),hashtable);
    }
    virtual void done() override {
    }

@@ -185,6 +185,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
       children[0]->produce(context, builder);
       joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::JoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType), context.builders[builderId]);
       children[1]->produce(context, builder);
+      builder.create<mlir::db::FreeOp>(joinOp->getLoc(), joinHt);
    }
    virtual void handleLookup(Value matched, LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) = 0;
    virtual void beforeLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {}
@@ -317,6 +318,7 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
       joinHt = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::MarkableJoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType), context.builders[builderId]);
       children[1]->produce(context, builder);
       after(context, builder);
+      builder.create<mlir::db::FreeOp>(joinOp->getLoc(), joinHt);
    }
    virtual void handleLookup(Value matched, Value markerBefore, LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) = 0;
    virtual void beforeLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {}

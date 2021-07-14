@@ -8,6 +8,8 @@
 
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
 #include "mlir/Transforms/DialectConversion.h" //
+#include <llvm/ADT/TypeSwitch.h>
+
 using namespace mlir;
 namespace {
 
@@ -140,9 +142,9 @@ class StringCastOpLowering : public ConversionPattern {
          } else if (auto decimalType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto scale = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalType.getS()));
             value = functionRegistry.call(rewriter, FunctionId ::CastStringToDecimal, ValueRange({isNull, value, scale}))[0];
-            if(typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth()<128) {
+            if (typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth() < 128) {
                auto converted = rewriter.create<mlir::TruncateIOp>(rewriter.getUnknownLoc(), typeConverter->convertType(decimalType), value);
-               value=converted;
+               value = converted;
             }
          } else {
             return failure();
@@ -166,9 +168,9 @@ class StringCastOpLowering : public ConversionPattern {
       } else if (auto decimalSourceType = scalarSourceType.dyn_cast_or_null<db::DecimalType>()) {
          if (scalarTargetType.isa<db::StringType>()) {
             auto scale = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalSourceType.getS()));
-            if(typeConverter->convertType(decimalSourceType).cast<mlir::IntegerType>().getWidth()<128) {
+            if (typeConverter->convertType(decimalSourceType).cast<mlir::IntegerType>().getWidth() < 128) {
                auto converted = rewriter.create<mlir::SignExtendIOp>(rewriter.getUnknownLoc(), rewriter.getIntegerType(128), value);
-               value=converted;
+               value = converted;
             }
             value = functionRegistry.call(rewriter, FunctionId ::CastDecimalToString, ValueRange({isNull, value, scale}))[0];
          } else {
@@ -228,7 +230,7 @@ class StringCmpOpLowering : public ConversionPattern {
       Value right = nullHandler.getValue(cmpOp.right());
       using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
       FuncId cmpFunc = funcForStrCompare(cmpOp.predicate());
-      Value res = functionRegistry.call(rewriter, cmpFunc, ValueRange({nullHandler.isNull(), left,right}))[0];
+      Value res = functionRegistry.call(rewriter, cmpFunc, ValueRange({nullHandler.isNull(), left, right}))[0];
       rewriter.replaceOp(op, nullHandler.combineResult(res));
       return success();
    }
@@ -277,9 +279,9 @@ class DumpOpLowering : public ConversionPattern {
       } else if (type.isa<mlir::db::BoolType>()) {
          functionRegistry.call(rewriter, FunctionId::DumpBool, ValueRange({isNull, val}));
       } else if (auto decType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
-         if(typeConverter->convertType(decType).cast<mlir::IntegerType>().getWidth()<128){
-            auto converted=rewriter.create<mlir::SignExtendIOp>(rewriter.getUnknownLoc(),rewriter.getIntegerType(128),val);
-            val=converted;
+         if (typeConverter->convertType(decType).cast<mlir::IntegerType>().getWidth() < 128) {
+            auto converted = rewriter.create<mlir::SignExtendIOp>(rewriter.getUnknownLoc(), rewriter.getIntegerType(128), val);
+            val = converted;
          }
          Value low = rewriter.create<TruncateIOp>(loc, val, i64Type);
          Value shift = rewriter.create<ConstantOp>(loc, rewriter.getIntegerAttr(i128Type, 64));
@@ -347,20 +349,20 @@ class HashLowering : public ConversionPattern {
       using FunctionId = db::codegen::FunctionRegistry::FunctionId;
       if (auto intType = v.getType().dyn_cast_or_null<mlir::IntegerType>()) {
          switch (intType.getWidth()) {
-            case 1: return functionRegistry.call(builder, FunctionId::HashBool,{totalHash,v})[0];
-            case 8: return functionRegistry.call(builder, FunctionId::HashInt8,{totalHash,v})[0];
-            case 16: return functionRegistry.call(builder, FunctionId::HashInt16,{totalHash,v})[0];
-            case 32: return functionRegistry.call(builder, FunctionId::HashInt32,{totalHash,v})[0];
-            case 64: return functionRegistry.call(builder, FunctionId::HashInt64,{totalHash,v})[0];
-            case 128: return functionRegistry.call(builder, FunctionId::HashInt128,{totalHash,v})[0];
+            case 1: return functionRegistry.call(builder, FunctionId::HashBool, {totalHash, v})[0];
+            case 8: return functionRegistry.call(builder, FunctionId::HashInt8, {totalHash, v})[0];
+            case 16: return functionRegistry.call(builder, FunctionId::HashInt16, {totalHash, v})[0];
+            case 32: return functionRegistry.call(builder, FunctionId::HashInt32, {totalHash, v})[0];
+            case 64: return functionRegistry.call(builder, FunctionId::HashInt64, {totalHash, v})[0];
+            case 128: return functionRegistry.call(builder, FunctionId::HashInt128, {totalHash, v})[0];
          }
       } else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
          switch (floatType.getWidth()) {
-            case 32: return functionRegistry.call(builder, FunctionId::HashFloat32,{totalHash,v})[0];
-            case 64: return functionRegistry.call(builder, FunctionId::HashFloat64,{totalHash,v})[0];
+            case 32: return functionRegistry.call(builder, FunctionId::HashFloat32, {totalHash, v})[0];
+            case 64: return functionRegistry.call(builder, FunctionId::HashFloat64, {totalHash, v})[0];
          }
       } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::util::GenericMemrefType>()) {
-         return functionRegistry.call(builder, FunctionId::HashBinary,{totalHash,v})[0];
+         return functionRegistry.call(builder, FunctionId::HashBinary, {totalHash, v})[0];
       } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
          if (auto originalTupleType = originalType.dyn_cast_or_null<mlir::TupleType>()) {
             auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
@@ -422,6 +424,48 @@ class DecimalMulLowering : public ConversionPattern {
          return success();
       }
       return failure();
+   }
+};
+class FreeOpLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
+   public:
+   explicit FreeOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::FreeOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+      auto freeOp = cast<mlir::db::FreeOp>(op);
+      mlir::db::FreeOpAdaptor adaptor(operands);
+      auto val = adaptor.val();
+      auto rewritten = ::llvm::TypeSwitch<::mlir::Type, bool>(freeOp.val().getType())
+                          .Case<::mlir::db::AggregationHashtableType>([&](::mlir::db::AggregationHashtableType type) {
+                             if (!type.getKeyType().getTypes().empty()) {
+                                functionRegistry.call(rewriter, FunctionId::AggrHtFree, val);
+                             }
+                             return true;
+                          })
+                          .Case<::mlir::db::VectorType>([&](::mlir::db::VectorType) {
+                             functionRegistry.call(rewriter, FunctionId::VectorFree, val);
+                             return true;
+                          })
+                          .Case<::mlir::db::JoinHashtableType>([&](::mlir::db::JoinHashtableType) {
+                             functionRegistry.call(rewriter, FunctionId::JoinHtFree, val);
+                             return true;
+                          })
+                          .Case<::mlir::db::MarkableJoinHashtableType>([&](::mlir::db::MarkableJoinHashtableType) {
+                             functionRegistry.call(rewriter, FunctionId::MJoinHtFree, val);
+                             return true;
+                          })
+                          .Default([&](::mlir::Type) { return false; });
+      if (rewritten) {
+         rewriter.eraseOp(op);
+         return success();
+      } else {
+         return failure();
+      }
    }
 };
 } // namespace
@@ -495,5 +539,6 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
    patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DumpIndexOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<HashLowering>(functionRegistry, typeConverter, patterns.getContext());
+   patterns.insert<FreeOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DecimalMulLowering>(typeConverter, patterns.getContext());
 }

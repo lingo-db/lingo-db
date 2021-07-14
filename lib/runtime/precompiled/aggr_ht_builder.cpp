@@ -27,6 +27,9 @@ EXPORT __attribute__((always_inline)) void _mlir_ciface_aggr_ht_builder_merge(Ag
 EXPORT __attribute__((always_inline)) AggrHashtableBuilder* _mlir_ciface_aggr_ht_builder_build(AggrHashtableBuilder* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return builder;
 }
+EXPORT __attribute__((always_inline)) void _mlir_ciface_aggr_ht_free(AggrHashtableBuilder* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   delete builder;
+}
 using iterator_t = runtime::ObjectBuffer<SimpleHashTable::Entry>::RangeIterator;
 EXPORT __attribute__((always_inline)) iterator_t* _mlir_ciface_aggr_ht_iterator_init(AggrHashtableBuilder* hashmap) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    auto x = (hashmap)->getHashTable().getBuffer().beginPtr();

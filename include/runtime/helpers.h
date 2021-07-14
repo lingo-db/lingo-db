@@ -131,6 +131,9 @@ class ObjectBuffer {
       size_t getCapacity() const {
          return capacity;
       }
+      ~Part(){
+         delete[] data;
+      }
    };
 
    size_t objSize;
@@ -197,6 +200,11 @@ class ObjectBuffer {
    RangeIterator* beginPtr() {
       return new RangeIterator(parts, 0, 0, objSize);
    }
+   ~ObjectBuffer(){
+      for(auto *part:parts){
+         delete part;
+      }
+   }
 };
 class VarLenBuffer {
    class Part {
@@ -230,6 +238,9 @@ class VarLenBuffer {
       size_t getCapacity() const {
          return capacity;
       }
+      ~Part(){
+         delete[] data;
+      }
    };
    std::vector<Part*> parts;
 
@@ -255,6 +266,11 @@ class VarLenBuffer {
 
    VarLenBuffer() {
       parts.push_back(new Part(100000));
+   }
+   ~VarLenBuffer(){
+      for(auto *part:parts){
+         delete part;
+      }
    }
 };
 struct ResizableBuffer {

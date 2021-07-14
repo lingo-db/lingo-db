@@ -166,6 +166,7 @@ struct AggrHashtableBuilder {
       memcpy(ptr + aggrOffset, &initAggr[0], aggrSize);
       update(ptr + aggrOffset, val);
    }
+   ~AggrHashtableBuilder();
 };
 } // namespace runtime
 #endif // RUNTIME_AGGR_HASHTABLE_H

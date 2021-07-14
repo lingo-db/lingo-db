@@ -122,6 +122,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
          builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());
       }
+      builder.create<mlir::db::FreeOp>(sortOp->getLoc(),vector);
    }
 
    virtual ~SortLowering() {}

@@ -8,9 +8,15 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
    size_t builderId;
    bool materialize;
    std::vector<mlir::relalg::RelationalAttribute*> attributes;
+   size_t userCount;
+   size_t producedCount;
 
    public:
    TmpLowering(mlir::relalg::TmpOp tmpOp) : mlir::relalg::ProducerConsumerNode(tmpOp.rel()), tmpOp(tmpOp) {
+      std::vector<mlir::Operation*> users(tmpOp->getUsers().begin(),tmpOp->getUsers().end());
+      userCount=users.size();
+      producedCount=0;
+
    }
    virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
@@ -49,7 +55,7 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
       auto scope = context.createScope();
 
       materialize = !context.materializedTmp.count(tmpOp.getOperation());
-
+      producedCount++;
       if (materialize) {
          std::vector<mlir::Type> types;
          for (const auto* attr : attributes) {
@@ -88,6 +94,10 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
          consumer->consume(this, builder2, context);
          builder2.create<mlir::db::YieldOp>(tmpOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());
+      }
+      if(producedCount>=userCount) {
+         auto [vector,attributes]=context.materializedTmp[tmpOp.getOperation()];
+         builder.create<mlir::db::FreeOp>(tmpOp->getLoc(), vector);
       }
    }
 

@@ -46,6 +46,7 @@ class LazyMultiMap {
    runtime::ObjectBuffer<Entry> entryBuffer;
    size_t dataSize;
    size_t entries;
+   ~LazyMultiMap();
 
    protected:
    // The hash table.
@@ -64,7 +65,6 @@ class LazyMultiMap {
    uint32_t hashTableMask;
 };
 class MarkableLazyMultiMap {
-
    public:
    // Entry in the hash table
    struct Entry {
@@ -101,6 +101,7 @@ class MarkableLazyMultiMap {
    }
    size_t dataSize;
    size_t entries;
+   ~MarkableLazyMultiMap();
 
    protected:
    // The hash table.

@@ -165,19 +165,19 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
    });
 
    typeConverter.addConversion([&](mlir::db::AggregationHashtableType aggregationHashtableType) {
-      auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
+     auto ptrType=mlir::util::GenericMemrefType::get(patterns.getContext(),IntegerType::get(patterns.getContext(), 8),llvm::Optional<int64_t>());
       return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::JoinHashtableType aggregationHashtableType) {
-      auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
+     auto ptrType=mlir::util::GenericMemrefType::get(patterns.getContext(),IntegerType::get(patterns.getContext(), 8),llvm::Optional<int64_t>());
       return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::MarkableJoinHashtableType aggregationHashtableType) {
-      auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
+     auto ptrType=mlir::util::GenericMemrefType::get(patterns.getContext(),IntegerType::get(patterns.getContext(), 8),llvm::Optional<int64_t>());
       return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::VectorType vectorType) {
-      auto ptrType = MemRefType::get({}, IntegerType::get(patterns.getContext(), 8));
+     auto ptrType=mlir::util::GenericMemrefType::get(patterns.getContext(),IntegerType::get(patterns.getContext(), 8),llvm::Optional<int64_t>());
       return ptrType;
    });
    typeConverter.addConversion([&](mlir::db::RangeType rangeType) {

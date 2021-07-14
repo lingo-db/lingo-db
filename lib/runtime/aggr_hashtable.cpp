@@ -21,3 +21,4 @@ void runtime::SimpleHashTable::resize() {
       entry.next = htBefore;
    }
 }
+runtime::AggrHashtableBuilder::~AggrHashtableBuilder() {}
