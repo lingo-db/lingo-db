@@ -29,3 +29,14 @@ class Attribute:
         if len(self.from_existing)>0:
             from_existing_def="=["+",".join(map(lambda x:x.ref_to_string(),self.from_existing))+"]"
         return '@%s({%s})%s' % (self.name,props,from_existing_def)
+
+class Function:
+    def __init__(self,name, operandTypes, resultType):
+        self.name=name
+        self.operandTypes=operandTypes
+        self.resultType=resultType
+
+def getFunction(name):
+    if name=="udf":
+        return Function("udf",[DBType("string",[])],DBType("string",[]))
+    return None

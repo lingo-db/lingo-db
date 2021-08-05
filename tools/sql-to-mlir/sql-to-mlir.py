@@ -1,4 +1,4 @@
-from translator import Translator
+from sql2mlir.translator import Translator
 import sys
 
 file=sys.argv[1]

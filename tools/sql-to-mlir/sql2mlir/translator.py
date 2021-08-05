@@ -1,10 +1,10 @@
 from moz_sql_parser import parse
 import copy
-from mlir import DBType, Attribute
-from codegen import CodeGen
-from resolver import StackedResolver, Resolver
-from tables import getTPCHTable
-from utility import ensure_list, ensure_value_dict, AggrFuncManager, getAttributeList, getPrintNames
+from sql2mlir.mlir import DBType, Attribute
+from sql2mlir.codegen import CodeGen
+from sql2mlir.resolver import StackedResolver, Resolver
+from sql2mlir.tables import getTPCHTable
+from sql2mlir.utility import ensure_list, ensure_value_dict, AggrFuncManager, getAttributeList, getPrintNames
 
 
 class Translator:
@@ -125,7 +125,10 @@ class Translator:
                 return codegen.create_relalg_getscalar(subquery, attr[0])
 
             else:
-                raise Exception("unknown expression:", expr)
+                funcname=key
+                params=translateSubExpressions(expr[key])
+                return codegen.create_db_func_call(funcname,params)
+                #raise Exception("unknown expression:", expr)
         elif type(expr) is int:
             return codegen.create_db_const(expr, DBType("int", ["64"], False))
         elif type(expr) is float:

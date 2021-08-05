@@ -1,5 +1,5 @@
 import functools
-from mlir import DBType,Attribute
+from sql2mlir.mlir import DBType,Attribute,Function,getFunction
 
 
 class ValueRef:
@@ -173,6 +173,14 @@ class CodeGen:
             return self.create_db_binary_op(name,rec_vals)
         else:
             return res
+    def create_db_func_call(self,funcname,params):
+        func=getFunction(funcname)
+        casted_params=[]
+        for i in range(0,len(func.operandTypes)):
+            casted_params.append(self.toCommonType(params[i],func.operandTypes[i]))
+        types_as_string=list(map(lambda val:val.to_string(),func.operandTypes))
+
+        return self.addOp(func.resultType,["call"," @",funcname,"(",",".join(casted_params),") : (",",".join(types_as_string),") -> ", func.resultType.to_string()])
     def create_db_date_binary_op(self, name,values):
         args=["db.date_"+name+" "]
         self.addValuesWithTypes(args,values)

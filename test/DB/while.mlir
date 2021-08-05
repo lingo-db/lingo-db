@@ -1,7 +1,7 @@
 // RUN: db-run %s | FileCheck %s
 
 module  {
-  func @main(%arg0: memref<i8>) {
+  func @main(%arg0: !util.generic_memref<i8>) {
     %c0 = db.constant ( 0 ) : !db.int<32>
     %c0n = db.cast %c0 : !db.int<32> -> !db.int<32,nullable>
 

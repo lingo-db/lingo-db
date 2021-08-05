@@ -18,6 +18,8 @@ class Resolver:
         self.add_(name, attr)
         for prefix in prefixes:
             self.add_(prefix + "." + name, attr)
+    def remove(self,attr):
+        del self.lookup_table[attr]
     def replace(self, attr_old, attr_new):
         for name in self.lookup_table:
             attr=self.lookup_table[name]

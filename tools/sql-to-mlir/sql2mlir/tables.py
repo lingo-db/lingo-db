@@ -1,4 +1,4 @@
-from mlir import Attribute, DBType
+from sql2mlir.mlir import Attribute, DBType
 
 
 class Table:
