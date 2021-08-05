@@ -25,7 +25,7 @@ int main(int argc, char** argv) {
    runner.lower();
    //runner.dump();
    runner.lowerToLLVM();
-   runner.dumpLLVM();
+   //runner.dumpLLVM();
    runner.runJit(&context, runner::Runner::printTable);
    return 0;
 }

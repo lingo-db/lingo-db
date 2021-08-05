@@ -5,6 +5,12 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Transforms/IPO.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/GVN.h"
+
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
@@ -35,7 +41,7 @@
 #include <llvm/Support/ErrorOr.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/SourceMgr.h>
-#include <algorithm>
+
 #include <runner/runner.h>
 
 namespace {
@@ -280,30 +286,32 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
       assert(false && "could not get target");
       return false;
    }
-   std::string cpu(llvm::sys::getHostCPUName());
-   llvm::SubtargetFeatures features;
-   llvm::StringMap<bool> hostFeatures;
+   auto customOptPipeline = [](llvm::Module* m) -> llvm::Error {
+      llvm::legacy::PassManager modulePM;
+      llvm::legacy::FunctionPassManager funcPM(m);
+      funcPM.add(llvm::createInstructionCombiningPass());
+      funcPM.add(llvm::createReassociatePass());
+      funcPM.add(llvm::createGVNPass());
+      funcPM.add(llvm::createCFGSimplificationPass());
+      funcPM.add(llvm::createAggressiveDCEPass());
+      funcPM.add(llvm::createCFGSimplificationPass());
 
-   if (llvm::sys::getHostCPUFeatures(hostFeatures))
-      for (auto& f : hostFeatures)
-         features.AddFeature(f.first(), f.second);
-
-   std::unique_ptr<llvm::TargetMachine> machine(target->createTargetMachine(
-      targetTriple, cpu, features.getString(), {}, {}));
-   if (!machine) {
-      assert(false && "Unable to create target machine\n");
-      return false;
-   }
-   auto optPipeline = mlir::makeOptimizingTransformer(
-      /*optLevel=*/true ? 3 : 0, /*sizeLevel=*/0,
-      /*targetMachine=*/machine.get());
+      funcPM.doInitialization();
+      for (auto& func : *m) {
+         funcPM.run(func);
+      }
+      funcPM.doFinalization();
+      modulePM.add(llvm::createFunctionInliningPass(3, 0, false));
+      modulePM.run(*m);
+      return llvm::Error::success();
+   };
 
    // Create an MLIR execution engine. The execution engine eagerly JIT-compiles
    // the module.
    auto start = std::chrono::high_resolution_clock::now();
 
    auto maybeEngine = mlir::ExecutionEngine::create(
-      ctxt->module.get(), /*llvmModuleBuilder=*/convertMLIRModule, optPipeline);
+      ctxt->module.get(), /*llvmModuleBuilder=*/convertMLIRModule, customOptPipeline);
    assert(maybeEngine && "failed to construct an execution engine");
    auto& engine = maybeEngine.get();
    uint8_t* res;
