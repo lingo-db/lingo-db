@@ -52,7 +52,7 @@ module @querymodule{
             %34 = relalg.addattr %31, @aggfmname2({type=!db.decimal<15,2>}) %33
             %35 = relalg.aggrfn sum @map1::@aggfmname3 %30 : !db.decimal<15,2>
             %36 = relalg.addattr %34, @aggfmname4({type=!db.decimal<15,2>}) %35
-            relalg.return
+            relalg.return %36 : !relalg.tuple
         }
         %38 = relalg.selection %32(%37: !relalg.tuple) {
             %39 = relalg.getattr %37 @aggr1::@aggfmname2 : !db.decimal<15,2>
@@ -101,7 +101,7 @@ module @querymodule{
             %66 = relalg.aggregation @aggr2 %58 [] (%64 : !relalg.relation, %65 : !relalg.tuple) {
                 %67 = relalg.aggrfn sum @map3::@aggfmname1 %64 : !db.decimal<15,2,nullable>
                 %68 = relalg.addattr %65, @aggfmname2({type=!db.decimal<15,2,nullable>}) %67
-                relalg.return
+                relalg.return %68 : !relalg.tuple
             }
             %70 = relalg.map @map4 %66 (%69: !relalg.tuple) {
                 %71 = relalg.getattr %69 @aggr2::@aggfmname2 : !db.decimal<15,2,nullable>

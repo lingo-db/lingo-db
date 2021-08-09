@@ -78,7 +78,7 @@ module @querymodule{
         %39 = relalg.aggregation @aggr1 %30 [@customer::@c_custkey,@customer::@c_name,@customer::@c_acctbal,@customer::@c_phone,@nation::@n_name,@customer::@c_address,@customer::@c_comment] (%37 : !relalg.relation, %38 : !relalg.tuple) {
             %40 = relalg.aggrfn sum @map1::@aggfmname1 %37 : !db.decimal<15,2>
             %41 = relalg.addattr %38, @aggfmname2({type=!db.decimal<15,2>}) %40
-            relalg.return
+            relalg.return %41 : !relalg.tuple
         }
         %42 = relalg.sort %39 [(@aggr1::@aggfmname2,desc)]
         %43 = relalg.limit 20 %42

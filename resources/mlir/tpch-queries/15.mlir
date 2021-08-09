@@ -47,7 +47,7 @@ module @querymodule{
         %22 = relalg.aggregation @aggr1 %13 [@lineitem::@l_suppkey] (%20 : !relalg.relation, %21 : !relalg.tuple) {
             %23 = relalg.aggrfn sum @map1::@aggfmname1 %20 : !db.decimal<15,2>
             %24 = relalg.addattr %21, @aggfmname2({type=!db.decimal<15,2>}) %23
-            relalg.return
+            relalg.return %24 : !relalg.tuple
         }
         %25 = relalg.crossproduct %1, %22
         %27 = relalg.selection %25(%26: !relalg.tuple) {
@@ -94,12 +94,12 @@ module @querymodule{
             %52 = relalg.aggregation @aggr2 %43 [@lineitem1::@l_suppkey] (%50 : !relalg.relation, %51 : !relalg.tuple) {
                 %53 = relalg.aggrfn sum @map3::@aggfmname1 %50 : !db.decimal<15,2>
                 %54 = relalg.addattr %51, @aggfmname2({type=!db.decimal<15,2>}) %53
-                relalg.return
+                relalg.return %54 : !relalg.tuple
             }
             %57 = relalg.aggregation @aggr3 %52 [] (%55 : !relalg.relation, %56 : !relalg.tuple) {
                 %58 = relalg.aggrfn max @aggr2::@aggfmname2 %55 : !db.decimal<15,2,nullable>
                 %59 = relalg.addattr %56, @aggfmname1({type=!db.decimal<15,2,nullable>}) %58
-                relalg.return
+                relalg.return %59 : !relalg.tuple
             }
             %60 = relalg.getscalar @aggr3::@aggfmname1 %57 : !db.decimal<15,2,nullable>
             %61 = db.compare eq %31 : !db.decimal<15,2>,%60 : !db.decimal<15,2,nullable>

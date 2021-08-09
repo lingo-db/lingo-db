@@ -33,12 +33,12 @@ module @querymodule{
         %15 = relalg.aggregation @aggr1 %4 [@customer::@c_custkey] (%13 : !relalg.relation, %14 : !relalg.tuple) {
             %16 = relalg.aggrfn count @outerjoin1::@o_orderkey %13 : !db.int<64>
             %17 = relalg.addattr %14, @aggfmname1({type=!db.int<64>}) %16
-            relalg.return
+            relalg.return %17 : !relalg.tuple
         }
         %20 = relalg.aggregation @aggr2 %15 [@aggr1::@aggfmname1] (%18 : !relalg.relation, %19 : !relalg.tuple) {
             %21 = relalg.count %18
             %22 = relalg.addattr %19, @aggfmname1({type=!db.int<64>}) %21
-            relalg.return
+            relalg.return %22 : !relalg.tuple
         }
         %23 = relalg.sort %20 [(@aggr2::@aggfmname1,desc),(@aggr1::@aggfmname1,desc)]
         %24 = relalg.materialize %23 [@aggr1::@aggfmname1,@aggr2::@aggfmname1] => ["c_count","custdist"] : !db.table

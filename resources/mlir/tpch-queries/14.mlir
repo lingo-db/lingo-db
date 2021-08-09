@@ -70,7 +70,7 @@ module @querymodule{
             %39 = relalg.addattr %36, @aggfmname2({type=!db.decimal<15,2,nullable>}) %38
             %40 = relalg.aggrfn sum @map1::@aggfmname3 %35 : !db.decimal<15,2,nullable>
             %41 = relalg.addattr %39, @aggfmname4({type=!db.decimal<15,2,nullable>}) %40
-            relalg.return
+            relalg.return %41 : !relalg.tuple
         }
         %43 = relalg.map @map2 %37 (%42: !relalg.tuple) {
             %44 = db.constant ("100.0") :!db.decimal<15,2>

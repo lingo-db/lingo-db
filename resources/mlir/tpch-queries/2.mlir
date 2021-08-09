@@ -109,7 +109,7 @@ module @querymodule{
             %62 = relalg.aggregation @aggr1 %43 [] (%60 : !relalg.relation, %61 : !relalg.tuple) {
                 %63 = relalg.aggrfn min @partsupp1::@ps_supplycost %60 : !db.decimal<15,2,nullable>
                 %64 = relalg.addattr %61, @aggfmname1({type=!db.decimal<15,2,nullable>}) %63
-                relalg.return
+                relalg.return %64 : !relalg.tuple
             }
             %65 = relalg.getscalar @aggr1::@aggfmname1 %62 : !db.decimal<15,2,nullable>
             %66 = db.compare eq %34 : !db.decimal<15,2>,%65 : !db.decimal<15,2,nullable>

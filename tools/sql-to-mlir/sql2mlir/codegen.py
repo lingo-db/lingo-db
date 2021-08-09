@@ -361,8 +361,8 @@ class CodeGen:
         tuple=self.newParam("tuple")
         attr_refs=list(map(lambda val:val.ref_to_string(),attributes))
         return self.startRegionOp("relation",["relalg.aggregation ","@",name," ",ValueRef(rel)," [",",".join(attr_refs),"] (",relation," : !relalg.relation, ",tuple," : !relalg.tuple) "]),relation,tuple
-    def endAggregation(self):
-        self.endRegionOpWith(Operation(None, None, ["relalg.return"]))
+    def endAggregation(self,tuple):
+        self.endRegionOpWith(Operation(None, None, ["relalg.return"," ",tuple, " : !relalg.tuple"]))
     def getResult(self):
         self.getCurrentRegion().print(self)
         return self.result

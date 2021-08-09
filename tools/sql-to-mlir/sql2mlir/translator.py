@@ -231,7 +231,7 @@ class Translator:
                 attr = Attribute(scope_name, name, codegen.getType(res))
                 tuple=codegen.create_relalg_addattr(res, attr,tuple)
                 resolver.add([], name, attr)
-            codegen.endAggregation()
+            codegen.endAggregation(tuple)
         if "having" in stmt:
             tree_var, tuple = codegen.startSelection(tree_var)
             stacked_resolver.push(tuple, resolver)

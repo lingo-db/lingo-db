@@ -71,7 +71,7 @@ module @querymodule{
             %48 = relalg.projection distinct [@partsupp::@ps_suppkey]%45
             %49 = relalg.aggrfn count @partsupp::@ps_suppkey %48 : !db.int<64>
             %50 = relalg.addattr %46, @aggfmname1({type=!db.int<64>}) %49
-            relalg.return
+            relalg.return %50 : !relalg.tuple
         }
         %51 = relalg.sort %47 [(@aggr2::@aggfmname1,desc),(@part::@p_brand,asc),(@part::@p_type,asc),(@part::@p_size,asc)]
         %52 = relalg.materialize %51 [@part::@p_brand,@part::@p_type,@part::@p_size,@aggr2::@aggfmname1] => ["p_brand","p_type","p_size","supplier_cnt"] : !db.table

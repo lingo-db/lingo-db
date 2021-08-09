@@ -50,7 +50,7 @@ module @querymodule{
         %32 = relalg.aggregation @aggr1 %25 [] (%30 : !relalg.relation, %31 : !relalg.tuple) {
             %33 = relalg.aggrfn sum @map1::@aggfmname1 %30 : !db.decimal<15,2,nullable>
             %34 = relalg.addattr %31, @aggfmname2({type=!db.decimal<15,2,nullable>}) %33
-            relalg.return
+            relalg.return %34 : !relalg.tuple
         }
         %35 = relalg.materialize %32 [@aggr1::@aggfmname2] => ["revenue"] : !db.table
         return %35 : !db.table

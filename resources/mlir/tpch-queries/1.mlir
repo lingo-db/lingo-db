@@ -61,7 +61,7 @@ module @querymodule{
             %43 = relalg.addattr %41, @aggfmname9({type=!db.decimal<15,2>}) %42
             %44 = relalg.count %27
             %45 = relalg.addattr %43, @aggfmname10({type=!db.int<64>}) %44
-            relalg.return
+            relalg.return %45 : !relalg.tuple
         }
         %46 = relalg.sort %29 [(@lineitem::@l_returnflag,asc),(@lineitem::@l_linestatus,asc)]
         %47 = relalg.materialize %46 [@lineitem::@l_returnflag,@lineitem::@l_linestatus,@aggr1::@aggfmname1,@aggr1::@aggfmname2,@aggr1::@aggfmname4,@aggr1::@aggfmname6,@aggr1::@aggfmname7,@aggr1::@aggfmname8,@aggr1::@aggfmname9,@aggr1::@aggfmname10] => ["l_returnflag","l_linestatus","sum_qty","sum_base_price","sum_disc_price","sum_charge","avg_qty","avg_price","avg_disc","count_order"] : !db.table

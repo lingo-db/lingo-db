@@ -65,7 +65,7 @@ module @querymodule{
             %24 = relalg.aggregation @aggr1 %18 [] (%22 : !relalg.relation, %23 : !relalg.tuple) {
                 %25 = relalg.aggrfn avg @lineitem1::@l_quantity %22 : !db.decimal<15,2,nullable>
                 %26 = relalg.addattr %23, @aggfmname1({type=!db.decimal<15,2,nullable>}) %25
-                relalg.return
+                relalg.return %26 : !relalg.tuple
             }
             %28 = relalg.map @map2 %24 (%27: !relalg.tuple) {
                 %29 = db.constant ("0.2") :!db.decimal<15,2>
@@ -82,7 +82,7 @@ module @querymodule{
         %38 = relalg.aggregation @aggr2 %5 [] (%36 : !relalg.relation, %37 : !relalg.tuple) {
             %39 = relalg.aggrfn sum @lineitem::@l_extendedprice %36 : !db.decimal<15,2,nullable>
             %40 = relalg.addattr %37, @aggfmname1({type=!db.decimal<15,2,nullable>}) %39
-            relalg.return
+            relalg.return %40 : !relalg.tuple
         }
         %42 = relalg.map @map4 %38 (%41: !relalg.tuple) {
             %43 = relalg.getattr %41 @aggr2::@aggfmname1 : !db.decimal<15,2,nullable>

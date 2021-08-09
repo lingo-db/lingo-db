@@ -59,7 +59,7 @@ module @querymodule{
             %11 = relalg.aggregation @aggr1 %8 [@lineitem1::@l_orderkey] (%9 : !relalg.relation, %10 : !relalg.tuple) {
                 %12 = relalg.aggrfn sum @lineitem1::@l_quantity %9 : !db.decimal<15,2>
                 %13 = relalg.addattr %10, @aggfmname1({type=!db.decimal<15,2>}) %12
-                relalg.return
+                relalg.return %13 : !relalg.tuple
             }
             %15 = relalg.selection %11(%14: !relalg.tuple) {
                 %16 = relalg.getattr %14 @aggr1::@aggfmname1 : !db.decimal<15,2>
@@ -82,7 +82,7 @@ module @querymodule{
         %31 = relalg.aggregation @aggr2 %7 [@customer::@c_name,@customer::@c_custkey,@orders::@o_orderkey,@orders::@o_orderdate,@orders::@o_totalprice] (%29 : !relalg.relation, %30 : !relalg.tuple) {
             %32 = relalg.aggrfn sum @lineitem::@l_quantity %29 : !db.decimal<15,2>
             %33 = relalg.addattr %30, @aggfmname1({type=!db.decimal<15,2>}) %32
-            relalg.return
+            relalg.return %33 : !relalg.tuple
         }
         %34 = relalg.sort %31 [(@orders::@o_totalprice,desc),(@orders::@o_orderdate,asc)]
         %35 = relalg.limit 100 %34

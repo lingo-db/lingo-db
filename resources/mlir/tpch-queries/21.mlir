@@ -128,7 +128,7 @@ module @querymodule{
         %57 = relalg.aggregation @aggr3 %9 [@supplier::@s_name] (%55 : !relalg.relation, %56 : !relalg.tuple) {
             %58 = relalg.count %55
             %59 = relalg.addattr %56, @aggfmname1({type=!db.int<64>}) %58
-            relalg.return
+            relalg.return %59 : !relalg.tuple
         }
         %60 = relalg.sort %57 [(@aggr3::@aggfmname1,desc),(@supplier::@s_name,asc)]
         %61 = relalg.limit 100 %60

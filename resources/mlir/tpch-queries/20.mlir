@@ -78,7 +78,7 @@ module @querymodule{
                 %37 = relalg.aggregation @aggr2 %21 [] (%35 : !relalg.relation, %36 : !relalg.tuple) {
                     %38 = relalg.aggrfn sum @lineitem::@l_quantity %35 : !db.decimal<15,2,nullable>
                     %39 = relalg.addattr %36, @aggfmname1({type=!db.decimal<15,2,nullable>}) %38
-                    relalg.return
+                    relalg.return %39 : !relalg.tuple
                 }
                 %41 = relalg.map @map4 %37 (%40: !relalg.tuple) {
                     %42 = db.constant ("0.5") :!db.decimal<15,2>

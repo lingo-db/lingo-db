@@ -51,7 +51,7 @@ module @querymodule{
         %24 = relalg.aggregation @aggr2 %3 [@orders::@o_orderpriority] (%22 : !relalg.relation, %23 : !relalg.tuple) {
             %25 = relalg.count %22
             %26 = relalg.addattr %23, @aggfmname1({type=!db.int<64>}) %25
-            relalg.return
+            relalg.return %26 : !relalg.tuple
         }
         %27 = relalg.sort %24 [(@orders::@o_orderpriority,asc)]
         %28 = relalg.materialize %27 [@orders::@o_orderpriority,@aggr2::@aggfmname1] => ["o_orderpriority","order_count"] : !db.table

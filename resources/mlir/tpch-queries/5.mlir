@@ -101,7 +101,7 @@ module @querymodule{
         %52 = relalg.aggregation @aggr1 %43 [@nation::@n_name] (%50 : !relalg.relation, %51 : !relalg.tuple) {
             %53 = relalg.aggrfn sum @map1::@aggfmname1 %50 : !db.decimal<15,2>
             %54 = relalg.addattr %51, @aggfmname2({type=!db.decimal<15,2>}) %53
-            relalg.return
+            relalg.return %54 : !relalg.tuple
         }
         %55 = relalg.sort %52 [(@aggr1::@aggfmname2,desc)]
         %56 = relalg.materialize %55 [@nation::@n_name,@aggr1::@aggfmname2] => ["n_name","revenue"] : !db.table

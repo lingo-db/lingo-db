@@ -91,7 +91,7 @@ module @querymodule{
             %56 = relalg.addattr %53, @aggfmname2({type=!db.int<64>}) %55
             %57 = relalg.aggrfn sum @map1::@aggfmname3 %52 : !db.int<64>
             %58 = relalg.addattr %56, @aggfmname4({type=!db.int<64>}) %57
-            relalg.return
+            relalg.return %58 : !relalg.tuple
         }
         %59 = relalg.sort %54 [(@lineitem::@l_shipmode,asc)]
         %60 = relalg.materialize %59 [@lineitem::@l_shipmode,@aggr1::@aggfmname2,@aggr1::@aggfmname4] => ["l_shipmode","high_line_count","low_line_count"] : !db.table

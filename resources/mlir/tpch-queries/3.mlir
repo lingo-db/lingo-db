@@ -69,7 +69,7 @@ module @querymodule{
         %34 = relalg.aggregation @aggr1 %25 [@lineitem::@l_orderkey,@orders::@o_orderdate,@orders::@o_shippriority] (%32 : !relalg.relation, %33 : !relalg.tuple) {
             %35 = relalg.aggrfn sum @map1::@aggfmname1 %32 : !db.decimal<15,2>
             %36 = relalg.addattr %33, @aggfmname2({type=!db.decimal<15,2>}) %35
-            relalg.return
+            relalg.return %36 : !relalg.tuple
         }
         %37 = relalg.sort %34 [(@aggr1::@aggfmname2,desc),(@orders::@o_orderdate,asc)]
         %38 = relalg.limit 10 %37
