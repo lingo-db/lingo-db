@@ -102,23 +102,23 @@ module @querymodule{
         %52 = relalg.map @map2 %13 (%51: !relalg.tuple) {
             %53 = relalg.getattr %51 @lineitem::@l_shipdate : !db.date<day>
             %54 = db.date_extract year, %53 : !db.date<day>
-            relalg.addattr @aggfmname1({type=!db.int<64>}) %54
-            %55 = relalg.getattr %51 @lineitem::@l_extendedprice : !db.decimal<15,2>
-            %56 = db.constant (1) :!db.decimal<15,2>
-            %57 = relalg.getattr %51 @lineitem::@l_discount : !db.decimal<15,2>
-            %58 = db.sub %56 : !db.decimal<15,2>,%57 : !db.decimal<15,2>
-            %59 = db.mul %55 : !db.decimal<15,2>,%58 : !db.decimal<15,2>
-            relalg.addattr @aggfmname2({type=!db.decimal<15,2>}) %59
+            %55 = relalg.addattr %51, @aggfmname1({type=!db.int<64>}) %54
+            %56 = relalg.getattr %51 @lineitem::@l_extendedprice : !db.decimal<15,2>
+            %57 = db.constant (1) :!db.decimal<15,2>
+            %58 = relalg.getattr %51 @lineitem::@l_discount : !db.decimal<15,2>
+            %59 = db.sub %57 : !db.decimal<15,2>,%58 : !db.decimal<15,2>
+            %60 = db.mul %56 : !db.decimal<15,2>,%59 : !db.decimal<15,2>
+            %61 = relalg.addattr %55, @aggfmname2({type=!db.decimal<15,2>}) %60
+            relalg.return %61 : !relalg.tuple
+        }
+        %64 = relalg.aggregation @aggr2 %52 [@nation::@n_name,@nation1::@n_name,@map2::@aggfmname1] (%62 : !relalg.relation, %63 : !relalg.tuple) {
+            %65 = relalg.aggrfn sum @map2::@aggfmname2 %62 : !db.decimal<15,2>
+            %66 = relalg.addattr %63, @aggfmname1({type=!db.decimal<15,2>}) %65
             relalg.return
         }
-        %61 = relalg.aggregation @aggr2 %52 [@nation::@n_name,@nation1::@n_name,@map2::@aggfmname1] (%60 : !relalg.relation) {
-            %62 = relalg.aggrfn sum @map2::@aggfmname2 %60 : !db.decimal<15,2>
-            relalg.addattr @aggfmname1({type=!db.decimal<15,2>}) %62
-            relalg.return
-        }
-        %63 = relalg.sort %61 [(@nation::@n_name,asc),(@nation1::@n_name,asc),(@map2::@aggfmname1,asc)]
-        %64 = relalg.materialize %63 [@nation::@n_name,@nation1::@n_name,@map2::@aggfmname1,@aggr2::@aggfmname1] => ["supp_nation","cust_nation","l_year","revenue"] : !db.table
-        return %64 : !db.table
+        %67 = relalg.sort %64 [(@nation::@n_name,asc),(@nation1::@n_name,asc),(@map2::@aggfmname1,asc)]
+        %68 = relalg.materialize %67 [@nation::@n_name,@nation1::@n_name,@map2::@aggfmname1,@aggr2::@aggfmname1] => ["supp_nation","cust_nation","l_year","revenue"] : !db.table
+        return %68 : !db.table
     }
 }
 

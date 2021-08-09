@@ -67,6 +67,7 @@ class ProducerConsumerBuilder : public mlir::OpBuilder {
 
       dest->getOperations().splice(dest->end(), source->getOperations());
       for (auto* op : toErase) {
+         op->dropAllUses();
          op->erase();
       }
    }

@@ -75,39 +75,39 @@ module @querymodule{
                     %34 = db.and %24 : !db.bool,%27 : !db.bool,%30 : !db.bool,%33 : !db.bool
                     relalg.return %34 : !db.bool
                 }
-                %36 = relalg.aggregation @aggr2 %21 [] (%35 : !relalg.relation) {
-                    %37 = relalg.aggrfn sum @lineitem::@l_quantity %35 : !db.decimal<15,2,nullable>
-                    relalg.addattr @aggfmname1({type=!db.decimal<15,2,nullable>}) %37
+                %37 = relalg.aggregation @aggr2 %21 [] (%35 : !relalg.relation, %36 : !relalg.tuple) {
+                    %38 = relalg.aggrfn sum @lineitem::@l_quantity %35 : !db.decimal<15,2,nullable>
+                    %39 = relalg.addattr %36, @aggfmname1({type=!db.decimal<15,2,nullable>}) %38
                     relalg.return
                 }
-                %39 = relalg.map @map4 %36 (%38: !relalg.tuple) {
-                    %40 = db.constant ("0.5") :!db.decimal<15,2>
-                    %41 = relalg.getattr %38 @aggr2::@aggfmname1 : !db.decimal<15,2,nullable>
-                    %42 = db.mul %40 : !db.decimal<15,2>,%41 : !db.decimal<15,2,nullable>
-                    relalg.addattr @aggfmname2({type=!db.decimal<15,2,nullable>}) %42
-                    relalg.return
+                %41 = relalg.map @map4 %37 (%40: !relalg.tuple) {
+                    %42 = db.constant ("0.5") :!db.decimal<15,2>
+                    %43 = relalg.getattr %40 @aggr2::@aggfmname1 : !db.decimal<15,2,nullable>
+                    %44 = db.mul %42 : !db.decimal<15,2>,%43 : !db.decimal<15,2,nullable>
+                    %45 = relalg.addattr %40, @aggfmname2({type=!db.decimal<15,2,nullable>}) %44
+                    relalg.return %45 : !relalg.tuple
                 }
-                %43 = relalg.getscalar @map4::@aggfmname2 %39 : !db.decimal<15,2,nullable>
-                %44 = db.cast %18 : !db.int<32> -> !db.decimal<15,2,nullable>
-                %45 = db.compare gt %44 : !db.decimal<15,2,nullable>,%43 : !db.decimal<15,2,nullable>
-                %46 = db.and %17 : !db.bool,%45 : !db.bool<nullable>
-                relalg.return %46 : !db.bool<nullable>
+                %46 = relalg.getscalar @map4::@aggfmname2 %41 : !db.decimal<15,2,nullable>
+                %47 = db.cast %18 : !db.int<32> -> !db.decimal<15,2,nullable>
+                %48 = db.compare gt %47 : !db.decimal<15,2,nullable>,%46 : !db.decimal<15,2,nullable>
+                %49 = db.and %17 : !db.bool,%48 : !db.bool<nullable>
+                relalg.return %49 : !db.bool<nullable>
             }
-            %47 = relalg.projection all [@partsupp::@ps_suppkey]%8
-            %48 = relalg.getattr %4 @supplier::@s_suppkey : !db.int<64>
-            %49 = relalg.in %48 : !db.int<64>, %47
-            %50 = relalg.getattr %4 @supplier::@s_nationkey : !db.int<64>
-            %51 = relalg.getattr %4 @nation::@n_nationkey : !db.int<64>
-            %52 = db.compare eq %50 : !db.int<64>,%51 : !db.int<64>
-            %53 = relalg.getattr %4 @nation::@n_name : !db.string
-            %54 = db.constant ("CANADA") :!db.string
-            %55 = db.compare eq %53 : !db.string,%54 : !db.string
-            %56 = db.and %49 : !db.bool,%52 : !db.bool,%55 : !db.bool
-            relalg.return %56 : !db.bool
+            %50 = relalg.projection all [@partsupp::@ps_suppkey]%8
+            %51 = relalg.getattr %4 @supplier::@s_suppkey : !db.int<64>
+            %52 = relalg.in %51 : !db.int<64>, %50
+            %53 = relalg.getattr %4 @supplier::@s_nationkey : !db.int<64>
+            %54 = relalg.getattr %4 @nation::@n_nationkey : !db.int<64>
+            %55 = db.compare eq %53 : !db.int<64>,%54 : !db.int<64>
+            %56 = relalg.getattr %4 @nation::@n_name : !db.string
+            %57 = db.constant ("CANADA") :!db.string
+            %58 = db.compare eq %56 : !db.string,%57 : !db.string
+            %59 = db.and %52 : !db.bool,%55 : !db.bool,%58 : !db.bool
+            relalg.return %59 : !db.bool
         }
-        %57 = relalg.sort %5 [(@supplier::@s_name,asc)]
-        %58 = relalg.materialize %57 [@supplier::@s_name,@supplier::@s_address] => ["s_name","s_address"] : !db.table
-        return %58 : !db.table
+        %60 = relalg.sort %5 [(@supplier::@s_name,asc)]
+        %61 = relalg.materialize %60 [@supplier::@s_name,@supplier::@s_address] => ["s_name","s_address"] : !db.table
+        return %61 : !db.table
     }
 }
 

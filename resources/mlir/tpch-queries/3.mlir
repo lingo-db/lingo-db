@@ -63,18 +63,18 @@ module @querymodule{
             %28 = relalg.getattr %24 @lineitem::@l_discount : !db.decimal<15,2>
             %29 = db.sub %27 : !db.decimal<15,2>,%28 : !db.decimal<15,2>
             %30 = db.mul %26 : !db.decimal<15,2>,%29 : !db.decimal<15,2>
-            relalg.addattr @aggfmname1({type=!db.decimal<15,2>}) %30
+            %31 = relalg.addattr %24, @aggfmname1({type=!db.decimal<15,2>}) %30
+            relalg.return %31 : !relalg.tuple
+        }
+        %34 = relalg.aggregation @aggr1 %25 [@lineitem::@l_orderkey,@orders::@o_orderdate,@orders::@o_shippriority] (%32 : !relalg.relation, %33 : !relalg.tuple) {
+            %35 = relalg.aggrfn sum @map1::@aggfmname1 %32 : !db.decimal<15,2>
+            %36 = relalg.addattr %33, @aggfmname2({type=!db.decimal<15,2>}) %35
             relalg.return
         }
-        %32 = relalg.aggregation @aggr1 %25 [@lineitem::@l_orderkey,@orders::@o_orderdate,@orders::@o_shippriority] (%31 : !relalg.relation) {
-            %33 = relalg.aggrfn sum @map1::@aggfmname1 %31 : !db.decimal<15,2>
-            relalg.addattr @aggfmname2({type=!db.decimal<15,2>}) %33
-            relalg.return
-        }
-        %34 = relalg.sort %32 [(@aggr1::@aggfmname2,desc),(@orders::@o_orderdate,asc)]
-        %35 = relalg.limit 10 %34
-        %36 = relalg.materialize %35 [@lineitem::@l_orderkey,@aggr1::@aggfmname2,@orders::@o_orderdate,@orders::@o_shippriority] => ["l_orderkey","revenue","o_orderdate","o_shippriority"] : !db.table
-        return %36 : !db.table
+        %37 = relalg.sort %34 [(@aggr1::@aggfmname2,desc),(@orders::@o_orderdate,asc)]
+        %38 = relalg.limit 10 %37
+        %39 = relalg.materialize %38 [@lineitem::@l_orderkey,@aggr1::@aggfmname2,@orders::@o_orderdate,@orders::@o_shippriority] => ["l_orderkey","revenue","o_orderdate","o_shippriority"] : !db.table
+        return %39 : !db.table
     }
 }
 

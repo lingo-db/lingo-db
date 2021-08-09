@@ -191,8 +191,8 @@ class CodeGen:
         return self.addOp(targetType,["db.cast ",ValueRef(value)," : ",TypeRef(value)," -> ",targetType.to_string()])
     def create_relalg_getattr(self,tuple,attr):
         return self.addOp(attr.type,["relalg.getattr ",ValueRef(tuple), " ",attr.ref_to_string()," : ",attr.type.to_string()])
-    def create_relalg_addattr(self,val,attr):
-        return self.addExistingOp(Operation(None,None,["relalg.addattr ",attr.def_to_string()," ", ValueRef(val)]))
+    def create_relalg_addattr(self,val,attr,tuple):
+        return self.addExistingOp(Operation(self.newVar(),DBType("tuple"),["relalg.addattr ",tuple,", ",attr.def_to_string()," ", ValueRef(val)]))
     def create_relalg_materialize(self,rel,attrs):
         attr_refs=list(map(lambda val:val.ref_to_string(),attrs))
         columns=list(map(lambda val:'"'+val.print_name+'"',attrs))
@@ -296,8 +296,8 @@ class CodeGen:
     def startMap(self,scope_name,rel):
         tuple=self.newParam("tuple")
         return self.startRegionOp("relation",["relalg.map ","@",scope_name," ",ValueRef(rel)," (",tuple, ": !relalg.tuple) "]),tuple
-    def endMap(self):
-        self.endRegionOpWith(Operation(None, None, ["relalg.return"]))
+    def endMap(self,tuple):
+        self.endRegionOpWith(Operation(None, None, ["relalg.return"," ",tuple, " : !relalg.tuple"]))
 
     def startSelection(self,rel):
         tuple=self.newParam("tuple")
@@ -358,8 +358,9 @@ class CodeGen:
 
     def startAggregation(self,name,rel, attributes):
         relation=self.newParam("relation")
+        tuple=self.newParam("tuple")
         attr_refs=list(map(lambda val:val.ref_to_string(),attributes))
-        return self.startRegionOp("relation",["relalg.aggregation ","@",name," ",ValueRef(rel)," [",",".join(attr_refs),"] (",relation," : !relalg.relation) "]),relation
+        return self.startRegionOp("relation",["relalg.aggregation ","@",name," ",ValueRef(rel)," [",",".join(attr_refs),"] (",relation," : !relalg.relation, ",tuple," : !relalg.tuple) "]),relation,tuple
     def endAggregation(self):
         self.endRegionOpWith(Operation(None, None, ["relalg.return"]))
     def getResult(self):

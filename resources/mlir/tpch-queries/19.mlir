@@ -167,16 +167,16 @@ module @querymodule{
             %140 = relalg.getattr %136 @lineitem::@l_discount : !db.decimal<15,2>
             %141 = db.sub %139 : !db.decimal<15,2>,%140 : !db.decimal<15,2>
             %142 = db.mul %138 : !db.decimal<15,2>,%141 : !db.decimal<15,2>
-            relalg.addattr @aggfmname1({type=!db.decimal<15,2>}) %142
+            %143 = relalg.addattr %136, @aggfmname1({type=!db.decimal<15,2>}) %142
+            relalg.return %143 : !relalg.tuple
+        }
+        %146 = relalg.aggregation @aggr1 %137 [] (%144 : !relalg.relation, %145 : !relalg.tuple) {
+            %147 = relalg.aggrfn sum @map1::@aggfmname1 %144 : !db.decimal<15,2,nullable>
+            %148 = relalg.addattr %145, @aggfmname2({type=!db.decimal<15,2,nullable>}) %147
             relalg.return
         }
-        %144 = relalg.aggregation @aggr1 %137 [] (%143 : !relalg.relation) {
-            %145 = relalg.aggrfn sum @map1::@aggfmname1 %143 : !db.decimal<15,2,nullable>
-            relalg.addattr @aggfmname2({type=!db.decimal<15,2,nullable>}) %145
-            relalg.return
-        }
-        %146 = relalg.materialize %144 [@aggr1::@aggfmname2] => ["revenue"] : !db.table
-        return %146 : !db.table
+        %149 = relalg.materialize %146 [@aggr1::@aggfmname2] => ["revenue"] : !db.table
+        return %149 : !db.table
     }
 }
 

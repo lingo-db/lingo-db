@@ -416,8 +416,11 @@ static void print(OpAsmPrinter& p, relalg::GetScalarOp& op) {
 // AddAttrOp
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseAddAttrOp(OpAsmParser& parser, OperationState& result) {
-   OpAsmParser::OperandType input;
+   OpAsmParser::OperandType input,tuple,tupleOut;
    Type inputType;
+   if (parser.parseOperand(tuple)||parser.parseComma()) {
+      return failure();
+   }
    mlir::relalg::RelationalAttributeDefAttr defAttr;
    if (parseAttributeDefAttr(parser, result, defAttr)) {
       return failure();
@@ -427,14 +430,21 @@ static ParseResult parseAddAttrOp(OpAsmParser& parser, OperationState& result) {
       return failure();
    }
    inputType = defAttr.getRelationalAttribute().type;
+
+   auto tupleType=mlir::relalg::TupleType::get(parser.getBuilder().getContext());
+   if (parser.resolveOperand(tuple, tupleType, result.operands)) {
+      return failure();
+   }
    if (parser.resolveOperand(input, inputType, result.operands)) {
       return failure();
    }
+   result.addTypes({tupleType});
    return success();
 }
 static void print(OpAsmPrinter& p, relalg::AddAttrOp& op) {
    p << op.getOperationName();
-   p << " ";
+   p << " "<<op.tuple();
+   p << ", ";
    printAttributeDefAttr(p, op.attr());
    p << " " << op.val();
 }

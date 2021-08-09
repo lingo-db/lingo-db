@@ -204,14 +204,14 @@ class Translator:
             for name, expr in AFM.evaluate_before_agg.items():
                 res = self.translateExpression(expr, codegen, stacked_resolver)
                 attr = Attribute(scope_name, name, codegen.getType(res))
-                codegen.create_relalg_addattr(res, attr)
+                tuple=codegen.create_relalg_addattr(res, attr,tuple)
                 resolver.add([], name, attr)
             stacked_resolver.pop()
-            codegen.endMap()
+            codegen.endMap(tuple)
         if "groupby" in stmt or len(AFM.aggr) > 0:
             scope_name = AFM.aggname
             attributeList = getAttributeList(resolver, stmt["groupby"]) if "groupby" in stmt else []
-            tree_var, relation = codegen.startAggregation(scope_name, tree_var, attributeList)
+            tree_var, relation,tuple = codegen.startAggregation(scope_name, tree_var, attributeList)
             for name, aggrfunc in AFM.aggr.items():
                 if len(aggrfunc["names"]) > 0:
                     if aggrfunc["distinct"] == True:
@@ -229,7 +229,7 @@ class Translator:
                 elif aggrfunc["type"] == "count":
                     res = codegen.create_relalg_count_rows(relation)
                 attr = Attribute(scope_name, name, codegen.getType(res))
-                codegen.create_relalg_addattr(res, attr)
+                tuple=codegen.create_relalg_addattr(res, attr,tuple)
                 resolver.add([], name, attr)
             codegen.endAggregation()
         if "having" in stmt:
@@ -245,10 +245,10 @@ class Translator:
             for name, expr in AFM.evaluate_after_agg.items():
                 res = self.translateExpression(expr, codegen, stacked_resolver)
                 attr = Attribute(scope_name, name, codegen.getType(res))
-                codegen.create_relalg_addattr(res, attr)
+                tuple=codegen.create_relalg_addattr(res, attr,tuple)
                 resolver.add([], name, attr)
             stacked_resolver.pop()
-            codegen.endMap()
+            codegen.endMap(tuple)
         if select_names == ["*"]:
             results = all_from_attributes
         else:

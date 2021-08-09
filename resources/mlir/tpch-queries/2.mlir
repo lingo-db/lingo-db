@@ -106,20 +106,20 @@ module @querymodule{
                 %59 = db.and %46 : !db.bool,%49 : !db.bool,%52 : !db.bool,%55 : !db.bool,%58 : !db.bool
                 relalg.return %59 : !db.bool
             }
-            %61 = relalg.aggregation @aggr1 %43 [] (%60 : !relalg.relation) {
-                %62 = relalg.aggrfn min @partsupp1::@ps_supplycost %60 : !db.decimal<15,2,nullable>
-                relalg.addattr @aggfmname1({type=!db.decimal<15,2,nullable>}) %62
+            %62 = relalg.aggregation @aggr1 %43 [] (%60 : !relalg.relation, %61 : !relalg.tuple) {
+                %63 = relalg.aggrfn min @partsupp1::@ps_supplycost %60 : !db.decimal<15,2,nullable>
+                %64 = relalg.addattr %61, @aggfmname1({type=!db.decimal<15,2,nullable>}) %63
                 relalg.return
             }
-            %63 = relalg.getscalar @aggr1::@aggfmname1 %61 : !db.decimal<15,2,nullable>
-            %64 = db.compare eq %34 : !db.decimal<15,2>,%63 : !db.decimal<15,2,nullable>
-            %65 = db.and %14 : !db.bool,%17 : !db.bool,%21 : !db.bool,%24 : !db.bool,%27 : !db.bool,%30 : !db.bool,%33 : !db.bool,%64 : !db.bool<nullable>
-            relalg.return %65 : !db.bool<nullable>
+            %65 = relalg.getscalar @aggr1::@aggfmname1 %62 : !db.decimal<15,2,nullable>
+            %66 = db.compare eq %34 : !db.decimal<15,2>,%65 : !db.decimal<15,2,nullable>
+            %67 = db.and %14 : !db.bool,%17 : !db.bool,%21 : !db.bool,%24 : !db.bool,%27 : !db.bool,%30 : !db.bool,%33 : !db.bool,%66 : !db.bool<nullable>
+            relalg.return %67 : !db.bool<nullable>
         }
-        %66 = relalg.sort %11 [(@supplier::@s_acctbal,desc),(@nation::@n_name,asc),(@supplier::@s_name,asc),(@part::@p_partkey,asc)]
-        %67 = relalg.limit 100 %66
-        %68 = relalg.materialize %67 [@supplier::@s_acctbal,@supplier::@s_name,@nation::@n_name,@part::@p_partkey,@part::@p_mfgr,@supplier::@s_address,@supplier::@s_phone,@supplier::@s_comment] => ["s_acctbal","s_name","n_name","p_partkey","p_mfgr","s_address","s_phone","s_comment"] : !db.table
-        return %68 : !db.table
+        %68 = relalg.sort %11 [(@supplier::@s_acctbal,desc),(@nation::@n_name,asc),(@supplier::@s_name,asc),(@part::@p_partkey,asc)]
+        %69 = relalg.limit 100 %68
+        %70 = relalg.materialize %69 [@supplier::@s_acctbal,@supplier::@s_name,@nation::@n_name,@part::@p_partkey,@part::@p_mfgr,@supplier::@s_address,@supplier::@s_phone,@supplier::@s_comment] => ["s_acctbal","s_name","n_name","p_partkey","p_mfgr","s_address","s_phone","s_comment"] : !db.table
+        return %70 : !db.table
     }
 }
 

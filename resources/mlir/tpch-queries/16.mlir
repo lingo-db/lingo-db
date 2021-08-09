@@ -67,15 +67,15 @@ module @querymodule{
             %44 = db.and %8 : !db.bool,%11 : !db.bool,%15 : !db.bool,%33 : !db.bool,%43 : !db.bool
             relalg.return %44 : !db.bool
         }
-        %46 = relalg.aggregation @aggr2 %5 [@part::@p_brand,@part::@p_type,@part::@p_size] (%45 : !relalg.relation) {
-            %47 = relalg.projection distinct [@partsupp::@ps_suppkey]%45
-            %48 = relalg.aggrfn count @partsupp::@ps_suppkey %47 : !db.int<64>
-            relalg.addattr @aggfmname1({type=!db.int<64>}) %48
+        %47 = relalg.aggregation @aggr2 %5 [@part::@p_brand,@part::@p_type,@part::@p_size] (%45 : !relalg.relation, %46 : !relalg.tuple) {
+            %48 = relalg.projection distinct [@partsupp::@ps_suppkey]%45
+            %49 = relalg.aggrfn count @partsupp::@ps_suppkey %48 : !db.int<64>
+            %50 = relalg.addattr %46, @aggfmname1({type=!db.int<64>}) %49
             relalg.return
         }
-        %49 = relalg.sort %46 [(@aggr2::@aggfmname1,desc),(@part::@p_brand,asc),(@part::@p_type,asc),(@part::@p_size,asc)]
-        %50 = relalg.materialize %49 [@part::@p_brand,@part::@p_type,@part::@p_size,@aggr2::@aggfmname1] => ["p_brand","p_type","p_size","supplier_cnt"] : !db.table
-        return %50 : !db.table
+        %51 = relalg.sort %47 [(@aggr2::@aggfmname1,desc),(@part::@p_brand,asc),(@part::@p_type,asc),(@part::@p_size,asc)]
+        %52 = relalg.materialize %51 [@part::@p_brand,@part::@p_type,@part::@p_size,@aggr2::@aggfmname1] => ["p_brand","p_type","p_size","supplier_cnt"] : !db.table
+        return %52 : !db.table
     }
 }
 

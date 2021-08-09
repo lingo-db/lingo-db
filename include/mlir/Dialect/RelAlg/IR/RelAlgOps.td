@@ -314,7 +314,7 @@ let results = (outs RelAlg_TupleStream:$result);
 
 def RelAlg_ReturnOp : RelAlg_Op<"return", [NoSideEffect, ReturnLike, Terminator]> {
 let summary = "loop yield and termination operation";
-let arguments = (ins Variadic<DBType>:$results);
+let arguments = (ins Variadic<AnyType>:$results);
 let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 let assemblyFormat =
 [{  attr-dict ($results^ `:` type($results))? }];
@@ -330,7 +330,8 @@ let results = (outs DBType : $res);
 }
 def AddAttrOp : RelAlg_Op<"addattr"> {
 let summary = "add attribute operation";
-let arguments = (ins RelationalAttributeDefAttr:$attr, DBType:$val);
+let arguments = (ins RelAlg_Tuple:$tuple,RelationalAttributeDefAttr:$attr, DBType:$val);
+let results = (outs RelAlg_Tuple:$tuple_out);
 }
 
 def AggrFuncOp : RelAlg_Op<"aggrfn"> {

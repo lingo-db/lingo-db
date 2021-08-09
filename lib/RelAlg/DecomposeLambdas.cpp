@@ -89,18 +89,33 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
    }
    void decomposeMap(mlir::relalg::MapOp currentMap, mlir::Value& tree) {
       using namespace mlir;
-      currentMap->walk([&](mlir::relalg::AddAttrOp addAttrOp) {
-         OpBuilder builder(currentMap);
-         mlir::BlockAndValueMapping mapping;
-         auto newmap = builder.create<relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), currentMap.sym_name(), tree);
-         tree = newmap;
-         newmap.predicate().push_back(new Block);
-         newmap.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
-         builder.setInsertionPointToStart(&newmap.predicate().front());
-         builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
-         mapping.map(currentMap.getLambdaArgument(), newmap.getLambdaArgument());
-         mlir::relalg::detail::inlineOpIntoBlock(addAttrOp.getOperation(), addAttrOp->getParentOp(), newmap.getOperation(), &newmap.getLambdaBlock(), mapping);
-      });
+
+      auto *terminator=currentMap.predicate().front().getTerminator();
+      if(auto returnOp=mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(terminator)){
+         assert(returnOp.results().size()==1);
+         auto *definingOp=returnOp.results()[0].getDefiningOp();
+         mlir::relalg::AddAttrOp addAttrOp=definingOp?mlir::dyn_cast_or_null<mlir::relalg::AddAttrOp>(definingOp):relalg::AddAttrOp();
+         while(mlir::isa_and_nonnull<mlir::relalg::AddAttrOp>(addAttrOp)){
+            OpBuilder builder(currentMap);
+            mlir::BlockAndValueMapping mapping;
+            auto newmap = builder.create<relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), currentMap.sym_name(), tree);
+            tree = newmap;
+            newmap.predicate().push_back(new Block);
+            newmap.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
+            builder.setInsertionPointToStart(&newmap.predicate().front());
+            auto ret1=builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
+            mapping.map(currentMap.getLambdaArgument(), newmap.getLambdaArgument());
+            mapping.map(addAttrOp.tuple(), newmap.getLambdaArgument());
+            mlir::relalg::detail::inlineOpIntoBlock(addAttrOp.getOperation(), addAttrOp->getParentOp(), newmap.getOperation(), &newmap.getLambdaBlock(), mapping);
+            builder.create<relalg::ReturnOp>(builder.getUnknownLoc(),mapping.lookup(addAttrOp.tuple_out()));
+            ret1->remove();
+            ret1->dropAllReferences();
+            ret1->destroy();
+            //go to next in chain:
+            definingOp=addAttrOp.tuple().getDefiningOp();
+            addAttrOp=definingOp?mlir::dyn_cast_or_null<mlir::relalg::AddAttrOp>(definingOp):relalg::AddAttrOp();
+         }
+      }
    }
    void runOnFunction() override {
       getFunction().walk([&](mlir::relalg::SelectionOp op) {

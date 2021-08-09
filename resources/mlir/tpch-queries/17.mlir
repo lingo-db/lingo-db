@@ -62,37 +62,37 @@ module @querymodule{
                 %21 = db.compare eq %19 : !db.int<64>,%20 : !db.int<64>
                 relalg.return %21 : !db.bool
             }
-            %23 = relalg.aggregation @aggr1 %18 [] (%22 : !relalg.relation) {
-                %24 = relalg.aggrfn avg @lineitem1::@l_quantity %22 : !db.decimal<15,2,nullable>
-                relalg.addattr @aggfmname1({type=!db.decimal<15,2,nullable>}) %24
+            %24 = relalg.aggregation @aggr1 %18 [] (%22 : !relalg.relation, %23 : !relalg.tuple) {
+                %25 = relalg.aggrfn avg @lineitem1::@l_quantity %22 : !db.decimal<15,2,nullable>
+                %26 = relalg.addattr %23, @aggfmname1({type=!db.decimal<15,2,nullable>}) %25
                 relalg.return
             }
-            %26 = relalg.map @map2 %23 (%25: !relalg.tuple) {
-                %27 = db.constant ("0.2") :!db.decimal<15,2>
-                %28 = relalg.getattr %25 @aggr1::@aggfmname1 : !db.decimal<15,2,nullable>
-                %29 = db.mul %27 : !db.decimal<15,2>,%28 : !db.decimal<15,2,nullable>
-                relalg.addattr @aggfmname2({type=!db.decimal<15,2,nullable>}) %29
-                relalg.return
+            %28 = relalg.map @map2 %24 (%27: !relalg.tuple) {
+                %29 = db.constant ("0.2") :!db.decimal<15,2>
+                %30 = relalg.getattr %27 @aggr1::@aggfmname1 : !db.decimal<15,2,nullable>
+                %31 = db.mul %29 : !db.decimal<15,2>,%30 : !db.decimal<15,2,nullable>
+                %32 = relalg.addattr %27, @aggfmname2({type=!db.decimal<15,2,nullable>}) %31
+                relalg.return %32 : !relalg.tuple
             }
-            %30 = relalg.getscalar @map2::@aggfmname2 %26 : !db.decimal<15,2,nullable>
-            %31 = db.compare lt %15 : !db.decimal<15,2>,%30 : !db.decimal<15,2,nullable>
-            %32 = db.and %8 : !db.bool,%11 : !db.bool,%14 : !db.bool,%31 : !db.bool<nullable>
-            relalg.return %32 : !db.bool<nullable>
+            %33 = relalg.getscalar @map2::@aggfmname2 %28 : !db.decimal<15,2,nullable>
+            %34 = db.compare lt %15 : !db.decimal<15,2>,%33 : !db.decimal<15,2,nullable>
+            %35 = db.and %8 : !db.bool,%11 : !db.bool,%14 : !db.bool,%34 : !db.bool<nullable>
+            relalg.return %35 : !db.bool<nullable>
         }
-        %34 = relalg.aggregation @aggr2 %5 [] (%33 : !relalg.relation) {
-            %35 = relalg.aggrfn sum @lineitem::@l_extendedprice %33 : !db.decimal<15,2,nullable>
-            relalg.addattr @aggfmname1({type=!db.decimal<15,2,nullable>}) %35
+        %38 = relalg.aggregation @aggr2 %5 [] (%36 : !relalg.relation, %37 : !relalg.tuple) {
+            %39 = relalg.aggrfn sum @lineitem::@l_extendedprice %36 : !db.decimal<15,2,nullable>
+            %40 = relalg.addattr %37, @aggfmname1({type=!db.decimal<15,2,nullable>}) %39
             relalg.return
         }
-        %37 = relalg.map @map4 %34 (%36: !relalg.tuple) {
-            %38 = relalg.getattr %36 @aggr2::@aggfmname1 : !db.decimal<15,2,nullable>
-            %39 = db.constant ("7.0") :!db.decimal<15,2>
-            %40 = db.div %38 : !db.decimal<15,2,nullable>,%39 : !db.decimal<15,2>
-            relalg.addattr @aggfmname2({type=!db.decimal<15,2,nullable>}) %40
-            relalg.return
+        %42 = relalg.map @map4 %38 (%41: !relalg.tuple) {
+            %43 = relalg.getattr %41 @aggr2::@aggfmname1 : !db.decimal<15,2,nullable>
+            %44 = db.constant ("7.0") :!db.decimal<15,2>
+            %45 = db.div %43 : !db.decimal<15,2,nullable>,%44 : !db.decimal<15,2>
+            %46 = relalg.addattr %41, @aggfmname2({type=!db.decimal<15,2,nullable>}) %45
+            relalg.return %46 : !relalg.tuple
         }
-        %41 = relalg.materialize %37 [@map4::@aggfmname2] => ["avg_yearly"] : !db.table
-        return %41 : !db.table
+        %47 = relalg.materialize %42 [@map4::@aggfmname2] => ["avg_yearly"] : !db.table
+        return %47 : !db.table
     }
 }
 

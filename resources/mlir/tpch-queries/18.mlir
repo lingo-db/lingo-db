@@ -56,38 +56,38 @@ module @querymodule{
                 l_shipmode => @l_shipmode({type=!db.string}),
                 l_comment => @l_comment({type=!db.string})
             }
-            %10 = relalg.aggregation @aggr1 %8 [@lineitem1::@l_orderkey] (%9 : !relalg.relation) {
-                %11 = relalg.aggrfn sum @lineitem1::@l_quantity %9 : !db.decimal<15,2>
-                relalg.addattr @aggfmname1({type=!db.decimal<15,2>}) %11
+            %11 = relalg.aggregation @aggr1 %8 [@lineitem1::@l_orderkey] (%9 : !relalg.relation, %10 : !relalg.tuple) {
+                %12 = relalg.aggrfn sum @lineitem1::@l_quantity %9 : !db.decimal<15,2>
+                %13 = relalg.addattr %10, @aggfmname1({type=!db.decimal<15,2>}) %12
                 relalg.return
             }
-            %13 = relalg.selection %10(%12: !relalg.tuple) {
-                %14 = relalg.getattr %12 @aggr1::@aggfmname1 : !db.decimal<15,2>
-                %15 = db.constant (300) :!db.decimal<15,2>
-                %16 = db.compare gt %14 : !db.decimal<15,2>,%15 : !db.decimal<15,2>
-                relalg.return %16 : !db.bool
+            %15 = relalg.selection %11(%14: !relalg.tuple) {
+                %16 = relalg.getattr %14 @aggr1::@aggfmname1 : !db.decimal<15,2>
+                %17 = db.constant (300) :!db.decimal<15,2>
+                %18 = db.compare gt %16 : !db.decimal<15,2>,%17 : !db.decimal<15,2>
+                relalg.return %18 : !db.bool
             }
-            %17 = relalg.projection all [@lineitem1::@l_orderkey]%13
-            %18 = relalg.getattr %6 @orders::@o_orderkey : !db.int<64>
-            %19 = relalg.in %18 : !db.int<64>, %17
-            %20 = relalg.getattr %6 @customer::@c_custkey : !db.int<64>
-            %21 = relalg.getattr %6 @orders::@o_custkey : !db.int<64>
-            %22 = db.compare eq %20 : !db.int<64>,%21 : !db.int<64>
-            %23 = relalg.getattr %6 @orders::@o_orderkey : !db.int<64>
-            %24 = relalg.getattr %6 @lineitem::@l_orderkey : !db.int<64>
-            %25 = db.compare eq %23 : !db.int<64>,%24 : !db.int<64>
-            %26 = db.and %19 : !db.bool,%22 : !db.bool,%25 : !db.bool
-            relalg.return %26 : !db.bool
+            %19 = relalg.projection all [@lineitem1::@l_orderkey]%15
+            %20 = relalg.getattr %6 @orders::@o_orderkey : !db.int<64>
+            %21 = relalg.in %20 : !db.int<64>, %19
+            %22 = relalg.getattr %6 @customer::@c_custkey : !db.int<64>
+            %23 = relalg.getattr %6 @orders::@o_custkey : !db.int<64>
+            %24 = db.compare eq %22 : !db.int<64>,%23 : !db.int<64>
+            %25 = relalg.getattr %6 @orders::@o_orderkey : !db.int<64>
+            %26 = relalg.getattr %6 @lineitem::@l_orderkey : !db.int<64>
+            %27 = db.compare eq %25 : !db.int<64>,%26 : !db.int<64>
+            %28 = db.and %21 : !db.bool,%24 : !db.bool,%27 : !db.bool
+            relalg.return %28 : !db.bool
         }
-        %28 = relalg.aggregation @aggr2 %7 [@customer::@c_name,@customer::@c_custkey,@orders::@o_orderkey,@orders::@o_orderdate,@orders::@o_totalprice] (%27 : !relalg.relation) {
-            %29 = relalg.aggrfn sum @lineitem::@l_quantity %27 : !db.decimal<15,2>
-            relalg.addattr @aggfmname1({type=!db.decimal<15,2>}) %29
+        %31 = relalg.aggregation @aggr2 %7 [@customer::@c_name,@customer::@c_custkey,@orders::@o_orderkey,@orders::@o_orderdate,@orders::@o_totalprice] (%29 : !relalg.relation, %30 : !relalg.tuple) {
+            %32 = relalg.aggrfn sum @lineitem::@l_quantity %29 : !db.decimal<15,2>
+            %33 = relalg.addattr %30, @aggfmname1({type=!db.decimal<15,2>}) %32
             relalg.return
         }
-        %30 = relalg.sort %28 [(@orders::@o_totalprice,desc),(@orders::@o_orderdate,asc)]
-        %31 = relalg.limit 100 %30
-        %32 = relalg.materialize %31 [@customer::@c_name,@customer::@c_custkey,@orders::@o_orderkey,@orders::@o_orderdate,@orders::@o_totalprice,@aggr2::@aggfmname1] => ["c_name","c_custkey","o_orderkey","o_orderdate","o_totalprice","sum"] : !db.table
-        return %32 : !db.table
+        %34 = relalg.sort %31 [(@orders::@o_totalprice,desc),(@orders::@o_orderdate,asc)]
+        %35 = relalg.limit 100 %34
+        %36 = relalg.materialize %35 [@customer::@c_name,@customer::@c_custkey,@orders::@o_orderkey,@orders::@o_orderdate,@orders::@o_totalprice,@aggr2::@aggfmname1] => ["c_name","c_custkey","o_orderkey","o_orderdate","o_totalprice","sum"] : !db.table
+        return %36 : !db.table
     }
 }
 

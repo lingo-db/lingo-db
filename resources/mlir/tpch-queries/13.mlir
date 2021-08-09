@@ -30,19 +30,19 @@ module @querymodule{
             %12 = db.and %7 : !db.bool,%11 : !db.bool
             relalg.return %12 : !db.bool
         } mapping: {@o_orderkey({type=!db.int<64,nullable>})=[@orders::@o_orderkey],@o_custkey({type=!db.int<64,nullable>})=[@orders::@o_custkey],@o_orderstatus({type=!db.string<nullable>})=[@orders::@o_orderstatus],@o_totalprice({type=!db.decimal<15,2,nullable>})=[@orders::@o_totalprice],@o_orderdate({type=!db.date<day,nullable>})=[@orders::@o_orderdate],@o_orderpriority({type=!db.string<nullable>})=[@orders::@o_orderpriority],@o_clerk({type=!db.string<nullable>})=[@orders::@o_clerk],@o_shippriority({type=!db.int<32,nullable>})=[@orders::@o_shippriority],@o_comment({type=!db.string<nullable>})=[@orders::@o_comment]}
-        %14 = relalg.aggregation @aggr1 %4 [@customer::@c_custkey] (%13 : !relalg.relation) {
-            %15 = relalg.aggrfn count @outerjoin1::@o_orderkey %13 : !db.int<64>
-            relalg.addattr @aggfmname1({type=!db.int<64>}) %15
+        %15 = relalg.aggregation @aggr1 %4 [@customer::@c_custkey] (%13 : !relalg.relation, %14 : !relalg.tuple) {
+            %16 = relalg.aggrfn count @outerjoin1::@o_orderkey %13 : !db.int<64>
+            %17 = relalg.addattr %14, @aggfmname1({type=!db.int<64>}) %16
             relalg.return
         }
-        %17 = relalg.aggregation @aggr2 %14 [@aggr1::@aggfmname1] (%16 : !relalg.relation) {
-            %18 = relalg.count %16
-            relalg.addattr @aggfmname1({type=!db.int<64>}) %18
+        %20 = relalg.aggregation @aggr2 %15 [@aggr1::@aggfmname1] (%18 : !relalg.relation, %19 : !relalg.tuple) {
+            %21 = relalg.count %18
+            %22 = relalg.addattr %19, @aggfmname1({type=!db.int<64>}) %21
             relalg.return
         }
-        %19 = relalg.sort %17 [(@aggr2::@aggfmname1,desc),(@aggr1::@aggfmname1,desc)]
-        %20 = relalg.materialize %19 [@aggr1::@aggfmname1,@aggr2::@aggfmname1] => ["c_count","custdist"] : !db.table
-        return %20 : !db.table
+        %23 = relalg.sort %20 [(@aggr2::@aggfmname1,desc),(@aggr1::@aggfmname1,desc)]
+        %24 = relalg.materialize %23 [@aggr1::@aggfmname1,@aggr2::@aggfmname1] => ["c_count","custdist"] : !db.table
+        return %24 : !db.table
     }
 }
 

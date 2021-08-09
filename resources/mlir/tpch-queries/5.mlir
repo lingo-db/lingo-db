@@ -95,17 +95,17 @@ module @querymodule{
             %46 = relalg.getattr %42 @lineitem::@l_discount : !db.decimal<15,2>
             %47 = db.sub %45 : !db.decimal<15,2>,%46 : !db.decimal<15,2>
             %48 = db.mul %44 : !db.decimal<15,2>,%47 : !db.decimal<15,2>
-            relalg.addattr @aggfmname1({type=!db.decimal<15,2>}) %48
+            %49 = relalg.addattr %42, @aggfmname1({type=!db.decimal<15,2>}) %48
+            relalg.return %49 : !relalg.tuple
+        }
+        %52 = relalg.aggregation @aggr1 %43 [@nation::@n_name] (%50 : !relalg.relation, %51 : !relalg.tuple) {
+            %53 = relalg.aggrfn sum @map1::@aggfmname1 %50 : !db.decimal<15,2>
+            %54 = relalg.addattr %51, @aggfmname2({type=!db.decimal<15,2>}) %53
             relalg.return
         }
-        %50 = relalg.aggregation @aggr1 %43 [@nation::@n_name] (%49 : !relalg.relation) {
-            %51 = relalg.aggrfn sum @map1::@aggfmname1 %49 : !db.decimal<15,2>
-            relalg.addattr @aggfmname2({type=!db.decimal<15,2>}) %51
-            relalg.return
-        }
-        %52 = relalg.sort %50 [(@aggr1::@aggfmname2,desc)]
-        %53 = relalg.materialize %52 [@nation::@n_name,@aggr1::@aggfmname2] => ["n_name","revenue"] : !db.table
-        return %53 : !db.table
+        %55 = relalg.sort %52 [(@aggr1::@aggfmname2,desc)]
+        %56 = relalg.materialize %55 [@nation::@n_name,@aggr1::@aggfmname2] => ["n_name","revenue"] : !db.table
+        return %56 : !db.table
     }
 }
 

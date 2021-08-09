@@ -125,15 +125,15 @@ module @querymodule{
             %54 = db.and %12 : !db.bool,%15 : !db.bool,%18 : !db.bool,%21 : !db.bool,%32 : !db.bool,%47 : !db.bool,%50 : !db.bool,%53 : !db.bool
             relalg.return %54 : !db.bool
         }
-        %56 = relalg.aggregation @aggr3 %9 [@supplier::@s_name] (%55 : !relalg.relation) {
-            %57 = relalg.count %55
-            relalg.addattr @aggfmname1({type=!db.int<64>}) %57
+        %57 = relalg.aggregation @aggr3 %9 [@supplier::@s_name] (%55 : !relalg.relation, %56 : !relalg.tuple) {
+            %58 = relalg.count %55
+            %59 = relalg.addattr %56, @aggfmname1({type=!db.int<64>}) %58
             relalg.return
         }
-        %58 = relalg.sort %56 [(@aggr3::@aggfmname1,desc),(@supplier::@s_name,asc)]
-        %59 = relalg.limit 100 %58
-        %60 = relalg.materialize %59 [@supplier::@s_name,@aggr3::@aggfmname1] => ["s_name","numwait"] : !db.table
-        return %60 : !db.table
+        %60 = relalg.sort %57 [(@aggr3::@aggfmname1,desc),(@supplier::@s_name,asc)]
+        %61 = relalg.limit 100 %60
+        %62 = relalg.materialize %61 [@supplier::@s_name,@aggr3::@aggfmname1] => ["s_name","numwait"] : !db.table
+        return %62 : !db.table
     }
 }
 

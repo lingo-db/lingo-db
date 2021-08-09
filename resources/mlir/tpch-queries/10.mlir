@@ -72,18 +72,18 @@ module @querymodule{
             %33 = relalg.getattr %29 @lineitem::@l_discount : !db.decimal<15,2>
             %34 = db.sub %32 : !db.decimal<15,2>,%33 : !db.decimal<15,2>
             %35 = db.mul %31 : !db.decimal<15,2>,%34 : !db.decimal<15,2>
-            relalg.addattr @aggfmname1({type=!db.decimal<15,2>}) %35
+            %36 = relalg.addattr %29, @aggfmname1({type=!db.decimal<15,2>}) %35
+            relalg.return %36 : !relalg.tuple
+        }
+        %39 = relalg.aggregation @aggr1 %30 [@customer::@c_custkey,@customer::@c_name,@customer::@c_acctbal,@customer::@c_phone,@nation::@n_name,@customer::@c_address,@customer::@c_comment] (%37 : !relalg.relation, %38 : !relalg.tuple) {
+            %40 = relalg.aggrfn sum @map1::@aggfmname1 %37 : !db.decimal<15,2>
+            %41 = relalg.addattr %38, @aggfmname2({type=!db.decimal<15,2>}) %40
             relalg.return
         }
-        %37 = relalg.aggregation @aggr1 %30 [@customer::@c_custkey,@customer::@c_name,@customer::@c_acctbal,@customer::@c_phone,@nation::@n_name,@customer::@c_address,@customer::@c_comment] (%36 : !relalg.relation) {
-            %38 = relalg.aggrfn sum @map1::@aggfmname1 %36 : !db.decimal<15,2>
-            relalg.addattr @aggfmname2({type=!db.decimal<15,2>}) %38
-            relalg.return
-        }
-        %39 = relalg.sort %37 [(@aggr1::@aggfmname2,desc)]
-        %40 = relalg.limit 20 %39
-        %41 = relalg.materialize %40 [@customer::@c_custkey,@customer::@c_name,@aggr1::@aggfmname2,@customer::@c_acctbal,@nation::@n_name,@customer::@c_address,@customer::@c_phone,@customer::@c_comment] => ["c_custkey","c_name","revenue","c_acctbal","n_name","c_address","c_phone","c_comment"] : !db.table
-        return %41 : !db.table
+        %42 = relalg.sort %39 [(@aggr1::@aggfmname2,desc)]
+        %43 = relalg.limit 20 %42
+        %44 = relalg.materialize %43 [@customer::@c_custkey,@customer::@c_name,@aggr1::@aggfmname2,@customer::@c_acctbal,@nation::@n_name,@customer::@c_address,@customer::@c_phone,@customer::@c_comment] => ["c_custkey","c_name","revenue","c_acctbal","n_name","c_address","c_phone","c_comment"] : !db.table
+        return %44 : !db.table
     }
 }
 

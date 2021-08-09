@@ -48,14 +48,14 @@ module @querymodule{
             %21 = db.and %6 : !db.bool,%9 : !db.bool,%20 : !db.bool
             relalg.return %21 : !db.bool
         }
-        %23 = relalg.aggregation @aggr2 %3 [@orders::@o_orderpriority] (%22 : !relalg.relation) {
-            %24 = relalg.count %22
-            relalg.addattr @aggfmname1({type=!db.int<64>}) %24
+        %24 = relalg.aggregation @aggr2 %3 [@orders::@o_orderpriority] (%22 : !relalg.relation, %23 : !relalg.tuple) {
+            %25 = relalg.count %22
+            %26 = relalg.addattr %23, @aggfmname1({type=!db.int<64>}) %25
             relalg.return
         }
-        %25 = relalg.sort %23 [(@orders::@o_orderpriority,asc)]
-        %26 = relalg.materialize %25 [@orders::@o_orderpriority,@aggr2::@aggfmname1] => ["o_orderpriority","order_count"] : !db.table
-        return %26 : !db.table
+        %27 = relalg.sort %24 [(@orders::@o_orderpriority,asc)]
+        %28 = relalg.materialize %27 [@orders::@o_orderpriority,@aggr2::@aggfmname1] => ["o_orderpriority","order_count"] : !db.table
+        return %28 : !db.table
     }
 }
 

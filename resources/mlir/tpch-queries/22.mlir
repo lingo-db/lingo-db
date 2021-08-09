@@ -61,9 +61,9 @@ module @querymodule{
                 %43 = db.and %26 : !db.bool,%42 : !db.bool
                 relalg.return %43 : !db.bool
             }
-            %45 = relalg.aggregation @aggr1 %23 [] (%44 : !relalg.relation) {
+            %45 = relalg.aggregation @aggr1 %23 [] (%44 : !relalg.relation,%tuple : !relalg.tuple) {
                 %46 = relalg.aggrfn avg @customer1::@c_acctbal %44 : !db.decimal<15,2,nullable>
-                relalg.addattr @aggfmname1({type=!db.decimal<15,2,nullable>}) %46
+                relalg.addattr %tuple, @aggfmname1({type=!db.decimal<15,2,nullable>}) %46
                 relalg.return
             }
             %47 = relalg.getscalar @aggr1::@aggfmname1 %45 : !db.decimal<15,2,nullable>
@@ -92,14 +92,14 @@ module @querymodule{
         %mapped = relalg.map @map %3 (%maparg: !relalg.tuple) {
             %c_phone = relalg.getattr %maparg @customer::@c_phone : !db.string
             %cntrycode = db.substr %c_phone[1:2] : !db.string
-        	relalg.addattr @cntrycode({type = !db.string}) %cntrycode
-        	relalg.return
+        	%tpl=relalg.addattr %maparg, @cntrycode({type = !db.string}) %cntrycode
+        	relalg.return %tpl : !relalg.tuple
         }
-        %59 = relalg.aggregation @aggr4 %mapped [@map::@cntrycode] (%58 : !relalg.relation) {
+        %59 = relalg.aggregation @aggr4 %mapped [@map::@cntrycode] (%58 : !relalg.relation, %tuple : !relalg.tuple) {
             %60 = relalg.count %58
-            relalg.addattr @aggfmname1({type=!db.int<64>}) %60
+            relalg.addattr %tuple, @aggfmname1({type=!db.int<64>}) %60
             %61 = relalg.aggrfn sum @customer::@c_acctbal %58 : !db.decimal<15,2>
-            relalg.addattr @aggfmname2({type=!db.decimal<15,2>}) %61
+            relalg.addattr %tuple, @aggfmname2({type=!db.decimal<15,2>}) %61
             relalg.return
         }
         %62 = relalg.sort %59 [(@map::@cntrycode,asc)]

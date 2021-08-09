@@ -27,16 +27,16 @@ module{
 %1 = relalg.map @map %0 (%arg0: !relalg.tuple) {
     //CHECK:    %2 = db.constant( "true" ) : !db.bool
 	%2 = db.constant( "true" ) : !db.bool
-	//CHECK:    relalg.addattr @attr2({type = !db.bool}) %2
-	relalg.addattr @attr2({type = !db.bool}) %2
-	relalg.return
+	//CHECK:    %3 = relalg.addattr %arg0, @attr2({type = !db.bool}) %2
+	%tpl=relalg.addattr %arg0, @attr2({type = !db.bool}) %2
+	relalg.return %tpl : !relalg.tuple
 }
 }
 // -----
 module{
 %0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.string})] values: ["A", "B"]
-//CHECK: %1 = relalg.aggregation @aggr %0 [@constrel::@attr1] (%arg0: !relalg.relation) {
-%1 = relalg.aggregation @aggr %0 [@constrel::@attr1] (%arg0: !relalg.relation) {
+//CHECK: %1 = relalg.aggregation @aggr %0 [@constrel::@attr1] (%arg0: !relalg.relation,%arg1: !relalg.tuple) {
+%1 = relalg.aggregation @aggr %0 [@constrel::@attr1] (%arg0: !relalg.relation, %arg1: !relalg.tuple) {
 	relalg.return
 }
 }

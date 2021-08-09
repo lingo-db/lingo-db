@@ -68,34 +68,34 @@ module @querymodule{
                 %39 = db.constant (0) :!db.int<64>
                 db.yield %39 : !db.int<64>
             }
-            relalg.addattr @aggfmname1({type=!db.int<64>}) %37
-            %40 = relalg.getattr %28 @orders::@o_orderpriority : !db.string
-            %41 = db.constant ("1-URGENT") :!db.string
-            %42 = db.compare neq %40 : !db.string,%41 : !db.string
-            %43 = relalg.getattr %28 @orders::@o_orderpriority : !db.string
-            %44 = db.constant ("2-HIGH") :!db.string
-            %45 = db.compare neq %43 : !db.string,%44 : !db.string
-            %46 = db.and %42 : !db.bool,%45 : !db.bool
-            %47 = db.if %46 : !db.bool  -> !db.int<64> {
-                %48 = db.constant (1) :!db.int<64>
-                db.yield %48 : !db.int<64>
-            } else {
-                %49 = db.constant (0) :!db.int<64>
+            %40 = relalg.addattr %28, @aggfmname1({type=!db.int<64>}) %37
+            %41 = relalg.getattr %28 @orders::@o_orderpriority : !db.string
+            %42 = db.constant ("1-URGENT") :!db.string
+            %43 = db.compare neq %41 : !db.string,%42 : !db.string
+            %44 = relalg.getattr %28 @orders::@o_orderpriority : !db.string
+            %45 = db.constant ("2-HIGH") :!db.string
+            %46 = db.compare neq %44 : !db.string,%45 : !db.string
+            %47 = db.and %43 : !db.bool,%46 : !db.bool
+            %48 = db.if %47 : !db.bool  -> !db.int<64> {
+                %49 = db.constant (1) :!db.int<64>
                 db.yield %49 : !db.int<64>
+            } else {
+                %50 = db.constant (0) :!db.int<64>
+                db.yield %50 : !db.int<64>
             }
-            relalg.addattr @aggfmname3({type=!db.int<64>}) %47
+            %51 = relalg.addattr %40, @aggfmname3({type=!db.int<64>}) %48
+            relalg.return %51 : !relalg.tuple
+        }
+        %54 = relalg.aggregation @aggr1 %29 [@lineitem::@l_shipmode] (%52 : !relalg.relation, %53 : !relalg.tuple) {
+            %55 = relalg.aggrfn sum @map1::@aggfmname1 %52 : !db.int<64>
+            %56 = relalg.addattr %53, @aggfmname2({type=!db.int<64>}) %55
+            %57 = relalg.aggrfn sum @map1::@aggfmname3 %52 : !db.int<64>
+            %58 = relalg.addattr %56, @aggfmname4({type=!db.int<64>}) %57
             relalg.return
         }
-        %51 = relalg.aggregation @aggr1 %29 [@lineitem::@l_shipmode] (%50 : !relalg.relation) {
-            %52 = relalg.aggrfn sum @map1::@aggfmname1 %50 : !db.int<64>
-            relalg.addattr @aggfmname2({type=!db.int<64>}) %52
-            %53 = relalg.aggrfn sum @map1::@aggfmname3 %50 : !db.int<64>
-            relalg.addattr @aggfmname4({type=!db.int<64>}) %53
-            relalg.return
-        }
-        %54 = relalg.sort %51 [(@lineitem::@l_shipmode,asc)]
-        %55 = relalg.materialize %54 [@lineitem::@l_shipmode,@aggr1::@aggfmname2,@aggr1::@aggfmname4] => ["l_shipmode","high_line_count","low_line_count"] : !db.table
-        return %55 : !db.table
+        %59 = relalg.sort %54 [(@lineitem::@l_shipmode,asc)]
+        %60 = relalg.materialize %59 [@lineitem::@l_shipmode,@aggr1::@aggfmname2,@aggr1::@aggfmname4] => ["l_shipmode","high_line_count","low_line_count"] : !db.table
+        return %60 : !db.table
     }
 }
 
