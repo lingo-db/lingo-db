@@ -394,23 +394,6 @@ class LoadOpLowering : public ConversionPattern {
       return success();
    }
 };
-class ToRawPtrOpLowering : public ConversionPattern {
-   public:
-   explicit ToRawPtrOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::util::ToRawPointerOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      mlir::util::ToRawPointerOpAdaptor loadOpAdaptor(operands);
-      auto castedOp = cast<mlir::util::ToRawPointerOp>(op);
-      auto genericMemrefType = castedOp.ref().getType().cast<mlir::util::GenericMemrefType>();
-      Value elementPtr = getPtrFromGenericMemref(genericMemrefType, loadOpAdaptor.ref(), rewriter, typeConverter);
-
-      rewriter.replaceOpWithNewOp<LLVM::PtrToIntOp>(op, rewriter.getIntegerType(64), elementPtr);
-      return success();
-   }
-};
 class CastOpLowering : public ConversionPattern {
    public:
    explicit CastOpLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -453,25 +436,6 @@ class CastOpLowering : public ConversionPattern {
             op->getLoc(), LLVM::LLVMPointerType::get(targetElemType), adaptor.val());
          rewriter.replaceOp(op, casted);
       }
-      return success();
-   }
-};
-class FromRawPtrOpLowering : public ConversionPattern {
-   public:
-   explicit FromRawPtrOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::util::FromRawPointerOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      mlir::util::FromRawPointerOpAdaptor loadOpAdaptor(operands);
-      auto castedOp = cast<mlir::util::FromRawPointerOp>(op);
-      auto genericMemrefType = castedOp.ref().getType().cast<mlir::util::GenericMemrefType>();
-      auto elemType = typeConverter->convertType(genericMemrefType.getElementType());
-      auto elemPtrType = mlir::LLVM::LLVMPointerType::get(elemType);
-      Value ptr = rewriter.create<LLVM::IntToPtrOp>(rewriter.getUnknownLoc(), elemPtrType, loadOpAdaptor.ptr());
-      rewriter.replaceOp(op, ptr);
-
       return success();
    }
 };
@@ -532,6 +496,4 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<ToMemrefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<StoreOpLowering>(typeConverter, patterns.getContext());
    patterns.add<LoadOpLowering>(typeConverter, patterns.getContext());
-   patterns.add<FromRawPtrOpLowering>(typeConverter, patterns.getContext());
-   patterns.add<ToRawPtrOpLowering>(typeConverter, patterns.getContext());
 }

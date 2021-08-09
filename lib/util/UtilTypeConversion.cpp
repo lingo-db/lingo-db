@@ -211,34 +211,6 @@ class LoadOpLowering : public ConversionPattern {
       return success();
    }
 };
-class ToRawPtrLowering : public ConversionPattern {
-   public:
-   explicit ToRawPtrLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::util::ToRawPointerOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      mlir::util::ToRawPointerOpAdaptor adaptor(operands);
-      auto castedOp = mlir::dyn_cast_or_null<mlir::util::ToRawPointerOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::util::ToRawPointerOp>(op, castedOp.ptr().getType(), adaptor.ref());
-      return success();
-   }
-};
-class FromRawPtrLowering : public ConversionPattern {
-   public:
-   explicit FromRawPtrLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::util::FromRawPointerOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      mlir::util::FromRawPointerOpAdaptor adaptor(operands);
-      auto castedOp = mlir::dyn_cast_or_null<mlir::util::FromRawPointerOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::util::FromRawPointerOp>(op, typeConverter->convertType(castedOp.ref().getType()), adaptor.ptr());
-      return success();
-   }
-};
 class CastOpLowering : public ConversionPattern {
    public:
    explicit CastOpLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -283,8 +255,6 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
 
    patterns.add<SizeOfLowering>(typeConverter, patterns.getContext());
    patterns.add<LoadOpLowering>(typeConverter, patterns.getContext());
-   patterns.add<ToRawPtrLowering>(typeConverter, patterns.getContext());
-   patterns.add<FromRawPtrLowering>(typeConverter, patterns.getContext());
 
    typeConverter.addConversion([&](mlir::util::GenericMemrefType genericMemrefType) {
       return mlir::util::GenericMemrefType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());

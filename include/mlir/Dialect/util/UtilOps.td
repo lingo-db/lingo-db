@@ -88,16 +88,6 @@ let arguments = (ins GenericMemrefType:$generic_memref,Optional<Index>:$idx);
 let results=(outs AnyType:$val);
 let assemblyFormat = "$generic_memref `[` $idx `]` `:`type($generic_memref) `->` type($val) attr-dict";
 }
-def ToRawPointerOp  : Util_Op<"to_raw_ptr",[NoSideEffect]> {
-let arguments = (ins GenericMemrefType:$ref);
-let results=(outs Index:$ptr);
-let assemblyFormat = "$ref `:`type($ref) attr-dict";
-}
-def FromRawPointerOp  : Util_Op<"from_raw_ptr",[NoSideEffect]> {
-let arguments = (ins Index:$ptr);
-let results=(outs GenericMemrefType:$ref);
-let assemblyFormat = "$ptr `->` type($ref) attr-dict";
-}
 def SizeOfOp  : Util_Op<"sizeof",[NoSideEffect]> {
 let arguments = (ins TypeAttr:$type);
 let results=(outs Index:$res);
