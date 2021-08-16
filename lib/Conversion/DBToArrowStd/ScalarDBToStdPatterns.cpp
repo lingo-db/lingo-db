@@ -678,7 +678,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
       }
    });
    typeConverter.addConversion([&](mlir::db::FlagType type) {
-     auto boolType= mlir::db::BoolType::get(patterns.getContext());
+     auto boolType= typeConverter.convertType(mlir::db::BoolType::get(patterns.getContext()));
      Type memrefType = util::GenericMemrefType::get(patterns.getContext(), boolType, llvm::Optional<int64_t>());
       return memrefType;
    });

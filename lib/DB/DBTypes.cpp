@@ -178,6 +178,26 @@ mlir::Type mlir::db::CollectionType::getElementType() const {
       })
       .Default([](::mlir::Type) { return Type(); });
 }
+bool mlir::db::CollectionType::classof(Type t) {
+   return ::llvm::TypeSwitch<Type, bool>(t)
+   .Case<::mlir::db::GenericIterableType>([&](::mlir::db::GenericIterableType t) { return true; })
+   .Case<::mlir::db::RangeType>([&](::mlir::db::RangeType t) {
+      return true;
+   })
+   .Case<::mlir::db::VectorType>([&](::mlir::db::VectorType t) {
+      return true;
+   })
+   .Case<::mlir::db::JoinHashtableType>([&](::mlir::db::JoinHashtableType t) {
+      return true;
+   })
+   .Case<::mlir::db::MarkableJoinHashtableType>([&](::mlir::db::MarkableJoinHashtableType t) {
+      return true;
+   })
+   .Case<::mlir::db::AggregationHashtableType>([&](::mlir::db::AggregationHashtableType t) {
+      return true;
+   })
+   .Default([](::mlir::Type) { return false; });
+}
 template <class X>
 struct ParseSingleImpl {};
 template <>

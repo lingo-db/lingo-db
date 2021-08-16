@@ -555,11 +555,11 @@ static ParseResult parseMaterializeOp(OpAsmParser& parser, OperationState& resul
    parser.parseAttribute(columns);
    result.addAttribute("columns", columns);
 
-   mlir::db::CollectionType collectionType;
-   if (parser.parseColonType(collectionType)) {
+   mlir::db::TableType tableType;
+   if (parser.parseColonType(tableType)) {
       return failure();
    }
-   return parser.addTypeToList(collectionType, result.types);
+   return parser.addTypeToList(tableType, result.types);
 }
 static void print(OpAsmPrinter& p, relalg::MaterializeOp& op) {
    p << op.getOperationName() << " " << op.rel() << " ";

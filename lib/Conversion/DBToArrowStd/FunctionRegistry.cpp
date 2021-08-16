@@ -30,7 +30,6 @@ mlir::FuncOp mlir::db::codegen::FunctionRegistry::insertFunction(mlir::OpBuilder
    OpBuilder::InsertionGuard insertionGuard(builder);
    builder.setInsertionPointToStart(parentModule.getBody());
    FuncOp funcOp = builder.create<FuncOp>(parentModule.getLoc(), function.useWrapper?"_mlir_ciface_"+function.name:function.name, builder.getFunctionType(function.operands, function.results), builder.getStringAttr("private"));
-   funcOp.dump();
    return funcOp;
 }
 

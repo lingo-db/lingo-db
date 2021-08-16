@@ -44,6 +44,7 @@ def DBType : Type<CPred<"$_self.isa<::mlir::db::DBType>()">,"DB dialect type">;
 def DB_BoolType : Type<CPred<"$_self.isa<::mlir::db::BoolType>()">,"DB bool type">{
 let builderCall = "::mlir::db::BoolType::get($_builder.getContext(),false)";
 }
+def DB_TableType : Type<CPred<"$_self.isa<::mlir::db::TableType>()">,"DB table type">;
 def DB_CollectionType : Type<CPred<"$_self.isa<::mlir::db::CollectionType>()">,"DB collection type">;
 def DB_IntType : Type<CPred<"$_self.isa<::mlir::db::IntType>()">,"DB int type">{
 let builderCall = "::mlir::db::IntType::get($_builder.getContext(),false,64)";
@@ -358,7 +359,7 @@ let assemblyFormat =
 def MaterializeOp : RelAlg_Op<"materialize",[NoSideEffect]> {
 let summary = "materialize operation";
 let arguments = (ins RelAlg_TupleStream:$rel,ArrayAttr:$attrs,ArrayAttr:$columns);
-let results = (outs DB_CollectionType:$result);
+let results = (outs DB_TableType:$result);
 }
 def TmpOp : RelAlg_Op<"tmp",[NoSideEffect,Operator]> {
 let summary = "create tmp";

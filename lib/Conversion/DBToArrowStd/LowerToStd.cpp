@@ -147,8 +147,12 @@ static bool hasDBType(TypeRange types) {
       } else if (auto functionType = type.dyn_cast_or_null<mlir::FunctionType>()) {
          res |= hasDBType(functionType.getInputs()) ||
             hasDBType(functionType.getResults());
-      } else if (type.isa<mlir::db::TableType>() || type.isa<mlir::db::VectorType>()) {
+      } else if (type.isa<mlir::db::TableType>() || type.isa<mlir::db::VectorType>()|| type.isa<mlir::db::FlagType>()) {
          res = true;
+      }else{
+         if (type.isa<mlir::db::CollectionType>()) {
+            res = true;
+         }
       }
    }
    return res;

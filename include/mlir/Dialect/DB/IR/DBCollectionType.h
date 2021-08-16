@@ -13,6 +13,7 @@ class CollectionType : public mlir::Type {
    public:
    using Type::Type;
    Type getElementType() const;
+   static bool classof(Type);
 };
 } // namespace mlir::db
 

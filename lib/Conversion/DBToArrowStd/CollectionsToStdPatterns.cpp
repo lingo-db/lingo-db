@@ -165,8 +165,12 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
    });
 
    typeConverter.addConversion([&](mlir::db::AggregationHashtableType aggregationHashtableType) {
-     auto ptrType=mlir::util::GenericMemrefType::get(patterns.getContext(),IntegerType::get(patterns.getContext(), 8),llvm::Optional<int64_t>());
-      return ptrType;
+      if(aggregationHashtableType.getKeyType().getTypes().empty()){
+         return (Type)typeConverter.convertType(aggregationHashtableType.getValType());
+      }else {
+         auto ptrType = mlir::util::GenericMemrefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
+         return (Type)ptrType;
+      }
    });
    typeConverter.addConversion([&](mlir::db::JoinHashtableType aggregationHashtableType) {
      auto ptrType=mlir::util::GenericMemrefType::get(patterns.getContext(),IntegerType::get(patterns.getContext(), 8),llvm::Optional<int64_t>());
