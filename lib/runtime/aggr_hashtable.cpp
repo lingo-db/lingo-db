@@ -21,4 +21,18 @@ void runtime::SimpleHashTable::resize() {
       entry.next = htBefore;
    }
 }
+uint8_t* runtime::SimpleHashTable::insert(uint64_t hash) {
+   entries++;
+   double loadFactor = entries / (double) hashTable.size();
+   if (loadFactor > 0.5) {
+      resize();
+   }
+   size_t loc = hash & hashTableMask;
+   Entry* htBefore = hashTable[loc];
+   Entry* newEntry = buffer.alloc();
+   newEntry->next = htBefore;
+   hashTable[loc] = newEntry;
+   newEntry->hash = hash;
+   return newEntry->data;
+}
 runtime::AggrHashtableBuilder::~AggrHashtableBuilder() {}

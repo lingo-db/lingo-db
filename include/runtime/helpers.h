@@ -104,8 +104,7 @@ class Triple {
    public:
    Triple(T1 first, T2 second, T3 third) : first(first), second(second), third(third) {}
 };
-template <class T>
-class ObjectBuffer {
+struct ObjectBufferStorage{
    class Part {
       public:
       size_t len;
@@ -122,10 +121,10 @@ class ObjectBuffer {
       inline bool fits(size_t required) {
          return required <= (capacity - len);
       }
-      inline T* alloc(size_t size) {
+      inline uint8_t * alloc(size_t size) {
          uint8_t* ptr = reinterpret_cast<uint8_t*>(data + len);
          this->len += size;
-         return (T*) ptr;
+         return ptr;
       }
 
       size_t getCapacity() const {
@@ -138,6 +137,20 @@ class ObjectBuffer {
 
    size_t objSize;
    std::vector<Part*> parts;
+   uint8_t* alloc();
+   ObjectBufferStorage(size_t objSize){
+      this->objSize=objSize;
+      parts.push_back(new Part(1024 * objSize));
+   }
+   ~ObjectBufferStorage(){
+      for(auto *part:parts){
+         delete part;
+      }
+   }
+};
+template <class T>
+class ObjectBuffer {
+   using Part=ObjectBufferStorage::Part;
 
    public:
    class RangeIterator : public std::iterator<std::forward_iterator_tag, T> {
@@ -183,28 +196,18 @@ class ObjectBuffer {
       size_t offset;
       size_t objSize;
    };
-   inline T* alloc() {
-      auto* currPart = parts[parts.size() - 1];
-      if (!currPart->fits(objSize)) {
-         size_t newSize = currPart->getCapacity() * 2;
-         parts.push_back(new Part(newSize));
-         currPart = parts[parts.size() - 1];
-      }
-      return (T*) currPart->alloc(objSize);
+   ObjectBufferStorage storage;
+   T* alloc() {
+      return (T*)storage.alloc();
    }
-   ObjectBuffer(size_t objSize) : objSize(objSize) {
-      parts.push_back(new Part(1024 * objSize));
+   ObjectBuffer(size_t objSize) : storage(objSize) {
    }
-   RangeIterator end() { return RangeIterator(parts); }
-   RangeIterator begin() { return RangeIterator(parts, 0, 0, objSize); }
+   RangeIterator end() { return RangeIterator(storage.parts); }
+   RangeIterator begin() { return RangeIterator(storage.parts, 0, 0, storage.objSize); }
    RangeIterator* beginPtr() {
-      return new RangeIterator(parts, 0, 0, objSize);
+      return new RangeIterator(storage.parts, 0, 0, storage.objSize);
    }
-   ~ObjectBuffer(){
-      for(auto *part:parts){
-         delete part;
-      }
-   }
+
 };
 class VarLenBuffer {
    class Part {

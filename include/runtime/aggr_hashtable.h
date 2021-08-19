@@ -20,20 +20,7 @@ struct SimpleHashTable {
    size_t hashTableMask;
    size_t entries;
    void resize();
-   uint8_t* insert(uint64_t hash) {
-      entries++;
-      double loadFactor = entries / (double) hashTable.size();
-      if (loadFactor > 0.5) {
-         resize();
-      }
-      size_t loc = hash & hashTableMask;
-      Entry* htBefore = hashTable[loc];
-      Entry* newEntry = buffer.alloc();
-      newEntry->next = htBefore;
-      hashTable[loc] = newEntry;
-      newEntry->hash = hash;
-      return newEntry->data;
-   }
+   uint8_t* insert(uint64_t hash);
    // EqualRangeIterator for the hash table
    class EqualRangeIterator : public std::iterator<std::forward_iterator_tag, Entry> {
       public:

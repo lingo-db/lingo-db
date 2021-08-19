@@ -55,7 +55,7 @@ static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::Funct
    //TODO: implement other types too
    return FunctionId::ArrowTableBuilderAddInt32;
 }
-
+/*
 Value serializeForVector(OpBuilder& builder, TypeConverter* converter, Value vectorBuilder, Value element, Type type, db::codegen::FunctionRegistry& functionRegistry) {
    if (auto originalTupleType = type.dyn_cast_or_null<TupleType>()) {
       if (originalTupleType.getTypes().empty()) {
@@ -168,7 +168,7 @@ Value serializeForMJoinHT(OpBuilder& builder, TypeConverter* converter, Value ve
    } else {
       return element;
    }
-}
+}*/
 class BuilderMergeLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
 
@@ -204,7 +204,7 @@ class BuilderMergeLowering : public ConversionPattern {
          functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderFinishRow, mergeOpAdaptor.builder());
          rewriter.replaceOp(op, mergeOpAdaptor.builder());
       } else if (auto vectorBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::VectorBuilderType>()) {
-         Value v = serializeForVector(rewriter, typeConverter, mergeOpAdaptor.builder(), mergeOpAdaptor.val(), mergeOp.val().getType(), functionRegistry);
+         Value v = mergeOpAdaptor.val();//serializeForVector(rewriter, typeConverter, mergeOpAdaptor.builder(), mergeOpAdaptor.val(), mergeOp.val().getType(), functionRegistry);
          Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), v.getType());
          Value ptr = functionRegistry.call(rewriter, FunctionId::VectorBuilderMerge, ValueRange({mergeOpAdaptor.builder(), elementSize}))[0];
          Value typedPtr = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), v.getType(), llvm::Optional<int64_t>()), ptr);
@@ -277,8 +277,8 @@ class BuilderMergeLowering : public ConversionPattern {
                      OpBuilder::InsertionGuard insertionGuard(rewriter);
                      scf::IfOp::ensureTerminator(secondIfOp.elseRegion(), rewriter, loc);
                      rewriter.setInsertionPointToStart(&secondIfOp.elseRegion().front());
-                     Value serializedKey = serializeForAggrHT(rewriter, typeConverter, builderPtr, currKey, aggrHTBuilderType.getKeyType(), functionRegistry);
-                     Value serializedVal = serializeForAggrHT(rewriter, typeConverter, builderPtr, currVal, aggrHTBuilderType.getValType(), functionRegistry);
+                     Value serializedKey = currKey;//serializeForAggrHT(rewriter, typeConverter, builderPtr, currKey, aggrHTBuilderType.getKeyType(), functionRegistry);
+                     Value serializedVal = currVal;//serializeForAggrHT(rewriter, typeConverter, builderPtr, currVal, aggrHTBuilderType.getValType(), functionRegistry);
                      rewriter.create<util::StoreOp>(loc, serializedKey, allocaKey, Value());
                      rewriter.create<util::StoreOp>(loc, serializedVal, allocaVal, Value());
                      functionRegistry.call(rewriter, FunctionId::AggrHtBuilderMerge, ValueRange({builderPtr, hashed, plainMemrefKey, plainMemrefVal}));
@@ -289,8 +289,8 @@ class BuilderMergeLowering : public ConversionPattern {
                OpBuilder::InsertionGuard insertionGuard(rewriter);
                scf::IfOp::ensureTerminator(newIfOp.elseRegion(), rewriter, loc);
                rewriter.setInsertionPointToStart(&newIfOp.elseRegion().front());
-               Value serializedKey = serializeForAggrHT(rewriter, typeConverter, builderPtr, currKey, aggrHTBuilderType.getKeyType(), functionRegistry);
-               Value serializedVal = serializeForAggrHT(rewriter, typeConverter, builderPtr, currVal, aggrHTBuilderType.getValType(), functionRegistry);
+               Value serializedKey = currKey;// serializeForAggrHT(rewriter, typeConverter, builderPtr, currKey, aggrHTBuilderType.getKeyType(), functionRegistry);
+               Value serializedVal = currVal;// serializeForAggrHT(rewriter, typeConverter, builderPtr, currVal, aggrHTBuilderType.getValType(), functionRegistry);
                rewriter.create<util::StoreOp>(loc, serializedKey, allocaKey, Value());
                rewriter.create<util::StoreOp>(loc, serializedVal, allocaVal, Value());
                functionRegistry.call(rewriter, FunctionId::AggrHtBuilderMerge, ValueRange({builderPtr, hashed, plainMemrefKey, plainMemrefVal}));
@@ -298,7 +298,7 @@ class BuilderMergeLowering : public ConversionPattern {
             rewriter.replaceOp(op, mergeOpAdaptor.builder());
          }
       } else if (auto joinHtBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::JoinHTBuilderType>()) {
-         Value v = serializeForJoinHT(rewriter, typeConverter, mergeOpAdaptor.builder(), mergeOpAdaptor.val(), mergeOp.val().getType(), functionRegistry);
+         Value v = mergeOpAdaptor.val();//serializeForJoinHT(rewriter, typeConverter, mergeOpAdaptor.builder(), mergeOpAdaptor.val(), mergeOp.val().getType(), functionRegistry);
          auto tupleType = mlir::TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), v.getType()});
          auto valType = mergeOpAdaptor.val().getType().cast<mlir::TupleType>();
 
@@ -311,7 +311,7 @@ class BuilderMergeLowering : public ConversionPattern {
          rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), bucket, typedPtr, Value());
          rewriter.replaceOp(op, mergeOpAdaptor.builder());
       } else if (auto joinHtBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::MarkableJoinHTBuilderType>()) {
-         Value v = serializeForMJoinHT(rewriter, typeConverter, mergeOpAdaptor.builder(), mergeOpAdaptor.val(), mergeOp.val().getType(), functionRegistry);
+         Value v = mergeOpAdaptor.val();//serializeForMJoinHT(rewriter, typeConverter, mergeOpAdaptor.builder(), mergeOpAdaptor.val(), mergeOp.val().getType(), functionRegistry);
          auto tupleType = mlir::TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), v.getType()});
          auto valType = mergeOpAdaptor.val().getType().cast<mlir::TupleType>();
 
@@ -353,6 +353,7 @@ class CreateAggrHTBuilderLowering : public ConversionPattern {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(parentModule.getBody());
          rawUpdateFunc = rewriter.create<FuncOp>(parentModule.getLoc(), "db_ht_aggr_builder_raw_update" + std::to_string(id++), rewriter.getFunctionType(TypeRange({aggrType, valType}), TypeRange(aggrType)));
+         rawUpdateFunc.getOperation()->setAttr("passthrough", ArrayAttr::get(rewriter.getContext(), {rewriter.getStringAttr("alwaysinline")}));
          auto* funcBody = new Block;
          funcBody->addArguments(TypeRange({aggrType, valType}));
          rawUpdateFunc.body().push_back(funcBody);
@@ -390,6 +391,7 @@ class CreateAggrHTBuilderLowering : public ConversionPattern {
             OpBuilder::InsertionGuard insertionGuard(rewriter);
             rewriter.setInsertionPointToStart(parentModule.getBody());
             rawCompareFunc = rewriter.create<FuncOp>(parentModule.getLoc(), "db_ht_aggr_builder_raw_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({keyType, keyType}), TypeRange(mlir::db::BoolType::get(rewriter.getContext()))));
+            rawCompareFunc.getOperation()->setAttr("passthrough", ArrayAttr::get(rewriter.getContext(), {rewriter.getStringAttr("alwaysinline")}));
             auto* funcBody = new Block;
             funcBody->addArguments(TypeRange({keyType, keyType}));
             rawCompareFunc.body().push_back(funcBody);

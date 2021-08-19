@@ -34,7 +34,6 @@ static void optimizeModule(llvm::Module& module) {
    modulePM.add(llvm::createAlwaysInlinerLegacyPass());
    modulePM.add(llvm::createGlobalDCEPass());
    modulePM.run(module);
-   module.dump();
 }
 
 }  // namespace
