@@ -8,12 +8,13 @@ dataset = sys.argv[2]
 
 
 class QueryResult:
-    def __init__(self, query, runtime,optimization_time,lower_to_std_time,lower_to_llvm_time,llvm_time, return_code):
+    def __init__(self, query, runtime,optimization_time,lower_to_std_time,lower_to_llvm_time,conversion_time,llvm_time, return_code):
         self.query = query
         self.runtime = runtime
         self.optimization_time=optimization_time
         self.lower_to_std_time = lower_to_std_time
         self.lower_to_llvm_time = lower_to_llvm_time
+        self.conversion_time=conversion_time
         self.llvm_time=llvm_time
         self.return_code = return_code
 
@@ -41,11 +42,14 @@ for qnum in range(1, 23):
         m = re.search(r'lowering to llvm took: ([\d,\.,e,\+]+) ms', output)
         assert m is not None, 'Unexpected output:\n' + output
         lower_to_llvm_time = float(m.group(1))
+        m = re.search(r'conversion: ([\d,\.,e,\+]+) ms', output)
+        assert m is not None, 'Unexpected output:\n' + output
+        conversion = float(m.group(1))
         m = re.search(r'jit: ([\d,\.,e,\+]+) ms', output)
         assert m is not None, 'Unexpected output:\n' + output
         jit = float(m.group(1))
         print(output)
-    results.append(QueryResult("tpch" + str(qnum), runtime,optimization_time,lower_to_std_time,lower_to_llvm_time,jit, returncode))
+    results.append(QueryResult("tpch" + str(qnum), runtime,optimization_time,lower_to_std_time,lower_to_llvm_time,conversion,jit, returncode))
 
 for res in results:
-    print('%12s %5i %5i %5i %5i %5i %5i' % (res.query, res.runtime,res.optimization_time,res.lower_to_std_time,res.lower_to_llvm_time,res.llvm_time , res.return_code))
+    print('%12s %5i %5i %5i %5i %5i %5i %5i' % (res.query, res.runtime,res.optimization_time,res.lower_to_std_time,res.lower_to_llvm_time,res.conversion_time,res.llvm_time , res.return_code))

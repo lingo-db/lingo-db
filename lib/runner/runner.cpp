@@ -289,33 +289,17 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
       assert(false && "could not get target");
       return false;
    }
-   auto customOptPipeline = [](llvm::Module* m) -> llvm::Error {
-      llvm::legacy::PassManager modulePM;
-      llvm::legacy::FunctionPassManager funcPM(m);
-      funcPM.add(llvm::createInstructionCombiningPass());
-      funcPM.add(llvm::createReassociatePass());
-      funcPM.add(llvm::createGVNPass());
-      funcPM.add(llvm::createCFGSimplificationPass());
-      funcPM.add(llvm::createAggressiveDCEPass());
-      funcPM.add(llvm::createCFGSimplificationPass());
-
-      funcPM.doInitialization();
-      for (auto& func : *m) {
-         funcPM.run(func);
-      }
-      funcPM.doFinalization();
-      modulePM.add(llvm::createFunctionInliningPass(3, 0, false));
-      modulePM.run(*m);
-      return llvm::Error::success();
-   };
 
    // Create an MLIR execution engine. The execution engine eagerly JIT-compiles
    // the module.
-   auto start = std::chrono::high_resolution_clock::now();
-
    llvm::orc::ThreadSafeContext llvmContext{std::make_unique<llvm::LLVMContext>()};
-   runner::JIT jit(llvmContext);
+   auto startConv = std::chrono::high_resolution_clock::now();
    std::unique_ptr<llvm::Module> converted=convertMLIRModule(ctxt->module.get(),*llvmContext.getContext());
+   auto endConv = std::chrono::high_resolution_clock::now();
+   std::cout << "conversion: " << std::chrono::duration_cast<std::chrono::milliseconds>(endConv - startConv).count() << " ms" << std::endl;
+
+   auto start = std::chrono::high_resolution_clock::now();
+   runner::JIT jit(llvmContext);
    if(jit.addModule(std::move(converted))){
       assert(false);
    }
@@ -323,7 +307,6 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    auto** resPtr = &res;
    auto** contextPtr = &context;
 
-   std::cout << "context:" << context << std::endl;
    // Invoke the JIT-compiled function.
    auto lookupResult = jit.getPointerToFunction("main");
    if (!lookupResult) {
