@@ -1,4 +1,5 @@
 #include "llvm/Linker/Linker.h"
+#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/TargetRegistry.h"
@@ -11,6 +12,7 @@
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 
+#include "runner/jit.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
@@ -43,6 +45,7 @@
 #include <llvm/Support/SourceMgr.h>
 
 #include <runner/runner.h>
+#include <runtime/helpers.h>
 
 namespace {
 struct ToLLVMLoweringPass
@@ -164,7 +167,7 @@ int dumpLLVMIR(mlir::ModuleOp module) {
 
    /// Optionally run an optimization pipeline over the llvm module.
    auto optPipeline = mlir::makeOptimizingTransformer(
-      /*optLevel=*/true ? 3 : 0, /*sizeLevel=*/0,
+      /*optLevel=*/true ? 0 : 0, /*sizeLevel=*/0,
       /*targetMachine=*/nullptr);
    if (auto err = optPipeline(llvmModule.get())) {
       llvm::errs() << "Failed to optimize LLVM IR " << err << "\n";
@@ -310,17 +313,19 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    // the module.
    auto start = std::chrono::high_resolution_clock::now();
 
-   auto maybeEngine = mlir::ExecutionEngine::create(
-      ctxt->module.get(), /*llvmModuleBuilder=*/convertMLIRModule, customOptPipeline);
-   assert(maybeEngine && "failed to construct an execution engine");
-   auto& engine = maybeEngine.get();
+   llvm::orc::ThreadSafeContext llvmContext{std::make_unique<llvm::LLVMContext>()};
+   runner::JIT jit(llvmContext);
+   std::unique_ptr<llvm::Module> converted=convertMLIRModule(ctxt->module.get(),*llvmContext.getContext());
+   if(jit.addModule(std::move(converted))){
+      assert(false);
+   }
    uint8_t* res;
    auto** resPtr = &res;
    auto** contextPtr = &context;
 
    std::cout << "context:" << context << std::endl;
    // Invoke the JIT-compiled function.
-   auto lookupResult = engine->lookup("main");
+   auto lookupResult = jit.getPointerToFunction("main");
    if (!lookupResult) {
       llvm::errs() << "JIT invocation failed\n";
       return false;
@@ -328,20 +333,19 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    auto end = std::chrono::high_resolution_clock::now();
    std::cout << "jit: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
 
-   void* data[] = {contextPtr, resPtr};
-   auto funcPtr = lookupResult.get();
+   auto funcPtr = lookupResult;
    std::vector<size_t> measuredTimes;
    size_t repeats = 5;
    for (size_t i = 0; i < repeats; i++) {
       auto executionStart = std::chrono::high_resolution_clock::now();
       if (ctxt->numArgs == 1 && ctxt->numResults == 1) {
-         typedef void (*myfunc)(void**);
+         typedef uint8_t* (*myfunc)(void*);
          auto fn = (myfunc) funcPtr;
-         fn(data);
+         res=fn(context);
       } else if (ctxt->numArgs == 1) {
          typedef void (*myfunc)(void*);
          auto fn = (myfunc) funcPtr;
-         fn(&contextPtr);
+         fn(context);
       } else {
          typedef void (*myfunc)();
          auto fn = (myfunc) funcPtr;
