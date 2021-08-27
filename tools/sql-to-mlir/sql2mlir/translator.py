@@ -342,7 +342,7 @@ class Translator:
         res = codegen.create_relalg_materialize(var, results)
         return res
     def translateIntoFunction(self,codegen,name, params):
-        func_params=["%executionContext: !util.generic_memref<i8>"]
+        func_params=[]
         for param_name in params:
             p=codegen.newParam(params[param_name])
             func_params.append(p+": "+params[param_name].to_string())

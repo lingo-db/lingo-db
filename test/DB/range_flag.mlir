@@ -1,6 +1,6 @@
  // RUN: db-run %s %S/../../resources/data/test | FileCheck %s
  module {
-	func @main (%execution_context:  !util.generic_memref<i8>) {
+	func @main () {
             %zero = db.constant (0) : !db.int<32>
             %ten = db.constant (10) : !db.int<32>
             %one = db.constant (1) : !db.int<32>

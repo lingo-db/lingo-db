@@ -267,9 +267,9 @@ let assemblyFormat = "$builder `:` type($builder) `->` type($builded) attr-dict"
 def DB_GetTable : DB_Op<"get_table",
 [NoSideEffect]> {
 let summary = "get table";
-let arguments = (ins StrAttr:$tablename,AnyType:$execution_context);
+let arguments = (ins StrAttr:$tablename);
 let results = (outs DB_Table:$table);
-let assemblyFormat = "$tablename $execution_context `:` type($execution_context) attr-dict";
+let assemblyFormat = "$tablename attr-dict";
 }
 def DB_TableScan : DB_Op<"tablescan",
 [NoSideEffect]> {

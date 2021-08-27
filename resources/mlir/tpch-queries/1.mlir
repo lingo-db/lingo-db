@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main (%executionContext: !util.generic_memref<i8>)  -> !db.table{
+    func @main ()  -> !db.table{
         %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<64>}),
             l_partkey => @l_partkey({type=!db.int<64>}),
             l_suppkey => @l_suppkey({type=!db.int<64>}),

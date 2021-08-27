@@ -26,7 +26,7 @@ class BaseTableLowering : public mlir::relalg::ProducerConsumerNode {
    virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
       auto scope = context.createScope();
       using namespace mlir;
-      mlir::Value table = builder.create<mlir::db::GetTable>(baseTableOp->getLoc(), mlir::db::TableType::get(builder.getContext()), baseTableOp->getAttr("table_identifier").cast<mlir::StringAttr>(), context.executionContext);
+      mlir::Value table = builder.create<mlir::db::GetTable>(baseTableOp->getLoc(), mlir::db::TableType::get(builder.getContext()), baseTableOp->getAttr("table_identifier").cast<mlir::StringAttr>());
       std::vector<mlir::Attribute> columnNames;
       std::vector<mlir::Type> types;
       std::vector<const mlir::relalg::RelationalAttribute*> attrs;

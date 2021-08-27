@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main (%executionContext: !util.generic_memref<i8>)  -> !db.table{
+    func @main ()  -> !db.table{
         %1 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=!db.int<64>}),
             o_custkey => @o_custkey({type=!db.int<64>}),
             o_orderstatus => @o_orderstatus({type=!db.string}),
@@ -61,41 +61,41 @@ module @querymodule{
             %34 = db.constant ("2-HIGH") :!db.string
             %35 = db.compare eq %33 : !db.string,%34 : !db.string
             %36 = db.or %32 : !db.bool,%35 : !db.bool
-            %37 = db.if %36 : !db.bool  -> !db.int<64> {
+            %40 = db.if %36 : !db.bool  -> (!db.int<64>) {
                 %38 = db.constant (1) :!db.int<64>
                 db.yield %38 : !db.int<64>
             } else {
                 %39 = db.constant (0) :!db.int<64>
                 db.yield %39 : !db.int<64>
             }
-            %40 = relalg.addattr %28, @aggfmname1({type=!db.int<64>}) %37
-            %41 = relalg.getattr %28 @orders::@o_orderpriority : !db.string
-            %42 = db.constant ("1-URGENT") :!db.string
-            %43 = db.compare neq %41 : !db.string,%42 : !db.string
-            %44 = relalg.getattr %28 @orders::@o_orderpriority : !db.string
-            %45 = db.constant ("2-HIGH") :!db.string
-            %46 = db.compare neq %44 : !db.string,%45 : !db.string
-            %47 = db.and %43 : !db.bool,%46 : !db.bool
-            %48 = db.if %47 : !db.bool  -> !db.int<64> {
-                %49 = db.constant (1) :!db.int<64>
-                db.yield %49 : !db.int<64>
-            } else {
-                %50 = db.constant (0) :!db.int<64>
+            %41 = relalg.addattr %28, @aggfmname1({type=!db.int<64>}) %40
+            %42 = relalg.getattr %28 @orders::@o_orderpriority : !db.string
+            %43 = db.constant ("1-URGENT") :!db.string
+            %44 = db.compare neq %42 : !db.string,%43 : !db.string
+            %45 = relalg.getattr %28 @orders::@o_orderpriority : !db.string
+            %46 = db.constant ("2-HIGH") :!db.string
+            %47 = db.compare neq %45 : !db.string,%46 : !db.string
+            %48 = db.and %44 : !db.bool,%47 : !db.bool
+            %52 = db.if %48 : !db.bool  -> (!db.int<64>) {
+                %50 = db.constant (1) :!db.int<64>
                 db.yield %50 : !db.int<64>
+            } else {
+                %51 = db.constant (0) :!db.int<64>
+                db.yield %51 : !db.int<64>
             }
-            %51 = relalg.addattr %40, @aggfmname3({type=!db.int<64>}) %48
-            relalg.return %51 : !relalg.tuple
+            %53 = relalg.addattr %41, @aggfmname3({type=!db.int<64>}) %52
+            relalg.return %53 : !relalg.tuple
         }
-        %54 = relalg.aggregation @aggr1 %29 [@lineitem::@l_shipmode] (%52 : !relalg.relation, %53 : !relalg.tuple) {
-            %55 = relalg.aggrfn sum @map1::@aggfmname1 %52 : !db.int<64>
-            %56 = relalg.addattr %53, @aggfmname2({type=!db.int<64>}) %55
-            %57 = relalg.aggrfn sum @map1::@aggfmname3 %52 : !db.int<64>
-            %58 = relalg.addattr %56, @aggfmname4({type=!db.int<64>}) %57
-            relalg.return %58 : !relalg.tuple
+        %56 = relalg.aggregation @aggr1 %29 [@lineitem::@l_shipmode] (%54 : !relalg.relation, %55 : !relalg.tuple) {
+            %57 = relalg.aggrfn sum @map1::@aggfmname1 %54 : !db.int<64>
+            %58 = relalg.addattr %55, @aggfmname2({type=!db.int<64>}) %57
+            %59 = relalg.aggrfn sum @map1::@aggfmname3 %54 : !db.int<64>
+            %60 = relalg.addattr %58, @aggfmname4({type=!db.int<64>}) %59
+            relalg.return %60 : !relalg.tuple
         }
-        %59 = relalg.sort %54 [(@lineitem::@l_shipmode,asc)]
-        %60 = relalg.materialize %59 [@lineitem::@l_shipmode,@aggr1::@aggfmname2,@aggr1::@aggfmname4] => ["l_shipmode","high_line_count","low_line_count"] : !db.table
-        return %60 : !db.table
+        %61 = relalg.sort %56 [(@lineitem::@l_shipmode,asc)]
+        %62 = relalg.materialize %61 [@lineitem::@l_shipmode,@aggr1::@aggfmname2,@aggr1::@aggfmname4] => ["l_shipmode","high_line_count","low_line_count"] : !db.table
+        return %62 : !db.table
     }
 }
 

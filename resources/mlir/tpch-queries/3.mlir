@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main (%executionContext: !util.generic_memref<i8>)  -> !db.table{
+    func @main ()  -> !db.table{
         %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<64>}),
             c_name => @c_name({type=!db.string}),
             c_address => @c_address({type=!db.string}),

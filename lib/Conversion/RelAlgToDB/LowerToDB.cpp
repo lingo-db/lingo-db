@@ -23,7 +23,6 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
    }
    void runOnFunction() override {
       mlir::relalg::LoweringContext loweringContext;
-      loweringContext.executionContext = getFunction().getArgument(0);
       getFunction().walk([&](mlir::Operation* op) {
          if (isTranslationHook(op)) {
             auto node = mlir::relalg::ProducerConsumerNodeRegistry::createNode(op);

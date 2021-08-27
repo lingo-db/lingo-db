@@ -176,16 +176,13 @@ class CodeGen:
             return self.create_db_binary_op(name,rec_vals)
         else:
             return res
-    def create_db_func_call(self,funcname,params,ctxt="",ctxtType=""):
+    def create_db_func_call(self,funcname,params):
         func=self.functions[funcname]
         casted_params=[]
 
         for i in range(0,len(func.operandTypes)):
             casted_params.append(self.toCommonType(params[i],func.operandTypes[i]))
         types_as_string=list(map(lambda val:val.to_string(),func.operandTypes))
-        if len(ctxt)>0 and len(ctxtType)>0:
-            casted_params.insert(0,ctxt)
-            types_as_string.insert(0,ctxtType)
         return self.addOp(func.resultType,["call"," @",func.name,"(",",".join(casted_params),") : (",",".join(types_as_string),") -> ", func.resultType.to_string()])
     def create_db_date_binary_op(self, name,values):
         args=["db.date_"+name+" "]

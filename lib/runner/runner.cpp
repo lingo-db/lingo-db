@@ -215,6 +215,7 @@ bool Runner::lower() {
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
    }
+
    auto end = std::chrono::high_resolution_clock::now();
    std::cout << "lowering to std took: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
    return true;
@@ -226,6 +227,10 @@ bool Runner::lowerToLLVM() {
    if (auto mainFunc = moduleOp.lookupSymbol<mlir::FuncOp>("main")) {
       ctxt->numArgs = mainFunc.getNumArguments();
       ctxt->numResults = mainFunc.getNumResults();
+      mlir::db::codegen::FunctionRegistry registry(moduleOp->getContext());
+      registry.registerFunctions();
+      mlir::OpBuilder builder(&mainFunc.body().front().front());
+      registry.getFunction(builder,mlir::db::codegen::FunctionRegistry::FunctionId::SetExecutionContext);
    }
    mlir::PassManager pm2(&ctxt->context);
    pm2.addPass(mlir::createLowerToCFGPass());
@@ -272,6 +277,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
 
    // Invoke the JIT-compiled function.
    auto *lookupResult = jit.getPointerToFunction("main");
+
    if (!lookupResult) {
       llvm::errs() << "JIT invocation failed\n";
       return false;
@@ -279,20 +285,26 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    auto end = std::chrono::high_resolution_clock::now();
    std::cout << "jit: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
 
+   {
+      auto *lookupResult2 = jit.getPointerToFunction("_mlir_ciface_set_execution_context");
+      if (!lookupResult2) {
+         llvm::errs() << "JIT invocation failed\n";
+         return false;
+      }
+      typedef uint8_t* (*myfunc)(void*);
+      auto fn = (myfunc) lookupResult2;
+      fn(context);
+   }
    auto* funcPtr = lookupResult;
    std::vector<size_t> measuredTimes;
    size_t repeats = 5;
    for (size_t i = 0; i < repeats; i++) {
       auto executionStart = std::chrono::high_resolution_clock::now();
-      if (ctxt->numArgs == 1 && ctxt->numResults == 1) {
-         typedef uint8_t* (*myfunc)(void*);
+      if (ctxt->numResults == 1) {
+         typedef uint8_t* (*myfunc)();
          auto fn = (myfunc) funcPtr;
-         res = fn(context);
-      } else if (ctxt->numArgs == 1) {
-         typedef void (*myfunc)(void*);
-         auto fn = (myfunc) funcPtr;
-         fn(context);
-      } else {
+         res = fn();
+      }else {
          typedef void (*myfunc)();
          auto fn = (myfunc) funcPtr;
          fn();

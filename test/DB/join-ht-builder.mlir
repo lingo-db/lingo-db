@@ -12,7 +12,7 @@
 //CHECK: string("---------------")
  module {
 
-	func @main (%execution_context:  !util.generic_memref<i8>) {
+	func @main () {
          %str_const = db.constant ( "---------------" ) :!db.string
 
          %str1=db.constant ( "stra" ) :!db.string

@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main (%executionContext: !util.generic_memref<i8>)  -> !db.table{
+    func @main ()  -> !db.table{
         %1 = relalg.basetable @part { table_identifier="part", rows=20000 , pkey=["p_partkey"]} columns: {p_partkey => @p_partkey({type=!db.int<64>}),
             p_name => @p_name({type=!db.string}),
             p_mfgr => @p_mfgr({type=!db.string}),
@@ -128,33 +128,33 @@ module @querymodule{
             %65 = relalg.getattr %63 @nation1::@n_name : !db.string
             %66 = db.constant ("BRAZIL") :!db.string
             %67 = db.compare eq %65 : !db.string,%66 : !db.string
-            %68 = db.if %67 : !db.bool  -> !db.decimal<15,2> {
+            %71 = db.if %67 : !db.bool  -> (!db.decimal<15,2>) {
                 %69 = relalg.getattr %63 @map2::@aggfmname2 : !db.decimal<15,2>
                 db.yield %69 : !db.decimal<15,2>
             } else {
                 %70 = db.constant (0) :!db.decimal<15,2>
                 db.yield %70 : !db.decimal<15,2>
             }
-            %71 = relalg.addattr %63, @aggfmname1({type=!db.decimal<15,2>}) %68
-            relalg.return %71 : !relalg.tuple
+            %72 = relalg.addattr %63, @aggfmname1({type=!db.decimal<15,2>}) %71
+            relalg.return %72 : !relalg.tuple
         }
-        %74 = relalg.aggregation @aggr2 %64 [@map2::@aggfmname1] (%72 : !relalg.relation, %73 : !relalg.tuple) {
-            %75 = relalg.aggrfn sum @map3::@aggfmname1 %72 : !db.decimal<15,2>
-            %76 = relalg.addattr %73, @aggfmname2({type=!db.decimal<15,2>}) %75
-            %77 = relalg.aggrfn sum @map2::@aggfmname2 %72 : !db.decimal<15,2>
-            %78 = relalg.addattr %76, @aggfmname3({type=!db.decimal<15,2>}) %77
-            relalg.return %78 : !relalg.tuple
+        %75 = relalg.aggregation @aggr2 %64 [@map2::@aggfmname1] (%73 : !relalg.relation, %74 : !relalg.tuple) {
+            %76 = relalg.aggrfn sum @map3::@aggfmname1 %73 : !db.decimal<15,2>
+            %77 = relalg.addattr %74, @aggfmname2({type=!db.decimal<15,2>}) %76
+            %78 = relalg.aggrfn sum @map2::@aggfmname2 %73 : !db.decimal<15,2>
+            %79 = relalg.addattr %77, @aggfmname3({type=!db.decimal<15,2>}) %78
+            relalg.return %79 : !relalg.tuple
         }
-        %80 = relalg.map @map4 %74 (%79: !relalg.tuple) {
-            %81 = relalg.getattr %79 @aggr2::@aggfmname2 : !db.decimal<15,2>
-            %82 = relalg.getattr %79 @aggr2::@aggfmname3 : !db.decimal<15,2>
-            %83 = db.div %81 : !db.decimal<15,2>,%82 : !db.decimal<15,2>
-            %84 = relalg.addattr %79, @aggfmname4({type=!db.decimal<15,2>}) %83
-            relalg.return %84 : !relalg.tuple
+        %81 = relalg.map @map4 %75 (%80: !relalg.tuple) {
+            %82 = relalg.getattr %80 @aggr2::@aggfmname2 : !db.decimal<15,2>
+            %83 = relalg.getattr %80 @aggr2::@aggfmname3 : !db.decimal<15,2>
+            %84 = db.div %82 : !db.decimal<15,2>,%83 : !db.decimal<15,2>
+            %85 = relalg.addattr %80, @aggfmname4({type=!db.decimal<15,2>}) %84
+            relalg.return %85 : !relalg.tuple
         }
-        %85 = relalg.sort %80 [(@map2::@aggfmname1,asc)]
-        %86 = relalg.materialize %85 [@map2::@aggfmname1,@map4::@aggfmname4] => ["o_year","mkt_share"] : !db.table
-        return %86 : !db.table
+        %86 = relalg.sort %81 [(@map2::@aggfmname1,asc)]
+        %87 = relalg.materialize %86 [@map2::@aggfmname1,@map4::@aggfmname4] => ["o_year","mkt_share"] : !db.table
+        return %87 : !db.table
     }
 }
 

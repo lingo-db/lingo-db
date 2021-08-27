@@ -60,7 +60,7 @@ JIT::JIT(llvm::orc::ThreadSafeContext& ctx)
 
 llvm::Error JIT::addModule(std::unique_ptr<llvm::Module> module) {
    llvm::legacy::PassManager modulePM;
-   modulePM.add(llvm::createInternalizePass([&](const llvm::GlobalValue& gv){return gv.getName()=="main"||gv.isDeclaration();}));
+   modulePM.add(llvm::createInternalizePass([&](const llvm::GlobalValue& gv){return gv.getName()=="main"||gv.getName()=="_mlir_ciface_set_execution_context"||gv.isDeclaration();}));
    modulePM.run(*module);
    return optimizeLayer.add(mainDylib, llvm::orc::ThreadSafeModule{move(module), context});
 }

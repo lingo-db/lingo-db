@@ -32,8 +32,9 @@ class GetTableLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto getTableOp = cast<mlir::db::GetTable>(op);
+      auto executionContext=functionRegistry.call(rewriter,db::codegen::FunctionRegistry::FunctionId::GetExecutionContext,{})[0];
       auto tableName = rewriter.create<mlir::db::ConstantOp>(rewriter.getUnknownLoc(), mlir::db::StringType::get(rewriter.getContext(), false), rewriter.getStringAttr(getTableOp.tablename()));
-      auto tablePtr = functionRegistry.call(rewriter, db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({getTableOp.execution_context(), tableName}))[0];
+      auto tablePtr = functionRegistry.call(rewriter, db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({executionContext, tableName}))[0];
       rewriter.replaceOp(getTableOp, tablePtr);
       return success();
    }

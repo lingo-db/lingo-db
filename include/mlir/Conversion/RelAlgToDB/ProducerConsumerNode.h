@@ -20,8 +20,6 @@ class LoweringContext {
 
    mlir::Value getValueForAttribute(const mlir::relalg::RelationalAttribute* attribute) const {
       if (!symbolTable.lookup(attribute)) {
-         auto [a, b] = executionContext.getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager().getName(attribute);
-         llvm::dbgs() << " missing:" << a << "," << b << "\n";
          assert(symbolTable.count(attribute));
       }
 
@@ -37,7 +35,6 @@ class LoweringContext {
    AttributeResolverScope createScope() {
       return AttributeResolverScope(symbolTable);
    }
-   mlir::Value executionContext;
    std::unordered_map<size_t, mlir::Value> builders;
    size_t getBuilderId() {
       static size_t id = 0;
