@@ -1,18 +1,12 @@
 #include "llvm/Linker/Linker.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/Transforms/IPO.h"
-#include "llvm/Transforms/InstCombine/InstCombine.h"
-#include "llvm/Transforms/Scalar.h"
-#include "llvm/Transforms/Scalar/GVN.h"
-
 #include "runner/jit.h"
+
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
@@ -28,7 +22,6 @@
 #include "mlir/Dialect/util/Passes.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
-#include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/MLIRContext.h"
@@ -151,31 +144,6 @@ convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context) {
    llvm::Linker::linkModules(*mainModule, std::move(irModule), llvm::Linker::LinkOnlyNeeded);
    return mainModule;
 }
-int dumpLLVMIR(mlir::ModuleOp module) {
-   // Convert the module to LLVM IR in a new LLVM IR context.
-   llvm::LLVMContext llvmContext;
-   auto llvmModule = convertMLIRModule(module, llvmContext);
-   if (!llvmModule) {
-      llvm::errs() << "Failed to emit LLVM IR\n";
-      return -1;
-   }
-
-   // Initialize LLVM targets.
-   llvm::InitializeNativeTarget();
-   llvm::InitializeNativeTargetAsmPrinter();
-   mlir::ExecutionEngine::setupTargetTriple(llvmModule.get());
-
-   /// Optionally run an optimization pipeline over the llvm module.
-   auto optPipeline = mlir::makeOptimizingTransformer(
-      /*optLevel=*/true ? 0 : 0, /*sizeLevel=*/0,
-      /*targetMachine=*/nullptr);
-   if (auto err = optPipeline(llvmModule.get())) {
-      llvm::errs() << "Failed to optimize LLVM IR " << err << "\n";
-      return -1;
-   }
-   llvm::errs() << *llvmModule << "\n";
-   return 0;
-}
 
 struct RunnerContext {
    mlir::MLIRContext context;
@@ -273,10 +241,7 @@ void Runner::dump() {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    ctxt->module->dump();
 }
-void Runner::dumpLLVM() {
-   RunnerContext* ctxt = (RunnerContext*) this->context;
-   dumpLLVMIR(ctxt->module.get());
-}
+
 bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8_t*)> callback) {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    // Initialize LLVM targets.
@@ -294,21 +259,19 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    // the module.
    llvm::orc::ThreadSafeContext llvmContext{std::make_unique<llvm::LLVMContext>()};
    auto startConv = std::chrono::high_resolution_clock::now();
-   std::unique_ptr<llvm::Module> converted=convertMLIRModule(ctxt->module.get(),*llvmContext.getContext());
+   std::unique_ptr<llvm::Module> converted = convertMLIRModule(ctxt->module.get(), *llvmContext.getContext());
    auto endConv = std::chrono::high_resolution_clock::now();
    std::cout << "conversion: " << std::chrono::duration_cast<std::chrono::milliseconds>(endConv - startConv).count() << " ms" << std::endl;
 
    auto start = std::chrono::high_resolution_clock::now();
    runner::JIT jit(llvmContext);
-   if(jit.addModule(std::move(converted))){
+   if (jit.addModule(std::move(converted))) {
       assert(false);
    }
    uint8_t* res;
-   auto** resPtr = &res;
-   auto** contextPtr = &context;
 
    // Invoke the JIT-compiled function.
-   auto lookupResult = jit.getPointerToFunction("main");
+   auto *lookupResult = jit.getPointerToFunction("main");
    if (!lookupResult) {
       llvm::errs() << "JIT invocation failed\n";
       return false;
@@ -316,7 +279,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    auto end = std::chrono::high_resolution_clock::now();
    std::cout << "jit: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
 
-   auto funcPtr = lookupResult;
+   auto* funcPtr = lookupResult;
    std::vector<size_t> measuredTimes;
    size_t repeats = 5;
    for (size_t i = 0; i < repeats; i++) {
@@ -324,7 +287,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
       if (ctxt->numArgs == 1 && ctxt->numResults == 1) {
          typedef uint8_t* (*myfunc)(void*);
          auto fn = (myfunc) funcPtr;
-         res=fn(context);
+         res = fn(context);
       } else if (ctxt->numArgs == 1) {
          typedef void (*myfunc)(void*);
          auto fn = (myfunc) funcPtr;

@@ -13,7 +13,19 @@ class DBType:
             return '!db.%s' % (self.name)
         else:
             return '!db.%s<%s>' % (self.name,type_props)
+class TupleType:
+    def __init__ (self,types):
+        self.types=types
+    def to_string(self):
+        types_as_str=",".join(list(map(lambda val: val.to_string(),self.types)))
+        return "tuple<"+types_as_str+">"
 
+class DBVectorType:
+    def __init__(self, type):
+        self.type = type
+
+    def to_string(self):
+        return "!db.vector<"+self.type.to_string()+">"
 class Attribute:
     def __init__ (self,scope_name,name,type,from_existing=[],print_name=""):
         self.name=name
@@ -31,12 +43,8 @@ class Attribute:
         return '@%s({%s})%s' % (self.name,props,from_existing_def)
 
 class Function:
-    def __init__(self,name, operandTypes, resultType):
+    def __init__(self,name, operandTypes, resultType,function=None):
         self.name=name
         self.operandTypes=operandTypes
         self.resultType=resultType
-
-def getFunction(name):
-    if name=="udf":
-        return Function("udf",[DBType("string",[])],DBType("string",[]))
-    return None
+        self.function=function

@@ -1,5 +1,5 @@
 import functools
-from sql2mlir.mlir import DBType,Attribute,Function,getFunction
+from sql2mlir.mlir import DBType, Attribute, Function, TupleType, DBVectorType
 
 
 class ValueRef:
@@ -15,11 +15,13 @@ class TypeRef:
 class Operation:
     def __init__(self,var,type, print_args):
         self.var=var
+        self.print_vars= [var] if var != None else []
         self.type=type
         self.print_args=print_args
+        self.metadata={}
     def print(self,codegen):
-        if self.var != None:
-            codegen.print(self.var + " = ")
+        if len(self.print_vars)>0:
+            codegen.print(",".join(self.print_vars) + " = ")
         for print_arg in self.print_args:
             if type(print_arg) is str:
                 codegen.print(print_arg)
@@ -81,7 +83,7 @@ class RootRegion:
 class CodeGen:
 
 
-    def __init__(self):
+    def __init__(self,functions):
         self.var_number = 0
         self.needs_indent=False
         self.indent=0
@@ -89,6 +91,7 @@ class CodeGen:
         self.ops ={}
         self.stacked_regions=[RootRegion([])]
         self.stacked_ops=[]
+        self.functions=functions
 
     def getType(self, var):
         type = self.ops[var].type
@@ -173,14 +176,17 @@ class CodeGen:
             return self.create_db_binary_op(name,rec_vals)
         else:
             return res
-    def create_db_func_call(self,funcname,params):
-        func=getFunction(funcname)
+    def create_db_func_call(self,funcname,params,ctxt="",ctxtType=""):
+        func=self.functions[funcname]
         casted_params=[]
+
         for i in range(0,len(func.operandTypes)):
             casted_params.append(self.toCommonType(params[i],func.operandTypes[i]))
         types_as_string=list(map(lambda val:val.to_string(),func.operandTypes))
-
-        return self.addOp(func.resultType,["call"," @",funcname,"(",",".join(casted_params),") : (",",".join(types_as_string),") -> ", func.resultType.to_string()])
+        if len(ctxt)>0 and len(ctxtType)>0:
+            casted_params.insert(0,ctxt)
+            types_as_string.insert(0,ctxtType)
+        return self.addOp(func.resultType,["call"," @",func.name,"(",",".join(casted_params),") : (",",".join(types_as_string),") -> ", func.resultType.to_string()])
     def create_db_date_binary_op(self, name,values):
         args=["db.date_"+name+" "]
         self.addValuesWithTypes(args,values)
@@ -208,6 +214,15 @@ class CodeGen:
         return self.addOp(DBType("bool",[],self.is_any_nullable([val])),["relalg.in ",ValueRef(val)," : ",TypeRef(val),", ",ValueRef(rel)])
     def create_relalg_getscalar(self,rel,attr):
         return self.addOp(attr.type,["relalg.getscalar ",attr.ref_to_string()," ",ValueRef(rel)," : ",attr.type.to_string()])
+    def create_relalg_getlist(self,rel,attrs):
+        attr_refs = list(map(lambda val: val.ref_to_string(), attrs))
+        tupleType=TupleType(list(map(lambda attr:attr.type,attrs)))
+        t = DBVectorType(tupleType)
+        return self.addOp(t, ["relalg.getlist ", ValueRef(rel), " [", ",".join(attr_refs), "] : ", t.to_string()])
+    def create_get_tuple(self,tupleVar,idx):
+        res_type=self.getType(tupleVar).types[idx]
+        return self.addOp(res_type, ["util.get_tuple ", ValueRef(tupleVar), "[",idx,"] : (",TypeRef(tupleVar),") -> ", res_type.to_string()])
+
     def create_relalg_aggr_func(self,type,attr,rel,isNullable):
         return self.addOp(DBType(attr.type.name,attr.type.baseprops,isNullable),["relalg.aggrfn ",type," ",attr.ref_to_string()," ", ValueRef(rel), " : ",DBType(attr.type.name,attr.type.baseprops,isNullable).to_string()])
     def create_relalg_count_rows(self,rel):
@@ -305,36 +320,57 @@ class CodeGen:
     def endSelection(self,res):
         self.endRegionOpWith(Operation(None,None,["relalg.return ",ValueRef(res)," : ",TypeRef(res)]))
     def startIf(self,val):
-        return self.startRegionOp(None,["db.if ", ValueRef(val)," : ",TypeRef(val)," "])
-    def addElse(self, yieldval=None):
-        if yieldval != None:
-            ifop = self.stacked_ops[-1]
-            ifop.print_args.append(" -> ")
-            ifop.print_args.append(TypeRef(yieldval))
-            ifop.print_args.append(" ")
-            ifop.type=self.getType(yieldval)
-            yieldOp=Operation(None,None,["db.yield ",ValueRef(yieldval)," : ",TypeRef(yieldval)])
-        else:
-            yieldOp=Operation(None,None,["db.yield"])
-        current_region = self.getCurrentRegion()
-        current_region.addOp(yieldOp)
+        self.startRegionOp(None,["db.if ", ValueRef(val)," : ",TypeRef(val)," "])
+    def startFor(self,param, collection,iter_args,initial_vals):
+        iter_arg_str=",".join(list(map(lambda tpl: tpl[0]+" = "+tpl[1],zip(iter_args,initial_vals))))
+
+        iter_arg_types=",".join(list(map(lambda x: self.getType(x).to_string(),iter_args)))
+        if len(iter_args)>0:
+            iter_arg_str="iter_args("+iter_arg_str+") -> ("+iter_arg_types+")";
+        return self.startRegionOp(None,["db.for ", ValueRef(param)," in ",ValueRef(collection)," : ", TypeRef(collection)," ",iter_arg_str])
+    def create_db_yield(self,yieldValues):
+        yieldTypes=list(map(lambda x:self.getType(x).to_string(),yieldValues))
+        return self.addExistingOp(Operation(None,None,["db.yield ",",".join(yieldValues)," : " if len(yieldValues)>0 else "", ",".join(yieldTypes)]))
+
+    def endFor(self,yieldValues):
+        forop = self.stacked_ops[-1]
+        resParams=[]
+        for yieldValue in yieldValues:
+            resParams.append(self.newParam(self.getType(yieldValue)))
+        self.create_db_yield(yieldValues)
+        forop.print_vars=resParams
+        self.endRegionOp()
+        return resParams
+    def addElse(self, yieldValues=[]):
+        self.create_db_yield(yieldValues)
         ifop=self.stacked_ops[-1]
+        self.addIfReturnTypes(ifop,yieldValues)
+
         ifop.print_args.append(self.endRegion())
         ifop.print_args.append(" else ")
         self.startRegion()
-    def endIf(self, yieldval=None):
-        if yieldval != None:
-            ifop = self.stacked_ops[-1]
-            if ifop.type == None:
-                ifop = self.stacked_ops[-1]
-                ifop.print_args.append(" -> ")
-                ifop.print_args.append(TypeRef(yieldval))
-                ifop.print_args.append(" ")
-                ifop.type = self.getType(yieldval)
-            yieldOp=Operation(None,None,["db.yield ",ValueRef(yieldval)," : ",TypeRef(yieldval)])
-        else:
-            yieldOp=Operation(None,None,["db.yield"])
-        self.endRegionOpWith(yieldOp)
+    def addIfReturnTypes(self,ifop,yieldValues):
+        if not "addedReturnTypes" in ifop.metadata:
+            ifop.metadata["addedReturnTypes"]=True
+            first = True
+            for yieldValue in yieldValues:
+                if first:
+                    ifop.print_args.append(" -> (")
+                    first = False
+                else:
+                    ifop.print_args.append(", ")
+                ifop.print_args.append(TypeRef(yieldValue))
+            ifop.print_args.append(") ")
+    def endIf(self, yieldValues=[]):
+        ifop = self.stacked_ops[-1]
+        self.addIfReturnTypes(ifop,yieldValues)
+        resParams=[]
+        for yieldValue in yieldValues:
+            resParams.append(self.newParam(self.getType(yieldValue)))
+        ifop.print_vars=resParams
+        self.create_db_yield(yieldValues)
+        self.endRegionOp()
+        return resParams
 
 
     def startJoin(self, outer,type,left,right, name):

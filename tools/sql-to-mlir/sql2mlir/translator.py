@@ -9,6 +9,7 @@ from sql2mlir.utility import ensure_list, ensure_value_dict, AggrFuncManager, ge
 
 class Translator:
     def __init__(self, query):
+        self.params={}
         self.query = query
         self.basetables = {}
         self.attrnumber=0
@@ -60,22 +61,22 @@ class Translator:
                 else:
                     return codegen.create_db_binary_op(key, subexprs )
             elif key == "case":
-                return_values=[]
+                nesting_depth=0
+                return_value=None
                 for case in expr[key]:
                     if type(case) is dict and "when" in case:
                         cond=translateSubExpressions(case["when"])[0]
-                        return_value=codegen.startIf(cond)
+                        codegen.startIf(cond)
                         then=translateSubExpressions(case["then"])[0]
-                        codegen.addElse(then)
-                        return_values.append(return_value)
+                        codegen.addElse([then])
+                        nesting_depth+=1
                     else:
                         default=translateSubExpressions(case)[0]
                         codegen.toCommonType(default,codegen.getType(then))
-                        return_values.append(default)
-                while len(return_values)>1:
-                    return_value=return_values.pop()
-                    codegen.endIf(return_value)
-                return return_values[0]
+                        return_value=default
+                for i in range(0,nesting_depth):
+                    return_value=codegen.endIf([return_value])[0]
+                return return_value
 
             elif key == "extract":
                 return codegen.create_db_extract(expr[key][0], translateSubExpressions(expr[key][1])[0])
@@ -136,6 +137,8 @@ class Translator:
             parts=asstring.split('.');
             afterComma=len(parts[1])
             return codegen.create_db_const(expr, DBType("decimal", ["15",str(afterComma)], False))
+        elif type(expr) is str and expr.startswith("@"):
+            return self.params[expr[1:len(expr)]]
         else:
             attr, tuple = stacked_resolver.resolve(expr)
             return codegen.create_relalg_getattr(tuple, attr)
@@ -328,17 +331,29 @@ class Translator:
                 resolver.add(prefixes, attr.print_name, attr)
                 all_from_attributes.append(attr)
         return var
-
-    def translate(self):
+    def setParam(self,name,val):
+        self.params[name]=val
+    def translate(self,codegen):
         parsed = parse(self.query)
         if "with" in parsed:
             for with_query in ensure_list(parsed["with"]):
                 self.with_defs[with_query["name"]] = with_query["value"]
-        codegen = CodeGen()
-        codegen.startModule("querymodule")
-        codegen.startFunction("main",["%executionContext: !util.generic_memref<i8>"])
         var, results = self.translateSelectStmt(parsed, codegen)
         res = codegen.create_relalg_materialize(var, results)
+        return res
+    def translateIntoFunction(self,codegen,name, params):
+        func_params=["%executionContext: !util.generic_memref<i8>"]
+        for param_name in params:
+            p=codegen.newParam(params[param_name])
+            func_params.append(p+": "+params[param_name].to_string())
+            self.setParam(param_name,p)
+        codegen.startFunction(name,func_params)
+        res= self.translate(codegen)
         codegen.endFunction(res)
+    def translateModule(self,params,functions={}):
+
+        codegen = CodeGen(functions)
+        codegen.startModule("querymodule")
+        self.translateIntoFunction(codegen,"main",params)
         codegen.endModule()
         return codegen.getResult()

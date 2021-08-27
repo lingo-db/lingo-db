@@ -15,7 +15,6 @@ class Runner {
    bool lower();
    bool lowerToLLVM();
    void dump();
-   void dumpLLVM();
    bool runJit(runtime::ExecutionContext* context, std::function<void(uint8_t*)> callback);
    ~Runner();
    static void printTable(uint8_t* ptr);
