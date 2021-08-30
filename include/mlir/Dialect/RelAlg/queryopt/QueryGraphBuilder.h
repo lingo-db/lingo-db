@@ -97,6 +97,7 @@ class QueryGraphBuilder {
       switch (mlir::relalg::detail::getBinaryOperatorType(curr)) {
          case detail::BinaryOperatorType::SemiJoin:
          case detail::BinaryOperatorType::MarkJoin:
+         case detail::BinaryOperatorType::CollectionJoin:
          case detail::BinaryOperatorType::AntiSemiJoin:
          case detail::BinaryOperatorType::OuterJoin:
             return !rightTes.intersects(ses);

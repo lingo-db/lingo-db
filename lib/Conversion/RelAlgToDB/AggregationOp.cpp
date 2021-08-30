@@ -112,6 +112,11 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
          if (auto aggrFn = mlir::dyn_cast_or_null<mlir::relalg::AggrFuncOp>(addAttrOp.val().getDefiningOp())) {
             auto* destAttr = &addAttrOp.attr().getRelationalAttribute();
             auto* attr = &aggrFn.attr().getRelationalAttribute();
+            auto attrIsNullable=false;
+            auto dbType=attr->type.dyn_cast_or_null<mlir::db::DBType>();
+            if(dbType){
+               attrIsNullable=dbType.isNullable();
+            }
             size_t currValIdx = valAttributes.size();
             valAttributes.push_back(attr);
             valTypes.push_back(attr->type);
@@ -128,13 +133,13 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
                   initVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), resultingType.cast<mlir::db::DBType>().getBaseType(), builder.getI64IntegerAttr(0));
                }
                defaultValues.push_back(initVal);
-               aggregationFunctions.push_back([currDestIdx = currDestIdx, currValIdx = currValIdx, attr = attr, resultingType = resultingType](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
+               aggregationFunctions.push_back([currDestIdx = currDestIdx, currValIdx = currValIdx, attrIsNullable, resultingType = resultingType](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
                   std::vector<mlir::Value> res;
                   mlir::Value currVal = aggr[currDestIdx];
                   mlir::Value newVal = val[currValIdx];
                   mlir::Value added = builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), resultingType, currVal, newVal);
                   mlir::Value updatedVal = added;
-                  if (attr->type.isNullable()) {
+                  if (attrIsNullable) {
                      mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), newVal);
                      updatedVal = builder.create<mlir::db::SelectOp>(builder.getUnknownLoc(), isNull1, aggr[currDestIdx], added);
                   }
@@ -157,7 +162,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
                   initVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), resultingType.cast<mlir::db::DBType>().getBaseType(), getMaxValueAttr(resultingType.cast<mlir::db::DBType>()));
                }
                defaultValues.push_back(initVal);
-               aggregationFunctions.push_back([currDestIdx = currDestIdx, attr = attr, resultingType = resultingType, currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
+               aggregationFunctions.push_back([currDestIdx = currDestIdx, attrIsNullable, resultingType = resultingType, currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
                   std::vector<mlir::Value> res;
                   mlir::Value currVal = aggr[currDestIdx];
                   mlir::Value newVal = val[currValIdx];
@@ -165,7 +170,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
                   mlir::Value casted = builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), currVal.getType(), newVal);
                   mlir::Value added = builder.create<mlir::db::SelectOp>(builder.getUnknownLoc(), currLtNew, currVal, casted);
                   mlir::Value updatedVal = added;
-                  if (attr->type.isNullable()) {
+                  if (attrIsNullable) {
                      mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), newVal);
                      updatedVal = builder.create<mlir::db::SelectOp>(builder.getUnknownLoc(), isNull1, aggr[currDestIdx], added);
                   }
@@ -187,7 +192,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
                   initVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), resultingType.cast<mlir::db::DBType>().getBaseType(), builder.getI64IntegerAttr(0));
                }
                defaultValues.push_back(initVal);
-               aggregationFunctions.push_back([currDestIdx = currDestIdx, attr = attr, resultingType = resultingType, currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
+               aggregationFunctions.push_back([currDestIdx = currDestIdx, attrIsNullable, resultingType = resultingType, currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
                   std::vector<mlir::Value> res;
                   mlir::Value currVal = aggr[currDestIdx];
                   mlir::Value newVal = val[currValIdx];
@@ -195,7 +200,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
                   mlir::Value casted = builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), currVal.getType(), newVal);
                   mlir::Value added = builder.create<mlir::db::SelectOp>(builder.getUnknownLoc(), currGtNew, currVal, casted);
                   mlir::Value updatedVal = added;
-                  if (attr->type.isNullable()) {
+                  if (attrIsNullable) {
                      mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), newVal);
                      updatedVal = builder.create<mlir::db::SelectOp>(builder.getUnknownLoc(), isNull1, aggr[currDestIdx], added);
                   }
@@ -219,12 +224,12 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
                   mlir::Value casted=builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), resultingType, range[currDestIdx+1]);
                   mlir::Value average=builder.create<mlir::db::DivOp>(builder.getUnknownLoc(), resultingType, range[currDestIdx], casted);
                   return std::make_pair(destAttr, average); });
-               aggregationFunctions.push_back([currDestIdx = currDestIdx, currValIdx = currValIdx, attr = attr, resultingType = resultingType, counterType = counterType](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
+               aggregationFunctions.push_back([currDestIdx = currDestIdx, currValIdx = currValIdx, attrIsNullable, resultingType = resultingType, counterType = counterType](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
                   std::vector<mlir::Value> res;
                   auto one = builder.create<mlir::db::ConstantOp>(builder.getUnknownLoc(), counterType, builder.getI64IntegerAttr(1));
                   mlir::Value added1 = builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), resultingType, aggr[currDestIdx], val[currValIdx]);
                   mlir::Value added2 = builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), counterType, aggr[currDestIdx + 1], one);
-                  if (attr->type.isNullable()) {
+                  if (attrIsNullable) {
                      mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), val[currValIdx]);
                      res.push_back(builder.create<mlir::db::SelectOp>(builder.getUnknownLoc(), isNull1, aggr[currDestIdx], added1));
                      res.push_back(builder.create<mlir::db::SelectOp>(builder.getUnknownLoc(), isNull1, aggr[currDestIdx + 1], added2));
@@ -242,11 +247,11 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
                defaultValues.push_back(initCounterVal);
                finalizeFunctions.push_back([currDestIdx = currDestIdx, destAttr = destAttr](mlir::ValueRange range, mlir::OpBuilder& builder) { return std::make_pair(destAttr, range[currDestIdx]); });
 
-               aggregationFunctions.push_back([currDestIdx = currDestIdx, attr = attr, currValIdx = currValIdx, counterType = counterType, resultingType = resultingType](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
+               aggregationFunctions.push_back([currDestIdx = currDestIdx, attrIsNullable, currValIdx = currValIdx, counterType = counterType, resultingType = resultingType](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
                   std::vector<mlir::Value> res;
                   auto one = builder.create<mlir::db::ConstantOp>(builder.getUnknownLoc(), counterType, builder.getI64IntegerAttr(1));
                   mlir::Value value = builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), resultingType, aggr[currDestIdx], one);
-                  if (attr->type.isNullable()) {
+                  if (attrIsNullable) {
                      mlir::Value isNull2 = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), val[currValIdx]);
                      mlir::Value tmp = builder.create<mlir::db::SelectOp>(builder.getUnknownLoc(), isNull2, aggr[currDestIdx], value);
                      value = tmp;

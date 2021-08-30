@@ -4,7 +4,7 @@
 
 namespace mlir::relalg {
 struct RelationalAttribute {
-  mlir::db::DBType type;
+  mlir::Type type;
 };
 } // namespace mlir::relalg
 

@@ -31,6 +31,7 @@ enum class BinaryOperatorType : unsigned char {
    OuterJoin,
    FullOuterJoin,
    MarkJoin,
+   CollectionJoin,
    LAST
 };
 enum UnaryOperatorType : unsigned char {
@@ -72,12 +73,14 @@ constexpr CompatibilityTable<BinaryOperatorType, BinaryOperatorType> assoc{
    {BinaryOperatorType::CP, BinaryOperatorType::AntiSemiJoin},
    {BinaryOperatorType::CP, BinaryOperatorType::OuterJoin},
    {BinaryOperatorType::CP, BinaryOperatorType::MarkJoin},
+   {BinaryOperatorType::CP, BinaryOperatorType::CollectionJoin},
    {BinaryOperatorType::InnerJoin, BinaryOperatorType::CP},
    {BinaryOperatorType::InnerJoin, BinaryOperatorType::InnerJoin},
    {BinaryOperatorType::InnerJoin, BinaryOperatorType::SemiJoin},
    {BinaryOperatorType::InnerJoin, BinaryOperatorType::AntiSemiJoin},
    {BinaryOperatorType::InnerJoin, BinaryOperatorType::OuterJoin},
    {BinaryOperatorType::InnerJoin, BinaryOperatorType::MarkJoin},
+   {BinaryOperatorType::InnerJoin, BinaryOperatorType::CollectionJoin},
 
 };
 constexpr CompatibilityTable<BinaryOperatorType, BinaryOperatorType> lAsscom{
@@ -93,12 +96,14 @@ constexpr CompatibilityTable<BinaryOperatorType, BinaryOperatorType> lAsscom{
    {BinaryOperatorType::CP, BinaryOperatorType::AntiSemiJoin},
    {BinaryOperatorType::CP, BinaryOperatorType::OuterJoin},
    {BinaryOperatorType::CP, BinaryOperatorType::MarkJoin},
+   {BinaryOperatorType::CP, BinaryOperatorType::CollectionJoin},
    {BinaryOperatorType::InnerJoin, BinaryOperatorType::CP},
    {BinaryOperatorType::InnerJoin, BinaryOperatorType::InnerJoin},
    {BinaryOperatorType::InnerJoin, BinaryOperatorType::SemiJoin},
    {BinaryOperatorType::InnerJoin, BinaryOperatorType::AntiSemiJoin},
    {BinaryOperatorType::InnerJoin, BinaryOperatorType::OuterJoin},
    {BinaryOperatorType::InnerJoin, BinaryOperatorType::MarkJoin},
+   {BinaryOperatorType::InnerJoin, BinaryOperatorType::CollectionJoin},
    {BinaryOperatorType::SemiJoin, BinaryOperatorType::Intersection},
    {BinaryOperatorType::SemiJoin, BinaryOperatorType::Except},
    {BinaryOperatorType::SemiJoin, BinaryOperatorType::CP},
@@ -107,6 +112,7 @@ constexpr CompatibilityTable<BinaryOperatorType, BinaryOperatorType> lAsscom{
    {BinaryOperatorType::SemiJoin, BinaryOperatorType::AntiSemiJoin},
    {BinaryOperatorType::SemiJoin, BinaryOperatorType::OuterJoin},
    {BinaryOperatorType::SemiJoin, BinaryOperatorType::MarkJoin},
+   {BinaryOperatorType::SemiJoin, BinaryOperatorType::CollectionJoin},
    {BinaryOperatorType::AntiSemiJoin, BinaryOperatorType::Intersection},
    {BinaryOperatorType::AntiSemiJoin, BinaryOperatorType::Except},
    {BinaryOperatorType::AntiSemiJoin, BinaryOperatorType::CP},
@@ -115,18 +121,29 @@ constexpr CompatibilityTable<BinaryOperatorType, BinaryOperatorType> lAsscom{
    {BinaryOperatorType::AntiSemiJoin, BinaryOperatorType::AntiSemiJoin},
    {BinaryOperatorType::AntiSemiJoin, BinaryOperatorType::OuterJoin},
    {BinaryOperatorType::AntiSemiJoin, BinaryOperatorType::MarkJoin},
+   {BinaryOperatorType::AntiSemiJoin, BinaryOperatorType::CollectionJoin},
    {BinaryOperatorType::OuterJoin, BinaryOperatorType::CP},
    {BinaryOperatorType::OuterJoin, BinaryOperatorType::InnerJoin},
    {BinaryOperatorType::OuterJoin, BinaryOperatorType::SemiJoin},
    {BinaryOperatorType::OuterJoin, BinaryOperatorType::AntiSemiJoin},
    {BinaryOperatorType::OuterJoin, BinaryOperatorType::OuterJoin},
    {BinaryOperatorType::OuterJoin, BinaryOperatorType::MarkJoin},
+   {BinaryOperatorType::OuterJoin, BinaryOperatorType::CollectionJoin},
    {BinaryOperatorType::MarkJoin, BinaryOperatorType::CP},
    {BinaryOperatorType::MarkJoin, BinaryOperatorType::InnerJoin},
    {BinaryOperatorType::MarkJoin, BinaryOperatorType::SemiJoin},
    {BinaryOperatorType::MarkJoin, BinaryOperatorType::AntiSemiJoin},
    {BinaryOperatorType::MarkJoin, BinaryOperatorType::OuterJoin},
+   {BinaryOperatorType::MarkJoin, BinaryOperatorType::CollectionJoin},
    {BinaryOperatorType::MarkJoin, BinaryOperatorType::MarkJoin},
+
+   {BinaryOperatorType::CollectionJoin, BinaryOperatorType::CP},
+   {BinaryOperatorType::CollectionJoin, BinaryOperatorType::InnerJoin},
+   {BinaryOperatorType::CollectionJoin, BinaryOperatorType::SemiJoin},
+   {BinaryOperatorType::CollectionJoin, BinaryOperatorType::AntiSemiJoin},
+   {BinaryOperatorType::CollectionJoin, BinaryOperatorType::OuterJoin},
+   {BinaryOperatorType::CollectionJoin, BinaryOperatorType::MarkJoin},
+   {BinaryOperatorType::CollectionJoin, BinaryOperatorType::CollectionJoin},
 
 };
 constexpr CompatibilityTable<BinaryOperatorType, BinaryOperatorType> rAsscom{

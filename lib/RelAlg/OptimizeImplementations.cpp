@@ -44,7 +44,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
    void runOnFunction() override {
       getFunction().walk([&](Operator op) {
          ::llvm::TypeSwitch<mlir::Operation*, void>(op.getOperation())
-            .Case<mlir::relalg::InnerJoinOp, mlir::relalg::MarkJoinOp>([&](PredicateOperator predicateOperator) {
+            .Case<mlir::relalg::InnerJoinOp, mlir::relalg::MarkJoinOp,mlir::relalg::CollectionJoinOp>([&](PredicateOperator predicateOperator) {
                auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
                auto left = mlir::cast<Operator>(binOp.leftChild());
                auto right = mlir::cast<Operator>(binOp.rightChild());

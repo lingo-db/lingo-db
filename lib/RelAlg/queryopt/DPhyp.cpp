@@ -61,7 +61,7 @@ void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
       if(mlir::isa<mlir::relalg::SemiJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::SemiJoinOp>(specialJoin.getOperation())){
          estimatedResultSize=p1->getRows()*totalSelectivity;
       }
-      if(mlir::isa<mlir::relalg::OuterJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::MarkJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::SingleJoinOp>(specialJoin.getOperation())){
+      if(mlir::isa<mlir::relalg::OuterJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::MarkJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::CollectionJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::SingleJoinOp>(specialJoin.getOperation())){
          estimatedResultSize=p1->getRows();
       }
 

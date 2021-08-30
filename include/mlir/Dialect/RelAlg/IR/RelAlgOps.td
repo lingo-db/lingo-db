@@ -273,6 +273,16 @@ Attributes getCreatedAttributes();
 Attributes getUsedAttributes();
 Attributes getAvailableAttributes();}];
 }
+def CollectionJoinOp : RelAlg_Op<"collectionjoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
+    let summary = "collection join operation";
+    let arguments = (ins SymbolNameAttr:$sym_name,ArrayAttr:$attrs,RelationalAttributeDefAttr:$collAttr,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+    let results = (outs RelAlg_TupleStream:$result);
+    let regions = (region SizedRegion<1>:$predicate);
+    let extraClassDeclaration = [{
+        Attributes getCreatedAttributes();
+        Attributes getUsedAttributes();
+        Attributes getAvailableAttributes();}];
+}
 def MarkJoinOp : RelAlg_Op<"markjoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "mark join operation";
 let arguments = (ins SymbolNameAttr:$sym_name,RelationalAttributeDefAttr:$markattr,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
@@ -327,7 +337,7 @@ let assemblyFormat =
 def GetAttrOp : RelAlg_Op<"getattr",[NoSideEffect]> {
 let summary = "get attribute operation";
 let arguments = (ins RelationalAttributeRefAttr:$attr, RelAlg_Tuple:$tuple);
-let results = (outs DBType : $res);
+let results = (outs AnyType : $res);
 }
 def AddAttrOp : RelAlg_Op<"addattr"> {
 let summary = "add attribute operation";

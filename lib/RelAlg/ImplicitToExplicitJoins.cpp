@@ -86,7 +86,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             auto fromExisting=ArrayAttr::get(&getContext(),{before});
 
             auto newDef=attributeManager.createDef(attributeName,fromExisting);
-            newDef.getRelationalAttribute().type=before.getRelationalAttribute().type.asNullable();
+            newDef.getRelationalAttribute().type=getscalarop.getType();
             auto mapping=ArrayAttr::get(&getContext(),{newDef});
             auto singleJoin = builder.create<relalg::SingleJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()),scopeName, treeVal, getscalarop.rel(),mapping);
             singleJoin.initPredicate();
@@ -96,6 +96,24 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             getscalarop->remove();
             getscalarop->destroy();
             treeVal = singleJoin;
+            surroundingOperator->setOperand(0, treeVal);
+         } else if (auto getlistop = mlir::dyn_cast_or_null<mlir::relalg::GetListOp>(op)) {
+            OpBuilder builder(surroundingOperator);
+            std::string scopeName = attributeManager.getUniqueScope("collectionjoin");
+            std::string attributeName = "collattr";
+            attributeManager.setCurrentScope(scopeName);
+            auto fromAttrs=getlistop.attrs();
+
+            auto newDef=attributeManager.createDef(attributeName);
+            newDef.getRelationalAttribute().type=getlistop.getType();
+            auto collectionJoin = builder.create<relalg::CollectionJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()),scopeName, fromAttrs,newDef,treeVal, getlistop.rel());
+            collectionJoin.initPredicate();
+            builder.setInsertionPoint(getlistop);
+            Operation* replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), getlistop.getType(), attributeManager.createRef(scopeName,attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
+            getlistop.replaceAllUsesWith(replacement);
+            getlistop->remove();
+            getlistop->destroy();
+            treeVal = collectionJoin;
             surroundingOperator->setOperand(0, treeVal);
          } else if (auto existsop = mlir::dyn_cast_or_null<mlir::relalg::ExistsOp>(op)) {
             handleScalarBoolOp(surroundingOperator, op, existsop.rel().getDefiningOp(), [](auto) {});

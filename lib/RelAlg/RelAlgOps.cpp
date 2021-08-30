@@ -216,7 +216,7 @@ static ParseResult parseAttributeDefAttr(OpAsmParser& parser, OperationState& re
       }
    }
    attr = getRelationalAttributeManager(parser).createDef(attrSymbolAttr, fromExisting);
-   auto propType = dictAttr.get("type").dyn_cast<TypeAttr>().getValue().dyn_cast<mlir::db::DBType>();
+   auto propType = dictAttr.get("type").dyn_cast<TypeAttr>().getValue();
    attr.getRelationalAttribute().type = propType;
    return success();
 }
@@ -705,6 +705,38 @@ static void print(OpAsmPrinter& p, relalg::MarkJoinOp& op) {
    p << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
    p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"markattr","sym_name"});
+}
+///////////////////////////////////////////////////////////////////////////////////
+// CollectionJoinOp
+///////////////////////////////////////////////////////////////////////////////////
+static ParseResult parseCollectionJoinOp(OpAsmParser& parser, OperationState& result) {
+   StringAttr nameAttr;
+   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
+      return failure();
+   }
+   getRelationalAttributeManager(parser).setCurrentScope(nameAttr.getValue());
+   Attribute attrs;
+   parseAttributeRefArr(parser, result, attrs);
+   result.addAttribute("attrs", attrs);
+   relalg::RelationalAttributeDefAttr defAttr;
+   parseAttributeDefAttr(parser, result, defAttr);
+   result.addAttribute("collAttr", defAttr);
+   parseRelationalInputs(parser, result, 2);
+   parseCustomRegion(parser, result);
+   addRelationOutput(parser, result);
+   return parser.parseOptionalAttrDictWithKeyword(result.attributes);
+}
+static void print(OpAsmPrinter& p, relalg::CollectionJoinOp& op) {
+   p << op.getOperationName() << " ";
+   p << " ";
+   p.printSymbolName(op.sym_name());
+   p << " ";
+   printAttributeRefArr(p,op.attrs());
+   p << " ";
+   printAttributeDefAttr(p, op.collAttr());
+   p << " " << op.left() << ", " << op.right() << " ";
+   printCustomRegion(p, op.getRegion());
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"collAttr","sym_name","attrs"});
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // ProjectionOp

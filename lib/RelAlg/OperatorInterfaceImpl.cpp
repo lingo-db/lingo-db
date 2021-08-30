@@ -78,6 +78,7 @@ mlir::relalg::detail::BinaryOperatorType mlir::relalg::detail::getBinaryOperator
       .Case<mlir::relalg::AntiSemiJoinOp>([&](mlir::Operation* op) { return BinaryOperatorType::AntiSemiJoin; })
       .Case<mlir::relalg::SingleJoinOp>([&](mlir::Operation* op) { return BinaryOperatorType::OuterJoin; })
       .Case<mlir::relalg::MarkJoinOp>([&](mlir::Operation* op) { return BinaryOperatorType::MarkJoin; })
+      .Case<mlir::relalg::CollectionJoinOp>([&](mlir::Operation* op) { return BinaryOperatorType::CollectionJoin; })
       .Case<mlir::relalg::OuterJoinOp>([&](mlir::relalg::OuterJoinOp op) { return BinaryOperatorType::OuterJoin; })
       .Case<mlir::relalg::FullOuterJoinOp>([&](mlir::relalg::FullOuterJoinOp op) { return BinaryOperatorType::FullOuterJoin; })
       .Default([&](auto x) {
@@ -203,6 +204,20 @@ Attributes SingleJoinOp::getAvailableAttributes() {
    availablePreviously.insert(created);
    return availablePreviously;
 }
+Attributes CollectionJoinOp::getCreatedAttributes() {
+   Attributes created;
+   created.insert(&collAttr().getRelationalAttribute());
+   return created;
+}
+Attributes CollectionJoinOp::getUsedAttributes() {
+   return mlir::relalg::detail::getUsedAttributes(getOperation());
+}
+Attributes CollectionJoinOp::getAvailableAttributes() {
+   auto availablePreviously = collectAttributes(getChildOperators(*this), [](Operator op) { return op.getAvailableAttributes(); });
+   auto created = getCreatedAttributes();
+   availablePreviously.insert(created);
+   return availablePreviously;
+}
 Attributes MarkJoinOp::getCreatedAttributes() {
    Attributes created;
    created.insert(&markattr().getRelationalAttribute());
@@ -229,7 +244,7 @@ Attributes mlir::relalg::ProjectionOp::getAvailableAttributes() {
 
 bool mlir::relalg::detail::isJoin(Operation* op) {
    auto opType = getBinaryOperatorType(op);
-   return BinaryOperatorType::InnerJoin <= opType && opType <= BinaryOperatorType::MarkJoin;
+   return BinaryOperatorType::InnerJoin <= opType && opType <= BinaryOperatorType::CollectionJoin;
 }
 
 void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir::Value(mlir::Value, mlir::OpBuilder&)> predicateProducer) {
@@ -271,6 +286,17 @@ static void addRequirements(mlir::Operation* op, mlir::Operation* includeChildre
          addRequirements(operand.getDefiningOp(), includeChildren, excludeChildren, extracted, alreadyPresent, mapping);
       }
    }
+   op->walk([&](mlir::Operation* op2){
+      for (auto operand : op2->getOperands()) {
+         if(!mapping.contains(operand)) {
+            auto *definingOp=operand.getDefiningOp();
+            if(definingOp&&!op->isAncestor(definingOp)){
+               addRequirements(definingOp, includeChildren, excludeChildren, extracted, alreadyPresent, mapping);
+
+            }
+         }
+      }
+   });
    alreadyPresent.insert(op);
    if (!excludeChildren->isAncestor(op)) {
       extracted.push_back(op);
