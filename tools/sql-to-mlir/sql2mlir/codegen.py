@@ -177,7 +177,7 @@ class CodeGen:
         else:
             return res
     def create_db_func_call(self,funcname,params):
-        func=self.functions[funcname]
+        func=self.functions.get(funcname)
         casted_params=[]
 
         for i in range(0,len(func.operandTypes)):
