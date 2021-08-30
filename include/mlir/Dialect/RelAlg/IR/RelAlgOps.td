@@ -371,6 +371,11 @@ let summary = "get attribute operation";
 let arguments = (ins RelationalAttributeRefAttr:$attr, RelAlg_TupleStream:$rel);
 let results = (outs DBType : $res);
 }
+def GetListOp : RelAlg_Op<"getlist"> {
+    let summary = "get attribute operation";
+    let arguments = (ins RelAlg_TupleStream:$rel,ArrayAttr:$attrs);
+    let results = (outs  DB_CollectionType : $res);
+}
 def InOp : RelAlg_Op<"in"> {
 let summary = "in operation";
 let arguments = (ins DBType:$val, RelAlg_TupleStream:$rel);

@@ -1,4 +1,5 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
+#include <mlir/Transforms/InliningUtils.h>
 
 #include "mlir/Dialect/DB/IR/DBTypes.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
@@ -6,6 +7,30 @@
 
 using namespace mlir;
 using namespace mlir::relalg;
+
+struct RelalgInlinerInterface : public DialectInlinerInterface {
+   using DialectInlinerInterface::DialectInlinerInterface;
+
+   //===--------------------------------------------------------------------===//
+   // Analysis Hooks
+   //===--------------------------------------------------------------------===//
+
+   /// All call operations within toy can be inlined.
+   bool isLegalToInline(Operation* call, Operation* callable,
+                        bool wouldBeCloned) const final {
+      return true;
+   }
+
+   /// All operations within toy can be inlined.
+   bool isLegalToInline(Operation*, Region*, bool,
+                        BlockAndValueMapping&) const final {
+      return true;
+   }
+   virtual bool isLegalToInline(Region *dest, Region *src, bool wouldBeCloned,
+                                BlockAndValueMapping &valueMapping) const {
+      return true;
+   }
+};
 void RelAlgDialect::initialize() {
    addOperations<
 #define GET_OP_LIST
@@ -15,6 +40,7 @@ void RelAlgDialect::initialize() {
 #define GET_TYPEDEF_LIST
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsTypes.cpp.inc"
       >();
+   addInterfaces<RelalgInlinerInterface>();
    addAttributes<mlir::relalg::RelationalAttributeDefAttr>();
    addAttributes<mlir::relalg::RelationalAttributeRefAttr>();
    addAttributes<mlir::relalg::SortSpecificationAttr>();
