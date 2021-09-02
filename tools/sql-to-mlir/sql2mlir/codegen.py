@@ -92,7 +92,14 @@ class CodeGen:
         self.stacked_regions=[RootRegion([])]
         self.stacked_ops=[]
         self.functions=functions
-
+        self.uniquer={}
+    def getUniqueName(self,base):
+        if base in self.uniquer:
+            self.uniquer[base] += 1
+            base += str(self.uniquer[base])
+        else:
+            self.uniquer[base] = 0
+        return base
     def getType(self, var):
         type = self.ops[var].type
         return type
@@ -233,7 +240,7 @@ class CodeGen:
     def create_db_const(self,const,type):
         var=self.newVar()
         const_str="(\""+str(const)+"\")"
-        if type.name=="int":
+        if type.name=="int" or type.name=="bool":
             const_str="("+str(const)+")"
         self.addExistingOp(Operation(var,type,["db.constant ",const_str," :", TypeRef(var)]))
         return var
@@ -272,8 +279,8 @@ class CodeGen:
         op=self.stacked_ops.pop()
         op.print_args.append(self.endRegion())
         self.getCurrentRegion().addOp(op)
-    def startFunction(self,name,params):
-        self.stacked_ops.append(Operation(None,None,["func ","@",name," (",",".join(params),") "]))
+    def startFunction(self,name,params,mode="private"):
+        self.stacked_ops.append(Operation(None,None,["func ",mode," @",name," (",",".join(params),") "]))
         self.startRegion()
     def endFunction(self,res):
         op = self.stacked_ops.pop()
@@ -370,22 +377,25 @@ class CodeGen:
         return resParams
 
 
-    def startJoin(self, outer,type,left,right, name):
+    def startJoin(self, outer,type,left,right, name=""):
         tuple = self.newParam("tuple")
         joinop= "outerjoin" if outer else "join"
         if type =="full":
         	type=""
         	joinop="fullouterjoin"
+        if len(name)>0:
+            name=" @"+name
         return self.startRegionOp("relation",
-                                  ["relalg."+joinop," @",name," ", ValueRef(left),", ",ValueRef(right), "(", tuple, ": !relalg.tuple) "]), tuple
+                                  ["relalg."+joinop,name," ", ValueRef(left),", ",ValueRef(right), "(", tuple, ": !relalg.tuple) "]), tuple
 
-    def endJoin(self, res,mapping=[]):
+    def endJoin(self, res,mapping=None):
         current_region = self.getCurrentRegion()
         current_region.addOp(Operation(None, None, ["relalg.return ", ValueRef(res), " : ", TypeRef(res)]))
         op = self.stacked_ops.pop()
         op.print_args.append(self.endRegion())
-        attr_defs=list(map(lambda val:val.def_to_string(),mapping))
-        op.print_args.extend([" mapping: ", "{",",".join(attr_defs),"}"])
+        if not mapping is None:
+            attr_defs = list(map(lambda val: val.def_to_string(), mapping))
+            op.print_args.extend([" mapping: ", "{",",".join(attr_defs),"}"])
         self.addExistingOp(op)
         #if len(mapping)>0:
 

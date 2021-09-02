@@ -85,13 +85,18 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             auto before=getscalarop.attr();
             auto fromExisting=ArrayAttr::get(&getContext(),{before});
 
+            auto newAttrType=getscalarop.getType();
             auto newDef=attributeManager.createDef(attributeName,fromExisting);
-            newDef.getRelationalAttribute().type=getscalarop.getType();
+            if(auto dbType=newAttrType.dyn_cast_or_null<mlir::db::DBType>()){
+               newAttrType=dbType.asNullable();
+            }
+            newDef.getRelationalAttribute().type=newAttrType;
+
             auto mapping=ArrayAttr::get(&getContext(),{newDef});
             auto singleJoin = builder.create<relalg::SingleJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()),scopeName, treeVal, getscalarop.rel(),mapping);
             singleJoin.initPredicate();
             builder.setInsertionPoint(getscalarop);
-            Operation* replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), getscalarop.attr().getRelationalAttribute().type, attributeManager.createRef(scopeName,attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
+            Operation* replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), newAttrType, attributeManager.createRef(scopeName,attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
             getscalarop.replaceAllUsesWith(replacement);
             getscalarop->remove();
             getscalarop->destroy();

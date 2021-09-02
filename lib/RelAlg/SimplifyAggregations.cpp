@@ -1,4 +1,6 @@
+#include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -20,10 +22,10 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
       std::string attributeName = "aggrAttr";
 
       attributeManager.setCurrentScope(scopeName);
-      auto def=attributeManager.createDef(attributeName);
-      def.getRelationalAttribute().type=aggrFuncOp.getType();
-      auto aggrOp=rewriter.create<mlir::relalg::AggregationOp>(op->getLoc(),mlir::relalg::TupleStreamType::get(getContext()),scopeName,aggrFuncOp.rel(),rewriter.getArrayAttr({}));
-      auto* block=new mlir::Block;
+      auto def = attributeManager.createDef(attributeName);
+      def.getRelationalAttribute().type = aggrFuncOp.getType();
+      auto aggrOp = rewriter.create<mlir::relalg::AggregationOp>(op->getLoc(), mlir::relalg::TupleStreamType::get(getContext()), scopeName, aggrFuncOp.rel(), rewriter.getArrayAttr({}));
+      auto* block = new mlir::Block;
       aggrOp.aggr_func().push_back(block);
       {
          mlir::OpBuilder::InsertionGuard insertionGuard(rewriter);
@@ -38,14 +40,20 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
          auto tuple = rewriter.create<mlir::relalg::AddAttrOp>(op->getLoc(), tplType, tplArgument, def, val);
          rewriter.create<mlir::relalg::ReturnOp>(op->getLoc(), mlir::ValueRange({tuple}));
       }
-      rewriter.replaceOpWithNewOp<mlir::relalg::GetScalarOp>(op,aggrFuncOp.getType(),attributeManager.createRef(&def.getRelationalAttribute()),aggrOp.rel());
+      auto nullableType = aggrFuncOp.getType().cast<mlir::db::DBType>().asNullable();
+      mlir::Value getScalarOp = rewriter.replaceOpWithNewOp<mlir::relalg::GetScalarOp>(op, nullableType, attributeManager.createRef(&def.getRelationalAttribute()), aggrOp.asRelation());
+      mlir::Value res = getScalarOp;
+      if (!aggrFuncOp.getType().cast<mlir::db::DBType>().isNullable()) {
+         res = rewriter.create<mlir::db::CastOp>(op->getLoc(), aggrFuncOp.getType(), getScalarOp);
+      }
+      rewriter.replaceOp(op, res);
       return mlir::success(true);
    }
 };
 class WrapCountRowsPattern : public mlir::RewritePattern {
    public:
    WrapCountRowsPattern(mlir::MLIRContext* context)
-   : RewritePattern(mlir::relalg::CountRowsOp::getOperationName(), 1, context) {}
+      : RewritePattern(mlir::relalg::CountRowsOp::getOperationName(), 1, context) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto& attributeManager = getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
 
@@ -57,10 +65,10 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
       std::string attributeName = "aggrAttr";
 
       attributeManager.setCurrentScope(scopeName);
-      auto def=attributeManager.createDef(attributeName);
-      def.getRelationalAttribute().type=aggrFuncOp.getType();
-      auto aggrOp=rewriter.create<mlir::relalg::AggregationOp>(op->getLoc(),mlir::relalg::TupleStreamType::get(getContext()),scopeName,aggrFuncOp.rel(),rewriter.getArrayAttr({}));
-      auto* block=new mlir::Block;
+      auto def = attributeManager.createDef(attributeName);
+      def.getRelationalAttribute().type = aggrFuncOp.getType();
+      auto aggrOp = rewriter.create<mlir::relalg::AggregationOp>(op->getLoc(), mlir::relalg::TupleStreamType::get(getContext()), scopeName, aggrFuncOp.rel(), rewriter.getArrayAttr({}));
+      auto* block = new mlir::Block;
       aggrOp.aggr_func().push_back(block);
       {
          mlir::OpBuilder::InsertionGuard insertionGuard(rewriter);
@@ -75,7 +83,11 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
          auto tuple = rewriter.create<mlir::relalg::AddAttrOp>(op->getLoc(), tplType, tplArgument, def, val);
          rewriter.create<mlir::relalg::ReturnOp>(op->getLoc(), mlir::ValueRange({tuple}));
       }
-      rewriter.replaceOpWithNewOp<mlir::relalg::GetScalarOp>(op,aggrFuncOp.getType(),attributeManager.createRef(&def.getRelationalAttribute()),aggrOp.asRelation());
+      aggrFuncOp.getType().dump();
+      auto nullableType = aggrFuncOp.getType().cast<mlir::db::DBType>().asNullable();
+      mlir::Value getScalarOp = rewriter.create<mlir::relalg::GetScalarOp>(op->getLoc(), nullableType, attributeManager.createRef(&def.getRelationalAttribute()), aggrOp.asRelation());
+      mlir::Value res = rewriter.create<mlir::db::CastOp>(op->getLoc(), aggrFuncOp.getType(), getScalarOp);
+      rewriter.replaceOp(op, res);
       return mlir::success(true);
    }
 };
@@ -88,8 +100,8 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
          patterns.insert<WrapAggrFuncPattern>(&getContext());
          patterns.insert<WrapCountRowsPattern>(&getContext());
 
-         if(mlir::applyPatternsAndFoldGreedily(getFunction().getRegion(), std::move(patterns)).failed()){
-            assert(false&&"should not happen");
+         if (mlir::applyPatternsAndFoldGreedily(getFunction().getRegion(), std::move(patterns)).failed()) {
+            assert(false && "should not happen");
          }
       }
 

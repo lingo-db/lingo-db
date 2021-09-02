@@ -82,7 +82,7 @@ class HashJoinUtils {
          return false;
       }
    }
-   static std::vector<mlir::Value> inlineKeys(mlir::Block* block, mlir::relalg::Attributes keyAttributes, mlir::Block* newBlock, mlir::relalg::LoweringContext& context) {
+   static std::vector<mlir::Value> inlineKeys(mlir::Block* block, mlir::relalg::Attributes keyAttributes, mlir::Block* newBlock,mlir::Block::iterator insertionPoint, mlir::relalg::LoweringContext& context) {
       llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;
       mlir::BlockAndValueMapping mapping;
       std::vector<mlir::Value> keys;
@@ -104,7 +104,14 @@ class HashJoinUtils {
                }
                if (keyVal) {
                   if (!mapping.contains(keyVal)) {
-                     mlir::relalg::detail::inlineOpIntoBlock(keyVal.getDefiningOp(), keyVal.getDefiningOp()->getParentOp(), newBlock->getParentOp(), newBlock, mapping);
+                     //todo: remove nasty hack:
+                     mlir::OpBuilder builder(cmpOp->getContext());
+                     builder.setInsertionPoint(newBlock,insertionPoint);
+                     auto helperOp=builder.create<mlir::ConstantOp>(builder.getUnknownLoc(),builder.getIndexAttr(0));
+
+                     mlir::relalg::detail::inlineOpIntoBlock(keyVal.getDefiningOp(), keyVal.getDefiningOp()->getParentOp(), newBlock->getParentOp(), newBlock, mapping,helperOp);
+                     helperOp->remove();
+                     helperOp->destroy();
                   }
                   keys.push_back(mapping.lookupOrNull(keyVal));
                }
@@ -134,6 +141,8 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
    std::vector<mlir::relalg::RelationalAttribute*> orderedKeys;
    std::vector<mlir::relalg::RelationalAttribute*> orderedValues;
    mlir::TupleType keyTupleType, valTupleType, entryType;
+
+   std::vector<size_t> customLookupBuilders;
    size_t builderId;
    mlir::Value joinHt;
    HJNode(T joinOp, Value builderChild, Value lookupChild) : ProducerConsumerNode({builderChild, lookupChild}), joinOp(joinOp) {
@@ -154,7 +163,11 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
       auto availableRight = lookupChild->getAvailableAttributes();
       auto [leftKeys, rightKeys, keyTypes, leftKeyAttributes] = mlir::relalg::HashJoinUtils::analyzeHJPred(&joinOp.predicate().front(), availableLeft, availableRight);
       this->leftKeys = leftKeys;
+      this->leftKeys.dump(joinOp.getContext());
+      llvm::dbgs() << "\n";
       this->rightKeys = rightKeys;
+      this->rightKeys.dump(joinOp.getContext());
+      llvm::dbgs() << "\n";
       auto leftValues = availableLeft.intersect(this->requiredAttributes);
       for (mlir::relalg::Attributes& x : leftKeyAttributes) {
          if (x.size() == 1) {
@@ -192,10 +205,33 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
    virtual void afterLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {}
    virtual mlir::Value getFlag() { return Value(); }
 
+   std::vector<mlir::Type> getRequiredBuilderTypesCustom(LoweringContext& context) {
+      auto requiredBuilderTypes = getRequiredBuilderTypes(context);
+      for (auto x : customLookupBuilders) {
+         requiredBuilderTypes.push_back(context.builders[x].getType());
+      }
+      return requiredBuilderTypes;
+   }
+   std::vector<mlir::Value> getRequiredBuilderValuesCustom(LoweringContext& context) {
+      auto requiredBuilderValues = getRequiredBuilderValues(context);
+      for (auto x : customLookupBuilders) {
+         requiredBuilderValues.push_back(context.builders[x]);
+      }
+      return requiredBuilderValues;
+   }
+   void setRequiredBuilderValuesCustom(LoweringContext& context, mlir::ValueRange values) {
+      size_t i = 0;
+      for (auto x : requiredBuilders) {
+         context.builders[x] = values[i++];
+      }
+      for (auto y : customLookupBuilders) {
+         context.builders[y] = values[i++];
+      }
+   }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == builderChild) {
-         auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), leftKeys, builder.getInsertionBlock(), context);
+         auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), leftKeys, builder.getInsertionBlock(),builder.getInsertionPoint(), context);
          mlir::Value packedKey = mlir::relalg::HashJoinUtils::pack(inlinedKeys, builder);
          mlir::Value packedValues;
          if (!valTupleType.getTypes().empty()) {
@@ -208,18 +244,18 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
          mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(joinOp->getLoc(), htBuilder.getType(), htBuilder, packed);
          context.builders[builderId] = mergedBuilder;
       } else if (child == this->children[1].get()) {
-         auto packedKey = mlir::relalg::HashJoinUtils::pack(mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), rightKeys, builder.getInsertionBlock(), context), builder);
+         auto packedKey = mlir::relalg::HashJoinUtils::pack(mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), rightKeys, builder.getInsertionBlock(),builder.getInsertionPoint(), context), builder);
          mlir::Type htIterable = mlir::db::GenericIterableType::get(builder.getContext(), entryType, "join_ht_iterator");
          beforeLookup(context, builder);
          auto matches = builder.create<mlir::db::Lookup>(joinOp->getLoc(), htIterable, joinHt, packedKey);
          {
-            auto forOp2 = builder.create<mlir::db::ForOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matches, getFlag(), getRequiredBuilderValues(context));
+            auto forOp2 = builder.create<mlir::db::ForOp>(joinOp->getLoc(), getRequiredBuilderTypesCustom(context), matches, getFlag(), getRequiredBuilderValuesCustom(context));
             mlir::Block* block2 = new mlir::Block;
             block2->addArgument(entryType);
-            block2->addArguments(getRequiredBuilderTypes(context));
+            block2->addArguments(getRequiredBuilderTypesCustom(context));
             forOp2.getBodyRegion().push_back(block2);
             mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
-            setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
+            setRequiredBuilderValuesCustom(context, block2->getArguments().drop_front(1));
             auto unpacked = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), entryType.getTypes(), forOp2.getInductionVar()).getResults();
             mlir::ValueRange unpackedKey = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), keyTupleType.getTypes(), unpacked[0]).getResults();
             for (size_t i = 0; i < unpackedKey.size(); i++) {
@@ -244,8 +280,8 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
                terminator->erase();
                clonedOp->destroy();
             }
-            builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-            setRequiredBuilderValues(context, forOp2.results());
+            builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValuesCustom(context));
+            setRequiredBuilderValuesCustom(context, forOp2.results());
          }
          afterLookup(context, builder);
       }
@@ -369,7 +405,7 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
 
       auto scope = context.createScope();
       if (child == builderChild) {
-         auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), leftKeys, builder.getInsertionBlock(), context);
+         auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), leftKeys, builder.getInsertionBlock(),builder.getInsertionPoint(), context);
          mlir::Value packedKey = mlir::relalg::HashJoinUtils::pack(inlinedKeys, builder);
          mlir::Value packedValues;
          if (!valTupleType.getTypes().empty()) {
@@ -383,7 +419,7 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
          context.builders[builderId] = mergedBuilder;
       } else if (child == this->children[1].get()) {
          mlir::TupleType entryAndMarkerType = mlir::TupleType::get(builder.getContext(), TypeRange{entryType, ptrType});
-         auto packedKey = mlir::relalg::HashJoinUtils::pack(mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), rightKeys, builder.getInsertionBlock(), context), builder);
+         auto packedKey = mlir::relalg::HashJoinUtils::pack(mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), rightKeys, builder.getInsertionBlock(),builder.getInsertionPoint(), context), builder);
          mlir::Type htIterable = mlir::db::GenericIterableType::get(builder.getContext(), entryAndMarkerType, "mjoin_ht_iterator");
          beforeLookup(context, builder);
          auto matches = builder.create<mlir::db::Lookup>(joinOp->getLoc(), htIterable, joinHt, packedKey);

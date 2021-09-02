@@ -9,7 +9,7 @@ class Generator:
         self.functions=FunctionRegistry()
         self.codegen=CodeGen(self.functions)
         self.codegen.startModule("testmodule")
-        self.codegen.startFunction("main",[])
+        self.codegen.startFunction("main",[],"")
         self.res=None
     def registerFunction(self,func):
         self.functions.register(func)

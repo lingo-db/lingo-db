@@ -302,13 +302,13 @@ static void addRequirements(mlir::Operation* op, mlir::Operation* includeChildre
       extracted.push_back(op);
    }
 }
-void mlir::relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, mlir::Block* newBlock, mlir::BlockAndValueMapping& mapping) {
+void mlir::relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, mlir::Block* newBlock, mlir::BlockAndValueMapping& mapping,mlir::Operation* first) {
    llvm::SmallVector<mlir::Operation*, 8> extracted;
    llvm::SmallPtrSet<mlir::Operation*, 8> alreadyPresent;
    addRequirements(vop, includeChildren, excludeChildren, extracted, alreadyPresent,mapping);
    mlir::OpBuilder builder(vop->getContext());
    builder.setInsertionPointToStart(newBlock);
-   mlir::Operation* first = newBlock->empty()?nullptr:&newBlock->front();
+   first = first? first:(newBlock->empty()?nullptr:&newBlock->front());
    for (auto* op : extracted) {
       auto* cloneOp = builder.clone(*op, mapping);
       if(first) {

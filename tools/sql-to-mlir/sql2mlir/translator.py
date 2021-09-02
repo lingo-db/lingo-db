@@ -12,23 +12,8 @@ class Translator:
         self.params={}
         self.query = query
         self.basetables = {}
-        self.attrnumber=0
         self.with_defs = {}
-        self.mapnumber=0
-        self.aggrnumber=0
-        self.ojnumber=0
-    def uniqueAttrName(self):
-        self.attrnumber+=1
-        return "attr"+str(self.attrnumber)
-    def uniqueMapName(self):
-        self.mapnumber+=1
-        return "map"+str(self.mapnumber)
-    def uniqueOuterJoinName(self):
-        self.ojnumber+=1
-        return "outerjoin"+str(self.ojnumber)
-    def uniqueAggrName(self):
-        self.aggrnumber += 1
-        return "aggr" + str(self.aggrnumber)
+
 
     def translateExpression(self, expr, codegen, stacked_resolver):
         def translateSubExpressions(subexprs):
@@ -173,7 +158,7 @@ class Translator:
                     elif jointype == "right":
                         jointype=""
                         left,right=right,left
-                    name=self.uniqueOuterJoinName()if outer else ""
+                    name=codegen.getUniqueName("outerjoin") if outer else ""
                     tree_var, tuple = codegen.startJoin(outer, jointype, left , right, name)
 
                     stacked_resolver.push(tuple, resolver)
@@ -195,7 +180,7 @@ class Translator:
             sel_res = self.translateExpression(stmt["where"], codegen, stacked_resolver)
             stacked_resolver.pop()
             codegen.endSelection(sel_res)
-        AFM = AggrFuncManager(self.uniqueAggrName(),self.uniqueMapName(),self.uniqueMapName())
+        AFM = AggrFuncManager(codegen.getUniqueName("aggr"),codegen.getUniqueName("map"),codegen.getUniqueName("map"))
         if "having" in stmt:
             having_expr = AFM.substituteAggrFuncs(stmt["having"])
         select_names = AFM.substituteComplexExpressions(stmt["select"])
@@ -270,18 +255,12 @@ class Translator:
             tree_var=codegen.create_relalg_limit(tree_var,stmt["limit"])
 
         return tree_var, results
-    def getScopeName(self,base):
-        if base in self.basetables:
-            self.basetables[base] += 1
-            base += str(self.basetables[base])
-        else:
-            self.basetables[base] = 0
-        return base
+
     def estimateType(self,val):
         return DBType("string") if type(val) == str else DBType("int", ["32"])
     def addJoinTable(self, codegen, from_value, resolver,all_from_attributes):
         if type(from_value["value"]) is str and not from_value["value"] in self.with_defs:
-            scope_name=self.getScopeName(from_value["value"])
+            scope_name=codegen.getUniqueName(from_value["value"])
 
 
             table = getTPCHTable(from_value["value"],scope_name)
@@ -298,14 +277,14 @@ class Translator:
             base =from_value["value"]["values"]
             base =base["literal"] if (type(base)==dict) and "literal" in base else base
             probeelement=base[0]
-            scope_name=self.getScopeName("constrel")
+            scope_name=codegen.getUniqueName("constrel")
             if type(probeelement)==list:
                 for val in probeelement:
-                    attrname = self.uniqueAttrName()
+                    attrname = codegen.getUniqueName("attr")
                     attr = Attribute(scope_name, attrname, self.estimateType(val), [], attrname)
                     attrs.append(attr)
             else:
-                attrname = self.uniqueAttrName()
+                attrname = codegen.getUniqueName("attr")
                 attr=Attribute(scope_name,attrname,self.estimateType(probeelement),[],attrname)
                 attrs.append(attr)
             var = codegen.create_relalg_const_relation(scope_name,attrs,base)
@@ -341,19 +320,19 @@ class Translator:
         var, results = self.translateSelectStmt(parsed, codegen)
         res = codegen.create_relalg_materialize(var, results)
         return res
-    def translateIntoFunction(self,codegen,name, params):
+    def translateIntoFunction(self,codegen,name, params,mode="private"):
         func_params=[]
         for param_name in params:
             p=codegen.newParam(params[param_name])
             func_params.append(p+": "+params[param_name].to_string())
             self.setParam(param_name,p)
-        codegen.startFunction(name,func_params)
+        codegen.startFunction(name,func_params,mode)
         res= self.translate(codegen)
         codegen.endFunction(res)
     def translateModule(self,params,functions={}):
 
         codegen = CodeGen(functions)
         codegen.startModule("querymodule")
-        self.translateIntoFunction(codegen,"main",params)
+        self.translateIntoFunction(codegen,"main",params,"")
         codegen.endModule()
         return codegen.getResult()

@@ -12,6 +12,7 @@ add_mlir_conversion_library(MLIRRelAlgToDB
         OuterJoinOp.cpp
         SingleJoinOp.cpp
         MarkJoinOp.cpp
+        CollectionJoinOp.cpp
         SemiJoinOp.cpp
         AntiSemiJoinOp.cpp
         RenamingOp.cpp

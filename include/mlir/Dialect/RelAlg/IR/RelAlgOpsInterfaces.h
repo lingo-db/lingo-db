@@ -206,7 +206,7 @@ bool isJoin(Operation* op);
 void addPredicate(mlir::Operation* op, std::function<mlir::Value(mlir::Value, mlir::OpBuilder& builder)> predicateProducer);
 void initPredicate(mlir::Operation* op);
 
-void inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, mlir::Block* newBlock, mlir::BlockAndValueMapping& mapping);
+void inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, mlir::Block* newBlock, mlir::BlockAndValueMapping& mapping,mlir::Operation* first=nullptr);
 } // namespace mlir::relalg::detail
 class Operator;
 #define GET_OP_CLASSES

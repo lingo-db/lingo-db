@@ -106,6 +106,7 @@ class ProducerConsumerNode {
 
    public:
    ProducerConsumerNode(mlir::ValueRange children);
+
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       for (auto& child : children) {
@@ -124,6 +125,16 @@ class ProducerConsumerNode {
    virtual void produce(LoweringContext& context, ProducerConsumerBuilder& builder) = 0;
    virtual void done() {}
    virtual ~ProducerConsumerNode() {}
+};
+class NoopNode : public mlir::relalg::ProducerConsumerNode {
+   public:
+   NoopNode() : mlir::relalg::ProducerConsumerNode({}) {
+   }
+   virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override{};
+   virtual mlir::relalg::Attributes getAvailableAttributes() override { return {}; };
+   virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) override{};
+   virtual void produce(LoweringContext& context, ProducerConsumerBuilder& builder) override{};
+   virtual ~NoopNode() {}
 };
 class ProducerConsumerNodeRegistry {
    static bool registeredBaseTableOp;
@@ -144,6 +155,7 @@ class ProducerConsumerNodeRegistry {
    static bool registeredSingleJoinOp;
    static bool registeredMarkJoinOp;
    static bool registeredTmpOp;
+   static bool registeredCollectionJoinOp;
    std::unordered_map<std::string, std::function<std::unique_ptr<mlir::relalg::ProducerConsumerNode>(mlir::Operation*)>> nodes;
    ProducerConsumerNodeRegistry() {
       bool res = true;
@@ -165,6 +177,7 @@ class ProducerConsumerNodeRegistry {
       res &= registeredSingleJoinOp;
       res &= registeredMarkJoinOp;
       res &= registeredTmpOp;
+      res &= registeredCollectionJoinOp;
       llvm::dbgs() << "registered=" << res << "\n";
    }
 

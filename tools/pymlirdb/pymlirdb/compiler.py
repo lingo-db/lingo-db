@@ -201,7 +201,6 @@ class PythonVisitor(ast.NodeVisitor):
             source = dedent(source)
         else:
             raise NotImplementedError
-        self.basetables = {}
         self.dataframes = {}
         self.df_tuples = {}
         self._source = source
@@ -216,23 +215,14 @@ class PythonVisitor(ast.NodeVisitor):
     def visit_Name(self, node):
         return self.resolver.resolve(node.id)
 
-
-    def getScopeName(self, base):
-        if base in self.basetables:
-            self.basetables[base] += 1
-            base += str(self.basetables[base])
-        else:
-            self.basetables[base] = 0
-        return base
-
     def visit_Call(self, node):
         if type(node.func) is ast.Attribute:
             if type(node.func.value) is ast.Name and node.func.value.id == "pymlirdb":
                 pymlirdb_func = node.func.attr
                 if pymlirdb_func == "read_table":
                     table_name = node.args[0].value
-                    scope_name = self.getScopeName(table_name)
-                    table=getTPCHTable(scope_name, table_name)
+                    scope_name = self.codegen.getUniqueName(table_name)
+                    table=getTPCHTable(table_name,scope_name)
                     var = self.codegen.create_relalg_base_table(table)
                     self.dataframes[var] = table.columns
                     return var
@@ -241,6 +231,17 @@ class PythonVisitor(ast.NodeVisitor):
                 method_name = node.func.attr
                 if method_name == "count":
                     return self.codegen.create_relalg_count_rows(objval)
+                if method_name == "join":
+                    otherdf=self.visit(node.args[0])
+                    on=node.keywords[0].value
+
+                    tree_var, tuple = self.codegen.startJoin(False,"innerjoin",objval,otherdf)
+                    self.curr_tuple = tuple
+                    sel_res = self.visit(on)
+                    self.codegen.endJoin(sel_res)
+                    self.dataframes[tree_var] = self.dataframes[objval].copy()
+                    self.dataframes[tree_var].update(self.dataframes[otherdf])
+                    return tree_var
         if type(node.func) is ast.Name:
             if self.functions.contains(node.func.id):
                 params=list(map(lambda x:self.visit(x),node.args))
@@ -264,7 +265,7 @@ class PythonVisitor(ast.NodeVisitor):
 
                 if self.isDataFrame(left_val):
                     map_attr_name=t.slice.value.value
-                    scope_name="map"
+                    scope_name=self.codegen.getUniqueName("map")
                     tree_var, tuple = self.codegen.startMap(scope_name, left_val)
                     self.curr_tuple = tuple
                     val=self.visit(node.value)
@@ -358,6 +359,8 @@ class PythonVisitor(ast.NodeVisitor):
                     param_type.types.append(attr.type)
                 iter=self.codegen.create_relalg_getlist(iter,attrs)
                 self.codegen.startFor(param,iter,iter_args,iter_args_initial)
+                for x in zip(iter_vars,iter_args):
+                    self.resolver.set(x[0],x[1])
                 for stmt in node.body:
                     self.visit(stmt)
                 yield_values=list(map(lambda x:self.resolver.resolve(x),iter_vars))

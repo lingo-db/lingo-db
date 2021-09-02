@@ -70,7 +70,7 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
 
          children[0]->addRequiredBuilders({builderId});
          children[0]->produce(context, builder);
-         mlir::Value vector = builder.create<mlir::db::BuilderBuild>(tmpOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), vectorBuilder);
+         mlir::Value vector = builder.create<mlir::db::BuilderBuild>(tmpOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), context.builders[builderId]);
          context.materializedTmp[tmpOp.getOperation()]={vector,attributes};
       } else {
          auto [vector,attributes]=context.materializedTmp[tmpOp.getOperation()];

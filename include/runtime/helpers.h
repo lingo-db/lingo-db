@@ -241,6 +241,7 @@ class VarLenBuffer {
       size_t getCapacity() const {
          return capacity;
       }
+
       ~Part(){
          delete[] data;
       }
@@ -269,6 +270,12 @@ class VarLenBuffer {
 
    VarLenBuffer() {
       parts.push_back(new Part(100000));
+   }
+   void clear(){
+      for(size_t i=1;i<parts.size();i++){
+         delete parts[i];
+      }
+      parts.resize(1);
    }
    ~VarLenBuffer(){
       for(auto *part:parts){
