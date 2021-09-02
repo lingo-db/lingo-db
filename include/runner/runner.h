@@ -11,11 +11,12 @@ class Runner {
    public:
    Runner();
    bool load(std::string fileName);
+   bool loadString(std::string input);
    bool optimize();
    bool lower();
    bool lowerToLLVM();
    void dump();
-   bool runJit(runtime::ExecutionContext* context, std::function<void(uint8_t*)> callback);
+   bool runJit(runtime::ExecutionContext* context,size_t repeats, std::function<void(uint8_t*)> callback);
    ~Runner();
    static void printTable(uint8_t* ptr);
 

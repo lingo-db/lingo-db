@@ -111,7 +111,15 @@ int loadMLIR(std::string inputFilename, mlir::MLIRContext& context, mlir::Owning
    }
    return 0;
 }
+int loadMLIRFromString(const std::string& input, mlir::MLIRContext& context, mlir::OwningModuleRef& module) {
 
+   module=mlir::parseSourceString(input,&context);
+   if (!module) {
+      llvm::errs() << "Error can't load module\n";
+      return 3;
+   }
+   return 0;
+}
 static std::unique_ptr<llvm::Module>
 convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context) {
    //////////////////////////////////////////////////////////////////////////////////////
@@ -179,12 +187,37 @@ bool Runner::load(std::string file) {
       return false;
    return true;
 }
+bool Runner::loadString(std::string input) {
+   RunnerContext* ctxt = new RunnerContext;
+   this->context = (void*) ctxt;
+
+   mlir::DialectRegistry registry;
+   registry.insert<mlir::relalg::RelAlgDialect>();
+   registry.insert<mlir::db::DBDialect>();
+   registry.insert<mlir::StandardOpsDialect>();
+   registry.insert<mlir::scf::SCFDialect>();
+
+   registry.insert<mlir::util::UtilDialect>();
+   registry.insert<mlir::LLVM::LLVMDialect>();
+   registry.insert<mlir::memref::MemRefDialect>();
+
+   mlir::MLIRContext& context = ctxt->context;
+   context.appendDialectRegistry(registry);
+   mlir::registerLLVMDialectTranslation(context);
+
+   llvm::DebugFlag = false;
+   if (loadMLIRFromString(input, context, ctxt->module))
+      return false;
+   return true;
+}
 bool Runner::optimize() {
    auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createExtractNestedOperatorsPass());
+   pm.addPass(mlir::createInlinerPass());
+   pm.addPass(mlir::createSymbolDCEPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createSimplifyAggregationsPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createExtractNestedOperatorsPass());
    pm.addPass(mlir::createCSEPass());
    pm.addPass(mlir::createCanonicalizerPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createDecomposeLambdasPass());
@@ -247,7 +280,7 @@ void Runner::dump() {
    ctxt->module->dump();
 }
 
-bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8_t*)> callback) {
+bool Runner::runJit(runtime::ExecutionContext* context,size_t repeats, std::function<void(uint8_t*)> callback) {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    // Initialize LLVM targets.
    llvm::InitializeNativeTarget();
@@ -297,7 +330,6 @@ bool Runner::runJit(runtime::ExecutionContext* context, std::function<void(uint8
    }
    auto* funcPtr = lookupResult;
    std::vector<size_t> measuredTimes;
-   size_t repeats = 5;
    for (size_t i = 0; i < repeats; i++) {
       auto executionStart = std::chrono::high_resolution_clock::now();
       if (ctxt->numResults == 1) {

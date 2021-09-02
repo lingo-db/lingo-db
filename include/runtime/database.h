@@ -12,6 +12,8 @@ class Database {
    static std::shared_ptr<arrow::Table> loadTable(std::string name);
 
    public:
+   Database(){};
+   void addTable(std::string name,std::shared_ptr<arrow::Table> table);
    static std::unique_ptr<Database> load(std::string directory);
    std::shared_ptr<arrow::Table> getTable(const std::string& name);
 };

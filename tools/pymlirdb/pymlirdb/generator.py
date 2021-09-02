@@ -25,4 +25,6 @@ class Generator:
         self.codegen.endFunction(self.res)
         self.functions.implement(self.codegen)
         self.codegen.endModule()
-        print(self.codegen.getResult())
+        res=self.codegen.getResult()
+        print(res)
+        return res

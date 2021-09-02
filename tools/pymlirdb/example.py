@@ -1,6 +1,12 @@
 import pymlirdb
 from sql2mlir.mlir import Function, DBType
+import pyarrow as pa
+supplier=pa.ipc.open_file(pa.OSFile('../../resources/data/tpch-1/supplier.arrow')).read_all()
+lineitem=pa.ipc.open_file(pa.OSFile('../../resources/data/tpch-1/lineitem.arrow')).read_all()
+orders=pa.ipc.open_file(pa.OSFile('../../resources/data/tpch-1/orders.arrow')).read_all()
+nation=pa.ipc.open_file(pa.OSFile('../../resources/data/tpch-1/nation.arrow')).read_all()
 
+pymlirdb.load_tables({"supplier":supplier,"lineitem":lineitem,"orders":orders,"nation":nation})
 
 def count_delayed_orders_for_supplier(suppkey):
     items = pymlirdb.read_table("lineitem")

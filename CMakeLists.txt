@@ -32,7 +32,9 @@ set(LLVM_LINK_COMPONENTS
         OrcJIT
         )
 
+set(ArrowPython_DIR ${Arrow_DIR})
 include(${Arrow_DIR}/FindArrow.cmake)
+include(${Arrow_DIR}/FindArrowPython.cmake)
 include_directories(${ARROW_INCLUDE_DIR})
 include(${Arrow_DIR}/FindGandiva.cmake)
 include_directories(${GANDIVA_INCLUDE_DIR})
@@ -91,3 +93,11 @@ llvm_update_compile_flags(mlir-db-opt)
 target_link_libraries(mlir-db-opt PUBLIC ${LIBS} PRIVATE arrow_shared)
 add_subdirectory(tools)
 add_subdirectory(test)
+
+
+find_package(Python COMPONENTS Interpreter Development REQUIRED)
+add_subdirectory(pybind11)
+
+pybind11_add_module(pymlirdbext python/mlirdb.cpp)
+target_link_libraries(pymlirdbext PUBLIC runner runtime PRIVATE arrow_shared arrow_python_shared)
+target_link_options(pymlirdbext PUBLIC -Wl,--export-dynamic)

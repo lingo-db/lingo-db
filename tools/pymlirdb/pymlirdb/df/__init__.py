@@ -1,4 +1,8 @@
 import pymlirdb
+import sys,os
+sys.setdlopenflags(os.RTLD_NOW|os.RTLD_GLOBAL)
+import pyarrow as pa
+import pymlirdbext
 
 
 class DataFrame(object):
@@ -6,7 +10,9 @@ class DataFrame(object):
         pass
     def to_pandas(self):
         pymlirdb.generator.generate(self)
-        pymlirdb.generator.result()
+        mlirModule=pymlirdb.generator.result()
+        res=pymlirdbext.run(mlirModule)
+        return res.to_pandas()
 class QueryDF(DataFrame):
     def __init__(self,sql):
         self.sql=sql

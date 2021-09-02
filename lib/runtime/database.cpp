@@ -7,6 +7,10 @@
 #include <arrow/status.h>
 #include <arrow/table.h>
 namespace runtime {
+void Database::addTable(std::string name,std::shared_ptr<arrow::Table> table){
+   tables[name]=table;
+}
+
 std::shared_ptr<arrow::Table> Database::loadTable(std::string name) {
    auto inputFile = arrow::io::ReadableFile::Open(name).ValueOrDie();
    auto batchReader = arrow::ipc::RecordBatchFileReader::Open(inputFile).ValueOrDie();

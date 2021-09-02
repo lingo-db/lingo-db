@@ -23,6 +23,6 @@ int main(int argc, char** argv) {
    //runner.dump();
    runner.lowerToLLVM();
    //runner.dumpLLVM();
-   runner.runJit(&context, runner::Runner::printTable);
+   runner.runJit(&context, 1,runner::Runner::printTable);
    return 0;
 }
