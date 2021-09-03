@@ -16,7 +16,6 @@ build-arrow: build/arrow
 	cmake --install build/arrow --prefix build/arrow/install
 
 build/pyarrow:
-	mkdir -p build/pyarrowp
 	cd arrow/python; python3 setup.py build_ext --inplace --extra-cmake-args="-DArrow_DIR=/home/michael/master-thesis/code/build/arrow/install/lib/cmake/arrow -DArrowPython_DIR=/home/michael/master-thesis/code/build/arrow/install/lib/cmake/arrow"
 build-llvm: build/llvm-build
 	cmake --build build/llvm-build -j4
@@ -44,7 +43,7 @@ test-coverage:
 run-test:
 	cmake --build build/build-debug-llvm-release --target mlir-db-opt -- -j 6
 	cmake --build build/build-debug-llvm-release --target db-run -- -j 6
-	./build/llvm-build/bin/llvm-lit -v build/build-debug-llvm-release/test
+	export LD_LIBRARY_PATH=/home/michael/master-thesis/code/build/arrow/install/lib && ./build/llvm-build/bin/llvm-lit -v build/build-debug-llvm-release/test
 coverage-clean:
 	rm -rf build/build-debug-llvm-release-coverage/coverage
 
