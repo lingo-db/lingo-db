@@ -17,7 +17,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: arrow-build
-          key: ${{ runner.os }}-arrow-build-${{ steps.arrow-commit.outputs.commit }}
+          key: ${{ runner.os }}-arrow-build-with-python-${{ steps.arrow-commit.outputs.commit }}
       - uses: seanmiddleditch/gha-setup-ninja@master
       - name: Build Arrow
         if: steps.arrow-build.outputs.cache-hit != 'true'
@@ -25,7 +25,7 @@ jobs:
           git submodule init
           git submodule update arrow
           mkdir -p arrow-build
-          cmake arrow/cpp  -B arrow-build -DARROW_GANDIVA=1
+          cmake arrow/cpp  -B arrow-build -DARROW_GANDIVA=1 -DARROW_PYTHON=ON
           cmake --build arrow-build
           cmake --install arrow-build --prefix arrow-build/install
 
@@ -73,7 +73,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: arrow-build
-          key: ${{ runner.os }}-arrow-build-${{ steps.arrow-commit.outputs.commit }}
+          key: ${{ runner.os }}-arrow-build-with-python-${{ steps.arrow-commit.outputs.commit }}
       - name: Get llvm commit id
         id: llvm-commit
         run: |
@@ -134,7 +134,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: arrow-build
-          key: ${{ runner.os }}-arrow-build-${{ steps.arrow-commit.outputs.commit }}
+          key: ${{ runner.os }}-arrow-build-with-python-${{ steps.arrow-commit.outputs.commit }}
       - name: Fetch LLVM Build
         id: llvm-build
         uses: actions/cache@v2
@@ -184,7 +184,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: arrow-build
-          key: ${{ runner.os }}-arrow-build-${{ steps.arrow-commit.outputs.commit }}
+          key: ${{ runner.os }}-arrow-build-with-python-${{ steps.arrow-commit.outputs.commit }}
       - name: Fetch Cached Build
         uses: actions/cache@v2
         with:
@@ -207,7 +207,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: arrow-build
-          key: ${{ runner.os }}-arrow-build-${{ steps.arrow-commit.outputs.commit }}
+          key: ${{ runner.os }}-arrow-build-with-python-${{ steps.arrow-commit.outputs.commit }}
       - name: Install clang-tidy
         run: |
           sudo apt-get install -y clang-tidy
