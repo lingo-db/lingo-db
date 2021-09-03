@@ -1,28 +1,21 @@
-#include <iostream>
-
-#include <pybind11/pybind11.h>
-#include <pybind11/embed.h> // <= You need this header
-
-#include <arrow/python/pyarrow.h>
 #include <arrow/pretty_print.h>
-#include <pybind11/stl.h>
+#include <arrow/python/pyarrow.h>
+#include <pybind11/pybind11.h>
+
 #include "runner/runner.h"
 
-
-
 runtime::ExecutionContext* executionContext;
-void load(pybind11::dict dictionary){
-   executionContext=new runtime::ExecutionContext;
-   auto database=std::make_unique<runtime::Database>();
-   for (auto item : dictionary)
-   {
-      std::string name=item.first.cast<pybind11::str>();
-      auto arrowTable=arrow::py::unwrap_table(item.second.ptr()).ValueOrDie();
-      database->addTable(name,arrowTable);
+void load(pybind11::dict dictionary) {
+   executionContext = new runtime::ExecutionContext;
+   auto database = std::make_unique<runtime::Database>();
+   for (auto item : dictionary) {
+      std::string name = item.first.cast<pybind11::str>();
+      auto arrowTable = arrow::py::unwrap_table(item.second.ptr()).ValueOrDie();
+      database->addTable(name, arrowTable);
    };
-   executionContext->db=std::move(database);
+   executionContext->db = std::move(database);
 }
-pybind11::handle run(pybind11::str module){
+pybind11::handle run(pybind11::str module) {
    runner::Runner runner;
    runner.loadString(module);
    //runner.dump();
@@ -33,22 +26,16 @@ pybind11::handle run(pybind11::str module){
    runner.lowerToLLVM();
    //runner.dumpLLVM();
    pybind11::handle result;
-   runner.runJit(executionContext,1, [&](uint8_t* ptr){
+   runner.runJit(executionContext, 1, [&](uint8_t* ptr) {
       auto table = *(std::shared_ptr<arrow::Table>*) ptr;
       //arrow::PrettyPrint(*table,arrow::PrettyPrintOptions(),&std::cout);
-      result=arrow::py::wrap_table(table);
+      result = arrow::py::wrap_table(table);
    });
    return result;
-
 }
 
 
-
-namespace py = pybind11;
-
-PYBIND11_PLUGIN(pymlirdbext) {
-   py::module m("pymlirdbext", "python mlirdb extension");
-   m.def("load",&load);
-   m.def("run",run);
-   return m.ptr();
+PYBIND11_MODULE(pymlirdbext,m) {
+   m.def("load", &load);
+   m.def("run", run);
 }
