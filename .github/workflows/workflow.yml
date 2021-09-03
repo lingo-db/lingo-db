@@ -219,6 +219,17 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - name: install dependencies
+        run: |
+          sudo apt-get install libjemalloc-dev libboost-dev \
+                                 libboost-filesystem-dev \
+                                 libboost-system-dev \
+                                 libboost-regex-dev \
+                                 python-dev \
+                                 autoconf \
+                                 flex \
+                                 bison
+          pip3 install numpy
       - uses: actions/checkout@v2
       - name: Get arrow ommit id
         id: arrow-commit
