@@ -263,5 +263,7 @@ jobs:
           key: ${{ runner.os }}-build-${{ github.sha }}
       - name: Run Test
         run: |
+          git submodule init
+          git submodule update pybind11
           python3 tools/scripts/run-clang-tidy.py -p build/ -quiet  -exclude="arrow" -header-filter="$PWD/include/.*"
       
