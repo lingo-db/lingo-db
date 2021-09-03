@@ -78,7 +78,6 @@ jobs:
           git submodule init
           git submodule update arrow
           cd arrow/python; python3 setup.py build_ext --inplace --extra-cmake-args="-DArrow_DIR=/home/runner/work/db-dialects/db-dialects/arrow-build/install/lib/cmake/arrow -DArrowPython_DIR=/home/runner/work/db-dialects/db-dialects/arrow-build/install/lib/cmake/arrow"
-          cp arrow/python pyarrow
   build-llvm:
     runs-on: ubuntu-latest
 
