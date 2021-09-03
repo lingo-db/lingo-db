@@ -105,6 +105,7 @@ jobs:
         run: |
           git submodule init
           git submodule update arrow
+          git submodule update pybind11
           mkdir -p build 
           cmake -G Ninja . -B build\
            -DMLIR_DIR=llvm-build/lib/cmake/mlir\
