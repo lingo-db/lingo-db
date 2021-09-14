@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @supplier { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=!db.int<64>}),
             s_name => @s_name({type=!db.string}),
             s_address => @s_address({type=!db.string}),
@@ -99,7 +99,7 @@ module @querymodule{
             %50 = db.and %16 : !db.bool,%19 : !db.bool,%22 : !db.bool,%25 : !db.bool,%28 : !db.bool,%43 : !db.bool,%49 : !db.bool
             relalg.return %50 : !db.bool
         }
-        %52 = relalg.map @map2 %13 (%51: !relalg.tuple) {
+        %52 = relalg.map @map1 %13 (%51: !relalg.tuple) {
             %53 = relalg.getattr %51 @lineitem::@l_shipdate : !db.date<day>
             %54 = db.date_extract year, %53 : !db.date<day>
             %55 = relalg.addattr %51, @aggfmname1({type=!db.int<64>}) %54
@@ -111,13 +111,13 @@ module @querymodule{
             %61 = relalg.addattr %55, @aggfmname2({type=!db.decimal<15,2>}) %60
             relalg.return %61 : !relalg.tuple
         }
-        %64 = relalg.aggregation @aggr2 %52 [@nation::@n_name,@nation1::@n_name,@map2::@aggfmname1] (%62 : !relalg.relation, %63 : !relalg.tuple) {
-            %65 = relalg.aggrfn sum @map2::@aggfmname2 %62 : !db.decimal<15,2>
+        %64 = relalg.aggregation @aggr1 %52 [@nation::@n_name,@nation1::@n_name,@map1::@aggfmname1] (%62 : !relalg.tuplestream, %63 : !relalg.tuple) {
+            %65 = relalg.aggrfn sum @map1::@aggfmname2 %62 : !db.decimal<15,2>
             %66 = relalg.addattr %63, @aggfmname1({type=!db.decimal<15,2>}) %65
             relalg.return %66 : !relalg.tuple
         }
-        %67 = relalg.sort %64 [(@nation::@n_name,asc),(@nation1::@n_name,asc),(@map2::@aggfmname1,asc)]
-        %68 = relalg.materialize %67 [@nation::@n_name,@nation1::@n_name,@map2::@aggfmname1,@aggr2::@aggfmname1] => ["supp_nation","cust_nation","l_year","revenue"] : !db.table
+        %67 = relalg.sort %64 [(@nation::@n_name,asc),(@nation1::@n_name,asc),(@map1::@aggfmname1,asc)]
+        %68 = relalg.materialize %67 [@nation::@n_name,@nation1::@n_name,@map1::@aggfmname1,@aggr1::@aggfmname1] => ["supp_nation","cust_nation","l_year","revenue"] : !db.table
         return %68 : !db.table
     }
 }

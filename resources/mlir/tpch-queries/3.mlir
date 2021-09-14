@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<64>}),
             c_name => @c_name({type=!db.string}),
             c_address => @c_address({type=!db.string}),
@@ -57,7 +57,7 @@ module @querymodule{
             %23 = db.and %10 : !db.bool,%13 : !db.bool,%16 : !db.bool,%19 : !db.bool,%22 : !db.bool
             relalg.return %23 : !db.bool
         }
-        %25 = relalg.map @map1 %7 (%24: !relalg.tuple) {
+        %25 = relalg.map @map %7 (%24: !relalg.tuple) {
             %26 = relalg.getattr %24 @lineitem::@l_extendedprice : !db.decimal<15,2>
             %27 = db.constant (1) :!db.decimal<15,2>
             %28 = relalg.getattr %24 @lineitem::@l_discount : !db.decimal<15,2>
@@ -66,14 +66,14 @@ module @querymodule{
             %31 = relalg.addattr %24, @aggfmname1({type=!db.decimal<15,2>}) %30
             relalg.return %31 : !relalg.tuple
         }
-        %34 = relalg.aggregation @aggr1 %25 [@lineitem::@l_orderkey,@orders::@o_orderdate,@orders::@o_shippriority] (%32 : !relalg.relation, %33 : !relalg.tuple) {
-            %35 = relalg.aggrfn sum @map1::@aggfmname1 %32 : !db.decimal<15,2>
+        %34 = relalg.aggregation @aggr %25 [@lineitem::@l_orderkey,@orders::@o_orderdate,@orders::@o_shippriority] (%32 : !relalg.tuplestream, %33 : !relalg.tuple) {
+            %35 = relalg.aggrfn sum @map::@aggfmname1 %32 : !db.decimal<15,2>
             %36 = relalg.addattr %33, @aggfmname2({type=!db.decimal<15,2>}) %35
             relalg.return %36 : !relalg.tuple
         }
-        %37 = relalg.sort %34 [(@aggr1::@aggfmname2,desc),(@orders::@o_orderdate,asc)]
+        %37 = relalg.sort %34 [(@aggr::@aggfmname2,desc),(@orders::@o_orderdate,asc)]
         %38 = relalg.limit 10 %37
-        %39 = relalg.materialize %38 [@lineitem::@l_orderkey,@aggr1::@aggfmname2,@orders::@o_orderdate,@orders::@o_shippriority] => ["l_orderkey","revenue","o_orderdate","o_shippriority"] : !db.table
+        %39 = relalg.materialize %38 [@lineitem::@l_orderkey,@aggr::@aggfmname2,@orders::@o_orderdate,@orders::@o_shippriority] => ["l_orderkey","revenue","o_orderdate","o_shippriority"] : !db.table
         return %39 : !db.table
     }
 }

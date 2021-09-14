@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<64>}),
             l_partkey => @l_partkey({type=!db.int<64>}),
             l_suppkey => @l_suppkey({type=!db.int<64>}),
@@ -161,7 +161,7 @@ module @querymodule{
             %135 = db.or %48 : !db.bool,%91 : !db.bool,%134 : !db.bool
             relalg.return %135 : !db.bool
         }
-        %137 = relalg.map @map1 %5 (%136: !relalg.tuple) {
+        %137 = relalg.map @map %5 (%136: !relalg.tuple) {
             %138 = relalg.getattr %136 @lineitem::@l_extendedprice : !db.decimal<15,2>
             %139 = db.constant (1) :!db.decimal<15,2>
             %140 = relalg.getattr %136 @lineitem::@l_discount : !db.decimal<15,2>
@@ -170,12 +170,12 @@ module @querymodule{
             %143 = relalg.addattr %136, @aggfmname1({type=!db.decimal<15,2>}) %142
             relalg.return %143 : !relalg.tuple
         }
-        %146 = relalg.aggregation @aggr1 %137 [] (%144 : !relalg.relation, %145 : !relalg.tuple) {
-            %147 = relalg.aggrfn sum @map1::@aggfmname1 %144 : !db.decimal<15,2,nullable>
+        %146 = relalg.aggregation @aggr %137 [] (%144 : !relalg.tuplestream, %145 : !relalg.tuple) {
+            %147 = relalg.aggrfn sum @map::@aggfmname1 %144 : !db.decimal<15,2,nullable>
             %148 = relalg.addattr %145, @aggfmname2({type=!db.decimal<15,2,nullable>}) %147
             relalg.return %148 : !relalg.tuple
         }
-        %149 = relalg.materialize %146 [@aggr1::@aggfmname2] => ["revenue"] : !db.table
+        %149 = relalg.materialize %146 [@aggr::@aggfmname2] => ["revenue"] : !db.table
         return %149 : !db.table
     }
 }

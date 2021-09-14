@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @part { table_identifier="part", rows=20000 , pkey=["p_partkey"]} columns: {p_partkey => @p_partkey({type=!db.int<64>}),
             p_name => @p_name({type=!db.string}),
             p_mfgr => @p_mfgr({type=!db.string}),
@@ -106,12 +106,12 @@ module @querymodule{
                 %59 = db.and %46 : !db.bool,%49 : !db.bool,%52 : !db.bool,%55 : !db.bool,%58 : !db.bool
                 relalg.return %59 : !db.bool
             }
-            %62 = relalg.aggregation @aggr1 %43 [] (%60 : !relalg.relation, %61 : !relalg.tuple) {
+            %62 = relalg.aggregation @aggr %43 [] (%60 : !relalg.tuplestream, %61 : !relalg.tuple) {
                 %63 = relalg.aggrfn min @partsupp1::@ps_supplycost %60 : !db.decimal<15,2,nullable>
                 %64 = relalg.addattr %61, @aggfmname1({type=!db.decimal<15,2,nullable>}) %63
                 relalg.return %64 : !relalg.tuple
             }
-            %65 = relalg.getscalar @aggr1::@aggfmname1 %62 : !db.decimal<15,2,nullable>
+            %65 = relalg.getscalar @aggr::@aggfmname1 %62 : !db.decimal<15,2,nullable>
             %66 = db.compare eq %34 : !db.decimal<15,2>,%65 : !db.decimal<15,2,nullable>
             %67 = db.and %14 : !db.bool,%17 : !db.bool,%21 : !db.bool,%24 : !db.bool,%27 : !db.bool,%30 : !db.bool,%33 : !db.bool,%66 : !db.bool<nullable>
             relalg.return %67 : !db.bool<nullable>

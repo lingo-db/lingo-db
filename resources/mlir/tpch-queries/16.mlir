@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @partsupp { table_identifier="partsupp", rows=80000 , pkey=["ps_partkey","ps_suppkey"]} columns: {ps_partkey => @ps_partkey({type=!db.int<64>}),
             ps_suppkey => @ps_suppkey({type=!db.int<64>}),
             ps_availqty => @ps_availqty({type=!db.int<32>}),
@@ -67,14 +67,14 @@ module @querymodule{
             %44 = db.and %8 : !db.bool,%11 : !db.bool,%15 : !db.bool,%33 : !db.bool,%43 : !db.bool
             relalg.return %44 : !db.bool
         }
-        %47 = relalg.aggregation @aggr2 %5 [@part::@p_brand,@part::@p_type,@part::@p_size] (%45 : !relalg.relation, %46 : !relalg.tuple) {
+        %47 = relalg.aggregation @aggr1 %5 [@part::@p_brand,@part::@p_type,@part::@p_size] (%45 : !relalg.tuplestream, %46 : !relalg.tuple) {
             %48 = relalg.projection distinct [@partsupp::@ps_suppkey]%45
             %49 = relalg.aggrfn count @partsupp::@ps_suppkey %48 : !db.int<64>
             %50 = relalg.addattr %46, @aggfmname1({type=!db.int<64>}) %49
             relalg.return %50 : !relalg.tuple
         }
-        %51 = relalg.sort %47 [(@aggr2::@aggfmname1,desc),(@part::@p_brand,asc),(@part::@p_type,asc),(@part::@p_size,asc)]
-        %52 = relalg.materialize %51 [@part::@p_brand,@part::@p_type,@part::@p_size,@aggr2::@aggfmname1] => ["p_brand","p_type","p_size","supplier_cnt"] : !db.table
+        %51 = relalg.sort %47 [(@aggr1::@aggfmname1,desc),(@part::@p_brand,asc),(@part::@p_type,asc),(@part::@p_size,asc)]
+        %52 = relalg.materialize %51 [@part::@p_brand,@part::@p_type,@part::@p_size,@aggr1::@aggfmname1] => ["p_brand","p_type","p_size","supplier_cnt"] : !db.table
         return %52 : !db.table
     }
 }

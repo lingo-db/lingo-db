@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<64>}),
             c_name => @c_name({type=!db.string}),
             c_address => @c_address({type=!db.string}),
@@ -66,7 +66,7 @@ module @querymodule{
             %28 = db.and %12 : !db.bool,%15 : !db.bool,%18 : !db.bool,%21 : !db.bool,%24 : !db.bool,%27 : !db.bool
             relalg.return %28 : !db.bool
         }
-        %30 = relalg.map @map1 %9 (%29: !relalg.tuple) {
+        %30 = relalg.map @map %9 (%29: !relalg.tuple) {
             %31 = relalg.getattr %29 @lineitem::@l_extendedprice : !db.decimal<15,2>
             %32 = db.constant (1) :!db.decimal<15,2>
             %33 = relalg.getattr %29 @lineitem::@l_discount : !db.decimal<15,2>
@@ -75,14 +75,14 @@ module @querymodule{
             %36 = relalg.addattr %29, @aggfmname1({type=!db.decimal<15,2>}) %35
             relalg.return %36 : !relalg.tuple
         }
-        %39 = relalg.aggregation @aggr1 %30 [@customer::@c_custkey,@customer::@c_name,@customer::@c_acctbal,@customer::@c_phone,@nation::@n_name,@customer::@c_address,@customer::@c_comment] (%37 : !relalg.relation, %38 : !relalg.tuple) {
-            %40 = relalg.aggrfn sum @map1::@aggfmname1 %37 : !db.decimal<15,2>
+        %39 = relalg.aggregation @aggr %30 [@customer::@c_custkey,@customer::@c_name,@customer::@c_acctbal,@customer::@c_phone,@nation::@n_name,@customer::@c_address,@customer::@c_comment] (%37 : !relalg.tuplestream, %38 : !relalg.tuple) {
+            %40 = relalg.aggrfn sum @map::@aggfmname1 %37 : !db.decimal<15,2>
             %41 = relalg.addattr %38, @aggfmname2({type=!db.decimal<15,2>}) %40
             relalg.return %41 : !relalg.tuple
         }
-        %42 = relalg.sort %39 [(@aggr1::@aggfmname2,desc)]
+        %42 = relalg.sort %39 [(@aggr::@aggfmname2,desc)]
         %43 = relalg.limit 20 %42
-        %44 = relalg.materialize %43 [@customer::@c_custkey,@customer::@c_name,@aggr1::@aggfmname2,@customer::@c_acctbal,@nation::@n_name,@customer::@c_address,@customer::@c_phone,@customer::@c_comment] => ["c_custkey","c_name","revenue","c_acctbal","n_name","c_address","c_phone","c_comment"] : !db.table
+        %44 = relalg.materialize %43 [@customer::@c_custkey,@customer::@c_name,@aggr::@aggfmname2,@customer::@c_acctbal,@nation::@n_name,@customer::@c_address,@customer::@c_phone,@customer::@c_comment] => ["c_custkey","c_name","revenue","c_acctbal","n_name","c_address","c_phone","c_comment"] : !db.table
         return %44 : !db.table
     }
 }

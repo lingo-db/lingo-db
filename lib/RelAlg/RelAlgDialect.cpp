@@ -50,7 +50,7 @@ void RelAlgDialect::initialize() {
 
 /// Parse a type registered to this dialect.
 ::mlir::Type RelAlgDialect::parseType(::mlir::DialectAsmParser& parser) const {
-   if (!parser.parseOptionalKeyword("relation")) {
+   if (!parser.parseOptionalKeyword("tuplestream")) {
       return mlir::relalg::TupleStreamType::get(parser.getBuilder().getContext());
    }
    if (!parser.parseOptionalKeyword("tuple")) {
@@ -63,7 +63,7 @@ void RelAlgDialect::initialize() {
 void RelAlgDialect::printType(::mlir::Type type,
                               ::mlir::DialectAsmPrinter& os) const {
    if (type.isa<mlir::relalg::TupleStreamType>()) {
-      os << "relation";
+      os << "tuplestream";
    }
    if (type.isa<mlir::relalg::TupleType>()) {
       os << "tuple";

@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=!db.int<64>}),
             o_custkey => @o_custkey({type=!db.int<64>}),
             o_orderstatus => @o_orderstatus({type=!db.string}),
@@ -53,7 +53,7 @@ module @querymodule{
             %27 = db.and %8 : !db.bool,%14 : !db.bool,%17 : !db.bool,%20 : !db.bool,%23 : !db.bool,%26 : !db.bool
             relalg.return %27 : !db.bool
         }
-        %29 = relalg.map @map1 %5 (%28: !relalg.tuple) {
+        %29 = relalg.map @map %5 (%28: !relalg.tuple) {
             %30 = relalg.getattr %28 @orders::@o_orderpriority : !db.string
             %31 = db.constant ("1-URGENT") :!db.string
             %32 = db.compare eq %30 : !db.string,%31 : !db.string
@@ -86,15 +86,15 @@ module @querymodule{
             %53 = relalg.addattr %41, @aggfmname3({type=!db.int<64>}) %52
             relalg.return %53 : !relalg.tuple
         }
-        %56 = relalg.aggregation @aggr1 %29 [@lineitem::@l_shipmode] (%54 : !relalg.relation, %55 : !relalg.tuple) {
-            %57 = relalg.aggrfn sum @map1::@aggfmname1 %54 : !db.int<64>
+        %56 = relalg.aggregation @aggr %29 [@lineitem::@l_shipmode] (%54 : !relalg.tuplestream, %55 : !relalg.tuple) {
+            %57 = relalg.aggrfn sum @map::@aggfmname1 %54 : !db.int<64>
             %58 = relalg.addattr %55, @aggfmname2({type=!db.int<64>}) %57
-            %59 = relalg.aggrfn sum @map1::@aggfmname3 %54 : !db.int<64>
+            %59 = relalg.aggrfn sum @map::@aggfmname3 %54 : !db.int<64>
             %60 = relalg.addattr %58, @aggfmname4({type=!db.int<64>}) %59
             relalg.return %60 : !relalg.tuple
         }
         %61 = relalg.sort %56 [(@lineitem::@l_shipmode,asc)]
-        %62 = relalg.materialize %61 [@lineitem::@l_shipmode,@aggr1::@aggfmname2,@aggr1::@aggfmname4] => ["l_shipmode","high_line_count","low_line_count"] : !db.table
+        %62 = relalg.materialize %61 [@lineitem::@l_shipmode,@aggr::@aggfmname2,@aggr::@aggfmname4] => ["l_shipmode","high_line_count","low_line_count"] : !db.table
         return %62 : !db.table
     }
 }

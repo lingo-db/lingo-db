@@ -36,7 +36,7 @@ class BaseTableOp:
     def __init__(self,var,table):
         self.table=table
         self.var=var
-        self.type="relation"
+        self.type="tuplestream"
 
     def print(self, codegen):
         column_str=""
@@ -130,7 +130,7 @@ class CodeGen:
 
 
     def create_relalg_crossproduct(self,left,right):
-        return self.addOp("relation", ["relalg.crossproduct ",ValueRef(left),", ",ValueRef(right)])
+        return self.addOp("tuplestream", ["relalg.crossproduct ",ValueRef(left),", ",ValueRef(right)])
     def create_relalg_base_table(self,table):
         var=self.newVar()
         self.addExistingOp(BaseTableOp(var,table))
@@ -210,7 +210,7 @@ class CodeGen:
         return self.addOp(t,["relalg.materialize ",ValueRef(rel)," [",",".join(attr_refs),"]"," => [",",".join(columns),"]", " : ",t.to_string()])
     def create_relalg_projection(self,setsem,rel,attrs):
         attr_refs=list(map(lambda val:val.ref_to_string(),attrs))
-        return self.addOp("relation",["relalg.projection ",setsem," [",",".join(attr_refs),"]",ValueRef(rel)])
+        return self.addOp("tuplestream",["relalg.projection ",setsem," [",",".join(attr_refs),"]",ValueRef(rel)])
 
     def create_relalg_exists(self,rel):
         return self.addOp(DBType("bool"),["relalg.exists", ValueRef(rel)])
@@ -233,9 +233,9 @@ class CodeGen:
         return self.addOp(DBType("int",["64"]),["relalg.count ",ValueRef(rel)])
 
     def create_relalg_sort(self,rel,sortSpecifications):
-        return self.addOp("relation",["relalg.sort ",ValueRef(rel)," [%s]" % (",".join(map(lambda x: "("+x[0].ref_to_string()+","+x[1]+")",sortSpecifications)))])
+        return self.addOp("tuplestream",["relalg.sort ",ValueRef(rel)," [%s]" % (",".join(map(lambda x: "("+x[0].ref_to_string()+","+x[1]+")",sortSpecifications)))])
     def create_relalg_limit(self,rel,limit):
-        return self.addOp("relation",["relalg.limit ",limit," ",ValueRef(rel)])
+        return self.addOp("tuplestream",["relalg.limit ",limit," ",ValueRef(rel)])
 
     def create_db_const(self,const,type):
         var=self.newVar()
@@ -259,7 +259,7 @@ class CodeGen:
         return res
     def create_relalg_const_relation(self,scope,attrs,values):
         attr_defs=",".join(list(map(lambda val:val.def_to_string(),attrs)))
-        return self.addOp("relation",["relalg.const_relation ","@",scope, " attributes:[%s]" %(attr_defs) ," values: [%s]" % (",".join(map(lambda x: self.serializeVal(x,True),values)))])
+        return self.addOp("tuplestream",["relalg.const_relation ","@",scope, " attributes:[%s]" %(attr_defs) ," values: [%s]" % (",".join(map(lambda x: self.serializeVal(x,True),values)))])
 
 
 
@@ -309,18 +309,18 @@ class CodeGen:
 
     def startSelection(self,rel):
         tuple=self.newParam("tuple")
-        return self.startRegionOp("relation",["relalg.selection ",ValueRef(rel),"(",tuple, ": !relalg.tuple) "]),tuple
+        return self.startRegionOp("tuplestream",["relalg.selection ",ValueRef(rel),"(",tuple, ": !relalg.tuple) "]),tuple
     def endSelection(self,res):
         self.endRegionOpWith(Operation(None,None,["relalg.return ",ValueRef(res)," : ",TypeRef(res)]))
     def startMap(self,scope_name,rel):
         tuple=self.newParam("tuple")
-        return self.startRegionOp("relation",["relalg.map ","@",scope_name," ",ValueRef(rel)," (",tuple, ": !relalg.tuple) "]),tuple
+        return self.startRegionOp("tuplestream",["relalg.map ","@",scope_name," ",ValueRef(rel)," (",tuple, ": !relalg.tuple) "]),tuple
     def endMap(self,tuple):
         self.endRegionOpWith(Operation(None, None, ["relalg.return"," ",tuple, " : !relalg.tuple"]))
 
     def startSelection(self,rel):
         tuple=self.newParam("tuple")
-        return self.startRegionOp("relation",["relalg.selection ",ValueRef(rel),"(",tuple, ": !relalg.tuple) "]),tuple
+        return self.startRegionOp("tuplestream",["relalg.selection ",ValueRef(rel),"(",tuple, ": !relalg.tuple) "]),tuple
     def endSelection(self,res):
         self.endRegionOpWith(Operation(None,None,["relalg.return ",ValueRef(res)," : ",TypeRef(res)]))
     def startIf(self,val):
@@ -385,7 +385,7 @@ class CodeGen:
         	joinop="fullouterjoin"
         if len(name)>0:
             name=" @"+name
-        return self.startRegionOp("relation",
+        return self.startRegionOp("tuplestream",
                                   ["relalg."+joinop,name," ", ValueRef(left),", ",ValueRef(right), "(", tuple, ": !relalg.tuple) "]), tuple
 
     def endJoin(self, res,mapping=None):
@@ -400,10 +400,10 @@ class CodeGen:
         #if len(mapping)>0:
 
     def startAggregation(self,name,rel, attributes):
-        relation=self.newParam("relation")
+        relation=self.newParam("tuplestream")
         tuple=self.newParam("tuple")
         attr_refs=list(map(lambda val:val.ref_to_string(),attributes))
-        return self.startRegionOp("relation",["relalg.aggregation ","@",name," ",ValueRef(rel)," [",",".join(attr_refs),"] (",relation," : !relalg.relation, ",tuple," : !relalg.tuple) "]),relation,tuple
+        return self.startRegionOp("tuplestream",["relalg.aggregation ","@",name," ",ValueRef(rel)," [",",".join(attr_refs),"] (",relation," : !relalg.tuplestream, ",tuple," : !relalg.tuple) "]),relation,tuple
     def endAggregation(self,tuple):
         self.endRegionOpWith(Operation(None, None, ["relalg.return"," ",tuple, " : !relalg.tuple"]))
     def getResult(self):

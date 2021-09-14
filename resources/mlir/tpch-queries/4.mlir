@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=!db.int<64>}),
             o_custkey => @o_custkey({type=!db.int<64>}),
             o_orderstatus => @o_orderstatus({type=!db.string}),
@@ -48,13 +48,13 @@ module @querymodule{
             %21 = db.and %6 : !db.bool,%9 : !db.bool,%20 : !db.bool
             relalg.return %21 : !db.bool
         }
-        %24 = relalg.aggregation @aggr2 %3 [@orders::@o_orderpriority] (%22 : !relalg.relation, %23 : !relalg.tuple) {
+        %24 = relalg.aggregation @aggr1 %3 [@orders::@o_orderpriority] (%22 : !relalg.tuplestream, %23 : !relalg.tuple) {
             %25 = relalg.count %22
             %26 = relalg.addattr %23, @aggfmname1({type=!db.int<64>}) %25
             relalg.return %26 : !relalg.tuple
         }
         %27 = relalg.sort %24 [(@orders::@o_orderpriority,asc)]
-        %28 = relalg.materialize %27 [@orders::@o_orderpriority,@aggr2::@aggfmname1] => ["o_orderpriority","order_count"] : !db.table
+        %28 = relalg.materialize %27 [@orders::@o_orderpriority,@aggr1::@aggfmname1] => ["o_orderpriority","order_count"] : !db.table
         return %28 : !db.table
     }
 }

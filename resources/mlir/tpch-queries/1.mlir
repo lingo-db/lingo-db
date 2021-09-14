@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<64>}),
             l_partkey => @l_partkey({type=!db.int<64>}),
             l_suppkey => @l_suppkey({type=!db.int<64>}),
@@ -25,7 +25,7 @@ module @querymodule{
             %8 = db.compare lte %4 : !db.date<day>,%7 : !db.date<day>
             relalg.return %8 : !db.bool
         }
-        %10 = relalg.map @map1 %3 (%9: !relalg.tuple) {
+        %10 = relalg.map @map %3 (%9: !relalg.tuple) {
             %11 = relalg.getattr %9 @lineitem::@l_extendedprice : !db.decimal<15,2>
             %12 = db.constant (1) :!db.decimal<15,2>
             %13 = relalg.getattr %9 @lineitem::@l_discount : !db.decimal<15,2>
@@ -44,14 +44,14 @@ module @querymodule{
             %26 = relalg.addattr %16, @aggfmname5({type=!db.decimal<15,2>}) %25
             relalg.return %26 : !relalg.tuple
         }
-        %29 = relalg.aggregation @aggr1 %10 [@lineitem::@l_returnflag,@lineitem::@l_linestatus] (%27 : !relalg.relation, %28 : !relalg.tuple) {
+        %29 = relalg.aggregation @aggr %10 [@lineitem::@l_returnflag,@lineitem::@l_linestatus] (%27 : !relalg.tuplestream, %28 : !relalg.tuple) {
             %30 = relalg.aggrfn sum @lineitem::@l_quantity %27 : !db.decimal<15,2>
             %31 = relalg.addattr %28, @aggfmname1({type=!db.decimal<15,2>}) %30
             %32 = relalg.aggrfn sum @lineitem::@l_extendedprice %27 : !db.decimal<15,2>
             %33 = relalg.addattr %31, @aggfmname2({type=!db.decimal<15,2>}) %32
-            %34 = relalg.aggrfn sum @map1::@aggfmname3 %27 : !db.decimal<15,2>
+            %34 = relalg.aggrfn sum @map::@aggfmname3 %27 : !db.decimal<15,2>
             %35 = relalg.addattr %33, @aggfmname4({type=!db.decimal<15,2>}) %34
-            %36 = relalg.aggrfn sum @map1::@aggfmname5 %27 : !db.decimal<15,2>
+            %36 = relalg.aggrfn sum @map::@aggfmname5 %27 : !db.decimal<15,2>
             %37 = relalg.addattr %35, @aggfmname6({type=!db.decimal<15,2>}) %36
             %38 = relalg.aggrfn avg @lineitem::@l_quantity %27 : !db.decimal<15,2>
             %39 = relalg.addattr %37, @aggfmname7({type=!db.decimal<15,2>}) %38
@@ -64,7 +64,7 @@ module @querymodule{
             relalg.return %45 : !relalg.tuple
         }
         %46 = relalg.sort %29 [(@lineitem::@l_returnflag,asc),(@lineitem::@l_linestatus,asc)]
-        %47 = relalg.materialize %46 [@lineitem::@l_returnflag,@lineitem::@l_linestatus,@aggr1::@aggfmname1,@aggr1::@aggfmname2,@aggr1::@aggfmname4,@aggr1::@aggfmname6,@aggr1::@aggfmname7,@aggr1::@aggfmname8,@aggr1::@aggfmname9,@aggr1::@aggfmname10] => ["l_returnflag","l_linestatus","sum_qty","sum_base_price","sum_disc_price","sum_charge","avg_qty","avg_price","avg_disc","count_order"] : !db.table
+        %47 = relalg.materialize %46 [@lineitem::@l_returnflag,@lineitem::@l_linestatus,@aggr::@aggfmname1,@aggr::@aggfmname2,@aggr::@aggfmname4,@aggr::@aggfmname6,@aggr::@aggfmname7,@aggr::@aggfmname8,@aggr::@aggfmname9,@aggr::@aggfmname10] => ["l_returnflag","l_linestatus","sum_qty","sum_base_price","sum_disc_price","sum_charge","avg_qty","avg_price","avg_disc","count_order"] : !db.table
         return %47 : !db.table
     }
 }

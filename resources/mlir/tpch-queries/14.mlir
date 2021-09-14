@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<64>}),
             l_partkey => @l_partkey({type=!db.int<64>}),
             l_suppkey => @l_suppkey({type=!db.int<64>}),
@@ -41,7 +41,7 @@ module @querymodule{
             %15 = db.and %8 : !db.bool,%11 : !db.bool,%14 : !db.bool
             relalg.return %15 : !db.bool
         }
-        %17 = relalg.map @map1 %5 (%16: !relalg.tuple) {
+        %17 = relalg.map @map %5 (%16: !relalg.tuple) {
             %18 = relalg.getattr %16 @part::@p_type : !db.string
             %19 = db.constant ("PROMO%") :!db.string
             %20 = db.compare like %18 : !db.string,%19 : !db.string
@@ -65,23 +65,23 @@ module @querymodule{
             %35 = relalg.addattr %29, @aggfmname3({type=!db.decimal<15,2>}) %34
             relalg.return %35 : !relalg.tuple
         }
-        %38 = relalg.aggregation @aggr1 %17 [] (%36 : !relalg.relation, %37 : !relalg.tuple) {
-            %39 = relalg.aggrfn sum @map1::@aggfmname1 %36 : !db.decimal<15,2,nullable>
+        %38 = relalg.aggregation @aggr %17 [] (%36 : !relalg.tuplestream, %37 : !relalg.tuple) {
+            %39 = relalg.aggrfn sum @map::@aggfmname1 %36 : !db.decimal<15,2,nullable>
             %40 = relalg.addattr %37, @aggfmname2({type=!db.decimal<15,2,nullable>}) %39
-            %41 = relalg.aggrfn sum @map1::@aggfmname3 %36 : !db.decimal<15,2,nullable>
+            %41 = relalg.aggrfn sum @map::@aggfmname3 %36 : !db.decimal<15,2,nullable>
             %42 = relalg.addattr %40, @aggfmname4({type=!db.decimal<15,2,nullable>}) %41
             relalg.return %42 : !relalg.tuple
         }
-        %44 = relalg.map @map2 %38 (%43: !relalg.tuple) {
+        %44 = relalg.map @map1 %38 (%43: !relalg.tuple) {
             %45 = db.constant ("100.0") :!db.decimal<15,2>
-            %46 = relalg.getattr %43 @aggr1::@aggfmname2 : !db.decimal<15,2,nullable>
+            %46 = relalg.getattr %43 @aggr::@aggfmname2 : !db.decimal<15,2,nullable>
             %47 = db.mul %45 : !db.decimal<15,2>,%46 : !db.decimal<15,2,nullable>
-            %48 = relalg.getattr %43 @aggr1::@aggfmname4 : !db.decimal<15,2,nullable>
+            %48 = relalg.getattr %43 @aggr::@aggfmname4 : !db.decimal<15,2,nullable>
             %49 = db.div %47 : !db.decimal<15,2,nullable>,%48 : !db.decimal<15,2,nullable>
             %50 = relalg.addattr %43, @aggfmname5({type=!db.decimal<15,2,nullable>}) %49
             relalg.return %50 : !relalg.tuple
         }
-        %51 = relalg.materialize %44 [@map2::@aggfmname5] => ["promo_revenue"] : !db.table
+        %51 = relalg.materialize %44 [@map1::@aggfmname5] => ["promo_revenue"] : !db.table
         return %51 : !db.table
     }
 }

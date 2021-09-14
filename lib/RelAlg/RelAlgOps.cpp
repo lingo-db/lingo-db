@@ -416,9 +416,9 @@ static void print(OpAsmPrinter& p, relalg::GetScalarOp& op) {
 // AddAttrOp
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseAddAttrOp(OpAsmParser& parser, OperationState& result) {
-   OpAsmParser::OperandType input,tuple,tupleOut;
+   OpAsmParser::OperandType input, tuple, tupleOut;
    Type inputType;
-   if (parser.parseOperand(tuple)||parser.parseComma()) {
+   if (parser.parseOperand(tuple) || parser.parseComma()) {
       return failure();
    }
    mlir::relalg::RelationalAttributeDefAttr defAttr;
@@ -431,7 +431,7 @@ static ParseResult parseAddAttrOp(OpAsmParser& parser, OperationState& result) {
    }
    inputType = defAttr.getRelationalAttribute().type;
 
-   auto tupleType=mlir::relalg::TupleType::get(parser.getBuilder().getContext());
+   auto tupleType = mlir::relalg::TupleType::get(parser.getBuilder().getContext());
    if (parser.resolveOperand(tuple, tupleType, result.operands)) {
       return failure();
    }
@@ -443,7 +443,7 @@ static ParseResult parseAddAttrOp(OpAsmParser& parser, OperationState& result) {
 }
 static void print(OpAsmPrinter& p, relalg::AddAttrOp& op) {
    p << op.getOperationName();
-   p << " "<<op.tuple();
+   p << " " << op.tuple();
    p << ", ";
    printAttributeDefAttr(p, op.attr());
    p << " " << op.val();
@@ -483,7 +483,7 @@ static void print(OpAsmPrinter& p, relalg::MapOp& op) {
    p.printSymbolName(op.sym_name());
    p << " " << op.rel() << " ";
    printCustomRegion(p, op.getRegion());
-   p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"sym_name"});
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(), {"sym_name"});
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -510,7 +510,7 @@ static void print(OpAsmPrinter& p, relalg::AggregationOp& op) {
    printAttributeRefArr(p, op.group_by_attrs());
    p << " ";
    printCustomRegion(p, op.getRegion());
-   p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"group_by_attrs","sym_name"});
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(), {"group_by_attrs", "sym_name"});
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -575,7 +575,7 @@ static ParseResult parseTmpOp(OpAsmParser& parser, OperationState& result) {
    Attribute attrs;
    parseAttributeRefArr(parser, result, attrs);
    result.addAttribute("attrs", attrs);
-   return addRelationOutput(parser,result);
+   return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::TmpOp& op) {
    p << op.getOperationName() << " " << op.rel() << " ";
@@ -704,7 +704,7 @@ static void print(OpAsmPrinter& p, relalg::MarkJoinOp& op) {
    printAttributeDefAttr(p, op.markattr());
    p << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
-   p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"markattr","sym_name"});
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(), {"markattr", "sym_name"});
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // CollectionJoinOp
@@ -731,12 +731,12 @@ static void print(OpAsmPrinter& p, relalg::CollectionJoinOp& op) {
    p << " ";
    p.printSymbolName(op.sym_name());
    p << " ";
-   printAttributeRefArr(p,op.attrs());
+   printAttributeRefArr(p, op.attrs());
    p << " ";
    printAttributeDefAttr(p, op.collAttr());
    p << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
-   p.printOptionalAttrDictWithKeyword(op->getAttrs(),{"collAttr","sym_name","attrs"});
+   p.printOptionalAttrDictWithKeyword(op->getAttrs(), {"collAttr", "sym_name", "attrs"});
 }
 ///////////////////////////////////////////////////////////////////////////////////
 // ProjectionOp
@@ -775,8 +775,8 @@ static void print(OpAsmPrinter& p, relalg::SortOp& op) {
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseTopKOp(OpAsmParser& parser, OperationState& result) {
    mlir::IntegerAttr integerAttr;
-   parser.parseAttribute(integerAttr,parser.getBuilder().getI32Type());
-   result.addAttribute("rows",integerAttr);
+   parser.parseAttribute(integerAttr, parser.getBuilder().getI32Type());
+   result.addAttribute("rows", integerAttr);
    parseRelationalInputs(parser, result, 1);
    parseSortSpecs(parser, result);
    return addRelationOutput(parser, result);

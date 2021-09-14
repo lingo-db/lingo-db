@@ -56,7 +56,7 @@ module @querymodule  {
 	    %5 = db.compare eq %3 : !db.int<32>, %4 : !db.int<32>
 		relalg.return %5 : !db.bool
   	}
-  	%20 = relalg.aggregation @aggr %2 [@constrel2::@attr1] (%arg0: !relalg.relation) {
+  	%20 = relalg.aggregation @aggr %2 [@constrel2::@attr1] (%arg0: !relalg.tuplestream) {
 		relalg.return
 	}
   	%3 = relalg.join %0, %20 (%arg0: !relalg.tuple) {

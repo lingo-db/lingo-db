@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @part { table_identifier="part", rows=20000 , pkey=["p_partkey"]} columns: {p_partkey => @p_partkey({type=!db.int<64>}),
             p_name => @p_name({type=!db.string}),
             p_mfgr => @p_mfgr({type=!db.string}),
@@ -86,7 +86,7 @@ module @querymodule{
             %35 = db.and %16 : !db.bool,%19 : !db.bool,%22 : !db.bool,%25 : !db.bool,%28 : !db.bool,%31 : !db.bool,%34 : !db.bool
             relalg.return %35 : !db.bool
         }
-        %37 = relalg.map @map2 %13 (%36: !relalg.tuple) {
+        %37 = relalg.map @map1 %13 (%36: !relalg.tuple) {
             %38 = relalg.getattr %36 @orders::@o_orderdate : !db.date<day>
             %39 = db.date_extract year, %38 : !db.date<day>
             %40 = relalg.addattr %36, @aggfmname1({type=!db.int<64>}) %39
@@ -102,13 +102,13 @@ module @querymodule{
             %50 = relalg.addattr %40, @aggfmname2({type=!db.decimal<15,2>}) %49
             relalg.return %50 : !relalg.tuple
         }
-        %53 = relalg.aggregation @aggr2 %37 [@nation::@n_name,@map2::@aggfmname1] (%51 : !relalg.relation, %52 : !relalg.tuple) {
-            %54 = relalg.aggrfn sum @map2::@aggfmname2 %51 : !db.decimal<15,2>
+        %53 = relalg.aggregation @aggr1 %37 [@nation::@n_name,@map1::@aggfmname1] (%51 : !relalg.tuplestream, %52 : !relalg.tuple) {
+            %54 = relalg.aggrfn sum @map1::@aggfmname2 %51 : !db.decimal<15,2>
             %55 = relalg.addattr %52, @aggfmname1({type=!db.decimal<15,2>}) %54
             relalg.return %55 : !relalg.tuple
         }
-        %56 = relalg.sort %53 [(@nation::@n_name,asc),(@map2::@aggfmname1,desc)]
-        %57 = relalg.materialize %56 [@nation::@n_name,@map2::@aggfmname1,@aggr2::@aggfmname1] => ["nation","o_year","sum_profit"] : !db.table
+        %56 = relalg.sort %53 [(@nation::@n_name,asc),(@map1::@aggfmname1,desc)]
+        %57 = relalg.materialize %56 [@nation::@n_name,@map1::@aggfmname1,@aggr1::@aggfmname1] => ["nation","o_year","sum_profit"] : !db.table
         return %57 : !db.table
     }
 }

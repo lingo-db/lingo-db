@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @partsupp { table_identifier="partsupp", rows=80000 , pkey=["ps_partkey","ps_suppkey"]} columns: {ps_partkey => @ps_partkey({type=!db.int<64>}),
             ps_suppkey => @ps_suppkey({type=!db.int<64>}),
             ps_availqty => @ps_availqty({type=!db.int<32>}),
@@ -34,7 +34,7 @@ module @querymodule{
             %17 = db.and %10 : !db.bool,%13 : !db.bool,%16 : !db.bool
             relalg.return %17 : !db.bool
         }
-        %19 = relalg.map @map1 %7 (%18: !relalg.tuple) {
+        %19 = relalg.map @map %7 (%18: !relalg.tuple) {
             %20 = relalg.getattr %18 @partsupp::@ps_supplycost : !db.decimal<15,2>
             %21 = relalg.getattr %18 @partsupp::@ps_availqty : !db.int<32>
             %22 = db.cast %21 : !db.int<32> -> !db.decimal<15,2>
@@ -47,15 +47,15 @@ module @querymodule{
             %29 = relalg.addattr %24, @aggfmname3({type=!db.decimal<15,2>}) %28
             relalg.return %29 : !relalg.tuple
         }
-        %32 = relalg.aggregation @aggr1 %19 [@partsupp::@ps_partkey] (%30 : !relalg.relation, %31 : !relalg.tuple) {
-            %33 = relalg.aggrfn sum @map1::@aggfmname1 %30 : !db.decimal<15,2>
+        %32 = relalg.aggregation @aggr %19 [@partsupp::@ps_partkey] (%30 : !relalg.tuplestream, %31 : !relalg.tuple) {
+            %33 = relalg.aggrfn sum @map::@aggfmname1 %30 : !db.decimal<15,2>
             %34 = relalg.addattr %31, @aggfmname2({type=!db.decimal<15,2>}) %33
-            %35 = relalg.aggrfn sum @map1::@aggfmname3 %30 : !db.decimal<15,2>
+            %35 = relalg.aggrfn sum @map::@aggfmname3 %30 : !db.decimal<15,2>
             %36 = relalg.addattr %34, @aggfmname4({type=!db.decimal<15,2>}) %35
             relalg.return %36 : !relalg.tuple
         }
         %38 = relalg.selection %32(%37: !relalg.tuple) {
-            %39 = relalg.getattr %37 @aggr1::@aggfmname2 : !db.decimal<15,2>
+            %39 = relalg.getattr %37 @aggr::@aggfmname2 : !db.decimal<15,2>
             %40 = relalg.basetable @partsupp1 { table_identifier="partsupp", rows=80000 , pkey=["ps_partkey","ps_suppkey"]} columns: {ps_partkey => @ps_partkey({type=!db.int<64>}),
                 ps_suppkey => @ps_suppkey({type=!db.int<64>}),
                 ps_availqty => @ps_availqty({type=!db.int<32>}),
@@ -90,7 +90,7 @@ module @querymodule{
                 %56 = db.and %49 : !db.bool,%52 : !db.bool,%55 : !db.bool
                 relalg.return %56 : !db.bool
             }
-            %58 = relalg.map @map3 %46 (%57: !relalg.tuple) {
+            %58 = relalg.map @map2 %46 (%57: !relalg.tuple) {
                 %59 = relalg.getattr %57 @partsupp1::@ps_supplycost : !db.decimal<15,2>
                 %60 = relalg.getattr %57 @partsupp1::@ps_availqty : !db.int<32>
                 %61 = db.cast %60 : !db.int<32> -> !db.decimal<15,2>
@@ -98,26 +98,26 @@ module @querymodule{
                 %63 = relalg.addattr %57, @aggfmname1({type=!db.decimal<15,2>}) %62
                 relalg.return %63 : !relalg.tuple
             }
-            %66 = relalg.aggregation @aggr2 %58 [] (%64 : !relalg.relation, %65 : !relalg.tuple) {
-                %67 = relalg.aggrfn sum @map3::@aggfmname1 %64 : !db.decimal<15,2,nullable>
+            %66 = relalg.aggregation @aggr1 %58 [] (%64 : !relalg.tuplestream, %65 : !relalg.tuple) {
+                %67 = relalg.aggrfn sum @map2::@aggfmname1 %64 : !db.decimal<15,2,nullable>
                 %68 = relalg.addattr %65, @aggfmname2({type=!db.decimal<15,2,nullable>}) %67
                 relalg.return %68 : !relalg.tuple
             }
-            %70 = relalg.map @map4 %66 (%69: !relalg.tuple) {
-                %71 = relalg.getattr %69 @aggr2::@aggfmname2 : !db.decimal<15,2,nullable>
+            %70 = relalg.map @map3 %66 (%69: !relalg.tuple) {
+                %71 = relalg.getattr %69 @aggr1::@aggfmname2 : !db.decimal<15,2,nullable>
                 %72 = db.constant ("0.0001") :!db.decimal<15,4>
                 %73 = db.cast %71 : !db.decimal<15,2,nullable> -> !db.decimal<15,4,nullable>
                 %74 = db.mul %73 : !db.decimal<15,4,nullable>,%72 : !db.decimal<15,4>
                 %75 = relalg.addattr %69, @aggfmname3({type=!db.decimal<15,4,nullable>}) %74
                 relalg.return %75 : !relalg.tuple
             }
-            %76 = relalg.getscalar @map4::@aggfmname3 %70 : !db.decimal<15,4,nullable>
+            %76 = relalg.getscalar @map3::@aggfmname3 %70 : !db.decimal<15,4,nullable>
             %77 = db.cast %39 : !db.decimal<15,2> -> !db.decimal<15,4,nullable>
             %78 = db.compare gt %77 : !db.decimal<15,4,nullable>,%76 : !db.decimal<15,4,nullable>
             relalg.return %78 : !db.bool<nullable>
         }
-        %79 = relalg.sort %38 [(@aggr1::@aggfmname4,desc)]
-        %80 = relalg.materialize %79 [@partsupp::@ps_partkey,@aggr1::@aggfmname4] => ["ps_partkey","value"] : !db.table
+        %79 = relalg.sort %38 [(@aggr::@aggfmname4,desc)]
+        %80 = relalg.materialize %79 [@partsupp::@ps_partkey,@aggr::@aggfmname4] => ["ps_partkey","value"] : !db.table
         return %80 : !db.table
     }
 }

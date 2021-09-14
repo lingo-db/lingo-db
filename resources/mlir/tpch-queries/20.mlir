@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @supplier { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=!db.int<64>}),
             s_name => @s_name({type=!db.string}),
             s_address => @s_address({type=!db.string}),
@@ -75,19 +75,19 @@ module @querymodule{
                     %34 = db.and %24 : !db.bool,%27 : !db.bool,%30 : !db.bool,%33 : !db.bool
                     relalg.return %34 : !db.bool
                 }
-                %37 = relalg.aggregation @aggr2 %21 [] (%35 : !relalg.relation, %36 : !relalg.tuple) {
+                %37 = relalg.aggregation @aggr1 %21 [] (%35 : !relalg.tuplestream, %36 : !relalg.tuple) {
                     %38 = relalg.aggrfn sum @lineitem::@l_quantity %35 : !db.decimal<15,2,nullable>
                     %39 = relalg.addattr %36, @aggfmname1({type=!db.decimal<15,2,nullable>}) %38
                     relalg.return %39 : !relalg.tuple
                 }
-                %41 = relalg.map @map4 %37 (%40: !relalg.tuple) {
+                %41 = relalg.map @map3 %37 (%40: !relalg.tuple) {
                     %42 = db.constant ("0.5") :!db.decimal<15,2>
-                    %43 = relalg.getattr %40 @aggr2::@aggfmname1 : !db.decimal<15,2,nullable>
+                    %43 = relalg.getattr %40 @aggr1::@aggfmname1 : !db.decimal<15,2,nullable>
                     %44 = db.mul %42 : !db.decimal<15,2>,%43 : !db.decimal<15,2,nullable>
                     %45 = relalg.addattr %40, @aggfmname2({type=!db.decimal<15,2,nullable>}) %44
                     relalg.return %45 : !relalg.tuple
                 }
-                %46 = relalg.getscalar @map4::@aggfmname2 %41 : !db.decimal<15,2,nullable>
+                %46 = relalg.getscalar @map3::@aggfmname2 %41 : !db.decimal<15,2,nullable>
                 %47 = db.cast %18 : !db.int<32> -> !db.decimal<15,2,nullable>
                 %48 = db.compare gt %47 : !db.decimal<15,2,nullable>,%46 : !db.decimal<15,2,nullable>
                 %49 = db.and %17 : !db.bool,%48 : !db.bool<nullable>

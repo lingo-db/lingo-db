@@ -61,7 +61,7 @@ module @querymodule{
                 %43 = db.and %26 : !db.bool,%42 : !db.bool
                 relalg.return %43 : !db.bool
             }
-            %45 = relalg.aggregation @aggr1 %23 [] (%44 : !relalg.relation,%tuple : !relalg.tuple) {
+            %45 = relalg.aggregation @aggr1 %23 [] (%44 : !relalg.tuplestream,%tuple : !relalg.tuple) {
                 %46 = relalg.aggrfn avg @customer1::@c_acctbal %44 : !db.decimal<15,2,nullable>
                 relalg.addattr %tuple, @aggfmname1({type=!db.decimal<15,2,nullable>}) %46
                 relalg.return
@@ -95,7 +95,7 @@ module @querymodule{
         	%tpl=relalg.addattr %maparg, @cntrycode({type = !db.string}) %cntrycode
         	relalg.return %tpl : !relalg.tuple
         }
-        %59 = relalg.aggregation @aggr4 %mapped [@map::@cntrycode] (%58 : !relalg.relation, %tuple : !relalg.tuple) {
+        %59 = relalg.aggregation @aggr4 %mapped [@map::@cntrycode] (%58 : !relalg.tuplestream, %tuple : !relalg.tuple) {
             %60 = relalg.count %58
             relalg.addattr %tuple, @aggfmname1({type=!db.int<64>}) %60
             %61 = relalg.aggrfn sum @customer::@c_acctbal %58 : !db.decimal<15,2>

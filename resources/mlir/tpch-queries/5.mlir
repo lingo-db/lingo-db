@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<64>}),
             c_name => @c_name({type=!db.string}),
             c_address => @c_address({type=!db.string}),
@@ -89,7 +89,7 @@ module @querymodule{
             %41 = db.and %16 : !db.bool,%19 : !db.bool,%22 : !db.bool,%25 : !db.bool,%28 : !db.bool,%31 : !db.bool,%34 : !db.bool,%37 : !db.bool,%40 : !db.bool
             relalg.return %41 : !db.bool
         }
-        %43 = relalg.map @map1 %13 (%42: !relalg.tuple) {
+        %43 = relalg.map @map %13 (%42: !relalg.tuple) {
             %44 = relalg.getattr %42 @lineitem::@l_extendedprice : !db.decimal<15,2>
             %45 = db.constant (1) :!db.decimal<15,2>
             %46 = relalg.getattr %42 @lineitem::@l_discount : !db.decimal<15,2>
@@ -98,13 +98,13 @@ module @querymodule{
             %49 = relalg.addattr %42, @aggfmname1({type=!db.decimal<15,2>}) %48
             relalg.return %49 : !relalg.tuple
         }
-        %52 = relalg.aggregation @aggr1 %43 [@nation::@n_name] (%50 : !relalg.relation, %51 : !relalg.tuple) {
-            %53 = relalg.aggrfn sum @map1::@aggfmname1 %50 : !db.decimal<15,2>
+        %52 = relalg.aggregation @aggr %43 [@nation::@n_name] (%50 : !relalg.tuplestream, %51 : !relalg.tuple) {
+            %53 = relalg.aggrfn sum @map::@aggfmname1 %50 : !db.decimal<15,2>
             %54 = relalg.addattr %51, @aggfmname2({type=!db.decimal<15,2>}) %53
             relalg.return %54 : !relalg.tuple
         }
-        %55 = relalg.sort %52 [(@aggr1::@aggfmname2,desc)]
-        %56 = relalg.materialize %55 [@nation::@n_name,@aggr1::@aggfmname2] => ["n_name","revenue"] : !db.table
+        %55 = relalg.sort %52 [(@aggr::@aggfmname2,desc)]
+        %56 = relalg.materialize %55 [@nation::@n_name,@aggr::@aggfmname2] => ["n_name","revenue"] : !db.table
         return %56 : !db.table
     }
 }

@@ -1,5 +1,5 @@
 module @querymodule{
-    func @main ()  -> !db.table{
+    func  @main ()  -> !db.table{
         %1 = relalg.basetable @supplier { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=!db.int<64>}),
             s_name => @s_name({type=!db.string}),
             s_address => @s_address({type=!db.string}),
@@ -125,14 +125,14 @@ module @querymodule{
             %54 = db.and %12 : !db.bool,%15 : !db.bool,%18 : !db.bool,%21 : !db.bool,%32 : !db.bool,%47 : !db.bool,%50 : !db.bool,%53 : !db.bool
             relalg.return %54 : !db.bool
         }
-        %57 = relalg.aggregation @aggr3 %9 [@supplier::@s_name] (%55 : !relalg.relation, %56 : !relalg.tuple) {
+        %57 = relalg.aggregation @aggr2 %9 [@supplier::@s_name] (%55 : !relalg.tuplestream, %56 : !relalg.tuple) {
             %58 = relalg.count %55
             %59 = relalg.addattr %56, @aggfmname1({type=!db.int<64>}) %58
             relalg.return %59 : !relalg.tuple
         }
-        %60 = relalg.sort %57 [(@aggr3::@aggfmname1,desc),(@supplier::@s_name,asc)]
+        %60 = relalg.sort %57 [(@aggr2::@aggfmname1,desc),(@supplier::@s_name,asc)]
         %61 = relalg.limit 100 %60
-        %62 = relalg.materialize %61 [@supplier::@s_name,@aggr3::@aggfmname1] => ["s_name","numwait"] : !db.table
+        %62 = relalg.materialize %61 [@supplier::@s_name,@aggr2::@aggfmname1] => ["s_name","numwait"] : !db.table
         return %62 : !db.table
     }
 }

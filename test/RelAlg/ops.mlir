@@ -35,8 +35,8 @@ module{
 // -----
 module{
 %0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.string})] values: ["A", "B"]
-//CHECK: %1 = relalg.aggregation @aggr %0 [@constrel::@attr1] (%arg0: !relalg.relation,%arg1: !relalg.tuple) {
-%1 = relalg.aggregation @aggr %0 [@constrel::@attr1] (%arg0: !relalg.relation, %arg1: !relalg.tuple) {
+//CHECK: %1 = relalg.aggregation @aggr %0 [@constrel::@attr1] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple) {
+%1 = relalg.aggregation @aggr %0 [@constrel::@attr1] (%arg0: !relalg.tuplestream, %arg1: !relalg.tuple) {
 	relalg.return
 }
 }
