@@ -344,7 +344,7 @@ bool Runner::runJit(runtime::ExecutionContext* context,size_t repeats, std::func
       auto executionEnd = std::chrono::high_resolution_clock::now();
       measuredTimes.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(executionEnd - executionStart).count());
    }
-   std::cout << "runtime: " << *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) << " ms" << std::endl;
+   std::cout << "runtime: " << (measuredTimes.size()>1?*std::min_element(measuredTimes.begin() + 1, measuredTimes.end()):measuredTimes[0]) << " ms" << std::endl;
 
    if (ctxt->numResults == 1) {
       callback(res);

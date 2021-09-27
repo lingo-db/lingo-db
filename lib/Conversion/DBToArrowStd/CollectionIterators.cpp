@@ -67,7 +67,6 @@ class TableIterator : public WhileIterator {
       return functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorInit, tablePtr)[0];
    }
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
-      iterator.getType().dump();
       return functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorNext, iterator)[0];
    }
    virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
@@ -81,7 +80,6 @@ class TableIterator : public WhileIterator {
       return dbValue;
    }
    virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
-      iterator.getType().dump();
       functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorFree, iterator);
    }
 };

@@ -16,7 +16,6 @@ class Generator:
 
     def generate(self,df):
         if type(df) is QueryDF:
-            print(df.sql)
             translator=Translator(df.sql)
             self.res=translator.translate(self.codegen)
         pass

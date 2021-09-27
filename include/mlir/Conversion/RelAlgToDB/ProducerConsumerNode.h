@@ -178,7 +178,9 @@ class ProducerConsumerNodeRegistry {
       res &= registeredMarkJoinOp;
       res &= registeredTmpOp;
       res &= registeredCollectionJoinOp;
-      llvm::dbgs() << "registered=" << res << "\n";
+      if(res){
+         llvm::dbgs()<<"loading producer nodes failed\n";
+      }
    }
 
    public:
@@ -194,7 +196,6 @@ class ProducerConsumerNodeRegistry {
    }
    static std::unique_ptr<mlir::relalg::ProducerConsumerNode> createNode(mlir::Operation* operation) {
       std::string opName = operation->getName().getStringRef().str();
-      llvm::dbgs() << "looking up:" << opName << "\n";
       if (getRegistry().nodes.count(opName)) {
          return getRegistry().nodes[opName](operation);
       } else {

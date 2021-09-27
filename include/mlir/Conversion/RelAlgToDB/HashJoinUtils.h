@@ -163,11 +163,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
       auto availableRight = lookupChild->getAvailableAttributes();
       auto [leftKeys, rightKeys, keyTypes, leftKeyAttributes] = mlir::relalg::HashJoinUtils::analyzeHJPred(&joinOp.predicate().front(), availableLeft, availableRight);
       this->leftKeys = leftKeys;
-      this->leftKeys.dump(joinOp.getContext());
-      llvm::dbgs() << "\n";
       this->rightKeys = rightKeys;
-      this->rightKeys.dump(joinOp.getContext());
-      llvm::dbgs() << "\n";
       auto leftValues = availableLeft.intersect(this->requiredAttributes);
       for (mlir::relalg::Attributes& x : leftKeyAttributes) {
          if (x.size() == 1) {

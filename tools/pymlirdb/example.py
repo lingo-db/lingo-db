@@ -7,7 +7,7 @@ orders=pa.ipc.open_file(pa.OSFile('../../resources/data/tpch-1/orders.arrow')).r
 nation=pa.ipc.open_file(pa.OSFile('../../resources/data/tpch-1/nation.arrow')).read_all()
 
 pymlirdb.load_tables({"supplier":supplier,"lineitem":lineitem,"orders":orders,"nation":nation})
-
+print("done loading!")
 def count_delayed_orders_for_supplier(suppkey):
     items = pymlirdb.read_table("lineitem")
     items = items[items["l_suppkey"]==suppkey]
@@ -44,4 +44,5 @@ df = pymlirdb.query("""
                         and n_name='SAUDI ARABIA'
                         order by numwait desc 
                     """)
+print("result:")
 print(df.to_pandas())
