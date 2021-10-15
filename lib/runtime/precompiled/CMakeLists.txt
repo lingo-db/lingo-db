@@ -1,12 +1,10 @@
 set(PRECOMPILED_SRCS
         test.cpp
         string.cpp
-        hash.cpp
         date.cpp
         join_ht_builder.cpp
         mjoin_ht_builder.cpp
         aggr_ht_builder.cpp
-        vector_builder.cpp
         context.cpp
         )
 

@@ -394,7 +394,8 @@ class FreeOpLowering : public ConversionPattern {
                              return true;
                           })
                           .Case<::mlir::db::VectorType>([&](::mlir::db::VectorType) {
-                             functionRegistry.call(rewriter, FunctionId::VectorFree, val);
+                             //todo: free vector
+                             //functionRegistry.call(rewriter, FunctionId::VectorFree, val);
                              return true;
                           })
                           .Case<::mlir::db::JoinHashtableType>([&](::mlir::db::JoinHashtableType) {

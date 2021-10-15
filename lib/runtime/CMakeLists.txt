@@ -7,7 +7,6 @@ add_library(runtime OBJECT
         dynamic_calls/arrow_table_access.cpp
         dynamic_calls/execution_context.cpp
         dynamic_calls/string.cpp
-        dynamic_calls/vector_builder.cpp
         dynamic_calls/sort.cpp
         join_hashtables.cpp
         aggr_hashtable.cpp

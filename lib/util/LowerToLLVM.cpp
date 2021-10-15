@@ -408,14 +408,20 @@ class CastOpLowering : public ConversionPattern {
       auto targetGenericMemrefType = castedOp.res().getType().cast<mlir::util::GenericMemrefType>();
       auto dynSizeSource = sourceGenericMemrefType.getSize() && sourceGenericMemrefType.getSize().getValue() == -1;
       auto dynSizeTarget = targetGenericMemrefType.getSize() && targetGenericMemrefType.getSize().getValue() == -1;
-      if ((dynSizeSource && !dynSizeTarget) || (!dynSizeSource && dynSizeTarget)) {
+      if (!dynSizeSource && dynSizeTarget) {
          assert(false && "can not cast");
          return failure();
       }
       auto targetElemType = typeConverter->convertType(targetGenericMemrefType.getElementType());
-
-
-      if (sourceGenericMemrefType.getSize() && sourceGenericMemrefType.getSize().getValue() == -1) {
+      if ((dynSizeSource && !dynSizeTarget)) {
+         auto i8PointerType = mlir::LLVM::LLVMPointerType::get(rewriter.getIntegerType(8));
+         auto sourceElemType = typeConverter->convertType(sourceGenericMemrefType.getElementType());
+         auto targetType = typeConverter->convertType(targetGenericMemrefType);
+         auto idxType = typeConverter->convertType(rewriter.getIndexType());
+         Value alignedPtr = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), i8PointerType, adaptor.val(), rewriter.getI64ArrayAttr(0));
+         Value casted = rewriter.create<LLVM::BitcastOp>(op->getLoc(), LLVM::LLVMPointerType::get(targetElemType), alignedPtr);
+         rewriter.replaceOp(op, casted);
+      } else if (dynSizeSource) {
          auto i8PointerType = mlir::LLVM::LLVMPointerType::get(rewriter.getIntegerType(8));
          auto sourceElemType = typeConverter->convertType(sourceGenericMemrefType.getElementType());
          assert(sourceElemType == rewriter.getIntegerType(8));

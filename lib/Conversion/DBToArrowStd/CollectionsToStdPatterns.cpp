@@ -21,8 +21,11 @@ class SortOpLowering : public ConversionPattern {
       mlir::db::SortOpAdaptor sortOpAdaptor(operands);
       auto sortOp = cast<mlir::db::SortOp>(op);
       auto ptrType = mlir::util::GenericMemrefType::get(getContext(),IntegerType::get(getContext(), 8),llvm::Optional<int64_t>());
+
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
       Type elementType = sortOp.toSort().getType().cast<mlir::db::VectorType>().getElementType();
+      auto convertedElementType=typeConverter->convertType(elementType);
+      auto typedPtrType = mlir::util::GenericMemrefType::get(getContext(),convertedElementType,-1);
       FuncOp funcOp;
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
@@ -50,9 +53,15 @@ class SortOpLowering : public ConversionPattern {
          rewriter.eraseOp(sortLambdaTerminator);
          rewriter.eraseOp(terminator);
       }
+      auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange({rewriter.getIndexType(), typedPtrType}), sortOpAdaptor.toSort());
+
+      auto len=unpacked.getResult(0);
+      auto values=unpacked.getResult(1);
+      auto rawPtr = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), ptrType, values);
+
       Value functionPointer = rewriter.create<mlir::ConstantOp>(sortOp->getLoc(), funcOp.type(), rewriter.getSymbolRefAttr(funcOp.sym_name()));
       Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), elementType);
-      functionRegistry.call(rewriter, FunctionId::SortVector, {sortOpAdaptor.toSort(), elementSize, functionPointer});
+      functionRegistry.call(rewriter, FunctionId::SortVector, {len,rawPtr, elementSize, functionPointer});
       rewriter.eraseOp(op);
       return success();
    }

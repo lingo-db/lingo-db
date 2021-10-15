@@ -8,16 +8,20 @@
 using namespace mlir;
 namespace {
 class CreateVectorBuilderLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   explicit CreateVectorBuilderLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CreateVectorBuilder::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit CreateVectorBuilderLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CreateVectorBuilder::getOperationName(), 1, context){}
 
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
-      Value vectorBuilder = functionRegistry.call(rewriter, FunctionId::VectorBuilderCreate, {})[0];
-      rewriter.replaceOp(op, vectorBuilder);
+   LogicalResult matchAndRewrite(mlir::Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto vecBuilderOp=mlir::cast<mlir::db::CreateVectorBuilder>(op);
+      Value initialCapacity=rewriter.create<ConstantIndexOp>(op->getLoc(),2);
+      Value initialSize=rewriter.create<ConstantIndexOp>(op->getLoc(),0);
+
+      auto type=mlir::util::GenericMemrefType::get(getContext(), typeConverter->convertType(vecBuilderOp.getType().getElementType()), -1);
+      Value memref = rewriter.create<mlir::util::AllocOp>(op->getLoc(),type,initialCapacity);
+      Value builder=rewriter.create<mlir::util::PackOp>(op->getLoc(),typeConverter->convertType(vecBuilderOp.getType()),ValueRange{initialSize,memref});
+      rewriter.replaceOp(op, builder);
       return success();
    }
 };
@@ -204,12 +208,44 @@ class BuilderMergeLowering : public ConversionPattern {
          functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderFinishRow, mergeOpAdaptor.builder());
          rewriter.replaceOp(op, mergeOpAdaptor.builder());
       } else if (auto vectorBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::VectorBuilderType>()) {
+         Value builderVal=mergeOpAdaptor.builder();
          Value v = mergeOpAdaptor.val();//serializeForVector(rewriter, typeConverter, mergeOpAdaptor.builder(), mergeOpAdaptor.val(), mergeOp.val().getType(), functionRegistry);
-         Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), v.getType());
-         Value ptr = functionRegistry.call(rewriter, FunctionId::VectorBuilderMerge, ValueRange({mergeOpAdaptor.builder(), elementSize}))[0];
-         Value typedPtr = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), v.getType(), llvm::Optional<int64_t>()), ptr);
-         rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), v, typedPtr, Value());
-         rewriter.replaceOp(op, mergeOpAdaptor.builder());
+         auto convertedElementType=typeConverter->convertType(vectorBuilderType.getElementType());
+          Type typedPtrType = util::GenericMemrefType::get(rewriter.getContext(), convertedElementType, -1);
+         auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange({rewriter.getIndexType(), typedPtrType}), builderVal);
+
+         Value values=unpacked.getResult(1);
+         Value len=unpacked.getResult(0);
+         Value capacity = rewriter.create<util::DimOp>(rewriter.getUnknownLoc(),rewriter.getIndexType(), values);
+         Value cmp = rewriter.create<CmpIOp>(rewriter.getUnknownLoc(),CmpIPredicate::ult,len,capacity);
+         auto ifOp=    rewriter.create<scf::IfOp>(loc, values.getType(),cmp, [&](OpBuilder &b, Location loc) {
+            b.create<scf::YieldOp>(loc, ValueRange{values});
+            },[&](OpBuilder &b, Location loc) {
+            Value zero=rewriter.create<ConstantIndexOp>(op->getLoc(),0);
+            Value one=rewriter.create<ConstantIndexOp>(op->getLoc(),1);
+            Value two=rewriter.create<ConstantIndexOp>(op->getLoc(),2);
+            Value newCapacity=  b.create<MulIOp>(op->getLoc(),len,two);
+            Value newMemref = rewriter.create<mlir::util::AllocOp>(op->getLoc(),values.getType(),newCapacity);
+            auto loop = b.create<scf::ForOp>(
+               loc, zero, len, one,ValueRange({}),
+               [&](OpBuilder& b2, Location loc2, Value iv, ValueRange args) {
+                  Value currVal = b.create<util::LoadOp>(loc, convertedElementType, values, iv);
+                  rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), currVal, newMemref,iv);
+                  b.create<scf::YieldOp>(loc);
+               });
+            b.create<mlir::util::DeAllocOp>(op->getLoc(),values);
+            b.create<scf::YieldOp>(loc, ValueRange{newMemref});
+
+         });
+         values=ifOp.getResult(0);
+         rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), v, values,len);
+         Value one=rewriter.create<ConstantIndexOp>(op->getLoc(),1);
+
+         Value newLen=rewriter.create<AddIOp>(op->getLoc(),len,one);
+
+         Value updatedBuilder=rewriter.create<mlir::util::PackOp>(op->getLoc(),TupleType::get(getContext(),{rewriter.getIndexType(), typedPtrType}),ValueRange{newLen,values});
+
+         rewriter.replaceOp(op, updatedBuilder);
       } else if (auto aggrHTBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::AggrHTBuilderType>()) {
          if (aggrHTBuilderType.getKeyType().getTypes().empty()) {
             auto keyType = aggrHTBuilderType.getKeyType();
@@ -550,9 +586,7 @@ class BuilderBuildLowering : public ConversionPattern {
          Value table = functionRegistry.call(rewriter, FunctionId::ArrowTableBuilderBuild, buildAdaptor.builder())[0];
          rewriter.replaceOp(op, table);
       } else if (auto vectorBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::VectorBuilderType>()) {
-         Value vector = functionRegistry.call(rewriter, FunctionId::VectorBuilderBuild, buildAdaptor.builder())[0];
-
-         rewriter.replaceOp(op, vector);
+         rewriter.replaceOp(op, buildAdaptor.builder());
       } else if (auto aggrHTBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::AggrHTBuilderType>()) {
          if (aggrHTBuilderType.getKeyType().getTypes().empty()) {
             auto builderUnpacked = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), buildAdaptor.builder().getType().cast<mlir::TupleType>().getTypes(), buildAdaptor.builder())->getResults();
@@ -652,7 +686,7 @@ class CreateMarkableJoinHtBuilderLowering : public ConversionPattern {
 } // namespace
 void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<CreateVectorBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
+   patterns.insert<CreateVectorBuilderLowering>(typeConverter, patterns.getContext());
    patterns.insert<CreateAggrHTBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<BuilderMergeLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<BuilderBuildLowering>(functionRegistry, typeConverter, patterns.getContext());
@@ -692,7 +726,7 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
       return mlir::util::GenericMemrefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
    });
    typeConverter.addConversion([&](mlir::db::VectorBuilderType vectorBuilderType) {
-      return mlir::util::GenericMemrefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
+      return mlir::TupleType::get(patterns.getContext(),{IndexType::get(patterns.getContext()),mlir::util::GenericMemrefType::get(patterns.getContext(), typeConverter.convertType(vectorBuilderType.getElementType()), -1)});
    });
    typeConverter.addConversion([&](mlir::db::AggrHTBuilderType aggrHtBuilderType) {
       auto updateFnType = FunctionType::get(patterns.getContext(), {aggrHtBuilderType.getAggrType(), aggrHtBuilderType.getValType()}, {aggrHtBuilderType.getAggrType()});

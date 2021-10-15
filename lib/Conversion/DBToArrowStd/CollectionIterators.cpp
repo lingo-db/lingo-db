@@ -396,24 +396,21 @@ class VectorIterator : public ForIterator {
    Value vector;
    Type elementType;
    Value values;
-   Value rawValues;
-   Type ptrType;
-   Type typedPtrType;
-   mlir::db::codegen::FunctionRegistry& functionRegistry;
+   Value len;
    using FunctionId = mlir::db::codegen::FunctionRegistry::FunctionId;
 
    public:
-   VectorIterator(mlir::db::codegen::FunctionRegistry& functionRegistry, Value vector, Type elementType) : vector(vector), elementType(elementType), functionRegistry(functionRegistry) {
+   VectorIterator(mlir::db::codegen::FunctionRegistry& functionRegistry, Value vector, Type elementType) : vector(vector), elementType(elementType) {
    }
    virtual void init(OpBuilder& builder) {
       Type typedPtrType = util::GenericMemrefType::get(builder.getContext(), elementType, -1);
-      values = functionRegistry.call(builder, FunctionId::VectorGetValues, {vector})[0];
-      //auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({ util::GenericMemrefType::get(builder.getContext(), builder.getIntegerType(8), -1),builder.getI1Type()}), values);
-      auto tmp=values;//unpacked.vals()[0]
-      values = builder.create<util::GenericMemrefCastOp>(builder.getUnknownLoc(), typedPtrType, tmp);
+      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({builder.getIndexType(), typedPtrType}), vector);
+
+      values=unpacked.getResult(1);
+      len=unpacked.getResult(0);
    }
    virtual Value upper(OpBuilder& builder) {
-      return builder.create<util::DimOp>(builder.getUnknownLoc(), builder.getIndexType(), values);
+      return len;
    }
    virtual Value getElement(OpBuilder& builder, Value index) {
       Value loaded = builder.create<util::LoadOp>(builder.getUnknownLoc(), elementType, values, index);
