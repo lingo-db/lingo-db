@@ -2,8 +2,8 @@
  module {
 
 	func @main () {
-        %c1 = constant 1 : index
-        %c2 = constant 2 : index
+        %c1 = arith.constant 1 : index
+        %c2 = arith.constant 2 : index
 
         %generic_memref=util.alloca(%c2) : !util.generic_memref<!db.int<32,nullable>>
         %testval1= db.null : !db.int<32,nullable>

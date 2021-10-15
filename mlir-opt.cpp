@@ -4,6 +4,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Support/MlirOptMain.h"
+#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
@@ -17,6 +18,8 @@
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/SCF/SCF.h"
+#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
+
 
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
 
@@ -25,6 +28,8 @@
 namespace {
 struct ToLLVMLoweringPass
    : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
+   virtual llvm::StringRef getArgument() const override { return "tollvm"; }
+
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::memref::MemRefDialect>();
    }
@@ -73,49 +78,51 @@ void ToLLVMLoweringPass::runOnOperation() {
 
 int main(int argc, char** argv) {
    mlir::registerAllPasses();
-   ::mlir::registerPass("relalg-extract-nested-operators", "extract nested operators", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createExtractNestedOperatorsPass();
    });
-   ::mlir::registerPass("relalg-decompose-lambdas", "extract nested operators", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createDecomposeLambdasPass();
    });
-   ::mlir::registerPass("relalg-implicit-to-explicit-joins", "implicit to explicit joins", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createImplicitToExplicitJoinsPass();
    });
-   ::mlir::registerPass("relalg-unnesting", "unnest depending joins", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createUnnestingPass();
    });
-   ::mlir::registerPass("relalg-pushdown", "pushdown ", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createPushdownPass();
    });
-   ::mlir::registerPass("relalg-optimize-join-order", "joinorder", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createOptimizeJoinOrderPass();
    });
-   ::mlir::registerPass("relalg-combine-predicates", "extract nested operators", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createCombinePredicatesPass();
    });
-   ::mlir::registerPass("relalg-optimize-implementations", "extract nested operators", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createOptimizeImplementationsPass();
    });
-   ::mlir::registerPass("relalg-introduce-tmp", "extract nested operators", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
      return mlir::relalg::createIntroduceTmpPass();
    });
-   ::mlir::registerPass("relalg-simplify-aggrs", "simplify aggregations", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
      return mlir::relalg::createSimplifyAggregationsPass();
    });
-   ::mlir::registerPass("relalg-to-db", "Relalg to DB dialect conversion", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createLowerToDBPass();
    });
-   ::mlir::registerPass("to-arrow-std", "tostd", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
       return mlir::db::createLowerToStdPass();
    });
-   ::mlir::registerPass("to-llvm", "tollvm", []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
       return std::make_unique<ToLLVMLoweringPass>();
    });
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::StandardOpsDialect>();
+   registry.insert<mlir::arith::ArithmeticDialect>();
+
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::scf::SCFDialect>();

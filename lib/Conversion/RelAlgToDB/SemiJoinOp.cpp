@@ -126,11 +126,11 @@ class MHashSemiJoinLowering : public mlir::relalg::MarkableHJNode<mlir::relalg::
          mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
          builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
       }
-      auto const1 = builder1.create<mlir::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), builder1.getI8IntegerAttr(1));
+      auto const1 = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), builder1.getI8IntegerAttr(1));
       auto markerBefore = builder1.create<mlir::AtomicRMWOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
       {
-         auto zero = builder1.create<mlir::ConstantOp>(builder1.getUnknownLoc(), markerBefore.getType(), builder1.getIntegerAttr(markerBefore.getType(), 0));
-         auto isZero = builder1.create<mlir::CmpIOp>(builder1.getUnknownLoc(), mlir::CmpIPredicate::eq, markerBefore, zero);
+         auto zero = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), markerBefore.getType(), builder1.getIntegerAttr(markerBefore.getType(), 0));
+         auto isZero = builder1.create<mlir::arith::CmpIOp>(builder1.getUnknownLoc(), mlir::arith::CmpIPredicate::eq, markerBefore, zero);
          auto isZeroDB =builder1.create<mlir::db::TypeCastOp>(builder1.getUnknownLoc(),mlir::db::BoolType::get(builder1.getContext()),isZero);
          auto ifOp = builder1.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), isZeroDB);
          mlir::Block* ifBlock = new mlir::Block;

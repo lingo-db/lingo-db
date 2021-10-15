@@ -18,7 +18,7 @@ void mlir::util::GenericMemrefType::print(::mlir::DialectAsmPrinter& printer) co
    }
    printer << getElementType() << ">";
 }
-::mlir::Type mlir::util::GenericMemrefType::parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::util::GenericMemrefType::parse(::mlir::DialectAsmParser& parser) {
    Type elementType;
    llvm::Optional<int64_t> size;
    if (parser.parseLess()) {
@@ -33,7 +33,7 @@ void mlir::util::GenericMemrefType::print(::mlir::DialectAsmPrinter& printer) co
    if (parser.parseType(elementType) || parser.parseGreater()) {
       return Type();
    }
-   return mlir::util::GenericMemrefType::get(context, elementType, size);
+   return mlir::util::GenericMemrefType::get(parser.getContext(), elementType, size);
 }
 
 #define GET_TYPEDEF_CLASSES
@@ -55,7 +55,7 @@ void UtilDialect::registerTypes() {
    }
    auto loc = parser.getCurrentLocation();
    Type parsed;
-   ::generatedTypeParser(parser.getBuilder().getContext(), parser, memnonic, parsed);
+   ::generatedTypeParser(parser, memnonic, parsed);
    if (!parsed) {
       parser.emitError(loc, "unknown type");
    }

@@ -2,10 +2,10 @@
  module {
 
 	func @main () {
-        %c1 = constant 1 : index
-        %c2 = constant 2 : index
-        %c10 = constant 10 : index
-		%testbyte = constant 1 : i8
+        %c1 = arith.constant 1 : index
+        %c2 = arith.constant 2 : index
+        %c10 = arith.constant 10 : index
+		%testbyte = arith.constant 1 : i8
         %memref1=memref.alloc(%c10) : memref<?xi8>
         memref.store %testbyte, %memref1[%c1] :memref<?xi8>
         %generic_memref1= util.to_generic_memref %memref1 : memref<?xi8> -> !util.generic_memref<?x!db.int<32,nullable>>

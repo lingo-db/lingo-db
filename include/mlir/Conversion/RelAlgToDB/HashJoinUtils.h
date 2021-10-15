@@ -107,7 +107,7 @@ class HashJoinUtils {
                      //todo: remove nasty hack:
                      mlir::OpBuilder builder(cmpOp->getContext());
                      builder.setInsertionPoint(newBlock,insertionPoint);
-                     auto helperOp=builder.create<mlir::ConstantOp>(builder.getUnknownLoc(),builder.getIndexAttr(0));
+                     auto helperOp=builder.create<arith::ConstantOp>(builder.getUnknownLoc(),builder.getIndexAttr(0));
 
                      mlir::relalg::detail::inlineOpIntoBlock(keyVal.getDefiningOp(), keyVal.getDefiningOp()->getParentOp(), newBlock->getParentOp(), newBlock, mapping,helperOp);
                      helperOp->remove();

@@ -6,6 +6,8 @@
 
 namespace {
 class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::FunctionPass> {
+   virtual llvm::StringRef getArgument() const override { return "relalg-decompose-lambdas"; }
+
    public:
    void decomposeSelection(mlir::Value v, mlir::Value& tree) {
       auto currentSel = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(v.getDefiningOp()->getParentOp());

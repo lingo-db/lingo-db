@@ -6,6 +6,7 @@
 
 namespace {
 class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::FunctionPass> {
+   virtual llvm::StringRef getArgument() const override { return "relalg-introduce-tmp"; }
    public:
    mlir::relalg::Attributes getUsed(mlir::Operation* op) {
       if (auto asOperator = mlir::dyn_cast_or_null<Operator>(op)) {

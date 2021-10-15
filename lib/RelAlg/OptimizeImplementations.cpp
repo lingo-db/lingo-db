@@ -8,6 +8,8 @@
 
 namespace {
 class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations, mlir::FunctionPass> {
+   virtual llvm::StringRef getArgument() const override { return "relalg-optimize-implementations"; }
+
    public:
    bool hashImplPossible(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) { //todo: does not work always
       llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;

@@ -120,9 +120,11 @@ class TypeCastLowering : public ConversionPattern {
 namespace {
 struct DBToStdLoweringPass
    : public PassWrapper<DBToStdLoweringPass, OperationPass<ModuleOp>> {
+   virtual llvm::StringRef getArgument() const override { return "to-arrow-std"; }
+
    DBToStdLoweringPass() {}
    void getDependentDialects(DialectRegistry& registry) const override {
-      registry.insert<LLVM::LLVMDialect, scf::SCFDialect, util::UtilDialect, memref::MemRefDialect>();
+      registry.insert<LLVM::LLVMDialect, scf::SCFDialect, util::UtilDialect, memref::MemRefDialect,arith::ArithmeticDialect>();
    }
    void runOnOperation() final;
 };
@@ -169,6 +171,8 @@ void DBToStdLoweringPass::runOnOperation() {
    target.addLegalOp<UnrealizedConversionCastOp>();
 
    target.addLegalDialect<StandardOpsDialect>();
+   target.addLegalDialect<arith::ArithmeticDialect>();
+
    target.addLegalDialect<memref::MemRefDialect>();
 
    target.addLegalDialect<scf::SCFDialect>();

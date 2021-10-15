@@ -1,6 +1,7 @@
 
 set(LLVM_TARGET_DEFINITIONS DBOps.td)
 mlir_tablegen(DBOpsDialect.h.inc -gen-dialect-decls)
+mlir_tablegen(DBOpsDialect.cpp.inc -gen-dialect-defs)
 mlir_tablegen(DBOps.h.inc -gen-op-decls)
 mlir_tablegen(DBOps.cpp.inc -gen-op-defs)
 mlir_tablegen(DBOpsEnums.h.inc -gen-enum-decls)

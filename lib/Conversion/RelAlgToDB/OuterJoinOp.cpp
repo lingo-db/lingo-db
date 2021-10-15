@@ -236,7 +236,7 @@ class MHashOuterJoinLowering : public mlir::relalg::MarkableHJNode<mlir::relalg:
          mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
          builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
       }
-      auto const1 = builder1.create<mlir::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), builder1.getI8IntegerAttr(1));
+      auto const1 = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), builder1.getI8IntegerAttr(1));
       builder1.create<mlir::AtomicRMWOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
       for (mlir::Attribute attr : joinOp.mapping()) {
          auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
@@ -265,8 +265,8 @@ class MHashOuterJoinLowering : public mlir::relalg::MarkableHJNode<mlir::relalg:
    }
    void handleScanned(mlir::Value marker, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
       auto scope = context.createScope();
-      auto zero = builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
-      auto isZero = builder.create<mlir::CmpIOp>(builder.getUnknownLoc(), mlir::CmpIPredicate::eq, marker, zero);
+      auto zero = builder.create<mlir::arith::ConstantOp>(builder.getUnknownLoc(), marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
+      auto isZero = builder.create<mlir::arith::CmpIOp>(builder.getUnknownLoc(), mlir::arith::CmpIPredicate::eq, marker, zero);
       auto isZeroDB = builder.create<mlir::db::TypeCastOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), isZero);
       auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), isZeroDB);
       mlir::Block* ifBlock = new mlir::Block;

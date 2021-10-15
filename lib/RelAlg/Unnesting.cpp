@@ -14,6 +14,8 @@
 namespace {
 
 class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
+   virtual llvm::StringRef getArgument() const override { return "relalg-unnesting"; }
+
    Operator getFirstOfTree(Operator tree) {
       Operator currFirst = tree;
       for (auto child : tree.getChildren()) {

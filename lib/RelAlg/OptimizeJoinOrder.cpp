@@ -9,6 +9,8 @@
 namespace {
 
 class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::FunctionPass> {
+   virtual llvm::StringRef getArgument() const override { return "relalg-optimize-join-order"; }
+
    llvm::SmallPtrSet<mlir::Operation*, 12> alreadyOptimized;
 
    bool isUnsupportedOp(mlir::Operation* op) {

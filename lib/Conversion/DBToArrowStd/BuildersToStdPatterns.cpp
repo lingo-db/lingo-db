@@ -15,8 +15,8 @@ class CreateVectorBuilderLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(mlir::Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto vecBuilderOp=mlir::cast<mlir::db::CreateVectorBuilder>(op);
-      Value initialCapacity=rewriter.create<ConstantIndexOp>(op->getLoc(),2);
-      Value initialSize=rewriter.create<ConstantIndexOp>(op->getLoc(),0);
+      Value initialCapacity=rewriter.create<arith::ConstantIndexOp>(op->getLoc(),2);
+      Value initialSize=rewriter.create<arith::ConstantIndexOp>(op->getLoc(),0);
 
       auto type=mlir::util::GenericMemrefType::get(getContext(), typeConverter->convertType(vecBuilderOp.getType().getElementType()), -1);
       Value memref = rewriter.create<mlir::util::AllocOp>(op->getLoc(),type,initialCapacity);
@@ -190,7 +190,7 @@ class BuilderMergeLowering : public ConversionPattern {
          auto loweredTypes = mergeOpAdaptor.val().getType().cast<TupleType>().getTypes();
          auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, loweredTypes, mergeOpAdaptor.val());
          size_t i = 0;
-         Value falseValue = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+         Value falseValue = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
 
          for (auto v : unPackOp.vals()) {
             Value isNull;
@@ -201,7 +201,7 @@ class BuilderMergeLowering : public ConversionPattern {
             } else {
                isNull = falseValue;
             }
-            Value columnId = rewriter.create<mlir::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(i));
+            Value columnId = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(i));
             functionRegistry.call(rewriter, getStoreFunc(functionRegistry, rowType.getType(i).cast<mlir::db::DBType>()), ValueRange({mergeOpAdaptor.builder(), columnId, isNull, v}));
             i++;
          }
@@ -217,14 +217,14 @@ class BuilderMergeLowering : public ConversionPattern {
          Value values=unpacked.getResult(1);
          Value len=unpacked.getResult(0);
          Value capacity = rewriter.create<util::DimOp>(rewriter.getUnknownLoc(),rewriter.getIndexType(), values);
-         Value cmp = rewriter.create<CmpIOp>(rewriter.getUnknownLoc(),CmpIPredicate::ult,len,capacity);
+         Value cmp = rewriter.create<arith::CmpIOp>(rewriter.getUnknownLoc(),arith::CmpIPredicate::ult,len,capacity);
          auto ifOp=    rewriter.create<scf::IfOp>(loc, values.getType(),cmp, [&](OpBuilder &b, Location loc) {
             b.create<scf::YieldOp>(loc, ValueRange{values});
             },[&](OpBuilder &b, Location loc) {
-            Value zero=rewriter.create<ConstantIndexOp>(op->getLoc(),0);
-            Value one=rewriter.create<ConstantIndexOp>(op->getLoc(),1);
-            Value two=rewriter.create<ConstantIndexOp>(op->getLoc(),2);
-            Value newCapacity=  b.create<MulIOp>(op->getLoc(),len,two);
+            Value zero=rewriter.create<arith::ConstantIndexOp>(op->getLoc(),0);
+            Value one=rewriter.create<arith::ConstantIndexOp>(op->getLoc(),1);
+            Value two=rewriter.create<arith::ConstantIndexOp>(op->getLoc(),2);
+            Value newCapacity=  b.create<arith::MulIOp>(op->getLoc(),len,two);
             Value newMemref = rewriter.create<mlir::util::AllocOp>(op->getLoc(),values.getType(),newCapacity);
             auto loop = b.create<scf::ForOp>(
                loc, zero, len, one,ValueRange({}),
@@ -239,9 +239,9 @@ class BuilderMergeLowering : public ConversionPattern {
          });
          values=ifOp.getResult(0);
          rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), v, values,len);
-         Value one=rewriter.create<ConstantIndexOp>(op->getLoc(),1);
+         Value one=rewriter.create<arith::ConstantIndexOp>(op->getLoc(),1);
 
-         Value newLen=rewriter.create<AddIOp>(op->getLoc(),len,one);
+         Value newLen=rewriter.create<arith::AddIOp>(op->getLoc(),len,one);
 
          Value updatedBuilder=rewriter.create<mlir::util::PackOp>(op->getLoc(),TupleType::get(getContext(),{rewriter.getIndexType(), typedPtrType}),ValueRange{newLen,values});
 
@@ -418,7 +418,7 @@ class CreateAggrHTBuilderLowering : public ConversionPattern {
          rewriter.create<mlir::db::YieldOp>(createOp.getLoc());
       }
       if (keyType.getTypes().empty()) {
-         mlir::Value funcRef = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rawUpdateFunc.getType(), rewriter.getSymbolRefAttr(rawUpdateFunc.sym_name()));
+         mlir::Value funcRef = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rawUpdateFunc.getType(), SymbolRefAttr::get(rewriter.getStringAttr(rawUpdateFunc.sym_name())));
          rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, TupleType::get(rewriter.getContext(), {aggrType, rawUpdateFunc.getType()}), ValueRange{createOp.initial(), funcRef});
          return success();
       } else {
@@ -499,8 +499,8 @@ class CreateAggrHTBuilderLowering : public ConversionPattern {
             rewriter.create<mlir::ReturnOp>(rewriter.getUnknownLoc());
          }
 
-         Value updateFunctionPointer = rewriter.create<mlir::ConstantOp>(createOp->getLoc(), funcOp.type(), rewriter.getSymbolRefAttr(funcOp.sym_name()));
-         Value compareFunctionPointer = rewriter.create<mlir::ConstantOp>(createOp->getLoc(), compareFunc.type(), rewriter.getSymbolRefAttr(compareFunc.sym_name()));
+         Value updateFunctionPointer = rewriter.create<mlir::ConstantOp>(createOp->getLoc(), funcOp.type(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.sym_name())));
+         Value compareFunctionPointer = rewriter.create<mlir::ConstantOp>(createOp->getLoc(), compareFunc.type(), SymbolRefAttr::get(rewriter.getStringAttr(compareFunc.sym_name())));
          Value keySize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), keyType);
          Value valSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), valType);
          Value aggrSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), aggrType);
@@ -517,8 +517,8 @@ class CreateAggrHTBuilderLowering : public ConversionPattern {
          Value plainMemref = rewriter.create<mlir::util::GenericMemrefCastOp>(createOp->getLoc(), ptrType, allocaInitial);
 
          Value builder = functionRegistry.call(rewriter, FunctionId::AggrHtBuilderCreate, {keySize, valSize, aggrSize, combinedSize, compareFunctionPointer, updateFunctionPointer, plainMemref})[0];
-         mlir::Value compareFuncRef = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rawCompareFunc.getType(), rewriter.getSymbolRefAttr(rawCompareFunc.sym_name()));
-         mlir::Value updateFuncRef = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rawUpdateFunc.getType(), rewriter.getSymbolRefAttr(rawUpdateFunc.sym_name()));
+         mlir::Value compareFuncRef = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rawCompareFunc.getType(), SymbolRefAttr::get(rewriter.getStringAttr(rawCompareFunc.sym_name())));
+         mlir::Value updateFuncRef = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rawUpdateFunc.getType(), SymbolRefAttr::get(rewriter.getStringAttr(rawUpdateFunc.sym_name())));
          rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, TupleType::get(rewriter.getContext(), {ptrType, rawCompareFunc.getType(), rawUpdateFunc.getType()}), ValueRange{builder, compareFuncRef, updateFuncRef});
 
          return success();
@@ -564,9 +564,9 @@ static Value getArrowDataType(OpBuilder& builder, db::codegen::FunctionRegistry&
    }
    //TODO: also implement date types etc
 
-   Value arrowTypeConstant = builder.create<mlir::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(typeConstant));
-   Value arrowTypeParam1 = builder.create<mlir::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(param1));
-   Value arrowTypeParam2 = builder.create<mlir::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(param2));
+   Value arrowTypeConstant = builder.create<arith::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(typeConstant));
+   Value arrowTypeParam1 = builder.create<arith::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(param1));
+   Value arrowTypeParam2 = builder.create<arith::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(param2));
 
    Value arrowType = functionRegistry.call(builder, FunctionId::ArrowGetType2Param, ValueRange({arrowTypeConstant, arrowTypeParam1, arrowTypeParam2}))[0];
    return arrowType;
@@ -632,7 +632,7 @@ class CreateTableBuilderLowering : public ConversionPattern {
          auto dbType = rowType.getType(i).cast<mlir::db::DBType>();
          auto arrowType = getArrowDataType(rewriter, functionRegistry, dbType);
          auto columnName = rewriter.create<mlir::db::ConstantOp>(loc, mlir::db::StringType::get(rewriter.getContext(), false), stringAttr);
-         Value typeNullable = rewriter.create<ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), dbType.isNullable()));
+         Value typeNullable = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), dbType.isNullable()));
 
          functionRegistry.call(rewriter, FunctionId::ArrowTableSchemaAddField, ValueRange({schema, arrowType, typeNullable, columnName}));
          i += 1;

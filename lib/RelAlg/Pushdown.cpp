@@ -9,6 +9,8 @@
 namespace {
 
 class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
+   virtual llvm::StringRef getArgument() const override { return "relalg-pushdown"; }
+
    Operator pushdown(Operator topush, Operator curr) {
       UnaryOperator topushUnary = mlir::dyn_cast_or_null<UnaryOperator>(topush.getOperation());
       mlir::relalg::Attributes usedAttributes = topush.getUsedAttributes();

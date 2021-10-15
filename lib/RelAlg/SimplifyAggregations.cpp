@@ -91,6 +91,8 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
    }
 };
 class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir::FunctionPass> {
+   virtual llvm::StringRef getArgument() const override { return "relalg-simplify-aggrs"; }
+
    public:
    void runOnFunction() override {
       //transform "standalone" aggregation functions

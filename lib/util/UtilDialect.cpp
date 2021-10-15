@@ -35,3 +35,4 @@ void UtilDialect::initialize() {
    addInterfaces<UtilInlinerInterface>();
    registerTypes();
 }
+#include "mlir/Dialect/util/UtilOpsDialect.cpp.inc"

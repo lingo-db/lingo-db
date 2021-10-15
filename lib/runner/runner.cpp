@@ -1,7 +1,7 @@
 #include "llvm/Linker/Linker.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Host.h"
-#include "llvm/Support/TargetRegistry.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -12,6 +12,8 @@
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
+#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
+
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -19,6 +21,8 @@
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+
 #include "mlir/Dialect/util/Passes.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
@@ -37,6 +41,7 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/SourceMgr.h>
 
+#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <runner/runner.h>
 #include <runtime/helpers.h>
 
@@ -44,7 +49,7 @@ namespace {
 struct ToLLVMLoweringPass
    : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
-      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect>();
+      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect,mlir::arith::ArithmeticDialect>();
    }
    void runOnOperation() final;
 };
@@ -65,6 +70,12 @@ void ToLLVMLoweringPass::runOnOperation() {
    mlir::LowerToLLVMOptions options(&getContext());
    //options.emitCWrappers = true;
    mlir::LLVMTypeConverter typeConverter(&getContext(), options);
+   typeConverter.addSourceMaterialization([&](mlir::OpBuilder&, mlir::FunctionType type, mlir::ValueRange valueRange,mlir::Location loc) {
+      return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](mlir::OpBuilder&, mlir::FunctionType type, mlir::ValueRange valueRange, mlir::Location loc) {
+      return valueRange.front();
+   });
 
    // Now that the conversion target has been defined, we need to provide the
    // patterns used for lowering. At this point of the compilation process, we
@@ -79,6 +90,8 @@ void ToLLVMLoweringPass::runOnOperation() {
    populateLoopToStdConversionPatterns(patterns);
    mlir::util::populateUtilToLLVMConversionPatterns(typeConverter, patterns);
    populateStdToLLVMConversionPatterns(typeConverter, patterns);
+   mlir::populateMemRefToLLVMConversionPatterns(typeConverter,patterns);
+   mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter,patterns);
    // We want to completely lower to LLVM, so we use a `FullConversion`. This
    // ensures that only legal operations will remain after the conversion.
    auto module = getOperation();
@@ -170,6 +183,8 @@ bool Runner::load(std::string file) {
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::StandardOpsDialect>();
+   registry.insert<mlir::arith::ArithmeticDialect>();
+
    registry.insert<mlir::scf::SCFDialect>();
 
    registry.insert<mlir::util::UtilDialect>();

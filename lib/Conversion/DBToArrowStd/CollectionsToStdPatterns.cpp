@@ -59,7 +59,7 @@ class SortOpLowering : public ConversionPattern {
       auto values=unpacked.getResult(1);
       auto rawPtr = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), ptrType, values);
 
-      Value functionPointer = rewriter.create<mlir::ConstantOp>(sortOp->getLoc(), funcOp.type(), rewriter.getSymbolRefAttr(funcOp.sym_name()));
+      Value functionPointer = rewriter.create<mlir::ConstantOp>(sortOp->getLoc(), funcOp.type(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.sym_name())));
       Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), elementType);
       functionRegistry.call(rewriter, FunctionId::SortVector, {len,rawPtr, elementSize, functionPointer});
       rewriter.eraseOp(op);

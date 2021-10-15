@@ -73,10 +73,10 @@ void RelAlgDialect::printType(::mlir::Type type,
 RelAlgDialect::parseAttribute(::mlir::DialectAsmParser& parser,
                               ::mlir::Type type) const {
    if (!parser.parseOptionalKeyword("attr_def")) {
-      StringRef name;
+      std::string name;
       if (parser.parseLBrace() || parser.parseOptionalString(&name) || parser.parseRBrace())
          return mlir::Attribute();
-      return parser.getBuilder().getContext()->getLoadedDialect<RelAlgDialect>()->getRelationalAttributeManager().createDef(parser.getBuilder().getSymbolRefAttr(name));
+      return parser.getBuilder().getContext()->getLoadedDialect<RelAlgDialect>()->getRelationalAttributeManager().createDef(SymbolRefAttr::get(parser.getContext(),name));
    }
    return mlir::Attribute();
 }
@@ -86,3 +86,4 @@ void RelAlgDialect::printAttribute(::mlir::Attribute attr,
       os << "attr_def(\\\"" << attrDef.getName() << "\\\")";
    }
 }
+#include "mlir/Dialect/RelAlg/IR/RelAlgOpsDialect.cpp.inc"

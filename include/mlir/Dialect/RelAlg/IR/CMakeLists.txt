@@ -1,6 +1,7 @@
 
 set(LLVM_TARGET_DEFINITIONS RelAlgOps.td)
 mlir_tablegen(RelAlgOpsDialect.h.inc -gen-dialect-decls)
+mlir_tablegen(RelAlgOpsDialect.cpp.inc -gen-dialect-defs)
 mlir_tablegen(RelAlgOps.h.inc -gen-op-decls)
 mlir_tablegen(RelAlgOps.cpp.inc -gen-op-defs)
 mlir_tablegen(RelAlgOpsEnums.h.inc -gen-enum-decls)

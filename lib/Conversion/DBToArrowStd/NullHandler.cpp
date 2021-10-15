@@ -19,14 +19,14 @@ mlir::Value mlir::db::NullHandler::getValue(Value v, Value operand) {
 }
 mlir::Value mlir::db::NullHandler::isNull() {
    if (nullValues.empty()) {
-      return builder.create<mlir::ConstantOp>(builder.getUnknownLoc(), builder.getI1Type(), builder.getIntegerAttr(builder.getI1Type(), 0));
+      return builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getI1Type(), builder.getIntegerAttr(builder.getI1Type(), 0));
    }
    Value isNull;
    if (nullValues.size() >= 1) {
       isNull = nullValues.front();
    }
    for (size_t i = 1; i < nullValues.size(); i++) {
-      isNull = builder.create<mlir::OrOp>(builder.getUnknownLoc(), isNull.getType(), isNull, nullValues[i]);
+      isNull = builder.create<arith::OrIOp>(builder.getUnknownLoc(), isNull.getType(), isNull, nullValues[i]);
    }
    return isNull;
 };
@@ -40,7 +40,7 @@ mlir::Value mlir::db::NullHandler::combineResult(Value res) {
       isNull = nullValues.front();
    }
    for (size_t i = 1; i < nullValues.size(); i++) {
-      isNull = builder.create<mlir::OrOp>(builder.getUnknownLoc(), isNull.getType(), isNull, nullValues[i]);
+      isNull = builder.create<arith::OrIOp>(builder.getUnknownLoc(), isNull.getType(), isNull, nullValues[i]);
    }
    return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), mlir::TupleType::get(builder.getContext(), {i1Type, res.getType()}), ValueRange({isNull, res}));
 }

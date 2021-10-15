@@ -441,12 +441,7 @@ OpBuilder<(ins "mlir::db::DBCmpPredicate":$predicate, "Value":$left,
 
 let extraClassDeclaration = [{
 static StringRef getPredicateAttrName() { return "predicate"; }
-static CmpIPredicate getPredicateByName(StringRef name);
 
-CmpIPredicate getPredicate() {
-  return (CmpIPredicate)(*this)->getAttrOfType<IntegerAttr>(
-      getPredicateAttrName()).getInt();
-}
 }];
 }
 

@@ -103,7 +103,7 @@
             db.dump %v1 : !db.int<32>
             db.dump %v2 : !db.int<32>
             db.dump %str_const : !db.string
-            %one_i8 = constant 1 : i8
+            %one_i8 = arith.constant 1 : i8
             %marker_val=atomic_rmw "assign" %one_i8 , %marker[] : (i8, memref<i8>) -> i8
             %db_marker_val = db.type_cast %marker_val : i8 -> !db.int<8>
             db.dump %db_marker_val : !db.int<8>
@@ -120,7 +120,7 @@
             db.dump %k2 : !db.int<32>
             db.dump %v1 : !db.int<32>
             db.dump %v2 : !db.int<32>
-            %one_i8 = constant 1 : i8
+            %one_i8 = arith.constant 1 : i8
             %marker_val=atomic_rmw "assign" %one_i8 , %marker[] : (i8, memref<i8>) -> i8
             %db_marker_val = db.type_cast %marker_val : i8 -> !db.int<8>
             db.dump %db_marker_val : !db.int<8>
@@ -140,7 +140,7 @@
             db.dump %k2 : !db.int<32>
             db.dump %v1 : !db.int<32>
             db.dump %v2 : !db.int<32>
-            %one_i8 = constant 1 : i8
+            %one_i8 = arith.constant 1 : i8
             %marker_val=atomic_rmw "assign" %one_i8 , %marker[] : (i8, memref<i8>) -> i8
             %db_marker_val = db.type_cast %marker_val : i8 -> !db.int<8>
             db.dump %db_marker_val : !db.int<8>

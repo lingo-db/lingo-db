@@ -35,3 +35,4 @@ void DBDialect::initialize() {
    addInterfaces<DBInlinerInterface>();
    registerTypes();
 }
+#include "mlir/Dialect/DB/IR/DBOpsDialect.cpp.inc"

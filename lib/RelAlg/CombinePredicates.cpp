@@ -6,6 +6,8 @@
 
 namespace {
 class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::FunctionPass> {
+   virtual llvm::StringRef getArgument() const override { return "relalg-combine-predicates"; }
+
    public:
    void combine(PredicateOperator higher, PredicateOperator lower) {
       using namespace mlir;

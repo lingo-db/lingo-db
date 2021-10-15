@@ -25,8 +25,7 @@ using namespace mlir;
    return success();
 }
 static void print(OpAsmPrinter& p, db::ConstantOp& op) {
-   p << op.getOperationName();
-   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
+      p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
 
    if (op->getAttrs().size() > 1)
       p << ' ';
@@ -123,7 +122,7 @@ static ParseResult parseImplicitResultSameOperandBaseTypeOp(OpAsmParser& parser,
 
 static void printImplicitResultSameOperandBaseTypeOp(Operation* op, OpAsmPrinter& p) {
    bool first = true;
-   p << op->getName() << " ";
+   p  << " ";
    for (auto operand : op->getOperands()) {
       if (first) {
          first = false;
@@ -198,7 +197,6 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation* op, OpAsmPrinter
 }
 
 static void print(::mlir::OpAsmPrinter& p, mlir::db::CmpOp& op) {
-   p << "db.compare";
    p << ' ';
    {
       auto caseValue = op.predicate();
@@ -226,7 +224,7 @@ static ParseResult parseDateOp(OpAsmParser& parser,
 
 static void printDateOp(Operation* op, OpAsmPrinter& p) {
    bool first = true;
-   p << op->getName() << " ";
+   p  << " ";
    for (auto operand : op->getOperands()) {
       if (first) {
          first = false;
@@ -270,7 +268,7 @@ static ParseResult parseIfOp(OpAsmParser& parser, OperationState& result) {
 static void print(OpAsmPrinter& p, mlir::db::IfOp op) {
    bool printBlockTerminators = false;
 
-   p << mlir::db::IfOp::getOperationName() << " " << op.condition() << " : " << op.condition().getType();
+   p << " " << op.condition() << " : " << op.condition().getType();
    if (!op.results().empty()) {
       p << " -> (" << op.getResultTypes() << ")";
       // Print yield explicitly if the op defines values.
@@ -309,7 +307,7 @@ static ParseResult parseDateExtractOp(OpAsmParser& parser,
 }
 
 static void print(OpAsmPrinter& p, mlir::db::DateExtractOp extractOp) {
-   p << extractOp.getOperationName() << " " << mlir::db::stringifyExtractableTimeUnitAttr(extractOp.unit()) << ", " << extractOp.val() << " : " << extractOp.val().getType();
+   p  << " " << mlir::db::stringifyExtractableTimeUnitAttr(extractOp.unit()) << ", " << extractOp.val() << " : " << extractOp.val().getType();
 }
 static void printInitializationList(OpAsmPrinter &p,
                                     Block::BlockArgListType blocksArgs,
@@ -328,7 +326,7 @@ static void printInitializationList(OpAsmPrinter &p,
 }
 //adapted from scf::ForOp
 static void print(OpAsmPrinter &p, mlir::db::ForOp op) {
-   p << op.getOperationName() << " " << op.getInductionVar() << " in "
+   p  << " " << op.getInductionVar() << " in "
      << op.collection() <<" : "<<op.collection().getType()<<" ";
    if(op.until()){
       p<<"until "<<op.until()<<" ";
@@ -453,8 +451,7 @@ static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
 
 //taken from scf::WhileOp
 static void print(OpAsmPrinter &p, db::WhileOp op) {
-   p << op.getOperationName();
-   printInitializationList(p, op.before().front().getArguments(), op.inits(),
+      printInitializationList(p, op.before().front().getArguments(), op.inits(),
                            " ");
    p << " : ";
    p.printFunctionalType(op.inits().getTypes(), op.results().getTypes());
@@ -481,7 +478,7 @@ static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
    return success();
 }
 static void print(OpAsmPrinter& p, db::SortOp& op) {
-   p << op.getOperationName() << " " << op.toSort() << ":" << op.toSort().getType() << " ";
+   p  << " " << op.toSort() << ":" << op.toSort().getType() << " ";
    p << "(";
    bool first = true;
    for (auto arg : op.region().front().getArguments()) {
@@ -515,7 +512,7 @@ static ParseResult parseCreateAggrHTBuilder(OpAsmParser& parser, OperationState&
    return success();
 }
 static void print(OpAsmPrinter& p, db::CreateAggrHTBuilder& op) {
-   p << op.getOperationName() << " "<< op.initial() <<" ";
+   p  << " "<< op.initial() <<" ";
    p << "(";
    bool first = true;
    for (auto arg : op.region().front().getArguments()) {
@@ -533,7 +530,7 @@ static void print(OpAsmPrinter& p, db::CreateAggrHTBuilder& op) {
 
 
 static void print(OpAsmPrinter &p, mlir::db::SelectOp op) {
-   p << op.getOperationName()<<" " << op.condition() <<" : "<<op.condition().getType() << ", "<<op.true_value()<<", "<<op.false_value();
+   p <<" " << op.condition() <<" : "<<op.condition().getType() << ", "<<op.true_value()<<", "<<op.false_value();
    p.printOptionalAttrDict(op->getAttrs());
    p << " : ";
    p << op.getType();

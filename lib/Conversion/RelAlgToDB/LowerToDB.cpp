@@ -8,6 +8,8 @@
 namespace {
 
 class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass> {
+   virtual llvm::StringRef getArgument() const override { return "relalg-to-db"; }
+
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::util::UtilDialect>();
    }

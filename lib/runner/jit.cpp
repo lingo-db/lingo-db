@@ -41,10 +41,17 @@ static llvm::orc::JITDylib& checkAndGet(llvm::Expected<llvm::orc::JITDylib&> lib
    lib.operator bool();
    return lib.get();
 }
+static std::unique_ptr<llvm::orc::SelfExecutorProcessControl> createEPC(){
+   auto epc=llvm::orc::SelfExecutorProcessControl::Create();
+   if(!epc){
+      return nullptr;
+   }
+   return std::move(epc.get());
+}
 JIT::JIT(llvm::orc::ThreadSafeContext& ctx)
    : targetMachine(llvm::EngineBuilder().selectTarget()),
      dataLayout(targetMachine->createDataLayout()),
-     executionSession(),
+     executionSession(std::move(createEPC())),
      context(ctx),
      objectLinkingLayer(executionSession, []() { return std::make_unique<llvm::SectionMemoryManager>(); }),
      compileLayer(executionSession, objectLinkingLayer, std::make_unique<llvm::orc::SimpleCompiler>(*targetMachine)),

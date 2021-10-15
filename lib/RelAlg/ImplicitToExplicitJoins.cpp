@@ -8,6 +8,8 @@
 namespace {
 
 class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins, mlir::FunctionPass> {
+   virtual llvm::StringRef getArgument() const override { return "relalg-implicit-to-explicit-joins"; }
+
    llvm::SmallVector<mlir::Operation*> toDestroy;
    void handleScalarBoolOp(TupleLamdaOperator surroundingOperator, mlir::Operation* op, Operator relOperator, std::function<void(PredicateOperator)> apply) {
       using namespace mlir;
