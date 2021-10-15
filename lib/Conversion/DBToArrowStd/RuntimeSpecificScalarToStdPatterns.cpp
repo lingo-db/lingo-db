@@ -341,60 +341,6 @@ class DumpIndexOpLowering : public ConversionPattern {
    }
 };
 
-class HashLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
-
-   Value hashImpl(OpBuilder& builder, Value v, Value totalHash, Type originalType) const {
-      //todo: more checks:
-      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
-      if (auto intType = v.getType().dyn_cast_or_null<mlir::IntegerType>()) {
-         switch (intType.getWidth()) {
-            case 1: return functionRegistry.call(builder, FunctionId::HashBool, {totalHash, v})[0];
-            case 8: return functionRegistry.call(builder, FunctionId::HashInt8, {totalHash, v})[0];
-            case 16: return functionRegistry.call(builder, FunctionId::HashInt16, {totalHash, v})[0];
-            case 32: return functionRegistry.call(builder, FunctionId::HashInt32, {totalHash, v})[0];
-            case 64: return functionRegistry.call(builder, FunctionId::HashInt64, {totalHash, v})[0];
-            case 128: return functionRegistry.call(builder, FunctionId::HashInt128, {totalHash, v})[0];
-         }
-      } else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
-         switch (floatType.getWidth()) {
-            case 32: return functionRegistry.call(builder, FunctionId::HashFloat32, {totalHash, v})[0];
-            case 64: return functionRegistry.call(builder, FunctionId::HashFloat64, {totalHash, v})[0];
-         }
-      } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::util::GenericMemrefType>()) {
-         return functionRegistry.call(builder, FunctionId::HashBinary, {totalHash, v})[0];
-      } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
-         if (auto originalTupleType = originalType.dyn_cast_or_null<mlir::TupleType>()) {
-            auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
-            size_t i = 0;
-            for (auto v : unpacked->getResults()) {
-               totalHash = hashImpl(builder, v, totalHash, originalTupleType.getType(i++));
-            }
-            return totalHash;
-         } else if (auto dbType = originalType.dyn_cast_or_null<mlir::db::DBType>()) {
-            assert(dbType.isNullable());
-            auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
-            mlir::Value hashedIfNotNull = hashImpl(builder, unpacked.getResult(1), totalHash, dbType.getBaseType());
-            return builder.create<mlir::SelectOp>(builder.getUnknownLoc(), unpacked.getResult(0), totalHash, hashedIfNotNull);
-         }
-         assert(false && "should not happen");
-         return Value();
-      }
-      assert(false && "should not happen");
-      return Value();
-   }
-
-   public:
-   explicit HashLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::Hash::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::db::HashAdaptor hashAdaptor(operands);
-      auto hashOp = mlir::cast<mlir::db::Hash>(op);
-      Value const0 = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0));
-      rewriter.replaceOp(op, hashImpl(rewriter, hashAdaptor.val(), const0, hashOp.val().getType()));
-      return success();
-   }
-};
 class DecimalMulLowering : public ConversionPattern {
    public:
    explicit DecimalMulLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -538,7 +484,6 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
    patterns.insert<StringCastOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DumpIndexOpLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<HashLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<FreeOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DecimalMulLowering>(typeConverter, patterns.getContext());
 }
