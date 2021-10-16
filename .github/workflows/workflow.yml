@@ -229,6 +229,10 @@ jobs:
       - name: Install Python packages
         run: |
           pip3 install requests moz_sql_parser
+      - name: Get llvm commit id
+        id: llvm-commit
+        run: |
+          echo "::set-output name=commit::$(git submodule status llvm-project | tr ' ' '-' )"
       - name: Fetch LLVM Build
         id: llvm-build
         uses: actions/cache@v2
@@ -288,6 +292,10 @@ jobs:
       - name: Install clang-tidy
         run: |
           sudo apt-get install -y clang-tidy
+      - name: Get llvm commit id
+        id: llvm-commit
+        run: |
+          echo "::set-output name=commit::$(git submodule status llvm-project | tr ' ' '-' )"
       - name: Fetch Cached LLVM sources
         id: llvm-sources
         uses: actions/cache@v2
