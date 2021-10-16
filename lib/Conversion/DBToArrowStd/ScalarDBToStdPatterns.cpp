@@ -623,8 +623,6 @@ class HashLowering : public ConversionPattern {
    Value hashImpl(OpBuilder& builder, Value v, Value totalHash, Value magicConstant, Type originalType) const {
       auto loc = builder.getUnknownLoc();
 
-      //todo: more checks:
-      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
       if (auto intType = v.getType().dyn_cast_or_null<mlir::IntegerType>()) {
          if (intType.getWidth() == 128) {
             auto i64Type = IntegerType::get(builder.getContext(), 64);

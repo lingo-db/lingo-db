@@ -1,7 +1,7 @@
 #include "llvm/Linker/Linker.h"
+#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Host.h"
-#include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
@@ -9,11 +9,12 @@
 
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
+#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
-#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -21,7 +22,6 @@
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 
 #include "mlir/Dialect/util/Passes.h"
 #include "mlir/Dialect/util/UtilDialect.h"
@@ -49,7 +49,7 @@ namespace {
 struct ToLLVMLoweringPass
    : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
-      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect,mlir::arith::ArithmeticDialect>();
+      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::arith::ArithmeticDialect>();
    }
    void runOnOperation() final;
 };
@@ -70,7 +70,7 @@ void ToLLVMLoweringPass::runOnOperation() {
    mlir::LowerToLLVMOptions options(&getContext());
    //options.emitCWrappers = true;
    mlir::LLVMTypeConverter typeConverter(&getContext(), options);
-   typeConverter.addSourceMaterialization([&](mlir::OpBuilder&, mlir::FunctionType type, mlir::ValueRange valueRange,mlir::Location loc) {
+   typeConverter.addSourceMaterialization([&](mlir::OpBuilder&, mlir::FunctionType type, mlir::ValueRange valueRange, mlir::Location loc) {
       return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](mlir::OpBuilder&, mlir::FunctionType type, mlir::ValueRange valueRange, mlir::Location loc) {
@@ -90,8 +90,8 @@ void ToLLVMLoweringPass::runOnOperation() {
    populateLoopToStdConversionPatterns(patterns);
    mlir::util::populateUtilToLLVMConversionPatterns(typeConverter, patterns);
    populateStdToLLVMConversionPatterns(typeConverter, patterns);
-   mlir::populateMemRefToLLVMConversionPatterns(typeConverter,patterns);
-   mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter,patterns);
+   mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
+   mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
    // We want to completely lower to LLVM, so we use a `FullConversion`. This
    // ensures that only legal operations will remain after the conversion.
    auto module = getOperation();
@@ -125,8 +125,7 @@ int loadMLIR(std::string inputFilename, mlir::MLIRContext& context, mlir::Owning
    return 0;
 }
 int loadMLIRFromString(const std::string& input, mlir::MLIRContext& context, mlir::OwningModuleRef& module) {
-
-   module=mlir::parseSourceString(input,&context);
+   module = mlir::parseSourceString(input, &context);
    if (!module) {
       llvm::errs() << "Error can't load module\n";
       return 3;
@@ -278,7 +277,7 @@ bool Runner::lowerToLLVM() {
       mlir::db::codegen::FunctionRegistry registry(moduleOp->getContext());
       registry.registerFunctions();
       mlir::OpBuilder builder(&mainFunc.body().front().front());
-      registry.getFunction(builder,mlir::db::codegen::FunctionRegistry::FunctionId::SetExecutionContext);
+      registry.getFunction(builder, mlir::db::codegen::FunctionRegistry::FunctionId::SetExecutionContext);
    }
    mlir::PassManager pm2(&ctxt->context);
    pm2.addPass(mlir::createLowerToCFGPass());
@@ -295,7 +294,7 @@ void Runner::dump() {
    ctxt->module->dump();
 }
 
-bool Runner::runJit(runtime::ExecutionContext* context,size_t repeats, std::function<void(uint8_t*)> callback) {
+bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::function<void(uint8_t*)> callback) {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    // Initialize LLVM targets.
    llvm::InitializeNativeTarget();
@@ -324,7 +323,7 @@ bool Runner::runJit(runtime::ExecutionContext* context,size_t repeats, std::func
    uint8_t* res;
 
    // Invoke the JIT-compiled function.
-   auto *lookupResult = jit.getPointerToFunction("main");
+   auto* lookupResult = jit.getPointerToFunction("main");
 
    if (!lookupResult) {
       llvm::errs() << "JIT invocation failed\n";
@@ -334,7 +333,7 @@ bool Runner::runJit(runtime::ExecutionContext* context,size_t repeats, std::func
    std::cout << "jit: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
 
    {
-      auto *lookupResult2 = jit.getPointerToFunction("_mlir_ciface_set_execution_context");
+      auto* lookupResult2 = jit.getPointerToFunction("_mlir_ciface_set_execution_context");
       if (!lookupResult2) {
          llvm::errs() << "JIT invocation failed\n";
          return false;
@@ -351,7 +350,7 @@ bool Runner::runJit(runtime::ExecutionContext* context,size_t repeats, std::func
          typedef uint8_t* (*myfunc)();
          auto fn = (myfunc) funcPtr;
          res = fn();
-      }else {
+      } else {
          typedef void (*myfunc)();
          auto fn = (myfunc) funcPtr;
          fn();
@@ -359,7 +358,7 @@ bool Runner::runJit(runtime::ExecutionContext* context,size_t repeats, std::func
       auto executionEnd = std::chrono::high_resolution_clock::now();
       measuredTimes.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(executionEnd - executionStart).count());
    }
-   std::cout << "runtime: " << (measuredTimes.size()>1?*std::min_element(measuredTimes.begin() + 1, measuredTimes.end()):measuredTimes[0]) << " ms" << std::endl;
+   std::cout << "runtime: " << (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]) << " ms" << std::endl;
 
    if (ctxt->numResults == 1) {
       callback(res);

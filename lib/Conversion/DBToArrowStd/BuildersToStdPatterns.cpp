@@ -226,7 +226,7 @@ class BuilderMergeLowering : public ConversionPattern {
             Value two=rewriter.create<arith::ConstantIndexOp>(op->getLoc(),2);
             Value newCapacity=  b.create<arith::MulIOp>(op->getLoc(),len,two);
             Value newMemref = rewriter.create<mlir::util::AllocOp>(op->getLoc(),values.getType(),newCapacity);
-            auto loop = b.create<scf::ForOp>(
+            b.create<scf::ForOp>(
                loc, zero, len, one,ValueRange({}),
                [&](OpBuilder& b2, Location loc2, Value iv, ValueRange args) {
                   Value currVal = b.create<util::LoadOp>(loc, convertedElementType, values, iv);

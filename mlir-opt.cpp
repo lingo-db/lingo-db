@@ -15,11 +15,10 @@
 #include "mlir/Dialect/util/UtilDialect.h"
 
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
+#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/SCF/SCF.h"
-#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
-
 
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
 
@@ -96,25 +95,25 @@ int main(int argc, char** argv) {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createOptimizeJoinOrderPass();
    });
-   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createCombinePredicatesPass();
    });
-   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createOptimizeImplementationsPass();
    });
-   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
-     return mlir::relalg::createIntroduceTmpPass();
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::relalg::createIntroduceTmpPass();
    });
-   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
-     return mlir::relalg::createSimplifyAggregationsPass();
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::relalg::createSimplifyAggregationsPass();
    });
-   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createLowerToDBPass();
    });
-   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::db::createLowerToStdPass();
    });
-   ::mlir::registerPass( []() -> std::unique_ptr<::mlir::Pass> {
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return std::make_unique<ToLLVMLoweringPass>();
    });
    mlir::DialectRegistry registry;

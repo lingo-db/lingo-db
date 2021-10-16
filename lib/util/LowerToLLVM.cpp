@@ -1,4 +1,5 @@
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
@@ -13,7 +14,6 @@
 #include "mlir/Dialect/util/UtilTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 
 using namespace mlir;
 
@@ -349,7 +349,7 @@ class DeAllocOpLowering : public ConversionPattern {
          op->getLoc(), LLVM::LLVMPointerType::get(IntegerType::get(rewriter.getContext(), 8)),
          getPtrFromGenericMemref(genericMemrefType, adaptor.generic_memref(), rewriter, typeConverter));
       rewriter.replaceOpWithNewOp<LLVM::CallOp>(
-         op, TypeRange(), SymbolRefAttr::get(freeFunc), casted);//todo check if working
+         op, TypeRange(), SymbolRefAttr::get(freeFunc), casted); //todo check if working
       return success();
    }
 };
@@ -414,11 +414,9 @@ class CastOpLowering : public ConversionPattern {
       }
       auto targetElemType = typeConverter->convertType(targetGenericMemrefType.getElementType());
       if ((dynSizeSource && !dynSizeTarget)) {
-         auto i8PointerType = mlir::LLVM::LLVMPointerType::get(rewriter.getIntegerType(8));
          auto sourceElemType = typeConverter->convertType(sourceGenericMemrefType.getElementType());
          auto sourcePointerType = mlir::LLVM::LLVMPointerType::get(sourceElemType);
 
-         auto idxType = typeConverter->convertType(rewriter.getIndexType());
          Value alignedPtr = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), sourcePointerType, adaptor.val(), rewriter.getI64ArrayAttr(0));
          Value casted = rewriter.create<LLVM::BitcastOp>(op->getLoc(), LLVM::LLVMPointerType::get(targetElemType), alignedPtr);
          rewriter.replaceOp(op, casted);
