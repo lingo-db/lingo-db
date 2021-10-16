@@ -47,5 +47,7 @@ run-test:
 coverage-clean:
 	rm -rf build/build-debug-llvm-release-coverage/coverage
 
+build-docker:
+	docker build -f "docker/Dockerfile" -t dockerize:latest "."
 clean:
 	rm -rf build
