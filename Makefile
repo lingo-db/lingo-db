@@ -1,9 +1,9 @@
-l   build/llvm-build:
+build/llvm-build:
 	mkdir -p build/llvm-build
 	cmake -G Ninja llvm-project/llvm  -B build/llvm-build \
 	   -DLLVM_ENABLE_PROJECTS=mlir \
 	   -DLLVM_BUILD_EXAMPLES=OFF \
-	   -DLLVM_TARGETS_TO_BUILD="X86;NVPTX;AMDGPU" \
+	   -DLLVM_TARGETS_TO_BUILD="X86" \
 	   -DCMAKE_BUILD_TYPE=Release \
 	   -DLLVM_ENABLE_ASSERTIONS=ON
 
