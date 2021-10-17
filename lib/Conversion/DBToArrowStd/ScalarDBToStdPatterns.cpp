@@ -641,12 +641,13 @@ class HashLowering : public ConversionPattern {
       } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::util::GenericMemrefType>()) {
          auto len = builder.create<mlir::util::DimOp>(loc, builder.getIndexType(), v);
          Value casted = builder.create<util::GenericMemrefCastOp>(loc, util::GenericMemrefType::get(getContext(), builder.getI64Type(), {-1}), v);
+         auto lenCasted = builder.create<mlir::util::DimOp>(loc, builder.getIndexType(), casted);
+
          Value const0 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0));
          Value const1 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(1));
          Value const8 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(8));
-
          auto loop = builder.create<scf::ForOp>(
-            loc, const0, len, const8, totalHash,
+            loc, const0, lenCasted, const1, totalHash,
             [&](OpBuilder& b, Location loc, Value iv, ValueRange args) {
                Value currVal = b.create<util::LoadOp>(loc, b.getI64Type(), casted, iv);
                b.create<scf::YieldOp>(loc, hashInteger(b, magicConstant, currVal, args.front()));

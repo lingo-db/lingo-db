@@ -2,6 +2,7 @@
 
 #include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 
@@ -12,6 +13,7 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
 
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::util::UtilDialect>();
+      registry.insert<mlir::memref::MemRefDialect>();
    }
    bool isTranslationHook(mlir::Operation* op) {
       return ::llvm::TypeSwitch<mlir::Operation*, bool>(op)
