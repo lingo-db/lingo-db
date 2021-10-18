@@ -640,12 +640,16 @@ class HashLowering : public ConversionPattern {
          assert(false && "can not hash float values");
       } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::util::GenericMemrefType>()) {
          auto len = builder.create<mlir::util::DimOp>(loc, builder.getIndexType(), v);
+         Value const3 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(3));
+
          Value casted = builder.create<util::GenericMemrefCastOp>(loc, util::GenericMemrefType::get(getContext(), builder.getI64Type(), {-1}), v);
-         auto lenCasted = builder.create<mlir::util::DimOp>(loc, builder.getIndexType(), casted);
+         auto lenCasted = builder.create<mlir::arith::ShRUIOp>(loc, builder.getIndexType(), len,const3);
 
          Value const0 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0));
          Value const1 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(1));
          Value const8 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(8));
+         Value const7 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(7));
+
          auto loop = builder.create<scf::ForOp>(
             loc, const0, lenCasted, const1, totalHash,
             [&](OpBuilder& b, Location loc, Value iv, ValueRange args) {
@@ -653,7 +657,7 @@ class HashLowering : public ConversionPattern {
                b.create<scf::YieldOp>(loc, hashInteger(b, magicConstant, currVal, args.front()));
             });
          totalHash = loop.getResult(0);
-         auto remaining = builder.create<arith::RemUIOp>(loc, len, const8);
+         auto remaining = builder.create<arith::AndIOp>(loc, len, const7);
          auto start = builder.create<arith::SubIOp>(loc, len, remaining);
          auto loop2 = builder.create<scf::ForOp>(
             loc, start, len, const1, totalHash,
