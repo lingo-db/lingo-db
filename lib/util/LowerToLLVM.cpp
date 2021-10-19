@@ -226,7 +226,6 @@ class ToMemrefOpLowering : public ConversionPattern {
       auto targetType = typeConverter->convertType(memrefType);
 
       auto i8PointerType = mlir::LLVM::LLVMPointerType::get(IntegerType::get(context, 8));
-      auto elemType = typeConverter->convertType(genericMemrefType.getElementType());
       auto idxType = typeConverter->convertType(IndexType::get(context));
       Value tpl = rewriter.create<LLVM::UndefOp>(rewriter.getUnknownLoc(), targetType);
 

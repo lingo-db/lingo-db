@@ -2,7 +2,6 @@ set(PRECOMPILED_SRCS
         test.cpp
         string.cpp
         date.cpp
-        join_ht_builder.cpp
         mjoin_ht_builder.cpp
         aggr_ht_builder.cpp
         context.cpp

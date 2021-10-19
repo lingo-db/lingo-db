@@ -375,7 +375,7 @@ class ConstantLowering : public ConversionPattern {
             Attribute initialValue = DenseIntElementsAttr::get(
                RankedTensorType::get({strLen}, i8Type), vec);
             static int id = 0;
-            auto globalop = rewriter.create<mlir::memref::GlobalOp>(loc, "db_constant_string" + std::to_string(id++), rewriter.getStringAttr("private"), strStaticType, initialValue, true,rewriter.getI64IntegerAttr(1));
+            auto globalop = rewriter.create<mlir::memref::GlobalOp>(loc, "db_constant_string" + std::to_string(id++), rewriter.getStringAttr("private"), strStaticType, initialValue, true, rewriter.getI64IntegerAttr(1));
             rewriter.restoreInsertionPoint(insertionPoint);
             Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
             result = rewriter.create<memref::CastOp>(loc, conststr, strDynamicType);
@@ -614,13 +614,35 @@ class GetFlagLowering : public ConversionPattern {
    }
 };
 class HashLowering : public ConversionPattern {
-   Value hashInteger(OpBuilder& builder, Value magicConstant, Value integer, Value totalHash) const {
+   Value combineHashes(OpBuilder& builder, Value hash1, Value totalHash, bool& required) const {
+      Value kMul = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0x9ddfea08eb382d69));
+      Value k47 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(47));
+
+      if (!required) {
+         required = true;
+         Value shifted2 = builder.create<arith::ShRUIOp>(builder.getUnknownLoc(), hash1, k47);
+         Value b = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), shifted2, hash1);
+         Value multiplied4 = builder.create<arith::MulIOp>(builder.getUnknownLoc(), b, kMul);
+         return multiplied4;
+      }
+
+      Value xOred = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), totalHash, hash1);
+      Value multiplied2 = builder.create<arith::MulIOp>(builder.getUnknownLoc(), xOred, kMul);
+      Value shifted = builder.create<arith::ShRUIOp>(builder.getUnknownLoc(), multiplied2, k47);
+      Value a = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), shifted, multiplied2);
+      Value xOred2 = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), a, hash1);
+      Value multiplied3 = builder.create<arith::MulIOp>(builder.getUnknownLoc(), xOred2, kMul);
+      Value shifted2 = builder.create<arith::ShRUIOp>(builder.getUnknownLoc(), multiplied3, k47);
+      Value b = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), shifted2, multiplied3);
+      Value multiplied4 = builder.create<arith::MulIOp>(builder.getUnknownLoc(), b, kMul);
+      return multiplied4;
+   }
+   Value hashInteger(OpBuilder& builder, Value magicConstant, Value integer) const {
       Value asIndex = builder.create<arith::IndexCastOp>(builder.getUnknownLoc(), integer, builder.getIndexType());
       Value multiplied = builder.create<arith::MulIOp>(builder.getUnknownLoc(), asIndex, magicConstant);
-      Value xOred = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), multiplied, totalHash);
-      return xOred;
+      return multiplied;
    }
-   Value hashImpl(OpBuilder& builder, Value v, Value totalHash, Value magicConstant, Type originalType) const {
+   Value hashImpl(OpBuilder& builder, Value v, Value totalHash, Value magicConstant, Type originalType, bool& combinationRequired) const {
       auto loc = builder.getUnknownLoc();
 
       if (auto intType = v.getType().dyn_cast_or_null<mlir::IntegerType>()) {
@@ -631,55 +653,54 @@ class HashLowering : public ConversionPattern {
             Value low = builder.create<arith::TruncIOp>(loc, v, i64Type);
             Value shift = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(i128Type, 64));
             Value high = builder.create<arith::ShRUIOp>(loc, i128Type, v, shift);
-            return hashInteger(builder, magicConstant, low, hashInteger(builder, magicConstant, high, totalHash));
+            Value first = hashInteger(builder, magicConstant, high);
+            Value second = hashInteger(builder, magicConstant, low);
+            Value combined1 = combineHashes(builder, first, totalHash, combinationRequired);
+            Value combined2 = combineHashes(builder, second, combined1, combinationRequired);
+            return combined2;
          } else {
-            return hashInteger(builder, magicConstant, v, totalHash);
+            return combineHashes(builder, hashInteger(builder, magicConstant, v), totalHash, combinationRequired);
          }
 
       } else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
          assert(false && "can not hash float values");
       } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::util::GenericMemrefType>()) {
-         auto len = builder.create<mlir::util::DimOp>(loc, builder.getIndexType(), v);
-         Value const3 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(3));
-
-         Value casted = builder.create<util::GenericMemrefCastOp>(loc, util::GenericMemrefType::get(getContext(), builder.getI64Type(), {-1}), v);
-         auto lenCasted = builder.create<mlir::arith::ShRUIOp>(loc, builder.getIndexType(), len,const3);
+         Value len = builder.create<mlir::util::DimOp>(loc, builder.getIndexType(), v);
 
          Value const0 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0));
          Value const1 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(1));
-         Value const8 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(8));
-         Value const7 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(7));
+         Value const5 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(5));
+         Value const27 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(27));
 
-         auto loop = builder.create<scf::ForOp>(
-            loc, const0, lenCasted, const1, totalHash,
-            [&](OpBuilder& b, Location loc, Value iv, ValueRange args) {
-               Value currVal = b.create<util::LoadOp>(loc, b.getI64Type(), casted, iv);
-               b.create<scf::YieldOp>(loc, hashInteger(b, magicConstant, currVal, args.front()));
-            });
-         totalHash = loop.getResult(0);
-         auto remaining = builder.create<arith::AndIOp>(loc, len, const7);
-         auto start = builder.create<arith::SubIOp>(loc, len, remaining);
          auto loop2 = builder.create<scf::ForOp>(
-            loc, start, len, const1, totalHash,
+            loc, const0, len, const1, len,
             [&](OpBuilder& b, Location loc, Value iv, ValueRange args) {
+               Value hash = args.front();
                Value currVal = b.create<util::LoadOp>(loc, b.getIntegerType(8), v, iv);
-               b.create<scf::YieldOp>(loc, hashInteger(b, magicConstant, currVal, args.front()));
-            });
-         totalHash = loop2.getResult(0);
+               Value asIndex = builder.create<arith::IndexCastOp>(builder.getUnknownLoc(), currVal, builder.getIndexType());
 
-         return totalHash;
+               Value shifted5 = builder.create<arith::ShLIOp>(builder.getUnknownLoc(), hash, const5);
+               Value shifted27 = builder.create<arith::ShRUIOp>(builder.getUnknownLoc(), hash, const27);
+               Value xOred = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), shifted5, shifted27);
+               Value xOred2 = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), xOred, asIndex);
+
+               b.create<scf::YieldOp>(loc, xOred2);
+            });
+         Value hash = loop2.getResult(0);
+
+         return combineHashes(builder, hash, totalHash, combinationRequired);
       } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
          if (auto originalTupleType = originalType.dyn_cast_or_null<mlir::TupleType>()) {
             auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
             size_t i = 0;
             for (auto v : unpacked->getResults()) {
-               totalHash = hashImpl(builder, v, totalHash, magicConstant, originalTupleType.getType(i++));
+               totalHash = hashImpl(builder, v, totalHash, magicConstant, originalTupleType.getType(i++), combinationRequired);
             }
             return totalHash;
          } else if (auto dbType = originalType.dyn_cast_or_null<mlir::db::DBType>()) {
             assert(dbType.isNullable());
             auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
-            mlir::Value hashedIfNotNull = hashImpl(builder, unpacked.getResult(1), totalHash, magicConstant, dbType.getBaseType());
+            mlir::Value hashedIfNotNull = hashImpl(builder, unpacked.getResult(1), totalHash, magicConstant, dbType.getBaseType(), combinationRequired);
             return builder.create<mlir::SelectOp>(builder.getUnknownLoc(), unpacked.getResult(0), totalHash, hashedIfNotNull);
          }
          assert(false && "should not happen");
@@ -695,10 +716,11 @@ class HashLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::HashAdaptor hashAdaptor(operands);
       auto hashOp = mlir::cast<mlir::db::Hash>(op);
+      bool combinationRequired = false;
       Value const0 = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0));
       Value magicConstant = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0xbf58476d1ce4e5b9));
 
-      rewriter.replaceOp(op, hashImpl(rewriter, hashAdaptor.val(), const0, magicConstant, hashOp.val().getType()));
+      rewriter.replaceOp(op, hashImpl(rewriter, hashAdaptor.val(), const0, magicConstant, hashOp.val().getType(), combinationRequired));
       return success();
    }
 };

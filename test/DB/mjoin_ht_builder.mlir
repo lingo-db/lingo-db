@@ -48,7 +48,7 @@
 //CHECK: int(3)
 //CHECK: int(0)
 //CHECK: string("---------------")
-//CHECK: string("strj")
+//CHECK: string("strd")
 //CHECK: int(1)
 //CHECK: int(1)
 //CHECK: int(1)
@@ -62,7 +62,7 @@
          %str1=db.constant ( "stra" ) :!db.string
          %str2=db.constant ( "strb" ) :!db.string
          %str3=db.constant ( "strc" ) :!db.string
-         %str4=db.constant ( "strj" ) :!db.string
+         %str4=db.constant ( "strd" ) :!db.string
          %int1=db.constant ( 4 ) : !db.int<32>
          %int2=db.constant ( 2 ) : !db.int<32>
          %int3=db.constant ( 3 ) : !db.int<32>
