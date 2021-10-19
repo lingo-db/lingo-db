@@ -10,7 +10,7 @@
 #include <llvm/Transforms/Scalar/GVN.h>
 
 namespace {
-using JIT=runner::JIT;
+using JIT = runner::JIT;
 
 static void optimizeModule(llvm::Module& module) {
    llvm::legacy::PassManager modulePMInline;
@@ -36,29 +36,43 @@ static void optimizeModule(llvm::Module& module) {
    modulePM.run(module);
 }
 
-}  // namespace
-static llvm::orc::JITDylib& checkAndGet(llvm::Expected<llvm::orc::JITDylib&> lib){
+} // namespace
+static llvm::orc::JITDylib& checkAndGet(llvm::Expected<llvm::orc::JITDylib&> lib) {
    lib.operator bool();
    return lib.get();
 }
-static std::unique_ptr<llvm::orc::SelfExecutorProcessControl> createEPC(){
-   auto epc=llvm::orc::SelfExecutorProcessControl::Create();
-   if(!epc){
+static std::unique_ptr<llvm::orc::SelfExecutorProcessControl> createEPC() {
+   auto epc = llvm::orc::SelfExecutorProcessControl::Create();
+   if (!epc) {
       return nullptr;
    }
    return std::move(epc.get());
 }
+static std::unique_ptr<llvm::TargetMachine> createTargetMachine() {
+   auto tmBuilderOrError = llvm::orc::JITTargetMachineBuilder::detectHost();
+   if (!tmBuilderOrError) {
+      llvm::errs() << "Failed to create a JITTargetMachineBuilder for the host\n";
+      return nullptr;
+   }
+   auto tmOrError = tmBuilderOrError->createTargetMachine();
+   if (!tmOrError) {
+      llvm::errs() << "Failed to create a TargetMachine for the host\n";
+      return nullptr;
+   }
+   return std::move(tmOrError.get());
+}
 JIT::JIT(llvm::orc::ThreadSafeContext& ctx)
-   : targetMachine(llvm::EngineBuilder().selectTarget()),
+   : targetMachine(createTargetMachine()),
      dataLayout(targetMachine->createDataLayout()),
      executionSession(std::move(createEPC())),
      context(ctx),
      objectLinkingLayer(executionSession, []() { return std::make_unique<llvm::SectionMemoryManager>(); }),
      compileLayer(executionSession, objectLinkingLayer, std::make_unique<llvm::orc::SimpleCompiler>(*targetMachine)),
-     optimizeLayer(executionSession, compileLayer, [] (llvm::orc::ThreadSafeModule m, const llvm::orc::MaterializationResponsibility&) { optimizeModule(*m.getModuleUnlocked()); return m; }),
+     optimizeLayer(executionSession, compileLayer, [](llvm::orc::ThreadSafeModule m, const llvm::orc::MaterializationResponsibility&) { optimizeModule(*m.getModuleUnlocked()); return m; }),
      mainDylib(checkAndGet(executionSession.createJITDylib("<main>"))) {
-
+   objectLinkingLayer.registerJITEventListener(*llvm::JITEventListener::createPerfJITEventListener());
    // Lookup symbols in host process
+
    auto generator = llvm::cantFail(llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(
       dataLayout.getGlobalPrefix(),
       [](auto&) { return true; }));
@@ -67,7 +81,7 @@ JIT::JIT(llvm::orc::ThreadSafeContext& ctx)
 
 llvm::Error JIT::addModule(std::unique_ptr<llvm::Module> module) {
    llvm::legacy::PassManager modulePM;
-   modulePM.add(llvm::createInternalizePass([&](const llvm::GlobalValue& gv){return gv.getName()=="main"||gv.getName()=="_mlir_ciface_set_execution_context"||gv.isDeclaration();}));
+   modulePM.add(llvm::createInternalizePass([&](const llvm::GlobalValue& gv) { return gv.getName() == "main" || gv.getName() == "_mlir_ciface_set_execution_context" || gv.isDeclaration(); }));
    modulePM.run(*module);
    return optimizeLayer.add(mainDylib, llvm::orc::ThreadSafeModule{move(module), context});
 }
