@@ -70,7 +70,7 @@ JIT::JIT(llvm::orc::ThreadSafeContext& ctx)
      compileLayer(executionSession, objectLinkingLayer, std::make_unique<llvm::orc::SimpleCompiler>(*targetMachine)),
      optimizeLayer(executionSession, compileLayer, [](llvm::orc::ThreadSafeModule m, const llvm::orc::MaterializationResponsibility&) { optimizeModule(*m.getModuleUnlocked()); return m; }),
      mainDylib(checkAndGet(executionSession.createJITDylib("<main>"))) {
-   objectLinkingLayer.registerJITEventListener(*llvm::JITEventListener::createPerfJITEventListener());
+   //objectLinkingLayer.registerJITEventListener(*llvm::JITEventListener::createPerfJITEventListener());
    // Lookup symbols in host process
 
    auto generator = llvm::cantFail(llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(
