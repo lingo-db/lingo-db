@@ -123,18 +123,6 @@ class LookupOpLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto loc = rewriter.getUnknownLoc();
-      mlir::db::Lookup lookup = mlir::cast<mlir::db::Lookup>(op);
-      if (!lookup.collection().getType().isa<mlir::db::JoinHashtableType>()) {
-         mlir::db::LookupAdaptor lookupAdaptor(operands);
-
-         Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.getIndexType(), lookupAdaptor.key());
-         Value combined = rewriter.create<mlir::util::PackOp>(loc, TypeRange(TupleType::get(getContext(), {rewriter.getIndexType(), lookupAdaptor.collection().getType()})), ValueRange({hashed, lookupAdaptor.collection()}));
-
-         rewriter.replaceOp(op, combined);
-
-         return success();
-      } else {
-         auto loc = rewriter.getUnknownLoc();
          mlir::db::LookupAdaptor lookupAdaptor(operands);
          auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, lookupAdaptor.collection().getType().cast<TupleType>().getTypes(), lookupAdaptor.collection());
          Value vec = unpacked.getResult(0);
@@ -149,7 +137,7 @@ class LookupOpLowering : public ConversionPattern {
          rewriter.replaceOp(op, combined);
 
          return success();
-      }
+
    }
 };
 } // namespace
@@ -201,12 +189,26 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       }
    });
    typeConverter.addConversion([&](mlir::db::JoinHashtableType aggregationHashtableType) {
-      auto ptrType = mlir::util::GenericMemrefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
-      return ptrType;
+      Type kvType=TupleType::get(patterns.getContext(), {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()});
+      auto indexType = IndexType::get(patterns.getContext());
+      auto *context=patterns.getContext();
+
+      Type entryType=TupleType::get(patterns.getContext(),{indexType, kvType});
+
+      auto vecType = mlir::util::GenericMemrefType::get(context, entryType, -1);
+      auto htType=util::GenericMemrefType::get(patterns.getContext(), indexType, -1);
+      return (Type) TupleType::get(patterns.getContext(), {vecType,indexType,htType, indexType});
    });
    typeConverter.addConversion([&](mlir::db::MarkableJoinHashtableType aggregationHashtableType) {
-      auto ptrType = mlir::util::GenericMemrefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
-      return ptrType;
+      Type kvType=TupleType::get(patterns.getContext(), {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()});
+      auto indexType = IndexType::get(patterns.getContext());
+      auto *context=patterns.getContext();
+
+      Type entryType=TupleType::get(patterns.getContext(),{indexType,indexType, kvType});
+
+      auto vecType = mlir::util::GenericMemrefType::get(context, entryType, -1);
+      auto htType=util::GenericMemrefType::get(patterns.getContext(), indexType, -1);
+      return (Type) TupleType::get(patterns.getContext(), {vecType,indexType,htType, indexType});
    });
    typeConverter.addConversion([&](mlir::db::VectorType vectorType) {
       auto ptrType = mlir::util::GenericMemrefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
@@ -251,7 +253,8 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
          return (Type) TupleType::get(patterns.getContext(), {indexType, ptrType});
       } else if (genericIterableType.getIteratorName() == "mjoin_ht_iterator") {
          auto indexType = IndexType::get(patterns.getContext());
-         auto ptrType = mlir::util::GenericMemrefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
+         auto types= genericIterableType.getElementType().cast<mlir::TupleType>().getTypes();
+         auto ptrType = mlir::util::GenericMemrefType::get(patterns.getContext(), typeConverter.convertType(TupleType::get(patterns.getContext(), {indexType,indexType,types[0]})), -1);
 
          return (Type) TupleType::get(patterns.getContext(), {indexType, ptrType});
       }

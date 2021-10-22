@@ -404,7 +404,8 @@ class FreeOpLowering : public ConversionPattern {
                              return true;
                           })
                           .Case<::mlir::db::MarkableJoinHashtableType>([&](::mlir::db::MarkableJoinHashtableType) {
-                             functionRegistry.call(rewriter, FunctionId::MJoinHtFree, val);
+                             //todo: free join hashtable
+                             //functionRegistry.call(rewriter, FunctionId::MJoinHtFree, val);
                              return true;
                           })
                           .Default([&](::mlir::Type) { return false; });

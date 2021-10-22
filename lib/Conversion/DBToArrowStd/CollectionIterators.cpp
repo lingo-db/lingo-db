@@ -126,107 +126,115 @@ class JoinHtIterator : public WhileIterator {
    virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
    }
 };
-class MarkableJoinHtIterator : public WhileIterator {
-   Value iteratorInfo;
-   Type tupleType;
-   Type markerType;
-   db::codegen::FunctionRegistry& functionRegistry;
-   util::GenericMemrefType ptrType;
 
+
+class MarkableJoinHtIterator : public ForIterator {
+   Value hashTable;
+   Type elementType;
+   Value values;
+   Value len;
+   Value trueMemref;
+   Type memrefType;
+   Value typeSize;
+   using FunctionId = mlir::db::codegen::FunctionRegistry::FunctionId;
 
    public:
-   MarkableJoinHtIterator(Value tableInfo, Type elementType, db::codegen::FunctionRegistry& functionRegistry) : iteratorInfo(tableInfo), functionRegistry(functionRegistry) {
-      tupleType=elementType.cast<mlir::TupleType>().getType(0);
-      markerType=elementType.cast<mlir::TupleType>().getType(0);
-
+   MarkableJoinHtIterator(Value hashTable, Type elementType) : hashTable(hashTable), elementType(elementType) {
    }
-   virtual void init(OpBuilder& builder) override {
-   }
-   virtual Type iteratorType(OpBuilder& builder) override {
-      ptrType = mlir::util::GenericMemrefType::get(builder.getContext(),IntegerType::get(builder.getContext(), 8),llvm::Optional<int64_t>());
-
-      return ptrType;
-   }
-
-   virtual Value iterator(OpBuilder& builder) override {
-      return functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::MJoinHtIteratorInit, mlir::ValueRange({iteratorInfo}))[0];
-   }
-   virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
-      return functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::MJoinHtIteratorNext, iterator)[0];
-   }
-   virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
+   virtual void init(OpBuilder& builder) {
       auto i8Type = IntegerType::get(builder.getContext(), 8);
-
-      Type typedPtrType = util::GenericMemrefType::get(builder.getContext(), tupleType, llvm::Optional<int64_t>());
-      Value pair = functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::MJoinHtIteratorCurr, iterator)[0];
-      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({ptrType, ptrType}), pair);
-      mlir::Value data = builder.create<util::GenericMemrefCastOp>(builder.getUnknownLoc(), typedPtrType, unpacked.getResult(0));
-      auto memrefType = MemRefType::get({}, i8Type);
-
-      mlir::Value trueMemref=builder.create<util::ToMemrefOp>(builder.getUnknownLoc(), memrefType, unpacked.getResult(1));
-
-      Value loaded = builder.create<util::LoadOp>(builder.getUnknownLoc(), tupleType, data, Value());
-      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), {tupleType,memrefType}), mlir::ValueRange{loaded,trueMemref});
+      typeConverter->convertType(hashTable.getType()).dump();
+      auto unpacked = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), typeConverter->convertType(hashTable.getType()).cast<TupleType>().getTypes(), hashTable);
+      values = unpacked.getResult(0);
+      len = unpacked.getResult(1);
+      memrefType = MemRefType::get({-1}, i8Type);
+      trueMemref=builder.create<util::ToMemrefOp>(builder.getUnknownLoc(), memrefType, values);
+      typeSize = builder.create<util::SizeOfOp>(builder.getUnknownLoc(), builder.getIndexType(), mlir::TypeAttr::get(values.getType().cast<mlir::util::GenericMemrefType>().getElementType()));
    }
-   virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
-      Value rawValue = functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::MJoinHtIteratorValid, iterator)[0];
-      Value dbValue = builder.create<mlir::db::TypeCastOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), rawValue);
-      return dbValue;
+   virtual Value upper(OpBuilder& builder) {
+      return len;
    }
-   virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
-      functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::MJoinHtIteratorFree, iterator);
+   virtual Value getElement(OpBuilder& builder, Value index) {
+      auto i8Type = IntegerType::get(builder.getContext(), 8);
+      Value loaded = builder.create<util::LoadOp>(builder.getUnknownLoc(), values.getType().cast<mlir::util::GenericMemrefType>().getElementType(), values, index);
+      auto unpacked = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), loaded.getType().cast<TupleType>().getTypes(), loaded);
+
+      Value loadedValue=unpacked.getResult(2);
+      Value offset=builder.create<arith::MulIOp>(builder.getUnknownLoc(),typeSize,index);
+      Value ref=builder.create<memref::ViewOp>(builder.getUnknownLoc(), MemRefType::get(   {},i8Type  ), trueMemref,offset,ValueRange{});
+
+      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), {loadedValue.getType(),MemRefType::get({}, i8Type)}), mlir::ValueRange{loadedValue,ref});
+      return loaded;
+   }
+   virtual Value lower(OpBuilder& builder) {
+      return builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0));
+   }
+   virtual Value step(OpBuilder& builder) {
+      return builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(1));
+   }
+   virtual void destroyElement(OpBuilder& builder, Value elem) {
+   }
+   virtual void down(OpBuilder& builder) {
    }
 };
 class MarkableJoinHtLookupIterator : public WhileIterator {
    Value iteratorInfo;
+   Value initialPos;
+   Value vec;
    Type tupleType;
-   Type markerType;
-   db::codegen::FunctionRegistry& functionRegistry;
-   util::GenericMemrefType ptrType;
+   Value trueMemref;
+   Value typeSize;
+   Type memrefType;
 
    public:
-   MarkableJoinHtLookupIterator(Value tableInfo, Type elementType, db::codegen::FunctionRegistry& functionRegistry) : iteratorInfo(tableInfo), functionRegistry(functionRegistry) {
+   MarkableJoinHtLookupIterator(Value tableInfo, Type elementType) : iteratorInfo(tableInfo){
       tupleType=elementType.cast<mlir::TupleType>().getType(0);
-      markerType=elementType.cast<mlir::TupleType>().getType(0);
 
    }
    virtual void init(OpBuilder& builder) override {
+      auto i8Type = IntegerType::get(builder.getContext(), 8);
+      auto unpacked = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), typeConverter->convertType(iteratorInfo.getType()).cast<TupleType>().getTypes(), iteratorInfo);
+      typeConverter->convertType(iteratorInfo.getType()).dump();
+      initialPos=unpacked.getResult(0);
+      vec=unpacked.getResult(1);
+      memrefType = MemRefType::get({-1}, i8Type);
+      trueMemref=builder.create<util::ToMemrefOp>(builder.getUnknownLoc(), memrefType, unpacked.getResult(1));
+      typeSize = builder.create<util::SizeOfOp>(builder.getUnknownLoc(), builder.getIndexType(), mlir::TypeAttr::get(vec.getType().cast<mlir::util::GenericMemrefType>().getElementType()));
+
    }
    virtual Type iteratorType(OpBuilder& builder) override {
-      ptrType = mlir::util::GenericMemrefType::get(builder.getContext(),IntegerType::get(builder.getContext(), 8),llvm::Optional<int64_t>());
-
-      return ptrType;
+      return builder.getIndexType();
    }
 
    virtual Value iterator(OpBuilder& builder) override {
-
-
-      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({builder.getIndexType(), ptrType}), iteratorInfo);
-      return functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::MJoinHtLookupIteratorInit, mlir::ValueRange({unpacked.getResult(1), unpacked.getResult(0)}))[0];
+      return initialPos;
    }
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
-      return functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::MJoinHtLookupIteratorNext, iterator)[0];
+      Value loaded = builder.create<util::LoadOp>(builder.getUnknownLoc(), vec.getType().cast<mlir::util::GenericMemrefType>().getElementType(), vec, iterator);
+      auto unpacked = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), loaded.getType().cast<TupleType>().getTypes(), loaded);
+
+      return unpacked.getResult(1);
    }
    virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
       auto i8Type = IntegerType::get(builder.getContext(), 8);
+      Value loaded = builder.create<util::LoadOp>(builder.getUnknownLoc(), vec.getType().cast<mlir::util::GenericMemrefType>().getElementType(), vec, iterator);
+      auto unpacked = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), loaded.getType().cast<TupleType>().getTypes(), loaded);
 
-      Type typedPtrType = util::GenericMemrefType::get(builder.getContext(), tupleType, llvm::Optional<int64_t>());
-      Value pair = functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::MJoinHtLookupIteratorCurr, iterator)[0];
-      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({ptrType, ptrType}), pair);
-      mlir::Value data = builder.create<util::GenericMemrefCastOp>(builder.getUnknownLoc(), typedPtrType, unpacked.getResult(0));
-      auto memrefType = MemRefType::get({}, i8Type);
+      Value loadedValue=unpacked.getResult(2);
+      //  static void build(::mlir::OpBuilder &odsBuilder, ::mlir::OperationState &odsState, MemRefType resultType, Value source, ValueRange offsets, ValueRange sizes, ValueRange strides, ArrayRef<NamedAttribute> attrs = {});
+      Value offset=builder.create<arith::MulIOp>(builder.getUnknownLoc(),typeSize,iterator);
+      //::mlir::ArrayAttr static_offsets, ::mlir::ArrayAttr static_sizes, ::mlir::ArrayAttr static_strides
+      Value ref=builder.create<memref::ViewOp>(builder.getUnknownLoc(), MemRefType::get(   {},i8Type  ), trueMemref,offset,ValueRange{});
 
-      mlir::Value trueMemref=builder.create<util::ToMemrefOp>(builder.getUnknownLoc(), memrefType, unpacked.getResult(1));
-      Value loaded = builder.create<util::LoadOp>(builder.getUnknownLoc(), tupleType, data, Value());
-      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), {tupleType,memrefType}), mlir::ValueRange{loaded,trueMemref});
+      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), TupleType::get(builder.getContext(), {tupleType,MemRefType::get({}, i8Type)}), mlir::ValueRange{loadedValue,ref});
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
-      Value rawValue = functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::MJoinHtLookupIteratorValid, iterator)[0];
+      Value maxValue = builder.create<arith::ConstantIndexOp>(builder.getUnknownLoc(), 0xFFFFFFFFFFFFFFFF);
+      Value rawValue = builder.create<arith::CmpIOp>(builder.getUnknownLoc(),arith::CmpIPredicate::ne,iterator,maxValue);
       Value dbValue = builder.create<mlir::db::TypeCastOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), rawValue);
       return dbValue;
    }
    virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
-      functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::MJoinHtLookupIteratorFree, iterator);
    }
 };
 
@@ -663,7 +671,7 @@ std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIteration
       } else if (generic.getIteratorName() == "join_ht_iterator") {
          return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtIterator>(collection, generic.getElementType(), functionRegistry));
       } else if (generic.getIteratorName() == "mjoin_ht_iterator") {
-         return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<MarkableJoinHtLookupIterator>(collection, generic.getElementType(), functionRegistry));
+         return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<MarkableJoinHtLookupIterator>(collection, generic.getElementType()));
       }
    } else if (auto range = collectionType.dyn_cast_or_null<mlir::db::RangeType>()) {
       return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<RangeIterator>(range.getElementType().cast<DBType>(), collection));
@@ -676,7 +684,7 @@ std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIteration
          return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<AggrHtIterator>(collection, aggrHt.getKeyType(), aggrHt.getValType(), functionRegistry));
       }
    } else if (auto joinHt = collectionType.dyn_cast_or_null<mlir::db::MarkableJoinHashtableType>()) {
-      return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<MarkableJoinHtIterator>(collection, joinHt.getElementType(), functionRegistry));
+      return std::make_unique<ForIteratorIterationImpl>(std::make_unique<MarkableJoinHtIterator>(collection, joinHt.getElementType()));
    }
    return std::unique_ptr<mlir::db::CollectionIterationImpl>();
 }
