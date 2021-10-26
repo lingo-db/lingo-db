@@ -225,6 +225,22 @@ class CastOpLowering : public ConversionPattern {
       return success();
    }
 };
+class ElementPtrOpLowering : public ConversionPattern {
+   public:
+   explicit ElementPtrOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+   : ConversionPattern(typeConverter, mlir::util::ElementPtrOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+
+      mlir::util::ElementPtrOpAdaptor adaptor(operands);
+      auto castedOp = mlir::dyn_cast_or_null<mlir::util::ElementPtrOp>(op);
+      rewriter.replaceOpWithNewOp<mlir::util::ElementPtrOp>(op, typeConverter->convertType(castedOp.res().getType()), adaptor.generic_memref(), adaptor.idx());
+
+      return success();
+   }
+};
 //===----------------------------------------------------------------------===//
 // ToyToLLVMLoweringPass
 //===----------------------------------------------------------------------===//
@@ -255,6 +271,7 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
 
    patterns.add<SizeOfLowering>(typeConverter, patterns.getContext());
    patterns.add<LoadOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<ElementPtrOpLowering>(typeConverter, patterns.getContext());
 
    typeConverter.addConversion([&](mlir::util::GenericMemrefType genericMemrefType) {
       return mlir::util::GenericMemrefType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());

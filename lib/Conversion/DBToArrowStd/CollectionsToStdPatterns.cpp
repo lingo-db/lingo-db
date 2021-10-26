@@ -4,6 +4,7 @@
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include <llvm/Support/Debug.h>
 
 using namespace mlir;
 namespace {
@@ -184,12 +185,21 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       if (aggregationHashtableType.getKeyType().getTypes().empty()) {
          return (Type) typeConverter.convertType(aggregationHashtableType.getValType());
       } else {
-         auto ptrType = mlir::util::GenericMemrefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
-         return (Type) ptrType;
+         Type kvType=typeConverter.convertType(TupleType::get(patterns.getContext(), {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()}));
+         auto indexType = IndexType::get(patterns.getContext());
+         auto *context=patterns.getContext();
+
+         Type entryType=TupleType::get(patterns.getContext(),{indexType,indexType, kvType});
+
+         auto vecType = mlir::util::GenericMemrefType::get(context, entryType, -1);
+         auto t= (Type) TupleType::get(patterns.getContext(), {indexType,vecType});
+         llvm::dbgs()<<"converted:\n";
+         t.dump();
+         return t;
       }
    });
    typeConverter.addConversion([&](mlir::db::JoinHashtableType aggregationHashtableType) {
-      Type kvType=TupleType::get(patterns.getContext(), {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()});
+      Type kvType=typeConverter.convertType(TupleType::get(patterns.getContext(), {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()}));
       auto indexType = IndexType::get(patterns.getContext());
       auto *context=patterns.getContext();
 
@@ -200,7 +210,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       return (Type) TupleType::get(patterns.getContext(), {vecType,indexType,htType, indexType});
    });
    typeConverter.addConversion([&](mlir::db::MarkableJoinHashtableType aggregationHashtableType) {
-      Type kvType=TupleType::get(patterns.getContext(), {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()});
+      Type kvType=typeConverter.convertType(TupleType::get(patterns.getContext(), {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()}));
       auto indexType = IndexType::get(patterns.getContext());
       auto *context=patterns.getContext();
 

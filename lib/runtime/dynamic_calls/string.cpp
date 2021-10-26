@@ -165,3 +165,11 @@ extern "C" runtime::Str _mlir_ciface_cast_decimal_string(bool null, uint64_t low
 
    return runtime::Str(data, len);
 }
+/*extern "C" bool _mlir_ciface_cmp_string_eq(bool null, runtime::Str str1, runtime::Str str2) {
+if (null) {
+return false;
+} else {
+return str1.str()==str2.str();
+}
+}*/
+

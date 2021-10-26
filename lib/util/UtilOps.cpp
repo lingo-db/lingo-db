@@ -11,11 +11,13 @@ using namespace mlir;
    if (auto tupleType = unPackOp.tuple().getType().dyn_cast_or_null<mlir::TupleType>()) {
       if(tupleType.getTypes().size()!=unPackOp.vals().size()){
          unPackOp.emitOpError("must unpack exactly as much as entries in tuple");
+         unPackOp.dump();
          return failure();
       }
       for(size_t i=0;i<tupleType.getTypes().size();i++){
          if(tupleType.getTypes()[i]!=unPackOp.vals()[i].getType()){
             unPackOp.emitOpError("types must match during unpacking");
+            unPackOp.dump();
             return failure();
          }
       }
@@ -29,11 +31,13 @@ using namespace mlir;
    if (auto tupleType = packOp.tuple().getType().dyn_cast_or_null<mlir::TupleType>()) {
       if(tupleType.getTypes().size()!=packOp.vals().size()){
          packOp.emitOpError("must unpack exactly as much as entries in tuple");
+         packOp.dump();
          return failure();
       }
       for(size_t i=0;i<tupleType.getTypes().size();i++){
          if(tupleType.getTypes()[i]!=packOp.vals()[i].getType()){
             packOp.emitOpError("types must match during unpacking");
+            packOp.dump();
             return failure();
          }
       }

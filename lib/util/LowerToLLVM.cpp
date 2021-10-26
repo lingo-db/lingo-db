@@ -441,6 +441,24 @@ class CastOpLowering : public ConversionPattern {
       return success();
    }
 };
+class ElementPtrOpLowering : public ConversionPattern {
+   public:
+   explicit ElementPtrOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+   : ConversionPattern(typeConverter, mlir::util::ElementPtrOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      mlir::util::ElementPtrOpAdaptor elementPtrOpAdaptor(operands);
+      auto elementPtrOp = cast<mlir::util::ElementPtrOp>(op);
+      auto genericMemrefType = elementPtrOp.generic_memref().getType().cast<mlir::util::GenericMemrefType>();
+      auto elemPtrType = mlir::LLVM::LLVMPointerType::get(typeConverter->convertType(genericMemrefType.getElementType()));
+      Value elementPtr1 = getPtrFromGenericMemref(genericMemrefType, elementPtrOpAdaptor.generic_memref(), rewriter, typeConverter);
+      Value elementPtr = rewriter.create<LLVM::GEPOp>(rewriter.getUnknownLoc(), elemPtrType, elementPtr1, elementPtrOp.idx());
+      rewriter.replaceOp(op, elementPtr);
+      return success();
+   }
+};
 
 } // end anonymous namespace
 
@@ -505,6 +523,7 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<AllocOpLowering>(typeConverter, patterns.getContext());
    patterns.add<AllocaOpLowering>(typeConverter, patterns.getContext());
    patterns.add<DeAllocOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<ElementPtrOpLowering>(typeConverter, patterns.getContext());
 
    patterns.add<ToGenericMemrefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<ToMemrefOpLowering>(typeConverter, patterns.getContext());

@@ -88,6 +88,11 @@ let arguments = (ins GenericMemrefType:$generic_memref,Optional<Index>:$idx);
 let results=(outs AnyType:$val);
 let assemblyFormat = "$generic_memref `[` $idx `]` `:`type($generic_memref) `->` type($val) attr-dict";
 }
+def ElementPtrOp  : Util_Op<"elementptr",[NoSideEffect]> {
+    let arguments = (ins GenericMemrefType:$generic_memref,Index:$idx);
+    let results=(outs GenericMemrefType:$res);
+    let assemblyFormat = "$generic_memref `[` $idx `]` `:`type($generic_memref) `->` type($res) attr-dict";
+}
 def SizeOfOp  : Util_Op<"sizeof",[NoSideEffect]> {
 let arguments = (ins TypeAttr:$type);
 let results=(outs Index:$res);

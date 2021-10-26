@@ -143,7 +143,6 @@ class MarkableJoinHtIterator : public ForIterator {
    }
    virtual void init(OpBuilder& builder) {
       auto i8Type = IntegerType::get(builder.getContext(), 8);
-      typeConverter->convertType(hashTable.getType()).dump();
       auto unpacked = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), typeConverter->convertType(hashTable.getType()).cast<TupleType>().getTypes(), hashTable);
       values = unpacked.getResult(0);
       len = unpacked.getResult(1);
@@ -177,6 +176,41 @@ class MarkableJoinHtIterator : public ForIterator {
    virtual void down(OpBuilder& builder) {
    }
 };
+class AggrHtIterator : public ForIterator {
+   Value hashTable;
+   Type keyType;
+   Type aggrType;
+   Value values;
+   Value len;
+
+   public:
+   AggrHtIterator(Value hashTable, Type keyType,Type aggrType) : hashTable(hashTable), keyType(keyType),aggrType(aggrType) {
+   }
+   virtual void init(OpBuilder& builder) {
+      auto unpacked = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), typeConverter->convertType(hashTable.getType()).cast<TupleType>().getTypes(), hashTable);
+      values = unpacked.getResult(1);
+      len = unpacked.getResult(0);
+   }
+   virtual Value upper(OpBuilder& builder) {
+      return len;
+   }
+   virtual Value getElement(OpBuilder& builder, Value index) {
+      Value loaded = builder.create<util::LoadOp>(builder.getUnknownLoc(), values.getType().cast<mlir::util::GenericMemrefType>().getElementType(), values, index);
+      auto unpacked = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), loaded.getType().cast<TupleType>().getTypes(), loaded);
+      return unpacked.getResult(2);
+
+   }
+   virtual Value lower(OpBuilder& builder) {
+      return builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0));
+   }
+   virtual Value step(OpBuilder& builder) {
+      return builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(1));
+   }
+   virtual void destroyElement(OpBuilder& builder, Value elem) {
+   }
+   virtual void down(OpBuilder& builder) {
+   }
+};
 class MarkableJoinHtLookupIterator : public WhileIterator {
    Value iteratorInfo;
    Value initialPos;
@@ -194,7 +228,6 @@ class MarkableJoinHtLookupIterator : public WhileIterator {
    virtual void init(OpBuilder& builder) override {
       auto i8Type = IntegerType::get(builder.getContext(), 8);
       auto unpacked = builder.create<mlir::util::UnPackOp>(builder.getUnknownLoc(), typeConverter->convertType(iteratorInfo.getType()).cast<TupleType>().getTypes(), iteratorInfo);
-      typeConverter->convertType(iteratorInfo.getType()).dump();
       initialPos=unpacked.getResult(0);
       vec=unpacked.getResult(1);
       memrefType = MemRefType::get({-1}, i8Type);
@@ -437,7 +470,7 @@ class VectorIterator : public ForIterator {
    virtual void down(OpBuilder& builder) {
    }
 };
-class AggrHtIterator : public WhileIterator {
+/*class AggrHtIterator : public WhileIterator {
    Value iteratorInfo;
    Type keyType;
    Type valType;
@@ -479,7 +512,7 @@ class AggrHtIterator : public WhileIterator {
    virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
       functionRegistry.call(builder, mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtIteratorFree, iterator);
    }
-};
+};*/
 
 class ValueOnlyAggrHTIterator : public ForIterator {
    Value ht;
@@ -681,7 +714,7 @@ std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIteration
       if (aggrHt.getKeyType().getTypes().empty()) {
          return std::make_unique<ForIteratorIterationImpl>(std::make_unique<ValueOnlyAggrHTIterator>(functionRegistry, collection, aggrHt.getValType()));
       } else {
-         return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<AggrHtIterator>(collection, aggrHt.getKeyType(), aggrHt.getValType(), functionRegistry));
+         return std::make_unique<ForIteratorIterationImpl>(std::make_unique<AggrHtIterator>(collection, aggrHt.getKeyType(), aggrHt.getValType()));
       }
    } else if (auto joinHt = collectionType.dyn_cast_or_null<mlir::db::MarkableJoinHashtableType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<MarkableJoinHtIterator>(collection, joinHt.getElementType()));

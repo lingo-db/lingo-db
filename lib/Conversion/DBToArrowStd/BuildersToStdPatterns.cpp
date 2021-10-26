@@ -14,7 +14,7 @@ class VectorHelper {
 
    public:
    static Type createType(MLIRContext* context, Type elementType) {
-      return mlir::TupleType::get(context, {IndexType::get(context),IndexType::get(context), mlir::util::GenericMemrefType::get(context, elementType, -1)});
+      return mlir::TupleType::get(context, {IndexType::get(context), IndexType::get(context), mlir::util::GenericMemrefType::get(context, elementType, -1)});
    }
    VectorHelper(Type elementType, Location loc) : elementType(elementType), loc(loc) {
    }
@@ -22,12 +22,12 @@ class VectorHelper {
       Value initialSize = builder.create<arith::ConstantIndexOp>(loc, 0);
       auto type = mlir::util::GenericMemrefType::get(builder.getContext(), elementType, -1);
       Value memref = builder.create<mlir::util::AllocOp>(loc, type, initialCapacity);
-      Value vec = builder.create<mlir::util::PackOp>(loc, createType(builder.getContext(), elementType), ValueRange{initialSize,initialCapacity, memref});
+      Value vec = builder.create<mlir::util::PackOp>(loc, createType(builder.getContext(), elementType), ValueRange{initialSize, initialCapacity, memref});
       return vec;
    }
    Value insert(mlir::OpBuilder& builder, Value vec, Value newVal) {
       Type typedPtrType = util::GenericMemrefType::get(builder.getContext(), elementType, -1);
-      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({builder.getIndexType(),builder.getIndexType(), typedPtrType}), vec);
+      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({builder.getIndexType(), builder.getIndexType(), typedPtrType}), vec);
 
       Value values = unpacked.getResult(2);
       Value capacity = unpacked.getResult(1);
@@ -35,7 +35,7 @@ class VectorHelper {
       Value len = unpacked.getResult(0);
       Value cmp = builder.create<arith::CmpIOp>(builder.getUnknownLoc(), arith::CmpIPredicate::ult, len, capacity);
       auto ifOp = builder.create<scf::IfOp>(
-         loc, TypeRange({builder.getIndexType(),values.getType()}), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc, ValueRange{capacity,values}); }, [&](OpBuilder& b, Location loc) {
+         loc, TypeRange({builder.getIndexType(), values.getType()}), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc, ValueRange{capacity, values}); }, [&](OpBuilder& b, Location loc) {
             Value zero = builder.create<arith::ConstantIndexOp>(loc, 0);
             Value one = builder.create<arith::ConstantIndexOp>(loc, 1);
             Value two = builder.create<arith::ConstantIndexOp>(loc, 2);
@@ -57,8 +57,225 @@ class VectorHelper {
 
       Value newLen = builder.create<arith::AddIOp>(loc, len, one);
 
-      Value updatedVector = builder.create<mlir::util::PackOp>(loc, TupleType::get(builder.getContext(), {builder.getIndexType(),builder.getIndexType(), typedPtrType}), ValueRange{newLen,capacity, values});
+      Value updatedVector = builder.create<mlir::util::PackOp>(loc, TupleType::get(builder.getContext(), {builder.getIndexType(), builder.getIndexType(), typedPtrType}), ValueRange{newLen, capacity, values});
       return updatedVector;
+   }
+};
+class AggrHtHelper {
+   Type keyType;
+   Type aggrType;
+   TupleType entryType;
+   Location loc;
+
+   public:
+
+   static Type kvType(MLIRContext* context, Type keyType,Type aggrType){
+      return mlir::TupleType::get(context, {keyType,aggrType});
+   }
+   static TupleType createEntryType(MLIRContext* context, Type keyType,Type aggrType){
+      return mlir::TupleType::get(context, {IndexType::get(context), IndexType::get(context), kvType(context,keyType,aggrType)});
+   }
+   static Type createType(MLIRContext* context,Type keyType, Type aggrType, Type valType,Type compareFn, Type updateFn){
+      auto idxType=IndexType::get(context);
+      auto valuesType = mlir::util::GenericMemrefType::get(context, createEntryType(context,keyType,aggrType), -1);
+      auto htType = mlir::util::GenericMemrefType::get(context, idxType, -1);
+      //{initialSize.getType(),initialCapacity.getType(),values.getType(),ht.getType(),compareFn.getType(),updateFn.getType(),initialValue.getType()}
+      return mlir::TupleType::get(context,{idxType,idxType,valuesType,htType,compareFn, updateFn,aggrType});
+   }
+   AggrHtHelper(MLIRContext* context,Type keyType,Type aggrType, Location loc) : keyType(keyType),aggrType(aggrType),entryType(createEntryType(context,keyType,aggrType)), loc(loc) {
+   }
+
+   Value create(mlir::OpBuilder& builder,Value compareFn, Value updateFn,Value initialValue) {
+      Value initialCapacity = builder.create<arith::ConstantIndexOp>(loc, 4);
+      Value initialHtSize = builder.create<arith::ConstantIndexOp>(loc, 8);
+
+      Value initialSize = builder.create<arith::ConstantIndexOp>(loc, 0);
+      auto valuesType = mlir::util::GenericMemrefType::get(builder.getContext(), entryType, -1);
+      auto htType = mlir::util::GenericMemrefType::get(builder.getContext(), builder.getIndexType(), -1);
+
+      Value values = builder.create<mlir::util::AllocOp>(loc, valuesType, initialCapacity);
+      Value ht = builder.create<mlir::util::AllocOp>(loc, htType, initialHtSize);
+      Value zero = builder.create<arith::ConstantIndexOp>(loc, 0);
+      Value one = builder.create<arith::ConstantIndexOp>(loc, 1);
+      Value maxValue = builder.create<arith::ConstantIndexOp>(loc, 0xFFFFFFFFFFFFFFFF);
+
+      builder.create<scf::ForOp>(
+         loc, zero, initialHtSize, one, ValueRange({}),
+         [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
+            b.create<util::StoreOp>(loc2, maxValue, ht, iv);
+            b.create<scf::YieldOp>(loc);
+         });
+      Value vec = builder.create<mlir::util::PackOp>(loc, TupleType::get(builder.getContext(),TypeRange({initialSize.getType(),initialCapacity.getType(),values.getType(),ht.getType(),compareFn.getType(),updateFn.getType(),initialValue.getType()})), ValueRange{initialSize, initialCapacity, values, ht,compareFn,updateFn,initialValue});
+      return vec;
+   }
+   Value insert(mlir::OpBuilder& builder, Value aggrHtBuilder, Value key, Value val, Value hash) {
+      auto *context=builder.getContext();
+      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), aggrHtBuilder.getType().cast<TupleType>().getTypes(), aggrHtBuilder);
+      Value len = unpacked.getResult(0);
+      Value ht = unpacked.getResult(3);
+      Value values = unpacked.getResult(2);
+      Value capacity = unpacked.getResult(1);
+      Value compareFn=unpacked.getResult(4);
+      Value updateFn=unpacked.getResult(5);
+      Value initialVal=unpacked.getResult(6);
+      Value zero = builder.create<arith::ConstantIndexOp>(loc, 0);
+      Value one = builder.create<arith::ConstantIndexOp>(loc, 1);
+      Value two = builder.create<arith::ConstantIndexOp>(loc, 2);
+      Value four = builder.create<arith::ConstantIndexOp>(loc, 4);
+
+      Value maxValue = builder.create<arith::ConstantIndexOp>(loc, 0xFFFFFFFFFFFFFFFF);
+
+      Value cmp = builder.create<arith::CmpIOp>(builder.getUnknownLoc(), arith::CmpIPredicate::ult, len, capacity);
+      auto ifOp = builder.create<scf::IfOp>(
+         loc, TypeRange({builder.getIndexType(), values.getType(), ht.getType()}), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc, ValueRange{capacity, values, ht}); }, [&](OpBuilder& b, Location loc) {
+            Value newCapacity = b.create<arith::MulIOp>(loc, len, two);
+            Value newHtSize = b.create<arith::MulIOp>(loc, len, four);
+            Value htMask = b.create<arith::SubIOp>(loc, newHtSize, one);
+
+            Value newValues = builder.create<mlir::util::AllocOp>(loc, values.getType(), newCapacity);
+            Value newHt = builder.create<mlir::util::AllocOp>(loc, ht.getType(), newHtSize);
+            builder.create<scf::ForOp>(
+               loc, zero, newHtSize, one, ValueRange({}),
+               [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
+                  b.create<util::StoreOp>(loc2, maxValue, newHt, iv);
+                  b.create<scf::YieldOp>(loc);
+               });
+            b.create<scf::ForOp>(
+               loc, zero, len, one, ValueRange({}),
+               [&](OpBuilder& b2, Location loc2, Value iv, ValueRange args) {
+                  Value currVal = b2.create<util::LoadOp>(loc, entryType, values, iv);
+
+                  auto unpacked2 = b2.create<util::UnPackOp>(loc, entryType.getTypes(), currVal);
+                  Value buckedPos = b2.create<arith::AndIOp>(loc,htMask,unpacked2.getResult(1));
+
+                  Value previousPtr = b2.create<util::LoadOp>(loc, builder.getIndexType(), newHt, buckedPos);
+                  b2.create<util::StoreOp>(loc2, iv, newHt, buckedPos);
+                  auto repacked= b2.create<util::PackOp>(loc,entryType,ValueRange{previousPtr,unpacked2.getResult(1),unpacked2.getResult(2)});
+                  b2.create<util::StoreOp>(loc2, repacked, newValues, iv);
+
+                  b2.create<scf::YieldOp>(loc);
+               });
+            b.create<mlir::util::DeAllocOp>(loc, values);
+            b.create<scf::YieldOp>(loc, ValueRange{newCapacity, newValues,newHt}); });
+      capacity = ifOp.getResult(0);
+      values = ifOp.getResult(1);
+      ht = ifOp.getResult(2);
+      Value trueValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 1));
+      Value falseValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 0));
+
+      Value htSize =  builder.create<arith::MulIOp>(loc, capacity, two);
+
+      Value htMask = builder.create<arith::SubIOp>(loc, htSize, one);
+
+      //position = hash & hashTableMask
+      Value position = builder.create<arith::AndIOp>(loc, htMask, hash);
+      //idx = hashtable[position]
+      Value idx = builder.create<util::LoadOp>(loc, builder.getIndexType(), ht, position);
+      // ptr = &hashtable[position]
+      Type idxType=builder.getIndexType();
+      Value ptr = builder.create<util::ElementPtrOp>(loc,util::GenericMemrefType::get(context,idxType,llvm::Optional<int64_t>()),ht,position);
+      Type ptrType=util::GenericMemrefType::get(context,idxType,llvm::Optional<int64_t>());
+      Type doneType=builder.getI1Type();
+
+      auto resultTypes=std::vector<Type>({idxType,idxType,ptrType});
+      auto whileOp = builder.create<scf::WhileOp>(loc, resultTypes, ValueRange({len,idx,ptr}));
+      Block* before = builder.createBlock(&whileOp.before(), {}, resultTypes);
+      Block* after = builder.createBlock(&whileOp.after(), {}, resultTypes);
+
+      // The conditional block of the while loop.
+      {
+         builder.setInsertionPointToStart(&whileOp.before().front());
+         Value len = before->getArgument(0);
+         Value idx = before->getArgument(1);
+         Value ptr = before->getArgument(2);
+
+         //    if (idx == 0xFFFFFFFFFFF){
+         Value cmp = builder.create<arith::CmpIOp>(builder.getUnknownLoc(), arith::CmpIPredicate::eq, idx, maxValue);
+         auto ifOp = builder.create<scf::IfOp>(
+            loc, TypeRange({idxType,doneType,idxType,ptrType}), cmp, [&](OpBuilder& b, Location loc) {
+               Value newAggr= b.create<mlir::CallIndirectOp>(loc, updateFn, ValueRange({initialVal, val})).results()[0];
+               Value newKVPair=b.create<util::PackOp>(loc,TupleType::get(context,TypeRange({key.getType(),newAggr.getType()})),ValueRange({key,newAggr}));
+               //       %newEntry = ...
+               Value newEntry=b.create<util::PackOp>(loc,TupleType::get(context,TypeRange({idxType,idxType, newKVPair.getType()})),ValueRange({maxValue,hash,newKVPair}));
+
+
+               //       append(vec,newEntry)
+               b.create<util::StoreOp>(builder.getUnknownLoc(), newEntry, values, len);
+
+               //       *ptr=len
+               b.create<util::StoreOp>(builder.getUnknownLoc(),len,ptr,Value());
+               Value newLen=b.create<arith::AddIOp>(loc,len,one);
+               //       yield 0,0,done=true
+               b.create<scf::YieldOp>(loc, ValueRange{newLen,falseValue, idx,ptr});
+
+            }, [&](OpBuilder& b, Location loc) {
+
+         //       entry=vec[idx]
+                  Value currEntry= b.create<util::LoadOp>(loc, entryType, values, idx);
+                  auto entryUnpacked=b.create<util::UnPackOp>(loc,currEntry.getType().cast<TupleType>().getTypes(),currEntry);
+                  Value kv=entryUnpacked.getResult(2);
+                  auto kvUnpacked=b.create<util::UnPackOp>(loc,kv.getType().cast<TupleType>().getTypes(),kv);
+
+                  Value entryKey=kvUnpacked.getResult(0);
+                  Value entryAggr=kvUnpacked.getResult(1);
+                  Value entryNext=entryUnpacked.getResult(0);
+                  Value entryHash=entryUnpacked.getResult(0);
+
+         //       if(compare(entry.key,key)){
+                  Value keyMatches = b.create<mlir::CallIndirectOp>(loc, compareFn, ValueRange({entryKey,key})).results()[0];
+                  auto ifOp2 = builder.create<scf::IfOp>(
+                     loc, TypeRange({idxType,doneType,idxType,ptrType}), keyMatches, [&](OpBuilder& b, Location loc) {
+                        //          entry.aggr = update(vec.aggr,val)
+                        Value newAggr= builder.create<mlir::CallIndirectOp>(loc, updateFn, ValueRange({entryAggr, val})).results()[0];
+                        Value newKVPair=b.create<util::PackOp>(loc,TupleType::get(context,TypeRange({entryKey.getType(),newAggr.getType()})),ValueRange({entryKey,newAggr}));
+                        Value newEntry=b.create<util::PackOp>(loc,TupleType::get(context,TypeRange({idxType,idxType, newKVPair.getType()})),ValueRange({entryNext,entryHash,newKVPair}));
+                        b.create<util::StoreOp>(builder.getUnknownLoc(), newEntry, values, idx);
+                        b.create<scf::YieldOp>(loc, ValueRange{len,falseValue, idx,ptr});
+                        }, [&](OpBuilder& b, Location loc) {
+
+                        //          ptr = &entry.next
+                        Value entryPtr=builder.create<util::ElementPtrOp>(loc,util::GenericMemrefType::get(context,entryType,llvm::Optional<int64_t>()),values,idx);
+
+                        ptr=builder.create<util::GenericMemrefCastOp>(loc, util::GenericMemrefType::get(context,idxType,llvm::Optional<int64_t>()),entryPtr);
+                        //          yield idx,ptr,done=false
+                        b.create<scf::YieldOp>(loc, ValueRange{len,trueValue, entryNext, ptr });});
+               b.create<scf::YieldOp>(loc, ifOp2.getResults()); });
+         Value newLen=ifOp.getResult(0);
+         Value done=ifOp.getResult(1);
+         idx =ifOp.getResult(2);
+         ptr = ifOp.getResult(3);
+         builder.create<scf::ConditionOp>(loc, done,
+                                          ValueRange({newLen,idx,ptr}));
+      }
+
+      // The body of the while loop: shift right until reaching a value of 0.
+      {
+         builder.setInsertionPointToStart(&whileOp.after().front());
+         builder.create<scf::YieldOp>(loc, after->getArguments());
+      }
+
+      builder.setInsertionPointAfter(whileOp);
+      // do{
+
+      // } while (!done)
+      //
+      Value newLen=whileOp.getResult(0);
+
+
+
+      Value updatedBuilder = builder.create<mlir::util::PackOp>(loc, aggrHtBuilder.getType(), ValueRange{newLen, capacity, values,ht,compareFn,updateFn,initialVal});
+      return updatedBuilder;
+   }
+   Value build(mlir::OpBuilder& builder, Value aggrHtBuilder){
+      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), aggrHtBuilder.getType().cast<TupleType>().getTypes(), aggrHtBuilder);
+      Value len = unpacked.getResult(0);
+      //Value ht = unpacked.getResult(3);
+      Value values = unpacked.getResult(2);
+      //Value capacity = unpacked.getResult(1);
+      //Value compareFn=unpacked.getResult(4);
+      //Value updateFn=unpacked.getResult(5);
+      //Value initialVal=unpacked.getResult(6);
+      return builder.create<util::PackOp>(builder.getUnknownLoc(),TupleType::get(builder.getContext(),TypeRange({len.getType(),values.getType()})),ValueRange({len,values}));
    }
 };
 class CreateVectorBuilderLowering : public ConversionPattern {
@@ -162,11 +379,6 @@ class BuilderMergeLowering : public ConversionPattern {
             mlir::Value builderPacked = rewriter.create<mlir::util::PackOp>(loc, mergeOpAdaptor.builder().getType(), ValueRange{newAggr, builderUnpacked[1]});
             rewriter.replaceOp(op, builderPacked);
          } else {
-            auto ptrType = mlir::util::GenericMemrefType::get(getContext(), IntegerType::get(getContext(), 8), llvm::Optional<int64_t>());
-            auto updateFnType = FunctionType::get(getContext(), {aggrHTBuilderType.getAggrType(), aggrHTBuilderType.getValType()}, {aggrHTBuilderType.getAggrType()});
-            auto compareFnType = FunctionType::get(getContext(), {aggrHTBuilderType.getKeyType(), aggrHTBuilderType.getKeyType()}, {mlir::db::BoolType::get(getContext())});
-            auto builderUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, TypeRange{ptrType, typeConverter->convertType(compareFnType), typeConverter->convertType(updateFnType)}, mergeOpAdaptor.builder())->getResults();
-            auto builderPtr = builderUnpacked[0];
 
             auto loweredTypes = mergeOpAdaptor.val().getType().cast<TupleType>().getTypes();
 
@@ -175,67 +387,11 @@ class BuilderMergeLowering : public ConversionPattern {
             Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.getIndexType(), higherType);
             Value currKey = unPacked[0];
             Value currVal = unPacked[1];
+            auto keyType=typeConverter->convertType(aggrHTBuilderType.getKeyType());
+            auto aggrType=typeConverter->convertType(aggrHTBuilderType.getAggrType());
 
-            Type keyMemrefType = util::GenericMemrefType::get(rewriter.getContext(), currKey.getType(), llvm::Optional<int64_t>());
-            Type valMemrefType = util::GenericMemrefType::get(rewriter.getContext(), currVal.getType(), llvm::Optional<int64_t>());
-            Value allocaKey, allocaVal;
-            {
-               OpBuilder::InsertionGuard insertionGuard(rewriter);
-               auto func = op->getParentOfType<mlir::FuncOp>();
-               rewriter.setInsertionPointToStart(&func.getBody().front());
-               allocaKey = rewriter.create<mlir::util::AllocaOp>(loc, keyMemrefType, Value());
-               allocaVal = rewriter.create<mlir::util::AllocaOp>(loc, valMemrefType, Value());
-            }
-
-            Value plainMemrefKey = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, ptrType, allocaKey);
-            Value plainMemrefVal = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, ptrType, allocaVal);
-            Value tuple = functionRegistry.call(rewriter, FunctionId::AggrHtBuilderFastLookup, ValueRange({builderPtr, hashed}))[0];
-            auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, TypeRange{rewriter.getI1Type(), ptrType}, tuple)->getResults();
-            auto newIfOp = rewriter.create<mlir::scf::IfOp>(loc, TypeRange(), unpacked[0], true);
-            {
-               OpBuilder::InsertionGuard insertionGuard(rewriter);
-               scf::IfOp::ensureTerminator(newIfOp.thenRegion(), rewriter, loc);
-               rewriter.setInsertionPointToStart(&newIfOp.thenRegion().front());
-               auto keyType = typeConverter->convertType(aggrHTBuilderType.getKeyType());
-               auto aggrType = typeConverter->convertType(aggrHTBuilderType.getAggrType());
-               auto tupleType = TupleType::get(getContext(), {keyType, aggrType});
-               Value genericMemref = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), tupleType, llvm::Optional<int64_t>()), unpacked[1]);
-               Value loaded = rewriter.create<util::LoadOp>(rewriter.getUnknownLoc(), tupleType, genericMemref, Value());
-               auto unpackedTuple = rewriter.create<mlir::util::UnPackOp>(loc, TypeRange{keyType, aggrType}, loaded)->getResults();
-               auto keyMatches = rewriter.create<mlir::CallIndirectOp>(loc, builderUnpacked[1], ValueRange({unpackedTuple[0], currKey})).getResults()[0];
-               {
-                  auto secondIfOp = rewriter.create<mlir::scf::IfOp>(loc, TypeRange(), keyMatches, true);
-                  {
-                     OpBuilder::InsertionGuard insertionGuard(rewriter);
-                     scf::IfOp::ensureTerminator(secondIfOp.thenRegion(), rewriter, loc);
-                     rewriter.setInsertionPointToStart(&secondIfOp.thenRegion().front());
-                     auto newAggr = rewriter.create<mlir::CallIndirectOp>(loc, builderUnpacked[2], ValueRange({unpackedTuple[1], currVal})).results()[0];
-                     mlir::Value rePacked = rewriter.create<mlir::util::PackOp>(loc, TupleType::get(getContext(), {keyType, aggrType}), ValueRange{unpackedTuple[0], newAggr});
-                     rewriter.create<util::StoreOp>(loc, rePacked, genericMemref, Value());
-                  }
-                  {
-                     OpBuilder::InsertionGuard insertionGuard(rewriter);
-                     scf::IfOp::ensureTerminator(secondIfOp.elseRegion(), rewriter, loc);
-                     rewriter.setInsertionPointToStart(&secondIfOp.elseRegion().front());
-                     Value serializedKey = currKey; //serializeForAggrHT(rewriter, typeConverter, builderPtr, currKey, aggrHTBuilderType.getKeyType(), functionRegistry);
-                     Value serializedVal = currVal; //serializeForAggrHT(rewriter, typeConverter, builderPtr, currVal, aggrHTBuilderType.getValType(), functionRegistry);
-                     rewriter.create<util::StoreOp>(loc, serializedKey, allocaKey, Value());
-                     rewriter.create<util::StoreOp>(loc, serializedVal, allocaVal, Value());
-                     functionRegistry.call(rewriter, FunctionId::AggrHtBuilderMerge, ValueRange({builderPtr, hashed, plainMemrefKey, plainMemrefVal}));
-                  }
-               }
-            }
-            {
-               OpBuilder::InsertionGuard insertionGuard(rewriter);
-               scf::IfOp::ensureTerminator(newIfOp.elseRegion(), rewriter, loc);
-               rewriter.setInsertionPointToStart(&newIfOp.elseRegion().front());
-               Value serializedKey = currKey; // serializeForAggrHT(rewriter, typeConverter, builderPtr, currKey, aggrHTBuilderType.getKeyType(), functionRegistry);
-               Value serializedVal = currVal; // serializeForAggrHT(rewriter, typeConverter, builderPtr, currVal, aggrHTBuilderType.getValType(), functionRegistry);
-               rewriter.create<util::StoreOp>(loc, serializedKey, allocaKey, Value());
-               rewriter.create<util::StoreOp>(loc, serializedVal, allocaVal, Value());
-               functionRegistry.call(rewriter, FunctionId::AggrHtBuilderMerge, ValueRange({builderPtr, hashed, plainMemrefKey, plainMemrefVal}));
-            }
-            rewriter.replaceOp(op, mergeOpAdaptor.builder());
+            AggrHtHelper helper(rewriter.getContext(),keyType,aggrType,rewriter.getUnknownLoc());
+            rewriter.replaceOp(op, helper.insert(rewriter,mergeOpAdaptor.builder(),currKey,currVal,hashed));
          }
       } else if (auto joinHtBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::JoinHTBuilderType>()) {
          Value v = mergeOpAdaptor.val();
@@ -249,13 +405,13 @@ class BuilderMergeLowering : public ConversionPattern {
          rewriter.replaceOp(op, helper.insert(rewriter, mergeOpAdaptor.builder(), bucket));
       } else if (auto joinHtBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::MarkableJoinHTBuilderType>()) {
          Value v = mergeOpAdaptor.val();
-         auto tupleType = mlir::TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), rewriter.getIndexType(),v.getType()});
+         auto tupleType = mlir::TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), rewriter.getIndexType(), v.getType()});
          auto valType = mergeOpAdaptor.val().getType().cast<mlir::TupleType>();
 
          auto unPacked = rewriter.create<mlir::util::UnPackOp>(loc, valType.getTypes(), mergeOpAdaptor.val())->getResults();
          Value zero = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 0);
          Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.getIndexType(), unPacked[0]);
-         auto bucket = rewriter.create<mlir::util::PackOp>(rewriter.getUnknownLoc(), tupleType, mlir::ValueRange({zero,hashed, v}));
+         auto bucket = rewriter.create<mlir::util::PackOp>(rewriter.getUnknownLoc(), tupleType, mlir::ValueRange({zero, hashed, v}));
          VectorHelper helper(typeConverter->convertType(tupleType), op->getLoc());
          rewriter.replaceOp(op, helper.insert(rewriter, mergeOpAdaptor.builder(), bucket));
       }
@@ -265,20 +421,17 @@ class BuilderMergeLowering : public ConversionPattern {
 };
 
 class CreateAggrHTBuilderLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   explicit CreateAggrHTBuilderLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CreateAggrHTBuilder::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit CreateAggrHTBuilderLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CreateAggrHTBuilder::getOperationName(), 1, context){}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
 
       static size_t id = 0;
       auto createOp = cast<mlir::db::CreateAggrHTBuilder>(op);
 
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      auto ptrType = mlir::util::GenericMemrefType::get(getContext(), IntegerType::get(getContext(), 8), llvm::Optional<int64_t>());
       TupleType keyType = createOp.builder().getType().cast<mlir::db::AggrHTBuilderType>().getKeyType();
       TupleType valType = createOp.builder().getType().cast<mlir::db::AggrHTBuilderType>().getValType();
       TupleType aggrType = createOp.builder().getType().cast<mlir::db::AggrHTBuilderType>().getAggrType();
@@ -357,68 +510,14 @@ class CreateAggrHTBuilderLowering : public ConversionPattern {
             }
             rewriter.create<mlir::ReturnOp>(createOp->getLoc(), equal);
          }
-         FuncOp compareFunc;
-         {
-            OpBuilder::InsertionGuard insertionGuard(rewriter);
-            rewriter.setInsertionPointToStart(parentModule.getBody());
-            compareFunc = rewriter.create<FuncOp>(parentModule.getLoc(), "db_ht_aggr_builder_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange(mlir::db::BoolType::get(rewriter.getContext()))));
-            auto* funcBody = new Block;
-            funcBody->addArguments(TypeRange({ptrType, ptrType}));
-            compareFunc.body().push_back(funcBody);
-            rewriter.setInsertionPointToStart(funcBody);
-            Value left = funcBody->getArgument(0);
-            Value right = funcBody->getArgument(1);
 
-            Value genericMemrefLeft = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), keyType, llvm::Optional<int64_t>()), left);
-            Value genericMemrefRight = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), keyType, llvm::Optional<int64_t>()), right);
-            Value tupleLeft = rewriter.create<util::LoadOp>(createOp.getLoc(), keyType, genericMemrefLeft, Value());
-            Value tupleRight = rewriter.create<util::LoadOp>(createOp.getLoc(), keyType, genericMemrefRight, Value());
-            Value res = rewriter.create<mlir::CallOp>(createOp->getLoc(), rawCompareFunc, ValueRange({tupleLeft, tupleRight})).getResult(0);
-            rewriter.create<mlir::ReturnOp>(createOp->getLoc(), res);
-         }
-         FuncOp funcOp;
-         {
-            OpBuilder::InsertionGuard insertionGuard(rewriter);
-            rewriter.setInsertionPointToStart(parentModule.getBody());
-            funcOp = rewriter.create<FuncOp>(parentModule.getLoc(), "db_ht_aggr_builder_update" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange()));
-            auto* funcBody = new Block;
-            funcBody->addArguments(TypeRange({ptrType, ptrType}));
-            funcOp.body().push_back(funcBody);
-            rewriter.setInsertionPointToStart(funcBody);
-            Value left = funcBody->getArgument(0);
-            Value right = funcBody->getArgument(1);
 
-            Value genericMemrefLeft = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), aggrType, llvm::Optional<int64_t>()), left);
-            Value genericMemrefRight = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), valType, llvm::Optional<int64_t>()), right);
-            Value tupleLeft = rewriter.create<util::LoadOp>(createOp.getLoc(), aggrType, genericMemrefLeft, Value());
-            Value tupleRight = rewriter.create<util::LoadOp>(createOp.getLoc(), valType, genericMemrefRight, Value());
-            Value res = rewriter.create<mlir::CallOp>(createOp->getLoc(), rawUpdateFunc, ValueRange({tupleLeft, tupleRight})).getResult(0);
-            Value castedVal = rewriter.create<mlir::db::TypeCastOp>(rewriter.getUnknownLoc(), typeConverter->convertType(aggrType), res);
-            rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), castedVal, genericMemrefLeft, Value());
-            rewriter.create<mlir::ReturnOp>(rewriter.getUnknownLoc());
-         }
-
-         Value updateFunctionPointer = rewriter.create<mlir::ConstantOp>(createOp->getLoc(), funcOp.type(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.sym_name())));
-         Value compareFunctionPointer = rewriter.create<mlir::ConstantOp>(createOp->getLoc(), compareFunc.type(), SymbolRefAttr::get(rewriter.getStringAttr(compareFunc.sym_name())));
-         Value keySize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), keyType);
-         Value valSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), valType);
-         Value aggrSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), aggrType);
-         Value combinedSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), TupleType::get(getContext(), {keyType, aggrType}));
-
-         Value allocaInitial;
-         {
-            OpBuilder::InsertionGuard insertionGuard(rewriter);
-            auto func = op->getParentOfType<mlir::FuncOp>();
-            rewriter.setInsertionPointToStart(&func.getBody().front());
-            allocaInitial = rewriter.create<mlir::util::AllocaOp>(rewriter.getUnknownLoc(), util::GenericMemrefType::get(rewriter.getContext(), aggrType, llvm::Optional<int64_t>()), Value());
-         }
-         rewriter.create<util::StoreOp>(rewriter.getUnknownLoc(), createOp.initial(), allocaInitial, Value());
-         Value plainMemref = rewriter.create<mlir::util::GenericMemrefCastOp>(createOp->getLoc(), ptrType, allocaInitial);
-
-         Value builder = functionRegistry.call(rewriter, FunctionId::AggrHtBuilderCreate, {keySize, valSize, aggrSize, combinedSize, compareFunctionPointer, updateFunctionPointer, plainMemref})[0];
+         Value initialVal = createOp.initial();
+         AggrHtHelper helper(rewriter.getContext(),keyType,aggrType,rewriter.getUnknownLoc());
          mlir::Value compareFuncRef = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rawCompareFunc.getType(), SymbolRefAttr::get(rewriter.getStringAttr(rawCompareFunc.sym_name())));
          mlir::Value updateFuncRef = rewriter.create<mlir::ConstantOp>(rewriter.getUnknownLoc(), rawUpdateFunc.getType(), SymbolRefAttr::get(rewriter.getStringAttr(rawUpdateFunc.sym_name())));
-         rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, TupleType::get(rewriter.getContext(), {ptrType, rawCompareFunc.getType(), rawUpdateFunc.getType()}), ValueRange{builder, compareFuncRef, updateFuncRef});
+         rewriter.replaceOp(op,helper.create(rewriter,compareFuncRef,updateFuncRef,initialVal));
+
 
          return success();
       }
@@ -522,21 +621,15 @@ class BuilderBuildLowering : public ConversionPattern {
             auto builderUnpacked = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), buildAdaptor.builder().getType().cast<mlir::TupleType>().getTypes(), buildAdaptor.builder())->getResults();
             rewriter.replaceOp(op, builderUnpacked[0]);
          } else {
-            auto ptrType = mlir::util::GenericMemrefType::get(getContext(), IntegerType::get(getContext(), 8), llvm::Optional<int64_t>());
-
-            auto updateFnType = FunctionType::get(getContext(), {aggrHTBuilderType.getAggrType(), aggrHTBuilderType.getValType()}, {aggrHTBuilderType.getAggrType()});
-            auto compareFnType = FunctionType::get(getContext(), {aggrHTBuilderType.getKeyType(), aggrHTBuilderType.getKeyType()}, {mlir::db::BoolType::get(getContext())});
-            auto builderUnpacked = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange{ptrType, typeConverter->convertType(compareFnType), typeConverter->convertType(updateFnType)}, buildAdaptor.builder())->getResults();
-            auto builderPtr = builderUnpacked[0];
-            Value aggrHashtable = functionRegistry.call(rewriter, FunctionId::AggrHtBuilderBuild, builderPtr)[0];
-            rewriter.replaceOp(op, aggrHashtable);
+           AggrHtHelper helper(rewriter.getContext(),aggrHTBuilderType.getKeyType(),aggrHTBuilderType.getAggrType(),   rewriter.getUnknownLoc());
+           rewriter.replaceOp(op, helper.build(rewriter,buildAdaptor.builder()));
          }
       } else if (auto joinHtBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::JoinHTBuilderType>()) {
-         Type kvType=TupleType::get(getContext(), {joinHtBuilderType.getKeyType(), joinHtBuilderType.getValType()});
-         Type entryType=TupleType::get(rewriter.getContext(),{rewriter.getIndexType(), kvType});
+         Type kvType = TupleType::get(getContext(), {joinHtBuilderType.getKeyType(), joinHtBuilderType.getValType()});
+         Type entryType = TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), kvType});
 
-         Type typedPtrType = typeConverter->convertType(util::GenericMemrefType::get(rewriter.getContext(),entryType ,-1));
-         auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange({rewriter.getIndexType(),rewriter.getIndexType(), typedPtrType}), buildAdaptor.builder());
+         Type typedPtrType = typeConverter->convertType(util::GenericMemrefType::get(rewriter.getContext(), entryType, -1));
+         auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange({rewriter.getIndexType(), rewriter.getIndexType(), typedPtrType}), buildAdaptor.builder());
          Value len = unpacked.getResult(0);
          Value vec = unpacked.getResult(2);
          Value zero = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 0);
@@ -546,7 +639,6 @@ class BuilderBuildLowering : public ConversionPattern {
          auto loc = op->getLoc();
          Value htSize = nextPow2(rewriter, len);
          Value htMask = rewriter.create<arith::SubIOp>(loc, htSize, one);
-
 
          Value ht = rewriter.create<mlir::util::AllocOp>(loc, util::GenericMemrefType::get(rewriter.getContext(), rewriter.getIndexType(), -1), htSize);
          rewriter.create<scf::ForOp>(
@@ -560,22 +652,22 @@ class BuilderBuildLowering : public ConversionPattern {
             [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
                auto currVal = b.create<util::LoadOp>(loc, entryType, vec, iv);
                auto unpacked2 = b.create<util::UnPackOp>(loc, TypeRange({rewriter.getIndexType(), typeConverter->convertType(kvType)}), currVal);
-               Value buckedPos = b.create<arith::AndIOp>(loc,htMask,unpacked2.getResult(0));
+               Value buckedPos = b.create<arith::AndIOp>(loc, htMask, unpacked2.getResult(0));
 
                Value previousPtr = b.create<util::LoadOp>(loc, rewriter.getIndexType(), ht, buckedPos);
                b.create<util::StoreOp>(loc2, iv, ht, buckedPos);
-               auto repacked= b.create<util::PackOp>(loc,typeConverter->convertType(entryType),ValueRange{previousPtr,unpacked2.getResult(1)});
+               auto repacked = b.create<util::PackOp>(loc, typeConverter->convertType(entryType), ValueRange{previousPtr, unpacked2.getResult(1)});
                b.create<util::StoreOp>(loc2, repacked, vec, iv);
                b.create<scf::YieldOp>(loc);
             });
-         mlir::Value packed=rewriter.create<util::PackOp>(loc,TupleType::get(getContext(),{vec.getType(),len.getType(),ht.getType(),htMask.getType()}),ValueRange{vec,len,ht,htMask});
-         rewriter.replaceOp(op,packed);
+         mlir::Value packed = rewriter.create<util::PackOp>(loc, TupleType::get(getContext(), {vec.getType(), len.getType(), ht.getType(), htMask.getType()}), ValueRange{vec, len, ht, htMask});
+         rewriter.replaceOp(op, packed);
       } else if (auto joinHtBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::MarkableJoinHTBuilderType>()) {
-         Type kvType=TupleType::get(getContext(), {joinHtBuilderType.getKeyType(), joinHtBuilderType.getValType()});
-         Type entryType=TupleType::get(rewriter.getContext(),{rewriter.getIndexType(),rewriter.getIndexType(), kvType});
+         Type kvType = TupleType::get(getContext(), {joinHtBuilderType.getKeyType(), joinHtBuilderType.getValType()});
+         Type entryType = TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), rewriter.getIndexType(), kvType});
 
-         Type typedPtrType = typeConverter->convertType(util::GenericMemrefType::get(rewriter.getContext(),entryType ,-1));
-         auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange({rewriter.getIndexType(),rewriter.getIndexType(), typedPtrType}), buildAdaptor.builder());
+         Type typedPtrType = typeConverter->convertType(util::GenericMemrefType::get(rewriter.getContext(), entryType, -1));
+         auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange({rewriter.getIndexType(), rewriter.getIndexType(), typedPtrType}), buildAdaptor.builder());
          Value len = unpacked.getResult(0);
          Value vec = unpacked.getResult(2);
          Value zero = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 0);
@@ -585,7 +677,6 @@ class BuilderBuildLowering : public ConversionPattern {
          auto loc = op->getLoc();
          Value htSize = nextPow2(rewriter, len);
          Value htMask = rewriter.create<arith::SubIOp>(loc, htSize, one);
-
 
          Value ht = rewriter.create<mlir::util::AllocOp>(loc, util::GenericMemrefType::get(rewriter.getContext(), rewriter.getIndexType(), -1), htSize);
          rewriter.create<scf::ForOp>(
@@ -598,17 +689,17 @@ class BuilderBuildLowering : public ConversionPattern {
             loc, zero, len, one, ValueRange({}),
             [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
                auto currVal = b.create<util::LoadOp>(loc, entryType, vec, iv);
-               auto unpacked2 = b.create<util::UnPackOp>(loc, TypeRange({rewriter.getIndexType(),rewriter.getIndexType(), typeConverter->convertType(kvType)}), currVal);
-               Value buckedPos = b.create<arith::AndIOp>(loc,htMask,unpacked2.getResult(1));
+               auto unpacked2 = b.create<util::UnPackOp>(loc, TypeRange({rewriter.getIndexType(), rewriter.getIndexType(), typeConverter->convertType(kvType)}), currVal);
+               Value buckedPos = b.create<arith::AndIOp>(loc, htMask, unpacked2.getResult(1));
 
                Value previousPtr = b.create<util::LoadOp>(loc, rewriter.getIndexType(), ht, buckedPos);
                b.create<util::StoreOp>(loc2, iv, ht, buckedPos);
-               auto repacked= b.create<util::PackOp>(loc,typeConverter->convertType(entryType),ValueRange{unpacked2.getResult(0),previousPtr,unpacked2.getResult(2)});
+               auto repacked = b.create<util::PackOp>(loc, typeConverter->convertType(entryType), ValueRange{unpacked2.getResult(0), previousPtr, unpacked2.getResult(2)});
                b.create<util::StoreOp>(loc2, repacked, vec, iv);
                b.create<scf::YieldOp>(loc);
             });
-         mlir::Value packed=rewriter.create<util::PackOp>(loc,TupleType::get(getContext(),{vec.getType(),len.getType(),ht.getType(),htMask.getType()}),ValueRange{vec,len,ht,htMask});
-         rewriter.replaceOp(op,packed);
+         mlir::Value packed = rewriter.create<util::PackOp>(loc, TupleType::get(getContext(), {vec.getType(), len.getType(), ht.getType(), htMask.getType()}), ValueRange{vec, len, ht, htMask});
+         rewriter.replaceOp(op, packed);
       }
 
       return success();
@@ -662,7 +753,6 @@ class CreateJoinHtBuilderLowering : public ConversionPattern {
    }
 };
 class CreateMarkableJoinHtBuilderLowering : public ConversionPattern {
-
    public:
    explicit CreateMarkableJoinHtBuilderLowering(TypeConverter& typeConverter, MLIRContext* context)
       : ConversionPattern(typeConverter, mlir::db::CreateMarkableJoinHTBuilder::getOperationName(), 1, context) {}
@@ -671,7 +761,7 @@ class CreateMarkableJoinHtBuilderLowering : public ConversionPattern {
       auto createOp = mlir::cast<mlir::db::CreateMarkableJoinHTBuilder>(op);
       auto builderType = createOp.builder().getType().cast<mlir::db::MarkableJoinHTBuilderType>();
       auto entryType = mlir::TupleType::get(rewriter.getContext(), {builderType.getKeyType(), builderType.getValType()});
-      auto tupleType = mlir::TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), rewriter.getIndexType(),entryType});
+      auto tupleType = mlir::TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), rewriter.getIndexType(), entryType});
       Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 1024);
       VectorHelper helper(typeConverter->convertType(tupleType), op->getLoc());
       rewriter.replaceOp(op, helper.create(rewriter, initialCapacity));
@@ -682,7 +772,7 @@ class CreateMarkableJoinHtBuilderLowering : public ConversionPattern {
 void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<CreateVectorBuilderLowering>(typeConverter, patterns.getContext());
-   patterns.insert<CreateAggrHTBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
+   patterns.insert<CreateAggrHTBuilderLowering>( typeConverter, patterns.getContext());
    patterns.insert<BuilderMergeLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<BuilderBuildLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<CreateJoinHtBuilderLowering>(typeConverter, patterns.getContext());
@@ -730,8 +820,7 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
       if (aggrHtBuilderType.getKeyType().getTypes().empty()) {
          return (Type) TupleType::get(patterns.getContext(), {typeConverter.convertType(aggrHtBuilderType.getAggrType()), typeConverter.convertType(updateFnType)});
       } else {
-         auto ptrType = mlir::util::GenericMemrefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
-         return (Type) TupleType::get(patterns.getContext(), {ptrType, typeConverter.convertType(compareFnType), typeConverter.convertType(updateFnType)});
+         return AggrHtHelper::createType(patterns.getContext(),typeConverter.convertType(aggrHtBuilderType.getKeyType()),typeConverter.convertType(aggrHtBuilderType.getAggrType()),typeConverter.convertType(aggrHtBuilderType.getValType()),typeConverter.convertType(compareFnType), typeConverter.convertType(updateFnType));
       }
    });
    typeConverter.addConversion([&](mlir::db::JoinHTBuilderType joinHtBuilderType) {
@@ -740,5 +829,5 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
    });
    typeConverter.addConversion([&](mlir::db::MarkableJoinHTBuilderType joinHtBuilderType) {
       auto elemType = typeConverter.convertType(TupleType::get(patterns.getContext(), {IndexType::get(patterns.getContext()), IndexType::get(patterns.getContext()), TupleType::get(patterns.getContext(), {joinHtBuilderType.getKeyType(), joinHtBuilderType.getValType()})}));
-      return VectorHelper::createType(patterns.getContext(), elemType);   });
+      return VectorHelper::createType(patterns.getContext(), elemType); });
 }

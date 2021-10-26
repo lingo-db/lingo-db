@@ -373,23 +373,21 @@ class DecimalMulLowering : public ConversionPattern {
    }
 };
 class FreeOpLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
-
    public:
    explicit FreeOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::FreeOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+      : ConversionPattern(typeConverter, mlir::db::FreeOp::getOperationName(), 1, context) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
-      auto freeOp = cast<mlir::db::FreeOp>(op);
+      /*      auto freeOp = cast<mlir::db::FreeOp>(op);
       mlir::db::FreeOpAdaptor adaptor(operands);
       auto val = adaptor.val();
       auto rewritten = ::llvm::TypeSwitch<::mlir::Type, bool>(freeOp.val().getType())
                           .Case<::mlir::db::AggregationHashtableType>([&](::mlir::db::AggregationHashtableType type) {
                              if (!type.getKeyType().getTypes().empty()) {
-                                functionRegistry.call(rewriter, FunctionId::AggrHtFree, val);
+                                //todo free aggregation hashtable
+                                //functionRegistry.call(rewriter, FunctionId::AggrHtFree, val);
                              }
                              return true;
                           })
@@ -415,6 +413,9 @@ class FreeOpLowering : public ConversionPattern {
       } else {
          return failure();
       }
+      */
+      rewriter.eraseOp(op);
+      return success();
    }
 };
 } // namespace
