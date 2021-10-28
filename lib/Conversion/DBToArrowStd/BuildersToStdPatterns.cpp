@@ -160,6 +160,7 @@ class AggrHtHelper {
       capacity = ifOp.getResult(0);
       values = ifOp.getResult(1);
       ht = ifOp.getResult(2);
+
       Value trueValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 1));
       Value falseValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 0));
 
@@ -219,7 +220,7 @@ class AggrHtHelper {
                   Value entryKey=kvUnpacked.getResult(0);
                   Value entryAggr=kvUnpacked.getResult(1);
                   Value entryNext=entryUnpacked.getResult(0);
-                  Value entryHash=entryUnpacked.getResult(0);
+                  Value entryHash=entryUnpacked.getResult(1);
 
          //       if(compare(entry.key,key)){
                   Value keyMatches = b.create<mlir::CallIndirectOp>(loc, compareFn, ValueRange({entryKey,key})).results()[0];
