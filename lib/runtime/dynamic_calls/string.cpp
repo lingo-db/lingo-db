@@ -76,7 +76,7 @@ bool like(const char* str, size_t str_len, const char* pattern, size_t pattern_l
    }
    return slen == 0 && plen == 0;
 }
-extern "C" bool _mlir_ciface_cmp_string_like(bool null, runtime::Str str1, runtime::Str str2) {
+extern "C" bool rt_cmp_string_like(bool null, runtime::Str str1, runtime::Str str2) {
    if (null) {
       return false;
    } else {
@@ -87,7 +87,7 @@ extern "C" bool _mlir_ciface_cmp_string_like(bool null, runtime::Str str1, runti
 //taken from gandiva
 
 #define CAST_NUMERIC_FROM_STRING(OUT_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                   \
-   extern "C" OUT_TYPE _mlir_ciface_cast_string_##TYPE_NAME(bool null, runtime::Str str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
+   extern "C" OUT_TYPE rt_cast_string_##TYPE_NAME(bool null, runtime::Str str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       if (null) return (OUT_TYPE) 0;                                                                                                                \
       char* data = (str).data();                                                                                                                   \
       int32_t len = (str).len();                                                                                                                   \
@@ -115,7 +115,7 @@ CAST_NUMERIC_FROM_STRING(int64_t, arrow::Int64Type, int)
 CAST_NUMERIC_FROM_STRING(float, arrow::FloatType, float32)
 CAST_NUMERIC_FROM_STRING(double, arrow::DoubleType, float64)
 
-extern "C" __int128 _mlir_ciface_cast_string_decimal(bool null, runtime::Str string, unsigned reqScale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+extern "C" __int128 rt_cast_string_decimal(bool null, runtime::Str string, unsigned reqScale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    if (null) {
       return 0;
    }
@@ -133,7 +133,7 @@ extern "C" __int128 _mlir_ciface_cast_string_decimal(bool null, runtime::Str str
    return res;
 }
 #define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                        \
-   extern "C" runtime::Str _mlir_ciface_cast_##TYPE_NAME##_string(bool null, IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
+   extern "C" runtime::Str rt_cast_##TYPE_NAME##_string(bool null, IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       if (null) {                                                                                                                                     \
          return runtime::Str(nullptr, 0);                                                                                                          \
       }                                                                                                                                               \
@@ -153,7 +153,7 @@ CAST_NUMERIC_TO_STRING(int64_t, arrow::Int64Type, int)
 CAST_NUMERIC_TO_STRING(float, arrow::FloatType, float32)
 CAST_NUMERIC_TO_STRING(double, arrow::DoubleType, float64)
 
-extern "C" runtime::Str _mlir_ciface_cast_decimal_string(bool null, uint64_t low, uint64_t high, uint32_t scale) {// NOLINT (clang-diagnostic-return-type-c-linkage)
+extern "C" runtime::Str rt_cast_decimal_string(bool null, uint64_t low, uint64_t high, uint32_t scale) {// NOLINT (clang-diagnostic-return-type-c-linkage)
    if (null) {
       return runtime::Str(nullptr, 0);
    }
@@ -165,11 +165,38 @@ extern "C" runtime::Str _mlir_ciface_cast_decimal_string(bool null, uint64_t low
 
    return runtime::Str(data, len);
 }
-/*extern "C" bool _mlir_ciface_cmp_string_eq(bool null, runtime::Str str1, runtime::Str str2) {
-if (null) {
-return false;
-} else {
-return str1.str()==str2.str();
+
+
+//borrowed from apache gandiva
+__attribute__((always_inline))
+int64_t mem_compare(const char* left, int64_t left_len, const char* right,
+                    int64_t right_len) {
+   int min = left_len;
+   if (right_len < min) {
+      min = right_len;
+   }
+
+   int cmp_ret = memcmp(left, right, min);
+   if (cmp_ret != 0) {
+      return cmp_ret;
+   } else {
+      return left_len - right_len;
+   }
 }
-}*/
+#define STR_CMP(NAME, OP)                                                                                  \
+extern "C" __attribute__((always_inline)) bool rt_cmp_string_##NAME(bool null, runtime::Str str1, runtime::Str str2) { \
+if (null) {                                                                                          \
+return false;                                                                                     \
+} else {                                                                                             \
+return mem_compare((str1).data(), (str1).len(), (str2).data(), (str2).len()) OP 0;            \
+}                                                                                                    \
+}
+
+STR_CMP(eq, ==)
+STR_CMP(neq, !=)
+STR_CMP(lt, <)
+STR_CMP(lte, <=)
+STR_CMP(gt, >)
+STR_CMP(gte, >=)
+
 

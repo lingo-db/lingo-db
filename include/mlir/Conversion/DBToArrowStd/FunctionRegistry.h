@@ -13,7 +13,6 @@ class FunctionRegistry {
 #define RETURNS_(...)
 #define DECLARE_FUNCID(inst, ...) inst,
       FUNC_LIST(DECLARE_FUNCID, OPERANDS_, RETURNS_)
-      PLAIN_FUNC_LIST(DECLARE_FUNCID, OPERANDS_, RETURNS_)
 #undef DECLARE_FUNCID
 #undef OPERANDS_
 #undef RETURNS_

@@ -66,22 +66,16 @@
    F(CastFloat64ToString, cast_float64_string, OPERANDS(BOOL_TYPE, DOUBLE_TYPE), RETURNS(STRING_TYPE))                                                     \
    F(CastDecimalToString, cast_decimal_string, OPERANDS(BOOL_TYPE, INT_TYPE(128), INT_TYPE(32)), RETURNS(STRING_TYPE))                                     \
    F(SortVector, sort, OPERANDS(INDEX_TYPE, POINTER_TYPE, INDEX_TYPE, FUNCTION_TYPE(OPERANDS(POINTER_TYPE, POINTER_TYPE), RETURNS(BOOL_TYPE))), RETURNS()) \
-   F(TimestampAddMillis, timestamp_add_millis, OPERANDS(INT_TYPE(64), INT_TYPE(64)), RETURNS(INT_TYPE(64)))
+   F(TimestampAddMillis, timestamp_add_millis, OPERANDS(INT_TYPE(64), INT_TYPE(64)), RETURNS(INT_TYPE(64))) \
+   F(TimestampAddMonth, timestamp_add_months, OPERANDS(INT_TYPE(32), INT_TYPE(64)), RETURNS(INT_TYPE(64))) \
+   F(DateExtractYear, extract_year, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                             \
+   F(DateExtractDoy, extract_doy, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                               \
+   F(DateExtractMonth, extract_month, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                           \
+   F(DateExtractDay, extract_day, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                               \
+   F(DateExtractDow, extractdow, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                               \
+   F(DateExtractHour, extract_hour, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                             \
+   F(DateExtractMinute, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                         \
+   F(DateExtractSecond, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))
 
-#define PLAIN_FUNC_LIST(F, OPERANDS, RETURNS)                                                                        \
-   F(TimestampAddMonth, timestampaddMonth_int32_date64, OPERANDS(INT_TYPE(32), INT_TYPE(64)), RETURNS(INT_TYPE(64))) \
-   F(DateExtractMillenium, extractMillenium_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                   \
-   F(DateExtractCentury, extractCentury_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                       \
-   F(DateExtractDecade, extractDecade_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                         \
-   F(DateExtractYear, extractYear_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                             \
-   F(DateExtractQuarter, extractQuarter_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                       \
-   F(DateExtractDoy, extractDoy_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                               \
-   F(DateExtractMonth, extractMonth_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                           \
-   F(DateExtractDay, extractDay_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                               \
-   F(DateExtractWeek, extractWeek_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                             \
-   F(DateExtractDow, extractDow_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                               \
-   F(DateExtractHour, extractHour_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                             \
-   F(DateExtractMinute, extractMinute_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                         \
-   F(DateExtractSecond, extractSecond_date64, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))
 
 #endif // MLIR_CONVERSION_DBTOARROWSTD_REGISTEREDFUNCTIONS_H

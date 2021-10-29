@@ -1,7 +1,7 @@
 #include "runtime/helpers.h"
 #include <arrow/array.h>
 
-EXPORT std::shared_ptr<arrow::DataType>* _mlir_ciface_arrow_type2(uint32_t typeVal, uint32_t p1, uint32_t p2) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT std::shared_ptr<arrow::DataType>* rt_arrow_type2(uint32_t typeVal, uint32_t p1, uint32_t p2) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    auto* ptr = new std::shared_ptr<arrow::DataType>;
    arrow::Type::type type = static_cast<arrow::Type::type>(typeVal);
    switch (type) {
@@ -23,11 +23,11 @@ EXPORT std::shared_ptr<arrow::DataType>* _mlir_ciface_arrow_type2(uint32_t typeV
    return ptr;
 }
 
-EXPORT std::shared_ptr<arrow::DataType>* _mlir_ciface_arrow_type1(uint32_t typeVal, uint32_t p1) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return _mlir_ciface_arrow_type2(typeVal, 0, 0);
+EXPORT std::shared_ptr<arrow::DataType>* rt_arrow_type1(uint32_t typeVal, uint32_t p1) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return rt_arrow_type2(typeVal, 0, 0);
 }
-EXPORT std::shared_ptr<arrow::DataType>* _mlir_ciface_arrow_type(uint32_t typeVal) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return _mlir_ciface_arrow_type1(typeVal, 0);
+EXPORT std::shared_ptr<arrow::DataType>* rt_arrow_type(uint32_t typeVal) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return rt_arrow_type1(typeVal, 0);
 }
 struct SchemaBuilder {
    std::vector<std::shared_ptr<arrow::Field>> fields;
@@ -35,12 +35,12 @@ struct SchemaBuilder {
       return new std::shared_ptr<arrow::Schema>(std::make_shared<arrow::Schema>(fields));
    }
 };
-EXPORT SchemaBuilder* _mlir_ciface_arrow_schema_create_builder() { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT SchemaBuilder* rt_arrow_schema_create_builder() { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return new SchemaBuilder;
 }
-EXPORT void _mlir_ciface_arrow_schema_add_field(SchemaBuilder* builder, std::shared_ptr<arrow::DataType>* datatype, bool nullable, runtime::Str columnName) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT void rt_arrow_schema_add_field(SchemaBuilder* builder, std::shared_ptr<arrow::DataType>* datatype, bool nullable, runtime::Str columnName) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    (builder)->fields.push_back(std::make_shared<arrow::Field>(columnName.str(), (*datatype), nullable));
 }
-EXPORT std::shared_ptr<arrow::Schema>* _mlir_ciface_arrow_schema_build(SchemaBuilder* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT std::shared_ptr<arrow::Schema>* rt_arrow_schema_build(SchemaBuilder* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return (builder)->build();
 }

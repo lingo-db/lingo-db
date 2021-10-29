@@ -333,7 +333,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
    std::cout << "jit: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
 
    {
-      auto* lookupResult2 = jit.getPointerToFunction("_mlir_ciface_set_execution_context");
+      auto* lookupResult2 = jit.getPointerToFunction("rt_set_execution_context");
       if (!lookupResult2) {
          llvm::errs() << "JIT invocation failed\n";
          return false;

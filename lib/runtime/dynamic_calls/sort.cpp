@@ -4,7 +4,7 @@
 #include <iostream>
 #include <vector>
 
-EXPORT void _mlir_ciface_sort(size_t len,uint8_t* valuePtr, size_t objSize, bool (*fun_ptr)(uint8_t*, uint8_t*)) {
+EXPORT void rt_sort(size_t len,uint8_t* valuePtr, size_t objSize, bool (*fun_ptr)(uint8_t*, uint8_t*)) {
    std::vector<uint8_t*> toSort;
 
    size_t bytes =len*objSize;

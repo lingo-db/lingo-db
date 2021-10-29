@@ -19,9 +19,6 @@ void mlir::db::codegen::FunctionRegistry::registerFunctions() {
 #define REGISTER_FUNC(inst, name, operands, returns) registerFunction(FunctionId::inst, #name, operands, returns);
    FUNC_LIST(REGISTER_FUNC, OPERANDS_, RETURNS_)
 #undef REGISTER_FUNC
-#define REGISTER_FUNC(inst, name, operands, returns) registerFunction(FunctionId::inst, #name, operands, returns,false);
-   PLAIN_FUNC_LIST(REGISTER_FUNC, OPERANDS_, RETURNS_)
-#undef REGISTER_FUNC
 #undef RETURNS_
 #undef OPERANDS_
 }
@@ -29,7 +26,7 @@ mlir::FuncOp mlir::db::codegen::FunctionRegistry::insertFunction(mlir::OpBuilder
    ModuleOp parentModule = builder.getBlock()->getParentOp()->getParentOfType<ModuleOp>();
    OpBuilder::InsertionGuard insertionGuard(builder);
    builder.setInsertionPointToStart(parentModule.getBody());
-   FuncOp funcOp = builder.create<FuncOp>(parentModule.getLoc(), function.useWrapper?"_mlir_ciface_"+function.name:function.name, builder.getFunctionType(function.operands, function.results), builder.getStringAttr("private"));
+   FuncOp funcOp = builder.create<FuncOp>(parentModule.getLoc(), function.useWrapper?"rt_"+function.name:function.name, builder.getFunctionType(function.operands, function.results), builder.getStringAttr("private"));
    return funcOp;
 }
 

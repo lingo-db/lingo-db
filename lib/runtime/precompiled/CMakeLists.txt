@@ -1,7 +1,4 @@
 set(PRECOMPILED_SRCS
-        test.cpp
-        string.cpp
-        date.cpp
         context.cpp
         )
 
@@ -60,12 +57,11 @@ foreach(SRC_FILE ${PRECOMPILED_SRCS})
 endforeach()
 set(PRECOMPILED_BC_PATH "${CMAKE_CURRENT_BINARY_DIR}/irhelpers.bc")
 
-set(GANDIVA_PRECOMPILED_BC_PATH "${ARROW_BUILD_DIR}/src/gandiva/irhelpers.bc")
 set(PRECOMPILED_CC_IN_PATH "${CMAKE_SOURCE_DIR}/tools/scripts/precompiled_bitcode.cc.in")
 # link all of the bitcode files into a single bitcode file.
 add_custom_command(OUTPUT ${PRECOMPILED_BC_PATH}
         COMMAND ${LLVM_LINK_EXECUTABLE} -o ${PRECOMPILED_BC_PATH}
-        ${BC_FILES} ${GANDIVA_PRECOMPILED_BC_PATH}
+        ${BC_FILES}
         DEPENDS ${BC_FILES})
 
 find_package(PythonInterp)
