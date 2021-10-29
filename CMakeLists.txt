@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.13.4)
 project(db-dialects LANGUAGES CXX C)
 
-set(CMAKE_CXX_STANDARD 17 CACHE STRING "C++ standard to conform to")
+set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard to conform to")
 
 find_package(MLIR REQUIRED CONFIG)
 
