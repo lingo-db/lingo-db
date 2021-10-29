@@ -122,7 +122,7 @@ extern "C" __int128 _mlir_ciface_cast_string_decimal(bool null, runtime::Str str
    int32_t precision;
    int32_t scale;
    arrow::Decimal128 decimalrep;
-   if (arrow::Decimal128::FromString(string.str(), &decimalrep, &precision, &scale) != arrow::Status::OK()) {
+   if (!arrow::Decimal128::FromString(string.str(), &decimalrep, &precision, &scale).ok()) {
       //todo
    }
    auto x = decimalrep.Rescale(scale, reqScale);

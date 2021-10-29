@@ -28,7 +28,7 @@ std::pair<uint64_t, uint64_t> support::parseDecimal(std::string str, unsigned re
    int32_t precision;
    int32_t scale;
    arrow::Decimal128 decimalrep;
-   if (arrow::Decimal128::FromString(str, &decimalrep, &precision, &scale) != arrow::Status::OK()) {
+   if (!arrow::Decimal128::FromString(str, &decimalrep, &precision, &scale).ok()) {
       assert(false&&"could not parse decimal const");
    }
    auto x = decimalrep.Rescale(scale, reqScale);
