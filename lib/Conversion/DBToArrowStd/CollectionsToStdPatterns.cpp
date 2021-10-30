@@ -25,8 +25,6 @@ class SortOpLowering : public ConversionPattern {
 
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
       Type elementType = sortOp.toSort().getType().cast<mlir::db::VectorType>().getElementType();
-      auto convertedElementType = typeConverter->convertType(elementType);
-      auto typedPtrType = mlir::util::GenericMemrefType::get(getContext(), convertedElementType, -1);
       FuncOp funcOp;
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
@@ -54,7 +52,7 @@ class SortOpLowering : public ConversionPattern {
          rewriter.eraseOp(sortLambdaTerminator);
          rewriter.eraseOp(terminator);
       }
-      auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), TypeRange({rewriter.getIndexType(),rewriter.getIndexType(), typedPtrType}), sortOpAdaptor.toSort());
+      auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), sortOpAdaptor.toSort());
 
       auto len = unpacked.getResult(0);
       auto values = unpacked.getResult(2);
@@ -110,8 +108,7 @@ class CreateRangeLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto loc = rewriter.getUnknownLoc();
       auto createRangeOp = cast<mlir::db::CreateRange>(op);
-      Type storageType = createRangeOp.range().getType().cast<mlir::db::RangeType>().getElementType();
-      Value combined = rewriter.create<mlir::util::PackOp>(loc, TypeRange(TupleType::get(getContext(), {storageType, storageType, storageType})), ValueRange({createRangeOp.lower(), createRangeOp.upper(), createRangeOp.step()}));
+      Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({createRangeOp.lower(), createRangeOp.upper(), createRangeOp.step()}));
       rewriter.replaceOp(op, combined);
 
       return success();
@@ -125,7 +122,7 @@ class LookupOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto loc = rewriter.getUnknownLoc();
          mlir::db::LookupAdaptor lookupAdaptor(operands);
-         auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, lookupAdaptor.collection().getType().cast<TupleType>().getTypes(), lookupAdaptor.collection());
+         auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, lookupAdaptor.collection());
          Value vec = unpacked.getResult(0);
          Value ht = unpacked.getResult(2);
          Value htMask = unpacked.getResult(3);
@@ -133,7 +130,7 @@ class LookupOpLowering : public ConversionPattern {
          Value buckedPos = rewriter.create<arith::AndIOp>(loc, htMask, hashed);
          Value pos = rewriter.create<util::LoadOp>(loc, rewriter.getIndexType(), ht, buckedPos);
 
-         Value combined = rewriter.create<mlir::util::PackOp>(loc, TypeRange(TupleType::get(getContext(), {rewriter.getIndexType(), vec.getType()})), ValueRange({pos, vec}));
+         Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({pos, vec}));
 
          rewriter.replaceOp(op, combined);
 

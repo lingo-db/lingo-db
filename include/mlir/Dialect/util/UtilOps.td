@@ -104,6 +104,14 @@ let arguments = (ins Variadic<AnyType>:$vals);
 let results =(outs TupleOf<[AnyType]>:$tuple);
 let assemblyFormat = "$vals `:` type($vals) attr-dict `->` type($tuple) ";
 let verifier = [{ return ::verify(*this); }];
+let builders = [
+        OpBuilder<(ins "ValueRange":$vals), [{
+    std::vector<Type> types;
+    for(auto val:vals){
+        types.push_back(val.getType());
+        }
+    build($_builder, $_state, TupleType::get($_builder.getContext(),types), vals);
+}]>];
 }
 def UnPackOp : Util_Op<"unpack",[NoSideEffect]> {
 let summary = "unpack tuple";
@@ -112,6 +120,11 @@ let results =(outs Variadic<AnyType>:$vals);
 let assemblyFormat = "$tuple `:` type($tuple) attr-dict `->` type($vals)";
 let verifier = [{ return ::verify(*this); }];
 let hasCanonicalizeMethod = 1;
+let builders = [
+        OpBuilder<(ins "Value":$tuple), [{
+    build($_builder, $_state, tuple.getType().cast<TupleType>().getTypes(), tuple);
+}]>
+];
 }
 def UndefTupleOp : Util_Op<"undef_tuple",[NoSideEffect]> {
 let summary = "undef Tuple";

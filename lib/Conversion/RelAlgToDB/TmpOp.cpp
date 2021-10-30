@@ -42,9 +42,8 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
             types.push_back(attr->type);
             values.push_back(context.getValueForAttribute(attr));
          }
-         auto tupleType = mlir::TupleType::get(builder.getContext(), types);
          mlir::Value vectorBuilder = context.builders[builderId];
-         mlir::Value packed = builder.create<mlir::util::PackOp>(tmpOp->getLoc(), tupleType, values);
+         mlir::Value packed = builder.create<mlir::util::PackOp>(tmpOp->getLoc(), values);
          mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(tmpOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
          context.builders[builderId] = mergedBuilder;
          consumer->consume(this, builder, context);
@@ -86,7 +85,7 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
          forOp2.getBodyRegion().push_back(block2);
          mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
-         auto unpacked = builder2.create<mlir::util::UnPackOp>(tmpOp->getLoc(), types, forOp2.getInductionVar());
+         auto unpacked = builder2.create<mlir::util::UnPackOp>(tmpOp->getLoc(), forOp2.getInductionVar());
          size_t i = 0;
          for (const auto* attr : attributes) {
             context.setValueForAttribute(scope, attr, unpacked.getResult(i++));

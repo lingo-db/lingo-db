@@ -31,7 +31,6 @@ mlir::Value mlir::db::NullHandler::isNull() {
    return isNull;
 };
 mlir::Value mlir::db::NullHandler::combineResult(Value res) {
-   auto i1Type = IntegerType::get(builder.getContext(), 1);
    if (nullValues.empty()) {
       return res;
    }
@@ -42,5 +41,5 @@ mlir::Value mlir::db::NullHandler::combineResult(Value res) {
    for (size_t i = 1; i < nullValues.size(); i++) {
       isNull = builder.create<arith::OrIOp>(builder.getUnknownLoc(), isNull.getType(), isNull, nullValues[i]);
    }
-   return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), mlir::TupleType::get(builder.getContext(), {i1Type, res.getType()}), ValueRange({isNull, res}));
+   return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(),  ValueRange({isNull, res}));
 }

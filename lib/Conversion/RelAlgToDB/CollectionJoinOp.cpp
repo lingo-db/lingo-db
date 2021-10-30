@@ -43,7 +43,7 @@ class HashCollectionJoinLowering : public mlir::relalg::HJNode<mlir::relalg::Col
       ifOp.elseRegion().push_back(elseBlock);
       mlir::relalg::ProducerConsumerBuilder builder3(ifOp.elseRegion());
       builder3.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{vectorBuilder});
-      mlir::Value packed = builder1.create<mlir::util::PackOp>(joinOp->getLoc(), tupleType, values);
+      mlir::Value packed = builder1.create<mlir::util::PackOp>(joinOp->getLoc(), values);
       mlir::Value mergedBuilder = builder1.create<mlir::db::BuilderMerge>(joinOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
       builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{mergedBuilder});
 

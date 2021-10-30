@@ -42,7 +42,7 @@ class ConstRelLowering : public mlir::relalg::ProducerConsumerNode {
             values.push_back(entryVal);
             i++;
          }
-         mlir::Value packed = builder.create<mlir::util::PackOp>(constRelationOp->getLoc(), tupleType, values);
+         mlir::Value packed = builder.create<mlir::util::PackOp>(constRelationOp->getLoc(), values);
          vectorBuilder = builder.create<mlir::db::BuilderMerge>(constRelationOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
       }
       Value vector = builder.create<mlir::db::BuilderBuild>(constRelationOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), vectorBuilder);
@@ -54,7 +54,7 @@ class ConstRelLowering : public mlir::relalg::ProducerConsumerNode {
          forOp2.getBodyRegion().push_back(block2);
          mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
-         auto unpacked = builder2.create<mlir::util::UnPackOp>(constRelationOp->getLoc(), types, forOp2.getInductionVar());
+         auto unpacked = builder2.create<mlir::util::UnPackOp>(constRelationOp->getLoc(), forOp2.getInductionVar());
          size_t i = 0;
          for (const auto* attr : attrs) {
             context.setValueForAttribute(scope, attr, unpacked.getResult(i++));

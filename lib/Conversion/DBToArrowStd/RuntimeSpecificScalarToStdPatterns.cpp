@@ -121,7 +121,7 @@ class StringCastOpLowering : public ConversionPattern {
       Value isNull;
       Value value;
       if (sourceType.isNullable()) {
-         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, typeConverter->convertType(sourceType).dyn_cast_or_null<TupleType>().getTypes(), operands[0]);
+         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, operands[0]);
          isNull = unPackOp.vals()[0];
          value = unPackOp.vals()[1];
       } else {
@@ -181,7 +181,7 @@ class StringCastOpLowering : public ConversionPattern {
       }
       //todo convert types
       if (targetType.isNullable()) {
-         Value combined = rewriter.create<mlir::util::PackOp>(loc, typeConverter->convertType(targetType), ValueRange({isNull, value}));
+         Value combined = rewriter.create<mlir::util::PackOp>(loc,ValueRange({isNull, value}));
          rewriter.replaceOp(op, combined);
       } else {
          rewriter.replaceOp(op, value);
@@ -257,8 +257,7 @@ class DumpOpLowering : public ConversionPattern {
       auto f64Type = FloatType::getF64(rewriter.getContext());
       Value isNull;
       if (val.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
-         TupleType tupleType = typeConverter->convertType(val.getType()).dyn_cast_or_null<TupleType>();
-         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), tupleType.getTypes(), dumpOpAdaptor.val());
+         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), dumpOpAdaptor.val());
          isNull = unPackOp.vals()[0];
          val = unPackOp.vals()[1];
       } else {

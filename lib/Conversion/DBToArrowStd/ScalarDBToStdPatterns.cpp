@@ -63,8 +63,7 @@ class AndOpLowering : public ConversionPattern {
          Value currNull;
          Value currVal;
          if (currNullable) {
-            TupleType tupleType = typeConverter->convertType(currType).dyn_cast_or_null<TupleType>();
-            auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, tupleType.getTypes(), operands[i]);
+            auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc,  operands[i]);
             currNull = unPackOp.vals()[0];
             currVal = unPackOp.vals()[1];
          } else {
@@ -94,7 +93,7 @@ class AndOpLowering : public ConversionPattern {
       }
       if (andOp.getResult().getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
          isNull = rewriter.create<SelectOp>(loc, result, isNull, falseValue);
-         Value combined = rewriter.create<mlir::util::PackOp>(loc, typeConverter->convertType(andOp.getResult().getType()), ValueRange({isNull, result}));
+         Value combined = rewriter.create<mlir::util::PackOp>(loc,  ValueRange({isNull, result}));
          rewriter.replaceOp(op, combined);
       } else {
          rewriter.replaceOp(op, result);
@@ -124,8 +123,7 @@ class OrOpLowering : public ConversionPattern {
          Value currNull;
          Value currVal;
          if (currNullable) {
-            TupleType tupleType = typeConverter->convertType(currType).dyn_cast_or_null<TupleType>();
-            auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, tupleType.getTypes(), operands[i]);
+            auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, operands[i]);
             currNull = unPackOp.vals()[0];
             currVal = unPackOp.vals()[1];
          } else {
@@ -155,7 +153,7 @@ class OrOpLowering : public ConversionPattern {
       }
       if (orOp.getResult().getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
          isNull = rewriter.create<SelectOp>(loc, result, falseValue, isNull);
-         Value combined = rewriter.create<mlir::util::PackOp>(loc, typeConverter->convertType(orOp.getResult().getType()), ValueRange({isNull, result}));
+         Value combined = rewriter.create<mlir::util::PackOp>(loc,  ValueRange({isNull, result}));
          rewriter.replaceOp(op, combined);
       } else {
          rewriter.replaceOp(op, result);
@@ -226,9 +224,8 @@ class IsNullOpLowering : public ConversionPattern {
       : ConversionPattern(typeConverter, mlir::db::IsNullOp::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto nullOp = cast<mlir::db::IsNullOp>(op);
-      auto tupleType = typeConverter->convertType(nullOp.val().getType()).dyn_cast_or_null<TupleType>();
-      auto unPackOp = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), tupleType.getTypes(), nullOp.val());
+      mlir::db::IsNullOpAdaptor isNullOpAdaptor(operands);
+      auto unPackOp = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), isNullOpAdaptor.val());
       rewriter.replaceOp(op, unPackOp.vals()[0]);
       return success();
    }
@@ -240,8 +237,7 @@ class CombineNullOpLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::CombineNullOpAdaptor adaptor(operands);
-      auto combineNullOp = cast<mlir::db::CombineNullOp>(op);
-      auto packOp = rewriter.create<mlir::util::PackOp>(rewriter.getUnknownLoc(), typeConverter->convertType(combineNullOp.getType()), ValueRange({adaptor.null(), adaptor.val()}));
+      auto packOp = rewriter.create<mlir::util::PackOp>(rewriter.getUnknownLoc(),  ValueRange({adaptor.null(), adaptor.val()}));
       rewriter.replaceOp(op, packOp.tuple());
       return success();
    }
@@ -479,7 +475,7 @@ class CastOpLowering : public ConversionPattern {
       Value isNull;
       Value value;
       if (sourceType.isNullable()) {
-         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, typeConverter->convertType(sourceType).dyn_cast_or_null<TupleType>().getTypes(), operands[0]);
+         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, operands[0]);
          isNull = unPackOp.vals()[0];
          value = unPackOp.vals()[1];
       } else {
@@ -557,7 +553,7 @@ class CastOpLowering : public ConversionPattern {
       }
       //todo convert types
       if (targetType.isNullable()) {
-         Value combined = rewriter.create<mlir::util::PackOp>(loc, typeConverter->convertType(targetType), ValueRange({isNull, value}));
+         Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({isNull, value}));
          rewriter.replaceOp(op, combined);
       } else {
          rewriter.replaceOp(op, value);
@@ -691,7 +687,7 @@ class HashLowering : public ConversionPattern {
          return combineHashes(builder, hash, totalHash, combinationRequired);
       } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
          if (auto originalTupleType = originalType.dyn_cast_or_null<mlir::TupleType>()) {
-            auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
+            auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(),  v);
             size_t i = 0;
             for (auto v : unpacked->getResults()) {
                totalHash = hashImpl(builder, v, totalHash, magicConstant, originalTupleType.getType(i++), combinationRequired);
@@ -699,7 +695,7 @@ class HashLowering : public ConversionPattern {
             return totalHash;
          } else if (auto dbType = originalType.dyn_cast_or_null<mlir::db::DBType>()) {
             assert(dbType.isNullable());
-            auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), tupleType.getTypes(), v);
+            auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), v);
             mlir::Value hashedIfNotNull = hashImpl(builder, unpacked.getResult(1), totalHash, magicConstant, dbType.getBaseType(), combinationRequired);
             return builder.create<mlir::SelectOp>(builder.getUnknownLoc(), unpacked.getResult(0), totalHash, hashedIfNotNull);
          }

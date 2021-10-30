@@ -53,15 +53,15 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
       if (keyTupleType.getTypes().size() == 0) {
          packedKey = builder.create<mlir::util::UndefTupleOp>(aggregationOp->getLoc(), keyTupleType);
       } else {
-         packedKey = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), keyTupleType, keys);
+         packedKey = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), keys);
       }
       mlir::Value packedVal;
       if (valTupleType.getTypes().size() == 0) {
          packedVal = builder.create<mlir::util::UndefTupleOp>(aggregationOp->getLoc(), valTupleType);
       } else {
-         packedVal = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), valTupleType, values);
+         packedVal = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), values);
       }
-      mlir::Value packed = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), insertEntryType, mlir::ValueRange({packedKey, packedVal}));
+      mlir::Value packed = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), mlir::ValueRange({packedKey, packedVal}));
 
       auto builderMerge = builder.create<mlir::db::BuilderMerge>(aggregationOp->getLoc(), htBuilder.getType(), htBuilder, packed);
       context.builders[builderId] = builderMerge.result_builder();
@@ -79,10 +79,10 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
       aggrBuilderBlock->addArguments({aggrTupleType, valTupleType});
       mlir::relalg::ProducerConsumerBuilder builder2(builder.getContext());
       builder2.setInsertionPointToStart(aggrBuilderBlock);
-      auto unpackedCurr = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), aggrTypes, aggrBuilderBlock->getArgument(0))->getResults();
+      auto unpackedCurr = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), aggrBuilderBlock->getArgument(0))->getResults();
       mlir::ValueRange unpackedNew;
       if (valTypes.size() > 0) {
-         unpackedNew = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), valTypes, aggrBuilderBlock->getArgument(1)).getResults();
+         unpackedNew = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), aggrBuilderBlock->getArgument(1)).getResults();
       }
       std::vector<mlir::Value> valuesx;
       for (auto aggrFn : aggregationFunctions) {
@@ -90,7 +90,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
          valuesx.insert(valuesx.end(), vec.begin(), vec.end());
       }
 
-      mlir::Value packedx = builder2.create<mlir::util::PackOp>(aggregationOp->getLoc(), aggrTupleType, valuesx);
+      mlir::Value packedx = builder2.create<mlir::util::PackOp>(aggregationOp->getLoc(), valuesx);
 
       builder2.create<mlir::db::YieldOp>(builder.getUnknownLoc(), packedx);
 
@@ -344,12 +344,12 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
          forOp2.getBodyRegion().push_back(block2);
          mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
-         auto unpacked = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), iterEntryType.getTypes(), forOp2.getInductionVar()).getResults();
+         auto unpacked = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), forOp2.getInductionVar()).getResults();
          mlir::ValueRange unpackedKey;
          if (!keyTypes.empty()) {
-            unpackedKey = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), keyTypes, unpacked[0]).getResults();
+            unpackedKey = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), unpacked[0]).getResults();
          }
-         auto unpackedAggr = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), aggrTypes, unpacked[1]).getResults();
+         auto unpackedAggr = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), unpacked[1]).getResults();
 
          for (auto fn : finalizeFunctions) {
             auto [attr, val] = fn(unpackedAggr, builder2);

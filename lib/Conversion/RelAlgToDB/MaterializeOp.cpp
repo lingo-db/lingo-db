@@ -33,9 +33,8 @@ class MaterializeLowering : public mlir::relalg::ProducerConsumerNode {
             values.push_back(context.getValueForAttribute(&attrRef.getRelationalAttribute()));
          }
       }
-      auto tupleType = mlir::TupleType::get(builder.getContext(), types);
       mlir::Value tableBuilder = context.builders[builderId];
-      mlir::Value packed = builder.create<mlir::util::PackOp>(materializeOp->getLoc(), tupleType, values);
+      mlir::Value packed = builder.create<mlir::util::PackOp>(materializeOp->getLoc(), values);
       mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(materializeOp->getLoc(), tableBuilder.getType(), tableBuilder, packed);
       context.builders[builderId] = mergedBuilder;
    }

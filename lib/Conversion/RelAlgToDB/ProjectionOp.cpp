@@ -67,8 +67,8 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
       }
       mlir::Value htBuilder = context.builders[builderId];
       mlir::Value emptyVals = builder.create<mlir::util::UndefTupleOp>(projectionOp->getLoc(), valTupleType);
-      mlir::Value packedKey = builder.create<mlir::util::PackOp>(projectionOp->getLoc(), keyTupleType, keys);
-      mlir::Value packed = builder.create<mlir::util::PackOp>(projectionOp->getLoc(), entryType, mlir::ValueRange({packedKey, emptyVals}));
+      mlir::Value packedKey = builder.create<mlir::util::PackOp>(projectionOp->getLoc(), keys);
+      mlir::Value packed = builder.create<mlir::util::PackOp>(projectionOp->getLoc(), mlir::ValueRange({packedKey, emptyVals}));
 
       auto mergedBuilder = builder.create<mlir::db::BuilderMerge>(projectionOp->getLoc(), htBuilder.getType(), htBuilder, packed);
       mlir::Block* aggrBuilderBlock = new mlir::Block;
@@ -108,8 +108,8 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
          forOp2.getBodyRegion().push_back(block2);
          mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
-         auto unpacked = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), entryType.getTypes(), forOp2.getInductionVar()).getResults();
-         auto unpackedKey = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), keyTypes, unpacked[0]).getResults();
+         auto unpacked = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), forOp2.getInductionVar()).getResults();
+         auto unpackedKey = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), unpacked[0]).getResults();
 
          for (const auto* attr : requiredAttributes) {
             if (keyMapping.count(attr)) {

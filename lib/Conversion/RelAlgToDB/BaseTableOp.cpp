@@ -56,7 +56,7 @@ class BaseTableLowering : public mlir::relalg::ProducerConsumerNode {
       forOp2.getBodyRegion().push_back(block2);
       mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
-      auto unpacked = builder2.create<mlir::util::UnPackOp>(baseTableOp->getLoc(), types, forOp2.getInductionVar());
+      auto unpacked = builder2.create<mlir::util::UnPackOp>(baseTableOp->getLoc(), forOp2.getInductionVar());
       size_t i = 0;
       for (const auto* attr : attrs) {
          context.setValueForAttribute(scope, attr, unpacked.getResult(i++));

@@ -158,7 +158,7 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == this->children[0].get()) {
-         auto unpacked = builder.create<mlir::util::UnPackOp>(joinOp->getLoc(), types, context.builders[builderId]);
+         auto unpacked = builder.create<mlir::util::UnPackOp>(joinOp->getLoc(), context.builders[builderId]);
          for (size_t i = 0; i < attrs.size(); i++) {
             context.setValueForAttribute(scope, attrs[i], unpacked.getResult(i));
          }
@@ -173,7 +173,7 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
             }
             values.push_back(value);
          }
-         context.builders[builderId] = builder.create<mlir::util::PackOp>(joinOp->getLoc(), mlir::TupleType::get(builder.getContext(), types), values);
+         context.builders[builderId] = builder.create<mlir::util::PackOp>(joinOp->getLoc(), values);
       }
    }
    virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
@@ -182,7 +182,7 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
          values.push_back(builder.create<mlir::db::NullOp>(joinOp.getLoc(), type));
       }
       builderId = context.getBuilderId();
-      context.builders[builderId] = builder.create<mlir::util::PackOp>(joinOp->getLoc(), mlir::TupleType::get(builder.getContext(), types), values);
+      context.builders[builderId] = builder.create<mlir::util::PackOp>(joinOp->getLoc(), values);
       children[1]->addRequiredBuilders({builderId});
       children[1]->produce(context, builder);
       children[0]->produce(context, builder);
