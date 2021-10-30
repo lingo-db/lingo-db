@@ -70,8 +70,14 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
       mlir::Value packedKey = builder.create<mlir::util::PackOp>(projectionOp->getLoc(), keyTupleType, keys);
       mlir::Value packed = builder.create<mlir::util::PackOp>(projectionOp->getLoc(), entryType, mlir::ValueRange({packedKey, emptyVals}));
 
-      mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(projectionOp->getLoc(), htBuilder.getType(), htBuilder, packed);
-      context.builders[builderId] = mergedBuilder;
+      auto mergedBuilder = builder.create<mlir::db::BuilderMerge>(projectionOp->getLoc(), htBuilder.getType(), htBuilder, packed);
+      mlir::Block* aggrBuilderBlock = new mlir::Block;
+      mergedBuilder.fn().push_back(aggrBuilderBlock);
+      aggrBuilderBlock->addArguments({valTupleType, valTupleType});
+      mlir::relalg::ProducerConsumerBuilder builder2(builder.getContext());
+      builder2.setInsertionPointToStart(aggrBuilderBlock);
+      builder2.create<mlir::db::YieldOp>(builder.getUnknownLoc(), aggrBuilderBlock->getArgument(0));
+      context.builders[builderId] = mergedBuilder.result_builder();
    }
 
    virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
@@ -88,12 +94,6 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
       valTupleType = mlir::TupleType::get(builder.getContext(), {});
       mlir::Value emptyTuple=builder.create<mlir::util::UndefTupleOp>(projectionOp.getLoc(),mlir::TupleType::get(builder.getContext()));
       auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(projectionOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType,valTupleType),emptyTuple);
-      mlir::Block* aggrBuilderBlock = new mlir::Block;
-      aggrBuilder.region().push_back(aggrBuilderBlock);
-      aggrBuilderBlock->addArguments({valTupleType, valTupleType});
-      mlir::relalg::ProducerConsumerBuilder builder2(builder.getContext());
-      builder2.setInsertionPointToStart(aggrBuilderBlock);
-      builder2.create<mlir::db::YieldOp>(builder.getUnknownLoc(), aggrBuilderBlock->getArgument(0));
       builderId = context.getBuilderId();
       context.builders[builderId] = aggrBuilder;
       entryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, valTupleType});

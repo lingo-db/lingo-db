@@ -168,7 +168,7 @@ extern "C" runtime::Str rt_cast_decimal_string(bool null, uint64_t low, uint64_t
 
 
 //borrowed from apache gandiva
-__attribute__((always_inline))
+__attribute__((always_inline)) inline
 int64_t mem_compare(const char* left, int64_t left_len, const char* right,
                     int64_t right_len) {
    int min = left_len;
@@ -184,7 +184,7 @@ int64_t mem_compare(const char* left, int64_t left_len, const char* right,
    }
 }
 #define STR_CMP(NAME, OP)                                                                                  \
-extern "C" __attribute__((always_inline)) bool rt_cmp_string_##NAME(bool null, runtime::Str str1, runtime::Str str2) { \
+extern "C" bool rt_cmp_string_##NAME(bool null, runtime::Str str1, runtime::Str str2) { \
 if (null) {                                                                                          \
 return false;                                                                                     \
 } else {                                                                                             \
@@ -200,3 +200,10 @@ STR_CMP(gt, >)
 STR_CMP(gte, >=)
 
 
+extern "C" void rt_cpy(runtime::Str to, runtime::Str from) {// NOLINT (clang-diagnostic-return-type-c-linkage)
+   memcpy(to.data(), from.data(), from.len());
+
+}
+extern "C" void rt_fill(runtime::Str from, char val) {// NOLINT (clang-diagnostic-return-type-c-linkage)
+   memset(from.data(),val,from.len());
+}

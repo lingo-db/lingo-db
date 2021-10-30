@@ -420,12 +420,12 @@ class CastOpLowering : public ConversionPattern {
          Value casted = rewriter.create<LLVM::BitcastOp>(op->getLoc(), LLVM::LLVMPointerType::get(targetElemType), alignedPtr);
          rewriter.replaceOp(op, casted);
       } else if (dynSizeSource) {
-         auto i8PointerType = mlir::LLVM::LLVMPointerType::get(rewriter.getIntegerType(8));
          auto sourceElemType = typeConverter->convertType(sourceGenericMemrefType.getElementType());
-         assert(sourceElemType == rewriter.getIntegerType(8));
+         auto sourcePointerType = mlir::LLVM::LLVMPointerType::get(sourceElemType);
+
          auto targetType = typeConverter->convertType(targetGenericMemrefType);
          auto idxType = typeConverter->convertType(rewriter.getIndexType());
-         Value alignedPtr = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), i8PointerType, adaptor.val(), rewriter.getI64ArrayAttr(0));
+         Value alignedPtr = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), sourcePointerType, adaptor.val(), rewriter.getI64ArrayAttr(0));
          Value size = rewriter.create<LLVM::ExtractValueOp>(rewriter.getUnknownLoc(), idxType, adaptor.val(), rewriter.getI64ArrayAttr({1}));
          Value casted = rewriter.create<LLVM::BitcastOp>(op->getLoc(), LLVM::LLVMPointerType::get(targetElemType), alignedPtr);
          Value tpl = rewriter.create<LLVM::UndefOp>(rewriter.getUnknownLoc(), targetType);

@@ -492,40 +492,44 @@ static void print(OpAsmPrinter& p, db::SortOp& op) {
    p << ")";
    p.printRegion(op.region(), false, true);
 }
-static ParseResult parseCreateAggrHTBuilder(OpAsmParser& parser, OperationState& result) {
-   OpAsmParser::OperandType initial;
-   db::AggrHTBuilderType builderType;
-   if(parser.parseOperand(initial)){
-      return failure();
-   }
-   OpAsmParser::OperandType left,right;
-   Type leftArgType;
-   Type rightArgType;
-   if (parser.parseLParen()||parser.parseRegionArgument(left)||parser.parseColonType(leftArgType)||parser.parseComma()||parser.parseRegionArgument(right),parser.parseColonType(rightArgType)||parser.parseRParen()){
+static ParseResult parseBuilderMerge(OpAsmParser& parser, OperationState& result) {
+   OpAsmParser::OperandType builder, val;
+   db::BuilderType builderType;
+   Type valType;
+   if(parser.parseOperand(builder)||parser.parseColonType(builderType)||parser.parseComma()||parser.parseOperand(val)||parser.parseColonType(valType)){
       return failure();
    }
    Region* body = result.addRegion();
-   if (parser.parseRegion(*body, {left,right}, {leftArgType,rightArgType})) return failure();
-   if(parser.parseArrow()||parser.parseType(builderType)) return failure();
-   parser.resolveOperand(initial,leftArgType,result.operands);
+   if(parser.parseOptionalLParen().succeeded()) {
+      OpAsmParser::OperandType left, right;
+      Type leftArgType;
+      Type rightArgType;
+      if (parser.parseRegionArgument(left) || parser.parseColonType(leftArgType) || parser.parseComma() || parser.parseRegionArgument(right), parser.parseColonType(rightArgType) || parser.parseRParen()) {
+         return failure();
+      }
+      if (parser.parseRegion(*body, {left, right}, {leftArgType, rightArgType})) return failure();
+   }
+   parser.resolveOperand(builder,builderType,result.operands);
+   parser.resolveOperand(val,valType,result.operands);
    parser.addTypeToList(builderType,result.types);
    return success();
 }
-static void print(OpAsmPrinter& p, db::CreateAggrHTBuilder& op) {
-   p  << " "<< op.initial() <<" ";
-   p << "(";
-   bool first = true;
-   for (auto arg : op.region().front().getArguments()) {
-      if (first) {
-         first = false;
-      } else {
-         p << ",";
+static void print(OpAsmPrinter& p, db::BuilderMerge& op) {
+   p  << " "<< op.builder() <<" : "<<op.builder().getType()<<", "<<op.val()<<" : "<<op.val().getType();
+   if(!op.fn().empty()) {
+      p << "(";
+      bool first = true;
+      for (auto arg : op.fn().front().getArguments()) {
+         if (first) {
+            first = false;
+         } else {
+            p << ",";
+         }
+         p << arg << ":" << arg.getType();
       }
-      p << arg << ":" << arg.getType();
+      p << ")";
+      p.printRegion(op.fn(), false, true);
    }
-   p << ")";
-   p.printRegion(op.region(), false, true);
-   p<< " -> "<< op.getType();
 }
 
 

@@ -43,10 +43,10 @@
 
 
         %join_ht_builder= db.create_join_ht_builder : !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>
-        %builder1= db.builder_merge %join_ht_builder : !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>, %entry1 : !entry_type -> !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>
-        %builder2= db.builder_merge %builder1 : !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>, %entry2 : !entry_type -> !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>
-        %builder3= db.builder_merge %builder2 : !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>, %entry3 : !entry_type -> !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>
-        %builder4= db.builder_merge %builder3 : !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>, %entry4 : !entry_type -> !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>
+        %builder1= db.builder_merge %join_ht_builder : !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>, %entry1 : !entry_type
+        %builder2= db.builder_merge %builder1 : !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>, %entry2 : !entry_type
+        %builder3= db.builder_merge %builder2 : !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>, %entry3 : !entry_type
+        %builder4= db.builder_merge %builder3 : !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>, %entry4 : !entry_type
         %ht  = db.builder_build %builder4 : !db.join_ht_builder<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>> -> !db.join_ht<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>
         %matches = db.lookup %ht :  !db.join_ht<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>, %key1  : tuple<!db.string,!db.int<32>> -> !db.iterable<tuple<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>,join_ht_iterator>
         db.for %entry in %matches : !db.iterable<tuple<tuple<!db.string,!db.int<32>>,tuple<!db.int<32>,!db.int<32>>>,join_ht_iterator> {

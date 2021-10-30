@@ -193,8 +193,6 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
 
          auto vecType = mlir::util::GenericMemrefType::get(context, entryType, -1);
          auto t= (Type) TupleType::get(patterns.getContext(), {indexType,vecType});
-         llvm::dbgs()<<"converted:\n";
-         t.dump();
          return t;
       }
    });

@@ -16,6 +16,13 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
    std::vector<const mlir::relalg::RelationalAttribute*> valAttributes;
    std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> keyMapping;
 
+   std::vector<std::function<std::pair<const mlir::relalg::RelationalAttribute*, mlir::Value>(mlir::ValueRange, mlir::OpBuilder & builder)>> finalizeFunctions;
+   std::vector<std::function<std::vector<mlir::Value>(mlir::ValueRange, mlir::ValueRange, mlir::OpBuilder & builder)>> aggregationFunctions;
+   std::vector<mlir::Type> keyTypes;
+   std::vector<mlir::Type> valTypes;
+   std::vector<mlir::Value> defaultValues;
+   std::vector<mlir::Type> aggrTypes;
+
    public:
    AggregationLowering(mlir::relalg::AggregationOp aggregationOp) : mlir::relalg::ProducerConsumerNode(aggregationOp.rel()), aggregationOp(aggregationOp) {
    }
@@ -33,6 +40,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
       return aggregationOp.getAvailableAttributes();
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+
       std::vector<mlir::Value> keys, values;
       for (const auto* attr : keyAttributes) {
          keys.push_back(context.getValueForAttribute(attr));
@@ -55,8 +63,40 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
       }
       mlir::Value packed = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), insertEntryType, mlir::ValueRange({packedKey, packedVal}));
 
-      mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(aggregationOp->getLoc(), htBuilder.getType(), htBuilder, packed);
-      context.builders[builderId] = mergedBuilder;
+      auto builderMerge = builder.create<mlir::db::BuilderMerge>(aggregationOp->getLoc(), htBuilder.getType(), htBuilder, packed);
+      context.builders[builderId] = builderMerge.result_builder();
+
+
+      auto scope = context.createScope();
+
+
+      auto aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
+      keyTupleType = mlir::TupleType::get(builder.getContext(), keyTypes);
+      valTupleType = mlir::TupleType::get(builder.getContext(), valTypes);
+      aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
+      mlir::Block* aggrBuilderBlock = new mlir::Block;
+      builderMerge.fn().push_back(aggrBuilderBlock);
+      aggrBuilderBlock->addArguments({aggrTupleType, valTupleType});
+      mlir::relalg::ProducerConsumerBuilder builder2(builder.getContext());
+      builder2.setInsertionPointToStart(aggrBuilderBlock);
+      auto unpackedCurr = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), aggrTypes, aggrBuilderBlock->getArgument(0))->getResults();
+      mlir::ValueRange unpackedNew;
+      if (valTypes.size() > 0) {
+         unpackedNew = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), valTypes, aggrBuilderBlock->getArgument(1)).getResults();
+      }
+      std::vector<mlir::Value> valuesx;
+      for (auto aggrFn : aggregationFunctions) {
+         auto vec = aggrFn(unpackedCurr, unpackedNew, builder2);
+         valuesx.insert(valuesx.end(), vec.begin(), vec.end());
+      }
+
+      mlir::Value packedx = builder2.create<mlir::util::PackOp>(aggregationOp->getLoc(), aggrTupleType, valuesx);
+
+      builder2.create<mlir::db::YieldOp>(builder.getUnknownLoc(), packedx);
+
+
+
+
    }
 
    mlir::Attribute getMaxValueAttr(mlir::db::DBType type) {
@@ -90,13 +130,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
                                       .Default([&](::mlir::Type) { return builder.getI64IntegerAttr(std::numeric_limits<int64_t>::max()); });
       return maxValAttr;
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
-      std::vector<mlir::Type> keyTypes;
-      std::vector<mlir::Type> valTypes;
-      auto scope = context.createScope();
-
-      std::vector<std::function<std::pair<const mlir::relalg::RelationalAttribute*, mlir::Value>(mlir::ValueRange, mlir::OpBuilder & builder)>> finalizeFunctions;
-      std::vector<std::function<std::vector<mlir::Value>(mlir::ValueRange, mlir::ValueRange, mlir::OpBuilder & builder)>> aggregationFunctions;
+   void analyze(mlir::relalg::ProducerConsumerBuilder& builder){
       for (auto attr : aggregationOp.group_by_attrs()) {
          if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
             keyTypes.push_back(attrRef.getRelationalAttribute().type);
@@ -104,8 +138,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
             keyMapping.insert({&attrRef.getRelationalAttribute(), keyTypes.size() - 1});
          }
       }
-      std::vector<mlir::Value> defaultValues;
-      std::vector<mlir::Type> aggrTypes;
+
       auto counterType = mlir::db::IntType::get(builder.getContext(), false, 64);
 
       aggregationOp.aggr_func().walk([&](mlir::relalg::AddAttrOp addAttrOp) {
@@ -281,31 +314,20 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
             });
          }
       });
+   }
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+      auto scope = context.createScope();
+
+      analyze(builder);
+
       auto aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
       auto initTuple = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), aggrTupleType, defaultValues);
       keyTupleType = mlir::TupleType::get(builder.getContext(), keyTypes);
       valTupleType = mlir::TupleType::get(builder.getContext(), valTypes);
       aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
+
       auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(aggregationOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType, aggrTupleType), initTuple);
-      mlir::Block* aggrBuilderBlock = new mlir::Block;
-      aggrBuilder.region().push_back(aggrBuilderBlock);
-      aggrBuilderBlock->addArguments({aggrTupleType, valTupleType});
-      mlir::relalg::ProducerConsumerBuilder builder2(builder.getContext());
-      builder2.setInsertionPointToStart(aggrBuilderBlock);
-      auto unpackedCurr = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), aggrTypes, aggrBuilderBlock->getArgument(0))->getResults();
-      mlir::ValueRange unpackedNew;
-      if (valTypes.size() > 0) {
-         unpackedNew = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), valTypes, aggrBuilderBlock->getArgument(1)).getResults();
-      }
-      std::vector<mlir::Value> values;
-      for (auto aggrFn : aggregationFunctions) {
-         auto vec = aggrFn(unpackedCurr, unpackedNew, builder2);
-         values.insert(values.end(), vec.begin(), vec.end());
-      }
 
-      mlir::Value packed = builder2.create<mlir::util::PackOp>(aggregationOp->getLoc(), aggrTupleType, values);
-
-      builder2.create<mlir::db::YieldOp>(builder.getUnknownLoc(), packed);
       builderId = context.getBuilderId();
       context.builders[builderId] = aggrBuilder;
       this->insertEntryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, valTupleType});

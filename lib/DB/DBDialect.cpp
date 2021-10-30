@@ -23,7 +23,7 @@ struct DBInlinerInterface : public DialectInlinerInterface {
       return true;
    }
    virtual bool isLegalToInline(Region *dest, Region *src, bool wouldBeCloned,
-                                BlockAndValueMapping &valueMapping) const {
+                                BlockAndValueMapping &valueMapping) const override {
       return true;
    }
 };

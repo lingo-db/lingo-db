@@ -34,10 +34,10 @@ module {
          %row4 = util.pack %str4, %int4 : !db.string,!db.int<32> -> tuple<!db.string,!db.int<32>>
 
          %vector_builder=db.create_vector_builder : !db.vector_builder<!test_tuple_type>
-         %builder1=db.builder_merge %vector_builder : !db.vector_builder<!test_tuple_type>, %row1 : !test_tuple_type -> !db.vector_builder<!test_tuple_type>
-         %builder2=db.builder_merge %builder1 : !db.vector_builder<!test_tuple_type>, %row2 : !test_tuple_type -> !db.vector_builder<!test_tuple_type>
-         %builder3=db.builder_merge %builder2 : !db.vector_builder<!test_tuple_type>, %row3 : !test_tuple_type -> !db.vector_builder<!test_tuple_type>
-         %builder4=db.builder_merge %builder3 : !db.vector_builder<!test_tuple_type>, %row4 : !test_tuple_type -> !db.vector_builder<!test_tuple_type>
+         %builder1=db.builder_merge %vector_builder : !db.vector_builder<!test_tuple_type>, %row1 : !test_tuple_type
+         %builder2=db.builder_merge %builder1 : !db.vector_builder<!test_tuple_type>, %row2 : !test_tuple_type
+         %builder3=db.builder_merge %builder2 : !db.vector_builder<!test_tuple_type>, %row3 : !test_tuple_type
+         %builder4=db.builder_merge %builder3 : !db.vector_builder<!test_tuple_type>, %row4 : !test_tuple_type
          %vector=db.builder_build %builder4 : !db.vector_builder<!test_tuple_type> -> !db.vector<!test_tuple_type>
          %flag = db.createflag
          db.for %row in %vector : !db.vector<!test_tuple_type> until %flag {

@@ -34,21 +34,42 @@
 
         %initial = util.pack %zero, %one : !db.int<32>,!db.int<32> -> tuple<!db.int<32>,!db.int<32>>
 
-        %aggr_ht_builder= db.create_aggr_ht_builder %initial (%curr:tuple<!db.int<32>,!db.int<32>>, %new:tuple<!db.int<32>,!db.int<32>>) {
-           %curr1,%curr2 = util.unpack %curr : tuple<!db.int<32>,!db.int<32>> -> !db.int<32>,!db.int<32>
-           %new1,%new2 = util.unpack %new : tuple<!db.int<32>,!db.int<32>> -> !db.int<32>,!db.int<32>
-           %add1 = db.add %curr1 : !db.int<32>,%new1 : !db.int<32>
-           %mul1 = db.mul %curr2 : !db.int<32>,%new2 : !db.int<32>
-		   %updated_tuple = util.pack %add1, %mul1 : !db.int<32>, !db.int<32> -> tuple<!db.int<32>, !db.int<32>>
-           db.yield %updated_tuple : tuple<!db.int<32>, !db.int<32>>
-        } -> !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>
-        %builder1= db.builder_merge %aggr_ht_builder : !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>, %entry1 : !entry_type -> !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>
+        %aggr_ht_builder= db.create_aggr_ht_builder %initial : tuple<!db.int<32>,!db.int<32>>  -> !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>
+        %builder1= db.builder_merge %aggr_ht_builder : !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>, %entry1 : !entry_type (%curr:tuple<!db.int<32>,!db.int<32>>, %new:tuple<!db.int<32>,!db.int<32>>) {
+                                                                                                                                                                                     %curr1,%curr2 = util.unpack %curr : tuple<!db.int<32>,!db.int<32>> -> !db.int<32>,!db.int<32>
+                                                                                                                                                                                     %new1,%new2 = util.unpack %new : tuple<!db.int<32>,!db.int<32>> -> !db.int<32>,!db.int<32>
+                                                                                                                                                                                     %add1 = db.add %curr1 : !db.int<32>,%new1 : !db.int<32>
+                                                                                                                                                                                     %mul1 = db.mul %curr2 : !db.int<32>,%new2 : !db.int<32>
+                                                                                                                                                                          		   %updated_tuple = util.pack %add1, %mul1 : !db.int<32>, !db.int<32> -> tuple<!db.int<32>, !db.int<32>>
+                                                                                                                                                                                     db.yield %updated_tuple : tuple<!db.int<32>, !db.int<32>>
+                                                                                                                                                                                  }
         db.dump %str_const : !db.string
-        %builder2= db.builder_merge %builder1 : !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>, %entry2 : !entry_type -> !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>
+        %builder2= db.builder_merge %builder1 : !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>, %entry2 : !entry_type (%curr:tuple<!db.int<32>,!db.int<32>>, %new:tuple<!db.int<32>,!db.int<32>>) {
+                                                                                                                                                                              %curr1,%curr2 = util.unpack %curr : tuple<!db.int<32>,!db.int<32>> -> !db.int<32>,!db.int<32>
+                                                                                                                                                                              %new1,%new2 = util.unpack %new : tuple<!db.int<32>,!db.int<32>> -> !db.int<32>,!db.int<32>
+                                                                                                                                                                              %add1 = db.add %curr1 : !db.int<32>,%new1 : !db.int<32>
+                                                                                                                                                                              %mul1 = db.mul %curr2 : !db.int<32>,%new2 : !db.int<32>
+                                                                                                                                                                   		   %updated_tuple = util.pack %add1, %mul1 : !db.int<32>, !db.int<32> -> tuple<!db.int<32>, !db.int<32>>
+                                                                                                                                                                              db.yield %updated_tuple : tuple<!db.int<32>, !db.int<32>>
+                                                                                                                                                                           }
         db.dump %str_const : !db.string
-        %builder3= db.builder_merge %builder2 : !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>, %entry3 : !entry_type -> !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>
+        %builder3= db.builder_merge %builder2 : !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>, %entry3 : !entry_type (%curr:tuple<!db.int<32>,!db.int<32>>, %new:tuple<!db.int<32>,!db.int<32>>) {
+                                                                                                                                                                              %curr1,%curr2 = util.unpack %curr : tuple<!db.int<32>,!db.int<32>> -> !db.int<32>,!db.int<32>
+                                                                                                                                                                              %new1,%new2 = util.unpack %new : tuple<!db.int<32>,!db.int<32>> -> !db.int<32>,!db.int<32>
+                                                                                                                                                                              %add1 = db.add %curr1 : !db.int<32>,%new1 : !db.int<32>
+                                                                                                                                                                              %mul1 = db.mul %curr2 : !db.int<32>,%new2 : !db.int<32>
+                                                                                                                                                                   		   %updated_tuple = util.pack %add1, %mul1 : !db.int<32>, !db.int<32> -> tuple<!db.int<32>, !db.int<32>>
+                                                                                                                                                                              db.yield %updated_tuple : tuple<!db.int<32>, !db.int<32>>
+                                                                                                                                                                           }
         db.dump %str_const : !db.string
-        %builder4= db.builder_merge %builder3 : !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>, %entry4 : !entry_type -> !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>
+        %builder4= db.builder_merge %builder3 : !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>>, %entry4 : !entry_type (%curr:tuple<!db.int<32>,!db.int<32>>, %new:tuple<!db.int<32>,!db.int<32>>) {
+                                                                                                                                                                              %curr1,%curr2 = util.unpack %curr : tuple<!db.int<32>,!db.int<32>> -> !db.int<32>,!db.int<32>
+                                                                                                                                                                              %new1,%new2 = util.unpack %new : tuple<!db.int<32>,!db.int<32>> -> !db.int<32>,!db.int<32>
+                                                                                                                                                                              %add1 = db.add %curr1 : !db.int<32>,%new1 : !db.int<32>
+                                                                                                                                                                              %mul1 = db.mul %curr2 : !db.int<32>,%new2 : !db.int<32>
+                                                                                                                                                                   		   %updated_tuple = util.pack %add1, %mul1 : !db.int<32>, !db.int<32> -> tuple<!db.int<32>, !db.int<32>>
+                                                                                                                                                                              db.yield %updated_tuple : tuple<!db.int<32>, !db.int<32>>
+                                                                                                                                                                           }
         db.dump %str_const : !db.string
        %ht  = db.builder_build %builder4 : !db.aggr_ht_builder<tuple<>,tuple<!db.int<32>,!db.int<32>>, tuple<!db.int<32>,!db.int<32>>> -> !db.aggr_ht<tuple<>,tuple<!db.int<32>,!db.int<32>>>
         db.for %entry in %ht : !db.aggr_ht<tuple<>,tuple<!db.int<32>,!db.int<32>>> {

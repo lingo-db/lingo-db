@@ -255,7 +255,7 @@ def DB_BuilderMerge : DB_Op<"builder_merge",
 let summary = "merge value";
 let arguments = (ins DBBuilder:$builder,AnyType:$val);
 let results = (outs DBBuilder:$result_builder);
-let assemblyFormat = "$builder `:` type($builder) `,` $val `:`  type($val) `->` type($result_builder) attr-dict";
+let regions = (region AnyRegion:$fn);
 }
 def DB_BuilderBuild : DB_Op<"builder_build",
 [NoSideEffect]> {
@@ -306,7 +306,7 @@ def DB_CreateAggrHTBuilder : DB_Op<"create_aggr_ht_builder",
 let summary = "create aggr hashtable builder";
 let arguments = (ins AnyType: $initial);
 let results = (outs DB_AggrHTBuilder:$builder);
-let regions = (region SizedRegion<1>:$region);
+let assemblyFormat = " $initial `:` type($initial) `->` type($builder) attr-dict";
 }
 def DB_CreateJoinHTBuilder : DB_Op<"create_join_ht_builder",
 [NoSideEffect]> {
@@ -628,7 +628,7 @@ OperandRange getSuccessorEntryOperands(unsigned index);
 }
 
 def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
-        ParentOneOf<["IfOp","ForOp","WhileOp","SortOp","CreateAggrHTBuilder"]>]> {
+        ParentOneOf<["IfOp","ForOp","WhileOp","SortOp","BuilderMerge"]>]> {
 let summary = "loop yield and termination operation";
 
 let arguments = (ins Variadic<AnyType>:$results);

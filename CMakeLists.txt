@@ -36,8 +36,6 @@ set(ArrowPython_DIR ${Arrow_DIR})
 include(${Arrow_DIR}/FindArrow.cmake)
 include(${Arrow_DIR}/FindArrowPython.cmake)
 include_directories(${ARROW_INCLUDE_DIR})
-include(${Arrow_DIR}/FindGandiva.cmake)
-include_directories(${GANDIVA_INCLUDE_DIR})
 
 add_subdirectory(include)
 add_subdirectory(lib/mlir-support)
