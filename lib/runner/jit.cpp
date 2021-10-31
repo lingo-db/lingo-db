@@ -13,11 +13,8 @@ namespace {
 using JIT = runner::JIT;
 
 static void optimizeModule(llvm::Module& module) {
-   llvm::legacy::PassManager modulePMInline;
-   modulePMInline.add(llvm::createAlwaysInlinerLegacyPass());
-   modulePMInline.run(module);
+
    // Create a function pass manager
-   llvm::legacy::PassManager modulePM;
    llvm::legacy::FunctionPassManager funcPM(&module);
    funcPM.add(llvm::createInstructionCombiningPass());
    funcPM.add(llvm::createReassociatePass());
@@ -31,9 +28,6 @@ static void optimizeModule(llvm::Module& module) {
       funcPM.run(func);
    }
    funcPM.doFinalization();
-   modulePM.add(llvm::createAlwaysInlinerLegacyPass());
-   modulePM.add(llvm::createGlobalDCEPass());
-   modulePM.run(module);
 }
 
 } // namespace
@@ -80,9 +74,6 @@ JIT::JIT(llvm::orc::ThreadSafeContext& ctx)
 }
 
 llvm::Error JIT::addModule(std::unique_ptr<llvm::Module> module) {
-   llvm::legacy::PassManager modulePM;
-   modulePM.add(llvm::createInternalizePass([&](const llvm::GlobalValue& gv) { return gv.getName() == "main" || gv.getName() == "rt_set_execution_context" || gv.isDeclaration(); }));
-   modulePM.run(*module);
    return optimizeLayer.add(mainDylib, llvm::orc::ThreadSafeModule{move(module), context});
 }
 
