@@ -1,6 +1,5 @@
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Dialect/util/UtilDialect.h"
-#include "mlir/Dialect/util/UtilTypes.h"
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include <unordered_set>

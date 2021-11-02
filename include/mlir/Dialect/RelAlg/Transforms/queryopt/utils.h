@@ -1,5 +1,5 @@
-#ifndef MLIR_DIALECT_RELALG_QUERYOPT_UTILS_H
-#define MLIR_DIALECT_RELALG_QUERYOPT_UTILS_H
+#ifndef MLIR_DIALECT_RELALG_TRANSFORMS_QUERYOPT_UTILS_H
+#define MLIR_DIALECT_RELALG_TRANSFORMS_QUERYOPT_UTILS_H
 #include <llvm/ADT/EquivalenceClasses.h>
 #include <llvm/ADT/SmallBitVector.h>
 #include <llvm/ADT/TypeSwitch.h>
@@ -134,4 +134,4 @@ class Plan {
    const std::string& getDescription() const;
 };
 } // namespace mlir::relalg
-#endif // MLIR_DIALECT_RELALG_QUERYOPT_UTILS_H
+#endif // MLIR_DIALECT_RELALG_TRANSFORMS_QUERYOPT_UTILS_H

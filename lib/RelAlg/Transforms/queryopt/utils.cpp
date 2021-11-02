@@ -1,4 +1,4 @@
-#include "mlir/Dialect/RelAlg/queryopt/utils.h"
+#include "mlir/Dialect/RelAlg/Transforms/queryopt/utils.h"
 namespace mlir::relalg {
 void NodeSet::iterateSubsets(const std::function<void(NodeSet)>& fn) const {
    if (!storage.any()) return;

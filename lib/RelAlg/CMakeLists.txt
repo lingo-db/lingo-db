@@ -3,20 +3,20 @@ add_mlir_dialect_library(MLIRRelAlg
         RelAlgOps.cpp
         RelAlgOpsEnums.cpp
         OperatorInterfaceImpl.cpp
-        ExtractNestedOperators.cpp
-        SimplifyAggregations.cpp
-        DecomposeLambdas.cpp
-        CombinePredicates.cpp
-        OptimizeImplementations.cpp
-        IntroduceTmp.cpp
+        Transforms/ExtractNestedOperators.cpp
+        Transforms/SimplifyAggregations.cpp
+        Transforms/DecomposeLambdas.cpp
+        Transforms/CombinePredicates.cpp
+        Transforms/OptimizeImplementations.cpp
+        Transforms/IntroduceTmp.cpp
         RelationalAttributeManager.cpp
-        Unnesting.cpp
-        Pushdown.cpp
-        ImplicitToExplicitJoins.cpp
-        OptimizeJoinOrder.cpp
-        queryopt/utils.cpp
-        queryopt/QueryGraphBuilder.cpp
-        queryopt/DPhyp.cpp
+        Transforms/Unnesting.cpp
+        Transforms/Pushdown.cpp
+        Transforms/ImplicitToExplicitJoins.cpp
+        Transforms/OptimizeJoinOrder.cpp
+        Transforms/queryopt/utils.cpp
+        Transforms/queryopt/QueryGraphBuilder.cpp
+        Transforms/queryopt/DPhyp.cpp
         ADDITIONAL_HEADER_DIRS
         ../../include/mlir/Dialect/RelAlg
 

@@ -1,10 +1,10 @@
-#ifndef MLIR_DIALECT_RELALG_QUERYOPT_QUERYGRAPH_H
-#define MLIR_DIALECT_RELALG_QUERYOPT_QUERYGRAPH_H
+#ifndef MLIR_DIALECT_RELALG_TRANSFORMS_QUERYOPT_QUERYGRAPH_H
+#define MLIR_DIALECT_RELALG_TRANSFORMS_QUERYOPT_QUERYGRAPH_H
 
 #include "llvm/Support/Debug.h"
 #include <mlir/Dialect/DB/IR/DBOps.h>
 #include <mlir/Dialect/RelAlg/IR/RelAlgOps.h>
-#include <mlir/Dialect/RelAlg/queryopt/utils.h>
+#include <mlir/Dialect/RelAlg/Transforms/queryopt/utils.h>
 namespace mlir::relalg {
 class QueryGraph {
    public:
@@ -363,4 +363,4 @@ class QueryGraph {
    }
 };
 } // namespace mlir::relalg
-#endif // MLIR_DIALECT_RELALG_QUERYOPT_QUERYGRAPH_H
+#endif // MLIR_DIALECT_RELALG_TRANSFORMS_QUERYOPT_QUERYGRAPH_H

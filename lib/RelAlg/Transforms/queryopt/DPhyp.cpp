@@ -1,4 +1,4 @@
-#include "mlir/Dialect/RelAlg/queryopt/DPhyp.h"
+#include "mlir/Dialect/RelAlg/Transforms/queryopt/DPhyp.h"
 #include <iostream>
 #include <unordered_set>
 

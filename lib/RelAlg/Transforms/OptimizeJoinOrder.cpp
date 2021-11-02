@@ -3,8 +3,8 @@
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
-#include "mlir/Dialect/RelAlg/queryopt/DPhyp.h"
-#include "mlir/Dialect/RelAlg/queryopt/QueryGraphBuilder.h"
+#include "mlir/Dialect/RelAlg/Transforms/queryopt/DPhyp.h"
+#include "mlir/Dialect/RelAlg/Transforms/queryopt/QueryGraphBuilder.h"
 
 namespace {
 
