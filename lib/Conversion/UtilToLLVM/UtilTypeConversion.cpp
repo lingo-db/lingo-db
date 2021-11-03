@@ -105,10 +105,10 @@ class ToGenericMemrefOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::ToGenericMemrefOpAdaptor adaptor(operands);
       auto castedOp = mlir::dyn_cast_or_null<mlir::util::ToGenericMemrefOp>(op);
-      auto genericMemrefType = castedOp.generic_memref().getType().cast<mlir::util::GenericMemrefType>();
-      auto loweredGenericMemrefType = mlir::util::GenericMemrefType::get(getContext(), typeConverter->convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());
+      auto genericMemrefType = castedOp.ref().getType().cast<mlir::util::RefType>();
+      auto loweredRefType = mlir::util::RefType::get(getContext(), typeConverter->convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());
 
-      rewriter.replaceOpWithNewOp<mlir::util::ToGenericMemrefOp>(op, loweredGenericMemrefType, adaptor.memref());
+      rewriter.replaceOpWithNewOp<mlir::util::ToGenericMemrefOp>(op, loweredRefType, adaptor.memref());
 
       return success();
    }
@@ -125,9 +125,9 @@ class AllocOpLowering : public ConversionPattern {
       typename UtilOp::Adaptor adaptor(operands);
 
       auto castedOp = mlir::dyn_cast_or_null<UtilOp>(op);
-      auto genericMemrefType = castedOp.generic_memref().getType().template cast<mlir::util::GenericMemrefType>();
-      auto loweredGenericMemrefType = mlir::util::GenericMemrefType::get(getContext(), typeConverter->convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());
-      rewriter.replaceOpWithNewOp<UtilOp>(op, loweredGenericMemrefType, adaptor.size());
+      auto genericMemrefType = castedOp.ref().getType().template cast<mlir::util::RefType>();
+      auto loweredRefType = mlir::util::RefType::get(getContext(), typeConverter->convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());
+      rewriter.replaceOpWithNewOp<UtilOp>(op, loweredRefType, adaptor.size());
       return success();
    }
 };
@@ -140,7 +140,7 @@ class StoreOpLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::StoreOpAdaptor adaptor(operands);
-      rewriter.replaceOpWithNewOp<mlir::util::StoreOp>(op, adaptor.val(), adaptor.generic_memref(), adaptor.idx());
+      rewriter.replaceOpWithNewOp<mlir::util::StoreOp>(op, adaptor.val(), adaptor.ref(), adaptor.idx());
 
       return success();
    }
@@ -154,7 +154,7 @@ class DeAllocOpLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::DeAllocOpAdaptor adaptor(operands);
-      rewriter.replaceOpWithNewOp<mlir::util::DeAllocOp>(op, adaptor.generic_memref());
+      rewriter.replaceOpWithNewOp<mlir::util::DeAllocOp>(op, adaptor.ref());
 
       return success();
    }
@@ -185,7 +185,7 @@ class DimOpLowering : public ConversionPattern {
       mlir::util::DimOpAdaptor adaptor(operands);
 
 
-      rewriter.replaceOpWithNewOp<mlir::util::DimOp>(op, rewriter.getIndexType(), adaptor.generic_memref());
+      rewriter.replaceOpWithNewOp<mlir::util::DimOp>(op, rewriter.getIndexType(), adaptor.ref());
 
       return success();
    }
@@ -200,7 +200,7 @@ class LoadOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::LoadOpAdaptor adaptor(operands);
       auto castedOp = mlir::dyn_cast_or_null<mlir::util::LoadOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::util::LoadOp>(op, typeConverter->convertType(castedOp.val().getType()), adaptor.generic_memref(), adaptor.idx());
+      rewriter.replaceOpWithNewOp<mlir::util::LoadOp>(op, typeConverter->convertType(castedOp.val().getType()), adaptor.ref(), adaptor.idx());
 
       return success();
    }
@@ -230,7 +230,7 @@ class ElementPtrOpLowering : public ConversionPattern {
 
       mlir::util::ElementPtrOpAdaptor adaptor(operands);
       auto castedOp = mlir::dyn_cast_or_null<mlir::util::ElementPtrOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::util::ElementPtrOp>(op, typeConverter->convertType(castedOp.res().getType()), adaptor.generic_memref(), adaptor.idx());
+      rewriter.replaceOpWithNewOp<mlir::util::ElementPtrOp>(op, typeConverter->convertType(castedOp.res().getType()), adaptor.ref(), adaptor.idx());
 
       return success();
    }
@@ -267,13 +267,13 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    patterns.add<LoadOpLowering>(typeConverter, patterns.getContext());
    patterns.add<ElementPtrOpLowering>(typeConverter, patterns.getContext());
 
-   typeConverter.addConversion([&](mlir::util::GenericMemrefType genericMemrefType) {
-      return mlir::util::GenericMemrefType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());
+   typeConverter.addConversion([&](mlir::util::RefType genericMemrefType) {
+      return mlir::util::RefType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());
    });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, mlir::util::GenericMemrefType, ValueRange valueRange, Location loc) {
+   typeConverter.addSourceMaterialization([&](OpBuilder&, mlir::util::RefType, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
-   typeConverter.addTargetMaterialization([&](OpBuilder&, mlir::util::GenericMemrefType, ValueRange valueRange, Location loc) {
+   typeConverter.addTargetMaterialization([&](OpBuilder&, mlir::util::RefType, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
 }

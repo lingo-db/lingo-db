@@ -50,7 +50,7 @@ class TableScanLowering : public ConversionPattern {
       mlir::db::TableScanAdaptor adaptor(operands);
       auto tablescan = cast<mlir::db::TableScan>(op);
       std::vector<Type> types;
-      auto ptrType = mlir::util::GenericMemrefType::get(rewriter.getContext(),IntegerType::get(rewriter.getContext(), 8),llvm::Optional<int64_t>());
+      auto ptrType = mlir::util::RefType::get(rewriter.getContext(),IntegerType::get(rewriter.getContext(), 8),llvm::Optional<int64_t>());
       auto indexType = IndexType::get(rewriter.getContext());
 
       std::vector<Value> values;
@@ -145,7 +145,7 @@ static bool hasDBType(TypeRange types) {
          res |= true;
       } else if (auto tupleType = type.dyn_cast_or_null<TupleType>()) {
          res |= hasDBType(tupleType.getTypes());
-      } else if (auto genericMemrefType = type.dyn_cast_or_null<util::GenericMemrefType>()) {
+      } else if (auto genericMemrefType = type.dyn_cast_or_null<util::RefType>()) {
          res |= hasDBType(genericMemrefType.getElementType());
       } else if (auto functionType = type.dyn_cast_or_null<mlir::FunctionType>()) {
          res |= hasDBType(functionType.getInputs()) ||
@@ -227,7 +227,7 @@ void DBToStdLoweringPass::runOnOperation() {
       return convertFunctionType(functionType, typeConverter);
    });
    typeConverter.addConversion([&](mlir::db::TableType tableType) {
-      return mlir::util::GenericMemrefType::get(&getContext(),IntegerType::get(&getContext(), 8),llvm::Optional<int64_t>());
+      return mlir::util::RefType::get(&getContext(),IntegerType::get(&getContext(), 8),llvm::Optional<int64_t>());
    });
 
    typeConverter.addConversion([&](mlir::IntegerType iType) { return iType; });

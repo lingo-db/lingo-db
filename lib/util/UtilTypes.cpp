@@ -9,7 +9,7 @@
 using namespace mlir;
 
 
-void mlir::util::GenericMemrefType::print(::mlir::DialectAsmPrinter& printer) const {
+void mlir::util::RefType::print(::mlir::DialectAsmPrinter& printer) const {
    printer << getMnemonic() << "<";
    if (getSize() && getSize().getValue() == -1) {
       printer << "? x ";
@@ -18,7 +18,7 @@ void mlir::util::GenericMemrefType::print(::mlir::DialectAsmPrinter& printer) co
    }
    printer << getElementType() << ">";
 }
-::mlir::Type mlir::util::GenericMemrefType::parse(::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::util::RefType::parse(::mlir::DialectAsmParser& parser) {
    Type elementType;
    llvm::Optional<int64_t> size;
    if (parser.parseLess()) {
@@ -33,7 +33,7 @@ void mlir::util::GenericMemrefType::print(::mlir::DialectAsmPrinter& printer) co
    if (parser.parseType(elementType) || parser.parseGreater()) {
       return Type();
    }
-   return mlir::util::GenericMemrefType::get(parser.getContext(), elementType, size);
+   return mlir::util::RefType::get(parser.getContext(), elementType, size);
 }
 
 #define GET_TYPEDEF_CLASSES

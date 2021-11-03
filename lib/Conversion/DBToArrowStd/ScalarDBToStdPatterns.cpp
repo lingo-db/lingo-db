@@ -269,7 +269,7 @@ class SubStrOpLowering : public ConversionPattern {
       Value lenAsIndex = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.to() - subStrOp.from() + 1));
       Value asMemRef = rewriter.create<util::ToMemrefOp>(rewriter.getUnknownLoc(), MemRefType::get({-1}, rewriter.getIntegerType(8)), adaptor.val());
       Value view = rewriter.create<mlir::memref::ViewOp>(rewriter.getUnknownLoc(), MemRefType::get({-1}, rewriter.getIntegerType(8)), asMemRef, pos1AsIndex, mlir::ValueRange({lenAsIndex}));
-      Value val = rewriter.create<mlir::util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), mlir::util::GenericMemrefType::get(rewriter.getContext(), IntegerType::get(rewriter.getContext(), 8), -1), view);
+      Value val = rewriter.create<mlir::util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), mlir::util::RefType::get(rewriter.getContext(), IntegerType::get(rewriter.getContext(), 8), -1), view);
 
       rewriter.replaceOp(op, val);
       return success();
@@ -375,7 +375,7 @@ class ConstantLowering : public ConversionPattern {
             rewriter.restoreInsertionPoint(insertionPoint);
             Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
             result = rewriter.create<memref::CastOp>(loc, conststr, strDynamicType);
-            Value strres = rewriter.create<mlir::util::ToGenericMemrefOp>(loc, mlir::util::GenericMemrefType::get(getContext(), rewriter.getIntegerType(8), -1), result);
+            Value strres = rewriter.create<mlir::util::ToGenericMemrefOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8), -1), result);
             rewriter.replaceOp(op, strres);
             return success();
          }
@@ -568,7 +568,7 @@ class CreateFlagLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto boolType = mlir::db::BoolType::get(rewriter.getContext());
-      Type memrefType = util::GenericMemrefType::get(rewriter.getContext(), boolType, llvm::Optional<int64_t>());
+      Type memrefType = util::RefType::get(rewriter.getContext(), boolType, llvm::Optional<int64_t>());
       Value alloca;
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
@@ -660,7 +660,7 @@ class HashLowering : public ConversionPattern {
 
       } else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
          assert(false && "can not hash float values");
-      } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::util::GenericMemrefType>()) {
+      } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::util::RefType>()) {
          Value len = builder.create<mlir::util::DimOp>(loc, builder.getIndexType(), v);
 
          Value const0 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0));
@@ -764,7 +764,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
                            return res;
                         })
                         .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
-                           return mlir::util::GenericMemrefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), -1);
+                           return mlir::util::RefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), -1);
                         })
                         .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
                            return mlir::IntegerType::get(patterns.getContext(), 64);
@@ -788,7 +788,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    });
    typeConverter.addConversion([&](mlir::db::FlagType type) {
       auto boolType = typeConverter.convertType(mlir::db::BoolType::get(patterns.getContext()));
-      Type memrefType = util::GenericMemrefType::get(patterns.getContext(), boolType, llvm::Optional<int64_t>());
+      Type memrefType = util::RefType::get(patterns.getContext(), boolType, llvm::Optional<int64_t>());
       return memrefType;
    });
 

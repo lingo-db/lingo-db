@@ -4,8 +4,8 @@
 	func @main () {
         %c2 = arith.constant 100 : index
 
-        %generic_memref=util.alloc(%c2) : !util.generic_memref<?x!db.int<32,nullable>>
-        %size = util.dim %generic_memref : !util.generic_memref<?x!db.int<32,nullable>>
+        %generic_memref=util.alloc(%c2) : !util.ref<?x!db.int<32,nullable>>
+        %size = util.dim %generic_memref : !util.ref<?x!db.int<32,nullable>>
         //CHECK: index(100)
         call @rt_dump_index(%size) : (index) -> ()
 

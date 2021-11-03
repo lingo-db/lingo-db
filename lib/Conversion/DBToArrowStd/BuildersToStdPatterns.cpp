@@ -39,7 +39,7 @@ class BufferHelper {
    }
 
    Type ptrType() {
-      return util::GenericMemrefType::get(b.getContext(), b.getIntegerType(8), -1);
+      return util::RefType::get(b.getContext(), b.getIntegerType(8), -1);
    }
    Value resize(Value old, Value newLen) {
       auto loc = b.getUnknownLoc();
@@ -62,13 +62,13 @@ class VectorHelper {
 
    public:
    static Type createType(MLIRContext* context, Type elementType) {
-      return mlir::TupleType::get(context, {IndexType::get(context), IndexType::get(context), mlir::util::GenericMemrefType::get(context, elementType, -1)});
+      return mlir::TupleType::get(context, {IndexType::get(context), IndexType::get(context), mlir::util::RefType::get(context, elementType, -1)});
    }
    VectorHelper(Type elementType, Location loc) : elementType(elementType), loc(loc) {
    }
    Value create(mlir::OpBuilder& builder, Value initialCapacity) {
       Value initialSize = builder.create<arith::ConstantIndexOp>(loc, 0);
-      auto type = mlir::util::GenericMemrefType::get(builder.getContext(), elementType, -1);
+      auto type = mlir::util::RefType::get(builder.getContext(), elementType, -1);
       Value memref = builder.create<mlir::util::AllocOp>(loc, type, initialCapacity);
       Value vec = builder.create<mlir::util::PackOp>(loc, ValueRange{initialSize, initialCapacity, memref});
       return vec;
@@ -111,8 +111,8 @@ class AggrHtHelper {
    }
    static Type createType(MLIRContext* context, Type keyType, Type aggrType, Type valType) {
       auto idxType = IndexType::get(context);
-      auto valuesType = mlir::util::GenericMemrefType::get(context, createEntryType(context, keyType, aggrType), -1);
-      auto htType = mlir::util::GenericMemrefType::get(context, idxType, -1);
+      auto valuesType = mlir::util::RefType::get(context, createEntryType(context, keyType, aggrType), -1);
+      auto htType = mlir::util::RefType::get(context, idxType, -1);
       return mlir::TupleType::get(context, {idxType, idxType, valuesType, htType, aggrType});
    }
    AggrHtHelper(MLIRContext* context, Type keyType, Type aggrType, Location loc) : entryType(createEntryType(context, keyType, aggrType)), loc(loc) {
@@ -124,8 +124,8 @@ class AggrHtHelper {
       Value initialHtSize = builder.create<arith::ConstantIndexOp>(loc, 8);
 
       Value initialSize = builder.create<arith::ConstantIndexOp>(loc, 0);
-      auto valuesType = mlir::util::GenericMemrefType::get(builder.getContext(), entryType, -1);
-      auto htType = mlir::util::GenericMemrefType::get(builder.getContext(), builder.getIndexType(), -1);
+      auto valuesType = mlir::util::RefType::get(builder.getContext(), entryType, -1);
+      auto htType = mlir::util::RefType::get(builder.getContext(), builder.getIndexType(), -1);
 
       Value values = builder.create<mlir::util::AllocOp>(loc, valuesType, initialCapacity);
       Value ht = builder.create<mlir::util::AllocOp>(loc, htType, initialHtSize);
@@ -222,8 +222,8 @@ class AggrHtHelper {
       Value idx = builder.create<util::LoadOp>(loc, builder.getIndexType(), ht, position);
       // ptr = &hashtable[position]
       Type idxType = builder.getIndexType();
-      Value ptr = builder.create<util::ElementPtrOp>(loc, util::GenericMemrefType::get(context, idxType, llvm::Optional<int64_t>()), ht, position);
-      Type ptrType = util::GenericMemrefType::get(context, idxType, llvm::Optional<int64_t>());
+      Value ptr = builder.create<util::ElementPtrOp>(loc, util::RefType::get(context, idxType, llvm::Optional<int64_t>()), ht, position);
+      Type ptrType = util::RefType::get(context, idxType, llvm::Optional<int64_t>());
       Type doneType = builder.getI1Type();
 
       auto resultTypes = std::vector<Type>({idxType, idxType, ptrType});
@@ -282,18 +282,18 @@ class AggrHtHelper {
                               }, [&](OpBuilder& b, Location loc) {
 
                               //          ptr = &entry.next
-                              Value entryPtr=builder.create<util::ElementPtrOp>(loc,util::GenericMemrefType::get(context,entryType,llvm::Optional<int64_t>()),values,idx);
+                              Value entryPtr=builder.create<util::ElementPtrOp>(loc,util::RefType::get(context,entryType,llvm::Optional<int64_t>()),values,idx);
 
-                              ptr=builder.create<util::GenericMemrefCastOp>(loc, util::GenericMemrefType::get(context,idxType,llvm::Optional<int64_t>()),entryPtr);
+                              ptr=builder.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context,idxType,llvm::Optional<int64_t>()),entryPtr);
                               //          yield idx,ptr,done=false
                               b.create<scf::YieldOp>(loc, ValueRange{len,trueValue, entryNext, ptr });});
                         b.create<scf::YieldOp>(loc, ifOp2.getResults());
                         }, [&](OpBuilder& b, Location loc) {
 
                         //          ptr = &entry.next
-                        Value entryPtr=builder.create<util::ElementPtrOp>(loc,util::GenericMemrefType::get(context,entryType,llvm::Optional<int64_t>()),values,idx);
+                        Value entryPtr=builder.create<util::ElementPtrOp>(loc,util::RefType::get(context,entryType,llvm::Optional<int64_t>()),values,idx);
 
-                        ptr=builder.create<util::GenericMemrefCastOp>(loc, util::GenericMemrefType::get(context,idxType,llvm::Optional<int64_t>()),entryPtr);
+                        ptr=builder.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context,idxType,llvm::Optional<int64_t>()),entryPtr);
                         //          yield idx,ptr,done=false
                         b.create<scf::YieldOp>(loc, ValueRange{len,trueValue, entryNext, ptr });});
                   b.create<scf::YieldOp>(loc, ifOpH.getResults()); });
@@ -605,7 +605,7 @@ class BuilderBuildLowering : public ConversionPattern {
          Value htSize = nextPow2(rewriter, len);
          Value htMask = rewriter.create<arith::SubIOp>(loc, htSize, one);
 
-         Value ht = rewriter.create<mlir::util::AllocOp>(loc, util::GenericMemrefType::get(rewriter.getContext(), rewriter.getIndexType(), -1), htSize);
+         Value ht = rewriter.create<mlir::util::AllocOp>(loc, util::RefType::get(rewriter.getContext(), rewriter.getIndexType(), -1), htSize);
          rewriter.create<scf::ForOp>(
             loc, zero, htSize, one, ValueRange({}),
             [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
@@ -642,7 +642,7 @@ class BuilderBuildLowering : public ConversionPattern {
          Value htSize = nextPow2(rewriter, len);
          Value htMask = rewriter.create<arith::SubIOp>(loc, htSize, one);
 
-         Value ht = rewriter.create<mlir::util::AllocOp>(loc, util::GenericMemrefType::get(rewriter.getContext(), rewriter.getIndexType(), -1), htSize);
+         Value ht = rewriter.create<mlir::util::AllocOp>(loc, util::RefType::get(rewriter.getContext(), rewriter.getIndexType(), -1), htSize);
          rewriter.create<scf::ForOp>(
             loc, zero, htSize, one, ValueRange({}),
             [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
@@ -772,7 +772,7 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
       return valueRange.front();
    });
    typeConverter.addConversion([&](mlir::db::TableBuilderType tableType) {
-      return mlir::util::GenericMemrefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
+      return mlir::util::RefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
    });
    typeConverter.addConversion([&](mlir::db::VectorBuilderType vectorBuilderType) {
       return VectorHelper::createType(patterns.getContext(), typeConverter.convertType(vectorBuilderType.getElementType()));

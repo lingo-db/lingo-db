@@ -39,59 +39,59 @@ class Util_Type<string name, string typeMnemonic> : TypeDef<Util_Dialect, name> 
 }
 
 
-def GenericMemrefType : Util_Type<"GenericMemref","generic_memref"> {
-let summary = "generic memref type";
+def RefType : Util_Type<"Ref","ref"> {
+let summary = "ref type";
 let parameters = (ins "Type":$elementType,"llvm::Optional<int64_t>": $size);
 }
 
 def AllocOp  : Util_Op<"alloc"> {
 let arguments = (ins Optional<Index>:$size);
-let results=(outs GenericMemrefType:$generic_memref);
-let assemblyFormat = " `(` $size `)` `:` type($generic_memref) attr-dict";
+let results=(outs RefType:$ref);
+let assemblyFormat = " `(` $size `)` `:` type($ref) attr-dict";
 }
 def AllocaOp  : Util_Op<"alloca"> {
 let arguments = (ins Optional<Index>:$size);
-let results=(outs GenericMemrefType:$generic_memref);
-let assemblyFormat = " `(` $size `)` `:` type($generic_memref) attr-dict";
+let results=(outs RefType:$ref);
+let assemblyFormat = " `(` $size `)` `:` type($ref) attr-dict";
 }
 def DeAllocOp  : Util_Op<"dealloc"> {
-let arguments = (ins GenericMemrefType:$generic_memref);
-let assemblyFormat = "$generic_memref `:` type($generic_memref) attr-dict";
+let arguments = (ins RefType:$ref);
+let assemblyFormat = "$ref `:` type($ref) attr-dict";
 }
 def ToGenericMemrefOp  : Util_Op<"to_generic_memref",[NoSideEffect]> {
 let arguments = (ins I8MemRef:$memref);
-let results=(outs GenericMemrefType:$generic_memref);
-let assemblyFormat = "$memref `:` type($memref) `->` type($generic_memref) attr-dict";
+let results=(outs RefType:$ref);
+let assemblyFormat = "$memref `:` type($memref) `->` type($ref) attr-dict";
 }
 def ToMemrefOp  : Util_Op<"to_memref",[NoSideEffect]> {
-let arguments = (ins GenericMemrefType:$generic_memref);
+let arguments = (ins RefType:$ref);
 let results=(outs I8MemRef:$memref);
-let assemblyFormat = "$generic_memref `:` type($generic_memref) `->` type($memref) attr-dict";
+let assemblyFormat = "$ref `:` type($ref) `->` type($memref) attr-dict";
 }
 def GenericMemrefCastOp : Util_Op<"generic_memref_cast",[NoSideEffect]> {
 let summary = "generic memref cast function";
-let arguments = (ins GenericMemrefType:$val);
-let results=(outs GenericMemrefType:$res);
+let arguments = (ins RefType:$val);
+let results=(outs RefType:$res);
 let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
 }
 def StoreOp  : Util_Op<"store"> {
-let arguments = (ins AnyType:$val,GenericMemrefType:$generic_memref,Optional<Index>:$idx);
-let assemblyFormat = "$val `:` type($val) `,` $generic_memref `[` $idx `]` `:`type($generic_memref) attr-dict";
+let arguments = (ins AnyType:$val,RefType:$ref,Optional<Index>:$idx);
+let assemblyFormat = "$val `:` type($val) `,` $ref `[` $idx `]` `:`type($ref) attr-dict";
 }
 def DimOp  : Util_Op<"dim",[NoSideEffect]> {
-let arguments = (ins GenericMemrefType:$generic_memref);
+let arguments = (ins RefType:$ref);
 let results=(outs Index:$size);
-let assemblyFormat = "$generic_memref `:`type($generic_memref) attr-dict";
+let assemblyFormat = "$ref `:`type($ref) attr-dict";
 }
 def LoadOp  : Util_Op<"load",[NoSideEffect]> {
-let arguments = (ins GenericMemrefType:$generic_memref,Optional<Index>:$idx);
+let arguments = (ins RefType:$ref,Optional<Index>:$idx);
 let results=(outs AnyType:$val);
-let assemblyFormat = "$generic_memref `[` $idx `]` `:`type($generic_memref) `->` type($val) attr-dict";
+let assemblyFormat = "$ref `[` $idx `]` `:`type($ref) `->` type($val) attr-dict";
 }
 def ElementPtrOp  : Util_Op<"elementptr",[NoSideEffect]> {
-    let arguments = (ins GenericMemrefType:$generic_memref,Index:$idx);
-    let results=(outs GenericMemrefType:$res);
-    let assemblyFormat = "$generic_memref `[` $idx `]` `:`type($generic_memref) `->` type($res) attr-dict";
+    let arguments = (ins RefType:$ref,Index:$idx);
+    let results=(outs RefType:$res);
+    let assemblyFormat = "$ref `[` $idx `]` `:`type($ref) `->` type($res) attr-dict";
 }
 def SizeOfOp  : Util_Op<"sizeof",[NoSideEffect]> {
 let arguments = (ins TypeAttr:$type);
