@@ -1,14 +1,11 @@
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
-#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
+#include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/SCF.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
-#include "mlir/Dialect/util/Passes.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Dialect/util/UtilTypes.h"
@@ -139,7 +136,7 @@ class DimOpLowering : public ConversionPattern {
       } else {
          size = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(1));
       }
-      if(!(elemType.isa<mlir::IntegerType>()&&elemType.cast<mlir::IntegerType>().getWidth()==8)){
+      if (!(elemType.isa<mlir::IntegerType>() && elemType.cast<mlir::IntegerType>().getWidth() == 8)) {
          Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), idxType, elemType); //Todo: needs fixing
          size = rewriter.create<LLVM::UDivOp>(rewriter.getUnknownLoc(), idxType, size, elementSize);
       }
@@ -444,7 +441,7 @@ class CastOpLowering : public ConversionPattern {
 class ElementPtrOpLowering : public ConversionPattern {
    public:
    explicit ElementPtrOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-   : ConversionPattern(typeConverter, mlir::util::ElementPtrOp::getOperationName(), 1, context) {}
+      : ConversionPattern(typeConverter, mlir::util::ElementPtrOp::getOperationName(), 1, context) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,

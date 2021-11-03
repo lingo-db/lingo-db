@@ -10,8 +10,8 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
 
+#include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
-#include "mlir/Dialect/util/Passes.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"

@@ -44,6 +44,7 @@ test-coverage:
 run-test:
 	cmake --build build/build-debug-llvm-release --target mlir-db-opt -- -j 6
 	cmake --build build/build-debug-llvm-release --target db-run -- -j 6
+	cmake --build build/build-debug-llvm-release --target pymlirdbext -- -j 6
 	export LD_LIBRARY_PATH=/home/michael/master-thesis/code/build/arrow/install/lib && ./build/llvm-build/bin/llvm-lit -v build/build-debug-llvm-release/test
 coverage-clean:
 	rm -rf build/build-debug-llvm-release-coverage/coverage

@@ -7,14 +7,17 @@ directory=sys.argv[1]
 languages={"C/C++ Header":"Headers","C++":"C++","TableGen":"TableGen"}
 
 schema={
-    "Runtime":{"inc":["include/runtime","lib/runtime"],"exc":[]},
-    "JIT": {"inc": ["include/runner", "lib/runner"], "exc": []},
-    "util Dialect":{"inc":["include/mlir/Dialect/util","lib/util"],"exc":[]},
-    "db Dialect":{"inc":["include/mlir/Dialect/DB","lib/DB"],"exc":[]},
-    "relalg Dialect": {"inc":["include/mlir/Dialect/RelAlg", "lib/RelAlg"],"exc":["Transforms"]},
+    "Dialects": {"inc": ["include/mlir/Dialect", "lib/RelAlg","lib/DB","lib/util"], "exc": ["Transforms"],"nosum":True},
+    " $\\rightarrow$ relalg": {"inc": ["include/mlir/Dialect/RelAlg", "lib/RelAlg"], "exc": ["Transforms"]},
+    " $\\rightarrow$ db": {"inc": ["include/mlir/Dialect/DB", "lib/DB"], "exc": []},
+    " $\\rightarrow$ util":{"inc":["include/mlir/Dialect/util","lib/util"],"exc":[]},
     "Query Opt.": {"inc":["include/mlir/Dialect/RelAlg/Transforms", "lib/RelAlg/Transforms"],"exc":[]},
-    "relalg $\Rightarrow$ DB": {"inc":["include/mlir/Conversion/RelAlgToDB","lib/Conversion/RelAlgToDB"],"exc":[]},
-    "relalg $\Rightarrow$ std": {"inc": ["include/mlir/Conversion/DBToArrowStd","lib/Conversion/DBToArrowStd"], "exc": []}
+    "Lowerings":{"inc": ["include/mlir/Conversion", "lib/Conversion"], "exc": [],"nosum":True},
+    " $\\rightarrow$ relalg to db": {"inc":["include/mlir/Conversion/RelAlgToDB","lib/Conversion/RelAlgToDB"],"exc":[]},
+    " $\\rightarrow$ db to std": {"inc": ["include/mlir/Conversion/DBToArrowStd","lib/Conversion/DBToArrowStd"], "exc": []},
+    " $\\rightarrow$ util to llvm": {"inc": ["include/mlir/Conversion/UtilToLLVM", "lib/Conversion/UtilToLLVM"],"exc": []},
+    "Runtime": {"inc": ["include/runtime", "lib/runtime"], "exc": []},
+    "JIT": {"inc": ["include/runner", "lib/runner"], "exc": []},
 
 }
 def runCLOC(inc,exc):
@@ -29,7 +32,7 @@ def runCLOC(inc,exc):
     return json.loads(res)
 sum=0
 sums={"C/C++ Header":0,"C++":0,"TableGen":0}
-def format(name,j):
+def format(name,j,nosumup):
     global sum
     global sums
     print(name, end=' ')
@@ -37,8 +40,9 @@ def format(name,j):
         print(" & ", end='')
         if l in j:
             print(j[l]['code'],end='')
-            sum+=int(j[l]['code'])
-            sums[l]+=int(j[l]['code'])
+            if not nosumup:
+                sum+=int(j[l]['code'])
+                sums[l]+=int(j[l]['code'])
         else:
             print("-",end='')
     print(" \\\\")
@@ -47,7 +51,7 @@ for l in languages:
     print(" & "+languages[l],end='');
 print(" \\\\\\toprule")
 for k in schema:
-    format(k,runCLOC(schema[k]["inc"],schema[k]["exc"]))
+    format(k,runCLOC(schema[k]["inc"],schema[k]["exc"]),"nosum" in schema[k])
 print(" \\midrule")
 print("$\Sigma$",end='')
 for l in languages:
