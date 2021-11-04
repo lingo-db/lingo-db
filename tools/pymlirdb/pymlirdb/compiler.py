@@ -13,7 +13,7 @@ from textwrap import dedent
 ##### test #########
 from sql2mlir.codegen import CodeGen
 from sql2mlir.mlir import Function, DBType, Attribute, TupleType
-from sql2mlir.tables import getTPCHTable
+from sql2mlir.tables import getTable
 
 
 def countDelayedOrdersForSupplier(suppkey):
@@ -222,7 +222,7 @@ class PythonVisitor(ast.NodeVisitor):
                 if pymlirdb_func == "read_table":
                     table_name = node.args[0].value
                     scope_name = self.codegen.getUniqueName(table_name)
-                    table=getTPCHTable(table_name,scope_name)
+                    table=getTable(table_name,scope_name)
                     var = self.codegen.create_relalg_base_table(table)
                     self.dataframes[var] = table.columns
                     return var

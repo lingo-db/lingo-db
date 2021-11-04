@@ -57,7 +57,11 @@ sys.path.insert(0,sys.argv[1]+'/../../arrow/python')
 
 import pymlirdb
 from sql2mlir.mlir import Function, DBType
+from sql2mlir.tables import loadSchema
 import pyarrow as pa
+
+loadSchema(None)# load default schema
+
 
 supplier=pa.ipc.open_file(pa.OSFile(sys.argv[1]+'/../../resources/data/tpch/supplier.arrow')).read_all()
 lineitem=pa.ipc.open_file(pa.OSFile(sys.argv[1]+'/../../resources/data/tpch/lineitem.arrow')).read_all()

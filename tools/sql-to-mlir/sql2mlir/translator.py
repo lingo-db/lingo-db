@@ -3,7 +3,7 @@ import copy
 from sql2mlir.mlir import DBType, Attribute
 from sql2mlir.codegen import CodeGen
 from sql2mlir.resolver import StackedResolver, Resolver
-from sql2mlir.tables import getTPCHTable
+from sql2mlir.tables import getTable
 from sql2mlir.utility import ensure_list, ensure_value_dict, AggrFuncManager, getAttributeList, getPrintNames
 
 
@@ -263,7 +263,7 @@ class Translator:
             scope_name=codegen.getUniqueName(from_value["value"])
 
 
-            table = getTPCHTable(from_value["value"],scope_name)
+            table = getTable(from_value["value"],scope_name)
             prefixes = [from_value["value"]]
             if "name" in from_value:
                 prefixes.append(from_value["name"])

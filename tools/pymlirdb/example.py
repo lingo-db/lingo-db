@@ -1,6 +1,9 @@
 import pymlirdb
+import sql2mlir.tables
 from sql2mlir.mlir import Function, DBType
+from sql2mlir.tables import loadSchema
 import pyarrow as pa
+loadSchema(None)# load default path
 supplier=pa.ipc.open_file(pa.OSFile('../../resources/data/tpch-1/supplier.arrow')).read_all()
 lineitem=pa.ipc.open_file(pa.OSFile('../../resources/data/tpch-1/lineitem.arrow')).read_all()
 orders=pa.ipc.open_file(pa.OSFile('../../resources/data/tpch-1/orders.arrow')).read_all()
