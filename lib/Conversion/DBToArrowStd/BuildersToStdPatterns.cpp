@@ -598,7 +598,6 @@ class BuilderBuildLowering : public ConversionPattern {
          Value len = unpacked.getResult(0);
          Value vec = unpacked.getResult(2);
          Value zero = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 0);
-         Value maxValue = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 0xFFFFFFFFFFFFFFFF);
 
          Value one = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 1);
          auto loc = op->getLoc();
@@ -606,12 +605,9 @@ class BuilderBuildLowering : public ConversionPattern {
          Value htMask = rewriter.create<arith::SubIOp>(loc, htSize, one);
 
          Value ht = rewriter.create<mlir::util::AllocOp>(loc, util::RefType::get(rewriter.getContext(), rewriter.getIndexType(), -1), htSize);
-         rewriter.create<scf::ForOp>(
-            loc, zero, htSize, one, ValueRange({}),
-            [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
-               b.create<util::StoreOp>(loc2, maxValue, ht, iv);
-               b.create<scf::YieldOp>(loc);
-            });
+         Value fillValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerType(8), rewriter.getIntegerAttr(rewriter.getIntegerType(8), 0xFF));
+         BufferHelper helper(rewriter, rewriter.getBlock()->getParentOp()->getParentOfType<ModuleOp>());
+         helper.fill(ht, fillValue);
          rewriter.create<scf::ForOp>(
             loc, zero, len, one, ValueRange({}),
             [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
@@ -635,7 +631,6 @@ class BuilderBuildLowering : public ConversionPattern {
          Value len = unpacked.getResult(0);
          Value vec = unpacked.getResult(2);
          Value zero = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 0);
-         Value maxValue = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 0xFFFFFFFFFFFFFFFF);
 
          Value one = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 1);
          auto loc = op->getLoc();
@@ -643,12 +638,9 @@ class BuilderBuildLowering : public ConversionPattern {
          Value htMask = rewriter.create<arith::SubIOp>(loc, htSize, one);
 
          Value ht = rewriter.create<mlir::util::AllocOp>(loc, util::RefType::get(rewriter.getContext(), rewriter.getIndexType(), -1), htSize);
-         rewriter.create<scf::ForOp>(
-            loc, zero, htSize, one, ValueRange({}),
-            [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
-               b.create<util::StoreOp>(loc2, maxValue, ht, iv);
-               b.create<scf::YieldOp>(loc);
-            });
+         Value fillValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerType(8), rewriter.getIntegerAttr(rewriter.getIntegerType(8), 0xFF));
+         BufferHelper helper(rewriter, rewriter.getBlock()->getParentOp()->getParentOfType<ModuleOp>());
+         helper.fill(ht, fillValue);
          rewriter.create<scf::ForOp>(
             loc, zero, len, one, ValueRange({}),
             [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
