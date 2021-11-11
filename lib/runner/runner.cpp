@@ -228,6 +228,7 @@ bool Runner::optimize() {
    auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
+   pm.enableVerifier(false);
    pm.addPass(mlir::createInlinerPass());
    pm.addPass(mlir::createSymbolDCEPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createSimplifyAggregationsPass());
@@ -243,20 +244,32 @@ bool Runner::optimize() {
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createCombinePredicatesPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createOptimizeImplementationsPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createIntroduceTmpPass());
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createLowerToDBPass());
-   pm.addPass(mlir::createCanonicalizerPass());
-
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
    }
    auto end = std::chrono::high_resolution_clock::now();
-   std::cout << "optimization took: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
+   std::cout << "optimization took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
+   {
+      auto start = std::chrono::high_resolution_clock::now();
+
+      mlir::PassManager pm2(&ctxt->context);
+      pm2.enableVerifier(false);
+      pm2.addNestedPass<mlir::FuncOp>(mlir::relalg::createLowerToDBPass());
+      pm2.addPass(mlir::createCanonicalizerPass());
+      if (mlir::failed(pm2.run(ctxt->module.get()))) {
+         return false;
+      }
+      auto end = std::chrono::high_resolution_clock::now();
+      std::cout << "lowering to db took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
+   }
+
    return true;
 }
 bool Runner::lower() {
    auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
+   pm.enableVerifier(false);
    pm.addPass(mlir::db::createLowerToStdPass());
    pm.addPass(mlir::createCanonicalizerPass());
    if (mlir::failed(pm.run(ctxt->module.get()))) {
@@ -264,7 +277,7 @@ bool Runner::lower() {
    }
 
    auto end = std::chrono::high_resolution_clock::now();
-   std::cout << "lowering to std took: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
+   std::cout << "lowering to std took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
    return true;
 }
 bool Runner::lowerToLLVM() {
@@ -280,13 +293,14 @@ bool Runner::lowerToLLVM() {
       registry.getFunction(builder, mlir::db::codegen::FunctionRegistry::FunctionId::SetExecutionContext);
    }
    mlir::PassManager pm2(&ctxt->context);
+   pm2.enableVerifier(false);
    pm2.addPass(mlir::createLowerToCFGPass());
    pm2.addPass(createLowerToLLVMPass());
    if (mlir::failed(pm2.run(ctxt->module.get()))) {
       return false;
    }
    auto end = std::chrono::high_resolution_clock::now();
-   std::cout << "lowering to llvm took: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
+   std::cout << "lowering to llvm took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
    return true;
 }
 void Runner::dump() {
@@ -313,7 +327,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
    auto startConv = std::chrono::high_resolution_clock::now();
    std::unique_ptr<llvm::Module> converted = convertMLIRModule(ctxt->module.get(), *llvmContext.getContext());
    auto endConv = std::chrono::high_resolution_clock::now();
-   std::cout << "conversion: " << std::chrono::duration_cast<std::chrono::milliseconds>(endConv - startConv).count() << " ms" << std::endl;
+   std::cout << "conversion: " << std::chrono::duration_cast<std::chrono::microseconds>(endConv - startConv).count() / 1000.0 << " ms" << std::endl;
 
    auto start = std::chrono::high_resolution_clock::now();
    runner::JIT jit(llvmContext);
@@ -330,7 +344,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
       return false;
    }
    auto end = std::chrono::high_resolution_clock::now();
-   std::cout << "jit: " << std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count() << " ms" << std::endl;
+   std::cout << "jit: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
 
    {
       auto* lookupResult2 = jit.getPointerToFunction("rt_set_execution_context");
@@ -356,9 +370,9 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
          fn();
       }
       auto executionEnd = std::chrono::high_resolution_clock::now();
-      measuredTimes.push_back(std::chrono::duration_cast<std::chrono::milliseconds>(executionEnd - executionStart).count());
+      measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count());
    }
-   std::cout << "runtime: " << (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]) << " ms" << std::endl;
+   std::cout << "runtime: " << (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]) / 1000.0 << " ms" << std::endl;
 
    if (ctxt->numResults == 1) {
       callback(res);
