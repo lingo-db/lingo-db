@@ -17,7 +17,7 @@ schema={
     " $\\rightarrow$ db to std": {"inc": ["include/mlir/Conversion/DBToArrowStd","lib/Conversion/DBToArrowStd"], "exc": []},
     " $\\rightarrow$ util to llvm": {"inc": ["include/mlir/Conversion/UtilToLLVM", "lib/Conversion/UtilToLLVM"],"exc": []},
     "Runtime": {"inc": ["include/runtime", "lib/runtime"], "exc": []},
-    "JIT": {"inc": ["include/runner", "lib/runner"], "exc": []},
+    "Runner": {"inc": ["include/runner", "lib/runner"], "exc": []},
 
 }
 def runCLOC(inc,exc):

@@ -16,7 +16,7 @@ class QueryResult:
         self.lower_to_std_time = lower_to_std_time
         self.lower_to_llvm_time = lower_to_llvm_time
         self.conversion_time=conversion_time
-        self.llvm_time=llvm_time
+        self.llvm_time=llvm_time-conversion_time #hack
         self.return_code = return_code
 
 

@@ -5,8 +5,6 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
-#include "runner/jit.h"
-
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
@@ -41,7 +39,14 @@
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/SourceMgr.h>
 
+#include <llvm/IR/LegacyPassManager.h>
+#include <llvm/Transforms/IPO.h>
+
+#include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/Scalar.h>
+#include <llvm/Transforms/Scalar/GVN.h>
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
+#include <mlir/Dialect/util/UtilTypes.h>
 #include <runner/runner.h>
 #include <runtime/helpers.h>
 
@@ -134,6 +139,7 @@ int loadMLIRFromString(const std::string& input, mlir::MLIRContext& context, mli
 }
 static std::unique_ptr<llvm::Module>
 convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context) {
+   auto startConv = std::chrono::high_resolution_clock::now();
    //////////////////////////////////////////////////////////////////////////////////////
    auto bitcode = llvm::StringRef(reinterpret_cast<const char*>(kPrecompiledBitcode),
                                   kPrecompiledBitcodeSize);
@@ -162,6 +168,8 @@ convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context) {
    std::unique_ptr<llvm::Module> mainModule =
       translateModuleToLLVMIR(module, context);
    llvm::Linker::linkModules(*mainModule, std::move(irModule), llvm::Linker::LinkOnlyNeeded);
+   auto endConv = std::chrono::high_resolution_clock::now();
+   std::cout << "conversion: " << std::chrono::duration_cast<std::chrono::microseconds>(endConv - startConv).count() / 1000.0 << " ms" << std::endl;
    return mainModule;
 }
 
@@ -287,10 +295,11 @@ bool Runner::lowerToLLVM() {
    if (auto mainFunc = moduleOp.lookupSymbol<mlir::FuncOp>("main")) {
       ctxt->numArgs = mainFunc.getNumArguments();
       ctxt->numResults = mainFunc.getNumResults();
-      mlir::db::codegen::FunctionRegistry registry(moduleOp->getContext());
-      registry.registerFunctions();
-      mlir::OpBuilder builder(&mainFunc.body().front().front());
-      registry.getFunction(builder, mlir::db::codegen::FunctionRegistry::FunctionId::SetExecutionContext);
+      mlir::OpBuilder builder(moduleOp->getContext());
+      builder.setInsertionPointToStart(moduleOp.getBody());
+      mainFunc.sym_nameAttr(builder.getStringAttr("_mlir_main"));
+      builder.create< mlir::FuncOp>(moduleOp.getLoc(), "_mlir_set_execution_context", builder.getFunctionType(mlir::TypeRange({mlir::util::RefType::get(moduleOp->getContext(),mlir::IntegerType::get(moduleOp->getContext(), 8),llvm::Optional<int64_t>())}), mlir::TypeRange()), builder.getStringAttr("private"));
+
    }
    mlir::PassManager pm2(&ctxt->context);
    pm2.enableVerifier(false);
@@ -307,7 +316,23 @@ void Runner::dump() {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    ctxt->module->dump();
 }
+static llvm::Error optimizeModule(llvm::Module* module) {
+   // Create a function pass manager
+   llvm::legacy::FunctionPassManager funcPM(module);
+   funcPM.add(llvm::createInstructionCombiningPass());
+   funcPM.add(llvm::createReassociatePass());
+   funcPM.add(llvm::createGVNPass());
+   funcPM.add(llvm::createCFGSimplificationPass());
+   funcPM.add(llvm::createAggressiveDCEPass());
+   funcPM.add(llvm::createCFGSimplificationPass());
 
+   funcPM.doInitialization();
+   for (auto& func : *module) {
+      funcPM.run(func);
+   }
+   funcPM.doFinalization();
+   return llvm::Error::success();
+}
 bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::function<void(uint8_t*)> callback) {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    // Initialize LLVM targets.
@@ -321,42 +346,45 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
       return false;
    }
 
-   // Create an MLIR execution engine. The execution engine eagerly JIT-compiles
-   // the module.
-   llvm::orc::ThreadSafeContext llvmContext{std::make_unique<llvm::LLVMContext>()};
-   auto startConv = std::chrono::high_resolution_clock::now();
-   std::unique_ptr<llvm::Module> converted = convertMLIRModule(ctxt->module.get(), *llvmContext.getContext());
-   auto endConv = std::chrono::high_resolution_clock::now();
-   std::cout << "conversion: " << std::chrono::duration_cast<std::chrono::microseconds>(endConv - startConv).count() / 1000.0 << " ms" << std::endl;
+   // Initialize LLVM targets.
+   llvm::InitializeNativeTarget();
+   llvm::InitializeNativeTargetAsmPrinter();
+
+   // An optimization pipeline to use within the execution engine.
+
+
+
+
 
    auto start = std::chrono::high_resolution_clock::now();
-   runner::JIT jit(llvmContext);
-   if (jit.addModule(std::move(converted))) {
-      assert(false);
-   }
+
    uint8_t* res;
+   // Create an MLIR execution engine. The execution engine eagerly JIT-compiles
+   // the module.
+   auto maybeEngine = mlir::ExecutionEngine::create(ctxt->module.get(), /*llvmModuleBuilder=*/convertMLIRModule, optimizeModule);
+   assert(maybeEngine && "failed to construct an execution engine");
+   auto& engine = maybeEngine.get();
 
    // Invoke the JIT-compiled function.
-   auto* lookupResult = jit.getPointerToFunction("main");
-
+   auto lookupResult = engine->lookup("main");
    if (!lookupResult) {
       llvm::errs() << "JIT invocation failed\n";
       return false;
    }
+   auto* funcPtr= lookupResult.get();
    auto end = std::chrono::high_resolution_clock::now();
    std::cout << "jit: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
 
    {
-      auto* lookupResult2 = jit.getPointerToFunction("rt_set_execution_context");
+      auto lookupResult2 = engine->lookup("set_execution_context");
       if (!lookupResult2) {
          llvm::errs() << "JIT invocation failed\n";
          return false;
       }
       typedef uint8_t* (*myfunc)(void*);
-      auto fn = (myfunc) lookupResult2;
+      auto fn = (myfunc) lookupResult2.get();
       fn(context);
    }
-   auto* funcPtr = lookupResult;
    std::vector<size_t> measuredTimes;
    for (size_t i = 0; i < repeats; i++) {
       auto executionStart = std::chrono::high_resolution_clock::now();
