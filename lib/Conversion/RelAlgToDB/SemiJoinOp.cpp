@@ -30,25 +30,13 @@ class NLSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
          children[1]->setFlag(matchFoundFlag);
          children[1]->produce(context, builder);
          mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-         auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matchFound);
-         mlir::Block* ifBlock = new mlir::Block;
-
-         ifOp.thenRegion().push_back(ifBlock);
-
-         mlir::OpBuilder builder1(ifOp.thenRegion());
-         if (!requiredBuilders.empty()) {
-            mlir::Block* elseBlock = new mlir::Block;
-            ifOp.elseRegion().push_back(elseBlock);
-            mlir::OpBuilder builder2(ifOp.elseRegion());
-            builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-         }
-         consumer->consume(this, builder1, context);
-         builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-
-         size_t i = 0;
-         for (auto b : requiredBuilders) {
-            context.builders[b] = ifOp.getResult(i++);
-         }
+         auto builderValuesBefore = getRequiredBuilderValues(context);
+         auto ifOp = builder.create<mlir::db::IfOp>(
+            joinOp->getLoc(), getRequiredBuilderTypes(context), matchFound, [&](mlir::OpBuilder& builder1, mlir::Location) {
+               consumer->consume(this, builder1, context);
+               builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); },
+            requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
+         setRequiredBuilderValues(context, ifOp.getResults());
       } else if (child == this->children[1].get()) {
          mlir::relalg::SemiJoinOp clonedSemiJoinOp = mlir::dyn_cast<mlir::relalg::SemiJoinOp>(joinOp->clone());
          mlir::Block* block = &clonedSemiJoinOp.predicate().getBlocks().front();
@@ -86,25 +74,14 @@ class HashSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SemiJoinO
    }
    void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-      auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matchFound);
-      mlir::Block* ifBlock = new mlir::Block;
+      auto builderValuesBefore = getRequiredBuilderValues(context);
+      auto ifOp = builder.create<mlir::db::IfOp>(
+         joinOp->getLoc(), getRequiredBuilderTypes(context), matchFound, [&](mlir::OpBuilder& builder1, mlir::Location) {
+            consumer->consume(this, builder1, context);
+            builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); },
+         requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
 
-      ifOp.thenRegion().push_back(ifBlock);
-
-      mlir::OpBuilder builder1(ifOp.thenRegion());
-      if (!requiredBuilders.empty()) {
-         mlir::Block* elseBlock = new mlir::Block;
-         ifOp.elseRegion().push_back(elseBlock);
-         mlir::OpBuilder builder2(ifOp.elseRegion());
-         builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-      }
-      consumer->consume(this, builder1, context);
-      builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-
-      size_t i = 0;
-      for (auto b : requiredBuilders) {
-         context.builders[b] = ifOp.getResult(i++);
-      }
+      setRequiredBuilderValues(context, ifOp.getResults());
    }
    virtual ~HashSemiJoinLowering() {}
 };
@@ -114,50 +91,27 @@ class MHashSemiJoinLowering : public mlir::relalg::MarkableHJNode<mlir::relalg::
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matched);
-      mlir::Block* ifBlock = new mlir::Block;
-
-      ifOp.thenRegion().push_back(ifBlock);
-
-      mlir::OpBuilder builder1(ifOp.thenRegion());
-      if (!requiredBuilders.empty()) {
-         mlir::Block* elseBlock = new mlir::Block;
-         ifOp.elseRegion().push_back(elseBlock);
-         mlir::OpBuilder builder2(ifOp.elseRegion());
-         builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-      }
-      auto const1 = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), builder1.getI8IntegerAttr(1));
-      auto markerBefore = builder1.create<mlir::AtomicRMWOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
-      {
-         auto zero = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), markerBefore.getType(), builder1.getIntegerAttr(markerBefore.getType(), 0));
-         auto isZero = builder1.create<mlir::arith::CmpIOp>(builder1.getUnknownLoc(), mlir::arith::CmpIPredicate::eq, markerBefore, zero);
-         auto isZeroDB = builder1.create<mlir::db::TypeCastOp>(builder1.getUnknownLoc(), mlir::db::BoolType::get(builder1.getContext()), isZero);
-         auto ifOp = builder1.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), isZeroDB);
-         mlir::Block* ifBlock = new mlir::Block;
-
-         ifOp.thenRegion().push_back(ifBlock);
-
-         mlir::OpBuilder builder10(ifOp.thenRegion());
-         if (!requiredBuilders.empty()) {
-            mlir::Block* elseBlock = new mlir::Block;
-            ifOp.elseRegion().push_back(elseBlock);
-            mlir::OpBuilder builder20(ifOp.elseRegion());
-            builder20.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-         }
-         consumer->consume(this, builder10, context);
-         builder10.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-
-         size_t i = 0;
-         for (auto b : requiredBuilders) {
-            context.builders[b] = ifOp.getResult(i++);
-         }
-      }
-      builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-
-      size_t i = 0;
-      for (auto b : requiredBuilders) {
-         context.builders[b] = ifOp.getResult(i++);
-      }
+      auto beforeBuilderValues = getRequiredBuilderValues(context);
+      auto ifOp = builder.create<mlir::db::IfOp>(
+         joinOp->getLoc(), getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
+            auto const1 = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), builder1.getI8IntegerAttr(1));
+            auto markerBefore = builder1.create<mlir::AtomicRMWOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
+            {
+               auto zero = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), markerBefore.getType(), builder1.getIntegerAttr(markerBefore.getType(), 0));
+               auto isZero = builder1.create<mlir::arith::CmpIOp>(builder1.getUnknownLoc(), mlir::arith::CmpIPredicate::eq, markerBefore, zero);
+               auto isZeroDB = builder1.create<mlir::db::TypeCastOp>(builder1.getUnknownLoc(), mlir::db::BoolType::get(builder1.getContext()), isZero);
+               auto beforeBuilderValues = getRequiredBuilderValues(context);
+               auto ifOp = builder1.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), isZeroDB, [&](mlir::OpBuilder& builder10, mlir::Location) {
+                  consumer->consume(this, builder10, context);
+                  builder10.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
+                  },requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) {
+                  builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), beforeBuilderValues);
+               });
+               setRequiredBuilderValues(context,ifOp.getResults());
+            }
+            builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); },
+         requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), beforeBuilderValues); });
+      setRequiredBuilderValues(context, ifOp.getResults());
    }
 
    virtual ~MHashSemiJoinLowering() {}

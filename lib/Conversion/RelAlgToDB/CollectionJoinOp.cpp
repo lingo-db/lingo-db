@@ -22,7 +22,7 @@ class HashCollectionJoinLowering : public mlir::relalg::HJNode<mlir::relalg::Col
       tupleType = mlir::TupleType::get(collectionJoinOp.getContext(), tupleTypes);
    }
    virtual void addAdditionalRequiredAttributes() override {
-      for (auto *attr : tupleAttributes) {
+      for (auto* attr : tupleAttributes) {
          requiredAttributes.insert(attr);
       }
    }
@@ -33,20 +33,13 @@ class HashCollectionJoinLowering : public mlir::relalg::HJNode<mlir::relalg::Col
          values.push_back(context.getValueForAttribute(attr));
       }
 
-      auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), mlir::TypeRange{vectorBuilder.getType()}, matched);
-      mlir::Block* ifBlock = new mlir::Block;
-
-      ifOp.thenRegion().push_back(ifBlock);
-
-      mlir::OpBuilder builder1(ifOp.thenRegion());
-      mlir::Block* elseBlock = new mlir::Block;
-      ifOp.elseRegion().push_back(elseBlock);
-      mlir::OpBuilder builder3(ifOp.elseRegion());
-      builder3.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{vectorBuilder});
-      mlir::Value packed = builder1.create<mlir::util::PackOp>(joinOp->getLoc(), values);
-      mlir::Value mergedBuilder = builder1.create<mlir::db::BuilderMerge>(joinOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
-      builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{mergedBuilder});
-
+      auto ifOp = builder.create<mlir::db::IfOp>(
+         joinOp->getLoc(), mlir::TypeRange{vectorBuilder.getType()}, matched, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+         mlir::Value packed = builder.create<mlir::util::PackOp>(joinOp->getLoc(), values);
+         mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(joinOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
+         builder.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{mergedBuilder}); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+            builder.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{vectorBuilder});
+         });
       context.builders[vectorBuilderId] = ifOp.getResult(0);
    }
 

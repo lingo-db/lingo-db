@@ -15,7 +15,7 @@ class SelectionLowering : public mlir::relalg::ProducerConsumerNode {
       this->requiredAttributes.insert(selectionOp.getUsedAttributes());
       propagateInfo();
    }
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       children[0]->addRequiredBuilders(requiredBuilders);
    }
@@ -28,27 +28,14 @@ class SelectionLowering : public mlir::relalg::ProducerConsumerNode {
       mlir::Block* block = &clonedSelectionOp.predicate().getBlocks().front();
       auto* terminator = block->getTerminator();
 
-      mergeRelatinalBlock(builder.getInsertionBlock(),block, context, scope);
-
-      auto ifOp = builder.create<mlir::db::IfOp>(selectionOp->getLoc(), getRequiredBuilderTypes(context), mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0]);
-      mlir::Block* ifBlock = new mlir::Block;
-
-      ifOp.thenRegion().push_back(ifBlock);
-
-      mlir::OpBuilder builder1(ifOp.thenRegion());
-      if (!requiredBuilders.empty()) {
-         mlir::Block* elseBlock = new mlir::Block;
-         ifOp.elseRegion().push_back(elseBlock);
-         mlir::OpBuilder builder2(ifOp.elseRegion());
-         builder2.create<mlir::db::YieldOp>(selectionOp->getLoc(), getRequiredBuilderValues(context));
-      }
-      consumer->consume(this, builder1, context);
-      builder1.create<mlir::db::YieldOp>(selectionOp->getLoc(), getRequiredBuilderValues(context));
-
-      size_t i = 0;
-      for (auto b : requiredBuilders) {
-         context.builders[b] = ifOp.getResult(i++);
-      }
+      mergeRelatinalBlock(builder.getInsertionBlock(), block, context, scope);
+      auto builderValuesBefore = getRequiredBuilderValues(context);
+      auto ifOp = builder.create<mlir::db::IfOp>(
+         selectionOp->getLoc(), getRequiredBuilderTypes(context), mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0], [&](mlir::OpBuilder& builder1, mlir::Location) {
+         consumer->consume(this, builder1, context);
+         builder1.create<mlir::db::YieldOp>(selectionOp->getLoc(), getRequiredBuilderValues(context)); },
+         requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location loc) { builder2.create<mlir::db::YieldOp>(loc, builderValuesBefore); });
+      setRequiredBuilderValues(context, ifOp.getResults());
       terminator->erase();
       clonedSelectionOp->destroy();
    }
@@ -60,5 +47,5 @@ class SelectionLowering : public mlir::relalg::ProducerConsumerNode {
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredSelectionOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::SelectionOp selectionOp) {
-  return std::make_unique<SelectionLowering>(selectionOp);
+   return std::make_unique<SelectionLowering>(selectionOp);
 });

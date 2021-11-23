@@ -29,27 +29,15 @@ class NLInnerJoinLowering : public mlir::relalg::ProducerConsumerNode {
          mlir::Block* block = &clonedInnerJoinOp.predicate().getBlocks().front();
          auto* terminator = block->getTerminator();
 
-         mergeRelatinalBlock(builder.getInsertionBlock(),block, context, scope);
+         mergeRelatinalBlock(builder.getInsertionBlock(), block, context, scope);
 
-         auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0]);
-         mlir::Block* ifBlock = new mlir::Block;
-
-         ifOp.thenRegion().push_back(ifBlock);
-
-         mlir::OpBuilder builder1(ifOp.thenRegion());
-         if (!requiredBuilders.empty()) {
-            mlir::Block* elseBlock = new mlir::Block;
-            ifOp.elseRegion().push_back(elseBlock);
-            mlir::OpBuilder builder2(ifOp.elseRegion());
-            builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-         }
-         consumer->consume(this, builder1, context);
-         builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-
-         size_t i = 0;
-         for (auto b : requiredBuilders) {
-            context.builders[b] = ifOp.getResult(i++);
-         }
+         auto builderValuesBefore = getRequiredBuilderValues(context);
+         auto ifOp = builder.create<mlir::db::IfOp>(
+            joinOp->getLoc(), getRequiredBuilderTypes(context), mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0], [&](mlir::OpBuilder& builder1, mlir::Location) {
+               consumer->consume(this, builder1, context);
+               builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); },
+            requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
+         setRequiredBuilderValues(context, ifOp.getResults());
          terminator->erase();
          clonedInnerJoinOp->destroy();
       }
@@ -70,25 +58,13 @@ class HashInnerJoinLowering : public mlir::relalg::HJNode<mlir::relalg::InnerJoi
       return this->children[0]->getAvailableAttributes().insert(this->children[1]->getAvailableAttributes());
    }
    virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matched);
-      mlir::Block* ifBlock = new mlir::Block;
-
-      ifOp.thenRegion().push_back(ifBlock);
-
-      mlir::OpBuilder builder1(ifOp.thenRegion());
-      if (!requiredBuilders.empty()) {
-         mlir::Block* elseBlock = new mlir::Block;
-         ifOp.elseRegion().push_back(elseBlock);
-         mlir::OpBuilder builder3(ifOp.elseRegion());
-         builder3.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-      }
-      consumer->consume(this, builder1, context);
-      builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-
-      size_t i = 0;
-      for (auto b : requiredBuilders) {
-         context.builders[b] = ifOp.getResult(i++);
-      }
+      auto builderValuesBefore = getRequiredBuilderValues(context);
+      auto ifOp = builder.create<mlir::db::IfOp>(
+         joinOp->getLoc(), getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
+            consumer->consume(this, builder1, context);
+            builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); },
+         requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
+      setRequiredBuilderValues(context, ifOp.getResults());
    }
 
    virtual ~HashInnerJoinLowering() {}

@@ -17,7 +17,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
       this->requiredAttributes.insert(sortOp.getUsedAttributes());
       propagateInfo();
    }
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
@@ -38,27 +38,16 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::Value createSortPredicate(mlir::OpBuilder& builder, std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria, mlir::Value trueVal, mlir::Value falseVal, size_t pos) {
       if (pos < sortCriteria.size()) {
          auto lt = builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::lt, sortCriteria[pos].first, sortCriteria[pos].second);
-         auto ifOp = builder.create<mlir::db::IfOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), lt);
-         mlir::Block* ifBlock = new mlir::Block;
-         ifOp.thenRegion().push_back(ifBlock);
-         mlir::OpBuilder builder1(ifOp.thenRegion());
-         builder1.create<mlir::db::YieldOp>(builder.getUnknownLoc(), trueVal);
-         mlir::Block* elseBlock = new mlir::Block;
-         ifOp.elseRegion().push_back(elseBlock);
-         mlir::OpBuilder builder2(ifOp.elseRegion());
-         auto eq = builder2.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::eq, sortCriteria[pos].first, sortCriteria[pos].second);
-         auto ifOp2 = builder2.create<mlir::db::IfOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), eq);
-         mlir::Block* ifBlock2 = new mlir::Block;
-         ifOp2.thenRegion().push_back(ifBlock2);
-         mlir::OpBuilder builder3(ifOp2.thenRegion());
-         builder3.create<mlir::db::YieldOp>(builder.getUnknownLoc(), createSortPredicate(builder3, sortCriteria, trueVal, falseVal, pos + 1));
-         mlir::Block* elseBlock2 = new mlir::Block;
-         ifOp2.elseRegion().push_back(elseBlock2);
-         mlir::OpBuilder builder4(ifOp2.elseRegion());
-         builder4.create<mlir::db::YieldOp>(builder.getUnknownLoc(), falseVal);
-
-         builder2.create<mlir::db::YieldOp>(builder.getUnknownLoc(), ifOp2.getResult(0));
-
+         auto ifOp = builder.create<mlir::db::IfOp>(
+            builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), lt, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::db::YieldOp>(loc, trueVal); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+               auto eq = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, sortCriteria[pos].first, sortCriteria[pos].second);
+               auto ifOp2 = builder.create<mlir::db::IfOp>(loc, mlir::db::BoolType::get(builder.getContext()), eq,[&](mlir::OpBuilder& builder, mlir::Location loc) {
+                  builder.create<mlir::db::YieldOp>(loc, createSortPredicate(builder, sortCriteria, trueVal, falseVal, pos + 1));
+                  },[&](mlir::OpBuilder& builder, mlir::Location loc) {
+                     builder.create<mlir::db::YieldOp>(loc, falseVal);
+               });
+               builder.create<mlir::db::YieldOp>(loc, ifOp2.getResult(0));
+            });
          return ifOp.getResult(0);
       } else {
          return falseVal;
@@ -81,7 +70,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
       children[0]->produce(context, builder);
       vector = builder.create<mlir::db::BuilderBuild>(sortOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), context.builders[builderId]);
       {
-         auto dbSortOp = builder.create<mlir::db::SortOp>(sortOp->getLoc(),  vector);
+         auto dbSortOp = builder.create<mlir::db::SortOp>(sortOp->getLoc(), vector);
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType);
          block2->addArguments(tupleType);
@@ -105,7 +94,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
          builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), createSortPredicate(builder2, sortCriteria, trueVal, falseVal, 0));
       }
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(sortOp->getLoc(), getRequiredBuilderTypes(context), vector,flag, getRequiredBuilderValues(context));
+         auto forOp2 = builder.create<mlir::db::ForOp>(sortOp->getLoc(), getRequiredBuilderTypes(context), vector, flag, getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType);
          block2->addArguments(getRequiredBuilderTypes(context));
@@ -121,12 +110,12 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
          builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());
       }
-      builder.create<mlir::db::FreeOp>(sortOp->getLoc(),vector);
+      builder.create<mlir::db::FreeOp>(sortOp->getLoc(), vector);
    }
 
    virtual ~SortLowering() {}
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredSortOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::SortOp sortOp) {
-  return std::make_unique<SortLowering>(sortOp);
+   return std::make_unique<SortLowering>(sortOp);
 });

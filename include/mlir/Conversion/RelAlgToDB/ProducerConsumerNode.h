@@ -65,7 +65,7 @@ class ProducerConsumerNode {
       }
       return res;
    }
-   void setRequiredBuilderValues(LoweringContext& context, mlir::ValueRange values) {
+   void setRequiredBuilderValues(LoweringContext& context, const mlir::ValueRange& values) {
       size_t i = 0;
       for (auto x : requiredBuilders) {
          context.builders[x] = values[i++];
