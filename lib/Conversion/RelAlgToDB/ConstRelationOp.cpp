@@ -6,18 +6,12 @@ class ConstRelLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::relalg::ConstRelationOp constRelationOp;
 
    public:
-   ConstRelLowering(mlir::relalg::ConstRelationOp constRelationOp) : mlir::relalg::ProducerConsumerNode({}), constRelationOp(constRelationOp) {
-   }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
+   ConstRelLowering(mlir::relalg::ConstRelationOp constRelationOp) : mlir::relalg::ProducerConsumerNode(constRelationOp), constRelationOp(constRelationOp) {
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return constRelationOp.getCreatedAttributes();
-   }
+
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       assert(false && "should not happen");
    }

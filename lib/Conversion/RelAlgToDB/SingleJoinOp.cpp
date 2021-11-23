@@ -10,7 +10,7 @@ class NLSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::Value matchFoundFlag;
 
    public:
-   NLSingleJoinLowering(mlir::relalg::SingleJoinOp singleJoinOp) : mlir::relalg::ProducerConsumerNode({singleJoinOp.left(), singleJoinOp.right()}), joinOp(singleJoinOp) {
+   NLSingleJoinLowering(mlir::relalg::SingleJoinOp singleJoinOp) : mlir::relalg::ProducerConsumerNode(singleJoinOp), joinOp(singleJoinOp) {
    }
    virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
@@ -108,7 +108,7 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
    size_t builderId;
 
    public:
-   ConstantSingleJoinLowering(mlir::relalg::SingleJoinOp singleJoinOp) : mlir::relalg::ProducerConsumerNode({singleJoinOp.left(), singleJoinOp.right()}), joinOp(singleJoinOp) {
+   ConstantSingleJoinLowering(mlir::relalg::SingleJoinOp singleJoinOp) : mlir::relalg::ProducerConsumerNode(singleJoinOp), joinOp(singleJoinOp) {
    }
    virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;

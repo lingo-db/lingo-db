@@ -9,19 +9,10 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::Value vector;
 
    public:
-   SortLowering(mlir::relalg::SortOp sortOp) : mlir::relalg::ProducerConsumerNode(sortOp.rel()), sortOp(sortOp) {
-   }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(sortOp.getUsedAttributes());
-      propagateInfo();
+   SortLowering(mlir::relalg::SortOp sortOp) : mlir::relalg::ProducerConsumerNode(sortOp), sortOp(sortOp) {
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-   }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes();
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       std::vector<mlir::Type> types;

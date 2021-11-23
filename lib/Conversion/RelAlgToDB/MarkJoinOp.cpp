@@ -10,17 +10,9 @@ class NLMarkJoinLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::Value matchFoundFlag;
 
    public:
-   NLMarkJoinLowering(mlir::relalg::MarkJoinOp markJoinOp) : mlir::relalg::ProducerConsumerNode({markJoinOp.left(), markJoinOp.right()}), joinOp(markJoinOp) {
+   NLMarkJoinLowering(mlir::relalg::MarkJoinOp markJoinOp) : mlir::relalg::ProducerConsumerNode(markJoinOp), joinOp(markJoinOp) {
    }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(joinOp.getUsedAttributes());
-      propagateInfo();
-   }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes();
-   }
+
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == this->children[0].get()) {

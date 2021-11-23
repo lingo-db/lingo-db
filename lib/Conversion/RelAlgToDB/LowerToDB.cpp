@@ -49,7 +49,13 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
    }
 };
 } // end anonymous namespace
-mlir::relalg::ProducerConsumerNode::ProducerConsumerNode(mlir::ValueRange potentialChildren) {
+mlir::relalg::ProducerConsumerNode::ProducerConsumerNode(Operator op): op(op) {
+   for (auto child : op.getChildren()) {
+         children.push_back(mlir::relalg::ProducerConsumerNodeRegistry::createNode(child.getOperation()));
+   }
+}
+
+mlir::relalg::ProducerConsumerNode::ProducerConsumerNode(mlir::ValueRange potentialChildren): op(){
    for (auto child : potentialChildren) {
       if (child.getType().isa<mlir::relalg::TupleStreamType>()) {
          children.push_back(mlir::relalg::ProducerConsumerNodeRegistry::createNode(child.getDefiningOp()));

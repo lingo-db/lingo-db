@@ -10,7 +10,6 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
 
    mlir::TupleType keyTupleType;
    mlir::TupleType valTupleType;
-   mlir::TupleType insertEntryType;
 
    std::vector<const mlir::relalg::RelationalAttribute*> keyAttributes;
    std::vector<const mlir::relalg::RelationalAttribute*> valAttributes;
@@ -24,20 +23,11 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
    std::vector<mlir::Type> aggrTypes;
 
    public:
-   AggregationLowering(mlir::relalg::AggregationOp aggregationOp) : mlir::relalg::ProducerConsumerNode(aggregationOp.rel()), aggregationOp(aggregationOp) {
+   AggregationLowering(mlir::relalg::AggregationOp aggregationOp) : mlir::relalg::ProducerConsumerNode(aggregationOp), aggregationOp(aggregationOp) {
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       //do not forwared requiredBuilders to children
-   }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(aggregationOp.getUsedAttributes());
-      propagateInfo();
-   }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return aggregationOp.getAvailableAttributes();
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
 
@@ -297,8 +287,6 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
          }
          if (auto countOp = mlir::dyn_cast_or_null<mlir::relalg::CountRowsOp>(addAttrOp.val().getDefiningOp())) {
             auto* destAttr = &addAttrOp.attr().getRelationalAttribute();
-            //valTypes.push_back(counterType);
-            //mlir::Type resultingType = addAttrOp.attr().getRelationalAttribute().type;
             size_t currDestIdx = aggrTypes.size();
             aggrTypes.push_back(counterType);
             auto initCounterVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), counterType, builder.getI64IntegerAttr(0));
@@ -330,7 +318,6 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
 
       builderId = context.getBuilderId();
       context.builders[builderId] = aggrBuilder;
-      this->insertEntryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, valTupleType});
 
       auto iterEntryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, aggrTupleType});
       children[0]->addRequiredBuilders({builderId});

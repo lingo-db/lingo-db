@@ -12,7 +12,7 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
    size_t producedCount;
 
    public:
-   TmpLowering(mlir::relalg::TmpOp tmpOp) : mlir::relalg::ProducerConsumerNode(tmpOp.rel()), tmpOp(tmpOp) {
+   TmpLowering(mlir::relalg::TmpOp tmpOp) : mlir::relalg::ProducerConsumerNode(tmpOp), tmpOp(tmpOp) {
       std::vector<mlir::Operation*> users(tmpOp->getUsers().begin(),tmpOp->getUsers().end());
       userCount=users.size();
       producedCount=0;
@@ -30,9 +30,6 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       this->children[0]->addRequiredBuilders(requiredBuilders);
-   }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes();
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       if (materialize) {

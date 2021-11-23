@@ -9,17 +9,9 @@ class NLInnerJoinLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::relalg::InnerJoinOp joinOp;
 
    public:
-   NLInnerJoinLowering(mlir::relalg::InnerJoinOp innerJoinOp) : mlir::relalg::ProducerConsumerNode({innerJoinOp.left(), innerJoinOp.right()}), joinOp(innerJoinOp) {
+   NLInnerJoinLowering(mlir::relalg::InnerJoinOp innerJoinOp) : mlir::relalg::ProducerConsumerNode(innerJoinOp), joinOp(innerJoinOp) {
    }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(joinOp.getUsedAttributes());
-      propagateInfo();
-   }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes().insert(this->children[1]->getAvailableAttributes());
-   }
+
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == this->children[0].get()) {

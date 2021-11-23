@@ -7,21 +7,14 @@ class SelectionLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::relalg::SelectionOp selectionOp;
 
    public:
-   SelectionLowering(mlir::relalg::SelectionOp selectionOp) : mlir::relalg::ProducerConsumerNode(selectionOp.rel()), selectionOp(selectionOp) {
+   SelectionLowering(mlir::relalg::SelectionOp selectionOp) : mlir::relalg::ProducerConsumerNode(selectionOp), selectionOp(selectionOp) {
    }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(selectionOp.getUsedAttributes());
-      propagateInfo();
-   }
+
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       children[0]->addRequiredBuilders(requiredBuilders);
    }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes();
-   }
+
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       mlir::relalg::SelectionOp clonedSelectionOp = mlir::dyn_cast<mlir::relalg::SelectionOp>(selectionOp->clone());

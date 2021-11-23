@@ -8,17 +8,10 @@ class BaseTableLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::relalg::BaseTableOp baseTableOp;
 
    public:
-   BaseTableLowering(mlir::relalg::BaseTableOp baseTableOp) : mlir::relalg::ProducerConsumerNode({}), baseTableOp(baseTableOp) {
-   }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
+   BaseTableLowering(mlir::relalg::BaseTableOp baseTableOp) : mlir::relalg::ProducerConsumerNode(baseTableOp), baseTableOp(baseTableOp) {
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-   }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return baseTableOp.getCreatedAttributes();
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       assert(false && "should not happen");

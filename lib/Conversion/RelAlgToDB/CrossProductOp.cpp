@@ -4,18 +4,9 @@
 #include "mlir/Dialect/util/UtilOps.h"
 
 class CrossProductLowering : public mlir::relalg::ProducerConsumerNode {
-   mlir::relalg::CrossProductOp crossProductOp;
 
    public:
-   CrossProductLowering(mlir::relalg::CrossProductOp crossProductOp) : mlir::relalg::ProducerConsumerNode(mlir::ValueRange({crossProductOp.left(), crossProductOp.right()})), crossProductOp(crossProductOp) {
-   }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
-      propagateInfo();
-   }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes().insert(this->children[1]->getAvailableAttributes());
+   CrossProductLowering(mlir::relalg::CrossProductOp crossProductOp) : mlir::relalg::ProducerConsumerNode(crossProductOp) {
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       if (child == this->children[0].get()) {
@@ -31,5 +22,5 @@ class CrossProductLowering : public mlir::relalg::ProducerConsumerNode {
    virtual ~CrossProductLowering() {}
 };
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredCrossProductOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::CrossProductOp crossProductOp) {
-  return std::make_unique<CrossProductLowering>(crossProductOp);
+   return std::make_unique<CrossProductLowering>(crossProductOp);
 });

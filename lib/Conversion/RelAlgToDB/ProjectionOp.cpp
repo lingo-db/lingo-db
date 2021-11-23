@@ -7,21 +7,13 @@ class ProjectionLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::relalg::ProjectionOp projectionOp;
 
    public:
-   ProjectionLowering(mlir::relalg::ProjectionOp projectionOp) : mlir::relalg::ProducerConsumerNode(projectionOp.rel()), projectionOp(projectionOp) {
-   }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(projectionOp.getUsedAttributes());
-      propagateInfo();
+   ProjectionLowering(mlir::relalg::ProjectionOp projectionOp) : mlir::relalg::ProducerConsumerNode(projectionOp), projectionOp(projectionOp) {
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       children[0]->addRequiredBuilders(requiredBuilders);
    }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes();
-   }
+
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       consumer->consume(this, builder, context);
@@ -46,14 +38,9 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
    std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> keyMapping;
 
    public:
-   DistinctProjectionLowering(mlir::relalg::ProjectionOp projectionOp) : mlir::relalg::ProducerConsumerNode(projectionOp.rel()), projectionOp(projectionOp) {
+   DistinctProjectionLowering(mlir::relalg::ProjectionOp projectionOp) : mlir::relalg::ProducerConsumerNode(projectionOp), projectionOp(projectionOp) {
    }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(projectionOp.getUsedAttributes());
-      propagateInfo();
-   }
+
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }

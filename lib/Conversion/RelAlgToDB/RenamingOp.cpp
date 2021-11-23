@@ -8,21 +8,13 @@ class RenamingLowering : public mlir::relalg::ProducerConsumerNode {
    std::vector<std::pair<mlir::relalg::RelationalAttribute*, mlir::Value>> saved;
 
    public:
-   RenamingLowering(mlir::relalg::RenamingOp renamingOp) : mlir::relalg::ProducerConsumerNode(renamingOp.rel()), renamingOp(renamingOp) {
-   }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(renamingOp.getUsedAttributes());
-      propagateInfo();
+   RenamingLowering(mlir::relalg::RenamingOp renamingOp) : mlir::relalg::ProducerConsumerNode(renamingOp), renamingOp(renamingOp) {
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       children[0]->addRequiredBuilders(requiredBuilders);
    }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return renamingOp.getAvailableAttributes();
-   }
+
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       for(mlir::Attribute attr:renamingOp.attributes()){

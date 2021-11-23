@@ -47,6 +47,7 @@ static const mlir::function_ref<void(mlir::OpBuilder&, mlir::Location)> noBuilde
 class ProducerConsumerNode {
    protected:
    ProducerConsumerNode* consumer;
+   Operator op;
    std::vector<std::unique_ptr<ProducerConsumerNode>> children;
    std::vector<size_t> requiredBuilders;
    mlir::relalg::Attributes requiredAttributes;
@@ -81,7 +82,7 @@ class ProducerConsumerNode {
 
    public:
    ProducerConsumerNode(mlir::ValueRange children);
-
+   ProducerConsumerNode(Operator op);
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       for (auto& child : children) {
@@ -94,8 +95,17 @@ class ProducerConsumerNode {
          child->setFlag(flag);
       }
    }
-   virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) = 0;
-   virtual mlir::relalg::Attributes getAvailableAttributes() = 0;
+   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) {
+      this->consumer = consumer;
+      this->requiredAttributes = requiredAttributes;
+      if(op) {
+         this->requiredAttributes.insert(op.getUsedAttributes());
+         propagateInfo();
+      }
+   }
+   virtual mlir::relalg::Attributes getAvailableAttributes() {
+      return op.getAvailableAttributes();
+   };
    virtual void consume(ProducerConsumerNode* child, mlir::OpBuilder& builder, LoweringContext& context) = 0;
    virtual void produce(LoweringContext& context, mlir::OpBuilder& builder) = 0;
    virtual void done() {}
@@ -103,7 +113,7 @@ class ProducerConsumerNode {
 };
 class NoopNode : public mlir::relalg::ProducerConsumerNode {
    public:
-   NoopNode() : mlir::relalg::ProducerConsumerNode({}) {
+   NoopNode() : mlir::relalg::ProducerConsumerNode(ValueRange{}) {
    }
    virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override{};
    virtual mlir::relalg::Attributes getAvailableAttributes() override { return {}; };

@@ -10,21 +10,14 @@ class LimitLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::Value finishedFlag;
 
    public:
-   LimitLowering(mlir::relalg::LimitOp limitOp) : mlir::relalg::ProducerConsumerNode(limitOp.rel()), limitOp(limitOp) {
+   LimitLowering(mlir::relalg::LimitOp limitOp) : mlir::relalg::ProducerConsumerNode(limitOp), limitOp(limitOp) {
    }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(limitOp.getUsedAttributes());
-      propagateInfo();
-   }
+
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       this->children[0]->addRequiredBuilders(requiredBuilders);
    }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes();
-   }
+
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       std::vector<mlir::Type> types;
       std::vector<mlir::Value> values;

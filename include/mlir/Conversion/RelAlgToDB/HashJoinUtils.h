@@ -148,6 +148,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
    HJNode(T joinOp, Value builderChild, Value lookupChild) : ProducerConsumerNode({builderChild, lookupChild}), joinOp(joinOp) {
       this->builderChild = children[0].get();
       this->lookupChild = children[1].get();
+      this->op=joinOp;
    }
 
    public:
@@ -302,6 +303,7 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
    MarkableHJNode(T joinOp, Value builderChild, Value lookupChild) : ProducerConsumerNode({builderChild, lookupChild}), joinOp(joinOp) {
       this->builderChild = children[0].get();
       this->lookupChild = children[1].get();
+      this->op=joinOp;
    }
 
    public:

@@ -10,7 +10,7 @@ class NLOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::Value matchFoundFlag;
 
    public:
-   NLOuterJoinLowering(mlir::relalg::OuterJoinOp outerJoinOp) : mlir::relalg::ProducerConsumerNode({outerJoinOp.left(), outerJoinOp.right()}), joinOp(outerJoinOp) {
+   NLOuterJoinLowering(mlir::relalg::OuterJoinOp outerJoinOp) : mlir::relalg::ProducerConsumerNode(outerJoinOp), joinOp(outerJoinOp) {
    }
    virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;

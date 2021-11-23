@@ -7,21 +7,14 @@ class MapLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::relalg::MapOp mapOp;
 
    public:
-   MapLowering(mlir::relalg::MapOp mapOp) : mlir::relalg::ProducerConsumerNode(mapOp.rel()), mapOp(mapOp) {
+   MapLowering(mlir::relalg::MapOp mapOp) : mlir::relalg::ProducerConsumerNode(mapOp), mapOp(mapOp) {
    }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
-      this->consumer = consumer;
-      this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(mapOp.getUsedAttributes());
-      propagateInfo();
-   }
+
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       children[0]->addRequiredBuilders(requiredBuilders);
    }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes().insert(mapOp.getCreatedAttributes());
-   }
+
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       mlir::relalg::MapOp clonedSelectionOp = mlir::dyn_cast<mlir::relalg::MapOp>(mapOp->clone());
