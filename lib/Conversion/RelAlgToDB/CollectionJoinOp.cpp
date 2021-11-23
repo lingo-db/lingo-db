@@ -26,7 +26,7 @@ class HashCollectionJoinLowering : public mlir::relalg::HJNode<mlir::relalg::Col
          requiredAttributes.insert(attr);
       }
    }
-   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       mlir::Value vectorBuilder = context.builders[vectorBuilderId];
       std::vector<mlir::Value> values;
       for (const auto* attr : tupleAttributes) {
@@ -38,10 +38,10 @@ class HashCollectionJoinLowering : public mlir::relalg::HJNode<mlir::relalg::Col
 
       ifOp.thenRegion().push_back(ifBlock);
 
-      mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+      mlir::OpBuilder builder1(ifOp.thenRegion());
       mlir::Block* elseBlock = new mlir::Block;
       ifOp.elseRegion().push_back(elseBlock);
-      mlir::relalg::ProducerConsumerBuilder builder3(ifOp.elseRegion());
+      mlir::OpBuilder builder3(ifOp.elseRegion());
       builder3.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{vectorBuilder});
       mlir::Value packed = builder1.create<mlir::util::PackOp>(joinOp->getLoc(), values);
       mlir::Value mergedBuilder = builder1.create<mlir::db::BuilderMerge>(joinOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
@@ -50,13 +50,13 @@ class HashCollectionJoinLowering : public mlir::relalg::HJNode<mlir::relalg::Col
       context.builders[vectorBuilderId] = ifOp.getResult(0);
    }
 
-   void beforeLookup(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(joinOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType));
       vectorBuilderId = context.getBuilderId();
       context.builders[vectorBuilderId] = vectorBuilder;
       this->customLookupBuilders.push_back(vectorBuilderId);
    }
-   void afterLookup(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       mlir::Value vector = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), context.builders[vectorBuilderId]);
 

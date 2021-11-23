@@ -23,7 +23,7 @@ class RenamingLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return renamingOp.getAvailableAttributes();
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       for(mlir::Attribute attr:renamingOp.attributes()){
          auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
@@ -36,7 +36,7 @@ class RenamingLowering : public mlir::relalg::ProducerConsumerNode {
       }
       consumer->consume(this, builder, context);
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       for(mlir::Attribute attr:renamingOp.attributes()){
          auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
          mlir::Attribute from=relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[0];

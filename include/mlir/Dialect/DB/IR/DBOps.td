@@ -576,6 +576,12 @@ let summary = "if-then-else operation";
 let arguments = (ins AnyType:$condition);
 let results = (outs Variadic<AnyType>:$results);
 let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
+let builders = [
+        OpBuilder<(ins "TypeRange":$resultTypes, "Value":$cond,
+                CArg<"function_ref<void(OpBuilder &, Location)>">:$thenBuilder,
+                CArg<"function_ref<void(OpBuilder &, Location)>",
+                "nullptr">:$elseBuilder)>,
+        ];
 }
 
 def ConditionOp : DB_Op<"condition",

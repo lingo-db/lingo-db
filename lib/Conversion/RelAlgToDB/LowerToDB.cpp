@@ -32,7 +32,7 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
             auto node = mlir::relalg::ProducerConsumerNodeRegistry::createNode(op);
             mlir::relalg::NoopNode noopNode;
             node->setInfo(&noopNode, {});
-            mlir::relalg::ProducerConsumerBuilder builder(op);
+            mlir::OpBuilder builder(op);
             node->produce(loweringContext, builder);
             node->done();
          }
@@ -41,7 +41,7 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
          if (isTranslationHook(op)) {
             auto node = mlir::relalg::ProducerConsumerNodeRegistry::createNode(op);
             node->setInfo(nullptr, {});
-            mlir::relalg::ProducerConsumerBuilder builder(op);
+            mlir::OpBuilder builder(op);
             node->produce(loweringContext, builder);
             node->done();
          }

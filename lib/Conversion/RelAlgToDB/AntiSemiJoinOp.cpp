@@ -21,7 +21,7 @@ class NLAntiSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return this->children[0]->getAvailableAttributes();
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == this->children[0].get()) {
          matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
@@ -34,11 +34,11 @@ class NLAntiSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
 
          ifOp.thenRegion().push_back(ifBlock);
 
-         mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+         mlir::OpBuilder builder1(ifOp.thenRegion());
          if (!requiredBuilders.empty()) {
             mlir::Block* elseBlock = new mlir::Block;
             ifOp.elseRegion().push_back(elseBlock);
-            mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
+            mlir::OpBuilder builder2(ifOp.elseRegion());
             builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
          }
          consumer->consume(this, builder1, context);
@@ -53,14 +53,14 @@ class NLAntiSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
          mlir::Block* block = &clonedAntiSemiJoinOp.predicate().getBlocks().front();
          auto* terminator = block->getTerminator();
 
-         builder.mergeRelatinalBlock(block, context, scope);
+         mergeRelatinalBlock(builder.getInsertionBlock(),block, context, scope);
          mlir::Value matched = mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0];
          builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
          terminator->erase();
          clonedAntiSemiJoinOp->destroy();
       }
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       children[0]->produce(context, builder);
    }
 
@@ -74,16 +74,16 @@ class HashAntiSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::AntiS
    HashAntiSemiJoinLowering(mlir::relalg::AntiSemiJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::AntiSemiJoinOp>(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
-   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
    }
    mlir::Value getFlag() override {
       return matchFoundFlag;
    }
-   void beforeLookup(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
    }
-   void afterLookup(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
       mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFound);
 
@@ -92,11 +92,11 @@ class HashAntiSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::AntiS
 
       ifOp.thenRegion().push_back(ifBlock);
 
-      mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+      mlir::OpBuilder builder1(ifOp.thenRegion());
       if (!requiredBuilders.empty()) {
          mlir::Block* elseBlock = new mlir::Block;
          ifOp.elseRegion().push_back(elseBlock);
-         mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
+         mlir::OpBuilder builder2(ifOp.elseRegion());
          builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
       }
       consumer->consume(this, builder1, context);
@@ -114,17 +114,17 @@ class MHashAntiSemiJoinLowering : public mlir::relalg::MarkableHJNode<mlir::rela
    MHashAntiSemiJoinLowering(mlir::relalg::AntiSemiJoinOp innerJoinOp) : mlir::relalg::MarkableHJNode<mlir::relalg::AntiSemiJoinOp>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
    }
 
-   virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matched);
       mlir::Block* ifBlock = new mlir::Block;
 
       ifOp.thenRegion().push_back(ifBlock);
 
-      mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+      mlir::OpBuilder builder1(ifOp.thenRegion());
       if (!requiredBuilders.empty()) {
          mlir::Block* elseBlock = new mlir::Block;
          ifOp.elseRegion().push_back(elseBlock);
-         mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
+         mlir::OpBuilder builder2(ifOp.elseRegion());
          builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
       }
       auto const1 = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(8), builder1.getI8IntegerAttr(1));
@@ -136,10 +136,10 @@ class MHashAntiSemiJoinLowering : public mlir::relalg::MarkableHJNode<mlir::rela
          context.builders[b] = ifOp.getResult(i++);
       }
    }
-   virtual void after(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void after(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       scanHT(context, builder);
    }
-   void handleScanned(mlir::Value marker, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   void handleScanned(mlir::Value marker, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto zero = builder.create<mlir::arith::ConstantOp>(builder.getUnknownLoc(), marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
       auto isZero = builder.create<mlir::arith::CmpIOp>(builder.getUnknownLoc(), mlir::arith::CmpIPredicate::eq, marker, zero);
       auto isZeroDB = builder.create<mlir::db::TypeCastOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), isZero);
@@ -148,11 +148,11 @@ class MHashAntiSemiJoinLowering : public mlir::relalg::MarkableHJNode<mlir::rela
 
       ifOp.thenRegion().push_back(ifBlock);
 
-      mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+      mlir::OpBuilder builder1(ifOp.thenRegion());
       if (!requiredBuilders.empty()) {
          mlir::Block* elseBlock = new mlir::Block;
          ifOp.elseRegion().push_back(elseBlock);
-         mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
+         mlir::OpBuilder builder2(ifOp.elseRegion());
          builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
       }
       consumer->consume(this, builder1, context);

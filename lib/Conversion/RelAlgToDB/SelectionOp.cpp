@@ -22,24 +22,24 @@ class SelectionLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return this->children[0]->getAvailableAttributes();
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       mlir::relalg::SelectionOp clonedSelectionOp = mlir::dyn_cast<mlir::relalg::SelectionOp>(selectionOp->clone());
       mlir::Block* block = &clonedSelectionOp.predicate().getBlocks().front();
       auto* terminator = block->getTerminator();
 
-      builder.mergeRelatinalBlock(block, context, scope);
+      mergeRelatinalBlock(builder.getInsertionBlock(),block, context, scope);
 
       auto ifOp = builder.create<mlir::db::IfOp>(selectionOp->getLoc(), getRequiredBuilderTypes(context), mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0]);
       mlir::Block* ifBlock = new mlir::Block;
 
       ifOp.thenRegion().push_back(ifBlock);
 
-      mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+      mlir::OpBuilder builder1(ifOp.thenRegion());
       if (!requiredBuilders.empty()) {
          mlir::Block* elseBlock = new mlir::Block;
          ifOp.elseRegion().push_back(elseBlock);
-         mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
+         mlir::OpBuilder builder2(ifOp.elseRegion());
          builder2.create<mlir::db::YieldOp>(selectionOp->getLoc(), getRequiredBuilderValues(context));
       }
       consumer->consume(this, builder1, context);
@@ -52,7 +52,7 @@ class SelectionLowering : public mlir::relalg::ProducerConsumerNode {
       terminator->erase();
       clonedSelectionOp->destroy();
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       children[0]->produce(context, builder);
    }
 

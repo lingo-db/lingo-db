@@ -39,7 +39,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return aggregationOp.getAvailableAttributes();
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
 
       std::vector<mlir::Value> keys, values;
       for (const auto* attr : keyAttributes) {
@@ -77,7 +77,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
       mlir::Block* aggrBuilderBlock = new mlir::Block;
       builderMerge.fn().push_back(aggrBuilderBlock);
       aggrBuilderBlock->addArguments({aggrTupleType, valTupleType});
-      mlir::relalg::ProducerConsumerBuilder builder2(builder.getContext());
+      mlir::OpBuilder builder2(builder.getContext());
       builder2.setInsertionPointToStart(aggrBuilderBlock);
       auto unpackedCurr = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), aggrBuilderBlock->getArgument(0))->getResults();
       mlir::ValueRange unpackedNew;
@@ -130,7 +130,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
                                       .Default([&](::mlir::Type) { return builder.getI64IntegerAttr(std::numeric_limits<int64_t>::max()); });
       return maxValAttr;
    }
-   void analyze(mlir::relalg::ProducerConsumerBuilder& builder){
+   void analyze(mlir::OpBuilder& builder){
       for (auto attr : aggregationOp.group_by_attrs()) {
          if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
             keyTypes.push_back(attrRef.getRelationalAttribute().type);
@@ -315,7 +315,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
          }
       });
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
 
       analyze(builder);
@@ -342,7 +342,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
          block2->addArgument(iterEntryType);
          block2->addArguments(getRequiredBuilderTypes(context));
          forOp2.getBodyRegion().push_back(block2);
-         mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
+         mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), forOp2.getInductionVar()).getResults();
          mlir::ValueRange unpackedKey;

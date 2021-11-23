@@ -22,11 +22,11 @@ class ProjectionLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return this->children[0]->getAvailableAttributes();
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       consumer->consume(this, builder, context);
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       children[0]->produce(context, builder);
    }
 
@@ -60,7 +60,7 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return projectionOp.getAvailableAttributes();
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       std::vector<mlir::Value> keys;
       for (const auto* attr : groupAttributes) {
          keys.push_back(context.getValueForAttribute(attr));
@@ -74,13 +74,13 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
       mlir::Block* aggrBuilderBlock = new mlir::Block;
       mergedBuilder.fn().push_back(aggrBuilderBlock);
       aggrBuilderBlock->addArguments({valTupleType, valTupleType});
-      mlir::relalg::ProducerConsumerBuilder builder2(builder.getContext());
+      mlir::OpBuilder builder2(builder.getContext());
       builder2.setInsertionPointToStart(aggrBuilderBlock);
       builder2.create<mlir::db::YieldOp>(builder.getUnknownLoc(), aggrBuilderBlock->getArgument(0));
       context.builders[builderId] = mergedBuilder.result_builder();
    }
 
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
 
       for (auto attr : projectionOp.attrs()) {
@@ -106,7 +106,7 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
          block2->addArgument(entryType);
          block2->addArguments(getRequiredBuilderTypes(context));
          forOp2.getBodyRegion().push_back(block2);
-         mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
+         mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), forOp2.getInductionVar()).getResults();
          auto unpackedKey = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), unpacked[0]).getResults();

@@ -42,33 +42,8 @@ class LoweringContext {
    }
    std::unordered_map<mlir::Operation*, std::pair<mlir::Value, std::vector<mlir::relalg::RelationalAttribute*>>> materializedTmp;
 };
-class ProducerConsumerBuilder : public mlir::OpBuilder {
-   public:
-   using mlir::OpBuilder::OpBuilder;
-
-   void mergeRelatinalBlock(mlir::Block* source, LoweringContext& context, LoweringContext::AttributeResolverScope& scope) {
-      mlir::Block* dest = getBlock();
-
-      // Splice the operations of the 'source' block into the 'dest' block and erase
-      // it.
-      llvm::iplist<mlir::Operation> translated;
-      std::vector<mlir::Operation*> toErase;
-      source->walk([&](mlir::relalg::GetAttrOp getAttrOp) {
-         getAttrOp.replaceAllUsesWith(context.getValueForAttribute(&getAttrOp.attr().getRelationalAttribute()));
-         toErase.push_back(getAttrOp.getOperation());
-      });
-      for (auto addAttrOp : source->getOps<mlir::relalg::AddAttrOp>()) {
-         context.setValueForAttribute(scope, &addAttrOp.attr().getRelationalAttribute(), addAttrOp.val());
-         toErase.push_back(addAttrOp.getOperation());
-      }
-
-      dest->getOperations().splice(dest->end(), source->getOperations());
-      for (auto* op : toErase) {
-         op->dropAllUses();
-         op->erase();
-      }
-   }
-};
+void mergeRelatinalBlock(mlir::Block* dest,mlir::Block* source, LoweringContext& context, LoweringContext::AttributeResolverScope& scope);
+static const mlir::function_ref<void(mlir::OpBuilder&, mlir::Location)> noBuilder=nullptr;
 class ProducerConsumerNode {
    protected:
    ProducerConsumerNode* consumer;
@@ -121,8 +96,8 @@ class ProducerConsumerNode {
    }
    virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) = 0;
    virtual mlir::relalg::Attributes getAvailableAttributes() = 0;
-   virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) = 0;
-   virtual void produce(LoweringContext& context, ProducerConsumerBuilder& builder) = 0;
+   virtual void consume(ProducerConsumerNode* child, mlir::OpBuilder& builder, LoweringContext& context) = 0;
+   virtual void produce(LoweringContext& context, mlir::OpBuilder& builder) = 0;
    virtual void done() {}
    virtual ~ProducerConsumerNode() {}
 };
@@ -132,8 +107,8 @@ class NoopNode : public mlir::relalg::ProducerConsumerNode {
    }
    virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override{};
    virtual mlir::relalg::Attributes getAvailableAttributes() override { return {}; };
-   virtual void consume(ProducerConsumerNode* child, ProducerConsumerBuilder& builder, LoweringContext& context) override{};
-   virtual void produce(LoweringContext& context, ProducerConsumerBuilder& builder) override{};
+   virtual void consume(ProducerConsumerNode* child, mlir::OpBuilder& builder, LoweringContext& context) override{};
+   virtual void produce(LoweringContext& context, mlir::OpBuilder& builder) override{};
    virtual ~NoopNode() {}
 };
 class ProducerConsumerNodeRegistry {

@@ -23,7 +23,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return this->children[0]->getAvailableAttributes();
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       std::vector<mlir::Type> types;
       std::vector<mlir::Value> values;
       for (const auto* attr : requiredAttributes) {
@@ -41,20 +41,20 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
          auto ifOp = builder.create<mlir::db::IfOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), lt);
          mlir::Block* ifBlock = new mlir::Block;
          ifOp.thenRegion().push_back(ifBlock);
-         mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+         mlir::OpBuilder builder1(ifOp.thenRegion());
          builder1.create<mlir::db::YieldOp>(builder.getUnknownLoc(), trueVal);
          mlir::Block* elseBlock = new mlir::Block;
          ifOp.elseRegion().push_back(elseBlock);
-         mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
+         mlir::OpBuilder builder2(ifOp.elseRegion());
          auto eq = builder2.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::eq, sortCriteria[pos].first, sortCriteria[pos].second);
          auto ifOp2 = builder2.create<mlir::db::IfOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), eq);
          mlir::Block* ifBlock2 = new mlir::Block;
          ifOp2.thenRegion().push_back(ifBlock2);
-         mlir::relalg::ProducerConsumerBuilder builder3(ifOp2.thenRegion());
+         mlir::OpBuilder builder3(ifOp2.thenRegion());
          builder3.create<mlir::db::YieldOp>(builder.getUnknownLoc(), createSortPredicate(builder3, sortCriteria, trueVal, falseVal, pos + 1));
          mlir::Block* elseBlock2 = new mlir::Block;
          ifOp2.elseRegion().push_back(elseBlock2);
-         mlir::relalg::ProducerConsumerBuilder builder4(ifOp2.elseRegion());
+         mlir::OpBuilder builder4(ifOp2.elseRegion());
          builder4.create<mlir::db::YieldOp>(builder.getUnknownLoc(), falseVal);
 
          builder2.create<mlir::db::YieldOp>(builder.getUnknownLoc(), ifOp2.getResult(0));
@@ -64,7 +64,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
          return falseVal;
       }
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> attributePos;
       std::vector<mlir::Type> types;
@@ -86,7 +86,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
          block2->addArgument(tupleType);
          block2->addArguments(tupleType);
          dbSortOp.region().push_back(block2);
-         mlir::relalg::ProducerConsumerBuilder builder2(dbSortOp.region());
+         mlir::OpBuilder builder2(dbSortOp.region());
          auto unpackedLeft = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), block2->getArgument(0));
          auto unpackedRight = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), block2->getArgument(1));
          std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria;
@@ -110,7 +110,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
          block2->addArgument(tupleType);
          block2->addArguments(getRequiredBuilderTypes(context));
          forOp2.getBodyRegion().push_back(block2);
-         mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
+         mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), forOp2.getInductionVar());
          size_t i = 0;

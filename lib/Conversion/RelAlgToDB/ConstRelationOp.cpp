@@ -18,10 +18,10 @@ class ConstRelLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return constRelationOp.getCreatedAttributes();
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       assert(false && "should not happen");
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       using namespace mlir;
       std::vector<mlir::Type> types;
@@ -52,7 +52,7 @@ class ConstRelLowering : public mlir::relalg::ProducerConsumerNode {
          block2->addArgument(tupleType);
          block2->addArguments(getRequiredBuilderTypes(context));
          forOp2.getBodyRegion().push_back(block2);
-         mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
+         mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(constRelationOp->getLoc(), forOp2.getInductionVar());
          size_t i = 0;

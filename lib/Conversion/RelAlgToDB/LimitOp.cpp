@@ -25,7 +25,7 @@ class LimitLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return this->children[0]->getAvailableAttributes();
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       std::vector<mlir::Type> types;
       std::vector<mlir::Value> values;
       for (const auto* attr : requiredAttributes) {
@@ -42,7 +42,7 @@ class LimitLowering : public mlir::relalg::ProducerConsumerNode {
       context.builders[counterId] = addedCounter;
    }
 
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> attributePos;
       std::vector<mlir::Type> types;

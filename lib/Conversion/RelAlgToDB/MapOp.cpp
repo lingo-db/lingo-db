@@ -22,18 +22,18 @@ class MapLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return this->children[0]->getAvailableAttributes().insert(mapOp.getCreatedAttributes());
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       mlir::relalg::MapOp clonedSelectionOp = mlir::dyn_cast<mlir::relalg::MapOp>(mapOp->clone());
       mlir::Block* block = &clonedSelectionOp.predicate().getBlocks().front();
       auto* terminator = block->getTerminator();
 
-      builder.mergeRelatinalBlock(block, context, scope);
+      mergeRelatinalBlock(builder.getInsertionBlock(),block, context, scope);
       consumer->consume(this, builder, context);
       terminator->erase();
       clonedSelectionOp->destroy();
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       children[0]->produce(context, builder);
    }
 

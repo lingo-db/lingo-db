@@ -30,7 +30,7 @@ class NLSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return joinOp.getAvailableAttributes();
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == this->children[0].get()) {
          matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
@@ -42,11 +42,11 @@ class NLSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
 
          ifOp.thenRegion().push_back(ifBlock);
 
-         mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+         mlir::OpBuilder builder1(ifOp.thenRegion());
          if (!requiredBuilders.empty()) {
             mlir::Block* elseBlock = new mlir::Block;
             ifOp.elseRegion().push_back(elseBlock);
-            mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
+            mlir::OpBuilder builder2(ifOp.elseRegion());
             builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
          }
          for (mlir::Attribute attr : joinOp.mapping()) {
@@ -68,7 +68,7 @@ class NLSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
          mlir::Value condition;
          bool hasCondition = !mlir::cast<mlir::relalg::ReturnOp>(terminator).results().empty();
          if (hasCondition) {
-            builder.mergeRelatinalBlock(block, context, scope);
+            mergeRelatinalBlock(builder.getInsertionBlock(),block, context, scope);
             condition = mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0];
          } else {
             condition = builder.create<mlir::db::ConstantOp>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
@@ -79,11 +79,11 @@ class NLSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
 
          ifOp.thenRegion().push_back(ifBlock);
 
-         mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+         mlir::OpBuilder builder1(ifOp.thenRegion());
          if (!requiredBuilders.empty()) {
             mlir::Block* elseBlock = new mlir::Block;
             ifOp.elseRegion().push_back(elseBlock);
-            mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
+            mlir::OpBuilder builder2(ifOp.elseRegion());
             builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
          }
          for (mlir::Attribute attr : joinOp.mapping()) {
@@ -113,7 +113,7 @@ class NLSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
          clonedSingleJoinOp->destroy();
       }
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       children[0]->produce(context, builder);
    }
 
@@ -155,7 +155,7 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return joinOp.getAvailableAttributes();
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == this->children[0].get()) {
          auto unpacked = builder.create<mlir::util::UnPackOp>(joinOp->getLoc(), context.builders[builderId]);
@@ -176,7 +176,7 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
          context.builders[builderId] = builder.create<mlir::util::PackOp>(joinOp->getLoc(), values);
       }
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       std::vector<mlir::Value> values;
       for (auto type : types) {
          values.push_back(builder.create<mlir::db::NullOp>(joinOp.getLoc(), type));
@@ -208,18 +208,18 @@ class HashSingleJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SingleJ
       }
    }
 
-   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matched);
       mlir::Block* ifBlock = new mlir::Block;
 
       ifOp.thenRegion().push_back(ifBlock);
 
-      mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+      mlir::OpBuilder builder1(ifOp.thenRegion());
       if (!requiredBuilders.empty()) {
          mlir::Block* elseBlock = new mlir::Block;
          ifOp.elseRegion().push_back(elseBlock);
-         mlir::relalg::ProducerConsumerBuilder builder3(ifOp.elseRegion());
+         mlir::OpBuilder builder3(ifOp.elseRegion());
          builder3.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
       }
       for (mlir::Attribute attr : joinOp.mapping()) {
@@ -248,10 +248,10 @@ class HashSingleJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SingleJ
       }
    }
 
-   void beforeLookup(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
    }
-   void afterLookup(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
       mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFound);
@@ -260,11 +260,11 @@ class HashSingleJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SingleJ
 
       ifOp.thenRegion().push_back(ifBlock);
 
-      mlir::relalg::ProducerConsumerBuilder builder1(ifOp.thenRegion());
+      mlir::OpBuilder builder1(ifOp.thenRegion());
       if (!requiredBuilders.empty()) {
          mlir::Block* elseBlock = new mlir::Block;
          ifOp.elseRegion().push_back(elseBlock);
-         mlir::relalg::ProducerConsumerBuilder builder2(ifOp.elseRegion());
+         mlir::OpBuilder builder2(ifOp.elseRegion());
          builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
       }
       for (mlir::Attribute attr : joinOp.mapping()) {

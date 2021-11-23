@@ -602,6 +602,28 @@ LogicalResult mlir::db::OrOp::canonicalize(mlir::db::OrOp orOp, mlir::PatternRew
    }
    return failure();
 }
+
+void mlir::db::IfOp::build(OpBuilder &builder, OperationState &result,
+                 TypeRange resultTypes, Value cond,
+                 function_ref<void(OpBuilder &, Location)> thenBuilder,
+                 function_ref<void(OpBuilder &, Location)> elseBuilder) {
+   assert(thenBuilder && "the builder callback for 'then' must be present");
+
+   result.addOperands(cond);
+   result.addTypes(resultTypes);
+
+   OpBuilder::InsertionGuard guard(builder);
+   Region *thenRegion = result.addRegion();
+   builder.createBlock(thenRegion);
+   thenBuilder(builder, result.location);
+
+   Region *elseRegion = result.addRegion();
+   if (!elseBuilder)
+      return;
+
+   builder.createBlock(elseRegion);
+   elseBuilder(builder, result.location);
+}
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.cpp.inc"
 #include "mlir/Dialect/DB/IR/DBOpsInterfaces.cpp.inc"

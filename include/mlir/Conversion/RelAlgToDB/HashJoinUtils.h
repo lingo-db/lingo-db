@@ -186,7 +186,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return this->joinOp.getAvailableAttributes();
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto joinHtBuilder = builder.create<mlir::db::CreateJoinHTBuilder>(joinOp.getLoc(), mlir::db::JoinHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType));
       builderId = context.getBuilderId();
       context.builders[builderId] = joinHtBuilder;
@@ -196,9 +196,9 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
       children[1]->produce(context, builder);
       builder.create<mlir::db::FreeOp>(joinOp->getLoc(), joinHt);
    }
-   virtual void handleLookup(Value matched, LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) = 0;
-   virtual void beforeLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {}
-   virtual void afterLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {}
+   virtual void handleLookup(Value matched, LoweringContext& context, mlir::OpBuilder& builder) = 0;
+   virtual void beforeLookup(LoweringContext& context, mlir::OpBuilder& builder) {}
+   virtual void afterLookup(LoweringContext& context, mlir::OpBuilder& builder) {}
    virtual mlir::Value getFlag() { return Value(); }
 
    std::vector<mlir::Type> getRequiredBuilderTypesCustom(LoweringContext& context) {
@@ -224,7 +224,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
          context.builders[y] = values[i++];
       }
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == builderChild) {
          auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), leftKeys, builder.getInsertionBlock(),builder.getInsertionPoint(), context);
@@ -250,7 +250,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
             block2->addArgument(entryType);
             block2->addArguments(getRequiredBuilderTypesCustom(context));
             forOp2.getBodyRegion().push_back(block2);
-            mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
+            mlir::OpBuilder builder2(forOp2.getBodyRegion());
             setRequiredBuilderValuesCustom(context, block2->getArguments().drop_front(1));
             auto unpacked = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), entryType.getTypes(), forOp2.getInductionVar()).getResults();
             mlir::ValueRange unpackedKey = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), keyTupleType.getTypes(), unpacked[0]).getResults();
@@ -269,8 +269,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
                T clonedOp = mlir::dyn_cast<T>(joinOp->clone());
                mlir::Block* block = &clonedOp.predicate().getBlocks().front();
                auto* terminator = block->getTerminator();
-
-               builder2.mergeRelatinalBlock(block, context, scope);
+               mergeRelatinalBlock(builder2.getInsertionBlock(),block, context, scope);
                handleLookup(mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0], context, builder2);
 
                terminator->erase();
@@ -341,7 +340,7 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return this->joinOp.getAvailableAttributes();
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) override {
+   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto joinHtBuilder = builder.create<mlir::db::CreateMarkableJoinHTBuilder>(joinOp.getLoc(), mlir::db::MarkableJoinHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType));
       builderId = context.getBuilderId();
       context.builders[builderId] = joinHtBuilder;
@@ -352,15 +351,15 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
       after(context, builder);
       builder.create<mlir::db::FreeOp>(joinOp->getLoc(), joinHt);
    }
-   virtual void handleLookup(Value matched, Value markerBefore, LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) = 0;
-   virtual void beforeLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {}
-   virtual void afterLookup(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {}
-   virtual void handleScanned(Value marker, LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {
+   virtual void handleLookup(Value matched, Value markerBefore, LoweringContext& context, mlir::OpBuilder& builder) = 0;
+   virtual void beforeLookup(LoweringContext& context, mlir::OpBuilder& builder) {}
+   virtual void afterLookup(LoweringContext& context, mlir::OpBuilder& builder) {}
+   virtual void handleScanned(Value marker, LoweringContext& context, mlir::OpBuilder& builder) {
    }
-   virtual void after(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {
+   virtual void after(LoweringContext& context, mlir::OpBuilder& builder) {
    }
    virtual mlir::Value getFlag() { return Value(); }
-   void scanHT(LoweringContext& context, mlir::relalg::ProducerConsumerBuilder& builder) {
+   void scanHT(LoweringContext& context, mlir::OpBuilder& builder) {
       auto scope = context.createScope();
       auto ptrType = MemRefType::get({}, builder.getIntegerType(8));
       mlir::TupleType entryAndMarkerType = mlir::TupleType::get(builder.getContext(), TypeRange{entryType, ptrType});
@@ -371,7 +370,7 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
          block2->addArgument(entryAndMarkerType);
          block2->addArguments(getRequiredBuilderTypes(context));
          forOp2.getBodyRegion().push_back(block2);
-         mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
+         mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto seperateMarker = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), entryAndMarkerType.getTypes(), forOp2.getInductionVar()).getResults();
 
@@ -396,7 +395,7 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
          setRequiredBuilderValues(context, forOp2.results());
       }
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::relalg::ProducerConsumerBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto ptrType = MemRefType::get({}, builder.getIntegerType(8));
 
       auto scope = context.createScope();
@@ -425,7 +424,7 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
             block2->addArgument(entryAndMarkerType);
             block2->addArguments(getRequiredBuilderTypes(context));
             forOp2.getBodyRegion().push_back(block2);
-            mlir::relalg::ProducerConsumerBuilder builder2(forOp2.getBodyRegion());
+            mlir::OpBuilder builder2(forOp2.getBodyRegion());
             setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
             auto seperateMarker = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), entryAndMarkerType.getTypes(), forOp2.getInductionVar()).getResults();
 
@@ -446,7 +445,7 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
                T clonedOp = mlir::dyn_cast<T>(joinOp->clone());
                mlir::Block* block = &clonedOp.predicate().getBlocks().front();
                auto* terminator = block->getTerminator();
-               builder2.mergeRelatinalBlock(block, context, scope);
+               mergeRelatinalBlock(builder2.getInsertionBlock(),block, context, scope);
                handleLookup(mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0], seperateMarker[1], context, builder2);
                terminator->erase();
                clonedOp->destroy();

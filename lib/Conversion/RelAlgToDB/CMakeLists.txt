@@ -1,4 +1,5 @@
 add_mlir_conversion_library(MLIRRelAlgToDB
+        helpers.cpp
         LowerToDB.cpp
         BaseTableOp.cpp
         AggregationOp.cpp
