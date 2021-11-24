@@ -42,7 +42,7 @@ class LoweringContext {
    }
    std::unordered_map<mlir::Operation*, std::pair<mlir::Value, std::vector<mlir::relalg::RelationalAttribute*>>> materializedTmp;
 };
-void mergeRelatinalBlock(mlir::Block* dest,mlir::Block* source, LoweringContext& context, LoweringContext::AttributeResolverScope& scope);
+std::vector<mlir::Value> mergeRelationalBlock(mlir::Block* dest,mlir::Operation* op,mlir::function_ref<mlir::Block*(mlir::Operation*)> getBlockFn, LoweringContext& context, LoweringContext::AttributeResolverScope& scope);
 static const mlir::function_ref<void(mlir::OpBuilder&, mlir::Location)> noBuilder=nullptr;
 class ProducerConsumerNode {
    protected:

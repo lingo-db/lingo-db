@@ -23,15 +23,9 @@ class NLMarkJoinLowering : public mlir::relalg::ProducerConsumerNode {
          context.setValueForAttribute(scope, &joinOp.markattr().getRelationalAttribute(), matchFound);
          consumer->consume(this, builder, context);
       } else if (child == this->children[1].get()) {
-         mlir::relalg::MarkJoinOp clonedMarkJoinOp = mlir::dyn_cast<mlir::relalg::MarkJoinOp>(joinOp->clone());
-         mlir::Block* block = &clonedMarkJoinOp.predicate().getBlocks().front();
-         auto* terminator = block->getTerminator();
-
-         mergeRelatinalBlock(builder.getInsertionBlock(),block, context, scope);
-         mlir::Value matched = mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0];
+         mlir::Value matched= mergeRelationalBlock(
+            builder.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
          builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
-         terminator->erase();
-         clonedMarkJoinOp->destroy();
       }
    }
    virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {

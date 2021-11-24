@@ -267,14 +267,9 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
                }
             }
             {
-               T clonedOp = mlir::dyn_cast<T>(joinOp->clone());
-               mlir::Block* block = &clonedOp.predicate().getBlocks().front();
-               auto* terminator = block->getTerminator();
-               mergeRelatinalBlock(builder2.getInsertionBlock(),block, context, scope);
-               handleLookup(mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0], context, builder2);
-
-               terminator->erase();
-               clonedOp->destroy();
+               mlir::Value matched= mergeRelationalBlock(
+                  builder2.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
+               handleLookup(matched, context, builder2);
             }
             builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValuesCustom(context));
             setRequiredBuilderValuesCustom(context, forOp2.results());
@@ -444,13 +439,9 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
                }
             }
             {
-               T clonedOp = mlir::dyn_cast<T>(joinOp->clone());
-               mlir::Block* block = &clonedOp.predicate().getBlocks().front();
-               auto* terminator = block->getTerminator();
-               mergeRelatinalBlock(builder2.getInsertionBlock(),block, context, scope);
-               handleLookup(mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0], seperateMarker[1], context, builder2);
-               terminator->erase();
-               clonedOp->destroy();
+               mlir::Value matched= mergeRelationalBlock(
+                  builder2.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
+               handleLookup(matched, seperateMarker[1], context, builder2);
             }
             builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
             setRequiredBuilderValues(context, forOp2.results());

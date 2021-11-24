@@ -28,15 +28,9 @@ class NLAntiSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
                requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
          setRequiredBuilderValues(context,ifOp.getResults());
       } else if (child == this->children[1].get()) {
-         mlir::relalg::AntiSemiJoinOp clonedAntiSemiJoinOp = mlir::dyn_cast<mlir::relalg::AntiSemiJoinOp>(joinOp->clone());
-         mlir::Block* block = &clonedAntiSemiJoinOp.predicate().getBlocks().front();
-         auto* terminator = block->getTerminator();
-
-         mergeRelatinalBlock(builder.getInsertionBlock(),block, context, scope);
-         mlir::Value matched = mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0];
+         mlir::Value matched= mergeRelationalBlock(
+            builder.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
          builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
-         terminator->erase();
-         clonedAntiSemiJoinOp->destroy();
       }
    }
    virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {

@@ -44,9 +44,6 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return projectionOp.getAvailableAttributes();
-   }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       std::vector<mlir::Value> keys;
       for (const auto* attr : groupAttributes) {

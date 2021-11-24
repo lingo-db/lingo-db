@@ -27,9 +27,6 @@ class NLSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
       }
       propagateInfo();
    }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return joinOp.getAvailableAttributes();
-   }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == this->children[0].get()) {
@@ -59,8 +56,9 @@ class NLSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
          mlir::Value condition;
          bool hasCondition = !mlir::cast<mlir::relalg::ReturnOp>(terminator).results().empty();
          if (hasCondition) {
-            mergeRelatinalBlock(builder.getInsertionBlock(), block, context, scope);
-            condition = mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0];
+            condition = mergeRelationalBlock(
+               builder.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
+
          } else {
             condition = builder.create<mlir::db::ConstantOp>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
          }
@@ -131,9 +129,6 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       children[0]->addRequiredBuilders(requiredBuilders);
-   }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return joinOp.getAvailableAttributes();
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
@@ -211,8 +206,7 @@ class HashSingleJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SingleJ
 
             auto trueVal = builder1.create<mlir::db::ConstantOp>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
             builder1.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, trueVal);
-            builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-         },
+            builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); },
          requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
       setRequiredBuilderValues(context, ifOp.getResults());
    }

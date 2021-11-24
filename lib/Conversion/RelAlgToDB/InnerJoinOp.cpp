@@ -17,21 +17,15 @@ class NLInnerJoinLowering : public mlir::relalg::ProducerConsumerNode {
       if (child == this->children[0].get()) {
          children[1]->produce(context, builder);
       } else if (child == this->children[1].get()) {
-         mlir::relalg::InnerJoinOp clonedInnerJoinOp = mlir::dyn_cast<mlir::relalg::InnerJoinOp>(joinOp->clone());
-         mlir::Block* block = &clonedInnerJoinOp.predicate().getBlocks().front();
-         auto* terminator = block->getTerminator();
-
-         mergeRelatinalBlock(builder.getInsertionBlock(), block, context, scope);
-
+         mlir::Value matched= mergeRelationalBlock(
+            builder.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
          auto builderValuesBefore = getRequiredBuilderValues(context);
          auto ifOp = builder.create<mlir::db::IfOp>(
-            joinOp->getLoc(), getRequiredBuilderTypes(context), mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0], [&](mlir::OpBuilder& builder1, mlir::Location) {
+            joinOp->getLoc(), getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
                consumer->consume(this, builder1, context);
                builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); },
             requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
          setRequiredBuilderValues(context, ifOp.getResults());
-         terminator->erase();
-         clonedInnerJoinOp->destroy();
       }
    }
    virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
@@ -46,9 +40,6 @@ class HashInnerJoinLowering : public mlir::relalg::HJNode<mlir::relalg::InnerJoi
    HashInnerJoinLowering(mlir::relalg::InnerJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::InnerJoinOp>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
    }
 
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return this->children[0]->getAvailableAttributes().insert(this->children[1]->getAvailableAttributes());
-   }
    virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto builderValuesBefore = getRequiredBuilderValues(context);
       auto ifOp = builder.create<mlir::db::IfOp>(

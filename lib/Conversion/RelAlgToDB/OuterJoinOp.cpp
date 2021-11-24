@@ -27,9 +27,7 @@ class NLOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
       }
       propagateInfo();
    }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
-      return joinOp.getAvailableAttributes();
-   }
+
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == this->children[0].get()) {
@@ -53,14 +51,12 @@ class NLOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
 
          setRequiredBuilderValues(context, ifOp.getResults());
       } else if (child == this->children[1].get()) {
-         mlir::relalg::OuterJoinOp clonedOuterJoinOp = mlir::dyn_cast<mlir::relalg::OuterJoinOp>(joinOp->clone());
-         mlir::Block* block = &clonedOuterJoinOp.predicate().getBlocks().front();
-         auto* terminator = block->getTerminator();
 
-         mergeRelatinalBlock(builder.getInsertionBlock(), block, context, scope);
+         mlir::Value matched= mergeRelationalBlock(
+            builder.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
          auto builderValuesBefore = getRequiredBuilderValues(context);
          auto ifOp = builder.create<mlir::db::IfOp>(
-            joinOp->getLoc(), getRequiredBuilderTypes(context), mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0], [&](mlir::OpBuilder& builder1, mlir::Location) {
+            joinOp->getLoc(), getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
                for (mlir::Attribute attr : joinOp.mapping()) {
                   auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
                   auto* defAttr = &relationDefAttr.getRelationalAttribute();
@@ -82,8 +78,6 @@ class NLOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
             requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
 
          setRequiredBuilderValues(context, ifOp.getResults());
-         terminator->erase();
-         clonedOuterJoinOp->destroy();
       }
    }
    virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {

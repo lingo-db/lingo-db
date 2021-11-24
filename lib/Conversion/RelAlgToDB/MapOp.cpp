@@ -17,14 +17,9 @@ class MapLowering : public mlir::relalg::ProducerConsumerNode {
 
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
-      mlir::relalg::MapOp clonedSelectionOp = mlir::dyn_cast<mlir::relalg::MapOp>(mapOp->clone());
-      mlir::Block* block = &clonedSelectionOp.predicate().getBlocks().front();
-      auto* terminator = block->getTerminator();
-
-      mergeRelatinalBlock(builder.getInsertionBlock(),block, context, scope);
+      mergeRelationalBlock(
+         builder.getInsertionBlock(), mapOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope);
       consumer->consume(this, builder, context);
-      terminator->erase();
-      clonedSelectionOp->destroy();
    }
    virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       children[0]->produce(context, builder);

@@ -17,20 +17,16 @@ class SelectionLowering : public mlir::relalg::ProducerConsumerNode {
 
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
-      mlir::relalg::SelectionOp clonedSelectionOp = mlir::dyn_cast<mlir::relalg::SelectionOp>(selectionOp->clone());
-      mlir::Block* block = &clonedSelectionOp.predicate().getBlocks().front();
-      auto* terminator = block->getTerminator();
 
-      mergeRelatinalBlock(builder.getInsertionBlock(), block, context, scope);
+      mlir::Value matched= mergeRelationalBlock(
+         builder.getInsertionBlock(), selectionOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
       auto builderValuesBefore = getRequiredBuilderValues(context);
       auto ifOp = builder.create<mlir::db::IfOp>(
-         selectionOp->getLoc(), getRequiredBuilderTypes(context), mlir::cast<mlir::relalg::ReturnOp>(terminator).results()[0], [&](mlir::OpBuilder& builder1, mlir::Location) {
+         selectionOp->getLoc(), getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
          consumer->consume(this, builder1, context);
          builder1.create<mlir::db::YieldOp>(selectionOp->getLoc(), getRequiredBuilderValues(context)); },
          requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location loc) { builder2.create<mlir::db::YieldOp>(loc, builderValuesBefore); });
       setRequiredBuilderValues(context, ifOp.getResults());
-      terminator->erase();
-      clonedSelectionOp->destroy();
    }
    virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       children[0]->produce(context, builder);
