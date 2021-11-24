@@ -6,7 +6,7 @@ std::vector<mlir::Value> mlir::relalg::mergeRelationalBlock(mlir::Block* dest,ml
    // it.
    llvm::iplist<mlir::Operation> translated;
    std::vector<mlir::Operation*> toErase;
-   auto cloned=op->clone();
+   auto *cloned=op->clone();
    mlir::Block* source=getBlockFn(cloned);
    auto* terminator = source->getTerminator();
 
