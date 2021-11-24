@@ -18,7 +18,7 @@ class SelectionLowering : public mlir::relalg::ProducerConsumerNode {
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
 
-      mlir::Value matched= mergeRelationalBlock(
+      mlir::Value matched = mergeRelationalBlock(
          builder.getInsertionBlock(), selectionOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
       auto builderValuesBefore = getRequiredBuilderValues(context);
       auto ifOp = builder.create<mlir::db::IfOp>(

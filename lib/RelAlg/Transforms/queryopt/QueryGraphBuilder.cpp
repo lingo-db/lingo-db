@@ -57,7 +57,7 @@ QueryGraphBuilder::NodeResolver mlir::relalg::QueryGraphBuilder::populateQueryGr
    NodeResolver resolver(qg);
    if (alreadyOptimized.count(op.getOperation())) {
       size_t newNode = addNode(op);
-      for (auto* attr : op.getAvailableAttributes()) {
+      for (const auto* attr : op.getAvailableAttributes()) {
          resolver.add(attr, newNode);
       }
       return resolver;
@@ -75,7 +75,7 @@ QueryGraphBuilder::NodeResolver mlir::relalg::QueryGraphBuilder::populateQueryGr
       qg.addEdge(expand(leftTes), expand(rightTes), emptyNode, op, mlir::relalg::QueryGraph::EdgeType::REAL);
       if (!created.empty()) {
          size_t newNode = addNode(op);
-         for (auto* attr : op.getCreatedAttributes()) {
+         for (const auto* attr : op.getCreatedAttributes()) {
             resolver.add(attr, newNode);
          }
          qg.nodes[newNode].dependencies = expand(tes);
@@ -84,7 +84,7 @@ QueryGraphBuilder::NodeResolver mlir::relalg::QueryGraphBuilder::populateQueryGr
    } else if (!created.empty()) {
       //add node for operators that create attributes
       size_t newNode = addNode(op);
-      for (auto* attr : op.getCreatedAttributes()) {
+      for (const auto* attr : op.getCreatedAttributes()) {
          resolver.add(attr, newNode);
       }
       if (children.size() == 1) {
@@ -274,7 +274,7 @@ NodeSet QueryGraphBuilder::calcTES(Operator op, NodeResolver& resolver) {
 }
 NodeSet QueryGraphBuilder::calcSES(Operator op, NodeResolver& resolver) const {
    NodeSet res = NodeSet(numNodes);
-   for (auto* attr : op.getUsedAttributes()) {
+   for (const auto* attr : op.getUsedAttributes()) {
       res.set(resolver.resolve(attr));
    }
    return res;

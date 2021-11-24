@@ -45,13 +45,9 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
-      std::vector<mlir::Value> keys;
-      for (const auto* attr : groupAttributes) {
-         keys.push_back(context.getValueForAttribute(attr));
-      }
       mlir::Value htBuilder = context.builders[builderId];
       mlir::Value emptyVals = builder.create<mlir::util::UndefTupleOp>(projectionOp->getLoc(), valTupleType);
-      mlir::Value packedKey = builder.create<mlir::util::PackOp>(projectionOp->getLoc(), keys);
+      mlir::Value packedKey = packValues(context,builder,groupAttributes);
       mlir::Value packed = builder.create<mlir::util::PackOp>(projectionOp->getLoc(), mlir::ValueRange({packedKey, emptyVals}));
 
       auto mergedBuilder = builder.create<mlir::db::BuilderMerge>(projectionOp->getLoc(), htBuilder.getType(), htBuilder, packed);

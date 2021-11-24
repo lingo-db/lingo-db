@@ -16,12 +16,12 @@ class QueryGraphBuilder {
    class NodeResolver {
       QueryGraph& qg;
 
-      std::unordered_map<relalg::RelationalAttribute*, size_t> attrToNodes;
+      std::unordered_map<const relalg::RelationalAttribute*, size_t> attrToNodes;
 
       public:
       explicit NodeResolver(QueryGraph& qg) : qg(qg) {}
 
-      void add(relalg::RelationalAttribute* attr, size_t nodeid) {
+      void add(const relalg::RelationalAttribute* attr, size_t nodeid) {
          attrToNodes[attr] = nodeid;
       }
 
@@ -40,7 +40,7 @@ class QueryGraphBuilder {
          }
       }
 
-      size_t resolve(relalg::RelationalAttribute* attr) {
+      size_t resolve(const relalg::RelationalAttribute* attr) {
          return attrToNodes[attr];
       }
    };

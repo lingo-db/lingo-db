@@ -7,7 +7,7 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
    mlir::relalg::TmpOp tmpOp;
    size_t builderId;
    bool materialize;
-   std::vector<mlir::relalg::RelationalAttribute*> attributes;
+   std::vector<const mlir::relalg::RelationalAttribute*> attributes;
    size_t userCount;
    size_t producedCount;
 
@@ -23,7 +23,7 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
       this->requiredAttributes = requiredAttributes;
       this->requiredAttributes.insert(mlir::relalg::Attributes::fromArrayAttr(tmpOp.attrs()));
       propagateInfo();
-      for (auto* attr : this->requiredAttributes) {
+      for (const auto* attr : this->requiredAttributes) {
          attributes.push_back(attr);
       }
    }
@@ -33,14 +33,8 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       if (materialize) {
-         std::vector<mlir::Type> types;
-         std::vector<mlir::Value> values;
-         for (const auto* attr : attributes) {
-            types.push_back(attr->type);
-            values.push_back(context.getValueForAttribute(attr));
-         }
          mlir::Value vectorBuilder = context.builders[builderId];
-         mlir::Value packed = builder.create<mlir::util::PackOp>(tmpOp->getLoc(), values);
+         mlir::Value packed = packValues(context,builder,attributes);
          mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(tmpOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
          context.builders[builderId] = mergedBuilder;
          consumer->consume(this, builder, context);

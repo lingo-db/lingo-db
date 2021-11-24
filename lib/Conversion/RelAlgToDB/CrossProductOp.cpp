@@ -1,5 +1,4 @@
 #include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
-#include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 

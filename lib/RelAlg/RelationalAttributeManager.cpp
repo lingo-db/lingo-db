@@ -31,7 +31,7 @@ RelationalAttributeRefAttr RelationalAttributeManager::createRef(StringRef scope
    nested.push_back(FlatSymbolRefAttr::get(context, name));
    return relalg::RelationalAttributeRefAttr::get(context, SymbolRefAttr::get(context, scope, nested), attribute);
 }
-RelationalAttributeRefAttr RelationalAttributeManager::createRef(RelationalAttribute* attr){
+RelationalAttributeRefAttr RelationalAttributeManager::createRef(const RelationalAttribute* attr){
    auto [scope,name]=attributesRev[attr];
    return createRef(scope,name);
 }

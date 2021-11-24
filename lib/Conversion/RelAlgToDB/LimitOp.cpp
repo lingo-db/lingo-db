@@ -19,12 +19,6 @@ class LimitLowering : public mlir::relalg::ProducerConsumerNode {
    }
 
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
-      std::vector<mlir::Type> types;
-      std::vector<mlir::Value> values;
-      for (const auto* attr : requiredAttributes) {
-         types.push_back(attr->type);
-         values.push_back(context.getValueForAttribute(attr));
-      }
       mlir::Value counter = context.builders[counterId];
       consumer->consume(this, builder, context);
       auto one = builder.create<mlir::db::ConstantOp>(builder.getUnknownLoc(), counter.getType(), builder.getI64IntegerAttr(1));

@@ -127,7 +127,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
          } else if (auto inop = mlir::dyn_cast_or_null<mlir::relalg::InOp>(op)) {
             Operator relOperator = inop.rel().getDefiningOp();
             //get attribute of relation to search in
-            auto* attr = *relOperator.getAvailableAttributes().begin();
+            const auto* attr = *relOperator.getAvailableAttributes().begin();
             auto searchInAttr = attributeManager.createRef(attr);
             handleScalarBoolOp(surroundingOperator, op, relOperator, [&](PredicateOperator predicateOperator) {
                predicateOperator.addPredicate([&](Value tuple, OpBuilder& builder) {

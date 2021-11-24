@@ -25,11 +25,9 @@ class MaterializeLowering : public mlir::relalg::ProducerConsumerNode {
       return {};
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
-      std::vector<mlir::Type> types;
       std::vector<mlir::Value> values;
       for (auto attr : materializeOp.attrs()) {
          if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
-            types.push_back(attrRef.getRelationalAttribute().type);
             values.push_back(context.getValueForAttribute(&attrRef.getRelationalAttribute()));
          }
       }

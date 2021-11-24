@@ -236,7 +236,7 @@ bool Runner::optimize() {
    auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
-   pm.enableVerifier(false);
+   //pm.enableVerifier(false);
    pm.addPass(mlir::createInlinerPass());
    pm.addPass(mlir::createSymbolDCEPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createSimplifyAggregationsPass());
@@ -277,7 +277,7 @@ bool Runner::lower() {
    auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
-   pm.enableVerifier(false);
+   //pm.enableVerifier(false);
    pm.addPass(mlir::db::createLowerToStdPass());
    pm.addPass(mlir::createCanonicalizerPass());
    if (mlir::failed(pm.run(ctxt->module.get()))) {

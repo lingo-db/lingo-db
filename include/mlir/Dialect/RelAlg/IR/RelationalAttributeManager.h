@@ -13,7 +13,7 @@ class RelationalAttributeManager {
    RelationalAttributeDefAttr createDef(StringRef name, Attribute fromExisting = Attribute());
 
    RelationalAttributeRefAttr createRef(SymbolRefAttr name);
-   RelationalAttributeRefAttr createRef(RelationalAttribute* attr);
+   RelationalAttributeRefAttr createRef(const RelationalAttribute* attr);
 
    RelationalAttributeRefAttr createRef(StringRef scope, StringRef name);
    std::pair<std::string,std::string> getName(const RelationalAttribute* attr);

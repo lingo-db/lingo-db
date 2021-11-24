@@ -49,7 +49,6 @@ class HashInnerJoinLowering : public mlir::relalg::HJNode<mlir::relalg::InnerJoi
          requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
       setRequiredBuilderValues(context, ifOp.getResults());
    }
-
    virtual ~HashInnerJoinLowering() {}
 };
 

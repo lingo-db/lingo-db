@@ -54,7 +54,7 @@ class ToSQL {
    std::string operatorName(mlir::Operation* op) {
       return "op_" + std::to_string((size_t) op);
    }
-   std::string attributeName(mlir::relalg::RelationalAttribute& attr) {
+   std::string attributeName(const mlir::relalg::RelationalAttribute& attr) {
       auto& attributeManager = context->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       auto [scope, name] = attributeManager.getName(&attr);
       return "attr_" + scope + "___" + name;
@@ -318,7 +318,7 @@ class ToSQL {
                         alreadyPrinted.insert(&def.getRelationalAttribute());
                         output << attributeName(ref.getRelationalAttribute()) << " as " << attributeName(def.getRelationalAttribute());
                      }
-                     for (auto* attr : op.getAvailableAttributes()) {
+                     for (const auto* attr : op.getAvailableAttributes()) {
                         if (!alreadyPrinted.contains(attr)) {
                            if (first) {
                               first = false;
@@ -362,7 +362,7 @@ class ToSQL {
                         alreadyPrinted.insert(&def.getRelationalAttribute());
                         output << attributeName(ref.getRelationalAttribute()) << " as " << attributeName(def.getRelationalAttribute());
                      }
-                     for (auto* attr : op.getAvailableAttributes()) {
+                     for (const auto* attr : op.getAvailableAttributes()) {
                         if (!alreadyPrinted.contains(attr)) {
                            if (first) {
                               first = false;
@@ -521,7 +521,7 @@ class ToSQL {
                         alreadyPrinted.insert(&def.getRelationalAttribute());
                         output << attributeName(ref.getRelationalAttribute()) << " as " << attributeName(def.getRelationalAttribute());
                      }
-                     for (auto* attr : op.getAvailableAttributes()) {
+                     for (const auto* attr : op.getAvailableAttributes()) {
                         if (!alreadyPrinted.contains(attr)) {
                            if (first) {
                               first = false;

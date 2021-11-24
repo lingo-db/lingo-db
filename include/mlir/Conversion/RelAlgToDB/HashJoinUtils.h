@@ -50,25 +50,7 @@ class HashJoinUtils {
       });
       return {leftKeys, rightKeys, types, leftKeyAttributes};
    }
-   static mlir::Value pack(std::vector<mlir::Value> values, mlir::OpBuilder& builder) {
-      std::vector<mlir::Type> types;
-      for (auto v : values) {
-         types.push_back(v.getType());
-      }
-      auto tupleType = mlir::TupleType::get(builder.getContext(), types);
-      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), tupleType, values);
-   }
-   static mlir::Value packAttrs(std::vector<mlir::relalg::RelationalAttribute*> attrs, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) {
-      std::vector<mlir::Type> types;
-      std::vector<mlir::Value> values;
-      for (auto* attr : attrs) {
-         auto v = context.getValueForAttribute(attr);
-         types.push_back(v.getType());
-         values.push_back(v);
-      }
-      auto tupleType = mlir::TupleType::get(builder.getContext(), types);
-      return builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), tupleType, values);
-   }
+
    static bool isAndedResult(mlir::Operation* op, bool first = true) {
       if (mlir::isa<mlir::relalg::ReturnOp>(op)) {
          return true;
@@ -82,7 +64,7 @@ class HashJoinUtils {
          return false;
       }
    }
-   static std::vector<mlir::Value> inlineKeys(mlir::Block* block, mlir::relalg::Attributes keyAttributes, mlir::Block* newBlock,mlir::Block::iterator insertionPoint, mlir::relalg::LoweringContext& context) {
+   static std::vector<mlir::Value> inlineKeys(mlir::Block* block, mlir::relalg::Attributes keyAttributes, mlir::Block* newBlock, mlir::Block::iterator insertionPoint, mlir::relalg::LoweringContext& context) {
       llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;
       mlir::BlockAndValueMapping mapping;
       std::vector<mlir::Value> keys;
@@ -106,10 +88,10 @@ class HashJoinUtils {
                   if (!mapping.contains(keyVal)) {
                      //todo: remove nasty hack:
                      mlir::OpBuilder builder(cmpOp->getContext());
-                     builder.setInsertionPoint(newBlock,insertionPoint);
-                     auto helperOp=builder.create<arith::ConstantOp>(builder.getUnknownLoc(),builder.getIndexAttr(0));
+                     builder.setInsertionPoint(newBlock, insertionPoint);
+                     auto helperOp = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexAttr(0));
 
-                     mlir::relalg::detail::inlineOpIntoBlock(keyVal.getDefiningOp(), keyVal.getDefiningOp()->getParentOp(), newBlock->getParentOp(), newBlock, mapping,helperOp);
+                     mlir::relalg::detail::inlineOpIntoBlock(keyVal.getDefiningOp(), keyVal.getDefiningOp()->getParentOp(), newBlock->getParentOp(), newBlock, mapping, helperOp);
                      helperOp->remove();
                      helperOp->destroy();
                   }
@@ -138,8 +120,8 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
    mlir::relalg::ProducerConsumerNode* lookupChild;
    T joinOp;
    mlir::relalg::Attributes leftKeys, rightKeys, leftValues;
-   std::vector<mlir::relalg::RelationalAttribute*> orderedKeys;
-   std::vector<mlir::relalg::RelationalAttribute*> orderedValues;
+   std::vector<const mlir::relalg::RelationalAttribute*> orderedKeys;
+   std::vector<const mlir::relalg::RelationalAttribute*> orderedValues;
    mlir::TupleType keyTupleType, valTupleType, entryType;
 
    std::vector<size_t> customLookupBuilders;
@@ -148,7 +130,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
    HJNode(T joinOp, Value builderChild, Value lookupChild) : ProducerConsumerNode({builderChild, lookupChild}), joinOp(joinOp) {
       this->builderChild = children[0].get();
       this->lookupChild = children[1].get();
-      this->op=joinOp;
+      this->op = joinOp;
    }
 
    public:
@@ -228,20 +210,16 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       if (child == builderChild) {
-         auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), leftKeys, builder.getInsertionBlock(),builder.getInsertionPoint(), context);
-         mlir::Value packedKey = mlir::relalg::HashJoinUtils::pack(inlinedKeys, builder);
-         mlir::Value packedValues;
-         if (!valTupleType.getTypes().empty()) {
-            packedValues = mlir::relalg::HashJoinUtils::packAttrs(orderedValues, builder, context);
-         } else {
-            packedValues = builder.create<mlir::util::UndefTupleOp>(joinOp->getLoc(), valTupleType);
-         }
+
+         auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), leftKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context);
+         mlir::Value packedKey = builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), inlinedKeys);
+         mlir::Value packedValues = packValues(context, builder, orderedValues);
          mlir::Value htBuilder = context.builders[builderId];
          mlir::Value packed = builder.create<mlir::util::PackOp>(joinOp->getLoc(), entryType, mlir::ValueRange({packedKey, packedValues}));
          mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(joinOp->getLoc(), htBuilder.getType(), htBuilder, packed);
          context.builders[builderId] = mergedBuilder;
       } else if (child == this->children[1].get()) {
-         auto packedKey = mlir::relalg::HashJoinUtils::pack(mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), rightKeys, builder.getInsertionBlock(),builder.getInsertionPoint(), context), builder);
+         auto packedKey =builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), rightKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context));
          mlir::Type htIterable = mlir::db::GenericIterableType::get(builder.getContext(), entryType, "join_ht_iterator");
          beforeLookup(context, builder);
          auto matches = builder.create<mlir::db::Lookup>(joinOp->getLoc(), htIterable, joinHt, packedKey);
@@ -267,7 +245,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
                }
             }
             {
-               mlir::Value matched= mergeRelationalBlock(
+               mlir::Value matched = mergeRelationalBlock(
                   builder2.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
                handleLookup(matched, context, builder2);
             }
@@ -290,15 +268,15 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
    mlir::relalg::ProducerConsumerNode* lookupChild;
    T joinOp;
    mlir::relalg::Attributes leftKeys, rightKeys, leftValues;
-   std::vector<mlir::relalg::RelationalAttribute*> orderedKeys;
-   std::vector<mlir::relalg::RelationalAttribute*> orderedValues;
+   std::vector<const mlir::relalg::RelationalAttribute*> orderedKeys;
+   std::vector<const mlir::relalg::RelationalAttribute*> orderedValues;
    mlir::TupleType keyTupleType, valTupleType, entryType;
    size_t builderId;
    mlir::Value joinHt;
    MarkableHJNode(T joinOp, Value builderChild, Value lookupChild) : ProducerConsumerNode({builderChild, lookupChild}), joinOp(joinOp) {
       this->builderChild = children[0].get();
       this->lookupChild = children[1].get();
-      this->op=joinOp;
+      this->op = joinOp;
    }
 
    public:
@@ -397,21 +375,16 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
 
       auto scope = context.createScope();
       if (child == builderChild) {
-         auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), leftKeys, builder.getInsertionBlock(),builder.getInsertionPoint(), context);
-         mlir::Value packedKey = mlir::relalg::HashJoinUtils::pack(inlinedKeys, builder);
-         mlir::Value packedValues;
-         if (!valTupleType.getTypes().empty()) {
-            packedValues = mlir::relalg::HashJoinUtils::packAttrs(orderedValues, builder, context);
-         } else {
-            packedValues = builder.create<mlir::util::UndefTupleOp>(joinOp->getLoc(), valTupleType);
-         }
+         auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), leftKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context);
+         mlir::Value packedKey = builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), inlinedKeys);
+         mlir::Value packedValues = packValues(context, builder, orderedValues);
          mlir::Value htBuilder = context.builders[builderId];
          mlir::Value packed = builder.create<mlir::util::PackOp>(joinOp->getLoc(), entryType, mlir::ValueRange({packedKey, packedValues}));
          mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(joinOp->getLoc(), htBuilder.getType(), htBuilder, packed);
          context.builders[builderId] = mergedBuilder;
       } else if (child == this->children[1].get()) {
          mlir::TupleType entryAndMarkerType = mlir::TupleType::get(builder.getContext(), TypeRange{entryType, ptrType});
-         auto packedKey = mlir::relalg::HashJoinUtils::pack(mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), rightKeys, builder.getInsertionBlock(),builder.getInsertionPoint(), context), builder);
+         auto packedKey = builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), rightKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context));
          mlir::Type htIterable = mlir::db::GenericIterableType::get(builder.getContext(), entryAndMarkerType, "mjoin_ht_iterator");
          beforeLookup(context, builder);
          auto matches = builder.create<mlir::db::Lookup>(joinOp->getLoc(), htIterable, joinHt, packedKey);
@@ -439,7 +412,7 @@ class MarkableHJNode : public mlir::relalg::ProducerConsumerNode {
                }
             }
             {
-               mlir::Value matched= mergeRelationalBlock(
+               mlir::Value matched = mergeRelationalBlock(
                   builder2.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
                handleLookup(matched, seperateMarker[1], context, builder2);
             }

@@ -8,7 +8,7 @@
 class HashCollectionJoinLowering : public mlir::relalg::HJNode<mlir::relalg::CollectionJoinOp> {
    size_t vectorBuilderId;
    std::vector<mlir::Type> tupleTypes;
-   std::vector<mlir::relalg::RelationalAttribute*> tupleAttributes;
+   std::vector<const mlir::relalg::RelationalAttribute*> tupleAttributes;
    mlir::TupleType tupleType;
 
    public:
@@ -22,24 +22,17 @@ class HashCollectionJoinLowering : public mlir::relalg::HJNode<mlir::relalg::Col
       tupleType = mlir::TupleType::get(collectionJoinOp.getContext(), tupleTypes);
    }
    virtual void addAdditionalRequiredAttributes() override {
-      for (auto* attr : tupleAttributes) {
+      for (const auto* attr : tupleAttributes) {
          requiredAttributes.insert(attr);
       }
    }
    virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       mlir::Value vectorBuilder = context.builders[vectorBuilderId];
-      std::vector<mlir::Value> values;
-      for (const auto* attr : tupleAttributes) {
-         values.push_back(context.getValueForAttribute(attr));
-      }
-
       auto ifOp = builder.create<mlir::db::IfOp>(
          joinOp->getLoc(), mlir::TypeRange{vectorBuilder.getType()}, matched, [&](mlir::OpBuilder& builder, mlir::Location loc) {
-         mlir::Value packed = builder.create<mlir::util::PackOp>(joinOp->getLoc(), values);
+            mlir::Value packed = packValues(context,builder,tupleAttributes);
          mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(joinOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
-         builder.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{mergedBuilder}); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
-            builder.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{vectorBuilder});
-         });
+         builder.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{mergedBuilder}); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{vectorBuilder}); });
       context.builders[vectorBuilderId] = ifOp.getResult(0);
    }
 

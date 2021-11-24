@@ -5,6 +5,7 @@
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"
+#include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/Pass/Pass.h"
 #include <iostream>
@@ -40,10 +41,10 @@ class LoweringContext {
       static size_t id = 0;
       return id++;
    }
-   std::unordered_map<mlir::Operation*, std::pair<mlir::Value, std::vector<mlir::relalg::RelationalAttribute*>>> materializedTmp;
+   std::unordered_map<mlir::Operation*, std::pair<mlir::Value, std::vector<const mlir::relalg::RelationalAttribute*>>> materializedTmp;
 };
-std::vector<mlir::Value> mergeRelationalBlock(mlir::Block* dest,mlir::Operation* op,mlir::function_ref<mlir::Block*(mlir::Operation*)> getBlockFn, LoweringContext& context, LoweringContext::AttributeResolverScope& scope);
-static const mlir::function_ref<void(mlir::OpBuilder&, mlir::Location)> noBuilder=nullptr;
+std::vector<mlir::Value> mergeRelationalBlock(mlir::Block* dest, mlir::Operation* op, mlir::function_ref<mlir::Block*(mlir::Operation*)> getBlockFn, LoweringContext& context, LoweringContext::AttributeResolverScope& scope);
+static const mlir::function_ref<void(mlir::OpBuilder&, mlir::Location)> noBuilder = nullptr;
 class ProducerConsumerNode {
    protected:
    ProducerConsumerNode* consumer;
@@ -72,6 +73,28 @@ class ProducerConsumerNode {
          context.builders[x] = values[i++];
       }
    }
+   Value packValues(LoweringContext& context, OpBuilder builder, const std::vector<const mlir::relalg::RelationalAttribute*>& attrs) {
+      auto loc = builder.getUnknownLoc();
+      std::vector<Value> values;
+      for (const auto* attr : attrs) {
+         values.push_back(context.getValueForAttribute(attr));
+      }
+      if (values.size() == 0) {
+        return builder.create<mlir::util::UndefTupleOp>(loc, mlir::TupleType::get(builder.getContext()));
+      }
+      return builder.create<mlir::util::PackOp>(loc, values);
+   }
+   Value packValues(LoweringContext& context, OpBuilder builder, const mlir::relalg::Attributes& attrs) {
+      auto loc = builder.getUnknownLoc();
+      std::vector<Value> values;
+      for (const auto* attr : attrs) {
+         values.push_back(context.getValueForAttribute(attr));
+      }
+      if (values.size() == 0) {
+         return builder.create<mlir::util::UndefTupleOp>(loc, mlir::TupleType::get(builder.getContext()));
+      }
+      return builder.create<mlir::util::PackOp>(loc, values);
+   }
    std::vector<mlir::Type> getRequiredBuilderTypes(LoweringContext& context) {
       std::vector<mlir::Type> res;
       for (auto x : requiredBuilders) {
@@ -89,6 +112,7 @@ class ProducerConsumerNode {
          child->addRequiredBuilders(requiredBuilders);
       }
    }
+
    void setFlag(mlir::Value flag) {
       this->flag = flag;
       for (auto& child : children) {
@@ -98,7 +122,7 @@ class ProducerConsumerNode {
    virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
-      if(op) {
+      if (op) {
          this->requiredAttributes.insert(op.getUsedAttributes());
          propagateInfo();
       }
@@ -163,8 +187,8 @@ class ProducerConsumerNodeRegistry {
       res &= registeredMarkJoinOp;
       res &= registeredTmpOp;
       res &= registeredCollectionJoinOp;
-      if(res){
-         llvm::dbgs()<<"loading producer nodes failed\n";
+      if (res) {
+         llvm::dbgs() << "loading producer nodes failed\n";
       }
    }
 

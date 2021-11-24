@@ -4,10 +4,8 @@
 #include "mlir/Dialect/util/UtilOps.h"
 
 class MapLowering : public mlir::relalg::ProducerConsumerNode {
-   mlir::relalg::MapOp mapOp;
-
    public:
-   MapLowering(mlir::relalg::MapOp mapOp) : mlir::relalg::ProducerConsumerNode(mapOp), mapOp(mapOp) {
+   MapLowering(mlir::relalg::MapOp mapOp) : mlir::relalg::ProducerConsumerNode(mapOp) {
    }
 
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
@@ -18,7 +16,7 @@ class MapLowering : public mlir::relalg::ProducerConsumerNode {
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
       auto scope = context.createScope();
       mergeRelationalBlock(
-         builder.getInsertionBlock(), mapOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope);
+         builder.getInsertionBlock(), op, [](auto x) { return &x->getRegion(0).front(); }, context, scope);
       consumer->consume(this, builder, context);
    }
    virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {

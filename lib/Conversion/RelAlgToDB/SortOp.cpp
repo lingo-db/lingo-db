@@ -15,14 +15,8 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
-      std::vector<mlir::Type> types;
-      std::vector<mlir::Value> values;
-      for (const auto* attr : requiredAttributes) {
-         types.push_back(attr->type);
-         values.push_back(context.getValueForAttribute(attr));
-      }
       mlir::Value vectorBuilder = context.builders[builderId];
-      mlir::Value packed = builder.create<mlir::util::PackOp>(sortOp->getLoc(), values);
+      mlir::Value packed = packValues(context, builder, requiredAttributes);
       mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(sortOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
       context.builders[builderId] = mergedBuilder;
    }
@@ -37,8 +31,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
                   },[&](mlir::OpBuilder& builder, mlir::Location loc) {
                      builder.create<mlir::db::YieldOp>(loc, falseVal);
                });
-               builder.create<mlir::db::YieldOp>(loc, ifOp2.getResult(0));
-            });
+               builder.create<mlir::db::YieldOp>(loc, ifOp2.getResult(0)); });
          return ifOp.getResult(0);
       } else {
          return falseVal;

@@ -21,9 +21,9 @@ int main(int argc, char** argv) {
    runner.load(inputFileName);
    //runner.dump();
    runner.optimize();
-   //runner.dump();
+   runner.dump();
    runner.lower();
-   //runner.dump();
+   runner.dump();
    runner.lowerToLLVM();
    //runner.dump();
    //runner.dumpLLVM();

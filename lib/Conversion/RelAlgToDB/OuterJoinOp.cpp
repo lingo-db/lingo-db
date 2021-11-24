@@ -21,7 +21,7 @@ class NLOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
          auto* defAttr = &relationDefAttr.getRelationalAttribute();
          if (this->requiredAttributes.contains(defAttr)) {
             auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
-            auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+            const auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
             this->requiredAttributes.insert(refAttr);
          }
       }
@@ -62,7 +62,7 @@ class NLOuterJoinLowering : public mlir::relalg::ProducerConsumerNode {
                   auto* defAttr = &relationDefAttr.getRelationalAttribute();
                   if (this->requiredAttributes.contains(defAttr)) {
                      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
-                     auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+                     const auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
                      auto value = context.getValueForAttribute(refAttr);
                      if (refAttr->type != defAttr->type) {
                         mlir::Value tmp = builder1.create<mlir::db::CastOp>(builder.getUnknownLoc(), defAttr->type, value);
@@ -99,7 +99,7 @@ class HashOuterJoinLowering : public mlir::relalg::HJNode<mlir::relalg::OuterJoi
          auto* defAttr = &relationDefAttr.getRelationalAttribute();
          if (this->requiredAttributes.contains(defAttr)) {
             auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
-            auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+            const auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
             this->requiredAttributes.insert(refAttr);
          }
       }
@@ -115,7 +115,7 @@ class HashOuterJoinLowering : public mlir::relalg::HJNode<mlir::relalg::OuterJoi
                auto* defAttr = &relationDefAttr.getRelationalAttribute();
                if (this->requiredAttributes.contains(defAttr)) {
                   auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
-                  auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+                  const auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
                   auto value = context.getValueForAttribute(refAttr);
                   if (refAttr->type != defAttr->type) {
                      mlir::Value tmp = builder1.create<mlir::db::CastOp>(builder.getUnknownLoc(), defAttr->type, value);
@@ -170,7 +170,7 @@ class MHashOuterJoinLowering : public mlir::relalg::MarkableHJNode<mlir::relalg:
          auto* defAttr = &relationDefAttr.getRelationalAttribute();
          if (this->requiredAttributes.contains(defAttr)) {
             auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
-            auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+            const auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
             this->requiredAttributes.insert(refAttr);
          }
       }
@@ -187,7 +187,7 @@ class MHashOuterJoinLowering : public mlir::relalg::MarkableHJNode<mlir::relalg:
                auto* defAttr = &relationDefAttr.getRelationalAttribute();
                if (this->requiredAttributes.contains(defAttr)) {
                   auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
-                  auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+                  const auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
                   auto value = context.getValueForAttribute(refAttr);
                   if (refAttr->type != defAttr->type) {
                      mlir::Value tmp = builder1.create<mlir::db::CastOp>(builder.getUnknownLoc(), defAttr->type, value);

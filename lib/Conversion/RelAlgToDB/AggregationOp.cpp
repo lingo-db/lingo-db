@@ -30,27 +30,9 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
       //do not forwared requiredBuilders to children
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
-
-      std::vector<mlir::Value> keys, values;
-      for (const auto* attr : keyAttributes) {
-         keys.push_back(context.getValueForAttribute(attr));
-      }
-      for (const auto* attr : valAttributes) {
-         values.push_back(context.getValueForAttribute(attr));
-      }
       mlir::Value htBuilder = context.builders[builderId];
-      mlir::Value packedKey;
-      if (keyTupleType.getTypes().size() == 0) {
-         packedKey = builder.create<mlir::util::UndefTupleOp>(aggregationOp->getLoc(), keyTupleType);
-      } else {
-         packedKey = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), keys);
-      }
-      mlir::Value packedVal;
-      if (valTupleType.getTypes().size() == 0) {
-         packedVal = builder.create<mlir::util::UndefTupleOp>(aggregationOp->getLoc(), valTupleType);
-      } else {
-         packedVal = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), values);
-      }
+      mlir::Value packedKey= packValues(context,builder,keyAttributes);
+      mlir::Value packedVal=packValues(context,builder,valAttributes);
       mlir::Value packed = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), mlir::ValueRange({packedKey, packedVal}));
 
       auto builderMerge = builder.create<mlir::db::BuilderMerge>(aggregationOp->getLoc(), htBuilder.getType(), htBuilder, packed);
@@ -342,7 +324,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
             auto [attr, val] = fn(unpackedAggr, builder2);
             context.setValueForAttribute(scope, attr, val);
          }
-         for (auto* attr : requiredAttributes) {
+         for (const auto* attr : requiredAttributes) {
             if (keyMapping.count(attr)) {
                context.setValueForAttribute(scope, attr, unpackedKey[keyMapping[attr]]);
             }

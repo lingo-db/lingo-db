@@ -7,13 +7,13 @@
 #include <mlir/Dialect/RelAlg/IR/RelationalAttribute.h>
 namespace mlir::relalg {
 class Attributes {
-   using attribute_set = llvm::SmallPtrSet<mlir::relalg::RelationalAttribute*, 8>;
+   using attribute_set = llvm::SmallPtrSet<const mlir::relalg::RelationalAttribute*, 8>;
    attribute_set attributes;
 
    public:
    Attributes intersect(const Attributes& other) const {
       Attributes result;
-      for (auto *x : attributes) {
+      for (const auto *x : attributes) {
          if (other.attributes.contains(x)) {
             result.insert(x);
          }
@@ -26,7 +26,7 @@ class Attributes {
    size_t size() const {
       return attributes.size();
    }
-   void insert(mlir::relalg::RelationalAttribute* attr) {
+   void insert(const mlir::relalg::RelationalAttribute* attr) {
       attributes.insert(attr);
    }
    bool contains(mlir::relalg::RelationalAttribute* attr) {
@@ -37,12 +37,12 @@ class Attributes {
       return *this;
    }
    void remove(const Attributes& other) {
-      for (auto *elem : other.attributes) {
+      for (const auto *elem : other.attributes) {
          attributes.erase(elem);
       }
    }
    bool intersects(const Attributes& others) const {
-      for (auto* x : attributes) {
+      for (const auto* x : attributes) {
          if (others.attributes.contains(x)) {
             return true;
          }
@@ -51,7 +51,7 @@ class Attributes {
    }
 
    bool isSubsetOf(const Attributes& others) const {
-      for (auto* x : attributes) {
+      for (const auto* x : attributes) {
          if (!others.attributes.contains(x)) {
             return false;
          }
@@ -66,7 +66,7 @@ class Attributes {
    }
    void dump(MLIRContext* context) {
       auto& attributeManager = context->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
-      for (auto* x : attributes) {
+      for (const auto* x : attributes) {
          auto [scope, name] = attributeManager.getName(x);
          llvm::dbgs() << x << "(" << scope << "," << name << "),";
       }
@@ -75,14 +75,14 @@ class Attributes {
       auto& attributeManager = context->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
 
       std::vector<Attribute> refAttrs;
-      for (auto* attr : attributes) {
+      for (const auto* attr : attributes) {
          refAttrs.push_back(attributeManager.createRef(attr));
       }
       return ArrayAttr::get(context, refAttrs);
    }
    static Attributes fromArrayAttr(ArrayAttr arrayAttr) {
       Attributes res;
-      for (auto attr : arrayAttr) {
+      for (const auto attr : arrayAttr) {
          if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
             res.insert(&attrRef.getRelationalAttribute());
          } else if (auto attrDef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>()) {
