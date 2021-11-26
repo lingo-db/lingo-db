@@ -65,7 +65,7 @@ let assemblyFormat = "$memref `:` type($memref) `->` type($ref) attr-dict";
 }
 def ToMemrefOp  : Util_Op<"to_memref",[NoSideEffect]> {
 let arguments = (ins RefType:$ref);
-let results=(outs I8MemRef:$memref);
+let results=(outs AnyMemRef:$memref);
 let assemblyFormat = "$ref `:` type($ref) `->` type($memref) attr-dict";
 }
 def GenericMemrefCastOp : Util_Op<"generic_memref_cast",[NoSideEffect]> {

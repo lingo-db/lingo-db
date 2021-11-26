@@ -73,9 +73,9 @@ class ProducerConsumerNode {
          context.builders[x] = values[i++];
       }
    }
-   Value packValues(LoweringContext& context, OpBuilder builder, const std::vector<const mlir::relalg::RelationalAttribute*>& attrs) {
+   Value packValues(LoweringContext& context, OpBuilder builder, const std::vector<const mlir::relalg::RelationalAttribute*>& attrs, const std::vector<Value>& additional={}) {
       auto loc = builder.getUnknownLoc();
-      std::vector<Value> values;
+      std::vector<Value> values(additional);
       for (const auto* attr : attrs) {
          values.push_back(context.getValueForAttribute(attr));
       }

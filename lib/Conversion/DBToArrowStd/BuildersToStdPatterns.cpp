@@ -452,16 +452,6 @@ class BuilderMergeLowering : public ConversionPattern {
          auto bucket = rewriter.create<mlir::util::PackOp>(rewriter.getUnknownLoc(), mlir::ValueRange({hashed, v}));
          VectorHelper helper(typeConverter->convertType(tupleType), op->getLoc());
          rewriter.replaceOp(op, helper.insert(rewriter, mergeOpAdaptor.builder(), bucket));
-      } else if (auto joinHtBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::MarkableJoinHTBuilderType>()) {
-         Value v = mergeOpAdaptor.val();
-         auto tupleType = mlir::TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), rewriter.getIndexType(), v.getType()});
-
-         auto unPacked = rewriter.create<mlir::util::UnPackOp>(loc, mergeOpAdaptor.val())->getResults();
-         Value zero = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 0);
-         Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.getIndexType(), unPacked[0]);
-         auto bucket = rewriter.create<mlir::util::PackOp>(rewriter.getUnknownLoc(), mlir::ValueRange({zero, hashed, v}));
-         VectorHelper helper(typeConverter->convertType(tupleType), op->getLoc());
-         rewriter.replaceOp(op, helper.insert(rewriter, mergeOpAdaptor.builder(), bucket));
       }
 
       return success();
@@ -623,41 +613,7 @@ class BuilderBuildLowering : public ConversionPattern {
             });
          mlir::Value packed = rewriter.create<util::PackOp>(loc, ValueRange{vec, len, ht, htMask});
          rewriter.replaceOp(op, packed);
-      } else if (auto joinHtBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::MarkableJoinHTBuilderType>()) {
-         Type kvType = TupleType::get(getContext(), {joinHtBuilderType.getKeyType(), joinHtBuilderType.getValType()});
-         Type entryType = TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), rewriter.getIndexType(), kvType});
-
-         auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), buildAdaptor.builder());
-         Value len = unpacked.getResult(0);
-         Value vec = unpacked.getResult(2);
-         Value zero = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 0);
-
-         Value one = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 1);
-         auto loc = op->getLoc();
-         Value htSize = nextPow2(rewriter, len);
-         Value htMask = rewriter.create<arith::SubIOp>(loc, htSize, one);
-
-         Value ht = rewriter.create<mlir::util::AllocOp>(loc, util::RefType::get(rewriter.getContext(), rewriter.getIndexType(), -1), htSize);
-         Value fillValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerType(8), rewriter.getIntegerAttr(rewriter.getIntegerType(8), 0xFF));
-         BufferHelper helper(rewriter, rewriter.getBlock()->getParentOp()->getParentOfType<ModuleOp>());
-         helper.fill(ht, fillValue);
-         rewriter.create<scf::ForOp>(
-            loc, zero, len, one, ValueRange({}),
-            [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
-               auto currVal = b.create<util::LoadOp>(loc, entryType, vec, iv);
-               auto unpacked2 = b.create<util::UnPackOp>(loc, TypeRange({rewriter.getIndexType(), rewriter.getIndexType(), typeConverter->convertType(kvType)}), currVal);
-               Value buckedPos = b.create<arith::AndIOp>(loc, htMask, unpacked2.getResult(1));
-
-               Value previousPtr = b.create<util::LoadOp>(loc, rewriter.getIndexType(), ht, buckedPos);
-               b.create<util::StoreOp>(loc2, iv, ht, buckedPos);
-               auto repacked = b.create<util::PackOp>(loc, ValueRange{unpacked2.getResult(0), previousPtr, unpacked2.getResult(2)});
-               b.create<util::StoreOp>(loc2, repacked, vec, iv);
-               b.create<scf::YieldOp>(loc);
-            });
-         mlir::Value packed = rewriter.create<util::PackOp>(loc, ValueRange{vec, len, ht, htMask});
-         rewriter.replaceOp(op, packed);
       }
-
       return success();
    }
 };
@@ -708,22 +664,6 @@ class CreateJoinHtBuilderLowering : public ConversionPattern {
       return success();
    }
 };
-class CreateMarkableJoinHtBuilderLowering : public ConversionPattern {
-   public:
-   explicit CreateMarkableJoinHtBuilderLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CreateMarkableJoinHTBuilder::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto createOp = mlir::cast<mlir::db::CreateMarkableJoinHTBuilder>(op);
-      auto builderType = createOp.builder().getType().cast<mlir::db::MarkableJoinHTBuilderType>();
-      auto entryType = mlir::TupleType::get(rewriter.getContext(), {builderType.getKeyType(), builderType.getValType()});
-      auto tupleType = mlir::TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), rewriter.getIndexType(), entryType});
-      Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 1024);
-      VectorHelper helper(typeConverter->convertType(tupleType), op->getLoc());
-      rewriter.replaceOp(op, helper.create(rewriter, initialCapacity));
-      return success();
-   }
-};
 } // namespace
 void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
@@ -732,7 +672,6 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
    patterns.insert<BuilderMergeLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<BuilderBuildLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<CreateJoinHtBuilderLowering>(typeConverter, patterns.getContext());
-   patterns.insert<CreateMarkableJoinHtBuilderLowering>(typeConverter, patterns.getContext());
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::AggrHTBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
@@ -745,12 +684,7 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::JoinHTBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::MarkableJoinHTBuilderType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-   typeConverter.addTargetMaterialization([&](OpBuilder&, db::MarkableJoinHTBuilderType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
+
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::VectorBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
@@ -780,7 +714,5 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
       auto elemType = typeConverter.convertType(TupleType::get(patterns.getContext(), {IndexType::get(patterns.getContext()), TupleType::get(patterns.getContext(), {joinHtBuilderType.getKeyType(), joinHtBuilderType.getValType()})}));
       return VectorHelper::createType(patterns.getContext(), elemType);
    });
-   typeConverter.addConversion([&](mlir::db::MarkableJoinHTBuilderType joinHtBuilderType) {
-      auto elemType = typeConverter.convertType(TupleType::get(patterns.getContext(), {IndexType::get(patterns.getContext()), IndexType::get(patterns.getContext()), TupleType::get(patterns.getContext(), {joinHtBuilderType.getKeyType(), joinHtBuilderType.getValType()})}));
-      return VectorHelper::createType(patterns.getContext(), elemType); });
+
 }

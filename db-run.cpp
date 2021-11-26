@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
    runner::Runner runner;
    runner.load(inputFileName);
    runner.lower();
-   //runner.dump();
+   runner.dump();
    runner.lowerToLLVM();
    runner.dump();
    //runner.dumpLLVM();

@@ -302,7 +302,7 @@ bool Runner::lowerToLLVM() {
 
    }
    mlir::PassManager pm2(&ctxt->context);
-   pm2.enableVerifier(false);
+   //pm2.enableVerifier(false);
    pm2.addPass(mlir::createLowerToCFGPass());
    pm2.addPass(createLowerToLLVMPass());
    if (mlir::failed(pm2.run(ctxt->module.get()))) {

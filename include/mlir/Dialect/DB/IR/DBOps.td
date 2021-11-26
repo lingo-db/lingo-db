@@ -84,10 +84,6 @@ def DB_JoinHashtable : DB_Collection<"JoinHashtable","join_ht"> {
 let summary = "join hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
 }
-def DB_MarkableJoinHashtable : DB_Collection<"MarkableJoinHashtable","mjoin_ht"> {
-let summary = "markable join hashtable";
-let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
-}
 def DB_AggrHTBuilder : DB_Builder<"AggrHTBuilder","aggr_ht_builder"> {
 let summary = "builder for aggregation hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType,"TupleType":$aggrType);
@@ -96,10 +92,7 @@ def DB_JoinHTBuilder : DB_Builder<"JoinHTBuilder","join_ht_builder"> {
 let summary = "builder for join hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
 }
-def DB_MarkableJoinHTBuilder : DB_Builder<"MarkableJoinHTBuilder","mjoin_ht_builder"> {
-let summary = "builder for join hashtable";
-let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
-}
+
 def DB_BoolType : DB_Type<"Bool","bool"> {
   let summary = "database boolean type";
   let parameters = (ins "bool":$nullable);
@@ -312,12 +305,6 @@ def DB_CreateJoinHTBuilder : DB_Op<"create_join_ht_builder",
 [NoSideEffect]> {
 let summary = "create join hashtable builder";
 let results = (outs DB_JoinHTBuilder:$builder);
-let assemblyFormat = " `:` type($builder) attr-dict";
-}
-def DB_CreateMarkableJoinHTBuilder : DB_Op<"create_mjoin_ht_builder",
-[NoSideEffect]> {
-let summary = "create markable join hashtable builder";
-let results = (outs DB_MarkableJoinHTBuilder:$builder);
 let assemblyFormat = " `:` type($builder) attr-dict";
 }
 

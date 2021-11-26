@@ -159,12 +159,6 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::JoinHashtableType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::MarkableJoinHashtableType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-   typeConverter.addTargetMaterialization([&](OpBuilder&, db::MarkableJoinHashtableType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::VectorType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
@@ -204,17 +198,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       auto htType=util::RefType::get(patterns.getContext(), indexType, -1);
       return (Type) TupleType::get(patterns.getContext(), {vecType,indexType,htType, indexType});
    });
-   typeConverter.addConversion([&](mlir::db::MarkableJoinHashtableType aggregationHashtableType) {
-      Type kvType=typeConverter.convertType(TupleType::get(patterns.getContext(), {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()}));
-      auto indexType = IndexType::get(patterns.getContext());
-      auto *context=patterns.getContext();
 
-      Type entryType=TupleType::get(patterns.getContext(),{indexType,indexType, kvType});
-
-      auto vecType = mlir::util::RefType::get(context, entryType, -1);
-      auto htType=util::RefType::get(patterns.getContext(), indexType, -1);
-      return (Type) TupleType::get(patterns.getContext(), {vecType,indexType,htType, indexType});
-   });
    typeConverter.addConversion([&](mlir::db::VectorType vectorType) {
       auto ptrType = mlir::util::RefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
       return ptrType;
@@ -256,10 +240,10 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
          auto ptrType = mlir::util::RefType::get(patterns.getContext(), typeConverter.convertType(TupleType::get(patterns.getContext(), {indexType, genericIterableType.getElementType()})), -1);
 
          return (Type) TupleType::get(patterns.getContext(), {indexType, ptrType});
-      } else if (genericIterableType.getIteratorName() == "mjoin_ht_iterator") {
+      } else if (genericIterableType.getIteratorName() == "join_ht_mod_iterator") {
          auto indexType = IndexType::get(patterns.getContext());
          auto types= genericIterableType.getElementType().cast<mlir::TupleType>().getTypes();
-         auto ptrType = mlir::util::RefType::get(patterns.getContext(), typeConverter.convertType(TupleType::get(patterns.getContext(), {indexType,indexType,types[0]})), -1);
+         auto ptrType = mlir::util::RefType::get(patterns.getContext(), typeConverter.convertType(TupleType::get(patterns.getContext(), {indexType,types[0]})), -1);
 
          return (Type) TupleType::get(patterns.getContext(), {indexType, ptrType});
       }
