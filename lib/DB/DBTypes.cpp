@@ -164,9 +164,6 @@ mlir::Type mlir::db::CollectionType::getElementType() const {
       .Case<::mlir::db::GenericIterableType>([&](::mlir::db::GenericIterableType t) {
          return t.getElementType();
       })
-      .Case<::mlir::db::RangeType>([&](::mlir::db::RangeType t) {
-         return t.getElementType();
-      })
       .Case<::mlir::db::VectorType>([&](::mlir::db::VectorType t) {
          return t.getElementType();
       })
@@ -181,9 +178,6 @@ mlir::Type mlir::db::CollectionType::getElementType() const {
 bool mlir::db::CollectionType::classof(Type t) {
    return ::llvm::TypeSwitch<Type, bool>(t)
    .Case<::mlir::db::GenericIterableType>([&](::mlir::db::GenericIterableType t) { return true; })
-   .Case<::mlir::db::RangeType>([&](::mlir::db::RangeType t) {
-      return true;
-   })
    .Case<::mlir::db::VectorType>([&](::mlir::db::VectorType t) {
       return true;
    })
@@ -454,16 +448,6 @@ void mlir::db::StringType::print(::mlir::DialectAsmPrinter& printer) const {
 }
 void mlir::db::GenericIterableType::print(mlir::DialectAsmPrinter& p) const {
    p << getMnemonic() << "<" << getElementType() << "," << getIteratorName() << ">";
-}
-::mlir::Type mlir::db::RangeType::parse( mlir::DialectAsmParser& parser) {
-   Type type;
-   if (parser.parseLess() || parser.parseType(type) || parser.parseGreater()) {
-      return mlir::Type();
-   }
-   return mlir::db::RangeType::get(parser.getBuilder().getContext(), type);
-}
-void mlir::db::RangeType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getElementType() << ">";
 }
 ::mlir::Type mlir::db::TableBuilderType::parse( mlir::DialectAsmParser& parser) {
    Type type;

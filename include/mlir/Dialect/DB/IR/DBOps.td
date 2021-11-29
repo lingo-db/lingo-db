@@ -54,10 +54,7 @@ let parameters = (ins "Type":$elementType,"std::string":$iteratorName);
 
 }
 
-def DB_Range  : DB_Collection<"Range","range"> {
-let summary = "range";
-let parameters = (ins "Type":$elementType);
-}
+
 def DB_Table: DB_Type<"Table","table"> {
 let summary = "table";
 }
@@ -279,14 +276,6 @@ let results = (outs DB_GenericIterable:$iterable);
 let assemblyFormat = "$collection `:` type($collection) `,` $key `:` type($key) `->` type($iterable) attr-dict";
 }
 
-def DB_CreateRange : DB_Op<"range",
-[SameTypeOperands,NoSideEffect]> {
-let summary = "create a range of values";
-let arguments = (ins DBType:$lower,DBType:$upper,DBType:$step);
-let results = (outs DB_Range:$range);
-let assemblyFormat = "$lower `,` $upper `,` $step `:` type($lower) `->` type($range) attr-dict";
-
-}
 def DB_SortOp : DB_Op<"sort",
 []> {
 let summary = "sort";

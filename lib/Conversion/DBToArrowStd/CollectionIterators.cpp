@@ -261,39 +261,6 @@ class JoinHtModifyLookupIterator : public WhileIterator {
    }
 };
 
-class RangeIterator : public WhileIterator {
-   Value rangeTuple;
-   Value upper;
-   Value step;
-   mlir::db::DBType elementType;
-
-   public:
-   RangeIterator(mlir::db::DBType elementType, Value rangeTuple) : rangeTuple(rangeTuple), elementType(elementType) {
-   }
-   virtual void init(OpBuilder& builder) override {
-   }
-   virtual Type iteratorType(OpBuilder& builder) override {
-      return elementType;
-   }
-   virtual Value iterator(OpBuilder& builder) override {
-      auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), TypeRange({elementType, elementType, elementType}), rangeTuple);
-      Value lower = unpacked.getResult(0);
-      upper = unpacked.getResult(1);
-      step = unpacked.getResult(2);
-      return lower;
-   }
-   virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
-      return builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), elementType, iterator, step);
-   }
-   virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
-      return iterator;
-   }
-   virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
-      return builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::lt, iterator, upper);
-   }
-   virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
-   }
-};
 class TableRowIterator : public ForIterator {
    Value tableChunkInfo;
    Value chunk;
@@ -652,8 +619,6 @@ std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIteration
       } else if (generic.getIteratorName() == "join_ht_mod_iterator") {
          return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtModifyLookupIterator>(collection, generic.getElementType()));
       }
-   } else if (auto range = collectionType.dyn_cast_or_null<mlir::db::RangeType>()) {
-      return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<RangeIterator>(range.getElementType().cast<DBType>(), collection));
    } else if (auto vector = collectionType.dyn_cast_or_null<mlir::db::VectorType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<VectorIterator>(functionRegistry, collection, vector.getElementType()));
    } else if (auto aggrHt = collectionType.dyn_cast_or_null<mlir::db::AggregationHashtableType>()) {
