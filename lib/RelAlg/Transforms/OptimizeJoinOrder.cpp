@@ -15,7 +15,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Func
 
    bool isUnsupportedOp(mlir::Operation* op) {
       return ::llvm::TypeSwitch<mlir::Operation*, bool>(op)
-         .Case<mlir::relalg::CrossProductOp, mlir::relalg::SelectionOp, mlir::relalg::AggregationOp, mlir::relalg::MapOp, mlir::relalg::RenamingOp>(
+         .Case<mlir::relalg::CrossProductOp, mlir::relalg::SelectionOp>(
             [&](mlir::Operation* op) {
                return false;
             })

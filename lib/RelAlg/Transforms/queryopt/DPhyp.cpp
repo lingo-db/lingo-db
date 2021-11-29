@@ -12,24 +12,14 @@ void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
       }
    };
    std::unordered_set<Operator, HashOp> predicates;
-   std::unordered_set<Operator, HashOp> singlePredicates;
 
-   Operator implicitOperator{};
    Operator specialJoin{};
-   bool ignore = false;
-   bool edgeInverted = false;
-   double totalSelectivity=1;
-   for (auto& edge : queryGraph.edges) {
+   double totalSelectivity = 1;
+
+   for (auto& edge : queryGraph.joins) {
       if (edge.connects(s1, s2)) {
-         totalSelectivity*=edge.selectivity;
-         edgeInverted = (edge.left.isSubsetOf(s2) && edge.right.isSubsetOf(s1)); //todo also include arbitrary?
-         if (edge.edgeType == QueryGraph::EdgeType::IMPLICIT) {
-            auto& implicitNode = queryGraph.nodes[edge.right.findFirst()];
-            implicitOperator = implicitNode.op;
-            predicates.insert(implicitNode.additionalPredicates.begin(), implicitNode.additionalPredicates.end());
-         } else if (edge.edgeType == QueryGraph::EdgeType::IGNORE) {
-            ignore = true;
-         } else if (!edge.op) {
+         totalSelectivity *= edge.selectivity;
+         if (!edge.op) {
             //special case: forced cross product
             //do nothing
          } else if (!mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation()) && !mlir::isa<mlir::relalg::InnerJoinOp>(edge.op.getOperation())) {
@@ -37,43 +27,37 @@ void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
          } else {
             predicates.insert(edge.op);
          }
-      } else if ((edge.left | edge.right | edge.arbitrary).isSubsetOf(s1 | s2) && !(edge.left | edge.right | edge.arbitrary).isSubsetOf(s1) && !(edge.left | edge.right | edge.arbitrary).isSubsetOf(s2)) {
-         if (edge.op && (mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation()) || mlir::isa<mlir::relalg::InnerJoinOp>(edge.op.getOperation()))) {
-            singlePredicates.insert(edge.op);
-            totalSelectivity*=edge.selectivity;
+         if (edge.createdNode) {
+            s |= NodeSet::single(queryGraph.numNodes, edge.createdNode.getValue());
          }
       }
    }
+   for (auto& edge : queryGraph.selections) {
+      totalSelectivity*=queryGraph.calculateSelectivity(edge,s1,s2);
+      if (edge.connects2(s, s1, s2)) {
+         predicates.insert(edge.op);
+      }
+   }
    std::shared_ptr<Plan> currPlan;
-   predicates.insert(singlePredicates.begin(), singlePredicates.end());
 
-   if (ignore) {
-      auto child = edgeInverted ? p2 : p1;
-      currPlan = std::make_shared<Plan>(Operator(), std::vector<std::shared_ptr<Plan>>({child}), std::vector<Operator>(predicates.begin(), predicates.end()), child->getRows());
-   } else if (implicitOperator) {
-      auto subplans = std::vector<std::shared_ptr<Plan>>({p1});
-      if (edgeInverted) {
-         subplans = std::vector<std::shared_ptr<Plan>>({p2});
+   if (specialJoin) {
+      double estimatedResultSize = p1->getRows() * p2->getRows() * totalSelectivity;
+      if (mlir::isa<mlir::relalg::SemiJoinOp>(specialJoin.getOperation()) || mlir::isa<mlir::relalg::SemiJoinOp>(specialJoin.getOperation())) {
+         estimatedResultSize = p1->getRows() * totalSelectivity;
       }
-      currPlan = std::make_shared<Plan>(implicitOperator, subplans, std::vector<Operator>(predicates.begin(), predicates.end()), subplans[0]->getRows());
-   } else if (specialJoin) {
-      double estimatedResultSize=p1->getRows()*p2->getRows()*totalSelectivity;
-      if(mlir::isa<mlir::relalg::SemiJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::SemiJoinOp>(specialJoin.getOperation())){
-         estimatedResultSize=p1->getRows()*totalSelectivity;
-      }
-      if(mlir::isa<mlir::relalg::OuterJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::MarkJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::CollectionJoinOp>(specialJoin.getOperation())||mlir::isa<mlir::relalg::SingleJoinOp>(specialJoin.getOperation())){
-         estimatedResultSize=p1->getRows();
+      if (mlir::isa<mlir::relalg::OuterJoinOp>(specialJoin.getOperation()) || mlir::isa<mlir::relalg::MarkJoinOp>(specialJoin.getOperation()) || mlir::isa<mlir::relalg::CollectionJoinOp>(specialJoin.getOperation()) || mlir::isa<mlir::relalg::SingleJoinOp>(specialJoin.getOperation())) {
+         estimatedResultSize = p1->getRows();
       }
 
       currPlan = std::make_shared<Plan>(specialJoin, std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>(predicates.begin(), predicates.end()), estimatedResultSize);
    } else if (!predicates.empty()) {
-      auto estimatedResultSize=p1->getRows()*p2->getRows()*totalSelectivity;
-      if(p1->getRows()>p2->getRows()){
-         std::swap(p1,p2);
+      auto estimatedResultSize = p1->getRows() * p2->getRows() * totalSelectivity;
+      if (p1->getRows() > p2->getRows()) {
+         std::swap(p1, p2);
       }
       currPlan = std::make_shared<Plan>(*predicates.begin(), std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>(++predicates.begin(), predicates.end()), estimatedResultSize);
    } else {
-      auto estimatedResultSize=p1->getRows()*p2->getRows()*totalSelectivity;
+      auto estimatedResultSize = p1->getRows() * p2->getRows() * totalSelectivity;
       currPlan = std::make_shared<Plan>(Operator(), std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>({}), estimatedResultSize);
    }
    currPlan->setDescription("(" + p1->getDescription() + ") join (" + p2->getDescription() + ")");
@@ -119,11 +103,11 @@ void mlir::relalg::DPHyp::emitCsg(NodeSet s1) {
    });
 }
 static std::shared_ptr<mlir::relalg::Plan> createInitialPlan(mlir::relalg::QueryGraph::Node& n) {
-   std::string description=std::to_string(n.id);
-   if(auto baseTableOp=mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())){
-      description=baseTableOp.table_identifier().str();
+   std::string description = std::to_string(n.id);
+   if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
+      description = baseTableOp.table_identifier().str();
    }
-   auto currPlan = std::make_shared<mlir::relalg::Plan>(n.op, std::vector<std::shared_ptr<mlir::relalg::Plan>>({}), std::vector<Operator>({n.additionalPredicates}), n.rows*n.selectivity);
+   auto currPlan = std::make_shared<mlir::relalg::Plan>(n.op, std::vector<std::shared_ptr<mlir::relalg::Plan>>({}), std::vector<Operator>({n.additionalPredicates}), n.rows * n.selectivity);
    currPlan->setDescription(description);
    return currPlan;
 }

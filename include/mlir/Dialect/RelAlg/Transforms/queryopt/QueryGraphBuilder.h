@@ -11,8 +11,6 @@ class QueryGraphBuilder {
    llvm::SmallPtrSet<mlir::Operation*,12>& alreadyOptimized;
    size_t numNodes;
    QueryGraph qg;
-   NodeSet emptyNode;
-
    class NodeResolver {
       QueryGraph& qg;
 
@@ -41,9 +39,13 @@ class QueryGraphBuilder {
       }
 
       size_t resolve(const relalg::RelationalAttribute* attr) {
+         assert(attrToNodes.contains(attr));
          return attrToNodes[attr];
       }
    };
+   size_t addPseudoNode(){
+      return qg.addPseudoNode();
+   }
    size_t addNode(Operator op) {
       QueryGraph::Node n(op);
       n.id = qg.nodes.size();
@@ -82,40 +84,9 @@ class QueryGraphBuilder {
          return init;
       }
    }
-   bool canPushSelection(const NodeSet& ses, Operator curr, NodeResolver& resolver) {
-      if (curr.getChildren().size() == 1) {
-         return true;
-      }
-      auto tes = calcTES(curr, resolver);
-      auto bLeft = curr.getChildren()[0];
-      auto bRight = curr.getChildren()[1];
-      NodeSet leftTes = calcT(bLeft, resolver) & tes;
-      NodeSet rightTes = calcT(bRight, resolver) & tes;
-      if (leftTes.intersects(ses) && rightTes.intersects(ses)) {
-         return false;
-      }
-      switch (mlir::relalg::detail::getBinaryOperatorType(curr)) {
-         case detail::BinaryOperatorType::SemiJoin:
-         case detail::BinaryOperatorType::MarkJoin:
-         case detail::BinaryOperatorType::CollectionJoin:
-         case detail::BinaryOperatorType::AntiSemiJoin:
-         case detail::BinaryOperatorType::OuterJoin:
-            return !rightTes.intersects(ses);
-         case detail::BinaryOperatorType::FullOuterJoin: return false;
-         default:
-            return true;
-      }
-   }
+
    void ensureConnected();
 
-   NodeSet expand(NodeSet s) {
-      qg.iterateNodes(s, [&](QueryGraph::Node& n) {
-         if (n.dependencies.valid()) {
-            s |= n.dependencies;
-         }
-      });
-      return s;
-   }
 
    public:
    QueryGraphBuilder(Operator root, llvm::SmallPtrSet<mlir::Operation*,12>& alreadyOptimized);

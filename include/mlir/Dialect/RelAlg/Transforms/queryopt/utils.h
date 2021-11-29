@@ -40,6 +40,7 @@ class NodeSet {
       return (storage & rhs.storage).any();
    }
    void set(size_t pos) {
+      assert(pos<storage.size());
       storage.set(pos);
    }
    [[nodiscard]] auto begin() const {
