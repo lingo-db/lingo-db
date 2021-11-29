@@ -1,5 +1,4 @@
 #include "mlir/Dialect/RelAlg/Transforms/queryopt/DPhyp.h"
-#include <iostream>
 #include <unordered_set>
 
 void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
@@ -34,21 +33,22 @@ void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
    }
    for (auto& edge : queryGraph.selections) {
       if (edge.connects2(s, s1, s2)) {
-         totalSelectivity*=queryGraph.calculateSelectivity(edge,s1,s2);
+         totalSelectivity *= queryGraph.calculateSelectivity(edge, s1, s2);
          predicates.insert(edge.op);
       }
    }
    std::shared_ptr<Plan> currPlan;
 
    if (specialJoin) {
-      double estimatedResultSize = p1->getRows() * p2->getRows() * totalSelectivity;
-      if (mlir::isa<mlir::relalg::SemiJoinOp>(specialJoin.getOperation()) || mlir::isa<mlir::relalg::SemiJoinOp>(specialJoin.getOperation())) {
-         estimatedResultSize = p1->getRows() * totalSelectivity;
+      double estimatedResultSize;
+      switch (mlir::relalg::detail::getBinaryOperatorType(specialJoin)) {
+         case detail::BinaryOperatorType::AntiSemiJoin: estimatedResultSize = p1->getRows() * (1.0 - totalSelectivity); break;
+         case detail::BinaryOperatorType::SemiJoin: estimatedResultSize = p1->getRows() * totalSelectivity; break;
+         case detail::BinaryOperatorType::CollectionJoin:
+         case detail::BinaryOperatorType::OuterJoin: //todo: not really correct, but we would need to split singlejoin/outerjoin
+         case detail::BinaryOperatorType::MarkJoin: estimatedResultSize = p1->getRows(); break;
+         default: estimatedResultSize = p1->getRows() * p2->getRows() * totalSelectivity;
       }
-      if (mlir::isa<mlir::relalg::OuterJoinOp>(specialJoin.getOperation()) || mlir::isa<mlir::relalg::MarkJoinOp>(specialJoin.getOperation()) || mlir::isa<mlir::relalg::CollectionJoinOp>(specialJoin.getOperation()) || mlir::isa<mlir::relalg::SingleJoinOp>(specialJoin.getOperation())) {
-         estimatedResultSize = p1->getRows();
-      }
-
       currPlan = std::make_shared<Plan>(specialJoin, std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>(predicates.begin(), predicates.end()), estimatedResultSize);
    } else if (!predicates.empty()) {
       auto estimatedResultSize = p1->getRows() * p2->getRows() * totalSelectivity;

@@ -24,12 +24,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Func
                Operator asOperator = mlir::cast<Operator>(op);
                auto subOps = asOperator.getAllSubOperators();
                auto used = asOperator.getUsedAttributes();
-               if (used.intersects(subOps[0].getAvailableAttributes()) && used.intersects(subOps[1].getAvailableAttributes())) {
-                  return false;
-               } else {
-                  return true;
-               }
-
+               return !(used.intersects(subOps[0].getAvailableAttributes()) && used.intersects(subOps[1].getAvailableAttributes()));
             } else {
                return true;
             }

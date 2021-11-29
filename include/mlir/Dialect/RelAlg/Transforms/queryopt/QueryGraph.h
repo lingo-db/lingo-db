@@ -87,8 +87,8 @@ class QueryGraph {
 
    static void printReadable(const NodeSet& s, llvm::raw_ostream& out) {
       out << "{";
-      for (auto s : s) {
-         out << s << ",";
+      for (auto pos : s) {
+         out << pos << ",";
       }
       out << "}";
    }
