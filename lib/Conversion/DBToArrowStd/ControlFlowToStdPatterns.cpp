@@ -6,6 +6,19 @@
 
 using namespace mlir;
 namespace {
+
+static Value convertBooleanCondition(mlir::Location loc, mlir::OpBuilder& rewriter, Type t, Value v) {
+   auto boolType = t.dyn_cast_or_null<db::BoolType>();
+   if (boolType && boolType.isNullable()) {
+      auto i1Type = rewriter.getI1Type();
+      auto unpacked = rewriter.create<util::UnPackOp>(loc, v);
+      Value constTrue = rewriter.create<arith::ConstantOp>(loc, i1Type, rewriter.getIntegerAttr(i1Type, 1));
+      auto negated = rewriter.create<arith::XOrIOp>(loc, unpacked.getResult(0), constTrue); //negate
+      return rewriter.create<arith::AndIOp>(loc, i1Type, negated, unpacked.getResult(1));
+   } else {
+      return v;
+   }
+}
 //lower dbexec::If to scf::If
 class IfLowering : public ConversionPattern {
    public:
@@ -20,18 +33,8 @@ class IfLowering : public ConversionPattern {
       for (auto res : ifOp.results()) {
          resultTypes.push_back(typeConverter->convertType(res.getType()));
       }
-      Value condition;
-      auto boolType = ifOp.condition().getType().dyn_cast_or_null<db::BoolType>();
-      if (boolType && boolType.isNullable()) {
-         auto i1Type = rewriter.getI1Type();
-         auto unpacked = rewriter.create<util::UnPackOp>(loc, ifOpAdaptor.condition());
-         Value constTrue = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), i1Type, rewriter.getIntegerAttr(i1Type, 1));
-         auto negated = rewriter.create<arith::XOrIOp>(rewriter.getUnknownLoc(), unpacked.getResult(0), constTrue); //negate
-         auto anded = rewriter.create<arith::AndIOp>(rewriter.getUnknownLoc(), i1Type, negated, unpacked.getResult(1));
-         condition = anded;
-      } else {
-         condition = ifOpAdaptor.condition();
-      }
+      Value condition = convertBooleanCondition(loc, rewriter, ifOp.condition().getType(), ifOpAdaptor.condition());
+
       auto newIfOp = rewriter.create<mlir::scf::IfOp>(loc, TypeRange(resultTypes), condition, !ifOp.elseRegion().empty());
       {
          scf::IfOp::ensureTerminator(newIfOp.thenRegion(), rewriter, loc);
@@ -142,17 +145,7 @@ class ConditionLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       db::ConditionOpAdaptor adaptor(operands);
       db::ConditionOp conditionOp = cast<db::ConditionOp>(op);
-      auto boolType = conditionOp.condition().getType().dyn_cast_or_null<db::BoolType>();
-      if (boolType && boolType.isNullable()) {
-         auto i1Type = rewriter.getI1Type();
-         auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), adaptor.condition());
-         Value constTrue = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), i1Type, rewriter.getIntegerAttr(i1Type, 1));
-         auto negated = rewriter.create<arith::XOrIOp>(rewriter.getUnknownLoc(), unpacked.getResult(0), constTrue); //negate
-         auto anded = rewriter.create<arith::AndIOp>(rewriter.getUnknownLoc(), i1Type, negated, unpacked.getResult(1));
-         rewriter.replaceOpWithNewOp<scf::ConditionOp>(op, anded, adaptor.args());
-      } else {
-         rewriter.replaceOpWithNewOp<scf::ConditionOp>(op, adaptor.condition(), adaptor.args());
-      }
+      rewriter.replaceOpWithNewOp<mlir::scf::ConditionOp>(op, convertBooleanCondition(conditionOp.getLoc(), rewriter, conditionOp.condition().getType(), adaptor.condition()), adaptor.args());
       return success();
    }
 };
@@ -163,18 +156,8 @@ class SelectLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       db::SelectOpAdaptor adaptor(operands);
-      db::SelectOp conditionOp = cast<db::SelectOp>(op);
-      auto boolType = conditionOp.condition().getType().dyn_cast_or_null<db::BoolType>();
-      if (boolType && boolType.isNullable()) {
-         auto i1Type = rewriter.getI1Type();
-         auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), adaptor.condition());
-         Value constTrue = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), i1Type, rewriter.getIntegerAttr(i1Type, 1));
-         auto negated = rewriter.create<arith::XOrIOp>(rewriter.getUnknownLoc(), unpacked.getResult(0), constTrue); //negate
-         auto anded = rewriter.create<arith::AndIOp>(rewriter.getUnknownLoc(), i1Type, negated, unpacked.getResult(1));
-         rewriter.replaceOpWithNewOp<mlir::SelectOp>(op, anded,adaptor.true_value(),adaptor.false_value());
-      } else {
-         rewriter.replaceOpWithNewOp<mlir::SelectOp>(op, adaptor.condition(), adaptor.true_value(),adaptor.false_value());
-      }
+      db::SelectOp selectOp = cast<db::SelectOp>(op);
+      rewriter.replaceOpWithNewOp<mlir::SelectOp>(op, convertBooleanCondition(selectOp.getLoc(), rewriter, selectOp.getCondition().getType(), adaptor.condition()), adaptor.true_value(), adaptor.false_value());
       return success();
    }
 };
