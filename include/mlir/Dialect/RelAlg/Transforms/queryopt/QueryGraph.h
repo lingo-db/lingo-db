@@ -12,6 +12,8 @@ class QueryGraph {
    size_t pseudoNodes = 0;
 
    struct SelectionEdge {
+      size_t id;
+      std::unordered_map<NodeSet,double,HashNodeSet> cachedSel;
       NodeSet required;
       Operator op;
       [[nodiscard]] bool connects(const NodeSet& s1, const NodeSet& s2) const {
@@ -182,6 +184,7 @@ class QueryGraph {
          e.op = op;
       }
       e.required = required;
+      e.id=edgeid;
       for (auto n : required) {
          if (n >= nodes.size()) {
             //pseudo node
@@ -361,104 +364,11 @@ class QueryGraph {
       }
       return res;
    }
-
-   void estimate() {
-      for (auto& node : nodes) {
-         node.selectivity = 1;
-         if (node.op) {
-            node.rows = 1;
-            if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())) {
-               if (baseTableOp->hasAttr("rows")) {
-                  node.rows = baseTableOp->getAttr("rows").dyn_cast_or_null<mlir::IntegerAttr>().getInt();
-               }
-            }
-            auto availableLeft = node.op.getAvailableAttributes();
-            mlir::relalg::Attributes availableRight;
-            std::vector<Predicate> predicates;
-            for (auto pred : node.additionalPredicates) {
-               addPredicates(predicates, pred, availableLeft, availableRight);
-            }
-            Attributes pkey;
-            if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())) {
-               pkey = getPKey(baseTableOp.sym_name(), baseTableOp->getAttr("pkey"));
-            }
-            Attributes predicatesLeft;
-            for (auto predicate : predicates) {
-               predicatesLeft.insert(predicate.left);
-            }
-            bool pKeyIncluded = pkey.isSubsetOf(predicatesLeft);
-            if (pKeyIncluded) {
-               node.selectivity = 1 / node.rows;
-            } else {
-               for (auto predicate : predicates) {
-                  if (predicate.isEq) {
-                     node.selectivity *= 0.1;
-                  } else {
-                     node.selectivity *= 0.25;
-                  }
-               }
-            }
-         }
-      }
-      for (auto& edge : joins) {
-         auto availableLeft = getAttributesForNodeSet(edge.left);
-         auto availableRight = getAttributesForNodeSet(edge.right);
-         std::vector<Predicate> predicates;
-         addPredicates(predicates, edge.op, availableLeft, availableRight);
-         edge.selectivity = 1.0;
-         std::vector<std::pair<double, Attributes>> pkeysLeft;
-         std::vector<std::pair<double, Attributes>> pkeysRight;
-         iterateNodes(edge.left, [&](auto node) {
-            if (node.op) {
-               if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())) {
-                  pkeysLeft.push_back({node.rows, getPKey(baseTableOp.sym_name(), baseTableOp->getAttr("pkey"))});
-               }
-            }
-         });
-         iterateNodes(edge.right, [&](auto node) {
-            if (node.op) {
-               if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())) {
-                  pkeysRight.push_back({node.rows, getPKey(baseTableOp.sym_name(), baseTableOp->getAttr("pkey"))});
-               }
-            }
-         });
-
-         Attributes predicatesLeft;
-         Attributes predicatesRight;
-         for (auto predicate : predicates) {
-            predicatesLeft.insert(predicate.left);
-            predicatesRight.insert(predicate.right);
-         }
-         for (auto p : pkeysLeft) {
-            auto [rows, pkey] = p;
-            if (pkey.isSubsetOf(predicatesLeft)) {
-               edge.selectivity *= 1 / rows;
-               predicatesLeft.remove(pkey);
-            }
-         }
-         for (auto p : pkeysRight) {
-            auto [rows, pkey] = p;
-            if (pkey.isSubsetOf(predicatesRight)) {
-               edge.selectivity *= 1 / rows;
-               predicatesRight.remove(pkey);
-            }
-         }
-         for (auto predicate : predicates) {
-            if (predicate.left.isSubsetOf(predicatesLeft) && predicate.right.isSubsetOf(predicatesRight)) {
-               if (predicate.isEq) {
-                  edge.selectivity *= 0.1;
-               } else {
-                  edge.selectivity *= 0.25;
-               }
-            }
-         }
-      }
-   }
-   double calculateSelectivity(SelectionEdge& edge,NodeSet left,NodeSet right) {
+   double estimateSelectivity(Operator op,NodeSet left,NodeSet right){
       auto availableLeft = getAttributesForNodeSet(left);
       auto availableRight = getAttributesForNodeSet(right);
       std::vector<Predicate> predicates;
-      addPredicates(predicates, edge.op, availableLeft, availableRight);
+      addPredicates(predicates, op, availableLeft, availableRight);
       double selectivity = 1.0;
       std::vector<std::pair<double, Attributes>> pkeysLeft;
       std::vector<std::pair<double, Attributes>> pkeysRight;
@@ -506,6 +416,57 @@ class QueryGraph {
             }
          }
       }
+      return selectivity;
+   }
+   void estimate() {
+      for (auto& node : nodes) {
+         node.selectivity = 1;
+         if (node.op) {
+            node.rows = 1;
+            if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())) {
+               if (baseTableOp->hasAttr("rows")) {
+                  node.rows = baseTableOp->getAttr("rows").dyn_cast_or_null<mlir::IntegerAttr>().getInt();
+               }
+            }
+            auto availableLeft = node.op.getAvailableAttributes();
+            mlir::relalg::Attributes availableRight;
+            std::vector<Predicate> predicates;
+            for (auto pred : node.additionalPredicates) {
+               addPredicates(predicates, pred, availableLeft, availableRight);
+            }
+            Attributes pkey;
+            if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())) {
+               pkey = getPKey(baseTableOp.sym_name(), baseTableOp->getAttr("pkey"));
+            }
+            Attributes predicatesLeft;
+            for (auto predicate : predicates) {
+               predicatesLeft.insert(predicate.left);
+            }
+            bool pKeyIncluded = pkey.isSubsetOf(predicatesLeft);
+            if (pKeyIncluded) {
+               node.selectivity = 1 / node.rows;
+            } else {
+               for (auto predicate : predicates) {
+                  if (predicate.isEq) {
+                     node.selectivity *= 0.1;
+                  } else {
+                     node.selectivity *= 0.25;
+                  }
+               }
+            }
+         }
+      }
+      for (auto& edge : joins) {
+         edge.selectivity= estimateSelectivity(edge.op,edge.left,edge.right);
+      }
+   }
+   double calculateSelectivity(SelectionEdge& edge,NodeSet left,NodeSet right) {
+      auto key=left&edge.required;
+      if(edge.cachedSel.contains(key)){
+         return edge.cachedSel[key];
+      }
+      double selectivity= estimateSelectivity(edge.op,left,right);
+      edge.cachedSel[key]=selectivity;
       return selectivity;
    }
 };

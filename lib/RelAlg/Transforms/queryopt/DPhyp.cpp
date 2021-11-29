@@ -33,8 +33,8 @@ void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
       }
    }
    for (auto& edge : queryGraph.selections) {
-      totalSelectivity*=queryGraph.calculateSelectivity(edge,s1,s2);
       if (edge.connects2(s, s1, s2)) {
+         totalSelectivity*=queryGraph.calculateSelectivity(edge,s1,s2);
          predicates.insert(edge.op);
       }
    }
