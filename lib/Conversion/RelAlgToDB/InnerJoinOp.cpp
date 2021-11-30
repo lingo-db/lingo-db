@@ -41,13 +41,7 @@ class HashInnerJoinLowering : public mlir::relalg::HJNode<mlir::relalg::InnerJoi
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/,mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      auto builderValuesBefore = getRequiredBuilderValues(context);
-      auto ifOp = builder.create<mlir::db::IfOp>(
-         joinOp->getLoc(), getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
-            consumer->consume(this, builder1, context);
-            builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); },
-         requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
-      setRequiredBuilderValues(context, ifOp.getResults());
+      handlePotentialMatch(builder,context,matched);
    }
    virtual ~HashInnerJoinLowering() {}
 };

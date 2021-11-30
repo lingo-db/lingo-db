@@ -137,6 +137,14 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
    public:
    virtual void addAdditionalRequiredAttributes() {
    }
+   void handlePotentialMatch(OpBuilder& builder, LoweringContext& context,Value matches){
+      auto builderValuesBefore = getRequiredBuilderValues(context);
+      auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matches,[&](mlir::OpBuilder& builder1,mlir::Location loc){
+            consumer->consume(this, builder1, context);
+            builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
+         },requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
+      setRequiredBuilderValues(context,ifOp.getResults());
+   }
    virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
@@ -231,7 +239,7 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
       }
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
-      auto ctxt=builder.getContext();
+      auto *ctxt=builder.getContext();
       auto loc=joinOp->getLoc();
       auto scope = context.createScope();
       if (child == builderChild) {
