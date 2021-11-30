@@ -182,7 +182,7 @@ class HashSingleJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SingleJ
       }
    }
 
-   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       auto builderValuesBefore = getRequiredBuilderValues(context);
       auto ifOp = builder.create<mlir::db::IfOp>(

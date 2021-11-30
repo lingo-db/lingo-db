@@ -49,7 +49,7 @@ class HashSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SemiJoinO
    HashSemiJoinLowering(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::SemiJoinOp>(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
-   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
    }
    mlir::Value getFlag() override {
@@ -71,9 +71,9 @@ class HashSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SemiJoinO
    }
    virtual ~HashSemiJoinLowering() {}
 };
-class MHashSemiJoinLowering : public mlir::relalg::MarkableHJNode<mlir::relalg::SemiJoinOp> {
+class MHashSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SemiJoinOp,true> {
    public:
-   MHashSemiJoinLowering(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::MarkableHJNode<mlir::relalg::SemiJoinOp>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
+   MHashSemiJoinLowering(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::SemiJoinOp,true>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {

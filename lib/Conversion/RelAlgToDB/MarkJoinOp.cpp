@@ -41,7 +41,7 @@ class HashMarkJoinLowering : public mlir::relalg::HJNode<mlir::relalg::MarkJoinO
    HashMarkJoinLowering(mlir::relalg::MarkJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::MarkJoinOp>(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
-   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
    }
    mlir::Value getFlag() override {

@@ -26,7 +26,7 @@ class HashCollectionJoinLowering : public mlir::relalg::HJNode<mlir::relalg::Col
          requiredAttributes.insert(attr);
       }
    }
-   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       mlir::Value vectorBuilder = context.builders[vectorBuilderId];
       auto ifOp = builder.create<mlir::db::IfOp>(
          joinOp->getLoc(), mlir::TypeRange{vectorBuilder.getType()}, matched, [&](mlir::OpBuilder& builder, mlir::Location loc) {

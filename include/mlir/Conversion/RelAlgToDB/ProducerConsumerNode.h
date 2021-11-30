@@ -30,7 +30,6 @@ class LoweringContext {
       return symbolTable.lookup(attribute);
    }
    void setValueForAttribute(AttributeResolverScope& scope, const mlir::relalg::RelationalAttribute* iu, mlir::Value v) {
-      //      assert(!!v);
       symbolTable.insertIntoScope(&scope, iu, v);
    }
    AttributeResolverScope createScope() {

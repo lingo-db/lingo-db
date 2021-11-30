@@ -105,7 +105,7 @@ class HashOuterJoinLowering : public mlir::relalg::HJNode<mlir::relalg::OuterJoi
       }
    }
 
-   virtual void handleLookup(mlir::Value matched, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       auto builderValuesBefore = getRequiredBuilderValues(context);
       auto ifOp = builder.create<mlir::db::IfOp>(
@@ -160,9 +160,9 @@ class HashOuterJoinLowering : public mlir::relalg::HJNode<mlir::relalg::OuterJoi
    virtual ~HashOuterJoinLowering() {}
 };
 
-class MHashOuterJoinLowering : public mlir::relalg::MarkableHJNode<mlir::relalg::OuterJoinOp> {
+class MHashOuterJoinLowering : public mlir::relalg::HJNode<mlir::relalg::OuterJoinOp,true> {
    public:
-   MHashOuterJoinLowering(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::MarkableHJNode<mlir::relalg::OuterJoinOp>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
+   MHashOuterJoinLowering(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::OuterJoinOp,true>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
    }
    void addAdditionalRequiredAttributes() override {
       for (mlir::Attribute attr : joinOp.mapping()) {
