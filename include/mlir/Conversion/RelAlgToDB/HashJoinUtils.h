@@ -189,6 +189,28 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
    virtual void after(LoweringContext& context, mlir::OpBuilder& builder) {
    }
    virtual mlir::Value getFlag() { return Value(); }
+
+   void unpackValues(LoweringContext::AttributeResolverScope& scope, OpBuilder& builder, Value packed, LoweringContext& context, Value& marker) {
+      auto payloadUnpacked = builder.create<mlir::util::UnPackOp>(joinOp->getLoc(), packed).getResults();
+      if (!valTupleType.getTypes().empty()) {
+         auto unpackedValue = markable ? payloadUnpacked.drop_front() : payloadUnpacked;
+         for (size_t i = 0; i < unpackedValue.size(); i++) {
+            context.setValueForAttribute(scope, orderedValues[i], unpackedValue[i]);
+         }
+         if (markable) {
+            marker = payloadUnpacked[0];
+         }
+      }
+   }
+   void unpackKeys(LoweringContext::AttributeResolverScope& scope, OpBuilder& builder, Value packed, LoweringContext& context) {
+      mlir::ValueRange unpackedKey = builder.create<mlir::util::UnPackOp>(joinOp->getLoc(), packed).getResults();
+      for (size_t i = 0; i < unpackedKey.size(); i++) {
+         if (orderedKeys[i]) {
+            context.setValueForAttribute(scope, orderedKeys[i], unpackedKey[i]);
+         }
+      }
+   }
+
    void scanHT(LoweringContext& context, mlir::OpBuilder& builder) {
       auto scope = context.createScope();
       {
@@ -200,49 +222,38 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
          mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), forOp2.getInductionVar()).getResults();
-         mlir::ValueRange unpackedKey = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), unpacked[0]).getResults();
-         for (size_t i = 0; i < unpackedKey.size(); i++) {
-            if (orderedKeys[i]) {
-               context.setValueForAttribute(scope, orderedKeys[i], unpackedKey[i]);
-            }
-         }
-         auto payloadUnpacked = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), unpacked[1]).getResults();
-         if (!valTupleType.getTypes().empty()) {
-            auto unpackedValue = markable ? payloadUnpacked.drop_front() : payloadUnpacked;
-            for (size_t i = 0; i < unpackedValue.size(); i++) {
-               context.setValueForAttribute(scope, orderedValues[i], unpackedValue[i]);
-            }
-         }
-         {
-            auto marker = payloadUnpacked[0];
-            handleScanned(marker, context, builder2);
-         }
+         unpackKeys(scope,builder2,unpacked[0],context);
+         Value marker;
+         unpackValues(scope,builder2,unpacked[1],context,marker);
+         handleScanned(marker, context, builder2);
          builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());
       }
    }
    virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+      auto ctxt=builder.getContext();
+      auto loc=joinOp->getLoc();
       auto scope = context.createScope();
       if (child == builderChild) {
          auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), leftKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context);
-         mlir::Value packedKey = builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), inlinedKeys);
-         auto const0 = builder.create<mlir::arith::ConstantOp>(builder.getUnknownLoc(), builder.getIntegerType(64), builder.getI64IntegerAttr(0));
-
+         mlir::Value packedKey = builder.create<mlir::util::PackOp>(loc, inlinedKeys);
+         auto const0 = builder.create<mlir::arith::ConstantOp>(loc, builder.getIntegerType(64), builder.getI64IntegerAttr(0));
          mlir::Value packedValues = markable ? packValues(context, builder, orderedValues, {const0}) : packValues(context, builder, orderedValues);
          mlir::Value htBuilder = context.builders[builderId];
-         mlir::Value packed = builder.create<mlir::util::PackOp>(joinOp->getLoc(), mlir::ValueRange({packedKey, packedValues}));
-         mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(joinOp->getLoc(), htBuilder.getType(), htBuilder, packed);
+         mlir::Value packed = builder.create<mlir::util::PackOp>(loc, mlir::ValueRange({packedKey, packedValues}));
+         mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, htBuilder.getType(), htBuilder, packed);
          context.builders[builderId] = mergedBuilder;
       } else if (child == this->children[1].get()) {
-         mlir::TupleType entryAndValuePtrType = mlir::TupleType::get(builder.getContext(), TypeRange{entryType, util::RefType::get(builder.getContext(), valTupleType, llvm::Optional<int64_t>())});
-         auto packedKey = builder.create<mlir::util::PackOp>(builder.getUnknownLoc(), mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), rightKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context));
-         mlir::Type htIterable = mlir::db::GenericIterableType::get(builder.getContext(), markable ? entryAndValuePtrType : entryType, markable ? "join_ht_mod_iterator" : "join_ht_iterator");
+         mlir::TupleType entryAndValuePtrType = mlir::TupleType::get(ctxt, TypeRange{entryType, util::RefType::get(ctxt, valTupleType, llvm::Optional<int64_t>())});
+         Type iteratorType=markable ? entryAndValuePtrType : entryType;
+         auto packedKey = builder.create<mlir::util::PackOp>(loc, mlir::relalg::HashJoinUtils::inlineKeys(&joinOp.getPredicateBlock(), rightKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context));
+         mlir::Type htIterable = mlir::db::GenericIterableType::get(ctxt, iteratorType, markable ? "join_ht_mod_iterator" : "join_ht_iterator");
          beforeLookup(context, builder);
-         auto matches = builder.create<mlir::db::Lookup>(joinOp->getLoc(), htIterable, joinHt, packedKey);
+         auto matches = builder.create<mlir::db::Lookup>(loc, htIterable, joinHt, packedKey);
          {
-            auto forOp2 = builder.create<mlir::db::ForOp>(joinOp->getLoc(), getRequiredBuilderTypesCustom(context), matches, getFlag(), getRequiredBuilderValuesCustom(context));
+            auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypesCustom(context), matches, getFlag(), getRequiredBuilderValuesCustom(context));
             mlir::Block* block2 = new mlir::Block;
-            block2->addArgument(markable ? entryAndValuePtrType : entryType);
+            block2->addArgument(iteratorType);
             block2->addArguments(getRequiredBuilderTypesCustom(context));
             forOp2.getBodyRegion().push_back(block2);
             mlir::OpBuilder builder2(forOp2.getBodyRegion());
@@ -251,35 +262,25 @@ class HJNode : public mlir::relalg::ProducerConsumerNode {
             Value entry = forOp2.getInductionVar();
             Value valuePtr;
             if (markable) {
-               auto separated = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), forOp2.getInductionVar()).getResults();
+               auto separated = builder2.create<mlir::util::UnPackOp>(loc, forOp2.getInductionVar()).getResults();
                entry = separated[0];
                valuePtr = separated[1];
             }
-            auto unpacked = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), entry).getResults();
-            mlir::ValueRange unpackedKey = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), unpacked[0]).getResults();
-            for (size_t i = 0; i < unpackedKey.size(); i++) {
-               if (orderedKeys[i]) {
-                  context.setValueForAttribute(scope, orderedKeys[i], unpackedKey[i]);
-               }
-            }
-            if (!valTupleType.getTypes().empty()) {
-               auto unpackedValue = builder2.create<mlir::util::UnPackOp>(joinOp->getLoc(), unpacked[1]);
-               auto unpackedValues =markable?unpackedValue.getResults().drop_front():unpackedValue.getResults();
-               for (size_t i = 0; i < unpackedValues.size(); i++) {
-                  context.setValueForAttribute(scope, orderedValues[i], unpackedValues[i]);
-               }
-            }
+            auto unpacked = builder2.create<mlir::util::UnPackOp>(loc, entry).getResults();
+            unpackKeys(scope,builder2,unpacked[0],context);
+            Value markerVal;
+            unpackValues(scope,builder2,unpacked[1],context,markerVal);
             {
                mlir::Value matched = mergeRelationalBlock(
                   builder2.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
                Value marker;
                if (markable) {
-                  Value castedRef = builder2.create<util::GenericMemrefCastOp>(builder.getUnknownLoc(), util::RefType::get(builder.getContext(), builder.getI64Type(), llvm::Optional<int64_t>()), valuePtr);
-                  marker = builder2.create<util::ToMemrefOp>(builder.getUnknownLoc(), MemRefType::get({}, builder.getIntegerType(64)), castedRef);
+                  Value castedRef = builder2.create<util::GenericMemrefCastOp>(loc, util::RefType::get(ctxt, builder.getI64Type(), llvm::Optional<int64_t>()), valuePtr);
+                  marker = builder2.create<util::ToMemrefOp>(loc, MemRefType::get({}, builder.getIntegerType(64)), castedRef);
                }
                handleLookup(matched, marker, context, builder2);
             }
-            builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValuesCustom(context));
+            builder2.create<mlir::db::YieldOp>(loc, getRequiredBuilderValuesCustom(context));
             setRequiredBuilderValuesCustom(context, forOp2.results());
          }
          afterLookup(context, builder);
