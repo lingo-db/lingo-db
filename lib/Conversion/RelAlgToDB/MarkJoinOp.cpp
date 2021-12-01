@@ -14,17 +14,17 @@ class NLMarkJoinLowering : public mlir::relalg::NLJoinTranslator {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
+      builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, matched);
    }
    mlir::Value getFlag() override {
       return matchFoundFlag;
    }
    void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
+      matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
    }
    void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
+      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
       context.setValueForAttribute(scope, &cast<mlir::relalg::MarkJoinOp>(joinOp).markattr().getRelationalAttribute(), matchFound);
       consumer->consume(this, builder, context);
    }
@@ -38,17 +38,17 @@ class HashMarkJoinLowering : public mlir::relalg::HJNode {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
+      builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, matched);
    }
    mlir::Value getFlag() override {
       return matchFoundFlag;
    }
    void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
+      matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
    }
    void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
+      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
       context.setValueForAttribute(scope, &cast<mlir::relalg::MarkJoinOp>(joinOp).markattr().getRelationalAttribute(), matchFound);
       consumer->consume(this, builder, context);
    }

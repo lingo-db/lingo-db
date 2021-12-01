@@ -14,17 +14,17 @@ class NLAntiSemiJoinLowering : public mlir::relalg::NLJoinTranslator {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
+      builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, matched);
    }
    mlir::Value getFlag() override {
       return matchFoundFlag;
    }
    void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
+      matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
    }
    void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-      mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFound);
+      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
+      mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(builder.getContext()), matchFound);
       handlePotentialMatch(builder,context,noMatchFound);
    }
    virtual ~NLAntiSemiJoinLowering() {}
@@ -38,17 +38,17 @@ class HashAntiSemiJoinLowering : public mlir::relalg::HJNode {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
+      builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, matched);
    }
    mlir::Value getFlag() override {
       return matchFoundFlag;
    }
    void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
+      matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
    }
    void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-      mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFound);
+      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
+      mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(builder.getContext()), matchFound);
       handlePotentialMatch(builder,context,noMatchFound);
    }
    virtual ~HashAntiSemiJoinLowering() {}
@@ -60,11 +60,11 @@ class MHashAntiSemiJoinLowering : public mlir::relalg::HJNode {
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto builderValuesBefore = getRequiredBuilderValues(context);
-      auto ifOp = builder.create<mlir::db::IfOp>(joinOp->getLoc(), getRequiredBuilderTypes(context), matched,[&](mlir::OpBuilder& builder1,mlir::Location loc){
+      auto ifOp = builder.create<mlir::db::IfOp>(loc, getRequiredBuilderTypes(context), matched,[&](mlir::OpBuilder& builder1,mlir::Location loc){
          auto const1 = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(64), builder1.getI64IntegerAttr(1));
          builder1.create<mlir::AtomicRMWOp>(builder1.getUnknownLoc(), builder1.getIntegerType(64), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
-         builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context));
-         },requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
+         builder1.create<mlir::db::YieldOp>(loc, getRequiredBuilderValues(context));
+         },requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(loc, builderValuesBefore); });
       setRequiredBuilderValues(context,ifOp.getResults());
    }
    virtual void after(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {

@@ -29,10 +29,10 @@ class HashCollectionJoinLowering : public mlir::relalg::HJNode {
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       mlir::Value vectorBuilder = context.builders[vectorBuilderId];
       auto ifOp = builder.create<mlir::db::IfOp>(
-         joinOp->getLoc(), mlir::TypeRange{vectorBuilder.getType()}, matched, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+         loc, mlir::TypeRange{vectorBuilder.getType()}, matched, [&](mlir::OpBuilder& builder, mlir::Location loc) {
             mlir::Value packed = packValues(context,builder,tupleAttributes);
-         mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(joinOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
-         builder.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{mergedBuilder}); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::db::YieldOp>(joinOp->getLoc(), mlir::ValueRange{vectorBuilder}); });
+         mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, vectorBuilder.getType(), vectorBuilder, packed);
+         builder.create<mlir::db::YieldOp>(loc, mlir::ValueRange{mergedBuilder}); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::db::YieldOp>(loc, mlir::ValueRange{vectorBuilder}); });
       context.builders[vectorBuilderId] = ifOp.getResult(0);
    }
 
@@ -48,7 +48,7 @@ class HashCollectionJoinLowering : public mlir::relalg::HJNode {
 
       context.setValueForAttribute(scope, &cast<mlir::relalg::CollectionJoinOp>(joinOp).collAttr().getRelationalAttribute(), vector);
       consumer->consume(this, builder, context);
-      builder.create<mlir::db::FreeOp>(joinOp->getLoc(), vector);
+      builder.create<mlir::db::FreeOp>(loc, vector);
    }
    virtual ~HashCollectionJoinLowering() {}
 };

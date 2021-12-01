@@ -9,6 +9,7 @@ class NLJoinTranslator : public mlir::relalg::JoinTranslator {
    Value vector;
    std::vector<const mlir::relalg::RelationalAttribute*> orderedAttributesLeft;
    mlir::TupleType tupleType;
+   protected:
    mlir::Location loc;
 
    public:

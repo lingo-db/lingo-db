@@ -16,16 +16,16 @@ class NLSemiJoinLowering : public mlir::relalg::NLJoinTranslator {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
+      builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, matched);
    }
    mlir::Value getFlag() override {
       return matchFoundFlag;
    }
    void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
+      matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
    }
    void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
+      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
       handlePotentialMatch(builder, context, matchFound);
    }
    virtual ~NLSemiJoinLowering() {}
@@ -39,16 +39,16 @@ class HashSemiJoinLowering : public mlir::relalg::HJNode {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
+      builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, matched);
    }
    mlir::Value getFlag() override {
       return matchFoundFlag;
    }
    void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
+      matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
    }
    void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
+      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
       handlePotentialMatch(builder, context, matchFound);
    }
    virtual ~HashSemiJoinLowering() {}
@@ -61,7 +61,7 @@ class MHashSemiJoinLowering : public mlir::relalg::HJNode {
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto beforeBuilderValues = getRequiredBuilderValues(context);
       auto ifOp = builder.create<mlir::db::IfOp>(
-         joinOp->getLoc(), getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
+         loc, getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
             auto const1 = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(64), builder1.getI64IntegerAttr(1));
             auto markerBefore = builder1.create<mlir::AtomicRMWOp>(builder1.getUnknownLoc(), builder1.getIntegerType(64), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
             {
@@ -70,8 +70,8 @@ class MHashSemiJoinLowering : public mlir::relalg::HJNode {
                auto isZeroDB = builder1.create<mlir::db::TypeCastOp>(builder1.getUnknownLoc(), mlir::db::BoolType::get(builder1.getContext()), isZero);
                handlePotentialMatch(builder,context,isZeroDB);
             }
-            builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); },
-         requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), beforeBuilderValues); });
+            builder1.create<mlir::db::YieldOp>(loc, getRequiredBuilderValues(context)); },
+         requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(loc, beforeBuilderValues); });
       setRequiredBuilderValues(context, ifOp.getResults());
    }
 
