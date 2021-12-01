@@ -35,9 +35,9 @@ class NLInnerJoinLowering : public mlir::relalg::ProducerConsumerNode {
    virtual ~NLInnerJoinLowering() {}
 };
 
-class HashInnerJoinLowering : public mlir::relalg::HJNode<mlir::relalg::InnerJoinOp> {
+class HashInnerJoinLowering : public mlir::relalg::HJNode {
    public:
-   HashInnerJoinLowering(mlir::relalg::InnerJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::InnerJoinOp>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
+   HashInnerJoinLowering(mlir::relalg::InnerJoinOp innerJoinOp) : mlir::relalg::HJNode(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/,mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {

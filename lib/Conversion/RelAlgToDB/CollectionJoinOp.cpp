@@ -5,14 +5,14 @@
 #include <mlir/Conversion/RelAlgToDB/HashJoinUtils.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class HashCollectionJoinLowering : public mlir::relalg::HJNode<mlir::relalg::CollectionJoinOp> {
+class HashCollectionJoinLowering : public mlir::relalg::HJNode {
    size_t vectorBuilderId;
    std::vector<mlir::Type> tupleTypes;
    std::vector<const mlir::relalg::RelationalAttribute*> tupleAttributes;
    mlir::TupleType tupleType;
 
    public:
-   HashCollectionJoinLowering(mlir::relalg::CollectionJoinOp collectionJoinOp) : mlir::relalg::HJNode<mlir::relalg::CollectionJoinOp>(collectionJoinOp, collectionJoinOp.right(), collectionJoinOp.left()) {
+   HashCollectionJoinLowering(mlir::relalg::CollectionJoinOp collectionJoinOp) : mlir::relalg::HJNode(collectionJoinOp, collectionJoinOp.right(), collectionJoinOp.left()) {
       for (auto attr : collectionJoinOp.attrs()) {
          if (auto refAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
             tupleTypes.push_back(refAttr.getRelationalAttribute().type);
@@ -46,7 +46,7 @@ class HashCollectionJoinLowering : public mlir::relalg::HJNode<mlir::relalg::Col
       auto scope = context.createScope();
       mlir::Value vector = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), context.builders[vectorBuilderId]);
 
-      context.setValueForAttribute(scope, &joinOp.collAttr().getRelationalAttribute(), vector);
+      context.setValueForAttribute(scope, &cast<mlir::relalg::CollectionJoinOp>(joinOp).collAttr().getRelationalAttribute(), vector);
       consumer->consume(this, builder, context);
       builder.create<mlir::db::FreeOp>(joinOp->getLoc(), vector);
    }

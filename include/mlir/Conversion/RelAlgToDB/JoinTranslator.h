@@ -18,11 +18,48 @@ class JoinTranslator : public ProducerConsumerNode {
       this->lookupChild = children[1].get();
       this->op = joinOp;
    }
-   void handlePotentialMatch(OpBuilder& builder, LoweringContext& context, Value matches) {
+   void addJoinRequiredAttributes(){
+      this->requiredAttributes.insert(joinOp.getUsedAttributes());
+      if(joinOp->hasAttr("mapping")&&joinOp->getAttr("mapping").isa<mlir::ArrayAttr>()) {
+         for (mlir::Attribute attr : joinOp->getAttr("mapping").cast<mlir::ArrayAttr>()) {
+            auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+            auto* defAttr = &relationDefAttr.getRelationalAttribute();
+            if (this->requiredAttributes.contains(defAttr)) {
+               auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
+               const auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+               this->requiredAttributes.insert(refAttr);
+            }
+         }
+      }
+   }
+   void handleMapping(OpBuilder& builder, LoweringContext& context,LoweringContext::AttributeResolverScope& scope){
+      if(joinOp->hasAttr("mapping")&&joinOp->getAttr("mapping").isa<mlir::ArrayAttr>()){
+         for (mlir::Attribute attr : joinOp->getAttr("mapping").cast<mlir::ArrayAttr>()) {
+            auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+            auto* defAttr = &relationDefAttr.getRelationalAttribute();
+            if (this->requiredAttributes.contains(defAttr)) {
+               auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
+               const auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+               auto value = context.getValueForAttribute(refAttr);
+               if (refAttr->type != defAttr->type) {
+                  mlir::Value tmp = builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), defAttr->type, value);
+                  value = tmp;
+               }
+               context.setValueForAttribute(scope, defAttr, value);
+            }
+         }
+      }
+   }
+   void handlePotentialMatch(OpBuilder& builder, LoweringContext& context, Value matches,mlir::function_ref<void(OpBuilder&)> onMatch=nullptr) {
+      auto scope = context.createScope();
       auto builderValuesBefore = getRequiredBuilderValues(context);
       auto ifOp = builder.create<mlir::db::IfOp>(
          joinOp->getLoc(), getRequiredBuilderTypes(context), matches, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+               handleMapping(builder1,context,scope);
                consumer->consume(this, builder1, context);
+               if(onMatch){
+                  onMatch(builder1);
+               }
                builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); }, requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
       setRequiredBuilderValues(context, ifOp.getResults());
    }

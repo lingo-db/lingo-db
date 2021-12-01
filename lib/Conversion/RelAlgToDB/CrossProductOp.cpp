@@ -3,9 +3,9 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
-class CrossProductLowering : public mlir::relalg::NLJoinTranslator<mlir::relalg::CrossProductOp> {
+class CrossProductLowering : public mlir::relalg::NLJoinTranslator {
    public:
-   CrossProductLowering(mlir::relalg::CrossProductOp crossProductOp) : mlir::relalg::NLJoinTranslator<mlir::relalg::CrossProductOp>(crossProductOp, crossProductOp.left(), crossProductOp.right()) {
+   CrossProductLowering(mlir::relalg::CrossProductOp crossProductOp) : mlir::relalg::NLJoinTranslator(crossProductOp, crossProductOp.left(), crossProductOp.right()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/,mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {

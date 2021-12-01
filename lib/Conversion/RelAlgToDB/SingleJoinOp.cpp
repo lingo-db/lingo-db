@@ -164,50 +164,18 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
 
    virtual ~ConstantSingleJoinLowering() {}
 };
-class HashSingleJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SingleJoinOp> {
+class HashSingleJoinLowering : public mlir::relalg::HJNode {
    mlir::Value matchFoundFlag;
 
    public:
-   HashSingleJoinLowering(mlir::relalg::SingleJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::SingleJoinOp>(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
-   }
-   void addAdditionalRequiredAttributes() override {
-      for (mlir::Attribute attr : joinOp.mapping()) {
-         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
-         auto* defAttr = &relationDefAttr.getRelationalAttribute();
-         if (this->requiredAttributes.contains(defAttr)) {
-            auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
-            const auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
-            this->requiredAttributes.insert(refAttr);
-         }
-      }
+   HashSingleJoinLowering(mlir::relalg::SingleJoinOp innerJoinOp) : mlir::relalg::HJNode(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      auto scope = context.createScope();
-      auto builderValuesBefore = getRequiredBuilderValues(context);
-      auto ifOp = builder.create<mlir::db::IfOp>(
-         joinOp->getLoc(), getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
-            for (mlir::Attribute attr : joinOp.mapping()) {
-               auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
-               auto* defAttr = &relationDefAttr.getRelationalAttribute();
-               if (this->requiredAttributes.contains(defAttr)) {
-                  auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
-                  const auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
-                  auto value = context.getValueForAttribute(refAttr);
-                  if (refAttr->type != defAttr->type) {
-                     mlir::Value tmp = builder1.create<mlir::db::CastOp>(builder.getUnknownLoc(), defAttr->type, value);
-                     value = tmp;
-                  }
-                  context.setValueForAttribute(scope, defAttr, value);
-               }
-            }
-            consumer->consume(this, builder1, context);
-
-            auto trueVal = builder1.create<mlir::db::ConstantOp>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
-            builder1.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, trueVal);
-            builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); },
-         requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
-      setRequiredBuilderValues(context, ifOp.getResults());
+      handlePotentialMatch(builder,context,matched,[&](mlir::OpBuilder& builder){
+         auto trueVal = builder.create<mlir::db::ConstantOp>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
+         builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, trueVal);
+      });
    }
 
    void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
@@ -220,7 +188,7 @@ class HashSingleJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SingleJ
       auto builderValuesBefore = getRequiredBuilderValues(context);
       auto ifOp = builder.create<mlir::db::IfOp>(
          joinOp->getLoc(), getRequiredBuilderTypes(context), noMatchFound, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
-         for (mlir::Attribute attr : joinOp.mapping()) {
+         for (mlir::Attribute attr : cast<mlir::relalg::SingleJoinOp>(joinOp).mapping()) {
             auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
             auto* defAttr = &relationDefAttr.getRelationalAttribute();
             if (this->requiredAttributes.contains(defAttr)) {

@@ -34,11 +34,11 @@ class NLMarkJoinLowering : public mlir::relalg::ProducerConsumerNode {
 
    virtual ~NLMarkJoinLowering() {}
 };
-class HashMarkJoinLowering : public mlir::relalg::HJNode<mlir::relalg::MarkJoinOp> {
+class HashMarkJoinLowering : public mlir::relalg::HJNode {
    mlir::Value matchFoundFlag;
 
    public:
-   HashMarkJoinLowering(mlir::relalg::MarkJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::MarkJoinOp>(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
+   HashMarkJoinLowering(mlir::relalg::MarkJoinOp innerJoinOp) : mlir::relalg::HJNode(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
@@ -53,7 +53,7 @@ class HashMarkJoinLowering : public mlir::relalg::HJNode<mlir::relalg::MarkJoinO
    void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-      context.setValueForAttribute(scope, &joinOp.markattr().getRelationalAttribute(), matchFound);
+      context.setValueForAttribute(scope, &cast<mlir::relalg::MarkJoinOp>(joinOp).markattr().getRelationalAttribute(), matchFound);
       consumer->consume(this, builder, context);
    }
    virtual ~HashMarkJoinLowering() {}

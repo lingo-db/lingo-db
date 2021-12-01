@@ -40,11 +40,11 @@ class NLAntiSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
    virtual ~NLAntiSemiJoinLowering() {}
 };
 
-class HashAntiSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::AntiSemiJoinOp> {
+class HashAntiSemiJoinLowering : public mlir::relalg::HJNode {
    mlir::Value matchFoundFlag;
 
    public:
-   HashAntiSemiJoinLowering(mlir::relalg::AntiSemiJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::AntiSemiJoinOp>(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
+   HashAntiSemiJoinLowering(mlir::relalg::AntiSemiJoinOp innerJoinOp) : mlir::relalg::HJNode(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
@@ -63,9 +63,9 @@ class HashAntiSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::AntiS
    }
    virtual ~HashAntiSemiJoinLowering() {}
 };
-class MHashAntiSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::AntiSemiJoinOp,true> {
+class MHashAntiSemiJoinLowering : public mlir::relalg::HJNode {
    public:
-   MHashAntiSemiJoinLowering(mlir::relalg::AntiSemiJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::AntiSemiJoinOp,true>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
+   MHashAntiSemiJoinLowering(mlir::relalg::AntiSemiJoinOp innerJoinOp) : mlir::relalg::HJNode(innerJoinOp, innerJoinOp.left(), innerJoinOp.right(),true) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {

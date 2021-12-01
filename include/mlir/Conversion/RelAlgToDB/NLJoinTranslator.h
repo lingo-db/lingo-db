@@ -3,24 +3,21 @@
 #include "JoinTranslator.h"
 #include <mlir/Dialect/DB/IR/DBOps.h>
 namespace mlir::relalg {
-template <class T, bool markable=false>
 class NLJoinTranslator : public mlir::relalg::JoinTranslator {
-   Value flag;
+   bool markable;
    size_t vecBuilderId;
    Value vector;
    std::vector<const mlir::relalg::RelationalAttribute*> orderedAttributesLeft;
-
    mlir::TupleType tupleType;
-   T joinOp;
    mlir::Location loc;
 
    public:
-   NLJoinTranslator(T joinOp, Value builderChild, Value lookupChild) : JoinTranslator(joinOp,builderChild, lookupChild), joinOp(joinOp),loc(joinOp.getLoc()) {}
+   NLJoinTranslator(Operator joinOp, Value builderChild, Value lookupChild,bool markable=false) : JoinTranslator(joinOp,builderChild, lookupChild),markable(false),loc(joinOp.getLoc()) {}
 
    virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(joinOp.getUsedAttributes());
+      addJoinRequiredAttributes();
       addAdditionalRequiredAttributes();
       propagateInfo();
    }
