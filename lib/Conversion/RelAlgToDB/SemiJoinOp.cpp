@@ -1,3 +1,4 @@
+#include "mlir/Conversion/RelAlgToDB/NLJoinTranslator.h"
 #include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
@@ -30,7 +31,7 @@ class NLSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
             requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
          setRequiredBuilderValues(context, ifOp.getResults());
       } else if (child == this->children[1].get()) {
-         mlir::Value matched= mergeRelationalBlock(
+         mlir::Value matched = mergeRelationalBlock(
             builder.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
          builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
       }
@@ -60,13 +61,13 @@ class HashSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SemiJoinO
    }
    void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
       mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-      handlePotentialMatch(builder,context,matchFound);
+      handlePotentialMatch(builder, context, matchFound);
    }
    virtual ~HashSemiJoinLowering() {}
 };
-class MHashSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SemiJoinOp,true> {
+class MHashSemiJoinLowering : public mlir::relalg::HJNode<mlir::relalg::SemiJoinOp, true> {
    public:
-   MHashSemiJoinLowering(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::SemiJoinOp,true>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
+   MHashSemiJoinLowering(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::HJNode<mlir::relalg::SemiJoinOp, true>(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {

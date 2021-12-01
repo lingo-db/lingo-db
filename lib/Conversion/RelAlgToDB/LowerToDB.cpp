@@ -1,7 +1,10 @@
 #include "llvm/ADT/TypeSwitch.h"
 
+#include "mlir/Conversion/RelAlgToDB/JoinTranslator.h"
+#include "mlir/Conversion/RelAlgToDB/NLJoinTranslator.h"
 #include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
+
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilDialect.h"

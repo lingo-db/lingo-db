@@ -1,23 +1,16 @@
+#include "mlir/Conversion/RelAlgToDB/NLJoinTranslator.h"
 #include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
-class CrossProductLowering : public mlir::relalg::ProducerConsumerNode {
-
+class CrossProductLowering : public mlir::relalg::NLJoinTranslator<mlir::relalg::CrossProductOp> {
    public:
-   CrossProductLowering(mlir::relalg::CrossProductOp crossProductOp) : mlir::relalg::ProducerConsumerNode(crossProductOp) {
-   }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
-      if (child == this->children[0].get()) {
-         children[1]->produce(context, builder);
-      } else if (child == this->children[1].get()) {
-         consumer->consume(this, builder, context);
-      }
-   }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      children[0]->produce(context, builder);
+   CrossProductLowering(mlir::relalg::CrossProductOp crossProductOp) : mlir::relalg::NLJoinTranslator<mlir::relalg::CrossProductOp>(crossProductOp, crossProductOp.left(), crossProductOp.right()) {
    }
 
+   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/,mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+      handlePotentialMatch(builder,context,matched);
+   }
    virtual ~CrossProductLowering() {}
 };
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredCrossProductOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::CrossProductOp crossProductOp) {
