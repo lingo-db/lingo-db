@@ -3,35 +3,17 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
+#include <mlir/Conversion/RelAlgToDB/NLJoinTranslator.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class NLInnerJoinLowering : public mlir::relalg::ProducerConsumerNode {
-   mlir::relalg::InnerJoinOp joinOp;
-
+class NLInnerJoinLowering : public mlir::relalg::NLJoinTranslator {
    public:
-   NLInnerJoinLowering(mlir::relalg::InnerJoinOp innerJoinOp) : mlir::relalg::ProducerConsumerNode(innerJoinOp), joinOp(innerJoinOp) {
+   NLInnerJoinLowering(mlir::relalg::InnerJoinOp crossProductOp) : mlir::relalg::NLJoinTranslator(crossProductOp, crossProductOp.left(), crossProductOp.right()) {
    }
 
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
-      auto scope = context.createScope();
-      if (child == this->children[0].get()) {
-         children[1]->produce(context, builder);
-      } else if (child == this->children[1].get()) {
-         mlir::Value matched= mergeRelationalBlock(
-            builder.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
-         auto builderValuesBefore = getRequiredBuilderValues(context);
-         auto ifOp = builder.create<mlir::db::IfOp>(
-            joinOp->getLoc(), getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
-               consumer->consume(this, builder1, context);
-               builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); },
-            requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
-         setRequiredBuilderValues(context, ifOp.getResults());
-      }
+   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/,mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+      handlePotentialMatch(builder,context,matched);
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      children[0]->produce(context, builder);
-   }
-
    virtual ~NLInnerJoinLowering() {}
 };
 

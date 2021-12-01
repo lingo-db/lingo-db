@@ -52,24 +52,12 @@ class NLJoinTranslator : public mlir::relalg::JoinTranslator {
       }
    }
 
-   void handlePotentialMatch(OpBuilder& builder, LoweringContext& context, Value condition) {
-      if (condition) {
-         auto builderValuesBefore = getRequiredBuilderValues(context);
-         auto ifOp = builder.create<mlir::db::IfOp>(
-            loc, getRequiredBuilderTypes(context), condition, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
-            consumer->consume(this, builder1, context);
-            builder1.create<mlir::db::YieldOp>(loc, getRequiredBuilderValues(context)); }, requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(loc, builderValuesBefore); });
-         setRequiredBuilderValues(context, ifOp.getResults());
-      } else {
-         consumer->consume(this, builder, context);
-      }
-   }
 
    void probe(mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) {
       auto scope = context.createScope();
       beforeLookup(context, builder);
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), vector, flag, getRequiredBuilderValues(context));
+         auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), vector, getFlag(), getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType);
          block2->addArguments(getRequiredBuilderTypes(context));

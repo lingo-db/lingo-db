@@ -3,17 +3,17 @@
 //CHECK: -------------------------------------------------------------------
 //CHECK: |                      "Fichte"  |                  "Grundzuege"  |
 //CHECK: |                "Schopenhauer"  |                  "Grundzuege"  |
-//CHECK: |                "Schopenhauer"  |                       "Logik"  |
+//CHECK: |                "Theophrastos"  |                  "Grundzuege"  |
+//CHECK: |                   "Feuerbach"  |                  "Grundzuege"  |
 //CHECK: |                      "Carnap"  |                       "Ethik"  |
+//CHECK: |                "Theophrastos"  |                       "Ethik"  |
+//CHECK: |                "Theophrastos"  |                    "Maeeutik"  |
+//CHECK: |                "Schopenhauer"  |                       "Logik"  |
 //CHECK: |                      "Carnap"  |        "Wissenschaftstheorie"  |
 //CHECK: |                      "Carnap"  |                    "Bioethik"  |
 //CHECK: |                      "Carnap"  |            "Der Wiener Kreis"  |
-//CHECK: |                "Theophrastos"  |                  "Grundzuege"  |
-//CHECK: |                "Theophrastos"  |                       "Ethik"  |
-//CHECK: |                "Theophrastos"  |                    "Maeeutik"  |
-//CHECK: |                   "Feuerbach"  |           "Glaube und Wissen"  |
 //CHECK: |                       "Jonas"  |           "Glaube und Wissen"  |
-//CHECK: |                   "Feuerbach"  |                  "Grundzuege"  |
+//CHECK: |                   "Feuerbach"  |           "Glaube und Wissen"  |
 
 module @querymodule{
     func @main ()  -> !db.table{

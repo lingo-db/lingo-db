@@ -8,38 +8,26 @@
 #include <mlir/Conversion/RelAlgToDB/HashJoinUtils.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class NLSemiJoinLowering : public mlir::relalg::ProducerConsumerNode {
-   mlir::relalg::SemiJoinOp joinOp;
+class NLSemiJoinLowering : public mlir::relalg::NLJoinTranslator {
    mlir::Value matchFoundFlag;
 
    public:
-   NLSemiJoinLowering(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::ProducerConsumerNode(innerJoinOp), joinOp(innerJoinOp) {
+   NLSemiJoinLowering(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::NLJoinTranslator(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
-      auto scope = context.createScope();
-      if (child == this->children[0].get()) {
-         matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
-         children[1]->setFlag(matchFoundFlag);
-         children[1]->produce(context, builder);
-         mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-         auto builderValuesBefore = getRequiredBuilderValues(context);
-         auto ifOp = builder.create<mlir::db::IfOp>(
-            joinOp->getLoc(), getRequiredBuilderTypes(context), matchFound, [&](mlir::OpBuilder& builder1, mlir::Location) {
-               consumer->consume(this, builder1, context);
-               builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); },
-            requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
-         setRequiredBuilderValues(context, ifOp.getResults());
-      } else if (child == this->children[1].get()) {
-         mlir::Value matched = mergeRelationalBlock(
-            builder.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
-         builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
-      }
+   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+      builder.create<mlir::db::SetFlag>(joinOp->getLoc(), matchFoundFlag, matched);
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      children[0]->produce(context, builder);
+   mlir::Value getFlag() override {
+      return matchFoundFlag;
    }
-
+   void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+      matchFoundFlag = builder.create<mlir::db::CreateFlag>(joinOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
+   }
+   void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(joinOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
+      handlePotentialMatch(builder, context, matchFound);
+   }
    virtual ~NLSemiJoinLowering() {}
 };
 
