@@ -1,21 +1,21 @@
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
-class MaterializeLowering : public mlir::relalg::ProducerConsumerNode {
+class MaterializeTranslator : public mlir::relalg::Translator {
    mlir::relalg::MaterializeOp materializeOp;
    size_t builderId;
    mlir::Value table;
 
    public:
-   MaterializeLowering(mlir::relalg::MaterializeOp materializeOp) : mlir::relalg::ProducerConsumerNode(materializeOp.rel()), materializeOp(materializeOp) {
+   MaterializeTranslator(mlir::relalg::MaterializeOp materializeOp) : mlir::relalg::Translator(materializeOp.rel()), materializeOp(materializeOp) {
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       children[0]->addRequiredBuilders(requiredBuilders);
    }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
+   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
       this->requiredAttributes.insert(mlir::relalg::Attributes::fromArrayAttr(materializeOp.attrs()));
@@ -24,7 +24,7 @@ class MaterializeLowering : public mlir::relalg::ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() override {
       return {};
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       std::vector<mlir::Value> values;
       for (auto attr : materializeOp.attrs()) {
          if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
@@ -36,7 +36,7 @@ class MaterializeLowering : public mlir::relalg::ProducerConsumerNode {
       mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(materializeOp->getLoc(), tableBuilder.getType(), tableBuilder, packed);
       context.builders[builderId] = mergedBuilder;
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       std::vector<mlir::Type> types;
       for (auto attr : materializeOp.attrs()) {
          if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
@@ -53,9 +53,9 @@ class MaterializeLowering : public mlir::relalg::ProducerConsumerNode {
    virtual void done() override {
       materializeOp.replaceAllUsesWith(table);
    }
-   virtual ~MaterializeLowering() {}
+   virtual ~MaterializeTranslator() {}
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredMaterializeOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::MaterializeOp materializeOp) {
-  return std::make_unique<MaterializeLowering>(materializeOp);
+  return std::make_unique<MaterializeTranslator>(materializeOp);
 });

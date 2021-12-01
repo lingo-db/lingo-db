@@ -1,9 +1,9 @@
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
-class TmpLowering : public mlir::relalg::ProducerConsumerNode {
+class TmpTranslator : public mlir::relalg::Translator {
    mlir::relalg::TmpOp tmpOp;
    size_t builderId;
    bool materialize;
@@ -12,13 +12,13 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
    size_t producedCount;
 
    public:
-   TmpLowering(mlir::relalg::TmpOp tmpOp) : mlir::relalg::ProducerConsumerNode(tmpOp), tmpOp(tmpOp) {
+   TmpTranslator(mlir::relalg::TmpOp tmpOp) : mlir::relalg::Translator(tmpOp), tmpOp(tmpOp) {
       std::vector<mlir::Operation*> users(tmpOp->getUsers().begin(),tmpOp->getUsers().end());
       userCount=users.size();
       producedCount=0;
 
    }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
+   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
       this->requiredAttributes.insert(mlir::relalg::Attributes::fromArrayAttr(tmpOp.attrs()));
@@ -31,7 +31,7 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       this->children[0]->addRequiredBuilders(requiredBuilders);
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       if (materialize) {
          mlir::Value vectorBuilder = context.builders[builderId];
          mlir::Value packed = packValues(context,builder,attributes);
@@ -41,7 +41,7 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
       }
    }
 
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
 
       materialize = !context.materializedTmp.count(tmpOp.getOperation());
@@ -91,9 +91,9 @@ class TmpLowering : public mlir::relalg::ProducerConsumerNode {
       }
    }
 
-   virtual ~TmpLowering() {}
+   virtual ~TmpTranslator() {}
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredTmpOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::TmpOp tmpOp) {
-   return std::make_unique<TmpLowering>(tmpOp);
+   return std::make_unique<TmpTranslator>(tmpOp);
 });

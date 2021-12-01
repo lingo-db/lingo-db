@@ -13,7 +13,7 @@
 
 namespace mlir {
 namespace relalg {
-class LoweringContext {
+class TranslatorContext {
    llvm::ScopedHashTable<const mlir::relalg::RelationalAttribute*, mlir::Value> symbolTable;
 
    public:
@@ -42,13 +42,13 @@ class LoweringContext {
    }
    std::unordered_map<mlir::Operation*, std::pair<mlir::Value, std::vector<const mlir::relalg::RelationalAttribute*>>> materializedTmp;
 };
-std::vector<mlir::Value> mergeRelationalBlock(mlir::Block* dest, mlir::Operation* op, mlir::function_ref<mlir::Block*(mlir::Operation*)> getBlockFn, LoweringContext& context, LoweringContext::AttributeResolverScope& scope);
+std::vector<mlir::Value> mergeRelationalBlock(mlir::Block* dest, mlir::Operation* op, mlir::function_ref<mlir::Block*(mlir::Operation*)> getBlockFn, TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope);
 static const mlir::function_ref<void(mlir::OpBuilder&, mlir::Location)> noBuilder = nullptr;
-class ProducerConsumerNode {
+class Translator {
    protected:
-   ProducerConsumerNode* consumer;
+   Translator* consumer;
    Operator op;
-   std::vector<std::unique_ptr<ProducerConsumerNode>> children;
+   std::vector<std::unique_ptr<Translator>> children;
    std::vector<size_t> requiredBuilders;
    mlir::relalg::Attributes requiredAttributes;
    Value flag;
@@ -59,20 +59,20 @@ class ProducerConsumerNode {
          c->setInfo(this, toPropagate);
       }
    }
-   std::vector<mlir::Value> getRequiredBuilderValues(LoweringContext& context) {
+   std::vector<mlir::Value> getRequiredBuilderValues(TranslatorContext& context) {
       std::vector<mlir::Value> res;
       for (auto x : requiredBuilders) {
          res.push_back(context.builders[x]);
       }
       return res;
    }
-   void setRequiredBuilderValues(LoweringContext& context, const mlir::ValueRange& values) {
+   void setRequiredBuilderValues(TranslatorContext& context, const mlir::ValueRange& values) {
       size_t i = 0;
       for (auto x : requiredBuilders) {
          context.builders[x] = values[i++];
       }
    }
-   Value packValues(LoweringContext& context, OpBuilder builder, const std::vector<const mlir::relalg::RelationalAttribute*>& attrs, const std::vector<Value>& additional={}) {
+   Value packValues(TranslatorContext& context, OpBuilder builder, const std::vector<const mlir::relalg::RelationalAttribute*>& attrs, const std::vector<Value>& additional={}) {
       auto loc = builder.getUnknownLoc();
       std::vector<Value> values(additional);
       for (const auto* attr : attrs) {
@@ -83,7 +83,7 @@ class ProducerConsumerNode {
       }
       return builder.create<mlir::util::PackOp>(loc, values);
    }
-   Value packValues(LoweringContext& context, OpBuilder builder, const mlir::relalg::Attributes& attrs) {
+   Value packValues(TranslatorContext& context, OpBuilder builder, const mlir::relalg::Attributes& attrs) {
       auto loc = builder.getUnknownLoc();
       std::vector<Value> values;
       for (const auto* attr : attrs) {
@@ -94,7 +94,7 @@ class ProducerConsumerNode {
       }
       return builder.create<mlir::util::PackOp>(loc, values);
    }
-   std::vector<mlir::Type> getRequiredBuilderTypes(LoweringContext& context) {
+   std::vector<mlir::Type> getRequiredBuilderTypes(TranslatorContext& context) {
       std::vector<mlir::Type> res;
       for (auto x : requiredBuilders) {
          res.push_back(context.builders[x].getType());
@@ -103,8 +103,8 @@ class ProducerConsumerNode {
    }
 
    public:
-   ProducerConsumerNode(mlir::ValueRange children);
-   ProducerConsumerNode(Operator op);
+   Translator(mlir::ValueRange children);
+   Translator(Operator op);
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       for (auto& child : children) {
@@ -118,7 +118,7 @@ class ProducerConsumerNode {
          child->setFlag(flag);
       }
    }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) {
+   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
       if (op) {
@@ -129,19 +129,19 @@ class ProducerConsumerNode {
    virtual mlir::relalg::Attributes getAvailableAttributes() {
       return op.getAvailableAttributes();
    };
-   virtual void consume(ProducerConsumerNode* child, mlir::OpBuilder& builder, LoweringContext& context) = 0;
-   virtual void produce(LoweringContext& context, mlir::OpBuilder& builder) = 0;
+   virtual void consume(Translator* child, mlir::OpBuilder& builder, TranslatorContext& context) = 0;
+   virtual void produce(TranslatorContext& context, mlir::OpBuilder& builder) = 0;
    virtual void done() {}
-   virtual ~ProducerConsumerNode() {}
+   virtual ~Translator() {}
 };
-class NoopNode : public mlir::relalg::ProducerConsumerNode {
+class NoopNode : public mlir::relalg::Translator {
    public:
-   NoopNode() : mlir::relalg::ProducerConsumerNode(ValueRange{}) {
+   NoopNode() : mlir::relalg::Translator(ValueRange{}) {
    }
-   virtual void setInfo(ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override{};
+   virtual void setInfo(Translator* consumer, mlir::relalg::Attributes requiredAttributes) override{};
    virtual mlir::relalg::Attributes getAvailableAttributes() override { return {}; };
-   virtual void consume(ProducerConsumerNode* child, mlir::OpBuilder& builder, LoweringContext& context) override{};
-   virtual void produce(LoweringContext& context, mlir::OpBuilder& builder) override{};
+   virtual void consume(Translator* child, mlir::OpBuilder& builder, TranslatorContext& context) override{};
+   virtual void produce(TranslatorContext& context, mlir::OpBuilder& builder) override{};
    virtual ~NoopNode() {}
 };
 class ProducerConsumerNodeRegistry {
@@ -164,7 +164,7 @@ class ProducerConsumerNodeRegistry {
    static bool registeredMarkJoinOp;
    static bool registeredTmpOp;
    static bool registeredCollectionJoinOp;
-   std::unordered_map<std::string, std::function<std::unique_ptr<mlir::relalg::ProducerConsumerNode>(mlir::Operation*)>> nodes;
+   std::unordered_map<std::string, std::function<std::unique_ptr<mlir::relalg::Translator>(mlir::Operation*)>> nodes;
    ProducerConsumerNodeRegistry() {
       bool res = true;
       res &= registeredBaseTableOp;
@@ -202,13 +202,13 @@ class ProducerConsumerNodeRegistry {
       getRegistry().nodes.insert({x, [callBack = callBack](mlir::Operation* op) { return callBack(mlir::cast<T>(op)); }});
       return true;
    }
-   static std::unique_ptr<mlir::relalg::ProducerConsumerNode> createNode(mlir::Operation* operation) {
+   static std::unique_ptr<mlir::relalg::Translator> createNode(mlir::Operation* operation) {
       std::string opName = operation->getName().getStringRef().str();
       if (getRegistry().nodes.count(opName)) {
          return getRegistry().nodes[opName](operation);
       } else {
          assert("could not create node" && false);
-         return std::unique_ptr<mlir::relalg::ProducerConsumerNode>();
+         return std::unique_ptr<mlir::relalg::Translator>();
       }
    }
 };

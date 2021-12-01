@@ -1,20 +1,20 @@
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
-class SortLowering : public mlir::relalg::ProducerConsumerNode {
+class SortTranslator : public mlir::relalg::Translator {
    mlir::relalg::SortOp sortOp;
    size_t builderId;
    mlir::Value vector;
 
    public:
-   SortLowering(mlir::relalg::SortOp sortOp) : mlir::relalg::ProducerConsumerNode(sortOp), sortOp(sortOp) {
+   SortTranslator(mlir::relalg::SortOp sortOp) : mlir::relalg::Translator(sortOp), sortOp(sortOp) {
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       mlir::Value vectorBuilder = context.builders[builderId];
       mlir::Value packed = packValues(context, builder, requiredAttributes);
       mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(sortOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
@@ -37,7 +37,7 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
          return falseVal;
       }
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> attributePos;
       std::vector<mlir::Type> types;
@@ -97,9 +97,9 @@ class SortLowering : public mlir::relalg::ProducerConsumerNode {
       builder.create<mlir::db::FreeOp>(sortOp->getLoc(), vector);
    }
 
-   virtual ~SortLowering() {}
+   virtual ~SortTranslator() {}
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredSortOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::SortOp sortOp) {
-   return std::make_unique<SortLowering>(sortOp);
+   return std::make_unique<SortTranslator>(sortOp);
 });

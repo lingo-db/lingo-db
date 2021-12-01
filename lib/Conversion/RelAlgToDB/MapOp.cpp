@@ -1,11 +1,11 @@
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
-class MapLowering : public mlir::relalg::ProducerConsumerNode {
+class MapTranslator : public mlir::relalg::Translator {
    public:
-   MapLowering(mlir::relalg::MapOp mapOp) : mlir::relalg::ProducerConsumerNode(mapOp) {
+   MapTranslator(mlir::relalg::MapOp mapOp) : mlir::relalg::Translator(mapOp) {
    }
 
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
@@ -13,19 +13,19 @@ class MapLowering : public mlir::relalg::ProducerConsumerNode {
       children[0]->addRequiredBuilders(requiredBuilders);
    }
 
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       auto scope = context.createScope();
       mergeRelationalBlock(
          builder.getInsertionBlock(), op, [](auto x) { return &x->getRegion(0).front(); }, context, scope);
       consumer->consume(this, builder, context);
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       children[0]->produce(context, builder);
    }
 
-   virtual ~MapLowering() {}
+   virtual ~MapTranslator() {}
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredMapOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::MapOp mapOp) {
-  return std::make_unique<MapLowering>(mapOp);
+  return std::make_unique<MapTranslator>(mapOp);
 });

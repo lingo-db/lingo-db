@@ -2,8 +2,8 @@
 
 #include "mlir/Conversion/RelAlgToDB/JoinTranslator.h"
 #include "mlir/Conversion/RelAlgToDB/NLJoinTranslator.h"
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
@@ -29,7 +29,7 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
          });
    }
    void runOnFunction() override {
-      mlir::relalg::LoweringContext loweringContext;
+      mlir::relalg::TranslatorContext loweringContext;
       getFunction().walk([&](mlir::Operation* op) {
          if (mlir::isa<mlir::relalg::TmpOp>(op)) {
             auto node = mlir::relalg::ProducerConsumerNodeRegistry::createNode(op);
@@ -52,13 +52,13 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
    }
 };
 } // end anonymous namespace
-mlir::relalg::ProducerConsumerNode::ProducerConsumerNode(Operator op): op(op) {
+mlir::relalg::Translator::Translator(Operator op): op(op) {
    for (auto child : op.getChildren()) {
          children.push_back(mlir::relalg::ProducerConsumerNodeRegistry::createNode(child.getOperation()));
    }
 }
 
-mlir::relalg::ProducerConsumerNode::ProducerConsumerNode(mlir::ValueRange potentialChildren): op(){
+mlir::relalg::Translator::Translator(mlir::ValueRange potentialChildren): op(){
    for (auto child : potentialChildren) {
       if (child.getType().isa<mlir::relalg::TupleStreamType>()) {
          children.push_back(mlir::relalg::ProducerConsumerNodeRegistry::createNode(child.getDefiningOp()));

@@ -1,21 +1,21 @@
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
-class ConstRelLowering : public mlir::relalg::ProducerConsumerNode {
+class ConstRelTranslator : public mlir::relalg::Translator {
    mlir::relalg::ConstRelationOp constRelationOp;
 
    public:
-   ConstRelLowering(mlir::relalg::ConstRelationOp constRelationOp) : mlir::relalg::ProducerConsumerNode(constRelationOp), constRelationOp(constRelationOp) {
+   ConstRelTranslator(mlir::relalg::ConstRelationOp constRelationOp) : mlir::relalg::Translator(constRelationOp), constRelationOp(constRelationOp) {
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
 
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       assert(false && "should not happen");
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       using namespace mlir;
       std::vector<mlir::Type> types;
@@ -59,9 +59,9 @@ class ConstRelLowering : public mlir::relalg::ProducerConsumerNode {
       }
       builder.create<mlir::db::FreeOp>(constRelationOp->getLoc(),vector);
    }
-   virtual ~ConstRelLowering() {}
+   virtual ~ConstRelTranslator() {}
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredConstRelOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::ConstRelationOp constRelationOp) {
-  return std::make_unique<ConstRelLowering>(constRelationOp);
+  return std::make_unique<ConstRelTranslator>(constRelationOp);
 });

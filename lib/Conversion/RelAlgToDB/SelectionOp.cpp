@@ -1,13 +1,13 @@
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
-class SelectionLowering : public mlir::relalg::ProducerConsumerNode {
+class SelectionTranslator : public mlir::relalg::Translator {
    mlir::relalg::SelectionOp selectionOp;
 
    public:
-   SelectionLowering(mlir::relalg::SelectionOp selectionOp) : mlir::relalg::ProducerConsumerNode(selectionOp), selectionOp(selectionOp) {
+   SelectionTranslator(mlir::relalg::SelectionOp selectionOp) : mlir::relalg::Translator(selectionOp), selectionOp(selectionOp) {
    }
 
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
@@ -15,7 +15,7 @@ class SelectionLowering : public mlir::relalg::ProducerConsumerNode {
       children[0]->addRequiredBuilders(requiredBuilders);
    }
 
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       auto scope = context.createScope();
 
       mlir::Value matched = mergeRelationalBlock(
@@ -28,13 +28,13 @@ class SelectionLowering : public mlir::relalg::ProducerConsumerNode {
          requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location loc) { builder2.create<mlir::db::YieldOp>(loc, builderValuesBefore); });
       setRequiredBuilderValues(context, ifOp.getResults());
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       children[0]->produce(context, builder);
    }
 
-   virtual ~SelectionLowering() {}
+   virtual ~SelectionTranslator() {}
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredSelectionOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::SelectionOp selectionOp) {
-   return std::make_unique<SelectionLowering>(selectionOp);
+   return std::make_unique<SelectionTranslator>(selectionOp);
 });

@@ -1,22 +1,22 @@
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
-class BaseTableLowering : public mlir::relalg::ProducerConsumerNode {
+class BaseTableTranslator : public mlir::relalg::Translator {
    static bool registered;
    mlir::relalg::BaseTableOp baseTableOp;
 
    public:
-   BaseTableLowering(mlir::relalg::BaseTableOp baseTableOp) : mlir::relalg::ProducerConsumerNode(baseTableOp), baseTableOp(baseTableOp) {
+   BaseTableTranslator(mlir::relalg::BaseTableOp baseTableOp) : mlir::relalg::Translator(baseTableOp), baseTableOp(baseTableOp) {
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       assert(false && "should not happen");
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       using namespace mlir;
       mlir::Value table = builder.create<mlir::db::GetTable>(baseTableOp->getLoc(), mlir::db::TableType::get(builder.getContext()), baseTableOp->getAttr("table_identifier").cast<mlir::StringAttr>());
@@ -59,9 +59,9 @@ class BaseTableLowering : public mlir::relalg::ProducerConsumerNode {
       builder1.create<mlir::db::YieldOp>(baseTableOp->getLoc(), forOp2.getResults());
       setRequiredBuilderValues(context, forOp.results());
    }
-   virtual ~BaseTableLowering() {}
+   virtual ~BaseTableTranslator() {}
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredBaseTableOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::BaseTableOp baseTableOp) {
-   return std::make_unique<BaseTableLowering>(baseTableOp);
+   return std::make_unique<BaseTableTranslator>(baseTableOp);
 });

@@ -1,16 +1,16 @@
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
-class LimitLowering : public mlir::relalg::ProducerConsumerNode {
+class LimitTranslator : public mlir::relalg::Translator {
    mlir::relalg::LimitOp limitOp;
    size_t counterId;
    mlir::Value vector;
    mlir::Value finishedFlag;
 
    public:
-   LimitLowering(mlir::relalg::LimitOp limitOp) : mlir::relalg::ProducerConsumerNode(limitOp), limitOp(limitOp) {
+   LimitTranslator(mlir::relalg::LimitOp limitOp) : mlir::relalg::Translator(limitOp), limitOp(limitOp) {
    }
 
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
@@ -18,7 +18,7 @@ class LimitLowering : public mlir::relalg::ProducerConsumerNode {
       this->children[0]->addRequiredBuilders(requiredBuilders);
    }
 
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       mlir::Value counter = context.builders[counterId];
       consumer->consume(this, builder, context);
       auto one = builder.create<mlir::db::ConstantOp>(builder.getUnknownLoc(), counter.getType(), builder.getI64IntegerAttr(1));
@@ -29,7 +29,7 @@ class LimitLowering : public mlir::relalg::ProducerConsumerNode {
       context.builders[counterId] = addedCounter;
    }
 
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> attributePos;
       std::vector<mlir::Type> types;
@@ -48,9 +48,9 @@ class LimitLowering : public mlir::relalg::ProducerConsumerNode {
       children[0]->produce(context, builder);
    }
 
-   virtual ~LimitLowering() {}
+   virtual ~LimitTranslator() {}
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredLimitOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::LimitOp limitOp) {
-  return std::make_unique<LimitLowering>(limitOp);
+  return std::make_unique<LimitTranslator>(limitOp);
 });

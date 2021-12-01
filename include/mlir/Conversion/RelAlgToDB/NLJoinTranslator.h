@@ -15,7 +15,7 @@ class NLJoinTranslator : public mlir::relalg::JoinTranslator {
    public:
    NLJoinTranslator(Operator joinOp, Value builderChild, Value lookupChild,bool markable=false) : JoinTranslator(joinOp,builderChild, lookupChild),markable(false),loc(joinOp.getLoc()) {}
 
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
+   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
       addJoinRequiredAttributes();
@@ -23,14 +23,14 @@ class NLJoinTranslator : public mlir::relalg::JoinTranslator {
       propagateInfo();
    }
 
-   void build(mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) {
+   void build(mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) {
       mlir::Value vectorBuilder = context.builders[vecBuilderId];
       auto const0 = builder.create<mlir::arith::ConstantOp>(loc, builder.getIntegerType(64), builder.getI64IntegerAttr(0));
       mlir::Value packed = markable ? packValues(context, builder, orderedAttributesLeft, {const0}) : packValues(context, builder, orderedAttributesLeft);
       mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, vectorBuilder.getType(), vectorBuilder, packed);
       context.builders[vecBuilderId] = mergedBuilder;
    }
-   void scanHT(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) {
+   void scanHT(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) {
       auto scope = context.createScope();
       {
 
@@ -54,7 +54,7 @@ class NLJoinTranslator : public mlir::relalg::JoinTranslator {
    }
 
 
-   void probe(mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) {
+   void probe(mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) {
       auto scope = context.createScope();
       beforeLookup(context, builder);
       {
@@ -78,14 +78,14 @@ class NLJoinTranslator : public mlir::relalg::JoinTranslator {
       }
       afterLookup(context,builder);
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       if (child == this->children[0].get()) {
          build(builder, context);
       } else if (child == this->children[1].get()) {
          probe(builder, context);
       }
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       std::vector<mlir::Type> types;
       auto leftAttributes = this->requiredAttributes.intersect(children[0]->getAvailableAttributes());
       for (const auto* attr : leftAttributes) {

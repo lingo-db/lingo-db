@@ -1,31 +1,31 @@
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
-class ProjectionLowering : public mlir::relalg::ProducerConsumerNode {
+class ProjectionTranslator : public mlir::relalg::Translator {
    mlir::relalg::ProjectionOp projectionOp;
 
    public:
-   ProjectionLowering(mlir::relalg::ProjectionOp projectionOp) : mlir::relalg::ProducerConsumerNode(projectionOp), projectionOp(projectionOp) {
+   ProjectionTranslator(mlir::relalg::ProjectionOp projectionOp) : mlir::relalg::Translator(projectionOp), projectionOp(projectionOp) {
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       children[0]->addRequiredBuilders(requiredBuilders);
    }
 
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       auto scope = context.createScope();
       consumer->consume(this, builder, context);
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       children[0]->produce(context, builder);
    }
 
-   virtual ~ProjectionLowering() {}
+   virtual ~ProjectionTranslator() {}
 };
 
-class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
+class DistinctProjectionTranslator : public mlir::relalg::Translator {
    mlir::relalg::ProjectionOp projectionOp;
    size_t builderId;
    mlir::Value table;
@@ -38,13 +38,13 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
    std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> keyMapping;
 
    public:
-   DistinctProjectionLowering(mlir::relalg::ProjectionOp projectionOp) : mlir::relalg::ProducerConsumerNode(projectionOp), projectionOp(projectionOp) {
+   DistinctProjectionTranslator(mlir::relalg::ProjectionOp projectionOp) : mlir::relalg::Translator(projectionOp), projectionOp(projectionOp) {
    }
 
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       mlir::Value htBuilder = context.builders[builderId];
       mlir::Value emptyVals = builder.create<mlir::util::UndefTupleOp>(projectionOp->getLoc(), valTupleType);
       mlir::Value packedKey = packValues(context,builder,groupAttributes);
@@ -60,7 +60,7 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
       context.builders[builderId] = mergedBuilder.result_builder();
    }
 
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
 
       for (auto attr : projectionOp.attrs()) {
@@ -104,12 +104,12 @@ class DistinctProjectionLowering : public mlir::relalg::ProducerConsumerNode {
    }
    virtual void done() override {
    }
-   virtual ~DistinctProjectionLowering() {}
+   virtual ~DistinctProjectionTranslator() {}
 };
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredProjectionOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::ProjectionOp projectionOp) {
    if (projectionOp.set_semantic() == mlir::relalg::SetSemantic::distinct) {
-      return (std::unique_ptr<ProducerConsumerNode>) std::make_unique<DistinctProjectionLowering>(projectionOp);
+      return (std::unique_ptr<Translator>) std::make_unique<DistinctProjectionTranslator>(projectionOp);
    } else {
-      return (std::unique_ptr<ProducerConsumerNode>) std::make_unique<ProjectionLowering>(projectionOp);
+      return (std::unique_ptr<Translator>) std::make_unique<ProjectionTranslator>(projectionOp);
    }
 });

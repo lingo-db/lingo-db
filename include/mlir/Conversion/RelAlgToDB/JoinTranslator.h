@@ -1,19 +1,19 @@
 #ifndef MLIR_CONVERSION_RELALGTODB_JOINTRANSLATOR_H
 #define MLIR_CONVERSION_RELALGTODB_JOINTRANSLATOR_H
-#include "ProducerConsumerNode.h"
+#include "Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include <mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h>
 #include <mlir/Dialect/RelAlg/IR/RelationalAttribute.h>
 
 namespace mlir::relalg {
-class JoinTranslator : public ProducerConsumerNode {
+class JoinTranslator : public Translator {
    protected:
    Operator joinOp;
-   mlir::relalg::ProducerConsumerNode* builderChild;
-   mlir::relalg::ProducerConsumerNode* lookupChild;
+   mlir::relalg::Translator* builderChild;
+   mlir::relalg::Translator* lookupChild;
    std::vector<size_t> customLookupBuilders;
 
-   JoinTranslator(Operator joinOp, Value builderChild, Value lookupChild) : ProducerConsumerNode({builderChild, lookupChild}), joinOp(joinOp) {
+   JoinTranslator(Operator joinOp, Value builderChild, Value lookupChild) : Translator({builderChild, lookupChild}), joinOp(joinOp) {
       this->builderChild = children[0].get();
       this->lookupChild = children[1].get();
       this->op = joinOp;
@@ -32,7 +32,7 @@ class JoinTranslator : public ProducerConsumerNode {
          }
       }
    }
-   void handleMappingNull(OpBuilder& builder, LoweringContext& context, LoweringContext::AttributeResolverScope& scope) {
+   void handleMappingNull(OpBuilder& builder, TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope) {
       if (joinOp->hasAttr("mapping") && joinOp->getAttr("mapping").isa<mlir::ArrayAttr>()) {
          for (mlir::Attribute attr : joinOp->getAttr("mapping").cast<mlir::ArrayAttr>()) {
             auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
@@ -44,7 +44,7 @@ class JoinTranslator : public ProducerConsumerNode {
          }
       }
    }
-   void handleMapping(OpBuilder& builder, LoweringContext& context, LoweringContext::AttributeResolverScope& scope) {
+   void handleMapping(OpBuilder& builder, TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope) {
       if (joinOp->hasAttr("mapping") && joinOp->getAttr("mapping").isa<mlir::ArrayAttr>()) {
          for (mlir::Attribute attr : joinOp->getAttr("mapping").cast<mlir::ArrayAttr>()) {
             auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
@@ -62,7 +62,7 @@ class JoinTranslator : public ProducerConsumerNode {
          }
       }
    }
-   void handlePotentialMatch(OpBuilder& builder, LoweringContext& context, Value matches, mlir::function_ref<void(OpBuilder&, LoweringContext& context, LoweringContext::AttributeResolverScope&)> onMatch = nullptr) {
+   void handlePotentialMatch(OpBuilder& builder, TranslatorContext& context, Value matches, mlir::function_ref<void(OpBuilder&, TranslatorContext& context, TranslatorContext::AttributeResolverScope&)> onMatch = nullptr) {
       auto scope = context.createScope();
       auto builderValuesBefore = getRequiredBuilderValues(context);
       auto ifOp = builder.create<mlir::db::IfOp>(
@@ -74,21 +74,21 @@ class JoinTranslator : public ProducerConsumerNode {
                builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); }, requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
       setRequiredBuilderValues(context, ifOp.getResults());
    }
-   std::vector<mlir::Type> getRequiredBuilderTypesCustom(LoweringContext& context) {
+   std::vector<mlir::Type> getRequiredBuilderTypesCustom(TranslatorContext& context) {
       auto requiredBuilderTypes = getRequiredBuilderTypes(context);
       for (auto x : customLookupBuilders) {
          requiredBuilderTypes.push_back(context.builders[x].getType());
       }
       return requiredBuilderTypes;
    }
-   std::vector<mlir::Value> getRequiredBuilderValuesCustom(LoweringContext& context) {
+   std::vector<mlir::Value> getRequiredBuilderValuesCustom(TranslatorContext& context) {
       auto requiredBuilderValues = getRequiredBuilderValues(context);
       for (auto x : customLookupBuilders) {
          requiredBuilderValues.push_back(context.builders[x]);
       }
       return requiredBuilderValues;
    }
-   void setRequiredBuilderValuesCustom(LoweringContext& context, mlir::ValueRange values) {
+   void setRequiredBuilderValuesCustom(TranslatorContext& context, mlir::ValueRange values) {
       size_t i = 0;
       for (auto x : requiredBuilders) {
          context.builders[x] = values[i++];
@@ -104,14 +104,14 @@ class JoinTranslator : public ProducerConsumerNode {
 
    public:
    virtual void addAdditionalRequiredAttributes() {}
-   virtual void handleLookup(Value matched, Value markerBefore, LoweringContext& context, mlir::OpBuilder& builder) = 0;
-   virtual void beforeLookup(LoweringContext& context, mlir::OpBuilder& builder) {}
-   virtual void afterLookup(LoweringContext& context, mlir::OpBuilder& builder) {}
-   virtual void handleScanned(Value marker, LoweringContext& context, mlir::OpBuilder& builder) {
+   virtual void handleLookup(Value matched, Value markerBefore, TranslatorContext& context, mlir::OpBuilder& builder) = 0;
+   virtual void beforeLookup(TranslatorContext& context, mlir::OpBuilder& builder) {}
+   virtual void afterLookup(TranslatorContext& context, mlir::OpBuilder& builder) {}
+   virtual void handleScanned(Value marker, TranslatorContext& context, mlir::OpBuilder& builder) {
    }
-   virtual void after(LoweringContext& context, mlir::OpBuilder& builder) {
+   virtual void after(TranslatorContext& context, mlir::OpBuilder& builder) {
    }
-   virtual Value evaluatePredicate(LoweringContext& context, mlir::OpBuilder& builder, LoweringContext::AttributeResolverScope& scope) {
+   virtual Value evaluatePredicate(TranslatorContext& context, mlir::OpBuilder& builder, TranslatorContext::AttributeResolverScope& scope) {
       bool hasRealPredicate = false;
       if (joinOp->getNumRegions() == 1 && joinOp->getRegion(0).hasOneBlock()) {
          auto terminator = mlir::cast<mlir::relalg::ReturnOp>(joinOp->getRegion(0).front().getTerminator());

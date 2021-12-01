@@ -1,10 +1,10 @@
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include <llvm/ADT/TypeSwitch.h>
 
-class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
+class AggregationTranslator : public mlir::relalg::Translator {
    mlir::relalg::AggregationOp aggregationOp;
    size_t builderId;
 
@@ -23,13 +23,13 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
    std::vector<mlir::Type> aggrTypes;
 
    public:
-   AggregationLowering(mlir::relalg::AggregationOp aggregationOp) : mlir::relalg::ProducerConsumerNode(aggregationOp), aggregationOp(aggregationOp) {
+   AggregationTranslator(mlir::relalg::AggregationOp aggregationOp) : mlir::relalg::Translator(aggregationOp), aggregationOp(aggregationOp) {
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       //do not forwared requiredBuilders to children
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       mlir::Value htBuilder = context.builders[builderId];
       mlir::Value packedKey= packValues(context,builder,keyAttributes);
       mlir::Value packedVal=packValues(context,builder,valAttributes);
@@ -285,7 +285,7 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
          }
       });
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
 
       analyze(builder);
@@ -337,9 +337,9 @@ class AggregationLowering : public mlir::relalg::ProducerConsumerNode {
    }
    virtual void done() override {
    }
-   virtual ~AggregationLowering() {}
+   virtual ~AggregationTranslator() {}
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredAggregationOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::AggregationOp sortOp) {
-   return std::make_unique<AggregationLowering>(sortOp);
+   return std::make_unique<AggregationTranslator>(sortOp);
 });

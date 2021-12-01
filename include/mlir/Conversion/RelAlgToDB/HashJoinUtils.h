@@ -1,7 +1,7 @@
 #ifndef MLIR_CONVERSION_RELALGTODB_HASHJOINUTILS_H
 #define MLIR_CONVERSION_RELALGTODB_HASHJOINUTILS_H
 #include "JoinTranslator.h"
-#include "ProducerConsumerNode.h"
+#include "Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/Attributes.h"
@@ -65,7 +65,7 @@ class HashJoinUtils {
          return false;
       }
    }
-   static std::vector<mlir::Value> inlineKeys(mlir::Block* block, mlir::relalg::Attributes keyAttributes, mlir::Block* newBlock, mlir::Block::iterator insertionPoint, mlir::relalg::LoweringContext& context) {
+   static std::vector<mlir::Value> inlineKeys(mlir::Block* block, mlir::relalg::Attributes keyAttributes, mlir::Block* newBlock, mlir::Block::iterator insertionPoint, mlir::relalg::TranslatorContext& context) {
       llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;
       mlir::BlockAndValueMapping mapping;
       std::vector<mlir::Value> keys;
@@ -130,7 +130,7 @@ class HJNode : public mlir::relalg::JoinTranslator {
 
    public:
 
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
+   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
       addJoinRequiredAttributes();
@@ -162,7 +162,7 @@ class HJNode : public mlir::relalg::JoinTranslator {
       valTupleType = mlir::TupleType::get(op.getContext(), valTypes);
       entryType = mlir::TupleType::get(op.getContext(), {keyTupleType, valTupleType});
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto joinHtBuilder = builder.create<mlir::db::CreateJoinHTBuilder>(loc, mlir::db::JoinHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType));
       builderId = context.getBuilderId();
       context.builders[builderId] = joinHtBuilder;
@@ -175,7 +175,7 @@ class HJNode : public mlir::relalg::JoinTranslator {
    }
 
 
-   void unpackValues(LoweringContext::AttributeResolverScope& scope, OpBuilder& builder, Value packed, LoweringContext& context, Value& marker) {
+   void unpackValues(TranslatorContext::AttributeResolverScope& scope, OpBuilder& builder, Value packed, TranslatorContext& context, Value& marker) {
       auto payloadUnpacked = builder.create<mlir::util::UnPackOp>(loc, packed).getResults();
       if (!valTupleType.getTypes().empty()) {
          auto unpackedValue = markable ? payloadUnpacked.drop_front() : payloadUnpacked;
@@ -187,7 +187,7 @@ class HJNode : public mlir::relalg::JoinTranslator {
          }
       }
    }
-   void unpackKeys(LoweringContext::AttributeResolverScope& scope, OpBuilder& builder, Value packed, LoweringContext& context) {
+   void unpackKeys(TranslatorContext::AttributeResolverScope& scope, OpBuilder& builder, Value packed, TranslatorContext& context) {
       mlir::ValueRange unpackedKey = builder.create<mlir::util::UnPackOp>(loc, packed).getResults();
       for (size_t i = 0; i < unpackedKey.size(); i++) {
          if (orderedKeys[i]) {
@@ -196,7 +196,7 @@ class HJNode : public mlir::relalg::JoinTranslator {
       }
    }
 
-   void scanHT(LoweringContext& context, mlir::OpBuilder& builder) {
+   void scanHT(TranslatorContext& context, mlir::OpBuilder& builder) {
       auto scope = context.createScope();
       {
          auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), joinHt, this->flag, getRequiredBuilderValues(context));
@@ -215,7 +215,7 @@ class HJNode : public mlir::relalg::JoinTranslator {
          setRequiredBuilderValues(context, forOp2.results());
       }
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       auto* ctxt = builder.getContext();
       auto scope = context.createScope();
       if (child == builderChild) {

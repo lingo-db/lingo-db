@@ -1,39 +1,39 @@
 #include "mlir/Conversion/RelAlgToDB/HashJoinUtils.h"
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include <mlir/Conversion/RelAlgToDB/NLJoinTranslator.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class NLSingleJoinLowering : public mlir::relalg::NLJoinTranslator {
+class NLSingleJoinTranslator : public mlir::relalg::NLJoinTranslator {
    mlir::Value matchFoundFlag;
 
    public:
-   NLSingleJoinLowering(mlir::relalg::SingleJoinOp innerJoinOp) : mlir::relalg::NLJoinTranslator(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
+   NLSingleJoinTranslator(mlir::relalg::SingleJoinOp innerJoinOp) : mlir::relalg::NLJoinTranslator(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
-   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context,mlir::relalg::LoweringContext::AttributeResolverScope& scope) {
+   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
+      handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context,mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
          handleMapping(builder,context,scope);
          auto trueVal = builder.create<mlir::db::ConstantOp>(loc, mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
          builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, trueVal);
       });
    }
 
-   void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
    }
-   void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
       mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(builder.getContext()), matchFound);
-      handlePotentialMatch(builder, context, noMatchFound, [&](mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context,mlir::relalg::LoweringContext::AttributeResolverScope& scope) {
+      handlePotentialMatch(builder, context, noMatchFound, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context,mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
          handleMappingNull(builder,context,scope);
       });
    }
-   virtual ~NLSingleJoinLowering() {}
+   virtual ~NLSingleJoinTranslator() {}
 };
-class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
+class ConstantSingleJoinTranslator : public mlir::relalg::Translator {
    mlir::relalg::SingleJoinOp joinOp;
    std::vector<const mlir::relalg::RelationalAttribute*> attrs;
    std::vector<const mlir::relalg::RelationalAttribute*> origAttrs;
@@ -41,9 +41,9 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
    size_t builderId;
 
    public:
-   ConstantSingleJoinLowering(mlir::relalg::SingleJoinOp singleJoinOp) : mlir::relalg::ProducerConsumerNode(singleJoinOp), joinOp(singleJoinOp) {
+   ConstantSingleJoinTranslator(mlir::relalg::SingleJoinOp singleJoinOp) : mlir::relalg::Translator(singleJoinOp), joinOp(singleJoinOp) {
    }
-   virtual void setInfo(mlir::relalg::ProducerConsumerNode* consumer, mlir::relalg::Attributes requiredAttributes) override {
+   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
       this->requiredAttributes.insert(joinOp.getUsedAttributes());
@@ -65,7 +65,7 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       children[0]->addRequiredBuilders(requiredBuilders);
    }
-   virtual void consume(mlir::relalg::ProducerConsumerNode* child, mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context) override {
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       auto scope = context.createScope();
       if (child == this->children[0].get()) {
          auto unpacked = builder.create<mlir::util::UnPackOp>(joinOp->getLoc(), context.builders[builderId]);
@@ -86,7 +86,7 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
          context.builders[builderId] = builder.create<mlir::util::PackOp>(joinOp->getLoc(), values);
       }
    }
-   virtual void produce(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       std::vector<mlir::Value> values;
       for (auto type : types) {
          values.push_back(builder.create<mlir::db::NullOp>(joinOp.getLoc(), type));
@@ -98,45 +98,45 @@ class ConstantSingleJoinLowering : public mlir::relalg::ProducerConsumerNode {
       children[0]->produce(context, builder);
    }
 
-   virtual ~ConstantSingleJoinLowering() {}
+   virtual ~ConstantSingleJoinTranslator() {}
 };
-class HashSingleJoinLowering : public mlir::relalg::HJNode {
+class HashSingleJoinTranslator : public mlir::relalg::HJNode {
    mlir::Value matchFoundFlag;
 
    public:
-   HashSingleJoinLowering(mlir::relalg::SingleJoinOp innerJoinOp) : mlir::relalg::HJNode(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
+   HashSingleJoinTranslator(mlir::relalg::SingleJoinOp innerJoinOp) : mlir::relalg::HJNode(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
-   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
-      handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context,mlir::relalg::LoweringContext::AttributeResolverScope& scope) {
+   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
+      handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context,mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
          handleMapping(builder,context,scope);
          auto trueVal = builder.create<mlir::db::ConstantOp>(loc, mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
          builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, trueVal);
       });
    }
 
-   void beforeLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
    }
-   void afterLookup(mlir::relalg::LoweringContext& context, mlir::OpBuilder& builder) override {
+   void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
       mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(builder.getContext()), matchFound);
-      handlePotentialMatch(builder, context, noMatchFound, [&](mlir::OpBuilder& builder, mlir::relalg::LoweringContext& context,mlir::relalg::LoweringContext::AttributeResolverScope& scope) {
+      handlePotentialMatch(builder, context, noMatchFound, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context,mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
          handleMappingNull(builder,context,scope);
       });
    }
-   virtual ~HashSingleJoinLowering() {}
+   virtual ~HashSingleJoinTranslator() {}
 };
 
 bool mlir::relalg::ProducerConsumerNodeRegistry::registeredSingleJoinOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::SingleJoinOp joinOp) {
    if (joinOp->hasAttr("impl")) {
       if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
          if (impl.getValue() == "hash") {
-            return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<HashSingleJoinLowering>(joinOp);
+            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<HashSingleJoinTranslator>(joinOp);
          } else if (impl.getValue() == "constant") {
-            return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<ConstantSingleJoinLowering>(joinOp);
+            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<ConstantSingleJoinTranslator>(joinOp);
          }
       }
    }
-   return (std::unique_ptr<mlir::relalg::ProducerConsumerNode>) std::make_unique<NLSingleJoinLowering>(joinOp);
+   return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<NLSingleJoinTranslator>(joinOp);
 });

@@ -1,6 +1,6 @@
-#include "mlir/Conversion/RelAlgToDB/ProducerConsumerNode.h"
+#include "mlir/Conversion/RelAlgToDB/Translator.h"
 using namespace mlir::relalg;
-std::vector<mlir::Value> mlir::relalg::mergeRelationalBlock(mlir::Block* dest,mlir::Operation* op,mlir::function_ref<mlir::Block*(mlir::Operation*)> getBlockFn, LoweringContext& context, LoweringContext::AttributeResolverScope& scope) {
+std::vector<mlir::Value> mlir::relalg::mergeRelationalBlock(mlir::Block* dest,mlir::Operation* op,mlir::function_ref<mlir::Block*(mlir::Operation*)> getBlockFn, TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope) {
 
    // Splice the operations of the 'source' block into the 'dest' block and erase
    // it.
