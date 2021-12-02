@@ -56,6 +56,6 @@ class MaterializeTranslator : public mlir::relalg::Translator {
    virtual ~MaterializeTranslator() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredMaterializeOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::MaterializeOp materializeOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createMaterializeTranslator(mlir::relalg::MaterializeOp materializeOp) {
   return std::make_unique<MaterializeTranslator>(materializeOp);
-});
+}

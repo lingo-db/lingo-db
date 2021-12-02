@@ -25,7 +25,7 @@ class SelectionTranslator : public mlir::relalg::Translator {
          selectionOp->getLoc(), getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
          consumer->consume(this, builder1, context);
          builder1.create<mlir::db::YieldOp>(selectionOp->getLoc(), getRequiredBuilderValues(context)); },
-         requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location loc) { builder2.create<mlir::db::YieldOp>(loc, builderValuesBefore); });
+         requiredBuilders.empty() ? noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location loc) { builder2.create<mlir::db::YieldOp>(loc, builderValuesBefore); });
       setRequiredBuilderValues(context, ifOp.getResults());
    }
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
@@ -35,6 +35,6 @@ class SelectionTranslator : public mlir::relalg::Translator {
    virtual ~SelectionTranslator() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredSelectionOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::SelectionOp selectionOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createSelectionTranslator(mlir::relalg::SelectionOp selectionOp) {
    return std::make_unique<SelectionTranslator>(selectionOp);
-});
+}

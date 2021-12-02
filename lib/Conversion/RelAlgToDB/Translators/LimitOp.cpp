@@ -51,6 +51,6 @@ class LimitTranslator : public mlir::relalg::Translator {
    virtual ~LimitTranslator() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredLimitOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::LimitOp limitOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createLimitTranslator(mlir::relalg::LimitOp limitOp) {
   return std::make_unique<LimitTranslator>(limitOp);
-});
+}

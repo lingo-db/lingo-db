@@ -1,4 +1,4 @@
-#include "mlir/Conversion/RelAlgToDB/HashJoinUtils.h"
+#include "mlir/Conversion/RelAlgToDB/HashJoinTranslator.h"
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
@@ -33,10 +33,10 @@ class NLOuterJoinTranslator : public mlir::relalg::NLJoinTranslator {
 
    virtual ~NLOuterJoinTranslator() {}
 };
-class HashOuterJoinTranslator : public mlir::relalg::HJNode {
+class HashOuterJoinTranslator : public mlir::relalg::HashJoinTranslator {
    mlir::Value matchFoundFlag;
    public:
-   HashOuterJoinTranslator(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::HJNode(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
+   HashOuterJoinTranslator(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::HashJoinTranslator(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
@@ -62,10 +62,10 @@ class HashOuterJoinTranslator : public mlir::relalg::HJNode {
    virtual ~HashOuterJoinTranslator() {}
 };
 
-class MHashOuterJoinTranslator : public mlir::relalg::HJNode {
+class MHashOuterJoinTranslator : public mlir::relalg::HashJoinTranslator {
    public:
 
-   MHashOuterJoinTranslator(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::HJNode(innerJoinOp, innerJoinOp.left(), innerJoinOp.right(),true) {
+   MHashOuterJoinTranslator(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::HashJoinTranslator(innerJoinOp, innerJoinOp.left(), innerJoinOp.right(),true) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
@@ -89,7 +89,7 @@ class MHashOuterJoinTranslator : public mlir::relalg::HJNode {
    virtual ~MHashOuterJoinTranslator() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredOuterJoinOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::OuterJoinOp joinOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createOuterJoinTranslator(mlir::relalg::OuterJoinOp joinOp) {
    if (joinOp->hasAttr("impl")) {
       if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
          if (impl.getValue() == "hash") {
@@ -101,4 +101,4 @@ bool mlir::relalg::ProducerConsumerNodeRegistry::registeredOuterJoinOp = mlir::r
       }
    }
    return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<NLOuterJoinTranslator>(joinOp);
-});
+}

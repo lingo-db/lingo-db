@@ -32,8 +32,8 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
       mlir::relalg::TranslatorContext loweringContext;
       getFunction().walk([&](mlir::Operation* op) {
          if (mlir::isa<mlir::relalg::TmpOp>(op)) {
-            auto node = mlir::relalg::ProducerConsumerNodeRegistry::createNode(op);
-            mlir::relalg::NoopNode noopNode;
+            auto node = mlir::relalg::Translator::createTranslator(op);
+            mlir::relalg::DummyTranslator noopNode;
             node->setInfo(&noopNode, {});
             mlir::OpBuilder builder(op);
             node->produce(loweringContext, builder);
@@ -42,7 +42,7 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
       });
       getFunction().walk([&](mlir::Operation* op) {
          if (isTranslationHook(op)) {
-            auto node = mlir::relalg::ProducerConsumerNodeRegistry::createNode(op);
+            auto node = mlir::relalg::Translator::createTranslator(op);
             node->setInfo(nullptr, {});
             mlir::OpBuilder builder(op);
             node->produce(loweringContext, builder);
@@ -52,19 +52,7 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
    }
 };
 } // end anonymous namespace
-mlir::relalg::Translator::Translator(Operator op): op(op) {
-   for (auto child : op.getChildren()) {
-         children.push_back(mlir::relalg::ProducerConsumerNodeRegistry::createNode(child.getOperation()));
-   }
-}
 
-mlir::relalg::Translator::Translator(mlir::ValueRange potentialChildren): op(){
-   for (auto child : potentialChildren) {
-      if (child.getType().isa<mlir::relalg::TupleStreamType>()) {
-         children.push_back(mlir::relalg::ProducerConsumerNodeRegistry::createNode(child.getDefiningOp()));
-      }
-   }
-}
 namespace mlir {
 namespace relalg {
 std::unique_ptr<Pass> createLowerToDBPass() { return std::make_unique<LowerToDBPass>(); }

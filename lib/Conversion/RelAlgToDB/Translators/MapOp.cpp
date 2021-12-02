@@ -26,6 +26,6 @@ class MapTranslator : public mlir::relalg::Translator {
    virtual ~MapTranslator() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredMapOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::MapOp mapOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createMapTranslator(mlir::relalg::MapOp mapOp) {
   return std::make_unique<MapTranslator>(mapOp);
-});
+}

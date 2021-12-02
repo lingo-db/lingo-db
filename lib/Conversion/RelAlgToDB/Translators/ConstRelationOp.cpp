@@ -62,6 +62,6 @@ class ConstRelTranslator : public mlir::relalg::Translator {
    virtual ~ConstRelTranslator() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredConstRelOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::ConstRelationOp constRelationOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createConstRelTranslator(mlir::relalg::ConstRelationOp constRelationOp) {
   return std::make_unique<ConstRelTranslator>(constRelationOp);
-});
+}

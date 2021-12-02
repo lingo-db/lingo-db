@@ -62,6 +62,6 @@ class BaseTableTranslator : public mlir::relalg::Translator {
    virtual ~BaseTableTranslator() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredBaseTableOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::BaseTableOp baseTableOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createBaseTableTranslator(mlir::relalg::BaseTableOp baseTableOp) {
    return std::make_unique<BaseTableTranslator>(baseTableOp);
-});
+}

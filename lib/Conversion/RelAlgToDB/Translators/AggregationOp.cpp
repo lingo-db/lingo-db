@@ -340,6 +340,6 @@ class AggregationTranslator : public mlir::relalg::Translator {
    virtual ~AggregationTranslator() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredAggregationOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::AggregationOp sortOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createAggregationTranslator(mlir::relalg::AggregationOp sortOp) {
    return std::make_unique<AggregationTranslator>(sortOp);
-});
+}

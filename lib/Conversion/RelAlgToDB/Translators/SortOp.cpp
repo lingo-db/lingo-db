@@ -100,6 +100,6 @@ class SortTranslator : public mlir::relalg::Translator {
    virtual ~SortTranslator() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredSortOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::SortOp sortOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createSortTranslator(mlir::relalg::SortOp sortOp) {
    return std::make_unique<SortTranslator>(sortOp);
-});
+}

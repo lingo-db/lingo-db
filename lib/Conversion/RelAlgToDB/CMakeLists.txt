@@ -1,25 +1,28 @@
 add_mlir_conversion_library(MLIRRelAlgToDB
-        helpers.cpp
+        Translator.cpp
+        JoinTranslator.cpp
+        NLJoinTranslator.cpp
+        HashJoinTranslator.cpp
         LowerToDB.cpp
-        BaseTableOp.cpp
-        AggregationOp.cpp
-        ConstRelationOp.cpp
-        CrossProductOp.cpp
-        MapOp.cpp
-        MaterializeOp.cpp
-        SelectionOp.cpp
-        SortOp.cpp
-        InnerJoinOp.cpp
-        OuterJoinOp.cpp
-        SingleJoinOp.cpp
-        MarkJoinOp.cpp
-        CollectionJoinOp.cpp
-        SemiJoinOp.cpp
-        AntiSemiJoinOp.cpp
-        RenamingOp.cpp
-        ProjectionOp.cpp
-        LimitOp.cpp
-        TmpOp.cpp
+        Translators/BaseTableOp.cpp
+        Translators/AggregationOp.cpp
+        Translators/ConstRelationOp.cpp
+        Translators/CrossProductOp.cpp
+        Translators/MapOp.cpp
+        Translators/MaterializeOp.cpp
+        Translators/SelectionOp.cpp
+        Translators/SortOp.cpp
+        Translators/InnerJoinOp.cpp
+        Translators/OuterJoinOp.cpp
+        Translators/SingleJoinOp.cpp
+        Translators/MarkJoinOp.cpp
+        Translators/CollectionJoinOp.cpp
+        Translators/SemiJoinOp.cpp
+        Translators/AntiSemiJoinOp.cpp
+        Translators/RenamingOp.cpp
+        Translators/ProjectionOp.cpp
+        Translators/LimitOp.cpp
+        Translators/TmpOp.cpp
         ADDITIONAL_HEADER_DIRS
         ../../../mlir/Conversion/RelAlgToDB
 

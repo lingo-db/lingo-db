@@ -43,6 +43,6 @@ class RenamingTranslator : public mlir::relalg::Translator {
    virtual ~RenamingTranslator() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredRenamingOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::RenamingOp renamingOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createRenamingTranslator(mlir::relalg::RenamingOp renamingOp) {
   return std::make_unique<RenamingTranslator>(renamingOp);
-});
+}

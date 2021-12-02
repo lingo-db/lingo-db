@@ -2,17 +2,17 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
-#include <mlir/Conversion/RelAlgToDB/HashJoinUtils.h>
+#include <mlir/Conversion/RelAlgToDB/HashJoinTranslator.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class HashCollectionJoinTranslator : public mlir::relalg::HJNode {
+class HashCollectionJoinTranslator : public mlir::relalg::HashJoinTranslator {
    size_t vectorBuilderId;
    std::vector<mlir::Type> tupleTypes;
    std::vector<const mlir::relalg::RelationalAttribute*> tupleAttributes;
    mlir::TupleType tupleType;
 
    public:
-   HashCollectionJoinTranslator(mlir::relalg::CollectionJoinOp collectionJoinOp) : mlir::relalg::HJNode(collectionJoinOp, collectionJoinOp.right(), collectionJoinOp.left()) {
+   HashCollectionJoinTranslator(mlir::relalg::CollectionJoinOp collectionJoinOp) : mlir::relalg::HashJoinTranslator(collectionJoinOp, collectionJoinOp.right(), collectionJoinOp.left()) {
       for (auto attr : collectionJoinOp.attrs()) {
          if (auto refAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
             tupleTypes.push_back(refAttr.getRelationalAttribute().type);
@@ -52,7 +52,7 @@ class HashCollectionJoinTranslator : public mlir::relalg::HJNode {
    }
    virtual ~HashCollectionJoinTranslator() {}
 };
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredCollectionJoinOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::CollectionJoinOp joinOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createCollectionJoinTranslator(mlir::relalg::CollectionJoinOp joinOp) {
    if (joinOp->hasAttr("impl")) {
       if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
          if (impl.getValue() == "hash") {
@@ -62,4 +62,4 @@ bool mlir::relalg::ProducerConsumerNodeRegistry::registeredCollectionJoinOp = ml
    }
    assert(false && "not implemented");
    return std::unique_ptr<mlir::relalg::Translator>();
-});
+}

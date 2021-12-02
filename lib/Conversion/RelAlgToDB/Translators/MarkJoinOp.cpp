@@ -2,7 +2,7 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
-#include <mlir/Conversion/RelAlgToDB/HashJoinUtils.h>
+#include <mlir/Conversion/RelAlgToDB/HashJoinTranslator.h>
 #include <mlir/Conversion/RelAlgToDB/NLJoinTranslator.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
@@ -30,11 +30,11 @@ class NLMarkJoinTranslator : public mlir::relalg::NLJoinTranslator {
    }
    virtual ~NLMarkJoinTranslator() {}
 };
-class HashMarkJoinTranslator : public mlir::relalg::HJNode {
+class HashMarkJoinTranslator : public mlir::relalg::HashJoinTranslator {
    mlir::Value matchFoundFlag;
 
    public:
-   HashMarkJoinTranslator(mlir::relalg::MarkJoinOp innerJoinOp) : mlir::relalg::HJNode(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
+   HashMarkJoinTranslator(mlir::relalg::MarkJoinOp innerJoinOp) : mlir::relalg::HashJoinTranslator(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
@@ -54,7 +54,7 @@ class HashMarkJoinTranslator : public mlir::relalg::HJNode {
    }
    virtual ~HashMarkJoinTranslator() {}
 };
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredMarkJoinOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::MarkJoinOp joinOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createMarkJoinTranslator(mlir::relalg::MarkJoinOp joinOp) {
    if (joinOp->hasAttr("impl")) {
       if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
          if (impl.getValue() == "hash") {
@@ -63,4 +63,4 @@ bool mlir::relalg::ProducerConsumerNodeRegistry::registeredMarkJoinOp = mlir::re
       }
    }
    return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<NLMarkJoinTranslator>(joinOp);
-});
+}

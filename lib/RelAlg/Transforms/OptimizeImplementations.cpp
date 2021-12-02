@@ -1,5 +1,5 @@
 #include "llvm/ADT/TypeSwitch.h"
-#include "mlir/Conversion/RelAlgToDB/HashJoinUtils.h"
+#include "mlir/Conversion/RelAlgToDB/HashJoinTranslator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"

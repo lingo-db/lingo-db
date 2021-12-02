@@ -94,6 +94,6 @@ class TmpTranslator : public mlir::relalg::Translator {
    virtual ~TmpTranslator() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredTmpOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::TmpOp tmpOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createTmpTranslator(mlir::relalg::TmpOp tmpOp) {
    return std::make_unique<TmpTranslator>(tmpOp);
-});
+}

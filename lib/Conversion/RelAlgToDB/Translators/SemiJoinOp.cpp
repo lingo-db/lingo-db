@@ -5,7 +5,7 @@
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
-#include <mlir/Conversion/RelAlgToDB/HashJoinUtils.h>
+#include <mlir/Conversion/RelAlgToDB/HashJoinTranslator.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
 class NLSemiJoinTranslator : public mlir::relalg::NLJoinTranslator {
@@ -31,11 +31,11 @@ class NLSemiJoinTranslator : public mlir::relalg::NLJoinTranslator {
    virtual ~NLSemiJoinTranslator() {}
 };
 
-class HashSemiJoinTranslator : public mlir::relalg::HJNode {
+class HashSemiJoinTranslator : public mlir::relalg::HashJoinTranslator {
    mlir::Value matchFoundFlag;
 
    public:
-   HashSemiJoinTranslator(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::HJNode(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
+   HashSemiJoinTranslator(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::HashJoinTranslator(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
@@ -53,9 +53,9 @@ class HashSemiJoinTranslator : public mlir::relalg::HJNode {
    }
    virtual ~HashSemiJoinTranslator() {}
 };
-class MHashSemiJoinTranslator : public mlir::relalg::HJNode {
+class MHashSemiJoinTranslator : public mlir::relalg::HashJoinTranslator {
    public:
-   MHashSemiJoinTranslator(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::HJNode(innerJoinOp, innerJoinOp.left(), innerJoinOp.right(),true) {
+   MHashSemiJoinTranslator(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::HashJoinTranslator(innerJoinOp, innerJoinOp.left(), innerJoinOp.right(),true) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
@@ -71,14 +71,14 @@ class MHashSemiJoinTranslator : public mlir::relalg::HJNode {
                handlePotentialMatch(builder,context,isZeroDB);
             }
             builder1.create<mlir::db::YieldOp>(loc, getRequiredBuilderValues(context)); },
-         requiredBuilders.empty() ? mlir::relalg::noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(loc, beforeBuilderValues); });
+         requiredBuilders.empty() ? noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(loc, beforeBuilderValues); });
       setRequiredBuilderValues(context, ifOp.getResults());
    }
 
    virtual ~MHashSemiJoinTranslator() {}
 };
 
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredSemiJoinOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::SemiJoinOp joinOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createSemiJoinTranslator(mlir::relalg::SemiJoinOp joinOp) {
    if (joinOp->hasAttr("impl")) {
       if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
          if (impl.getValue() == "hash") {
@@ -90,4 +90,4 @@ bool mlir::relalg::ProducerConsumerNodeRegistry::registeredSemiJoinOp = mlir::re
       }
    }
    return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<NLSemiJoinTranslator>(joinOp);
-});
+}

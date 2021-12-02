@@ -106,10 +106,10 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
    }
    virtual ~DistinctProjectionTranslator() {}
 };
-bool mlir::relalg::ProducerConsumerNodeRegistry::registeredProjectionOp = mlir::relalg::ProducerConsumerNodeRegistry::registerNode([](mlir::relalg::ProjectionOp projectionOp) {
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createProjectionTranslator(mlir::relalg::ProjectionOp projectionOp) {
    if (projectionOp.set_semantic() == mlir::relalg::SetSemantic::distinct) {
       return (std::unique_ptr<Translator>) std::make_unique<DistinctProjectionTranslator>(projectionOp);
    } else {
       return (std::unique_ptr<Translator>) std::make_unique<ProjectionTranslator>(projectionOp);
    }
-});
+}
