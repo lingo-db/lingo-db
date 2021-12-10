@@ -12,7 +12,7 @@ build/llvm-build:
 
 build/arrow:
 	mkdir -p build/arrow
-	cmake arrow/cpp  -B build/arrow -DARROW_GANDIVA=1 -DARROW_PYTHON=ON
+	cmake arrow/cpp  -B build/arrow -DARROW_PYTHON=ON
 
 build-arrow: build/arrow
 	cmake --build build/arrow
@@ -28,6 +28,7 @@ build/llvm-build-debug:
 	cmake -G Ninja llvm-project/llvm  -B build/llvm-build-debug \
 	   -DLLVM_ENABLE_PROJECTS=mlir \
 	   -DLLVM_BUILD_EXAMPLES=OFF \
+	   -DLLVM_USE_PERF=ON \
 	   -DLLVM_TARGETS_TO_BUILD="X86;" \
 	   -DCMAKE_BUILD_TYPE=Debug \
 	   -DLLVM_ENABLE_ASSERTIONS=ON
