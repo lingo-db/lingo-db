@@ -78,9 +78,9 @@ class MHashOuterJoinTranslator : public mlir::relalg::HashJoinTranslator {
    }
    void handleScanned(mlir::Value marker, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      auto zero = builder.create<mlir::arith::ConstantOp>(builder.getUnknownLoc(), marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
-      auto isZero = builder.create<mlir::arith::CmpIOp>(builder.getUnknownLoc(), mlir::arith::CmpIPredicate::eq, marker, zero);
-      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), isZero);
+      auto zero = builder.create<mlir::arith::ConstantOp>(op->getLoc(), marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
+      auto isZero = builder.create<mlir::arith::CmpIOp>(op->getLoc(), mlir::arith::CmpIPredicate::eq, marker, zero);
+      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(op->getLoc(), mlir::db::BoolType::get(builder.getContext()), isZero);
       handlePotentialMatch(builder, context, isZeroDB, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context,mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
          handleMappingNull(builder,context,scope);
       });

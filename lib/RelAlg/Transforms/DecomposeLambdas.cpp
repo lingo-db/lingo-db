@@ -19,13 +19,13 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
       } else {
          OpBuilder builder(currentSel);
          mlir::BlockAndValueMapping mapping;
-         auto newsel = builder.create<relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), tree);
+         auto newsel = builder.create<relalg::SelectionOp>(currentSel->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), tree);
          tree = newsel;
          newsel.initPredicate();
          mapping.map(currentSel.getPredicateArgument(), newsel.getPredicateArgument());
          builder.setInsertionPointToStart(&newsel.predicate().front());
          mlir::relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), newsel.getOperation(), &newsel.getPredicateBlock(), mapping);
-         builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), mapping.lookup(v));
+         builder.create<mlir::relalg::ReturnOp>(currentSel->getLoc(), mapping.lookup(v));
          auto* terminator = newsel.getLambdaBlock().getTerminator();
          terminator->remove();
          terminator->destroy();
@@ -74,12 +74,12 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
             auto children = currentJoinOp.getChildren();
             OpBuilder builder(currentJoinOp);
             mlir::BlockAndValueMapping mapping;
-            auto newsel = builder.create<relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), children[1].asRelation());
+            auto newsel = builder.create<relalg::SelectionOp>(currentJoinOp->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), children[1].asRelation());
             newsel.initPredicate();
             mapping.map(currentJoinOp.getPredicateArgument(), newsel.getPredicateArgument());
             builder.setInsertionPointToStart(&newsel.predicate().front());
             mlir::relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), newsel.getOperation(), &newsel.getPredicateBlock(), mapping);
-            builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), mapping.lookup(v));
+            builder.create<mlir::relalg::ReturnOp>(currentJoinOp->getLoc(), mapping.lookup(v));
             auto* terminator = newsel.getLambdaBlock().getTerminator();
             terminator->remove();
             terminator->destroy();
@@ -100,16 +100,16 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
          while(mlir::isa_and_nonnull<mlir::relalg::AddAttrOp>(addAttrOp)){
             OpBuilder builder(currentMap);
             mlir::BlockAndValueMapping mapping;
-            auto newmap = builder.create<relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), currentMap.sym_name(), tree);
+            auto newmap = builder.create<relalg::MapOp>(currentMap->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), currentMap.sym_name(), tree);
             tree = newmap;
             newmap.predicate().push_back(new Block);
             newmap.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
             builder.setInsertionPointToStart(&newmap.predicate().front());
-            auto ret1=builder.create<relalg::ReturnOp>(builder.getUnknownLoc());
+            auto ret1=builder.create<relalg::ReturnOp>(currentMap->getLoc());
             mapping.map(currentMap.getLambdaArgument(), newmap.getLambdaArgument());
             mapping.map(addAttrOp.tuple(), newmap.getLambdaArgument());
             mlir::relalg::detail::inlineOpIntoBlock(addAttrOp.getOperation(), addAttrOp->getParentOp(), newmap.getOperation(), &newmap.getLambdaBlock(), mapping);
-            builder.create<relalg::ReturnOp>(builder.getUnknownLoc(),mapping.lookup(addAttrOp.tuple_out()));
+            builder.create<relalg::ReturnOp>(currentMap->getLoc(),mapping.lookup(addAttrOp.tuple_out()));
             ret1->remove();
             ret1->dropAllReferences();
             ret1->destroy();

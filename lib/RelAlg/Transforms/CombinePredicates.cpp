@@ -23,8 +23,8 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Func
       builder.setInsertionPointToEnd(&lower.getPredicateBlock());
       mlir::relalg::detail::inlineOpIntoBlock(higherPredVal.getDefiningOp(), higherPredVal.getDefiningOp()->getParentOp(), lower.getOperation(), &lower.getPredicateBlock(), mapping);
       auto nullable=higherPredVal.getType().cast<mlir::db::DBType>().isNullable()||lowerPredVal.getType().cast<mlir::db::DBType>().isNullable();
-      mlir::Value combined=builder.create<mlir::db::AndOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext(),nullable),ValueRange{lowerPredVal,mapping.lookup(higherPredVal)});
-      builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), combined);
+      mlir::Value combined=builder.create<mlir::db::AndOp>(higher->getLoc(), mlir::db::BoolType::get(builder.getContext(),nullable),ValueRange{lowerPredVal,mapping.lookup(higherPredVal)});
+      builder.create<mlir::relalg::ReturnOp>(higher->getLoc(), combined);
       lowerTerminator->remove();
       lowerTerminator->destroy();
    }

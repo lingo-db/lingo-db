@@ -31,7 +31,7 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::FunctionPass> 
                usedAttributes.insert(getUsed(user));
             }
             usedAttributes=usedAttributes.intersect(op.getAvailableAttributes());
-            auto tmp = builder.create<mlir::relalg::TmpOp>(builder.getUnknownLoc(), op.asRelation().getType(), op.asRelation(), usedAttributes.asRefArrayAttr(&getContext()));
+            auto tmp = builder.create<mlir::relalg::TmpOp>(op->getLoc(), op.asRelation().getType(), op.asRelation(), usedAttributes.asRefArrayAttr(&getContext()));
 
             op.asRelation().replaceUsesWithIf(tmp.getResult(), [&](mlir::OpOperand& operand) { return operand.getOwner() != tmp.getOperation(); });
          }

@@ -30,7 +30,7 @@ class HashCollectionJoinTranslator : public mlir::relalg::HashJoinTranslator {
       mlir::Value vectorBuilder = context.builders[vectorBuilderId];
       auto ifOp = builder.create<mlir::db::IfOp>(
          loc, mlir::TypeRange{vectorBuilder.getType()}, matched, [&](mlir::OpBuilder& builder, mlir::Location loc) {
-            mlir::Value packed = packValues(context,builder,tupleAttributes);
+            mlir::Value packed = packValues(context,builder,op->getLoc(),tupleAttributes);
          mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, vectorBuilder.getType(), vectorBuilder, packed);
          builder.create<mlir::db::YieldOp>(loc, mlir::ValueRange{mergedBuilder}); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::db::YieldOp>(loc, mlir::ValueRange{vectorBuilder}); });
       context.builders[vectorBuilderId] = ifOp.getResult(0);

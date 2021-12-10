@@ -42,9 +42,9 @@ mlir::FuncOp mlir::db::codegen::FunctionRegistry::getFunction(OpBuilder builder,
    }
    assert(false && "could not find function");
 }
-mlir::ResultRange mlir::db::codegen::FunctionRegistry::call(OpBuilder builder, FunctionId function, ValueRange values) {
+mlir::ResultRange mlir::db::codegen::FunctionRegistry::call(OpBuilder builder,Location loc, FunctionId function, ValueRange values) {
    FuncOp func = getFunction(builder, function);
-   auto funcCall = builder.create<CallOp>(builder.getUnknownLoc(), func, values);
+   auto funcCall = builder.create<CallOp>(loc, func, values);
    return funcCall.getResults();
 }
 void mlir::db::codegen::FunctionRegistry::registerFunction(FunctionId funcId, std::string name, std::vector<mlir::Type> ops, std::vector<mlir::Type> returns, bool useWrapper) {

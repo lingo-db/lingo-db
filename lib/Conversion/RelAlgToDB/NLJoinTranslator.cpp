@@ -11,7 +11,7 @@ void NLJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg:
 void NLJoinTranslator::build(mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) {
    mlir::Value vectorBuilder = context.builders[vecBuilderId];
    auto const0 = builder.create<mlir::arith::ConstantOp>(loc, builder.getIntegerType(64), builder.getI64IntegerAttr(0));
-   mlir::Value packed = markable ? packValues(context, builder, orderedAttributesLeft, {const0}) : packValues(context, builder, orderedAttributesLeft);
+   mlir::Value packed = markable ? packValues(context, builder, op->getLoc(), orderedAttributesLeft, {const0}) : packValues(context, builder, op->getLoc(), orderedAttributesLeft);
    mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, vectorBuilder.getType(), vectorBuilder, packed);
    context.builders[vecBuilderId] = mergedBuilder;
 }

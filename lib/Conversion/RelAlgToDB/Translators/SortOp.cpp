@@ -16,15 +16,15 @@ class SortTranslator : public mlir::relalg::Translator {
    }
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       mlir::Value vectorBuilder = context.builders[builderId];
-      mlir::Value packed = packValues(context, builder, requiredAttributes);
+      mlir::Value packed = packValues(context, builder, sortOp->getLoc(), requiredAttributes);
       mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(sortOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
       context.builders[builderId] = mergedBuilder;
    }
    mlir::Value createSortPredicate(mlir::OpBuilder& builder, std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria, mlir::Value trueVal, mlir::Value falseVal, size_t pos) {
       if (pos < sortCriteria.size()) {
-         auto lt = builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::lt, sortCriteria[pos].first, sortCriteria[pos].second);
+         auto lt = builder.create<mlir::db::CmpOp>(sortOp->getLoc(), mlir::db::DBCmpPredicate::lt, sortCriteria[pos].first, sortCriteria[pos].second);
          auto ifOp = builder.create<mlir::db::IfOp>(
-            builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), lt, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::db::YieldOp>(loc, trueVal); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+            sortOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), lt, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::db::YieldOp>(loc, trueVal); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
                auto eq = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, sortCriteria[pos].first, sortCriteria[pos].second);
                auto ifOp2 = builder.create<mlir::db::IfOp>(loc, mlir::db::BoolType::get(builder.getContext()), eq,[&](mlir::OpBuilder& builder, mlir::Location loc) {
                   builder.create<mlir::db::YieldOp>(loc, createSortPredicate(builder, sortCriteria, trueVal, falseVal, pos + 1));

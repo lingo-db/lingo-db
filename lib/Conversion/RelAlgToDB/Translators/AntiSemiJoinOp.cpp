@@ -61,8 +61,8 @@ class MHashAntiSemiJoinTranslator : public mlir::relalg::HashJoinTranslator {
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto builderValuesBefore = getRequiredBuilderValues(context);
       auto ifOp = builder.create<mlir::db::IfOp>(loc, getRequiredBuilderTypes(context), matched,[&](mlir::OpBuilder& builder1,mlir::Location loc){
-         auto const1 = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(64), builder1.getI64IntegerAttr(1));
-         builder1.create<mlir::AtomicRMWOp>(builder1.getUnknownLoc(), builder1.getIntegerType(64), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
+         auto const1 = builder1.create<mlir::arith::ConstantOp>(loc, builder1.getIntegerType(64), builder1.getI64IntegerAttr(1));
+         builder1.create<mlir::AtomicRMWOp>(loc, builder1.getIntegerType(64), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
          builder1.create<mlir::db::YieldOp>(loc, getRequiredBuilderValues(context));
          },requiredBuilders.empty() ? noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(loc, builderValuesBefore); });
       setRequiredBuilderValues(context,ifOp.getResults());
@@ -71,9 +71,9 @@ class MHashAntiSemiJoinTranslator : public mlir::relalg::HashJoinTranslator {
       scanHT(context, builder);
    }
    void handleScanned(mlir::Value marker, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      auto zero = builder.create<mlir::arith::ConstantOp>(builder.getUnknownLoc(), marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
-      auto isZero = builder.create<mlir::arith::CmpIOp>(builder.getUnknownLoc(), mlir::arith::CmpIPredicate::eq, marker, zero);
-      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext()), isZero);
+      auto zero = builder.create<mlir::arith::ConstantOp>(op->getLoc(), marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
+      auto isZero = builder.create<mlir::arith::CmpIOp>(op->getLoc(), mlir::arith::CmpIPredicate::eq, marker, zero);
+      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(op->getLoc(), mlir::db::BoolType::get(builder.getContext()), isZero);
       handlePotentialMatch(builder,context,isZeroDB);
    }
 

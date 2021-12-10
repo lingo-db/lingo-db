@@ -92,7 +92,7 @@ void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilde
       auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp->getRegion(0).front(), leftKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context);
       mlir::Value packedKey = builder.create<mlir::util::PackOp>(loc, inlinedKeys);
       auto const0 = builder.create<mlir::arith::ConstantOp>(loc, builder.getIntegerType(64), builder.getI64IntegerAttr(0));
-      mlir::Value packedValues = markable ? packValues(context, builder, orderedValues, {const0}) : packValues(context, builder, orderedValues);
+      mlir::Value packedValues = markable ? packValues(context, builder,loc, orderedValues, {const0}) : packValues(context, builder,loc, orderedValues);
       mlir::Value htBuilder = context.builders[builderId];
       mlir::Value packed = builder.create<mlir::util::PackOp>(loc, mlir::ValueRange({packedKey, packedValues}));
       mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, htBuilder.getType(), htBuilder, packed);

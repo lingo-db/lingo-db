@@ -19,7 +19,7 @@ class FunctionRegistry {
    };
    FunctionRegistry(MLIRContext* context) : context(context) {}
    FuncOp getFunction(OpBuilder builder, FunctionId function);
-   ResultRange call(OpBuilder builder, FunctionId function, ValueRange values);
+   ResultRange call(OpBuilder builder,mlir::Location loc, FunctionId function, ValueRange values);
    void registerFunctions();
 
    private:

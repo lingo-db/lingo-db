@@ -7,9 +7,10 @@ class NullHandler {
    std::vector<Value> nullValues;
    TypeConverter& typeConverter;
    OpBuilder& builder;
+   Location loc;
 
    public:
-   NullHandler(TypeConverter& typeConverter, OpBuilder& builder) : typeConverter(typeConverter), builder(builder) {}
+   NullHandler(TypeConverter& typeConverter, OpBuilder& builder,Location loc) : typeConverter(typeConverter), builder(builder),loc(loc) {}
    Value isNull();
    Value combineResult(Value res);
    Value getValue(Value v, Value operand = Value());

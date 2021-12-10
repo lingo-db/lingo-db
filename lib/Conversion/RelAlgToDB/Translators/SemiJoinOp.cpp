@@ -62,12 +62,12 @@ class MHashSemiJoinTranslator : public mlir::relalg::HashJoinTranslator {
       auto beforeBuilderValues = getRequiredBuilderValues(context);
       auto ifOp = builder.create<mlir::db::IfOp>(
          loc, getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
-            auto const1 = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), builder1.getIntegerType(64), builder1.getI64IntegerAttr(1));
-            auto markerBefore = builder1.create<mlir::AtomicRMWOp>(builder1.getUnknownLoc(), builder1.getIntegerType(64), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
+            auto const1 = builder1.create<mlir::arith::ConstantOp>(loc, builder1.getIntegerType(64), builder1.getI64IntegerAttr(1));
+            auto markerBefore = builder1.create<mlir::AtomicRMWOp>(loc, builder1.getIntegerType(64), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
             {
-               auto zero = builder1.create<mlir::arith::ConstantOp>(builder1.getUnknownLoc(), markerBefore.getType(), builder1.getIntegerAttr(markerBefore.getType(), 0));
-               auto isZero = builder1.create<mlir::arith::CmpIOp>(builder1.getUnknownLoc(), mlir::arith::CmpIPredicate::eq, markerBefore, zero);
-               auto isZeroDB = builder1.create<mlir::db::TypeCastOp>(builder1.getUnknownLoc(), mlir::db::BoolType::get(builder1.getContext()), isZero);
+               auto zero = builder1.create<mlir::arith::ConstantOp>(loc, markerBefore.getType(), builder1.getIntegerAttr(markerBefore.getType(), 0));
+               auto isZero = builder1.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, markerBefore, zero);
+               auto isZeroDB = builder1.create<mlir::db::TypeCastOp>(loc, mlir::db::BoolType::get(builder1.getContext()), isZero);
                handlePotentialMatch(builder,context,isZeroDB);
             }
             builder1.create<mlir::db::YieldOp>(loc, getRequiredBuilderValues(context)); },

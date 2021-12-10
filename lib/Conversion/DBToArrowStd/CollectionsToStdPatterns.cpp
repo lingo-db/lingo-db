@@ -37,8 +37,8 @@ class SortOpLowering : public ConversionPattern {
          Value left = funcBody->getArgument(0);
          Value right = funcBody->getArgument(1);
 
-         Value genericMemrefLeft = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), util::RefType::get(rewriter.getContext(), elementType, llvm::Optional<int64_t>()), left);
-         Value genericMemrefRight = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), util::RefType::get(rewriter.getContext(), elementType, llvm::Optional<int64_t>()), right);
+         Value genericMemrefLeft = rewriter.create<util::GenericMemrefCastOp>(sortOp.getLoc(), util::RefType::get(rewriter.getContext(), elementType, llvm::Optional<int64_t>()), left);
+         Value genericMemrefRight = rewriter.create<util::GenericMemrefCastOp>(sortOp.getLoc(), util::RefType::get(rewriter.getContext(), elementType, llvm::Optional<int64_t>()), right);
          Value tupleLeft = rewriter.create<util::LoadOp>(sortOp.getLoc(), elementType, genericMemrefLeft, Value());
          Value tupleRight = rewriter.create<util::LoadOp>(sortOp.getLoc(), elementType, genericMemrefRight, Value());
          auto terminator = rewriter.create<mlir::ReturnOp>(sortOp.getLoc());
@@ -52,15 +52,15 @@ class SortOpLowering : public ConversionPattern {
          rewriter.eraseOp(sortLambdaTerminator);
          rewriter.eraseOp(terminator);
       }
-      auto unpacked = rewriter.create<util::UnPackOp>(rewriter.getUnknownLoc(), sortOpAdaptor.toSort());
+      auto unpacked = rewriter.create<util::UnPackOp>(sortOp.getLoc(), sortOpAdaptor.toSort());
 
       auto len = unpacked.getResult(0);
       auto values = unpacked.getResult(2);
-      auto rawPtr = rewriter.create<util::GenericMemrefCastOp>(rewriter.getUnknownLoc(), ptrType, values);
+      auto rawPtr = rewriter.create<util::GenericMemrefCastOp>(sortOp.getLoc(), ptrType, values);
 
       Value functionPointer = rewriter.create<mlir::ConstantOp>(sortOp->getLoc(), funcOp.type(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.sym_name())));
-      Value elementSize = rewriter.create<util::SizeOfOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), elementType);
-      functionRegistry.call(rewriter, FunctionId::SortVector, {len, rawPtr, elementSize, functionPointer});
+      Value elementSize = rewriter.create<util::SizeOfOp>(sortOp.getLoc(), rewriter.getIndexType(), elementType);
+      functionRegistry.call(rewriter, sortOp->getLoc(), FunctionId::SortVector, {len, rawPtr, elementSize, functionPointer});
       rewriter.eraseOp(op);
       return success();
    }
@@ -81,7 +81,7 @@ class ForOpLowering : public ConversionPattern {
       auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), functionRegistry);
 
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      std::vector<Value> results = iterator->implementLoop(forOpAdaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, [&](ValueRange values, OpBuilder builder) {
+      std::vector<Value> results = iterator->implementLoop(op->getLoc(), forOpAdaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, [&](ValueRange values, OpBuilder builder) {
          auto yieldOp = cast<mlir::db::YieldOp>(forOp.getBody()->getTerminator());
          rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
          std::vector<Value> results(yieldOp.results().begin(), yieldOp.results().end());
@@ -107,7 +107,7 @@ class LookupOpLowering : public ConversionPattern {
       : ConversionPattern(typeConverter, mlir::db::Lookup::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto loc = rewriter.getUnknownLoc();
+      auto loc = op->getLoc();
       mlir::db::LookupAdaptor lookupAdaptor(operands);
       auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, lookupAdaptor.collection());
       Value vec = unpacked.getResult(0);
@@ -158,7 +158,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
    auto indexType = IndexType::get(context);
    auto i8ptrType = mlir::util::RefType::get(context, IntegerType::get(context, 8), llvm::Optional<int64_t>());
 
-   typeConverter.addConversion([&typeConverter,context,indexType](mlir::db::AggregationHashtableType aggregationHashtableType) {
+   typeConverter.addConversion([&typeConverter, context, indexType](mlir::db::AggregationHashtableType aggregationHashtableType) {
       if (aggregationHashtableType.getKeyType().getTypes().empty()) {
          return (Type) typeConverter.convertType(aggregationHashtableType.getValType());
       } else {
@@ -171,7 +171,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
          return t;
       }
    });
-   typeConverter.addConversion([&typeConverter,indexType,context](mlir::db::JoinHashtableType aggregationHashtableType) {
+   typeConverter.addConversion([&typeConverter, indexType, context](mlir::db::JoinHashtableType aggregationHashtableType) {
       Type kvType = typeConverter.convertType(TupleType::get(context, {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()}));
       Type entryType = TupleType::get(context, {indexType, kvType});
 
@@ -183,7 +183,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
    typeConverter.addConversion([i8ptrType](mlir::db::VectorType vectorType) {
       return i8ptrType;
    });
-   typeConverter.addConversion([&typeConverter,context,i8ptrType,indexType](mlir::db::GenericIterableType genericIterableType) {
+   typeConverter.addConversion([&typeConverter, context, i8ptrType, indexType](mlir::db::GenericIterableType genericIterableType) {
       Type elementType = genericIterableType.getElementType();
       Type nestedElementType = elementType;
       if (auto nested = elementType.dyn_cast_or_null<mlir::db::GenericIterableType>()) {

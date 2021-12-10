@@ -49,8 +49,7 @@ void Translator::setRequiredBuilderValues(TranslatorContext& context, const mlir
       context.builders[x] = values[i++];
    }
 }
-mlir::Value Translator::packValues(TranslatorContext& context, OpBuilder builder, const std::vector<const mlir::relalg::RelationalAttribute*>& attrs, const std::vector<Value>& additional) {
-   auto loc = builder.getUnknownLoc();
+mlir::Value Translator::packValues(TranslatorContext& context, OpBuilder builder, Location loc, const std::vector<const mlir::relalg::RelationalAttribute*>& attrs, const std::vector<Value>& additional) {
    std::vector<Value> values(additional);
    for (const auto* attr : attrs) {
       values.push_back(context.getValueForAttribute(attr));
@@ -60,8 +59,7 @@ mlir::Value Translator::packValues(TranslatorContext& context, OpBuilder builder
    }
    return builder.create<mlir::util::PackOp>(loc, values);
 }
-mlir::Value Translator::packValues(TranslatorContext& context, OpBuilder builder, const mlir::relalg::Attributes& attrs) {
-   auto loc = builder.getUnknownLoc();
+mlir::Value Translator::packValues(TranslatorContext& context, OpBuilder builder,Location loc, const mlir::relalg::Attributes& attrs) {
    std::vector<Value> values;
    for (const auto* attr : attrs) {
       values.push_back(context.getValueForAttribute(attr));

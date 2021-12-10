@@ -21,8 +21,8 @@ class LimitTranslator : public mlir::relalg::Translator {
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       mlir::Value counter = context.builders[counterId];
       consumer->consume(this, builder, context);
-      auto one = builder.create<mlir::db::ConstantOp>(builder.getUnknownLoc(), counter.getType(), builder.getI64IntegerAttr(1));
-      mlir::Value addedCounter = builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), counter.getType(), counter, one);
+      auto one = builder.create<mlir::db::ConstantOp>(limitOp.getLoc(), counter.getType(), builder.getI64IntegerAttr(1));
+      mlir::Value addedCounter = builder.create<mlir::db::AddOp>(limitOp.getLoc(), counter.getType(), counter, one);
       mlir::Value upper=builder.create<mlir::db::ConstantOp>(limitOp.getLoc(),counter.getType(),builder.getI64IntegerAttr(limitOp.rows()));
       mlir::Value finished=builder.create<mlir::db::CmpOp>(limitOp.getLoc(),mlir::db::DBCmpPredicate::gte,addedCounter,upper);
       builder.create<mlir::db::SetFlag>(limitOp->getLoc(), finishedFlag,finished);

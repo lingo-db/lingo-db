@@ -27,12 +27,12 @@ class NotOpLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto notOp = cast<mlir::db::NotOp>(op);
-      Value trueValue = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      Value trueValue = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
       mlir::db::DBType valType = notOp.val().getType().cast<mlir::db::DBType>();
       if (valType.isNullable()) {
          auto tupleType = typeConverter->convertType(notOp.val().getType());
-         Value val = rewriter.create<util::GetTupleOp>(rewriter.getUnknownLoc(), rewriter.getI1Type(), operands[0], 1);
-         val = rewriter.create<arith::XOrIOp>(rewriter.getUnknownLoc(), val, trueValue);
+         Value val = rewriter.create<util::GetTupleOp>(op->getLoc(), rewriter.getI1Type(), operands[0], 1);
+         val = rewriter.create<arith::XOrIOp>(op->getLoc(), val, trueValue);
          rewriter.replaceOpWithNewOp<util::SetTupleOp>(op, tupleType, operands[0], val, 1);
          return success();
       } else {
@@ -53,9 +53,9 @@ class AndOpLowering : public ConversionPattern {
 
       Value result;
       Value isNull;
-      auto loc = rewriter.getUnknownLoc();
-      Value falseValue = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-      Value trueValue = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      auto loc = op->getLoc();
+      Value falseValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+      Value trueValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
 
       for (size_t i = 0; i < operands.size(); i++) {
          auto currType = andOp.vals()[i].getType();
@@ -63,7 +63,7 @@ class AndOpLowering : public ConversionPattern {
          Value currNull;
          Value currVal;
          if (currNullable) {
-            auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc,  operands[i]);
+            auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, operands[i]);
             currNull = unPackOp.vals()[0];
             currVal = unPackOp.vals()[1];
          } else {
@@ -93,7 +93,7 @@ class AndOpLowering : public ConversionPattern {
       }
       if (andOp.getResult().getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
          isNull = rewriter.create<SelectOp>(loc, result, isNull, falseValue);
-         Value combined = rewriter.create<mlir::util::PackOp>(loc,  ValueRange({isNull, result}));
+         Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({isNull, result}));
          rewriter.replaceOp(op, combined);
       } else {
          rewriter.replaceOp(op, result);
@@ -113,9 +113,9 @@ class OrOpLowering : public ConversionPattern {
 
       Value result;
       Value isNull;
-      auto loc = rewriter.getUnknownLoc();
-      Value falseValue = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-      Value trueValue = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      auto loc = op->getLoc();
+      Value falseValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+      Value trueValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
 
       for (size_t i = 0; i < operands.size(); i++) {
          auto currType = orOp.vals()[i].getType();
@@ -153,7 +153,7 @@ class OrOpLowering : public ConversionPattern {
       }
       if (orOp.getResult().getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
          isNull = rewriter.create<SelectOp>(loc, result, falseValue, isNull);
-         Value combined = rewriter.create<mlir::util::PackOp>(loc,  ValueRange({isNull, result}));
+         Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({isNull, result}));
          rewriter.replaceOp(op, combined);
       } else {
          rewriter.replaceOp(op, result);
@@ -172,13 +172,13 @@ class BinOpLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto addOp = cast<OpClass>(op);
-      db::NullHandler nullHandler(*typeConverter, rewriter);
+      db::NullHandler nullHandler(*typeConverter, rewriter,op->getLoc());
       auto type = addOp.left().getType();
       Type resType = addOp.result().getType().template cast<db::DBType>().getBaseType();
       Value left = nullHandler.getValue(addOp.left());
       Value right = nullHandler.getValue(addOp.right());
       if (type.template isa<OperandType>()) {
-         Value replacement = rewriter.create<StdOpClass>(rewriter.getUnknownLoc(), typeConverter->convertType(resType), left, right);
+         Value replacement = rewriter.create<StdOpClass>(op->getLoc(), typeConverter->convertType(resType), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(replacement));
          return success();
       }
@@ -196,7 +196,7 @@ class DecimalOpScaledLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto addOp = cast<DBOp>(op);
       typename DBOp::Adaptor adaptor(operands);
-      db::NullHandler nullHandler(*typeConverter, rewriter);
+      db::NullHandler nullHandler(*typeConverter, rewriter,addOp->getLoc());
       Value left = nullHandler.getValue(addOp.left(), adaptor.left());
       Value right = nullHandler.getValue(addOp.right(), adaptor.right());
       if (left.getType() != right.getType()) {
@@ -207,8 +207,8 @@ class DecimalOpScaledLowering : public ConversionPattern {
          auto [low, high] = support::getDecimalScaleMultiplier(decimalType.getS());
          std::vector<uint64_t> parts = {low, high};
          auto stdType = typeConverter->convertType(decimalType.getBaseType());
-         auto multiplier = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.template cast<mlir::IntegerType>().getWidth(), parts)));
-         left = rewriter.create<arith::MulIOp>(rewriter.getUnknownLoc(), stdType, left, multiplier);
+         auto multiplier = rewriter.create<arith::ConstantOp>(op->getLoc(), stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.template cast<mlir::IntegerType>().getWidth(), parts)));
+         left = rewriter.create<arith::MulIOp>(op->getLoc(), stdType, left, multiplier);
          auto replacement = rewriter.create<Op>(op->getLoc(), stdType, left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(replacement));
 
@@ -225,7 +225,7 @@ class IsNullOpLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::IsNullOpAdaptor isNullOpAdaptor(operands);
-      auto unPackOp = rewriter.create<mlir::util::UnPackOp>(rewriter.getUnknownLoc(), isNullOpAdaptor.val());
+      auto unPackOp = rewriter.create<mlir::util::UnPackOp>(op->getLoc(), isNullOpAdaptor.val());
       rewriter.replaceOp(op, unPackOp.vals()[0]);
       return success();
    }
@@ -237,7 +237,7 @@ class CombineNullOpLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::CombineNullOpAdaptor adaptor(operands);
-      auto packOp = rewriter.create<mlir::util::PackOp>(rewriter.getUnknownLoc(),  ValueRange({adaptor.null(), adaptor.val()}));
+      auto packOp = rewriter.create<mlir::util::PackOp>(op->getLoc(), ValueRange({adaptor.null(), adaptor.val()}));
       rewriter.replaceOp(op, packOp.tuple());
       return success();
    }
@@ -250,8 +250,8 @@ class NullOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto nullOp = cast<mlir::db::NullOp>(op);
       auto tupleType = typeConverter->convertType(nullOp.getType());
-      auto undefTuple = rewriter.create<mlir::util::UndefTupleOp>(rewriter.getUnknownLoc(), tupleType);
-      auto trueValue = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      auto undefTuple = rewriter.create<mlir::util::UndefTupleOp>(op->getLoc(), tupleType);
+      auto trueValue = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
 
       rewriter.replaceOpWithNewOp<mlir::util::SetTupleOp>(op, tupleType, undefTuple, trueValue, 0);
       return success();
@@ -265,11 +265,11 @@ class SubStrOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto subStrOp = cast<mlir::db::SubStrOp>(op);
       mlir::db::SubStrOpAdaptor adaptor(operands);
-      Value pos1AsIndex = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.from() - 1));
-      Value lenAsIndex = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.to() - subStrOp.from() + 1));
-      Value asMemRef = rewriter.create<util::ToMemrefOp>(rewriter.getUnknownLoc(), MemRefType::get({-1}, rewriter.getIntegerType(8)), adaptor.val());
-      Value view = rewriter.create<mlir::memref::ViewOp>(rewriter.getUnknownLoc(), MemRefType::get({-1}, rewriter.getIntegerType(8)), asMemRef, pos1AsIndex, mlir::ValueRange({lenAsIndex}));
-      Value val = rewriter.create<mlir::util::ToGenericMemrefOp>(rewriter.getUnknownLoc(), mlir::util::RefType::get(rewriter.getContext(), IntegerType::get(rewriter.getContext(), 8), -1), view);
+      Value pos1AsIndex = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.from() - 1));
+      Value lenAsIndex = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.to() - subStrOp.from() + 1));
+      Value asMemRef = rewriter.create<util::ToMemrefOp>(op->getLoc(), MemRefType::get({-1}, rewriter.getIntegerType(8)), adaptor.val());
+      Value view = rewriter.create<mlir::memref::ViewOp>(op->getLoc(), MemRefType::get({-1}, rewriter.getIntegerType(8)), asMemRef, pos1AsIndex, mlir::ValueRange({lenAsIndex}));
+      Value val = rewriter.create<mlir::util::ToGenericMemrefOp>(op->getLoc(), mlir::util::RefType::get(rewriter.getContext(), IntegerType::get(rewriter.getContext(), 8), -1), view);
 
       rewriter.replaceOp(op, val);
       return success();
@@ -286,6 +286,7 @@ class ConstantLowering : public ConversionPattern {
       auto constantOp = cast<mlir::db::ConstantOp>(op);
       auto type = constantOp.getType();
       auto stdType = typeConverter->convertType(type);
+      auto loc = op->getLoc();
       if (constantOp.getType().isa<mlir::db::UIntType>()) {
          if (!constantOp.value().isa<IntegerAttr>()) {
             return failure();
@@ -356,7 +357,6 @@ class ConstantLowering : public ConversionPattern {
             const std::string& str = stringAttr.getValue().str();
             Value result;
             ModuleOp parentModule = rewriter.getInsertionPoint()->getParentOfType<ModuleOp>();
-            auto loc = rewriter.getUnknownLoc();
             auto* context = rewriter.getContext();
             auto i8Type = IntegerType::get(context, 8);
             auto insertionPoint = rewriter.saveInsertionPoint();
@@ -433,13 +433,13 @@ class CmpOpLowering : public ConversionPattern {
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      auto loc = rewriter.getUnknownLoc();
+      auto loc = op->getLoc();
       auto cmpOp = cast<db::CmpOp>(op);
       auto type = cmpOp.left().getType().cast<db::DBType>().getBaseType();
       if (type.isa<db::StringType>()) {
          return failure();
       }
-      db::NullHandler nullHandler(*typeConverter, rewriter);
+      db::NullHandler nullHandler(*typeConverter, rewriter, loc);
       Value left = nullHandler.getValue(cmpOp.left());
       Value right = nullHandler.getValue(cmpOp.right());
       if (type.isa<db::BoolType>() || type.isa<db::IntType>() || type.isa<db::DecimalType>() || type.isa<db::DateType>() || type.isa<db::TimestampType>() || type.isa<db::IntervalType>()) {
@@ -464,7 +464,7 @@ class CastOpLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto castOp = cast<mlir::db::CastOp>(op);
-      auto loc = rewriter.getUnknownLoc();
+      auto loc = op->getLoc();
       auto sourceType = castOp.val().getType().cast<db::DBType>();
       auto targetType = castOp.getType().cast<db::DBType>();
       auto scalarSourceType = sourceType.getBaseType();
@@ -479,7 +479,7 @@ class CastOpLowering : public ConversionPattern {
          isNull = unPackOp.vals()[0];
          value = unPackOp.vals()[1];
       } else {
-         isNull = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+         isNull = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
          value = operands[0];
       }
       if (scalarSourceType == scalarTargetType) {
@@ -492,11 +492,11 @@ class CastOpLowering : public ConversionPattern {
             size_t decimalWidth = typeConverter->convertType(decimalTargetType).cast<mlir::IntegerType>().getWidth();
             auto [low, high] = support::getDecimalScaleMultiplier(sourceScale);
             std::vector<uint64_t> parts = {low, high};
-            auto multiplier = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(decimalWidth, parts)));
+            auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(decimalWidth, parts)));
             if (intType.getWidth() < decimalWidth) {
                value = rewriter.create<arith::ExtSIOp>(loc, value, convertedTargetType);
             }
-            value = rewriter.create<arith::MulIOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
+            value = rewriter.create<arith::MulIOp>(loc, convertedTargetType, value, multiplier);
          } else if (auto targetType = scalarTargetType.dyn_cast_or_null<db::IntType>()) {
             if (targetType.getWidth() < intType.getWidth()) {
                value = rewriter.create<arith::TruncIOp>(loc, value, convertedTargetType);
@@ -510,8 +510,8 @@ class CastOpLowering : public ConversionPattern {
          if (scalarTargetType.isa<db::IntType>()) {
             value = rewriter.create<arith::FPToSIOp>(loc, value, convertedTargetType);
          } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
-            auto multiplier = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), convertedSourceType, FloatAttr::get(convertedSourceType, powf(10, decimalTargetType.getS())));
-            value = rewriter.create<arith::MulFOp>(rewriter.getUnknownLoc(), convertedSourceType, value, multiplier);
+            auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedSourceType, FloatAttr::get(convertedSourceType, powf(10, decimalTargetType.getS())));
+            value = rewriter.create<arith::MulFOp>(loc, convertedSourceType, value, multiplier);
             value = rewriter.create<arith::FPToSIOp>(loc, value, convertedTargetType);
          } else {
             return failure();
@@ -523,16 +523,16 @@ class CastOpLowering : public ConversionPattern {
             size_t decimalWidth = convertedSourceType.cast<mlir::IntegerType>().getWidth(); //TODO
             auto [low, high] = support::getDecimalScaleMultiplier(std::max(sourceScale, targetScale) - std::min(sourceScale, targetScale));
             std::vector<uint64_t> parts = {low, high};
-            auto multiplier = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(decimalWidth, parts)));
+            auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(decimalWidth, parts)));
             if (sourceScale < targetScale) {
-               value = rewriter.create<arith::MulIOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
+               value = rewriter.create<arith::MulIOp>(loc, convertedTargetType, value, multiplier);
             } else {
-               value = rewriter.create<arith::DivSIOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
+               value = rewriter.create<arith::DivSIOp>(loc, convertedTargetType, value, multiplier);
             }
          } else if (scalarTargetType.isa<db::FloatType>()) {
-            auto multiplier = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), convertedTargetType, FloatAttr::get(convertedTargetType, powf(10, decimalSourceType.getS())));
+            auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, FloatAttr::get(convertedTargetType, powf(10, decimalSourceType.getS())));
             value = rewriter.create<arith::SIToFPOp>(loc, value, convertedTargetType);
-            value = rewriter.create<arith::DivFOp>(rewriter.getUnknownLoc(), convertedTargetType, value, multiplier);
+            value = rewriter.create<arith::DivFOp>(loc, convertedTargetType, value, multiplier);
          } else if (auto intType = scalarTargetType.dyn_cast_or_null<db::IntType>()) {
             auto sourceScale = decimalSourceType.getS();
             auto [low, high] = support::getDecimalScaleMultiplier(sourceScale);
@@ -540,8 +540,8 @@ class CastOpLowering : public ConversionPattern {
 
             std::vector<uint64_t> parts = {low, high};
 
-            auto multiplier = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), convertedSourceType, rewriter.getIntegerAttr(convertedSourceType, APInt(decimalWidth, parts)));
-            value = rewriter.create<arith::DivSIOp>(rewriter.getUnknownLoc(), convertedSourceType, value, multiplier);
+            auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedSourceType, rewriter.getIntegerAttr(convertedSourceType, APInt(decimalWidth, parts)));
+            value = rewriter.create<arith::DivSIOp>(loc, convertedSourceType, value, multiplier);
             if (intType.getWidth() < decimalWidth) {
                value = rewriter.create<arith::TruncIOp>(loc, value, convertedTargetType);
             }
@@ -610,37 +610,35 @@ class GetFlagLowering : public ConversionPattern {
    }
 };
 class HashLowering : public ConversionPattern {
-   Value combineHashes(OpBuilder& builder, Value hash1, Value totalHash, bool& required) const {
-      Value kMul = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0x9ddfea08eb382d69));
-      Value k47 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(47));
+   Value combineHashes(OpBuilder& builder, Location loc, Value hash1, Value totalHash, bool& required) const {
+      Value kMul = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(0x9ddfea08eb382d69));
+      Value k47 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(47));
 
       if (!required) {
          required = true;
-         Value shifted2 = builder.create<arith::ShRUIOp>(builder.getUnknownLoc(), hash1, k47);
-         Value b = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), shifted2, hash1);
-         Value multiplied4 = builder.create<arith::MulIOp>(builder.getUnknownLoc(), b, kMul);
+         Value shifted2 = builder.create<arith::ShRUIOp>(loc, hash1, k47);
+         Value b = builder.create<arith::XOrIOp>(loc, shifted2, hash1);
+         Value multiplied4 = builder.create<arith::MulIOp>(loc, b, kMul);
          return multiplied4;
       }
 
-      Value xOred = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), totalHash, hash1);
-      Value multiplied2 = builder.create<arith::MulIOp>(builder.getUnknownLoc(), xOred, kMul);
-      Value shifted = builder.create<arith::ShRUIOp>(builder.getUnknownLoc(), multiplied2, k47);
-      Value a = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), shifted, multiplied2);
-      Value xOred2 = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), a, hash1);
-      Value multiplied3 = builder.create<arith::MulIOp>(builder.getUnknownLoc(), xOred2, kMul);
-      Value shifted2 = builder.create<arith::ShRUIOp>(builder.getUnknownLoc(), multiplied3, k47);
-      Value b = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), shifted2, multiplied3);
-      Value multiplied4 = builder.create<arith::MulIOp>(builder.getUnknownLoc(), b, kMul);
+      Value xOred = builder.create<arith::XOrIOp>(loc, totalHash, hash1);
+      Value multiplied2 = builder.create<arith::MulIOp>(loc, xOred, kMul);
+      Value shifted = builder.create<arith::ShRUIOp>(loc, multiplied2, k47);
+      Value a = builder.create<arith::XOrIOp>(loc, shifted, multiplied2);
+      Value xOred2 = builder.create<arith::XOrIOp>(loc, a, hash1);
+      Value multiplied3 = builder.create<arith::MulIOp>(loc, xOred2, kMul);
+      Value shifted2 = builder.create<arith::ShRUIOp>(loc, multiplied3, k47);
+      Value b = builder.create<arith::XOrIOp>(loc, shifted2, multiplied3);
+      Value multiplied4 = builder.create<arith::MulIOp>(loc, b, kMul);
       return multiplied4;
    }
-   Value hashInteger(OpBuilder& builder, Value magicConstant, Value integer) const {
-      Value asIndex = builder.create<arith::IndexCastOp>(builder.getUnknownLoc(), integer, builder.getIndexType());
-      Value multiplied = builder.create<arith::MulIOp>(builder.getUnknownLoc(), asIndex, magicConstant);
+   Value hashInteger(OpBuilder& builder, Location loc, Value magicConstant, Value integer) const {
+      Value asIndex = builder.create<arith::IndexCastOp>(loc, integer, builder.getIndexType());
+      Value multiplied = builder.create<arith::MulIOp>(loc, asIndex, magicConstant);
       return multiplied;
    }
-   Value hashImpl(OpBuilder& builder, Value v, Value totalHash, Value magicConstant, Type originalType, bool& combinationRequired) const {
-      auto loc = builder.getUnknownLoc();
-
+   Value hashImpl(OpBuilder& builder, Location loc, Value v, Value totalHash, Value magicConstant, Type originalType, bool& combinationRequired) const {
       if (auto intType = v.getType().dyn_cast_or_null<mlir::IntegerType>()) {
          if (intType.getWidth() == 128) {
             auto i64Type = IntegerType::get(builder.getContext(), 64);
@@ -649,13 +647,13 @@ class HashLowering : public ConversionPattern {
             Value low = builder.create<arith::TruncIOp>(loc, v, i64Type);
             Value shift = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(i128Type, 64));
             Value high = builder.create<arith::ShRUIOp>(loc, i128Type, v, shift);
-            Value first = hashInteger(builder, magicConstant, high);
-            Value second = hashInteger(builder, magicConstant, low);
-            Value combined1 = combineHashes(builder, first, totalHash, combinationRequired);
-            Value combined2 = combineHashes(builder, second, combined1, combinationRequired);
+            Value first = hashInteger(builder, loc, magicConstant, high);
+            Value second = hashInteger(builder, loc, magicConstant, low);
+            Value combined1 = combineHashes(builder, loc, first, totalHash, combinationRequired);
+            Value combined2 = combineHashes(builder, loc, second, combined1, combinationRequired);
             return combined2;
          } else {
-            return combineHashes(builder, hashInteger(builder, magicConstant, v), totalHash, combinationRequired);
+            return combineHashes(builder, loc, hashInteger(builder, loc, magicConstant, v), totalHash, combinationRequired);
          }
 
       } else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
@@ -663,41 +661,41 @@ class HashLowering : public ConversionPattern {
       } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::util::RefType>()) {
          Value len = builder.create<mlir::util::DimOp>(loc, builder.getIndexType(), v);
 
-         Value const0 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(0));
-         Value const1 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(1));
-         Value const5 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(5));
-         Value const27 = builder.create<arith::ConstantOp>(builder.getUnknownLoc(), builder.getIndexType(), builder.getIndexAttr(27));
+         Value const0 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(0));
+         Value const1 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(1));
+         Value const5 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(5));
+         Value const27 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(27));
 
          auto loop2 = builder.create<scf::ForOp>(
             loc, const0, len, const1, len,
             [&](OpBuilder& b, Location loc, Value iv, ValueRange args) {
                Value hash = args.front();
                Value currVal = b.create<util::LoadOp>(loc, b.getIntegerType(8), v, iv);
-               Value asIndex = builder.create<arith::IndexCastOp>(builder.getUnknownLoc(), currVal, builder.getIndexType());
+               Value asIndex = builder.create<arith::IndexCastOp>(loc, currVal, builder.getIndexType());
 
-               Value shifted5 = builder.create<arith::ShLIOp>(builder.getUnknownLoc(), hash, const5);
-               Value shifted27 = builder.create<arith::ShRUIOp>(builder.getUnknownLoc(), hash, const27);
-               Value xOred = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), shifted5, shifted27);
-               Value xOred2 = builder.create<arith::XOrIOp>(builder.getUnknownLoc(), xOred, asIndex);
+               Value shifted5 = builder.create<arith::ShLIOp>(loc, hash, const5);
+               Value shifted27 = builder.create<arith::ShRUIOp>(loc, hash, const27);
+               Value xOred = builder.create<arith::XOrIOp>(loc, shifted5, shifted27);
+               Value xOred2 = builder.create<arith::XOrIOp>(loc, xOred, asIndex);
 
                b.create<scf::YieldOp>(loc, xOred2);
             });
          Value hash = loop2.getResult(0);
 
-         return combineHashes(builder, hash, totalHash, combinationRequired);
+         return combineHashes(builder, loc, hash, totalHash, combinationRequired);
       } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
          if (auto originalTupleType = originalType.dyn_cast_or_null<mlir::TupleType>()) {
-            auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(),  v);
+            auto unpacked = builder.create<util::UnPackOp>(loc, v);
             size_t i = 0;
             for (auto v : unpacked->getResults()) {
-               totalHash = hashImpl(builder, v, totalHash, magicConstant, originalTupleType.getType(i++), combinationRequired);
+               totalHash = hashImpl(builder, loc, v, totalHash, magicConstant, originalTupleType.getType(i++), combinationRequired);
             }
             return totalHash;
          } else if (auto dbType = originalType.dyn_cast_or_null<mlir::db::DBType>()) {
             assert(dbType.isNullable());
-            auto unpacked = builder.create<util::UnPackOp>(builder.getUnknownLoc(), v);
-            mlir::Value hashedIfNotNull = hashImpl(builder, unpacked.getResult(1), totalHash, magicConstant, dbType.getBaseType(), combinationRequired);
-            return builder.create<mlir::SelectOp>(builder.getUnknownLoc(), unpacked.getResult(0), totalHash, hashedIfNotNull);
+            auto unpacked = builder.create<util::UnPackOp>(loc, v);
+            mlir::Value hashedIfNotNull = hashImpl(builder, loc, unpacked.getResult(1), totalHash, magicConstant, dbType.getBaseType(), combinationRequired);
+            return builder.create<mlir::SelectOp>(loc, unpacked.getResult(0), totalHash, hashedIfNotNull);
          }
          assert(false && "should not happen");
          return Value();
@@ -713,10 +711,10 @@ class HashLowering : public ConversionPattern {
       mlir::db::HashAdaptor hashAdaptor(operands);
       auto hashOp = mlir::cast<mlir::db::Hash>(op);
       bool combinationRequired = false;
-      Value const0 = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0));
-      Value magicConstant = rewriter.create<arith::ConstantOp>(rewriter.getUnknownLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0xbf58476d1ce4e5b9));
+      Value const0 = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0));
+      Value magicConstant = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0xbf58476d1ce4e5b9));
 
-      rewriter.replaceOp(op, hashImpl(rewriter, hashAdaptor.val(), const0, magicConstant, hashOp.val().getType(), combinationRequired));
+      rewriter.replaceOp(op, hashImpl(rewriter, op->getLoc(),hashAdaptor.val(), const0, magicConstant, hashOp.val().getType(), combinationRequired));
       return success();
    }
 };

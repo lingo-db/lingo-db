@@ -585,7 +585,7 @@ LogicalResult mlir::db::OrOp::canonicalize(mlir::db::OrOp orOp, mlir::PatternRew
          }
          if(keep.size()!=andOp.vals().size()){
             if(keep.size()) {
-               newOrOperands.push_back(rewriter.create<mlir::db::AndOp>(rewriter.getUnknownLoc(), keep));
+               newOrOperands.push_back(rewriter.create<mlir::db::AndOp>(andOp->getLoc(), keep));
             }
          }else{
             newOrOperands.push_back(andOp);
@@ -595,7 +595,7 @@ LogicalResult mlir::db::OrOp::canonicalize(mlir::db::OrOp orOp, mlir::PatternRew
    std::vector<Value> extractedAsVec;
    extractedAsVec.insert(extractedAsVec.end(),extracted.begin(),extracted.end());
    if(!extracted.empty()){
-      Value newOrOp=rewriter.create<mlir::db::OrOp>(rewriter.getUnknownLoc(),newOrOperands);
+      Value newOrOp=rewriter.create<mlir::db::OrOp>(orOp->getLoc(),newOrOperands);
       extractedAsVec.push_back(newOrOp);
       rewriter.replaceOpWithNewOp<mlir::db::AndOp>(orOp,extractedAsVec);
       return success();

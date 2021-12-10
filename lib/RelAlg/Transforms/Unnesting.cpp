@@ -27,14 +27,14 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       return currFirst;
    }
 
-   void handleChildren(Operator d, Operator others) {
+   void handleChildren(mlir::Location loc,Operator d, Operator others) {
       llvm::SmallVector<Operator, 4> newChildren;
       for (auto childOp : others.getChildren()) {
-         newChildren.push_back(pushDependJoinDown(d, childOp));
+         newChildren.push_back(pushDependJoinDown(loc,d, childOp));
       }
       others.setChildren(newChildren);
    }
-   Operator pushDependJoinDown(Operator d, Operator op) {
+   Operator pushDependJoinDown(mlir::Location loc,Operator d, Operator op) {
       auto availableD = d.getAvailableAttributes();
 
       using namespace mlir::relalg;
@@ -43,7 +43,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       builder.setInsertionPointAfter(op.getOperation());
       return ::llvm::TypeSwitch<mlir::Operation*, Operator>(op.getOperation())
          .Case<mlir::relalg::BaseTableOp, mlir::relalg::ConstRelationOp>([&](Operator baserelation) {
-            return builder.create<CrossProductOp>(builder.getUnknownLoc(), relType, baserelation.asRelation(), d.asRelation()).getOperation();
+            return builder.create<CrossProductOp>(loc, relType, baserelation.asRelation(), d.asRelation()).getOperation();
          })
          .Case<CrossProductOp>([&](Operator cp) {
             llvm::SmallVector<Operator, 4> newChildren;
@@ -53,22 +53,22 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
                   newChildren.push_back(childOp);
                } else {
                   pushedDownAny = true;
-                  newChildren.push_back(pushDependJoinDown(d, childOp));
+                  newChildren.push_back(pushDependJoinDown(loc,d, childOp));
                }
             }
             if (!pushedDownAny) {
-               newChildren[0] = pushDependJoinDown(d, newChildren[0]);
+               newChildren[0] = pushDependJoinDown(loc,d, newChildren[0]);
             }
             cp.setChildren(newChildren);
             return cp;
          })
          .Case<AggregationOp>([&](AggregationOp projection) {
-            handleChildren(d, projection);
+            handleChildren(loc,d, projection);
             projection->setAttr("group_by_attrs", Attributes::fromArrayAttr(projection.group_by_attrs()).insert(availableD).asRefArrayAttr(&getContext()));
             return projection;
          })
          .Case<ProjectionOp>([&](ProjectionOp projection) {
-            handleChildren(d, projection);
+            handleChildren(loc,d, projection);
             projection->setAttr("attrs", Attributes::fromArrayAttr(projection.attrs()).insert(availableD).asRefArrayAttr(&getContext()));
             return projection;
          })
@@ -92,23 +92,23 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
                }
                if (!pushDownLeft && !pushDownRight) {
                   //handle case when no pushdown would be necessary
-                  return mlir::dyn_cast_or_null<Operator>(builder.create<CrossProductOp>(builder.getUnknownLoc(), relType, mlir::dyn_cast_or_null<Operator>(join.getOperation()).asRelation(), d.asRelation()).getOperation());
+                  return mlir::dyn_cast_or_null<Operator>(builder.create<CrossProductOp>(loc, relType, mlir::dyn_cast_or_null<Operator>(join.getOperation()).asRelation(), d.asRelation()).getOperation());
 
                } else {
-                  handleJoin(join, pushDownLeft ? pushDependJoinDown(d, left) : left, pushDownRight ? pushDependJoinDown(d, right) : right, pushDownLeft && pushDownRight, renameRight, availableD);
+                  handleJoin(loc,join, pushDownLeft ? pushDependJoinDown(loc,d, left) : left, pushDownRight ? pushDependJoinDown(loc,d, right) : right, pushDownLeft && pushDownRight, renameRight, availableD);
                   return mlir::dyn_cast_or_null<Operator>(join.getOperation());
                }
             } else {
-               handleChildren(d, mlir::dyn_cast_or_null<Operator>(join.getOperation()));
+               handleChildren(loc,d, mlir::dyn_cast_or_null<Operator>(join.getOperation()));
                return mlir::dyn_cast_or_null<Operator>(join.getOperation());
             }
          })
          .Default([&](Operator others) {
-            handleChildren(d, others);
+            handleChildren(loc,d, others);
             return others;
          });
    }
-   void handleJoin(BinaryOperator join, Operator newLeft, Operator newRight, bool joinDependent, bool renameRight, mlir::relalg::Attributes& dependentAttributes) {
+   void handleJoin(mlir::Location loc,BinaryOperator join, Operator newLeft, Operator newRight, bool joinDependent, bool renameRight, mlir::relalg::Attributes& dependentAttributes) {
       using namespace mlir;
       auto relType = relalg::TupleStreamType::get(&getContext());
       auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
@@ -127,13 +127,13 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             def.getRelationalAttribute().type = attr->type;
             renamed.insert({attr, &def.getRelationalAttribute()});
          }
-         Operator renamingop = builder.create<relalg::RenamingOp>(builder.getUnknownLoc(), relType, toRename->getResult(0), scope, builder.getArrayAttr(renamingDefsAsAttr));
+         Operator renamingop = builder.create<relalg::RenamingOp>(loc, relType, toRename->getResult(0), scope, builder.getArrayAttr(renamingDefsAsAttr));
          for (const auto* attr : dependentAttributes) {
             mlir::dyn_cast_or_null<PredicateOperator>(join.getOperation()).addPredicate([&](Value tuple, OpBuilder& builder) {
                auto attrefDependent = attributeManager.createRef(renamed[attr]);
-               Value valLeft = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), attr->type, attributeManager.createRef(attr), tuple);
-               Value valRight = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), attr->type, attrefDependent, tuple);
-               Value cmpEq = builder.create<db::CmpOp>(builder.getUnknownLoc(), db::DBCmpPredicate::eq, valLeft, valRight);
+               Value valLeft = builder.create<relalg::GetAttrOp>(loc, attr->type, attributeManager.createRef(attr), tuple);
+               Value valRight = builder.create<relalg::GetAttrOp>(loc, attr->type, attrefDependent, tuple);
+               Value cmpEq = builder.create<db::CmpOp>(loc, db::DBCmpPredicate::eq, valLeft, valRight);
                return cmpEq;
             });
          }
@@ -173,7 +173,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
             return false;
          });
    }
-   void combine(std::vector<mlir::relalg::SelectionOp> selectionOps, PredicateOperator lower) {
+   void combine(mlir::Location loc,std::vector<mlir::relalg::SelectionOp> selectionOps, PredicateOperator lower) {
       using namespace mlir;
       auto lowerTerminator = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(lower.getPredicateBlock().getTerminator());
 
@@ -197,8 +197,8 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          nullable |= higherPredVal.getType().cast<mlir::db::DBType>().isNullable();
          values.push_back(mapping.lookup(higherPredVal));
       }
-      mlir::Value combined = builder.create<mlir::db::AndOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext(), nullable), values);
-      builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), combined);
+      mlir::Value combined = builder.create<mlir::db::AndOp>(loc, mlir::db::BoolType::get(builder.getContext(), nullable), values);
+      builder.create<mlir::relalg::ReturnOp>(loc, combined);
       lowerTerminator->remove();
       lowerTerminator->destroy();
    }
@@ -218,7 +218,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          if (!collectSimpleDependencies(dependentChild, providedAttrs, selectionOps)) {
             return false;
          }
-         combine(selectionOps, predicateOperator);
+         combine(binaryOperator->getLoc(),selectionOps, predicateOperator);
          for (auto selOp : selectionOps) {
             selOp.replaceAllUsesWith(selOp.rel());
             selOp->remove();
@@ -249,12 +249,12 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
          OpBuilder builder(binaryOperator.getOperation());
          providerChild.moveSubTreeBefore(getFirstOfTree(dependentChild));
          builder.setInsertionPointAfter(providerChild);
-         auto proj = builder.create<relalg::ProjectionOp>(builder.getUnknownLoc(), relalg::TupleStreamType::get(&getContext()), relalg::SetSemantic::distinct, providerChild.asRelation(), dependentAttributes.asRefArrayAttr(&getContext()));
+         auto proj = builder.create<relalg::ProjectionOp>(binaryOperator->getLoc(), relalg::TupleStreamType::get(&getContext()), relalg::SetSemantic::distinct, providerChild.asRelation(), dependentAttributes.asRefArrayAttr(&getContext()));
          Operator d = mlir::dyn_cast_or_null<Operator>(proj.getOperation());
-         Operator unnestedChild = pushDependJoinDown(d, dependentChild);
+         Operator unnestedChild = pushDependJoinDown(binaryOperator->getLoc(),d, dependentChild);
          Operator newLeft = leftProvides ? providerChild : unnestedChild;
          Operator newRight = leftProvides ? unnestedChild : providerChild;
-         handleJoin(binaryOperator, newLeft, newRight, true, leftProvides, dependentAttributes);
+         handleJoin(binaryOperator->getLoc(),binaryOperator, newLeft, newRight, true, leftProvides, dependentAttributes);
       });
    }
 };

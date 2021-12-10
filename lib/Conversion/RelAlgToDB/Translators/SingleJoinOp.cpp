@@ -78,7 +78,7 @@ class ConstantSingleJoinTranslator : public mlir::relalg::Translator {
          for (size_t i = 0; i < origAttrs.size(); i++) {
             mlir::Value value = context.getValueForAttribute(origAttrs[i]);
             if (origAttrs[i]->type != attrs[i]->type) {
-               mlir::Value tmp = builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), attrs[i]->type, value);
+               mlir::Value tmp = builder.create<mlir::db::CastOp>(op->getLoc(), attrs[i]->type, value);
                value = tmp;
             }
             values.push_back(value);

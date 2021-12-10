@@ -11,7 +11,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
    virtual llvm::StringRef getArgument() const override { return "relalg-implicit-to-explicit-joins"; }
 
    llvm::SmallVector<mlir::Operation*> toDestroy;
-   void handleScalarBoolOp(TupleLamdaOperator surroundingOperator, mlir::Operation* op, Operator relOperator, std::function<void(PredicateOperator)> apply) {
+   void handleScalarBoolOp(mlir::Location loc,TupleLamdaOperator surroundingOperator, mlir::Operation* op, Operator relOperator, std::function<void(PredicateOperator)> apply) {
       using namespace mlir;
       auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       bool negated = false;
@@ -37,7 +37,6 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
       //get attribute f relation to search in
       OpBuilder builder(surroundingOperator);
       auto relType = mlir::relalg::TupleStreamType::get(&getContext());
-      auto loc = builder.getUnknownLoc();
       if (directSelection) {
          PredicateOperator semijoin;
          if (negated) {
@@ -95,10 +94,10 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             newDef.getRelationalAttribute().type=newAttrType;
 
             auto mapping=ArrayAttr::get(&getContext(),{newDef});
-            auto singleJoin = builder.create<relalg::SingleJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()),scopeName, treeVal, getscalarop.rel(),mapping);
+            auto singleJoin = builder.create<relalg::SingleJoinOp>(getscalarop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()),scopeName, treeVal, getscalarop.rel(),mapping);
             singleJoin.initPredicate();
             builder.setInsertionPoint(getscalarop);
-            Operation* replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), newAttrType, attributeManager.createRef(scopeName,attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
+            Operation* replacement = builder.create<relalg::GetAttrOp>(getscalarop->getLoc(), newAttrType, attributeManager.createRef(scopeName,attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
             getscalarop.replaceAllUsesWith(replacement);
             getscalarop->remove();
             getscalarop->destroy();
@@ -113,30 +112,30 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
 
             auto newDef=attributeManager.createDef(attributeName);
             newDef.getRelationalAttribute().type=getlistop.getType();
-            auto collectionJoin = builder.create<relalg::CollectionJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()),scopeName, fromAttrs,newDef,treeVal, getlistop.rel());
+            auto collectionJoin = builder.create<relalg::CollectionJoinOp>(getlistop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()),scopeName, fromAttrs,newDef,treeVal, getlistop.rel());
             collectionJoin.initPredicate();
             builder.setInsertionPoint(getlistop);
-            Operation* replacement = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), getlistop.getType(), attributeManager.createRef(scopeName,attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
+            Operation* replacement = builder.create<relalg::GetAttrOp>(getlistop->getLoc(), getlistop.getType(), attributeManager.createRef(scopeName,attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
             getlistop.replaceAllUsesWith(replacement);
             getlistop->remove();
             getlistop->destroy();
             treeVal = collectionJoin;
             surroundingOperator->setOperand(0, treeVal);
          } else if (auto existsop = mlir::dyn_cast_or_null<mlir::relalg::ExistsOp>(op)) {
-            handleScalarBoolOp(surroundingOperator, op, existsop.rel().getDefiningOp(), [](auto) {});
+            handleScalarBoolOp(existsop->getLoc(),surroundingOperator, op, existsop.rel().getDefiningOp(), [](auto) {});
          } else if (auto inop = mlir::dyn_cast_or_null<mlir::relalg::InOp>(op)) {
             Operator relOperator = inop.rel().getDefiningOp();
             //get attribute of relation to search in
             const auto* attr = *relOperator.getAvailableAttributes().begin();
             auto searchInAttr = attributeManager.createRef(attr);
-            handleScalarBoolOp(surroundingOperator, op, relOperator, [&](PredicateOperator predicateOperator) {
+            handleScalarBoolOp(inop->getLoc(),surroundingOperator, op, relOperator, [&](PredicateOperator predicateOperator) {
                predicateOperator.addPredicate([&](Value tuple, OpBuilder& builder) {
                   mlir::BlockAndValueMapping mapping;
                   mapping.map(surroundingOperator.getLambdaArgument(), predicateOperator.getPredicateArgument());
                   mlir::relalg::detail::inlineOpIntoBlock(inop.val().getDefiningOp(), surroundingOperator.getOperation(), predicateOperator.getOperation(), &predicateOperator.getPredicateBlock(), mapping);
                   auto val = mapping.lookup(inop.val());
-                  auto otherVal = builder.create<relalg::GetAttrOp>(builder.getUnknownLoc(), searchInAttr.getRelationalAttribute().type, searchInAttr, tuple);
-                  Value predicate = builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::eq, val, otherVal);
+                  auto otherVal = builder.create<relalg::GetAttrOp>(inop->getLoc(), searchInAttr.getRelationalAttribute().type, searchInAttr, tuple);
+                  Value predicate = builder.create<mlir::db::CmpOp>(inop->getLoc(), mlir::db::DBCmpPredicate::eq, val, otherVal);
                   return predicate;
                });
             });

@@ -117,7 +117,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
                      mlir::OpBuilder builder(aggregationOp);
                      auto attrs = mlir::relalg::Attributes::fromArrayAttr(aggregationOp.group_by_attrs());
                      attrs.insert(mlir::relalg::Attributes::fromArrayAttr(projectionOp.attrs()));
-                     auto newProj = builder.create<mlir::relalg::ProjectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(&getContext()), mlir::relalg::SetSemantic::distinct, aggregationOp.rel(), attrs.asRefArrayAttr(&getContext()));
+                     auto newProj = builder.create<mlir::relalg::ProjectionOp>(projectionOp->getLoc(), mlir::relalg::TupleStreamType::get(&getContext()), mlir::relalg::SetSemantic::distinct, aggregationOp.rel(), attrs.asRefArrayAttr(&getContext()));
                      aggregationOp.setOperand(newProj);
                      projectionOp.replaceAllUsesWith(arg);
                      projectionOp->remove();

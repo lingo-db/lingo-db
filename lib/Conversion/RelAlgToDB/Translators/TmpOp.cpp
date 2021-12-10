@@ -13,10 +13,9 @@ class TmpTranslator : public mlir::relalg::Translator {
 
    public:
    TmpTranslator(mlir::relalg::TmpOp tmpOp) : mlir::relalg::Translator(tmpOp), tmpOp(tmpOp) {
-      std::vector<mlir::Operation*> users(tmpOp->getUsers().begin(),tmpOp->getUsers().end());
-      userCount=users.size();
-      producedCount=0;
-
+      std::vector<mlir::Operation*> users(tmpOp->getUsers().begin(), tmpOp->getUsers().end());
+      userCount = users.size();
+      producedCount = 0;
    }
    virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) override {
       this->consumer = consumer;
@@ -34,7 +33,7 @@ class TmpTranslator : public mlir::relalg::Translator {
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       if (materialize) {
          mlir::Value vectorBuilder = context.builders[builderId];
-         mlir::Value packed = packValues(context,builder,attributes);
+         mlir::Value packed = packValues(context, builder, tmpOp->getLoc(), attributes);
          mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(tmpOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
          context.builders[builderId] = mergedBuilder;
          consumer->consume(this, builder, context);
@@ -61,9 +60,9 @@ class TmpTranslator : public mlir::relalg::Translator {
          children[0]->addRequiredBuilders({builderId});
          children[0]->produce(context, builder);
          mlir::Value vector = builder.create<mlir::db::BuilderBuild>(tmpOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), context.builders[builderId]);
-         context.materializedTmp[tmpOp.getOperation()]={vector,attributes};
+         context.materializedTmp[tmpOp.getOperation()] = {vector, attributes};
       } else {
-         auto [vector,attributes]=context.materializedTmp[tmpOp.getOperation()];
+         auto [vector, attributes] = context.materializedTmp[tmpOp.getOperation()];
          std::vector<mlir::Type> types;
          for (const auto* attr : attributes) {
             types.push_back(attr->type);
@@ -85,8 +84,8 @@ class TmpTranslator : public mlir::relalg::Translator {
          builder2.create<mlir::db::YieldOp>(tmpOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());
       }
-      if(producedCount>=userCount) {
-         auto [vector,attributes]=context.materializedTmp[tmpOp.getOperation()];
+      if (producedCount >= userCount) {
+         auto [vector, attributes] = context.materializedTmp[tmpOp.getOperation()];
          builder.create<mlir::db::FreeOp>(tmpOp->getLoc(), vector);
       }
    }

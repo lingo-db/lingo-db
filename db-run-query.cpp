@@ -23,7 +23,7 @@ int main(int argc, char** argv) {
    runner.optimize();
    //runner.dump();
    runner.lower();
-   //runner.dump();
+   runner.dump();
    runner.lowerToLLVM();
    //runner.dump();
    //runner.dumpLLVM();

@@ -255,10 +255,10 @@ void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir:
    if (terminator->getNumOperands() > 0) {
       mlir::Value oldValue = terminator->getOperand(0);
       bool nullable = oldValue.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable() || additionalPred.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable();
-      mlir::Value anded = builder.create<mlir::db::AndOp>(builder.getUnknownLoc(), mlir::db::BoolType::get(builder.getContext(), nullable), mlir::ValueRange({oldValue, additionalPred}));
-      builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), anded);
+      mlir::Value anded = builder.create<mlir::db::AndOp>(op->getLoc(), mlir::db::BoolType::get(builder.getContext(), nullable), mlir::ValueRange({oldValue, additionalPred}));
+      builder.create<mlir::relalg::ReturnOp>(op->getLoc(), anded);
    } else {
-      builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), additionalPred);
+      builder.create<mlir::relalg::ReturnOp>(op->getLoc(), additionalPred);
    }
    terminator->remove();
    terminator->destroy();
@@ -271,7 +271,7 @@ void mlir::relalg::detail::initPredicate(mlir::Operation* op) {
    block->addArgument(tupleType);
    mlir::OpBuilder builder(context);
    builder.setInsertionPointToStart(block);
-   builder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc());
+   builder.create<mlir::relalg::ReturnOp>(op->getLoc());
 }
 
 static void addRequirements(mlir::Operation* op, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, llvm::SmallVector<mlir::Operation*, 8>& extracted, llvm::SmallPtrSet<mlir::Operation*, 8>& alreadyPresent, mlir::BlockAndValueMapping& mapping) {
