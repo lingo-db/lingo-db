@@ -42,8 +42,38 @@ class Util_Type<string name, string typeMnemonic> : TypeDef<Util_Dialect, name> 
 def RefType : Util_Type<"Ref","ref"> {
 let summary = "ref type";
 let parameters = (ins "Type":$elementType,"llvm::Optional<int64_t>": $size);
+    let builders = [
+    TypeBuilder<(ins "Type":$elementType), [{
+    return $_get($_ctxt, elementType,llvm::Optional<int64_t>());
+    }]>,
+    TypeBuilder<(ins ), [{
+    return $_get($_ctxt, mlir::IntegerType::get($_ctxt,8),llvm::Optional<int64_t>());
+    }]>
+    ];
+let builderCall = "$_builder.getType<" # dialect.cppNamespace #
+"::" # cppClassName # ">()";
 }
 
+
+def VarLen32Type : Util_Type<"VarLen32","varlen32"> {
+let summary = "type representing variable-length data up to 2^32 bytes";
+}
+
+def CreateVarLen  : Util_Op<"varlen32_create"> {
+let arguments = (ins RefType:$ref, I32: $len, I8:$type);
+let results=(outs VarLen32Type:$varlen);
+let assemblyFormat = " $ref `,` $len `,` $type attr-dict";
+}
+def VarLenGetRef : Util_Op<"varlen32_getref"> {
+    let arguments = (ins VarLen32Type:$varlen);
+    let results = (outs RefType: $ref);
+    let assemblyFormat = " $varlen `->` type($ref) attr-dict";
+}
+def VarLenGetLen : Util_Op<"varlen32_getlen"> {
+    let arguments = (ins VarLen32Type:$varlen);
+    let results = (outs Index: $len);
+    let assemblyFormat = " $varlen attr-dict";
+}
 def AllocOp  : Util_Op<"alloc"> {
 let arguments = (ins Optional<Index>:$size);
 let results=(outs RefType:$ref);
