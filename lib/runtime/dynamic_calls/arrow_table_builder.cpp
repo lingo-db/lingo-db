@@ -94,13 +94,13 @@ EXPORT void rt_table_builder_add_small_decimal(TableBuilder* builder, int column
       typed_builder->Append(decimalrep); //NOLINT (clang-diagnostic-unused-result)
    }
 }
-EXPORT void rt_table_builder_add_binary(TableBuilder* builder, int column, bool isNull, runtime::Str string) {
+EXPORT void rt_table_builder_add_binary(TableBuilder* builder, int column, bool isNull, runtime::VarLen32 string) {
    auto* typed_builder = (builder)->GetBuilderForColumn<arrow::BinaryBuilder>(column);
    if (isNull) {
       typed_builder->AppendNull(); //NOLINT (clang-diagnostic-unused-result)
    } else {
       std::string str = (string).str();
-      typed_builder->Append(str.data(), str.size()); //NOLINT (clang-diagnostic-unused-result)
+      typed_builder->Append(string.getPtr(), string.getLen()); //NOLINT (clang-diagnostic-unused-result)
    }
 }
 EXPORT void rt_table_builder_finish_row(TableBuilder* builder) {

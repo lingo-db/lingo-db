@@ -360,33 +360,13 @@ class ConstantLowering : public ConversionPattern {
       } else if (type.isa<mlir::db::StringType>()) {
          if (auto stringAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
             const std::string& str = stringAttr.getValue().str();
-            Value result;
             ModuleOp parentModule = rewriter.getInsertionPoint()->getParentOfType<ModuleOp>();
-            auto* context = rewriter.getContext();
-            auto i8Type = IntegerType::get(context, 8);
-            auto insertionPoint = rewriter.saveInsertionPoint();
-            int64_t strLen = str.size();
-            std::vector<uint8_t> vec;
-            for (auto c : str) {
-               vec.push_back(c);
-            }
-            auto strStaticType = MemRefType::get({strLen}, i8Type);
-            auto strDynamicType = MemRefType::get({-1}, IntegerType::get(context, 8));
-            rewriter.setInsertionPointToStart(parentModule.getBody());
-            Attribute initialValue = DenseIntElementsAttr::get(
-               RankedTensorType::get({strLen}, i8Type), vec);
-            static int id = 0;
-            auto globalop = rewriter.create<mlir::memref::GlobalOp>(loc, "db_constant_string" + std::to_string(id++), rewriter.getStringAttr("private"), strStaticType, initialValue, true, rewriter.getI64IntegerAttr(1));
-            rewriter.restoreInsertionPoint(insertionPoint);
-            Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
-            result = rewriter.create<memref::CastOp>(loc, conststr, strDynamicType);
-            Value strres = rewriter.create<mlir::util::ToGenericMemrefOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8), -1), result);
-
+            Value strres = db::createStringConstant(loc,rewriter,parentModule,str);
             Value ptr = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8)), strres);
-            Value len = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(strLen));
+            Value len = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(str.size()));
             Value type = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI8Type(), rewriter.getI8IntegerAttr(0));
 
-            rewriter.replaceOpWithNewOp<mlir::util::CreateVarLen>(op, mlir::util::VarLen32Type::get(context), ptr, len, type);
+            rewriter.replaceOpWithNewOp<mlir::util::CreateVarLen>(op, mlir::util::VarLen32Type::get(rewriter.getContext()), ptr, len, type);
             return success();
          }
       }

@@ -37,5 +37,31 @@ class Bytes {
       return size;
    }
 };
+
+class VarLen32 {
+   uint32_t len;
+   uint8_t type;
+   uint8_t bytes[11];
+
+   public:
+   uint8_t* getPtr() {
+      if (len <= 11) {
+         return bytes;
+      } else {
+         return reinterpret_cast<uint8_t*>(*(uintptr_t*) (&bytes[3]));
+      }
+   }
+   char* data() {
+      return (char*) getPtr();
+   }
+   uint32_t getLen() {
+      return len;
+   }
+   uint8_t getType() {
+      return type;
+   }
+   operator std::string() { return std::string((char*) getPtr(), len); }
+   std::string str() { return std::string((char*) getPtr(), len); }
+};
 } // end namespace runtime
 #endif // RUNTIME_HELPERS_H

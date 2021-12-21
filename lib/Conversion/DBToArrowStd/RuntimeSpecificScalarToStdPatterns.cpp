@@ -246,8 +246,6 @@ class StringCmpOpLowering : public ConversionPattern {
       Value right = nullHandler.getValue(cmpOp.right(),adaptor.right());
       using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
       FuncId cmpFunc = funcForStrCompare(cmpOp.predicate());
-      left = rewriter.create<mlir::util::VarLenGetRef>(cmpOp->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), left);
-      right = rewriter.create<mlir::util::VarLenGetRef>(cmpOp->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), right);
       Value res = functionRegistry.call(rewriter, cmpOp->getLoc(), cmpFunc, ValueRange({nullHandler.isNull(), left, right}))[0];
       rewriter.replaceOp(op, nullHandler.combineResult(res));
       return success();
@@ -334,8 +332,7 @@ class DumpOpLowering : public ConversionPattern {
          }
          functionRegistry.call(rewriter, loc, FunctionId::DumpFloat, ValueRange({isNull, val}));
       } else if (type.isa<mlir::db::StringType>()) {
-         auto ref = rewriter.create<mlir::util::VarLenGetRef>(loc, mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), val);
-         functionRegistry.call(rewriter, loc, FunctionId::DumpString, ValueRange({isNull, ref}));
+         functionRegistry.call(rewriter, loc, FunctionId::DumpString, ValueRange({isNull, val}));
       }
       rewriter.eraseOp(op);
 

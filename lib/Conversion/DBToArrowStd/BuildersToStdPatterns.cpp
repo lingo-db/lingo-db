@@ -403,9 +403,6 @@ class BuilderMergeLowering : public ConversionPattern {
             }
             Value columnId = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(i));
             Value val = v;
-            if (rowType.getType(i).cast<mlir::db::DBType>().isa<mlir::db::StringType>()) {
-               val = rewriter.create<mlir::util::VarLenGetRef>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), val);
-            }
             functionRegistry.call(rewriter, loc, getStoreFunc(functionRegistry, rowType.getType(i).cast<mlir::db::DBType>()), ValueRange({mergeOpAdaptor.builder(), columnId, isNull, val}));
             i++;
          }
@@ -637,9 +634,7 @@ class CreateTableBuilderLowering : public ConversionPattern {
          auto stringAttr = c.cast<StringAttr>();
          auto dbType = rowType.getType(i).cast<mlir::db::DBType>();
          auto arrowType = getArrowDataType(rewriter, op->getLoc(), functionRegistry, dbType);
-         auto columnName = rewriter.create<mlir::db::ConstantOp>(loc, mlir::db::StringType::get(rewriter.getContext(), false), stringAttr);
-         Value columnNameRef = rewriter.create<mlir::util::VarLenGetRef>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), columnName);
-
+         Value columnNameRef =mlir::db::createStringConstant(loc,rewriter,op->getParentOfType<ModuleOp>(),stringAttr.getValue().str());
          Value typeNullable = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), dbType.isNullable()));
 
          functionRegistry.call(rewriter, loc, FunctionId::ArrowTableSchemaAddField, ValueRange({schema, arrowType, typeNullable, columnNameRef}));
