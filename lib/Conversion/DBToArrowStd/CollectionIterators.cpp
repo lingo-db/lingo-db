@@ -304,8 +304,6 @@ class TableRowIterator : public ForIterator {
          }
          if (dbtype.isVarLen()) {
             varLenBuffer = functionRegistry.call(builder, loc,db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const2}))[0];
-            Value asMemRef = builder.create<util::ToMemrefOp>(loc, MemRefType::get({-1}, builder.getIntegerType(8)), varLenBuffer);
-            varLenBuffer = asMemRef;
          }
          columnInfo.push_back({dbtype, convertedType, offset, nullMultiplier, bitmapBuffer, valueBuffer, varLenBuffer});
          columnIdx++;
@@ -328,9 +326,12 @@ class TableRowIterator : public ForIterator {
             Value pos2 = builder.create<util::LoadOp>(loc, column.stdType, column.values, ip1);
             Value len = builder.create<arith::SubIOp>(loc, builder.getI32Type(), pos2, pos1);
             Value pos1AsIndex = builder.create<arith::IndexCastOp>(loc, pos1, indexType);
-            Value lenAsIndex = builder.create<arith::IndexCastOp>(loc, len, indexType);
-            Value view = builder.create<mlir::memref::ViewOp>(loc, MemRefType::get({-1}, builder.getIntegerType(8)), column.varLenBuffer, pos1AsIndex, mlir::ValueRange({lenAsIndex}));
-            val = builder.create<mlir::util::ToGenericMemrefOp>(loc, mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8), -1), view);
+            Value stringType = builder.create<mlir::arith::ConstantOp>(loc, builder.getI8Type(), builder.getI8IntegerAttr(1));
+            Value ptr=builder.create<util::ElementPtrOp>(loc,util::RefType::get(context,builder.getI8Type(),llvm::Optional<int64_t>()),column.varLenBuffer,pos1AsIndex);
+            val = builder.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(builder.getContext()), ptr,len,stringType);
+            //Value lenAsIndex = builder.create<arith::IndexCastOp>(loc, len, indexType);
+            //Value view = builder.create<mlir::memref::ViewOp>(loc, MemRefType::get({-1}, builder.getIntegerType(8)), column.varLenBuffer, pos1AsIndex, mlir::ValueRange({lenAsIndex}));
+            //val = builder.create<mlir::util::ToGenericMemrefOp>(loc, mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8), -1), view);
          } else if (column.type.isa<db::BoolType>()) {
             Value realPos = builder.create<arith::AddIOp>(loc, indexType, column.offset, index);
             val = mlir::db::codegen::BitUtil::getBit(builder, loc, column.values, realPos);

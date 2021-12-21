@@ -198,7 +198,7 @@ class DecimalOpScaledLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto addOp = cast<DBOp>(op);
       typename DBOp::Adaptor adaptor(operands);
-      db::NullHandler nullHandler(*typeConverter, rewriter,addOp->getLoc());
+      db::NullHandler nullHandler(*typeConverter, rewriter, addOp->getLoc());
       Value left = nullHandler.getValue(addOp.left(), adaptor.left());
       Value right = nullHandler.getValue(addOp.right(), adaptor.right());
       if (left.getType() != right.getType()) {
@@ -267,12 +267,15 @@ class SubStrOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto subStrOp = cast<mlir::db::SubStrOp>(op);
       mlir::db::SubStrOpAdaptor adaptor(operands);
+      Value ref = rewriter.create<mlir::util::VarLenGetRef>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), adaptor.val());
+      ref = rewriter.create<mlir::util::GenericMemrefCastOp>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type()), ref);
       Value pos1AsIndex = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.from() - 1));
-      Value lenAsIndex = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.to() - subStrOp.from() + 1));
-      Value asMemRef = rewriter.create<util::ToMemrefOp>(op->getLoc(), MemRefType::get({-1}, rewriter.getIntegerType(8)), adaptor.val());
-      Value view = rewriter.create<mlir::memref::ViewOp>(op->getLoc(), MemRefType::get({-1}, rewriter.getIntegerType(8)), asMemRef, pos1AsIndex, mlir::ValueRange({lenAsIndex}));
-      Value val = rewriter.create<mlir::util::ToGenericMemrefOp>(op->getLoc(), mlir::util::RefType::get(rewriter.getContext(), IntegerType::get(rewriter.getContext(), 8), -1), view);
+      Value stringType = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI8Type(), rewriter.getI8IntegerAttr(2));
 
+      Value len = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(subStrOp.to() - subStrOp.from() + 1));
+      Value indexed = rewriter.create<mlir::util::ElementPtrOp>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type()), ref, pos1AsIndex);
+
+      Value val = rewriter.create<mlir::util::CreateVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(getContext()), indexed, len, stringType);
       rewriter.replaceOp(op, val);
       return success();
    }
@@ -378,7 +381,12 @@ class ConstantLowering : public ConversionPattern {
             Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
             result = rewriter.create<memref::CastOp>(loc, conststr, strDynamicType);
             Value strres = rewriter.create<mlir::util::ToGenericMemrefOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8), -1), result);
-            rewriter.replaceOp(op, strres);
+
+            Value ptr = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8)), strres);
+            Value len = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(strLen));
+            Value type = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI8Type(), rewriter.getI8IntegerAttr(0));
+
+            rewriter.replaceOpWithNewOp<mlir::util::CreateVarLen>(op, mlir::util::VarLen32Type::get(context), ptr, len, type);
             return success();
          }
       }
@@ -437,7 +445,6 @@ class CmpOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto loc = op->getLoc();
       auto cmpOp = cast<db::CmpOp>(op);
-      db::CmpOpAdaptor adaptor(operands);
       auto type = cmpOp.left().getType().cast<db::DBType>().getBaseType();
       if (type.isa<db::StringType>()) {
          return failure();
@@ -661,19 +668,20 @@ class HashLowering : public ConversionPattern {
 
       } else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
          assert(false && "can not hash float values");
-      } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::util::RefType>()) {
-         Value len = builder.create<mlir::util::DimOp>(loc, builder.getIndexType(), v);
+      } else if (auto varLenType = v.getType().dyn_cast_or_null<mlir::util::VarLen32Type>()) {
+         Value len = builder.create<mlir::util::VarLenGetLen>(loc, builder.getIndexType(), v);
 
          Value const0 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(0));
          Value const1 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(1));
          Value const5 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(5));
          Value const27 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(27));
+         Value ref = builder.create<mlir::util::VarLenGetRef>(loc, mlir::util::RefType::get(getContext(), builder.getI8Type(), -1), v);
 
          auto loop2 = builder.create<scf::ForOp>(
             loc, const0, len, const1, len,
             [&](OpBuilder& b, Location loc, Value iv, ValueRange args) {
                Value hash = args.front();
-               Value currVal = b.create<util::LoadOp>(loc, b.getIntegerType(8), v, iv);
+               Value currVal = b.create<util::LoadOp>(loc, b.getIntegerType(8), ref, iv);
                Value asIndex = builder.create<arith::IndexCastOp>(loc, currVal, builder.getIndexType());
 
                Value shifted5 = builder.create<arith::ShLIOp>(loc, hash, const5);
@@ -717,7 +725,7 @@ class HashLowering : public ConversionPattern {
       Value const0 = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0));
       Value magicConstant = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0xbf58476d1ce4e5b9));
 
-      rewriter.replaceOp(op, hashImpl(rewriter, op->getLoc(),hashAdaptor.val(), const0, magicConstant, hashOp.val().getType(), combinationRequired));
+      rewriter.replaceOp(op, hashImpl(rewriter, op->getLoc(), hashAdaptor.val(), const0, magicConstant, hashOp.val().getType(), combinationRequired));
       return success();
    }
 };
@@ -765,7 +773,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
                            return res;
                         })
                         .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
-                           return mlir::util::RefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), -1);
+                           return mlir::util::VarLen32Type::get(patterns.getContext());
                         })
                         .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
                            return mlir::IntegerType::get(patterns.getContext(), 64);

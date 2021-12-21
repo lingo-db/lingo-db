@@ -164,6 +164,12 @@ class UnPackOpLowering : public ConversionPattern {
       std::vector<Value> values;
       for (auto type : structType.getBody()) {
          values.push_back(rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), type, adaptor.tuple(), rewriter.getI64ArrayAttr(pos++)));
+         if (!unPackOp.getResult(pos).use_empty()) {
+            values.push_back(rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), type, unPackOp.tuple(), rewriter.getI64ArrayAttr(pos++)));
+         } else {
+            values.push_back(Value());
+            pos++;
+         }
       }
       rewriter.replaceOp(op, values);
       return success();
@@ -511,7 +517,7 @@ class CreateVarLenLowering : public ConversionPattern {
       auto shift = rewriter.create<mlir::SelectOp>(op->getLoc(), lenGT11, const3I16, lenI16);
 
       auto shifted = rewriter.create<mlir::LLVM::ShlOp>(op->getLoc(), const1I16, shift);
-      auto bitmask=rewriter.create<mlir::LLVM::SubOp>(op->getLoc(),shifted, const1I16);
+      auto bitmask = rewriter.create<mlir::LLVM::SubOp>(op->getLoc(), shifted, const1I16);
       auto vecPtrType = mlir::LLVM::LLVMPointerType::get(vecType);
       Value vecPtr = rewriter.create<LLVM::BitcastOp>(op->getLoc(), vecPtrType, adaptor.ref());
       Value mask = rewriter.create<LLVM::BitcastOp>(op->getLoc(), maskType, bitmask);
@@ -554,6 +560,15 @@ class VarLenGetRefLowering : public ConversionPattern {
 
       auto i8Type = IntegerType::get(context, 8);
       auto ptrType = mlir::LLVM::LLVMPointerType::get(i8Type);
+      mlir::Value allocatedElementPtr;
+      Value const11i;
+      {
+         auto func = op->getParentOfType<mlir::LLVM::LLVMFuncOp>();
+         OpBuilder::InsertionGuard insertionGuard(rewriter);
+         rewriter.setInsertionPointToStart(&func.getBody().front());
+         const11i = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 11);
+         allocatedElementPtr = rewriter.create<LLVM::AllocaOp>(op->getLoc(), mlir::LLVM::LLVMPointerType::get(i128Type), const11i, 0);
+      }
       Value len = rewriter.create<LLVM::TruncOp>(op->getLoc(), i32type, adaptor.varlen());
       Value const64 = rewriter.create<arith::ConstantOp>(op->getLoc(), i128Type, rewriter.getIntegerAttr(i128Type, 64));
       Value const11i = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 11);
@@ -564,13 +579,7 @@ class VarLenGetRefLowering : public ConversionPattern {
 
       Value ptrCasted = rewriter.create<LLVM::TruncOp>(op->getLoc(), i64type, ptr128);
       Value ptrToLargeString = rewriter.create<LLVM::IntToPtrOp>(op->getLoc(), ptrType, ptrCasted);
-      mlir::Value allocatedElementPtr;
-      {
-         auto func=op->getParentOfType<mlir::LLVM::LLVMFuncOp>();
-         OpBuilder::InsertionGuard insertionGuard(rewriter);
-         rewriter.setInsertionPointToStart(&func.getBody().front());
-         allocatedElementPtr= rewriter.create<LLVM::AllocaOp>(op->getLoc(), mlir::LLVM::LLVMPointerType::get(i128Type), const11i, 0);
-      }
+
       rewriter.create<LLVM::StoreOp>(op->getLoc(), bytes, allocatedElementPtr);
 
       Value castedLen = rewriter.create<LLVM::SExtOp>(op->getLoc(), typeConverter->convertType(rewriter.getIndexType()), len);
@@ -640,7 +649,10 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
          return (Type) elemPtrType;
       }
    });
-
+   typeConverter.addConversion([&](mlir::util::VarLen32Type varLen32Type) {
+      MLIRContext* context = &typeConverter.getContext();
+      return IntegerType::get(context, 128);
+   });
    patterns.add<CastOpLowering>(typeConverter, patterns.getContext());
    patterns.add<DimOpLowering>(typeConverter, patterns.getContext());
    patterns.add<SizeOfOpLowering>(typeConverter, patterns.getContext());

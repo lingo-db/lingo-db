@@ -34,7 +34,8 @@ class GetTableLowering : public ConversionPattern {
       auto getTableOp = cast<mlir::db::GetTable>(op);
       auto executionContext = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::GetExecutionContext, {})[0];
       auto tableName = rewriter.create<mlir::db::ConstantOp>(op->getLoc(), mlir::db::StringType::get(rewriter.getContext(), false), rewriter.getStringAttr(getTableOp.tablename()));
-      auto tablePtr = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({executionContext, tableName}))[0];
+      Value tableNameRef=rewriter.create<mlir::util::VarLenGetRef>(op->getLoc(),mlir::util::RefType::get(getContext(),rewriter.getI8Type(),-1),tableName);
+      auto tablePtr = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({executionContext, tableNameRef}))[0];
       rewriter.replaceOp(getTableOp, tablePtr);
       return success();
    }
@@ -61,7 +62,9 @@ class TableScanLowering : public ConversionPattern {
          auto stringAttr = c.cast<StringAttr>();
          types.push_back(indexType);
          auto columnName = rewriter.create<mlir::db::ConstantOp>(op->getLoc(), mlir::db::StringType::get(rewriter.getContext(), false), stringAttr);
-         auto columnId = functionRegistry.call(rewriter, op->getLoc(),db::codegen::FunctionRegistry::FunctionId::TableGetColumnId, mlir::ValueRange({tablePtr, columnName}))[0];
+         Value columnNameRef=rewriter.create<mlir::util::VarLenGetRef>(op->getLoc(),mlir::util::RefType::get(getContext(),rewriter.getI8Type(),-1),columnName);
+
+         auto columnId = functionRegistry.call(rewriter, op->getLoc(),db::codegen::FunctionRegistry::FunctionId::TableGetColumnId, mlir::ValueRange({tablePtr, columnNameRef}))[0];
          values.push_back(columnId);
       }
       rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, mlir::TupleType::get(rewriter.getContext(), types), values);

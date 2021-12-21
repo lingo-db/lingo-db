@@ -15,23 +15,23 @@ namespace {
 
 template <class OpClass, class LeftT, class RightT, class ResT>
 class SimpleBinOpToFuncLowering : public ConversionPattern {
-   std::function<Value(mlir::Location,LeftT, Value, ConversionPatternRewriter&)> processLeft;
-   std::function<Value(mlir::Location,RightT, Value, ConversionPatternRewriter&)> processRight;
+   std::function<Value(mlir::Location, LeftT, Value, ConversionPatternRewriter&)> processLeft;
+   std::function<Value(mlir::Location, RightT, Value, ConversionPatternRewriter&)> processRight;
    std::function<std::vector<Value>(Value, Value)> combine;
    std::function<FuncOp(OpClass, LeftT, RightT, ConversionPatternRewriter& rewriter)> provideFunc;
    std::function<Value(mlir::Location, ResT, Value, ConversionPatternRewriter&)> processResult;
 
    public:
    explicit SimpleBinOpToFuncLowering(MLIRContext* context,
-                                      std::function<Value(mlir::Location,LeftT, Value, ConversionPatternRewriter&)>
+                                      std::function<Value(mlir::Location, LeftT, Value, ConversionPatternRewriter&)>
                                          processLeft,
-                                      std::function<Value(mlir::Location,RightT, Value, ConversionPatternRewriter&)>
+                                      std::function<Value(mlir::Location, RightT, Value, ConversionPatternRewriter&)>
                                          processRight,
                                       std::function<std::vector<Value>(Value, Value)>
                                          combine,
                                       std::function<FuncOp(OpClass, LeftT, RightT, ConversionPatternRewriter& rewriter)>
                                          provideFunc,
-                                      std::function<Value(mlir::Location,ResT, Value, ConversionPatternRewriter&)>
+                                      std::function<Value(mlir::Location, ResT, Value, ConversionPatternRewriter&)>
                                          processResult)
       : ConversionPattern(OpClass::getOperationName(), 1, context), processLeft(processLeft), processRight(processRight), combine(combine), provideFunc(provideFunc), processResult(processResult) {}
    LogicalResult
@@ -51,29 +51,29 @@ class SimpleBinOpToFuncLowering : public ConversionPattern {
       Value left = nullHandler.getValue(casted.left(), opAdaptor.left());
       Value right = nullHandler.getValue(casted.right(), opAdaptor.right());
 
-      left = processLeft(loc,leftType, left, rewriter);
-      right = processRight(loc,rightType, right, rewriter);
+      left = processLeft(loc, leftType, left, rewriter);
+      right = processRight(loc, rightType, right, rewriter);
       FuncOp func = provideFunc(casted, leftType, rightType, rewriter);
       auto call = rewriter.create<CallOp>(loc, func, combine(left, right));
       Value res = call.getResult(0);
-      res = processResult(loc,resType, res, rewriter);
+      res = processResult(loc, resType, res, rewriter);
       rewriter.replaceOp(op, nullHandler.combineResult(res));
       return success();
    }
 };
 template <class OpClass, class ValT, class ResT>
 class SimpleUnOpToFuncLowering : public ConversionPattern {
-   std::function<Value(mlir::Location,ValT, Value, ConversionPatternRewriter&)> processVal;
+   std::function<Value(mlir::Location, ValT, Value, ConversionPatternRewriter&)> processVal;
    std::function<FuncOp(OpClass, ValT, ConversionPatternRewriter& rewriter)> provideFunc;
-   std::function<Value(mlir::Location,ResT, Value, ConversionPatternRewriter&)> processResult;
+   std::function<Value(mlir::Location, ResT, Value, ConversionPatternRewriter&)> processResult;
 
    public:
    explicit SimpleUnOpToFuncLowering(MLIRContext* context,
-                                     std::function<Value(mlir::Location,ValT, Value, ConversionPatternRewriter&)>
+                                     std::function<Value(mlir::Location, ValT, Value, ConversionPatternRewriter&)>
                                         processIn,
                                      std::function<FuncOp(OpClass, ValT, ConversionPatternRewriter& rewriter)>
                                         provideFunc,
-                                     std::function<Value(mlir::Location,ResT, Value, ConversionPatternRewriter&)>
+                                     std::function<Value(mlir::Location, ResT, Value, ConversionPatternRewriter&)>
                                         processResult)
       : ConversionPattern(OpClass::getOperationName(), 1, context), processVal(processIn), provideFunc(provideFunc), processResult(processResult) {}
    LogicalResult
@@ -89,11 +89,11 @@ class SimpleUnOpToFuncLowering : public ConversionPattern {
          return failure();
       }
       Value val = nullHandler.getValue(casted.val(), opAdaptor.val());
-      val = processVal(loc,valType, val, rewriter);
+      val = processVal(loc, valType, val, rewriter);
       FuncOp func = provideFunc(casted, valType, rewriter);
       auto call = rewriter.create<CallOp>(loc, func, val);
       Value res = call.getResult(0);
-      res = processResult(loc,resType, res, rewriter);
+      res = processResult(loc, resType, res, rewriter);
       rewriter.replaceOp(op, nullHandler.combineResult(res));
       return success();
    }
@@ -101,6 +101,14 @@ class SimpleUnOpToFuncLowering : public ConversionPattern {
 
 class StringCastOpLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
+   mlir::Value convertRefToVarLen(mlir::Location loc, ConversionPatternRewriter& rewriter, mlir::Value val) const {
+      Value ptr = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8)), val);
+      Value dim = rewriter.create<mlir::util::DimOp>(loc, rewriter.getIndexType(), val);
+      Value len = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getI32Type(), dim);
+      Value type = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI8Type(), rewriter.getI8IntegerAttr(2));
+
+      return rewriter.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(rewriter.getContext()), ptr, len, type);
+   }
 
    public:
    explicit StringCastOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
@@ -133,6 +141,7 @@ class StringCastOpLowering : public ConversionPattern {
       if (scalarSourceType == scalarTargetType) {
          //nothing to do here
       } else if (auto stringType = scalarSourceType.dyn_cast_or_null<db::StringType>()) {
+         value = rewriter.create<mlir::util::VarLenGetRef>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), value);
          if (auto intType = scalarTargetType.dyn_cast_or_null<db::IntType>()) {
             value = functionRegistry.call(rewriter, loc, FunctionId::CastStringToInt64, ValueRange({isNull, value}))[0];
             if (intType.getWidth() < 64) {
@@ -157,6 +166,7 @@ class StringCastOpLowering : public ConversionPattern {
                value = rewriter.create<arith::ExtSIOp>(loc, value, rewriter.getI64Type());
             }
             value = functionRegistry.call(rewriter, loc, FunctionId ::CastInt64ToString, ValueRange({isNull, value}))[0];
+            value = convertRefToVarLen(loc, rewriter, value);
          } else {
             return failure();
          }
@@ -164,6 +174,8 @@ class StringCastOpLowering : public ConversionPattern {
          if (scalarTargetType.isa<db::StringType>()) {
             FunctionId castFn = floatType.getWidth() == 32 ? FunctionId ::CastFloat32ToString : FunctionId ::CastFloat64ToString;
             value = functionRegistry.call(rewriter, loc, castFn, ValueRange({isNull, value}))[0];
+            value = convertRefToVarLen(loc, rewriter, value);
+
          } else {
             return failure();
          }
@@ -175,6 +187,8 @@ class StringCastOpLowering : public ConversionPattern {
                value = converted;
             }
             value = functionRegistry.call(rewriter, loc, FunctionId ::CastDecimalToString, ValueRange({isNull, value, scale}))[0];
+            value = convertRefToVarLen(loc, rewriter, value);
+
          } else {
             return failure();
          }
@@ -232,6 +246,8 @@ class StringCmpOpLowering : public ConversionPattern {
       Value right = nullHandler.getValue(cmpOp.right(),adaptor.right());
       using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
       FuncId cmpFunc = funcForStrCompare(cmpOp.predicate());
+      left = rewriter.create<mlir::util::VarLenGetRef>(cmpOp->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), left);
+      right = rewriter.create<mlir::util::VarLenGetRef>(cmpOp->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), right);
       Value res = functionRegistry.call(rewriter, cmpOp->getLoc(), cmpFunc, ValueRange({nullHandler.isNull(), left, right}))[0];
       rewriter.replaceOp(op, nullHandler.combineResult(res));
       return success();
@@ -318,7 +334,8 @@ class DumpOpLowering : public ConversionPattern {
          }
          functionRegistry.call(rewriter, loc, FunctionId::DumpFloat, ValueRange({isNull, val}));
       } else if (type.isa<mlir::db::StringType>()) {
-         functionRegistry.call(rewriter, loc, FunctionId::DumpString, ValueRange({isNull, val}));
+         auto ref = rewriter.create<mlir::util::VarLenGetRef>(loc, mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), val);
+         functionRegistry.call(rewriter, loc, FunctionId::DumpString, ValueRange({isNull, ref}));
       }
       rewriter.eraseOp(op);
 
@@ -419,7 +436,7 @@ class FreeOpLowering : public ConversionPattern {
 void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    using FunctionId = db::codegen::FunctionRegistry::FunctionId;
 
-   auto ensureDate64 = [](mlir::Location loc,mlir::db::DateType dateType, Value v, ConversionPatternRewriter& rewriter) {
+   auto ensureDate64 = [](mlir::Location loc, mlir::db::DateType dateType, Value v, ConversionPatternRewriter& rewriter) {
       if (dateType.getUnit() == db::DateUnitAttr::day) {
          auto i64Type = IntegerType::get(rewriter.getContext(), 64);
          v = rewriter.template create<arith::ExtUIOp>(loc, v, i64Type);
@@ -430,11 +447,11 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
          return v;
       }
    };
-   auto negateInterval = [](mlir::Location loc,mlir::db::IntervalType dateType, Value v, ConversionPatternRewriter& rewriter) {
+   auto negateInterval = [](mlir::Location loc, mlir::db::IntervalType dateType, Value v, ConversionPatternRewriter& rewriter) {
       Value multiplier = rewriter.template create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(v.getType(), -1));
       return rewriter.template create<arith::MulIOp>(loc, v, multiplier);
    };
-   auto transformDateBack = [](mlir::Location loc,mlir::db::DateType dateType, Value v, ConversionPatternRewriter& rewriter) {
+   auto transformDateBack = [](mlir::Location loc, mlir::db::DateType dateType, Value v, ConversionPatternRewriter& rewriter) {
       if (dateType.getUnit() == db::DateUnitAttr::day) {
          auto i64Type = IntegerType::get(rewriter.getContext(), 64);
          auto i32Type = IntegerType::get(rewriter.getContext(), 32);
@@ -445,7 +462,7 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
       }
       return v;
    };
-   auto identity = [](auto,auto, Value v, auto&) { return v; };
+   auto identity = [](auto, auto, Value v, auto&) { return v; };
    auto rightleft = [](Value left, Value right) { return std::vector<Value>({right, left}); };
    auto dateAddFunction = [&](Operation* op, mlir::db::DateType dateType, mlir::db::IntervalType intervalType, ConversionPatternRewriter& rewriter) {
       if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime) {

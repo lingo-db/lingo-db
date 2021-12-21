@@ -285,10 +285,20 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    typeConverter.addConversion([&](mlir::util::RefType genericMemrefType) {
       return mlir::util::RefType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());
    });
+   typeConverter.addConversion([&](mlir::util::VarLen32Type varType) {
+      return varType;
+   });
    typeConverter.addSourceMaterialization([&](OpBuilder&, mlir::util::RefType, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
    typeConverter.addTargetMaterialization([&](OpBuilder&, mlir::util::RefType, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
+
+   typeConverter.addSourceMaterialization([&](OpBuilder&, VarLen32Type type, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, VarLen32Type type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
 }
