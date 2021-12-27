@@ -54,6 +54,6 @@ for qnum in range(1, 23):
         jit = float(m.group(1))
         print(output)
     results.append(QueryResult("tpch" + str(qnum), runtime,optimization_time,lower_to_db_time,lower_to_std_time,lower_to_llvm_time,conversion,jit, returncode))
-
+print('%12s %12s %12s %12s %12s %12s %12s %12s %12s' % ("#Query", "Runtime","Query Opt.","-> db","-> std","-> llvm","-> LLVM","LLVM", "Error?"))
 for res in results:
-    print('%12s %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f %5i' % (res.query, res.runtime,res.optimization_time,res.lower_to_db_time,res.lower_to_std_time,res.lower_to_llvm_time,res.conversion_time,res.llvm_time , res.return_code))
+    print('%12s %12.2f %12.2f %12.2f %12.2f %12.2f %12.2f %12.2f %12i' % (res.query, res.runtime,res.optimization_time,res.lower_to_db_time,res.lower_to_std_time,res.lower_to_llvm_time,res.conversion_time,res.llvm_time , res.return_code))

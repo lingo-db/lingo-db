@@ -73,10 +73,16 @@ coverage-clean:
 	rm -rf build/build-debug-llvm-release-coverage/coverage
 
 build-docker:
-	docker build -f "docker/Dockerfile" -t dockerize:latest "."
+	docker build -f "docker/Dockerfile" -t mlirdb:latest "."
+.docker-built:
+	$(MAKE) build-docker
+	touch .docker-built
 clean:
 	rm -rf build
 
+
+reproduce: .docker-built
+	docker run -it mlirdb /bin/bash -c "python3 tools/benchmark-tpch.py /build/mlirdb/ tpch-1"
 #perf:
 #	 perf record -k 1 -F 1000  --call-graph dwarf [cmd]
 #	 perf inject -j -i perf.data -o perf.data.jitted

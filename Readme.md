@@ -1,4 +1,9 @@
-## Get it running
+## To reproduce results with docker
+```
+make reproduce
+```
+
+## For developers
 
 1. Install libs:
 ```bash
