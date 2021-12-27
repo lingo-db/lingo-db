@@ -1,6 +1,9 @@
 #include "arrow/vendored/datetime/date.h"
 #include "runtime/helpers.h"
 #include <iostream>
+//adapted from apache gandiva
+//source: https://github.com/apache/arrow/blob/3da66003ab2543c231fdf6551c2eb886f9a7e68f/cpp/src/gandiva/precompiled/epoch_time_point.h
+//Apache-2.0 License
 namespace date=arrow_vendored::date;
 class DateHelper {
    public:
@@ -65,6 +68,7 @@ class DateHelper {
 
    std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds> tp_;
 };
+//end adapted from apache gandiva
 
 extern "C"  uint64_t rt_extract_second(uint64_t millis){
    return DateHelper(millis).TmSec();

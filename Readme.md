@@ -2,6 +2,7 @@
 ```
 make reproduce
 ```
+Note that docker comes with a slight runtime overhead (passing `--privileged` helps a bit). Measurements in the paper were conducted using native builds.
 
 ## For developers
 

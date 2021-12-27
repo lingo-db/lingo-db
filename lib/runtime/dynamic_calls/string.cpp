@@ -4,9 +4,10 @@
 #include <arrow/type.h>
 #include <arrow/util/decimal.h>
 
+//taken from NoisePage
+// src: https://github.com/cmu-db/noisepage/blob/c2635d3360dd24a9f7a094b4b8bcd131d99f2d4b/src/execution/sql/operators/like_operators.cpp
+// (MIT License, Copyright (c) 2018 CMU Database Group)
 #define NextByte(p, plen) ((p)++, (plen)--)
-
-//taken from noisepage
 bool like(const char* str, size_t str_len, const char* pattern, size_t pattern_len, char escape) {
    const char *s = str, *p = pattern;
    std::size_t slen = str_len, plen = pattern_len;
@@ -76,6 +77,8 @@ bool like(const char* str, size_t str_len, const char* pattern, size_t pattern_l
    }
    return slen == 0 && plen == 0;
 }
+//end taken from noisepage
+
 extern "C" bool rt_cmp_string_like(bool null, runtime::Str str1, runtime::Str str2) {
    if (null) {
       return false;
@@ -85,35 +88,37 @@ extern "C" bool rt_cmp_string_like(bool null, runtime::Str str1, runtime::Str st
 }
 
 //taken from gandiva
-
-#define CAST_NUMERIC_FROM_STRING(OUT_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                   \
+//source https://github.com/apache/arrow/blob/41d115071587d68891b219cc137551d3ea9a568b/cpp/src/gandiva/gdv_function_stubs.cc
+//Apache-2.0 License
+#define CAST_NUMERIC_FROM_STRING(OUT_TYPE, ARROW_TYPE, TYPE_NAME)                                                                     \
    extern "C" OUT_TYPE rt_cast_string_##TYPE_NAME(bool null, runtime::Str str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
-      if (null) return (OUT_TYPE) 0;                                                                                                                \
-      char* data = (str).data();                                                                                                                   \
-      int32_t len = (str).len();                                                                                                                   \
-      OUT_TYPE val = 0;                                                                                                                             \
-      /* trim leading and trailing spaces */                                                                                                        \
-      int32_t trimmed_len;                                                                                                                          \
-      int32_t start = 0, end = len - 1;                                                                                                             \
-      while (start <= end && data[start] == ' ') {                                                                                                  \
-         ++start;                                                                                                                                   \
-      }                                                                                                                                             \
-      while (end >= start && data[end] == ' ') {                                                                                                    \
-         --end;                                                                                                                                     \
-      }                                                                                                                                             \
-      trimmed_len = end - start + 1;                                                                                                                \
-      const char* trimmed_data = data + start;                                                                                                      \
-      if (!arrow::internal::ParseValue<ARROW_TYPE>(trimmed_data, trimmed_len, &val)) {                                                              \
-         std::string err =                                                                                                                          \
-            "Failed to cast the string " + std::string(data, len) + " to " #OUT_TYPE;                                                               \
-         /*gdv_fn_context_set_error_msg(context, err.c_str());*/                                                                                    \
-      }                                                                                                                                             \
-      return val;                                                                                                                                   \
+      if (null) return (OUT_TYPE) 0;                                                                                                  \
+      char* data = (str).data();                                                                                                      \
+      int32_t len = (str).len();                                                                                                      \
+      OUT_TYPE val = 0;                                                                                                               \
+      /* trim leading and trailing spaces */                                                                                          \
+      int32_t trimmed_len;                                                                                                            \
+      int32_t start = 0, end = len - 1;                                                                                               \
+      while (start <= end && data[start] == ' ') {                                                                                    \
+         ++start;                                                                                                                     \
+      }                                                                                                                               \
+      while (end >= start && data[end] == ' ') {                                                                                      \
+         --end;                                                                                                                       \
+      }                                                                                                                               \
+      trimmed_len = end - start + 1;                                                                                                  \
+      const char* trimmed_data = data + start;                                                                                        \
+      if (!arrow::internal::ParseValue<ARROW_TYPE>(trimmed_data, trimmed_len, &val)) {                                                \
+         std::string err =                                                                                                            \
+            "Failed to cast the string " + std::string(data, len) + " to " #OUT_TYPE;                                                 \
+         /*gdv_fn_context_set_error_msg(context, err.c_str());*/                                                                      \
+      }                                                                                                                               \
+      return val;                                                                                                                     \
    }
 
 CAST_NUMERIC_FROM_STRING(int64_t, arrow::Int64Type, int)
 CAST_NUMERIC_FROM_STRING(float, arrow::FloatType, float32)
 CAST_NUMERIC_FROM_STRING(double, arrow::DoubleType, float64)
+//end taken from gandiva
 
 extern "C" __int128 rt_cast_string_decimal(bool null, runtime::Str string, unsigned reqScale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    if (null) {
@@ -132,28 +137,28 @@ extern "C" __int128 rt_cast_string_decimal(bool null, runtime::Str string, unsig
    res |= decimalrep.low_bits();
    return res;
 }
-#define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                        \
+#define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                           \
    extern "C" runtime::Str rt_cast_##TYPE_NAME##_string(bool null, IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
-      if (null) {                                                                                                                                     \
-         return runtime::Str(nullptr, 0);                                                                                                          \
-      }                                                                                                                                               \
-      arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                                         \
-      char* data = nullptr;                                                                                                                           \
-      size_t len = 0;                                                                                                                                 \
-      arrow::Status status = formatter(value, [&](arrow::util::string_view v) {                                                                       \
-         len = v.length();                                                                                                                            \
-         data = new char[len];                                                                                                                        \
-         memcpy(data, v.data(), len);                                                                                                                 \
-         return arrow::Status::OK();                                                                                                                  \
-      });                                                                                                                                             \
-      return runtime::Str(data, len);                                                                                                              \
+      if (null) {                                                                                                                        \
+         return runtime::Str(nullptr, 0);                                                                                                \
+      }                                                                                                                                  \
+      arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                            \
+      char* data = nullptr;                                                                                                              \
+      size_t len = 0;                                                                                                                    \
+      arrow::Status status = formatter(value, [&](arrow::util::string_view v) {                                                          \
+         len = v.length();                                                                                                               \
+         data = new char[len];                                                                                                           \
+         memcpy(data, v.data(), len);                                                                                                    \
+         return arrow::Status::OK();                                                                                                     \
+      });                                                                                                                                \
+      return runtime::Str(data, len);                                                                                                    \
    }
 
 CAST_NUMERIC_TO_STRING(int64_t, arrow::Int64Type, int)
 CAST_NUMERIC_TO_STRING(float, arrow::FloatType, float32)
 CAST_NUMERIC_TO_STRING(double, arrow::DoubleType, float64)
 
-extern "C" runtime::Str rt_cast_decimal_string(bool null, uint64_t low, uint64_t high, uint32_t scale) {// NOLINT (clang-diagnostic-return-type-c-linkage)
+extern "C" runtime::Str rt_cast_decimal_string(bool null, uint64_t low, uint64_t high, uint32_t scale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    if (null) {
       return runtime::Str(nullptr, 0);
    }
@@ -166,11 +171,11 @@ extern "C" runtime::Str rt_cast_decimal_string(bool null, uint64_t low, uint64_t
    return runtime::Str(data, len);
 }
 
-
-//borrowed from apache gandiva
-__attribute__((always_inline)) inline
-int64_t mem_compare(const char* left, int64_t left_len, const char* right,
-                    int64_t right_len) {
+//taken from apache gandiva
+//source: https://github.com/apache/arrow/blob/master/cpp/src/gandiva/precompiled/string_ops.cc
+//Apache-2.0 License
+__attribute__((always_inline)) inline int64_t mem_compare(const char* left, int64_t left_len, const char* right,
+                                                          int64_t right_len) {
    int min = left_len;
    if (right_len < min) {
       min = right_len;
@@ -183,14 +188,16 @@ int64_t mem_compare(const char* left, int64_t left_len, const char* right,
       return left_len - right_len;
    }
 }
-#define STR_CMP(NAME, OP)                                                                                  \
-extern "C" bool rt_cmp_string_##NAME(bool null, runtime::Str str1, runtime::Str str2) { \
-if (null) {                                                                                          \
-return false;                                                                                     \
-} else {                                                                                             \
-return mem_compare((str1).data(), (str1).len(), (str2).data(), (str2).len()) OP 0;            \
-}                                                                                                    \
-}
+//end taken from apache gandiva
+
+#define STR_CMP(NAME, OP)                                                                   \
+   extern "C" bool rt_cmp_string_##NAME(bool null, runtime::Str str1, runtime::Str str2) {  \
+      if (null) {                                                                           \
+         return false;                                                                      \
+      } else {                                                                              \
+         return mem_compare((str1).data(), (str1).len(), (str2).data(), (str2).len()) OP 0; \
+      }                                                                                     \
+   }
 
 STR_CMP(eq, ==)
 STR_CMP(neq, !=)
@@ -199,11 +206,9 @@ STR_CMP(lte, <=)
 STR_CMP(gt, >)
 STR_CMP(gte, >=)
 
-
-extern "C" void rt_cpy(runtime::Str to, runtime::Str from) {// NOLINT (clang-diagnostic-return-type-c-linkage)
+extern "C" void rt_cpy(runtime::Str to, runtime::Str from) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    memcpy(to.data(), from.data(), from.len());
-
 }
-extern "C" void rt_fill(runtime::Str from, char val) {// NOLINT (clang-diagnostic-return-type-c-linkage)
-   memset(from.data(),val,from.len());
+extern "C" void rt_fill(runtime::Str from, char val) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   memset(from.data(), val, from.len());
 }
