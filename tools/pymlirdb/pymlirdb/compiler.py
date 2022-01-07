@@ -120,14 +120,15 @@ class BlockAnalyzer(ast.NodeVisitor):
         if isinstance(node.ctx, ast.Load):
             if node.slice:
                 val = self.visit(node.value)
+                slice=node.slice
                 if self.isDataFrame(val):
-                    if type(node.slice.value) is ast.Constant:
+                    if type(slice) is ast.Constant:
                         pass
                     else:
-                        sel_res=self.visit(node.slice.value)
+                        sel_res=self.visit(slice)
                 if self.isDataFrameTuple(val):
-                    if type(node.slice.value) is ast.Constant:
-                        attr_name=node.slice.value.value
+                    if type(slice) is ast.Constant:
+                        attr_name=slice.value
                         self.df_tuples[val].register(attr_name)
 
     def visit_For(self, node):
@@ -262,9 +263,9 @@ class PythonVisitor(ast.NodeVisitor):
         elif type(t) is ast.Subscript:
             if t.slice:
                 left_val = self.visit(t.value)
-
+                slice=t.slice
                 if self.isDataFrame(left_val):
-                    map_attr_name=t.slice.value.value
+                    map_attr_name=slice.value
                     scope_name=self.codegen.getUniqueName("map")
                     tree_var, tuple = self.codegen.startMap(scope_name, left_val)
                     self.curr_tuple = tuple
@@ -310,9 +311,10 @@ class PythonVisitor(ast.NodeVisitor):
         if isinstance(node.ctx, ast.Load):
             if node.slice:
                 val = self.visit(node.value)
+                slice = node.slice
                 if self.isDataFrame(val):
-                    if type(node.slice.value) is ast.Constant:
-                        attr_name=node.slice.value.value
+                    if type(slice) is ast.Constant:
+                        attr_name=slice.value
                         attr=self.dataframes[val][attr_name]
 
                         var= self.codegen.create_relalg_getattr(self.curr_tuple,attr)
@@ -320,13 +322,13 @@ class PythonVisitor(ast.NodeVisitor):
                     else:
                         tree_var, tuple = self.codegen.startSelection(val)
                         self.curr_tuple=tuple
-                        sel_res=self.visit(node.slice.value)
+                        sel_res=self.visit(slice)
                         self.codegen.endSelection(sel_res)
                         self.dataframes[tree_var] = self.dataframes[val].copy()
                         return tree_var
                 if self.isDataFrameTuple(val):
-                    if type(node.slice.value) is ast.Constant:
-                        attr_name=node.slice.value.value
+                    if type(slice) is ast.Constant:
+                        attr_name=slice.value
                         idx =self.df_tuples[val].resolve(attr_name)
                         var= self.codegen.create_get_tuple(val,idx)
                         return var
