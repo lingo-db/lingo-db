@@ -1,4 +1,5 @@
 ROOT_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
+NPROCS := $(shell echo $$(nproc))
 
 build/llvm-build:
 	mkdir -p build/llvm-build
@@ -15,13 +16,13 @@ build/arrow:
 	cmake arrow/cpp  -B build/arrow -DARROW_PYTHON=ON
 
 build-arrow: build/arrow
-	cmake --build build/arrow
+	cmake --build build/arrow -j${NPROCS}
 	cmake --install build/arrow --prefix build/arrow/install
 
 build/pyarrow:
 	cd arrow/python; python3 setup.py build_ext --inplace --extra-cmake-args="-DArrow_DIR=${ROOT_DIR}/build/arrow/install/lib/cmake/arrow -DArrowPython_DIR=${ROOT_DIR}/build/arrow/install/lib/cmake/arrow"
 build-llvm: build/llvm-build
-	cmake --build build/llvm-build -j4
+	cmake --build build/llvm-build -j${NPROCS}
 
 build/llvm-build-debug:
 	mkdir -p build/llvm-build-debug
@@ -34,7 +35,7 @@ build/llvm-build-debug:
 	   -DLLVM_ENABLE_ASSERTIONS=ON
 
 build-llvm-debug: build/llvm-build-debug
-	cmake --build build/llvm-build-debug -j1
+	cmake --build build/llvm-build-debug -j${NPROCS}
 
 build/build-debug-llvm-release:
 	cmake -G Ninja .  -B  build/build-debug-llvm-release \
@@ -60,14 +61,14 @@ build/build-debug-llvm-release-coverage:
 dependencies: build build-llvm build-arrow build/pyarrow
 
 test-coverage:  build/build-debug-llvm-release-coverage
-	cmake --build build/build-debug-llvm-release-coverage --target mlir-db-opt db-run-query db-run pymlirdbext -- -j 6
+	cmake --build build/build-debug-llvm-release-coverage --target mlir-db-opt db-run-query db-run pymlirdbext -- -j${NPROCS}
 	export LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib &&./build/llvm-build/bin/llvm-lit build/build-debug-llvm-release-coverage/test
 	lcov --no-external --capture --directory build/build-debug-llvm-release-coverage -b . --output-file build/build-debug-llvm-release-coverage/coverage.info
 		lcov --remove build/build-debug-llvm-release-coverage/coverage.info -o build/build-debug-llvm-release-coverage/filtered-coverage.info \
 			'**/build/llvm-build/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*'
 	genhtml  --ignore-errors source build/build-debug-llvm-release-coverage/filtered-coverage.info --legend --title "lcov-test" --output-directory=build/build-debug-llvm-release-coverage/coverage-report
 run-test: build/build-debug-llvm-release
-	cmake --build build/build-debug-llvm-release --target mlir-db-opt db-run-query db-run pymlirdbext -- -j 6
+	cmake --build build/build-debug-llvm-release --target mlir-db-opt db-run-query db-run pymlirdbext -- -j${NPROCS}
 	export LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib && ./build/llvm-build/bin/llvm-lit -v build/build-debug-llvm-release/test
 coverage-clean:
 	rm -rf build/build-debug-llvm-release-coverage/coverage
