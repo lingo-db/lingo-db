@@ -24,7 +24,8 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       std::vector<mlir::Type> types;
       std::vector<const mlir::relalg::RelationalAttribute*> attrs;
       for (auto namedAttr : baseTableOp.columnsAttr().getValue()) {
-         auto [identifier, attr] = namedAttr;
+         auto identifier=namedAttr.getName();
+         auto attr=namedAttr.getValue();
          auto attrDef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
          if (requiredAttributes.contains(&attrDef.getRelationalAttribute())) {
             columnNames.push_back(builder.getStringAttr(identifier.strref()));

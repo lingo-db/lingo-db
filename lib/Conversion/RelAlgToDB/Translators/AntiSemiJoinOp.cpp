@@ -62,7 +62,7 @@ class MHashAntiSemiJoinTranslator : public mlir::relalg::HashJoinTranslator {
       auto builderValuesBefore = getRequiredBuilderValues(context);
       auto ifOp = builder.create<mlir::db::IfOp>(loc, getRequiredBuilderTypes(context), matched,[&](mlir::OpBuilder& builder1,mlir::Location loc){
          auto const1 = builder1.create<mlir::arith::ConstantOp>(loc, builder1.getIntegerType(64), builder1.getI64IntegerAttr(1));
-         builder1.create<mlir::AtomicRMWOp>(loc, builder1.getIntegerType(64), mlir::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
+         builder1.create<mlir::memref::AtomicRMWOp>(loc, builder1.getIntegerType(64), mlir::arith::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
          builder1.create<mlir::db::YieldOp>(loc, getRequiredBuilderValues(context));
          },requiredBuilders.empty() ? noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(loc, builderValuesBefore); });
       setRequiredBuilderValues(context,ifOp.getResults());

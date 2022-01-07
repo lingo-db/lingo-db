@@ -37,9 +37,9 @@ class IfLowering : public ConversionPattern {
 
       auto newIfOp = rewriter.create<mlir::scf::IfOp>(loc, TypeRange(resultTypes), condition, !ifOp.elseRegion().empty());
       {
-         scf::IfOp::ensureTerminator(newIfOp.thenRegion(), rewriter, loc);
+         scf::IfOp::ensureTerminator(newIfOp.getThenRegion(), rewriter, loc);
          auto insertPt = rewriter.saveInsertionPoint();
-         rewriter.setInsertionPointToStart(&newIfOp.thenRegion().front());
+         rewriter.setInsertionPointToStart(&newIfOp.getThenRegion().front());
          Block* originalThenBlock = &ifOp.thenRegion().front();
          auto* terminator = rewriter.getInsertionBlock()->getTerminator();
          rewriter.mergeBlockBefore(originalThenBlock, terminator, {});
@@ -47,9 +47,9 @@ class IfLowering : public ConversionPattern {
          rewriter.restoreInsertionPoint(insertPt);
       }
       if (!ifOp.elseRegion().empty()) {
-         scf::IfOp::ensureTerminator(newIfOp.elseRegion(), rewriter, loc);
+         scf::IfOp::ensureTerminator(newIfOp.getElseRegion(), rewriter, loc);
          auto insertPt = rewriter.saveInsertionPoint();
-         rewriter.setInsertionPointToStart(&newIfOp.elseRegion().front());
+         rewriter.setInsertionPointToStart(&newIfOp.getElseRegion().front());
          Block* originalElseBlock = &ifOp.elseRegion().front();
          auto* terminator = rewriter.getInsertionBlock()->getTerminator();
          rewriter.mergeBlockBefore(originalElseBlock, terminator, {});
@@ -57,7 +57,7 @@ class IfLowering : public ConversionPattern {
          rewriter.restoreInsertionPoint(insertPt);
       }
 
-      rewriter.replaceOp(ifOp, newIfOp.results());
+      rewriter.replaceOp(ifOp, newIfOp.getResults());
 
       return success();
    }
@@ -69,38 +69,39 @@ class WhileLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto whileOp = cast<mlir::db::WhileOp>(op);
+      mlir::db::WhileOpAdaptor adaptor(operands);
       auto loc = op->getLoc();
       std::vector<Type> resultTypes;
       for (auto res : whileOp.results()) {
          resultTypes.push_back(typeConverter->convertType(res.getType()));
       }
-      auto newWhileOp = rewriter.create<mlir::scf::WhileOp>(loc, TypeRange(resultTypes), whileOp.inits());
+      auto newWhileOp = rewriter.create<mlir::scf::WhileOp>(loc, TypeRange(resultTypes), adaptor.inits());
       Block* before = new Block;
       Block* after = new Block;
-      newWhileOp.before().push_back(before);
-      newWhileOp.after().push_back(after);
+      newWhileOp.getBefore().push_back(before);
+      newWhileOp.getAfter().push_back(after);
       for (auto t : resultTypes) {
          before->addArgument(t);
          after->addArgument(t);
       }
 
       {
-         scf::IfOp::ensureTerminator(newWhileOp.before(), rewriter, loc);
+         scf::IfOp::ensureTerminator(newWhileOp.getBefore(), rewriter, loc);
          auto insertPt = rewriter.saveInsertionPoint();
-         rewriter.setInsertionPointToStart(&newWhileOp.before().front());
+         rewriter.setInsertionPointToStart(&newWhileOp.getBefore().front());
          Block* originalThenBlock = &whileOp.before().front();
          auto* terminator = rewriter.getInsertionBlock()->getTerminator();
-         rewriter.mergeBlockBefore(originalThenBlock, terminator, newWhileOp.before().front().getArguments());
+         rewriter.mergeBlockBefore(originalThenBlock, terminator, newWhileOp.getBefore().front().getArguments());
          rewriter.eraseOp(terminator);
          rewriter.restoreInsertionPoint(insertPt);
       }
       {
-         scf::IfOp::ensureTerminator(newWhileOp.after(), rewriter, loc);
+         scf::IfOp::ensureTerminator(newWhileOp.getAfter(), rewriter, loc);
          auto insertPt = rewriter.saveInsertionPoint();
-         rewriter.setInsertionPointToStart(&newWhileOp.after().front());
+         rewriter.setInsertionPointToStart(&newWhileOp.getAfter().front());
          Block* originalElseBlock = &whileOp.after().front();
          auto* terminator = rewriter.getInsertionBlock()->getTerminator();
-         rewriter.mergeBlockBefore(originalElseBlock, terminator, newWhileOp.after().front().getArguments());
+         rewriter.mergeBlockBefore(originalElseBlock, terminator, newWhileOp.getAfter().front().getArguments());
          rewriter.eraseOp(terminator);
          rewriter.restoreInsertionPoint(insertPt);
       }
@@ -122,7 +123,7 @@ class WhileLowering : public ConversionPattern {
          rewriter.setInsertionPointToStart(&whileOp.after().front());
          rewriter.create<mlir::db::YieldOp>(whileOp.getLoc());
       }
-      rewriter.replaceOp(whileOp, newWhileOp.results());
+      rewriter.replaceOp(whileOp, newWhileOp.getResults());
 
       return success();
    }

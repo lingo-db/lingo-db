@@ -222,14 +222,14 @@ class StringCmpOpLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto cmpOp = cast<db::CmpOp>(op);
-
+      db::CmpOpAdaptor adaptor(operands);
       auto type = cmpOp.left().getType().cast<db::DBType>().getBaseType();
       if (!type.isa<db::StringType>()) {
          return failure();
       }
       db::NullHandler nullHandler(*typeConverter, rewriter, cmpOp->getLoc());
-      Value left = nullHandler.getValue(cmpOp.left());
-      Value right = nullHandler.getValue(cmpOp.right());
+      Value left = nullHandler.getValue(cmpOp.left(),adaptor.left());
+      Value right = nullHandler.getValue(cmpOp.right(),adaptor.right());
       using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
       FuncId cmpFunc = funcForStrCompare(cmpOp.predicate());
       Value res = functionRegistry.call(rewriter, cmpOp->getLoc(), cmpFunc, ValueRange({nullHandler.isNull(), left, right}))[0];

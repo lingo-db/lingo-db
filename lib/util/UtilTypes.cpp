@@ -9,8 +9,8 @@
 using namespace mlir;
 
 
-void mlir::util::RefType::print(::mlir::DialectAsmPrinter& printer) const {
-   printer << getMnemonic() << "<";
+void mlir::util::RefType::print(::mlir::AsmPrinter& printer) const {
+   printer << "<";
    if (getSize() && getSize().getValue() == -1) {
       printer << "? x ";
    } else if (getSize()) {
@@ -18,7 +18,7 @@ void mlir::util::RefType::print(::mlir::DialectAsmPrinter& printer) const {
    }
    printer << getElementType() << ">";
 }
-::mlir::Type mlir::util::RefType::parse(::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::util::RefType::parse(::mlir::AsmParser& parser) {
    Type elementType;
    llvm::Optional<int64_t> size;
    if (parser.parseLess()) {

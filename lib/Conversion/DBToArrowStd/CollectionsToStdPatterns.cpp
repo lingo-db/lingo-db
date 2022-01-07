@@ -180,8 +180,11 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       return (Type) TupleType::get(context, {vecType, indexType, htType, indexType});
    });
 
-   typeConverter.addConversion([i8ptrType](mlir::db::VectorType vectorType) {
-      return i8ptrType;
+   typeConverter.addConversion([context,&typeConverter,indexType](mlir::db::VectorType vectorType) {
+      Type entryType = typeConverter.convertType(vectorType.getElementType());
+
+      auto arrayType = mlir::util::RefType::get(context, entryType, -1);
+      return (Type) TupleType::get(context, {indexType, indexType, arrayType});
    });
    typeConverter.addConversion([&typeConverter, context, i8ptrType, indexType](mlir::db::GenericIterableType genericIterableType) {
       Type elementType = genericIterableType.getElementType();

@@ -172,11 +172,13 @@ class BinOpLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto addOp = cast<OpClass>(op);
+      using AT=typename OpClass::Adaptor;
+      auto adaptor= AT(operands);
       db::NullHandler nullHandler(*typeConverter, rewriter,op->getLoc());
       auto type = addOp.left().getType();
       Type resType = addOp.result().getType().template cast<db::DBType>().getBaseType();
-      Value left = nullHandler.getValue(addOp.left());
-      Value right = nullHandler.getValue(addOp.right());
+      Value left = nullHandler.getValue(addOp.left(),adaptor.left());
+      Value right = nullHandler.getValue(addOp.right(),adaptor.right());
       if (type.template isa<OperandType>()) {
          Value replacement = rewriter.create<StdOpClass>(op->getLoc(), typeConverter->convertType(resType), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(replacement));
@@ -435,13 +437,14 @@ class CmpOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto loc = op->getLoc();
       auto cmpOp = cast<db::CmpOp>(op);
+      db::CmpOpAdaptor adaptor(operands);
       auto type = cmpOp.left().getType().cast<db::DBType>().getBaseType();
       if (type.isa<db::StringType>()) {
          return failure();
       }
       db::NullHandler nullHandler(*typeConverter, rewriter, loc);
-      Value left = nullHandler.getValue(cmpOp.left());
-      Value right = nullHandler.getValue(cmpOp.right());
+      Value left = nullHandler.getValue(cmpOp.left(),adaptor.left());
+      Value right = nullHandler.getValue(cmpOp.right(),adaptor.right());
       if (type.isa<db::BoolType>() || type.isa<db::IntType>() || type.isa<db::DecimalType>() || type.isa<db::DateType>() || type.isa<db::TimestampType>() || type.isa<db::IntervalType>()) {
          Value res = rewriter.create<arith::CmpIOp>(loc, translateIPredicate(cmpOp.predicate()), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(res));

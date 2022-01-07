@@ -93,7 +93,7 @@ class FuncConstLowering : public ConversionPattern {
       if (auto type = constantOp.getType().dyn_cast_or_null<mlir::FunctionType>()) {
          // Convert the original function types.
 
-         rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, convertFunctionType(type, *typeConverter), constantOp.value());
+         rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, convertFunctionType(type, *typeConverter), constantOp.getValue());
          return success();
 
       } else {
@@ -199,7 +199,7 @@ void DBToStdLoweringPass::runOnOperation() {
          //llvm::dbgs() << "isLegal:" << isLegal << "\n";
          return isLegal;
       });
-   target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::StoreOp, util::LoadOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp, util::GenericMemrefCastOp, util::ElementPtrOp>(
+   target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp,util::ToMemrefOp, util::StoreOp, util::LoadOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp, util::GenericMemrefCastOp, util::ElementPtrOp>(
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());

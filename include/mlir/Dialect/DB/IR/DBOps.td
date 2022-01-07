@@ -3,6 +3,7 @@
 
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 include "DBInterfaces.td"
 
@@ -102,6 +103,16 @@ let builderCall = "$_builder.getType<" # dialect.cppNamespace #
 "::" # cppClassName # ">()";
 }
 
+
+class BoolType<int nullable>
+    : Type<CPred<"$_self.isa<::mlir::db::BoolType>()&&$_self.cast<mlir::db::BoolType>().isNullable()==" # nullable # "">,
+                  "bool", "::mlir::db::BoolType">,
+      BuildableType<
+        "mlir::db::BoolType::get($_builder.getContext()," # nullable # ")"> {
+  int isnullable = nullable;
+}
+def AnyBool: AnyTypeOf<[BoolType<0>,BoolType<1>]>;
+def Bool: BoolType<0>;
 def DB_TimeUnit_S  : I64EnumAttrCase<"second", 0>;
 def DB_TimeUnit_MS  : I64EnumAttrCase<"millisecond", 1>;
 def DB_TimeUnit_MUS : I64EnumAttrCase<"microsecond", 2>;
@@ -206,14 +217,14 @@ let assemblyFormat = "attr-dict";
 }
 def DB_SetFlag : DB_Op<"setflag"> {
 let summary = "set flag to true";
-let arguments = (ins DB_Flag:$flag,  DB_BoolType:$val);
+let arguments = (ins DB_Flag:$flag,  BoolType<0>:$val);
 let assemblyFormat = "$flag `,` $val attr-dict";
 }
 def DB_GetFlag : DB_Op<"getflag",
 [NoSideEffect]> {
 let summary = "get flag value";
 let arguments = (ins DB_Flag:$flag);
-let results= (outs DB_BoolType:$res);
+let results= (outs Bool:$res);
 let assemblyFormat = "$flag attr-dict";
 }
 def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
@@ -223,7 +234,7 @@ let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
 def DB_CombineNullOp : DB_Op<"combine_null", [NoSideEffect]> {
-let arguments = (ins DBType: $val,DB_BoolType: $null);
+let arguments = (ins DBType: $val,Bool: $null);
 let results = (outs  DBType : $res);
 let assemblyFormat = "$val `:` type($val) `,` $null  `:` type($res) attr-dict";
 }
@@ -346,7 +357,7 @@ def DB_IsNullOp : DB_Op<"isnull",
 [NoSideEffect]> {
 let summary = "isnull";
 let arguments = (ins DBType:$val);
-let results = (outs DB_BoolType:$result);
+let results = (outs Bool:$result);
 let assemblyFormat = "$val `:` type($val) attr-dict";
 
 }
@@ -407,7 +418,7 @@ DB_CmpPredicateAttr:$predicate,
 DBType:$left,
 DBType:$right
 );
-let results = (outs DB_BoolType:$result);
+let results = (outs AnyBool:$result);
 
 let builders = [
 OpBuilder<(ins "mlir::db::DBCmpPredicate":$predicate, "Value":$left,
@@ -435,8 +446,8 @@ let assemblyFormat = "$val attr-dict";
 
 
 def AndOp : DB_Op<"and", [NoSideEffect]> {
-let arguments = (ins Variadic<DB_BoolType>: $vals);
-let results = (outs  DB_BoolType : $res);
+let arguments = (ins Variadic<AnyBool>: $vals);
+let results = (outs  AnyBool : $res);
 let parser = [{
 return parseImplicitResultSameOperandBaseTypeOp(parser, result);
 }];
@@ -450,8 +461,8 @@ OpBuilder<(ins "ValueRange":$vals), [{
 ];
 }
 def OrOp : DB_Op<"or", [NoSideEffect]> {
-let arguments = (ins Variadic<DB_BoolType>: $vals);
-let results = (outs  DB_BoolType : $res);
+let arguments = (ins Variadic<AnyBool>: $vals);
+let results = (outs  AnyBool : $res);
 let parser = [{
 return parseImplicitResultSameOperandBaseTypeOp(parser, result);
 }];
@@ -466,8 +477,8 @@ OpBuilder<(ins "ValueRange":$vals), [{
 let hasCanonicalizeMethod = 1;
 }
 def NotOp : DB_Op<"not", [NoSideEffect,SameOperandsAndResultType]> {
-let arguments = (ins DB_BoolType: $val);
-let results = (outs  DB_BoolType : $res);
+let arguments = (ins AnyBool: $val);
+let results = (outs  AnyBool : $res);
 let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 def FreeOp : DB_Op<"free"> {
@@ -576,17 +587,11 @@ def SelectOp : DB_Op<"select", [NoSideEffect,
 ElementwiseMappable.traits> {
 
 
-let arguments = (ins DB_BoolType:$condition,
+let arguments = (ins AnyBool:$condition,
 AnyType:$true_value,
 AnyType:$false_value);
 let results = (outs AnyType:$result);
 
-let builders = [
-OpBuilder<(ins "Value":$condition, "Value":$trueValue,
-"Value":$falseValue), [{
-$_state.addOperands({condition, trueValue, falseValue});
-$_state.addTypes(trueValue.getType());
-}]>];
 
 let extraClassDeclaration = [{
 Value getCondition() { return condition(); }

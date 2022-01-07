@@ -396,6 +396,13 @@ class ValueOnlyAggrHTIterator : public ForIterator {
       return builder.create<mlir::util::PackOp>(loc, TupleType::get(builder.getContext(), {undefTuple.getType(), typeConverter->convertType(valType)}), ValueRange({undefTuple, ht}));
    }
 };
+
+static std::vector<Value> remap(std::vector<Value> values, ConversionPatternRewriter& builder){
+   for(size_t i=0;i<values.size();i++){
+      values[i]=builder.getRemappedValue(values[i]);
+   }
+   return values;
+}
 class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
    std::unique_ptr<WhileIterator> iterator;
 
@@ -448,7 +455,7 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       auto returnValues = bodyBuilder(bodyParams, builder);
       returnValues.insert(returnValues.begin(), nextIterator);
       builder.setInsertionPoint(terminator);
-      builder.create<mlir::db::YieldOp>(loc, returnValues);
+      builder.create<mlir::db::YieldOp>(loc, remap(returnValues,builder));
       builder.eraseOp(terminator);
       Value finalIterator = whileOp.getResult(0);
       builder.restoreInsertionPoint(insertionPoint);
@@ -489,12 +496,12 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       auto results = bodyBuilder(bodyArguments, builder);
       iterator->destroyElement(builder, element);
       if (iterArgs.size()) {
-         builder.create<scf::YieldOp>(loc, results);
+         builder.create<scf::YieldOp>(loc, remap(results,builder));
          builder.eraseOp(terminator);
       }
       builder.restoreInsertionPoint(insertionPoint);
       iterator->down(builder);
-      return std::vector<Value>(forOp.results().begin(), forOp.results().end());
+      return std::vector<Value>(forOp.getResults().begin(), forOp.getResults().end());
    }
    std::vector<Value> implementLoopCondition(mlir::Location loc, const ValueRange& iterArgs, Value flag, TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) {
       auto insertionPoint = builder.saveInsertionPoint();
@@ -546,7 +553,7 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       auto returnValues = bodyBuilder(bodyParams, builder);
       returnValues.insert(returnValues.begin(), nextIterator);
       builder.setInsertionPoint(terminator);
-      builder.create<mlir::db::YieldOp>(loc, returnValues);
+      builder.create<mlir::db::YieldOp>(loc, remap(returnValues,builder));
       builder.eraseOp(terminator);
       builder.restoreInsertionPoint(insertionPoint);
       auto loopResultValues = whileOp.results().drop_front();

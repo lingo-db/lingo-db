@@ -106,7 +106,7 @@
             %one_i64 = arith.constant 1 : i64
             %marker_ptr=util.generic_memref_cast %ptr : !util.ref<tuple<i64,!db.int<32>,!db.int<32>>> -> !util.ref<i64>
             %marker=util.to_memref %marker_ptr : !util.ref<i64> -> memref<i64>
-            %marker_val=atomic_rmw "assign" %one_i64 , %marker[] : (i64, memref<i64>) -> i64
+            %marker_val=memref.atomic_rmw "assign" %one_i64 , %marker[] : (i64, memref<i64>) -> i64
             %db_marker_val = db.type_cast %marker_val : i64 -> !db.int<64>
             db.dump %db_marker_val : !db.int<64>
         }
@@ -124,7 +124,7 @@
              %one_i64 = arith.constant 1 : i64
              %marker_ptr=util.generic_memref_cast %ptr : !util.ref<tuple<i64,!db.int<32>,!db.int<32>>> -> !util.ref<i64>
              %marker=util.to_memref %marker_ptr : !util.ref<i64> -> memref<i64>
-             %marker_val=atomic_rmw "assign" %one_i64 , %marker[] : (i64, memref<i64>) -> i64
+             %marker_val=memref.atomic_rmw "assign" %one_i64 , %marker[] : (i64, memref<i64>) -> i64
              %db_marker_val = db.type_cast %marker_val : i64 -> !db.int<64>
              db.dump %db_marker_val : !db.int<64>
          }

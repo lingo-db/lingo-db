@@ -297,8 +297,7 @@ bool Runner::lowerToLLVM() {
       ctxt->numResults = mainFunc.getNumResults();
       mlir::OpBuilder builder(moduleOp->getContext());
       builder.setInsertionPointToStart(moduleOp.getBody());
-      mainFunc.sym_nameAttr(builder.getStringAttr("_mlir_main"));
-      builder.create< mlir::FuncOp>(moduleOp.getLoc(), "_mlir_set_execution_context", builder.getFunctionType(mlir::TypeRange({mlir::util::RefType::get(moduleOp->getContext(),mlir::IntegerType::get(moduleOp->getContext(), 8),llvm::Optional<int64_t>())}), mlir::TypeRange()), builder.getStringAttr("private"));
+      builder.create< mlir::FuncOp>(moduleOp.getLoc(), "rt_set_execution_context", builder.getFunctionType(mlir::TypeRange({mlir::util::RefType::get(moduleOp->getContext(),mlir::IntegerType::get(moduleOp->getContext(), 8),llvm::Optional<int64_t>())}), mlir::TypeRange()), builder.getStringAttr("private"));
 
    }
    mlir::PassManager pm2(&ctxt->context);
@@ -376,7 +375,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
    std::cout << "jit: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
 
    {
-      auto lookupResult2 = engine->lookup("set_execution_context");
+      auto lookupResult2 = engine->lookup("rt_set_execution_context");
       if (!lookupResult2) {
          llvm::errs() << "JIT invocation failed\n";
          return false;

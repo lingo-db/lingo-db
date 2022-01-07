@@ -13,7 +13,7 @@ class NullHandler {
    NullHandler(TypeConverter& typeConverter, OpBuilder& builder,Location loc) : typeConverter(typeConverter), builder(builder),loc(loc) {}
    Value isNull();
    Value combineResult(Value res);
-   Value getValue(Value v, Value operand = Value());
+   Value getValue(Value v, Value operand);
 };
 } // end namespace db
 } // end namespace mlir

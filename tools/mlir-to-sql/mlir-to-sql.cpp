@@ -285,7 +285,8 @@ class ToSQL {
                      output << "select ";
                      auto first = true;
                      for (auto mapping : op.columns()) {
-                        auto [column_name, attr] = mapping;
+                        auto column_name=mapping.getName();
+                        auto attr=mapping.getValue();
                         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
                         if (first) {
                            first = false;

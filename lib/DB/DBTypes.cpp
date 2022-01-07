@@ -193,7 +193,7 @@ template <class X>
 struct ParseSingleImpl {};
 template <>
 struct ParseSingleImpl<unsigned> {
-   static unsigned apply(bool& error, ::mlir::DialectAsmParser& parser) {
+   static unsigned apply(bool& error, ::mlir::AsmParser& parser) {
       unsigned res;
       if (parser.parseInteger(res)) {
          error = true;
@@ -203,7 +203,7 @@ struct ParseSingleImpl<unsigned> {
 };
 template <>
 struct ParseSingleImpl<std::string> {
-   static std::string apply(bool& error, ::mlir::DialectAsmParser& parser) {
+   static std::string apply(bool& error, ::mlir::AsmParser& parser) {
       llvm::StringRef ref;
       if (parser.parseKeyword(&ref).failed()) {
          error = true;
@@ -213,7 +213,7 @@ struct ParseSingleImpl<std::string> {
 };
 template <>
 struct ParseSingleImpl<mlir::db::TimeUnitAttr> {
-   static mlir::db::TimeUnitAttr apply(bool& error, ::mlir::DialectAsmParser& parser) {
+   static mlir::db::TimeUnitAttr apply(bool& error, ::mlir::AsmParser& parser) {
       mlir::db::TimeUnitAttr unit = mlir::db::TimeUnitAttr::second;
 
       ::llvm::StringRef attrStr;
@@ -240,7 +240,7 @@ struct ParseSingleImpl<mlir::db::TimeUnitAttr> {
 };
 template <>
 struct ParseSingleImpl<mlir::db::DateUnitAttr> {
-   static mlir::db::DateUnitAttr apply(bool& error, ::mlir::DialectAsmParser& parser) {
+   static mlir::db::DateUnitAttr apply(bool& error, ::mlir::AsmParser& parser) {
       mlir::db::DateUnitAttr unit = mlir::db::DateUnitAttr::millisecond;
 
       ::llvm::StringRef attrStr;
@@ -267,7 +267,7 @@ struct ParseSingleImpl<mlir::db::DateUnitAttr> {
 };
 template <>
 struct ParseSingleImpl<mlir::db::IntervalUnitAttr> {
-   static mlir::db::IntervalUnitAttr apply(bool& error, ::mlir::DialectAsmParser& parser) {
+   static mlir::db::IntervalUnitAttr apply(bool& error, ::mlir::AsmParser& parser) {
       mlir::db::IntervalUnitAttr unit = mlir::db::IntervalUnitAttr::months;
 
       ::llvm::StringRef attrStr;
@@ -293,7 +293,7 @@ struct ParseSingleImpl<mlir::db::IntervalUnitAttr> {
    }
 };
 template <class X>
-X parseSingle(bool& first, bool& error, ::mlir::DialectAsmParser& parser) {
+X parseSingle(bool& first, bool& error, ::mlir::AsmParser& parser) {
    if (first) {
       first = false;
    } else if (!first && parser.parseComma()) {
@@ -303,7 +303,7 @@ X parseSingle(bool& first, bool& error, ::mlir::DialectAsmParser& parser) {
    return ParseSingleImpl<X>::apply(error, parser);
 }
 template <class T, class... ParamT>
-mlir::Type parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser) {
+mlir::Type parse(::mlir::MLIRContext* context, ::mlir::AsmParser& parser) {
    constexpr size_t additionalParams = sizeof...(ParamT);
    bool nullable = false;
    bool first = true;
@@ -342,7 +342,7 @@ mlir::Type parse(::mlir::MLIRContext* context, ::mlir::DialectAsmParser& parser)
    return res;
 }
 template <class X>
-void printSingle(bool& first, ::mlir::DialectAsmPrinter& printer, X x) {
+void printSingle(bool& first, ::mlir::AsmPrinter& printer, X x) {
    if (first) {
       first = false;
    } else {
@@ -351,11 +351,10 @@ void printSingle(bool& first, ::mlir::DialectAsmPrinter& printer, X x) {
    printer << x;
 }
 template <class T, class... ParamT>
-void print(::mlir::DialectAsmPrinter& printer, bool nullable, ParamT... params) {
+void print(::mlir::AsmPrinter& printer, bool nullable, ParamT... params) {
    using expander = int[];
    bool first = true;
    size_t args = sizeof...(ParamT) + nullable;
-   printer << T::getMnemonic();
    if (!args) {
       return;
    }
@@ -370,75 +369,75 @@ void print(::mlir::DialectAsmPrinter& printer, bool nullable, ParamT... params) 
    }
    printer << ">";
 }
-::mlir::Type mlir::db::IntType::parse(::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::IntType::parse(::mlir::AsmParser& parser) {
    return ::parse<mlir::db::IntType, unsigned>(parser.getContext(),parser);
 }
-void mlir::db::IntType::print(::mlir::DialectAsmPrinter& printer) const {
+void mlir::db::IntType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::IntType, unsigned>(printer, getNullable(), getWidth());
 }
-::mlir::Type mlir::db::UIntType::parse(::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::UIntType::parse(::mlir::AsmParser& parser) {
    return ::parse<mlir::db::UIntType, unsigned>(parser.getContext(), parser);
 }
-void mlir::db::UIntType::print(::mlir::DialectAsmPrinter& printer) const {
+void mlir::db::UIntType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::UIntType, unsigned>(printer, getNullable(), getWidth());
 }
-::mlir::Type mlir::db::FloatType::parse( ::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::FloatType::parse( ::mlir::AsmParser& parser) {
    return ::parse<mlir::db::FloatType, unsigned>(parser.getContext(),parser);
 }
-void mlir::db::FloatType::print(::mlir::DialectAsmPrinter& printer) const {
+void mlir::db::FloatType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::FloatType, unsigned>(printer, getNullable(), getWidth());
 }
-::mlir::Type mlir::db::BoolType::parse( ::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::BoolType::parse( ::mlir::AsmParser& parser) {
    return ::parse<mlir::db::BoolType>(parser.getContext(),parser);
 }
-void mlir::db::BoolType::print(::mlir::DialectAsmPrinter& printer) const {
+void mlir::db::BoolType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::BoolType>(printer, getNullable());
 }
-::mlir::Type mlir::db::DateType::parse( ::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::DateType::parse( ::mlir::AsmParser& parser) {
    return ::parse<mlir::db::DateType, DateUnitAttr>(parser.getContext(),parser);
 }
-void mlir::db::DateType::print(::mlir::DialectAsmPrinter& printer) const {
+void mlir::db::DateType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::DateType>(printer, getNullable(), mlir::db::stringifyDateUnitAttr(getUnit()).str());
 }
-::mlir::Type mlir::db::IntervalType::parse( ::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::IntervalType::parse( ::mlir::AsmParser& parser) {
    return ::parse<mlir::db::IntervalType, IntervalUnitAttr>(parser.getContext(),parser);
 }
-void mlir::db::IntervalType::print(::mlir::DialectAsmPrinter& printer) const {
+void mlir::db::IntervalType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::IntervalType, std::string>(printer, getNullable(), mlir::db::stringifyIntervalUnitAttr(getUnit()).str());
 }
 
-::mlir::Type mlir::db::TimestampType::parse( ::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::TimestampType::parse( ::mlir::AsmParser& parser) {
    return ::parse<mlir::db::TimestampType, TimeUnitAttr>(parser.getContext(),parser);
 }
-void mlir::db::TimestampType::print(::mlir::DialectAsmPrinter& printer) const {
+void mlir::db::TimestampType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::TimestampType>(printer, getNullable(), mlir::db::stringifyTimeUnitAttr(getUnit()).str());
 }
-::mlir::Type mlir::db::TimeType::parse( ::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::TimeType::parse( ::mlir::AsmParser& parser) {
    return ::parse<mlir::db::TimeType, TimeUnitAttr>(parser.getContext(),parser);
 }
-void mlir::db::TimeType::print(::mlir::DialectAsmPrinter& printer) const {
+void mlir::db::TimeType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::TimeType>(printer, getNullable(), mlir::db::stringifyTimeUnitAttr(getUnit()).str());
 }
-::mlir::Type mlir::db::DurationType::parse( ::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::DurationType::parse( ::mlir::AsmParser& parser) {
    return ::parse<mlir::db::DurationType, TimeUnitAttr>(parser.getContext(),parser);
 }
-void mlir::db::DurationType::print(::mlir::DialectAsmPrinter& printer) const {
+void mlir::db::DurationType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::DurationType>(printer, getNullable(), mlir::db::stringifyTimeUnitAttr(getUnit()).str());
 }
-::mlir::Type mlir::db::DecimalType::parse( ::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::DecimalType::parse( ::mlir::AsmParser& parser) {
    return ::parse<mlir::db::DecimalType, unsigned, unsigned>(parser.getContext(),parser);
 }
-void mlir::db::DecimalType::print(::mlir::DialectAsmPrinter& printer) const {
+void mlir::db::DecimalType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::DecimalType, unsigned, unsigned>(printer, getNullable(), getP(), getS());
 }
-::mlir::Type mlir::db::StringType::parse( ::mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::StringType::parse( ::mlir::AsmParser& parser) {
    return ::parse<mlir::db::StringType>(parser.getContext(),parser);
 }
-void mlir::db::StringType::print(::mlir::DialectAsmPrinter& printer) const {
+void mlir::db::StringType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::StringType>(printer, getNullable());
 }
 
-::mlir::Type mlir::db::GenericIterableType::parse(mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::GenericIterableType::parse(mlir::AsmParser& parser) {
    Type type;
    StringRef parserName;
    if (parser.parseLess() || parser.parseType(type) || parser.parseComma(), parser.parseKeyword(&parserName) || parser.parseGreater()) {
@@ -446,79 +445,79 @@ void mlir::db::StringType::print(::mlir::DialectAsmPrinter& printer) const {
    }
    return mlir::db::GenericIterableType::get(parser.getBuilder().getContext(), type, parserName.str());
 }
-void mlir::db::GenericIterableType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getElementType() << "," << getIteratorName() << ">";
+void mlir::db::GenericIterableType::print(mlir::AsmPrinter& p) const {
+   p << "<" << getElementType() << "," << getIteratorName() << ">";
 }
-::mlir::Type mlir::db::TableBuilderType::parse( mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::TableBuilderType::parse( mlir::AsmParser& parser) {
    Type type;
    if (parser.parseLess() || parser.parseType(type) || parser.parseGreater()) {
       return mlir::Type();
    }
    return mlir::db::TableBuilderType::get(parser.getBuilder().getContext(), type.dyn_cast<TupleType>());
 }
-void mlir::db::TableBuilderType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getRowType() << ">";
+void mlir::db::TableBuilderType::print(mlir::AsmPrinter& p) const {
+   p << "<" << getRowType() << ">";
 }
-::mlir::Type mlir::db::VectorBuilderType::parse( mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::VectorBuilderType::parse( mlir::AsmParser& parser) {
    Type type;
    if (parser.parseLess() || parser.parseType(type) || parser.parseGreater()) {
       return mlir::Type();
    }
    return mlir::db::VectorBuilderType::get(parser.getBuilder().getContext(), type);
 }
-void mlir::db::VectorBuilderType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getElementType() << ">";
+void mlir::db::VectorBuilderType::print(mlir::AsmPrinter& p) const {
+   p <<  "<" << getElementType() << ">";
 }
 
-::mlir::Type mlir::db::AggrHTBuilderType::parse( mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::AggrHTBuilderType::parse( mlir::AsmParser& parser) {
    TupleType keyType, valType, aggrType;
    if (parser.parseLess() || parser.parseType(keyType) || parser.parseComma() || parser.parseType(valType) || parser.parseComma() || parser.parseType(aggrType) || parser.parseGreater()) {
       return mlir::Type();
    }
    return mlir::db::AggrHTBuilderType::get(parser.getBuilder().getContext(), keyType, valType, aggrType);
 }
-void mlir::db::AggrHTBuilderType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getKeyType() << "," << getValType() << "," << getAggrType() << ">";
+void mlir::db::AggrHTBuilderType::print(mlir::AsmPrinter& p) const {
+   p << "<" << getKeyType() << "," << getValType() << "," << getAggrType() << ">";
 }
-::mlir::Type mlir::db::JoinHTBuilderType::parse( mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::JoinHTBuilderType::parse( mlir::AsmParser& parser) {
    TupleType keyType, valType;
    if (parser.parseLess() || parser.parseType(keyType) || parser.parseComma() || parser.parseType(valType) || parser.parseGreater()) {
       return mlir::Type();
    }
    return mlir::db::JoinHTBuilderType::get(parser.getBuilder().getContext(), keyType, valType);
 }
-void mlir::db::JoinHTBuilderType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getKeyType() << "," << getValType() << ">";
+void mlir::db::JoinHTBuilderType::print(mlir::AsmPrinter& p) const {
+   p << "<" << getKeyType() << "," << getValType() << ">";
 }
-::mlir::Type mlir::db::JoinHashtableType::parse( mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::JoinHashtableType::parse( mlir::AsmParser& parser) {
    TupleType keyType, valType;
    if (parser.parseLess() || parser.parseType(keyType) || parser.parseComma() || parser.parseType(valType) || parser.parseGreater()) {
       return mlir::Type();
    }
    return mlir::db::JoinHashtableType::get(parser.getBuilder().getContext(), keyType, valType);
 }
-void mlir::db::JoinHashtableType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getKeyType() << "," << getValType() << ">";
+void mlir::db::JoinHashtableType::print(mlir::AsmPrinter& p) const {
+   p << "<" << getKeyType() << "," << getValType() << ">";
 }
-::mlir::Type mlir::db::AggregationHashtableType::parse( mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::AggregationHashtableType::parse( mlir::AsmParser& parser) {
    TupleType keyType, valType;
    if (parser.parseLess() || parser.parseType(keyType) || parser.parseComma() || parser.parseType(valType) || parser.parseGreater()) {
       return mlir::Type();
    }
    return mlir::db::AggregationHashtableType::get(parser.getBuilder().getContext(), keyType, valType);
 }
-void mlir::db::AggregationHashtableType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getKeyType() << "," << getValType() << ">";
+void mlir::db::AggregationHashtableType::print(mlir::AsmPrinter& p) const {
+   p << "<" << getKeyType() << "," << getValType() << ">";
 }
-::mlir::Type mlir::db::VectorType::parse( mlir::DialectAsmParser& parser) {
+::mlir::Type mlir::db::VectorType::parse( mlir::AsmParser& parser) {
    Type type;
    if (parser.parseLess() || parser.parseType(type) || parser.parseGreater()) {
       return mlir::Type();
    }
    return mlir::db::VectorType::get(parser.getBuilder().getContext(), type);
 }
-void mlir::db::VectorType::print(mlir::DialectAsmPrinter& p) const {
-   p << getMnemonic() << "<" << getElementType() << ">";
+void mlir::db::VectorType::print(mlir::AsmPrinter& p) const {
+   p  << "<" << getElementType() << ">";
 }
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/DB/IR/DBOpsTypes.cpp.inc"

@@ -227,7 +227,7 @@ Attributes MarkJoinOp::getCreatedAttributes() {
 Attributes BaseTableOp::getCreatedAttributes() {
    Attributes creations;
    for (auto mapping : columns()) {
-      auto [_, attr] = mapping;
+      auto attr=mapping.getValue();
       auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
       creations.insert(&relationDefAttr.getRelationalAttribute());
    }

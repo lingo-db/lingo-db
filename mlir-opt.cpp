@@ -61,6 +61,8 @@ void ToLLVMLoweringPass::runOnOperation() {
    // patterns must be applied to fully transform an illegal operation into a
    // set of legal ones.
    mlir::RewritePatternSet patterns(&getContext());
+   mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
+   mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
    populateAffineToStdConversionPatterns(patterns);
    populateLoopToStdConversionPatterns(patterns);
    mlir::util::populateUtilToLLVMConversionPatterns(typeConverter, patterns);
