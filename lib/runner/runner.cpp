@@ -333,6 +333,7 @@ static llvm::Error optimizeModule(llvm::Module* module) {
       funcPM.run(func);
    }
    funcPM.doFinalization();
+   module->dump();
    return llvm::Error::success();
 }
 bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::function<void(uint8_t*)> callback) {
