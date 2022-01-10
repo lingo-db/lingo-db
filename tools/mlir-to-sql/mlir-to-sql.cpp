@@ -285,7 +285,7 @@ class ToSQL {
                      output << "select ";
                      auto first = true;
                      for (auto mapping : op.columns()) {
-                        auto column_name=mapping.getName();
+                        auto columnName =mapping.getName();
                         auto attr=mapping.getValue();
                         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
                         if (first) {
@@ -293,7 +293,7 @@ class ToSQL {
                         } else {
                            output << ", ";
                         }
-                        output << column_name.str() << " as " << attributeName(relationDefAttr.getRelationalAttribute());
+                        output << columnName.str() << " as " << attributeName(relationDefAttr.getRelationalAttribute());
                      }
                      output << "\nfrom " << std::string(op.table_identifier());
                   })

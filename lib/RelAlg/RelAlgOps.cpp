@@ -336,7 +336,7 @@ static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
    p << " columns: {";
    auto first = true;
    for (auto mapping : op.columns()) {
-      auto column_name=mapping.getName();
+      auto columnName =mapping.getName();
       auto attr=mapping.getValue();
       auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
       if (first) {
@@ -344,7 +344,7 @@ static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
       } else {
          p << ", ";
       }
-      p << column_name.getValue() << " => ";
+      p << columnName.getValue() << " => ";
       printAttributeDefAttr(p, relationDefAttr);
    }
    p << "}";
