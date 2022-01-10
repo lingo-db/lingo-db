@@ -1,6 +1,7 @@
 #include "arrow/util/formatting.h"
 #include "arrow/util/value_parsing.h"
 #include "runtime/helpers.h"
+#include <iostream>
 #include <arrow/type.h>
 #include <arrow/util/decimal.h>
 
@@ -198,7 +199,7 @@ __attribute__((always_inline)) inline int64_t mem_compare(const char* left, int6
       }                                                                                              \
    }
 
-STR_CMP(eq, ==)
+//STR_CMP(eq, ==)
 STR_CMP(neq, !=)
 STR_CMP(lt, <)
 STR_CMP(lte, <=)

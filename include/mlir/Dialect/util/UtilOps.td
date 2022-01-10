@@ -74,6 +74,22 @@ def VarLenGetLen : Util_Op<"varlen32_getlen"> {
     let results = (outs Index: $len);
     let assemblyFormat = " $varlen attr-dict";
 }
+
+def Hash64 : Util_Op<"hash_64"> {
+    let arguments = (ins Index:$val);
+    let results = (outs Index:$hash);
+    let assemblyFormat = "$val attr-dict";
+}
+def HashVarLen : Util_Op<"hash_varlen"> {
+    let arguments = (ins VarLen32Type:$val);
+    let results = (outs Index:$hash);
+    let assemblyFormat = "$val attr-dict";
+}
+def HashCombine : Util_Op<"hash_combine"> {
+    let arguments = (ins Index:$h1, Index:$h2);
+    let results = (outs Index:$hash);
+    let assemblyFormat = "$h1 `,` $h2 attr-dict";
+}
 def AllocOp  : Util_Op<"alloc"> {
 let arguments = (ins Optional<Index>:$size);
 let results=(outs RefType:$ref);

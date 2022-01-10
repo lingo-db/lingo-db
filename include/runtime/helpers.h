@@ -65,6 +65,7 @@ static uint64_t READ_8_PAD_ZERO(const uint8_t* p, uint32_t len) {
 }
 
 class VarLen32 {
+   public:
    static constexpr uint32_t SHORT_LEN = 12;
    uint32_t len;
    union {
@@ -84,7 +85,7 @@ class VarLen32 {
    public:
    VarLen32(uint8_t* ptr, uint32_t len) : len(len) {
       if (len > SHORT_LEN) {
-         //todo: copy for temporary strings
+         this->first4 = UNALIGNED_LOAD32(ptr);
          storePtr(ptr);
       } else if (len > 8) {
          this->first4 = UNALIGNED_LOAD32(ptr);
