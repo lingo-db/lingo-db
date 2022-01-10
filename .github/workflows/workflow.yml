@@ -115,6 +115,10 @@ jobs:
     needs: [build-llvm,build-arrow]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/setup-python@v2
+        with:
+          python-version: '3.9.x'
+          architecture: 'x64'
       - name: install dependencies
         run: |
           sudo apt-get install libjemalloc-dev libboost-dev \
