@@ -7,7 +7,7 @@
 #include <string>
 #include <vector>
 #define EXPORT extern "C" __attribute__((visibility("default")))
-
+#define INLINE __attribute__((always_inline))
 namespace runtime {
 class Str {
    char* pointer;
@@ -39,16 +39,25 @@ class Bytes {
 };
 
 class VarLen32 {
+   static constexpr uint32_t SHORT_LEN = 12;
    uint32_t len;
-   uint8_t type;
-   uint8_t bytes[11];
+   uint8_t bytes[SHORT_LEN];
 
    public:
+   VarLen32(uint8_t* ptr, uint32_t len) : len(len) {
+      //todo: optimize
+      memcpy(bytes, ptr, std::min(len, SHORT_LEN));
+      //todo set remaining to zero
+      if(len>SHORT_LEN){
+         uint8_t** ptrloc=reinterpret_cast<uint8_t**>((&bytes[4]));
+         *ptrloc=ptr;
+      }
+   }
    uint8_t* getPtr() {
-      if (len <= 11) {
+      if (len <= SHORT_LEN) {
          return bytes;
       } else {
-         return reinterpret_cast<uint8_t*>(*(uintptr_t*) (&bytes[3]));
+         return reinterpret_cast<uint8_t*>(*(uintptr_t*) (&bytes[4]));
       }
    }
    char* data() {
@@ -57,9 +66,11 @@ class VarLen32 {
    uint32_t getLen() {
       return len;
    }
-   uint8_t getType() {
-      return type;
+
+   __int128 asI128(){
+      return *(reinterpret_cast<__int128*>(this));
    }
+
    operator std::string() { return std::string((char*) getPtr(), len); }
    std::string str() { return std::string((char*) getPtr(), len); }
 };

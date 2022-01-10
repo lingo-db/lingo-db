@@ -425,6 +425,7 @@ class CmpOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto loc = op->getLoc();
       auto cmpOp = cast<db::CmpOp>(op);
+      mlir::db::CmpOpAdaptor adaptor(operands);
       auto type = cmpOp.left().getType().cast<db::DBType>().getBaseType();
       if (type.isa<db::StringType>()) {
          return failure();

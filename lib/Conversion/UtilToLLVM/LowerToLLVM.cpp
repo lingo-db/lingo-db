@@ -163,9 +163,8 @@ class UnPackOpLowering : public ConversionPattern {
       unsigned pos = 0;
       std::vector<Value> values;
       for (auto type : structType.getBody()) {
-         values.push_back(rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), type, adaptor.tuple(), rewriter.getI64ArrayAttr(pos++)));
          if (!unPackOp.getResult(pos).use_empty()) {
-            values.push_back(rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), type, unPackOp.tuple(), rewriter.getI64ArrayAttr(pos++)));
+            values.push_back(rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), type, adaptor.tuple(), rewriter.getI64ArrayAttr(pos++)));
          } else {
             values.push_back(Value());
             pos++;
@@ -469,7 +468,7 @@ class ElementPtrOpLowering : public ConversionPattern {
 
       Value elementPtr1 = getPtrFromGenericMemref(op->getLoc(), genericMemrefType, elementPtrOpAdaptor.ref(), rewriter, typeConverter);
       if (!genericMemrefType.getSize().hasValue() && genericMemrefType.getElementType().isa<mlir::TupleType>()) {
-         Value zero = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI64Type(),rewriter.getI64IntegerAttr(0));
+         Value zero = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(0));
 
          assert(elementPtrOp.idx().getDefiningOp());
          auto val = mlir::cast<mlir::arith::ConstantIndexOp>(elementPtrOp.idx().getDefiningOp()).value();
@@ -495,49 +494,20 @@ class CreateVarLenLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto* context = getContext();
       mlir::util::CreateVarLenAdaptor adaptor(operands);
-
-      auto i8Type = IntegerType::get(context, 8);
-      auto i16Type = IntegerType::get(context, 16);
-
-      auto i1Type = IntegerType::get(context, 1);
       auto i128Type = IntegerType::get(context, 128);
-      auto i64Type = IntegerType::get(context, 64);
-      auto i32Type = IntegerType::get(context, 32);
-
-      auto vecType = mlir::VectorType::get({16}, i8Type);
-      auto maskType = mlir::VectorType::get({16}, i1Type);
-      Value const11 = rewriter.create<arith::ConstantOp>(op->getLoc(), i32Type, rewriter.getI32IntegerAttr(11));
-
-      Value lenGT11 = rewriter.create<LLVM::ICmpOp>(op->getLoc(), LLVM::ICmpPredicate::ugt, adaptor.len(), const11);
-
-      auto const1I16 = rewriter.create<mlir::ConstantOp>(op->getLoc(), i16Type, rewriter.getIntegerAttr(i16Type, 1));
-      auto const3I16 = rewriter.create<mlir::ConstantOp>(op->getLoc(), i16Type, rewriter.getIntegerAttr(i16Type, 3));
-
-      auto lenI16 = rewriter.create<LLVM::TruncOp>(op->getLoc(), i16Type, adaptor.len());
-      auto shift = rewriter.create<mlir::SelectOp>(op->getLoc(), lenGT11, const3I16, lenI16);
-
-      auto shifted = rewriter.create<mlir::LLVM::ShlOp>(op->getLoc(), const1I16, shift);
-      auto bitmask = rewriter.create<mlir::LLVM::SubOp>(op->getLoc(), shifted, const1I16);
-      auto vecPtrType = mlir::LLVM::LLVMPointerType::get(vecType);
-      Value vecPtr = rewriter.create<LLVM::BitcastOp>(op->getLoc(), vecPtrType, adaptor.ref());
-      Value mask = rewriter.create<LLVM::BitcastOp>(op->getLoc(), maskType, bitmask);
-      Value passThrough = rewriter.create<arith::ConstantOp>(op->getLoc(), vecType, DenseIntElementsAttr::get<uint8_t>(VectorType::get({16}, i8Type), {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}));
-      Value loaded = rewriter.create<LLVM::MaskedLoadOp>(op->getLoc(), vecType, vecPtr, mask, passThrough, 1);
-      Value loadedAs128 = rewriter.create<LLVM::BitcastOp>(op->getLoc(), i128Type, loaded);
-      Value lenAs128 = rewriter.create<LLVM::ZExtOp>(op->getLoc(), i128Type, adaptor.len());
-      Value typeAs128 = rewriter.create<LLVM::ZExtOp>(op->getLoc(), i128Type, adaptor.type());
-      Value refAs128 = rewriter.create<LLVM::ZExtOp>(op->getLoc(), i128Type, rewriter.create<LLVM::PtrToIntOp>(op->getLoc(), i64Type, adaptor.ref()));
-
-      Value constX = rewriter.create<arith::ConstantOp>(op->getLoc(), i128Type, rewriter.getIntegerAttr(i128Type, APInt(128, {0x0000000000000000, 0xFFFFFFFFFFFFFFFF})));
-      Value const40 = rewriter.create<arith::ConstantOp>(op->getLoc(), i128Type, rewriter.getIntegerAttr(i128Type, 40));
-      Value const32 = rewriter.create<arith::ConstantOp>(op->getLoc(), i128Type, rewriter.getIntegerAttr(i128Type, 32));
+      auto elemPtrType = mlir::LLVM::LLVMPointerType::get(rewriter.getI8Type());
+      auto structType = LLVM::LLVMStructType::getLiteral(context, std::vector<Type>{rewriter.getI64Type(), rewriter.getI64Type()});
+      auto types = std::vector<Type>{elemPtrType, rewriter.getI32Type()};
+      auto fn = LLVM::lookupOrCreateFn(op->getParentOfType<ModuleOp>(), "rt_varlen_from_ptr", types, structType);
       Value const64 = rewriter.create<arith::ConstantOp>(op->getLoc(), i128Type, rewriter.getIntegerAttr(i128Type, 64));
-      Value shiftedType = rewriter.create<LLVM::ShlOp>(op->getLoc(), typeAs128, const32);
-      Value shiftedBytes = rewriter.create<LLVM::ShlOp>(op->getLoc(), loadedAs128, const40);
-      Value shiftedRef = rewriter.create<LLVM::ShlOp>(op->getLoc(), refAs128, const64);
-      shiftedBytes = rewriter.create<LLVM::SelectOp>(op->getLoc(), lenGT11, rewriter.create<LLVM::OrOp>(op->getLoc(), rewriter.create<LLVM::AndOp>(op->getLoc(), shiftedBytes, constX), shiftedRef), shiftedBytes);
-      Value res = rewriter.create<LLVM::OrOp>(op->getLoc(), rewriter.create<LLVM::OrOp>(op->getLoc(), lenAs128, shiftedType), shiftedBytes);
-      rewriter.replaceOp(op, res);
+      auto result = createLLVMCall(rewriter, op->getLoc(), fn, {adaptor.ref(), adaptor.len()}, structType)[0];
+      auto toI1281 = rewriter.create<LLVM::ZExtOp>(op->getLoc(), i128Type, rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), rewriter.getI64Type(), result, rewriter.getI64ArrayAttr(0)));
+      auto toI1282 = rewriter.create<LLVM::ZExtOp>(op->getLoc(), i128Type, rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), rewriter.getI64Type(), result, rewriter.getI64ArrayAttr(1)));
+      auto toI1283 = rewriter.create<LLVM::ShlOp>(op->getLoc(), i128Type, toI1282,const64);
+
+      mlir::Value toI128 = rewriter.create<LLVM::OrOp>(op->getLoc(),i128Type,toI1283,toI1281);
+
+      rewriter.replaceOp(op, toI128);
       return success();
    }
 };
@@ -551,49 +521,28 @@ class VarLenGetRefLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto* context = getContext();
       mlir::util::VarLenGetRefAdaptor adaptor(operands);
-      auto varlenRef = cast<mlir::util::VarLenGetRef>(op);
       auto i128Type = IntegerType::get(context, 128);
+      auto i128PtrType = mlir::LLVM::LLVMPointerType::get(IntegerType::get(context, 128));
 
-      auto targetType = typeConverter->convertType(varlenRef.getType());
-      auto i32type = rewriter.getI32Type();
-      auto i64type = rewriter.getI64Type();
-
-      auto i8Type = IntegerType::get(context, 8);
-      auto ptrType = mlir::LLVM::LLVMPointerType::get(i8Type);
       mlir::Value allocatedElementPtr;
-      Value const11i;
       {
          auto func = op->getParentOfType<mlir::LLVM::LLVMFuncOp>();
          OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(&func.getBody().front());
-         const11i = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 11);
-         allocatedElementPtr = rewriter.create<LLVM::AllocaOp>(op->getLoc(), mlir::LLVM::LLVMPointerType::get(i128Type), const11i, 0);
+         auto const1 = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(1));
+         allocatedElementPtr = rewriter.create<LLVM::AllocaOp>(op->getLoc(), mlir::LLVM::LLVMPointerType::get(i128Type), const1, 16);
       }
-      Value len = rewriter.create<LLVM::TruncOp>(op->getLoc(), i32type, adaptor.varlen());
-      Value const64 = rewriter.create<arith::ConstantOp>(op->getLoc(), i128Type, rewriter.getIntegerAttr(i128Type, 64));
-      Value const11i = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 11);
-      Value const40 = rewriter.create<arith::ConstantOp>(op->getLoc(), i128Type, rewriter.getIntegerAttr(i128Type, 40));
+      rewriter.create<LLVM::StoreOp>(op->getLoc(), adaptor.varlen(), allocatedElementPtr);
 
-      Value ptr128 = rewriter.create<LLVM::LShrOp>(op->getLoc(), adaptor.varlen(), const64);
-      Value bytes = rewriter.create<LLVM::LShrOp>(op->getLoc(), adaptor.varlen(), const40);
-
-      Value ptrCasted = rewriter.create<LLVM::TruncOp>(op->getLoc(), i64type, ptr128);
-      Value ptrToLargeString = rewriter.create<LLVM::IntToPtrOp>(op->getLoc(), ptrType, ptrCasted);
-
-      rewriter.create<LLVM::StoreOp>(op->getLoc(), bytes, allocatedElementPtr);
-
-      Value castedLen = rewriter.create<LLVM::SExtOp>(op->getLoc(), typeConverter->convertType(rewriter.getIndexType()), len);
-      Value ptrToSmallString = rewriter.create<LLVM::BitcastOp>(op->getLoc(), ptrType, allocatedElementPtr);
-      Value lenGT11 = rewriter.create<LLVM::ICmpOp>(op->getLoc(), LLVM::ICmpPredicate::ugt, castedLen, const11i);
-      Value ptr = rewriter.create<LLVM::SelectOp>(op->getLoc(), lenGT11, ptrToLargeString, ptrToSmallString);
-      Value tpl = rewriter.create<LLVM::UndefOp>(op->getLoc(), targetType);
-      tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, ptr, rewriter.getI64ArrayAttr(0));
-      tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, castedLen, rewriter.getI64ArrayAttr(1));
-      rewriter.replaceOp(op, tpl);
+      auto elemPtrType = mlir::LLVM::LLVMPointerType::get(rewriter.getI8Type());
+      auto idxType = typeConverter->convertType(IndexType::get(context));
+      auto resType = LLVM::LLVMStructType::getLiteral(context, std::vector<Type>{elemPtrType, idxType});
+      auto fn = LLVM::lookupOrCreateFn(op->getParentOfType<ModuleOp>(), "rt_varlen_to_ref", i128PtrType, resType);
+      auto result = createLLVMCall(rewriter, op->getLoc(), fn, {allocatedElementPtr}, resType)[0];
+      rewriter.replaceOp(op, result);
       return success();
    }
 };
-
 
 class VarLenGetLenLowering : public ConversionPattern {
    public:
@@ -603,13 +552,10 @@ class VarLenGetLenLowering : public ConversionPattern {
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      auto* context = getContext();
       mlir::util::VarLenGetLenAdaptor adaptor(operands);
-      auto varlenRef = cast<mlir::util::VarLenGetLen>(op);
 
       auto i32type = rewriter.getI32Type();
 
-      auto i8Type = IntegerType::get(context, 8);
       Value len = rewriter.create<LLVM::TruncOp>(op->getLoc(), i32type, adaptor.varlen());
 
       Value castedLen = rewriter.create<LLVM::SExtOp>(op->getLoc(), typeConverter->convertType(rewriter.getIndexType()), len);
@@ -673,5 +619,4 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<CreateVarLenLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenGetRefLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenGetLenLowering>(typeConverter, patterns.getContext());
-
 }

@@ -189,23 +189,13 @@ __attribute__((always_inline)) inline int64_t mem_compare(const char* left, int6
    }
 }
 //end taken from apache gandiva
-#define STR_CMP(NAME, OP)                                                                                  \
-extern "C" bool rt_cmp_string_##NAME(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) { \
-if (null) {                                                                                          \
-return false;                                                                                     \
-} else {                                                                                             \
-return mem_compare((str1).data(), (str1).getLen(), (str2).data(), (str2).getLen()) OP 0;            \
-}                                                                                                    \
-}
-//end taken from apache gandiva
-
-#define STR_CMP(NAME, OP)                                                                   \
-   extern "C" bool rt_cmp_string_##NAME(bool null, runtime::Str str1, runtime::Str str2) {  \
-      if (null) {                                                                           \
-         return false;                                                                      \
-      } else {                                                                              \
-         return mem_compare((str1).data(), (str1).len(), (str2).data(), (str2).len()) OP 0; \
-      }                                                                                     \
+#define STR_CMP(NAME, OP)                                                                            \
+   extern "C" bool rt_cmp_string_##NAME(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) { \
+      if (null) {                                                                                    \
+         return false;                                                                               \
+      } else {                                                                                       \
+         return mem_compare((str1).data(), (str1).getLen(), (str2).data(), (str2).getLen()) OP 0;    \
+      }                                                                                              \
    }
 
 STR_CMP(eq, ==)
@@ -217,8 +207,8 @@ STR_CMP(gte, >=)
 
 extern "C" void rt_cpy(runtime::Str to, runtime::Str from) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    memcpy(to.data(), from.data(), from.len());
-
 }
 extern "C" void rt_fill(runtime::Str from, char val) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    memset(from.data(), val, from.len());
 }
+
