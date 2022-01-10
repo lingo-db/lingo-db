@@ -208,7 +208,7 @@ jobs:
         uses: actions/cache@v2
         with:
           path: arrow/python
-          key: ${{ runner.os }}-pyarrow-${{ steps.arrow-commit.outputs.commit }}
+          key: ${{ runner.os }}-pyarrow-2-${{ steps.arrow-commit.outputs.commit }}
       - name: Fetch LLVM Build
         id: llvm-build
         uses: actions/cache@v2
