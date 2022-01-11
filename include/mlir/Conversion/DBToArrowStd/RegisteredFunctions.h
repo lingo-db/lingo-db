@@ -21,6 +21,7 @@
    F(DumpIntervalDayTime, dump_interval_daytime, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                             \
    F(DumpFloat, dump_float, OPERANDS(BOOL_TYPE, DOUBLE_TYPE), RETURNS())                                                                                   \
    F(DumpString, dump_string, OPERANDS(BOOL_TYPE, STRING_TYPE), RETURNS())                                                                                 \
+   F(DumpChar, dump_char, OPERANDS(BOOL_TYPE, INT_TYPE(64), INT_TYPE(64)), RETURNS())                                                                      \
    F(TableChunkIteratorInit, table_chunk_iterator_init, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                     \
    F(TableChunkIteratorNext, table_chunk_iterator_next, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                     \
    F(TableChunkIteratorCurr, table_chunk_iterator_curr, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                     \
@@ -48,6 +49,7 @@
    F(ArrowTableBuilderAddFloat64, table_builder_add_float_64, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, DOUBLE_TYPE), RETURNS())                     \
    F(ArrowTableBuilderAddBool, table_builder_add_bool, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, BOOL_TYPE), RETURNS())                              \
    F(ArrowTableBuilderAddBinary, table_builder_add_binary, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, STRING_TYPE), RETURNS())                        \
+   F(ArrowTableBuilderAddFixedBinary, table_builder_add_fixed_binary, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(64)), RETURNS())                        \
    F(ArrowTableBuilderFinishRow, table_builder_finish_row, OPERANDS(POINTER_TYPE), RETURNS())                                                              \
    F(ArrowTableBuilderBuild, table_builder_build, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                           \
    F(CmpStringEQ, cmp_string_eq, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
@@ -65,17 +67,17 @@
    F(CastFloat32ToString, cast_float32_string, OPERANDS(BOOL_TYPE, FLOAT_TYPE), RETURNS(STRING_TYPE))                                                      \
    F(CastFloat64ToString, cast_float64_string, OPERANDS(BOOL_TYPE, DOUBLE_TYPE), RETURNS(STRING_TYPE))                                                     \
    F(CastDecimalToString, cast_decimal_string, OPERANDS(BOOL_TYPE, INT_TYPE(128), INT_TYPE(32)), RETURNS(STRING_TYPE))                                     \
+   F(CastCharToString, cast_char_string, OPERANDS(BOOL_TYPE, INT_TYPE(64), INT_TYPE(64)), RETURNS(STRING_TYPE))                                     \
    F(SortVector, sort, OPERANDS(INDEX_TYPE, POINTER_TYPE, INDEX_TYPE, FUNCTION_TYPE(OPERANDS(POINTER_TYPE, POINTER_TYPE), RETURNS(BOOL_TYPE))), RETURNS()) \
-   F(TimestampAddMillis, timestamp_add_millis, OPERANDS(INT_TYPE(64), INT_TYPE(64)), RETURNS(INT_TYPE(64))) \
-   F(TimestampAddMonth, timestamp_add_months, OPERANDS(INT_TYPE(32), INT_TYPE(64)), RETURNS(INT_TYPE(64))) \
-   F(DateExtractYear, extract_year, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                             \
-   F(DateExtractDoy, extract_doy, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                               \
-   F(DateExtractMonth, extract_month, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                           \
-   F(DateExtractDay, extract_day, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                               \
-   F(DateExtractDow, extractdow, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                               \
-   F(DateExtractHour, extract_hour, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                             \
-   F(DateExtractMinute, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                         \
+   F(TimestampAddMillis, timestamp_add_millis, OPERANDS(INT_TYPE(64), INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                \
+   F(TimestampAddMonth, timestamp_add_months, OPERANDS(INT_TYPE(32), INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                 \
+   F(DateExtractYear, extract_year, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                         \
+   F(DateExtractDoy, extract_doy, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                           \
+   F(DateExtractMonth, extract_month, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                       \
+   F(DateExtractDay, extract_day, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                           \
+   F(DateExtractDow, extractdow, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                            \
+   F(DateExtractHour, extract_hour, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                         \
+   F(DateExtractMinute, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                     \
    F(DateExtractSecond, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))
-
 
 #endif // MLIR_CONVERSION_DBTOARROWSTD_REGISTEREDFUNCTIONS_H

@@ -17,6 +17,7 @@ EXPORT std::shared_ptr<arrow::DataType>* rt_arrow_type2(uint32_t typeVal, uint32
       case arrow::Type::STRING: *ptr = arrow::utf8(); break;
       case arrow::Type::DATE32: *ptr = arrow::date32(); break;
       case arrow::Type::DATE64: *ptr = arrow::date64(); break;
+      case arrow::Type::FIXED_SIZE_BINARY: *ptr = arrow::fixed_size_binary(p1);break;
 
       default: throw std::runtime_error("unknown arrow type!!");
    }

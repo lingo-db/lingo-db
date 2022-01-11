@@ -105,7 +105,7 @@ void ToLLVMLoweringPass::runOnOperation() {
 }
 
 namespace runner {
-
+static constexpr bool enableVerifier =false;
 extern const unsigned char kPrecompiledBitcode[];
 extern const size_t kPrecompiledBitcodeSize;
 std::unique_ptr<mlir::Pass> createLowerToLLVMPass() {
@@ -236,7 +236,7 @@ bool Runner::optimize() {
    auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
-   pm.enableVerifier(false);
+   pm.enableVerifier(enableVerifier);
    pm.addPass(mlir::createInlinerPass());
    pm.addPass(mlir::createSymbolDCEPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createSimplifyAggregationsPass());
@@ -256,12 +256,13 @@ bool Runner::optimize() {
       return false;
    }
    auto end = std::chrono::high_resolution_clock::now();
+   ctxt->module->dump();
    std::cout << "optimization took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
    {
       auto start = std::chrono::high_resolution_clock::now();
 
       mlir::PassManager pm2(&ctxt->context);
-      pm2.enableVerifier(false);
+      pm2.enableVerifier(enableVerifier);
       pm2.addNestedPass<mlir::FuncOp>(mlir::relalg::createLowerToDBPass());
       pm2.addPass(mlir::createCanonicalizerPass());
       if (mlir::failed(pm2.run(ctxt->module.get()))) {
@@ -277,7 +278,7 @@ bool Runner::lower() {
    auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
-   pm.enableVerifier(false);
+   pm.enableVerifier(enableVerifier);
    pm.addPass(mlir::db::createLowerToStdPass());
    pm.addPass(mlir::createCanonicalizerPass());
    if (mlir::failed(pm.run(ctxt->module.get()))) {
@@ -301,7 +302,7 @@ bool Runner::lowerToLLVM() {
 
    }
    mlir::PassManager pm2(&ctxt->context);
-   pm2.enableVerifier(false);
+   pm2.enableVerifier(enableVerifier);
    pm2.addPass(mlir::createLowerToCFGPass());
    pm2.addPass(createLowerToLLVMPass());
    if (mlir::failed(pm2.run(ctxt->module.get()))) {

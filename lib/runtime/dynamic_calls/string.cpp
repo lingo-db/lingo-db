@@ -171,6 +171,11 @@ extern "C" runtime::Str rt_cast_decimal_string(bool null, uint64_t low, uint64_t
    return runtime::Str(data, len);
 }
 
+EXPORT runtime::Str rt_cast_char_string(bool null, uint64_t val, size_t bytes) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   char* data = new char[bytes];
+   memcpy(data,&val,bytes);
+   return runtime::Str(data,bytes);
+}
 //taken from apache gandiva
 //source: https://github.com/apache/arrow/blob/master/cpp/src/gandiva/precompiled/string_ops.cc
 //Apache-2.0 License

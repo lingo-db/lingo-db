@@ -1,9 +1,9 @@
 module @querymodule{
     func @main ()  -> !db.table{
-        %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<64>}),
+        %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<32>}),
             c_name => @c_name({type=!db.string}),
             c_address => @c_address({type=!db.string}),
-            c_nationkey => @c_nationkey({type=!db.int<64>}),
+            c_nationkey => @c_nationkey({type=!db.int<32>}),
             c_phone => @c_phone({type=!db.string}),
             c_acctbal => @c_acctbal({type=!db.decimal<15,2>}),
             c_mktsegment => @c_mktsegment({type=!db.string}),
@@ -28,10 +28,10 @@ module @querymodule{
             %18 = db.compare eq %4 : !db.string,%17 : !db.string
             %19 = db.or %6 : !db.bool,%8 : !db.bool,%10 : !db.bool,%12 : !db.bool,%14 : !db.bool,%16 : !db.bool,%18 : !db.bool
             %20 = relalg.getattr %2 @customer::@c_acctbal : !db.decimal<15,2>
-            %21 = relalg.basetable @customer1 { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<64>}),
+            %21 = relalg.basetable @customer1 { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<32>}),
                 c_name => @c_name({type=!db.string}),
                 c_address => @c_address({type=!db.string}),
-                c_nationkey => @c_nationkey({type=!db.int<64>}),
+                c_nationkey => @c_nationkey({type=!db.int<32>}),
                 c_phone => @c_phone({type=!db.string}),
                 c_acctbal => @c_acctbal({type=!db.decimal<15,2>}),
                 c_mktsegment => @c_mktsegment({type=!db.string}),
@@ -68,9 +68,9 @@ module @querymodule{
             }
             %47 = relalg.getscalar @aggr1::@aggfmname1 %45 : !db.decimal<15,2,nullable>
             %48 = db.compare gt %20 : !db.decimal<15,2>,%47 : !db.decimal<15,2,nullable>
-            %49 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=!db.int<64>}),
-                o_custkey => @o_custkey({type=!db.int<64>}),
-                o_orderstatus => @o_orderstatus({type=!db.string}),
+            %49 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=!db.int<32>}),
+                o_custkey => @o_custkey({type=!db.int<32>}),
+                o_orderstatus => @o_orderstatus({type=!db.char<1>}),
                 o_totalprice => @o_totalprice({type=!db.decimal<15,2>}),
                 o_orderdate => @o_orderdate({type=!db.date<day>}),
                 o_orderpriority => @o_orderpriority({type=!db.string}),
@@ -79,9 +79,9 @@ module @querymodule{
                 o_comment => @o_comment({type=!db.string})
             }
             %51 = relalg.selection %49(%50: !relalg.tuple) {
-                %52 = relalg.getattr %50 @orders::@o_custkey : !db.int<64>
-                %53 = relalg.getattr %2 @customer::@c_custkey : !db.int<64>
-                %54 = db.compare eq %52 : !db.int<64>,%53 : !db.int<64>
+                %52 = relalg.getattr %50 @orders::@o_custkey : !db.int<32>
+                %53 = relalg.getattr %2 @customer::@c_custkey : !db.int<32>
+                %54 = db.compare eq %52 : !db.int<32>,%53 : !db.int<32>
                 relalg.return %54 : !db.bool
             }
             %55 = relalg.exists%51

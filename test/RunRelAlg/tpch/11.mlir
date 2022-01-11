@@ -204,34 +204,34 @@
 //CHECK: |                          3627  |                    1004461.04  |
 module @querymodule{
     func  @main ()  -> !db.table{
-        %1 = relalg.basetable @partsupp { table_identifier="partsupp", rows=80000 , pkey=["ps_partkey","ps_suppkey"]} columns: {ps_partkey => @ps_partkey({type=!db.int<64>}),
-            ps_suppkey => @ps_suppkey({type=!db.int<64>}),
+        %1 = relalg.basetable @partsupp { table_identifier="partsupp", rows=80000 , pkey=["ps_partkey","ps_suppkey"]} columns: {ps_partkey => @ps_partkey({type=!db.int<32>}),
+            ps_suppkey => @ps_suppkey({type=!db.int<32>}),
             ps_availqty => @ps_availqty({type=!db.int<32>}),
             ps_supplycost => @ps_supplycost({type=!db.decimal<15,2>}),
             ps_comment => @ps_comment({type=!db.string})
         }
-        %2 = relalg.basetable @supplier { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=!db.int<64>}),
+        %2 = relalg.basetable @supplier { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=!db.int<32>}),
             s_name => @s_name({type=!db.string}),
             s_address => @s_address({type=!db.string}),
-            s_nationkey => @s_nationkey({type=!db.int<64>}),
+            s_nationkey => @s_nationkey({type=!db.int<32>}),
             s_phone => @s_phone({type=!db.string}),
             s_acctbal => @s_acctbal({type=!db.decimal<15,2>}),
             s_comment => @s_comment({type=!db.string})
         }
         %3 = relalg.crossproduct %1, %2
-        %4 = relalg.basetable @nation { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=!db.int<64>}),
+        %4 = relalg.basetable @nation { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=!db.int<32>}),
             n_name => @n_name({type=!db.string}),
-            n_regionkey => @n_regionkey({type=!db.int<64>}),
+            n_regionkey => @n_regionkey({type=!db.int<32>}),
             n_comment => @n_comment({type=!db.string<nullable>})
         }
         %5 = relalg.crossproduct %3, %4
         %7 = relalg.selection %5(%6: !relalg.tuple) {
-            %8 = relalg.getattr %6 @partsupp::@ps_suppkey : !db.int<64>
-            %9 = relalg.getattr %6 @supplier::@s_suppkey : !db.int<64>
-            %10 = db.compare eq %8 : !db.int<64>,%9 : !db.int<64>
-            %11 = relalg.getattr %6 @supplier::@s_nationkey : !db.int<64>
-            %12 = relalg.getattr %6 @nation::@n_nationkey : !db.int<64>
-            %13 = db.compare eq %11 : !db.int<64>,%12 : !db.int<64>
+            %8 = relalg.getattr %6 @partsupp::@ps_suppkey : !db.int<32>
+            %9 = relalg.getattr %6 @supplier::@s_suppkey : !db.int<32>
+            %10 = db.compare eq %8 : !db.int<32>,%9 : !db.int<32>
+            %11 = relalg.getattr %6 @supplier::@s_nationkey : !db.int<32>
+            %12 = relalg.getattr %6 @nation::@n_nationkey : !db.int<32>
+            %13 = db.compare eq %11 : !db.int<32>,%12 : !db.int<32>
             %14 = relalg.getattr %6 @nation::@n_name : !db.string
             %15 = db.constant ("GERMANY") :!db.string
             %16 = db.compare eq %14 : !db.string,%15 : !db.string
@@ -260,34 +260,34 @@ module @querymodule{
         }
         %38 = relalg.selection %32(%37: !relalg.tuple) {
             %39 = relalg.getattr %37 @aggr::@aggfmname2 : !db.decimal<15,2>
-            %40 = relalg.basetable @partsupp1 { table_identifier="partsupp", rows=80000 , pkey=["ps_partkey","ps_suppkey"]} columns: {ps_partkey => @ps_partkey({type=!db.int<64>}),
-                ps_suppkey => @ps_suppkey({type=!db.int<64>}),
+            %40 = relalg.basetable @partsupp1 { table_identifier="partsupp", rows=80000 , pkey=["ps_partkey","ps_suppkey"]} columns: {ps_partkey => @ps_partkey({type=!db.int<32>}),
+                ps_suppkey => @ps_suppkey({type=!db.int<32>}),
                 ps_availqty => @ps_availqty({type=!db.int<32>}),
                 ps_supplycost => @ps_supplycost({type=!db.decimal<15,2>}),
                 ps_comment => @ps_comment({type=!db.string})
             }
-            %41 = relalg.basetable @supplier1 { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=!db.int<64>}),
+            %41 = relalg.basetable @supplier1 { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=!db.int<32>}),
                 s_name => @s_name({type=!db.string}),
                 s_address => @s_address({type=!db.string}),
-                s_nationkey => @s_nationkey({type=!db.int<64>}),
+                s_nationkey => @s_nationkey({type=!db.int<32>}),
                 s_phone => @s_phone({type=!db.string}),
                 s_acctbal => @s_acctbal({type=!db.decimal<15,2>}),
                 s_comment => @s_comment({type=!db.string})
             }
             %42 = relalg.crossproduct %40, %41
-            %43 = relalg.basetable @nation1 { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=!db.int<64>}),
+            %43 = relalg.basetable @nation1 { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=!db.int<32>}),
                 n_name => @n_name({type=!db.string}),
-                n_regionkey => @n_regionkey({type=!db.int<64>}),
+                n_regionkey => @n_regionkey({type=!db.int<32>}),
                 n_comment => @n_comment({type=!db.string<nullable>})
             }
             %44 = relalg.crossproduct %42, %43
             %46 = relalg.selection %44(%45: !relalg.tuple) {
-                %47 = relalg.getattr %45 @partsupp1::@ps_suppkey : !db.int<64>
-                %48 = relalg.getattr %45 @supplier1::@s_suppkey : !db.int<64>
-                %49 = db.compare eq %47 : !db.int<64>,%48 : !db.int<64>
-                %50 = relalg.getattr %45 @supplier1::@s_nationkey : !db.int<64>
-                %51 = relalg.getattr %45 @nation1::@n_nationkey : !db.int<64>
-                %52 = db.compare eq %50 : !db.int<64>,%51 : !db.int<64>
+                %47 = relalg.getattr %45 @partsupp1::@ps_suppkey : !db.int<32>
+                %48 = relalg.getattr %45 @supplier1::@s_suppkey : !db.int<32>
+                %49 = db.compare eq %47 : !db.int<32>,%48 : !db.int<32>
+                %50 = relalg.getattr %45 @supplier1::@s_nationkey : !db.int<32>
+                %51 = relalg.getattr %45 @nation1::@n_nationkey : !db.int<32>
+                %52 = db.compare eq %50 : !db.int<32>,%51 : !db.int<32>
                 %53 = relalg.getattr %45 @nation1::@n_name : !db.string
                 %54 = db.constant ("GERMANY") :!db.string
                 %55 = db.compare eq %53 : !db.string,%54 : !db.string

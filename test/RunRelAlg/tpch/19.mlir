@@ -4,16 +4,16 @@
 //CHECK: |                     168597.24  |
 module @querymodule{
     func  @main ()  -> !db.table{
-        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<64>}),
-            l_partkey => @l_partkey({type=!db.int<64>}),
-            l_suppkey => @l_suppkey({type=!db.int<64>}),
+        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
+            l_partkey => @l_partkey({type=!db.int<32>}),
+            l_suppkey => @l_suppkey({type=!db.int<32>}),
             l_linenumber => @l_linenumber({type=!db.int<32>}),
             l_quantity => @l_quantity({type=!db.decimal<15,2>}),
             l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
             l_discount => @l_discount({type=!db.decimal<15,2>}),
             l_tax => @l_tax({type=!db.decimal<15,2>}),
-            l_returnflag => @l_returnflag({type=!db.string}),
-            l_linestatus => @l_linestatus({type=!db.string}),
+            l_returnflag => @l_returnflag({type=!db.char<1>}),
+            l_linestatus => @l_linestatus({type=!db.char<1>}),
             l_shipdate => @l_shipdate({type=!db.date<day>}),
             l_commitdate => @l_commitdate({type=!db.date<day>}),
             l_receiptdate => @l_receiptdate({type=!db.date<day>}),
@@ -21,7 +21,7 @@ module @querymodule{
             l_shipmode => @l_shipmode({type=!db.string}),
             l_comment => @l_comment({type=!db.string})
         }
-        %2 = relalg.basetable @part { table_identifier="part", rows=20000 , pkey=["p_partkey"]} columns: {p_partkey => @p_partkey({type=!db.int<64>}),
+        %2 = relalg.basetable @part { table_identifier="part", rows=20000 , pkey=["p_partkey"]} columns: {p_partkey => @p_partkey({type=!db.int<32>}),
             p_name => @p_name({type=!db.string}),
             p_mfgr => @p_mfgr({type=!db.string}),
             p_brand => @p_brand({type=!db.string}),
@@ -33,9 +33,9 @@ module @querymodule{
         }
         %3 = relalg.crossproduct %1, %2
         %5 = relalg.selection %3(%4: !relalg.tuple) {
-            %6 = relalg.getattr %4 @part::@p_partkey : !db.int<64>
-            %7 = relalg.getattr %4 @lineitem::@l_partkey : !db.int<64>
-            %8 = db.compare eq %6 : !db.int<64>,%7 : !db.int<64>
+            %6 = relalg.getattr %4 @part::@p_partkey : !db.int<32>
+            %7 = relalg.getattr %4 @lineitem::@l_partkey : !db.int<32>
+            %8 = db.compare eq %6 : !db.int<32>,%7 : !db.int<32>
             %9 = relalg.getattr %4 @part::@p_brand : !db.string
             %10 = db.constant ("Brand#12") :!db.string
             %11 = db.compare eq %9 : !db.string,%10 : !db.string
@@ -76,9 +76,9 @@ module @querymodule{
             %46 = db.constant ("DELIVER IN PERSON") :!db.string
             %47 = db.compare eq %45 : !db.string,%46 : !db.string
             %48 = db.and %8 : !db.bool,%11 : !db.bool,%21 : !db.bool,%24 : !db.bool,%30 : !db.bool,%38 : !db.bool,%44 : !db.bool,%47 : !db.bool
-            %49 = relalg.getattr %4 @part::@p_partkey : !db.int<64>
-            %50 = relalg.getattr %4 @lineitem::@l_partkey : !db.int<64>
-            %51 = db.compare eq %49 : !db.int<64>,%50 : !db.int<64>
+            %49 = relalg.getattr %4 @part::@p_partkey : !db.int<32>
+            %50 = relalg.getattr %4 @lineitem::@l_partkey : !db.int<32>
+            %51 = db.compare eq %49 : !db.int<32>,%50 : !db.int<32>
             %52 = relalg.getattr %4 @part::@p_brand : !db.string
             %53 = db.constant ("Brand#23") :!db.string
             %54 = db.compare eq %52 : !db.string,%53 : !db.string
@@ -119,9 +119,9 @@ module @querymodule{
             %89 = db.constant ("DELIVER IN PERSON") :!db.string
             %90 = db.compare eq %88 : !db.string,%89 : !db.string
             %91 = db.and %51 : !db.bool,%54 : !db.bool,%64 : !db.bool,%67 : !db.bool,%73 : !db.bool,%81 : !db.bool,%87 : !db.bool,%90 : !db.bool
-            %92 = relalg.getattr %4 @part::@p_partkey : !db.int<64>
-            %93 = relalg.getattr %4 @lineitem::@l_partkey : !db.int<64>
-            %94 = db.compare eq %92 : !db.int<64>,%93 : !db.int<64>
+            %92 = relalg.getattr %4 @part::@p_partkey : !db.int<32>
+            %93 = relalg.getattr %4 @lineitem::@l_partkey : !db.int<32>
+            %94 = db.compare eq %92 : !db.int<32>,%93 : !db.int<32>
             %95 = relalg.getattr %4 @part::@p_brand : !db.string
             %96 = db.constant ("Brand#34") :!db.string
             %97 = db.compare eq %95 : !db.string,%96 : !db.string

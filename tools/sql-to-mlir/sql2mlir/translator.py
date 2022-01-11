@@ -76,6 +76,8 @@ class Translator:
                     timeunit="months"
                 return codegen.create_db_const(val, DBType("interval", [timeunit], False))
             elif key == "literal":
+                if len(expr[key])<8:
+                    return codegen.create_db_const(expr[key], DBType("char", [str(len(expr[key]))], False))
                 return codegen.create_db_const(expr[key], DBType("string", [], False))
             elif key == "in":
                 attr = expr[key][0]

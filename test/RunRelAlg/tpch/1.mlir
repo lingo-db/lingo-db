@@ -1,22 +1,22 @@
 //RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                  l_returnflag  |                  l_linestatus  |                       sum_qty  |                sum_base_price  |                sum_disc_price  |                    sum_charge  |                       avg_qty  |                     avg_price  |                      avg_disc  |                   count_order  |
 //CHECK: -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-//CHECK: |                           "A"  |                           "F"  |                    3774200.00  |                 5320753880.69  |                 5054095661.43  |                 5256750064.91  |                         25.53  |                      36002.12  |                          0.05  |                        147790  |
-//CHECK: |                           "N"  |                           "F"  |                      95257.00  |                  133737795.84  |                  127132357.30  |                  132286258.95  |                         25.30  |                      35521.32  |                          0.04  |                          3765  |
-//CHECK: |                           "N"  |                           "O"  |                    7459297.00  |                10512270008.90  |                 9986237142.30  |                10385575878.94  |                         25.54  |                      36000.92  |                          0.05  |                        292000  |
-//CHECK: |                           "R"  |                           "F"  |                    3785523.00  |                 5337950526.47  |                 5071817924.80  |                 5274404231.65  |                         25.52  |                      35994.02  |                          0.04  |                        148301  |
+//CHECK: |                             A  |                             F  |                    3774200.00  |                 5320753880.69  |                 5054095661.43  |                 5256750064.91  |                         25.53  |                      36002.12  |                          0.05  |                        147790  |
+//CHECK: |                             N  |                             F  |                      95257.00  |                  133737795.84  |                  127132357.30  |                  132286258.95  |                         25.30  |                      35521.32  |                          0.04  |                          3765  |
+//CHECK: |                             N  |                             O  |                    7459297.00  |                10512270008.90  |                 9986237142.30  |                10385575878.94  |                         25.54  |                      36000.92  |                          0.05  |                        292000  |
+//CHECK: |                             R  |                             F  |                    3785523.00  |                 5337950526.47  |                 5071817924.80  |                 5274404231.65  |                         25.52  |                      35994.02  |                          0.04  |                        148301  |
 module @querymodule{
     func  @main ()  -> !db.table{
-        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<64>}),
-            l_partkey => @l_partkey({type=!db.int<64>}),
-            l_suppkey => @l_suppkey({type=!db.int<64>}),
+        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
+            l_partkey => @l_partkey({type=!db.int<32>}),
+            l_suppkey => @l_suppkey({type=!db.int<32>}),
             l_linenumber => @l_linenumber({type=!db.int<32>}),
             l_quantity => @l_quantity({type=!db.decimal<15,2>}),
             l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
             l_discount => @l_discount({type=!db.decimal<15,2>}),
             l_tax => @l_tax({type=!db.decimal<15,2>}),
-            l_returnflag => @l_returnflag({type=!db.string}),
-            l_linestatus => @l_linestatus({type=!db.string}),
+            l_returnflag => @l_returnflag({type=!db.char<1>}),
+            l_linestatus => @l_linestatus({type=!db.char<1>}),
             l_shipdate => @l_shipdate({type=!db.date<day>}),
             l_commitdate => @l_commitdate({type=!db.date<day>}),
             l_receiptdate => @l_receiptdate({type=!db.date<day>}),

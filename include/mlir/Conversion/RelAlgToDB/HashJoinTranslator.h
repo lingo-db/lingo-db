@@ -13,14 +13,18 @@
 namespace mlir::relalg {
 class HashJoinUtils {
    public:
-   static std::tuple<mlir::relalg::Attributes, mlir::relalg::Attributes, std::vector<mlir::Type>, std::vector<Attributes>> analyzeHJPred(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
+   static std::tuple<mlir::relalg::Attributes, mlir::relalg::Attributes, std::vector<mlir::Type>, std::vector<Attributes>,std::vector<bool>> analyzeHJPred(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
       llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;
+      llvm::DenseSet<mlir::Value> pureAttribute;
+
       mlir::relalg::Attributes leftKeys, rightKeys;
       std::vector<Attributes> leftKeyAttributes;
+      std::vector<bool> canSave;
       std::vector<mlir::Type> types;
       block->walk([&](mlir::Operation* op) {
          if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
             required.insert({getAttr.getResult(), mlir::relalg::Attributes::from(getAttr.attr())});
+            pureAttribute.insert(getAttr.getResult());
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(op)) {
             if (cmpOp.predicate() == mlir::db::DBCmpPredicate::eq && isAndedResult(op)) {
                auto leftAttributes = required[cmpOp.left()];
@@ -29,12 +33,15 @@ class HashJoinUtils {
                   leftKeys.insert(leftAttributes);
                   rightKeys.insert(rightAttributes);
                   leftKeyAttributes.push_back(leftAttributes);
+                  canSave.push_back(pureAttribute.contains(cmpOp.left()));
                   types.push_back(cmpOp.left().getType());
+
                } else if (leftAttributes.isSubsetOf(availableRight) && rightAttributes.isSubsetOf(availableLeft)) {
                   leftKeys.insert(rightAttributes);
                   rightKeys.insert(leftAttributes);
                   leftKeyAttributes.push_back(rightAttributes);
-                  types.push_back(cmpOp.left().getType());
+                  canSave.push_back(pureAttribute.contains(cmpOp.right()));
+                  types.push_back(cmpOp.right().getType());
                }
             }
          } else {
@@ -49,7 +56,7 @@ class HashJoinUtils {
             }
          }
       });
-      return {leftKeys, rightKeys, types, leftKeyAttributes};
+      return {leftKeys, rightKeys, types, leftKeyAttributes,canSave};
    }
 
    static bool isAndedResult(mlir::Operation* op, bool first = true) {

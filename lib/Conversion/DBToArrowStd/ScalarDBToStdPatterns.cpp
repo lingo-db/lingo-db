@@ -354,6 +354,16 @@ class ConstantLowering : public ConversionPattern {
             rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getFloatAttr(stdType, std::stod(stringAttr.getValue().str())));
             return success();
          }
+      } else if (auto charType=type.dyn_cast_or_null<mlir::db::CharType>()){
+         if (auto stringAttr =constantOp.value().dyn_cast_or_null<StringAttr>()){
+            const std::string& str = stringAttr.getValue().str();
+            if(str.length()==charType.getBytes()){
+               uint64_t val;
+               memcpy(&val, str.data(),std::min(sizeof(uint64_t),(size_t)charType.getBytes()));
+               rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, val));
+               return success();
+            }
+         }
       } else if (type.isa<mlir::db::StringType>()) {
          if (auto stringAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
             const std::string& str = stringAttr.getValue().str();
@@ -445,7 +455,7 @@ class CmpOpLowering : public ConversionPattern {
       db::NullHandler nullHandler(*typeConverter, rewriter, loc);
       Value left = nullHandler.getValue(cmpOp.left(),adaptor.left());
       Value right = nullHandler.getValue(cmpOp.right(),adaptor.right());
-      if (type.isa<db::BoolType>() || type.isa<db::IntType>() || type.isa<db::DecimalType>() || type.isa<db::DateType>() || type.isa<db::TimestampType>() || type.isa<db::IntervalType>()) {
+      if (type.isa<db::BoolType>() || type.isa<db::IntType>() || type.isa<db::DecimalType>() || type.isa<db::DateType>() || type.isa<db::TimestampType>() || type.isa<db::IntervalType>() || type.isa<db::CharType>()) {
          Value res = rewriter.create<arith::CmpIOp>(loc, translateIPredicate(cmpOp.predicate()), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(res));
          return success();
@@ -752,6 +762,10 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
                         .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
                            return mlir::IntegerType::get(patterns.getContext(), t.getWidth());
                         })
+                        .Case<::mlir::db::CharType>([&](::mlir::db::CharType t) {
+                           if(t.getBytes()>8)return mlir::Type();
+                           return (Type)mlir::IntegerType::get(patterns.getContext(), t.getBytes()*8);
+                        })
                         .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
                            return mlir::IntegerType::get(patterns.getContext(), t.getWidth());
                         })
@@ -794,6 +808,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    });
 
    patterns.insert<CmpOpLowering>(typeConverter, patterns.getContext());
+
    patterns.insert<NotOpLowering>(typeConverter, patterns.getContext());
 
    patterns.insert<AndOpLowering>(typeConverter, patterns.getContext());

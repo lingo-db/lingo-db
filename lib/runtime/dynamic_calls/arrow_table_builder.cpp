@@ -103,6 +103,14 @@ EXPORT void rt_table_builder_add_binary(TableBuilder* builder, int column, bool 
       typed_builder->Append(str.data(), str.size()); //NOLINT (clang-diagnostic-unused-result)
    }
 }
+EXPORT void rt_table_builder_add_fixed_binary(TableBuilder* builder, int column, bool isNull, uint64_t x) {
+   auto* typed_builder = (builder)->GetBuilderForColumn<arrow::FixedSizeBinaryBuilder>(column);
+   if (isNull) {
+      typed_builder->AppendNull(); //NOLINT (clang-diagnostic-unused-result)
+   } else {
+      typed_builder->Append((char*)&x);
+   }
+}
 EXPORT void rt_table_builder_finish_row(TableBuilder* builder) {
    (builder)->nextRow();
 }

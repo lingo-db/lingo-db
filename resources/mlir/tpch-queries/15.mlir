@@ -1,23 +1,23 @@
 module @querymodule{
     func  @main ()  -> !db.table{
-        %1 = relalg.basetable @supplier { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=!db.int<64>}),
+        %1 = relalg.basetable @supplier { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=!db.int<32>}),
             s_name => @s_name({type=!db.string}),
             s_address => @s_address({type=!db.string}),
-            s_nationkey => @s_nationkey({type=!db.int<64>}),
+            s_nationkey => @s_nationkey({type=!db.int<32>}),
             s_phone => @s_phone({type=!db.string}),
             s_acctbal => @s_acctbal({type=!db.decimal<15,2>}),
             s_comment => @s_comment({type=!db.string})
         }
-        %2 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<64>}),
-            l_partkey => @l_partkey({type=!db.int<64>}),
-            l_suppkey => @l_suppkey({type=!db.int<64>}),
+        %2 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
+            l_partkey => @l_partkey({type=!db.int<32>}),
+            l_suppkey => @l_suppkey({type=!db.int<32>}),
             l_linenumber => @l_linenumber({type=!db.int<32>}),
             l_quantity => @l_quantity({type=!db.decimal<15,2>}),
             l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
             l_discount => @l_discount({type=!db.decimal<15,2>}),
             l_tax => @l_tax({type=!db.decimal<15,2>}),
-            l_returnflag => @l_returnflag({type=!db.string}),
-            l_linestatus => @l_linestatus({type=!db.string}),
+            l_returnflag => @l_returnflag({type=!db.char<1>}),
+            l_linestatus => @l_linestatus({type=!db.char<1>}),
             l_shipdate => @l_shipdate({type=!db.date<day>}),
             l_commitdate => @l_commitdate({type=!db.date<day>}),
             l_receiptdate => @l_receiptdate({type=!db.date<day>}),
@@ -51,20 +51,20 @@ module @querymodule{
         }
         %25 = relalg.crossproduct %1, %22
         %27 = relalg.selection %25(%26: !relalg.tuple) {
-            %28 = relalg.getattr %26 @supplier::@s_suppkey : !db.int<64>
-            %29 = relalg.getattr %26 @lineitem::@l_suppkey : !db.int<64>
-            %30 = db.compare eq %28 : !db.int<64>,%29 : !db.int<64>
+            %28 = relalg.getattr %26 @supplier::@s_suppkey : !db.int<32>
+            %29 = relalg.getattr %26 @lineitem::@l_suppkey : !db.int<32>
+            %30 = db.compare eq %28 : !db.int<32>,%29 : !db.int<32>
             %31 = relalg.getattr %26 @aggr::@aggfmname2 : !db.decimal<15,2>
-            %32 = relalg.basetable @lineitem1 { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<64>}),
-                l_partkey => @l_partkey({type=!db.int<64>}),
-                l_suppkey => @l_suppkey({type=!db.int<64>}),
+            %32 = relalg.basetable @lineitem1 { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
+                l_partkey => @l_partkey({type=!db.int<32>}),
+                l_suppkey => @l_suppkey({type=!db.int<32>}),
                 l_linenumber => @l_linenumber({type=!db.int<32>}),
                 l_quantity => @l_quantity({type=!db.decimal<15,2>}),
                 l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
                 l_discount => @l_discount({type=!db.decimal<15,2>}),
                 l_tax => @l_tax({type=!db.decimal<15,2>}),
-                l_returnflag => @l_returnflag({type=!db.string}),
-                l_linestatus => @l_linestatus({type=!db.string}),
+                l_returnflag => @l_returnflag({type=!db.char<1>}),
+                l_linestatus => @l_linestatus({type=!db.char<1>}),
                 l_shipdate => @l_shipdate({type=!db.date<day>}),
                 l_commitdate => @l_commitdate({type=!db.date<day>}),
                 l_receiptdate => @l_receiptdate({type=!db.date<day>}),

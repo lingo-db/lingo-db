@@ -228,7 +228,10 @@ class CodeGen:
         return self.addOp(res_type, ["util.get_tuple ", ValueRef(tupleVar), "[",idx,"] : (",TypeRef(tupleVar),") -> ", res_type.to_string()])
 
     def create_relalg_aggr_func(self,type,attr,rel,isNullable):
-        return self.addOp(DBType(attr.type.name,attr.type.baseprops,isNullable),["relalg.aggrfn ",type," ",attr.ref_to_string()," ", ValueRef(rel), " : ",DBType(attr.type.name,attr.type.baseprops,isNullable).to_string()])
+        count_t=DBType("int",["64"])
+        default_t=DBType(attr.type.name,attr.type.baseprops,isNullable)
+        result_t=count_t if type=="count" else default_t
+        return self.addOp(result_t,["relalg.aggrfn ",type," ",attr.ref_to_string()," ", ValueRef(rel), " : ",result_t.to_string()])
     def create_relalg_count_rows(self,rel):
         return self.addOp(DBType("int",["64"]),["relalg.count ",ValueRef(rel)])
 

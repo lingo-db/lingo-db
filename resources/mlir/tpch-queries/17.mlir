@@ -1,15 +1,15 @@
 module @querymodule{
     func  @main ()  -> !db.table{
-        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<64>}),
-            l_partkey => @l_partkey({type=!db.int<64>}),
-            l_suppkey => @l_suppkey({type=!db.int<64>}),
+        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
+            l_partkey => @l_partkey({type=!db.int<32>}),
+            l_suppkey => @l_suppkey({type=!db.int<32>}),
             l_linenumber => @l_linenumber({type=!db.int<32>}),
             l_quantity => @l_quantity({type=!db.decimal<15,2>}),
             l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
             l_discount => @l_discount({type=!db.decimal<15,2>}),
             l_tax => @l_tax({type=!db.decimal<15,2>}),
-            l_returnflag => @l_returnflag({type=!db.string}),
-            l_linestatus => @l_linestatus({type=!db.string}),
+            l_returnflag => @l_returnflag({type=!db.char<1>}),
+            l_linestatus => @l_linestatus({type=!db.char<1>}),
             l_shipdate => @l_shipdate({type=!db.date<day>}),
             l_commitdate => @l_commitdate({type=!db.date<day>}),
             l_receiptdate => @l_receiptdate({type=!db.date<day>}),
@@ -17,7 +17,7 @@ module @querymodule{
             l_shipmode => @l_shipmode({type=!db.string}),
             l_comment => @l_comment({type=!db.string})
         }
-        %2 = relalg.basetable @part { table_identifier="part", rows=20000 , pkey=["p_partkey"]} columns: {p_partkey => @p_partkey({type=!db.int<64>}),
+        %2 = relalg.basetable @part { table_identifier="part", rows=20000 , pkey=["p_partkey"]} columns: {p_partkey => @p_partkey({type=!db.int<32>}),
             p_name => @p_name({type=!db.string}),
             p_mfgr => @p_mfgr({type=!db.string}),
             p_brand => @p_brand({type=!db.string}),
@@ -29,9 +29,9 @@ module @querymodule{
         }
         %3 = relalg.crossproduct %1, %2
         %5 = relalg.selection %3(%4: !relalg.tuple) {
-            %6 = relalg.getattr %4 @part::@p_partkey : !db.int<64>
-            %7 = relalg.getattr %4 @lineitem::@l_partkey : !db.int<64>
-            %8 = db.compare eq %6 : !db.int<64>,%7 : !db.int<64>
+            %6 = relalg.getattr %4 @part::@p_partkey : !db.int<32>
+            %7 = relalg.getattr %4 @lineitem::@l_partkey : !db.int<32>
+            %8 = db.compare eq %6 : !db.int<32>,%7 : !db.int<32>
             %9 = relalg.getattr %4 @part::@p_brand : !db.string
             %10 = db.constant ("Brand#23") :!db.string
             %11 = db.compare eq %9 : !db.string,%10 : !db.string
@@ -39,16 +39,16 @@ module @querymodule{
             %13 = db.constant ("MED BOX") :!db.string
             %14 = db.compare eq %12 : !db.string,%13 : !db.string
             %15 = relalg.getattr %4 @lineitem::@l_quantity : !db.decimal<15,2>
-            %16 = relalg.basetable @lineitem1 { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<64>}),
-                l_partkey => @l_partkey({type=!db.int<64>}),
-                l_suppkey => @l_suppkey({type=!db.int<64>}),
+            %16 = relalg.basetable @lineitem1 { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
+                l_partkey => @l_partkey({type=!db.int<32>}),
+                l_suppkey => @l_suppkey({type=!db.int<32>}),
                 l_linenumber => @l_linenumber({type=!db.int<32>}),
                 l_quantity => @l_quantity({type=!db.decimal<15,2>}),
                 l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
                 l_discount => @l_discount({type=!db.decimal<15,2>}),
                 l_tax => @l_tax({type=!db.decimal<15,2>}),
-                l_returnflag => @l_returnflag({type=!db.string}),
-                l_linestatus => @l_linestatus({type=!db.string}),
+                l_returnflag => @l_returnflag({type=!db.char<1>}),
+                l_linestatus => @l_linestatus({type=!db.char<1>}),
                 l_shipdate => @l_shipdate({type=!db.date<day>}),
                 l_commitdate => @l_commitdate({type=!db.date<day>}),
                 l_receiptdate => @l_receiptdate({type=!db.date<day>}),
@@ -57,9 +57,9 @@ module @querymodule{
                 l_comment => @l_comment({type=!db.string})
             }
             %18 = relalg.selection %16(%17: !relalg.tuple) {
-                %19 = relalg.getattr %17 @lineitem1::@l_partkey : !db.int<64>
-                %20 = relalg.getattr %4 @part::@p_partkey : !db.int<64>
-                %21 = db.compare eq %19 : !db.int<64>,%20 : !db.int<64>
+                %19 = relalg.getattr %17 @lineitem1::@l_partkey : !db.int<32>
+                %20 = relalg.getattr %4 @part::@p_partkey : !db.int<32>
+                %21 = db.compare eq %19 : !db.int<32>,%20 : !db.int<32>
                 relalg.return %21 : !db.bool
             }
             %24 = relalg.aggregation @aggr %18 [] (%22 : !relalg.tuplestream, %23 : !relalg.tuple) {

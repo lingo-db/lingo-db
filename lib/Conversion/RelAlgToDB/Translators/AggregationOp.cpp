@@ -242,9 +242,9 @@ class AggregationTranslator : public mlir::relalg::Translator {
                });
             } else if (aggrFn.fn() == mlir::relalg::AggrFunc::count) {
                size_t currDestIdx = aggrTypes.size();
-               aggrTypes.push_back(resultingType);
                auto initCounterVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), counterType, builder.getI64IntegerAttr(0));
                defaultValues.push_back(initCounterVal);
+               aggrTypes.push_back(resultingType);
                finalizeFunctions.push_back([currDestIdx = currDestIdx, destAttr = destAttr](mlir::ValueRange range, mlir::OpBuilder& builder) { return std::make_pair(destAttr, range[currDestIdx]); });
 
                aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, attrIsNullable, currValIdx = currValIdx, counterType = counterType, resultingType = resultingType](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {

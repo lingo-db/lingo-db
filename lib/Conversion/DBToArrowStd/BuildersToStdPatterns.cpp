@@ -5,6 +5,7 @@
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
+#include "llvm/Support/Debug.h"
 
 using namespace mlir;
 namespace {
@@ -370,6 +371,8 @@ static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::Funct
       } else {
          return FunctionId::ArrowTableBuilderAddDate64;
       }
+   }else if(type.isa<mlir::db::CharType>()){
+      return FunctionId ::ArrowTableBuilderAddFixedBinary;
    }
    //TODO: implement other types too
    return FunctionId::ArrowTableBuilderAddInt32;
@@ -393,16 +396,23 @@ class BuilderMergeLowering : public ConversionPattern {
          Value falseValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
 
          for (auto v : unPackOp.vals()) {
+            Value val=v;
             Value isNull;
             if (mergeOp.val().getType().cast<TupleType>().getType(i).cast<db::DBType>().isNullable()) {
-               auto nullUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, v);
+               auto nullUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, val);
                isNull = nullUnpacked.getResult(0);
-               v = nullUnpacked->getResult(1);
+               val = nullUnpacked->getResult(1);
             } else {
                isNull = falseValue;
             }
+            if(auto charType=mergeOp.val().getType().cast<TupleType>().getType(i).dyn_cast_or_null<mlir::db::CharType>()){
+               if(charType.getBytes()<8){
+                  val = rewriter.create<arith::ExtSIOp>(loc, val, rewriter.getI64Type());
+
+               }
+            }
             Value columnId = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(i));
-            functionRegistry.call(rewriter, loc, getStoreFunc(functionRegistry, rowType.getType(i).cast<mlir::db::DBType>()), ValueRange({mergeOpAdaptor.builder(), columnId, isNull, v}));
+            functionRegistry.call(rewriter, loc, getStoreFunc(functionRegistry, rowType.getType(i).cast<mlir::db::DBType>()), ValueRange({mergeOpAdaptor.builder(), columnId, isNull, val}));
             i++;
          }
          functionRegistry.call(rewriter, loc, FunctionId::ArrowTableBuilderFinishRow, mergeOpAdaptor.builder());
@@ -514,6 +524,9 @@ static Value getArrowDataType(OpBuilder& builder, Location loc, db::codegen::Fun
       } else {
          typeConstant = arrow::Type::type::DATE64;
       }
+   } else if (auto charType=type.dyn_cast_or_null<mlir::db::CharType>()){
+      typeConstant=arrow::Type::type::FIXED_SIZE_BINARY;
+      param1=charType.getBytes();
    }
    //TODO: also implement date types etc
 

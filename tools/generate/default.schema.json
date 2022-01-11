@@ -1,18 +1,18 @@
 [        { "name": "nation", "rows":  25, "pkeys": ["n_nationkey"], "columns": [
-            { "name": "n_nationkey",  "type":{ "base": "int", "props": ["64"]}},
+            { "name": "n_nationkey",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "n_name",  "type":{ "base": "string", "props": []}},
-            { "name": "n_regionkey",  "type":{ "base": "int", "props": ["64"]}},
+            { "name": "n_regionkey",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "n_comment",  "type":{ "base": "string", "props": ["nullable"]}}
         ]},
 
         { "name": "region", "rows": 5, "pkeys": ["r_regionkey"], "columns": [
-            { "name": "r_regionkey",  "type":{ "base": "int", "props": ["64"]}},
+            { "name": "r_regionkey",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "r_name",  "type":{ "base": "string", "props": []}},
             { "name": "r_comment",  "type":{ "base": "string", "props": ["nullable"]}}
        ]},
 
         { "name": "part", "rows": 20000, "pkeys": ["p_partkey"], "columns": [
-            { "name": "p_partkey",  "type":{ "base": "int", "props": ["64"]}},
+            { "name": "p_partkey",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "p_name",  "type":{ "base": "string", "props": []}},
             { "name": "p_mfgr",  "type":{ "base": "string", "props": []}},
             { "name": "p_brand",  "type":{ "base": "string", "props": []}},
@@ -24,28 +24,28 @@
        ]},
 
         { "name": "supplier", "rows": 1000, "pkeys": ["s_suppkey"], "columns": [
-            { "name": "s_suppkey",  "type":{ "base": "int", "props": ["64"]}},
+            { "name": "s_suppkey",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "s_name",  "type":{ "base": "string", "props": []}},
             { "name": "s_address",  "type":{ "base": "string", "props": []}},
-            { "name": "s_nationkey",  "type":{ "base": "int", "props": ["64"]}},
+            { "name": "s_nationkey",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "s_phone",  "type":{ "base": "string", "props": []}},
             { "name": "s_acctbal",  "type":{ "base": "decimal", "props": ["15", "2"]}},
             { "name": "s_comment",  "type":{ "base": "string", "props": []}}
        ]},
 
         { "name": "partsupp", "rows":  80000, "pkeys": ["ps_partkey","ps_suppkey"], "columns": [
-            { "name": "ps_partkey",  "type":{ "base": "int", "props": ["64"]}},
-            { "name": "ps_suppkey",  "type":{ "base": "int", "props": ["64"]}},
+            { "name": "ps_partkey",  "type":{ "base": "int", "props": ["32"]}},
+            { "name": "ps_suppkey",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "ps_availqty",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "ps_supplycost",  "type":{ "base": "decimal", "props": ["15", "2"]}},
             { "name": "ps_comment",  "type":{ "base": "string", "props": []}}
        ]},
 
         { "name": "customer", "rows": 15000, "pkeys": ["c_custkey"], "columns": [
-            { "name": "c_custkey",  "type":{ "base": "int", "props": ["64"]}},
+            { "name": "c_custkey",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "c_name",  "type":{ "base": "string", "props": []}},
             { "name": "c_address",  "type":{ "base": "string", "props": []}},
-            { "name": "c_nationkey",  "type":{ "base": "int", "props": ["64"]}},
+            { "name": "c_nationkey",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "c_phone",  "type":{ "base": "string", "props": []}},
             { "name": "c_acctbal",  "type":{ "base": "decimal", "props": ["15", "2"]}},
             { "name": "c_mktsegment",  "type":{ "base": "string", "props": []}},
@@ -53,9 +53,9 @@
        ]},
 
         { "name": "orders", "rows":  150000, "pkeys": ["o_orderkey"], "columns": [
-            { "name": "o_orderkey",  "type":{ "base": "int", "props": ["64"]}},
-            { "name": "o_custkey",  "type":{ "base": "int", "props": ["64"]}},
-            { "name": "o_orderstatus",  "type":{ "base": "string", "props": []}},
+            { "name": "o_orderkey",  "type":{ "base": "int", "props": ["32"]}},
+            { "name": "o_custkey",  "type":{ "base": "int", "props": ["32"]}},
+            { "name": "o_orderstatus",  "type":{ "base": "char", "props": ["1"]}},
             { "name": "o_totalprice",  "type":{ "base": "decimal", "props": ["15", "2"]}},
             { "name": "o_orderdate",  "type":{ "base": "date", "props": ["day"]}},
             { "name": "o_orderpriority",  "type":{ "base": "string", "props": []}},
@@ -65,16 +65,16 @@
        ]},
 
         { "name": "lineitem", "rows": 600572, "pkeys": ["l_orderkey","l_linenumber"], "columns": [
-            { "name": "l_orderkey",  "type":{ "base": "int", "props": ["64"]}},
-            { "name": "l_partkey",  "type":{ "base": "int", "props": ["64"]}},
-            { "name": "l_suppkey",  "type":{ "base": "int", "props": ["64"]}},
+            { "name": "l_orderkey",  "type":{ "base": "int", "props": ["32"]}},
+            { "name": "l_partkey",  "type":{ "base": "int", "props": ["32"]}},
+            { "name": "l_suppkey",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "l_linenumber",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "l_quantity",  "type":{ "base": "decimal", "props": ["15", "2"]}},
             { "name": "l_extendedprice",  "type":{ "base": "decimal", "props": ["15", "2"]}},
             { "name": "l_discount",  "type":{ "base": "decimal", "props": ["15", "2"]}},
             { "name": "l_tax",  "type":{ "base": "decimal", "props": ["15", "2"]}},
-            { "name": "l_returnflag",  "type":{ "base": "string", "props": []}},
-            { "name": "l_linestatus",  "type":{ "base": "string", "props": []}},
+            { "name": "l_returnflag",  "type":{ "base": "char", "props": ["1"]}},
+            { "name": "l_linestatus",  "type":{ "base": "char", "props": ["1"]}},
             { "name": "l_shipdate",  "type":{ "base": "date", "props": ["day"]}},
             { "name": "l_commitdate",  "type":{ "base": "date", "props": ["day"]}},
             { "name": "l_receiptdate",  "type":{ "base": "date", "props": ["day"]}},

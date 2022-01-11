@@ -102,3 +102,13 @@ EXPORT void rt_dump_string(bool null, runtime::Str string) {
       std::cout << "string(\"" << string.str() << "\")" << std::endl;
    }
 }
+EXPORT void rt_dump_char(bool null, uint64_t val, size_t bytes) {
+   std::cout << "char<"<<bytes<<">";
+   if (null) {
+      std::cout<<"(NULL)" << std::endl;
+   } else {
+      char chars[sizeof(val)];
+      memcpy(chars,&val, sizeof(val));
+      std::cout << "(\"" << std::string(chars,bytes) << "\")" << std::endl;
+   }
+}

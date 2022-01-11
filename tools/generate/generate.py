@@ -8,13 +8,25 @@ import json
 def convertTypeToArrow(type):
     base = type["base"]
     if base == "int":
-        return pyarrow.int64()
+        width = int(type["props"][0])
+        if width == 8:
+            return pyarrow.int8()
+        elif width == 16:
+            return pyarrow.int16()
+        elif width ==32:
+            return pyarrow.int32()
+        elif width==64:
+            return pyarrow.int64()
+        else:
+            raise "problem"
     if base == "date":
         return pyarrow.date32()
     elif base == "string":
         return pyarrow.string()
     elif base == "decimal":
         return pyarrow.decimal128(int(type["props"][0]), int(type["props"][1]))
+    elif base == "char":
+        return pyarrow.binary(int(type["props"][0]))
 
 
 def createArrowColumnTypes(cols):
@@ -70,10 +82,10 @@ def createColumnNames(cols):
 def convertToArrowTable(inpath, outpath, table):
     tablename = table["name"]
     filepath = inpath + "/" + tablename + ".tbl"
-    output_filepath=outpath + '/' + tablename + '.arrow'
+    output_filepath = outpath + '/' + tablename + '.arrow'
     if not os.path.exists(filepath):
         return
-    print("converting", filepath,"->", output_filepath)
+    print("converting", filepath, "->", output_filepath)
     table = csv.read_csv(filepath,
                          convert_options=pyarrow.csv.ConvertOptions(
                              column_types=createArrowColumnTypes(table["columns"])),

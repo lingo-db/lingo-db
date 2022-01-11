@@ -24,6 +24,9 @@ bool mlir::db::DBType::classof(Type t) {
       .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
          return true;
       })
+      .Case<::mlir::db::CharType>([&](::mlir::db::CharType t) {
+         return true;
+      })
       .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
          return true;
       })
@@ -59,6 +62,9 @@ bool mlir::db::DBType::isNullable() {
          return t.getNullable();
       })
       .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
+         return t.getNullable();
+      })
+      .Case<::mlir::db::CharType>([&](::mlir::db::CharType t) {
          return t.getNullable();
       })
       .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
@@ -105,6 +111,9 @@ mlir::db::DBType mlir::db::DBType::getBaseType() const {
       .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
          return mlir::db::UIntType::get(t.getContext(), false, t.getWidth());
       })
+      .Case<::mlir::db::CharType>([&](::mlir::db::CharType t) {
+         return mlir::db::CharType::get(t.getContext(), false,t.getBytes());
+      })
       .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
          return mlir::db::StringType::get(t.getContext(), false);
       })
@@ -138,6 +147,9 @@ mlir::db::DBType mlir::db::DBType::asNullable() const {
       })
       .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
          return mlir::db::IntType::get(t.getContext(), true, t.getWidth());
+      })
+      .Case<::mlir::db::CharType>([&](::mlir::db::CharType t) {
+         return mlir::db::CharType::get(t.getContext(), true,t.getBytes());
       })
       .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
          return mlir::db::StringType::get(t.getContext(), true);
@@ -374,6 +386,12 @@ void print(::mlir::AsmPrinter& printer, bool nullable, ParamT... params) {
 }
 void mlir::db::IntType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::IntType, unsigned>(printer, getNullable(), getWidth());
+}
+::mlir::Type mlir::db::CharType::parse(::mlir::AsmParser& parser) {
+   return ::parse<mlir::db::CharType, unsigned>(parser.getContext(),parser);
+}
+void mlir::db::CharType::print(::mlir::AsmPrinter& printer) const {
+   ::print<mlir::db::CharType, unsigned>(printer, getNullable(), getBytes());
 }
 ::mlir::Type mlir::db::UIntType::parse(::mlir::AsmParser& parser) {
    return ::parse<mlir::db::UIntType, unsigned>(parser.getContext(), parser);

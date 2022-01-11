@@ -8,12 +8,13 @@ void HashJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relal
    propagateInfo();
    auto availableLeft = builderChild->getAvailableAttributes();
    auto availableRight = lookupChild->getAvailableAttributes();
-   auto [leftKeys, rightKeys, keyTypes, leftKeyAttributes] = mlir::relalg::HashJoinUtils::analyzeHJPred(&op->getRegion(0).front(), availableLeft, availableRight);
+   auto [leftKeys, rightKeys, keyTypes, leftKeyAttributes,canSave] = mlir::relalg::HashJoinUtils::analyzeHJPred(&op->getRegion(0).front(), availableLeft, availableRight);
    this->leftKeys = leftKeys;
    this->rightKeys = rightKeys;
    auto leftValues = availableLeft.intersect(this->requiredAttributes);
-   for (mlir::relalg::Attributes& x : leftKeyAttributes) {
-      if (x.size() == 1) {
+   for (size_t i=0;i<canSave.size();i++) {
+      if (canSave[i]) {
+         auto& x=leftKeyAttributes[i];
          leftValues.remove(x);
          orderedKeys.push_back(*x.begin());
       } else {

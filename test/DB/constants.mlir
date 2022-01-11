@@ -1,5 +1,6 @@
 // RUN: db-run %s | FileCheck %s
 
+//CHECK: char<2>("AB")
 //CHECK: int(10)
 //CHECK: int(10)
 //CHECK: bool(true)
@@ -34,6 +35,7 @@
 //CHECK: decimal(1.00)
  module {
  	func @main () {
+ 	     %char_const = db.constant ( "AB" ) : !db.char<2>
  		 %int32_const = db.constant ( 10 ) : !db.int<32>
  		 %int64_const = db.constant ( 10 ) : !db.int<64>
  		 %bool_true_const = db.constant ( 1 ) : !db.bool
@@ -68,7 +70,7 @@
 		 %float32_div= db.div %float32_const : !db.float<32>, %float32_const : !db.float<32>
 		 %float64_div= db.div %float64_const : !db.float<64>, %float64_const : !db.float<64>
 		 %decimal2_div = db.div %decimal2_const : !db.decimal<15,2>, %decimal2_const : !db.decimal<15,2>
-
+         db.dump %char_const : !db.char<2>
  		 db.dump %int32_const : !db.int<32>
  		 db.dump %int64_const : !db.int<64>
  		 db.dump %bool_true_const : !db.bool

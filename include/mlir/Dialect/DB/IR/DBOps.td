@@ -152,6 +152,10 @@ def DB_IntType : DB_Type<"Int","int"> {
 let summary = "database integer type";
 let parameters = (ins "bool":$nullable,"unsigned":$width);
 }
+def DB_CharType : DB_Type<"Char","char"> {
+let summary = "database char<> type";
+let parameters = (ins "bool":$nullable,"unsigned":$bytes);
+}
 def DB_FloatType : DB_Type<"Float","float"> {
 let summary = "database float type";
 let parameters = (ins "bool":$nullable,"unsigned":$width);
