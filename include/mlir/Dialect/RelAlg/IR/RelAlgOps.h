@@ -12,6 +12,7 @@
 
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsEnums.h"
+#include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgTypes.h"
 #include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"

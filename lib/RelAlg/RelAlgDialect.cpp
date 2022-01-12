@@ -1,9 +1,11 @@
+
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include <mlir/Transforms/InliningUtils.h>
 
 #include "mlir/Dialect/DB/IR/DBTypes.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/IR/DialectImplementation.h"
+#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace mlir::relalg;
@@ -31,6 +33,8 @@ struct RelalgInlinerInterface : public DialectInlinerInterface {
       return true;
    }
 };
+#define GET_ATTRDEF_CLASSES
+#include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.cpp.inc"
 void RelAlgDialect::initialize() {
    addOperations<
 #define GET_OP_LIST
@@ -39,6 +43,10 @@ void RelAlgDialect::initialize() {
    addTypes<
 #define GET_TYPEDEF_LIST
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsTypes.cpp.inc"
+      >();
+   addAttributes<
+#define GET_ATTRDEF_LIST
+#include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.cpp.inc"
       >();
    addInterfaces<RelalgInlinerInterface>();
    addAttributes<mlir::relalg::RelationalAttributeDefAttr>();
@@ -77,6 +85,14 @@ RelAlgDialect::parseAttribute(::mlir::DialectAsmParser& parser,
       if (parser.parseLBrace() || parser.parseOptionalString(&name) || parser.parseRBrace())
          return mlir::Attribute();
       return parser.getBuilder().getContext()->getLoadedDialect<RelAlgDialect>()->getRelationalAttributeManager().createDef(SymbolRefAttr::get(parser.getContext(),name));
+   }else {
+      Attribute attr;
+      llvm::StringRef mnemonic;
+      if (!parser.parseKeyword(&mnemonic)) {
+         auto parseResult = generatedAttributeParser(parser, mnemonic, type, attr);
+         if (parseResult.hasValue())
+            return attr;
+      }
    }
    return mlir::Attribute();
 }
@@ -84,6 +100,21 @@ void RelAlgDialect::printAttribute(::mlir::Attribute attr,
                                    ::mlir::DialectAsmPrinter& os) const {
    if (auto attrDef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>()) {
       os << "attr_def(\\\"" << attrDef.getName() << "\\\")";
+   }else{
+      if (succeeded(generatedAttributePrinter(attr, os)))
+         return;
    }
+}
+
+::mlir::Attribute mlir::relalg::TableMetaDataAttr::parse(::mlir::AsmParser& parser, ::mlir::Type type) {
+   if(parser.parseLess()) return Attribute();
+   StringAttr attr;
+   if(parser.parseAttribute(attr))return Attribute();
+   if(parser.parseGreater())
+      return Attribute();
+   return mlir::relalg::TableMetaDataAttr::get(parser.getContext(), runtime::TableMetaData::deserialize(attr.str()));
+}
+void mlir::relalg::TableMetaDataAttr::print(::mlir::AsmPrinter& printer) const {
+   printer<<"<"<<getMeta()->serialize()<<">";
 }
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsDialect.cpp.inc"

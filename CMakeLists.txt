@@ -89,9 +89,18 @@ target_link_options(db-run-query PUBLIC -Wl,--export-dynamic)
 
 
 llvm_update_compile_flags(mlir-db-opt)
-target_link_libraries(mlir-db-opt PUBLIC ${LIBS} PRIVATE arrow_shared)
+target_link_libraries(mlir-db-opt PUBLIC ${LIBS} runtime PRIVATE arrow_shared)
+
+
+add_executable(mlir-ctxt-opt mlir-ctxt-opt.cpp)
+llvm_update_compile_flags(mlir-ctxt-opt)
+target_link_libraries(mlir-ctxt-opt PUBLIC ${LIBS} runtime PRIVATE arrow_shared)
 add_subdirectory(tools)
 add_subdirectory(test)
+
+add_executable(arrow-test test.cpp)
+target_link_libraries(arrow-test PUBLIC runtime PRIVATE arrow_shared)
+
 
 
 find_package(Python COMPONENTS Interpreter Development REQUIRED)

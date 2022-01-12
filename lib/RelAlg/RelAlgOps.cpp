@@ -325,6 +325,16 @@ static ParseResult parseBaseTableOp(OpAsmParser& parser, OperationState& result)
       if (parser.parseRBrace()) { return failure(); }
       break;
    }
+   auto meta = result.attributes.get("meta");
+   if (meta) {
+      if (auto strAttr = meta.dyn_cast<mlir::StringAttr>()) {
+            result.attributes.set("meta", mlir::relalg::TableMetaDataAttr::get(parser.getContext(), runtime::TableMetaData::deserialize(strAttr.str())));
+      } else {
+         return failure();
+      }
+   } else {
+      result.addAttribute("meta", mlir::relalg::TableMetaDataAttr::get(parser.getContext(), std::make_shared<runtime::TableMetaData>()));
+   }
    result.addAttribute("columns", mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns));
    return parser.addTypeToList(mlir::relalg::TupleStreamType::get(parser.getBuilder().getContext()), result.types);
 }
@@ -332,12 +342,21 @@ static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
    p << " ";
    p.printSymbolName(op.sym_name());
    if (op->getAttrs().size() > 1) p << ' ';
+   if(op->hasAttr("meta")){
+      if(auto metaAttr=op->getAttr("meta").dyn_cast_or_null<mlir::relalg::TableMetaDataAttr>()){
+         if(metaAttr.getMeta()->isPresent()) {
+            op->setAttr("meta", mlir::StringAttr::get(op->getContext(), metaAttr.getMeta()->serialize()));
+         }else{
+            op->removeAttr("meta");
+         }
+      }
+   }
    p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"sym_name", "columns"});
    p << " columns: {";
    auto first = true;
    for (auto mapping : op.columns()) {
-      auto columnName =mapping.getName();
-      auto attr=mapping.getValue();
+      auto columnName = mapping.getName();
+      auto attr = mapping.getValue();
       auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
       if (first) {
          first = false;
@@ -403,7 +422,7 @@ static ParseResult parseGetScalarOp(OpAsmParser& parser, OperationState& result)
    return parser.addTypeToList(resultType, result.types);
 }
 static void print(OpAsmPrinter& p, relalg::GetScalarOp& op) {
-   p  << " ";
+   p << " ";
    p.printAttributeWithoutType(op.attr().getName());
 
    p << " " << op.rel();
@@ -457,7 +476,7 @@ static ParseResult parseSelectionOp(OpAsmParser& parser, OperationState& result)
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::SelectionOp& op) {
-   p  << " " << op.rel() << " ";
+   p << " " << op.rel() << " ";
    printCustomRegion(p, op.getRegion());
    p.printOptionalAttrDictWithKeyword(op->getAttrs());
 }
@@ -477,7 +496,7 @@ static ParseResult parseMapOp(OpAsmParser& parser, OperationState& result) {
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::MapOp& op) {
-   p  << " ";
+   p << " ";
    p.printSymbolName(op.sym_name());
    p << " " << op.rel() << " ";
    printCustomRegion(p, op.getRegion());
@@ -502,7 +521,7 @@ static ParseResult parseAggregationOp(OpAsmParser& parser, OperationState& resul
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::AggregationOp& op) {
-   p  << " ";
+   p << " ";
    p.printSymbolName(op.sym_name());
    p << " " << op.rel() << " ";
    printAttributeRefArr(p, op.group_by_attrs());
@@ -559,7 +578,7 @@ static ParseResult parseMaterializeOp(OpAsmParser& parser, OperationState& resul
    return parser.addTypeToList(tableType, result.types);
 }
 static void print(OpAsmPrinter& p, relalg::MaterializeOp& op) {
-   p  << " " << op.rel() << " ";
+   p << " " << op.rel() << " ";
    printAttributeRefArr(p, op.attrs());
    p << " => " << op.columns();
    p << " : " << op.getType();
@@ -575,7 +594,7 @@ static ParseResult parseTmpOp(OpAsmParser& parser, OperationState& result) {
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::TmpOp& op) {
-   p  << " " << op.rel() << " ";
+   p << " " << op.rel() << " ";
    printAttributeRefArr(p, op.attrs());
 }
 ///////////////////////////////////////////////////////////////////////////////////
@@ -588,7 +607,7 @@ static ParseResult parseInnerJoinOp(OpAsmParser& parser, OperationState& result)
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::InnerJoinOp& op) {
-   p  << " " << op.left() << ", " << op.right() << " ";
+   p << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
    p << " ";
    p.printOptionalAttrDictWithKeyword(op->getAttrs());
@@ -603,7 +622,7 @@ static ParseResult parseFullOuterJoinOp(OpAsmParser& parser, OperationState& res
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::FullOuterJoinOp& op) {
-   p  << " " << op.left() << ", " << op.right() << " ";
+   p << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
    p << " ";
    p.printOptionalAttrDictWithKeyword(op->getAttrs());
@@ -624,7 +643,7 @@ static ParseResult parseOuterJoinOp(OpAsmParser& parser, OperationState& result)
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::OuterJoinOp& op) {
-   p  << " ";
+   p << " ";
    p.printSymbolName(op.sym_name());
    p << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
@@ -648,7 +667,7 @@ static ParseResult parseSingleJoinOp(OpAsmParser& parser, OperationState& result
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::SingleJoinOp& op) {
-   p  << " ";
+   p << " ";
    p.printSymbolName(op.sym_name());
    p << " " << op.left() << ", " << op.right() << " ";
    printCustomRegion(p, op.getRegion());
@@ -693,7 +712,7 @@ static ParseResult parseMarkJoinOp(OpAsmParser& parser, OperationState& result) 
    return parser.parseOptionalAttrDictWithKeyword(result.attributes);
 }
 static void print(OpAsmPrinter& p, relalg::MarkJoinOp& op) {
-   p  << " ";
+   p << " ";
    p << " ";
    p.printSymbolName(op.sym_name());
    p << " ";
@@ -723,7 +742,7 @@ static ParseResult parseCollectionJoinOp(OpAsmParser& parser, OperationState& re
    return parser.parseOptionalAttrDictWithKeyword(result.attributes);
 }
 static void print(OpAsmPrinter& p, relalg::CollectionJoinOp& op) {
-   p  << " ";
+   p << " ";
    p << " ";
    p.printSymbolName(op.sym_name());
    p << " ";
@@ -748,7 +767,7 @@ static ParseResult parseProjectionOp(OpAsmParser& parser, OperationState& result
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::ProjectionOp& op) {
-   p  << " ";
+   p << " ";
    printSetSemantic(p, op.set_semantic());
    p << " ";
    printAttributeRefArr(p, op.attrs());
@@ -763,7 +782,7 @@ static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::SortOp& op) {
-   p  << " " << op.rel() << " ";
+   p << " " << op.rel() << " ";
    printSortSpecs(p, op.sortspecs());
 }
 ///////////////////////////////////////////////////////////////////////////////////
@@ -778,7 +797,7 @@ static ParseResult parseTopKOp(OpAsmParser& parser, OperationState& result) {
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::TopKOp& op) {
-   p  << " " << op.rows() << " " << op.rel() << " ";
+   p << " " << op.rows() << " " << op.rel() << " ";
    printSortSpecs(p, op.sortspecs());
 }
 ///////////////////////////////////////////////////////////////////////////////////
@@ -798,7 +817,7 @@ static ParseResult parseUnionOp(OpAsmParser& parser, OperationState& result) {
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::UnionOp& op) {
-   p  << " ";
+   p << " ";
    p.printSymbolName(op.sym_name());
    p << " ";
    printSetSemantic(p, op.set_semantic());
@@ -823,7 +842,7 @@ static ParseResult parseIntersectOp(OpAsmParser& parser, OperationState& result)
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::IntersectOp& op) {
-   p  << " ";
+   p << " ";
    p.printSymbolName(op.sym_name());
    p << " ";
    printSetSemantic(p, op.set_semantic());
@@ -848,7 +867,7 @@ static ParseResult parseExceptOp(OpAsmParser& parser, OperationState& result) {
    return addRelationOutput(parser, result);
 }
 static void print(OpAsmPrinter& p, relalg::ExceptOp& op) {
-   p  << " ";
+   p << " ";
    p.printSymbolName(op.sym_name());
    p << " ";
    printSetSemantic(p, op.set_semantic());
@@ -954,7 +973,7 @@ static ParseResult parseGetListOp(OpAsmParser& parser, OperationState& result) {
    return parser.addTypeToList(collectionType, result.types);
 }
 static void print(OpAsmPrinter& p, relalg::GetListOp& op) {
-   p  << " " << op.rel() << " ";
+   p << " " << op.rel() << " ";
    printAttributeRefArr(p, op.attrs());
    p << " : " << op.getType();
 }

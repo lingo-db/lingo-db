@@ -59,6 +59,11 @@ let summary = "tuple type";
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Attributes
 ////////////////////////////////////////////////////////////////////////////////////////////////////
+class RelAlg_Attr<string name> : AttrDef<RelAlg_Dialect, name>;
+def TableMetaDataAttr : RelAlg_Attr<"TableMetaData"> {
+let mnemonic = "table_metadata";
+let parameters = (ins "std::shared_ptr<runtime::TableMetaData>":$meta);
+}
 def RelationalAttributeDefAttr :
 DialectAttr<RelAlg_Dialect,
     CPred<"$_self.isa<RelationalAttributeDefAttr>()">, "AttributeDefAttr">{
@@ -131,7 +136,7 @@ Attributes getCreatedAttributes();
 def BaseTableOp : RelAlg_Op<"basetable",
 [SingleBlockImplicitTerminator<"relalg::ReturnOp">,RecursiveSideEffects,Operator]> {
 let summary = "base table operation";
-let arguments = (ins SymbolNameAttr:$sym_name, StrAttr: $table_identifier, DictionaryAttr: $columns);
+let arguments = (ins SymbolNameAttr:$sym_name, StrAttr: $table_identifier, TableMetaDataAttr: $meta, DictionaryAttr: $columns);
 let results = (outs RelAlg_TupleStream:$result);
 let extraClassDeclaration = [{
 Attributes getCreatedAttributes();

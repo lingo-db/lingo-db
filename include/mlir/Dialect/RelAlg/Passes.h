@@ -2,6 +2,7 @@
 #define MLIR_DIALECT_RELALG_PASSES_H
 
 #include "mlir/Pass/Pass.h"
+#include "runtime/database.h"
 #include <memory>
 
 namespace mlir {
@@ -16,7 +17,8 @@ std::unique_ptr<Pass> createCombinePredicatesPass();
 std::unique_ptr<Pass> createOptimizeImplementationsPass();
 std::unique_ptr<Pass> createIntroduceTmpPass();
 std::unique_ptr<Pass> createSimplifyAggregationsPass();
-
+std::unique_ptr<Pass> createAttachMetaDataPass(runtime::Database& db);
+std::unique_ptr<Pass> createDetachMetaDataPass();
 
 } // namespace relalg
 } // end namespace mlir
