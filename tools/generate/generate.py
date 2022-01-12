@@ -3,6 +3,7 @@ import os
 import pyarrow
 from pyarrow import csv
 import json
+import random
 
 
 def convertTypeToArrow(type):
@@ -94,7 +95,10 @@ def convertToArrowTable(inpath, outpath, table):
     writer = pyarrow.RecordBatchFileWriter(output_filepath, table.schema)
     writer.write_table(table)
     writer.close()
-
+    sample=table.take(random.sample(range(0,table.num_rows),min(1024,table.num_rows)))
+    writer = pyarrow.RecordBatchFileWriter(output_filepath+'.sample', sample.schema)
+    writer.write_table(sample)
+    writer.close()
 
 import sys
 
