@@ -2,6 +2,7 @@
 #define RUNTIME_METADATA_H
 #include <optional>
 #include <unordered_map>
+
 #include <arrow/record_batch.h>
 namespace runtime {
 class ColumnMetaData {
@@ -19,7 +20,7 @@ class TableMetaData {
    std::shared_ptr<arrow::RecordBatch> sample;
 
    public:
-   TableMetaData():present(false) {}
+   TableMetaData() : present(false) {}
    size_t getNumRows() const {
       return numRows;
    }
@@ -35,9 +36,9 @@ class TableMetaData {
    }
    static std::shared_ptr<TableMetaData> deserialize(std::string);
    std::string serialize() const;
-   static std::shared_ptr<TableMetaData> create( const std::string& json,const std::string& name, std::shared_ptr<arrow::RecordBatch> sample);
+   static std::shared_ptr<TableMetaData> create(const std::string& json, const std::string& name, std::shared_ptr<arrow::RecordBatch> sample);
    bool isPresent() const;
 };
-}
+} // end namespace runtime
 
-#endif //RUNTIME_METADATA_H
+#endif // RUNTIME_METADATA_H

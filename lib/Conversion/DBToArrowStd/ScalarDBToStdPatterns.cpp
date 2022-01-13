@@ -308,18 +308,16 @@ class ConstantLowering : public ConversionPattern {
       auto parseResult = support::parse(parseArg, arrowType, param1);
       if (auto intType = stdType.dyn_cast_or_null<IntegerType>()) {
          if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
-            auto [low, high] = support::parseDecimal(std::string((char*) parseResult.data(), parseResult.size()), decimalType.getS());
+            auto [low, high] = support::parseDecimal(std::get<std::string>(parseResult), decimalType.getS());
             std::vector<uint64_t> parts = {low, high};
             rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.cast<mlir::IntegerType>().getWidth(), parts)));
             return success();
          } else {
-            int64_t res = *(reinterpret_cast<int64_t*>(parseResult.data()));
-            rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, res));
+            rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, std::get<int64_t>(parseResult)));
             return success();
          }
       } else if (auto floatType = stdType.dyn_cast_or_null<FloatType>()) {
-         double res = *(reinterpret_cast<double*>(parseResult.data()));
-         rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getFloatAttr(stdType, res));
+         rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getFloatAttr(stdType,  std::get<double>(parseResult)));
          return success();
       } else if (auto refType = stdType.dyn_cast_or_null<mlir::util::RefType>()) {
          Value result;
@@ -327,9 +325,10 @@ class ConstantLowering : public ConversionPattern {
          auto* context = rewriter.getContext();
          auto i8Type = IntegerType::get(context, 8);
          auto insertionPoint = rewriter.saveInsertionPoint();
-         int64_t strLen = parseResult.size();
+         std::string str= std::get<std::string>(parseResult);
+         int64_t strLen = str.size();
          std::vector<uint8_t> vec;
-         for (auto c : parseResult) {
+         for (auto c : str) {
             vec.push_back(static_cast<uint8_t>(c));
          }
          auto strStaticType = MemRefType::get({strLen}, i8Type);

@@ -33,13 +33,8 @@ std::pair<uint64_t, uint64_t> support::parseDecimal(std::string str, unsigned re
    uint64_t high = decimalrep.high_bits();
    return {low, high};
 }
-std::vector<std::byte> pack(void* ptr, size_t bytes) {
-   std::vector<std::byte> res;
-   res.resize(bytes);
-   memcpy(res.data(), ptr, bytes);
-   return res;
-}
-std::vector<std::byte> parseInt(std::variant<int64_t, double, std::string> val) {
+
+std::variant<int64_t,double, std::string> parseInt(std::variant<int64_t, double, std::string> val) {
    int64_t res;
    if (std::holds_alternative<int64_t>(val)) {
       res = std::get<int64_t>(val);
@@ -48,9 +43,9 @@ std::vector<std::byte> parseInt(std::variant<int64_t, double, std::string> val) 
    } else {
       res = std::stoll(std::get<std::string>(val));
    }
-   return pack(&res, sizeof(res));
+   return res;
 }
-std::vector<std::byte> parseDouble(std::variant<int64_t, double, std::string> val) {
+std::variant<int64_t,double, std::string> parseDouble(std::variant<int64_t, double, std::string> val) {
    double res;
    if (std::holds_alternative<int64_t>(val)) {
       res = std::get<int64_t>(val);
@@ -59,13 +54,14 @@ std::vector<std::byte> parseDouble(std::variant<int64_t, double, std::string> va
    } else {
       res = std::stod(std::get<std::string>(val));
    }
-   return pack(&res, sizeof(res));
+   return res;
 }
-std::vector<std::byte> parseBool(std::variant<int64_t, double, std::string> val) {
+std::variant<int64_t,double, std::string> parseBool(std::variant<int64_t, double, std::string> val) {
    bool res;
    if (std::holds_alternative<int64_t>(val)) {
       res = std::get<int64_t>(val);
    } else if (std::holds_alternative<double>(val)) {
+      throw std::runtime_error("can not parse bool from double");
    } else {
       auto str = std::get<std::string>(val);
       if (str == "true" || str == "t") {
@@ -76,9 +72,9 @@ std::vector<std::byte> parseBool(std::variant<int64_t, double, std::string> val)
          throw std::runtime_error("can not parse bool from value: " + str);
       }
    }
-   return pack(&res, sizeof(res));
+   return static_cast<int64_t>(res);
 }
-std::vector<std::byte> parseString(std::variant<int64_t, double, std::string> val,bool acceptInts=false) {
+std::variant<int64_t,double, std::string> parseString(std::variant<int64_t, double, std::string> val,bool acceptInts=false) {
    std::string str;
    if (std::holds_alternative<int64_t>(val)) {
       if(acceptInts) {
@@ -91,34 +87,39 @@ std::vector<std::byte> parseString(std::variant<int64_t, double, std::string> va
    } else {
       str=std::get<std::string>(val);
    }
-   return pack(str.data(), str.size());
+   return str;
 }
-std::vector<std::byte> parseDate(std::variant<int64_t, double, std::string> val,bool parse64=false) {
+std::variant<int64_t,double, std::string> parseDate(std::variant<int64_t, double, std::string> val,bool parse64=false) {
 
     if (!std::holds_alternative<std::string>(val)) {
        throw std::runtime_error("can not parse date");
    }
    std::string str=std::get<std::string>(val);
-   int32_t parsed= parseDate32(str);
-   int64_t date64=parsed;
-   date64*=24*60*60*1000;
-   return parse64?pack(&date64, sizeof(date64)):pack(&parsed, sizeof(parsed));
+   int64_t parsed= parseDate32(str);
+   int64_t date64=parsed*24*60*60*1000;
+   return parse64?date64:parsed;
 }
-std::vector<std::byte> ensure8Byte(std::vector<std::byte> bytes ){
-   bytes.resize(8);
-   return bytes;
+std::variant<int64_t,double, std::string> toI64(std::variant<int64_t,double, std::string> val ){
+   if(std::holds_alternative<std::string>(val)){
+      int64_t res=0;
+      auto str=std::get<std::string>(val);
+      memcpy(&res,str.data(),std::min(sizeof(res),str.size()));
+      return res;
+   }
+   return val;
+
 }
-std::vector<std::byte> parseTimestamp(std::variant<int64_t, double, std::string> val, support::TimeUnit unit) {
+std::variant<int64_t,double, std::string> parseTimestamp(std::variant<int64_t, double, std::string> val, support::TimeUnit unit) {
    if (!std::holds_alternative<std::string>(val)) {
       throw std::runtime_error("can not parse timestamp");
    }
    std::string str=std::get<std::string>(val);
    int64_t res;
    arrow::internal::ParseValue<arrow::TimestampType>(arrow::TimestampType(convertTimeUnit(unit)), str.data(), str.length(), &res);
-   return pack(&res, sizeof(res));
+   return res;
 
 }
-std::vector<std::byte> support::parse(std::variant<int64_t, double, std::string> val, arrow::Type::type type,uint32_t param1, uint32_t param2) {
+std::variant<int64_t,double, std::string> support::parse(std::variant<int64_t, double, std::string> val, arrow::Type::type type,uint32_t param1, uint32_t param2) {
    switch (type) {
       case arrow::Type::type::INT8:
       case arrow::Type::type::INT16:
@@ -135,13 +136,12 @@ std::vector<std::byte> support::parse(std::variant<int64_t, double, std::string>
       case arrow::Type::type::HALF_FLOAT:
       case arrow::Type::type::FLOAT:
       case arrow::Type::type::DOUBLE: return parseDouble(val);
-      case arrow::Type::type::FIXED_SIZE_BINARY: return ensure8Byte(parseString(val));
+      case arrow::Type::type::FIXED_SIZE_BINARY: return toI64(parseString(val));
       case arrow::Type::type::DECIMAL128: return parseString(val,true);
       case arrow::Type::type::STRING: return parseString(val);
       case arrow::Type::type::DATE32: return parseDate(val,false);
       case arrow::Type::type::DATE64: return parseDate(val,true);
       case arrow::Type::type::TIMESTAMP: return parseTimestamp(val, static_cast<TimeUnit>(param1));
-
       default:
          throw std::runtime_error("could not parse");
    }

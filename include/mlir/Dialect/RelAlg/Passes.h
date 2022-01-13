@@ -5,7 +5,7 @@
 #include <memory>
 namespace runtime{
 class Database;
-}
+} // end namespace runtime
 namespace mlir {
 namespace relalg {
 std::unique_ptr<Pass> createExtractNestedOperatorsPass();

@@ -1,8 +1,11 @@
-#include "runtime/metadata.h"
-#include "runtime/database.h"
-#include "vendored/json.h"
 #include <iostream>
 #include <regex>
+
+#include "json.h"
+
+#include "runtime/database.h"
+#include "runtime/metadata.h"
+
 std::shared_ptr<runtime::ColumnMetaData> createColumnMetaData(const nlohmann::json& info) {
    auto res = std::make_shared<runtime::ColumnMetaData>();
    if (info.contains("distinct_values")) {
@@ -12,7 +15,7 @@ std::shared_ptr<runtime::ColumnMetaData> createColumnMetaData(const nlohmann::js
 }
 std::shared_ptr<runtime::TableMetaData> runtime::TableMetaData::create(const std::string& jsonMetaData, const std::string& name = "", std::shared_ptr<arrow::RecordBatch> sample = std::shared_ptr<arrow::RecordBatch>()) {
    auto res = std::make_shared<runtime::TableMetaData>();
-   res->present = !jsonMetaData.empty()||sample;
+   res->present = !jsonMetaData.empty() || sample;
    res->sample = sample;
    if (jsonMetaData.empty()) return res;
    auto json = nlohmann::json::parse(jsonMetaData);
