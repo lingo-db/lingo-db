@@ -1,4 +1,5 @@
-#include "mlir-support/mlir-support.h"
+#include "mlir-support/parsing.h"
+#include "mlir/Conversion/DBToArrowStd/ArrowTypes.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/NullHandler.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
@@ -172,13 +173,13 @@ class BinOpLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto addOp = cast<OpClass>(op);
-      using AT=typename OpClass::Adaptor;
-      auto adaptor= AT(operands);
-      db::NullHandler nullHandler(*typeConverter, rewriter,op->getLoc());
+      using AT = typename OpClass::Adaptor;
+      auto adaptor = AT(operands);
+      db::NullHandler nullHandler(*typeConverter, rewriter, op->getLoc());
       auto type = addOp.left().getType();
       Type resType = addOp.result().getType().template cast<db::DBType>().getBaseType();
-      Value left = nullHandler.getValue(addOp.left(),adaptor.left());
-      Value right = nullHandler.getValue(addOp.right(),adaptor.right());
+      Value left = nullHandler.getValue(addOp.left(), adaptor.left());
+      Value right = nullHandler.getValue(addOp.right(), adaptor.right());
       if (type.template isa<OperandType>()) {
          Value replacement = rewriter.create<StdOpClass>(op->getLoc(), typeConverter->convertType(resType), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(replacement));
@@ -198,7 +199,7 @@ class DecimalOpScaledLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto addOp = cast<DBOp>(op);
       typename DBOp::Adaptor adaptor(operands);
-      db::NullHandler nullHandler(*typeConverter, rewriter,addOp->getLoc());
+      db::NullHandler nullHandler(*typeConverter, rewriter, addOp->getLoc());
       Value left = nullHandler.getValue(addOp.left(), adaptor.left());
       Value right = nullHandler.getValue(addOp.right(), adaptor.right());
       if (left.getType() != right.getType()) {
@@ -289,110 +290,64 @@ class ConstantLowering : public ConversionPattern {
       auto type = constantOp.getType();
       auto stdType = typeConverter->convertType(type);
       auto loc = op->getLoc();
-      if (constantOp.getType().isa<mlir::db::UIntType>()) {
-         if (!constantOp.value().isa<IntegerAttr>()) {
-            return failure();
-         }
-         auto integerVal = constantOp.value().dyn_cast_or_null<IntegerAttr>().getInt();
-         rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, integerVal));
-         return success();
-      } else if (constantOp.getType().isa<mlir::db::IntType>() || constantOp.getType().isa<mlir::db::BoolType>()) {
-         if (!constantOp.value().isa<IntegerAttr>()) {
-            return failure();
-         }
-         auto integerVal = constantOp.value().dyn_cast_or_null<IntegerAttr>().getInt();
-         rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, integerVal));
-         return success();
-      } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
-         std::string stringRep;
-         if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            stringRep = strAttr.getValue().str();
-         } else if (auto intAttr = constantOp.value().dyn_cast_or_null<IntegerAttr>()) {
-            stringRep = std::to_string(intAttr.getInt());
-         } else {
-            return failure();
-         }
-         auto [low, high] = support::parseDecimal(stringRep, decimalType.getS());
-         std::vector<uint64_t> parts = {low, high};
-         rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.cast<mlir::IntegerType>().getWidth(), parts)));
-         return success();
-      } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
-         if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            if (dateType.getUnit() == db::DateUnitAttr::day) {
-               int32_t integerVal = support::parseDate32(strAttr.getValue().str());
-               rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, integerVal));
-            } else {
-               int64_t integerVal = support::parseDate32(strAttr.getValue().str());
-               integerVal *= 24 * 60 * 60 * 1000;
-               rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, integerVal));
-            }
-            return success();
-         }
-      } else if (auto timestampType = type.dyn_cast_or_null<mlir::db::TimestampType>()) {
-         if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            int64_t integerVal = support::parseTimestamp(strAttr.getValue().str(), toTimeUnit(timestampType.getUnit()));
-            rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, integerVal));
-            return success();
-         }
-      } else if (type.isa<mlir::db::IntervalType>()) {
-         if (auto intAttr = constantOp.value().dyn_cast_or_null<IntegerAttr>()) {
-            rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, intAttr.getInt()));
-            return success();
-         }
-         if (auto strAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, std::stoll(strAttr.getValue().str())));
-            return success();
-         }
-      } else if (type.isa<mlir::db::FloatType>()) {
-         if (auto floatAttr = constantOp.value().dyn_cast_or_null<FloatAttr>()) {
-            rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getFloatAttr(stdType, floatAttr.getValueAsDouble()));
-            return success();
-         } else if (auto intAttr = constantOp.value().dyn_cast_or_null<IntegerAttr>()) {
-            rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getFloatAttr(stdType, intAttr.getInt()));
-            return success();
-         } else if (auto stringAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getFloatAttr(stdType, std::stod(stringAttr.getValue().str())));
-            return success();
-         }
-      } else if (auto charType=type.dyn_cast_or_null<mlir::db::CharType>()){
-         if (auto stringAttr =constantOp.value().dyn_cast_or_null<StringAttr>()){
-            const std::string& str = stringAttr.getValue().str();
-            if(str.length()==charType.getBytes()){
-               uint64_t val;
-               memcpy(&val, str.data(),std::min(sizeof(uint64_t),(size_t)charType.getBytes()));
-               rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, val));
-               return success();
-            }
-         }
-      } else if (type.isa<mlir::db::StringType>()) {
-         if (auto stringAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
-            const std::string& str = stringAttr.getValue().str();
-            Value result;
-            ModuleOp parentModule = rewriter.getInsertionPoint()->getParentOfType<ModuleOp>();
-            auto* context = rewriter.getContext();
-            auto i8Type = IntegerType::get(context, 8);
-            auto insertionPoint = rewriter.saveInsertionPoint();
-            int64_t strLen = str.size();
-            std::vector<uint8_t> vec;
-            for (auto c : str) {
-               vec.push_back(c);
-            }
-            auto strStaticType = MemRefType::get({strLen}, i8Type);
-            auto strDynamicType = MemRefType::get({-1}, IntegerType::get(context, 8));
-            rewriter.setInsertionPointToStart(parentModule.getBody());
-            Attribute initialValue = DenseIntElementsAttr::get(
-               RankedTensorType::get({strLen}, i8Type), vec);
-            static int id = 0;
-            auto globalop = rewriter.create<mlir::memref::GlobalOp>(loc, "db_constant_string" + std::to_string(id++), rewriter.getStringAttr("private"), strStaticType, initialValue, true, rewriter.getI64IntegerAttr(1));
-            rewriter.restoreInsertionPoint(insertionPoint);
-            Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
-            result = rewriter.create<memref::CastOp>(loc, conststr, strDynamicType);
-            Value strres = rewriter.create<mlir::util::ToGenericMemrefOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8), -1), result);
-            rewriter.replaceOp(op, strres);
-            return success();
-         }
+      uint32_t param1 = 0;
+      auto arrowType = std::get<0>(mlir::db::codegen::convertTypeToArrow(type.cast<mlir::db::DBType>()));
+      std::variant<int64_t, double, std::string> parseArg;
+      if (auto integerAttr = constantOp.value().dyn_cast_or_null<IntegerAttr>()) {
+         parseArg = integerAttr.getInt();
+      } else if (auto floatAttr = constantOp.value().dyn_cast_or_null<FloatAttr>()) {
+         parseArg = floatAttr.getValueAsDouble();
+      } else if (auto stringAttr = constantOp.value().dyn_cast_or_null<StringAttr>()) {
+         parseArg = stringAttr.str();
+      } else {
+         return failure();
       }
-
+      if (auto timestampType = type.dyn_cast_or_null<mlir::db::TimestampType>()) {
+         param1 = toTimeUnit(timestampType.getUnit());
+      }
+      auto parseResult = support::parse(parseArg, arrowType, param1);
+      if (auto intType = stdType.dyn_cast_or_null<IntegerType>()) {
+         if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
+            auto [low, high] = support::parseDecimal(std::string((char*) parseResult.data(), parseResult.size()), decimalType.getS());
+            std::vector<uint64_t> parts = {low, high};
+            rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.cast<mlir::IntegerType>().getWidth(), parts)));
+            return success();
+         } else {
+            int64_t res = *(reinterpret_cast<int64_t*>(parseResult.data()));
+            rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, res));
+            return success();
+         }
+      } else if (auto floatType = stdType.dyn_cast_or_null<FloatType>()) {
+         double res = *(reinterpret_cast<double*>(parseResult.data()));
+         rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getFloatAttr(stdType, res));
+         return success();
+      } else if (auto refType = stdType.dyn_cast_or_null<mlir::util::RefType>()) {
+         Value result;
+         ModuleOp parentModule = rewriter.getInsertionPoint()->getParentOfType<ModuleOp>();
+         auto* context = rewriter.getContext();
+         auto i8Type = IntegerType::get(context, 8);
+         auto insertionPoint = rewriter.saveInsertionPoint();
+         int64_t strLen = parseResult.size();
+         std::vector<uint8_t> vec;
+         for (auto c : parseResult) {
+            vec.push_back(static_cast<uint8_t>(c));
+         }
+         auto strStaticType = MemRefType::get({strLen}, i8Type);
+         auto strDynamicType = MemRefType::get({-1}, IntegerType::get(context, 8));
+         rewriter.setInsertionPointToStart(parentModule.getBody());
+         Attribute initialValue = DenseIntElementsAttr::get(
+            RankedTensorType::get({strLen}, i8Type), vec);
+         static int id = 0;
+         auto globalop = rewriter.create<mlir::memref::GlobalOp>(loc, "db_constant_string" + std::to_string(id++), rewriter.getStringAttr("private"), strStaticType, initialValue, true, rewriter.getI64IntegerAttr(1));
+         rewriter.restoreInsertionPoint(insertionPoint);
+         Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
+         result = rewriter.create<memref::CastOp>(loc, conststr, strDynamicType);
+         Value strres = rewriter.create<mlir::util::ToGenericMemrefOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8), -1), result);
+         rewriter.replaceOp(op, strres);
+         return success();
+      } else {
+         return failure();
+      }
       return failure();
    }
 };
@@ -453,8 +408,8 @@ class CmpOpLowering : public ConversionPattern {
          return failure();
       }
       db::NullHandler nullHandler(*typeConverter, rewriter, loc);
-      Value left = nullHandler.getValue(cmpOp.left(),adaptor.left());
-      Value right = nullHandler.getValue(cmpOp.right(),adaptor.right());
+      Value left = nullHandler.getValue(cmpOp.left(), adaptor.left());
+      Value right = nullHandler.getValue(cmpOp.right(), adaptor.right());
       if (type.isa<db::BoolType>() || type.isa<db::IntType>() || type.isa<db::DecimalType>() || type.isa<db::DateType>() || type.isa<db::TimestampType>() || type.isa<db::IntervalType>() || type.isa<db::CharType>()) {
          Value res = rewriter.create<arith::CmpIOp>(loc, translateIPredicate(cmpOp.predicate()), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(res));
@@ -727,7 +682,7 @@ class HashLowering : public ConversionPattern {
       Value const0 = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0));
       Value magicConstant = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0xbf58476d1ce4e5b9));
 
-      rewriter.replaceOp(op, hashImpl(rewriter, op->getLoc(),hashAdaptor.val(), const0, magicConstant, hashOp.val().getType(), combinationRequired));
+      rewriter.replaceOp(op, hashImpl(rewriter, op->getLoc(), hashAdaptor.val(), const0, magicConstant, hashOp.val().getType(), combinationRequired));
       return success();
    }
 };
@@ -763,8 +718,8 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
                            return mlir::IntegerType::get(patterns.getContext(), t.getWidth());
                         })
                         .Case<::mlir::db::CharType>([&](::mlir::db::CharType t) {
-                           if(t.getBytes()>8)return mlir::Type();
-                           return (Type)mlir::IntegerType::get(patterns.getContext(), t.getBytes()*8);
+                           if (t.getBytes() > 8) return mlir::Type();
+                           return (Type) mlir::IntegerType::get(patterns.getContext(), t.getBytes() * 8);
                         })
                         .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
                            return mlir::IntegerType::get(patterns.getContext(), t.getWidth());

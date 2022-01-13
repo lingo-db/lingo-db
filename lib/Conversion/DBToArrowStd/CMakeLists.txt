@@ -8,6 +8,7 @@ add_mlir_conversion_library(MLIRDBToArrowStd
         BuildersToStdPatterns.cpp
         CollectionsToStdPatterns.cpp
         NullHandler.cpp
+        ArrowTypes.cpp
 
         ADDITIONAL_HEADER_DIRS
         ../../../mlir/Conversion/DBToArrowStd

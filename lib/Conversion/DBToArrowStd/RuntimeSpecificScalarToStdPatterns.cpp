@@ -1,5 +1,5 @@
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
-#include <mlir-support/mlir-support.h>
+#include "mlir-support/parsing.h"
 #include <mlir/Conversion/DBToArrowStd/NullHandler.h>
 #include <mlir/Dialect/util/UtilOps.h>
 

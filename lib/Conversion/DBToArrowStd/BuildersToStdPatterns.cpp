@@ -1,11 +1,12 @@
 #include "arrow/type_fwd.h"
+
+#include "mlir/Conversion/DBToArrowStd/ArrowTypes.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include "llvm/Support/Debug.h"
 
 using namespace mlir;
 namespace {
@@ -304,7 +305,7 @@ class AggrHtHelper {
          idx = ifOp.getResult(2);
          ptr = ifOp.getResult(3);
          rewriter.create<scf::ConditionOp>(loc, done,
-                                          ValueRange({newLen, idx, ptr}));
+                                           ValueRange({newLen, idx, ptr}));
       }
 
       // The body of the while loop: shift right until reaching a value of 0.
@@ -371,7 +372,7 @@ static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::Funct
       } else {
          return FunctionId::ArrowTableBuilderAddDate64;
       }
-   }else if(type.isa<mlir::db::CharType>()){
+   } else if (type.isa<mlir::db::CharType>()) {
       return FunctionId ::ArrowTableBuilderAddFixedBinary;
    }
    //TODO: implement other types too
@@ -396,7 +397,7 @@ class BuilderMergeLowering : public ConversionPattern {
          Value falseValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
 
          for (auto v : unPackOp.vals()) {
-            Value val=v;
+            Value val = v;
             Value isNull;
             if (mergeOp.val().getType().cast<TupleType>().getType(i).cast<db::DBType>().isNullable()) {
                auto nullUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, val);
@@ -405,10 +406,9 @@ class BuilderMergeLowering : public ConversionPattern {
             } else {
                isNull = falseValue;
             }
-            if(auto charType=mergeOp.val().getType().cast<TupleType>().getType(i).dyn_cast_or_null<mlir::db::CharType>()){
-               if(charType.getBytes()<8){
+            if (auto charType = mergeOp.val().getType().cast<TupleType>().getType(i).dyn_cast_or_null<mlir::db::CharType>()) {
+               if (charType.getBytes() < 8) {
                   val = rewriter.create<arith::ExtSIOp>(loc, val, rewriter.getI64Type());
-
                }
             }
             Value columnId = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(i));
@@ -492,42 +492,8 @@ class CreateAggrHTBuilderLowering : public ConversionPattern {
 
 static Value getArrowDataType(OpBuilder& builder, Location loc, db::codegen::FunctionRegistry& functionRegistry, db::DBType type) {
    using FunctionId = db::codegen::FunctionRegistry::FunctionId;
-   int typeConstant = 0;
-   int param1 = 0;
-   int param2 = 0;
-   if (auto intType = type.dyn_cast_or_null<mlir::db::IntType>()) {
-      switch (intType.getWidth()) {
-         case 8: typeConstant = arrow::Type::type::INT8; break;
-         case 16: typeConstant = arrow::Type::type::INT16; break;
-         case 32: typeConstant = arrow::Type::type::INT32; break;
-         case 64: typeConstant = arrow::Type::type::INT64; break;
-      }
-   } else if (auto boolType = type.dyn_cast_or_null<mlir::db::BoolType>()) {
-      typeConstant = arrow::Type::type::BOOL;
-   } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
-      typeConstant = arrow::Type::type::DECIMAL128;
-      param1 = decimalType.getP();
-      param2 = decimalType.getS();
-   } else if (auto boolType = type.dyn_cast_or_null<mlir::db::BoolType>()) {
-      typeConstant = arrow::Type::type::BOOL;
-   } else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
-      switch (floatType.getWidth()) {
-         case 16: typeConstant = arrow::Type::type::HALF_FLOAT; break;
-         case 32: typeConstant = arrow::Type::type::FLOAT; break;
-         case 64: typeConstant = arrow::Type::type::DOUBLE; break;
-      }
-   } else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {
-      typeConstant = arrow::Type::type::STRING;
-   } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
-      if (dateType.getUnit() == mlir::db::DateUnitAttr::day) {
-         typeConstant = arrow::Type::type::DATE32;
-      } else {
-         typeConstant = arrow::Type::type::DATE64;
-      }
-   } else if (auto charType=type.dyn_cast_or_null<mlir::db::CharType>()){
-      typeConstant=arrow::Type::type::FIXED_SIZE_BINARY;
-      param1=charType.getBytes();
-   }
+
+   auto [typeConstant, param1, param2] = db::codegen::convertTypeToArrow(type);
    //TODO: also implement date types etc
 
    Value arrowTypeConstant = builder.create<arith::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(typeConstant));
