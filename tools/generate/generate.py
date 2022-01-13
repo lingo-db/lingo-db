@@ -4,6 +4,7 @@ import pyarrow
 from pyarrow import csv
 import json
 import random
+import pyarrow.compute
 
 
 def convertTypeToArrow(type):
@@ -80,18 +81,27 @@ def createColumnNames(cols):
     return res
 
 
-def convertToArrowTable(inpath, outpath, table):
-    tablename = table["name"]
+def convertToArrowTable(inpath, outpath, table_schema,meta):
+    tablename = table_schema["name"]
     filepath = inpath + "/" + tablename + ".tbl"
     output_filepath = outpath + '/' + tablename + '.arrow'
     if not os.path.exists(filepath):
         return
     print("converting", filepath, "->", output_filepath)
+    meta["tables"][tablename]={}
+    table_meta_obj=meta["tables"][tablename]
     table = csv.read_csv(filepath,
                          convert_options=pyarrow.csv.ConvertOptions(
-                             column_types=createArrowColumnTypes(table["columns"])),
+                             column_types=createArrowColumnTypes(table_schema["columns"])),
                          parse_options=pyarrow.csv.ParseOptions(delimiter='|'),
-                         read_options=pyarrow.csv.ReadOptions(column_names=createColumnNames(table["columns"])))
+                         read_options=pyarrow.csv.ReadOptions(column_names=createColumnNames(table_schema["columns"])))
+    table_meta_obj["num_rows"]=table.num_rows
+    table_meta_obj["pkey"]=table_schema["pkeys"]
+    table_meta_obj["columns"]={}
+    for c in table_schema["columns"]:
+        table_meta_obj["columns"][c["name"]]={}
+        col_meta_obj=table_meta_obj["columns"][c["name"]]
+        col_meta_obj["distinct_values"]=(len(table.select([c["name"]]).to_pandas().drop_duplicates()))
     writer = pyarrow.RecordBatchFileWriter(output_filepath, table.schema)
     writer.write_table(table)
     writer.close()
@@ -101,11 +111,16 @@ def convertToArrowTable(inpath, outpath, table):
     writer.close()
 
 import sys
+random.seed(0)
 
 input_dir = sys.argv[1]
 output_dir = sys.argv[2]
+meta={}
+meta["tables"]={}
 
 with open(os.path.dirname(os.path.realpath(__file__)) + "/default.schema.json", "r") as schema_file:
     schema = json.load(schema_file)
 for table_schema in schema:
-    convertToArrowTable(input_dir, output_dir, table_schema)
+    convertToArrowTable(input_dir, output_dir, table_schema,meta)
+with open(output_dir+'/metadata.json', 'w') as f:
+    json.dump(meta,f)
