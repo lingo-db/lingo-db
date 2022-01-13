@@ -1,12 +1,14 @@
-#include "runtime/database.h"
 #include <filesystem>
-
 #include <fstream>
+
 #include <arrow/api.h>
 #include <arrow/io/api.h>
 #include <arrow/ipc/api.h>
 #include <arrow/status.h>
 #include <arrow/table.h>
+
+#include "runtime/database.h"
+
 namespace runtime {
 void Database::addTable(std::string name, std::shared_ptr<arrow::Table> table) {
    tables[name] = table;
@@ -64,37 +66,34 @@ std::shared_ptr<arrow::RecordBatch> Database::getSample(const std::string& name)
    return std::shared_ptr<arrow::RecordBatch>();
 }
 std::string Database::serializeRecordBatch(std::shared_ptr<arrow::RecordBatch> batch) {
-   std::unique_ptr<arrow::io::BufferOutputStream> sink_;
-   std::shared_ptr<arrow::ipc::RecordBatchWriter> writer_;
-   std::shared_ptr<arrow::ResizableBuffer> buffer_ = arrow::AllocateResizableBuffer(0).ValueOrDie();
-   sink_.reset(new arrow::io::BufferOutputStream(buffer_));
-   writer_ = arrow::ipc::MakeStreamWriter(sink_.get(), batch->schema()).ValueOrDie();
+   std::shared_ptr<arrow::ResizableBuffer> buffer = arrow::AllocateResizableBuffer(0).ValueOrDie();
+   std::unique_ptr<arrow::io::BufferOutputStream> bufferOutputStream = std::make_unique<arrow::io::BufferOutputStream>(buffer);
+   std::shared_ptr<arrow::ipc::RecordBatchWriter> recordBatchWriter = arrow::ipc::MakeStreamWriter(bufferOutputStream.get(), batch->schema()).ValueOrDie();
 
-   writer_->WriteRecordBatch(*batch);
-   writer_->Close();
-   auto resBuffer = sink_->Finish();
+   assert(recordBatchWriter->WriteRecordBatch(*batch) == arrow::Status::OK());
+   assert(recordBatchWriter->Close() == arrow::Status::OK());
+   auto resBuffer = bufferOutputStream->Finish();
    return resBuffer.ValueOrDie()->ToHexString();
 }
 //adapted from stack overflow: https://stackoverflow.com/a/30606613
-std::shared_ptr<arrow::ResizableBuffer> HexToBytes(const std::string& hex) {
+std::shared_ptr<arrow::ResizableBuffer> hexToBytes(const std::string& hex) {
    auto bytes = arrow::AllocateResizableBuffer(hex.size() / 2).ValueOrDie();
    for (unsigned int i = 0; i < hex.length(); i += 2) {
       std::string byteString = hex.substr(i, 2);
       char byte = (char) strtol(byteString.c_str(), NULL, 16);
-      auto& ref = *bytes;
       bytes->mutable_data()[i / 2] = byte;
    }
 
    return bytes;
 }
 std::shared_ptr<arrow::RecordBatch> Database::deserializeRecordBatch(std::string str) {
-   auto buffer_ = HexToBytes(str);
-   auto reader = arrow::ipc::RecordBatchStreamReader::Open(std::make_shared<arrow::io::BufferReader>(buffer_)).ValueOrDie();
+   auto resizableBuffer = hexToBytes(str);
+   auto reader = arrow::ipc::RecordBatchStreamReader::Open(std::make_shared<arrow::io::BufferReader>(resizableBuffer)).ValueOrDie();
    std::shared_ptr<arrow::RecordBatch> batch;
-   reader->ReadNext(&batch);
+   assert(reader->ReadNext(&batch) == arrow::Status::OK());
    return batch;
 }
 std::shared_ptr<TableMetaData> Database::getTableMetaData(const std::string& name) {
-      return metaData[name];
+   return metaData[name];
 }
 } //end namespace runtime

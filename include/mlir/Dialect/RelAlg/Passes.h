@@ -2,9 +2,10 @@
 #define MLIR_DIALECT_RELALG_PASSES_H
 
 #include "mlir/Pass/Pass.h"
-#include "runtime/database.h"
 #include <memory>
-
+namespace runtime{
+class Database;
+}
 namespace mlir {
 namespace relalg {
 std::unique_ptr<Pass> createExtractNestedOperatorsPass();

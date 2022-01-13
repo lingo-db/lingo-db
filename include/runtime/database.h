@@ -1,12 +1,12 @@
 #ifndef RUNTIME_DATABASE_H
 #define RUNTIME_DATABASE_H
 
-#include <arrow/table.h>
 
 #include <memory>
 #include <unordered_map>
 
 #include "metadata.h"
+#include <arrow/type_fwd.h>
 namespace runtime {
 
 class Database {

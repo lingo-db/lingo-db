@@ -30,10 +30,10 @@ int main(int argc, char** argv) {
       std::cerr << "expected more args" << std::endl;
       return 1;
    }
-   char** argv_=new char*[argc-1];
-   argv_[0]=argv[0];
-   for(size_t i=2;i<argc;i++){
-      argv_[i-1]=argv[i];
+   char** argvReduced =new char*[argc-1];
+   argvReduced[0]=argv[0];
+   for(int i=2;i<argc;i++){
+      argvReduced[i-1]=argv[i];
    }
 
    runtime::ExecutionContext context;
@@ -57,5 +57,5 @@ int main(int argc, char** argv) {
    registry.insert<mlir::scf::SCFDialect>();
 
    return failed(
-      mlir::MlirOptMain(argc-1, argv_, "DB dialects optimization driver\n", registry));
+      mlir::MlirOptMain(argc-1, argvReduced, "DB dialects optimization driver\n", registry));
 }
