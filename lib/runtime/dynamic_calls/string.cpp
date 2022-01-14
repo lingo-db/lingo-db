@@ -86,6 +86,22 @@ extern "C" bool rt_cmp_string_like(bool null, runtime::Str str1, runtime::Str st
       return like((str1).data(), (str1).len(), (str2).data(), (str2).len(), '\\');
    }
 }
+extern "C" bool rt_cmp_string_ends_with(bool null, runtime::Str str1, runtime::Str str2) {
+   if (null) {
+      return false;
+   } else {
+      if (str1.len() < str2.len()) return false;
+      return memcmp(str1.data() + str1.len() - str2.len(), str2.data(), str2.len())==0;
+   }
+}
+extern "C" bool rt_cmp_string_starts_with(bool null, runtime::Str str1, runtime::Str str2) {
+   if (null) {
+      return false;
+   } else {
+      if (str1.len() < str2.len()) return false;
+      return memcmp(str1.data(), str2.data(), str2.len()) == 0;
+   }
+}
 
 //taken from gandiva
 //source https://github.com/apache/arrow/blob/41d115071587d68891b219cc137551d3ea9a568b/cpp/src/gandiva/gdv_function_stubs.cc
@@ -173,8 +189,8 @@ extern "C" runtime::Str rt_cast_decimal_string(bool null, uint64_t low, uint64_t
 
 EXPORT runtime::Str rt_cast_char_string(bool null, uint64_t val, size_t bytes) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    char* data = new char[bytes];
-   memcpy(data,&val,bytes);
-   return runtime::Str(data,bytes);
+   memcpy(data, &val, bytes);
+   return runtime::Str(data, bytes);
 }
 //taken from apache gandiva
 //source: https://github.com/apache/arrow/blob/master/cpp/src/gandiva/precompiled/string_ops.cc

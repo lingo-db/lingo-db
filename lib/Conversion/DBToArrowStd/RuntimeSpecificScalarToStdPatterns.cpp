@@ -1,5 +1,5 @@
-#include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir-support/parsing.h"
+#include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include <mlir/Conversion/DBToArrowStd/NullHandler.h>
 #include <mlir/Dialect/util/UtilOps.h>
 
@@ -203,12 +203,12 @@ class StringCastOpLowering : public ConversionPattern {
 };
 class StringCmpOpLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
+   using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
 
    public:
    explicit StringCmpOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
       : ConversionPattern(typeConverter, mlir::db::CmpOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
    mlir::db::codegen::FunctionRegistry::FunctionId funcForStrCompare(db::DBCmpPredicate pred) const {
-      using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
       switch (pred) {
          case db::DBCmpPredicate::eq:
             return FuncId::CmpStringEQ;
@@ -228,6 +228,12 @@ class StringCmpOpLowering : public ConversionPattern {
       assert(false && "unexpected case");
       return FuncId::CmpStringEQ;
    }
+   bool stringIsOk(std::string str) const {
+      for (auto x : str) {
+         if (!std::isalnum(x)) return false;
+      }
+      return true;
+   }
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
@@ -241,6 +247,24 @@ class StringCmpOpLowering : public ConversionPattern {
       Value left = nullHandler.getValue(cmpOp.left(), adaptor.left());
       Value right = nullHandler.getValue(cmpOp.right(), adaptor.right());
       using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
+      if (cmpOp.predicate() == db::DBCmpPredicate::like) {
+         if (auto *defOp = cmpOp.right().getDefiningOp()) {
+            if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(defOp)) {
+               std::string likeCond = constOp.getValue().cast<mlir::StringAttr>().str();
+               if (likeCond.ends_with('%') && stringIsOk(likeCond.substr(0, likeCond.size() - 1))) {
+                  auto newConst=rewriter.create<mlir::db::ConstantOp>(cmpOp->getLoc(),mlir::db::StringType::get(getContext(),false),rewriter.getStringAttr(likeCond.substr(0, likeCond.size() - 1)));
+                  Value res = functionRegistry.call(rewriter, cmpOp->getLoc(), FuncId ::CmpStringStartsWith, ValueRange({nullHandler.isNull(), left, rewriter.getRemappedValue(newConst)}))[0];
+                  rewriter.replaceOp(op, nullHandler.combineResult(res));
+                  return success();
+               } else if (likeCond.starts_with('%') && stringIsOk(likeCond.substr(1, likeCond.size() - 1))) {
+                  auto newConst=rewriter.create<mlir::db::ConstantOp>(cmpOp->getLoc(),mlir::db::StringType::get(getContext(),false),rewriter.getStringAttr(likeCond.substr(1, likeCond.size() - 1)));
+                  Value res = functionRegistry.call(rewriter, cmpOp->getLoc(), FuncId ::CmpStringEndsWith, ValueRange({nullHandler.isNull(), left, rewriter.getRemappedValue(newConst)}))[0];
+                  rewriter.replaceOp(op, nullHandler.combineResult(res));
+                  return success();
+               }
+            }
+         }
+      }
       FuncId cmpFunc = funcForStrCompare(cmpOp.predicate());
       Value res = functionRegistry.call(rewriter, cmpOp->getLoc(), cmpFunc, ValueRange({nullHandler.isNull(), left, right}))[0];
       rewriter.replaceOp(op, nullHandler.combineResult(res));
