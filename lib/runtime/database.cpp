@@ -6,6 +6,7 @@
 #include <arrow/ipc/api.h>
 #include <arrow/status.h>
 #include <arrow/table.h>
+#include <iostream>
 
 #include "runtime/database.h"
 
@@ -94,6 +95,9 @@ std::shared_ptr<arrow::RecordBatch> Database::deserializeRecordBatch(std::string
    return batch;
 }
 std::shared_ptr<TableMetaData> Database::getTableMetaData(const std::string& name) {
+   if(!metaData.contains(name)) {
+      return runtime::TableMetaData::create("", name, {});
+   }
    return metaData[name];
 }
 } //end namespace runtime

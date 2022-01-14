@@ -19,7 +19,7 @@ pybind11::handle run(pybind11::str module) {
    runner::Runner runner;
    runner.loadString(module);
    //runner.dump();
-   runner.optimize();
+   runner.optimize(*executionContext->db);
    //runner.dump();
    runner.lower();
    //runner.dump();

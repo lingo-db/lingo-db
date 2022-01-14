@@ -10,17 +10,21 @@
 #include <arrow/compute/type_fwd.h>
 #include <arrow/type_fwd.h>
 namespace support::eval {
-using expr = arrow::compute::Expression;
-expr createAttrRef(const std::string& str);
-std::optional<expr> createLiteral(std::variant<int64_t, double, std::string> parsed, std::tuple<arrow::Type::type, uint32_t, uint32_t> type);
-expr createAnd(const std::vector<expr>& expressions);
-expr createOr(const std::vector<expr>& expressions);
-expr createNot(expr a);
-expr createEq(expr a, expr b);
-expr createLt(expr a, expr b);
-expr createGt(expr a, expr b);
+struct Expr {
+   virtual ~Expr() = default;
+};
+using expr = Expr;
+std::unique_ptr<expr> createInvalid();
+std::unique_ptr<expr> createAttrRef(const std::string& str);
+std::unique_ptr<expr> createLiteral(std::variant<int64_t, double, std::string> parsed, std::tuple<arrow::Type::type, uint32_t, uint32_t> type);
+std::unique_ptr<expr> createAnd(const std::vector<std::unique_ptr<expr>>& expressions);
+std::unique_ptr<expr> createOr(const std::vector<std::unique_ptr<expr>>& expressions);
+std::unique_ptr<expr> createNot(std::unique_ptr<expr> a);
+std::unique_ptr<expr> createEq(std::unique_ptr<expr> a, std::unique_ptr<expr> b);
+std::unique_ptr<expr> createLt(std::unique_ptr<expr> a, std::unique_ptr<expr> b);
+std::unique_ptr<expr> createGt(std::unique_ptr<expr> a, std::unique_ptr<expr> b);
 
-std::optional<size_t> countResults(std::shared_ptr<arrow::RecordBatch> batch, expr& filter);
+std::optional<size_t> countResults(std::shared_ptr<arrow::RecordBatch> batch, std::unique_ptr<expr> filter);
 } // end namespace support::eval
 
 #endif // MLIR_SUPPORT_EVAL_H

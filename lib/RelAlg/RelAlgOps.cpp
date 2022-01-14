@@ -342,16 +342,19 @@ static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
    p << " ";
    p.printSymbolName(op.sym_name());
    if (op->getAttrs().size() > 1) p << ' ';
-   if(op->hasAttr("meta")){
-      if(auto metaAttr=op->getAttr("meta").dyn_cast_or_null<mlir::relalg::TableMetaDataAttr>()){
-         if(metaAttr.getMeta()->isPresent()) {
-            op->setAttr("meta", mlir::StringAttr::get(op->getContext(), metaAttr.getMeta()->serialize()));
-         }else{
-            op->removeAttr("meta");
+   std::vector<mlir::NamedAttribute> attrsToPrint;
+   for(auto attr:op->getAttrs()){
+      if(attr.getName().str()=="meta"){
+         if(auto metaAttr=attr.getValue().dyn_cast_or_null<mlir::relalg::TableMetaDataAttr>()){
+            if(metaAttr.getMeta()->isPresent()) {
+               attrsToPrint.push_back(mlir::NamedAttribute(mlir::StringAttr::get(op->getContext(),"meta"), mlir::StringAttr::get(op->getContext(), metaAttr.getMeta()->serialize())));
+            }
          }
+      }else{
+       attrsToPrint.push_back(attr);
       }
    }
-   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"sym_name", "columns"});
+   p.printOptionalAttrDict(attrsToPrint, /*elidedAttrs=*/{"sym_name", "columns"});
    p << " columns: {";
    auto first = true;
    for (auto mapping : op.columns()) {

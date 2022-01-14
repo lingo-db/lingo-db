@@ -14,10 +14,11 @@ class Database {
    std::unordered_map<std::string, std::shared_ptr<arrow::RecordBatch>> samples;
    std::unordered_map<std::string, std::shared_ptr<TableMetaData>> metaData;
 
-   static std::shared_ptr<arrow::Table> loadTable(std::string name);
    static std::shared_ptr<arrow::RecordBatch> loadSample(std::string name);
 
    public:
+   static std::shared_ptr<arrow::Table> loadTable(std::string name);
+
    Database(){};
 
    void addTable(std::string name, std::shared_ptr<arrow::Table> table);

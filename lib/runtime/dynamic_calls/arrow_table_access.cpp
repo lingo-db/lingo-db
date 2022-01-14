@@ -1,6 +1,7 @@
 #include "runtime/helpers.h"
 #include <arrow/array.h>
 #include <arrow/table.h>
+#include <iostream>
 
 EXPORT uint64_t rt_get_column_id(std::shared_ptr<arrow::Table>* table, runtime::Str columnName) {
    auto column_names = (*table)->ColumnNames();

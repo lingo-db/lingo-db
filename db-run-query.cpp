@@ -20,10 +20,10 @@ int main(int argc, char** argv) {
    runner::Runner runner;
    runner.load(inputFileName);
    //runner.dump();
-   runner.optimize();
+   runner.optimize(*context.db);
    //runner.dump();
    runner.lower();
-   runner.dump();
+   //runner.dump();
    runner.lowerToLLVM();
    //runner.dump();
    //runner.dumpLLVM();

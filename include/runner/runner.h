@@ -12,7 +12,7 @@ class Runner {
    Runner();
    bool load(std::string fileName);
    bool loadString(std::string input);
-   bool optimize();
+   bool optimize(runtime::Database& db);
    bool lower();
    bool lowerToLLVM();
    void dump();

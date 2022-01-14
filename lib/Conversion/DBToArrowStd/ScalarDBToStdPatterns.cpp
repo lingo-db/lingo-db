@@ -11,16 +11,7 @@
 
 using namespace mlir;
 namespace {
-support::TimeUnit toTimeUnit(mlir::db::TimeUnitAttr attr) {
-   switch (attr) {
-      case mlir::db::TimeUnitAttr::second: return support::TimeUnit::SECOND;
 
-      case mlir::db::TimeUnitAttr::millisecond: return support::TimeUnit::MILLI;
-      case mlir::db::TimeUnitAttr::microsecond: return support::TimeUnit::MICRO;
-      case mlir::db::TimeUnitAttr::nanosecond: return support::TimeUnit::NANO;
-   }
-   return support::TimeUnit::SECOND;
-}
 class NotOpLowering : public ConversionPattern {
    public:
    explicit NotOpLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -290,8 +281,7 @@ class ConstantLowering : public ConversionPattern {
       auto type = constantOp.getType();
       auto stdType = typeConverter->convertType(type);
       auto loc = op->getLoc();
-      uint32_t param1 = 0;
-      auto arrowType = std::get<0>(mlir::db::codegen::convertTypeToArrow(type.cast<mlir::db::DBType>()));
+      auto [arrowType,param1,param2] = mlir::db::codegen::convertTypeToArrow(type.cast<mlir::db::DBType>());
       std::variant<int64_t, double, std::string> parseArg;
       if (auto integerAttr = constantOp.value().dyn_cast_or_null<IntegerAttr>()) {
          parseArg = integerAttr.getInt();
@@ -302,10 +292,7 @@ class ConstantLowering : public ConversionPattern {
       } else {
          return failure();
       }
-      if (auto timestampType = type.dyn_cast_or_null<mlir::db::TimestampType>()) {
-         param1 = toTimeUnit(timestampType.getUnit());
-      }
-      auto parseResult = support::parse(parseArg, arrowType, param1);
+      auto parseResult = support::parse(parseArg, arrowType, param1,param2);
       if (auto intType = stdType.dyn_cast_or_null<IntegerType>()) {
          if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
             auto [low, high] = support::parseDecimal(std::get<std::string>(parseResult), decimalType.getS());

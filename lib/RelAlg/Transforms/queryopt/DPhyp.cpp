@@ -42,8 +42,8 @@ void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
    if (specialJoin) {
       double estimatedResultSize;
       switch (mlir::relalg::detail::getBinaryOperatorType(specialJoin)) {
-         case detail::BinaryOperatorType::AntiSemiJoin: estimatedResultSize = p1->getRows() * (1.0 - totalSelectivity); break;
-         case detail::BinaryOperatorType::SemiJoin: estimatedResultSize = p1->getRows() * totalSelectivity; break;
+         case detail::BinaryOperatorType::AntiSemiJoin: estimatedResultSize = p1->getRows()-std::min(p1->getRows(), p1->getRows() * p2->getRows() * totalSelectivity); break;
+         case detail::BinaryOperatorType::SemiJoin: estimatedResultSize = std::min(p1->getRows(), p1->getRows() * p2->getRows() * totalSelectivity); break;
          case detail::BinaryOperatorType::CollectionJoin:
          case detail::BinaryOperatorType::OuterJoin: //todo: not really correct, but we would need to split singlejoin/outerjoin
          case detail::BinaryOperatorType::MarkJoin: estimatedResultSize = p1->getRows(); break;

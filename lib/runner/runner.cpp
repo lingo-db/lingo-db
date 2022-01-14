@@ -232,7 +232,7 @@ bool Runner::loadString(std::string input) {
       return false;
    return true;
 }
-bool Runner::optimize() {
+bool Runner::optimize(runtime::Database& db) {
    auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
@@ -248,7 +248,9 @@ bool Runner::optimize() {
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createImplicitToExplicitJoinsPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createPushdownPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createUnnestingPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createAttachMetaDataPass(db));
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createOptimizeJoinOrderPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createDetachMetaDataPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createCombinePredicatesPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createOptimizeImplementationsPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createIntroduceTmpPass());

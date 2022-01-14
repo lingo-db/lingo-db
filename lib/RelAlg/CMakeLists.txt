@@ -19,6 +19,7 @@ add_mlir_dialect_library(MLIRRelAlg
         Transforms/queryopt/utils.cpp
         Transforms/queryopt/QueryGraphBuilder.cpp
         Transforms/queryopt/DPhyp.cpp
+        Transforms/queryopt/QueryGraph.cpp
         ADDITIONAL_HEADER_DIRS
         ../../include/mlir/Dialect/RelAlg
 
@@ -26,6 +27,6 @@ add_mlir_dialect_library(MLIRRelAlg
         MLIRRelAlgOpsIncGen
         MLIRDBOpsIncGen
 
-        LINK_LIBS PUBLIC
+        LINK_LIBS mlir-support PUBLIC
         MLIRIR
         )
