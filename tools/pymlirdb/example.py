@@ -46,7 +46,7 @@ df = pymlirdb.query("""
                         from supplier, nation
                         where s_nationkey=n_nationkey
                         and n_name='SAUDI ARABIA'
-                        order by numwait desc 
+                        order by numwait desc,s_name 
                     """)
 print("result:")
 print(df.to_pandas())
