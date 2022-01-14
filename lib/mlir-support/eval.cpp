@@ -1,49 +1,51 @@
 #include "mlir-support/eval.h"
+
 #include <arrow/api.h>
 #include <arrow/compute/api.h>
-#include <iostream>
+
 namespace support::eval {
-struct ArrowExpr: public Expr{
+struct ArrowExpr : public Expr {
    arrow::compute::Expression expr;
-   ArrowExpr(arrow::compute::Expression expr):expr(expr){}
+   ArrowExpr(arrow::compute::Expression expr) : expr(expr) {}
 };
 arrow::compute::Expression unpack(const std::unique_ptr<expr>& expr) {
    return dynamic_cast<ArrowExpr&>(*expr).expr;
 }
-std::unique_ptr<expr> pack(arrow::compute::Expression expr){
+void init(){
+   arrow::compute::GetFunctionRegistry();
+}
+std::unique_ptr<expr> pack(arrow::compute::Expression expr) {
    return std::make_unique<ArrowExpr>(expr);
 }
 std::optional<size_t> countResults(std::shared_ptr<arrow::RecordBatch> batch, std::unique_ptr<expr> filter) {
-   if(!filter)return {};
-   auto filterExpression=unpack(filter);
-   std::cout<<filterExpression.ToString()<<std::endl;
+   if (!filter) return {};
+   auto filterExpression = unpack(filter);
    auto boundCond = filterExpression.Bind(*batch->schema()).ValueOrDie();
    auto res2 = arrow::compute::ExecuteScalarExpression(boundCond, arrow::compute::MakeExecBatch(*batch->schema(), batch).ValueOrDie()).ValueOrDie();
-
-   return arrow::compute::Count(arrow::compute::Filter(res2, res2).ValueOrDie()).ValueOrDie().scalar_as<arrow::Int64Scalar>().value;
+   size_t res = arrow::compute::internal::GetFilterOutputSize(*res2.array(), arrow::compute::FilterOptions::NullSelectionBehavior::DROP);
+   return res;
 }
 std::unique_ptr<expr> createAnd(const std::vector<std::unique_ptr<expr>>& expressions) {
    std::vector<arrow::compute::Expression> pureExpressions;
-   for (auto& e : expressions) {
+   for (const auto& e : expressions) {
       if (!e) return {};
       pureExpressions.push_back(unpack(e));
    }
-   if(pureExpressions.size()==1)return pack(pureExpressions[0]);
-   assert(pureExpressions.size()>1);
-   auto res= arrow::compute::and_(pureExpressions);
+   if (pureExpressions.size() == 1) return pack(pureExpressions[0]);
+   assert(pureExpressions.size() > 1);
+   auto res = arrow::compute::and_(pureExpressions);
    return pack(res);
 }
 std::unique_ptr<expr> createOr(const std::vector<std::unique_ptr<expr>>& expressions) {
    std::vector<arrow::compute::Expression> pureExpressions;
-   for (auto& e : expressions) {
+   for (const auto& e : expressions) {
       if (!e) return {};
       pureExpressions.push_back(unpack(e));
    }
-   if(pureExpressions.size()==1)return pack(pureExpressions[0]);
-   assert(pureExpressions.size()>1);
-   auto res= arrow::compute::or_(pureExpressions);
+   if (pureExpressions.size() == 1) return pack(pureExpressions[0]);
+   assert(pureExpressions.size() > 1);
+   auto res = arrow::compute::or_(pureExpressions);
    return pack(res);
-
 }
 std::unique_ptr<expr> createAttrRef(const std::string& str) {
    auto res= arrow::compute::field_ref(str);
@@ -51,22 +53,32 @@ std::unique_ptr<expr> createAttrRef(const std::string& str) {
 }
 std::unique_ptr<expr> createEq(std::unique_ptr<expr> a, std::unique_ptr<expr> b) {
    if (!a || !b) return {};
-   auto res= arrow::compute::equal(unpack(a), unpack(b));
+   auto res = arrow::compute::equal(unpack(a), unpack(b));
    return pack(res);
 }
 std::unique_ptr<expr> createLt(std::unique_ptr<expr> a, std::unique_ptr<expr> b) {
    if (!a || !b) return {};
-   auto res= arrow::compute::less(unpack(a), unpack(b));
+   auto res = arrow::compute::less(unpack(a), unpack(b));
    return pack(res);
 }
 std::unique_ptr<expr> createGt(std::unique_ptr<expr> a, std::unique_ptr<expr> b) {
    if (!a || !b) return {};
-   auto res= arrow::compute::greater(unpack(a), unpack(b));
+   auto res = arrow::compute::greater(unpack(a), unpack(b));
+   return pack(res);
+}
+std::unique_ptr<expr> createLte(std::unique_ptr<expr> a, std::unique_ptr<expr> b) {
+   if (!a || !b) return {};
+   auto res = arrow::compute::less_equal(unpack(a), unpack(b));
+   return pack(res);
+}
+std::unique_ptr<expr> createGte(std::unique_ptr<expr> a, std::unique_ptr<expr> b) {
+   if (!a || !b) return {};
+   auto res = arrow::compute::greater_equal(unpack(a), unpack(b));
    return pack(res);
 }
 std::unique_ptr<expr> createNot(std::unique_ptr<expr> a) {
    if (!a) return {};
-   auto res= arrow::compute::not_(unpack(a));
+   auto res = arrow::compute::not_(unpack(a));
    return pack(res);
 }
 std::unique_ptr<expr> createLiteral(std::variant<int64_t, double, std::string> parsed, std::tuple<arrow::Type::type, uint32_t, uint32_t> t) {
@@ -110,7 +122,7 @@ std::unique_ptr<expr> createLiteral(std::variant<int64_t, double, std::string> p
       default: return {};
    }
 }
-std::unique_ptr<expr> createInvalid(){
+std::unique_ptr<expr> createInvalid() {
    return {};
 }
 

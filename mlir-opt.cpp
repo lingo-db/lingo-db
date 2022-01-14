@@ -24,6 +24,8 @@
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 
+#include "mlir-support/eval.h"
+
 namespace {
 struct ToLLVMLoweringPass
    : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
@@ -130,6 +132,7 @@ int main(int argc, char** argv) {
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::scf::SCFDialect>();
+   support::eval::init();
 
    return failed(
       mlir::MlirOptMain(argc, argv, "DB dialects optimization driver\n", registry));

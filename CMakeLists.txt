@@ -86,12 +86,12 @@ add_executable(db-run db-run.cpp)
 target_link_libraries(db-run runner runtime)
 target_link_options(db-run PUBLIC -Wl,--export-dynamic)
 add_executable(db-run-query db-run-query.cpp)
-target_link_libraries(db-run-query runner runtime)
+target_link_libraries(db-run-query runner runtime mlir-support)
 target_link_options(db-run-query PUBLIC -Wl,--export-dynamic)
 
 
 llvm_update_compile_flags(mlir-db-opt)
-target_link_libraries(mlir-db-opt PUBLIC ${LIBS} runtime PRIVATE arrow_shared)
+target_link_libraries(mlir-db-opt PUBLIC ${LIBS} runtime mlir-support PRIVATE arrow_shared)
 
 
 add_executable(mlir-ctxt-opt mlir-ctxt-opt.cpp)

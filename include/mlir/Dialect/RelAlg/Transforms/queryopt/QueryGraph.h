@@ -16,6 +16,7 @@ class QueryGraph {
       std::unordered_map<NodeSet,double,HashNodeSet> cachedSel;
       NodeSet required;
       Operator op;
+      double selectivity = 1;
       [[nodiscard]] bool connects(const NodeSet& s1, const NodeSet& s2) const {
          return required.isSubsetOf(s1 | s2) && !required.isSubsetOf(s1) && !required.isSubsetOf(s2);
       }

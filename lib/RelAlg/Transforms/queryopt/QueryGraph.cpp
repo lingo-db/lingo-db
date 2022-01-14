@@ -49,7 +49,7 @@ void mlir::relalg::QueryGraph::print(llvm::raw_ostream& out) {
       if (e.op) {
          e.op->print(out);
       }
-      out << "}";
+      out << ", selectivity=" << e.selectivity;
       out << "},\n";
    }
    out << "]\n";
@@ -191,8 +191,15 @@ void mlir::relalg::QueryGraph::estimate() {
    for (auto& edge : joins) {
       edge.selectivity = estimateSelectivity(edge.op, edge.left, edge.right);
    }
+   for (auto& edge : selections) {
+      if(edge.required.count()==2) {
+         auto left = NodeSet::single(this->numNodes, edge.required.findFirst());
+         edge.selectivity = estimateSelectivity(edge.op, left, edge.required);
+      }
+   }
 }
 double mlir::relalg::QueryGraph::calculateSelectivity(SelectionEdge& edge, NodeSet left, NodeSet right) {
+   if(edge.required.count()==2&&left.any()&&right.any())return edge.selectivity;
    auto key = left & edge.required;
    if (edge.cachedSel.contains(key)) {
       return edge.cachedSel[key];

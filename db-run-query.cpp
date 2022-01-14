@@ -1,7 +1,10 @@
-#include "arrow/array.h"
-#include "runner/runner.h"
 #include <iostream>
 #include <string>
+
+#include "arrow/array.h"
+#include "mlir-support/eval.h"
+#include "runner/runner.h"
+
 
 int main(int argc, char** argv) {
    std::string inputFileName = "-";
@@ -16,6 +19,7 @@ int main(int argc, char** argv) {
       auto database = runtime::Database::load(std::string(argv[2]));
       context.db = std::move(database);
    }
+   support::eval::init();
 
    runner::Runner runner;
    runner.load(inputFileName);
@@ -27,6 +31,6 @@ int main(int argc, char** argv) {
    runner.lowerToLLVM();
    //runner.dump();
    //runner.dumpLLVM();
-   runner.runJit(&context,5, runner::Runner::printTable);
+   runner.runJit(&context, 5, runner::Runner::printTable);
    return 0;
 }

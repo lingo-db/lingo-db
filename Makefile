@@ -13,7 +13,7 @@ build/llvm-build:
 
 build/arrow:
 	mkdir -p build/arrow
-	cmake arrow/cpp  -B build/arrow -DARROW_PYTHON=ON
+	cmake arrow/cpp  -B build/arrow -DARROW_PYTHON=ON -DCMAKE_BUILD_TYPE=Release
 
 build-arrow: build/arrow
 	cmake --build build/arrow -j${NPROCS}

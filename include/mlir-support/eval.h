@@ -14,6 +14,7 @@ struct Expr {
    virtual ~Expr() = default;
 };
 using expr = Expr;
+void init();
 std::unique_ptr<expr> createInvalid();
 std::unique_ptr<expr> createAttrRef(const std::string& str);
 std::unique_ptr<expr> createLiteral(std::variant<int64_t, double, std::string> parsed, std::tuple<arrow::Type::type, uint32_t, uint32_t> type);
@@ -22,6 +23,8 @@ std::unique_ptr<expr> createOr(const std::vector<std::unique_ptr<expr>>& express
 std::unique_ptr<expr> createNot(std::unique_ptr<expr> a);
 std::unique_ptr<expr> createEq(std::unique_ptr<expr> a, std::unique_ptr<expr> b);
 std::unique_ptr<expr> createLt(std::unique_ptr<expr> a, std::unique_ptr<expr> b);
+std::unique_ptr<expr> createLte(std::unique_ptr<expr> a, std::unique_ptr<expr> b);
+std::unique_ptr<expr> createGte(std::unique_ptr<expr> a, std::unique_ptr<expr> b);
 std::unique_ptr<expr> createGt(std::unique_ptr<expr> a, std::unique_ptr<expr> b);
 
 std::optional<size_t> countResults(std::shared_ptr<arrow::RecordBatch> batch, std::unique_ptr<expr> filter);
