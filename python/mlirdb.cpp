@@ -16,7 +16,7 @@ void load(pybind11::dict dictionary) {
    executionContext->db = std::move(database);
 }
 pybind11::handle run(pybind11::str module) {
-   runner::Runner runner;
+   runner::Runner runner(runner::RunMode::SPEED);
    runner.loadString(module);
    //runner.dump();
    runner.optimize(*executionContext->db);

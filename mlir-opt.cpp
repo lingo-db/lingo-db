@@ -132,6 +132,8 @@ int main(int argc, char** argv) {
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::scf::SCFDialect>();
+   registry.insert<mlir::LLVM::LLVMDialect>();
+
    support::eval::init();
 
    return failed(

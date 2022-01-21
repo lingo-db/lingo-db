@@ -100,9 +100,6 @@ target_link_libraries(mlir-ctxt-opt PUBLIC ${LIBS} runtime PRIVATE arrow_shared)
 add_subdirectory(tools)
 add_subdirectory(test)
 
-#add_executable(arrow-test test.cpp)
-#target_link_libraries(arrow-test PUBLIC runtime PRIVATE arrow_shared)
-
 
 
 find_package(Python COMPONENTS Interpreter Development REQUIRED)

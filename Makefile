@@ -70,6 +70,10 @@ test-coverage:  build/build-debug-llvm-release-coverage
 run-test: build/build-debug-llvm-release
 	cmake --build build/build-debug-llvm-release --target mlir-db-opt db-run-query db-run pymlirdbext -- -j${NPROCS}
 	export LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib && ./build/llvm-build/bin/llvm-lit -v build/build-debug-llvm-release/test
+run-benchmark: build/build-llvm-release
+	cmake --build build/build-llvm-release --target db-run-query -- -j${NPROCS}
+	python3 tools/benchmark-tpch.py ./build/build-llvm-release tpch-1
+
 coverage-clean:
 	rm -rf build/build-debug-llvm-release-coverage/coverage
 
