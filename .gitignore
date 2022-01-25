@@ -4,3 +4,6 @@ test*.mlir
 test.sql
 resources/data/tpch-1
 __pycache__
+llvm-jit-static.*
+perf-result.json
+sourcemap.*.json

@@ -354,13 +354,14 @@ static llvm::Error optimizeModule(llvm::Module* module) {
       funcPM.run(func);
    }
    funcPM.doFinalization();
+   module->dump();
    return llvm::Error::success();
 }
 
 static pid_t runPerfRecord() {
    pid_t childPid = 0;
    auto parentPid = std::to_string(getpid());
-   const char* argV[] = {"perf", "record", "-a", "-e", "cycles:p", "-c", "50000", "--call-graph", "dwarf,1024", nullptr};
+   const char* argV[] = {"perf", "record", "-a", "-e", "cycles:pp", "-c", "50000", nullptr};
    auto status = posix_spawn(&childPid, "/usr/bin/perf", nullptr, nullptr, const_cast<char**>(argV), environ);
    sleep(2);
    if (status != 0)
