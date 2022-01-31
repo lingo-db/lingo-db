@@ -56,9 +56,18 @@
 #include <mlir/Dialect/util/UtilTypes.h>
 #include <runner/runner.h>
 
+#include <sched.h>
+
 namespace {
 struct ToLLVMLoweringPass
    : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
+   void getDependentDialects(mlir::DialectRegistry& registry) const override {
+      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::arith::ArithmeticDialect>();
+   }
+   void runOnOperation() final;
+};
+struct InsertPerfAsmPass
+   : public mlir::PassWrapper<InsertPerfAsmPass, mlir::OperationPass<mlir::ModuleOp>> {
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::arith::ArithmeticDialect>();
    }
@@ -108,6 +117,32 @@ void ToLLVMLoweringPass::runOnOperation() {
    auto module = getOperation();
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
+}
+mlir::Location dropNames(mlir::Location l) {
+   if (auto namedLoc = l.dyn_cast<mlir::NameLoc>()) {
+      return dropNames(namedLoc.getChildLoc());
+   } else if (auto namedResultsLoc = l.dyn_cast<mlir::NamedResultsLoc>()) {
+      return dropNames(namedResultsLoc.getChildLoc());
+   }
+   return l;
+}
+void InsertPerfAsmPass::runOnOperation() {
+   getOperation()->walk([](mlir::LLVM::CallOp callOp){
+      callOp.dump();
+      size_t loc=0xdeadbeef;
+      if(auto fileLoc=dropNames(callOp.getLoc()).dyn_cast<mlir::FileLineColLoc>()){
+         loc=fileLoc.getLine();
+      }
+      llvm::dbgs()<<" extracted line:"<<loc<<"\n";
+      mlir::OpBuilder b(callOp);
+      const auto *asmTp = "mov r15,{0}";
+      auto asmDialectAttr =
+         mlir::LLVM::AsmDialectAttr::get(b.getContext(), mlir::LLVM::AsmDialect::AD_Intel);
+      const auto *asmCstr =
+         "";
+      auto asmStr = llvm::formatv(asmTp, llvm::format_hex(loc, /*width=*/16)).str();
+      b.create<mlir::LLVM::InlineAsmOp>(callOp->getLoc(),mlir::TypeRange(), mlir::ValueRange(), asmStr, asmCstr, true, false, asmDialectAttr);
+   });
 }
 
 namespace runner {
@@ -185,6 +220,7 @@ struct RunnerContext {
 };
 Runner::Runner(RunMode mode) : context(nullptr), runMode(mode) {
    llvm::DebugFlag = true;
+   LLVMInitializeX86AsmParser();
 }
 bool Runner::load(std::string file) {
    RunnerContext* ctxt = new RunnerContext;
@@ -357,13 +393,22 @@ static llvm::Error optimizeModule(llvm::Module* module) {
    module->dump();
    return llvm::Error::success();
 }
+cpu_set_t  mask;
+
+inline void assignToThisCore(int coreId)
+{
+    CPU_ZERO(&mask);
+    CPU_SET(coreId, &mask);
+    sched_setaffinity(0, sizeof(mask), &mask);
+}
 
 static pid_t runPerfRecord() {
+   assignToThisCore(0);
    pid_t childPid = 0;
    auto parentPid = std::to_string(getpid());
-   const char* argV[] = {"perf", "record", "-a", "-e", "cycles:pp", "-c", "50000", nullptr};
+   const char* argV[] = {"perf", "record", "-R","-e", "ibs_op//p", "-c", "5000","--intr-regs=r15","-C","0", nullptr};
    auto status = posix_spawn(&childPid, "/usr/bin/perf", nullptr, nullptr, const_cast<char**>(argV), environ);
-   sleep(2);
+   sleep(5);
    if (status != 0)
       std::cerr << "Launching application Failed: " << status << std::endl;
    return childPid;
@@ -454,6 +499,9 @@ class WrappedExecutionEngine {
    }
 };
 bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::function<void(uint8_t*)> callback) {
+   if(runMode==RunMode::PERF){
+      repeats=1;
+   }
    RunnerContext* ctxt = (RunnerContext*) this->context;
    // Initialize LLVM targets.
    llvm::InitializeNativeTarget();
@@ -471,7 +519,14 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
    llvm::InitializeNativeTargetAsmPrinter();
 
    // An optimization pipeline to use within the execution engine.
-
+   if(runMode==RunMode::PERF){
+      mlir::PassManager pm(&ctxt->context);
+      pm.enableVerifier(false);
+      pm.addPass(std::make_unique<InsertPerfAsmPass>());
+      if (mlir::failed(pm.run(ctxt->module.get()))) {
+         return false;
+      }
+   }
    WrappedExecutionEngine engine(ctxt->module.get(), runMode);
    if (!engine.succeeded()) return false;
    if (runMode == RunMode::PERF && !engine.linkStatic()) return false;
@@ -483,6 +538,11 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
    pid_t pid;
    if (runMode == RunMode::PERF) {
       pid = runPerfRecord();
+      uint64_t r15DefaultValue=0xbadeaffe;
+      __asm__ __volatile__("mov %0, %%r15\n\t"
+                           : /* no output */
+                           : "a" (r15DefaultValue)
+                           : "%r15");
    }
    std::vector<size_t> measuredTimes;
    for (size_t i = 0; i < repeats; i++) {

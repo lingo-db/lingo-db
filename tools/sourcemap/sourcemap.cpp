@@ -24,13 +24,7 @@
 #include <list>
 #include <queue>
 
-#include "../vendored/json.h"
-namespace cl = llvm::cl;
-
-static cl::opt<std::string> inputFilename(cl::Positional,
-                                          cl::desc("<input mlir file>"),
-                                          cl::init("-"),
-                                          cl::value_desc("filename"));
+#include "json.h"
 
 mlir::Location dropNames(mlir::Location l) {
    if (auto namedLoc = l.dyn_cast<mlir::NameLoc>()) {
@@ -41,7 +35,6 @@ mlir::Location dropNames(mlir::Location l) {
    return l;
 }
 int main(int argc, char** argv) {
-   cl::ParseCommandLineOptions(argc, argv, "toy compiler\n");
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
@@ -54,45 +47,61 @@ int main(int argc, char** argv) {
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::LLVM::LLVMDialect>();
    registry.insert<mlir::memref::MemRefDialect>();
-
-   mlir::MLIRContext context;
-   context.appendDialectRegistry(registry);
-
-   llvm::SourceMgr sourceMgr;
-   mlir::Block block;
-   mlir::LocationAttr fileLoc;
-   mlir::AsmParserState state;
-   if (mlir::parseSourceFile(inputFilename, sourceMgr, &block, &context, &fileLoc, &state).failed()) {
-      llvm::errs() << "Error can't load file " << inputFilename << "\n";
-      return 3;
-   }
+   size_t opId = 0;
+   std::unordered_map<std::string, size_t> analyzedOps;
    nlohmann::json j;
 
-   block.walk([&](mlir::Operation* op) {
-      auto opDef = state.getOpDef(op);
-      if (opDef) {
+   for (int param = 1; param < argc; param++) {
+      mlir::MLIRContext context;
+      context.appendDialectRegistry(registry);
 
-         if (auto fileLineLoc = dropNames(op->getLoc()).dyn_cast<mlir::FileLineColLoc>()) {
-            auto loc1 = sourceMgr.getLineAndColumn(opDef->scopeLoc.Start);
-            auto loc2 = sourceMgr.getLineAndColumn(opDef->scopeLoc.End);
-            nlohmann::json mapping;
-            nlohmann::json opStart;
-            nlohmann::json opEnd;
-            opStart["line"] = loc1.first;
-            opStart["col"] = loc1.second;
-            opEnd["line"] = loc2.first;
-            opEnd["col"] = loc2.second;
-            mapping["start"] = opStart;
-            mapping["end"] = opEnd;
-            mapping["created_from"] = nlohmann::json();
-            mapping["created_from"]["line"] = fileLineLoc.getLine();
-            mapping["created_from"]["col"] = fileLineLoc.getColumn();
-            mapping["created_from"]["file"] = fileLineLoc.getFilename().str();
-            mapping["operation"]=std::string(opDef->scopeLoc.Start.getPointer(),opDef->scopeLoc.End.getPointer());
-            j.push_back(mapping);
-         }
+      llvm::SourceMgr sourceMgr;
+      mlir::Block block;
+      mlir::LocationAttr fileLoc;
+      mlir::AsmParserState state;
+      auto inputFilename = std::string(argv[param]);
+      if (mlir::parseSourceFile(inputFilename, sourceMgr, &block, &context, &fileLoc, &state).failed()) {
+         llvm::errs() << "Error can't load file " << inputFilename << "\n";
+         return 3;
       }
-   });
+      llvm::DenseMap<mlir::Operation*, size_t> opIds;
+      block.walk<mlir::WalkOrder::PreOrder>([&](mlir::Operation* op) {
+         const auto *opDef = state.getOpDef(op);
+         if (opDef) {
+            if (auto fileLineLoc = dropNames(op->getLoc()).dyn_cast<mlir::FileLineColLoc>()) {
+               auto loc1 = sourceMgr.getLineAndColumn(opDef->scopeLoc.Start);
+               nlohmann::json operation;
+               operation["id"] = opId++;
+               opIds[op] = operation["id"];
+               operation["representation"] = std::string(opDef->scopeLoc.Start.getPointer(), opDef->scopeLoc.End.getPointer());
+               operation["loc"] = inputFilename + ":" + std::to_string(loc1.first);
+               analyzedOps[operation["loc"]] = operation["id"];
+               auto *parentOp = op->getParentOp();
+               if (opIds.count(parentOp)) {
+                  operation["parent"] = opIds[parentOp];
+               }
+               std::vector<size_t> dependencies;
+               for(auto operand:op->getOperands()){
+                  if(auto *defOp=operand.getDefiningOp()){
+                     if(opIds.count(defOp)){
+                        dependencies.push_back(opIds[defOp]);
+                     }
+                  }
+               }
+               if(dependencies.size()){
+                  operation["dependencies"]=dependencies;
+               }
+               auto mappedFile = fileLineLoc.getFilename().str();
+               auto mappedLine = fileLineLoc.getLine();
+               auto p = mappedFile + ":" + std::to_string(mappedLine);
+               if (analyzedOps.count(p)) {
+                  operation["mapping"] = analyzedOps[p];
+               }
+               j.push_back(operation);
+            }
+         }
+      });
+   }
    std::cout << j.dump() << std::endl;
    return 0;
 }

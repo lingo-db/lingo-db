@@ -2,47 +2,76 @@ import duckdb
 import matplotlib
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 
-con = duckdb.connect(database="profile.db", read_only=True)
+con = duckdb.connect(database=":memory:")
+con.execute("CREATE TABLE operation AS SELECT * FROM 'operations.parquet'")
+con.execute("CREATE TABLE event AS SELECT * FROM 'events.parquet'")
+pd.set_option('display.max_columns', 500)
+pd.set_option('display.width', 1000)
+# con.execute(
+#    """select e.loc_type, e.symbol,e.rt_srcline, e.jit_srcline, count(*) as cnt
+#       from event e
+#       where e.loc_type=='rt'  group by e.loc_type, e.symbol,e.rt_srcline, e.jit_srcline order by cnt desc""")
+# print(con.fetchdf())
+# exit(0)
 
 
-con.execute("SELECT op.loc,op.op from operations op join file_loc f on op.loc=f.id where f.file=?", ["snapshot-0.mlir"])
+con.execute("SELECT op.id,op.repr from operation op where op.loc like 'snapshot-0.mlir%'")
 operations = con.fetchall()
 nested_op_stats = {}
 for op in operations:
     nested_op_stats[op[0]] = {"operation": op[1].split(" ")[0], "count": 0, "children": []}
 con.execute(
-    "SELECT m3.created_from  as locid, count(*) as cnt from event e join mapping m1 on e.event_loc=m1.loc join mapping m2 on m2.loc=m1.created_from join mapping m3 on m3.loc=m2.created_from left outer join file_loc f on f.id=e.event_loc where f.file is null or f.file like '%.mlir' group by m3.created_from order by cnt desc")
+    """select op.id, count(*) as cnt
+       from operation op, operation op1, operation op2, operation op3, event e
+       where op1.mapping=op.id and op2.mapping=op1.id and op3.mapping=op2.id and op3.loc=e.jit_srcline and e.loc_type=='jit' group by op.id order by cnt desc""")
+
 stats = con.fetchall()
 for stat in stats:
     if stat[0] in nested_op_stats:
         nested_op_stats[stat[0]]["count"] = stat[1]
 
+con.execute(
+    """select op.id,e.symbol, count(*) as cnt
+       from operation op, operation op1, operation op2, operation op3, event e
+       where op1.mapping=op.id and op2.mapping=op1.id and op3.mapping=op2.id and op3.loc=e.jit_srcline and e.loc_type=='rt' group by op.id,e.symbol order by cnt desc""")
+# print(con.fetchdf())
+rt_stats = con.fetchall()
+for stat in rt_stats:
+    if stat[0] in nested_op_stats:
+        nested_op_stats[stat[0]]["count"] += stat[2]
+        description = stat[1] + "()" if stat[1] is not None else "<unknown>"
+        description = description[0:min(len(description), 30)]
+        nested_op_stats[stat[0]]["children"].append({"operation": description, "count": stat[2], "children": []})
 
-#con.execute(
+print(nested_op_stats)
+# con.execute(
 #    "SELECT m3.created_from, f.file  as locid, count(*) as cnt from event e  join mapping m1 on e.event_loc=m1.loc join mapping m2 on #m2.loc=m1.created_from join mapping m3 on m3.loc=m2.created_from join file_loc f on f.id=e.event_loc group by m3.created_from,f.file #order by cnt desc")
-#con.execute(
+# con.execute(
 #    "SELECT * from event where rt_symbol is not null")
-#print(con.fetchdf())
+# print(con.fetchdf())
 
+
+con.execute("SELECT op.id,op.parent from operation op where op.loc like 'snapshot-0.mlir%' order by op.id desc")
+parents = con.fetchall()
 root = None
-for k in nested_op_stats:
-    con.execute("SELECT outer_op from nested where inner_op=?", [k])
-    res = con.fetchone()
-    if res is None:
-        root = k
+for p in parents:
+    if p[1] is None:
+        root = p[0]
     else:
-        parent = res[0]
-        curr = nested_op_stats[k]
+        parent = p[1]
+        curr = nested_op_stats[p[0]]
         nested_op_stats[parent]["count"] += curr["count"]
         nested_op_stats[parent]["children"].append(curr)
+print(nested_op_stats)
 
-#con.execute(
+# con.execute(
 #    "SELECT e.rt_symbol,e.event_symbol,count(*) as cnt from event e join file_loc f on f.id=e.event_loc where f.file not like '%.mlir' and e.jit_loc is null group by e.rt_symbol,e.event_symbol")
-#lonely_rt=con.fetchall()
-#lonely_rt_dict={}
+# lonely_rt=con.fetchall()
+# lonely_rt_dict={}
 
-#for e in lonely_rt:
+# for e in lonely_rt:
 #    name=e[0] or e[1]
 #    count=e[2]
 #    if name in lonely_rt_dict:
@@ -50,20 +79,30 @@ for k in nested_op_stats:
 #    else:
 #        lonely_rt_dict[name] = {"operation": "'"+name+"'", "count": count, "children": []}
 
-#for el  in lonely_rt_dict:
+# for el  in lonely_rt_dict:
 #    nested_op_stats[root]["children"].append(lonely_rt_dict[el])
 #    nested_op_stats[root]["count"]+=lonely_rt_dict[el]["count"]
-min_cnt=max(1,nested_op_stats[root]["count"]/360)
+con.execute("SELECT count(*) from event where loc_type is not null")
+total_events = con.fetchone()[0]
+min_cnt = max(1, total_events / (360 * 2))
+
+
 def convert_to_sunburst_format(obj):
-    if obj["count"]<min_cnt:
+    if obj["count"] < min_cnt:
         return None
-    children=[]
+    children = []
     for c in obj["children"]:
-        converted=convert_to_sunburst_format(c)
+        converted = convert_to_sunburst_format(c)
+        print(converted)
         if not converted is None:
             children.append(converted)
-    return (obj["operation"],obj["count"],children)
-plot_data=convert_to_sunburst_format(nested_op_stats[root])
+
+    return (obj["operation"], obj["count"], children)
+
+
+plot_data = convert_to_sunburst_format(nested_op_stats[root])
+
+
 def sunburst(nodes, total=np.pi * 2, offset=0, level=0, ax=None):
     ax = ax or plt.subplot(111, projection='polar')
 
@@ -100,7 +139,8 @@ def sunburst(nodes, total=np.pi * 2, offset=0, level=0, ax=None):
         ax.set_axis_off()
 
 
-fig1=plt.figure(figsize=(20, 20))
+fig1 = plt.figure(figsize=(20, 20))
+print(plot_data)
 
 sunburst([plot_data])
 plt.show()
