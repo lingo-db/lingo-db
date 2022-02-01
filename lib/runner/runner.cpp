@@ -6,13 +6,13 @@
 #include "dlfcn.h"
 #include "unistd.h"
 
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/MC/TargetRegistry.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
-#include "llvm/CodeGen/TargetRegisterInfo.h"
 
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
@@ -128,21 +128,21 @@ mlir::Location dropNames(mlir::Location l) {
    return l;
 }
 void InsertPerfAsmPass::runOnOperation() {
-   getOperation()->walk([](mlir::LLVM::CallOp callOp){
+   getOperation()->walk([](mlir::LLVM::CallOp callOp) {
       callOp.dump();
-      size_t loc=0xdeadbeef;
-      if(auto fileLoc=dropNames(callOp.getLoc()).dyn_cast<mlir::FileLineColLoc>()){
-         loc=fileLoc.getLine();
+      size_t loc = 0xdeadbeef;
+      if (auto fileLoc = dropNames(callOp.getLoc()).dyn_cast<mlir::FileLineColLoc>()) {
+         loc = fileLoc.getLine();
       }
-      llvm::dbgs()<<" extracted line:"<<loc<<"\n";
+      llvm::dbgs() << " extracted line:" << loc << "\n";
       mlir::OpBuilder b(callOp);
-      const auto *asmTp = "mov r15,{0}";
+      const auto* asmTp = "mov r15,{0}";
       auto asmDialectAttr =
          mlir::LLVM::AsmDialectAttr::get(b.getContext(), mlir::LLVM::AsmDialect::AD_Intel);
-      const auto *asmCstr =
+      const auto* asmCstr =
          "";
       auto asmStr = llvm::formatv(asmTp, llvm::format_hex(loc, /*width=*/16)).str();
-      b.create<mlir::LLVM::InlineAsmOp>(callOp->getLoc(),mlir::TypeRange(), mlir::ValueRange(), asmStr, asmCstr, true, false, asmDialectAttr);
+      b.create<mlir::LLVM::InlineAsmOp>(callOp->getLoc(), mlir::TypeRange(), mlir::ValueRange(), asmStr, asmCstr, true, false, asmDialectAttr);
    });
 }
 
@@ -219,9 +219,16 @@ struct RunnerContext {
    size_t numArgs;
    size_t numResults;
 };
+static mlir::Location tagLocHook(mlir::Location loc) {
+   static size_t operationId = 0;
+   auto idAsStr = std::to_string(operationId++);
+   return mlir::NameLoc::get(mlir::StringAttr::get(loc.getContext(), idAsStr), loc);
+}
 Runner::Runner(RunMode mode) : context(nullptr), runMode(mode) {
    llvm::DebugFlag = true;
    LLVMInitializeX86AsmParser();
+
+   mlir::Operation::setTagLocationHook(tagLocHook);
 }
 bool Runner::load(std::string file) {
    RunnerContext* ctxt = new RunnerContext;
@@ -394,20 +401,19 @@ static llvm::Error optimizeModule(llvm::Module* module) {
    module->dump();
    return llvm::Error::success();
 }
-cpu_set_t  mask;
+cpu_set_t mask;
 
-inline void assignToThisCore(int coreId)
-{
-    CPU_ZERO(&mask);
-    CPU_SET(coreId, &mask);
-    sched_setaffinity(0, sizeof(mask), &mask);
+inline void assignToThisCore(int coreId) {
+   CPU_ZERO(&mask);
+   CPU_SET(coreId, &mask);
+   sched_setaffinity(0, sizeof(mask), &mask);
 }
 
 static pid_t runPerfRecord() {
    assignToThisCore(0);
    pid_t childPid = 0;
    auto parentPid = std::to_string(getpid());
-   const char* argV[] = {"perf", "record", "-R","-e", "ibs_op//p", "-c", "5000","--intr-regs=r15","-C","0", nullptr};
+   const char* argV[] = {"perf", "record", "-R", "-e", "ibs_op//p", "-c", "5000", "--intr-regs=r15", "-C", "0", nullptr};
    auto status = posix_spawn(&childPid, "/usr/bin/perf", nullptr, nullptr, const_cast<char**>(argV), environ);
    sleep(5);
    if (status != 0)
@@ -500,9 +506,9 @@ class WrappedExecutionEngine {
    }
 };
 bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::function<void(uint8_t*)> callback) {
-   if(runMode==RunMode::PERF){
-      repeats=1;
-      reserveLastRegister=true;
+   if (runMode == RunMode::PERF) {
+      repeats = 1;
+      reserveLastRegister = true;
    }
    RunnerContext* ctxt = (RunnerContext*) this->context;
    // Initialize LLVM targets.
@@ -521,7 +527,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
    llvm::InitializeNativeTargetAsmPrinter();
 
    // An optimization pipeline to use within the execution engine.
-   if(runMode==RunMode::PERF){
+   if (runMode == RunMode::PERF) {
       mlir::PassManager pm(&ctxt->context);
       pm.enableVerifier(false);
       pm.addPass(std::make_unique<InsertPerfAsmPass>());
@@ -531,7 +537,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
    }
    WrappedExecutionEngine engine(ctxt->module.get(), runMode);
    if (!engine.succeeded()) return false;
-   if (runMode == RunMode::PERF && !engine.linkStatic()) return false;
+   if ((runMode == RunMode::PERF || runMode == RunMode::DEBUGGING) && !engine.linkStatic()) return false;
    typedef uint8_t* (*myfunc)(void*);
    auto fn = (myfunc) engine.getSetContextPtr();
    fn(context);
@@ -540,10 +546,10 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
    pid_t pid;
    if (runMode == RunMode::PERF) {
       pid = runPerfRecord();
-      uint64_t r15DefaultValue=0xbadeaffe;
+      uint64_t r15DefaultValue = 0xbadeaffe;
       __asm__ __volatile__("mov %0, %%r15\n\t"
                            : /* no output */
-                           : "a" (r15DefaultValue)
+                           : "a"(r15DefaultValue)
                            : "%r15");
    }
    std::vector<size_t> measuredTimes;
@@ -562,7 +568,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
       measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count());
    }
    if (runMode == RunMode::PERF) {
-      reserveLastRegister=false;
+      reserveLastRegister = false;
       kill(pid, SIGINT);
       sleep(2);
    }
