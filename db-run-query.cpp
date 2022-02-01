@@ -34,7 +34,13 @@ int main(int argc, char** argv) {
       context.db = std::move(database);
    }
    support::eval::init();
-   runner::Runner runner(beingTraced() ? runner::RunMode::DEBUGGING : runner::RunMode::SPEED);
+   runner::RunMode runMode;
+   if (RUN_QUERIES_WITH_PERF) {
+      runMode = runner::RunMode::PERF;
+   } else {
+      runMode = beingTraced() ? runner::RunMode::DEBUGGING : runner::RunMode::SPEED;
+   }
+   runner::Runner runner(runMode);
    runner.load(inputFileName);
    runner.optimize(*context.db);
    runner.lower();

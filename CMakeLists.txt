@@ -3,6 +3,11 @@ project(db-dialects LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard to conform to")
 
+option(COMPILE_FOR_PERF "compile for perf" OFF)
+if(COMPILE_FOR_PERF)
+    SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -ffixed-r15")
+endif(COMPILE_FOR_PERF)
+
 find_package(MLIR REQUIRED CONFIG)
 
 message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
@@ -32,6 +37,7 @@ set(LLVM_LINK_COMPONENTS
         Core
         nativecodegen
         OrcJIT
+        X86
         )
 
 set(ArrowPython_DIR ${Arrow_DIR})
@@ -86,13 +92,18 @@ add_executable(db-run db-run.cpp)
 target_link_libraries(db-run runner runtime)
 target_link_options(db-run PUBLIC -Wl,--export-dynamic)
 add_executable(db-run-query db-run-query.cpp)
+
 target_link_libraries(db-run-query runner runtime mlir-support)
 target_link_options(db-run-query PUBLIC -Wl,--export-dynamic)
 
 
 llvm_update_compile_flags(mlir-db-opt)
 target_link_libraries(mlir-db-opt PUBLIC ${LIBS} runtime mlir-support PRIVATE arrow_shared)
-
+if(COMPILE_FOR_PERF)
+    target_compile_definitions(db-run-query PRIVATE RUN_QUERIES_WITH_PERF=1 )
+else()
+    target_compile_definitions(db-run-query PRIVATE RUN_QUERIES_WITH_PERF=0 )
+endif(COMPILE_FOR_PERF)
 
 add_executable(mlir-ctxt-opt mlir-ctxt-opt.cpp)
 llvm_update_compile_flags(mlir-ctxt-opt)

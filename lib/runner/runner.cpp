@@ -12,6 +12,7 @@
 #include "llvm/Support/Host.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
 
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
@@ -501,6 +502,7 @@ class WrappedExecutionEngine {
 bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::function<void(uint8_t*)> callback) {
    if(runMode==RunMode::PERF){
       repeats=1;
+      reserveLastRegister=true;
    }
    RunnerContext* ctxt = (RunnerContext*) this->context;
    // Initialize LLVM targets.
@@ -560,6 +562,7 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
       measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count());
    }
    if (runMode == RunMode::PERF) {
+      reserveLastRegister=false;
       kill(pid, SIGINT);
       sleep(2);
    }
