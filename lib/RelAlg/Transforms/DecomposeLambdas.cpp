@@ -38,14 +38,12 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
             llvm::dbgs() << "restrictions[" << scope << "].push_back(" << operand << ")\n";
          }
       }
-      andOp.dump();
       return restrictions;
    }
 
    void deriveRestrictionsFromOr(mlir::db::OrOp orOp, mlir::Value& tree) {
       auto currentSel = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(orOp->getParentOp());
 
-      orOp.dump();
       std::vector<std::unordered_map<std::string, std::vector<mlir::Value>>> restrictions;
       std::unordered_set<std::string> availableScopes;
       for (auto v : orOp.vals()) {
@@ -69,12 +67,13 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
             newsel.initPredicate();
             mapping.map(currentSel.getPredicateArgument(), newsel.getPredicateArgument());
             builder.setInsertionPointToStart(&newsel.predicate().front());
+            auto* terminator = newsel.getLambdaBlock().getTerminator();
 
             std::vector<mlir::Value> c2;
             for (auto& m : restrictions) {
                std::vector<mlir::Value> c1;
                for (auto v : m[scope]) {
-                  mlir::relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), newsel.getOperation(), &newsel.getPredicateBlock(), mapping);
+                  mlir::relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), newsel.getOperation(), &newsel.getPredicateBlock(), mapping,terminator);
                   c1.push_back(mapping.lookup(v));
                }
                if (c1.size() == 1) {
@@ -84,7 +83,6 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
                }
             }
             mlir::Value ored = builder.create<mlir::db::OrOp>(orOp->getLoc(), c2);
-            auto* terminator = newsel.getLambdaBlock().getTerminator();
             builder.create<mlir::relalg::ReturnOp>(currentSel->getLoc(), ored);
             terminator->remove();
             terminator->destroy();

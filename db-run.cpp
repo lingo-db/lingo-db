@@ -17,7 +17,7 @@ int main(int argc, char** argv) {
       context.db = std::move(database);
    }
 
-   runner::Runner runner;
+   runner::Runner runner(runner::RunMode::SPEED);
    runner.load(inputFileName);
    runner.lower();
    runner.dump();

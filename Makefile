@@ -15,9 +15,17 @@ build/arrow:
 	mkdir -p build/arrow
 	cmake arrow/cpp  -B build/arrow -DARROW_PYTHON=ON -DCMAKE_BUILD_TYPE=Release
 
+build/arrow-perf:
+	mkdir -p build/arrow-perf
+	cmake arrow/cpp  -B build/arrow-perf -DARROW_PYTHON=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_FLAGS=-ffixed-r15
+
 build-arrow: build/arrow
 	cmake --build build/arrow -j${NPROCS}
 	cmake --install build/arrow --prefix build/arrow/install
+
+build-arrow-perf: build/arrow-perf
+	cmake --build build/arrow-perf -j${NPROCS}
+	cmake --install build/arrow-perf --prefix build/arrow-perf/install
 
 build/pyarrow:
 	cd arrow/python; python3 setup.py build_ext --inplace --extra-cmake-args="-DArrow_DIR=${ROOT_DIR}/build/arrow/install/lib/cmake/arrow -DArrowPython_DIR=${ROOT_DIR}/build/arrow/install/lib/cmake/arrow"
@@ -70,6 +78,10 @@ test-coverage:  build/build-debug-llvm-release-coverage
 run-test: build/build-debug-llvm-release
 	cmake --build build/build-debug-llvm-release --target mlir-db-opt db-run-query db-run pymlirdbext -- -j${NPROCS}
 	export LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib && ./build/llvm-build/bin/llvm-lit -v build/build-debug-llvm-release/test
+run-benchmark: build/build-llvm-release
+	cmake --build build/build-llvm-release --target db-run-query -- -j${NPROCS}
+	python3 tools/benchmark-tpch.py ./build/build-llvm-release tpch-1
+
 coverage-clean:
 	rm -rf build/build-debug-llvm-release-coverage/coverage
 
