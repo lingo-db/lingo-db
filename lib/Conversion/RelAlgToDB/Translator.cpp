@@ -96,12 +96,6 @@ void Translator::addRequiredBuilders(std::vector<size_t> requiredBuilders) {
    }
 }
 
-void Translator::setFlag(mlir::Value flag) {
-   this->flag = flag;
-   for (auto& child : children) {
-      child->setFlag(flag);
-   }
-}
 void Translator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) {
    this->consumer = consumer;
    this->requiredAttributes = requiredAttributes;

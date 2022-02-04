@@ -1,3 +1,4 @@
+#include "mlir/Conversion/RelAlgToDB/Pipeline.h"
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
@@ -10,7 +11,7 @@ class BaseTableTranslator : public mlir::relalg::Translator {
    public:
    BaseTableTranslator(mlir::relalg::BaseTableOp baseTableOp) : mlir::relalg::Translator(baseTableOp), baseTableOp(baseTableOp) {
    }
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
@@ -19,13 +20,13 @@ class BaseTableTranslator : public mlir::relalg::Translator {
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       using namespace mlir;
-      mlir::Value table = builder.create<mlir::db::GetTable>(baseTableOp->getLoc(), mlir::db::TableType::get(builder.getContext()), baseTableOp->getAttr("table_identifier").cast<mlir::StringAttr>());
-      std::vector<mlir::Attribute> columnNames;
       std::vector<mlir::Type> types;
       std::vector<const mlir::relalg::RelationalAttribute*> attrs;
+      std::vector<mlir::Attribute> columnNames;
+
       for (auto namedAttr : baseTableOp.columnsAttr().getValue()) {
-         auto identifier=namedAttr.getName();
-         auto attr=namedAttr.getValue();
+         auto identifier = namedAttr.getName();
+         auto attr = namedAttr.getValue();
          auto attrDef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
          if (requiredAttributes.contains(&attrDef.getRelationalAttribute())) {
             columnNames.push_back(builder.getStringAttr(identifier.strref()));
@@ -36,14 +37,20 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       auto tupleType = mlir::TupleType::get(builder.getContext(), types);
       mlir::Type rowIterable = mlir::db::GenericIterableType::get(builder.getContext(), tupleType, "table_row_iterator");
       mlir::Type chunkIterable = mlir::db::GenericIterableType::get(builder.getContext(), rowIterable, "table_chunk_iterator");
-      auto chunkIterator = builder.create<mlir::db::TableScan>(baseTableOp->getLoc(), chunkIterable, table, builder.getArrayAttr(columnNames));
-      auto forOp = builder.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), chunkIterator, flag, getRequiredBuilderValues(context));
+      auto currPipeline = context.pipelineManager.getCurrentPipeline();
+      auto initRes = currPipeline->addInitFn([&](mlir::OpBuilder& builder) {
+         mlir::Value table = builder.create<mlir::db::GetTable>(baseTableOp->getLoc(), mlir::db::TableType::get(builder.getContext()), baseTableOp->getAttr("table_identifier").cast<mlir::StringAttr>());
+         auto chunkIterator = builder.create<mlir::db::TableScan>(baseTableOp->getLoc(), chunkIterable, table, builder.getArrayAttr(columnNames));
+
+         return std::vector<Value>({chunkIterator});
+      });
+      auto forOp = builder.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), currPipeline->addDependency(initRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
       mlir::Block* block = new mlir::Block;
       block->addArgument(rowIterable);
       block->addArguments(getRequiredBuilderTypes(context));
       forOp.getBodyRegion().push_back(block);
       mlir::OpBuilder builder1(forOp.getBodyRegion());
-      auto forOp2 = builder1.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), forOp.getInductionVar(), flag, block->getArguments().drop_front(1));
+      auto forOp2 = builder1.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), forOp.getInductionVar(), context.pipelineManager.getCurrentPipeline()->getFlag(), block->getArguments().drop_front(1));
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(tupleType);
       block2->addArguments(getRequiredBuilderTypes(context));

@@ -150,7 +150,9 @@ static bool hasDBType(TypeRange types) {
             hasDBType(functionType.getResults());
       } else if (type.isa<mlir::db::TableType>() || type.isa<mlir::db::VectorType>() || type.isa<mlir::db::FlagType>()) {
          res = true;
-      } else {
+      }  else if (type.isa<mlir::db::TableBuilderType>()||type.isa<mlir::db::VectorBuilderType>()||type.isa<mlir::db::JoinHTBuilderType>()||type.isa<mlir::db::AggrHTBuilderType>()) {
+         res = true;
+      }else {
          if (type.isa<mlir::db::CollectionType>()) {
             res = true;
          }

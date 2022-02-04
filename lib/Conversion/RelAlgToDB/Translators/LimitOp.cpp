@@ -40,7 +40,7 @@ class LimitTranslator : public mlir::relalg::Translator {
       }
       mlir::Value counter = builder.create<mlir::db::ConstantOp>(limitOp.getLoc(), mlir::db::IntType::get(builder.getContext(), false, 64),builder.getI64IntegerAttr(0));
       finishedFlag = builder.create<mlir::db::CreateFlag>(limitOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
-      children[0]->setFlag(finishedFlag);
+      context.pipelineManager.getCurrentPipeline()->setFlag(finishedFlag);
       counterId = context.getBuilderId();
       context.builders[counterId] = counter;
 

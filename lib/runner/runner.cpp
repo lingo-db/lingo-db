@@ -129,12 +129,10 @@ mlir::Location dropNames(mlir::Location l) {
 }
 void InsertPerfAsmPass::runOnOperation() {
    getOperation()->walk([](mlir::LLVM::CallOp callOp) {
-      callOp.dump();
       size_t loc = 0xdeadbeef;
       if (auto fileLoc = dropNames(callOp.getLoc()).dyn_cast<mlir::FileLineColLoc>()) {
          loc = fileLoc.getLine();
       }
-      llvm::dbgs() << " extracted line:" << loc << "\n";
       mlir::OpBuilder b(callOp);
       const auto* asmTp = "mov r15,{0}";
       auto asmDialectAttr =
@@ -307,7 +305,7 @@ bool Runner::optimize(runtime::Database& db) {
    }
    snapshot();
    auto end = std::chrono::high_resolution_clock::now();
-   ctxt->module->dump();
+   //ctxt->module->dump();
    std::cout << "optimization took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
    {
       auto start = std::chrono::high_resolution_clock::now();
@@ -350,6 +348,7 @@ bool Runner::lowerToLLVM() {
       ctxt->numResults = mainFunc.getNumResults();
       mlir::OpBuilder builder(moduleOp->getContext());
       builder.setInsertionPointToStart(moduleOp.getBody());
+      mainFunc->setAttr("passthrough", builder.getArrayAttr({builder.getStringAttr("noinline"), builder.getStringAttr("optnone")}));
       builder.create<mlir::FuncOp>(moduleOp.getLoc(), "rt_set_execution_context", builder.getFunctionType(mlir::TypeRange({mlir::util::RefType::get(moduleOp->getContext(), mlir::IntegerType::get(moduleOp->getContext(), 8), llvm::Optional<int64_t>())}), mlir::TypeRange()), builder.getStringAttr("private"));
    }
    mlir::PassManager pm2(&ctxt->context);
@@ -367,7 +366,6 @@ bool Runner::lowerToLLVM() {
 void Runner::dump() {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::OpPrintingFlags flags;
-   flags.enableDebugInfo(true);
    ctxt->module->print(llvm::dbgs(), flags);
 }
 
@@ -395,10 +393,11 @@ static llvm::Error optimizeModule(llvm::Module* module) {
 
    funcPM.doInitialization();
    for (auto& func : *module) {
-      funcPM.run(func);
+      if (!func.hasOptNone()) {
+         funcPM.run(func);
+      }
    }
    funcPM.doFinalization();
-   module->dump();
    return llvm::Error::success();
 }
 cpu_set_t mask;

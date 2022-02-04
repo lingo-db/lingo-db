@@ -18,7 +18,7 @@ void NLJoinTranslator::build(mlir::OpBuilder& builder, mlir::relalg::TranslatorC
 void NLJoinTranslator::scanHT(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) {
    auto scope = context.createScope();
    {
-      auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), vector, flag, getRequiredBuilderValues(context));
+      auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), vector, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(tupleType);
       block2->addArguments(getRequiredBuilderTypes(context));

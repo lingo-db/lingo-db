@@ -46,39 +46,52 @@ class SortTranslator : public mlir::relalg::Translator {
          types.push_back(attr->type);
          attributePos[attr] = i++;
       }
+      auto parentPipeline=context.pipelineManager.getCurrentPipeline();
+      auto childPipeline =std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
+      context.pipelineManager.setCurrentPipeline(childPipeline);
+      context.pipelineManager.addPipeline(childPipeline);
       auto tupleType = mlir::TupleType::get(builder.getContext(), types);
-      mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(sortOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType));
+      auto res = childPipeline->addInitFn([&](mlir::OpBuilder& builder) {
+         return std::vector<mlir::Value>({builder.create<mlir::db::CreateVectorBuilder>(sortOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType))});
+      });
       builderId = context.getBuilderId();
-      context.builders[builderId] = vectorBuilder;
+      context.builders[builderId] = childPipeline->addDependency(res[0]);
       children[0]->addRequiredBuilders({builderId});
-      children[0]->produce(context, builder);
-      vector = builder.create<mlir::db::BuilderBuild>(sortOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), context.builders[builderId]);
-      {
-         auto dbSortOp = builder.create<mlir::db::SortOp>(sortOp->getLoc(), vector);
-         mlir::Block* block2 = new mlir::Block;
-         block2->addArgument(tupleType);
-         block2->addArguments(tupleType);
-         dbSortOp.region().push_back(block2);
-         mlir::OpBuilder builder2(dbSortOp.region());
-         auto unpackedLeft = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), block2->getArgument(0));
-         auto unpackedRight = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), block2->getArgument(1));
-         std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria;
-         for (auto attr : sortOp.sortspecs()) {
-            auto sortspecAttr = attr.cast<mlir::relalg::SortSpecificationAttr>();
-            mlir::Value left = unpackedLeft.getResult(attributePos[&sortspecAttr.getAttr().getRelationalAttribute()]);
-            mlir::Value right = unpackedRight.getResult(attributePos[&sortspecAttr.getAttr().getRelationalAttribute()]);
-            if (sortspecAttr.getSortSpec() == mlir::relalg::SortSpec::desc) {
-               std::swap(left, right);
-            }
-            sortCriteria.push_back({left, right});
-         }
-         auto trueVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
-         auto falseVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 0));
+      children[0]->produce(context, childPipeline->getBuilder());
+      childPipeline->finishMainFunction({context.builders[builderId]});
 
-         builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), createSortPredicate(builder2, sortCriteria, trueVal, falseVal, 0));
-      }
+      auto sortedRes=childPipeline->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
+         mlir::Value vector = builder.create<mlir::db::BuilderBuild>(sortOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), args[0]);
+         {
+            auto dbSortOp = builder.create<mlir::db::SortOp>(sortOp->getLoc(), vector);
+            mlir::Block* block2 = new mlir::Block;
+            block2->addArgument(tupleType);
+            block2->addArguments(tupleType);
+            dbSortOp.region().push_back(block2);
+            mlir::OpBuilder builder2(dbSortOp.region());
+            auto unpackedLeft = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), block2->getArgument(0));
+            auto unpackedRight = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), block2->getArgument(1));
+            std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria;
+            for (auto attr : sortOp.sortspecs()) {
+               auto sortspecAttr = attr.cast<mlir::relalg::SortSpecificationAttr>();
+               mlir::Value left = unpackedLeft.getResult(attributePos[&sortspecAttr.getAttr().getRelationalAttribute()]);
+               mlir::Value right = unpackedRight.getResult(attributePos[&sortspecAttr.getAttr().getRelationalAttribute()]);
+               if (sortspecAttr.getSortSpec() == mlir::relalg::SortSpec::desc) {
+                  std::swap(left, right);
+               }
+               sortCriteria.push_back({left, right});
+            }
+            auto trueVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
+            auto falseVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 0));
+
+            builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), createSortPredicate(builder2, sortCriteria, trueVal, falseVal, 0));
+         }
+         return std::vector<mlir::Value>{vector};
+      });
+      vector=parentPipeline->addDependency(sortedRes[0]);
+      context.pipelineManager.setCurrentPipeline(parentPipeline);
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(sortOp->getLoc(), getRequiredBuilderTypes(context), vector, flag, getRequiredBuilderValues(context));
+         auto forOp2 = builder.create<mlir::db::ForOp>(sortOp->getLoc(), getRequiredBuilderTypes(context), vector, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType);
          block2->addArguments(getRequiredBuilderTypes(context));

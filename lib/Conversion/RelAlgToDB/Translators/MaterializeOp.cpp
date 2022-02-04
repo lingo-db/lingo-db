@@ -11,7 +11,7 @@ class MaterializeTranslator : public mlir::relalg::Translator {
    public:
    MaterializeTranslator(mlir::relalg::MaterializeOp materializeOp) : mlir::relalg::Translator(materializeOp.rel()), materializeOp(materializeOp) {
    }
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       children[0]->addRequiredBuilders(requiredBuilders);
    }
@@ -36,19 +36,30 @@ class MaterializeTranslator : public mlir::relalg::Translator {
       mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(materializeOp->getLoc(), tableBuilder.getType(), tableBuilder, packed);
       context.builders[builderId] = mergedBuilder;
    }
-   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& bX) override {
+      auto p=std::make_shared<mlir::relalg::Pipeline>(bX.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
+      context.pipelineManager.setCurrentPipeline(p);
+      context.pipelineManager.addPipeline(p);
       std::vector<mlir::Type> types;
       for (auto attr : materializeOp.attrs()) {
          if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
             types.push_back(attrRef.getRelationalAttribute().type);
          }
       }
-      mlir::Value tableBuilder = builder.create<mlir::db::CreateTableBuilder>(materializeOp.getLoc(), mlir::db::TableBuilderType::get(builder.getContext(), mlir::TupleType::get(builder.getContext(), types)), materializeOp.columns());
+      auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
+         return std::vector<mlir::Value>({builder.create<mlir::db::CreateTableBuilder>(materializeOp.getLoc(), mlir::db::TableBuilderType::get(builder.getContext(), mlir::TupleType::get(builder.getContext(), types)), materializeOp.columns())});
+      });
       builderId = context.getBuilderId();
-      context.builders[builderId] = tableBuilder;
+      context.builders[builderId] = p->addDependency(res[0]);
       children[0]->addRequiredBuilders({builderId});
-      children[0]->produce(context, builder);
-      table = builder.create<mlir::db::BuilderBuild>(materializeOp.getLoc(), mlir::db::TableType::get(builder.getContext()), context.builders[builderId]);
+      children[0]->produce(context, p->getBuilder());
+      p->finishMainFunction({context.builders[builderId]});
+      p->addFinalizeFn([&](mlir::OpBuilder& builder,mlir::ValueRange args) {
+         auto table = builder.create<mlir::db::BuilderBuild>(materializeOp.getLoc(), mlir::db::TableType::get(builder.getContext()), args[0]);
+         return std::vector<mlir::Value>{table};
+      });
+      context.pipelineManager.execute(bX);
+      table=context.pipelineManager.getResultsFromPipeline(p)[0];
    }
    virtual void done() override {
       materializeOp.replaceAllUsesWith(table);
@@ -57,5 +68,5 @@ class MaterializeTranslator : public mlir::relalg::Translator {
 };
 
 std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createMaterializeTranslator(mlir::relalg::MaterializeOp materializeOp) {
-  return std::make_unique<MaterializeTranslator>(materializeOp);
+   return std::make_unique<MaterializeTranslator>(materializeOp);
 }

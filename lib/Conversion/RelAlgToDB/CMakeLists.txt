@@ -1,4 +1,5 @@
 add_mlir_conversion_library(MLIRRelAlgToDB
+        Pipeline.cpp
         Translator.cpp
         JoinTranslator.cpp
         NLJoinTranslator.cpp

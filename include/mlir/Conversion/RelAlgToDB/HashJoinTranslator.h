@@ -131,7 +131,7 @@ class HashJoinTranslator : public mlir::relalg::JoinTranslator {
    std::vector<const mlir::relalg::RelationalAttribute*> orderedValues;
    mlir::TupleType keyTupleType, valTupleType, entryType;
    size_t builderId;
-   mlir::Value joinHt;
+   mlir::relalg::PipelineDependency joinHt;
 
    HashJoinTranslator(Operator joinOp, Value builderChild, Value lookupChild,bool markable = false) : JoinTranslator(joinOp,builderChild, lookupChild), loc(joinOp.getLoc()),markable(markable) {}
 

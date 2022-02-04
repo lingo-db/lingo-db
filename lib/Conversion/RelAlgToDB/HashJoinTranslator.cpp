@@ -34,15 +34,28 @@ void HashJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relal
    entryType = mlir::TupleType::get(op.getContext(), {keyTupleType, valTupleType});
 }
 void HashJoinTranslator::produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder)  {
-   auto joinHtBuilder = builder.create<mlir::db::CreateJoinHTBuilder>(loc, mlir::db::JoinHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType));
+   auto parentPipeline = context.pipelineManager.getCurrentPipeline();
+   auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
+   context.pipelineManager.setCurrentPipeline(p);
+   context.pipelineManager.addPipeline(p);
+   auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
+      auto joinHtBuilder = builder.create<mlir::db::CreateJoinHTBuilder>(loc, mlir::db::JoinHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType));
+      return std::vector<mlir::Value>({joinHtBuilder});
+   });
    builderId = context.getBuilderId();
-   context.builders[builderId] = joinHtBuilder;
+   context.builders[builderId] = p->addDependency(res[0]);
    children[0]->addRequiredBuilders({builderId});
-   children[0]->produce(context, builder);
-   joinHt = builder.create<mlir::db::BuilderBuild>(loc, mlir::db::JoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType), context.builders[builderId]);
+   children[0]->produce(context, p->getBuilder());
+   p->finishMainFunction({context.builders[builderId]});
+   auto hashtableRes = p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
+      mlir::Value hashtable =  builder.create<mlir::db::BuilderBuild>(loc, mlir::db::JoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType),args[0]);
+      return std::vector<mlir::Value>{hashtable};
+   });
+   context.pipelineManager.setCurrentPipeline(parentPipeline);
+   joinHt=hashtableRes[0];
    children[1]->produce(context, builder);
    after(context, builder);
-   builder.create<mlir::db::FreeOp>(loc, joinHt);
+   builder.create<mlir::db::FreeOp>(loc, context.pipelineManager.getCurrentPipeline()->addDependency(joinHt));
 }
 
 
@@ -70,7 +83,7 @@ void HashJoinTranslator::unpackKeys(TranslatorContext::AttributeResolverScope& s
 void HashJoinTranslator::scanHT(TranslatorContext& context, mlir::OpBuilder& builder) {
    auto scope = context.createScope();
    {
-      auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), joinHt, this->flag, getRequiredBuilderValues(context));
+      auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), context.pipelineManager.getCurrentPipeline()->addDependency(joinHt), context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(entryType);
       block2->addArguments(getRequiredBuilderTypes(context));
@@ -104,7 +117,7 @@ void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilde
       auto packedKey = builder.create<mlir::util::PackOp>(loc, mlir::relalg::HashJoinUtils::inlineKeys(&joinOp->getRegion(0).front(), rightKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context));
       mlir::Type htIterable = mlir::db::GenericIterableType::get(ctxt, iteratorType, markable ? "join_ht_mod_iterator" : "join_ht_iterator");
       beforeLookup(context, builder);
-      auto matches = builder.create<mlir::db::Lookup>(loc, htIterable, joinHt, packedKey);
+      auto matches = builder.create<mlir::db::Lookup>(loc, htIterable, context.pipelineManager.getCurrentPipeline()->addDependency(joinHt), packedKey);
       {
          auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypesCustom(context), matches, getFlag(), getRequiredBuilderValuesCustom(context));
          mlir::Block* block2 = new mlir::Block;

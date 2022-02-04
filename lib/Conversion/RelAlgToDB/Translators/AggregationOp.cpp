@@ -284,26 +284,37 @@ class AggregationTranslator : public mlir::relalg::Translator {
    }
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-
-      analyze(builder);
-
+      auto parentPipeline = context.pipelineManager.getCurrentPipeline();
+      auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
+      context.pipelineManager.setCurrentPipeline(p);
+      context.pipelineManager.addPipeline(p);
+      auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
+         analyze(builder);
+         auto aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
+         auto initTuple = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), aggrTupleType, defaultValues);
+         keyTupleType = mlir::TupleType::get(builder.getContext(), keyTypes);
+         valTupleType = mlir::TupleType::get(builder.getContext(), valTypes);
+         auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(aggregationOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType, aggrTupleType), initTuple);
+         return std::vector<mlir::Value>({aggrBuilder});
+      });
       auto aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
-      auto initTuple = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), aggrTupleType, defaultValues);
-      keyTupleType = mlir::TupleType::get(builder.getContext(), keyTypes);
-      valTupleType = mlir::TupleType::get(builder.getContext(), valTypes);
-      aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
-
-      auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(aggregationOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType, aggrTupleType), initTuple);
 
       builderId = context.getBuilderId();
-      context.builders[builderId] = aggrBuilder;
+      context.builders[builderId] = p->addDependency(res[0]);
 
       auto iterEntryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, aggrTupleType});
       children[0]->addRequiredBuilders({builderId});
-      children[0]->produce(context, builder);
-      mlir::Value hashtable = builder.create<mlir::db::BuilderBuild>(aggregationOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, aggrTupleType), context.builders[builderId]);
+      children[0]->produce(context, p->getBuilder());
+      p->finishMainFunction({context.builders[builderId]});
+      auto hashtableRes = p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
+         mlir::Value hashtable = builder.create<mlir::db::BuilderBuild>(aggregationOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, aggrTupleType), args[0]);
+         return std::vector<mlir::Value>{hashtable};
+      });
+
+      context.pipelineManager.setCurrentPipeline(parentPipeline);
+      auto hashtable = context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]);
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(aggregationOp->getLoc(), getRequiredBuilderTypes(context), hashtable, flag, getRequiredBuilderValues(context));
+         auto forOp2 = builder.create<mlir::db::ForOp>(aggregationOp->getLoc(), getRequiredBuilderTypes(context), hashtable, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(iterEntryType);
          block2->addArguments(getRequiredBuilderTypes(context));

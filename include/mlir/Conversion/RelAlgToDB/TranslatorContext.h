@@ -4,11 +4,11 @@
 
 #include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"
 #include "mlir/IR/Value.h"
+#include "mlir/Conversion/RelAlgToDB/Pipeline.h"
 namespace mlir {
 namespace relalg {
 class TranslatorContext {
    llvm::ScopedHashTable<const mlir::relalg::RelationalAttribute*, mlir::Value> symbolTable;
-
    public:
    using AttributeResolverScope = llvm::ScopedHashTableScope<const mlir::relalg::RelationalAttribute*, mlir::Value>;
 
@@ -29,11 +29,13 @@ class TranslatorContext {
       return AttributeResolverScope(symbolTable);
    }
    std::unordered_map<size_t, mlir::Value> builders;
+   PipelineManager pipelineManager;
+
    size_t getBuilderId() {
       static size_t id = 0;
       return id++;
    }
-   std::unordered_map<mlir::Operation*, std::pair<mlir::Value, std::vector<const mlir::relalg::RelationalAttribute*>>> materializedTmp;
+   std::unordered_map<mlir::Operation*, std::pair<PipelineDependency, std::vector<const mlir::relalg::RelationalAttribute*>>> materializedTmp;
 };
 } // end namespace relalg
 } // end namespace mlir
