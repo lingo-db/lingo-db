@@ -60,9 +60,9 @@ let summary = "type representing variable-length data up to 2^32 bytes";
 }
 
 def CreateVarLen  : Util_Op<"varlen32_create"> {
-let arguments = (ins RefType:$ref, I32: $len, I8:$type);
+let arguments = (ins RefType:$ref, I32: $len);
 let results=(outs VarLen32Type:$varlen);
-let assemblyFormat = " $ref `,` $len `,` $type attr-dict";
+let assemblyFormat = " $ref `,` $len attr-dict";
 }
 def VarLenGetRef : Util_Op<"varlen32_getref"> {
     let arguments = (ins VarLen32Type:$varlen);

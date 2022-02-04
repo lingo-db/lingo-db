@@ -105,9 +105,8 @@ class StringCastOpLowering : public ConversionPattern {
       Value ptr = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8)), val);
       Value dim = rewriter.create<mlir::util::DimOp>(loc, rewriter.getIndexType(), val);
       Value len = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getI32Type(), dim);
-      Value type = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI8Type(), rewriter.getI8IntegerAttr(2));
 
-      return rewriter.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(rewriter.getContext()), ptr, len, type);
+      return rewriter.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(rewriter.getContext()), ptr, len);
    }
 
    public:

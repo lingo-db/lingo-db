@@ -505,36 +505,6 @@ static Value getArrowDataType(OpBuilder& builder, Location loc, db::codegen::Fun
 }
 class BuilderBuildLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
-   mlir::Value nextPow2(OpBuilder& builder, Location loc, mlir::Value v) const {
-      Value c1 = builder.create<arith::ConstantIndexOp>(loc, 1);
-      Value c2 = builder.create<arith::ConstantIndexOp>(loc, 2);
-      Value c4 = builder.create<arith::ConstantIndexOp>(loc, 4);
-      Value c8 = builder.create<arith::ConstantIndexOp>(loc, 8);
-      Value c16 = builder.create<arith::ConstantIndexOp>(loc, 16);
-      Value c32 = builder.create<arith::ConstantIndexOp>(loc, 32);
-      Value vs, ored;
-      Value vmm = builder.create<arith::SubIOp>(loc, v, c1);
-      v = vmm;
-      vs = builder.create<arith::ShRUIOp>(loc, vmm, c1);
-      ored = builder.create<arith::OrIOp>(loc, v, vs);
-      v = ored;
-      vs = builder.create<arith::ShRUIOp>(loc, vmm, c2);
-      ored = builder.create<arith::OrIOp>(loc, v, vs);
-      v = ored;
-      vs = builder.create<arith::ShRUIOp>(loc, vmm, c4);
-      ored = builder.create<arith::OrIOp>(loc, v, vs);
-      v = ored;
-      vs = builder.create<arith::ShRUIOp>(loc, vmm, c8);
-      ored = builder.create<arith::OrIOp>(loc, v, vs);
-      v = ored;
-      vs = builder.create<arith::ShRUIOp>(loc, vmm, c16);
-      ored = builder.create<arith::OrIOp>(loc, v, vs);
-      v = ored;
-      vs = builder.create<arith::ShRUIOp>(loc, vmm, c32);
-      ored = builder.create<arith::OrIOp>(loc, v, vs);
-      v = builder.create<arith::AddIOp>(loc, ored, c1);
-      return v;
-   }
 
    public:
    explicit BuilderBuildLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
@@ -567,7 +537,7 @@ class BuilderBuildLowering : public ConversionPattern {
 
          Value one = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 1);
          auto loc = op->getLoc();
-         Value htSize = nextPow2(rewriter, loc, len);
+         Value htSize = functionRegistry.call(rewriter, op->getLoc(), FunctionId::NextPow2, len)[0];
          Value htMask = rewriter.create<arith::SubIOp>(loc, htSize, one);
 
          Value ht = rewriter.create<mlir::util::AllocOp>(loc, util::RefType::get(rewriter.getContext(), rewriter.getIndexType(), -1), htSize);

@@ -262,12 +262,11 @@ class SubStrOpLowering : public ConversionPattern {
       Value ref = rewriter.create<mlir::util::VarLenGetRef>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), adaptor.val());
       ref = rewriter.create<mlir::util::GenericMemrefCastOp>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type()), ref);
       Value pos1AsIndex = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.from() - 1));
-      Value stringType = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI8Type(), rewriter.getI8IntegerAttr(2));
 
       Value len = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(subStrOp.to() - subStrOp.from() + 1));
       Value indexed = rewriter.create<mlir::util::ElementPtrOp>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type()), ref, pos1AsIndex);
 
-      Value val = rewriter.create<mlir::util::CreateVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(getContext()), indexed, len, stringType);
+      Value val = rewriter.create<mlir::util::CreateVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(getContext()), indexed, len);
       rewriter.replaceOp(op, val);
       return success();
    }
@@ -315,8 +314,7 @@ class ConstantLowering : public ConversionPattern {
          Value strres = db::createStringConstant(loc, rewriter, parentModule, str);
          Value ptr = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8)), strres);
          Value len = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(str.size()));
-         Value type = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI8Type(), rewriter.getI8IntegerAttr(0));
-         rewriter.replaceOpWithNewOp<mlir::util::CreateVarLen>(op, mlir::util::VarLen32Type::get(rewriter.getContext()), ptr, len, type);
+         rewriter.replaceOpWithNewOp<mlir::util::CreateVarLen>(op, mlir::util::VarLen32Type::get(rewriter.getContext()), ptr, len);
          return success();
       } else {
          return failure();

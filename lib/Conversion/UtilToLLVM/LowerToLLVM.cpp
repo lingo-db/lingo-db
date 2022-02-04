@@ -571,11 +571,8 @@ class Hash64Lowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::Hash64Adaptor adaptor(operands);
       Value p1 = rewriter.create<mlir::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(11400714819323198549ull));
-      Value p2 = rewriter.create<mlir::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(11400714819323198485ull));
       Value m1 = rewriter.create<LLVM::MulOp>(op->getLoc(), p1, adaptor.val());
       Value reversed=rewriter.create<mlir::LLVM::ByteSwapOp>(op->getLoc(),m1);
-
-      Value m2 = rewriter.create<LLVM::MulOp>(op->getLoc(), p2, adaptor.val());
       Value result=rewriter.create<LLVM::XOrOp>(op->getLoc(),m1,reversed);
       rewriter.replaceOp(op, result);
       return success();

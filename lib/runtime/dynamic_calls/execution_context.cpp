@@ -7,3 +7,14 @@ EXPORT std::shared_ptr<arrow::Table>* rt_get_table(runtime::ExecutionContext* ex
    }
    return new std::shared_ptr<arrow::Table>(table);
 }
+EXPORT uint64_t rt_next_pow2(uint64_t v){
+   v--;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    v |= v >> 32;
+    v++;
+    return v;
+}
