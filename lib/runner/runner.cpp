@@ -384,6 +384,9 @@ void Runner::snapshot() {
 }
 static llvm::Error optimizeModule(llvm::Module* module) {
    // Create a function pass manager
+   //llvm::legacy::PassManager modulePMInline;
+   //modulePMInline.add(llvm::createAlwaysInlinerLegacyPass());
+   //modulePMInline.run(*module);
    llvm::legacy::FunctionPassManager funcPM(module);
    funcPM.add(llvm::createInstructionCombiningPass());
    funcPM.add(llvm::createReassociatePass());
@@ -399,6 +402,7 @@ static llvm::Error optimizeModule(llvm::Module* module) {
       }
    }
    funcPM.doFinalization();
+   module->dump();
    return llvm::Error::success();
 }
 cpu_set_t mask;

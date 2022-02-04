@@ -259,12 +259,15 @@ class SubStrOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto subStrOp = cast<mlir::db::SubStrOp>(op);
       mlir::db::SubStrOpAdaptor adaptor(operands);
+      Value ref = rewriter.create<mlir::util::VarLenGetRef>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), adaptor.val());
+      ref = rewriter.create<mlir::util::GenericMemrefCastOp>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type()), ref);
       Value pos1AsIndex = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.from() - 1));
-      Value lenAsIndex = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.to() - subStrOp.from() + 1));
-      Value asMemRef = rewriter.create<util::ToMemrefOp>(op->getLoc(), MemRefType::get({-1}, rewriter.getIntegerType(8)), adaptor.val());
-      Value view = rewriter.create<mlir::memref::ViewOp>(op->getLoc(), MemRefType::get({-1}, rewriter.getIntegerType(8)), asMemRef, pos1AsIndex, mlir::ValueRange({lenAsIndex}));
-      Value val = rewriter.create<mlir::util::ToGenericMemrefOp>(op->getLoc(), mlir::util::RefType::get(rewriter.getContext(), IntegerType::get(rewriter.getContext(), 8), -1), view);
+      Value stringType = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI8Type(), rewriter.getI8IntegerAttr(2));
 
+      Value len = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(subStrOp.to() - subStrOp.from() + 1));
+      Value indexed = rewriter.create<mlir::util::ElementPtrOp>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type()), ref, pos1AsIndex);
+
+      Value val = rewriter.create<mlir::util::CreateVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(getContext()), indexed, len, stringType);
       rewriter.replaceOp(op, val);
       return success();
    }
@@ -306,30 +309,14 @@ class ConstantLowering : public ConversionPattern {
       } else if (auto floatType = stdType.dyn_cast_or_null<FloatType>()) {
          rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getFloatAttr(stdType,  std::get<double>(parseResult)));
          return success();
-      } else if (auto refType = stdType.dyn_cast_or_null<mlir::util::RefType>()) {
-         Value result;
-         ModuleOp parentModule = rewriter.getInsertionPoint()->getParentOfType<ModuleOp>();
-         auto* context = rewriter.getContext();
-         auto i8Type = IntegerType::get(context, 8);
-         auto insertionPoint = rewriter.saveInsertionPoint();
+      }  else if (type.isa<mlir::db::StringType>()) {
          std::string str= std::get<std::string>(parseResult);
-         int64_t strLen = str.size();
-         std::vector<uint8_t> vec;
-         for (auto c : str) {
-            vec.push_back(static_cast<uint8_t>(c));
-         }
-         auto strStaticType = MemRefType::get({strLen}, i8Type);
-         auto strDynamicType = MemRefType::get({-1}, IntegerType::get(context, 8));
-         rewriter.setInsertionPointToStart(parentModule.getBody());
-         Attribute initialValue = DenseIntElementsAttr::get(
-            RankedTensorType::get({strLen}, i8Type), vec);
-         static int id = 0;
-         auto globalop = rewriter.create<mlir::memref::GlobalOp>(loc, "db_constant_string" + std::to_string(id++), rewriter.getStringAttr("private"), strStaticType, initialValue, true, rewriter.getI64IntegerAttr(1));
-         rewriter.restoreInsertionPoint(insertionPoint);
-         Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
-         result = rewriter.create<memref::CastOp>(loc, conststr, strDynamicType);
-         Value strres = rewriter.create<mlir::util::ToGenericMemrefOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8), -1), result);
-         rewriter.replaceOp(op, strres);
+         ModuleOp parentModule = rewriter.getInsertionPoint()->getParentOfType<ModuleOp>();
+         Value strres = db::createStringConstant(loc, rewriter, parentModule, str);
+         Value ptr = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8)), strres);
+         Value len = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(str.size()));
+         Value type = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI8Type(), rewriter.getI8IntegerAttr(0));
+         rewriter.replaceOpWithNewOp<mlir::util::CreateVarLen>(op, mlir::util::VarLen32Type::get(rewriter.getContext()), ptr, len, type);
          return success();
       } else {
          return failure();
@@ -388,7 +375,7 @@ class CmpOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto loc = op->getLoc();
       auto cmpOp = cast<db::CmpOp>(op);
-      db::CmpOpAdaptor adaptor(operands);
+      mlir::db::CmpOpAdaptor adaptor(operands);
       auto type = cmpOp.left().getType().cast<db::DBType>().getBaseType();
       if (type.isa<db::StringType>()) {
          return failure();
@@ -565,32 +552,16 @@ class GetFlagLowering : public ConversionPattern {
 };
 class HashLowering : public ConversionPattern {
    Value combineHashes(OpBuilder& builder, Location loc, Value hash1, Value totalHash, bool& required) const {
-      Value kMul = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(0x9ddfea08eb382d69));
-      Value k47 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(47));
-
       if (!required) {
          required = true;
-         Value shifted2 = builder.create<arith::ShRUIOp>(loc, hash1, k47);
-         Value b = builder.create<arith::XOrIOp>(loc, shifted2, hash1);
-         Value multiplied4 = builder.create<arith::MulIOp>(loc, b, kMul);
-         return multiplied4;
+         return hash1;
+      } else {
+         return builder.create<mlir::util::HashCombine>(loc, builder.getIndexType(), hash1, totalHash);
       }
-
-      Value xOred = builder.create<arith::XOrIOp>(loc, totalHash, hash1);
-      Value multiplied2 = builder.create<arith::MulIOp>(loc, xOred, kMul);
-      Value shifted = builder.create<arith::ShRUIOp>(loc, multiplied2, k47);
-      Value a = builder.create<arith::XOrIOp>(loc, shifted, multiplied2);
-      Value xOred2 = builder.create<arith::XOrIOp>(loc, a, hash1);
-      Value multiplied3 = builder.create<arith::MulIOp>(loc, xOred2, kMul);
-      Value shifted2 = builder.create<arith::ShRUIOp>(loc, multiplied3, k47);
-      Value b = builder.create<arith::XOrIOp>(loc, shifted2, multiplied3);
-      Value multiplied4 = builder.create<arith::MulIOp>(loc, b, kMul);
-      return multiplied4;
    }
    Value hashInteger(OpBuilder& builder, Location loc, Value magicConstant, Value integer) const {
       Value asIndex = builder.create<arith::IndexCastOp>(loc, integer, builder.getIndexType());
-      Value multiplied = builder.create<arith::MulIOp>(loc, asIndex, magicConstant);
-      return multiplied;
+      return builder.create<mlir::util::Hash64>(loc, builder.getIndexType(), asIndex);
    }
    Value hashImpl(OpBuilder& builder, Location loc, Value v, Value totalHash, Value magicConstant, Type originalType, bool& combinationRequired) const {
       if (auto intType = v.getType().dyn_cast_or_null<mlir::IntegerType>()) {
@@ -612,30 +583,8 @@ class HashLowering : public ConversionPattern {
 
       } else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
          assert(false && "can not hash float values");
-      } else if (auto memrefType = v.getType().dyn_cast_or_null<mlir::util::RefType>()) {
-         Value len = builder.create<mlir::util::DimOp>(loc, builder.getIndexType(), v);
-
-         Value const0 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(0));
-         Value const1 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(1));
-         Value const5 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(5));
-         Value const27 = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(27));
-
-         auto loop2 = builder.create<scf::ForOp>(
-            loc, const0, len, const1, len,
-            [&](OpBuilder& b, Location loc, Value iv, ValueRange args) {
-               Value hash = args.front();
-               Value currVal = b.create<util::LoadOp>(loc, b.getIntegerType(8), v, iv);
-               Value asIndex = builder.create<arith::IndexCastOp>(loc, currVal, builder.getIndexType());
-
-               Value shifted5 = builder.create<arith::ShLIOp>(loc, hash, const5);
-               Value shifted27 = builder.create<arith::ShRUIOp>(loc, hash, const27);
-               Value xOred = builder.create<arith::XOrIOp>(loc, shifted5, shifted27);
-               Value xOred2 = builder.create<arith::XOrIOp>(loc, xOred, asIndex);
-
-               b.create<scf::YieldOp>(loc, xOred2);
-            });
-         Value hash = loop2.getResult(0);
-
+      } else if (auto varLenType = v.getType().dyn_cast_or_null<mlir::util::VarLen32Type>()) {
+         auto hash = builder.create<mlir::util::HashVarLen>(loc, builder.getIndexType(), v);
          return combineHashes(builder, loc, hash, totalHash, combinationRequired);
       } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
          if (auto originalTupleType = originalType.dyn_cast_or_null<mlir::TupleType>()) {
@@ -720,7 +669,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
                            return res;
                         })
                         .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
-                           return mlir::util::RefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), -1);
+                           return mlir::util::VarLen32Type::get(patterns.getContext());
                         })
                         .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
                            return mlir::IntegerType::get(patterns.getContext(), 64);

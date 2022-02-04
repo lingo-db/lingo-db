@@ -101,6 +101,14 @@ class SimpleUnOpToFuncLowering : public ConversionPattern {
 
 class StringCastOpLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
+   mlir::Value convertRefToVarLen(mlir::Location loc, ConversionPatternRewriter& rewriter, mlir::Value val) const {
+      Value ptr = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8)), val);
+      Value dim = rewriter.create<mlir::util::DimOp>(loc, rewriter.getIndexType(), val);
+      Value len = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getI32Type(), dim);
+      Value type = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI8Type(), rewriter.getI8IntegerAttr(2));
+
+      return rewriter.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(rewriter.getContext()), ptr, len, type);
+   }
 
    public:
    explicit StringCastOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
@@ -133,6 +141,7 @@ class StringCastOpLowering : public ConversionPattern {
       if (scalarSourceType == scalarTargetType) {
          //nothing to do here
       } else if (auto stringType = scalarSourceType.dyn_cast_or_null<db::StringType>()) {
+         value = rewriter.create<mlir::util::VarLenGetRef>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), value);
          if (auto intType = scalarTargetType.dyn_cast_or_null<db::IntType>()) {
             value = functionRegistry.call(rewriter, loc, FunctionId::CastStringToInt64, ValueRange({isNull, value}))[0];
             if (intType.getWidth() < 64) {
@@ -157,6 +166,7 @@ class StringCastOpLowering : public ConversionPattern {
                value = rewriter.create<arith::ExtSIOp>(loc, value, rewriter.getI64Type());
             }
             value = functionRegistry.call(rewriter, loc, FunctionId ::CastInt64ToString, ValueRange({isNull, value}))[0];
+            value = convertRefToVarLen(loc, rewriter, value);
          } else {
             return failure();
          }
@@ -164,6 +174,8 @@ class StringCastOpLowering : public ConversionPattern {
          if (scalarTargetType.isa<db::StringType>()) {
             FunctionId castFn = floatType.getWidth() == 32 ? FunctionId ::CastFloat32ToString : FunctionId ::CastFloat64ToString;
             value = functionRegistry.call(rewriter, loc, castFn, ValueRange({isNull, value}))[0];
+            value = convertRefToVarLen(loc, rewriter, value);
+
          } else {
             return failure();
          }
@@ -175,6 +187,8 @@ class StringCastOpLowering : public ConversionPattern {
                value = converted;
             }
             value = functionRegistry.call(rewriter, loc, FunctionId ::CastDecimalToString, ValueRange({isNull, value, scale}))[0];
+            value = convertRefToVarLen(loc, rewriter, value);
+
          } else {
             return failure();
          }

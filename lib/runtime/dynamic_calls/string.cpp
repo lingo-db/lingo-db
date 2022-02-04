@@ -1,6 +1,7 @@
 #include "arrow/util/formatting.h"
 #include "arrow/util/value_parsing.h"
 #include "runtime/helpers.h"
+#include <iostream>
 #include <arrow/type.h>
 #include <arrow/util/decimal.h>
 
@@ -79,27 +80,27 @@ bool like(const char* str, size_t str_len, const char* pattern, size_t pattern_l
 }
 //end taken from noisepage
 
-extern "C" bool rt_cmp_string_like(bool null, runtime::Str str1, runtime::Str str2) {
+extern "C" bool rt_cmp_string_like(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
    if (null) {
       return false;
    } else {
-      return like((str1).data(), (str1).len(), (str2).data(), (str2).len(), '\\');
+      return like((str1).data(), (str1).getLen(), (str2).data(), (str2).getLen(), '\\');
    }
 }
-extern "C" bool rt_cmp_string_ends_with(bool null, runtime::Str str1, runtime::Str str2) {
+extern "C" bool rt_cmp_string_ends_with(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
    if (null) {
       return false;
    } else {
-      if (str1.len() < str2.len()) return false;
-      return memcmp(str1.data() + str1.len() - str2.len(), str2.data(), str2.len())==0;
+      if (str1.getLen() < str2.getLen()) return false;
+      return memcmp(str1.data() + str1.getLen() - str2.getLen(), str2.data(), str2.getLen())==0;
    }
 }
-extern "C" bool rt_cmp_string_starts_with(bool null, runtime::Str str1, runtime::Str str2) {
+extern "C" bool rt_cmp_string_starts_with(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
    if (null) {
       return false;
    } else {
-      if (str1.len() < str2.len()) return false;
-      return memcmp(str1.data(), str2.data(), str2.len()) == 0;
+      if (str1.getLen() < str2.getLen()) return false;
+      return memcmp(str1.data(), str2.data(), str2.getLen()) == 0;
    }
 }
 
@@ -187,10 +188,10 @@ extern "C" runtime::Str rt_cast_decimal_string(bool null, uint64_t low, uint64_t
    return runtime::Str(data, len);
 }
 
-EXPORT runtime::Str rt_cast_char_string(bool null, uint64_t val, size_t bytes) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT runtime::VarLen32 rt_cast_char_string(bool null, uint64_t val, size_t bytes) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    char* data = new char[bytes];
    memcpy(data, &val, bytes);
-   return runtime::Str(data, bytes);
+   return runtime::VarLen32((uint8_t*) data, bytes);
 }
 //taken from apache gandiva
 //source: https://github.com/apache/arrow/blob/master/cpp/src/gandiva/precompiled/string_ops.cc
@@ -210,17 +211,16 @@ __attribute__((always_inline)) inline int64_t mem_compare(const char* left, int6
    }
 }
 //end taken from apache gandiva
-
-#define STR_CMP(NAME, OP)                                                                   \
-   extern "C" bool rt_cmp_string_##NAME(bool null, runtime::Str str1, runtime::Str str2) {  \
-      if (null) {                                                                           \
-         return false;                                                                      \
-      } else {                                                                              \
-         return mem_compare((str1).data(), (str1).len(), (str2).data(), (str2).len()) OP 0; \
-      }                                                                                     \
+#define STR_CMP(NAME, OP)                                                                            \
+   extern "C" bool rt_cmp_string_##NAME(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) { \
+      if (null) {                                                                                    \
+         return false;                                                                               \
+      } else {                                                                                       \
+         return mem_compare((str1).data(), (str1).getLen(), (str2).data(), (str2).getLen()) OP 0;    \
+      }                                                                                              \
    }
 
-STR_CMP(eq, ==)
+//STR_CMP(eq, ==)
 STR_CMP(neq, !=)
 STR_CMP(lt, <)
 STR_CMP(lte, <=)
@@ -233,3 +233,4 @@ extern "C" void rt_cpy(runtime::Str to, runtime::Str from) { // NOLINT (clang-di
 extern "C" void rt_fill(runtime::Str from, char val) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    memset(from.data(), val, from.len());
 }
+

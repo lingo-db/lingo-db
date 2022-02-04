@@ -95,7 +95,7 @@ EXPORT void rt_dump_float(bool null, double val) {
    }
 }
 
-EXPORT void rt_dump_string(bool null, runtime::Str string) {
+EXPORT void rt_dump_string(bool null, runtime::VarLen32 string) {
    if (null) {
       std::cout << "string(NULL)" << std::endl;
    } else {

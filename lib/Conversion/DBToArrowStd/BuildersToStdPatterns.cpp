@@ -612,10 +612,10 @@ class CreateTableBuilderLowering : public ConversionPattern {
          auto stringAttr = c.cast<StringAttr>();
          auto dbType = rowType.getType(i).cast<mlir::db::DBType>();
          auto arrowType = getArrowDataType(rewriter, op->getLoc(), functionRegistry, dbType);
-         auto columnName = rewriter.create<mlir::db::ConstantOp>(loc, mlir::db::StringType::get(rewriter.getContext(), false), stringAttr);
+         Value columnNameRef =mlir::db::createStringConstant(loc,rewriter,op->getParentOfType<ModuleOp>(),stringAttr.getValue().str());
          Value typeNullable = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), dbType.isNullable()));
 
-         functionRegistry.call(rewriter, loc, FunctionId::ArrowTableSchemaAddField, ValueRange({schema, arrowType, typeNullable, columnName}));
+         functionRegistry.call(rewriter, loc, FunctionId::ArrowTableSchemaAddField, ValueRange({schema, arrowType, typeNullable, columnNameRef}));
          i += 1;
       }
       schema = functionRegistry.call(rewriter, loc, FunctionId::ArrowTableSchemaBuild, schema)[0];

@@ -53,6 +53,12 @@ void ToLLVMLoweringPass::runOnOperation() {
    mlir::LowerToLLVMOptions options(&getContext());
    //options.emitCWrappers = true;
    mlir::LLVMTypeConverter typeConverter(&getContext(), options);
+   typeConverter.addSourceMaterialization([&](mlir::OpBuilder&, mlir::FunctionType type, mlir::ValueRange valueRange, mlir::Location loc) {
+      return valueRange.front();
+   });
+   typeConverter.addTargetMaterialization([&](mlir::OpBuilder&, mlir::FunctionType type, mlir::ValueRange valueRange, mlir::Location loc) {
+      return valueRange.front();
+   });
 
    // Now that the conversion target has been defined, we need to provide the
    // patterns used for lowering. At this point of the compilation process, we
@@ -69,6 +75,8 @@ void ToLLVMLoweringPass::runOnOperation() {
    populateLoopToStdConversionPatterns(patterns);
    mlir::util::populateUtilToLLVMConversionPatterns(typeConverter, patterns);
    populateStdToLLVMConversionPatterns(typeConverter, patterns);
+   mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
+   mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
    // We want to completely lower to LLVM, so we use a `FullConversion`. This
    // ensures that only legal operations will remain after the conversion.
    auto module = getOperation();
