@@ -50,8 +50,11 @@
 
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Transforms/InstCombine/InstCombine.h>
+#include <llvm/Transforms/IPO.h>
+#include <llvm/Transforms/IPO/AlwaysInliner.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
+
 
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Dialect/util/UtilTypes.h>
@@ -402,7 +405,7 @@ static llvm::Error optimizeModule(llvm::Module* module) {
       }
    }
    funcPM.doFinalization();
-   module->dump();
+   //module->dump();
    return llvm::Error::success();
 }
 cpu_set_t mask;

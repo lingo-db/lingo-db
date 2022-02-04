@@ -48,7 +48,20 @@ EXPORT uint64_t rt_table_chunk_num_rows(arrow::RecordBatch* tableChunk) {
    return (tableChunk)->num_rows();
 }
 
-EXPORT runtime::Bytes rt_table_chunk_get_column_buffer(arrow::RecordBatch* tableChunk, uint64_t columnId, uint64_t bufferId) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT uint8_t* rt_table_chunk_get_column_buffer(arrow::RecordBatch* tableChunk, uint64_t columnId, uint64_t bufferId) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   static uint8_t alternative = 0b11111111;
+   auto* buffer = (tableChunk)->column_data(columnId)->buffers[bufferId].get();
+   if (buffer) {
+      size_t offset=(tableChunk)->column_data(columnId)->offset;
+      uint8_t* data = (uint8_t*) buffer->address();
+      data+=offset;
+      return data;
+   } else {
+      return &alternative; //always return valid pointer to at least one byte filled with ones
+   }
+}
+
+EXPORT runtime::Bytes rt_table_chunk_get_raw_column_buffer(arrow::RecordBatch* tableChunk, uint64_t columnId, uint64_t bufferId) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    static uint8_t alternative = 0b11111111;
    auto* buffer = (tableChunk)->column_data(columnId)->buffers[bufferId].get();
    if (buffer) {

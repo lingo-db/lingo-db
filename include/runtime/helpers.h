@@ -65,9 +65,12 @@ static uint64_t READ_8_PAD_ZERO(const uint8_t* p, uint32_t len) {
 }
 
 class VarLen32 {
+   private:
+   uint32_t len;
+
    public:
    static constexpr uint32_t SHORT_LEN = 12;
-   uint32_t len;
+   static constexpr uint32_t LAZY_MASK = 0x80000000;
    union {
       uint8_t bytes[SHORT_LEN];
       struct __attribute__((__packed__)) {
@@ -109,15 +112,18 @@ class VarLen32 {
       return (char*) getPtr();
    }
    uint32_t getLen() {
-      return len;
+      return len & ~LAZY_MASK;
+   }
+   bool isLazy(){
+      return len&LAZY_MASK!=0;
    }
 
    __int128 asI128() {
       return *(reinterpret_cast<__int128*>(this));
    }
 
-   operator std::string() { return std::string((char*) getPtr(), len); }
-   std::string str() { return std::string((char*) getPtr(), len); }
+   operator std::string() { return std::string((char*) getPtr(), getLen()); }
+   std::string str() { return std::string((char*) getPtr(), getLen()); }
 };
 } // end namespace runtime
 #endif // RUNTIME_HELPERS_H

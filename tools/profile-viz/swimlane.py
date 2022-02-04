@@ -47,6 +47,8 @@ def create_swimline_chart(data, colo_map, cond="",normalized=None):
         p_id = ops[r[1]]["parent"]
         if p_id is not None:
             id = p_id
+        else:
+            id = r[1]
         name=ops[id]["name"]+"("+str(id)+")"
         names.append(name)
         if name not in grouped_data:

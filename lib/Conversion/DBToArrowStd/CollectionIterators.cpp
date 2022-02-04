@@ -278,26 +278,23 @@ class TableRowIterator : public ForIterator {
       for (auto columnType : columnTypes) {
          auto dbtype = columnType.dyn_cast_or_null<mlir::db::DBType>();
          Value columnId = unpackOp.getResult(1 + columnIdx);
-         Value offset = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnOffset, mlir::ValueRange({chunk, columnId}))[0];
+         Value offset;
+         if(dbtype.isa<mlir::db::BoolType>()||dbtype.isNullable()){
+            offset=functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnOffset, mlir::ValueRange({chunk, columnId}))[0];
+         }
          Value bitmapBuffer{};
          auto convertedType = getValueBufferType(*typeConverter, builder, dbtype);
-         auto typeSize = builder.create<util::SizeOfOp>(loc, indexType, mlir::TypeAttr::get(convertedType));
-         Value valueBuffer0 = functionRegistry.call(builder, loc,db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
          Value valueBuffer;
          if (!dbtype.isa<mlir::db::BoolType>()) {
-            Value byteOffset = builder.create<arith::MulIOp>(loc, indexType, offset, typeSize);
-            Value byteSize = builder.create<util::DimOp>(loc, indexType, valueBuffer0);
-            Value asMemRef = builder.create<util::ToMemrefOp>(loc, MemRefType::get({-1}, builder.getIntegerType(8)), valueBuffer0);
-            Value view = builder.create<memref::ViewOp>(loc, MemRefType::get({-1}, builder.getIntegerType(8)), asMemRef, byteOffset, ValueRange({byteSize}));
-            valueBuffer = builder.create<mlir::util::ToGenericMemrefOp>(loc, mlir::util::RefType::get(builder.getContext(), convertedType, -1), view);
-
+            valueBuffer = functionRegistry.call(builder, loc,db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
+            valueBuffer = builder.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context,convertedType,llvm::Optional<int64_t>()),valueBuffer);
          } else {
-            valueBuffer = valueBuffer0;
+            valueBuffer = functionRegistry.call(builder, loc,db::codegen::FunctionRegistry::FunctionId::TableChunkGetRawColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
          }
          Value varLenBuffer{};
          Value nullMultiplier;
          if (dbtype.isNullable()) {
-            bitmapBuffer = functionRegistry.call(builder, loc,db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const0}))[0];
+            bitmapBuffer = functionRegistry.call(builder, loc,db::codegen::FunctionRegistry::FunctionId::TableChunkGetRawColumnBuffer, mlir::ValueRange({chunk, columnId, const0}))[0];
             Value bitmapSize = builder.create<util::DimOp>(loc, indexType, bitmapBuffer);
             Value emptyBitmap = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, const0, bitmapSize);
             nullMultiplier = builder.create<mlir::SelectOp>(loc, emptyBitmap, const0, const1);
