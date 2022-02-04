@@ -225,8 +225,9 @@ static mlir::Location tagLocHook(mlir::Location loc) {
 Runner::Runner(RunMode mode) : context(nullptr), runMode(mode) {
    llvm::DebugFlag = true;
    LLVMInitializeX86AsmParser();
-
-   mlir::Operation::setTagLocationHook(tagLocHook);
+   if(mode==RunMode::DEBUGGING||mode==RunMode::PERF){
+      mlir::Operation::setTagLocationHook(tagLocHook);
+   }
 }
 bool Runner::load(std::string file) {
    RunnerContext* ctxt = new RunnerContext;
