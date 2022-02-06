@@ -52,7 +52,9 @@ class SortOpLowering : public ConversionPattern {
          rewriter.eraseOp(sortLambdaTerminator);
          rewriter.eraseOp(terminator);
       }
-      auto unpacked = rewriter.create<util::UnPackOp>(sortOp.getLoc(), sortOpAdaptor.toSort());
+      Type typedPtrType = util::RefType::get(rewriter.getContext(), typeConverter->convertType(elementType), -1);
+      auto loaded = rewriter.create<mlir::util::LoadOp>(op->getLoc(), mlir::TupleType::get(rewriter.getContext(), TypeRange({rewriter.getIndexType(), rewriter.getIndexType(), typedPtrType})), sortOpAdaptor.toSort(), Value());
+      auto unpacked = rewriter.create<util::UnPackOp>(sortOp.getLoc(), loaded);
 
       auto len = unpacked.getResult(0);
       auto values = unpacked.getResult(2);
@@ -180,11 +182,10 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       return (Type) TupleType::get(context, {vecType, indexType, htType, indexType});
    });
 
-   typeConverter.addConversion([context,&typeConverter,indexType](mlir::db::VectorType vectorType) {
+   typeConverter.addConversion([context, &typeConverter, indexType](mlir::db::VectorType vectorType) {
       Type entryType = typeConverter.convertType(vectorType.getElementType());
-
       auto arrayType = mlir::util::RefType::get(context, entryType, -1);
-      return (Type) TupleType::get(context, {indexType, indexType, arrayType});
+      return (Type) mlir::util::RefType::get(context, TupleType::get(context, {indexType, indexType, arrayType}), llvm::Optional<int64_t>());
    });
    typeConverter.addConversion([&typeConverter, context, i8ptrType, indexType](mlir::db::GenericIterableType genericIterableType) {
       Type elementType = genericIterableType.getElementType();

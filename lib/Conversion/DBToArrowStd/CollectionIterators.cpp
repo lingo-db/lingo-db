@@ -95,7 +95,7 @@ class TableIterator : public WhileIterator {
       return dbValue;
    }
    virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
-      functionRegistry.call(builder, loc,mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorFree, iterator);
+      functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorFree, iterator);
    }
 };
 
@@ -279,35 +279,35 @@ class TableRowIterator : public ForIterator {
          auto dbtype = columnType.dyn_cast_or_null<mlir::db::DBType>();
          Value columnId = unpackOp.getResult(1 + columnIdx);
          Value offset;
-         if(dbtype.isa<mlir::db::BoolType>()||dbtype.isNullable()){
-            offset=functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnOffset, mlir::ValueRange({chunk, columnId}))[0];
+         if (dbtype.isa<mlir::db::BoolType>() || dbtype.isNullable()) {
+            offset = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnOffset, mlir::ValueRange({chunk, columnId}))[0];
          }
          Value bitmapBuffer{};
          auto convertedType = getValueBufferType(*typeConverter, builder, dbtype);
          Value valueBuffer;
          if (!dbtype.isa<mlir::db::BoolType>()) {
-            valueBuffer = functionRegistry.call(builder, loc,db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
-            valueBuffer = builder.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context,convertedType,llvm::Optional<int64_t>()),valueBuffer);
+            valueBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
+            valueBuffer = builder.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, convertedType, llvm::Optional<int64_t>()), valueBuffer);
          } else {
-            valueBuffer = functionRegistry.call(builder, loc,db::codegen::FunctionRegistry::FunctionId::TableChunkGetRawColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
+            valueBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetRawColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
          }
          Value varLenBuffer{};
          Value nullMultiplier;
          if (dbtype.isNullable()) {
-            bitmapBuffer = functionRegistry.call(builder, loc,db::codegen::FunctionRegistry::FunctionId::TableChunkGetRawColumnBuffer, mlir::ValueRange({chunk, columnId, const0}))[0];
+            bitmapBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetRawColumnBuffer, mlir::ValueRange({chunk, columnId, const0}))[0];
             Value bitmapSize = builder.create<util::DimOp>(loc, indexType, bitmapBuffer);
             Value emptyBitmap = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, const0, bitmapSize);
             nullMultiplier = builder.create<mlir::SelectOp>(loc, emptyBitmap, const0, const1);
          }
          if (dbtype.isVarLen()) {
-            varLenBuffer = functionRegistry.call(builder, loc,db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const2}))[0];
+            varLenBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const2}))[0];
          }
          columnInfo.push_back({dbtype, convertedType, offset, nullMultiplier, bitmapBuffer, valueBuffer, varLenBuffer});
          columnIdx++;
       }
    }
    virtual Value upper(OpBuilder& builder) override {
-      return functionRegistry.call(builder,loc, db::codegen::FunctionRegistry::FunctionId::TableChunkNumRows, mlir::ValueRange({chunk}))[0];
+      return functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkNumRows, mlir::ValueRange({chunk}))[0];
    }
    virtual Value getElement(OpBuilder& builder, Value index) override {
       auto indexType = IndexType::get(builder.getContext());
@@ -323,8 +323,8 @@ class TableRowIterator : public ForIterator {
             Value pos2 = builder.create<util::LoadOp>(loc, column.stdType, column.values, ip1);
             Value len = builder.create<arith::SubIOp>(loc, builder.getI32Type(), pos2, pos1);
             Value pos1AsIndex = builder.create<arith::IndexCastOp>(loc, pos1, indexType);
-            Value ptr=builder.create<util::ElementPtrOp>(loc,util::RefType::get(context,builder.getI8Type(),llvm::Optional<int64_t>()),column.varLenBuffer,pos1AsIndex);
-            val = builder.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(builder.getContext()), ptr,len);
+            Value ptr = builder.create<util::ElementPtrOp>(loc, util::RefType::get(context, builder.getI8Type(), llvm::Optional<int64_t>()), column.varLenBuffer, pos1AsIndex);
+            val = builder.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(builder.getContext()), ptr, len);
          } else if (column.type.isa<db::BoolType>()) {
             Value realPos = builder.create<arith::AddIOp>(loc, indexType, column.offset, index);
             val = mlir::db::codegen::BitUtil::getBit(builder, loc, column.values, realPos);
@@ -362,7 +362,8 @@ class VectorIterator : public ForIterator {
    }
    virtual void init(OpBuilder& builder) override {
       Type typedPtrType = util::RefType::get(builder.getContext(), elementType, -1);
-      auto unpacked = builder.create<util::UnPackOp>(loc, TypeRange({builder.getIndexType(), builder.getIndexType(), typedPtrType}), vector);
+      auto loaded = builder.create<util::LoadOp>(loc, mlir::TupleType::get(builder.getContext(), TypeRange({builder.getIndexType(), builder.getIndexType(), typedPtrType})), vector, Value());
+      auto unpacked = builder.create<util::UnPackOp>(loc, loaded);
 
       values = unpacked.getResult(2);
       len = unpacked.getResult(0);
@@ -391,9 +392,9 @@ class ValueOnlyAggrHTIterator : public ForIterator {
    }
 };
 
-static std::vector<Value> remap(std::vector<Value> values, ConversionPatternRewriter& builder){
-   for(size_t i=0;i<values.size();i++){
-      values[i]=builder.getRemappedValue(values[i]);
+static std::vector<Value> remap(std::vector<Value> values, ConversionPatternRewriter& builder) {
+   for (size_t i = 0; i < values.size(); i++) {
+      values[i] = builder.getRemappedValue(values[i]);
    }
    return values;
 }
@@ -449,7 +450,7 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       auto returnValues = bodyBuilder(bodyParams, builder);
       returnValues.insert(returnValues.begin(), nextIterator);
       builder.setInsertionPoint(terminator);
-      builder.create<mlir::db::YieldOp>(loc, remap(returnValues,builder));
+      builder.create<mlir::db::YieldOp>(loc, remap(returnValues, builder));
       builder.eraseOp(terminator);
       Value finalIterator = whileOp.getResult(0);
       builder.restoreInsertionPoint(insertionPoint);
@@ -490,7 +491,7 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       auto results = bodyBuilder(bodyArguments, builder);
       iterator->destroyElement(builder, element);
       if (iterArgs.size()) {
-         builder.create<scf::YieldOp>(loc, remap(results,builder));
+         builder.create<scf::YieldOp>(loc, remap(results, builder));
          builder.eraseOp(terminator);
       }
       builder.restoreInsertionPoint(insertionPoint);
@@ -547,7 +548,7 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       auto returnValues = bodyBuilder(bodyParams, builder);
       returnValues.insert(returnValues.begin(), nextIterator);
       builder.setInsertionPoint(terminator);
-      builder.create<mlir::db::YieldOp>(loc, remap(returnValues,builder));
+      builder.create<mlir::db::YieldOp>(loc, remap(returnValues, builder));
       builder.eraseOp(terminator);
       builder.restoreInsertionPoint(insertionPoint);
       auto loopResultValues = whileOp.results().drop_front();

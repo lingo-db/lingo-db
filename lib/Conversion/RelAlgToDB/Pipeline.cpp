@@ -48,6 +48,8 @@ std::vector<mlir::relalg::PipelineDependency> mlir::relalg::Pipeline::addFinaliz
    moduleBuilder.setInsertionPointToStart(parentModule.getBody());
    std::vector<Type> resTypes;
    finalizeFn = moduleBuilder.create<FuncOp>(parentModule->getLoc(), createName("finalize"), builder.getFunctionType({}, resTypes));
+   finalizeFn->setAttr("passthrough", moduleBuilder.getArrayAttr({moduleBuilder.getStringAttr("noinline"), moduleBuilder.getStringAttr("optnone")}));
+
    mlir::Block* functionBlock = new mlir::Block;
    finalizeFn.body().push_back(functionBlock);
    OpBuilder fnBuilder(parentModule.getContext());
@@ -82,6 +84,7 @@ void mlir::relalg::Pipeline::finishMainFunction(std::vector<Value> values) {
    auto mainFnBlock = mainFn.body().begin();
    auto terminator = mainFnBlock->getTerminator();
    OpBuilder b(terminator);
+   //mainFn->setAttr("passthrough", b.getArrayAttr({b.getStringAttr("noinline"), b.getStringAttr("optnone")}));
    b.create<mlir::ReturnOp>(b.getUnknownLoc(), values);
    terminator->erase();
    std::vector<Type> resTypes;

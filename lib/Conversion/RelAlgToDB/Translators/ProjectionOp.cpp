@@ -72,16 +72,29 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       }
       keyTupleType = mlir::TupleType::get(builder.getContext(), keyTypes);
       valTupleType = mlir::TupleType::get(builder.getContext(), {});
-      mlir::Value emptyTuple = builder.create<mlir::util::UndefTupleOp>(projectionOp.getLoc(), mlir::TupleType::get(builder.getContext()));
-      auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(projectionOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType, valTupleType), emptyTuple);
+      auto parentPipeline = context.pipelineManager.getCurrentPipeline();
+      auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
+      context.pipelineManager.setCurrentPipeline(p);
+      context.pipelineManager.addPipeline(p);
+      auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
+         mlir::Value emptyTuple = builder.create<mlir::util::UndefTupleOp>(projectionOp.getLoc(), mlir::TupleType::get(builder.getContext()));
+         auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(projectionOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType, valTupleType), emptyTuple);
+         return std::vector<mlir::Value>({aggrBuilder});
+      });
       builderId = context.getBuilderId();
-      context.builders[builderId] = aggrBuilder;
+      context.builders[builderId] = p->addDependency(res[0]);
       entryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, valTupleType});
       children[0]->addRequiredBuilders({builderId});
-      children[0]->produce(context, builder);
-      mlir::Value hashtable = builder.create<mlir::db::BuilderBuild>(projectionOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), context.builders[builderId]);
+      children[0]->produce(context, p->getBuilder());
+      p->finishMainFunction({context.builders[builderId]});
+      auto hashtableRes = p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
+         mlir::Value hashtable = builder.create<mlir::db::BuilderBuild>(projectionOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), args[0]);
+         return std::vector<mlir::Value>{hashtable};
+      });
+      context.pipelineManager.setCurrentPipeline(parentPipeline);
+
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(projectionOp->getLoc(), getRequiredBuilderTypes(context), hashtable, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
+         auto forOp2 = builder.create<mlir::db::ForOp>(projectionOp->getLoc(), getRequiredBuilderTypes(context), context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(entryType);
          block2->addArguments(getRequiredBuilderTypes(context));
@@ -100,7 +113,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
          builder2.create<mlir::db::YieldOp>(projectionOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());
       }
-      builder.create<mlir::db::FreeOp>(projectionOp->getLoc(), hashtable);
+      builder.create<mlir::db::FreeOp>(projectionOp->getLoc(),  context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]));
    }
    virtual void done() override {
    }
