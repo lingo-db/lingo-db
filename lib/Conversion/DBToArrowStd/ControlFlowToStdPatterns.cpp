@@ -81,8 +81,8 @@ class WhileLowering : public ConversionPattern {
       newWhileOp.getBefore().push_back(before);
       newWhileOp.getAfter().push_back(after);
       for (auto t : resultTypes) {
-         before->addArgument(t);
-         after->addArgument(t);
+         before->addArgument(t,loc);
+         after->addArgument(t,loc);
       }
 
       {
@@ -109,7 +109,7 @@ class WhileLowering : public ConversionPattern {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
          whileOp.before().push_back(new Block());
          for (auto t : resultTypes) {
-            whileOp.before().addArgument(t);
+            whileOp.before().addArgument(t,loc);
          }
          rewriter.setInsertionPointToStart(&whileOp.before().front());
          rewriter.create<mlir::db::YieldOp>(whileOp.getLoc());
@@ -118,7 +118,7 @@ class WhileLowering : public ConversionPattern {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
          whileOp.after().push_back(new Block());
          for (auto t : resultTypes) {
-            whileOp.after().addArgument(t);
+            whileOp.after().addArgument(t,loc);
          }
          rewriter.setInsertionPointToStart(&whileOp.after().front());
          rewriter.create<mlir::db::YieldOp>(whileOp.getLoc());
@@ -158,7 +158,20 @@ class SelectLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       db::SelectOpAdaptor adaptor(operands);
       db::SelectOp selectOp = cast<db::SelectOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::SelectOp>(op, convertBooleanCondition(selectOp.getLoc(), rewriter, selectOp.getCondition().getType(), adaptor.condition()), adaptor.true_value(), adaptor.false_value());
+      rewriter.replaceOpWithNewOp<mlir::arith::SelectOp>(op, convertBooleanCondition(selectOp.getLoc(), rewriter, selectOp.getCondition().getType(), adaptor.condition()), adaptor.true_value(), adaptor.false_value());
+      return success();
+   }
+};
+class CondSkipTypeConversion : public ConversionPattern {
+   public:
+   explicit CondSkipTypeConversion(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CondSkipOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto condskip = mlir::cast<mlir::db::CondSkipOp>(op);
+      db::CondSkipOpAdaptor adaptor(operands);
+      condskip.dump();
+      rewriter.replaceOpWithNewOp<mlir::db::CondSkipOp>(op, convertBooleanCondition(op->getLoc(), rewriter, condskip.condition().getType(), adaptor.condition()), adaptor.args());
       return success();
    }
 };
@@ -170,4 +183,5 @@ void mlir::db::populateControlFlowToStdPatterns(mlir::TypeConverter& typeConvert
    patterns.insert<ConditionLowering>(typeConverter, patterns.getContext());
    patterns.insert<YieldLowering>(typeConverter, patterns.getContext());
    patterns.insert<SelectLowering>(typeConverter, patterns.getContext());
+   patterns.insert<CondSkipTypeConversion>(typeConverter, patterns.getContext());
 }

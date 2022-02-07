@@ -8,7 +8,7 @@
 
 namespace {
 
-class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
+class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-pushdown"; }
 
    Operator pushdown(Operator topush, Operator curr) {
@@ -55,9 +55,9 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::FunctionPass> {
       return res;
    }
 
-   void runOnFunction() override {
+   void runOnOperation() override {
       using namespace mlir;
-      getFunction()->walk([&](mlir::relalg::SelectionOp sel) {
+      getOperation()->walk([&](mlir::relalg::SelectionOp sel) {
          SmallPtrSet<mlir::Operation*, 4> users;
          for (auto* u : sel->getUsers()) {
             users.insert(u);

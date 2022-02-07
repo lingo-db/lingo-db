@@ -602,7 +602,32 @@ LogicalResult mlir::db::OrOp::canonicalize(mlir::db::OrOp orOp, mlir::PatternRew
    }
    return failure();
 }
+LogicalResult mlir::db::AndOp::canonicalize(mlir::db::AndOp andOp, mlir::PatternRewriter& rewriter){
+   std::vector<mlir::Value> rawValues;
+   std::queue<mlir::Value> queue;
+   queue.push(andOp);
+   while(!queue.empty()){
+      auto current=queue.front();
+      queue.pop();
+      if(auto *definingOp=current.getDefiningOp()){
+         if(auto nestedAnd=mlir::dyn_cast_or_null<mlir::db::AndOp>(definingOp)){
+            for(auto v:nestedAnd.vals()){
+               queue.push(v);
+            }
+         }else{
+            rawValues.push_back(current);
+         }
+      }else{
+         rawValues.push_back(current);
+      }
 
+   }
+   if(rawValues.size()!=andOp.vals().size()){
+      rewriter.replaceOpWithNewOp<mlir::db::AndOp>(andOp,rawValues);
+      return success();
+   }
+   return failure();
+}
 void mlir::db::IfOp::build(OpBuilder &builder, OperationState &result,
                  TypeRange resultTypes, Value cond,
                  function_ref<void(OpBuilder &, Location)> thenBuilder,

@@ -2,13 +2,14 @@
 #define MLIR_CONVERSION_RELALGTODB_TRANSLATORCONTEXT_H
 #include "llvm/ADT/ScopedHashTable.h"
 
+#include "mlir/Conversion/RelAlgToDB/Pipeline.h"
 #include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"
 #include "mlir/IR/Value.h"
-#include "mlir/Conversion/RelAlgToDB/Pipeline.h"
 namespace mlir {
 namespace relalg {
 class TranslatorContext {
    llvm::ScopedHashTable<const mlir::relalg::RelationalAttribute*, mlir::Value> symbolTable;
+
    public:
    using AttributeResolverScope = llvm::ScopedHashTableScope<const mlir::relalg::RelationalAttribute*, mlir::Value>;
 

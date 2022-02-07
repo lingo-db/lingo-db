@@ -1,7 +1,7 @@
 #include "arrow/util/formatting.h"
 #include "arrow/util/value_parsing.h"
 #include "runtime/helpers.h"
-#include <iostream>
+
 #include <arrow/type.h>
 #include <arrow/util/decimal.h>
 
@@ -220,7 +220,6 @@ __attribute__((always_inline)) inline int64_t mem_compare(const char* left, int6
       }                                                                                              \
    }
 
-
 STR_CMP(lt, <)
 STR_CMP(lte, <=)
 STR_CMP(gt, >)
@@ -237,30 +236,29 @@ struct P64 {
    uint64_t b;
 };
 
-
 uint64_t rt_hash_long(uint8_t* ptr, uint32_t len);
-EXPORT INLINE uint64_t rt_hash_varlen(P64 str) {
-   auto obj = reinterpret_cast<runtime::VarLen32*>(&str);
+EXPORT uint64_t rt_hash_varlen(P64 str) {
+   auto* obj = reinterpret_cast<runtime::VarLen32*>(&str);
    return rt_hash_long(obj->getPtr(), obj->getLen());
 }
-EXPORT INLINE bool rt_cmp_string_eq(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
+EXPORT bool rt_cmp_string_eq(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
    if (null) return false;
 
    if (str1.getLen() != str2.getLen()) return false;
    return memcmp(str1.data(), str2.data(), str1.getLen()) == 0;
 }
-EXPORT INLINE bool rt_cmp_string_neq(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
+EXPORT bool rt_cmp_string_neq(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
    if (null) return false;
 
    if (str1.getLen() != str2.getLen()) return true;
    return memcmp(str1.data(), str2.data(), str1.getLen()) != 0;
 }
-EXPORT INLINE P64 rt_varlen_from_ptr(uint8_t* ptr, uint32_t len) {
+EXPORT P64 rt_varlen_from_ptr(uint8_t* ptr, uint32_t len) {
    auto x = runtime::VarLen32(ptr, len);
    return *(reinterpret_cast<P64*>(&x));
 }
 
-EXPORT INLINE runtime::Str rt_varlen_to_ref(P64* varlen) {
-   auto obj = reinterpret_cast<runtime::VarLen32*>(varlen);
+EXPORT runtime::Str rt_varlen_to_ref(P64* varlen) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   auto *obj = reinterpret_cast<runtime::VarLen32*>(varlen);
    return runtime::Str(obj->data(), obj->getLen());
 }

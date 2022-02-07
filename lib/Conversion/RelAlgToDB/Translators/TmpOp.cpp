@@ -80,8 +80,8 @@ class TmpTranslator : public mlir::relalg::Translator {
       auto tupleType = mlir::TupleType::get(builder.getContext(), types);
       auto forOp2 = builder.create<mlir::db::ForOp>(tmpOp->getLoc(), getRequiredBuilderTypes(context), context.pipelineManager.getCurrentPipeline()->addDependency(vector), context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
       mlir::Block* block2 = new mlir::Block;
-      block2->addArgument(tupleType);
-      block2->addArguments(getRequiredBuilderTypes(context));
+      block2->addArgument(tupleType,tmpOp->getLoc());
+      block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));

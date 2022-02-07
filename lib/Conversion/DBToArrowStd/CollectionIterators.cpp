@@ -297,7 +297,7 @@ class TableRowIterator : public ForIterator {
             bitmapBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetRawColumnBuffer, mlir::ValueRange({chunk, columnId, const0}))[0];
             Value bitmapSize = builder.create<util::DimOp>(loc, indexType, bitmapBuffer);
             Value emptyBitmap = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, const0, bitmapSize);
-            nullMultiplier = builder.create<mlir::SelectOp>(loc, emptyBitmap, const0, const1);
+            nullMultiplier = builder.create<mlir::arith::SelectOp>(loc, emptyBitmap, const0, const1);
          }
          if (dbtype.isVarLen()) {
             varLenBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const2}))[0];
@@ -424,8 +424,8 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       whileOp.before().push_back(before);
       whileOp.after().push_back(after);
       for (auto t : results) {
-         before->addArgument(t);
-         after->addArgument(t);
+         before->addArgument(t,loc);
+         after->addArgument(t,loc);
       }
 
       builder.setInsertionPointToStart(&whileOp.before().front());
@@ -521,8 +521,8 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       whileOp.before().push_back(before);
       whileOp.after().push_back(after);
       for (auto t : results) {
-         before->addArgument(t);
-         after->addArgument(t);
+         before->addArgument(t,loc);
+         after->addArgument(t,loc);
       }
 
       builder.setInsertionPointToStart(&whileOp.before().front());

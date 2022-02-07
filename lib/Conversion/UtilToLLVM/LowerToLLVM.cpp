@@ -1,7 +1,6 @@
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
-#include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
-#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -494,7 +493,7 @@ class CreateVarLenLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto* context = getContext();
       mlir::util::CreateVarLenAdaptor adaptor(operands);
-      Value lazymask = rewriter.create<mlir::ConstantOp>(op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(0x80000000));
+      Value lazymask = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(0x80000000));
       Value lazylen = rewriter.create<mlir::LLVM::OrOp>(op->getLoc(), lazymask, adaptor.len());
       Value asI64 = rewriter.create<mlir::LLVM::ZExtOp>(op->getLoc(), rewriter.getI64Type(), lazylen);
       auto elemPtrType = mlir::LLVM::LLVMPointerType::get(rewriter.getI8Type());
@@ -502,7 +501,6 @@ class CreateVarLenLowering : public ConversionPattern {
       auto types = std::vector<Type>{elemPtrType, rewriter.getI32Type()};
       Value rawPtr = rewriter.create<mlir::LLVM::PtrToIntOp>(op->getLoc(), rewriter.getI64Type(), adaptor.ref());
       Value result = rewriter.create<LLVM::UndefOp>(op->getLoc(), structType);
-      unsigned pos = 0;
       result = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), result, asI64, rewriter.getI64ArrayAttr(0));
       result = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), result, rawPtr, rewriter.getI64ArrayAttr(1));
       rewriter.replaceOp(op, result);
@@ -552,9 +550,8 @@ class VarLenGetLenLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::VarLenGetLenAdaptor adaptor(operands);
-      auto i32type = rewriter.getI32Type();
       Value len = rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), rewriter.getI64Type(), adaptor.varlen(), rewriter.getI64ArrayAttr(0));
-      Value mask = rewriter.create<mlir::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(0x7FFFFFFF));
+      Value mask = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(0x7FFFFFFF));
       Value castedLen = rewriter.create<LLVM::AndOp>(op->getLoc(), len, mask);
 
       rewriter.replaceOp(op, castedLen);
@@ -570,7 +567,7 @@ class Hash64Lowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::Hash64Adaptor adaptor(operands);
-      Value p1 = rewriter.create<mlir::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(11400714819323198549ull));
+      Value p1 = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(11400714819323198549ull));
       Value m1 = rewriter.create<LLVM::MulOp>(op->getLoc(), p1, adaptor.val());
       Value reversed=rewriter.create<mlir::LLVM::ByteSwapOp>(op->getLoc(),m1);
       Value result=rewriter.create<LLVM::XOrOp>(op->getLoc(),m1,reversed);

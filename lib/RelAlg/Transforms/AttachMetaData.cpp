@@ -5,15 +5,15 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "runtime/database.h"
 namespace {
-class AttachMetaData : public mlir::PassWrapper<AttachMetaData, mlir::FunctionPass> {
+class AttachMetaData : public mlir::PassWrapper<AttachMetaData, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-attach-meta-data"; }
    runtime::Database& db;
    public:
    AttachMetaData(runtime::Database& db):db(db){}
 
 
-   void runOnFunction() override {
-      getFunction().walk([&](mlir::relalg::BaseTableOp op) {
+   void runOnOperation() override {
+      getOperation().walk([&](mlir::relalg::BaseTableOp op) {
          op.metaAttr(mlir::relalg::TableMetaDataAttr::get(&getContext(),db.getTableMetaData(op.table_identifier().str())));
       });
    }

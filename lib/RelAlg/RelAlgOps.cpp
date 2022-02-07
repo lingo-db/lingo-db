@@ -1,9 +1,11 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
+#include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/OpImplementation.h"
+#include <llvm/ADT/TypeSwitch.h>
 #include <iostream>
 #include <queue>
-#include <unordered_set>
+
 using namespace mlir;
 
 ///////////////////////////////////////////////////////////////////////////////////
@@ -225,7 +227,7 @@ static void printAttributeDefAttr(OpAsmPrinter& p, mlir::relalg::RelationalAttri
    std::vector<mlir::NamedAttribute> relAttrDefProps;
    MLIRContext* context = attr.getContext();
    const mlir::relalg::RelationalAttribute& relationalAttribute = attr.getRelationalAttribute();
-   relAttrDefProps.push_back({mlir::Identifier::get("type", context), mlir::TypeAttr::get(relationalAttribute.type)});
+   relAttrDefProps.push_back({mlir::StringAttr::get(context, "type"), mlir::TypeAttr::get(relationalAttribute.type)});
    p << "(" << mlir::DictionaryAttr::get(context, relAttrDefProps) << ")";
    Attribute fromExisting = attr.getFromExisting();
    if (fromExisting) {
@@ -320,7 +322,7 @@ static ParseResult parseBaseTableOp(OpAsmParser& parser, OperationState& result)
       if (parseAttributeDefAttr(parser, result, attrDefAttr)) {
          return failure();
       }
-      columns.push_back({Identifier::get(colName, parser.getBuilder().getContext()), attrDefAttr});
+      columns.push_back({StringAttr::get(parser.getBuilder().getContext(), colName), attrDefAttr});
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRBrace()) { return failure(); }
       break;
@@ -328,7 +330,7 @@ static ParseResult parseBaseTableOp(OpAsmParser& parser, OperationState& result)
    auto meta = result.attributes.get("meta");
    if (meta) {
       if (auto strAttr = meta.dyn_cast<mlir::StringAttr>()) {
-            result.attributes.set("meta", mlir::relalg::TableMetaDataAttr::get(parser.getContext(), runtime::TableMetaData::deserialize(strAttr.str())));
+         result.attributes.set("meta", mlir::relalg::TableMetaDataAttr::get(parser.getContext(), runtime::TableMetaData::deserialize(strAttr.str())));
       } else {
          return failure();
       }
@@ -343,15 +345,15 @@ static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
    p.printSymbolName(op.sym_name());
    if (op->getAttrs().size() > 1) p << ' ';
    std::vector<mlir::NamedAttribute> attrsToPrint;
-   for(auto attr:op->getAttrs()){
-      if(attr.getName().str()=="meta"){
-         if(auto metaAttr=attr.getValue().dyn_cast_or_null<mlir::relalg::TableMetaDataAttr>()){
-            if(metaAttr.getMeta()->isPresent()) {
-               attrsToPrint.push_back(mlir::NamedAttribute(mlir::StringAttr::get(op->getContext(),"meta"), mlir::StringAttr::get(op->getContext(), metaAttr.getMeta()->serialize())));
+   for (auto attr : op->getAttrs()) {
+      if (attr.getName().str() == "meta") {
+         if (auto metaAttr = attr.getValue().dyn_cast_or_null<mlir::relalg::TableMetaDataAttr>()) {
+            if (metaAttr.getMeta()->isPresent()) {
+               attrsToPrint.push_back(mlir::NamedAttribute(mlir::StringAttr::get(op->getContext(), "meta"), mlir::StringAttr::get(op->getContext(), metaAttr.getMeta()->serialize())));
             }
          }
-      }else{
-       attrsToPrint.push_back(attr);
+      } else {
+         attrsToPrint.push_back(attr);
       }
    }
    p.printOptionalAttrDict(attrsToPrint, /*elidedAttrs=*/{"sym_name", "columns"});

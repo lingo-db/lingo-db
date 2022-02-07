@@ -65,8 +65,8 @@ class SortTranslator : public mlir::relalg::Translator {
          {
             auto dbSortOp = builder.create<mlir::db::SortOp>(sortOp->getLoc(), vector);
             mlir::Block* block2 = new mlir::Block;
-            block2->addArgument(tupleType);
-            block2->addArguments(tupleType);
+            block2->addArgument(tupleType,sortOp->getLoc());
+            block2->addArguments(tupleType,sortOp->getLoc());
             dbSortOp.region().push_back(block2);
             mlir::OpBuilder builder2(dbSortOp.region());
             auto unpackedLeft = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), block2->getArgument(0));
@@ -93,8 +93,8 @@ class SortTranslator : public mlir::relalg::Translator {
       {
          auto forOp2 = builder.create<mlir::db::ForOp>(sortOp->getLoc(), getRequiredBuilderTypes(context), vector, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;
-         block2->addArgument(tupleType);
-         block2->addArguments(getRequiredBuilderTypes(context));
+         block2->addArgument(tupleType,sortOp->getLoc());
+         block2->addArguments(getRequiredBuilderTypes(context),getRequiredBuilderLocs(context));
          forOp2.getBodyRegion().push_back(block2);
          mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));

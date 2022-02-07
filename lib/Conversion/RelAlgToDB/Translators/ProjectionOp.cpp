@@ -53,7 +53,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       auto mergedBuilder = builder.create<mlir::db::BuilderMerge>(projectionOp->getLoc(), htBuilder.getType(), htBuilder, packed);
       mlir::Block* aggrBuilderBlock = new mlir::Block;
       mergedBuilder.fn().push_back(aggrBuilderBlock);
-      aggrBuilderBlock->addArguments({valTupleType, valTupleType});
+      aggrBuilderBlock->addArguments({valTupleType, valTupleType}, {projectionOp->getLoc(),projectionOp->getLoc()});
       mlir::OpBuilder builder2(builder.getContext());
       builder2.setInsertionPointToStart(aggrBuilderBlock);
       builder2.create<mlir::db::YieldOp>(projectionOp->getLoc(), aggrBuilderBlock->getArgument(0));
@@ -96,8 +96,8 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       {
          auto forOp2 = builder.create<mlir::db::ForOp>(projectionOp->getLoc(), getRequiredBuilderTypes(context), context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;
-         block2->addArgument(entryType);
-         block2->addArguments(getRequiredBuilderTypes(context));
+         block2->addArgument(entryType, projectionOp->getLoc());
+         block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
          forOp2.getBodyRegion().push_back(block2);
          mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
@@ -113,7 +113,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
          builder2.create<mlir::db::YieldOp>(projectionOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());
       }
-      builder.create<mlir::db::FreeOp>(projectionOp->getLoc(),  context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]));
+      builder.create<mlir::db::FreeOp>(projectionOp->getLoc(), context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]));
    }
    virtual void done() override {
    }

@@ -5,7 +5,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace {
-class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::FunctionPass> {
+class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-introduce-tmp"; }
    public:
    mlir::relalg::Attributes getUsed(mlir::Operation* op) {
@@ -20,8 +20,8 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::FunctionPass> 
       }
       return {};
    }
-   void runOnFunction() override {
-      getFunction().walk([&](Operator op) {
+   void runOnOperation() override {
+      getOperation().walk([&](Operator op) {
          auto users = op->getUsers();
          if (!users.empty() && ++users.begin() != users.end()) {
             mlir::OpBuilder builder(&getContext());

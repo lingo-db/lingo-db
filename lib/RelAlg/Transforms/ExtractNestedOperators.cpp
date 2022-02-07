@@ -4,7 +4,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace {
-class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, mlir::FunctionPass> {
+class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, mlir::OperationPass<mlir::FuncOp>> {
    public:
    virtual llvm::StringRef getArgument() const override { return "relalg-extract-nested-operators"; }
 
@@ -17,8 +17,8 @@ class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, 
          }
       }
    }
-   void runOnFunction() override {
-      getFunction().walk([&](Operator innerOperator) {
+   void runOnOperation() override {
+      getOperation().walk([&](Operator innerOperator) {
          if (auto o = mlir::dyn_cast_or_null<TupleLamdaOperator>(innerOperator->getParentOp())) {
             mlir::BlockAndValueMapping mapping;
             TupleLamdaOperator toMoveBefore;

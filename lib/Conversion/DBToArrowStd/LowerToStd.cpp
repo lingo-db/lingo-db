@@ -2,7 +2,7 @@
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
-#include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
@@ -21,8 +21,7 @@
 
 using namespace mlir;
 
-Value mlir::db::createStringConstant(mlir::Location loc,ConversionPatternRewriter& rewriter, mlir::ModuleOp parentModule,const std::string& str){
-
+Value mlir::db::createStringConstant(mlir::Location loc, ConversionPatternRewriter& rewriter, mlir::ModuleOp parentModule, const std::string& str) {
    auto* context = rewriter.getContext();
    auto i8Type = IntegerType::get(context, 8);
    auto insertionPoint = rewriter.saveInsertionPoint();
@@ -56,7 +55,7 @@ class GetTableLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto getTableOp = cast<mlir::db::GetTable>(op);
       auto executionContext = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::GetExecutionContext, {})[0];
-      Value tableNameRef=mlir::db::createStringConstant(op->getLoc(),rewriter,op->getParentOfType<ModuleOp>(),getTableOp.tablename().str());
+      Value tableNameRef = mlir::db::createStringConstant(op->getLoc(), rewriter, op->getParentOfType<ModuleOp>(), getTableOp.tablename().str());
       auto tablePtr = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({executionContext, tableNameRef}))[0];
       rewriter.replaceOp(getTableOp, tablePtr);
       return success();
@@ -83,8 +82,8 @@ class TableScanLowering : public ConversionPattern {
       for (auto c : tablescan.columns()) {
          auto stringAttr = c.cast<StringAttr>();
          types.push_back(indexType);
-         Value columnNameRef=mlir::db::createStringConstant(op->getLoc(),rewriter,op->getParentOfType<ModuleOp>(),stringAttr.getValue().str());
-         auto columnId = functionRegistry.call(rewriter, op->getLoc(),db::codegen::FunctionRegistry::FunctionId::TableGetColumnId, mlir::ValueRange({tablePtr, columnNameRef}))[0];
+         Value columnNameRef = mlir::db::createStringConstant(op->getLoc(), rewriter, op->getParentOfType<ModuleOp>(), stringAttr.getValue().str());
+         auto columnId = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::TableGetColumnId, mlir::ValueRange({tablePtr, columnNameRef}))[0];
          values.push_back(columnId);
       }
       rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, mlir::TupleType::get(rewriter.getContext(), types), values);
@@ -173,9 +172,9 @@ static bool hasDBType(TypeRange types) {
             hasDBType(functionType.getResults());
       } else if (type.isa<mlir::db::TableType>() || type.isa<mlir::db::VectorType>() || type.isa<mlir::db::FlagType>()) {
          res = true;
-      }  else if (type.isa<mlir::db::TableBuilderType>()||type.isa<mlir::db::VectorBuilderType>()||type.isa<mlir::db::JoinHTBuilderType>()||type.isa<mlir::db::AggrHTBuilderType>()) {
+      } else if (type.isa<mlir::db::TableBuilderType>() || type.isa<mlir::db::VectorBuilderType>() || type.isa<mlir::db::JoinHTBuilderType>() || type.isa<mlir::db::AggrHTBuilderType>()) {
          res = true;
-      }else {
+      } else {
          if (type.isa<mlir::db::CollectionType>()) {
             res = true;
          }
@@ -200,6 +199,11 @@ void DBToStdLoweringPass::runOnOperation() {
 
    target.addLegalDialect<scf::SCFDialect>();
    target.addLegalDialect<util::UtilDialect>();
+   target.addLegalOp<mlir::db::CondSkipOp>();
+   target.addDynamicallyLegalOp<mlir::db::CondSkipOp>([&](db::CondSkipOp op) {
+      auto isLegal = !hasDBType(op->getOperandTypes());
+      return isLegal;
+   });
    target.addDynamicallyLegalOp<FuncOp>([&](FuncOp op) {
       auto isLegal = !hasDBType(op.getType().getInputs()) &&
          !hasDBType(op.getType().getResults());
@@ -224,7 +228,7 @@ void DBToStdLoweringPass::runOnOperation() {
          //llvm::dbgs() << "isLegal:" << isLegal << "\n";
          return isLegal;
       });
-   target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp,util::ToMemrefOp, util::StoreOp, util::LoadOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp, util::GenericMemrefCastOp, util::ElementPtrOp>(
+   target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::ToMemrefOp, util::StoreOp, util::LoadOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp, util::GenericMemrefCastOp, util::ElementPtrOp>(
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());
@@ -291,9 +295,9 @@ void DBToStdLoweringPass::runOnOperation() {
       return valueRange.front();
    });
 
-   OwningRewritePatternList patterns(&getContext());
+   RewritePatternSet patterns(&getContext());
 
-   mlir::populateFuncOpTypeConversionPattern(patterns, typeConverter);
+   mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::FuncOp>(patterns, typeConverter);
    mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
    mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
    mlir::db::populateScalarToStdPatterns(typeConverter, patterns);

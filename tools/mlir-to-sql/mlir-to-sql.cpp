@@ -26,7 +26,7 @@ static cl::opt<std::string> inputFilename(cl::Positional,
                                           cl::init("-"),
                                           cl::value_desc("filename"));
 
-int loadMLIR(mlir::MLIRContext& context, mlir::OwningModuleRef& module) {
+int loadMLIR(mlir::MLIRContext& context, mlir::OwningOpRef<mlir::ModuleOp>& module) {
    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
       llvm::MemoryBuffer::getFileOrSTDIN(inputFilename);
    if (std::error_code ec = fileOrErr.getError()) {
@@ -591,7 +591,7 @@ int main(int argc, char** argv) {
 
    mlir::MLIRContext context;
    context.appendDialectRegistry(registry);
-   mlir::OwningModuleRef module;
+   mlir::OwningOpRef<mlir::ModuleOp> module;
    llvm::SourceMgr sourceMgr;
    mlir::SourceMgrDiagnosticHandler sourceMgrHandler(sourceMgr, &context);
    if (int error = loadMLIR(context, module))

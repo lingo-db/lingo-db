@@ -2,13 +2,13 @@
 #include <ranges>
 
 void mlir::relalg::PipelineManager::execute(mlir::OpBuilder& builder) {
-   llvm::SmallBitVector done(PipelineManager::MAX_PIPELINES);
+   llvm::SmallBitVector done(PipelineManager::maxPipelines);
 
-   while(done.find_first_unset()!=-1 &&done.find_first_unset()<pipelines.size()){
-      for(auto p:pipelines){
-         if(done.test(p->getPipelineId())) continue;
-         if((p->getDependsOn()&~done).none()){
-            p->call(builder,pipelineResults);
+   while (done.find_first_unset() != -1 && ((size_t) done.find_first_unset()) < pipelines.size()) {
+      for (auto p : pipelines) {
+         if (done.test(p->getPipelineId())) continue;
+         if ((p->getDependsOn() & ~done).none()) {
+            p->call(builder, pipelineResults);
             done.set(p->getPipelineId());
          }
       }
@@ -56,7 +56,7 @@ std::vector<mlir::relalg::PipelineDependency> mlir::relalg::Pipeline::addFinaliz
    fnBuilder.setInsertionPointToStart(functionBlock);
    fnBuilder.setInsertionPointToStart(functionBlock);
    for (auto argT : mainFn.getType().getResults()) {
-      functionBlock->addArgument(argT);
+      functionBlock->addArgument(argT, fnBuilder.getUnknownLoc());
    }
    auto values = fn(fnBuilder, functionBlock->getArguments());
    size_t i = 0;
@@ -77,12 +77,12 @@ mlir::Value mlir::relalg::Pipeline::addDependency(PipelineDependency dep) {
    mainArgTypes.push_back(dep.getT());
    //todo: persist dependency
    auto& mainFnBlock = (*mainFn.body().begin());
-   return mainFnBlock.addArgument(dep.getT());
+   return mainFnBlock.addArgument(dep.getT(), OpBuilder(mainFn.getContext()).getUnknownLoc());
 }
 
 void mlir::relalg::Pipeline::finishMainFunction(std::vector<Value> values) {
    auto mainFnBlock = mainFn.body().begin();
-   auto terminator = mainFnBlock->getTerminator();
+   auto* terminator = mainFnBlock->getTerminator();
    OpBuilder b(terminator);
    //mainFn->setAttr("passthrough", b.getArrayAttr({b.getStringAttr("noinline"), b.getStringAttr("optnone")}));
    b.create<mlir::ReturnOp>(b.getUnknownLoc(), values);

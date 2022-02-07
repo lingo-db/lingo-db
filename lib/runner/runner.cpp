@@ -14,11 +14,12 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
-#include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
@@ -43,18 +44,15 @@
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+
 #include <llvm/Bitcode/BitcodeReader.h>
+#include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Support/ErrorOr.h>
 #include <llvm/Support/MemoryBuffer.h>
 #include <llvm/Support/SourceMgr.h>
-
-#include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Transforms/InstCombine/InstCombine.h>
-#include <llvm/Transforms/IPO.h>
-#include <llvm/Transforms/IPO/AlwaysInliner.h>
 #include <llvm/Transforms/Scalar.h>
 #include <llvm/Transforms/Scalar/GVN.h>
-
 
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Dialect/util/UtilTypes.h>
@@ -111,9 +109,11 @@ void ToLLVMLoweringPass::runOnOperation() {
    // set of legal ones.
    mlir::RewritePatternSet patterns(&getContext());
    populateAffineToStdConversionPatterns(patterns);
-   populateLoopToStdConversionPatterns(patterns);
+   mlir::populateSCFToControlFlowConversionPatterns(patterns);
    mlir::util::populateUtilToLLVMConversionPatterns(typeConverter, patterns);
    populateStdToLLVMConversionPatterns(typeConverter, patterns);
+   mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
+
    mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
    mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
    // We want to completely lower to LLVM, so we use a `FullConversion`. This
@@ -143,7 +143,7 @@ void InsertPerfAsmPass::runOnOperation() {
       const auto* asmCstr =
          "";
       auto asmStr = llvm::formatv(asmTp, llvm::format_hex(loc, /*width=*/16)).str();
-      b.create<mlir::LLVM::InlineAsmOp>(callOp->getLoc(), mlir::TypeRange(), mlir::ValueRange(), asmStr, asmCstr, true, false, asmDialectAttr);
+      b.create<mlir::LLVM::InlineAsmOp>(callOp->getLoc(), mlir::TypeRange(), mlir::ValueRange(), llvm::StringRef(asmStr), llvm::StringRef(asmCstr), true, false, asmDialectAttr, mlir::ArrayAttr());
    });
 }
 
@@ -153,7 +153,7 @@ extern const size_t kPrecompiledBitcodeSize;
 std::unique_ptr<mlir::Pass> createLowerToLLVMPass() {
    return std::make_unique<ToLLVMLoweringPass>();
 }
-int loadMLIR(std::string inputFilename, mlir::MLIRContext& context, mlir::OwningModuleRef& module) {
+int loadMLIR(std::string inputFilename, mlir::MLIRContext& context, mlir::OwningOpRef<mlir::ModuleOp>& module) {
    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
       llvm::MemoryBuffer::getFileOrSTDIN(inputFilename);
    if (std::error_code ec = fileOrErr.getError()) {
@@ -171,7 +171,7 @@ int loadMLIR(std::string inputFilename, mlir::MLIRContext& context, mlir::Owning
    }
    return 0;
 }
-int loadMLIRFromString(const std::string& input, mlir::MLIRContext& context, mlir::OwningModuleRef& module) {
+int loadMLIRFromString(const std::string& input, mlir::MLIRContext& context, mlir::OwningOpRef<mlir::ModuleOp>& module) {
    module = mlir::parseSourceString(input, &context);
    if (!module) {
       llvm::errs() << "Error can't load module\n";
@@ -216,7 +216,7 @@ convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context, mlir::LLVM:
 
 struct RunnerContext {
    mlir::MLIRContext context;
-   mlir::OwningModuleRef module;
+   mlir::OwningOpRef<mlir::ModuleOp> module;
    size_t numArgs;
    size_t numResults;
 };
@@ -228,7 +228,7 @@ static mlir::Location tagLocHook(mlir::Location loc) {
 Runner::Runner(RunMode mode) : context(nullptr), runMode(mode) {
    llvm::DebugFlag = true;
    LLVMInitializeX86AsmParser();
-   if(mode==RunMode::DEBUGGING||mode==RunMode::PERF){
+   if (mode == RunMode::DEBUGGING || mode == RunMode::PERF) {
       mlir::Operation::setTagLocationHook(tagLocHook);
    }
 }
@@ -304,6 +304,7 @@ bool Runner::optimize(runtime::Database& db) {
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createCombinePredicatesPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createOptimizeImplementationsPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createIntroduceTmpPass());
+   pm.addPass(mlir::createCanonicalizerPass());
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
    }
@@ -357,7 +358,7 @@ bool Runner::lowerToLLVM() {
    }
    mlir::PassManager pm2(&ctxt->context);
    pm2.enableVerifier(runMode == RunMode::DEBUGGING);
-   pm2.addPass(mlir::createLowerToCFGPass());
+   pm2.addPass(mlir::createConvertSCFToCFPass());
    pm2.addPass(createLowerToLLVMPass());
    if (mlir::failed(pm2.run(ctxt->module.get()))) {
       return false;

@@ -9,11 +9,11 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <llvm/ADT/TypeSwitch.h>
 #include <list>
-#include <unordered_set>
+#include <unordered_map>
 
 namespace {
 
-class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
+class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-unnesting"; }
 
    Operator getFirstOfTree(Operator tree) {
@@ -228,9 +228,9 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::FunctionPass> {
       }
       return false;
    }
-   void runOnFunction() override {
+   void runOnOperation() override {
       using namespace mlir;
-      getFunction()->walk([&](BinaryOperator binaryOperator) {
+      getOperation()->walk([&](BinaryOperator binaryOperator) {
          if (!mlir::relalg::detail::isJoin(binaryOperator.getOperation())) return;
          if (!mlir::relalg::detail::isDependentJoin(binaryOperator.getOperation())) return;
          auto left = mlir::dyn_cast_or_null<Operator>(binaryOperator.leftChild());

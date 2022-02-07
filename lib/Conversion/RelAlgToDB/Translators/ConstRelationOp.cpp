@@ -43,8 +43,8 @@ class ConstRelTranslator : public mlir::relalg::Translator {
       {
          auto forOp2 = builder.create<mlir::db::ForOp>(constRelationOp->getLoc(), getRequiredBuilderTypes(context), vector, context.pipelineManager.getCurrentPipeline()->getFlag(),getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;
-         block2->addArgument(tupleType);
-         block2->addArguments(getRequiredBuilderTypes(context));
+         block2->addArgument(tupleType,constRelationOp->getLoc());
+         block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
          forOp2.getBodyRegion().push_back(block2);
          mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));

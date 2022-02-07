@@ -20,8 +20,8 @@ void NLJoinTranslator::scanHT(mlir::relalg::TranslatorContext& context, mlir::Op
    {
       auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), vector, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
       mlir::Block* block2 = new mlir::Block;
-      block2->addArgument(tupleType);
-      block2->addArguments(getRequiredBuilderTypes(context));
+      block2->addArgument(tupleType,loc);
+      block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
@@ -43,8 +43,8 @@ void NLJoinTranslator::probe(mlir::OpBuilder& builder, mlir::relalg::TranslatorC
    {
       auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), vector, getFlag(), getRequiredBuilderValues(context));
       mlir::Block* block2 = new mlir::Block;
-      block2->addArgument(tupleType);
-      block2->addArguments(getRequiredBuilderTypes(context));
+      block2->addArgument(tupleType,loc);
+      block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));

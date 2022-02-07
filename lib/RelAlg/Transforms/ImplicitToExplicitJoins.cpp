@@ -7,7 +7,7 @@
 
 namespace {
 
-class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins, mlir::FunctionPass> {
+class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-implicit-to-explicit-joins"; }
 
    llvm::SmallVector<mlir::Operation*> toDestroy;
@@ -69,10 +69,10 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
          surroundingOperator->setOperand(0, markJoin->getResult(0));
       }
    }
-   void runOnFunction() override {
+   void runOnOperation() override {
       auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       using namespace mlir;
-      getFunction().walk([&](mlir::Operation* op) {
+      getOperation().walk([&](mlir::Operation* op) {
          TupleLamdaOperator surroundingOperator = op->getParentOfType<TupleLamdaOperator>();
          if (!surroundingOperator) {
             return;

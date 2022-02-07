@@ -46,14 +46,14 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       });
       auto forOp = builder.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), currPipeline->addDependency(initRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
       mlir::Block* block = new mlir::Block;
-      block->addArgument(rowIterable);
-      block->addArguments(getRequiredBuilderTypes(context));
+      block->addArgument(rowIterable,baseTableOp->getLoc());
+      block->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
       forOp.getBodyRegion().push_back(block);
       mlir::OpBuilder builder1(forOp.getBodyRegion());
       auto forOp2 = builder1.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), forOp.getInductionVar(), context.pipelineManager.getCurrentPipeline()->getFlag(), block->getArguments().drop_front(1));
       mlir::Block* block2 = new mlir::Block;
-      block2->addArgument(tupleType);
-      block2->addArguments(getRequiredBuilderTypes(context));
+      block2->addArgument(tupleType,baseTableOp->getLoc());
+      block2->addArguments(getRequiredBuilderTypes(context),getRequiredBuilderLocs(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));

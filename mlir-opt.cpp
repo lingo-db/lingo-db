@@ -14,10 +14,10 @@
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
-#include "mlir/Conversion/SCFToStandard/SCFToStandard.h"
-#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/SCF/SCF.h"
 
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
@@ -72,9 +72,10 @@ void ToLLVMLoweringPass::runOnOperation() {
    mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
    mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
    populateAffineToStdConversionPatterns(patterns);
-   populateLoopToStdConversionPatterns(patterns);
+   mlir::populateSCFToControlFlowConversionPatterns(patterns);
    mlir::util::populateUtilToLLVMConversionPatterns(typeConverter, patterns);
    populateStdToLLVMConversionPatterns(typeConverter, patterns);
+   mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
    mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
    mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
    // We want to completely lower to LLVM, so we use a `FullConversion`. This

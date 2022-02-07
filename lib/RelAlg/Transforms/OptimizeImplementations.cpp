@@ -7,7 +7,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace {
-class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations, mlir::FunctionPass> {
+class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-optimize-implementations"; }
 
    public:
@@ -43,8 +43,8 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       });
       return res;
    }
-   void runOnFunction() override {
-      getFunction().walk([&](Operator op) {
+   void runOnOperation() override {
+      getOperation().walk([&](Operator op) {
          ::llvm::TypeSwitch<mlir::Operation*, void>(op.getOperation())
             .Case<mlir::relalg::InnerJoinOp, mlir::relalg::MarkJoinOp,mlir::relalg::CollectionJoinOp>([&](PredicateOperator predicateOperator) {
                auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());

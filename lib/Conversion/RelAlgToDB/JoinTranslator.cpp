@@ -68,6 +68,13 @@ std::vector<mlir::Type> JoinTranslator::getRequiredBuilderTypesCustom(Translator
    }
    return requiredBuilderTypes;
 }
+std::vector<mlir::Location> JoinTranslator::getRequiredBuilderLocsCustom(TranslatorContext& context) {
+   auto requiredBuilderLocs = getRequiredBuilderLocs(context);
+   for (auto x : customLookupBuilders) {
+      requiredBuilderLocs.push_back(context.builders[x].getLoc());
+   }
+   return requiredBuilderLocs;
+}
 std::vector<mlir::Value> JoinTranslator::getRequiredBuilderValuesCustom(TranslatorContext& context) {
    auto requiredBuilderValues = getRequiredBuilderValues(context);
    for (auto x : customLookupBuilders) {

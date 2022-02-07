@@ -46,7 +46,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
       aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
       mlir::Block* aggrBuilderBlock = new mlir::Block;
       builderMerge.fn().push_back(aggrBuilderBlock);
-      aggrBuilderBlock->addArguments({aggrTupleType, valTupleType});
+      aggrBuilderBlock->addArguments({aggrTupleType, valTupleType},{aggregationOp->getLoc(),aggregationOp->getLoc()});
       mlir::OpBuilder builder2(builder.getContext());
       builder2.setInsertionPointToStart(aggrBuilderBlock);
       auto unpackedCurr = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), aggrBuilderBlock->getArgument(0))->getResults();
@@ -316,8 +316,8 @@ class AggregationTranslator : public mlir::relalg::Translator {
       {
          auto forOp2 = builder.create<mlir::db::ForOp>(aggregationOp->getLoc(), getRequiredBuilderTypes(context), hashtable, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;
-         block2->addArgument(iterEntryType);
-         block2->addArguments(getRequiredBuilderTypes(context));
+         block2->addArgument(iterEntryType,aggregationOp->getLoc());
+         block2->addArguments(getRequiredBuilderTypes(context),getRequiredBuilderLocs(context));
          forOp2.getBodyRegion().push_back(block2);
          mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));

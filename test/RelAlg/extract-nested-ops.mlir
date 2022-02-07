@@ -4,14 +4,14 @@ module  {
     //CHECK: %{{.*}} = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
     //CHECK: %{{.*}} = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
     //CHECK: %{{.*}} = relalg.const_relation @constrel3  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-    //CHECK: %{{.*}} = relalg.selection %2 (%arg0: !relalg.tuple) {
+    //CHECK: %{{.*}} = relalg.selection %2 (%arg0: !relalg.tuple)
     //CHECK-DAG: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK-DAG: %{{.*}} = relalg.getattr %arg0 @constrel3::@attr1 : !db.int<32>
     //CHECK-DAG: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
     //CHECK: relalg.return
-    //CHECK: %{{.*}} = relalg.selection %1 (%arg0: !relalg.tuple) {
+    //CHECK: %{{.*}} = relalg.selection %1 (%arg0: !relalg.tuple)
 	//CHECK: relalg.return
-	//CHECK: %{{.*}} = relalg.selection %0 (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.selection %0 (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.exists
 	//CHECK: relalg.return
     %0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]

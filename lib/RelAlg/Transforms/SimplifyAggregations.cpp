@@ -31,8 +31,8 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
          mlir::OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(block);
          auto tplType = mlir::relalg::TupleType::get(getContext());
-         block->addArgument(mlir::relalg::TupleStreamType::get(getContext()));
-         block->addArgument(tplType);
+         block->addArgument(mlir::relalg::TupleStreamType::get(getContext()),op->getLoc());
+         block->addArgument(tplType,op->getLoc());
 
          auto relArgument = block->getArgument(0);
          auto tplArgument = block->getArgument(1);
@@ -74,8 +74,8 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
          mlir::OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(block);
          auto tplType = mlir::relalg::TupleType::get(getContext());
-         block->addArgument(mlir::relalg::TupleStreamType::get(getContext()));
-         block->addArgument(tplType);
+         block->addArgument(mlir::relalg::TupleStreamType::get(getContext()),op->getLoc());
+         block->addArgument(tplType,op->getLoc());
 
          auto relArgument = block->getArgument(0);
          auto tplArgument = block->getArgument(1);
@@ -90,24 +90,24 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
       return mlir::success(true);
    }
 };
-class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir::FunctionPass> {
+class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-simplify-aggrs"; }
 
    public:
-   void runOnFunction() override {
+   void runOnOperation() override {
       //transform "standalone" aggregation functions
       {
-         mlir::OwningRewritePatternList patterns(&getContext());
+         mlir::RewritePatternSet patterns(&getContext());
          patterns.insert<WrapAggrFuncPattern>(&getContext());
          patterns.insert<WrapCountRowsPattern>(&getContext());
 
-         if (mlir::applyPatternsAndFoldGreedily(getFunction().getRegion(), std::move(patterns)).failed()) {
+         if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");
          }
       }
 
       //handle distinct ones
-      getFunction()
+      getOperation()
          .walk([&](mlir::relalg::AggregationOp aggregationOp) {
             mlir::Value arg = aggregationOp.aggr_func().front().getArgument(0);
             std::vector<mlir::Operation*> users(arg.getUsers().begin(), arg.getUsers().end());

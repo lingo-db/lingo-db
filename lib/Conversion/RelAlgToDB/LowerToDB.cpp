@@ -11,7 +11,7 @@
 
 namespace {
 
-class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass> {
+class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-to-db"; }
 
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
@@ -28,9 +28,9 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::FunctionPass
             return false;
          });
    }
-   void runOnFunction() override {
+   void runOnOperation() override {
       mlir::relalg::TranslatorContext loweringContext;
-      getFunction().walk([&](mlir::Operation* op) {
+      getOperation().walk([&](mlir::Operation* op) {
          if (isTranslationHook(op)) {
             auto node = mlir::relalg::Translator::createTranslator(op);
             node->setInfo(nullptr, {});

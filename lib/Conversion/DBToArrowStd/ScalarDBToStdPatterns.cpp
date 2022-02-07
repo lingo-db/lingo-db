@@ -63,7 +63,7 @@ class AndOpLowering : public ConversionPattern {
          }
          if (i == 0) {
             if (currNullable) {
-               result = rewriter.create<SelectOp>(loc, currNull, trueValue, currVal);
+               result = rewriter.create<arith::SelectOp>(loc, currNull, trueValue, currVal);
             } else {
                result = currVal;
             }
@@ -77,14 +77,14 @@ class AndOpLowering : public ConversionPattern {
                }
             }
             if (currNullable) {
-               result = rewriter.create<SelectOp>(loc, currNull, result, rewriter.create<SelectOp>(loc, currVal, result, falseValue));
+               result = rewriter.create<arith::SelectOp>(loc, currNull, result, rewriter.create<arith::SelectOp>(loc, currVal, result, falseValue));
             } else {
-               result = rewriter.create<SelectOp>(loc, currVal, result, falseValue);
+               result = rewriter.create<arith::SelectOp>(loc, currVal, result, falseValue);
             }
          }
       }
       if (andOp.getResult().getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
-         isNull = rewriter.create<SelectOp>(loc, result, isNull, falseValue);
+         isNull = rewriter.create<arith::SelectOp>(loc, result, isNull, falseValue);
          Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({isNull, result}));
          rewriter.replaceOp(op, combined);
       } else {
@@ -123,7 +123,7 @@ class OrOpLowering : public ConversionPattern {
          }
          if (i == 0) {
             if (currNullable) {
-               result = rewriter.create<SelectOp>(loc, currNull, falseValue, currVal);
+               result = rewriter.create<arith::SelectOp>(loc, currNull, falseValue, currVal);
             } else {
                result = currVal;
             }
@@ -137,14 +137,14 @@ class OrOpLowering : public ConversionPattern {
                }
             }
             if (currNullable) {
-               result = rewriter.create<SelectOp>(loc, currNull, result, rewriter.create<SelectOp>(loc, currVal, trueValue, result));
+               result = rewriter.create<arith::SelectOp>(loc, currNull, result, rewriter.create<arith::SelectOp>(loc, currVal, trueValue, result));
             } else {
-               result = rewriter.create<SelectOp>(loc, currVal, trueValue, result);
+               result = rewriter.create<arith::SelectOp>(loc, currVal, trueValue, result);
             }
          }
       }
       if (orOp.getResult().getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
-         isNull = rewriter.create<SelectOp>(loc, result, falseValue, isNull);
+         isNull = rewriter.create<arith::SelectOp>(loc, result, falseValue, isNull);
          Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({isNull, result}));
          rewriter.replaceOp(op, combined);
       } else {
@@ -596,7 +596,7 @@ class HashLowering : public ConversionPattern {
             assert(dbType.isNullable());
             auto unpacked = builder.create<util::UnPackOp>(loc, v);
             mlir::Value hashedIfNotNull = hashImpl(builder, loc, unpacked.getResult(1), totalHash, magicConstant, dbType.getBaseType(), combinationRequired);
-            return builder.create<mlir::SelectOp>(loc, unpacked.getResult(0), totalHash, hashedIfNotNull);
+            return builder.create<mlir::arith::SelectOp>(loc, unpacked.getResult(0), totalHash, hashedIfNotNull);
          }
          assert(false && "should not happen");
          return Value();

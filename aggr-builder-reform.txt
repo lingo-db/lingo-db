@@ -1,0 +1,279 @@
+class AggrHtHelper {
+   TupleType entryType;
+   Type keyType, aggrType;
+   Location loc;
+
+   public:
+   static Type kvType(MLIRContext* context, Type keyType, Type aggrType) {
+      return mlir::TupleType::get(context, {keyType, aggrType});
+   }
+   static TupleType createEntryType(MLIRContext* context, Type keyType, Type aggrType) {
+      return mlir::TupleType::get(context, {IndexType::get(context), IndexType::get(context), kvType(context, keyType, aggrType)});
+   }
+
+   static Type createSType(MLIRContext* context, Type keyType, Type aggrType) {
+      auto idxType = IndexType::get(context);
+      auto valuesType = mlir::util::RefType::get(context, createEntryType(context, keyType, aggrType), -1);
+      auto htType = mlir::util::RefType::get(context, idxType, -1);
+      return mlir::TupleType::get(context, {idxType, idxType, valuesType, htType, aggrType});
+   }
+   static Type createType(MLIRContext* context, Type keyType, Type aggrType) {
+      return mlir::util::RefType::get(context, createSType(context, keyType, aggrType), llvm::Optional<int64_t>());
+   }
+   static mlir::util::RefType createLowB(MLIRContext* context) {
+      auto idxType = IndexType::get(context);
+      auto valuesType = mlir::util::RefType::get(context, idxType, -1);
+      auto htType = mlir::util::RefType::get(context, idxType, -1);
+      return mlir::util::RefType::get(context, mlir::TupleType::get(context, {idxType, idxType, valuesType}), llvm::Optional<int64_t>());
+   }
+
+   AggrHtHelper(MLIRContext* context, Type keyType, Type aggrType, Location loc) : entryType(createEntryType(context, keyType, aggrType)), keyType(keyType), aggrType(aggrType), loc(loc) {
+   }
+
+   Value create(mlir::OpBuilder& builder, Value initialValue) {
+      Value aggrHt = builder.create<mlir::util::AllocOp>(loc, createType(builder.getContext(), keyType, aggrType), mlir::Value());
+
+      BufferHelper helper(builder, loc, builder.getBlock()->getParentOp()->getParentOfType<ModuleOp>());
+      Value initialCapacity = builder.create<arith::ConstantIndexOp>(loc, 4);
+      Value initialHtSize = builder.create<arith::ConstantIndexOp>(loc, 8);
+
+      Value initialSize = builder.create<arith::ConstantIndexOp>(loc, 0);
+      auto valuesType = mlir::util::RefType::get(builder.getContext(), entryType, -1);
+      auto htType = mlir::util::RefType::get(builder.getContext(), builder.getIndexType(), -1);
+
+      Value values = builder.create<mlir::util::AllocOp>(loc, valuesType, initialCapacity);
+      Value ht = builder.create<mlir::util::AllocOp>(loc, htType, initialHtSize);
+      Value fillValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerType(8), builder.getIntegerAttr(builder.getIntegerType(8), 0xFF));
+      helper.fill(ht, fillValue);
+
+      Value packed = builder.create<mlir::util::PackOp>(loc, ValueRange{initialSize, initialCapacity, values, ht, initialValue});
+      builder.create<mlir::util::StoreOp>(loc, packed, aggrHt, Value());
+      return aggrHt;
+   }
+   Value compareKeys(mlir::OpBuilder& rewriter, Value left, Value right) {
+      Value equal = rewriter.create<mlir::db::ConstantOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      auto leftUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, left);
+      auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, right);
+      for (size_t i = 0; i < leftUnpacked.getNumResults(); i++) {
+         Value compared = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, leftUnpacked->getResult(i), rightUnpacked.getResult(i));
+         if (leftUnpacked->getResult(i).getType().dyn_cast_or_null<mlir::db::DBType>().isNullable() && rightUnpacked.getResult(i).getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
+            Value isNull1 = rewriter.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), leftUnpacked->getResult(i));
+            Value isNull2 = rewriter.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), rightUnpacked->getResult(i));
+            Value bothNull = rewriter.create<mlir::db::AndOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), ValueRange({isNull1, isNull2}));
+            Value casted = rewriter.create<mlir::db::CastOp>(loc, compared.getType(), bothNull);
+            Value tmp = rewriter.create<mlir::db::SelectOp>(loc, bothNull, casted, compared);
+            compared = tmp;
+         }
+         Value localEqual = rewriter.create<mlir::db::AndOp>(loc, mlir::db::BoolType::get(rewriter.getContext(), equal.getType().cast<mlir::db::BoolType>().getNullable() || compared.getType().cast<mlir::db::BoolType>().getNullable()), ValueRange({equal, compared}));
+         equal = localEqual;
+      }
+      if (equal.getType().cast<mlir::db::DBType>().isNullable()) {
+         Value isNull = rewriter.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), equal);
+         Value notNull = rewriter.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), isNull);
+         Value value = rewriter.create<mlir::db::CastOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), equal);
+         equal = rewriter.create<mlir::db::AndOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), ValueRange({notNull, value}));
+      }
+      return equal;
+   }
+   void insert(mlir::ConversionPatternRewriter& rewriter, Value aggrHtBuilder, Value key, Value val, Value hash, std::function<Value(mlir::OpBuilder&, Value, Value)> updateFn) {
+      mlir::Value loaded = rewriter.create<mlir::util::LoadOp>(loc, createSType(rewriter.getContext(), keyType, aggrType), aggrHtBuilder, Value());
+      loaded = rewriter.getRemappedValue(loaded);
+      Type idxType = rewriter.getIndexType();
+
+      BufferHelper helper(rewriter, loc, rewriter.getBlock()->getParentOp()->getParentOfType<ModuleOp>());
+      auto* context = rewriter.getContext();
+      auto unpacked = rewriter.create<util::UnPackOp>(loc, loaded);
+      Value len = unpacked.getResult(0);
+      Value ht = unpacked.getResult(3);
+      Value values = unpacked.getResult(2);
+      Value capacity = unpacked.getResult(1);
+
+      Value initialVal = unpacked.getResult(4);
+      Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+      Value one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+      Value two = rewriter.create<arith::ConstantIndexOp>(loc, 2);
+      Value four = rewriter.create<arith::ConstantIndexOp>(loc, 4);
+
+      Value maxValue = rewriter.create<arith::ConstantIndexOp>(loc, 0xFFFFFFFFFFFFFFFF);
+      ModuleOp module = unpacked->getParentOfType<ModuleOp>();
+      auto lowBType = createLowB(loc.getContext());
+      FuncOp buildFn = module.lookupSymbol<FuncOp>("build_aggr_ht");
+      if (!buildFn) {
+         {
+            auto htType = util::RefType::get(rewriter.getContext(), idxType, -1);
+
+            mlir::OpBuilder::InsertionGuard g(rewriter);
+            rewriter.setInsertionPointToStart(&module.body().front());
+            buildFn = rewriter.create<FuncOp>(loc, "build_aggr_ht", rewriter.getFunctionType({idxType, lowBType}, {htType}));
+            mlir::Block* functionBlock = new mlir::Block;
+            functionBlock->addArguments({idxType, lowBType});
+            buildFn.body().push_back(functionBlock);
+            rewriter.setInsertionPointToStart(functionBlock);
+            Value const8 = rewriter.create<arith::ConstantIndexOp>(loc, 8);
+            Value elemSize = rewriter.create<mlir::arith::DivUIOp>(loc, functionBlock->getArgument(0), const8);
+            auto loaded = rewriter.create<mlir::util::LoadOp>(loc, lowBType.getElementType(), functionBlock->getArgument(1), Value());
+            auto unpacked = rewriter.create<util::UnPackOp>(loc, loaded);
+            Value numValues = unpacked.getResult(0);
+            Value vec = unpacked.getResult(2);
+            Value zero = rewriter.create<arith::ConstantIndexOp>(loc, 0);
+
+            Value one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+            Value four = rewriter.create<arith::ConstantIndexOp>(loc, 4);
+
+            Value newHtSize = rewriter.create<arith::MulIOp>(loc, numValues, four);
+
+            Value htMask = rewriter.create<arith::SubIOp>(loc, newHtSize, one);
+
+            Value ht = rewriter.create<mlir::util::AllocOp>(loc, htType, newHtSize);
+            Value fillValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerType(8), rewriter.getIntegerAttr(rewriter.getIntegerType(8), 0xFF));
+            BufferHelper helper(rewriter, loc, rewriter.getBlock()->getParentOp()->getParentOfType<ModuleOp>());
+            helper.fill(ht, fillValue);
+            rewriter.create<scf::ForOp>(
+               loc, zero, numValues, one, ValueRange({}),
+               [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
+                  Value vecPos = b.create<mlir::arith::MulIOp>(loc, iv, elemSize);
+                  Value hPos = b.create<mlir::arith::AddIOp>(loc, vecPos, one);
+                  auto currVal = b.create<util::LoadOp>(loc, idxType, vec, hPos);
+                  Value buckedPos = b.create<arith::AndIOp>(loc, htMask, currVal);
+                  Value previousPtr = b.create<util::LoadOp>(loc, rewriter.getIndexType(), ht, buckedPos);
+                  b.create<util::StoreOp>(loc2, iv, ht, buckedPos);
+                  b.create<util::StoreOp>(loc2, previousPtr, vec, vecPos);
+                  b.create<scf::YieldOp>(loc);
+               });
+            rewriter.create<mlir::ReturnOp>(loc, ValueRange({ht}));
+         }
+      }
+      Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, len, capacity);
+      auto ifOp = rewriter.create<scf::IfOp>(
+         loc, TypeRange({rewriter.getIndexType(), values.getType(), ht.getType()}), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc, ValueRange{capacity, values, ht}); }, [&](OpBuilder& b, Location loc) {
+
+            Value newCapacity = b.create<arith::MulIOp>(loc, len, two);
+            auto elemsize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), entryType);
+            Value toLB = rewriter.create<util::GenericMemrefCastOp>(loc, lowBType, aggrHtBuilder);
+            auto called = rewriter.create<mlir::CallOp>(loc, buildFn, ValueRange({elemsize, toLB}));
+            Value newValues = helper.resize(values,newCapacity);
+
+            b.create<scf::YieldOp>(loc, ValueRange{newCapacity, newValues,called.getResult(0)}); });
+      capacity = ifOp.getResult(0);
+      values = ifOp.getResult(1);
+      ht = ifOp.getResult(2);
+
+      Value trueValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      Value falseValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+
+      Value htSize = rewriter.create<arith::MulIOp>(loc, capacity, two);
+
+      Value htMask = rewriter.create<arith::SubIOp>(loc, htSize, one);
+
+      //position = hash & hashTableMask
+      Value position = rewriter.create<arith::AndIOp>(loc, htMask, hash);
+      //idx = hashtable[position]
+      Value idx = rewriter.create<util::LoadOp>(loc, rewriter.getIndexType(), ht, position);
+      // ptr = &hashtable[position]
+      Value ptr = rewriter.create<util::ElementPtrOp>(loc, util::RefType::get(context, idxType, llvm::Optional<int64_t>()), ht, position);
+      Type ptrType = util::RefType::get(context, idxType, llvm::Optional<int64_t>());
+      Type doneType = rewriter.getI1Type();
+
+      auto resultTypes = std::vector<Type>({idxType, idxType, ptrType});
+      auto whileOp = rewriter.create<scf::WhileOp>(loc, resultTypes, ValueRange({len, idx, ptr}));
+      Block* before = rewriter.createBlock(&whileOp.getBefore(), {}, resultTypes);
+      Block* after = rewriter.createBlock(&whileOp.getAfter(), {}, resultTypes);
+
+      // The conditional block of the while loop.
+      {
+         rewriter.setInsertionPointToStart(&whileOp.getBefore().front());
+         Value len = before->getArgument(0);
+         Value idx = before->getArgument(1);
+         Value ptr = before->getArgument(2);
+
+         //    if (idx == 0xFFFFFFFFFFF){
+         Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, idx, maxValue);
+         auto ifOp = rewriter.create<scf::IfOp>(
+            loc, TypeRange({idxType, doneType, idxType, ptrType}), cmp, [&](OpBuilder& b, Location loc) {
+               Value newAggr = updateFn(b,initialVal, val);
+               Value newKVPair = b.create<util::PackOp>(loc,ValueRange({key, newAggr}));
+               //       %newEntry = ...
+               Value newEntry = b.create<util::PackOp>(loc, ValueRange({maxValue, hash, newKVPair}));
+
+               //       append(vec,newEntry)
+               b.create<util::StoreOp>(loc, newEntry, values, len);
+
+               //       *ptr=len
+               b.create<util::StoreOp>(loc, len, ptr, Value());
+               Value newLen = b.create<arith::AddIOp>(loc, len, one);
+               //       yield 0,0,done=true
+               b.create<scf::YieldOp>(loc, ValueRange{newLen, falseValue, idx, ptr}); },
+            [&](OpBuilder& b, Location loc) {
+
+         //       entry=vec[idx]
+                  Value currEntry= b.create<util::LoadOp>(loc, entryType, values, idx);
+                  auto entryUnpacked=b.create<util::UnPackOp>(loc,currEntry);
+                  Value kv=entryUnpacked.getResult(2);
+                  auto kvUnpacked=b.create<util::UnPackOp>(loc,kv);
+
+                  Value entryKey=kvUnpacked.getResult(0);
+                  Value entryAggr=kvUnpacked.getResult(1);
+                  Value entryNext=entryUnpacked.getResult(0);
+                  Value entryHash=entryUnpacked.getResult(1);
+                  Value hashMatches = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, entryHash,hash);
+                  auto ifOpH = b.create<scf::IfOp>(
+                     loc, TypeRange({idxType,doneType,idxType,ptrType}), hashMatches, [&](OpBuilder& b, Location loc) {
+                        Value keyMatches = b.create<mlir::db::TypeCastOp>(loc,b.getI1Type(),compareKeys(b,entryKey,key));
+                        auto ifOp2 = b.create<scf::IfOp>(
+                           loc, TypeRange({idxType,doneType,idxType,ptrType}), keyMatches, [&](OpBuilder& b, Location loc) {
+                              //          entry.aggr = update(vec.aggr,val)
+                              Value newAggr= updateFn(b,entryAggr, val);
+                              Value newKVPair=b.create<util::PackOp>(loc,ValueRange({entryKey,newAggr}));
+                              Value newEntry=b.create<util::PackOp>(loc,ValueRange({entryNext,entryHash,newKVPair}));
+                              b.create<util::StoreOp>(loc, newEntry, values, idx);
+                              b.create<scf::YieldOp>(loc, ValueRange{len,falseValue, idx,ptr});
+                              }, [&](OpBuilder& b, Location loc) {
+
+                              //          ptr = &entry.next
+                              Value entryPtr=b.create<util::ElementPtrOp>(loc,util::RefType::get(context,entryType,llvm::Optional<int64_t>()),values,idx);
+
+                              ptr=b.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context,idxType,llvm::Optional<int64_t>()),entryPtr);
+                              //          yield idx,ptr,done=false
+                              b.create<scf::YieldOp>(loc, ValueRange{len,trueValue, entryNext, ptr });});
+                        b.create<scf::YieldOp>(loc, ifOp2.getResults());
+                        }, [&](OpBuilder& b, Location loc) {
+
+                        //          ptr = &entry.next
+                        Value entryPtr=b.create<util::ElementPtrOp>(loc,util::RefType::get(context,entryType,llvm::Optional<int64_t>()),values,idx);
+
+                        ptr=b.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context,idxType,llvm::Optional<int64_t>()),entryPtr);
+                        //          yield idx,ptr,done=false
+                        b.create<scf::YieldOp>(loc, ValueRange{len,trueValue, entryNext, ptr });});
+                  b.create<scf::YieldOp>(loc, ifOpH.getResults()); });
+         //       if(compare(entry.key,key)){
+
+         Value newLen = ifOp.getResult(0);
+         Value done = ifOp.getResult(1);
+         idx = ifOp.getResult(2);
+         ptr = ifOp.getResult(3);
+         rewriter.create<scf::ConditionOp>(loc, done,
+                                           ValueRange({newLen, idx, ptr}));
+      }
+
+      // The body of the while loop: shift right until reaching a value of 0.
+      {
+         rewriter.setInsertionPointToStart(&whileOp.getAfter().front());
+         rewriter.create<scf::YieldOp>(loc, after->getArguments());
+      }
+
+      rewriter.setInsertionPointAfter(whileOp);
+      Value newLen = whileOp.getResult(0);
+
+      Value updatedBuilder = rewriter.create<mlir::util::PackOp>(loc, ValueRange{newLen, capacity, values, ht, initialVal});
+      rewriter.create<mlir::util::StoreOp>(loc, updatedBuilder, aggrHtBuilder, Value());
+   }
+   Value build(mlir::OpBuilder& builder, Value aggrHtBuilder) {
+      auto loaded = builder.create<mlir::util::LoadOp>(loc, createSType(builder.getContext(), keyType, aggrType), aggrHtBuilder, Value());
+
+      auto unpacked = builder.create<util::UnPackOp>(loc, loaded);
+      Value len = unpacked.getResult(0);
+      //Value ht = unpacked.getResult(3);//todo: free
+      Value values = unpacked.getResult(2);
+      return builder.create<util::PackOp>(loc, ValueRange({len, values}));
+   }
+};

@@ -8,7 +8,7 @@
 
 namespace {
 
-class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::FunctionPass> {
+class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-optimize-join-order"; }
 
    llvm::SmallPtrSet<mlir::Operation*, 12> alreadyOptimized;
@@ -111,9 +111,9 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Func
       }
    }
 
-   void runOnFunction() override {
+   void runOnOperation() override {
       //walk over all operators:
-      getFunction()->walk([&](Operator op) {
+      getOperation()->walk([&](Operator op) {
          //check if current operator is root for join order optimization
          if (isOptimizationRoot(op.getOperation())) {
             //if so: optimize subtree

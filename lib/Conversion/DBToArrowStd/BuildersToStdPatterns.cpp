@@ -237,8 +237,8 @@ class AggrHtHelper {
 
       auto resultTypes = std::vector<Type>({idxType, idxType, ptrType});
       auto whileOp = rewriter.create<scf::WhileOp>(loc, resultTypes, ValueRange({len, idx, ptr}));
-      Block* before = rewriter.createBlock(&whileOp.getBefore(), {}, resultTypes);
-      Block* after = rewriter.createBlock(&whileOp.getAfter(), {}, resultTypes);
+      Block* before = rewriter.createBlock(&whileOp.getBefore(), {}, resultTypes,{loc,loc,loc});
+      Block* after = rewriter.createBlock(&whileOp.getAfter(), {}, resultTypes,{loc,loc,loc});
 
       // The conditional block of the while loop.
       {
@@ -542,18 +542,19 @@ class BuilderBuildLowering : public ConversionPattern {
          auto lowBType=mlir::util::RefType::get(op->getContext(),mlir::TupleType::get(op->getContext(),{idxType,idxType,mlir::util::RefType::get(op->getContext(),idxType,-1)}),llvm::Optional<int64_t>());
          if (!buildFn) {
             {
-               auto loc=op->getLoc();
-               auto htType=util::RefType::get(rewriter.getContext(), idxType, -1);
+               auto loc = op->getLoc();
+               auto htType = util::RefType::get(rewriter.getContext(), idxType, -1);
 
                mlir::OpBuilder::InsertionGuard g(rewriter);
                rewriter.setInsertionPointToStart(&module.body().front());
-               buildFn = rewriter.create<FuncOp>(op->getLoc(), "build_join_ht", rewriter.getFunctionType({idxType,lowBType}, {htType,idxType}));
+               buildFn = rewriter.create<FuncOp>(op->getLoc(), "build_join_ht", rewriter.getFunctionType({idxType, lowBType}, {htType, idxType}));
+               buildFn->setAttr("passthrough", rewriter.getArrayAttr({rewriter.getStringAttr("noinline"), rewriter.getStringAttr("optnone")}));
                mlir::Block* functionBlock = new mlir::Block;
-               functionBlock->addArguments({idxType,lowBType});
+               functionBlock->addArguments({idxType, lowBType},{loc,loc});
                buildFn.body().push_back(functionBlock);
                rewriter.setInsertionPointToStart(functionBlock);
                Value const8 = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 8);
-               Value elemSize=rewriter.create<mlir::arith::DivUIOp>(loc,functionBlock->getArgument(0),const8);
+               Value elemSize = rewriter.create<mlir::arith::DivUIOp>(loc, functionBlock->getArgument(0), const8);
                auto loaded = rewriter.create<mlir::util::LoadOp>(op->getLoc(), lowBType.getElementType(), functionBlock->getArgument(1), Value());
                auto unpacked = rewriter.create<util::UnPackOp>(op->getLoc(), loaded);
                Value numValues = unpacked.getResult(0);
@@ -571,7 +572,7 @@ class BuilderBuildLowering : public ConversionPattern {
                rewriter.create<scf::ForOp>(
                   loc, zero, numValues, one, ValueRange({}),
                   [&](OpBuilder& b, Location loc2, Value iv, ValueRange args) {
-                     Value vecPos=b.create<mlir::arith::MulIOp>(loc,iv,elemSize);
+                     Value vecPos = b.create<mlir::arith::MulIOp>(loc, iv, elemSize);
                      auto currVal = b.create<util::LoadOp>(loc, idxType, vec, vecPos);
                      Value buckedPos = b.create<arith::AndIOp>(loc, htMask, currVal);
                      Value previousPtr = b.create<util::LoadOp>(loc, rewriter.getIndexType(), ht, buckedPos);
@@ -579,20 +580,20 @@ class BuilderBuildLowering : public ConversionPattern {
                      b.create<util::StoreOp>(loc2, previousPtr, vec, vecPos);
                      b.create<scf::YieldOp>(loc);
                   });
-               rewriter.create<mlir::ReturnOp>(op->getLoc(),ValueRange({ht,htMask}));
+               rewriter.create<mlir::ReturnOp>(op->getLoc(), ValueRange({ht, htMask}));
             }
          }
 
          Type kvType = TupleType::get(getContext(), {joinHtBuilderType.getKeyType(), joinHtBuilderType.getValType()});
          Type entryType = TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), kvType});
-         auto elemsize=rewriter.create<mlir::util::SizeOfOp>(op->getLoc(),rewriter.getIndexType(),entryType);
+         auto elemsize = rewriter.create<mlir::util::SizeOfOp>(op->getLoc(), rewriter.getIndexType(), entryType);
          auto loaded = rewriter.create<mlir::util::LoadOp>(op->getLoc(), VectorHelper::createSType(rewriter.getContext(), entryType), buildAdaptor.builder(), Value());
          auto unpacked = rewriter.create<util::UnPackOp>(op->getLoc(), loaded);
          Value len = unpacked.getResult(0);
          Value vec = unpacked.getResult(2);
          Value toLB = rewriter.create<util::GenericMemrefCastOp>(op->getLoc(), lowBType, buildAdaptor.builder());
 
-         auto called=rewriter.create<mlir::CallOp>(op->getLoc(),buildFn,ValueRange({elemsize,toLB}));
+         auto called = rewriter.create<mlir::CallOp>(op->getLoc(), buildFn, ValueRange({elemsize, toLB}));
          mlir::Value packed = rewriter.create<util::PackOp>(op->getLoc(), ValueRange{vec, len, called->getResult(0), called->getResult(1)});
          rewriter.replaceOp(op, packed);
       }

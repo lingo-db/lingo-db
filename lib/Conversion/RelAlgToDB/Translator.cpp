@@ -76,6 +76,13 @@ std::vector<mlir::Type> Translator::getRequiredBuilderTypes(TranslatorContext& c
    }
    return res;
 }
+std::vector<mlir::Location> Translator::getRequiredBuilderLocs(TranslatorContext& context) {
+   std::vector<mlir::Location> res;
+   for (auto x : requiredBuilders) {
+      res.push_back(context.builders[x].getLoc());
+   }
+   return res;
+}
 mlir::relalg::Translator::Translator(Operator op) : op(op) {
    for (auto child : op.getChildren()) {
       children.push_back(mlir::relalg::Translator::createTranslator(child.getOperation()));

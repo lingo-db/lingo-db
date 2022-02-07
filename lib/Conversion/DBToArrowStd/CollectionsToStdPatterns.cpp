@@ -1,8 +1,12 @@
 #include "mlir/Conversion/DBToArrowStd/CollectionIteration.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
+
 #include "mlir/Dialect/util/UtilOps.h"
+#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include <llvm/Support/Debug.h>
 
@@ -31,7 +35,7 @@ class SortOpLowering : public ConversionPattern {
          rewriter.setInsertionPointToStart(parentModule.getBody());
          funcOp = rewriter.create<FuncOp>(parentModule.getLoc(), "db_sort_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange(mlir::db::BoolType::get(rewriter.getContext()))));
          auto* funcBody = new Block;
-         funcBody->addArguments(TypeRange({ptrType, ptrType}));
+         funcBody->addArguments(TypeRange({ptrType, ptrType}), {parentModule->getLoc(), parentModule->getLoc()});
          funcOp.body().push_back(funcBody);
          rewriter.setInsertionPointToStart(funcBody);
          Value left = funcBody->getArgument(0);
@@ -73,11 +77,16 @@ class ForOpLowering : public ConversionPattern {
    public:
    explicit ForOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
       : ConversionPattern(typeConverter, mlir::db::ForOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
-
+   std::vector<Value> remap(std::vector<Value> values, ConversionPatternRewriter& builder) const {
+      for (size_t i = 0; i < values.size(); i++) {
+         values[i] = builder.getRemappedValue(values[i]);
+      }
+      return values;
+   }
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::ForOpAdaptor forOpAdaptor(operands, op->getAttrDictionary());
       auto forOp = cast<mlir::db::ForOp>(op);
-      auto argumentTypes = forOp.region().getArgumentTypes();
+      forOp.region().getArgumentTypes();
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::db::CollectionType>();
 
       auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), functionRegistry);
@@ -92,8 +101,9 @@ class ForOpLowering : public ConversionPattern {
       });
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
+
          forOp.region().push_back(new Block());
-         forOp.region().front().addArguments(argumentTypes);
+         //forOp.region().front().addArguments(argumentTypes);
          rewriter.setInsertionPointToStart(&forOp.region().front());
          rewriter.create<mlir::db::YieldOp>(forOp.getLoc());
       }

@@ -85,8 +85,8 @@ void HashJoinTranslator::scanHT(TranslatorContext& context, mlir::OpBuilder& bui
    {
       auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), context.pipelineManager.getCurrentPipeline()->addDependency(joinHt), context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
       mlir::Block* block2 = new mlir::Block;
-      block2->addArgument(entryType);
-      block2->addArguments(getRequiredBuilderTypes(context));
+      block2->addArgument(entryType,loc);
+      block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocsCustom(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
@@ -121,8 +121,8 @@ void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilde
       {
          auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypesCustom(context), matches, getFlag(), getRequiredBuilderValuesCustom(context));
          mlir::Block* block2 = new mlir::Block;
-         block2->addArgument(iteratorType);
-         block2->addArguments(getRequiredBuilderTypesCustom(context));
+         block2->addArgument(iteratorType,loc);
+         block2->addArguments(getRequiredBuilderTypesCustom(context), getRequiredBuilderLocsCustom(context));
          forOp2.getBodyRegion().push_back(block2);
          mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValuesCustom(context, block2->getArguments().drop_front(1));

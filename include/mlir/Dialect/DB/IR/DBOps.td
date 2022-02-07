@@ -28,7 +28,7 @@ public:
 }];
 }
 
-class DB_Op<string mnemonic, list<OpTrait> traits = []> :
+class DB_Op<string mnemonic, list<Trait> traits = []> :
 Op<DB_Dialect, mnemonic, traits>{
 let printer = [{ return ::print(p, *this); }];
 let parser = [{ return ::parse$cppClass(parser, result); }];
@@ -367,7 +367,7 @@ let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
 
-class DB_BinaryOp<string mnemonic, list<OpTrait> traits = []> :
+class DB_BinaryOp<string mnemonic, list<Trait> traits = []> :
 Op<DB_Dialect, mnemonic,
     !listconcat(traits, [NoSideEffect])>,Arguments<(ins DBType:$left, DBType:$right)> {
 let results = (outs AnyType:$result);
@@ -379,7 +379,7 @@ let printer = [{
 return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
 }];
 }
-class DB_UnaryOp<string mnemonic, list<OpTrait> traits = []> :
+class DB_UnaryOp<string mnemonic, list<Trait> traits = []> :
 Op<DB_Dialect, mnemonic,
     !listconcat(traits, [NoSideEffect,
         SameOperandsAndResultType])>,Arguments<(ins DBType:$val)> {
@@ -463,6 +463,8 @@ OpBuilder<(ins "ValueRange":$vals), [{
 ::buildDBAndOp($_builder, $_state, vals);
 }]>
 ];
+let hasCanonicalizeMethod = 1;
+
 }
 def OrOp : DB_Op<"or", [NoSideEffect]> {
 let arguments = (ins Variadic<AnyBool>: $vals);
@@ -627,6 +629,19 @@ let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 
 let assemblyFormat =
 [{  attr-dict ($results^ `:` type($results))? }];
+
+// Override default verifier (defined in SCF_Op), no custom verification
+// needed.
+let verifier = ?;
+}
+def CondSkipOp : DB_Op<"cond_skip", [ParentOneOf<["ForOp"]>]> {
+let summary = "loop yield and termination operation";
+
+
+let arguments = (ins AnyType:$condition, Variadic<AnyType>:$args);
+
+let assemblyFormat =
+[{ `(` $condition `:` type($condition) `)` attr-dict ($args^ `:` type($args))? }];
 
 // Override default verifier (defined in SCF_Op), no custom verification
 // needed.

@@ -16,10 +16,9 @@ class PipelineDependency {
    mlir::Type t;
    size_t funcId;
 
-
    public:
-   PipelineDependency(size_t pipline, size_t idx, const Type& t,size_t funcId) : pipline(pipline), idx(idx), t(t),funcId(funcId) {}
-   PipelineDependency(): pipline(-1),idx(-1),t(),funcId(-1){}
+   PipelineDependency(size_t pipline, size_t idx, const Type& t, size_t funcId) : pipline(pipline), idx(idx), t(t), funcId(funcId) {}
+   PipelineDependency() : pipline(-1), idx(-1), t(), funcId(-1) {}
    const Type& getT() const {
       return t;
    }
@@ -32,17 +31,17 @@ class PipelineDependency {
    size_t getFuncId() const {
       return funcId;
    }
-
 };
 class Pipeline;
-class PipelineManager{
+class PipelineManager {
    std::vector<std::shared_ptr<Pipeline>> pipelines;
    std::shared_ptr<Pipeline> currentPipeline;
    std::unordered_map<size_t, std::vector<mlir::Value>> pipelineResults;
-   public:
-   static constexpr size_t MAX_PIPELINES=64;
 
-   void addPipeline(std::shared_ptr<Pipeline> pipeline){
+   public:
+   static constexpr size_t maxPipelines = 64;
+
+   void addPipeline(std::shared_ptr<Pipeline> pipeline) {
       pipelines.push_back(pipeline);
    }
 
@@ -54,7 +53,6 @@ class PipelineManager{
    }
    void execute(mlir::OpBuilder& builder);
    std::vector<mlir::Value> getResultsFromPipeline(std::shared_ptr<Pipeline> pipeline);
-
 };
 
 class Pipeline {
@@ -77,7 +75,7 @@ class Pipeline {
    }
 
    public:
-   Pipeline(ModuleOp parentModule) : builder(parentModule.getContext()), parentModule(parentModule),dependsOn(PipelineManager::MAX_PIPELINES) {
+   Pipeline(ModuleOp parentModule) : builder(parentModule.getContext()), parentModule(parentModule), dependsOn(PipelineManager::maxPipelines) {
       static size_t id = 0;
       pipelineId = id++;
       OpBuilder moduleBuilder(parentModule->getContext());
@@ -94,9 +92,9 @@ class Pipeline {
    Value addDependency(PipelineDependency dep);
 
    std::vector<PipelineDependency> addInitFn(std::function<std::vector<Value>(OpBuilder&)> fn);
-   std::vector<mlir::relalg::PipelineDependency> addFinalizeFn(std::function<std::vector<Value>(OpBuilder&,mlir::ValueRange args)> fn);
+   std::vector<mlir::relalg::PipelineDependency> addFinalizeFn(std::function<std::vector<Value>(OpBuilder&, mlir::ValueRange args)> fn);
 
-   ResultRange call(OpBuilder& builder,std::unordered_map<size_t, std::vector<mlir::Value>>& pipelineResults);
+   ResultRange call(OpBuilder& builder, std::unordered_map<size_t, std::vector<mlir::Value>>& pipelineResults);
    //void addFinalizeFn(std::function<> fn);
    //void addDeInitFn(std::function<...> fn);
    OpBuilder& getBuilder() {

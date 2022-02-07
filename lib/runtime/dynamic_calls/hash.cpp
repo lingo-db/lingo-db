@@ -1,4 +1,4 @@
-#include "runtime/xxhash.h"
+#include "xxhash.h"
 #include "runtime/helpers.h"
 
 uint64_t rt_hash_long(uint8_t* ptr, uint32_t len){

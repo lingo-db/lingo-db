@@ -268,7 +268,7 @@ void mlir::relalg::detail::initPredicate(mlir::Operation* op) {
    mlir::Type tupleType = mlir::relalg::TupleType::get(context);
    auto* block = new mlir::Block;
    op->getRegion(0).push_back(block);
-   block->addArgument(tupleType);
+   block->addArgument(tupleType,op->getLoc());
    mlir::OpBuilder builder(context);
    builder.setInsertionPointToStart(block);
    builder.create<mlir::relalg::ReturnOp>(op->getLoc());

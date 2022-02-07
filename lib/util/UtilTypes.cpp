@@ -47,24 +47,4 @@ void UtilDialect::registerTypes() {
       >();
 }
 
-/// Parse a type registered to this dialect.
-::mlir::Type UtilDialect::parseType(::mlir::DialectAsmParser& parser) const {
-   StringRef memnonic;
-   if (parser.parseKeyword(&memnonic)) {
-      return Type();
-   }
-   auto loc = parser.getCurrentLocation();
-   Type parsed;
-   ::generatedTypeParser(parser, memnonic, parsed);
-   if (!parsed) {
-      parser.emitError(loc, "unknown type");
-   }
-   return parsed;
-}
-void UtilDialect::printType(::mlir::Type type,
-                            ::mlir::DialectAsmPrinter& os) const {
-   if (::generatedTypePrinter(type, os).failed()) {
-      llvm::errs() << "could not print";
-   }
-}
 } // namespace mlir::util

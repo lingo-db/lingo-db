@@ -4,12 +4,12 @@ module @querymodule  {
     //CHECK: %{{.*}} = relalg.const_relation @constrel
     //CHECK: %{{.*}} = relalg.const_relation @constrel2
     //CHECK: %{{.*}} = relalg.crossproduct
-	//CHECK: %{{.*}} = relalg.selection %{{.*}} (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.selection %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 	//CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>
 	//CHECK: relalg.return %{{.*}} : !db.bool
-	//CHECK: %{{.*}} = relalg.selection %{{.*}} (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.selection %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr2 : !db.int<32>
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr2 : !db.int<32>
 	//CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>
@@ -39,13 +39,13 @@ module @querymodule  {
   	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>}),@attr2({type = !db.int<32>})] values: [[1, 1], [2, 2]]
   	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>}),@attr2({type = !db.int<32>})] values: [[1, 1], [2, 2]]
   	%2 = relalg.crossproduct %0, %1
-    //CHECK: %{{.*}} = relalg.map @map %{{.*}} (%arg0: !relalg.tuple) {
+    //CHECK: %{{.*}} = relalg.map @map %{{.*}} (%arg0: !relalg.tuple)
     //CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr2 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr2 : !db.int<32>
     //CHECK: %{{.*}} = db.add %{{.*}}:!db.int<32>,%{{.*}}:!db.int<32>
     //CHECK: relalg.addattr %{{.*}}, @attr4({type = !db.int<32>}) %{{.*}}
     //CHECK: relalg.return %{{.*}} : !relalg.tuple
-	//CHECK: %{{.*}} = relalg.map @map %{{.*}} (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.map @map %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 	//CHECK: %{{.*}} = db.add %5:!db.int<32>,%6:!db.int<32>

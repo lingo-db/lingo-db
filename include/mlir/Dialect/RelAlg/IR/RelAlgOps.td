@@ -31,7 +31,7 @@ RelationalAttributeManager& getRelationalAttributeManager(){
 // Base relAlg operation definition.
 //===----------------------------------------------------------------------===//
 
-class RelAlg_Op<string mnemonic, list<OpTrait> traits = []> :
+class RelAlg_Op<string mnemonic, list<Trait> traits = []> :
 Op<RelAlg_Dialect, mnemonic, traits>{
 let printer = [{ return ::print(p, *this); }];
 let parser = [{ return ::parse$cppClass(parser, result); }];
@@ -52,9 +52,11 @@ let builderCall = "::mlir::db::IntType::get($_builder.getContext(),false,64)";
 
 def RelAlg_TupleStream :  TypeDef<RelAlg_Dialect, "TupleStream"> {
 let summary = "tuple stream type";
+let mnemonic="tuplestream";
 }
 def RelAlg_Tuple :  TypeDef<RelAlg_Dialect, "Tuple"> {
 let summary = "tuple type";
+let mnemonic="tuple";
 }
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Attributes

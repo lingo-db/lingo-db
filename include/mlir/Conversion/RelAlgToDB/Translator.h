@@ -31,6 +31,7 @@ class Translator {
    Value packValues(TranslatorContext& context, OpBuilder builder, mlir::Location loc, const std::vector<const mlir::relalg::RelationalAttribute*>& attrs, const std::vector<Value>& additional = {});
    Value packValues(TranslatorContext& context, OpBuilder builder, mlir::Location loc, const mlir::relalg::Attributes& attrs);
    std::vector<mlir::Type> getRequiredBuilderTypes(TranslatorContext& context);
+   std::vector<mlir::Location> getRequiredBuilderLocs(TranslatorContext& context);
 
    public:
    Translator(mlir::ValueRange children);

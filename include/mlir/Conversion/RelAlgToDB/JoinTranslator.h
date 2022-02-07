@@ -20,6 +20,7 @@ class JoinTranslator : public Translator {
    void handlePotentialMatch(OpBuilder& builder, TranslatorContext& context, Value matches, mlir::function_ref<void(OpBuilder&, TranslatorContext& context, TranslatorContext::AttributeResolverScope&)> onMatch=nullptr);
    std::vector<mlir::Type> getRequiredBuilderTypesCustom(TranslatorContext& context);
    std::vector<mlir::Value> getRequiredBuilderValuesCustom(TranslatorContext& context);
+   std::vector<mlir::Location> getRequiredBuilderLocsCustom(TranslatorContext& context);
    void setRequiredBuilderValuesCustom(TranslatorContext& context, mlir::ValueRange values);
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override;
 

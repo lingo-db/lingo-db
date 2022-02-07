@@ -5,7 +5,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace {
-class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::FunctionPass> {
+class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-combine-predicates"; }
 
    public:
@@ -29,8 +29,8 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Func
       lowerTerminator->destroy();
    }
 
-   void runOnFunction() override {
-      getFunction().walk([&](mlir::relalg::SelectionOp op) {
+   void runOnOperation() override {
+      getOperation().walk([&](mlir::relalg::SelectionOp op) {
          mlir::Value lower = op.rel();
          bool canCombine = mlir::isa<mlir::relalg::SelectionOp>(lower.getDefiningOp()) || mlir::isa<mlir::relalg::InnerJoinOp>(lower.getDefiningOp());
          if (canCombine) {

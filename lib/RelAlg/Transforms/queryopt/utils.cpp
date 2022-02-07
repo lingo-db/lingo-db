@@ -112,7 +112,7 @@ Operator Plan::realizePlanRec() {
             mlir::OpBuilder builder(currop.getOperation());
             auto x = builder.create<mlir::relalg::InnerJoinOp>(selop.getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
             x.predicate().push_back(new mlir::Block);
-            x.getLambdaBlock().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
+            x.getLambdaBlock().addArgument(mlir::relalg::TupleType::get(builder.getContext()),selop->getLoc());
             selop.getLambdaArgument().replaceAllUsesWith(x.getLambdaArgument());
             x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), selop.getLambdaBlock().getOperations());
             //selop.replaceAllUsesWith(x.getOperation());

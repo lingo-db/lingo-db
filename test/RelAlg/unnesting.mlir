@@ -23,7 +23,7 @@ module @querymodule  {
   	//CHECK: relalg.return
   	//CHECK: %{{.*}} = relalg.fullouterjoin %{{.*}}, %{{.*}}
 	//CHECK: %{{.*}} = relalg.renaming @renaming{{.*}} %{{.*}}  renamed: [@renamed0({type = !db.int<32>})=[@constrel::@attr1]]
-	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @renaming{{.*}}::@renamed0 : !db.int<32>
     //CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>
@@ -46,7 +46,7 @@ module @querymodule  {
   	//CHECK: relalg.return
   	//CHECK: %{{.*}} = relalg.aggregation @aggr %{{.*}} [{{.*}},{{.*}}]
 	//CHECK: %{{.*}} = relalg.renaming @renaming %{{.*}}  renamed: [@renamed0({type = !db.int<32>})=[@constrel::@attr1]]
-	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @renaming::@renamed0 : !db.int<32>
     //CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>
@@ -78,7 +78,7 @@ module @querymodule  {
   	//CHECK: relalg.return
   	//CHECK: %{{.*}} = relalg.projection all [{{.*}},{{.*}}] %{{.*}}
 	//CHECK: %{{.*}} = relalg.renaming @renaming %{{.*}}  renamed: [@renamed0({type = !db.int<32>})=[@constrel::@attr1]]
-	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @renaming::@renamed0 : !db.int<32>
     //CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>
@@ -100,7 +100,7 @@ module @querymodule  {
   func @query() {
   	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
   	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1]
-	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>
@@ -121,7 +121,7 @@ module @querymodule  {
   func @query() {
   	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
   	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1]
-	//CHECK: %{{.*}} = relalg.join %{{.*}}, %0 (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.join %{{.*}}, %0 (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>
@@ -159,7 +159,7 @@ module @querymodule  {
   	//CHECK: relalg.return
   	//CHECK: %{{.*}} = relalg.semijoin %{{.*}}, %{{.*}}
 	//CHECK: %{{.*}} = relalg.renaming @renaming{{.*}} %{{.*}}  renamed: [@renamed0({type = !db.int<32>})=[@constrel::@attr1]]
-	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @renaming{{.*}}::@renamed0 : !db.int<32>
     //CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>
@@ -179,7 +179,7 @@ module @querymodule  {
 	%10 = relalg.const_relation @constrel3  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
 	%110 = relalg.crossproduct %1, %10
   	//CHECK: %{{.*}} = relalg.crossproduct %{{.*}}, %{{.*}}
-	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>
@@ -207,7 +207,7 @@ module @querymodule  {
     }
     //CHECK: %{{.*}} = relalg.join %{{.*}}, %{{.*}}
 
-	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>
@@ -235,7 +235,7 @@ module @querymodule  {
     }
     //CHECK: %{{.*}} = relalg.semijoin %{{.*}}, %{{.*}}
 
-	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple) {
+	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
     //CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>

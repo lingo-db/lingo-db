@@ -56,56 +56,6 @@ void RelAlgDialect::initialize() {
 
 }
 
-/// Parse a type registered to this dialect.
-::mlir::Type RelAlgDialect::parseType(::mlir::DialectAsmParser& parser) const {
-   if (!parser.parseOptionalKeyword("tuplestream")) {
-      return mlir::relalg::TupleStreamType::get(parser.getBuilder().getContext());
-   }
-   if (!parser.parseOptionalKeyword("tuple")) {
-      return mlir::relalg::TupleType::get(parser.getBuilder().getContext());
-   }
-   return mlir::Type();
-}
-
-/// Print a type registered to this dialect.
-void RelAlgDialect::printType(::mlir::Type type,
-                              ::mlir::DialectAsmPrinter& os) const {
-   if (type.isa<mlir::relalg::TupleStreamType>()) {
-      os << "tuplestream";
-   }
-   if (type.isa<mlir::relalg::TupleType>()) {
-      os << "tuple";
-   }
-}
-::mlir::Attribute
-RelAlgDialect::parseAttribute(::mlir::DialectAsmParser& parser,
-                              ::mlir::Type type) const {
-   if (!parser.parseOptionalKeyword("attr_def")) {
-      std::string name;
-      if (parser.parseLBrace() || parser.parseOptionalString(&name) || parser.parseRBrace())
-         return mlir::Attribute();
-      return parser.getBuilder().getContext()->getLoadedDialect<RelAlgDialect>()->getRelationalAttributeManager().createDef(SymbolRefAttr::get(parser.getContext(),name));
-   }else {
-      Attribute attr;
-      llvm::StringRef mnemonic;
-      if (!parser.parseKeyword(&mnemonic)) {
-         auto parseResult = generatedAttributeParser(parser, mnemonic, type, attr);
-         if (parseResult.hasValue())
-            return attr;
-      }
-   }
-   return mlir::Attribute();
-}
-void RelAlgDialect::printAttribute(::mlir::Attribute attr,
-                                   ::mlir::DialectAsmPrinter& os) const {
-   if (auto attrDef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>()) {
-      os << "attr_def(\\\"" << attrDef.getName() << "\\\")";
-   }else{
-      if (succeeded(generatedAttributePrinter(attr, os)))
-         return;
-   }
-}
-
 ::mlir::Attribute mlir::relalg::TableMetaDataAttr::parse(::mlir::AsmParser& parser, ::mlir::Type type) {
    if(parser.parseLess()) return Attribute();
    StringAttr attr;

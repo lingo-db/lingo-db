@@ -28,7 +28,7 @@ public:
 }];
 }
 
-class Util_Op<string mnemonic, list<OpTrait> traits = []> :
+class Util_Op<string mnemonic, list<Trait> traits = []> :
 Op<Util_Dialect, mnemonic, traits>{
 let printer = [{ return ::print(p, *this); }];
 let parser = [{ return ::parse$cppClass(parser, result); }];

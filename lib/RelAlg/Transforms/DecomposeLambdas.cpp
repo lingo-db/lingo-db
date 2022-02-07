@@ -6,7 +6,7 @@
 #include <unordered_set>
 
 namespace {
-class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::FunctionPass> {
+class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-decompose-lambdas"; }
 
    public:
@@ -187,7 +187,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
             auto newmap = builder.create<relalg::MapOp>(currentMap->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), currentMap.sym_name(), tree);
             tree = newmap;
             newmap.predicate().push_back(new Block);
-            newmap.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()));
+            newmap.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()),currentMap->getLoc());
             builder.setInsertionPointToStart(&newmap.predicate().front());
             auto ret1 = builder.create<relalg::ReturnOp>(currentMap->getLoc());
             mapping.map(currentMap.getLambdaArgument(), newmap.getLambdaArgument());
@@ -203,8 +203,8 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
          }
       }
    }
-   void runOnFunction() override {
-      getFunction().walk([&](mlir::relalg::SelectionOp op) {
+   void runOnOperation() override {
+      getOperation().walk([&](mlir::relalg::SelectionOp op) {
          auto* terminator = op.getRegion().front().getTerminator();
          auto retval = terminator->getOperand(0);
          mlir::Value val = op.rel();
@@ -213,14 +213,14 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Functi
          op->remove();
          op->destroy();
       });
-      getFunction().walk([&](mlir::relalg::MapOp op) {
+      getOperation().walk([&](mlir::relalg::MapOp op) {
          mlir::Value val = op.rel();
          decomposeMap(op, val);
          op.replaceAllUsesWith(val);
          op->remove();
          op->destroy();
       });
-      getFunction().walk([&](mlir::relalg::OuterJoinOp op) {
+      getOperation().walk([&](mlir::relalg::OuterJoinOp op) {
          auto* terminator = op.getRegion().front().getTerminator();
          auto retval = terminator->getOperand(0);
          auto availableLeft = op.getChildren()[0].getAvailableAttributes();
