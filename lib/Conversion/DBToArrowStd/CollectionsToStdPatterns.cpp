@@ -86,7 +86,12 @@ class ForOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::ForOpAdaptor forOpAdaptor(operands, op->getAttrDictionary());
       auto forOp = cast<mlir::db::ForOp>(op);
-      forOp.region().getArgumentTypes();
+      std::vector<Type> argumentTypes;
+      std::vector<Location> argumentLocs;
+      for(auto t:forOp.region().getArgumentTypes()){
+         argumentTypes.push_back(t);
+         argumentLocs.push_back(op->getLoc());
+      }
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::db::CollectionType>();
 
       auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), functionRegistry);
@@ -94,16 +99,72 @@ class ForOpLowering : public ConversionPattern {
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
       std::vector<Value> results = iterator->implementLoop(op->getLoc(), forOpAdaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, [&](ValueRange values, OpBuilder builder) {
          auto yieldOp = cast<mlir::db::YieldOp>(forOp.getBody()->getTerminator());
-         rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
-         std::vector<Value> results(yieldOp.results().begin(), yieldOp.results().end());
-         rewriter.eraseOp(yieldOp);
+         std::vector<Type> resTypes;
+         std::vector<Location> locs;
+         for (auto t : yieldOp.results()) {
+            resTypes.push_back(typeConverter->convertType(t.getType()));
+            locs.push_back(op->getLoc());
+         }
+         auto execRegion = builder.create<mlir::scf::ExecuteRegionOp>(op->getLoc(), resTypes);
+         auto execRegionBlock = new Block();
+         execRegion.getRegion().push_back(execRegionBlock);
+         {
+            OpBuilder::InsertionGuard guard(builder);
+            OpBuilder::InsertionGuard guard2(rewriter);
+
+            builder.setInsertionPointToStart(execRegionBlock);
+            auto term = builder.create<mlir::scf::YieldOp>(op->getLoc());
+            builder.setInsertionPointToStart(execRegionBlock);
+            rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
+
+            std::vector<Value> results(yieldOp.results().begin(), yieldOp.results().end());
+            rewriter.eraseOp(yieldOp);
+            auto term2 = builder.create<mlir::scf::YieldOp>(op->getLoc(), remap(results, rewriter));
+
+            Block* end = rewriter.splitBlock(builder.getBlock(), builder.getInsertionPoint());
+            builder.setInsertionPoint(term2);
+            builder.create<mlir::cf::BranchOp>(op->getLoc(), end, remap(results, rewriter));
+            term2->erase();
+
+            end->addArguments(resTypes, locs);
+            builder.setInsertionPointToEnd(end);
+            builder.create<mlir::scf::YieldOp>(op->getLoc(), end->getArguments());
+            std::vector<Operation*> toErase;
+            for (auto it = execRegionBlock->getOperations().rbegin(); it != execRegionBlock->getOperations().rend(); it++) {
+               if (auto op = mlir::dyn_cast_or_null<mlir::db::CondSkipOp>(&*it)) {
+                  toErase.push_back(op.getOperation());
+                  builder.setInsertionPointAfter(op);
+                  llvm::SmallVector<mlir::Value> remappedArgs;
+                  rewriter.getRemappedValues(op.args(), remappedArgs);
+                  Block* after = rewriter.splitBlock(builder.getBlock(), builder.getInsertionPoint());
+                  builder.setInsertionPointAfter(op);
+                  auto cond = rewriter.getRemappedValue(op.condition());
+                  if (auto tupleType = cond.getType().dyn_cast_or_null<mlir::TupleType>()) {
+                     auto i1Type = builder.getI1Type();
+                     auto unpacked = builder.create<util::UnPackOp>(op->getLoc(), cond);
+                     Value constTrue = builder.create<arith::ConstantOp>(op->getLoc(), i1Type, builder.getIntegerAttr(i1Type, 1));
+                     auto negated = builder.create<arith::XOrIOp>(op->getLoc(), unpacked.getResult(0), constTrue); //negate
+                     cond = builder.create<arith::AndIOp>(op->getLoc(), i1Type, negated, unpacked.getResult(1));
+                  }
+                  builder.create<mlir::cf::CondBranchOp>(op->getLoc(), cond, end, remappedArgs, after, ValueRange());
+               }
+            }
+            for (auto x : toErase) {
+               rewriter.eraseOp(x);
+            }
+            rewriter.eraseOp(term);
+         }
+         //yieldOp->erase();
+         assert(execRegion.getNumResults() == resTypes.size());
+         std::vector<Value> results(execRegion.getResults().begin(), execRegion.getResults().end());
+
          return results;
       });
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
 
          forOp.region().push_back(new Block());
-         //forOp.region().front().addArguments(argumentTypes);
+         forOp.region().front().addArguments(argumentTypes,argumentLocs);
          rewriter.setInsertionPointToStart(&forOp.region().front());
          rewriter.create<mlir::db::YieldOp>(forOp.getLoc());
       }

@@ -64,14 +64,14 @@ namespace {
 struct ToLLVMLoweringPass
    : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
-      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::arith::ArithmeticDialect>();
+      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect,mlir::cf::ControlFlowDialect, mlir::arith::ArithmeticDialect>();
    }
    void runOnOperation() final;
 };
 struct InsertPerfAsmPass
    : public mlir::PassWrapper<InsertPerfAsmPass, mlir::OperationPass<mlir::ModuleOp>> {
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
-      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::arith::ArithmeticDialect>();
+      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect,mlir::cf::ControlFlowDialect, mlir::arith::ArithmeticDialect>();
    }
    void runOnOperation() final;
 };
@@ -241,6 +241,7 @@ bool Runner::load(std::string file) {
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::StandardOpsDialect>();
    registry.insert<mlir::arith::ArithmeticDialect>();
+   registry.insert<mlir::cf::ControlFlowDialect>();
 
    registry.insert<mlir::scf::SCFDialect>();
 
@@ -268,6 +269,7 @@ bool Runner::loadString(std::string input) {
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::StandardOpsDialect>();
    registry.insert<mlir::scf::SCFDialect>();
+   registry.insert<mlir::cf::ControlFlowDialect>();
 
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::LLVM::LLVMDialect>();

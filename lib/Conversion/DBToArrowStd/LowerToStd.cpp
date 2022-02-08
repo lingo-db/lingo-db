@@ -144,7 +144,7 @@ struct DBToStdLoweringPass
 
    DBToStdLoweringPass() {}
    void getDependentDialects(DialectRegistry& registry) const override {
-      registry.insert<LLVM::LLVMDialect, scf::SCFDialect, util::UtilDialect, memref::MemRefDialect, arith::ArithmeticDialect>();
+      registry.insert<LLVM::LLVMDialect, scf::SCFDialect, mlir::cf::ControlFlowDialect, util::UtilDialect, memref::MemRefDialect, arith::ArithmeticDialect>();
    }
    void runOnOperation() final;
 };
@@ -198,6 +198,8 @@ void DBToStdLoweringPass::runOnOperation() {
    target.addLegalDialect<memref::MemRefDialect>();
 
    target.addLegalDialect<scf::SCFDialect>();
+   target.addLegalDialect<cf::ControlFlowDialect>();
+
    target.addLegalDialect<util::UtilDialect>();
    target.addLegalOp<mlir::db::CondSkipOp>();
    target.addDynamicallyLegalOp<mlir::db::CondSkipOp>([&](db::CondSkipOp op) {
