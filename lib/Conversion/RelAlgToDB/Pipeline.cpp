@@ -1,5 +1,4 @@
 #include "mlir/Conversion/RelAlgToDB/Pipeline.h"
-#include <ranges>
 
 void mlir::relalg::PipelineManager::execute(mlir::OpBuilder& builder) {
    llvm::SmallBitVector done(PipelineManager::maxPipelines);
