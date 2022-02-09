@@ -127,7 +127,7 @@ class ForOpLowering : public ConversionPattern {
             Block* end = rewriter.splitBlock(builder.getBlock(), builder.getInsertionPoint());
             builder.setInsertionPoint(term2);
             builder.create<mlir::cf::BranchOp>(op->getLoc(), end, remap(results, rewriter));
-            term2->erase();
+            rewriter.eraseOp(term2);
 
             end->addArguments(resTypes, locs);
             builder.setInsertionPointToEnd(end);
