@@ -32,6 +32,7 @@ void mlir::util::RefType::print(::mlir::AsmPrinter& printer) const {
    }
    if (parser.parseType(elementType) || parser.parseGreater()) {
       return Type();
+      return Type();
    }
    return mlir::util::RefType::get(parser.getContext(), elementType, size);
 }
