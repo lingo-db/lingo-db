@@ -549,19 +549,18 @@ class GetFlagLowering : public ConversionPattern {
    }
 };
 class HashLowering : public ConversionPattern {
-   Value combineHashes(OpBuilder& builder, Location loc, Value hash1, Value totalHash, bool& required) const {
-      if (!required) {
-         required = true;
+   Value combineHashes(OpBuilder& builder, Location loc, Value hash1, Value totalHash) const {
+      if (!totalHash) {
          return hash1;
       } else {
          return builder.create<mlir::util::HashCombine>(loc, builder.getIndexType(), hash1, totalHash);
       }
    }
-   Value hashInteger(OpBuilder& builder, Location loc, Value magicConstant, Value integer) const {
+   Value hashInteger(OpBuilder& builder, Location loc, Value integer) const {
       Value asIndex = builder.create<arith::IndexCastOp>(loc, integer, builder.getIndexType());
       return builder.create<mlir::util::Hash64>(loc, builder.getIndexType(), asIndex);
    }
-   Value hashImpl(OpBuilder& builder, Location loc, Value v, Value totalHash, Value magicConstant, Type originalType, bool& combinationRequired) const {
+   Value hashImpl(OpBuilder& builder, Location loc, Value v, Value totalHash, Type originalType) const {
       if (auto intType = v.getType().dyn_cast_or_null<mlir::IntegerType>()) {
          if (intType.getWidth() == 128) {
             auto i64Type = IntegerType::get(builder.getContext(), 64);
@@ -570,32 +569,35 @@ class HashLowering : public ConversionPattern {
             Value low = builder.create<arith::TruncIOp>(loc, v, i64Type);
             Value shift = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(i128Type, 64));
             Value high = builder.create<arith::ShRUIOp>(loc, i128Type, v, shift);
-            Value first = hashInteger(builder, loc, magicConstant, high);
-            Value second = hashInteger(builder, loc, magicConstant, low);
-            Value combined1 = combineHashes(builder, loc, first, totalHash, combinationRequired);
-            Value combined2 = combineHashes(builder, loc, second, combined1, combinationRequired);
+            Value first = hashInteger(builder, loc, high);
+            Value second = hashInteger(builder, loc, low);
+            Value combined1 = combineHashes(builder, loc, first, totalHash);
+            Value combined2 = combineHashes(builder, loc, second, combined1);
             return combined2;
          } else {
-            return combineHashes(builder, loc, hashInteger(builder, loc, magicConstant, v), totalHash, combinationRequired);
+            return combineHashes(builder, loc, hashInteger(builder, loc, v), totalHash);
          }
 
       } else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
          assert(false && "can not hash float values");
       } else if (auto varLenType = v.getType().dyn_cast_or_null<mlir::util::VarLen32Type>()) {
          auto hash = builder.create<mlir::util::HashVarLen>(loc, builder.getIndexType(), v);
-         return combineHashes(builder, loc, hash, totalHash, combinationRequired);
+         return combineHashes(builder, loc, hash, totalHash);
       } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
          if (auto originalTupleType = originalType.dyn_cast_or_null<mlir::TupleType>()) {
             auto unpacked = builder.create<util::UnPackOp>(loc, v);
             size_t i = 0;
             for (auto v : unpacked->getResults()) {
-               totalHash = hashImpl(builder, loc, v, totalHash, magicConstant, originalTupleType.getType(i++), combinationRequired);
+               totalHash = hashImpl(builder, loc, v, totalHash, originalTupleType.getType(i++));
             }
             return totalHash;
          } else if (auto dbType = originalType.dyn_cast_or_null<mlir::db::DBType>()) {
             assert(dbType.isNullable());
             auto unpacked = builder.create<util::UnPackOp>(loc, v);
-            mlir::Value hashedIfNotNull = hashImpl(builder, loc, unpacked.getResult(1), totalHash, magicConstant, dbType.getBaseType(), combinationRequired);
+            mlir::Value hashedIfNotNull = hashImpl(builder, loc, unpacked.getResult(1), totalHash, dbType.getBaseType());
+            if(!totalHash){
+               totalHash = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(0));
+            }
             return builder.create<mlir::arith::SelectOp>(loc, unpacked.getResult(0), totalHash, hashedIfNotNull);
          }
          assert(false && "should not happen");
@@ -611,11 +613,8 @@ class HashLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::HashAdaptor hashAdaptor(operands);
       auto hashOp = mlir::cast<mlir::db::Hash>(op);
-      bool combinationRequired = false;
-      Value const0 = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0));
-      Value magicConstant = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(0xbf58476d1ce4e5b9));
 
-      rewriter.replaceOp(op, hashImpl(rewriter, op->getLoc(), hashAdaptor.val(), const0, magicConstant, hashOp.val().getType(), combinationRequired));
+      rewriter.replaceOp(op, hashImpl(rewriter, op->getLoc(), hashAdaptor.val(),Value(), hashOp.val().getType()));
       return success();
    }
 };
