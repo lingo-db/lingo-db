@@ -22,6 +22,8 @@
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 
+#include "mlir/Transforms/CustomPasses.h"
+
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -337,6 +339,7 @@ bool Runner::lower() {
    pm.enableVerifier(runMode == RunMode::DEBUGGING);
    pm.addPass(mlir::db::createLowerToStdPass());
    pm.addPass(mlir::createCanonicalizerPass());
+   pm.addPass(mlir::createSinkOpPass());
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
    }

@@ -319,8 +319,11 @@ class TableRowIterator : public ForIterator {
          Value val;
          if (column.type.isa<db::StringType>()) {
             Value pos1 = builder.create<util::LoadOp>(loc, column.stdType, column.values, index);
+            pos1.getDefiningOp()->setAttr("nosideffect",builder.getUnitAttr());
+
             Value ip1 = builder.create<arith::AddIOp>(loc, indexType, index, const1);
             Value pos2 = builder.create<util::LoadOp>(loc, column.stdType, column.values, ip1);
+            pos2.getDefiningOp()->setAttr("nosideffect",builder.getUnitAttr());
             Value len = builder.create<arith::SubIOp>(loc, builder.getI32Type(), pos2, pos1);
             Value pos1AsIndex = builder.create<arith::IndexCastOp>(loc, pos1, indexType);
             Value ptr = builder.create<util::ElementPtrOp>(loc, util::RefType::get(context, builder.getI8Type(), llvm::Optional<int64_t>()), column.varLenBuffer, pos1AsIndex);
@@ -330,12 +333,14 @@ class TableRowIterator : public ForIterator {
             val = mlir::db::codegen::BitUtil::getBit(builder, loc, column.values, realPos);
          } else if (auto decimalType = column.type.dyn_cast_or_null<db::DecimalType>()) {
             val = builder.create<util::LoadOp>(loc, column.stdType, column.values, index);
+            val.getDefiningOp()->setAttr("nosideffect",builder.getUnitAttr());
             if (typeConverter->convertType(decimalType.getBaseType()).cast<mlir::IntegerType>().getWidth() != 128) {
                auto converted = builder.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType.getBaseType()), val);
                val = converted;
             }
          } else if (column.stdType.isa<mlir::IntegerType>() || column.stdType.isa<mlir::FloatType>()) {
             val = builder.create<util::LoadOp>(loc, column.stdType, column.values, index);
+            val.getDefiningOp()->setAttr("nosideffect",builder.getUnitAttr());
          } else {
             assert(val && "unhandled type!!");
          }
@@ -404,7 +409,7 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
    public:
    WhileIteratorIterationImpl(std::unique_ptr<WhileIterator> iterator) : iterator(std::move(iterator)) {
    }
-   virtual std::vector<Value> implementLoop(mlir::Location loc, mlir::ValueRange iterArgs, Value flag, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) override {
+   virtual std::vector<Value> implementLoop(mlir::Location loc, mlir::ValueRange iterArgs, Value flag, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>,ValueRange, OpBuilder)> bodyBuilder) override {
       auto insertionPoint = builder.saveInsertionPoint();
 
       iterator->setTypeConverter(&typeConverter);
@@ -440,16 +445,15 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       builder.create<mlir::db::ConditionOp>(loc, condition, whileOp.before().front().getArguments());
       builder.setInsertionPointToStart(&whileOp.after().front());
       auto arg2 = whileOp.after().front().getArgument(0);
-      Value currElement = iterator->iteratorGetCurrentElement(builder, arg2);
-      Value nextIterator = iterator->iteratorNext(builder, arg2);
       auto terminator = builder.create<mlir::db::YieldOp>(loc);
-      builder.setInsertionPoint(nextIterator.getDefiningOp());
-      std::vector<Value> bodyParams = {currElement};
+      builder.setInsertionPoint(terminator);
+      std::vector<Value> bodyParams = {};
       auto additionalArgs = whileOp.after().front().getArguments().drop_front();
       bodyParams.insert(bodyParams.end(), additionalArgs.begin(), additionalArgs.end());
-      auto returnValues = bodyBuilder(bodyParams, builder);
-      returnValues.insert(returnValues.begin(), nextIterator);
+      auto returnValues = bodyBuilder([&](mlir::OpBuilder& b){return iterator->iteratorGetCurrentElement(b, arg2);},bodyParams, builder);
       builder.setInsertionPoint(terminator);
+      Value nextIterator = iterator->iteratorNext(builder, arg2);
+      returnValues.insert(returnValues.begin(), nextIterator);
       builder.create<mlir::db::YieldOp>(loc, remap(returnValues, builder));
       builder.eraseOp(terminator);
       Value finalIterator = whileOp.getResult(0);
@@ -465,14 +469,14 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
    public:
    ForIteratorIterationImpl(std::unique_ptr<ForIterator> iterator) : iterator(std::move(iterator)) {
    }
-   virtual std::vector<Value> implementLoop(mlir::Location loc, mlir::ValueRange iterArgs, Value flag, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) override {
+   virtual std::vector<Value> implementLoop(mlir::Location loc, mlir::ValueRange iterArgs, Value flag, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>,ValueRange, OpBuilder)> bodyBuilder) override {
       if (flag) {
          return implementLoopCondition(loc, iterArgs, flag, typeConverter, builder, bodyBuilder);
       } else {
          return implementLoopSimple(loc, iterArgs, typeConverter, builder, bodyBuilder);
       }
    }
-   std::vector<Value> implementLoopSimple(mlir::Location loc, const ValueRange& iterArgs, TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) {
+   std::vector<Value> implementLoopSimple(mlir::Location loc, const ValueRange& iterArgs, TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>,ValueRange, OpBuilder)> bodyBuilder) {
       auto insertionPoint = builder.saveInsertionPoint();
       iterator->setTypeConverter(&typeConverter);
       iterator->init(builder);
@@ -484,11 +488,11 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       }
       Operation* terminator = forOp.getBody()->getTerminator();
       builder.setInsertionPointToStart(forOp.getBody());
-      auto element = iterator->getElement(builder, forOp.getInductionVar());
-      std::vector<Value> bodyArguments = {element};
+      std::vector<Value> bodyArguments = {};
 
       bodyArguments.insert(bodyArguments.end(), forOp.getRegionIterArgs().begin(), forOp.getRegionIterArgs().end());
-      auto results = bodyBuilder(bodyArguments, builder);
+      Value element;
+      auto results = bodyBuilder([&](mlir::OpBuilder& b){return element=iterator->getElement(b, forOp.getInductionVar());},bodyArguments, builder);
       iterator->destroyElement(builder, element);
       if (iterArgs.size()) {
          builder.create<scf::YieldOp>(loc, remap(results, builder));
@@ -498,7 +502,7 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       iterator->down(builder);
       return std::vector<Value>(forOp.getResults().begin(), forOp.getResults().end());
    }
-   std::vector<Value> implementLoopCondition(mlir::Location loc, const ValueRange& iterArgs, Value flag, TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(ValueRange, OpBuilder)> bodyBuilder) {
+   std::vector<Value> implementLoopCondition(mlir::Location loc, const ValueRange& iterArgs, Value flag, TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>,ValueRange, OpBuilder)> bodyBuilder) {
       auto insertionPoint = builder.saveInsertionPoint();
 
       iterator->setTypeConverter(&typeConverter);
@@ -538,14 +542,13 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       builder.create<mlir::db::ConditionOp>(loc, dbcondition, whileOp.before().front().getArguments());
       builder.setInsertionPointToStart(&whileOp.after().front());
       auto arg2 = whileOp.after().front().getArgument(0);
-      Value currElement = iterator->getElement(builder, arg2);
       Value nextIterator = builder.create<arith::AddIOp>(loc, builder.getIndexType(), arg2, step);
       auto terminator = builder.create<mlir::db::YieldOp>(loc);
       builder.setInsertionPoint(nextIterator.getDefiningOp());
-      std::vector<Value> bodyParams = {currElement};
+      std::vector<Value> bodyParams = {};
       auto additionalArgs = whileOp.after().front().getArguments().drop_front();
       bodyParams.insert(bodyParams.end(), additionalArgs.begin(), additionalArgs.end());
-      auto returnValues = bodyBuilder(bodyParams, builder);
+      auto returnValues = bodyBuilder([&](mlir::OpBuilder& b){return iterator->getElement(b, arg2);},bodyParams, builder);
       returnValues.insert(returnValues.begin(), nextIterator);
       builder.setInsertionPoint(terminator);
       builder.create<mlir::db::YieldOp>(loc, remap(returnValues, builder));

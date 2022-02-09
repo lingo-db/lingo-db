@@ -93,11 +93,11 @@ class ForOpLowering : public ConversionPattern {
          argumentLocs.push_back(op->getLoc());
       }
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::db::CollectionType>();
-
       auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), functionRegistry);
 
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      std::vector<Value> results = iterator->implementLoop(op->getLoc(), forOpAdaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, [&](ValueRange values, OpBuilder builder) {
+      std::vector<Value> results = iterator->implementLoop(op->getLoc(), forOpAdaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, [&](std::function<Value(OpBuilder& b)> getElem,ValueRange iterargs, OpBuilder builder) {
+
          auto yieldOp = cast<mlir::db::YieldOp>(forOp.getBody()->getTerminator());
          std::vector<Type> resTypes;
          std::vector<Location> locs;
@@ -106,15 +106,18 @@ class ForOpLowering : public ConversionPattern {
             locs.push_back(op->getLoc());
          }
          auto execRegion = builder.create<mlir::scf::ExecuteRegionOp>(op->getLoc(), resTypes);
-         auto execRegionBlock = new Block();
+         auto *execRegionBlock = new Block();
          execRegion.getRegion().push_back(execRegionBlock);
          {
             OpBuilder::InsertionGuard guard(builder);
             OpBuilder::InsertionGuard guard2(rewriter);
 
             builder.setInsertionPointToStart(execRegionBlock);
+            std::vector<Value> values;
+            values.push_back(getElem(builder));
+            values.insert(values.end(),iterargs.begin(),iterargs.end());
             auto term = builder.create<mlir::scf::YieldOp>(op->getLoc());
-            builder.setInsertionPointToStart(execRegionBlock);
+            builder.setInsertionPoint(term);
             rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
 
             std::vector<Value> results(yieldOp.results().begin(), yieldOp.results().end());
@@ -135,7 +138,7 @@ class ForOpLowering : public ConversionPattern {
                   toErase.push_back(op.getOperation());
                   builder.setInsertionPointAfter(op);
                   llvm::SmallVector<mlir::Value> remappedArgs;
-                  rewriter.getRemappedValues(op.args(), remappedArgs);
+                  assert(rewriter.getRemappedValues(op.args(), remappedArgs).succeeded());
                   Block* after = rewriter.splitBlock(builder.getBlock(), builder.getInsertionPoint());
                   builder.setInsertionPointAfter(op);
                   auto cond = rewriter.getRemappedValue(op.condition());
@@ -149,7 +152,7 @@ class ForOpLowering : public ConversionPattern {
                   builder.create<mlir::cf::CondBranchOp>(op->getLoc(), cond, end, remappedArgs, after, ValueRange());
                }
             }
-            for (auto x : toErase) {
+            for (auto *x : toErase) {
                rewriter.eraseOp(x);
             }
             rewriter.eraseOp(term);

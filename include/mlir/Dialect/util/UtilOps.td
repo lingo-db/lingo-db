@@ -59,7 +59,7 @@ def VarLen32Type : Util_Type<"VarLen32","varlen32"> {
 let summary = "type representing variable-length data up to 2^32 bytes";
 }
 
-def CreateVarLen  : Util_Op<"varlen32_create"> {
+def CreateVarLen  : Util_Op<"varlen32_create",[NoSideEffect]> {//todo: technically not currect
 let arguments = (ins RefType:$ref, I32: $len);
 let results=(outs VarLen32Type:$varlen);
 let assemblyFormat = " $ref `,` $len attr-dict";
@@ -75,17 +75,17 @@ def VarLenGetLen : Util_Op<"varlen32_getlen"> {
     let assemblyFormat = " $varlen attr-dict";
 }
 
-def Hash64 : Util_Op<"hash_64"> {
+def Hash64 : Util_Op<"hash_64",[NoSideEffect]> {
     let arguments = (ins Index:$val);
     let results = (outs Index:$hash);
     let assemblyFormat = "$val attr-dict";
 }
-def HashVarLen : Util_Op<"hash_varlen"> {
+def HashVarLen : Util_Op<"hash_varlen",[NoSideEffect]> {
     let arguments = (ins VarLen32Type:$val);
     let results = (outs Index:$hash);
     let assemblyFormat = "$val attr-dict";
 }
-def HashCombine : Util_Op<"hash_combine"> {
+def HashCombine : Util_Op<"hash_combine",[NoSideEffect]> {
     let arguments = (ins Index:$h1, Index:$h2);
     let results = (outs Index:$hash);
     let assemblyFormat = "$h1 `,` $h2 attr-dict";
@@ -129,7 +129,7 @@ let arguments = (ins RefType:$ref);
 let results=(outs Index:$size);
 let assemblyFormat = "$ref `:`type($ref) attr-dict";
 }
-def LoadOp  : Util_Op<"load",[NoSideEffect]> {
+def LoadOp  : Util_Op<"load",[DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
 let arguments = (ins RefType:$ref,Optional<Index>:$idx);
 let results=(outs AnyType:$val);
 let assemblyFormat = "$ref `[` $idx `]` `:`type($ref) `->` type($val) attr-dict";

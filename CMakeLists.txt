@@ -53,6 +53,7 @@ add_subdirectory(lib/util)
 add_subdirectory(lib/Conversion/DBToArrowStd)
 add_subdirectory(lib/Conversion/RelAlgToDB)
 add_subdirectory(lib/Conversion/UtilToLLVM)
+add_subdirectory(lib/Transforms)
 
 get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
@@ -79,6 +80,7 @@ set(LIBS
         MLIRCallInterfaces
         MLIRSideEffectInterfaces
         MLIRTransforms
+        MLIRCustomTransforms
         )
 set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
 

@@ -67,6 +67,11 @@ LogicalResult mlir::util::UnPackOp::canonicalize(mlir::util::UnPackOp unPackOp, 
    }
    return failure();
 }
+void mlir::util::LoadOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects::EffectInstance<::mlir::MemoryEffects::Effect>>& effects) {
+   if(!getOperation()->hasAttr("nosideffect")){
+      effects.emplace_back(MemoryEffects::Read::get());
+   }
+}
 
 #define GET_OP_CLASSES
 #include "mlir/Dialect/util/UtilOps.cpp.inc"

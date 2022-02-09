@@ -25,6 +25,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 
 #include "mlir-support/eval.h"
+#include "mlir/Transforms/CustomPasses.h"
 
 namespace {
 struct ToLLVMLoweringPass
@@ -131,6 +132,9 @@ int main(int argc, char** argv) {
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createDetachMetaDataPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::createSinkOpPass();
    });
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();

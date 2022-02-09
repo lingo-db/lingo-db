@@ -20,19 +20,63 @@ class SelectionTranslator : public mlir::relalg::Translator {
 
       mlir::Value matched = mergeRelationalBlock(
          builder.getInsertionBlock(), selectionOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
-      auto parentOp = builder.getBlock()->getParentOp();
-      if (parentOp && mlir::isa<mlir::db::ForOp>(parentOp)) {
-         std::vector<mlir::Value> conditions;
+      auto *parentOp = builder.getBlock()->getParentOp();
+      if (mlir::isa_and_nonnull<mlir::db::ForOp>(parentOp)) {
+         std::vector<std::pair<int,mlir::Value>> conditions;
          if (auto andOp = mlir::dyn_cast_or_null<mlir::db::AndOp>(matched.getDefiningOp())) {
             for (auto c : andOp.vals()) {
-               conditions.push_back(c);
+               int p=1000;
+               if(auto *defOp=c.getDefiningOp()){
+                  if(auto cmpOp=mlir::dyn_cast_or_null<mlir::db::CmpOp>(defOp)){
+                     auto t=cmpOp.left().getType();
+                     p= ::llvm::TypeSwitch<mlir::Type, int>(t)
+                        .Case<::mlir::db::BoolType>([&](::mlir::db::BoolType t) {
+                           return 1;
+                        })
+                        .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) {
+                           return 2;
+                        })
+                        .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
+                           return 3;
+                        })
+                        .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
+                           return 2;
+                        })
+                        .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
+                           return 2;
+                        })
+                        .Case<::mlir::db::CharType>([&](::mlir::db::CharType t) {
+                           return 2;
+                        })
+                        .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
+                           return 10;
+                        })
+                        .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
+                           return 2;
+                        })
+                        .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
+                           return 2;
+                        })
+                        .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
+                           return 2;
+                        })
+                        .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
+                           return 2;
+                        })
+                        .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
+                           return 2;
+                        })
+                        .Default([](::mlir::Type) { return 100; });
+                  }
+               }
+               conditions.push_back({p,c});
             }
          } else {
-            conditions.push_back(matched);
+            conditions.push_back({0,matched});
          }
-
+         std::sort(conditions.begin(),conditions.end(),[](auto a,auto b){return a.first<b.first;});
          for (auto c : conditions) {
-            auto negated = builder.create<mlir::db::NotOp>(selectionOp.getLoc(), c);
+            auto negated = builder.create<mlir::db::NotOp>(selectionOp.getLoc(), c.second);
             builder.create<mlir::db::CondSkipOp>(selectionOp->getLoc(), negated, getRequiredBuilderValues(context));
          }
          consumer->consume(this, builder, context);
