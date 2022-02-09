@@ -338,11 +338,21 @@ bool Runner::lower() {
    mlir::PassManager pm(&ctxt->context);
    pm.enableVerifier(runMode == RunMode::DEBUGGING);
    pm.addPass(mlir::db::createLowerToStdPass());
-   pm.addPass(mlir::createCanonicalizerPass());
-   pm.addPass(mlir::createSinkOpPass());
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
    }
+   mlir::PassManager pmFunc(&ctxt->context,mlir::FuncOp::getOperationName());
+   pmFunc.enableVerifier(runMode == RunMode::DEBUGGING);
+   pmFunc.addPass(mlir::createCanonicalizerPass());
+   pmFunc.addPass(mlir::createSinkOpPass());
+   ctxt->module.get().walk([&](mlir::FuncOp f){
+      if(!f->hasAttr("passthrough")){
+         if (mlir::failed(pmFunc.run(f))) {
+            return;//todo:fixed
+         }
+      }
+   });
+
 
    auto end = std::chrono::high_resolution_clock::now();
    std::cout << "lowering to std took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
