@@ -21,6 +21,12 @@ class Bytes {
    size_t getSize() {
       return size;
    }
+   void setPointer(uint8_t* pointer) {
+      Bytes::pointer = pointer;
+   }
+   void setSize(size_t size) {
+      Bytes::size = size;
+   }
 };
 static uint64_t unalignedLoad64(const uint8_t* p) {
    uint64_t result;

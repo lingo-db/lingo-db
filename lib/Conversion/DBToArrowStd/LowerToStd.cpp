@@ -163,7 +163,7 @@ static bool hasDBType(TypeRange types) {
 }
 void DBToStdLoweringPass::runOnOperation() {
    auto module = getOperation();
-   mlir::db::codegen::FunctionRegistry functionRegistry(&getContext());
+   mlir::db::codegen::FunctionRegistry functionRegistry(module);
    functionRegistry.registerFunctions();
 
    // Define Conversion Target

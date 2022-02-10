@@ -24,7 +24,6 @@ void mlir::db::codegen::FunctionRegistry::registerFunctions() {
 #undef OPERANDS_
 }
 mlir::FuncOp mlir::db::codegen::FunctionRegistry::insertFunction(mlir::OpBuilder builder, mlir::db::codegen::FunctionRegistry::RegisteredFunction& function){
-   ModuleOp parentModule = builder.getBlock()->getParentOp()->getParentOfType<ModuleOp>();
    OpBuilder::InsertionGuard insertionGuard(builder);
    builder.setInsertionPointToStart(parentModule.getBody());
    FuncOp funcOp = builder.create<FuncOp>(parentModule.getLoc(), function.useWrapper?"rt_"+function.name:function.name, builder.getFunctionType(function.operands, function.results), builder.getStringAttr("private"));

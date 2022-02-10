@@ -28,14 +28,14 @@
    F(TableChunkIteratorValid, table_chunk_iterator_valid, OPERANDS(POINTER_TYPE), RETURNS(BOOL_TYPE))                                                      \
    F(TableChunkIteratorFree, table_chunk_iterator_free, OPERANDS(POINTER_TYPE), RETURNS())                                                                 \
    F(TableChunkNumRows, table_chunk_num_rows, OPERANDS(POINTER_TYPE), RETURNS(INDEX_TYPE))                                                                 \
-   F(TableChunkGetColumnBuffer, table_chunk_get_column_buffer, OPERANDS(POINTER_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                       \
-   F(TableChunkGetRawColumnBuffer, table_chunk_get_raw_column_buffer, OPERANDS(POINTER_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(BYTES_TYPE))                       \
+   F(TableChunkGetColumnBuffer, table_chunk_get_column_buffer, OPERANDS(POINTER_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                      \
+   F(TableChunkGetRawColumnBuffer, table_chunk_get_raw_column_buffer, OPERANDS(POINTER_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(BYTES_TYPE))                 \
    F(TableChunkGetColumnOffset, table_chunk_get_column_offset, OPERANDS(POINTER_TYPE, INDEX_TYPE), RETURNS(INDEX_TYPE))                                    \
    F(ArrowGetType2Param, arrow_type2, OPERANDS(INT_TYPE(32), INT_TYPE(32), INT_TYPE(32)), RETURNS(POINTER_TYPE))                                           \
    F(ArrowGetType1Param, arrow_type1, OPERANDS(INT_TYPE(32), INT_TYPE(32)), RETURNS(POINTER_TYPE))                                                         \
    F(ArrowGetType, arrow_type, OPERANDS(INT_TYPE(32)), RETURNS(POINTER_TYPE))                                                                              \
    F(ArrowTableSchemaCreate, arrow_schema_create_builder, OPERANDS(), RETURNS(POINTER_TYPE))                                                               \
-   F(NextPow2, next_pow2, OPERANDS(INDEX_TYPE), RETURNS(INDEX_TYPE))                                                               \
+   F(NextPow2, next_pow2, OPERANDS(INDEX_TYPE), RETURNS(INDEX_TYPE))                                                                                       \
    F(ArrowTableSchemaAddField, arrow_schema_add_field, OPERANDS(POINTER_TYPE, POINTER_TYPE, BOOL_TYPE, STRING_TYPE), RETURNS())                            \
    F(ArrowTableSchemaBuild, arrow_schema_build, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                             \
    F(ArrowTableBuilderCreate, arrow_create_table_builder, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                   \
@@ -51,7 +51,7 @@
    F(ArrowTableBuilderAddFloat64, table_builder_add_float_64, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, DOUBLE_TYPE), RETURNS())                     \
    F(ArrowTableBuilderAddBool, table_builder_add_bool, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, BOOL_TYPE), RETURNS())                              \
    F(ArrowTableBuilderAddBinary, table_builder_add_binary, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, STRING_TYPE), RETURNS())                        \
-   F(ArrowTableBuilderAddFixedBinary, table_builder_add_fixed_binary, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(64)), RETURNS())                        \
+   F(ArrowTableBuilderAddFixedBinary, table_builder_add_fixed_binary, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(64)), RETURNS())            \
    F(ArrowTableBuilderFinishRow, table_builder_finish_row, OPERANDS(POINTER_TYPE), RETURNS())                                                              \
    F(ArrowTableBuilderBuild, table_builder_build, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                           \
    F(CmpStringEQ, cmp_string_eq, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
@@ -61,8 +61,8 @@
    F(CmpStringGT, cmp_string_gt, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
    F(CmpStringGTE, cmp_string_gte, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                      \
    F(CmpStringLike, cmp_string_like, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                    \
-   F(CmpStringStartsWith, cmp_string_starts_with, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                    \
-   F(CmpStringEndsWith, cmp_string_ends_with, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                    \
+   F(CmpStringStartsWith, cmp_string_starts_with, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                       \
+   F(CmpStringEndsWith, cmp_string_ends_with, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                           \
    F(CastStringToInt64, cast_string_int, OPERANDS(BOOL_TYPE, STRING_TYPE), RETURNS(INT_TYPE(64)))                                                          \
    F(CastStringToFloat32, cast_string_float32, OPERANDS(BOOL_TYPE, STRING_TYPE), RETURNS(FLOAT_TYPE))                                                      \
    F(CastStringToFloat64, cast_string_float64, OPERANDS(BOOL_TYPE, STRING_TYPE), RETURNS(DOUBLE_TYPE))                                                     \
@@ -71,7 +71,7 @@
    F(CastFloat32ToString, cast_float32_string, OPERANDS(BOOL_TYPE, FLOAT_TYPE), RETURNS(STRING_TYPE))                                                      \
    F(CastFloat64ToString, cast_float64_string, OPERANDS(BOOL_TYPE, DOUBLE_TYPE), RETURNS(STRING_TYPE))                                                     \
    F(CastDecimalToString, cast_decimal_string, OPERANDS(BOOL_TYPE, INT_TYPE(128), INT_TYPE(32)), RETURNS(STRING_TYPE))                                     \
-   F(CastCharToString, cast_char_string, OPERANDS(BOOL_TYPE, INT_TYPE(64), INT_TYPE(64)), RETURNS(STRING_TYPE))                                           \
+   F(CastCharToString, cast_char_string, OPERANDS(BOOL_TYPE, INT_TYPE(64), INT_TYPE(64)), RETURNS(STRING_TYPE))                                            \
    F(SortVector, sort, OPERANDS(INDEX_TYPE, POINTER_TYPE, INDEX_TYPE, FUNCTION_TYPE(OPERANDS(POINTER_TYPE, POINTER_TYPE), RETURNS(BOOL_TYPE))), RETURNS()) \
    F(TimestampAddMillis, timestamp_add_millis, OPERANDS(INT_TYPE(64), INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                \
    F(TimestampAddMonth, timestamp_add_months, OPERANDS(INT_TYPE(32), INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                 \
@@ -82,6 +82,7 @@
    F(DateExtractDow, extractdow, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                            \
    F(DateExtractHour, extract_hour, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                         \
    F(DateExtractMinute, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                     \
-   F(DateExtractSecond, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))
+   F(DateExtractSecond, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                     \
+   F(VecResize, resize_vec, OPERANDS(POINTER_TYPE), RETURNS())
 
 #endif // MLIR_CONVERSION_DBTOARROWSTD_REGISTEREDFUNCTIONS_H

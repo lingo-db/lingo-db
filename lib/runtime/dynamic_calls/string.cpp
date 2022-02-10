@@ -107,29 +107,29 @@ extern "C" bool rt_cmp_string_starts_with(bool null, runtime::VarLen32 str1, run
 //taken from gandiva
 //source https://github.com/apache/arrow/blob/41d115071587d68891b219cc137551d3ea9a568b/cpp/src/gandiva/gdv_function_stubs.cc
 //Apache-2.0 License
-#define CAST_NUMERIC_FROM_STRING(OUT_TYPE, ARROW_TYPE, TYPE_NAME)                                                                     \
+#define CAST_NUMERIC_FROM_STRING(OUT_TYPE, ARROW_TYPE, TYPE_NAME)                                                                          \
    extern "C" OUT_TYPE rt_cast_string_##TYPE_NAME(bool null, runtime::VarLen32 str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
-      if (null) return (OUT_TYPE) 0;                                                                                                  \
-      char* data = (str).data();                                                                                                      \
-      int32_t len = (str).getLen();                                                                                                      \
-      OUT_TYPE val = 0;                                                                                                               \
-      /* trim leading and trailing spaces */                                                                                          \
-      int32_t trimmed_len;                                                                                                            \
-      int32_t start = 0, end = len - 1;                                                                                               \
-      while (start <= end && data[start] == ' ') {                                                                                    \
-         ++start;                                                                                                                     \
-      }                                                                                                                               \
-      while (end >= start && data[end] == ' ') {                                                                                      \
-         --end;                                                                                                                       \
-      }                                                                                                                               \
-      trimmed_len = end - start + 1;                                                                                                  \
-      const char* trimmed_data = data + start;                                                                                        \
-      if (!arrow::internal::ParseValue<ARROW_TYPE>(trimmed_data, trimmed_len, &val)) {                                                \
-         std::string err =                                                                                                            \
-            "Failed to cast the string " + std::string(data, len) + " to " #OUT_TYPE;                                                 \
-         /*gdv_fn_context_set_error_msg(context, err.c_str());*/                                                                      \
-      }                                                                                                                               \
-      return val;                                                                                                                     \
+      if (null) return (OUT_TYPE) 0;                                                                                                       \
+      char* data = (str).data();                                                                                                           \
+      int32_t len = (str).getLen();                                                                                                        \
+      OUT_TYPE val = 0;                                                                                                                    \
+      /* trim leading and trailing spaces */                                                                                               \
+      int32_t trimmed_len;                                                                                                                 \
+      int32_t start = 0, end = len - 1;                                                                                                    \
+      while (start <= end && data[start] == ' ') {                                                                                         \
+         ++start;                                                                                                                          \
+      }                                                                                                                                    \
+      while (end >= start && data[end] == ' ') {                                                                                           \
+         --end;                                                                                                                            \
+      }                                                                                                                                    \
+      trimmed_len = end - start + 1;                                                                                                       \
+      const char* trimmed_data = data + start;                                                                                             \
+      if (!arrow::internal::ParseValue<ARROW_TYPE>(trimmed_data, trimmed_len, &val)) {                                                     \
+         std::string err =                                                                                                                 \
+            "Failed to cast the string " + std::string(data, len) + " to " #OUT_TYPE;                                                      \
+         /*gdv_fn_context_set_error_msg(context, err.c_str());*/                                                                           \
+      }                                                                                                                                    \
+      return val;                                                                                                                          \
    }
 
 CAST_NUMERIC_FROM_STRING(int64_t, arrow::Int64Type, int)
@@ -154,20 +154,20 @@ extern "C" __int128 rt_cast_string_decimal(bool null, runtime::VarLen32 string, 
    res |= decimalrep.low_bits();
    return res;
 }
-#define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                           \
+#define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                \
    extern "C" runtime::VarLen32 rt_cast_##TYPE_NAME##_string(bool null, IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
-      if (null) {                                                                                                                        \
+      if (null) {                                                                                                                             \
          return runtime::VarLen32(nullptr, 0);                                                                                                \
-      }                                                                                                                                  \
-      arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                            \
-      uint8_t * data = nullptr;                                                                                                              \
-      size_t len = 0;                                                                                                                    \
-      arrow::Status status = formatter(value, [&](arrow::util::string_view v) {                                                          \
-         len = v.length();                                                                                                               \
-         data = new uint8_t [len];                                                                                                           \
-         memcpy(data, v.data(), len);                                                                                                    \
-         return arrow::Status::OK();                                                                                                     \
-      });                                                                                                                                \
+      }                                                                                                                                       \
+      arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                                 \
+      uint8_t* data = nullptr;                                                                                                                \
+      size_t len = 0;                                                                                                                         \
+      arrow::Status status = formatter(value, [&](arrow::util::string_view v) {                                                               \
+         len = v.length();                                                                                                                    \
+         data = new uint8_t[len];                                                                                                             \
+         memcpy(data, v.data(), len);                                                                                                         \
+         return arrow::Status::OK();                                                                                                          \
+      });                                                                                                                                     \
       return runtime::VarLen32(data, len);                                                                                                    \
    }
 
@@ -260,5 +260,20 @@ EXPORT P64 rt_varlen_from_ptr(uint8_t* ptr, uint32_t len) {
 
 EXPORT runtime::Bytes rt_varlen_to_ref(P64* varlen) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    auto* obj = reinterpret_cast<runtime::VarLen32*>(varlen);
-   return runtime::Bytes((uint8_t*)obj->data(), obj->getLen());
+   return runtime::Bytes((uint8_t*) obj->data(), obj->getLen());
+}
+
+struct Vec {
+   size_t len;
+   size_t cap;
+   runtime::Bytes bytes;
+};
+EXPORT void rt_resize_vec(Vec* v) {
+   v->cap *= 2;
+   auto newNumBytes = v->bytes.getSize() * 2;
+   uint8_t* newBytes = (uint8_t*) malloc(newNumBytes);
+   memcpy(newBytes, v->bytes.getPtr(), v->bytes.getSize());
+   v->bytes.setSize(newNumBytes);
+   free(v->bytes.getPtr());
+   v->bytes.setPointer(newBytes);
 }
