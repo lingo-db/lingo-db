@@ -14,6 +14,8 @@
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
 
+#include "mlir/Analysis/DataLayoutAnalysis.h"
+
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
@@ -83,6 +85,8 @@ void ToLLVMLoweringPass::runOnOperation() {
    // The first thing to define is the conversion target. This will define the
    // final target for this lowering. For this lowering, we are only targeting
    // the LLVM dialect.
+   const auto &dataLayoutAnalysis = getAnalysis<mlir::DataLayoutAnalysis>();
+
    mlir::LLVMConversionTarget target(getContext());
    target.addLegalOp<mlir::ModuleOp>();
 
@@ -91,9 +95,9 @@ void ToLLVMLoweringPass::runOnOperation() {
    // conversion we use a TypeConverter as part of the lowering. This converter
    // details how one type maps to another. This is necessary now that we will be
    // doing more complicated lowerings, involving loop region arguments.
-   mlir::LowerToLLVMOptions options(&getContext());
+   mlir::LowerToLLVMOptions options(&getContext(),dataLayoutAnalysis.getAtOrAbove(getOperation()));
    //options.emitCWrappers = true;
-   mlir::LLVMTypeConverter typeConverter(&getContext(), options);
+   mlir::LLVMTypeConverter typeConverter(&getContext(), options,&dataLayoutAnalysis);
    typeConverter.addSourceMaterialization([&](mlir::OpBuilder&, mlir::FunctionType type, mlir::ValueRange valueRange, mlir::Location loc) {
       return valueRange.front();
    });
@@ -375,6 +379,7 @@ bool Runner::lowerToLLVM() {
    pm2.enableVerifier(runMode == RunMode::DEBUGGING);
    pm2.addPass(mlir::createConvertSCFToCFPass());
    pm2.addPass(createLowerToLLVMPass());
+   pm2.addPass(mlir::createCSEPass());
    if (mlir::failed(pm2.run(ctxt->module.get()))) {
       return false;
    }

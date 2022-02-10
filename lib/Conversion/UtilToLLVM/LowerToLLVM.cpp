@@ -1,3 +1,4 @@
+#include "mlir/Analysis/DataLayoutAnalysis.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
@@ -10,6 +11,8 @@
 #include "mlir/Dialect/util/UtilTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
+
+#include <iostream>
 
 using namespace mlir;
 
@@ -105,18 +108,22 @@ class GetTupleOpLowering : public ConversionPattern {
 };
 class SizeOfOpLowering : public ConversionPattern {
    public:
-   explicit SizeOfOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::util::SizeOfOp::getOperationName(), 1, context) {}
+   DataLayout defaultLayout;
+   LLVMTypeConverter& llvmTypeConverter;
+   explicit SizeOfOpLowering(LLVMTypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::SizeOfOp::getOperationName(), 1, context), defaultLayout(), llvmTypeConverter(typeConverter) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto sizeOfOp = mlir::dyn_cast_or_null<mlir::util::SizeOfOp>(op);
-      Value const1 = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(1));
-      Type ptrType = mlir::LLVM::LLVMPointerType::get(typeConverter->convertType(sizeOfOp.type()));
-      Value nullPtr = rewriter.create<mlir::LLVM::NullOp>(op->getLoc(), ptrType);
-      Value size1 = rewriter.create<LLVM::GEPOp>(op->getLoc(), ptrType, nullPtr, const1);
-      rewriter.replaceOpWithNewOp<mlir::LLVM::PtrToIntOp>(op, rewriter.getI64Type(), size1);
+      Type t = typeConverter->convertType(sizeOfOp.type());
+      const DataLayout* layout = &defaultLayout;
+      if (const DataLayoutAnalysis* analysis = llvmTypeConverter.getDataLayoutAnalysis()) {
+         layout = &analysis->getAbove(op);
+      }
+      size_t typeSize = layout->getTypeSize(t);
+      rewriter.replaceOpWithNewOp<mlir::LLVM::ConstantOp>(op, rewriter.getI64Type(), rewriter.getI64IntegerAttr(typeSize));
       return success();
    }
 };

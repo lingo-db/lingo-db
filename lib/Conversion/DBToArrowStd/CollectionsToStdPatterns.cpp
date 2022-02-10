@@ -185,7 +185,8 @@ class LookupOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto loc = op->getLoc();
       mlir::db::LookupAdaptor lookupAdaptor(operands);
-      auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, lookupAdaptor.collection());
+      auto loaded = rewriter.create<util::LoadOp>(loc,lookupAdaptor.collection().getType().cast<mlir::util::RefType>().getElementType(), lookupAdaptor.collection(), Value());
+      auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, loaded);
       Value vec = unpacked.getResult(0);
       Value ht = unpacked.getResult(2);
       Value htMask = unpacked.getResult(3);
@@ -247,13 +248,13 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
          return t;
       }
    });
-   typeConverter.addConversion([&typeConverter, indexType, context](mlir::db::JoinHashtableType aggregationHashtableType) {
-      Type kvType = typeConverter.convertType(TupleType::get(context, {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()}));
+   typeConverter.addConversion([&typeConverter, indexType, context](mlir::db::JoinHashtableType joinHashtableType) {
+      Type kvType = typeConverter.convertType(TupleType::get(context, {joinHashtableType.getKeyType(), joinHashtableType.getValType()}));
       Type entryType = TupleType::get(context, {indexType, kvType});
 
       auto vecType = mlir::util::RefType::get(context, entryType, -1);
       auto htType = util::RefType::get(context, indexType, -1);
-      return (Type) TupleType::get(context, {vecType, indexType, htType, indexType});
+      return (Type) util::RefType::get(context, TupleType::get(context, {vecType, indexType, htType, indexType}),{});
    });
 
    typeConverter.addConversion([context, &typeConverter, indexType](mlir::db::VectorType vectorType) {

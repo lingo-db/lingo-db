@@ -595,7 +595,10 @@ class BuilderBuildLowering : public ConversionPattern {
 
          auto called = rewriter.create<mlir::CallOp>(op->getLoc(), buildFn, ValueRange({elemsize, toLB}));
          mlir::Value packed = rewriter.create<util::PackOp>(op->getLoc(), ValueRange{vec, len, called->getResult(0), called->getResult(1)});
-         rewriter.replaceOp(op, packed);
+         Value hashtable = rewriter.create<mlir::util::AllocOp>(op->getLoc(), util::RefType::get(rewriter.getContext(),packed.getType(),{}), mlir::Value());
+
+         rewriter.create<mlir::util::StoreOp>(op->getLoc(), packed, hashtable, Value());
+         rewriter.replaceOp(op, hashtable);
       }
       return success();
    }

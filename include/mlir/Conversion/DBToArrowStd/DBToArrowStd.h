@@ -13,7 +13,7 @@ void populateScalarToStdPatterns(mlir::TypeConverter& typeConverter, mlir::Rewri
 void populateControlFlowToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
 void populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
 void populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry& joinHtBuilderType, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
-void populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
+void populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegistry& joinHashtableType, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
 
 std::unique_ptr<Pass> createLowerToStdPass();
 

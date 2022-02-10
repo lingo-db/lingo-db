@@ -146,7 +146,8 @@ class JoinHtIterator : public ForIterator {
    JoinHtIterator(Value hashTable) : ForIterator(hashTable.getContext()), hashTable(hashTable) {
    }
    virtual void init(OpBuilder& builder) override {
-      auto unpacked = builder.create<mlir::util::UnPackOp>(loc, typeConverter->convertType(hashTable.getType()).cast<TupleType>().getTypes(), hashTable);
+      auto loaded = builder.create<util::LoadOp>(loc,typeConverter->convertType(hashTable.getType()).cast<mlir::util::RefType>().getElementType(), hashTable, Value());
+      auto unpacked = builder.create<mlir::util::UnPackOp>(loc, loaded);
       values = unpacked.getResult(0);
       len = unpacked.getResult(1);
    }
