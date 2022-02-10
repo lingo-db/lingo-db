@@ -282,7 +282,6 @@ class ConstantLowering : public ConversionPattern {
       auto constantOp = cast<mlir::db::ConstantOp>(op);
       auto type = constantOp.getType();
       auto stdType = typeConverter->convertType(type);
-      auto loc = op->getLoc();
       auto [arrowType,param1,param2] = mlir::db::codegen::convertTypeToArrow(type.cast<mlir::db::DBType>());
       std::variant<int64_t, double, std::string> parseArg;
       if (auto integerAttr = constantOp.value().dyn_cast_or_null<IntegerAttr>()) {
@@ -310,11 +309,8 @@ class ConstantLowering : public ConversionPattern {
          return success();
       }  else if (type.isa<mlir::db::StringType>()) {
          std::string str= std::get<std::string>(parseResult);
-         ModuleOp parentModule = rewriter.getInsertionPoint()->getParentOfType<ModuleOp>();
-         Value strres = db::createStringConstant(loc, rewriter, parentModule, str);
-         Value ptr = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), rewriter.getIntegerType(8)), strres);
-         Value len = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(str.size()));
-         rewriter.replaceOpWithNewOp<mlir::util::CreateVarLen>(op, mlir::util::VarLen32Type::get(rewriter.getContext()), ptr, len);
+
+         rewriter.replaceOpWithNewOp<mlir::util::CreateConstVarLen>(op, mlir::util::VarLen32Type::get(rewriter.getContext()), rewriter.getStringAttr(str));
          return success();
       } else {
          return failure();

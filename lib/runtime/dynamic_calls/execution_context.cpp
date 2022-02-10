@@ -1,6 +1,6 @@
 #include "runtime/execution_context.h"
 #include "runtime/helpers.h"
-EXPORT std::shared_ptr<arrow::Table>* rt_get_table(runtime::ExecutionContext* executionContext, runtime::Str tableName) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT std::shared_ptr<arrow::Table>* rt_get_table(runtime::ExecutionContext* executionContext, runtime::VarLen32 tableName) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    auto table=(executionContext)->db->getTable(tableName);
    if(!table){
       throw std::runtime_error("could not find table");

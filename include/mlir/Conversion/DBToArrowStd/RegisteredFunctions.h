@@ -4,8 +4,8 @@
 #define FUNC_LIST(F, OPERANDS, RETURNS)                                                                                                                    \
    F(SetExecutionContext, set_execution_context, OPERANDS(POINTER_TYPE), RETURNS())                                                                        \
    F(GetExecutionContext, get_execution_context, OPERANDS(), RETURNS(POINTER_TYPE))                                                                        \
-   F(ExecutionContextGetTable, get_table, OPERANDS(POINTER_TYPE, BYTES_TYPE), RETURNS(POINTER_TYPE))                                                      \
-   F(TableGetColumnId, get_column_id, OPERANDS(POINTER_TYPE, BYTES_TYPE), RETURNS(INDEX_TYPE))                                                            \
+   F(ExecutionContextGetTable, get_table, OPERANDS(POINTER_TYPE, STRING_TYPE), RETURNS(POINTER_TYPE))                                                      \
+   F(TableGetColumnId, get_column_id, OPERANDS(POINTER_TYPE, STRING_TYPE), RETURNS(INDEX_TYPE))                                                            \
    F(DumpInt, dump_int, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                                                      \
    F(DumpIndex, dump_index, OPERANDS(INDEX_TYPE), RETURNS())                                                                                               \
    F(DumpUInt, dump_uint, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                                                    \
@@ -36,7 +36,7 @@
    F(ArrowGetType, arrow_type, OPERANDS(INT_TYPE(32)), RETURNS(POINTER_TYPE))                                                                              \
    F(ArrowTableSchemaCreate, arrow_schema_create_builder, OPERANDS(), RETURNS(POINTER_TYPE))                                                               \
    F(NextPow2, next_pow2, OPERANDS(INDEX_TYPE), RETURNS(INDEX_TYPE))                                                               \
-   F(ArrowTableSchemaAddField, arrow_schema_add_field, OPERANDS(POINTER_TYPE, POINTER_TYPE, BOOL_TYPE, BYTES_TYPE), RETURNS())                            \
+   F(ArrowTableSchemaAddField, arrow_schema_add_field, OPERANDS(POINTER_TYPE, POINTER_TYPE, BOOL_TYPE, STRING_TYPE), RETURNS())                            \
    F(ArrowTableSchemaBuild, arrow_schema_build, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                             \
    F(ArrowTableBuilderCreate, arrow_create_table_builder, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                   \
    F(ArrowTableBuilderAddInt8, table_builder_add_int_8, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(8)), RETURNS())                           \
@@ -63,14 +63,14 @@
    F(CmpStringLike, cmp_string_like, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                    \
    F(CmpStringStartsWith, cmp_string_starts_with, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                    \
    F(CmpStringEndsWith, cmp_string_ends_with, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                    \
-   F(CastStringToInt64, cast_string_int, OPERANDS(BOOL_TYPE, BYTES_TYPE), RETURNS(INT_TYPE(64)))                                                          \
-   F(CastStringToFloat32, cast_string_float32, OPERANDS(BOOL_TYPE, BYTES_TYPE), RETURNS(FLOAT_TYPE))                                                      \
-   F(CastStringToFloat64, cast_string_float64, OPERANDS(BOOL_TYPE, BYTES_TYPE), RETURNS(DOUBLE_TYPE))                                                     \
-   F(CastStringToDecimal, cast_string_decimal, OPERANDS(BOOL_TYPE, BYTES_TYPE, INT_TYPE(32)), RETURNS(INT_TYPE(128)))                                     \
-   F(CastInt64ToString, cast_int_string, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS(BYTES_TYPE))                                                          \
-   F(CastFloat32ToString, cast_float32_string, OPERANDS(BOOL_TYPE, FLOAT_TYPE), RETURNS(BYTES_TYPE))                                                      \
-   F(CastFloat64ToString, cast_float64_string, OPERANDS(BOOL_TYPE, DOUBLE_TYPE), RETURNS(BYTES_TYPE))                                                     \
-   F(CastDecimalToString, cast_decimal_string, OPERANDS(BOOL_TYPE, INT_TYPE(128), INT_TYPE(32)), RETURNS(BYTES_TYPE))                                     \
+   F(CastStringToInt64, cast_string_int, OPERANDS(BOOL_TYPE, STRING_TYPE), RETURNS(INT_TYPE(64)))                                                          \
+   F(CastStringToFloat32, cast_string_float32, OPERANDS(BOOL_TYPE, STRING_TYPE), RETURNS(FLOAT_TYPE))                                                      \
+   F(CastStringToFloat64, cast_string_float64, OPERANDS(BOOL_TYPE, STRING_TYPE), RETURNS(DOUBLE_TYPE))                                                     \
+   F(CastStringToDecimal, cast_string_decimal, OPERANDS(BOOL_TYPE, STRING_TYPE, INT_TYPE(32)), RETURNS(INT_TYPE(128)))                                     \
+   F(CastInt64ToString, cast_int_string, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS(STRING_TYPE))                                                          \
+   F(CastFloat32ToString, cast_float32_string, OPERANDS(BOOL_TYPE, FLOAT_TYPE), RETURNS(STRING_TYPE))                                                      \
+   F(CastFloat64ToString, cast_float64_string, OPERANDS(BOOL_TYPE, DOUBLE_TYPE), RETURNS(STRING_TYPE))                                                     \
+   F(CastDecimalToString, cast_decimal_string, OPERANDS(BOOL_TYPE, INT_TYPE(128), INT_TYPE(32)), RETURNS(STRING_TYPE))                                     \
    F(CastCharToString, cast_char_string, OPERANDS(BOOL_TYPE, INT_TYPE(64), INT_TYPE(64)), RETURNS(STRING_TYPE))                                           \
    F(SortVector, sort, OPERANDS(INDEX_TYPE, POINTER_TYPE, INDEX_TYPE, FUNCTION_TYPE(OPERANDS(POINTER_TYPE, POINTER_TYPE), RETURNS(BOOL_TYPE))), RETURNS()) \
    F(TimestampAddMillis, timestamp_add_millis, OPERANDS(INT_TYPE(64), INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                \

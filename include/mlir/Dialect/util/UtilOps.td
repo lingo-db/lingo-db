@@ -64,6 +64,11 @@ let arguments = (ins RefType:$ref, I32: $len);
 let results=(outs VarLen32Type:$varlen);
 let assemblyFormat = " $ref `,` $len attr-dict";
 }
+def CreateConstVarLen  : Util_Op<"varlen32_create_const",[NoSideEffect]> {
+let arguments = (ins StrAttr: $str);
+let results=(outs VarLen32Type:$varlen);
+let assemblyFormat = " $str attr-dict";
+}
 def VarLenGetRef : Util_Op<"varlen32_getref"> {
     let arguments = (ins VarLen32Type:$varlen);
     let results = (outs RefType: $ref);

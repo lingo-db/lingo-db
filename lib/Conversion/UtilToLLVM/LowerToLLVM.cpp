@@ -507,6 +507,53 @@ class CreateVarLenLowering : public ConversionPattern {
       return success();
    }
 };
+class CreateConstVarLenLowering : public ConversionPattern {
+   public:
+   explicit CreateConstVarLenLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::CreateConstVarLen::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto* context = getContext();
+      auto createStrConstOp = mlir::cast<mlir::util::CreateConstVarLen>(op);
+      size_t len = createStrConstOp.str().size();
+      auto structType = LLVM::LLVMStructType::getLiteral(context, std::vector<Type>{rewriter.getI64Type(), rewriter.getI64Type()});
+      Value result = rewriter.create<LLVM::UndefOp>(op->getLoc(), structType);
+
+      uint64_t first4 = 0;
+      memcpy(&first4, createStrConstOp.str().data(), std::min(4ul, len));
+      size_t c1 = (first4 << 32) | len;
+      auto p1 = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(c1));
+      result = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), result, p1, rewriter.getI64ArrayAttr(0));
+      if (len <= 12) {
+         uint64_t last8 = 0;
+         if (len > 4) {
+            memcpy(&last8, createStrConstOp.str().data() + 4, std::min(8ul, len - 4));
+         }
+         size_t c2 = last8;
+         auto p2 = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(c2));
+
+         result = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), result, p2, rewriter.getI64ArrayAttr(1));
+         rewriter.replaceOp(op, result);
+      } else {
+         static size_t globalStrConstId = 0;
+         mlir::LLVM::GlobalOp globalOp;
+         {
+            std::string name = "global_str_const_" + std::to_string(globalStrConstId++);
+            auto moduleOp = rewriter.getBlock()->getParentOp()->getParentOfType<ModuleOp>();
+            OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(moduleOp.getBody());
+            globalOp = rewriter.create<mlir::LLVM::GlobalOp>(op->getLoc(), mlir::LLVM::LLVMArrayType::get(rewriter.getI8Type(), len), true, mlir::LLVM::Linkage::Private, name, createStrConstOp.strAttr());
+         }
+         auto ptr = rewriter.create<mlir::LLVM::AddressOfOp>(op->getLoc(), globalOp);
+         Value rawPtr = rewriter.create<mlir::LLVM::PtrToIntOp>(op->getLoc(), rewriter.getI64Type(), ptr);
+         result = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), result, rawPtr, rewriter.getI64ArrayAttr(1));
+         rewriter.replaceOp(op, result);
+      }
+      return success();
+   }
+};
 class VarLenGetRefLowering : public ConversionPattern {
    public:
    explicit VarLenGetRefLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -569,8 +616,8 @@ class Hash64Lowering : public ConversionPattern {
       mlir::util::Hash64Adaptor adaptor(operands);
       Value p1 = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(11400714819323198549ull));
       Value m1 = rewriter.create<LLVM::MulOp>(op->getLoc(), p1, adaptor.val());
-      Value reversed=rewriter.create<mlir::LLVM::ByteSwapOp>(op->getLoc(),m1);
-      Value result=rewriter.create<LLVM::XOrOp>(op->getLoc(),m1,reversed);
+      Value reversed = rewriter.create<mlir::LLVM::ByteSwapOp>(op->getLoc(), m1);
+      Value result = rewriter.create<LLVM::XOrOp>(op->getLoc(), m1, reversed);
       rewriter.replaceOp(op, result);
       return success();
    }
@@ -585,8 +632,8 @@ class HashCombineLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::HashCombineAdaptor adaptor(operands);
 
-      Value reversed=rewriter.create<mlir::LLVM::ByteSwapOp>(op->getLoc(),adaptor.h1());
-      Value result=rewriter.create<LLVM::XOrOp>(op->getLoc(),adaptor.h2(),reversed);
+      Value reversed = rewriter.create<mlir::LLVM::ByteSwapOp>(op->getLoc(), adaptor.h1());
+      Value result = rewriter.create<LLVM::XOrOp>(op->getLoc(), adaptor.h2(), reversed);
       rewriter.replaceOp(op, result);
       return success();
    }
@@ -663,6 +710,7 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<StoreOpLowering>(typeConverter, patterns.getContext());
    patterns.add<LoadOpLowering>(typeConverter, patterns.getContext());
    patterns.add<CreateVarLenLowering>(typeConverter, patterns.getContext());
+   patterns.add<CreateConstVarLenLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenGetRefLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenGetLenLowering>(typeConverter, patterns.getContext());
    patterns.add<HashCombineLowering>(typeConverter, patterns.getContext());

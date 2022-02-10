@@ -9,21 +9,6 @@
 #define EXPORT extern "C" __attribute__((visibility("default")))
 #define INLINE __attribute__((always_inline))
 namespace runtime {
-class Str {
-   char* pointer;
-   size_t size;
-
-   public:
-   Str(char* ptr, size_t len) : pointer(ptr), size(len) {}
-   operator std::string() { return std::string(pointer, size); }
-   std::string str() { return std::string(pointer, size); }
-   size_t len() {
-      return size;
-   }
-   char* data() {
-      return pointer;
-   }
-};
 class Bytes {
    uint8_t* pointer;
    size_t size;

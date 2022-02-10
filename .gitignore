@@ -11,3 +11,4 @@ snapshot-*
 perf.*
 events.parquet
 operations.parquet
+.vscode

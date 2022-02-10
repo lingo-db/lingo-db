@@ -21,28 +21,7 @@
 
 using namespace mlir;
 
-Value mlir::db::createStringConstant(mlir::Location loc, ConversionPatternRewriter& rewriter, mlir::ModuleOp parentModule, const std::string& str) {
-   auto* context = rewriter.getContext();
-   auto i8Type = IntegerType::get(context, 8);
-   auto insertionPoint = rewriter.saveInsertionPoint();
-   int64_t strLen = str.size();
-   std::vector<uint8_t> vec;
-   for (auto c : str) {
-      vec.push_back(c);
-   }
-   auto strStaticType = MemRefType::get({strLen}, i8Type);
-   auto strDynamicType = MemRefType::get({-1}, IntegerType::get(context, 8));
-   rewriter.setInsertionPointToStart(parentModule.getBody());
-   Attribute initialValue = DenseIntElementsAttr::get(
-      RankedTensorType::get({strLen}, i8Type), vec);
-   static int id = 0;
-   auto globalop = rewriter.create<mlir::memref::GlobalOp>(loc, "db_constant_string" + std::to_string(id++), rewriter.getStringAttr("private"), strStaticType, initialValue, true, rewriter.getI64IntegerAttr(1));
-   rewriter.restoreInsertionPoint(insertionPoint);
-   Value conststr = rewriter.create<mlir::memref::GetGlobalOp>(loc, strStaticType, globalop.sym_name());
-   Value result = rewriter.create<memref::CastOp>(loc, conststr, strDynamicType);
-   Value strres = rewriter.create<mlir::util::ToGenericMemrefOp>(loc, mlir::util::RefType::get(context, rewriter.getIntegerType(8), -1), result);
-   return strres;
-}
+
 namespace {
 
 class GetTableLowering : public ConversionPattern {
@@ -55,8 +34,8 @@ class GetTableLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto getTableOp = cast<mlir::db::GetTable>(op);
       auto executionContext = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::GetExecutionContext, {})[0];
-      Value tableNameRef = mlir::db::createStringConstant(op->getLoc(), rewriter, op->getParentOfType<ModuleOp>(), getTableOp.tablename().str());
-      auto tablePtr = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({executionContext, tableNameRef}))[0];
+      auto tableName=rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(),mlir::util::VarLen32Type::get(rewriter.getContext()),getTableOp.tablenameAttr());
+      auto tablePtr = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({executionContext, tableName}))[0];
       rewriter.replaceOp(getTableOp, tablePtr);
       return success();
    }
@@ -82,8 +61,8 @@ class TableScanLowering : public ConversionPattern {
       for (auto c : tablescan.columns()) {
          auto stringAttr = c.cast<StringAttr>();
          types.push_back(indexType);
-         Value columnNameRef = mlir::db::createStringConstant(op->getLoc(), rewriter, op->getParentOfType<ModuleOp>(), stringAttr.getValue().str());
-         auto columnId = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::TableGetColumnId, mlir::ValueRange({tablePtr, columnNameRef}))[0];
+         auto columnName=rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(),mlir::util::VarLen32Type::get(rewriter.getContext()),stringAttr);
+         auto columnId = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::TableGetColumnId, mlir::ValueRange({tablePtr, columnName}))[0];
          values.push_back(columnId);
       }
       rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, mlir::TupleType::get(rewriter.getContext(), types), values);
