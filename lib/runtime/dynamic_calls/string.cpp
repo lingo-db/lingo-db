@@ -269,15 +269,47 @@ struct Vec {
    runtime::Bytes bytes;
    Vec(size_t len, size_t cap, size_t numBytes) : len(len), cap(cap), bytes((uint8_t*) malloc(numBytes), numBytes) {}
 };
-EXPORT Vec* rt_create_vec(size_t sizeOfType,size_t initialCapacity) {
-   return new Vec(0, initialCapacity,initialCapacity*sizeOfType);
+struct AggrHt {
+   struct Entry {
+      size_t next;
+      size_t hashValue;
+      //kv follows
+   };
+   size_t numValues;
+   size_t capacity;
+   runtime::Bytes values;
+   runtime::Bytes ht;
+   //initial value follows...
+   AggrHt(size_t initialCapacity, size_t typeSize) : numValues(0), capacity(initialCapacity), values((uint8_t*) malloc(initialCapacity * typeSize), initialCapacity * typeSize), ht((uint8_t*) malloc(initialCapacity * 2 * sizeof(uint64_t)), initialCapacity * 2 * sizeof(uint64_t)) {
+      ht.fill(0xff);
+   }
+};
+EXPORT Vec* rt_create_vec(size_t sizeOfType, size_t initialCapacity) {
+   return new Vec(0, initialCapacity, initialCapacity * sizeOfType);
 }
 EXPORT void rt_resize_vec(Vec* v) {
    v->cap *= 2;
-   auto newNumBytes = v->bytes.getSize() * 2;
-   uint8_t* newBytes = (uint8_t*) malloc(newNumBytes);
-   memcpy(newBytes, v->bytes.getPtr(), v->bytes.getSize());
-   v->bytes.setSize(newNumBytes);
-   free(v->bytes.getPtr());
-   v->bytes.setPointer(newBytes);
+   v->bytes.resize(2);
+}
+EXPORT AggrHt* rt_create_aggr_ht(size_t typeSize, size_t initialCapacity) {
+   return new (malloc(sizeof(AggrHt) + typeSize)) AggrHt(initialCapacity, typeSize);
+}
+EXPORT void rt_resize_aggr_ht(AggrHt* aggrHt, size_t typeSize) {
+   size_t old = aggrHt->values.getSize();
+   aggrHt->values.resize(2);
+   aggrHt->ht.resize(2);
+   aggrHt->ht.fill(0xff);
+   aggrHt->capacity*=2;
+   size_t* ht = (size_t*) aggrHt->ht.getPtr();
+   size_t hashMask = (aggrHt->ht.getSize() / sizeof(size_t)) - 1;
+   auto valuesPtr = aggrHt->values.getPtr();
+   assert((old/typeSize)==aggrHt->numValues);
+   for (size_t i = 0; i < aggrHt->numValues; i++) {
+      //assert((i * (sizeof(AggrHt::Entry) + typeSize)) < old);
+      AggrHt::Entry* entry = (AggrHt::Entry*) &valuesPtr[i * typeSize];
+      auto pos = entry->hashValue & hashMask;
+      auto previousPtr = ht[pos];
+      ht[pos] = i;
+      entry->next = previousPtr;
+   }
 }

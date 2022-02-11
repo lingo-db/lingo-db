@@ -27,6 +27,17 @@ class Bytes {
    void setSize(size_t size) {
       Bytes::size = size;
    }
+   void resize(size_t factor) {
+      auto newNumBytes = getSize() * factor;
+      uint8_t* newBytes = (uint8_t*) malloc(newNumBytes);
+      memcpy(newBytes, getPtr(), getSize());
+      setSize(newNumBytes);
+      free(getPtr());
+      setPointer(newBytes);
+   }
+   void fill(uint8_t val){
+      memset(getPtr(), val, getSize());
+   }
 };
 static uint64_t unalignedLoad64(const uint8_t* p) {
    uint64_t result;
