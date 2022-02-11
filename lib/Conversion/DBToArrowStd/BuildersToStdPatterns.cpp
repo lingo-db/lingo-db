@@ -70,15 +70,10 @@ class VectorHelper {
    }
    VectorHelper(Type elementType, Location loc) : elementType(elementType), loc(loc) {
    }
-   Value create(mlir::OpBuilder& builder, Value initialCapacity) {
-      Value vec = builder.create<mlir::util::AllocOp>(loc, createType(builder.getContext(), elementType), mlir::Value());
-
-      Value initialSize = builder.create<arith::ConstantIndexOp>(loc, 0);
-      auto type = mlir::util::RefType::get(builder.getContext(), elementType, -1);
-      Value memref = builder.create<mlir::util::AllocOp>(loc, type, initialCapacity);
-      Value packed = builder.create<mlir::util::PackOp>(loc, ValueRange{initialSize, initialCapacity, memref});
-      builder.create<mlir::util::StoreOp>(loc, packed, vec, Value());
-      return vec;
+   Value create(mlir::OpBuilder& builder, Value initialCapacity, mlir::db::codegen::FunctionRegistry& functionRegistry) {
+      auto typeSize = builder.create<mlir::util::SizeOfOp>(loc, builder.getIndexType(), elementType);
+      auto ptr = functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::VecCreate, ValueRange({typeSize, initialCapacity}))[0];
+      return builder.create<mlir::util::GenericMemrefCastOp>(loc, createType(builder.getContext(), elementType), ptr);
    }
    void insert(mlir::OpBuilder& builder, Value vec, Value newVal, mlir::db::codegen::FunctionRegistry& functionRegistry) {
       Value offsetZero = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
@@ -341,16 +336,18 @@ class AggrHtHelper {
    }
 };
 class CreateVectorBuilderLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
    public:
-   explicit CreateVectorBuilderLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CreateVectorBuilder::getOperationName(), 1, context) {}
+   explicit CreateVectorBuilderLowering(TypeConverter& typeConverter, MLIRContext* context, db::codegen::FunctionRegistry& functionRegistry)
+      : ConversionPattern(typeConverter, mlir::db::CreateVectorBuilder::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult matchAndRewrite(mlir::Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto vecBuilderOp = mlir::cast<mlir::db::CreateVectorBuilder>(op);
       Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 1024);
       auto elementType = typeConverter->convertType(vecBuilderOp.getType().getElementType());
       VectorHelper vectorHelper(elementType, op->getLoc());
-      rewriter.replaceOp(op, vectorHelper.create(rewriter, initialCapacity));
+      rewriter.replaceOp(op, vectorHelper.create(rewriter, initialCapacity, functionRegistry));
       return success();
    }
 };
@@ -637,9 +634,11 @@ class CreateTableBuilderLowering : public ConversionPattern {
    }
 };
 class CreateJoinHtBuilderLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
    public:
-   explicit CreateJoinHtBuilderLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CreateJoinHTBuilder::getOperationName(), 1, context) {}
+   explicit CreateJoinHtBuilderLowering(TypeConverter& typeConverter, MLIRContext* context, db::codegen::FunctionRegistry& functionRegistry)
+      : ConversionPattern(typeConverter, mlir::db::CreateJoinHTBuilder::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto createOp = mlir::cast<mlir::db::CreateJoinHTBuilder>(op);
@@ -648,18 +647,18 @@ class CreateJoinHtBuilderLowering : public ConversionPattern {
       auto tupleType = mlir::TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), entryType});
       Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 1024);
       VectorHelper helper(typeConverter->convertType(tupleType), op->getLoc());
-      rewriter.replaceOp(op, helper.create(rewriter, initialCapacity));
+      rewriter.replaceOp(op, helper.create(rewriter, initialCapacity,functionRegistry));
       return success();
    }
 };
 } // namespace
 void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<CreateVectorBuilderLowering>(typeConverter, patterns.getContext());
+   patterns.insert<CreateVectorBuilderLowering>(typeConverter, patterns.getContext(), functionRegistry);
    patterns.insert<CreateAggrHTBuilderLowering>(typeConverter, patterns.getContext());
    patterns.insert<BuilderMergeLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<BuilderBuildLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<CreateJoinHtBuilderLowering>(typeConverter, patterns.getContext());
+   patterns.insert<CreateJoinHtBuilderLowering>(typeConverter, patterns.getContext(),functionRegistry);
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::AggrHTBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });

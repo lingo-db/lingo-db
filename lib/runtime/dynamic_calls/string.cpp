@@ -267,7 +267,11 @@ struct Vec {
    size_t len;
    size_t cap;
    runtime::Bytes bytes;
+   Vec(size_t len, size_t cap, size_t numBytes) : len(len), cap(cap), bytes((uint8_t*) malloc(numBytes), numBytes) {}
 };
+EXPORT Vec* rt_create_vec(size_t sizeOfType,size_t initialCapacity) {
+   return new Vec(0, initialCapacity,initialCapacity*sizeOfType);
+}
 EXPORT void rt_resize_vec(Vec* v) {
    v->cap *= 2;
    auto newNumBytes = v->bytes.getSize() * 2;

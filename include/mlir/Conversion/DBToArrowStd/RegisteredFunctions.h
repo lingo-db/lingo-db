@@ -83,6 +83,7 @@
    F(DateExtractHour, extract_hour, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                         \
    F(DateExtractMinute, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                     \
    F(DateExtractSecond, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                     \
-   F(VecResize, resize_vec, OPERANDS(POINTER_TYPE), RETURNS())
+   F(VecResize, resize_vec, OPERANDS(POINTER_TYPE), RETURNS())                                                                                             \
+   F(VecCreate, create_vec, OPERANDS(INDEX_TYPE,INDEX_TYPE), RETURNS(POINTER_TYPE))
 
 #endif // MLIR_CONVERSION_DBTOARROWSTD_REGISTEREDFUNCTIONS_H
