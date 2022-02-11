@@ -63,7 +63,7 @@ class VectorHelper {
 
    public:
    static Type createSType(MLIRContext* context, Type elementType) {
-      return mlir::TupleType::get(context, {IndexType::get(context), IndexType::get(context), mlir::util::RefType::get(context, elementType, -1)});
+      return mlir::TupleType::get(context, {IndexType::get(context), IndexType::get(context), mlir::util::RefType::get(context, elementType)});
    }
    static mlir::util::RefType createType(MLIRContext* context, Type elementType) {
       return mlir::util::RefType::get(context, createSType(context, elementType), llvm::Optional<int64_t>());
@@ -76,16 +76,13 @@ class VectorHelper {
       return builder.create<mlir::util::GenericMemrefCastOp>(loc, createType(builder.getContext(), elementType), ptr);
    }
    void insert(mlir::OpBuilder& builder, Value vec, Value newVal, mlir::db::codegen::FunctionRegistry& functionRegistry) {
-      Value offsetZero = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
-      Value offsetOne = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
-      Value offsetTwo = builder.create<mlir::arith::ConstantIndexOp>(loc, 2);
 
       auto idxType = builder.getIndexType();
       auto idxPtrType = util::RefType::get(builder.getContext(), idxType, {});
-      auto valuesType = mlir::util::RefType::get(builder.getContext(), elementType, -1);
+      auto valuesType = mlir::util::RefType::get(builder.getContext(), elementType);
       BufferHelper helper(builder, loc, builder.getBlock()->getParentOp()->getParentOfType<ModuleOp>());
-      Value lenAddress = builder.create<util::ElementPtrOp>(loc, idxPtrType, vec, offsetZero);
-      Value capacityAddress = builder.create<util::ElementPtrOp>(loc, idxPtrType, vec, offsetOne);
+      Value lenAddress = builder.create<util::TupleElementPtrOp>(loc, idxPtrType, vec, 0);
+      Value capacityAddress = builder.create<util::TupleElementPtrOp>(loc, idxPtrType, vec, 1);
 
       auto len = builder.create<mlir::util::LoadOp>(loc, idxType, lenAddress, Value());
       auto capacity = builder.create<mlir::util::LoadOp>(loc, idxType, capacityAddress, Value());
@@ -95,7 +92,7 @@ class VectorHelper {
             Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type(),{}), vec);
             functionRegistry.call(b,loc,mlir::db::codegen::FunctionRegistry::FunctionId::VecResize,downCasted);
             b.create<scf::YieldOp>(loc); });
-      Value valuesAddress = builder.create<util::ElementPtrOp>(loc, util::RefType::get(builder.getContext(), valuesType, {}), vec, offsetTwo);
+      Value valuesAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valuesType, {}), vec, 2);
       auto values = builder.create<mlir::util::LoadOp>(loc, valuesType, valuesAddress, Value());
 
       builder.create<util::StoreOp>(loc, newVal, values, len);
@@ -129,13 +126,12 @@ class AggrHtHelper {
    }
 
    Value create(mlir::OpBuilder& builder, Value initialValue, mlir::db::codegen::FunctionRegistry& functionRegistry) {
-      Value offset4 = builder.create<mlir::arith::ConstantIndexOp>(loc, 4);
       BufferHelper helper(builder, loc, builder.getBlock()->getParentOp()->getParentOfType<ModuleOp>());
       auto typeSize = builder.create<mlir::util::SizeOfOp>(loc, builder.getIndexType(), createEntryType(builder.getContext(), keyType, aggrType));
       Value initialCapacity = builder.create<arith::ConstantIndexOp>(loc, 4);
       auto ptr = functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtCreate, ValueRange({typeSize, initialCapacity}))[0];
       auto casted = builder.create<mlir::util::GenericMemrefCastOp>(loc, createType(builder.getContext(), keyType, aggrType), ptr);
-      Value initValAddress = builder.create<util::ElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), initialValue.getType()), casted, offset4);
+      Value initValAddress = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), initialValue.getType()), casted, 4);
       builder.create<mlir::util::StoreOp>(loc, initialValue, initValAddress, Value());
       return casted;
    }
@@ -167,18 +163,13 @@ class AggrHtHelper {
    void insert(mlir::ConversionPatternRewriter& rewriter, Value aggrHtBuilder, Value key, Value val, Value hash, std::function<Value(mlir::OpBuilder&, Value, Value)> updateFn, mlir::db::codegen::FunctionRegistry& functionRegistry) {
       BufferHelper helper(rewriter, loc, rewriter.getBlock()->getParentOp()->getParentOfType<ModuleOp>());
       auto* context = rewriter.getContext();
-      Value offsetZero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
-      Value offsetOne = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
-      Value offsetTwo = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 2);
-      Value offsetThree = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 3);
-      Value offsetFour = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 4);
       auto idxType = rewriter.getIndexType();
       auto idxPtrType = util::RefType::get(rewriter.getContext(), idxType, {});
-      Value lenAddress = rewriter.create<util::ElementPtrOp>(loc, idxPtrType, aggrHtBuilder, offsetZero);
-      Value capacityAddress = rewriter.create<util::ElementPtrOp>(loc, idxPtrType, aggrHtBuilder, offsetOne);
+      Value lenAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 0);
+      Value capacityAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 1);
       //Value valuesAddress = rewriter.create<util::ElementPtrOp>(loc, idxPtrType, aggrHtBuilder, offsetOne);
       //Value htAddress = rewriter.create<util::ElementPtrOp>(loc, idxPtrType, aggrHtBuilder, offsetOne);
-      Value initValAddress = rewriter.create<util::ElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(),aggrType), aggrHtBuilder, offsetFour);
+      Value initValAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(),aggrType), aggrHtBuilder, 4);
       Value len = rewriter.create<util::LoadOp>(loc, idxType, lenAddress);
       Value capacityInitial = rewriter.create<util::LoadOp>(loc, idxType, capacityAddress);
 
@@ -212,7 +203,7 @@ class AggrHtHelper {
       //idx = hashtable[position]
       Value idx = rewriter.create<util::LoadOp>(loc, rewriter.getIndexType(), ht, position);
       // ptr = &hashtable[position]
-      Value ptr = rewriter.create<util::ElementPtrOp>(loc, util::RefType::get(context, idxType, llvm::Optional<int64_t>()), ht, position);
+      Value ptr = rewriter.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, idxType, llvm::Optional<int64_t>()), ht, position);
       Type ptrType = util::RefType::get(context, idxType, llvm::Optional<int64_t>());
       Type doneType = rewriter.getI1Type();
 
@@ -274,7 +265,7 @@ class AggrHtHelper {
                               }, [&](OpBuilder& b, Location loc) {
 
                               //          ptr = &entry.next
-                              Value entryPtr=b.create<util::ElementPtrOp>(loc,util::RefType::get(context,entryType,llvm::Optional<int64_t>()),values,idx);
+                              Value entryPtr=b.create<util::ArrayElementPtrOp>(loc,util::RefType::get(context,entryType,llvm::Optional<int64_t>()),values,idx);
 
                               ptr=b.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context,idxType,llvm::Optional<int64_t>()),entryPtr);
                               //          yield idx,ptr,done=false
@@ -283,7 +274,7 @@ class AggrHtHelper {
                         }, [&](OpBuilder& b, Location loc) {
 
                         //          ptr = &entry.next
-                        Value entryPtr=b.create<util::ElementPtrOp>(loc,util::RefType::get(context,entryType,llvm::Optional<int64_t>()),values,idx);
+                        Value entryPtr=b.create<util::ArrayElementPtrOp>(loc,util::RefType::get(context,entryType,llvm::Optional<int64_t>()),values,idx);
 
                         ptr=b.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context,idxType,llvm::Optional<int64_t>()),entryPtr);
                         //          yield idx,ptr,done=false
@@ -519,8 +510,8 @@ class BuilderBuildLowering : public ConversionPattern {
          ModuleOp module = op->getParentOfType<ModuleOp>();
          FuncOp buildFn = module.lookupSymbol<FuncOp>("build_join_ht");
          auto idxType = rewriter.getIndexType();
-         auto lowBType = mlir::util::RefType::get(op->getContext(), mlir::TupleType::get(op->getContext(), {idxType, idxType, mlir::util::RefType::get(op->getContext(), idxType, -1)}), llvm::Optional<int64_t>());
-         auto lowResType = mlir::util::RefType::get(op->getContext(), mlir::TupleType::get(op->getContext(), {mlir::util::RefType::get(op->getContext(), idxType, -1), idxType, mlir::util::RefType::get(op->getContext(), idxType, -1), idxType}), llvm::Optional<int64_t>());
+         auto lowBType = mlir::util::RefType::get(op->getContext(), mlir::TupleType::get(op->getContext(), {idxType, idxType, mlir::util::RefType::get(op->getContext(), idxType)}), llvm::Optional<int64_t>());
+         auto lowResType = mlir::util::RefType::get(op->getContext(), mlir::TupleType::get(op->getContext(), {mlir::util::RefType::get(op->getContext(), idxType), idxType, mlir::util::RefType::get(op->getContext(), idxType, -1), idxType}), llvm::Optional<int64_t>());
 
          if (!buildFn) {
             {

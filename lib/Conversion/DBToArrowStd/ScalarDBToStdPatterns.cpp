@@ -264,7 +264,7 @@ class SubStrOpLowering : public ConversionPattern {
       Value pos1AsIndex = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.from() - 1));
 
       Value len = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(subStrOp.to() - subStrOp.from() + 1));
-      Value indexed = rewriter.create<mlir::util::ElementPtrOp>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type()), ref, pos1AsIndex);
+      Value indexed = rewriter.create<mlir::util::ArrayElementPtrOp>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type()), ref, pos1AsIndex);
 
       Value val = rewriter.create<mlir::util::CreateVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(getContext()), indexed, len);
       rewriter.replaceOp(op, val);

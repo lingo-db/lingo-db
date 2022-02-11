@@ -21,7 +21,6 @@
 
 using namespace mlir;
 
-
 namespace {
 
 class GetTableLowering : public ConversionPattern {
@@ -34,7 +33,7 @@ class GetTableLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto getTableOp = cast<mlir::db::GetTable>(op);
       auto executionContext = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::GetExecutionContext, {})[0];
-      auto tableName=rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(),mlir::util::VarLen32Type::get(rewriter.getContext()),getTableOp.tablenameAttr());
+      auto tableName = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), getTableOp.tablenameAttr());
       auto tablePtr = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({executionContext, tableName}))[0];
       rewriter.replaceOp(getTableOp, tablePtr);
       return success();
@@ -61,7 +60,7 @@ class TableScanLowering : public ConversionPattern {
       for (auto c : tablescan.columns()) {
          auto stringAttr = c.cast<StringAttr>();
          types.push_back(indexType);
-         auto columnName=rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(),mlir::util::VarLen32Type::get(rewriter.getContext()),stringAttr);
+         auto columnName = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), stringAttr);
          auto columnId = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::TableGetColumnId, mlir::ValueRange({tablePtr, columnName}))[0];
          values.push_back(columnId);
       }
@@ -209,7 +208,7 @@ void DBToStdLoweringPass::runOnOperation() {
          //llvm::dbgs() << "isLegal:" << isLegal << "\n";
          return isLegal;
       });
-   target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::ToMemrefOp, util::StoreOp, util::LoadOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp, util::GenericMemrefCastOp, util::ElementPtrOp>(
+   target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::ToMemrefOp, util::StoreOp, util::LoadOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp, util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp>(
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());

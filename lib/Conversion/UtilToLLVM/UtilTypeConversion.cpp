@@ -182,7 +182,7 @@ class SizeOfLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto castedOp = mlir::dyn_cast_or_null<mlir::util::SizeOfOp>(op);
-      auto converted=typeConverter->convertType(castedOp.type());
+      auto converted = typeConverter->convertType(castedOp.type());
       rewriter.replaceOpWithNewOp<mlir::util::SizeOfOp>(op, rewriter.getIndexType(), TypeAttr::get(converted));
 
       return success();
@@ -197,7 +197,6 @@ class DimOpLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::DimOpAdaptor adaptor(operands);
-
 
       rewriter.replaceOpWithNewOp<mlir::util::DimOp>(op, rewriter.getIndexType(), adaptor.ref());
 
@@ -233,19 +232,34 @@ class CastOpLowering : public ConversionPattern {
       return success();
    }
 };
-class ElementPtrOpLowering : public ConversionPattern {
+class ArrayElementPtrOpLowering : public ConversionPattern {
    public:
-   explicit ElementPtrOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-   : ConversionPattern(typeConverter, mlir::util::ElementPtrOp::getOperationName(), 1, context) {}
+   explicit ArrayElementPtrOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::ArrayElementPtrOp::getOperationName(), 1, context) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
+      mlir::util::ArrayElementPtrOpAdaptor adaptor(operands);
+      auto castedOp = mlir::dyn_cast_or_null<mlir::util::ArrayElementPtrOp>(op);
+      rewriter.replaceOpWithNewOp<mlir::util::ArrayElementPtrOp>(op, typeConverter->convertType(castedOp.res().getType()), adaptor.ref(), adaptor.idx());
 
-      mlir::util::ElementPtrOpAdaptor adaptor(operands);
-      auto castedOp = mlir::dyn_cast_or_null<mlir::util::ElementPtrOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::util::ElementPtrOp>(op, typeConverter->convertType(castedOp.res().getType()), adaptor.ref(), adaptor.idx());
+      return success();
+   }
+};
+class TupleElementPtrOpLowering : public ConversionPattern {
+   public:
+   explicit TupleElementPtrOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::TupleElementPtrOp::getOperationName(), 1, context) {}
 
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto elePtrOp = mlir::cast<mlir::util::TupleElementPtrOp>(op);
+
+      mlir::util::TupleElementPtrOpAdaptor adaptor(operands);
+      auto castedOp = mlir::dyn_cast_or_null<mlir::util::TupleElementPtrOp>(op);
+      rewriter.replaceOpWithNewOp<mlir::util::TupleElementPtrOp>(op, typeConverter->convertType(castedOp.res().getType()), adaptor.ref(), elePtrOp.idx());
       return success();
    }
 };
@@ -280,7 +294,8 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
 
    patterns.add<SizeOfLowering>(typeConverter, patterns.getContext());
    patterns.add<LoadOpLowering>(typeConverter, patterns.getContext());
-   patterns.add<ElementPtrOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<ArrayElementPtrOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<TupleElementPtrOpLowering>(typeConverter, patterns.getContext());
 
    typeConverter.addConversion([&](mlir::util::RefType genericMemrefType) {
       return mlir::util::RefType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());

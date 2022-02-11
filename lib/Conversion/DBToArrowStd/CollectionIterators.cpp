@@ -217,16 +217,15 @@ class JoinHtModifyLookupIterator : public WhileIterator {
       auto elemType = bucketType.cast<TupleType>().getTypes()[1];
 
       auto valType = elemType.cast<TupleType>().getTypes()[1];
-      Value offsetOne = builder.create<mlir::arith::ConstantIndexOp>(loc, 1);
 
       Value loaded = builder.create<util::LoadOp>(loc, bucketType, vec, iterator);
-      Value bucketAddress = builder.create<util::ElementPtrOp>(loc, util::RefType::get(builder.getContext(), bucketType, Optional<int64_t>()), vec, iterator);
-      Value elemAddress = builder.create<util::ElementPtrOp>(loc, util::RefType::get(builder.getContext(), elemType, Optional<int64_t>()), bucketAddress, offsetOne);
+      Value bucketAddress = builder.create<util::ArrayElementPtrOp>(loc, util::RefType::get(builder.getContext(), bucketType, Optional<int64_t>()), vec, iterator);
+      Value elemAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), elemType, Optional<int64_t>()), bucketAddress, 1);
 
       auto unpacked = builder.create<mlir::util::UnPackOp>(loc, loaded);
       Value loadedValue = unpacked.getResult(1);
 
-      Value valAddress = builder.create<util::ElementPtrOp>(loc, util::RefType::get(builder.getContext(), valType, Optional<int64_t>()), elemAddress, offsetOne);
+      Value valAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valType, Optional<int64_t>()), elemAddress, 1);
 
       return builder.create<mlir::util::PackOp>(loc, mlir::ValueRange{loadedValue, valAddress});
    }
@@ -329,7 +328,7 @@ class TableRowIterator : public ForIterator {
             pos2.getDefiningOp()->setAttr("nosideffect", builder.getUnitAttr());
             Value len = builder.create<arith::SubIOp>(loc, builder.getI32Type(), pos2, pos1);
             Value pos1AsIndex = builder.create<arith::IndexCastOp>(loc, pos1, indexType);
-            Value ptr = builder.create<util::ElementPtrOp>(loc, util::RefType::get(context, builder.getI8Type(), llvm::Optional<int64_t>()), column.varLenBuffer, pos1AsIndex);
+            Value ptr = builder.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, builder.getI8Type(), llvm::Optional<int64_t>()), column.varLenBuffer, pos1AsIndex);
             val = builder.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(builder.getContext()), ptr, len);
          } else if (column.type.isa<db::BoolType>()) {
             Value realPos = builder.create<arith::AddIOp>(loc, indexType, column.offset, index);
@@ -369,7 +368,7 @@ class VectorIterator : public ForIterator {
    VectorIterator(mlir::db::codegen::FunctionRegistry& functionRegistry, Value vector, Type elementType) : ForIterator(vector.getContext()), vector(vector), elementType(elementType) {
    }
    virtual void init(OpBuilder& builder) override {
-      Type typedPtrType = util::RefType::get(builder.getContext(), elementType, -1);
+      Type typedPtrType = util::RefType::get(builder.getContext(), elementType);
       auto loaded = builder.create<util::LoadOp>(loc, mlir::TupleType::get(builder.getContext(), TypeRange({builder.getIndexType(), builder.getIndexType(), typedPtrType})), vector, Value());
       auto unpacked = builder.create<util::UnPackOp>(loc, loaded);
 

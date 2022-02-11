@@ -139,8 +139,13 @@ let arguments = (ins RefType:$ref,Optional<Index>:$idx);
 let results=(outs AnyType:$val);
 let assemblyFormat = "$ref `[` $idx `]` `:`type($ref) `->` type($val) attr-dict";
 }
-def ElementPtrOp  : Util_Op<"elementptr",[NoSideEffect]> {
+def ArrayElementPtrOp  : Util_Op<"arrayelementptr",[NoSideEffect]> {
     let arguments = (ins RefType:$ref,Index:$idx);
+    let results=(outs RefType:$res);
+    let assemblyFormat = "$ref `[` $idx `]` `:`type($ref) `->` type($res) attr-dict";
+}
+def TupleElementPtrOp  : Util_Op<"tupleelementptr",[NoSideEffect]> {
+    let arguments = (ins RefType:$ref,I32Attr:$idx);
     let results=(outs RefType:$res);
     let assemblyFormat = "$ref `[` $idx `]` `:`type($ref) `->` type($res) attr-dict";
 }
