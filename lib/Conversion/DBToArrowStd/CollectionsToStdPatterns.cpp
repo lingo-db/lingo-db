@@ -88,7 +88,7 @@ class ForOpLowering : public ConversionPattern {
       auto forOp = cast<mlir::db::ForOp>(op);
       std::vector<Type> argumentTypes;
       std::vector<Location> argumentLocs;
-      for(auto t:forOp.region().getArgumentTypes()){
+      for (auto t : forOp.region().getArgumentTypes()) {
          argumentTypes.push_back(t);
          argumentLocs.push_back(op->getLoc());
       }
@@ -96,8 +96,7 @@ class ForOpLowering : public ConversionPattern {
       auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), functionRegistry);
 
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      std::vector<Value> results = iterator->implementLoop(op->getLoc(), forOpAdaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, [&](std::function<Value(OpBuilder& b)> getElem,ValueRange iterargs, OpBuilder builder) {
-
+      std::vector<Value> results = iterator->implementLoop(op->getLoc(), forOpAdaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, [&](std::function<Value(OpBuilder & b)> getElem, ValueRange iterargs, OpBuilder builder) {
          auto yieldOp = cast<mlir::db::YieldOp>(forOp.getBody()->getTerminator());
          std::vector<Type> resTypes;
          std::vector<Location> locs;
@@ -106,7 +105,7 @@ class ForOpLowering : public ConversionPattern {
             locs.push_back(op->getLoc());
          }
          auto execRegion = builder.create<mlir::scf::ExecuteRegionOp>(op->getLoc(), resTypes);
-         auto *execRegionBlock = new Block();
+         auto* execRegionBlock = new Block();
          execRegion.getRegion().push_back(execRegionBlock);
          {
             OpBuilder::InsertionGuard guard(builder);
@@ -115,7 +114,7 @@ class ForOpLowering : public ConversionPattern {
             builder.setInsertionPointToStart(execRegionBlock);
             std::vector<Value> values;
             values.push_back(getElem(builder));
-            values.insert(values.end(),iterargs.begin(),iterargs.end());
+            values.insert(values.end(), iterargs.begin(), iterargs.end());
             auto term = builder.create<mlir::scf::YieldOp>(op->getLoc());
             builder.setInsertionPoint(term);
             rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
@@ -152,7 +151,7 @@ class ForOpLowering : public ConversionPattern {
                   builder.create<mlir::cf::CondBranchOp>(op->getLoc(), cond, end, remappedArgs, after, ValueRange());
                }
             }
-            for (auto *x : toErase) {
+            for (auto* x : toErase) {
                rewriter.eraseOp(x);
             }
             rewriter.eraseOp(term);
@@ -167,7 +166,7 @@ class ForOpLowering : public ConversionPattern {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
 
          forOp.region().push_back(new Block());
-         forOp.region().front().addArguments(argumentTypes,argumentLocs);
+         forOp.region().front().addArguments(argumentTypes, argumentLocs);
          rewriter.setInsertionPointToStart(&forOp.region().front());
          rewriter.create<mlir::db::YieldOp>(forOp.getLoc());
       }
@@ -185,7 +184,7 @@ class LookupOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto loc = op->getLoc();
       mlir::db::LookupAdaptor lookupAdaptor(operands);
-      auto loaded = rewriter.create<util::LoadOp>(loc,lookupAdaptor.collection().getType().cast<mlir::util::RefType>().getElementType(), lookupAdaptor.collection(), Value());
+      auto loaded = rewriter.create<util::LoadOp>(loc, lookupAdaptor.collection().getType().cast<mlir::util::RefType>().getElementType(), lookupAdaptor.collection(), Value());
       auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, loaded);
       Value vec = unpacked.getResult(0);
       Value ht = unpacked.getResult(2);
@@ -244,7 +243,8 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
          Type entryType = TupleType::get(context, {indexType, indexType, kvType});
 
          auto vecType = mlir::util::RefType::get(context, entryType, -1);
-         auto t = (Type) TupleType::get(context, {indexType, vecType});
+         auto htType = mlir::util::RefType::get(context, indexType, -1);
+         auto t = (Type) util::RefType::get(context, TupleType::get(context, {indexType, indexType, vecType, htType, typeConverter.convertType(aggregationHashtableType.getValType())}));
          return t;
       }
    });
@@ -254,7 +254,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
 
       auto vecType = mlir::util::RefType::get(context, entryType, -1);
       auto htType = util::RefType::get(context, indexType, -1);
-      return (Type) util::RefType::get(context, TupleType::get(context, {vecType, indexType, htType, indexType}),{});
+      return (Type) util::RefType::get(context, TupleType::get(context, {vecType, indexType, htType, indexType}), {});
    });
 
    typeConverter.addConversion([context, &typeConverter, indexType](mlir::db::VectorType vectorType) {
