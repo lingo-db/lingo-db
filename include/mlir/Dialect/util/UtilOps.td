@@ -119,6 +119,11 @@ let arguments = (ins RefType:$ref);
 let results=(outs AnyMemRef:$memref);
 let assemblyFormat = "$ref `:` type($ref) `->` type($memref) attr-dict";
 }
+def IsRefValidOp  : Util_Op<"is_ref_valid",[NoSideEffect]> {
+let arguments = (ins RefType:$ref);
+let results=(outs I1:$valid);
+let assemblyFormat = "$ref `:` type($ref) attr-dict";
+}
 def GenericMemrefCastOp : Util_Op<"generic_memref_cast",[NoSideEffect]> {
 let summary = "generic memref cast function";
 let arguments = (ins RefType:$val);

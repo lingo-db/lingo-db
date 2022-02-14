@@ -316,7 +316,7 @@ EXPORT void rt_resize_aggr_ht(AggrHt* aggrHt, size_t typeSize) {
 //!llvm.ptr<struct<(ptr<>, i64, struct<(ptr<i64>, i64)>, i64)>>
 struct JoinHt {
    struct Entry {
-      size_t next;
+      Entry* next;
       //kv follows
    };
    runtime::Bytes values;
@@ -341,14 +341,14 @@ EXPORT JoinHt* rt_build_join_ht(Vec* v, size_t typeSize) {
    size_t htSize = next_pow_2(v->len);
    size_t htMask = htSize - 1;
    auto joinHt = new JoinHt(v->bytes, v->len, htMask, htSize);
-   joinHt->ht.fill(0xff);
+   joinHt->ht.fill(0x00);
    auto valuesPtr = joinHt->values.getPtr();
-   size_t* ht = (size_t*) joinHt->ht.getPtr();
+   JoinHt::Entry** ht = (JoinHt::Entry**) joinHt->ht.getPtr();
    for (size_t i = 0; i < v->len; i++) {
       auto entry = (JoinHt::Entry*) &valuesPtr[i * typeSize];
-      auto pos = entry->next & htMask;
+      auto pos = ((size_t) entry->next) & htMask;
       auto previousPtr = ht[pos];
-      ht[pos] = i;
+      ht[pos] = entry;
       entry->next = previousPtr;
    }
    return joinHt;

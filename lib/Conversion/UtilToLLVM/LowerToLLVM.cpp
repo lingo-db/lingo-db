@@ -261,6 +261,21 @@ class ToMemrefOpLowering : public ConversionPattern {
       return success();
    }
 };
+class IsRefValidOpLowering : public ConversionPattern {
+   public:
+   explicit IsRefValidOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::IsRefValidOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto* context = getContext();
+      auto casted=mlir::cast<mlir::util::IsRefValidOp>(op);
+      auto ptr = getPtrFromGenericMemref(op->getLoc(), casted.ref().getType().cast<mlir::util::RefType>(), operands[0], rewriter, typeConverter);
+      rewriter.replaceOpWithNewOp<mlir::LLVM::ICmpOp>(op, mlir::LLVM::ICmpPredicate::ne, ptr, rewriter.create<mlir::LLVM::NullOp>(op->getLoc(),ptr.getType()));
+      return success();
+   }
+};
 class AllocaOpLowering : public ConversionPattern {
    public:
    explicit AllocaOpLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -731,6 +746,7 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
 
    patterns.add<ToGenericMemrefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<ToMemrefOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<IsRefValidOpLowering>(typeConverter, patterns.getContext());
    patterns.add<StoreOpLowering>(typeConverter, patterns.getContext());
    patterns.add<LoadOpLowering>(typeConverter, patterns.getContext());
    patterns.add<CreateVarLenLowering>(typeConverter, patterns.getContext());

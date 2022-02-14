@@ -56,7 +56,7 @@ class SortOpLowering : public ConversionPattern {
          rewriter.eraseOp(sortLambdaTerminator);
          rewriter.eraseOp(terminator);
       }
-      Type typedPtrType = util::RefType::get(rewriter.getContext(), typeConverter->convertType(elementType),-1);
+      Type typedPtrType = util::RefType::get(rewriter.getContext(), typeConverter->convertType(elementType), -1);
       auto loaded = rewriter.create<mlir::util::LoadOp>(op->getLoc(), mlir::TupleType::get(rewriter.getContext(), TypeRange({rewriter.getIndexType(), rewriter.getIndexType(), typedPtrType})), sortOpAdaptor.toSort(), Value());
       auto unpacked = rewriter.create<util::UnPackOp>(sortOp.getLoc(), loaded);
 
@@ -186,14 +186,12 @@ class LookupOpLowering : public ConversionPattern {
       mlir::db::LookupAdaptor lookupAdaptor(operands);
       auto loaded = rewriter.create<util::LoadOp>(loc, lookupAdaptor.collection().getType().cast<mlir::util::RefType>().getElementType(), lookupAdaptor.collection(), Value());
       auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, loaded);
-      Value vec = unpacked.getResult(0);
       Value ht = unpacked.getResult(2);
       Value htMask = unpacked.getResult(3);
       Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.getIndexType(), lookupAdaptor.key()); //hash key value
       Value buckedPos = rewriter.create<arith::AndIOp>(loc, htMask, hashed);
-      Value pos = rewriter.create<util::LoadOp>(loc, rewriter.getIndexType(), ht, buckedPos);
-      Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({pos, vec}));
-      rewriter.replaceOp(op, combined);
+      Value ptr = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(ht.getType()).cast<mlir::util::RefType>().getElementType(), ht, buckedPos);
+      rewriter.replaceOp(op, ptr);
       return success();
    }
 };
@@ -248,18 +246,20 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
          return t;
       }
    });
-   typeConverter.addConversion([&typeConverter, indexType, context](mlir::db::JoinHashtableType joinHashtableType) {
+   auto i8PtrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
+
+   typeConverter.addConversion([&typeConverter, indexType,i8PtrType, context](mlir::db::JoinHashtableType joinHashtableType) {
       Type kvType = typeConverter.convertType(TupleType::get(context, {joinHashtableType.getKeyType(), joinHashtableType.getValType()}));
-      Type entryType = TupleType::get(context, {indexType, kvType});
+      Type entryType = TupleType::get(context, {i8PtrType, kvType});
 
       auto vecType = mlir::util::RefType::get(context, entryType, -1);
-      auto htType = util::RefType::get(context, indexType, -1);
+      auto htType = util::RefType::get(context, mlir::util::RefType::get(context,entryType), -1);
       return (Type) util::RefType::get(context, TupleType::get(context, {vecType, indexType, htType, indexType}), {});
    });
 
    typeConverter.addConversion([context, &typeConverter, indexType](mlir::db::VectorType vectorType) {
       Type entryType = typeConverter.convertType(vectorType.getElementType());
-      auto arrayType = mlir::util::RefType::get(context, entryType,-1);
+      auto arrayType = mlir::util::RefType::get(context, entryType, -1);
       return (Type) mlir::util::RefType::get(context, TupleType::get(context, {indexType, indexType, arrayType}), llvm::Optional<int64_t>());
    });
    typeConverter.addConversion([&typeConverter, context, i8ptrType, indexType](mlir::db::GenericIterableType genericIterableType) {
@@ -287,12 +287,12 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
          }
          return (Type) TupleType::get(context, types);
       } else if (genericIterableType.getIteratorName() == "join_ht_iterator") {
-         auto ptrType = mlir::util::RefType::get(context, typeConverter.convertType(TupleType::get(context, {indexType, genericIterableType.getElementType()})),-1);
-         return (Type) TupleType::get(context, {indexType, ptrType});
+         auto ptrType = mlir::util::RefType::get(context, typeConverter.convertType(TupleType::get(context, {i8ptrType, genericIterableType.getElementType()})));
+         return (Type) ptrType;
       } else if (genericIterableType.getIteratorName() == "join_ht_mod_iterator") {
          auto types = genericIterableType.getElementType().cast<mlir::TupleType>().getTypes();
-         auto ptrType = mlir::util::RefType::get(context, typeConverter.convertType(TupleType::get(context, {indexType, types[0]})),-1);
-         return (Type) TupleType::get(context, {indexType, ptrType});
+         auto ptrType = mlir::util::RefType::get(context, typeConverter.convertType(TupleType::get(context, {i8ptrType, types[0]})));
+         return (Type) ptrType;
       }
       return Type();
    });
