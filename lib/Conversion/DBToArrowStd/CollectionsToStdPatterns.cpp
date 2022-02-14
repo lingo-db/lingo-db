@@ -83,6 +83,7 @@ class ForOpLowering : public ConversionPattern {
       }
       return values;
    }
+
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::ForOpAdaptor forOpAdaptor(operands, op->getAttrDictionary());
       auto forOp = cast<mlir::db::ForOp>(op);
@@ -96,7 +97,13 @@ class ForOpLowering : public ConversionPattern {
       auto iterator = mlir::db::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), functionRegistry);
 
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
-      std::vector<Value> results = iterator->implementLoop(op->getLoc(), forOpAdaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, [&](std::function<Value(OpBuilder & b)> getElem, ValueRange iterargs, OpBuilder builder) {
+      bool containsCondSkip = false;
+      for (auto& op : forOp.region().front().getOperations()) {
+         containsCondSkip |= mlir::isa<mlir::db::CondSkipOp>(&op);
+      }
+
+      using fn_t = std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)>;
+      fn_t fn1 = [&](std::function<Value(OpBuilder & b)> getElem, ValueRange iterargs, OpBuilder builder) {
          auto yieldOp = cast<mlir::db::YieldOp>(forOp.getBody()->getTerminator());
          std::vector<Type> resTypes;
          std::vector<Location> locs;
@@ -161,7 +168,30 @@ class ForOpLowering : public ConversionPattern {
          std::vector<Value> results(execRegion.getResults().begin(), execRegion.getResults().end());
 
          return results;
-      });
+      };
+      fn_t fn2 = [&](std::function<Value(OpBuilder & b)> getElem, ValueRange iterargs, OpBuilder builder) {
+         auto yieldOp = cast<mlir::db::YieldOp>(forOp.getBody()->getTerminator());
+         std::vector<Type> resTypes;
+         std::vector<Location> locs;
+         for (auto t : yieldOp.results()) {
+            resTypes.push_back(typeConverter->convertType(t.getType()));
+            locs.push_back(op->getLoc());
+         }
+         std::vector<Value> values;
+         values.push_back(getElem(builder));
+         values.insert(values.end(), iterargs.begin(), iterargs.end());
+         auto term = builder.create<mlir::scf::YieldOp>(op->getLoc());
+         builder.setInsertionPoint(term);
+         rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
+
+         std::vector<Value> results(yieldOp.results().begin(), yieldOp.results().end());
+         rewriter.eraseOp(yieldOp);
+         rewriter.eraseOp(term);
+
+         return results;
+      };
+
+      std::vector<Value> results = iterator->implementLoop(op->getLoc(), forOpAdaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, containsCondSkip ? fn1 : fn2);
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
 
@@ -232,7 +262,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
    auto indexType = IndexType::get(context);
    auto i8ptrType = mlir::util::RefType::get(context, IntegerType::get(context, 8), llvm::Optional<int64_t>());
    auto i8PtrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
-   typeConverter.addConversion([&typeConverter, context, indexType,i8ptrType](mlir::db::AggregationHashtableType aggregationHashtableType) {
+   typeConverter.addConversion([&typeConverter, context, indexType, i8ptrType](mlir::db::AggregationHashtableType aggregationHashtableType) {
       if (aggregationHashtableType.getKeyType().getTypes().empty()) {
          return (Type) typeConverter.convertType(aggregationHashtableType.getValType());
       } else {
@@ -248,12 +278,12 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
       }
    });
 
-   typeConverter.addConversion([&typeConverter, indexType,i8PtrType, context](mlir::db::JoinHashtableType joinHashtableType) {
+   typeConverter.addConversion([&typeConverter, indexType, i8PtrType, context](mlir::db::JoinHashtableType joinHashtableType) {
       Type kvType = typeConverter.convertType(TupleType::get(context, {joinHashtableType.getKeyType(), joinHashtableType.getValType()}));
       Type entryType = TupleType::get(context, {i8PtrType, kvType});
 
       auto vecType = mlir::util::RefType::get(context, entryType, -1);
-      auto htType = util::RefType::get(context, mlir::util::RefType::get(context,entryType), -1);
+      auto htType = util::RefType::get(context, mlir::util::RefType::get(context, entryType), -1);
       return (Type) util::RefType::get(context, TupleType::get(context, {vecType, indexType, htType, indexType}), {});
    });
 
