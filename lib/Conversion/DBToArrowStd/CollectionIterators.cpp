@@ -171,9 +171,9 @@ class AggrHtIterator : public ForIterator {
    AggrHtIterator(Value hashTable) : ForIterator(hashTable.getContext()), hashTable(hashTable) {
    }
    virtual void init(OpBuilder& builder) override {
-      auto elemType=typeConverter->convertType(hashTable.getType()).cast<mlir::util::RefType>().getElementType();
+      auto elemType = typeConverter->convertType(hashTable.getType()).cast<mlir::util::RefType>().getElementType();
       auto loaded = builder.create<mlir::util::LoadOp>(loc, elemType, hashTable, Value());
-      auto unpacked = builder.create<mlir::util::UnPackOp>(loc,elemType.cast<mlir::TupleType>().getTypes(), loaded);
+      auto unpacked = builder.create<mlir::util::UnPackOp>(loc, elemType.cast<mlir::TupleType>().getTypes(), loaded);
       values = unpacked.getResult(2);
       len = unpacked.getResult(0);
    }
@@ -368,7 +368,7 @@ class VectorIterator : public ForIterator {
    VectorIterator(mlir::db::codegen::FunctionRegistry& functionRegistry, Value vector, Type elementType) : ForIterator(vector.getContext()), vector(vector), elementType(elementType) {
    }
    virtual void init(OpBuilder& builder) override {
-      Type typedPtrType = util::RefType::get(builder.getContext(), elementType);
+      Type typedPtrType = util::RefType::get(builder.getContext(), elementType, -1);
       auto loaded = builder.create<util::LoadOp>(loc, mlir::TupleType::get(builder.getContext(), TypeRange({builder.getIndexType(), builder.getIndexType(), typedPtrType})), vector, Value());
       auto unpacked = builder.create<util::UnPackOp>(loc, loaded);
 
