@@ -208,7 +208,7 @@ void DBToStdLoweringPass::runOnOperation() {
          //llvm::dbgs() << "isLegal:" << isLegal << "\n";
          return isLegal;
       });
-   target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::ToMemrefOp, util::StoreOp, util::LoadOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp, util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp>(
+   target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::InvalidRefOp,util::IsRefValidOp,util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::ToMemrefOp, util::StoreOp, util::LoadOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp, util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp>(
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());

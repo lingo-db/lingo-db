@@ -231,22 +231,22 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
    });
    auto indexType = IndexType::get(context);
    auto i8ptrType = mlir::util::RefType::get(context, IntegerType::get(context, 8), llvm::Optional<int64_t>());
-
-   typeConverter.addConversion([&typeConverter, context, indexType](mlir::db::AggregationHashtableType aggregationHashtableType) {
+   auto i8PtrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
+   typeConverter.addConversion([&typeConverter, context, indexType,i8ptrType](mlir::db::AggregationHashtableType aggregationHashtableType) {
       if (aggregationHashtableType.getKeyType().getTypes().empty()) {
          return (Type) typeConverter.convertType(aggregationHashtableType.getValType());
       } else {
          Type kvType = typeConverter.convertType(TupleType::get(context, {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()}));
 
-         Type entryType = TupleType::get(context, {indexType, indexType, kvType});
+         Type entryType = TupleType::get(context, {i8ptrType, indexType, kvType});
+         auto entryPtrType = mlir::util::RefType::get(context, entryType);
 
          auto vecType = mlir::util::RefType::get(context, entryType, -1);
-         auto htType = mlir::util::RefType::get(context, indexType, -1);
+         auto htType = mlir::util::RefType::get(context, entryPtrType, -1);
          auto t = (Type) util::RefType::get(context, TupleType::get(context, {indexType, indexType, vecType, htType, typeConverter.convertType(aggregationHashtableType.getValType())}));
          return t;
       }
    });
-   auto i8PtrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
 
    typeConverter.addConversion([&typeConverter, indexType,i8PtrType, context](mlir::db::JoinHashtableType joinHashtableType) {
       Type kvType = typeConverter.convertType(TupleType::get(context, {joinHashtableType.getKeyType(), joinHashtableType.getValType()}));

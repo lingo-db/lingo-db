@@ -271,7 +271,7 @@ struct Vec {
 };
 struct AggrHt {
    struct Entry {
-      size_t next;
+      Entry* next;
       size_t hashValue;
       //kv follows
    };
@@ -281,7 +281,7 @@ struct AggrHt {
    runtime::Bytes ht;
    //initial value follows...
    AggrHt(size_t initialCapacity, size_t typeSize) : numValues(0), capacity(initialCapacity), values((uint8_t*) malloc(initialCapacity * typeSize), initialCapacity * typeSize), ht((uint8_t*) malloc(initialCapacity * 2 * sizeof(uint64_t)), initialCapacity * 2 * sizeof(uint64_t)) {
-      ht.fill(0xff);
+      ht.fill(0x00);
    }
 };
 EXPORT Vec* rt_create_vec(size_t sizeOfType, size_t initialCapacity) {
@@ -298,9 +298,9 @@ EXPORT void rt_resize_aggr_ht(AggrHt* aggrHt, size_t typeSize) {
    size_t old = aggrHt->values.getSize();
    aggrHt->values.resize(2);
    aggrHt->ht.resize(2);
-   aggrHt->ht.fill(0xff);
+   aggrHt->ht.fill(0x00);
    aggrHt->capacity *= 2;
-   size_t* ht = (size_t*) aggrHt->ht.getPtr();
+   AggrHt::Entry** ht = (AggrHt::Entry**) aggrHt->ht.getPtr();
    size_t hashMask = (aggrHt->ht.getSize() / sizeof(size_t)) - 1;
    auto valuesPtr = aggrHt->values.getPtr();
    assert((old / typeSize) == aggrHt->numValues);
@@ -309,7 +309,7 @@ EXPORT void rt_resize_aggr_ht(AggrHt* aggrHt, size_t typeSize) {
       AggrHt::Entry* entry = (AggrHt::Entry*) &valuesPtr[i * typeSize];
       auto pos = entry->hashValue & hashMask;
       auto previousPtr = ht[pos];
-      ht[pos] = i;
+      ht[pos] = entry;
       entry->next = previousPtr;
    }
 }

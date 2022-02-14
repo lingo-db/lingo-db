@@ -140,6 +140,19 @@ class IsRefValidOpLowering : public ConversionPattern {
       return success();
    }
 };
+class InvalidRefOpLowering : public ConversionPattern {
+   public:
+   explicit InvalidRefOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::InvalidRefOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      mlir::util::IsRefValidOpAdaptor adaptor(operands);
+      rewriter.replaceOpWithNewOp<mlir::util::InvalidRefOp>(op, typeConverter->convertType(mlir::cast<util::InvalidRefOp>(op).getType()));
+      return success();
+   }
+};
 template <class UtilOp>
 class AllocOpLowering : public ConversionPattern {
    public:
@@ -299,6 +312,7 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    patterns.add<ToGenericMemrefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<ToMemrefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<IsRefValidOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<InvalidRefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<StoreOpLowering>(typeConverter, patterns.getContext());
    patterns.add<AllocOpLowering<util::AllocOp>>(typeConverter, patterns.getContext());
    patterns.add<AllocOpLowering<util::AllocaOp>>(typeConverter, patterns.getContext());

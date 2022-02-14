@@ -58,7 +58,7 @@ static ParseResult parseConstantOp(OpAsmParser& parser,
 static void buildDBCmpOp(OpBuilder& build, OperationState& result,
                          mlir::db::DBCmpPredicate predicate, Value left, Value right) {
    result.addOperands({left, right});
-   bool nullable = left.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable() || right.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable();
+   bool nullable = left.getType().cast<mlir::db::DBType>().isNullable() || right.getType().cast<mlir::db::DBType>().isNullable();
 
    result.types.push_back(mlir::db::BoolType::get(build.getContext(), nullable));
    result.addAttribute("predicate",
