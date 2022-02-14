@@ -123,8 +123,10 @@ class AggrHtHelper {
       auto idxPtrType = util::RefType::get(rewriter.getContext(), idxType, {});
       Value lenAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 0);
       Value capacityAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 1);
-      //Value valuesAddress = rewriter.create<util::ElementPtrOp>(loc, idxPtrType, aggrHtBuilder, offsetOne);
-      //Value htAddress = rewriter.create<util::ElementPtrOp>(loc, idxPtrType, aggrHtBuilder, offsetOne);
+      auto valuesType = mlir::util::RefType::get(context, entryType, -1);
+      auto entryPtrType = mlir::util::RefType::get(context, entryType);
+      auto htType = mlir::util::RefType::get(context, entryPtrType, -1);
+      Value htAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), htType), aggrHtBuilder, 3);
       Value initValAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), aggrType), aggrHtBuilder, 4);
       Value len = rewriter.create<util::LoadOp>(loc, idxType, lenAddress);
       Value capacityInitial = rewriter.create<util::LoadOp>(loc, idxType, capacityAddress);
@@ -139,10 +141,7 @@ class AggrHtHelper {
             auto typeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), createEntryType(rewriter.getContext(),keyType,aggrType));
             functionRegistry.call(b,loc,mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtResize,ValueRange{downCasted,typeSize});
             b.create<scf::YieldOp>(loc); });
-      auto load = rewriter.create<mlir::util::LoadOp>(loc, aggrHtBuilder.getType().cast<mlir::util::RefType>().getElementType(), aggrHtBuilder, Value());
-      auto unpacked = rewriter.create<util::UnPackOp>(loc, load);
-      Value ht = unpacked.getResult(3);
-      Value values = unpacked.getResult(2);
+      Value ht = rewriter.create<util::LoadOp>(loc, htType, htAddress);
       Value capacity = rewriter.create<util::LoadOp>(loc, idxType, capacityAddress);
 
       Value trueValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
@@ -178,26 +177,29 @@ class AggrHtHelper {
             [&](OpBuilder& b, Location loc) {
 
          //       entry=vec[idx]
-                  Value currEntry= b.create<util::LoadOp>(loc, entryType, currEntryPtr);
-                  auto entryUnpacked=b.create<util::UnPackOp>(loc,currEntry);
-                  Value kv=entryUnpacked.getResult(2);
-                  auto kvUnpacked=b.create<util::UnPackOp>(loc,kv);
-
-                  Value entryKey=kvUnpacked.getResult(0);
-                  Value entryAggr=kvUnpacked.getResult(1);
-                  Value entryNext=entryUnpacked.getResult(0);
-                  Value entryHash=entryUnpacked.getResult(1);
+                  //Value currEntry= b.create<util::LoadOp>(loc, entryType, currEntryPtr);
+                  //auto entryUnpacked=b.create<util::UnPackOp>(loc,currEntry);
+                  auto kvType=AggrHtHelper::kvType(context,keyType,aggrType);
+                  auto kvPtrType=mlir::util::RefType::get(b.getContext(),kvType);
+                  auto keyPtrType=mlir::util::RefType::get(b.getContext(),keyType);
+                  auto aggrPtrType=mlir::util::RefType::get(b.getContext(),aggrType);
+                  Value hashAddress=rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, currEntryPtr, 1);
+                  Value entryHash = rewriter.create<util::LoadOp>(loc, idxType, hashAddress);
                   Value hashMatches = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, entryHash,hash);
                   auto ifOpH = b.create<scf::IfOp>(
                      loc, TypeRange({doneType,ptrType}), hashMatches, [&](OpBuilder& b, Location loc) {
+                        Value kvAddress=rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
+                        Value entryKeyAddress=rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, kvAddress, 0);
+                        Value entryKey = rewriter.create<util::LoadOp>(loc, keyType, entryKeyAddress);
+
                         Value keyMatches = b.create<mlir::db::TypeCastOp>(loc,b.getI1Type(),compareKeys(b,b.create<mlir::db::TypeCastOp>(loc,oKeyType,entryKey),key));
                         auto ifOp2 = b.create<scf::IfOp>(
                            loc, TypeRange({doneType,ptrType}), keyMatches, [&](OpBuilder& b, Location loc) {
                               //          entry.aggr = update(vec.aggr,val)
+                              Value entryAggrAddress=rewriter.create<util::TupleElementPtrOp>(loc, aggrPtrType, kvAddress, 1);
+                              Value entryAggr = rewriter.create<util::LoadOp>(loc, aggrType, entryAggrAddress);
                               Value newAggr= updateFn(b,entryAggr, val);
-                              Value newKVPair=b.create<util::PackOp>(loc,ValueRange({entryKey,newAggr}));
-                              Value newEntry=b.create<util::PackOp>(loc,ValueRange({entryNext,entryHash,newKVPair}));
-                              b.create<util::StoreOp>(loc, newEntry, currEntryPtr, Value());
+                              b.create<util::StoreOp>(loc, newAggr, entryAggrAddress, Value());
                               b.create<scf::YieldOp>(loc, ValueRange{falseValue,ptr});
                               }, [&](OpBuilder& b, Location loc) {
 
@@ -219,6 +221,8 @@ class AggrHtHelper {
                Value invalidNext  = b.create<util::InvalidRefOp>(loc,i8PtrType);
                //       %newEntry = ...
                Value newEntry = b.create<util::PackOp>(loc, ValueRange({invalidNext, hash, newKVPair}));
+               Value valuesAddress = b.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(b.getContext(),valuesType), aggrHtBuilder, 2);
+               Value values = b.create<util::LoadOp>(loc, valuesType, valuesAddress);
                Value newValueLocPtr=b.create<util::ArrayElementPtrOp>(loc,bucketPtrType,values,len);
                //       append(vec,newEntry)
                b.create<util::StoreOp>(loc, newEntry, newValueLocPtr,Value());
