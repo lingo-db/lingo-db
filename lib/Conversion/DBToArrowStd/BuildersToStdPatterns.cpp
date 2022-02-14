@@ -11,52 +11,6 @@
 using namespace mlir;
 namespace {
 
-class BufferHelper {
-   OpBuilder& b;
-   ModuleOp module;
-   Location loc;
-
-   public:
-   BufferHelper(OpBuilder& b, Location loc, ModuleOp module) : b(b), module(module), loc(loc) {
-   }
-   FuncOp getCpyFn() {
-      auto func = module.lookupSymbol<FuncOp>("rt_cpy");
-      if (func)
-         return func;
-      OpBuilder::InsertionGuard insertionGuard(b);
-      b.setInsertionPointToStart(module.getBody());
-      FuncOp funcOp = b.create<FuncOp>(module.getLoc(), "rt_cpy", b.getFunctionType(TypeRange({ptrType(), ptrType()}), TypeRange()), b.getStringAttr("private"));
-      return funcOp;
-   }
-   FuncOp getFillFn() {
-      auto func = module.lookupSymbol<FuncOp>("rt_fill");
-      if (func)
-         return func;
-      OpBuilder::InsertionGuard insertionGuard(b);
-      b.setInsertionPointToStart(module.getBody());
-      FuncOp funcOp = b.create<FuncOp>(module.getLoc(), "rt_fill", b.getFunctionType(TypeRange({ptrType(), b.getIntegerType(8)}), TypeRange()), b.getStringAttr("private"));
-      return funcOp;
-   }
-   void copy(Value to, Value from) {
-      b.create<CallOp>(loc, getCpyFn(), ValueRange({to, from}));
-   }
-
-   Type ptrType() {
-      return util::RefType::get(b.getContext(), b.getIntegerType(8), -1);
-   }
-   Value resize(Value old, Value newLen) {
-      Value newMemref = b.create<mlir::util::AllocOp>(loc, old.getType(), newLen);
-      Value toPtr = b.create<util::GenericMemrefCastOp>(loc, ptrType(), newMemref);
-      Value fromPtr = b.create<util::GenericMemrefCastOp>(loc, ptrType(), old);
-      copy(toPtr, fromPtr);
-      b.create<mlir::util::DeAllocOp>(loc, old);
-      return newMemref;
-   }
-   void fill(Value memref, Value val) {
-      Value toPtr = b.create<util::GenericMemrefCastOp>(loc, ptrType(), memref);
-      b.create<CallOp>(loc, getFillFn(), ValueRange({toPtr, val}));
-   }
-};
 class VectorHelper {
    Type elementType;
    Location loc;
@@ -79,7 +33,6 @@ class VectorHelper {
       auto idxType = builder.getIndexType();
       auto idxPtrType = util::RefType::get(builder.getContext(), idxType, {});
       auto valuesType = mlir::util::RefType::get(builder.getContext(), elementType,-1);
-      BufferHelper helper(builder, loc, builder.getBlock()->getParentOp()->getParentOfType<ModuleOp>());
       Value lenAddress = builder.create<util::TupleElementPtrOp>(loc, idxPtrType, vec, 0);
       Value capacityAddress = builder.create<util::TupleElementPtrOp>(loc, idxPtrType, vec, 1);
 
@@ -125,7 +78,6 @@ class AggrHtHelper {
    }
 
    Value create(mlir::OpBuilder& builder, Value initialValue, mlir::db::codegen::FunctionRegistry& functionRegistry) {
-      BufferHelper helper(builder, loc, builder.getBlock()->getParentOp()->getParentOfType<ModuleOp>());
       auto typeSize = builder.create<mlir::util::SizeOfOp>(loc, builder.getIndexType(), createEntryType(builder.getContext(), keyType, aggrType));
       Value initialCapacity = builder.create<arith::ConstantIndexOp>(loc, 4);
       auto ptr = functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtCreate, ValueRange({typeSize, initialCapacity}))[0];
@@ -160,7 +112,6 @@ class AggrHtHelper {
       return equal;
    }
    void insert(mlir::ConversionPatternRewriter& rewriter, Value aggrHtBuilder, Value key, Value val, Value hash, std::function<Value(mlir::OpBuilder&, Value, Value)> updateFn, mlir::db::codegen::FunctionRegistry& functionRegistry) {
-      BufferHelper helper(rewriter, loc, rewriter.getBlock()->getParentOp()->getParentOfType<ModuleOp>());
       auto* context = rewriter.getContext();
       auto idxType = rewriter.getIndexType();
       auto idxPtrType = util::RefType::get(rewriter.getContext(), idxType, {});
