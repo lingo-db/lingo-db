@@ -118,16 +118,19 @@ class AggrHtHelper {
    void insert(mlir::ConversionPatternRewriter& rewriter, Value aggrHtBuilder, Value key, Value val, Value hash, std::function<Value(mlir::OpBuilder&, Value, Value)> updateFn, mlir::db::codegen::FunctionRegistry& functionRegistry) {
       auto* context = rewriter.getContext();
       auto i8PtrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
-
       auto idxType = rewriter.getIndexType();
       auto idxPtrType = util::RefType::get(rewriter.getContext(), idxType, {});
-      Value lenAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 0);
-      Value capacityAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 1);
+      auto kvType = AggrHtHelper::kvType(context, keyType, aggrType);
+      auto kvPtrType = mlir::util::RefType::get(context, kvType);
+      auto keyPtrType = mlir::util::RefType::get(context, keyType);
+      auto aggrPtrType = mlir::util::RefType::get(context, aggrType);
       auto valuesType = mlir::util::RefType::get(context, entryType, -1);
       auto entryPtrType = mlir::util::RefType::get(context, entryType);
       auto htType = mlir::util::RefType::get(context, entryPtrType, -1);
-      Value htAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), htType), aggrHtBuilder, 3);
-      Value initValAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), aggrType), aggrHtBuilder, 4);
+
+      Value lenAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 0);
+      Value capacityAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 1);
+
       Value len = rewriter.create<util::LoadOp>(loc, idxType, lenAddress);
       Value capacityInitial = rewriter.create<util::LoadOp>(loc, idxType, capacityAddress);
 
@@ -141,7 +144,10 @@ class AggrHtHelper {
             auto typeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), createEntryType(rewriter.getContext(),keyType,aggrType));
             functionRegistry.call(b,loc,mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtResize,ValueRange{downCasted,typeSize});
             b.create<scf::YieldOp>(loc); });
+
+      Value htAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), htType), aggrHtBuilder, 3);
       Value ht = rewriter.create<util::LoadOp>(loc, htType, htAddress);
+
       Value capacity = rewriter.create<util::LoadOp>(loc, idxType, capacityAddress);
 
       Value trueValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
@@ -176,13 +182,6 @@ class AggrHtHelper {
             loc, TypeRange({doneType, ptrType}), cmp,
             [&](OpBuilder& b, Location loc) {
 
-         //       entry=vec[idx]
-                  //Value currEntry= b.create<util::LoadOp>(loc, entryType, currEntryPtr);
-                  //auto entryUnpacked=b.create<util::UnPackOp>(loc,currEntry);
-                  auto kvType=AggrHtHelper::kvType(context,keyType,aggrType);
-                  auto kvPtrType=mlir::util::RefType::get(b.getContext(),kvType);
-                  auto keyPtrType=mlir::util::RefType::get(b.getContext(),keyType);
-                  auto aggrPtrType=mlir::util::RefType::get(b.getContext(),aggrType);
                   Value hashAddress=rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, currEntryPtr, 1);
                   Value entryHash = rewriter.create<util::LoadOp>(loc, idxType, hashAddress);
                   Value hashMatches = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, entryHash,hash);
@@ -215,6 +214,7 @@ class AggrHtHelper {
                         //          yield ptr,done=false
                         b.create<scf::YieldOp>(loc, ValueRange{trueValue, newPtr });});
                   b.create<scf::YieldOp>(loc, ifOpH.getResults()); }, [&](OpBuilder& b, Location loc) {
+               Value initValAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), aggrType), aggrHtBuilder, 4);
                Value initialVal = b.create<util::LoadOp>(loc, aggrType, initValAddress);
                Value newAggr = updateFn(b,initialVal, val);
                Value newKVPair = b.create<util::PackOp>(loc,ValueRange({key, newAggr}));
@@ -532,26 +532,13 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::AggrHTBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
-   typeConverter.addTargetMaterialization([&](OpBuilder&, db::AggrHTBuilderType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::JoinHTBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
-   typeConverter.addTargetMaterialization([&](OpBuilder&, db::JoinHTBuilderType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::VectorBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
-   typeConverter.addTargetMaterialization([&](OpBuilder&, db::VectorBuilderType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::TableBuilderType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-   typeConverter.addTargetMaterialization([&](OpBuilder&, db::TableBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
    typeConverter.addConversion([&](mlir::db::TableBuilderType tableType) {

@@ -300,15 +300,14 @@ EXPORT void rt_resize_aggr_ht(AggrHt* aggrHt, size_t typeSize) {
    aggrHt->ht.resize(2);
    aggrHt->ht.fill(0x00);
    aggrHt->capacity *= 2;
-   AggrHt::Entry** ht = (AggrHt::Entry**) aggrHt->ht.getPtr();
+   auto* ht = (AggrHt::Entry**) aggrHt->ht.getPtr();
    size_t hashMask = (aggrHt->ht.getSize() / sizeof(size_t)) - 1;
-   auto valuesPtr = aggrHt->values.getPtr();
+   auto* valuesPtr = aggrHt->values.getPtr();
    assert((old / typeSize) == aggrHt->numValues);
    for (size_t i = 0; i < aggrHt->numValues; i++) {
-      //assert((i * (sizeof(AggrHt::Entry) + typeSize)) < old);
-      AggrHt::Entry* entry = (AggrHt::Entry*) &valuesPtr[i * typeSize];
+      auto* entry = (AggrHt::Entry*) &valuesPtr[i * typeSize];
       auto pos = entry->hashValue & hashMask;
-      auto previousPtr = ht[pos];
+      auto* previousPtr = ht[pos];
       ht[pos] = entry;
       entry->next = previousPtr;
    }
@@ -340,14 +339,14 @@ EXPORT uint64_t next_pow_2(uint64_t v) {
 EXPORT JoinHt* rt_build_join_ht(Vec* v, size_t typeSize) {
    size_t htSize = next_pow_2(v->len);
    size_t htMask = htSize - 1;
-   auto joinHt = new JoinHt(v->bytes, v->len, htMask, htSize);
+   auto *joinHt = new JoinHt(v->bytes, v->len, htMask, htSize);
    joinHt->ht.fill(0x00);
-   auto valuesPtr = joinHt->values.getPtr();
-   JoinHt::Entry** ht = (JoinHt::Entry**) joinHt->ht.getPtr();
+   auto* valuesPtr = joinHt->values.getPtr();
+   auto* ht = (JoinHt::Entry**) joinHt->ht.getPtr();
    for (size_t i = 0; i < v->len; i++) {
-      auto entry = (JoinHt::Entry*) &valuesPtr[i * typeSize];
+      auto* entry = (JoinHt::Entry*) &valuesPtr[i * typeSize];
       auto pos = ((size_t) entry->next) & htMask;
-      auto previousPtr = ht[pos];
+      auto* previousPtr = ht[pos];
       ht[pos] = entry;
       entry->next = previousPtr;
    }

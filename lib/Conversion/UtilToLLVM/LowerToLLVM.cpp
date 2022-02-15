@@ -269,7 +269,6 @@ class IsRefValidOpLowering : public ConversionPattern {
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      auto* context = getContext();
       auto casted=mlir::cast<mlir::util::IsRefValidOp>(op);
       auto ptr = getPtrFromGenericMemref(op->getLoc(), casted.ref().getType().cast<mlir::util::RefType>(), operands[0], rewriter, typeConverter);
       rewriter.replaceOpWithNewOp<mlir::LLVM::ICmpOp>(op, mlir::LLVM::ICmpPredicate::ne, ptr, rewriter.create<mlir::LLVM::NullOp>(op->getLoc(),ptr.getType()));
@@ -284,7 +283,6 @@ class InvalidRefOpLowering : public ConversionPattern {
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      auto* context = getContext();
       auto casted=mlir::cast<mlir::util::InvalidRefOp>(op);
       rewriter.replaceOpWithNewOp<mlir::LLVM::NullOp>(op,typeConverter->convertType(casted.getType()));
       return success();
