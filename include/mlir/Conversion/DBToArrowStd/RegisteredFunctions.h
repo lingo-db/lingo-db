@@ -87,6 +87,7 @@
    F(VecCreate, create_vec, OPERANDS(INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                       \
    F(AggrHtCreate, create_aggr_ht, OPERANDS(INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                 \
    F(AggrHtResize, resize_aggr_ht, OPERANDS(POINTER_TYPE, INDEX_TYPE), RETURNS()) \
-   F(JoinHtBuild, build_join_ht, OPERANDS(POINTER_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))
+   F(JoinHtBuild, build_join_ht, OPERANDS(POINTER_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE)) \
+   F(ScanSourceInit, scan_source_init, OPERANDS(POINTER_TYPE, STRING_TYPE), RETURNS(POINTER_TYPE))
 
 #endif // MLIR_CONVERSION_DBTOARROWSTD_REGISTEREDFUNCTIONS_H

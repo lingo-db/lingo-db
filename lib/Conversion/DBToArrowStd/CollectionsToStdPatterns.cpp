@@ -306,7 +306,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
                types.push_back(indexType);
             }
          }
-         return (Type) TupleType::get(context, types);
+         return (Type) mlir::util::RefType::get(context, TupleType::get(context, types));
       } else if (genericIterableType.getIteratorName() == "table_row_iterator") {
          std::vector<Type> types;
          types.push_back(i8ptrType);

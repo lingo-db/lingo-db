@@ -276,12 +276,12 @@ let arguments = (ins StrAttr:$tablename);
 let results = (outs DB_Table:$table);
 let assemblyFormat = "$tablename attr-dict";
 }
-def DB_TableScan : DB_Op<"tablescan",
+def DB_ScanSource : DB_Op<"scan_source",
 [NoSideEffect]> {
-let summary = "tablescan";
-let arguments = (ins DB_Table:$table,ArrayAttr:$columns);
+let summary = "scans a source";
+let arguments = (ins StrAttr:$descr);
 let results = (outs DB_GenericIterable:$iterable);
-let assemblyFormat = "$table $columns `:` type($iterable) attr-dict";
+let assemblyFormat = "$descr `:` type($iterable) attr-dict";
 }
 def DB_Lookup : DB_Op<"lookup",
 [NoSideEffect]> {

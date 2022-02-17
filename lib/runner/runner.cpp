@@ -349,6 +349,8 @@ bool Runner::lower() {
    pmFunc.enableVerifier(runMode == RunMode::DEBUGGING);
    pmFunc.addPass(mlir::createCanonicalizerPass());
    pmFunc.addPass(mlir::createSinkOpPass());
+   pmFunc.addPass(mlir::createCSEPass());
+
    ctxt->module.get().walk([&](mlir::FuncOp f){
       if(!f->hasAttr("passthrough")){
          if (mlir::failed(pmFunc.run(f))) {

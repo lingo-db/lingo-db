@@ -39,32 +39,21 @@ class GetTableLowering : public ConversionPattern {
       return success();
    }
 };
-class TableScanLowering : public ConversionPattern {
+class ScanSourceLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   explicit TableScanLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::TableScan::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit ScanSourceLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::ScanSource::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::db::TableScanAdaptor adaptor(operands);
-      auto tablescan = cast<mlir::db::TableScan>(op);
+      auto tablescan = cast<mlir::db::ScanSource>(op);
       std::vector<Type> types;
-      auto ptrType = mlir::util::RefType::get(rewriter.getContext(), IntegerType::get(rewriter.getContext(), 8), llvm::Optional<int64_t>());
-      auto indexType = IndexType::get(rewriter.getContext());
-
-      std::vector<Value> values;
-      types.push_back(ptrType);
-      auto tablePtr = adaptor.table();
-      values.push_back(tablePtr);
-      for (auto c : tablescan.columns()) {
-         auto stringAttr = c.cast<StringAttr>();
-         types.push_back(indexType);
-         auto columnName = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), stringAttr);
-         auto columnId = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::TableGetColumnId, mlir::ValueRange({tablePtr, columnName}))[0];
-         values.push_back(columnId);
-      }
-      rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, mlir::TupleType::get(rewriter.getContext(), types), values);
+      auto executionContext = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::GetExecutionContext, {})[0];
+      mlir::Value description = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), tablescan.descrAttr());
+      auto rawPtr = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::ScanSourceInit, ValueRange({executionContext, description}))[0];
+      mlir::Value res = rewriter.create<mlir::util::GenericMemrefCastOp>(op->getLoc(), typeConverter->convertType(tablescan.getType()), rawPtr);
+      rewriter.replaceOp(op, res);
       return success();
    }
 };
@@ -208,7 +197,7 @@ void DBToStdLoweringPass::runOnOperation() {
          //llvm::dbgs() << "isLegal:" << isLegal << "\n";
          return isLegal;
       });
-   target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::InvalidRefOp,util::IsRefValidOp,util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::ToMemrefOp, util::StoreOp, util::LoadOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp, util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp>(
+   target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::InvalidRefOp, util::IsRefValidOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::ToMemrefOp, util::StoreOp, util::LoadOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp, util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp>(
       [](Operation* op) {
          auto isLegal = !hasDBType(op->getOperandTypes()) &&
             !hasDBType(op->getResultTypes());
@@ -290,7 +279,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<FuncConstLowering>(typeConverter, &getContext());
    patterns.insert<TypeCastLowering>(typeConverter, &getContext());
 
-   patterns.insert<TableScanLowering>(functionRegistry, typeConverter, &getContext());
+   patterns.insert<ScanSourceLowering>(functionRegistry, typeConverter, &getContext());
 
    patterns.insert<GetTableLowering>(functionRegistry, typeConverter, &getContext());
 

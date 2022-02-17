@@ -23,8 +23,7 @@
     //CHECK: string("---------------")
 	func @main () {
 			%str_const = db.constant ( "---------------" ) :!db.string
-			%table=db.get_table "test"
-	 		%0 = db.tablescan %table ["str","float32","float64","decimal","int32","int64","bool","date32","date64"] : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator>
+            %0 = db.scan_source "{ \"table\": \"test\", \"columns\": [\"str\",\"float32\",\"float64\",\"decimal\",\"int32\",\"int64\",\"bool\",\"date32\",\"date64\"] }" : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator>
             %count_0 = db.constant (0) : !db.int<32>
             %one = db.constant (1) : !db.int<32>
 			%total_count=db.for %table_chunk in %0 : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator> iter_args(%count_iter = %count_0) -> (!db.int<32>){

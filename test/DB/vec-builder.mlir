@@ -24,8 +24,7 @@
 	func @main () {
 	    %str_const = db.constant ( "---------------" ) :!db.string
         %vector_builder=db.create_vector_builder : !db.vector_builder<!test_table_tuple>
-        %table=db.get_table "test"
-	 	%0 = db.tablescan %table ["str","bool","int32","int64","float32","float64","date32","date64","decimal"] : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator>
+        %0 = db.scan_source "{ \"table\": \"test\", \"columns\": [\"str\",\"bool\",\"int32\",\"int64\",\"float32\",\"float64\",\"date32\",\"date64\",\"decimal\"] }" : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator>
         %final_builder=db.for %table_chunk in %0 : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator> iter_args(%builder = %vector_builder) -> (!db.vector_builder<!test_table_tuple>){
             %builder_3 = db.for %table_row in %table_chunk : !db.iterable<!test_table_tuple,table_row_iterator> iter_args(%builder_2 = %builder) -> (!db.vector_builder<!test_table_tuple>){
                %curr_vector_builder=db.builder_merge %builder_2 : !db.vector_builder<!test_table_tuple>, %table_row : !test_table_tuple

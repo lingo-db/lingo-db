@@ -44,6 +44,7 @@ int main(int argc, char** argv) {
    runner.load(inputFileName);
    runner.optimize(*context.db);
    runner.lower();
+   //runner.dump();
    runner.lowerToLLVM();
    runner.runJit(&context, 5, runner::Runner::printTable);
    return 0;

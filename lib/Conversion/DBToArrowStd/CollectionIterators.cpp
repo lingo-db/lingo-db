@@ -72,6 +72,10 @@ class TableIterator : public WhileIterator {
    public:
    TableIterator(Value tableInfo, db::codegen::FunctionRegistry& functionRegistry) : WhileIterator(tableInfo.getContext()), tableInfo(tableInfo), functionRegistry(functionRegistry) {
    }
+   virtual void init(OpBuilder &builder) override {
+      auto convertedType=typeConverter->convertType(tableInfo.getType()).cast<mlir::util::RefType>();
+      tableInfo=builder.create<mlir::util::LoadOp>(loc,convertedType.getElementType(),tableInfo);
+   }
 
    virtual Type iteratorType(OpBuilder& builder) override {
       return mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8), llvm::Optional<int64_t>());
@@ -86,7 +90,7 @@ class TableIterator : public WhileIterator {
    }
    virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
       Value currElementPtr = functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorCurr, iterator)[0];
-      Value currElement = builder.create<mlir::util::SetTupleOp>(loc, typeConverter->convertType(tableInfo.getType()), tableInfo, currElementPtr, 0);
+      Value currElement = builder.create<mlir::util::SetTupleOp>(loc, tableInfo.getType(), tableInfo, currElementPtr, 0);
       return currElement;
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
