@@ -1,7 +1,6 @@
 #include "mlir/Analysis/DataLayoutAnalysis.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
-#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -15,10 +14,6 @@
 #include <iostream>
 
 using namespace mlir;
-
-//===----------------------------------------------------------------------===//
-// ToyToLLVM RewritePatterns
-//===----------------------------------------------------------------------===//
 
 namespace {
 
@@ -46,8 +41,7 @@ class PackOpLowering : public ConversionPattern {
       Value tpl = rewriter.create<LLVM::UndefOp>(op->getLoc(), structType);
       unsigned pos = 0;
       for (auto val : adaptor.vals()) {
-         tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), tpl, val,
-                                                    rewriter.getI64ArrayAttr(pos++));
+         tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), tpl, val, rewriter.getI64ArrayAttr(pos++));
       }
       rewriter.replaceOp(op, tpl);
       return success();
@@ -61,11 +55,8 @@ class UndefTupleOpLowering : public ConversionPattern {
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      auto undefTupleOp = mlir::dyn_cast_or_null<mlir::util::UndefTupleOp>(op);
-      auto tupleType = undefTupleOp.tuple().getType().dyn_cast_or_null<TupleType>();
-      auto structType = convertTuple(tupleType, *typeConverter);
-      Value tpl = rewriter.create<LLVM::UndefOp>(op->getLoc(), structType);
-      rewriter.replaceOp(op, tpl);
+      auto structType = convertTuple(op->getResult(0).getType().cast<TupleType>(), *typeConverter);
+      rewriter.replaceOpWithNewOp<LLVM::UndefOp>(op, structType);
       return success();
    }
 };
@@ -77,14 +68,9 @@ class SetTupleOpLowering : public ConversionPattern {
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      auto setTupleOp = mlir::dyn_cast_or_null<mlir::util::SetTupleOp>(op);
-      mlir::util::SetTupleOpAdaptor adaptor(operands);
-      auto tupleType = setTupleOp.tuple().getType().dyn_cast_or_null<TupleType>();
-      auto structType = convertTuple(tupleType, *typeConverter);
-      Value tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), structType, adaptor.tuple(), adaptor.val(),
-                                                       rewriter.getI64ArrayAttr(setTupleOp.offset()));
-
-      rewriter.replaceOp(op, tpl);
+      mlir::util::SetTupleOpAdaptor adaptor(operands, op->getAttrDictionary());
+      auto structType = convertTuple(op->getResult(0).getType().cast<TupleType>(), *typeConverter);
+      rewriter.replaceOpWithNewOp<LLVM::InsertValueOp>(op, structType, adaptor.tuple(), adaptor.val(), rewriter.getI64ArrayAttr(adaptor.offset()));
       return success();
    }
 };
@@ -99,10 +85,7 @@ class GetTupleOpLowering : public ConversionPattern {
       auto getTupleOp = mlir::dyn_cast_or_null<mlir::util::GetTupleOp>(op);
       mlir::util::GetTupleOpAdaptor adaptor(operands);
       auto resType = typeConverter->convertType(getTupleOp.val().getType());
-      Value tpl = rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), resType, adaptor.tuple(),
-                                                        rewriter.getI64ArrayAttr(getTupleOp.offset()));
-
-      rewriter.replaceOp(op, tpl);
+      rewriter.replaceOpWithNewOp<LLVM::ExtractValueOp>(op, resType, adaptor.tuple(), rewriter.getI64ArrayAttr(getTupleOp.offset()));
       return success();
    }
 };
@@ -183,8 +166,7 @@ class UnPackOpLowering : public ConversionPattern {
 mlir::Value getPtrFromGenericMemref(mlir::Location loc, mlir::util::RefType genericMemrefType, mlir::Value memref, OpBuilder builder, TypeConverter* typeConverter) {
    if (genericMemrefType.getSize() && genericMemrefType.getSize().getValue() == -1) {
       auto elemPtrType = mlir::LLVM::LLVMPointerType::get(typeConverter->convertType(genericMemrefType.getElementType()));
-      return builder.create<LLVM::ExtractValueOp>(loc, elemPtrType, memref,
-                                                  builder.getI64ArrayAttr(0));
+      return builder.create<LLVM::ExtractValueOp>(loc, elemPtrType, memref, builder.getI64ArrayAttr(0));
    } else {
       return memref;
    }
@@ -269,9 +251,9 @@ class IsRefValidOpLowering : public ConversionPattern {
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      auto casted=mlir::cast<mlir::util::IsRefValidOp>(op);
+      auto casted = mlir::cast<mlir::util::IsRefValidOp>(op);
       auto ptr = getPtrFromGenericMemref(op->getLoc(), casted.ref().getType().cast<mlir::util::RefType>(), operands[0], rewriter, typeConverter);
-      rewriter.replaceOpWithNewOp<mlir::LLVM::ICmpOp>(op, mlir::LLVM::ICmpPredicate::ne, ptr, rewriter.create<mlir::LLVM::NullOp>(op->getLoc(),ptr.getType()));
+      rewriter.replaceOpWithNewOp<mlir::LLVM::ICmpOp>(op, mlir::LLVM::ICmpPredicate::ne, ptr, rewriter.create<mlir::LLVM::NullOp>(op->getLoc(), ptr.getType()));
       return success();
    }
 };
@@ -283,8 +265,8 @@ class InvalidRefOpLowering : public ConversionPattern {
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      auto casted=mlir::cast<mlir::util::InvalidRefOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::LLVM::NullOp>(op,typeConverter->convertType(casted.getType()));
+      auto casted = mlir::cast<mlir::util::InvalidRefOp>(op);
+      rewriter.replaceOpWithNewOp<mlir::LLVM::NullOp>(op, typeConverter->convertType(casted.getType()));
       return success();
    }
 };
@@ -681,7 +663,6 @@ class HashCombineLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       mlir::util::HashCombineAdaptor adaptor(operands);
-
       Value reversed = rewriter.create<mlir::LLVM::ByteSwapOp>(op->getLoc(), adaptor.h1());
       Value result = rewriter.create<LLVM::XOrOp>(op->getLoc(), adaptor.h2(), reversed);
       rewriter.replaceOp(op, result);

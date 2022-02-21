@@ -5,10 +5,9 @@
 
 class MapTranslator : public mlir::relalg::Translator {
    public:
-   MapTranslator(mlir::relalg::MapOp mapOp) : mlir::relalg::Translator(mapOp) {
-   }
+   MapTranslator(mlir::relalg::MapOp mapOp) : mlir::relalg::Translator(mapOp) {}
 
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
+   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       children[0]->addRequiredBuilders(requiredBuilders);
    }
@@ -27,5 +26,5 @@ class MapTranslator : public mlir::relalg::Translator {
 };
 
 std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createMapTranslator(mlir::relalg::MapOp mapOp) {
-  return std::make_unique<MapTranslator>(mapOp);
+   return std::make_unique<MapTranslator>(mapOp);
 }
