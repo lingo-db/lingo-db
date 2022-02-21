@@ -19,7 +19,7 @@ class BitUtil {
       Value div8 = builder.create<arith::ShRUIOp>(loc, indexType, pos, const3);
       Value rem8 = builder.create<arith::AndIOp>(loc, indexType, pos, const7);
       Value loadedByte = builder.create<mlir::util::LoadOp>(loc,i8Type, bits, div8);
-      Value rem8AsByte = builder.create<arith::IndexCastOp>(loc, rem8, i8Type);
+      Value rem8AsByte = builder.create<arith::IndexCastOp>(loc, i8Type,rem8);
       Value shifted = builder.create<arith::ShRUIOp>(loc, i8Type, loadedByte, rem8AsByte);
       Value res1 = shifted;
       if (negated) {

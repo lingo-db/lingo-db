@@ -336,7 +336,7 @@ class BuilderMergeLowering : public ConversionPattern {
             }
             if (auto charType = mergeOp.val().getType().cast<TupleType>().getType(i).dyn_cast_or_null<mlir::db::CharType>()) {
                if (charType.getBytes() < 8) {
-                  val = rewriter.create<arith::ExtSIOp>(loc, val, rewriter.getI64Type());
+                  val = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), val);
                }
             }
             Value columnId = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(i));

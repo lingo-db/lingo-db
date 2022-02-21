@@ -72,9 +72,9 @@ class TableIterator : public WhileIterator {
    public:
    TableIterator(Value tableInfo, db::codegen::FunctionRegistry& functionRegistry) : WhileIterator(tableInfo.getContext()), tableInfo(tableInfo), functionRegistry(functionRegistry) {
    }
-   virtual void init(OpBuilder &builder) override {
-      auto convertedType=typeConverter->convertType(tableInfo.getType()).cast<mlir::util::RefType>();
-      tableInfo=builder.create<mlir::util::LoadOp>(loc,convertedType.getElementType(),tableInfo);
+   virtual void init(OpBuilder& builder) override {
+      auto convertedType = typeConverter->convertType(tableInfo.getType()).cast<mlir::util::RefType>();
+      tableInfo = builder.create<mlir::util::LoadOp>(loc, convertedType.getElementType(), tableInfo);
    }
 
    virtual Type iteratorType(OpBuilder& builder) override {
@@ -124,15 +124,15 @@ class JoinHtLookupIterator : public WhileIterator {
    }
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
       auto i8PtrType = mlir::util::RefType::get(builder.getContext(), builder.getI8Type());
-      Value nextPtr = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), i8PtrType), iterator,0);
+      Value nextPtr = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), i8PtrType), iterator, 0);
       auto next = builder.create<mlir::util::LoadOp>(loc, i8PtrType, nextPtr);
       return builder.create<util::GenericMemrefCastOp>(loc, ptrType, next);
    }
    virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
-      auto payloadType=iterator.getType().cast<mlir::util::RefType>().getElementType().cast<TupleType>().getType(1);
+      auto payloadType = iterator.getType().cast<mlir::util::RefType>().getElementType().cast<TupleType>().getType(1);
       auto payloadPtrType = mlir::util::RefType::get(builder.getContext(), payloadType);
-      Value payloadPtr = builder.create<util::TupleElementPtrOp>(loc,payloadPtrType, iterator,1);
-     return builder.create<mlir::util::LoadOp>(loc, payloadType, payloadPtr);
+      Value payloadPtr = builder.create<util::TupleElementPtrOp>(loc, payloadPtrType, iterator, 1);
+      return builder.create<mlir::util::LoadOp>(loc, payloadType, payloadPtr);
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
       return builder.create<mlir::util::IsRefValidOp>(loc, builder.getI1Type(), iterator);
@@ -209,7 +209,7 @@ class JoinHtModifyLookupIterator : public WhileIterator {
    }
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
       auto i8PtrType = mlir::util::RefType::get(builder.getContext(), builder.getI8Type());
-      Value nextPtr = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), i8PtrType), iterator,0);
+      Value nextPtr = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), i8PtrType), iterator, 0);
       auto next = builder.create<mlir::util::LoadOp>(loc, i8PtrType, nextPtr);
       return builder.create<util::GenericMemrefCastOp>(loc, ptrType, next);
    }
@@ -221,7 +221,7 @@ class JoinHtModifyLookupIterator : public WhileIterator {
 
       Value elemAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), elemType, Optional<int64_t>()), iterator, 1);
 
-      Value loadedValue = builder.create<util::LoadOp>(loc,elemType,elemAddress);
+      Value loadedValue = builder.create<util::LoadOp>(loc, elemType, elemAddress);
 
       Value valAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valType, Optional<int64_t>()), elemAddress, 1);
 
@@ -322,7 +322,7 @@ class TableRowIterator : public ForIterator {
             Value pos2 = builder.create<util::LoadOp>(loc, column.stdType, column.values, ip1);
             pos2.getDefiningOp()->setAttr("nosideffect", builder.getUnitAttr());
             Value len = builder.create<arith::SubIOp>(loc, builder.getI32Type(), pos2, pos1);
-            Value pos1AsIndex = builder.create<arith::IndexCastOp>(loc, pos1, indexType);
+            Value pos1AsIndex = builder.create<arith::IndexCastOp>(loc, indexType, pos1);
             Value ptr = builder.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, builder.getI8Type(), llvm::Optional<int64_t>()), column.varLenBuffer, pos1AsIndex);
             val = builder.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(builder.getContext()), ptr, len);
          } else if (column.type.isa<db::BoolType>()) {
