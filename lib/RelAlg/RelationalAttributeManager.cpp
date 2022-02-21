@@ -14,11 +14,11 @@ std::shared_ptr<RelationalAttribute> RelationalAttributeManager::get(StringRef s
 }
 RelationalAttributeDefAttr RelationalAttributeManager::createDef(SymbolRefAttr name, Attribute fromExisting) {
    auto attribute = get(currentScope, name.getRootReference().getValue());
-   return mlir::relalg::RelationalAttributeDefAttr::get(context, name.getRootReference().getValue(), attribute, fromExisting);
+   return mlir::relalg::RelationalAttributeDefAttr::get(context, name.getRootReference().getValue().str(), attribute, fromExisting);
 }
 RelationalAttributeDefAttr RelationalAttributeManager::createDef(StringRef name, Attribute fromExisting) {
    auto attribute = get(currentScope, name);
-   return mlir::relalg::RelationalAttributeDefAttr::get(context, name, attribute, fromExisting);
+   return mlir::relalg::RelationalAttributeDefAttr::get(context, name.str(), attribute, fromExisting);
 }
 RelationalAttributeRefAttr RelationalAttributeManager::createRef(SymbolRefAttr name) {
    assert(name.getNestedReferences().size() == 1);

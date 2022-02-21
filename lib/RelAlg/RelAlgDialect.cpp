@@ -2,10 +2,10 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include <mlir/Transforms/InliningUtils.h>
 
+#include "llvm/ADT/TypeSwitch.h"
 #include "mlir/Dialect/DB/IR/DBTypes.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/IR/DialectImplementation.h"
-#include "llvm/ADT/TypeSwitch.h"
 
 using namespace mlir;
 using namespace mlir::relalg;
@@ -19,17 +19,17 @@ struct RelalgInlinerInterface : public DialectInlinerInterface {
 
    /// All call operations within toy can be inlined.
    bool isLegalToInline(Operation* call, Operation* callable,
-                        bool wouldBeCloned) const final override{
+                        bool wouldBeCloned) const final override {
       return true;
    }
 
    /// All operations within toy can be inlined.
    bool isLegalToInline(Operation*, Region*, bool,
-                        BlockAndValueMapping&) const final override{
+                        BlockAndValueMapping&) const final override {
       return true;
    }
-   virtual bool isLegalToInline(Region *dest, Region *src, bool wouldBeCloned,
-                                BlockAndValueMapping &valueMapping) const override{
+   virtual bool isLegalToInline(Region* dest, Region* src, bool wouldBeCloned,
+                                BlockAndValueMapping& valueMapping) const override {
       return true;
    }
 };
@@ -49,22 +49,38 @@ void RelAlgDialect::initialize() {
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.cpp.inc"
       >();
    addInterfaces<RelalgInlinerInterface>();
-   addAttributes<mlir::relalg::RelationalAttributeDefAttr>();
-   addAttributes<mlir::relalg::RelationalAttributeRefAttr>();
-   addAttributes<mlir::relalg::SortSpecificationAttr>();
    relationalAttributeManager.setContext(getContext());
-
 }
 
 ::mlir::Attribute mlir::relalg::TableMetaDataAttr::parse(::mlir::AsmParser& parser, ::mlir::Type type) {
-   if(parser.parseLess()) return Attribute();
    StringAttr attr;
-   if(parser.parseAttribute(attr))return Attribute();
-   if(parser.parseGreater())
-      return Attribute();
+   if (parser.parseLess() || parser.parseAttribute(attr) || parser.parseGreater()) return Attribute();
    return mlir::relalg::TableMetaDataAttr::get(parser.getContext(), runtime::TableMetaData::deserialize(attr.str()));
 }
 void mlir::relalg::TableMetaDataAttr::print(::mlir::AsmPrinter& printer) const {
-   printer<<"<"<<getMeta()->serialize()<<">";
+   printer << "<" << getMeta()->serialize() << ">";
+}
+void mlir::relalg::RelationalAttributeDefAttr::print(::mlir::AsmPrinter& printer) const {
+   printer << "<" << getName() << ">";
+}
+::mlir::Attribute mlir::relalg::RelationalAttributeDefAttr::parse(::mlir::AsmParser& parser, ::mlir::Type odsType) {
+   std::string str;
+   if (parser.parseLess() || parser.parseString(&str) || parser.parseGreater()) return Attribute();
+   return mlir::relalg::RelationalAttributeDefAttr::get(parser.getContext(), str, {}, {});
+}
+void mlir::relalg::RelationalAttributeRefAttr::print(::mlir::AsmPrinter& printer) const {
+   printer << "<" << getName() << ">";
+}
+::mlir::Attribute mlir::relalg::RelationalAttributeRefAttr::parse(::mlir::AsmParser& parser, ::mlir::Type odsType) {
+   mlir::SymbolRefAttr sym;
+   if (parser.parseLess() || parser.parseAttribute(sym) || parser.parseGreater()) return Attribute();
+   return mlir::relalg::RelationalAttributeRefAttr::get(parser.getContext(), sym, {});
+}
+void mlir::relalg::SortSpecificationAttr::print(::mlir::AsmPrinter& printer) const {
+   printer << "<"
+           << ">";
+}
+::mlir::Attribute mlir::relalg::SortSpecificationAttr::parse(::mlir::AsmParser& parser, ::mlir::Type odsType) {
+   return mlir::relalg::SortSpecificationAttr::get(parser.getContext(), {}, {});
 }
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsDialect.cpp.inc"

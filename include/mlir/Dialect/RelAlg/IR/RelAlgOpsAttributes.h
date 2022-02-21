@@ -5,7 +5,7 @@
 #include "mlir/IR/OpDefinition.h"
 #include "runtime/metadata.h"
 
-
+#include "mlir/Dialect/RelAlg/IR/RelAlgOpsEnums.h"
 #define GET_ATTRDEF_CLASSES
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.h.inc"
 

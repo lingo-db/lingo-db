@@ -66,27 +66,28 @@ def TableMetaDataAttr : RelAlg_Attr<"TableMetaData"> {
 let mnemonic = "table_metadata";
 let parameters = (ins "std::shared_ptr<runtime::TableMetaData>":$meta);
 }
-def RelationalAttributeDefAttr :
-DialectAttr<RelAlg_Dialect,
-    CPred<"$_self.isa<RelationalAttributeDefAttr>()">, "AttributeDefAttr">{
-let storageType = "::mlir::relalg::RelationalAttributeDefAttr";
-let returnType = "::mlir::relalg::RelationalAttributeDefAttr";
-let convertFromStorage = "$_self";
+
+def RelationalAttributeDefAttr : RelAlg_Attr<"RelationalAttributeDef"> {
+let mnemonic = "attrdef";
+let parameters = (ins "std::string":$name,"std::shared_ptr<RelationalAttribute>":$relationalAttributePtr,"Attribute":$fromExisting);
+let extraClassDeclaration = [{
+  RelationalAttribute &getRelationalAttribute() { return *getRelationalAttributePtr();  }
+}];
 }
-def RelationalAttributeRefAttr :
-DialectAttr<RelAlg_Dialect,
-    CPred<"$_self.isa<RelationalAttributeRefAttr>()">, "AttributeRefAttr">{
-let storageType = "::mlir::relalg::RelationalAttributeRefAttr";
-let returnType = "::mlir::relalg::RelationalAttributeRefAttr";
-let convertFromStorage = "$_self";
+def RelationalAttributeRefAttr : RelAlg_Attr<"RelationalAttributeRef"> {
+let mnemonic = "attrref";
+let parameters = (ins "SymbolRefAttr":$name,"std::shared_ptr<RelationalAttribute>":$relationalAttributePtr);
+let extraClassDeclaration = [{
+  RelationalAttribute &getRelationalAttribute() { return *getRelationalAttributePtr(); }
+}];
 }
-def SortSpecificationAttr :
-DialectAttr<RelAlg_Dialect,
-        CPred<"$_self.isa<SortSpecificationAttr>()">, "SortSpecificationAttr">{
-let storageType = "::mlir::relalg::SortSpecificationAttr";
-let returnType = "::mlir::relalg::SortSpecificationAttr";
-let convertFromStorage = "$_self";
+
+def SortSpecificationAttr : RelAlg_Attr<"SortSpecification"> {
+let mnemonic = "sortspec";
+let parameters = (ins "RelationalAttributeRefAttr":$attr,"SortSpec":$sortSpec);
 }
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Enums
 ////////////////////////////////////////////////////////////////////////////////////////////////////

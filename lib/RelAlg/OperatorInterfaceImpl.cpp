@@ -107,7 +107,7 @@ Attributes AggregationOp::getUsedAttributes() {
 Attributes SortOp::getUsedAttributes() {
    Attributes used;
    for (Attribute a : sortspecs()) {
-      used.insert(&a.dyn_cast_or_null<SortSpecificationAttr>().getAttr().getRelationalAttribute());
+      used.insert(&a.dyn_cast_or_null<mlir::relalg::SortSpecificationAttr>().getAttr().getRelationalAttribute());
    }
    return used;
 }
