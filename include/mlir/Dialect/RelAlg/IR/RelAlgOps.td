@@ -166,8 +166,7 @@ def LimitOp : RelAlg_Op<"limit",[NoSideEffect,Operator,UnaryOperator]> {
 let summary = "limit operation";
 let arguments = (ins I32Attr:$rows, RelAlg_TupleStream:$rel);
 let results = (outs RelAlg_TupleStream:$result);
-let assemblyFormat =
-[{ $rows $rel attr-dict }];
+let assemblyFormat = [{ $rows $rel attr-dict }];
 }
 def TopKOp : RelAlg_Op<"topk",[NoSideEffect,Operator,UnaryOperator]> {
 let summary = "top k operation";
@@ -178,8 +177,7 @@ def CrossProductOp : RelAlg_Op<"crossproduct",[RecursiveSideEffects,Operator,Bin
 let summary = "crossproduct operation";
 let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
 let results = (outs RelAlg_TupleStream:$result);
-let assemblyFormat =
-[{ $left `,` $right attr-dict }];
+let assemblyFormat = [{ $left `,` $right attr-dict }];
 }
 
 def RenamingOp : RelAlg_Op<"renaming",
@@ -362,17 +360,14 @@ def CountRowsOp : RelAlg_Op<"count"> {
 let summary = "count rows";
 let arguments = (ins RelAlg_TupleStream:$rel);
 let results = (outs DB_IntType:$res);
-let assemblyFormat =
-[{  $rel attr-dict }];
+let assemblyFormat = [{  $rel attr-dict }];
 }
 
 
 def ExistsOp : RelAlg_Op<"exists"> {
-let summary = "exists operation";
 let arguments = (ins RelAlg_TupleStream:$rel);
 let results = (outs DB_BoolType:$result);
-let assemblyFormat =
-[{  $rel attr-dict }];
+let assemblyFormat = [{  $rel attr-dict }];
 }
 def MaterializeOp : RelAlg_Op<"materialize",[NoSideEffect]> {
 let summary = "materialize operation";
@@ -398,5 +393,6 @@ def InOp : RelAlg_Op<"in"> {
 let summary = "in operation";
 let arguments = (ins DBType:$val, RelAlg_TupleStream:$rel);
 let results = (outs DB_BoolType : $res);
+let assemblyFormat = [{ $val `:` type($val) `,` $rel attr-dict }];
 }
 #endif// OPS

@@ -945,24 +945,6 @@ static ParseResult parseRenamingOp(OpAsmParser& parser,
 }
 
 ///////////////////////////////////////////////////////////////////////////////////
-// InOp
-///////////////////////////////////////////////////////////////////////////////////
-static ParseResult parseInOp(OpAsmParser& parser, OperationState& result) {
-   OpAsmParser::OperandType val;
-   ::mlir::Type valType;
-   if (parser.parseOperand(val) || parser.parseColonType(valType) || parser.parseComma()) {
-      return failure();
-   }
-   if (parser.resolveOperand(val, valType, result.operands)) {
-      return failure();
-   }
-   parseRelationalInputs(parser, result, 1);
-   return parser.addTypeToList(db::BoolType::get(parser.getBuilder().getContext()), result.types);
-}
-static void print(OpAsmPrinter& p, relalg::InOp& op) {
-   p << " " << op.val() << " : " << op.val().getType() << ", " << op.rel();
-}
-///////////////////////////////////////////////////////////////////////////////////
 // MaterializeOp
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseGetListOp(OpAsmParser& parser, OperationState& result) {
