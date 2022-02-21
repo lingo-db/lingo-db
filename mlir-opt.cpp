@@ -27,6 +27,9 @@
 #include "mlir-support/eval.h"
 #include "mlir/Transforms/CustomPasses.h"
 
+#include "mlir/InitAllDialects.h"
+#include "torch-mlir/InitAll.h"
+
 namespace {
 struct ToLLVMLoweringPass
    : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
@@ -90,6 +93,7 @@ void ToLLVMLoweringPass::runOnOperation() {
 }
 
 int main(int argc, char** argv) {
+   mlir::torch::registerAllPasses();
    mlir::registerAllPasses();
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createExtractNestedOperatorsPass();
@@ -146,6 +150,8 @@ int main(int argc, char** argv) {
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::scf::SCFDialect>();
    registry.insert<mlir::LLVM::LLVMDialect>();
+   mlir::torch::registerAllDialects(registry);
+   mlir::registerAllDialects(registry);
 
    support::eval::init();
 

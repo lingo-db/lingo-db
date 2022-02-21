@@ -9,7 +9,12 @@ build/llvm-build:
 	   -DLLVM_BUILD_EXAMPLES=OFF \
 	   -DLLVM_TARGETS_TO_BUILD="X86" \
 	   -DCMAKE_BUILD_TYPE=Release \
-	   -DLLVM_ENABLE_ASSERTIONS=ON
+	   -DLLVM_ENABLE_ASSERTIONS=ON \
+	   -DPython3_FIND_VIRTUALENV=ONLY \
+       -DLLVM_EXTERNAL_PROJECTS="torch-mlir;torch-mlir-dialects" \
+       -DLLVM_EXTERNAL_TORCH_MLIR_SOURCE_DIR="${ROOT_DIR}/torch-mlir" \
+       -DLLVM_EXTERNAL_TORCH_MLIR_DIALECTS_SOURCE_DIR="${ROOT_DIR}/torch-mlir/external/llvm-external-projects/torch-mlir-dialects" \
+       -DMLIR_ENABLE_BINDINGS_PYTHON=ON
 
 build/arrow:
 	mkdir -p build/arrow

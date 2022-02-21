@@ -1,15 +1,15 @@
 cmake_minimum_required(VERSION 3.13.4)
-if(POLICY CMP0116)
+if (POLICY CMP0116)
     cmake_policy(SET CMP0116 OLD)
-endif()
+endif ()
 project(db-dialects LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard to conform to")
 
 option(COMPILE_FOR_PERF "compile for perf" OFF)
-if(COMPILE_FOR_PERF)
-    SET(CMAKE_CXX_FLAGS  "${CMAKE_CXX_FLAGS} -ffixed-r15")
-endif(COMPILE_FOR_PERF)
+if (COMPILE_FOR_PERF)
+    SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffixed-r15")
+endif (COMPILE_FOR_PERF)
 
 find_package(MLIR REQUIRED CONFIG)
 
@@ -29,6 +29,8 @@ include(HandleLLVMOptions)
 
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
+include_directories(${PROJECT_SOURCE_DIR}/torch-mlir/include)
+
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/vendored)
 
@@ -84,6 +86,23 @@ set(LIBS
         MLIRSideEffectInterfaces
         MLIRTransforms
         MLIRCustomTransforms
+        MLIRMathTransforms
+        TorchMLIRInitAll
+        TorchMLIRConversionPasses
+        TorchMLIRRefBackend
+        TorchMLIRTMTensorDialect
+        TorchMLIRTMTensorPasses
+        TorchMLIRTorchConversionDialect
+        TorchMLIRTorchConversionPasses
+        TorchMLIRTorchDialect
+        TorchMLIRTorchPasses
+        TorchMLIRTorchToLinalg
+        TorchMLIRTorchToSCF
+        TorchMLIRTorchToStd
+        TorchMLIRTorchToTosa
+        TorchMLIRTorchUtils
+        MLIRMathTransforms
+        TorchMLIRTMTensorDialect
         )
 set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
 
@@ -104,18 +123,17 @@ target_link_options(db-run-query PUBLIC -Wl,--export-dynamic)
 
 llvm_update_compile_flags(mlir-db-opt)
 target_link_libraries(mlir-db-opt PUBLIC ${LIBS} runtime mlir-support PRIVATE arrow_shared)
-if(COMPILE_FOR_PERF)
-    target_compile_definitions(db-run-query PRIVATE RUN_QUERIES_WITH_PERF=1 )
-else()
-    target_compile_definitions(db-run-query PRIVATE RUN_QUERIES_WITH_PERF=0 )
-endif(COMPILE_FOR_PERF)
+if (COMPILE_FOR_PERF)
+    target_compile_definitions(db-run-query PRIVATE RUN_QUERIES_WITH_PERF=1)
+else ()
+    target_compile_definitions(db-run-query PRIVATE RUN_QUERIES_WITH_PERF=0)
+endif (COMPILE_FOR_PERF)
 
 add_executable(mlir-ctxt-opt mlir-ctxt-opt.cpp)
 llvm_update_compile_flags(mlir-ctxt-opt)
 target_link_libraries(mlir-ctxt-opt PUBLIC ${LIBS} runtime PRIVATE arrow_shared)
 add_subdirectory(tools)
 add_subdirectory(test)
-
 
 
 find_package(Python COMPONENTS Interpreter Development REQUIRED)
