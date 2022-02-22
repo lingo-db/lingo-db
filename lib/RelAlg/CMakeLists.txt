@@ -3,8 +3,7 @@ add_mlir_dialect_library(MLIRRelAlg
         RelAlgOps.cpp
         RelAlgOpsEnums.cpp
         OperatorInterfaceImpl.cpp
-        Transforms/AttachMetaData.cpp
-        Transforms/DetachMetaData.cpp
+        Transforms/MetaData.cpp
         Transforms/ExtractNestedOperators.cpp
         Transforms/SimplifyAggregations.cpp
         Transforms/DecomposeLambdas.cpp

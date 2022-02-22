@@ -1,6 +1,6 @@
 #include <mlir/Conversion/RelAlgToDB/JoinTranslator.h>
 using namespace mlir::relalg;
-JoinTranslator::JoinTranslator(Operator joinOp, Value builderChild, Value lookupChild) : Translator({builderChild, lookupChild}), joinOp(joinOp) {
+JoinTranslator::JoinTranslator(Operator joinOp, Value builderChild, Value lookupChild) : Translator({builderChild, lookupChild}), joinOp(joinOp), matchFoundFlag() {
    this->builderChild = children[0].get();
    this->lookupChild = children[1].get();
    this->op = joinOp;

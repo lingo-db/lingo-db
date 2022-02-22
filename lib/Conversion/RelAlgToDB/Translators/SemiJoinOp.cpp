@@ -9,7 +9,6 @@
 #include <mlir/IR/BlockAndValueMapping.h>
 
 class NLSemiJoinTranslator : public mlir::relalg::NLJoinTranslator {
-   mlir::Value matchFoundFlag;
 
    public:
    NLSemiJoinTranslator(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::NLJoinTranslator(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
@@ -18,9 +17,7 @@ class NLSemiJoinTranslator : public mlir::relalg::NLJoinTranslator {
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, matched);
    }
-   mlir::Value getFlag() override {
-      return matchFoundFlag;
-   }
+
    void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
    }
@@ -30,9 +27,7 @@ class NLSemiJoinTranslator : public mlir::relalg::NLJoinTranslator {
    }
    virtual ~NLSemiJoinTranslator() {}
 };
-
 class HashSemiJoinTranslator : public mlir::relalg::HashJoinTranslator {
-   mlir::Value matchFoundFlag;
 
    public:
    HashSemiJoinTranslator(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::HashJoinTranslator(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
@@ -40,9 +35,6 @@ class HashSemiJoinTranslator : public mlir::relalg::HashJoinTranslator {
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, matched);
-   }
-   mlir::Value getFlag() override {
-      return matchFoundFlag;
    }
    void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));

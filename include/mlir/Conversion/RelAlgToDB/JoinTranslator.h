@@ -12,12 +12,14 @@ class JoinTranslator : public Translator {
    mlir::relalg::Translator* builderChild;
    mlir::relalg::Translator* lookupChild;
    std::vector<size_t> customLookupBuilders;
+   mlir::Value matchFoundFlag;
+   bool stopOnFlag = true;
 
    JoinTranslator(Operator joinOp, Value builderChild, Value lookupChild);
    void addJoinRequiredAttributes();
    void handleMappingNull(OpBuilder& builder, TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope);
    void handleMapping(OpBuilder& builder, TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope);
-   void handlePotentialMatch(OpBuilder& builder, TranslatorContext& context, Value matches, mlir::function_ref<void(OpBuilder&, TranslatorContext& context, TranslatorContext::AttributeResolverScope&)> onMatch=nullptr);
+   void handlePotentialMatch(OpBuilder& builder, TranslatorContext& context, Value matches, mlir::function_ref<void(OpBuilder&, TranslatorContext& context, TranslatorContext::AttributeResolverScope&)> onMatch = nullptr);
    std::vector<mlir::Type> getRequiredBuilderTypesCustom(TranslatorContext& context);
    std::vector<mlir::Value> getRequiredBuilderValuesCustom(TranslatorContext& context);
    std::vector<mlir::Location> getRequiredBuilderLocsCustom(TranslatorContext& context);
@@ -34,7 +36,7 @@ class JoinTranslator : public Translator {
    virtual void after(TranslatorContext& context, mlir::OpBuilder& builder) {
    }
    virtual Value evaluatePredicate(TranslatorContext& context, mlir::OpBuilder& builder, TranslatorContext::AttributeResolverScope& scope);
-   virtual mlir::Value getFlag() { return Value(); }
+   virtual mlir::Value getFlag() { return stopOnFlag ? matchFoundFlag : Value(); }
 };
 } // end namespace mlir::relalg
 #endif // MLIR_CONVERSION_RELALGTODB_JOINTRANSLATOR_H
