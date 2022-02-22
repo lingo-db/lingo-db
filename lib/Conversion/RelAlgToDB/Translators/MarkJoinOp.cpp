@@ -6,9 +6,9 @@
 #include <mlir/Conversion/RelAlgToDB/NLJoinTranslator.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class MarkJoinTranslator : public mlir::relalg::JoinImpl {
+class MarkJoinImpl : public mlir::relalg::JoinImpl {
    public:
-   MarkJoinTranslator(mlir::relalg::MarkJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
+   MarkJoinImpl(mlir::relalg::MarkJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
@@ -24,16 +24,9 @@ class MarkJoinTranslator : public mlir::relalg::JoinImpl {
       context.setValueForAttribute(scope, &cast<mlir::relalg::MarkJoinOp>(joinOp).markattr().getRelationalAttribute(), matchFound);
       translator->forwardConsume(builder, context);
    }
-   virtual ~MarkJoinTranslator() {}
+   virtual ~MarkJoinImpl() {}
 };
 
-std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createMarkJoinTranslator(mlir::relalg::MarkJoinOp joinOp) {
-   if (joinOp->hasAttr("impl")) {
-      if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
-         if (impl.getValue() == "hash") {
-            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<HashJoinTranslator>(std::make_shared<MarkJoinTranslator>(joinOp));
-         }
-      }
-   }
-   return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<NLJoinTranslator>(std::make_shared<MarkJoinTranslator>(joinOp));
+std::shared_ptr<mlir::relalg::JoinImpl> mlir::relalg::Translator::createMarkJoinImpl(mlir::relalg::MarkJoinOp joinOp) {
+   return std::make_shared<MarkJoinImpl>(joinOp);
 }

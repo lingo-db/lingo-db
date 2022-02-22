@@ -13,6 +13,6 @@ class CrossProductTranslator : public mlir::relalg::JoinImpl {
    }
    virtual ~CrossProductTranslator() {}
 };
-std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createCrossProductTranslator(mlir::relalg::CrossProductOp crossProductOp) {
-   return std::make_unique<mlir::relalg::NLJoinTranslator>(std::make_shared<CrossProductTranslator>(crossProductOp));
+std::shared_ptr<mlir::relalg::JoinImpl> mlir::relalg::Translator::createCrossProductImpl(mlir::relalg::CrossProductOp crossProductOp) {
+   return std::make_shared<CrossProductTranslator>(crossProductOp);
 }

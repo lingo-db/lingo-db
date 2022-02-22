@@ -4,13 +4,13 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 
-#include <mlir/Conversion/RelAlgToDB/HashJoinTranslator.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class NLSemiJoinTranslator : public mlir::relalg::JoinImpl {
+class SemiJoinImpl : public mlir::relalg::JoinImpl {
    public:
-   NLSemiJoinTranslator(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
+   SemiJoinImpl(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
@@ -24,11 +24,11 @@ class NLSemiJoinTranslator : public mlir::relalg::JoinImpl {
       mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
       translator->handlePotentialMatch(builder, context, matchFound);
    }
-   virtual ~NLSemiJoinTranslator() {}
+   virtual ~SemiJoinImpl() {}
 };
-class MHashSemiJoinTranslator : public mlir::relalg::JoinImpl {
+class ReversedSemiJoinImpl : public mlir::relalg::JoinImpl {
    public:
-   MHashSemiJoinTranslator(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.left(), innerJoinOp.right(), true) {
+   ReversedSemiJoinImpl(mlir::relalg::SemiJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.left(), innerJoinOp.right(), true) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
@@ -48,19 +48,9 @@ class MHashSemiJoinTranslator : public mlir::relalg::JoinImpl {
       translator->setRequiredBuilderValues(context, ifOp.getResults());
    }
 
-   virtual ~MHashSemiJoinTranslator() {}
+   virtual ~ReversedSemiJoinImpl() {}
 };
 
-std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createSemiJoinTranslator(mlir::relalg::SemiJoinOp joinOp) {
-   if (joinOp->hasAttr("impl")) {
-      if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
-         if (impl.getValue() == "hash") {
-            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::HashJoinTranslator>(std::make_shared<NLSemiJoinTranslator>(joinOp));
-         }
-         if (impl.getValue() == "markhash") {
-            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::HashJoinTranslator>(std::make_shared<MHashSemiJoinTranslator>(joinOp));
-         }
-      }
-   }
-   return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::NLJoinTranslator>(std::make_shared<NLSemiJoinTranslator>(joinOp));
-}
+std::shared_ptr<mlir::relalg::JoinImpl> mlir::relalg::Translator::createSemiJoinImpl(mlir::relalg::SemiJoinOp joinOp, bool reversed) {
+   return reversed ? (std::shared_ptr<mlir::relalg::JoinImpl>) std::make_shared<ReversedSemiJoinImpl>(joinOp) : (std::shared_ptr<mlir::relalg::JoinImpl>) std::make_shared<SemiJoinImpl>(joinOp);
+};

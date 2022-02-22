@@ -6,12 +6,12 @@
 #include <mlir/Conversion/RelAlgToDB/HashJoinTranslator.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class HashCollectionJoinTranslator : public mlir::relalg::JoinImpl {
+class CollectionJoinImpl : public mlir::relalg::JoinImpl {
    size_t vectorBuilderId;
    mlir::relalg::OrderedAttributes attrs;
 
    public:
-   HashCollectionJoinTranslator(mlir::relalg::CollectionJoinOp collectionJoinOp) : mlir::relalg::JoinImpl(collectionJoinOp, collectionJoinOp.right(), collectionJoinOp.left()) {
+   CollectionJoinImpl(mlir::relalg::CollectionJoinOp collectionJoinOp) : mlir::relalg::JoinImpl(collectionJoinOp, collectionJoinOp.right(), collectionJoinOp.left()) {
       attrs = mlir::relalg::OrderedAttributes::fromRefArr(collectionJoinOp.attrs());
    }
    virtual void addAdditionalRequiredAttributes() override {
@@ -43,16 +43,8 @@ class HashCollectionJoinTranslator : public mlir::relalg::JoinImpl {
       translator->forwardConsume(builder, context);
       builder.create<mlir::db::FreeOp>(loc, vector);
    }
-   virtual ~HashCollectionJoinTranslator() {}
+   virtual ~CollectionJoinImpl() {}
 };
-std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createCollectionJoinTranslator(mlir::relalg::CollectionJoinOp joinOp) {
-   if (joinOp->hasAttr("impl")) {
-      if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
-         if (impl.getValue() == "hash") {
-            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::HashJoinTranslator>(std::make_shared<HashCollectionJoinTranslator>(joinOp));
-         }
-      }
-   }
-   assert(false && "not implemented");
-   return std::unique_ptr<mlir::relalg::Translator>();
+std::shared_ptr<mlir::relalg::JoinImpl> mlir::relalg::Translator::createCollectionJoinImpl(mlir::relalg::CollectionJoinOp joinOp) {
+   return std::make_shared<CollectionJoinImpl>(joinOp);
 }

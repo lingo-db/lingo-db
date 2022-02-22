@@ -13,6 +13,7 @@
 
 namespace mlir {
 namespace relalg {
+class JoinImpl;
 
 class Translator {
    public:
@@ -41,28 +42,31 @@ class Translator {
    virtual void produce(TranslatorContext& context, mlir::OpBuilder& builder) = 0;
    virtual void done() {}
    virtual ~Translator() {}
+   static std::shared_ptr<mlir::relalg::JoinImpl> createAntiSemiJoinImpl(AntiSemiJoinOp operation,bool reversed);
+   static std::shared_ptr<mlir::relalg::JoinImpl> createInnerJoinImpl(InnerJoinOp operation);
+   static std::shared_ptr<mlir::relalg::JoinImpl> createSemiJoinImpl(SemiJoinOp operation,bool reversed);
+   static std::shared_ptr<mlir::relalg::JoinImpl> createOuterJoinImpl(OuterJoinOp operation,bool reversed);
+   static std::shared_ptr<mlir::relalg::JoinImpl> createSingleJoinImpl(SingleJoinOp operation);
+   static std::shared_ptr<mlir::relalg::JoinImpl> createMarkJoinImpl(MarkJoinOp operation);
+   static std::shared_ptr<mlir::relalg::JoinImpl> createCollectionJoinImpl(CollectionJoinOp operation);
+   static std::shared_ptr<mlir::relalg::JoinImpl> createCrossProductImpl(CrossProductOp operation);
 
    static std::unique_ptr<mlir::relalg::Translator> createBaseTableTranslator(BaseTableOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createConstRelTranslator(ConstRelationOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createMaterializeTranslator(MaterializeOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createSelectionTranslator(SelectionOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createMapTranslator(MapOp operation);
-   static std::unique_ptr<mlir::relalg::Translator> createCrossProductTranslator(CrossProductOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createSortTranslator(SortOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createAggregationTranslator(AggregationOp operation);
-   static std::unique_ptr<mlir::relalg::Translator> createInnerJoinTranslator(InnerJoinOp operation);
-   static std::unique_ptr<mlir::relalg::Translator> createSemiJoinTranslator(SemiJoinOp operation);
-   static std::unique_ptr<mlir::relalg::Translator> createAntiSemiJoinTranslator(AntiSemiJoinOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createRenamingTranslator(RenamingOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createProjectionTranslator(ProjectionOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createLimitTranslator(LimitOp operation);
-   static std::unique_ptr<mlir::relalg::Translator> createOuterJoinTranslator(OuterJoinOp operation);
-   static std::unique_ptr<mlir::relalg::Translator> createSingleJoinTranslator(SingleJoinOp operation);
-   static std::unique_ptr<mlir::relalg::Translator> createMarkJoinTranslator(MarkJoinOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createTmpTranslator(TmpOp operation);
-   static std::unique_ptr<mlir::relalg::Translator> createCollectionJoinTranslator(CollectionJoinOp operation);
+   static std::unique_ptr<mlir::relalg::Translator> createConstSingleJoinTranslator(SingleJoinOp operation);
 
    static std::unique_ptr<mlir::relalg::Translator> createTranslator(mlir::Operation* operation);
+   static std::unique_ptr<mlir::relalg::Translator> createJoinTranslator(mlir::Operation* operation);
+
 };
 class DummyTranslator : public mlir::relalg::Translator {
    public:

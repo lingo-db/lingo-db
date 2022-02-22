@@ -6,9 +6,9 @@
 #include <mlir/Conversion/RelAlgToDB/NLJoinTranslator.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class NLOuterJoinTranslator : public mlir::relalg::JoinImpl {
+class OuterJoinTranslator : public mlir::relalg::JoinImpl {
    public:
-   NLOuterJoinTranslator(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
+   OuterJoinTranslator(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
       this->stopOnFlag = false;
    }
 
@@ -31,12 +31,12 @@ class NLOuterJoinTranslator : public mlir::relalg::JoinImpl {
       });
    }
 
-   virtual ~NLOuterJoinTranslator() {}
+   virtual ~OuterJoinTranslator() {}
 };
 
-class MHashOuterJoinTranslator : public mlir::relalg::JoinImpl {
+class ReversedOuterJoinImpl : public mlir::relalg::JoinImpl {
    public:
-   MHashOuterJoinTranslator(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.left(), innerJoinOp.right(), true) {
+   ReversedOuterJoinImpl(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.left(), innerJoinOp.right(), true) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
@@ -57,19 +57,9 @@ class MHashOuterJoinTranslator : public mlir::relalg::JoinImpl {
       });
    }
 
-   virtual ~MHashOuterJoinTranslator() {}
+   virtual ~ReversedOuterJoinImpl() {}
 };
 
-std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createOuterJoinTranslator(mlir::relalg::OuterJoinOp joinOp) {
-   if (joinOp->hasAttr("impl")) {
-      if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
-         if (impl.getValue() == "hash") {
-            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::HashJoinTranslator>(std::make_shared<NLOuterJoinTranslator>(joinOp));
-         }
-         if (impl.getValue() == "markhash") {
-            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::HashJoinTranslator>(std::make_shared<MHashOuterJoinTranslator>(joinOp));
-         }
-      }
-   }
-   return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::NLJoinTranslator>(std::make_shared<NLOuterJoinTranslator>(joinOp));
+std::shared_ptr<mlir::relalg::JoinImpl> mlir::relalg::Translator::createOuterJoinImpl(mlir::relalg::OuterJoinOp joinOp, bool reversed) {
+   return reversed ? (std::shared_ptr<mlir::relalg::JoinImpl>) std::make_shared<ReversedOuterJoinImpl>(joinOp) : (std::shared_ptr<mlir::relalg::JoinImpl>) std::make_shared<OuterJoinTranslator>(joinOp);
 }

@@ -6,11 +6,11 @@
 #include <mlir/Conversion/RelAlgToDB/NLJoinTranslator.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class NLSingleJoinTranslator : public mlir::relalg::JoinImpl {
+class SingleJoinImpl : public mlir::relalg::JoinImpl {
    mlir::Value matchFoundFlag;
 
    public:
-   NLSingleJoinTranslator(mlir::relalg::SingleJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
+   SingleJoinImpl(mlir::relalg::SingleJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
@@ -31,7 +31,7 @@ class NLSingleJoinTranslator : public mlir::relalg::JoinImpl {
          translator->handleMappingNull(builder, context, scope);
       });
    }
-   virtual ~NLSingleJoinTranslator() {}
+   virtual ~SingleJoinImpl() {}
 };
 class ConstantSingleJoinTranslator : public mlir::relalg::Translator {
    mlir::relalg::SingleJoinOp joinOp;
@@ -100,43 +100,11 @@ class ConstantSingleJoinTranslator : public mlir::relalg::Translator {
 
    virtual ~ConstantSingleJoinTranslator() {}
 };
-class HashSingleJoinTranslator : public mlir::relalg::JoinImpl {
-   mlir::Value matchFoundFlag;
 
-   public:
-   HashSingleJoinTranslator(mlir::relalg::SingleJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
-   }
 
-   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      translator->handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
-         translator->handleMapping(builder, context, scope);
-         auto trueVal = builder.create<mlir::db::ConstantOp>(loc, mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
-         builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, trueVal);
-      });
-   }
-
-   void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
-   }
-   void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-      mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(builder.getContext()), matchFound);
-      translator->handlePotentialMatch(builder, context, noMatchFound, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
-         translator->handleMappingNull(builder, context, scope);
-      });
-   }
-   virtual ~HashSingleJoinTranslator() {}
-};
-
-std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createSingleJoinTranslator(mlir::relalg::SingleJoinOp joinOp) {
-   if (joinOp->hasAttr("impl")) {
-      if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
-         if (impl.getValue() == "hash") {
-            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::HashJoinTranslator>(std::make_shared<HashSingleJoinTranslator>(joinOp));
-         } else if (impl.getValue() == "constant") {
-            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<ConstantSingleJoinTranslator>(joinOp);
-         }
-      }
-   }
-   return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::NLJoinTranslator>(std::make_shared<NLSingleJoinTranslator>(joinOp));
+std::shared_ptr<mlir::relalg::JoinImpl> mlir::relalg::Translator::createSingleJoinImpl(mlir::relalg::SingleJoinOp joinOp) {
+   return std::make_shared<SingleJoinImpl>(joinOp);
+}
+std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createConstSingleJoinTranslator(mlir::relalg::SingleJoinOp joinOp){
+   return std::make_unique<ConstantSingleJoinTranslator>(joinOp);
 }

@@ -1,4 +1,7 @@
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
+#include <mlir/Conversion/RelAlgToDB/HashJoinTranslator.h>
+#include <mlir/Conversion/RelAlgToDB/NLJoinTranslator.h>
+
 using namespace mlir::relalg;
 std::vector<mlir::Value> mlir::relalg::Translator::mergeRelationalBlock(mlir::Block* dest, mlir::Operation* op, mlir::function_ref<mlir::Block*(mlir::Operation*)> getBlockFn, TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope) {
    // Splice the operations of the 'source' block into the 'dest' block and erase
@@ -95,6 +98,44 @@ void Translator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attri
 mlir::relalg::Attributes Translator::getAvailableAttributes() {
    return op.getAvailableAttributes();
 };
+std::unique_ptr<mlir::relalg::Translator> Translator::createJoinTranslator(mlir::Operation* joinOp) {
+   bool reversed = false;
+   bool hash = false;
+   bool constant = false;
+   if (joinOp->hasAttr("impl")) {
+      if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
+         if (impl.getValue() == "hash") {
+            hash = true;
+         }
+         if (impl.getValue() == "markhash") {
+            hash = true;
+            reversed = true;
+         }
+         if (impl.getValue() == "constant") {
+            constant = true;
+         }
+      }
+   }
+   if (constant) {
+      return createConstSingleJoinTranslator(mlir::cast<SingleJoinOp>(joinOp));
+   }
+   auto joinImpl = ::llvm::TypeSwitch<mlir::Operation*, std::shared_ptr<mlir::relalg::JoinImpl>>(joinOp)
+                      .Case<CrossProductOp>([&](auto x) { return createCrossProductImpl(x); })
+                      .Case<InnerJoinOp>([&](auto x) { return createInnerJoinImpl(x); })
+                      .Case<SemiJoinOp>([&](auto x) { return createSemiJoinImpl(x, reversed); })
+                      .Case<AntiSemiJoinOp>([&](auto x) { return createAntiSemiJoinImpl(x, reversed); })
+                      .Case<OuterJoinOp>([&](auto x) { return createOuterJoinImpl(x, reversed); })
+                      .Case<SingleJoinOp>([&](auto x) { return createSingleJoinImpl(x); })
+                      .Case<MarkJoinOp>([&](auto x) { return createMarkJoinImpl(x); })
+                      .Case<CollectionJoinOp>([&](auto x) { return createCollectionJoinImpl(x); })
+                      .Default([](auto x) { assert(false&&"should not happen"); return std::shared_ptr<JoinImpl>(); });
+
+   if (hash) {
+      return std::make_unique<mlir::relalg::HashJoinTranslator>(joinImpl);
+   } else {
+      return std::make_unique<mlir::relalg::NLJoinTranslator>(joinImpl);
+   }
+}
 std::unique_ptr<mlir::relalg::Translator> Translator::createTranslator(mlir::Operation* operation) {
    return ::llvm::TypeSwitch<mlir::Operation*, std::unique_ptr<mlir::relalg::Translator>>(operation)
       .Case<BaseTableOp>([&](auto x) { return createBaseTableTranslator(x); })
@@ -102,19 +143,12 @@ std::unique_ptr<mlir::relalg::Translator> Translator::createTranslator(mlir::Ope
       .Case<MaterializeOp>([&](auto x) { return createMaterializeTranslator(x); })
       .Case<SelectionOp>([&](auto x) { return createSelectionTranslator(x); })
       .Case<MapOp>([&](auto x) { return createMapTranslator(x); })
-      .Case<CrossProductOp>([&](auto x) { return createCrossProductTranslator(x); })
+      .Case<CrossProductOp, InnerJoinOp, SemiJoinOp, AntiSemiJoinOp, OuterJoinOp, SingleJoinOp, MarkJoinOp, CollectionJoinOp>([&](mlir::Operation* op) { return createJoinTranslator(op); })
       .Case<SortOp>([&](auto x) { return createSortTranslator(x); })
       .Case<AggregationOp>([&](auto x) { return createAggregationTranslator(x); })
-      .Case<InnerJoinOp>([&](auto x) { return createInnerJoinTranslator(x); })
-      .Case<SemiJoinOp>([&](auto x) { return createSemiJoinTranslator(x); })
-      .Case<AntiSemiJoinOp>([&](auto x) { return createAntiSemiJoinTranslator(x); })
       .Case<RenamingOp>([&](auto x) { return createRenamingTranslator(x); })
       .Case<ProjectionOp>([&](auto x) { return createProjectionTranslator(x); })
       .Case<LimitOp>([&](auto x) { return createLimitTranslator(x); })
-      .Case<OuterJoinOp>([&](auto x) { return createOuterJoinTranslator(x); })
-      .Case<SingleJoinOp>([&](auto x) { return createSingleJoinTranslator(x); })
-      .Case<MarkJoinOp>([&](auto x) { return createMarkJoinTranslator(x); })
       .Case<TmpOp>([&](auto x) { return createTmpTranslator(x); })
-      .Case<CollectionJoinOp>([&](auto x) { return createCollectionJoinTranslator(x); })
       .Default([](auto x) { assert(false&&"should not happen"); return std::unique_ptr<Translator>(); });
 }
