@@ -2,6 +2,7 @@
 #define MLIR_CONVERSION_RELALGTODB_HASHJOINTRANSLATOR_H
 #include "JoinTranslator.h"
 #include "Translator.h"
+#include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/Attributes.h"
@@ -9,13 +10,11 @@
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include <tuple>
-#include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
-
 
 namespace mlir::relalg {
 class HashJoinUtils {
    public:
-   static std::tuple<mlir::relalg::Attributes, mlir::relalg::Attributes, std::vector<mlir::Type>, std::vector<Attributes>,std::vector<bool>> analyzeHJPred(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
+   static std::tuple<mlir::relalg::Attributes, mlir::relalg::Attributes, std::vector<mlir::Type>, std::vector<Attributes>, std::vector<bool>> analyzeHJPred(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
       llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;
       llvm::DenseSet<mlir::Value> pureAttribute;
 
@@ -58,7 +57,7 @@ class HashJoinUtils {
             }
          }
       });
-      return {leftKeys, rightKeys, types, leftKeyAttributes,canSave};
+      return {leftKeys, rightKeys, types, leftKeyAttributes, canSave};
    }
 
    static bool isAndedResult(mlir::Operation* op, bool first = true) {
@@ -125,28 +124,25 @@ class HashJoinUtils {
 };
 
 class HashJoinTranslator : public mlir::relalg::JoinTranslator {
-   protected:
+   public:
    mlir::Location loc;
-   bool markable;
    mlir::relalg::Attributes leftKeys, rightKeys;
    mlir::relalg::OrderedAttributes orderedKeys;
-   mlir::relalg::OrderedAttributes  orderedValues;
+   mlir::relalg::OrderedAttributes orderedValues;
    mlir::TupleType keyTupleType, valTupleType, entryType;
    size_t builderId;
    mlir::relalg::PipelineDependency joinHt;
 
-   HashJoinTranslator(Operator joinOp, Value builderChild, Value lookupChild,bool markable = false) : JoinTranslator(joinOp,builderChild, lookupChild), loc(joinOp.getLoc()),markable(markable) {}
+   HashJoinTranslator(std::shared_ptr<JoinImpl> impl) : JoinTranslator(impl), loc(joinOp.getLoc()) {}
 
    public:
-
    virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) override;
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override;
-
 
    void unpackValues(TranslatorContext::AttributeResolverScope& scope, OpBuilder& builder, Value packed, TranslatorContext& context, Value& marker);
    void unpackKeys(TranslatorContext::AttributeResolverScope& scope, OpBuilder& builder, Value packed, TranslatorContext& context);
 
-   void scanHT(TranslatorContext& context, mlir::OpBuilder& builder);
+   virtual void scanHT(TranslatorContext& context, mlir::OpBuilder& builder);
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override;
 
    virtual ~HashJoinTranslator() {}

@@ -5,35 +5,24 @@
 #include <mlir/Conversion/RelAlgToDB/NLJoinTranslator.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class NLInnerJoinTranslator : public mlir::relalg::NLJoinTranslator {
+class NLInnerJoinTranslator : public mlir::relalg::JoinImpl {
    public:
-   NLInnerJoinTranslator(mlir::relalg::InnerJoinOp crossProductOp) : mlir::relalg::NLJoinTranslator(crossProductOp, crossProductOp.left(), crossProductOp.right()) {
+   NLInnerJoinTranslator(mlir::relalg::InnerJoinOp crossProductOp) : mlir::relalg::JoinImpl(crossProductOp, crossProductOp.left(), crossProductOp.right()) {
    }
 
-   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/,mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      handlePotentialMatch(builder,context,matched);
+   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
+      translator->handlePotentialMatch(builder, context, matched);
    }
    virtual ~NLInnerJoinTranslator() {}
-};
-
-class HashInnerJoinTranslator : public mlir::relalg::HashJoinTranslator {
-   public:
-   HashInnerJoinTranslator(mlir::relalg::InnerJoinOp innerJoinOp) : mlir::relalg::HashJoinTranslator(innerJoinOp, innerJoinOp.left(), innerJoinOp.right()) {
-   }
-
-   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/,mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      handlePotentialMatch(builder,context,matched);
-   }
-   virtual ~HashInnerJoinTranslator() {}
 };
 
 std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createInnerJoinTranslator(mlir::relalg::InnerJoinOp joinOp) {
    if (joinOp->hasAttr("impl")) {
       if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
          if (impl.getValue() == "hash") {
-            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<HashInnerJoinTranslator>(joinOp);
+            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::HashJoinTranslator>(std::make_shared<NLInnerJoinTranslator>(joinOp));
          }
       }
    }
-   return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<NLInnerJoinTranslator>(joinOp);
+   return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::NLJoinTranslator>(std::make_shared<NLInnerJoinTranslator>(joinOp));
 }

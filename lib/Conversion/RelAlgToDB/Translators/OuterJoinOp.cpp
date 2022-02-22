@@ -6,15 +6,15 @@
 #include <mlir/Conversion/RelAlgToDB/NLJoinTranslator.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
-class NLOuterJoinTranslator : public mlir::relalg::NLJoinTranslator {
+class NLOuterJoinTranslator : public mlir::relalg::JoinImpl {
    public:
-   NLOuterJoinTranslator(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::NLJoinTranslator(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
+   NLOuterJoinTranslator(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
       this->stopOnFlag = false;
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
-         handleMapping(builder, context, scope);
+      translator->handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
+         translator->handleMapping(builder, context, scope);
          auto trueVal = builder.create<mlir::db::ConstantOp>(loc, mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
          builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, trueVal);
       });
@@ -26,62 +26,34 @@ class NLOuterJoinTranslator : public mlir::relalg::NLJoinTranslator {
    void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
       mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(builder.getContext()), matchFound);
-      handlePotentialMatch(builder, context, noMatchFound, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
-         handleMappingNull(builder, context, scope);
+      translator->handlePotentialMatch(builder, context, noMatchFound, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
+         translator->handleMappingNull(builder, context, scope);
       });
    }
 
    virtual ~NLOuterJoinTranslator() {}
 };
-class HashOuterJoinTranslator : public mlir::relalg::HashJoinTranslator {
+
+class MHashOuterJoinTranslator : public mlir::relalg::JoinImpl {
    public:
-   HashOuterJoinTranslator(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::HashJoinTranslator(innerJoinOp, innerJoinOp.right(), innerJoinOp.left()) {
-      this->stopOnFlag = false;
-   }
-
-   virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
-         handleMapping(builder, context, scope);
-         auto trueVal = builder.create<mlir::db::ConstantOp>(loc, mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
-         builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, trueVal);
-      });
-   }
-
-   void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
-   }
-   void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      auto scope = context.createScope();
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-      mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(builder.getContext()), matchFound);
-      handlePotentialMatch(builder, context, noMatchFound, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
-         handleMappingNull(builder, context, scope);
-      });
-   }
-
-   virtual ~HashOuterJoinTranslator() {}
-};
-
-class MHashOuterJoinTranslator : public mlir::relalg::HashJoinTranslator {
-   public:
-   MHashOuterJoinTranslator(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::HashJoinTranslator(innerJoinOp, innerJoinOp.left(), innerJoinOp.right(), true) {
+   MHashOuterJoinTranslator(mlir::relalg::OuterJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.left(), innerJoinOp.right(), true) {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
-         handleMapping(builder, context, scope);
+      translator->handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
+         translator->handleMapping(builder, context, scope);
       });
    }
    virtual void after(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      scanHT(context, builder);
+      translator->scanHT(context, builder);
    }
    void handleScanned(mlir::Value marker, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      auto zero = builder.create<mlir::arith::ConstantOp>(op->getLoc(), marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
-      auto isZero = builder.create<mlir::arith::CmpIOp>(op->getLoc(), mlir::arith::CmpIPredicate::eq, marker, zero);
-      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(op->getLoc(), mlir::db::BoolType::get(builder.getContext()), isZero);
-      handlePotentialMatch(builder, context, isZeroDB, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
-         handleMappingNull(builder, context, scope);
+      auto zero = builder.create<mlir::arith::ConstantOp>(loc, marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
+      auto isZero = builder.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, marker, zero);
+      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(loc, mlir::db::BoolType::get(builder.getContext()), isZero);
+      translator->handlePotentialMatch(builder, context, isZeroDB, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
+         translator->handleMappingNull(builder, context, scope);
       });
    }
 
@@ -92,12 +64,12 @@ std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createOuterJ
    if (joinOp->hasAttr("impl")) {
       if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
          if (impl.getValue() == "hash") {
-            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<HashOuterJoinTranslator>(joinOp);
+            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::HashJoinTranslator>(std::make_shared<NLOuterJoinTranslator>(joinOp));
          }
          if (impl.getValue() == "markhash") {
-            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<MHashOuterJoinTranslator>(joinOp);
+            return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::HashJoinTranslator>(std::make_shared<MHashOuterJoinTranslator>(joinOp));
          }
       }
    }
-   return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<NLOuterJoinTranslator>(joinOp);
+   return (std::unique_ptr<mlir::relalg::Translator>) std::make_unique<mlir::relalg::NLJoinTranslator>(std::make_shared<NLOuterJoinTranslator>(joinOp));
 }

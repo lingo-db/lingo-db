@@ -15,7 +15,7 @@ namespace mlir {
 namespace relalg {
 
 class Translator {
-   protected:
+   public:
    Translator* consumer;
    Operator op;
    std::vector<std::unique_ptr<Translator>> children;
@@ -31,7 +31,6 @@ class Translator {
    std::vector<mlir::Type> getRequiredBuilderTypes(TranslatorContext& context);
    std::vector<mlir::Location> getRequiredBuilderLocs(TranslatorContext& context);
 
-   public:
    Translator(mlir::ValueRange children);
    Translator(Operator op);
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders);
