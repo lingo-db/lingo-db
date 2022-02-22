@@ -120,8 +120,17 @@ class BoolType<int nullable>
         "mlir::db::BoolType::get($_builder.getContext()," # nullable # ")"> {
   int isnullable = nullable;
 }
+class IntType<int width,int nullable>
+    : Type<CPred<"$_self.isa<::mlir::db::IntType>()&&$_self.cast<mlir::db::IntType>().isNullable()==" # nullable # "">,
+                  "int", "::mlir::db::IntType">,
+      BuildableType<
+        "mlir::db::IntType::get($_builder.getContext()," # nullable # "," # width # ")"> {
+  int isnullable = nullable;
+  int intWidth = width;
+}
 def AnyBool: AnyTypeOf<[BoolType<0>,BoolType<1>]>;
 def Bool: BoolType<0>;
+def DBInt64 : IntType<64,0>;
 def DB_TimeUnit_S  : I64EnumAttrCase<"second", 0>;
 def DB_TimeUnit_MS  : I64EnumAttrCase<"millisecond", 1>;
 def DB_TimeUnit_MUS : I64EnumAttrCase<"microsecond", 2>;
@@ -186,14 +195,7 @@ return $_get($_ctxt, nullable,unit,"");
 }]>
 ];
 }
-def DB_TimeType : DB_Type<"Time","time"> {
-let summary = "database time type";
-let parameters = (ins "bool":$nullable,"TimeUnitAttr":$unit);
-}
-def DB_DurationType : DB_Type<"Duration","duration"> {
-let summary = "database duration type";
-let parameters = (ins "bool":$nullable,"TimeUnitAttr":$unit);
-}
+
 def DB_DecimalType : DB_Type<"Decimal","decimal"> {
 let summary = "database date type";
 let parameters = (ins "bool":$nullable,"unsigned":$p,"unsigned":$s);
@@ -209,11 +211,13 @@ let summary = "constant";
 
 
 let arguments = (ins AnyAttr:$value);
-let results = (outs DBType);
+let results = (outs DBType:$result);
 
 let extraClassDeclaration = [{
 Attribute getValue() { return (*this)->getAttr("value"); }
 }];
+let assemblyFormat = "`(` $value `)` `:` type($result) attr-dict";
+
 
 }
 def DB_NullOp : DB_Op<"null",
@@ -423,7 +427,7 @@ let cppNamespace = "::mlir::db";
 }
 
 def DB_CmpOp : DB_Op<"compare",
-    [NoSideEffect]> {
+    [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
 let summary = "integer comparison operation";
 
 let arguments = (ins
@@ -433,16 +437,12 @@ DBType:$right
 );
 let results = (outs AnyBool:$result);
 
-let builders = [
-OpBuilder<(ins "mlir::db::DBCmpPredicate":$predicate, "Value":$left,
-"Value":$right), [{
-::buildDBCmpOp($_builder, $_state, predicate, left, right);
-}]>];
 
 let extraClassDeclaration = [{
 static StringRef getPredicateAttrName() { return "predicate"; }
 
 }];
+let assemblyFormat = "$predicate $left `:` type($left) `,` $right `:` type($right) attr-dict";
 }
 
 
@@ -555,7 +555,9 @@ return printDateOp(this->getOperation(), p);
 def DateExtractOp : DB_Op<"date_extract"> {
 let summary = "date sub function";
 let arguments = (ins DB_ExtractableTimeUnitAttr:$unit, DB_DateType:$val );
-let results = (outs  DB_IntType : $res);
+let results = (outs  DBInt64 : $res);
+let assemblyFormat = "$unit `,` $val `:` type($val) attr-dict";
+
 }
 def CastOp : DB_Op<"cast"> {
 let summary = "cast function";
@@ -613,20 +615,16 @@ Value getCondition() { return condition(); }
 Value getTrueValue() { return true_value(); }
 Value getFalseValue() { return false_value(); }
 }];
+//let hasCustomAssemblyFormat = 1;
 
 }
 def WhileOp : DB_Op<"while",
 [RecursiveSideEffects]> {
 let summary = "a generic 'while' loop";
-
-
 let arguments = (ins Variadic<AnyType>:$inits);
 let results = (outs Variadic<AnyType>:$results);
 let regions = (region SizedRegion<1>:$before, SizedRegion<1>:$after);
 
-let extraClassDeclaration = [{
-OperandRange getSuccessorEntryOperands(unsigned index);
-}];
 }
 
 def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
@@ -636,11 +634,8 @@ let summary = "loop yield and termination operation";
 let arguments = (ins Variadic<AnyType>:$results);
 let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 
-let assemblyFormat =
-[{  attr-dict ($results^ `:` type($results))? }];
+let assemblyFormat = [{  attr-dict ($results^ `:` type($results))? }];
 
-// Override default verifier (defined in SCF_Op), no custom verification
-// needed.
 let verifier = ?;
 }
 def CondSkipOp : DB_Op<"cond_skip", [ParentOneOf<["ForOp"]>]> {
@@ -649,8 +644,7 @@ let summary = "loop yield and termination operation";
 
 let arguments = (ins AnyType:$condition, Variadic<AnyType>:$args);
 
-let assemblyFormat =
-[{ `(` $condition `:` type($condition) `)` attr-dict ($args^ `:` type($args))? }];
+let assemblyFormat = [{ `(` $condition `:` type($condition) `)` attr-dict ($args^ `:` type($args))? }];
 
 // Override default verifier (defined in SCF_Op), no custom verification
 // needed.

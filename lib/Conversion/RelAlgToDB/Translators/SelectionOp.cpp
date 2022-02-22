@@ -60,12 +60,6 @@ class SelectionTranslator : public mlir::relalg::Translator {
                         .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
                            return 2;
                         })
-                        .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
-                           return 2;
-                        })
-                        .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
-                           return 2;
-                        })
                         .Default([](::mlir::Type) { return 100; });
                   }
                }

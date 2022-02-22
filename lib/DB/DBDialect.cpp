@@ -6,24 +6,10 @@ using namespace mlir;
 using namespace mlir::db;
 struct DBInlinerInterface : public DialectInlinerInterface {
    using DialectInlinerInterface::DialectInlinerInterface;
-
-   //===--------------------------------------------------------------------===//
-   // Analysis Hooks
-   //===--------------------------------------------------------------------===//
-
-   /// All call operations within toy can be inlined.
-   bool isLegalToInline(Operation* call, Operation* callable,
-                        bool wouldBeCloned) const final override{
+   bool isLegalToInline(Operation*, Region*, bool, BlockAndValueMapping&) const final override {
       return true;
    }
-
-   /// All operations within toy can be inlined.
-   bool isLegalToInline(Operation*, Region*, bool,
-                        BlockAndValueMapping&) const final override{
-      return true;
-   }
-   virtual bool isLegalToInline(Region *dest, Region *src, bool wouldBeCloned,
-                                BlockAndValueMapping &valueMapping) const override {
+   virtual bool isLegalToInline(Region* dest, Region* src, bool wouldBeCloned, BlockAndValueMapping& valueMapping) const override {
       return true;
    }
 };

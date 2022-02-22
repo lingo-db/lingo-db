@@ -1,4 +1,3 @@
-#include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/IR/OpImplementation.h"
 

@@ -8,61 +8,14 @@
 #include <queue>
 using namespace mlir;
 
-::mlir::ParseResult parseExtractableTimeUnit(::mlir::OpAsmParser& parser, mlir::db::ExtractableTimeUnitAttrAttr& result) {
-   ::llvm::StringRef attrStr;
-   ::mlir::NamedAttrList attrStorage;
-   auto loc = parser.getCurrentLocation();
-   if (parser.parseOptionalKeyword(&attrStr)) {
-      return parser.emitError(loc, "expected extractable time unit");
-   }
-   if (!attrStr.empty()) {
-      auto attrOptional = ::mlir::db::symbolizeExtractableTimeUnitAttr(attrStr);
-      if (!attrOptional)
-         return parser.emitError(loc, "invalid ")
-            << "extractable time unit specification: \"" << attrStr << '"';
-      result = mlir::db::ExtractableTimeUnitAttrAttr::get(parser.getBuilder().getContext(), attrOptional.getValue());
-   }
+LogicalResult mlir::db::CmpOp::inferReturnTypes(
+   MLIRContext *context, Optional<Location> location, ValueRange operands,
+   DictionaryAttr attributes, RegionRange regions,
+   SmallVectorImpl<Type> &inferredReturnTypes) {
+   bool nullable = operands[0].getType().cast<mlir::db::DBType>().isNullable() || operands[1].getType().cast<mlir::db::DBType>().isNullable();
+
+   inferredReturnTypes.assign({mlir::db::BoolType::get(context, nullable)});
    return success();
-}
-static void print(OpAsmPrinter& p, db::ConstantOp& op) {
-      p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"value"});
-
-   if (op->getAttrs().size() > 1)
-      p << ' ';
-   p << "( ";
-   p.printAttributeWithoutType(op.getValue());
-   p << " )";
-   p << " : " << op.getType();
-}
-
-static ParseResult parseConstantOp(OpAsmParser& parser,
-                                   OperationState& result) {
-   Attribute valueAttr;
-   if (parser.parseLParen() ||
-       parser.parseAttribute(valueAttr, "value", result.attributes) ||
-       parser.parseRParen())
-      return failure();
-
-   // If the attribute is a symbol reference, then we expect a trailing type.
-   Type type;
-   if (parser.parseColon()) {
-      return failure();
-   }
-   if (parser.parseType(type)) {
-      return failure();
-   }
-   // Add the attribute type to the list.
-   return parser.addTypeToList(type, result.types);
-}
-
-static void buildDBCmpOp(OpBuilder& build, OperationState& result,
-                         mlir::db::DBCmpPredicate predicate, Value left, Value right) {
-   result.addOperands({left, right});
-   bool nullable = left.getType().cast<mlir::db::DBType>().isNullable() || right.getType().cast<mlir::db::DBType>().isNullable();
-
-   result.types.push_back(mlir::db::BoolType::get(build.getContext(), nullable));
-   result.addAttribute("predicate",
-                       build.getI64IntegerAttr(static_cast<int64_t>(predicate)));
 }
 static void buildDBAndOp(OpBuilder& build, OperationState& result, ValueRange operands) {
    result.addOperands(operands);
@@ -133,79 +86,6 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation* op, OpAsmPrinter
    }
 }
 
-//////////////////////////////////////////////////////////////////////////////////////////
-// CmpOp
-//////////////////////////////////////////////////////////////////////////////////////////
-
-::mlir::ParseResult parseCmpOp(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
-   ::mlir::IntegerAttr predicateAttr;
-   ::mlir::OpAsmParser::OperandType leftOperand;
-   ::llvm::SMLoc leftOperandsLoc;
-   (void) leftOperandsLoc;
-   ::mlir::db::DBType leftType, rightType;
-   ::mlir::OpAsmParser::OperandType rightOperand;
-   ::llvm::SMLoc rightOperandsLoc;
-   (void) rightOperandsLoc;
-
-   {
-      ::llvm::StringRef attrStr;
-      ::mlir::NamedAttrList attrStorage;
-      auto loc = parser.getCurrentLocation();
-      if (parser.parseOptionalKeyword(&attrStr, {"eq", "neq", "lt", "lte", "gt", "gte", "like"})) {
-         return parser.emitError(loc, "expected keyword containing one of the following enum values for attribute 'predicate' [eq, neq, lt, lte, gt, gte,like]");
-      }
-      if (!attrStr.empty()) {
-         auto attrOptional = ::mlir::db::symbolizeDBCmpPredicate(attrStr);
-         if (!attrOptional)
-            return parser.emitError(loc, "invalid ")
-               << "predicate attribute specification: \"" << attrStr << '"';
-         ;
-
-         predicateAttr = parser.getBuilder().getI64IntegerAttr(static_cast<int64_t>(attrOptional.getValue()));
-         result.addAttribute("predicate", predicateAttr);
-      }
-   }
-
-   leftOperandsLoc = parser.getCurrentLocation();
-   if (parser.parseOperand(leftOperand))
-      return ::mlir::failure();
-   if (parser.parseColon())
-      return ::mlir::failure();
-
-   if (parser.parseType(leftType))
-      return ::mlir::failure();
-   if (parser.parseComma())
-      return ::mlir::failure();
-
-   rightOperandsLoc = parser.getCurrentLocation();
-   if (parser.parseOperand(rightOperand))
-      return ::mlir::failure();
-   if (parser.parseColon())
-      return ::mlir::failure();
-
-   if (parser.parseType(rightType))
-      return ::mlir::failure();
-   if (parser.parseOptionalAttrDict(result.attributes))
-      return ::mlir::failure();
-   if (parser.resolveOperand(leftOperand, leftType, result.operands))
-      return ::mlir::failure();
-   if (parser.resolveOperand(rightOperand, rightType, result.operands))
-      return ::mlir::failure();
-   bool nullable = rightType.isNullable() || leftType.isNullable();
-   parser.addTypeToList(db::BoolType::get(parser.getBuilder().getContext(), nullable), result.types);
-   return ::mlir::success();
-}
-
-static void print(::mlir::OpAsmPrinter& p, mlir::db::CmpOp& op) {
-   p << ' ';
-   {
-      auto caseValue = op.predicate();
-      auto caseValueStr = stringifyDBCmpPredicate(caseValue);
-      p << caseValueStr;
-   }
-   p << ' ' << op.left() << " : " << op.left().getType() << ", " << op.right() << ' ' << ": " << op.right().getType();
-   p.printOptionalAttrDict(op->getAttrs(), /*elidedAttrs=*/{"predicate"});
-}
 
 static ParseResult parseDateOp(OpAsmParser& parser,
                                OperationState& result) {
@@ -290,25 +170,7 @@ static void print(OpAsmPrinter& p, mlir::db::IfOp op) {
    p.printOptionalAttrDict(op->getAttrs());
 }
 
-static ParseResult parseDateExtractOp(OpAsmParser& parser,
-                                      OperationState& result) {
-   OpAsmParser::OperandType date;
-   mlir::db::DBType dateType;
-   mlir::db::ExtractableTimeUnitAttrAttr unit;
-   if (parseExtractableTimeUnit(parser, unit) || parser.parseComma() || parser.parseOperand(date) || parser.parseColonType(dateType)) {
-      return failure();
-   }
-   if (parser.resolveOperand(date, dateType, result.operands).failed()) {
-      return failure();
-   }
-   result.addAttribute("unit", unit);
-   parser.addTypeToList(db::IntType::get(parser.getBuilder().getContext(), dateType.isNullable(), 64), result.types);
-   return success();
-}
 
-static void print(OpAsmPrinter& p, mlir::db::DateExtractOp extractOp) {
-   p  << " " << mlir::db::stringifyExtractableTimeUnitAttr(extractOp.unit()) << ", " << extractOp.val() << " : " << extractOp.val().getType();
-}
 static void printInitializationList(OpAsmPrinter &p,
                                     Block::BlockArgListType blocksArgs,
                                     ValueRange initializers,

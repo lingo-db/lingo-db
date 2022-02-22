@@ -629,13 +629,6 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
                               return mlir::IntegerType::get(patterns.getContext(), 64);
                            }
                         })
-                        .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
-                           if (t.getUnit() == mlir::db::TimeUnitAttr::second && t.getUnit() == mlir::db::TimeUnitAttr::millisecond) {
-                              return mlir::IntegerType::get(patterns.getContext(), 32);
-                           } else {
-                              return mlir::IntegerType::get(patterns.getContext(), 64);
-                           }
-                        })
                         .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
                            if (t.getP() < 19) {
                               return mlir::IntegerType::get(patterns.getContext(), 64);
@@ -665,9 +658,6 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
                            return mlir::util::VarLen32Type::get(patterns.getContext());
                         })
                         .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
-                           return mlir::IntegerType::get(patterns.getContext(), 64);
-                        })
-                        .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
                            return mlir::IntegerType::get(patterns.getContext(), 64);
                         })
                         .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {

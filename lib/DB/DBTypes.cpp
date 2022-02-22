@@ -38,12 +38,6 @@ bool mlir::db::DBType::classof(Type t) {
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
          return true;
       })
-      .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
-         return true;
-      })
-      .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
-         return true;
-      })
       .Default([](::mlir::Type) { return false; });
 }
 bool mlir::db::DBType::isNullable() {
@@ -76,12 +70,6 @@ bool mlir::db::DBType::isNullable() {
          return t.getNullable();
       })
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
-         return t.getNullable();
-      })
-      .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
-         return t.getNullable();
-      })
-      .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
          return t.getNullable();
       })
       .Default([](::mlir::Type) { return false; });
@@ -122,12 +110,6 @@ mlir::db::DBType mlir::db::DBType::getBaseType() const {
       .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
          return mlir::db::IntervalType::get(t.getContext(), false, t.getUnit());
       })
-      .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
-         return mlir::db::TimeType::get(t.getContext(), false, t.getUnit());
-      })
-      .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
-         return mlir::db::DurationType::get(t.getContext(), false, t.getUnit());
-      })
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
          return mlir::db::FloatType::get(t.getContext(), false, t.getWidth());
       })
@@ -158,12 +140,6 @@ mlir::db::DBType mlir::db::DBType::asNullable() const {
       })
       .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
          return mlir::db::IntervalType::get(t.getContext(), true, t.getUnit());
-      })
-      .Case<::mlir::db::TimeType>([&](::mlir::db::TimeType t) {
-         return mlir::db::TimeType::get(t.getContext(), true, t.getUnit());
-      })
-      .Case<::mlir::db::DurationType>([&](::mlir::db::DurationType t) {
-         return mlir::db::DurationType::get(t.getContext(), true, t.getUnit());
       })
       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
          return mlir::db::FloatType::get(t.getContext(), true, t.getWidth());
@@ -428,18 +404,6 @@ void mlir::db::IntervalType::print(::mlir::AsmPrinter& printer) const {
 }
 void mlir::db::TimestampType::print(::mlir::AsmPrinter& printer) const {
    ::print<mlir::db::TimestampType>(printer, getNullable(), mlir::db::stringifyTimeUnitAttr(getUnit()).str());
-}
-::mlir::Type mlir::db::TimeType::parse( ::mlir::AsmParser& parser) {
-   return ::parse<mlir::db::TimeType, TimeUnitAttr>(parser.getContext(),parser);
-}
-void mlir::db::TimeType::print(::mlir::AsmPrinter& printer) const {
-   ::print<mlir::db::TimeType>(printer, getNullable(), mlir::db::stringifyTimeUnitAttr(getUnit()).str());
-}
-::mlir::Type mlir::db::DurationType::parse( ::mlir::AsmParser& parser) {
-   return ::parse<mlir::db::DurationType, TimeUnitAttr>(parser.getContext(),parser);
-}
-void mlir::db::DurationType::print(::mlir::AsmPrinter& printer) const {
-   ::print<mlir::db::DurationType>(printer, getNullable(), mlir::db::stringifyTimeUnitAttr(getUnit()).str());
 }
 ::mlir::Type mlir::db::DecimalType::parse( ::mlir::AsmParser& parser) {
    return ::parse<mlir::db::DecimalType, unsigned, unsigned>(parser.getContext(),parser);

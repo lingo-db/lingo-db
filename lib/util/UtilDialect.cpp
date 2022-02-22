@@ -6,24 +6,7 @@ using namespace mlir;
 using namespace mlir::util;
 struct UtilInlinerInterface : public DialectInlinerInterface {
    using DialectInlinerInterface::DialectInlinerInterface;
-
-   //===--------------------------------------------------------------------===//
-   // Analysis Hooks
-   //===--------------------------------------------------------------------===//
-
-   /// All call operations within toy can be inlined.
-   bool isLegalToInline(Operation* call, Operation* callable,
-                        bool wouldBeCloned) const final override{
-      return true;
-   }
-
-   /// All operations within toy can be inlined.
-   bool isLegalToInline(Operation*, Region*, bool,
-                        BlockAndValueMapping&) const final override{
-      return true;
-   }
-   virtual bool isLegalToInline(Region *dest, Region *src, bool wouldBeCloned,
-                                BlockAndValueMapping &valueMapping) const override{
+   bool isLegalToInline(Operation*, Region*, bool, BlockAndValueMapping&) const final override {
       return true;
    }
 };
