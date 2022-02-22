@@ -58,37 +58,46 @@ let parameters = (ins "Type":$elementType,"std::string":$iteratorName);
 
 def DB_Table: DB_Type<"Table","table"> {
 let summary = "table";
+let assemblyFormat = "";
 }
 def DB_Flag: DB_Type<"Flag","flag"> {
 let summary = "flag";
+let assemblyFormat = "";
 }
 def DB_TableBuilder : DB_Builder<"TableBuilder","table_builder"> {
 let summary = "builder for table";
 let parameters = (ins "TupleType":$rowType);
+let assemblyFormat = "`<` $rowType `>`";
 }
 def DB_Vector : DB_Collection<"Vector","vector"> {
 let summary = "vector";
 let parameters = (ins "Type":$elementType);
+let assemblyFormat = "`<` $elementType `>`";
 }
 def DB_VectorBuilder : DB_Builder<"VectorBuilder","vector_builder"> {
 let summary = "builder for vector";
 let parameters = (ins "Type":$elementType);
+let assemblyFormat = "`<` $elementType `>`";
 }
 def DB_AggregationHashtable : DB_Collection<"AggregationHashtable","aggr_ht"> {
 let summary = "aggregation hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
+let assemblyFormat = "`<` $keyType `,` $valType `>`";
 }
 def DB_JoinHashtable : DB_Collection<"JoinHashtable","join_ht"> {
 let summary = "join hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
+let assemblyFormat = "`<` $keyType `,` $valType `>`";
 }
 def DB_AggrHTBuilder : DB_Builder<"AggrHTBuilder","aggr_ht_builder"> {
 let summary = "builder for aggregation hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType,"TupleType":$aggrType);
+let assemblyFormat = "`<` $keyType `,` $valType `,` $aggrType `>`";
 }
 def DB_JoinHTBuilder : DB_Builder<"JoinHTBuilder","join_ht_builder"> {
 let summary = "builder for join hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
+let assemblyFormat = "`<` $keyType `,` $valType `>`";
 }
 
 def DB_BoolType : DB_Type<"Bool","bool"> {

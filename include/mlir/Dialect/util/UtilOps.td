@@ -41,7 +41,7 @@ class Util_Type<string name, string typeMnemonic> : TypeDef<Util_Dialect, name> 
 
 def RefType : Util_Type<"Ref","ref"> {
 let summary = "ref type";
-let parameters = (ins "Type":$elementType,"llvm::Optional<int64_t>": $size);
+let parameters = (ins "Type":$elementType,OptionalParameter<"llvm::Optional<int64_t>">: $size);
     let builders = [
     TypeBuilder<(ins "Type":$elementType), [{
     return $_get($_ctxt, elementType,llvm::Optional<int64_t>());
@@ -50,8 +50,7 @@ let parameters = (ins "Type":$elementType,"llvm::Optional<int64_t>": $size);
     return $_get($_ctxt, mlir::IntegerType::get($_ctxt,8),llvm::Optional<int64_t>());
     }]>
     ];
-let builderCall = "$_builder.getType<" # dialect.cppNamespace #
-"::" # cppClassName # ">()";
+let builderCall = "$_builder.getType<" # dialect.cppNamespace # "::" # cppClassName # ">()";
 }
 
 
