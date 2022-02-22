@@ -2,12 +2,14 @@
 #define MLIR_CONVERSION_RELALGTODB_NLJOINTRANSLATOR_H
 #include "JoinTranslator.h"
 #include <mlir/Dialect/DB/IR/DBOps.h>
+#include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
+
 namespace mlir::relalg {
 class NLJoinTranslator : public mlir::relalg::JoinTranslator {
    bool markable;
    size_t vecBuilderId;
    Value vector;
-   std::vector<const mlir::relalg::RelationalAttribute*> orderedAttributesLeft;
+   mlir::relalg::OrderedAttributes orderedAttributesLeft;
    mlir::TupleType tupleType;
    protected:
    mlir::Location loc;

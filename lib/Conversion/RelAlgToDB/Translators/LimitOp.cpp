@@ -31,13 +31,6 @@ class LimitTranslator : public mlir::relalg::Translator {
 
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> attributePos;
-      std::vector<mlir::Type> types;
-      size_t i = 0;
-      for (const auto* attr : requiredAttributes) {
-         types.push_back(attr->type);
-         attributePos[attr] = i++;
-      }
       mlir::Value counter = builder.create<mlir::db::ConstantOp>(limitOp.getLoc(), mlir::db::IntType::get(builder.getContext(), false, 64),builder.getI64IntegerAttr(0));
       finishedFlag = builder.create<mlir::db::CreateFlag>(limitOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
       context.pipelineManager.getCurrentPipeline()->setFlag(finishedFlag);

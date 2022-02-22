@@ -1,3 +1,4 @@
+#include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
@@ -7,22 +8,14 @@
 
 class HashCollectionJoinTranslator : public mlir::relalg::HashJoinTranslator {
    size_t vectorBuilderId;
-   std::vector<mlir::Type> tupleTypes;
-   std::vector<const mlir::relalg::RelationalAttribute*> tupleAttributes;
-   mlir::TupleType tupleType;
+   mlir::relalg::OrderedAttributes attrs;
 
    public:
    HashCollectionJoinTranslator(mlir::relalg::CollectionJoinOp collectionJoinOp) : mlir::relalg::HashJoinTranslator(collectionJoinOp, collectionJoinOp.right(), collectionJoinOp.left()) {
-      for (auto attr : collectionJoinOp.attrs()) {
-         if (auto refAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
-            tupleTypes.push_back(refAttr.getRelationalAttribute().type);
-            tupleAttributes.push_back(&refAttr.getRelationalAttribute());
-         }
-      }
-      tupleType = mlir::TupleType::get(collectionJoinOp.getContext(), tupleTypes);
+      attrs = mlir::relalg::OrderedAttributes::fromRefArr(collectionJoinOp.attrs());
    }
    virtual void addAdditionalRequiredAttributes() override {
-      for (const auto* attr : tupleAttributes) {
+      for (const auto* attr : attrs.getAttrs()) {
          requiredAttributes.insert(attr);
       }
    }
@@ -30,21 +23,21 @@ class HashCollectionJoinTranslator : public mlir::relalg::HashJoinTranslator {
       mlir::Value vectorBuilder = context.builders[vectorBuilderId];
       auto ifOp = builder.create<mlir::db::IfOp>(
          loc, mlir::TypeRange{vectorBuilder.getType()}, matched, [&](mlir::OpBuilder& builder, mlir::Location loc) {
-            mlir::Value packed = packValues(context,builder,op->getLoc(),tupleAttributes);
+            mlir::Value packed = attrs.pack(context,builder,op->getLoc());
          mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, vectorBuilder.getType(), vectorBuilder, packed);
          builder.create<mlir::db::YieldOp>(loc, mlir::ValueRange{mergedBuilder}); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::db::YieldOp>(loc, mlir::ValueRange{vectorBuilder}); });
       context.builders[vectorBuilderId] = ifOp.getResult(0);
    }
 
    void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(joinOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType));
+      mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(joinOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), attrs.getTupleType(builder.getContext())));
       vectorBuilderId = context.getBuilderId();
       context.builders[vectorBuilderId] = vectorBuilder;
       this->customLookupBuilders.push_back(vectorBuilderId);
    }
    void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      mlir::Value vector = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), context.builders[vectorBuilderId]);
+      mlir::Value vector = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), attrs.getTupleType(builder.getContext())), context.builders[vectorBuilderId]);
 
       context.setValueForAttribute(scope, &cast<mlir::relalg::CollectionJoinOp>(joinOp).collAttr().getRelationalAttribute(), vector);
       consumer->consume(this, builder, context);

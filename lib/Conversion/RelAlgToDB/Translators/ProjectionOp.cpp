@@ -2,6 +2,7 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
+#include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
 
 class ProjectionTranslator : public mlir::relalg::Translator {
    mlir::relalg::ProjectionOp projectionOp;
@@ -29,13 +30,11 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
    mlir::relalg::ProjectionOp projectionOp;
    size_t builderId;
    mlir::Value table;
-   std::vector<mlir::Type> keyTypes;
-   mlir::TupleType keyTupleType;
+   mlir::relalg::OrderedAttributes key;
+
    mlir::TupleType valTupleType;
    mlir::TupleType entryType;
 
-   std::vector<const mlir::relalg::RelationalAttribute*> groupAttributes;
-   std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> keyMapping;
 
    public:
    DistinctProjectionTranslator(mlir::relalg::ProjectionOp projectionOp) : mlir::relalg::Translator(projectionOp), projectionOp(projectionOp) {
@@ -47,7 +46,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       mlir::Value htBuilder = context.builders[builderId];
       mlir::Value emptyVals = builder.create<mlir::util::UndefTupleOp>(projectionOp->getLoc(), valTupleType);
-      mlir::Value packedKey = packValues(context, builder, projectionOp->getLoc(), groupAttributes);
+      mlir::Value packedKey = key.pack(context, builder, projectionOp->getLoc());
       mlir::Value packed = builder.create<mlir::util::PackOp>(projectionOp->getLoc(), mlir::ValueRange({packedKey, emptyVals}));
 
       auto mergedBuilder = builder.create<mlir::db::BuilderMerge>(projectionOp->getLoc(), htBuilder.getType(), htBuilder, packed);
@@ -62,16 +61,9 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
 
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-
-      for (auto attr : projectionOp.attrs()) {
-         if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
-            keyMapping[&attrRef.getRelationalAttribute()] = keyTypes.size();
-            keyTypes.push_back(attrRef.getRelationalAttribute().type);
-            groupAttributes.push_back(&attrRef.getRelationalAttribute());
-         }
-      }
-      keyTupleType = mlir::TupleType::get(builder.getContext(), keyTypes);
+      key=mlir::relalg::OrderedAttributes::fromRefArr(projectionOp.attrs());
       valTupleType = mlir::TupleType::get(builder.getContext(), {});
+      auto keyTupleType=key.getTupleType(builder.getContext());
       auto parentPipeline = context.pipelineManager.getCurrentPipeline();
       auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
       context.pipelineManager.setCurrentPipeline(p);
@@ -103,12 +95,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), forOp2.getInductionVar()).getResults();
          auto unpackedKey = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), unpacked[0]).getResults();
-
-         for (const auto* attr : requiredAttributes) {
-            if (keyMapping.count(attr)) {
-               context.setValueForAttribute(scope, attr, unpackedKey[keyMapping[attr]]);
-            }
-         }
+         key.setValuesForAttributes(context,scope,unpackedKey);
          consumer->consume(this, builder2, context);
          builder2.create<mlir::db::YieldOp>(projectionOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());

@@ -170,7 +170,6 @@ class CondSkipTypeConversion : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto condskip = mlir::cast<mlir::db::CondSkipOp>(op);
       db::CondSkipOpAdaptor adaptor(operands);
-      condskip.dump();
       rewriter.replaceOpWithNewOp<mlir::db::CondSkipOp>(op, convertBooleanCondition(op->getLoc(), rewriter, condskip.condition().getType(), adaptor.condition()), adaptor.args());
       return success();
    }

@@ -1,3 +1,4 @@
+#include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
@@ -7,12 +8,11 @@ class TmpTranslator : public mlir::relalg::Translator {
    mlir::relalg::TmpOp tmpOp;
    size_t builderId;
    bool materialize;
-   std::vector<const mlir::relalg::RelationalAttribute*> attributes;
+   mlir::relalg::OrderedAttributes attributes;
    size_t userCount;
    size_t producedCount;
 
    public:
-
    TmpTranslator(mlir::relalg::TmpOp tmpOp) : mlir::relalg::Translator(tmpOp), tmpOp(tmpOp) {
       std::vector<mlir::Operation*> users(tmpOp->getUsers().begin(), tmpOp->getUsers().end());
       userCount = users.size();
@@ -27,14 +27,14 @@ class TmpTranslator : public mlir::relalg::Translator {
       this->requiredAttributes.insert(mlir::relalg::Attributes::fromArrayAttr(tmpOp.attrs()));
       propagateInfo();
       for (const auto* attr : this->requiredAttributes) {
-         attributes.push_back(attr);
+         attributes.insert(attr);
       }
    }
 
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       if (materialize) {
          mlir::Value vectorBuilder = context.builders[builderId];
-         mlir::Value packed = packValues(context, builder, tmpOp->getLoc(), attributes);
+         mlir::Value packed = attributes.pack(context, builder, tmpOp->getLoc());
          mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(tmpOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
          context.builders[builderId] = mergedBuilder;
       }
@@ -46,15 +46,11 @@ class TmpTranslator : public mlir::relalg::Translator {
       materialize = !context.materializedTmp.count(tmpOp.getOperation());
       producedCount++;
       if (materialize) {
-         auto parentPipeline=context.pipelineManager.getCurrentPipeline();
+         auto parentPipeline = context.pipelineManager.getCurrentPipeline();
          auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
          context.pipelineManager.setCurrentPipeline(p);
          context.pipelineManager.addPipeline(p);
-         std::vector<mlir::Type> types;
-         for (const auto* attr : attributes) {
-            types.push_back(attr->type);
-         }
-         auto tupleType = mlir::TupleType::get(builder.getContext(), types);
+         auto tupleType = attributes.getTupleType(builder.getContext());
          std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> attributePos;
          auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
             return std::vector<mlir::Value>({builder.create<mlir::db::CreateVectorBuilder>(tmpOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType))});
@@ -69,27 +65,21 @@ class TmpTranslator : public mlir::relalg::Translator {
             mlir::Value vector = builder.create<mlir::db::BuilderBuild>(tmpOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), args[0]);
             return std::vector<mlir::Value>{vector};
          });
-         context.materializedTmp[tmpOp.getOperation()] = {vectorRes[0], attributes};
+         context.materializedTmp[tmpOp.getOperation()] = {vectorRes[0], attributes.getAttrs()};
          context.pipelineManager.setCurrentPipeline(parentPipeline);
       }
-      auto [vector, attributes] = context.materializedTmp[tmpOp.getOperation()];
-      std::vector<mlir::Type> types;
-      for (const auto* attr : attributes) {
-         types.push_back(attr->type);
-      }
-      auto tupleType = mlir::TupleType::get(builder.getContext(), types);
+      auto [vector, attributes_] = context.materializedTmp[tmpOp.getOperation()];
+      auto attributes=mlir::relalg::OrderedAttributes::fromVec(attributes_);
+      auto tupleType = attributes.getTupleType(builder.getContext());
       auto forOp2 = builder.create<mlir::db::ForOp>(tmpOp->getLoc(), getRequiredBuilderTypes(context), context.pipelineManager.getCurrentPipeline()->addDependency(vector), context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
       mlir::Block* block2 = new mlir::Block;
-      block2->addArgument(tupleType,tmpOp->getLoc());
+      block2->addArgument(tupleType, tmpOp->getLoc());
       block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
       auto unpacked = builder2.create<mlir::util::UnPackOp>(tmpOp->getLoc(), forOp2.getInductionVar());
-      size_t i = 0;
-      for (const auto* attr : attributes) {
-         context.setValueForAttribute(scope, attr, unpacked.getResult(i++));
-      }
+      attributes.setValuesForAttributes(context,scope,unpacked.getResults());
       consumer->consume(this, builder2, context);
       builder2.create<mlir::db::YieldOp>(tmpOp->getLoc(), getRequiredBuilderValues(context));
       setRequiredBuilderValues(context, forOp2.results());

@@ -49,26 +49,7 @@ void Translator::setRequiredBuilderValues(TranslatorContext& context, const mlir
       context.builders[x] = values[i++];
    }
 }
-mlir::Value Translator::packValues(TranslatorContext& context, OpBuilder builder, Location loc, const std::vector<const mlir::relalg::RelationalAttribute*>& attrs, const std::vector<Value>& additional) {
-   std::vector<Value> values(additional);
-   for (const auto* attr : attrs) {
-      values.push_back(context.getValueForAttribute(attr));
-   }
-   if (values.size() == 0) {
-      return builder.create<mlir::util::UndefTupleOp>(loc, mlir::TupleType::get(builder.getContext()));
-   }
-   return builder.create<mlir::util::PackOp>(loc, values);
-}
-mlir::Value Translator::packValues(TranslatorContext& context, OpBuilder builder,Location loc, const mlir::relalg::Attributes& attrs) {
-   std::vector<Value> values;
-   for (const auto* attr : attrs) {
-      values.push_back(context.getValueForAttribute(attr));
-   }
-   if (values.size() == 0) {
-      return builder.create<mlir::util::UndefTupleOp>(loc, mlir::TupleType::get(builder.getContext()));
-   }
-   return builder.create<mlir::util::PackOp>(loc, values);
-}
+
 std::vector<mlir::Type> Translator::getRequiredBuilderTypes(TranslatorContext& context) {
    std::vector<mlir::Type> res;
    for (auto x : requiredBuilders) {

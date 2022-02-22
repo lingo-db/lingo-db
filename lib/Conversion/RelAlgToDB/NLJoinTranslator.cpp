@@ -11,7 +11,7 @@ void NLJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg:
 void NLJoinTranslator::build(mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) {
    mlir::Value vectorBuilder = context.builders[vecBuilderId];
    auto const0 = builder.create<mlir::arith::ConstantOp>(loc, builder.getIntegerType(64), builder.getI64IntegerAttr(0));
-   mlir::Value packed = markable ? packValues(context, builder, op->getLoc(), orderedAttributesLeft, {const0}) : packValues(context, builder, op->getLoc(), orderedAttributesLeft);
+   mlir::Value packed = orderedAttributesLeft.pack(context, builder, op->getLoc(), markable ? std::vector<Value>{const0} : std::vector<Value>());
    mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, vectorBuilder.getType(), vectorBuilder, packed);
    context.builders[vecBuilderId] = mergedBuilder;
 }
@@ -20,16 +20,13 @@ void NLJoinTranslator::scanHT(mlir::relalg::TranslatorContext& context, mlir::Op
    {
       auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), vector, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
       mlir::Block* block2 = new mlir::Block;
-      block2->addArgument(tupleType,loc);
+      block2->addArgument(tupleType, loc);
       block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
       auto unpacked = builder2.create<mlir::util::UnPackOp>(loc, forOp2.getInductionVar());
-      size_t i = 0;
-      for (const auto* attr : orderedAttributesLeft) {
-         context.setValueForAttribute(scope, attr, unpacked.getResult(i++));
-      }
+      orderedAttributesLeft.setValuesForAttributes(context, scope, unpacked.getResults());
       Value marker = markable ? unpacked.getResult(unpacked.getNumResults() - 1) : Value();
       handleScanned(marker, context, builder2);
       builder2.create<mlir::db::YieldOp>(loc, getRequiredBuilderValues(context));
@@ -43,16 +40,13 @@ void NLJoinTranslator::probe(mlir::OpBuilder& builder, mlir::relalg::TranslatorC
    {
       auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), vector, getFlag(), getRequiredBuilderValues(context));
       mlir::Block* block2 = new mlir::Block;
-      block2->addArgument(tupleType,loc);
+      block2->addArgument(tupleType, loc);
       block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
       auto unpacked = builder2.create<mlir::util::UnPackOp>(loc, forOp2.getInductionVar());
-      size_t i = 0;
-      for (const auto* attr : orderedAttributesLeft) {
-         context.setValueForAttribute(scope, attr, unpacked.getResult(i++));
-      }
+      orderedAttributesLeft.setValuesForAttributes(context, scope, unpacked.getResults());
       Value markerLeft = markable ? unpacked.getResult(unpacked.getNumResults() - 1) : Value();
       Value matched = evaluatePredicate(context, builder2, scope);
       handleLookup(matched, markerLeft, context, builder2);
@@ -69,16 +63,9 @@ void NLJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilder&
    }
 }
 void NLJoinTranslator::produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) {
-   std::vector<mlir::Type> types;
    auto leftAttributes = this->requiredAttributes.intersect(children[0]->getAvailableAttributes());
-   for (const auto* attr : leftAttributes) {
-      types.push_back(attr->type);
-      orderedAttributesLeft.push_back(attr);
-   }
-   if (markable) {
-      types.push_back(mlir::IntegerType::get(op->getContext(), 64));
-   }
-   tupleType = mlir::TupleType::get(builder.getContext(), types);
+   orderedAttributesLeft = mlir::relalg::OrderedAttributes::fromAttributes(leftAttributes);
+   tupleType = orderedAttributesLeft.getTupleType(op.getContext(), markable ? std::vector<Type>({mlir::IntegerType::get(op->getContext(), 64)}) : std::vector<Type>());
    mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(loc, mlir::db::VectorBuilderType::get(builder.getContext(), tupleType));
    vecBuilderId = context.getBuilderId();
    context.builders[vecBuilderId] = vectorBuilder;

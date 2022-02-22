@@ -9,6 +9,8 @@
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include <tuple>
+#include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
+
 
 namespace mlir::relalg {
 class HashJoinUtils {
@@ -127,8 +129,8 @@ class HashJoinTranslator : public mlir::relalg::JoinTranslator {
    mlir::Location loc;
    bool markable;
    mlir::relalg::Attributes leftKeys, rightKeys;
-   std::vector<const mlir::relalg::RelationalAttribute*> orderedKeys;
-   std::vector<const mlir::relalg::RelationalAttribute*> orderedValues;
+   mlir::relalg::OrderedAttributes orderedKeys;
+   mlir::relalg::OrderedAttributes  orderedValues;
    mlir::TupleType keyTupleType, valTupleType, entryType;
    size_t builderId;
    mlir::relalg::PipelineDependency joinHt;
