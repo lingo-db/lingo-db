@@ -1,6 +1,8 @@
 #ifndef MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEMANAGER_H
 #define MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEMANAGER_H
+
 #include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"
+
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.h"
 
 namespace mlir::relalg {

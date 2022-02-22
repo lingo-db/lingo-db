@@ -1,11 +1,9 @@
-
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
+#include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/IR/DialectImplementation.h"
 #include <mlir/Transforms/InliningUtils.h>
 
 #include "llvm/ADT/TypeSwitch.h"
-#include "mlir/Dialect/DB/IR/DBTypes.h"
-#include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
-#include "mlir/IR/DialectImplementation.h"
 
 using namespace mlir;
 using namespace mlir::relalg;

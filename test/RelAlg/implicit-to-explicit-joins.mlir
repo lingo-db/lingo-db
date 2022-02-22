@@ -1,10 +1,10 @@
 // RUN: mlir-db-opt %s -split-input-file -mlir-print-debuginfo -mlir-print-local-scope  --relalg-implicit-to-explicit-joins | FileCheck %s
 module @querymodule  {
   func @query() {
-    //CHECK: %{{.*}} = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-    //CHECK: %{{.*}} = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-  	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-  	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation @constrel  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation @constrel2  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+  	%0 = relalg.const_relation @constrel  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+  	%1 = relalg.const_relation @constrel2  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
   	//CHECK: %{{.*}} =  relalg.semijoin %{{.*}}, %{{.*}} (%arg0: !relalg.tuple)
   	%2 = relalg.selection %0 (%arg0: !relalg.tuple) {
   	      %4 = relalg.exists %1
@@ -16,10 +16,10 @@ module @querymodule  {
 // -----
 module @querymodule  {
   func @query() {
-    //CHECK: %{{.*}} = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-    //CHECK: %{{.*}} = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-  	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-  	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation @constrel  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation @constrel2  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+  	%0 = relalg.const_relation @constrel  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+  	%1 = relalg.const_relation @constrel2  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
   	//CHECK: %{{.*}} =  relalg.antisemijoin %{{.*}}, %{{.*}} (%arg0: !relalg.tuple)
   	%2 = relalg.selection %0 (%arg0: !relalg.tuple) {
   	      %4 = relalg.exists %1
@@ -32,10 +32,10 @@ module @querymodule  {
 // -----
 module @querymodule  {
   func @query() {
-    //CHECK: %{{.*}} = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-    //CHECK: %{{.*}} = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-  	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-  	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation @constrel  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation @constrel2  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+  	%0 = relalg.const_relation @constrel  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+  	%1 = relalg.const_relation @constrel2  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
   	//CHECK: %{{.*}} =  relalg.markjoin @markjoin @markattr({type = !db.bool}) %{{.*}}, %{{.*}} (%arg0: !relalg.tuple)
   	%2 = relalg.selection %0 (%arg0: !relalg.tuple) {
   		  //CHECK: %{{.*}} = relalg.getattr %arg0 @markjoin::@markattr
@@ -50,10 +50,10 @@ module @querymodule  {
 // -----
 module @querymodule  {
   func @query() {
-    //CHECK: %{{.*}} = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-    //CHECK: %{{.*}} = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1]
-  	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-  	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1]
+    //CHECK: %{{.*}} = relalg.const_relation @constrel  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation @constrel2  attributes : [@attr1({type = !db.int<32>})] values : [1]
+  	%0 = relalg.const_relation @constrel  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+  	%1 = relalg.const_relation @constrel2  attributes : [@attr1({type = !db.int<32>})] values : [1]
   	//CHECK: %{{.*}} =  relalg.singlejoin @singlejoin %{{.*}}, %{{.*}} (%arg0: !relalg.tuple)
   	%2 = relalg.selection %0 (%arg0: !relalg.tuple) {
   		  //CHECK: %{{.*}} = relalg.getattr %arg0 @singlejoin::@sjattr
@@ -68,8 +68,8 @@ module @querymodule  {
 // -----
 module @querymodule  {
   func @query() {
-  	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-  	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1]
+  	%0 = relalg.const_relation @constrel  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+  	%1 = relalg.const_relation @constrel2  attributes : [@attr1({type = !db.int<32>})] values : [1]
 	//CHECK: %{{.*}} = relalg.semijoin %0, %1 (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
@@ -85,8 +85,8 @@ module @querymodule  {
 // -----
 module @querymodule  {
   func @query() {
-  	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-  	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1]
+  	%0 = relalg.const_relation @constrel  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+  	%1 = relalg.const_relation @constrel2  attributes : [@attr1({type = !db.int<32>})] values : [1]
 	//CHECK: %{{.*}} = relalg.antisemijoin %0, %1 (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
@@ -103,8 +103,8 @@ module @querymodule  {
 // -----
 module @querymodule  {
   func @query() {
-  	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>})] values: [1, 2]
-  	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>})] values: [1]
+  	%0 = relalg.const_relation @constrel  attributes : [@attr1({type = !db.int<32>})] values : [1, 2]
+  	%1 = relalg.const_relation @constrel2  attributes : [@attr1({type = !db.int<32>})] values : [1]
 	//CHECK: %2 = relalg.markjoin @markjoin @markattr({type = !db.bool}) %0, %1 (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>

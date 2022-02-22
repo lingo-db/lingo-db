@@ -131,6 +131,8 @@ def ConstRelationOp : RelAlg_Op<"const_relation",
 let summary = "constant relation";
 let arguments = (ins SymbolNameAttr:$sym_name,ArrayAttr:$attributes,ArrayAttr:$values);
 let results = (outs RelAlg_TupleStream:$result);
+let assemblyFormat = [{ custom<AttrNS>($sym_name) `attributes` `:` custom<CustDefArr>($attributes) `values` `:` $values attr-dict}];
+
 let extraClassDeclaration = [{
 Attributes getCreatedAttributes();
 }];
@@ -155,12 +157,15 @@ let summary = "selection operation";
 let arguments = (ins RelAlg_TupleStream:$rel);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
+let assemblyFormat = [{ $rel custom<CustRegion>($predicate) attr-dict-with-keyword }];
 }
 def MapOp : RelAlg_Op<"map",[NoSideEffect,Operator,TupleLamdaOperator,UnaryOperator]> {
 let summary = "map operation";
 let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_TupleStream:$rel);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
+let assemblyFormat = [{ custom<AttrNS>($sym_name) $rel custom<CustRegion>($predicate) attr-dict-with-keyword }];
+
 }
 def LimitOp : RelAlg_Op<"limit",[NoSideEffect,Operator,UnaryOperator]> {
 let summary = "limit operation";
@@ -172,6 +177,8 @@ def TopKOp : RelAlg_Op<"topk",[NoSideEffect,Operator,UnaryOperator]> {
 let summary = "top k operation";
 let arguments = (ins I32Attr:$rows, RelAlg_TupleStream:$rel,ArrayAttr:$sortspecs);
 let results = (outs RelAlg_TupleStream:$result);
+let assemblyFormat = [{ $rows $rel custom<SortSpecs>($sortspecs) attr-dict}];
+
 }
 def CrossProductOp : RelAlg_Op<"crossproduct",[RecursiveSideEffects,Operator,BinaryOperator]> {
 let summary = "crossproduct operation";
@@ -185,6 +192,8 @@ def RenamingOp : RelAlg_Op<"renaming",
 let summary = "renaming attributes in relation";
 let arguments = (ins RelAlg_TupleStream:$rel,SymbolNameAttr:$sym_name,ArrayAttr:$attributes);
 let results = (outs RelAlg_TupleStream:$result);
+let assemblyFormat = [{ custom<AttrNS>($sym_name) $rel `renamed` `:` custom<CustDefArr>($attributes) attr-dict-with-keyword }];
+
 let extraClassDeclaration = [{
 Attributes getCreatedAttributes();
 Attributes getUsedAttributes();
@@ -202,6 +211,7 @@ let extraClassDeclaration = [{
 Attributes getUsedAttributes();
 Attributes getAvailableAttributes();
 }];
+let assemblyFormat = [{ custom<AttrNS>($sym_name) $rel custom<CustRefArr>($group_by_attrs) custom<CustRegion>($aggr_func) attr-dict-with-keyword }];
 }
 def SortOp : RelAlg_Op<"sort",[NoSideEffect,Operator,UnaryOperator]> {
 let summary = "sort operation";
@@ -210,6 +220,8 @@ let results = (outs RelAlg_TupleStream:$result);
 let extraClassDeclaration = [{
 Attributes getUsedAttributes();
 }];
+let assemblyFormat = [{ $rel custom<SortSpecs>($sortspecs) attr-dict}];
+
 }
 // Joins
 def InnerJoinOp : RelAlg_Op<"join",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
@@ -217,6 +229,7 @@ let summary = "inner join operation";
 let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
+let assemblyFormat = [{ $left `,` $right custom<CustRegion>($predicate) attr-dict-with-keyword }];
 }
 
 def SemiJoinOp : RelAlg_Op<"semijoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
@@ -224,14 +237,7 @@ let summary = "semi join operation";
 let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
-
-let parser = [{
-return parseNonCommutativeJoin(parser, result);
-}];
-
-let printer = [{
-return printNonCommutativeJoin(this->getOperation(), p);
-}];
+let assemblyFormat = [{ $left `,` $right custom<CustRegion>($predicate) attr-dict-with-keyword }];
 let extraClassDeclaration = [{
 Attributes getAvailableAttributes();
 }];
@@ -244,13 +250,7 @@ let regions = (region SizedRegion<1>:$predicate);
 let extraClassDeclaration = [{
 Attributes getAvailableAttributes();
 }];
-let parser = [{
-return parseNonCommutativeJoin(parser, result);
-}];
-
-let printer = [{
-return printNonCommutativeJoin(this->getOperation(), p);
-}];
+let assemblyFormat = [{ $left `,` $right custom<CustRegion>($predicate) attr-dict-with-keyword }];
 }
 def OuterJoinOp : RelAlg_Op<"outerjoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "outer join operation";
@@ -261,13 +261,15 @@ let extraClassDeclaration = [{
 Attributes getCreatedAttributes();
 Attributes getUsedAttributes();
 Attributes getAvailableAttributes();}];
+let assemblyFormat = [{ custom<AttrNS>($sym_name) $left `,` $right custom<CustRegion>($predicate)  custom<CustAttrMapping>($mapping) attr-dict-with-keyword }];
+
 }
 def FullOuterJoinOp : RelAlg_Op<"fullouterjoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "full outer join operation";
 let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
-
+let assemblyFormat = [{ $left `,` $right custom<CustRegion>($predicate) attr-dict-with-keyword }];
 }
 def SingleJoinOp : RelAlg_Op<"singlejoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
 let summary = "single join operation";
@@ -278,12 +280,15 @@ let extraClassDeclaration = [{
 Attributes getCreatedAttributes();
 Attributes getUsedAttributes();
 Attributes getAvailableAttributes();}];
+let assemblyFormat = [{ custom<AttrNS>($sym_name) $left `,` $right custom<CustRegion>($predicate)  custom<CustAttrMapping>($mapping) attr-dict-with-keyword }];
 }
 def CollectionJoinOp : RelAlg_Op<"collectionjoin",[NoSideEffect,Operator,BinaryOperator,PredicateOperator,TupleLamdaOperator]> {
     let summary = "collection join operation";
     let arguments = (ins SymbolNameAttr:$sym_name,ArrayAttr:$attrs,RelationalAttributeDefAttr:$collAttr,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
     let results = (outs RelAlg_TupleStream:$result);
     let regions = (region SizedRegion<1>:$predicate);
+    let assemblyFormat = [{ custom<AttrNS>($sym_name) custom<CustRefArr>($attrs) custom<CustDef>($collAttr) $left `,` $right custom<CustRegion>($predicate)  attr-dict }];
+
     let extraClassDeclaration = [{
         Attributes getCreatedAttributes();
         Attributes getUsedAttributes();
@@ -294,6 +299,7 @@ let summary = "mark join operation";
 let arguments = (ins SymbolNameAttr:$sym_name,RelationalAttributeDefAttr:$markattr,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
+let assemblyFormat = [{ custom<AttrNS>($sym_name) custom<CustDef>($markattr) $left `,` $right custom<CustRegion>($predicate)  attr-dict }];
 let extraClassDeclaration = [{
 Attributes getAvailableAttributes();
 Attributes getCreatedAttributes();
@@ -304,6 +310,7 @@ def ProjectionOp : RelAlg_Op<"projection",[NoSideEffect,Operator,UnaryOperator]>
 let summary = "projection operation";
 let arguments = (ins  RelAlg_SetSemantic:$set_semantic,RelAlg_TupleStream:$rel, ArrayAttr:$attrs);
 let results = (outs RelAlg_TupleStream:$result);
+let assemblyFormat = [{ $set_semantic custom<CustRefArr>($attrs) $rel attr-dict }];
 let extraClassDeclaration = [{
 Attributes getAvailableAttributes();
 }];
@@ -313,16 +320,19 @@ def UnionOp :  RelAlg_Op<"union",[NoSideEffect,Operator,BinaryOperator,UnaryOper
 let summary = "union operation";
 let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_TupleStream:$result);
+let assemblyFormat = [{ custom<AttrNS>($sym_name) $set_semantic $left `,` $right custom<CustAttrMapping>($mapping) attr-dict }];
 }
 def IntersectOp :  RelAlg_Op<"intersect",[NoSideEffect,Operator,BinaryOperator]> {
 let summary = "intersect operation";
 let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_TupleStream:$result);
+let assemblyFormat = [{ custom<AttrNS>($sym_name) $set_semantic $left `,` $right custom<CustAttrMapping>($mapping) attr-dict }];
 }
 def ExceptOp :  RelAlg_Op<"except",[NoSideEffect,Operator,BinaryOperator]> {
 let summary = "except operation";
 let arguments = (ins  SymbolNameAttr:$sym_name,  RelAlg_SetSemantic:$set_semantic,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
 let results = (outs RelAlg_TupleStream:$result);
+let assemblyFormat = [{ custom<AttrNS>($sym_name) $set_semantic $left `,` $right custom<CustAttrMapping>($mapping) attr-dict }];
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -344,6 +354,8 @@ def GetAttrOp : RelAlg_Op<"getattr",[NoSideEffect]> {
 let summary = "get attribute operation";
 let arguments = (ins RelationalAttributeRefAttr:$attr, RelAlg_Tuple:$tuple);
 let results = (outs AnyType : $res);
+let assemblyFormat = [{  $tuple custom<CustRef>($attr) `:` type($res) attr-dict }];
+
 }
 def AddAttrOp : RelAlg_Op<"addattr"> {
 let summary = "add attribute operation";
@@ -355,6 +367,8 @@ def AggrFuncOp : RelAlg_Op<"aggrfn"> {
 let summary = "aggregation operation";
 let arguments = (ins RelAlg_AggrFunc:$fn,RelAlg_TupleStream:$rel,RelationalAttributeRefAttr:$attr);
 let results = (outs DBType:$result);
+let assemblyFormat = [{  $fn custom<CustRef>($attr) $rel `:` type($result) attr-dict }];
+
 }
 def CountRowsOp : RelAlg_Op<"count"> {
 let summary = "count rows";
@@ -373,21 +387,26 @@ def MaterializeOp : RelAlg_Op<"materialize",[NoSideEffect]> {
 let summary = "materialize operation";
 let arguments = (ins RelAlg_TupleStream:$rel,ArrayAttr:$attrs,ArrayAttr:$columns);
 let results = (outs DB_TableType:$result);
+let assemblyFormat = [{  $rel custom<CustRefArr>($attrs) `=` `>` $columns `:` type($result) attr-dict }];
 }
 def TmpOp : RelAlg_Op<"tmp",[NoSideEffect,Operator]> {
 let summary = "create tmp";
 let arguments = (ins RelAlg_TupleStream:$rel,ArrayAttr:$attrs);
 let results = (outs RelAlg_TupleStream:$res_rel);
+let assemblyFormat = [{  $rel custom<CustRefArr>($attrs) attr-dict }];
 }
 def GetScalarOp : RelAlg_Op<"getscalar"> {
 let summary = "get attribute operation";
 let arguments = (ins RelationalAttributeRefAttr:$attr, RelAlg_TupleStream:$rel);
 let results = (outs DBType : $res);
+let assemblyFormat = [{  custom<CustRef>($attr) $rel `:` type($res) attr-dict }];
+
 }
 def GetListOp : RelAlg_Op<"getlist"> {
     let summary = "get attribute operation";
     let arguments = (ins RelAlg_TupleStream:$rel,ArrayAttr:$attrs);
     let results = (outs  DB_CollectionType : $res);
+    let assemblyFormat = [{ $rel custom<CustRefArr>($attrs) `:` type($res) attr-dict }];
 }
 def InOp : RelAlg_Op<"in"> {
 let summary = "in operation";
