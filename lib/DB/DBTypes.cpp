@@ -143,7 +143,7 @@ llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const mlir::db::TimeUnitAtt
    os<<mlir::db::stringifyTimeUnitAttr(dt);
    return os;
 }
-}
+} // end namespace mlir
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/DB/IR/DBOpsTypes.cpp.inc"
 namespace mlir::db {
