@@ -72,12 +72,12 @@ module @querymodule{
                 relalg.return %43 : !db.bool
             }
             %45 = relalg.aggregation @aggr1 %23 [] (%44 : !relalg.tuplestream,%tuple : !relalg.tuple) {
-                %46 = relalg.aggrfn avg @customer1::@c_acctbal %44 : !db.decimal<15,2,nullable>
-                relalg.addattr %tuple, @aggfmname1({type=!db.decimal<15,2,nullable>}) %46
+                %46 = relalg.aggrfn avg @customer1::@c_acctbal %44 : !db.nullable<!db.decimal<15,2>>
+                relalg.addattr %tuple, @aggfmname1({type=!db.nullable<!db.decimal<15,2>>}) %46
                 relalg.return
             }
-            %47 = relalg.getscalar @aggr1::@aggfmname1 %45 : !db.decimal<15,2,nullable>
-            %48 = db.compare gt %20 : !db.decimal<15,2>,%47 : !db.decimal<15,2,nullable>
+            %47 = relalg.getscalar @aggr1::@aggfmname1 %45 : !db.nullable<!db.decimal<15,2>>
+            %48 = db.compare gt %20 : !db.decimal<15,2>,%47 : !db.nullable<!db.decimal<15,2>>
             %49 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=!db.int<32>}),
                 o_custkey => @o_custkey({type=!db.int<32>}),
                 o_orderstatus => @o_orderstatus({type=!db.char<1>}),
@@ -96,8 +96,8 @@ module @querymodule{
             }
             %55 = relalg.exists%51
             %56 = db.not %55 : !db.bool
-            %57 = db.and %19 : !db.bool,%48 : !db.bool<nullable>,%56 : !db.bool
-            relalg.return %57 : !db.bool<nullable>
+            %57 = db.and %19 : !db.bool,%48 : !db.nullable<!db.bool> ,%56 : !db.bool
+            relalg.return %57 : !db.nullable<!db.bool>
         }
         %mapped = relalg.map @map %3 (%maparg: !relalg.tuple) {
             %c_phone = relalg.getattr %maparg @customer::@c_phone : !db.string

@@ -97,18 +97,14 @@ class AggregationTranslator : public mlir::relalg::Translator {
    void analyze(mlir::OpBuilder& builder) {
       key = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_attrsAttr());
 
-      auto counterType = mlir::db::IntType::get(builder.getContext(), false, 64);
+      auto counterType = mlir::db::IntType::get(builder.getContext(), 64);
 
       aggregationOp.aggr_func().walk([&](mlir::relalg::AddAttrOp addAttrOp) {
          if (auto aggrFn = mlir::dyn_cast_or_null<mlir::relalg::AggrFuncOp>(addAttrOp.val().getDefiningOp())) {
             auto loc = aggrFn->getLoc();
             auto* destAttr = &addAttrOp.attr().getRelationalAttribute();
             auto* attr = &aggrFn.attr().getRelationalAttribute();
-            auto attrIsNullable = false;
-            auto dbType = attr->type.dyn_cast_or_null<mlir::db::DBType>();
-            if (dbType) {
-               attrIsNullable = dbType.isNullable();
-            }
+            auto attrIsNullable = attr->type.isa<mlir::db::NullableType>();
             size_t currValIdx = val.insert(attr);
             mlir::Type resultingType = addAttrOp.attr().getRelationalAttribute().type;
             size_t currDestIdx = aggrTypes.size();
@@ -117,10 +113,10 @@ class AggregationTranslator : public mlir::relalg::Translator {
                finalizeFunctions.push_back([currDestIdx = currDestIdx, destAttr = destAttr](mlir::ValueRange range, mlir::OpBuilder& builder) { return std::make_pair(destAttr, range[currDestIdx]); });
                aggrTypes.push_back(resultingType);
                mlir::Value initVal;
-               if (resultingType.cast<mlir::db::DBType>().isNullable()) {
+               if (resultingType.isa<mlir::db::NullableType>()) {
                   initVal = builder.create<mlir::db::NullOp>(loc, resultingType);
                } else {
-                  initVal = builder.create<mlir::db::ConstantOp>(loc, resultingType.cast<mlir::db::DBType>().getBaseType(), builder.getI64IntegerAttr(0));
+                  initVal = builder.create<mlir::db::ConstantOp>(loc, getBaseType(resultingType), builder.getI64IntegerAttr(0));
                }
                defaultValues.push_back(initVal);
                aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, currValIdx = currValIdx, attrIsNullable, resultingType = resultingType](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
@@ -133,7 +129,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
                      mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(builder.getContext()), newVal);
                      updatedVal = builder.create<mlir::db::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
                   }
-                  if (resultingType.cast<mlir::db::DBType>().isNullable()) {
+                  if (resultingType.isa<mlir::db::NullableType>()) {
                      mlir::Value casted = builder.create<mlir::db::CastOp>(loc, currVal.getType(), newVal);
                      mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(builder.getContext()), aggr[currDestIdx]);
                      res.push_back(builder.create<mlir::db::SelectOp>(loc, isNull, casted, added));
@@ -146,10 +142,10 @@ class AggregationTranslator : public mlir::relalg::Translator {
                finalizeFunctions.push_back([currDestIdx = currDestIdx, destAttr = destAttr](mlir::ValueRange range, mlir::OpBuilder& builder) { return std::make_pair(destAttr, range[currDestIdx]); });
                aggrTypes.push_back(resultingType);
                mlir::Value initVal;
-               if (resultingType.cast<mlir::db::DBType>().isNullable()) {
+               if (resultingType.isa<mlir::db::NullableType>()) {
                   initVal = builder.create<mlir::db::NullOp>(aggregationOp.getLoc(), resultingType);
                } else {
-                  initVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), resultingType.cast<mlir::db::DBType>().getBaseType(), getMaxValueAttr(resultingType.cast<mlir::db::DBType>()));
+                  initVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(),getBaseType(resultingType), getMaxValueAttr(resultingType.cast<mlir::db::DBType>()));
                }
                defaultValues.push_back(initVal);
                aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, attrIsNullable, resultingType = resultingType, currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
@@ -164,7 +160,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
                      mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(builder.getContext()), newVal);
                      updatedVal = builder.create<mlir::db::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
                   }
-                  if (resultingType.cast<mlir::db::DBType>().isNullable()) {
+                  if (resultingType.isa<mlir::db::NullableType>()) {
                      mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(builder.getContext()), aggr[currDestIdx]);
                      res.push_back(builder.create<mlir::db::SelectOp>(loc, isNull, casted, added));
                   } else {
@@ -176,10 +172,10 @@ class AggregationTranslator : public mlir::relalg::Translator {
                finalizeFunctions.push_back([currDestIdx = currDestIdx, destAttr = destAttr](mlir::ValueRange range, mlir::OpBuilder& builder) { return std::make_pair(destAttr, range[currDestIdx]); });
                aggrTypes.push_back(resultingType);
                mlir::Value initVal;
-               if (resultingType.cast<mlir::db::DBType>().isNullable()) {
+               if (resultingType.isa<mlir::db::NullableType>()) {
                   initVal = builder.create<mlir::db::NullOp>(aggregationOp.getLoc(), resultingType);
                } else {
-                  initVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), resultingType.cast<mlir::db::DBType>().getBaseType(), builder.getI64IntegerAttr(0));
+                  initVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), getBaseType(resultingType), builder.getI64IntegerAttr(0));
                }
                defaultValues.push_back(initVal);
                aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, attrIsNullable, resultingType = resultingType, currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
@@ -194,7 +190,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
                      mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(builder.getContext()), newVal);
                      updatedVal = builder.create<mlir::db::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
                   }
-                  if (resultingType.cast<mlir::db::DBType>().isNullable()) {
+                  if (resultingType.isa<mlir::db::NullableType>()) {
                      mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(builder.getContext()), aggr[currDestIdx]);
                      res.push_back(builder.create<mlir::db::SelectOp>(loc, isNull, casted, added));
                   } else {
@@ -205,7 +201,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
             } else if (aggrFn.fn() == mlir::relalg::AggrFunc::avg) {
                aggrTypes.push_back(resultingType);
                aggrTypes.push_back(counterType);
-               auto initVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), resultingType.cast<mlir::db::DBType>().getBaseType(), builder.getI64IntegerAttr(0));
+               auto initVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), getBaseType(resultingType), builder.getI64IntegerAttr(0));
                auto initCounterVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), counterType, builder.getI64IntegerAttr(0));
 
                defaultValues.push_back(builder.create<mlir::db::CastOp>(aggregationOp.getLoc(), resultingType, initVal));

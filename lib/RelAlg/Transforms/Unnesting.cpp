@@ -185,7 +185,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
       bool nullable = false;
       if(!lowerTerminator.results().empty()) {
          Value lowerPredVal = lowerTerminator.results()[0];
-         nullable|=lowerPredVal.getType().cast<mlir::db::DBType>().isNullable();
+         nullable|=lowerPredVal.getType().isa<mlir::db::NullableType>();
          values.push_back(lowerPredVal);
       }
       for (auto selOp : selectionOps) {
@@ -194,10 +194,14 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          mlir::BlockAndValueMapping mapping;
          mapping.map(selOp.getPredicateArgument(), lower.getPredicateArgument());
          mlir::relalg::detail::inlineOpIntoBlock(higherPredVal.getDefiningOp(), higherPredVal.getDefiningOp()->getParentOp(), lower.getOperation(), &lower.getPredicateBlock(), mapping);
-         nullable |= higherPredVal.getType().cast<mlir::db::DBType>().isNullable();
+         nullable |= higherPredVal.getType().isa<mlir::db::NullableType>();
          values.push_back(mapping.lookup(higherPredVal));
       }
-      mlir::Value combined = builder.create<mlir::db::AndOp>(loc, mlir::db::BoolType::get(builder.getContext(), nullable), values);
+      mlir::Type resType=mlir::db::BoolType::get(builder.getContext());
+      if(nullable){
+         resType=mlir::db::NullableType::get(builder.getContext(),resType);
+      }
+      mlir::Value combined = builder.create<mlir::db::AndOp>(loc, resType, values);
       builder.create<mlir::relalg::ReturnOp>(loc, combined);
       lowerTerminator->remove();
       lowerTerminator->destroy();

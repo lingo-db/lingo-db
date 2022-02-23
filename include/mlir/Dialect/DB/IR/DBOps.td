@@ -37,6 +37,14 @@ let parser = [{ return ::parse$cppClass(parser, result); }];
 class DB_Type<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,[],"::mlir::db::DBType"> {
   let mnemonic = typeMnemonic;
 }
+
+class DB_Type_<string name, string typeMnemonic> : TypeDef<DB_Dialect, name> {
+  let mnemonic = typeMnemonic;
+}
+def NullableType : DB_Type_<"Nullable","nullable"> {
+    let parameters = (ins "Type":$type);
+    let assemblyFormat = "`<` $type `>`";
+}
 def DBType : Type<CPred<"$_self.isa<::mlir::db::DBType>()">,"DB dialect type">;
 
 class DB_Collection<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,[],"::mlir::db::CollectionType"> {
@@ -102,7 +110,7 @@ let assemblyFormat = "`<` $keyType `,` $valType `>`";
 
 def DB_BoolType : DB_Type<"Bool","bool"> {
   let summary = "database boolean type";
-  let parameters = (ins "bool":$nullable);
+  let parameters = (ins );
     let builders = [
     TypeBuilder<(ins ), [{
     return $_get($_ctxt, false);
@@ -113,24 +121,15 @@ let builderCall = "$_builder.getType<" # dialect.cppNamespace #
 }
 
 
-class BoolType<int nullable>
-    : Type<CPred<"$_self.isa<::mlir::db::BoolType>()&&$_self.cast<mlir::db::BoolType>().isNullable()==" # nullable # "">,
-                  "bool", "::mlir::db::BoolType">,
-      BuildableType<
-        "mlir::db::BoolType::get($_builder.getContext()," # nullable # ")"> {
-  int isnullable = nullable;
-}
-class IntType<int width,int nullable>
-    : Type<CPred<"$_self.isa<::mlir::db::IntType>()&&$_self.cast<mlir::db::IntType>().isNullable()==" # nullable # "">,
+
+class IntType<int width>
+    : Type<CPred<"$_self.isa<::mlir::db::IntType>()&&$_self.cast<mlir::db::IntType>().getWidth()==" # width # "">,
                   "int", "::mlir::db::IntType">,
       BuildableType<
-        "mlir::db::IntType::get($_builder.getContext()," # nullable # "," # width # ")"> {
-  int isnullable = nullable;
+        "mlir::db::IntType::get($_builder.getContext()," # width # ")"> {
   int intWidth = width;
 }
-def AnyBool: AnyTypeOf<[BoolType<0>,BoolType<1>]>;
-def Bool: BoolType<0>;
-def DBInt64 : IntType<64,0>;
+def DBInt64 : IntType<64>;
 def DB_TimeUnit_S  : I64EnumAttrCase<"second", 0>;
 def DB_TimeUnit_MS  : I64EnumAttrCase<"millisecond", 1>;
 def DB_TimeUnit_MUS : I64EnumAttrCase<"microsecond", 2>;
@@ -164,46 +163,54 @@ let cppNamespace = "::mlir::db";
 
 def DB_UIntType : DB_Type<"UInt","uint"> {
 let summary = "database unsigned integer type";
-let parameters = (ins "bool":$nullable,"unsigned":$width);
+let parameters = (ins "unsigned":$width);
+let assemblyFormat="`<` $width  `>` ";
 }
 def DB_IntType : DB_Type<"Int","int"> {
 let summary = "database integer type";
-let parameters = (ins "bool":$nullable,"unsigned":$width);
+let parameters = (ins "unsigned":$width);
+let assemblyFormat="`<` $width  `>` ";
+
 }
 def DB_CharType : DB_Type<"Char","char"> {
 let summary = "database char<> type";
-let parameters = (ins "bool":$nullable,"unsigned":$bytes);
+let parameters = (ins "unsigned":$bytes);
+let assemblyFormat="`<` $bytes `>` ";
+
 }
 def DB_FloatType : DB_Type<"Float","float"> {
 let summary = "database float type";
-let parameters = (ins "bool":$nullable,"unsigned":$width);
+let parameters = (ins "unsigned":$width);
+let assemblyFormat="`<` $width  `>` ";
 }
 def DB_DateType : DB_Type<"Date","date"> {
 let summary = "database date type";
-let parameters = (ins "bool":$nullable,"DateUnitAttr":$unit);
+let parameters = (ins "DateUnitAttr":$unit);
+let assemblyFormat="`<` $unit  `>` ";
 }
 def DB_IntervalType : DB_Type<"Interval","interval"> {
 let summary = "database interval type";
-let parameters = (ins "bool":$nullable,"IntervalUnitAttr":$unit);
+let parameters = (ins "IntervalUnitAttr":$unit);
+let assemblyFormat="`<` $unit  `>` ";
 }
 def DB_TimestampType : DB_Type<"Timestamp","timestamp"> {
 let summary = "database date type";
-let parameters = (ins "bool":$nullable,"TimeUnitAttr":$unit,"std::string":$tz);
-let builders = [
-TypeBuilder<(ins "bool":$nullable,"TimeUnitAttr":$unit), [{
-return $_get($_ctxt, nullable,unit,"");
-}]>
-];
+let parameters = (ins "TimeUnitAttr":$unit);
+let assemblyFormat="`<` $unit`>` ";
 }
 
 def DB_DecimalType : DB_Type<"Decimal","decimal"> {
 let summary = "database date type";
-let parameters = (ins "bool":$nullable,"unsigned":$p,"unsigned":$s);
+let parameters = (ins "unsigned":$p,"unsigned":$s);
+let assemblyFormat="`<` $p `,` $s  `>` ";
 }
 def DB_StringType : DB_Type<"String","string"> {
 let summary = "database date type";
-let parameters = (ins "bool":$nullable);
+let parameters = (ins );
+
 }
+def AnyBool: AnyTypeOf<[DB_BoolType,NullableType]>;
+def NullableDBType: AnyTypeOf<[DBType,NullableType]>;
 
 def DB_ConstantOp : DB_Op<"constant",
     [NoSideEffect]> {
@@ -223,7 +230,7 @@ let assemblyFormat = "`(` $value `)` `:` type($result) attr-dict";
 def DB_NullOp : DB_Op<"null",
 [NoSideEffect]> {
 let summary = "null";
-let results = (outs DBType:$res);
+let results = (outs NullableType:$res);
 let assemblyFormat = "`:` type($res) attr-dict";
 }
 def DB_CreateFlag : DB_Op<"createflag",
@@ -234,14 +241,14 @@ let assemblyFormat = "attr-dict";
 }
 def DB_SetFlag : DB_Op<"setflag"> {
 let summary = "set flag to true";
-let arguments = (ins DB_Flag:$flag,  BoolType<0>:$val);
+let arguments = (ins DB_Flag:$flag, DB_BoolType:$val);
 let assemblyFormat = "$flag `,` $val attr-dict";
 }
 def DB_GetFlag : DB_Op<"getflag",
 [NoSideEffect]> {
 let summary = "get flag value";
 let arguments = (ins DB_Flag:$flag);
-let results= (outs Bool:$res);
+let results= (outs DB_BoolType:$res);
 let assemblyFormat = "$flag attr-dict";
 }
 def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
@@ -251,8 +258,8 @@ let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
 def DB_CombineNullOp : DB_Op<"combine_null", [NoSideEffect]> {
-let arguments = (ins DBType: $val,Bool: $null);
-let results = (outs  DBType : $res);
+let arguments = (ins DBType: $val,DB_BoolType: $null);
+let results = (outs  NullableType : $res);
 let assemblyFormat = "$val `:` type($val) `,` $null  `:` type($res) attr-dict";
 }
 def DB_CreateTableBuilder : DB_Op<"create_table_builder",
@@ -373,8 +380,8 @@ unsigned getNumIterOperands() {
 def DB_IsNullOp : DB_Op<"isnull",
 [NoSideEffect]> {
 let summary = "isnull";
-let arguments = (ins DBType:$val);
-let results = (outs Bool:$result);
+let arguments = (ins NullableType:$val);
+let results = (outs DB_BoolType:$result);
 let assemblyFormat = "$val `:` type($val) attr-dict";
 
 }
@@ -382,7 +389,7 @@ let assemblyFormat = "$val `:` type($val) attr-dict";
 
 class DB_BinaryOp<string mnemonic, list<Trait> traits = []> :
 Op<DB_Dialect, mnemonic,
-    !listconcat(traits, [NoSideEffect])>,Arguments<(ins DBType:$left, DBType:$right)> {
+    !listconcat(traits, [NoSideEffect])>,Arguments<(ins NullableDBType:$left, NullableDBType:$right)> {
 let results = (outs AnyType:$result);
 let parser = [{
 return parseImplicitResultSameOperandBaseTypeOp(parser, result);
@@ -395,7 +402,7 @@ return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
 class DB_UnaryOp<string mnemonic, list<Trait> traits = []> :
 Op<DB_Dialect, mnemonic,
     !listconcat(traits, [NoSideEffect,
-        SameOperandsAndResultType])>,Arguments<(ins DBType:$val)> {
+        SameOperandsAndResultType])>,Arguments<(ins NullableDBType:$val)> {
 let results = (outs AnyType:$result);
 let parser = [{
 return parseImplicitResultSameOperandBaseTypeOp(parser, result);
@@ -432,8 +439,8 @@ let summary = "integer comparison operation";
 
 let arguments = (ins
 DB_CmpPredicateAttr:$predicate,
-DBType:$left,
-DBType:$right
+NullableDBType:$left,
+NullableDBType:$right
 );
 let results = (outs AnyBool:$result);
 
@@ -448,7 +455,7 @@ let assemblyFormat = "$predicate $left `:` type($left) `,` $right `:` type($righ
 
 def DumpOp : DB_Op<"dump"> {
 let summary = "dump function";
-let arguments = (ins DBType: $val);
+let arguments = (ins NullableDBType: $val);
 let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 def DumpIndexOp : DB_Op<"dump_index"> {
@@ -476,8 +483,8 @@ let hasCanonicalizeMethod = 1;
 
 }
 def OrOp : DB_Op<"or", [NoSideEffect]> {
-let arguments = (ins Variadic<AnyBool>: $vals);
-let results = (outs  AnyBool : $res);
+let arguments = (ins Variadic<AnyType>: $vals);
+let results = (outs  AnyType : $res);
 let parser = [{
 return parseImplicitResultSameOperandBaseTypeOp(parser, result);
 }];
@@ -561,8 +568,8 @@ let assemblyFormat = "$unit `,` $val `:` type($val) attr-dict";
 }
 def CastOp : DB_Op<"cast"> {
 let summary = "cast function";
-let arguments = (ins DBType:$val);
-let results=(outs DBType:$res);
+let arguments = (ins NullableDBType:$val);
+let results=(outs NullableDBType:$res);
 let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
 }
 def TypeCastOp : DB_Op<"type_cast"> {

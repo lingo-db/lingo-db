@@ -18,5 +18,6 @@
 
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.h.inc"
-
+mlir::Type constructNullableBool(mlir::MLIRContext* context, mlir::ValueRange operands);
+mlir::Type getBaseType(mlir::Type t);
 #endif // MLIR_DIALECT_DB_IR_DBOPS_H

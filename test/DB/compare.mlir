@@ -9,24 +9,24 @@
         %constf2 = db.constant ( 2. ) : !db.float<32>
 
 
-		%const1_nullable = db.cast %const1 : !db.int<32> -> !db.int<32,nullable>
-		%const2_nullable = db.cast %const2 : !db.int<32> -> !db.int<32,nullable>
-		%null_nullable = db.null : !db.int<32,nullable>
+		%const1_nullable = db.cast %const1 : !db.int<32> -> !db.nullable<!db.int<32>>
+		%const2_nullable = db.cast %const2 : !db.int<32> -> !db.nullable<!db.int<32>>
+		%null_nullable = db.null : !db.nullable<!db.int<32>>
 		//CHECK: bool(NULL)
-		%n_eq_n = db.compare eq %null_nullable:!db.int<32,nullable>, %null_nullable:!db.int<32,nullable>
-		db.dump %n_eq_n : !db.bool<nullable>
+		%n_eq_n = db.compare eq %null_nullable:!db.nullable<!db.int<32>>, %null_nullable:!db.nullable<!db.int<32>>
+		db.dump %n_eq_n : !db.nullable<!db.bool>
 		//CHECK: bool(NULL)
-		%n_eq_one = db.compare eq %null_nullable:!db.int<32,nullable>, %const1_nullable:!db.int<32,nullable>
-		db.dump %n_eq_one : !db.bool<nullable>
+		%n_eq_one = db.compare eq %null_nullable:!db.nullable<!db.int<32>>, %const1_nullable:!db.nullable<!db.int<32>>
+		db.dump %n_eq_one : !db.nullable<!db.bool>
 		//CHECK: bool(NULL)
-		%one_eq_n = db.compare eq %const1_nullable:!db.int<32,nullable>, %null_nullable:!db.int<32,nullable>
-		db.dump %one_eq_n : !db.bool<nullable>
+		%one_eq_n = db.compare eq %const1_nullable:!db.nullable<!db.int<32>>, %null_nullable:!db.nullable<!db.int<32>>
+		db.dump %one_eq_n : !db.nullable<!db.bool>
 		//CHECK: bool(true)
-		%one_eq_one = db.compare eq %const1_nullable:!db.int<32,nullable>, %const1_nullable:!db.int<32,nullable>
-		db.dump %one_eq_one : !db.bool<nullable>
+		%one_eq_one = db.compare eq %const1_nullable:!db.nullable<!db.int<32>>, %const1_nullable:!db.nullable<!db.int<32>>
+		db.dump %one_eq_one : !db.nullable<!db.bool>
 		//CHECK: bool(false)
-		%one_eq_two = db.compare eq %const1_nullable:!db.int<32,nullable>, %const2_nullable:!db.int<32,nullable>
-		db.dump %one_eq_two : !db.bool<nullable>
+		%one_eq_two = db.compare eq %const1_nullable:!db.nullable<!db.int<32>>, %const2_nullable:!db.nullable<!db.int<32>>
+		db.dump %one_eq_two : !db.nullable<!db.bool>
 
 		//CHECK: bool(true)
 		%10 = db.compare eq %const1 : !db.int<32>, %const1 : !db.int<32>

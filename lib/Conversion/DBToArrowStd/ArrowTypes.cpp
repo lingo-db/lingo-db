@@ -1,6 +1,6 @@
 #include "mlir/Conversion/DBToArrowStd/ArrowTypes.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
-std::tuple<arrow::Type::type, uint32_t, uint32_t> mlir::db::codegen::convertTypeToArrow(mlir::db::DBType type) {
+std::tuple<arrow::Type::type, uint32_t, uint32_t> mlir::db::codegen::convertTypeToArrow(mlir::Type type) {
    arrow::Type::type typeConstant=arrow::Type::type::NA;
    uint32_t param1 = 0, param2 = 0;
    if (auto intType = type.dyn_cast_or_null<mlir::db::IntType>()) {

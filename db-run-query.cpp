@@ -43,6 +43,7 @@ int main(int argc, char** argv) {
    runner::Runner runner(runMode);
    runner.load(inputFileName);
    runner.optimize(*context.db);
+   runner.dump();
    runner.lower();
    //runner.dump();
    runner.lowerToLLVM();

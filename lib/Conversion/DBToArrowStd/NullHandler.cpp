@@ -1,18 +1,15 @@
 #include "mlir/Conversion/DBToArrowStd/NullHandler.h"
 #include <mlir/Dialect/DB/IR/DBType.h>
+#include <mlir/Dialect/DB/IR/DBTypes.h>
 #include <mlir/Dialect/util/UtilOps.h>
 
 mlir::Value mlir::db::NullHandler::getValue(Value v, Value operand) {
    Type type = v.getType();
-   if (auto dbType = type.dyn_cast_or_null<mlir::db::DBType>()) {
-      if (dbType.isNullable()) {
+   if (type.isa<mlir::db::NullableType>()) {
          TupleType tupleType = typeConverter.convertType(v.getType()).dyn_cast_or_null<TupleType>();
          auto unPackOp = builder.create<mlir::util::UnPackOp>(loc, tupleType.getTypes(), v);
          nullValues.push_back(unPackOp.vals()[0]);
          return unPackOp.vals()[1];
-      } else {
-         return operand ? operand : v;
-      }
    } else {
       return operand ? operand : v;
    }

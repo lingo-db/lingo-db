@@ -29,7 +29,7 @@ module @querymodule{
             %11 = db.not %10 : !db.bool
             %12 = db.and %7 : !db.bool,%11 : !db.bool
             relalg.return %12 : !db.bool
-        } mapping: {@o_orderkey({type=!db.int<32,nullable>})=[@orders::@o_orderkey],@o_custkey({type=!db.int<32,nullable>})=[@orders::@o_custkey],@o_orderstatus({type=!db.char<1,nullable>})=[@orders::@o_orderstatus],@o_totalprice({type=!db.decimal<15,2,nullable>})=[@orders::@o_totalprice],@o_orderdate({type=!db.date<day,nullable>})=[@orders::@o_orderdate],@o_orderpriority({type=!db.string<nullable>})=[@orders::@o_orderpriority],@o_clerk({type=!db.string<nullable>})=[@orders::@o_clerk],@o_shippriority({type=!db.int<32,nullable>})=[@orders::@o_shippriority],@o_comment({type=!db.string<nullable>})=[@orders::@o_comment]}
+        } mapping: {@o_orderkey({type=!db.nullable<!db.int<32>>})=[@orders::@o_orderkey],@o_custkey({type=!db.nullable<!db.int<32>>})=[@orders::@o_custkey],@o_orderstatus({type=!db.nullable<!db.char<1>>})=[@orders::@o_orderstatus],@o_totalprice({type=!db.nullable<!db.decimal<15,2>>})=[@orders::@o_totalprice],@o_orderdate({type=!db.nullable<!db.date<day>>})=[@orders::@o_orderdate],@o_orderpriority({type=!db.nullable<!db.string>})=[@orders::@o_orderpriority],@o_clerk({type=!db.nullable<!db.string>})=[@orders::@o_clerk],@o_shippriority({type=!db.nullable<!db.int<32>>})=[@orders::@o_shippriority],@o_comment({type=!db.nullable<!db.string>})=[@orders::@o_comment]}
         %15 = relalg.aggregation @aggr %4 [@customer::@c_custkey] (%13 : !relalg.tuplestream, %14 : !relalg.tuple) {
             %16 = relalg.aggrfn count @outerjoin::@o_orderkey %13 : !db.int<64>
             %17 = relalg.addattr %14, @aggfmname1({type=!db.int<64>}) %16

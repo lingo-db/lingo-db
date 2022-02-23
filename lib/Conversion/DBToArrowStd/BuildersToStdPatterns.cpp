@@ -96,7 +96,11 @@ class AggrHtHelper {
       auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, right);
       for (size_t i = 0; i < leftUnpacked.getNumResults(); i++) {
          Value compared = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, leftUnpacked->getResult(i), rightUnpacked.getResult(i));
-         if (leftUnpacked->getResult(i).getType().dyn_cast_or_null<mlir::db::DBType>().isNullable() && rightUnpacked.getResult(i).getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
+         auto currLeftType = leftUnpacked->getResult(i).getType();
+         auto currRightType = rightUnpacked.getResult(i).getType();
+         auto currLeftNullableType = currLeftType.dyn_cast_or_null<mlir::db::NullableType>();
+         auto currRightNullableType = currRightType.dyn_cast_or_null<mlir::db::NullableType>();
+         if (currLeftNullableType && currRightNullableType) {
             Value isNull1 = rewriter.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), leftUnpacked->getResult(i));
             Value isNull2 = rewriter.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), rightUnpacked->getResult(i));
             Value bothNull = rewriter.create<mlir::db::AndOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), ValueRange({isNull1, isNull2}));
@@ -104,10 +108,10 @@ class AggrHtHelper {
             Value tmp = rewriter.create<mlir::db::SelectOp>(loc, bothNull, casted, compared);
             compared = tmp;
          }
-         Value localEqual = rewriter.create<mlir::db::AndOp>(loc, mlir::db::BoolType::get(rewriter.getContext(), equal.getType().cast<mlir::db::BoolType>().getNullable() || compared.getType().cast<mlir::db::BoolType>().getNullable()), ValueRange({equal, compared}));
+         Value localEqual = rewriter.create<mlir::db::AndOp>(loc, constructNullableBool(rewriter.getContext(), mlir::ValueRange({equal,compared})), ValueRange({equal, compared}));
          equal = localEqual;
       }
-      if (equal.getType().cast<mlir::db::DBType>().isNullable()) {
+      if (equal.getType().isa<mlir::db::NullableType>()) {
          Value isNull = rewriter.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), equal);
          Value notNull = rewriter.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), isNull);
          Value value = rewriter.create<mlir::db::CastOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), equal);
@@ -271,7 +275,7 @@ class CreateVectorBuilderLowering : public ConversionPattern {
    }
 };
 
-static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::FunctionRegistry& functionRegistry, db::DBType type) {
+static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::FunctionRegistry& functionRegistry, Type type) {
    using FunctionId = db::codegen::FunctionRegistry::FunctionId;
    if (auto intType = type.dyn_cast_or_null<mlir::db::IntType>()) {
       switch (intType.getWidth()) {
@@ -327,7 +331,7 @@ class BuilderMergeLowering : public ConversionPattern {
          for (auto v : unPackOp.vals()) {
             Value val = v;
             Value isNull;
-            if (mergeOp.val().getType().cast<TupleType>().getType(i).cast<db::DBType>().isNullable()) {
+            if (mergeOp.val().getType().cast<TupleType>().getType(i).isa<mlir::db::NullableType>()) {
                auto nullUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, val);
                isNull = nullUnpacked.getResult(0);
                val = nullUnpacked->getResult(1);
@@ -340,7 +344,7 @@ class BuilderMergeLowering : public ConversionPattern {
                }
             }
             Value columnId = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(i));
-            functionRegistry.call(rewriter, loc, getStoreFunc(functionRegistry, rowType.getType(i).cast<mlir::db::DBType>()), ValueRange({mergeOpAdaptor.builder(), columnId, isNull, val}));
+            functionRegistry.call(rewriter, loc, getStoreFunc(functionRegistry, getBaseType(rowType.getType(i))), ValueRange({mergeOpAdaptor.builder(), columnId, isNull, val}));
             i++;
          }
          functionRegistry.call(rewriter, loc, FunctionId::ArrowTableBuilderFinishRow, mergeOpAdaptor.builder());
@@ -422,7 +426,7 @@ class CreateAggrHTBuilderLowering : public ConversionPattern {
    }
 };
 
-static Value getArrowDataType(OpBuilder& builder, Location loc, db::codegen::FunctionRegistry& functionRegistry, db::DBType type) {
+static Value getArrowDataType(OpBuilder& builder, Location loc, db::codegen::FunctionRegistry& functionRegistry, Type type) {
    using FunctionId = db::codegen::FunctionRegistry::FunctionId;
 
    auto [typeConstant, param1, param2] = db::codegen::convertTypeToArrow(type);
@@ -489,10 +493,10 @@ class CreateTableBuilderLowering : public ConversionPattern {
       size_t i = 0;
       for (auto c : createTB.columns()) {
          auto stringAttr = c.cast<StringAttr>();
-         auto dbType = rowType.getType(i).cast<mlir::db::DBType>();
-         auto arrowType = getArrowDataType(rewriter, op->getLoc(), functionRegistry, dbType);
+         auto isNullable = rowType.getType(i).isa<mlir::db::NullableType>();
+         auto arrowType = getArrowDataType(rewriter, op->getLoc(), functionRegistry, getBaseType(rowType.getType(i)));
          auto columnName = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), stringAttr);
-         Value typeNullable = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), dbType.isNullable()));
+         Value typeNullable = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), isNullable));
 
          functionRegistry.call(rewriter, loc, FunctionId::ArrowTableSchemaAddField, ValueRange({schema, arrowType, typeNullable, columnName}));
          i += 1;

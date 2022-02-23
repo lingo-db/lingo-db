@@ -11,7 +11,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
    virtual llvm::StringRef getArgument() const override { return "relalg-implicit-to-explicit-joins"; }
 
    llvm::SmallVector<mlir::Operation*> toDestroy;
-   void handleScalarBoolOp(mlir::Location loc,TupleLamdaOperator surroundingOperator, mlir::Operation* op, Operator relOperator, std::function<void(PredicateOperator)> apply) {
+   void handleScalarBoolOp(mlir::Location loc, TupleLamdaOperator surroundingOperator, mlir::Operation* op, Operator relOperator, std::function<void(PredicateOperator)> apply) {
       using namespace mlir;
       auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
       bool negated = false;
@@ -83,21 +83,21 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             std::string scopeName = attributeManager.getUniqueScope("singlejoin");
             std::string attributeName = "sjattr";
             attributeManager.setCurrentScope(scopeName);
-            auto before=getscalarop.attr();
-            auto fromExisting=ArrayAttr::get(&getContext(),{before});
+            auto before = getscalarop.attr();
+            auto fromExisting = ArrayAttr::get(&getContext(), {before});
 
-            auto newAttrType=getscalarop.getType();
-            auto newDef=attributeManager.createDef(attributeName,fromExisting);
-            if(auto dbType=newAttrType.dyn_cast_or_null<mlir::db::DBType>()){
-               newAttrType=dbType.asNullable();
+            auto newAttrType = getscalarop.getType();
+            auto newDef = attributeManager.createDef(attributeName, fromExisting);
+            if (!newAttrType.isa<mlir::db::NullableType>()) {
+               newAttrType = mlir::db::NullableType::get(builder.getContext(), newAttrType);
             }
-            newDef.getRelationalAttribute().type=newAttrType;
+            newDef.getRelationalAttribute().type = newAttrType;
 
-            auto mapping=ArrayAttr::get(&getContext(),{newDef});
-            auto singleJoin = builder.create<relalg::SingleJoinOp>(getscalarop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()),scopeName, treeVal, getscalarop.rel(),mapping);
+            auto mapping = ArrayAttr::get(&getContext(), {newDef});
+            auto singleJoin = builder.create<relalg::SingleJoinOp>(getscalarop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), scopeName, treeVal, getscalarop.rel(), mapping);
             singleJoin.initPredicate();
             builder.setInsertionPoint(getscalarop);
-            Operation* replacement = builder.create<relalg::GetAttrOp>(getscalarop->getLoc(), newAttrType, attributeManager.createRef(scopeName,attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
+            Operation* replacement = builder.create<relalg::GetAttrOp>(getscalarop->getLoc(), newAttrType, attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
             getscalarop.replaceAllUsesWith(replacement);
             getscalarop->remove();
             getscalarop->destroy();
@@ -108,27 +108,27 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             std::string scopeName = attributeManager.getUniqueScope("collectionjoin");
             std::string attributeName = "collattr";
             attributeManager.setCurrentScope(scopeName);
-            auto fromAttrs=getlistop.attrs();
+            auto fromAttrs = getlistop.attrs();
 
-            auto newDef=attributeManager.createDef(attributeName);
-            newDef.getRelationalAttribute().type=getlistop.getType();
-            auto collectionJoin = builder.create<relalg::CollectionJoinOp>(getlistop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()),scopeName, fromAttrs,newDef,treeVal, getlistop.rel());
+            auto newDef = attributeManager.createDef(attributeName);
+            newDef.getRelationalAttribute().type = getlistop.getType();
+            auto collectionJoin = builder.create<relalg::CollectionJoinOp>(getlistop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), scopeName, fromAttrs, newDef, treeVal, getlistop.rel());
             collectionJoin.initPredicate();
             builder.setInsertionPoint(getlistop);
-            Operation* replacement = builder.create<relalg::GetAttrOp>(getlistop->getLoc(), getlistop.getType(), attributeManager.createRef(scopeName,attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
+            Operation* replacement = builder.create<relalg::GetAttrOp>(getlistop->getLoc(), getlistop.getType(), attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
             getlistop.replaceAllUsesWith(replacement);
             getlistop->remove();
             getlistop->destroy();
             treeVal = collectionJoin;
             surroundingOperator->setOperand(0, treeVal);
          } else if (auto existsop = mlir::dyn_cast_or_null<mlir::relalg::ExistsOp>(op)) {
-            handleScalarBoolOp(existsop->getLoc(),surroundingOperator, op, existsop.rel().getDefiningOp(), [](auto) {});
+            handleScalarBoolOp(existsop->getLoc(), surroundingOperator, op, existsop.rel().getDefiningOp(), [](auto) {});
          } else if (auto inop = mlir::dyn_cast_or_null<mlir::relalg::InOp>(op)) {
             Operator relOperator = inop.rel().getDefiningOp();
             //get attribute of relation to search in
             const auto* attr = *relOperator.getAvailableAttributes().begin();
             auto searchInAttr = attributeManager.createRef(attr);
-            handleScalarBoolOp(inop->getLoc(),surroundingOperator, op, relOperator, [&](PredicateOperator predicateOperator) {
+            handleScalarBoolOp(inop->getLoc(), surroundingOperator, op, relOperator, [&](PredicateOperator predicateOperator) {
                predicateOperator.addPredicate([&](Value tuple, OpBuilder& builder) {
                   mlir::BlockAndValueMapping mapping;
                   mapping.map(surroundingOperator.getLambdaArgument(), predicateOperator.getPredicateArgument());

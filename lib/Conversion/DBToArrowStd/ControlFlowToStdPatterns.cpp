@@ -8,8 +8,8 @@ using namespace mlir;
 namespace {
 
 static Value convertBooleanCondition(mlir::Location loc, mlir::OpBuilder& rewriter, Type t, Value v) {
-   auto boolType = t.dyn_cast_or_null<db::BoolType>();
-   if (boolType && boolType.isNullable()) {
+   auto nullableType=t.dyn_cast_or_null<db::NullableType>();
+   if (nullableType && nullableType.getType().isa<mlir::db::BoolType>()) {
       auto i1Type = rewriter.getI1Type();
       auto unpacked = rewriter.create<util::UnPackOp>(loc, v);
       Value constTrue = rewriter.create<arith::ConstantOp>(loc, i1Type, rewriter.getIntegerAttr(i1Type, 1));

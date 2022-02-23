@@ -64,7 +64,7 @@ module @querymodule{
         %6 = relalg.basetable @nation { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=!db.int<32>}),
             n_name => @n_name({type=!db.string}),
             n_regionkey => @n_regionkey({type=!db.int<32>}),
-            n_comment => @n_comment({type=!db.string<nullable>})
+            n_comment => @n_comment({type=!db.nullable<!db.string>})
         }
         %7 = relalg.crossproduct %5, %6
         %9 = relalg.selection %7(%8: !relalg.tuple) {

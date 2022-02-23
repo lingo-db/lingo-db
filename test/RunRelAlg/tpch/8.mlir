@@ -66,18 +66,18 @@ module @querymodule{
         %10 = relalg.basetable @nation { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=!db.int<32>}),
             n_name => @n_name({type=!db.string}),
             n_regionkey => @n_regionkey({type=!db.int<32>}),
-            n_comment => @n_comment({type=!db.string<nullable>})
+            n_comment => @n_comment({type=!db.nullable<!db.string>})
         }
         %11 = relalg.crossproduct %9, %10
         %12 = relalg.basetable @nation1 { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=!db.int<32>}),
             n_name => @n_name({type=!db.string}),
             n_regionkey => @n_regionkey({type=!db.int<32>}),
-            n_comment => @n_comment({type=!db.string<nullable>})
+            n_comment => @n_comment({type=!db.nullable<!db.string>})
         }
         %13 = relalg.crossproduct %11, %12
         %14 = relalg.basetable @region { table_identifier="region", rows=5 , pkey=["r_regionkey"]} columns: {r_regionkey => @r_regionkey({type=!db.int<32>}),
             r_name => @r_name({type=!db.string}),
-            r_comment => @r_comment({type=!db.string<nullable>})
+            r_comment => @r_comment({type=!db.nullable<!db.string>})
         }
         %15 = relalg.crossproduct %13, %14
         %17 = relalg.selection %15(%16: !relalg.tuple) {

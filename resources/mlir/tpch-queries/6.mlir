@@ -48,8 +48,8 @@ module @querymodule{
             relalg.return %29 : !relalg.tuple
         }
         %32 = relalg.aggregation @aggr %25 [] (%30 : !relalg.tuplestream, %31 : !relalg.tuple) {
-            %33 = relalg.aggrfn sum @map::@aggfmname1 %30 : !db.decimal<15,2,nullable>
-            %34 = relalg.addattr %31, @aggfmname2({type=!db.decimal<15,2,nullable>}) %33
+            %33 = relalg.aggrfn sum @map::@aggfmname1 %30 : !db.nullable<!db.decimal<15,2>>
+            %34 = relalg.addattr %31, @aggfmname2({type=!db.nullable<!db.decimal<15,2>>}) %33
             relalg.return %34 : !relalg.tuple
         }
         %35 = relalg.materialize %32 [@aggr::@aggfmname2] => ["revenue"] : !db.table

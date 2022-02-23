@@ -40,14 +40,13 @@ let parser = [{ return ::parse$cppClass(parser, result); }];
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Types
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-def DBType : Type<CPred<"$_self.isa<::mlir::db::DBType>()">,"DB dialect type">;
 def DB_BoolType : Type<CPred<"$_self.isa<::mlir::db::BoolType>()">,"DB bool type">{
-let builderCall = "::mlir::db::BoolType::get($_builder.getContext(),false)";
+let builderCall = "::mlir::db::BoolType::get($_builder.getContext())";
 }
 def DB_TableType : Type<CPred<"$_self.isa<::mlir::db::TableType>()">,"DB table type">;
 def DB_CollectionType : Type<CPred<"$_self.isa<::mlir::db::CollectionType>()">,"DB collection type">;
 def DB_IntType : Type<CPred<"$_self.isa<::mlir::db::IntType>()">,"DB int type">{
-let builderCall = "::mlir::db::IntType::get($_builder.getContext(),false,64)";
+let builderCall = "::mlir::db::IntType::get($_builder.getContext(),64)";
 }
 
 def RelAlg_TupleStream :  TypeDef<RelAlg_Dialect, "TupleStream"> {
@@ -359,14 +358,14 @@ let assemblyFormat = [{  $tuple custom<CustRef>($attr) `:` type($res) attr-dict 
 }
 def AddAttrOp : RelAlg_Op<"addattr"> {
 let summary = "add attribute operation";
-let arguments = (ins RelAlg_Tuple:$tuple,RelationalAttributeDefAttr:$attr, DBType:$val);
+let arguments = (ins RelAlg_Tuple:$tuple,RelationalAttributeDefAttr:$attr, AnyType:$val);
 let results = (outs RelAlg_Tuple:$tuple_out);
 }
 
 def AggrFuncOp : RelAlg_Op<"aggrfn"> {
 let summary = "aggregation operation";
 let arguments = (ins RelAlg_AggrFunc:$fn,RelAlg_TupleStream:$rel,RelationalAttributeRefAttr:$attr);
-let results = (outs DBType:$result);
+let results = (outs AnyType:$result);
 let assemblyFormat = [{  $fn custom<CustRef>($attr) $rel `:` type($result) attr-dict }];
 
 }
@@ -398,7 +397,7 @@ let assemblyFormat = [{  $rel custom<CustRefArr>($attrs) attr-dict }];
 def GetScalarOp : RelAlg_Op<"getscalar"> {
 let summary = "get attribute operation";
 let arguments = (ins RelationalAttributeRefAttr:$attr, RelAlg_TupleStream:$rel);
-let results = (outs DBType : $res);
+let results = (outs AnyType : $res);
 let assemblyFormat = [{  custom<CustRef>($attr) $rel `:` type($res) attr-dict }];
 
 }
@@ -410,7 +409,7 @@ def GetListOp : RelAlg_Op<"getlist"> {
 }
 def InOp : RelAlg_Op<"in"> {
 let summary = "in operation";
-let arguments = (ins DBType:$val, RelAlg_TupleStream:$rel);
+let arguments = (ins AnyType:$val, RelAlg_TupleStream:$rel);
 let results = (outs DB_BoolType : $res);
 let assemblyFormat = [{ $val `:` type($val) `,` $rel attr-dict }];
 }

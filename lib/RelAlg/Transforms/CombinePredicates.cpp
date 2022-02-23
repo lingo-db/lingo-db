@@ -22,8 +22,12 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Oper
       mapping.map(higher.getPredicateArgument(), lower.getPredicateArgument());
       builder.setInsertionPointToEnd(&lower.getPredicateBlock());
       mlir::relalg::detail::inlineOpIntoBlock(higherPredVal.getDefiningOp(), higherPredVal.getDefiningOp()->getParentOp(), lower.getOperation(), &lower.getPredicateBlock(), mapping);
-      auto nullable=higherPredVal.getType().cast<mlir::db::DBType>().isNullable()||lowerPredVal.getType().cast<mlir::db::DBType>().isNullable();
-      mlir::Value combined=builder.create<mlir::db::AndOp>(higher->getLoc(), mlir::db::BoolType::get(builder.getContext(),nullable),ValueRange{lowerPredVal,mapping.lookup(higherPredVal)});
+      auto nullable = higherPredVal.getType().isa<mlir::db::NullableType>() || lowerPredVal.getType().isa<mlir::db::NullableType>();
+      mlir::Type restype = mlir::db::BoolType::get(builder.getContext());
+      if (nullable) {
+         restype = mlir::db::NullableType::get(builder.getContext(), restype);
+      }
+      mlir::Value combined = builder.create<mlir::db::AndOp>(higher->getLoc(), restype, ValueRange{lowerPredVal, mapping.lookup(higherPredVal)});
       builder.create<mlir::relalg::ReturnOp>(higher->getLoc(), combined);
       lowerTerminator->remove();
       lowerTerminator->destroy();
@@ -34,7 +38,7 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Oper
          mlir::Value lower = op.rel();
          bool canCombine = mlir::isa<mlir::relalg::SelectionOp>(lower.getDefiningOp()) || mlir::isa<mlir::relalg::InnerJoinOp>(lower.getDefiningOp());
          if (canCombine) {
-            combine(op,lower.getDefiningOp());
+            combine(op, lower.getDefiningOp());
             op.replaceAllUsesWith(lower);
             op->remove();
             op->destroy();

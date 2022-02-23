@@ -227,7 +227,7 @@ Attributes MarkJoinOp::getCreatedAttributes() {
 Attributes BaseTableOp::getCreatedAttributes() {
    Attributes creations;
    for (auto mapping : columns()) {
-      auto attr=mapping.getValue();
+      auto attr = mapping.getValue();
       auto relationDefAttr = attr.dyn_cast_or_null<RelationalAttributeDefAttr>();
       creations.insert(&relationDefAttr.getRelationalAttribute());
    }
@@ -254,8 +254,12 @@ void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir:
    auto additionalPred = predicateProducer(lambdaOperator.getPredicateArgument(), builder);
    if (terminator->getNumOperands() > 0) {
       mlir::Value oldValue = terminator->getOperand(0);
-      bool nullable = oldValue.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable() || additionalPred.getType().dyn_cast_or_null<mlir::db::DBType>().isNullable();
-      mlir::Value anded = builder.create<mlir::db::AndOp>(op->getLoc(), mlir::db::BoolType::get(builder.getContext(), nullable), mlir::ValueRange({oldValue, additionalPred}));
+      bool nullable = oldValue.getType().isa<mlir::db::NullableType>() || additionalPred.getType().isa<mlir::db::NullableType>();
+      mlir::Type restype = mlir::db::BoolType::get(builder.getContext());
+      if (nullable) {
+         restype = mlir::db::NullableType::get(builder.getContext(), restype);
+      }
+      mlir::Value anded = builder.create<mlir::db::AndOp>(op->getLoc(), restype, mlir::ValueRange({oldValue, additionalPred}));
       builder.create<mlir::relalg::ReturnOp>(op->getLoc(), anded);
    } else {
       builder.create<mlir::relalg::ReturnOp>(op->getLoc(), additionalPred);
@@ -268,7 +272,7 @@ void mlir::relalg::detail::initPredicate(mlir::Operation* op) {
    mlir::Type tupleType = mlir::relalg::TupleType::get(context);
    auto* block = new mlir::Block;
    op->getRegion(0).push_back(block);
-   block->addArgument(tupleType,op->getLoc());
+   block->addArgument(tupleType, op->getLoc());
    mlir::OpBuilder builder(context);
    builder.setInsertionPointToStart(block);
    builder.create<mlir::relalg::ReturnOp>(op->getLoc());
@@ -282,17 +286,16 @@ static void addRequirements(mlir::Operation* op, mlir::Operation* includeChildre
    if (!includeChildren->isAncestor(op))
       return;
    for (auto operand : op->getOperands()) {
-      if(!mapping.contains(operand)) {
+      if (!mapping.contains(operand)) {
          addRequirements(operand.getDefiningOp(), includeChildren, excludeChildren, extracted, alreadyPresent, mapping);
       }
    }
-   op->walk([&](mlir::Operation* op2){
+   op->walk([&](mlir::Operation* op2) {
       for (auto operand : op2->getOperands()) {
-         if(!mapping.contains(operand)) {
-            auto *definingOp=operand.getDefiningOp();
-            if(definingOp&&!op->isAncestor(definingOp)){
+         if (!mapping.contains(operand)) {
+            auto* definingOp = operand.getDefiningOp();
+            if (definingOp && !op->isAncestor(definingOp)) {
                addRequirements(definingOp, includeChildren, excludeChildren, extracted, alreadyPresent, mapping);
-
             }
          }
       }
@@ -302,20 +305,20 @@ static void addRequirements(mlir::Operation* op, mlir::Operation* includeChildre
       extracted.push_back(op);
    }
 }
-void mlir::relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, mlir::Block* newBlock, mlir::BlockAndValueMapping& mapping,mlir::Operation* first) {
+void mlir::relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, mlir::Block* newBlock, mlir::BlockAndValueMapping& mapping, mlir::Operation* first) {
    llvm::SmallVector<mlir::Operation*, 8> extracted;
    llvm::SmallPtrSet<mlir::Operation*, 8> alreadyPresent;
-   addRequirements(vop, includeChildren, excludeChildren, extracted, alreadyPresent,mapping);
+   addRequirements(vop, includeChildren, excludeChildren, extracted, alreadyPresent, mapping);
    mlir::OpBuilder builder(vop->getContext());
    builder.setInsertionPointToStart(newBlock);
-   first = first? first:(newBlock->empty()?nullptr:&newBlock->front());
+   first = first ? first : (newBlock->empty() ? nullptr : &newBlock->front());
    for (auto* op : extracted) {
       auto* cloneOp = builder.clone(*op, mapping);
-      if(first) {
+      if (first) {
          cloneOp->moveBefore(first);
-      }else{
-         cloneOp->moveBefore(newBlock,newBlock->begin());
-         first=cloneOp;
+      } else {
+         cloneOp->moveBefore(newBlock, newBlock->begin());
+         first = cloneOp;
       }
    }
 }

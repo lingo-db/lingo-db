@@ -97,14 +97,14 @@ module @querymodule{
                 relalg.return %54 : !relalg.tuple
             }
             %57 = relalg.aggregation @aggr2 %52 [] (%55 : !relalg.tuplestream, %56 : !relalg.tuple) {
-                %58 = relalg.aggrfn max @aggr1::@aggfmname2 %55 : !db.decimal<15,2,nullable>
-                %59 = relalg.addattr %56, @aggfmname1({type=!db.decimal<15,2,nullable>}) %58
+                %58 = relalg.aggrfn max @aggr1::@aggfmname2 %55 : !db.nullable<!db.decimal<15,2>>
+                %59 = relalg.addattr %56, @aggfmname1({type=!db.nullable<!db.decimal<15,2>>}) %58
                 relalg.return %59 : !relalg.tuple
             }
-            %60 = relalg.getscalar @aggr2::@aggfmname1 %57 : !db.decimal<15,2,nullable>
-            %61 = db.compare eq %31 : !db.decimal<15,2>,%60 : !db.decimal<15,2,nullable>
-            %62 = db.and %30 : !db.bool,%61 : !db.bool<nullable>
-            relalg.return %62 : !db.bool<nullable>
+            %60 = relalg.getscalar @aggr2::@aggfmname1 %57 : !db.nullable<!db.decimal<15,2>>
+            %61 = db.compare eq %31 : !db.decimal<15,2>,%60 : !db.nullable<!db.decimal<15,2>>
+            %62 = db.and %30 : !db.bool,%61 : !db.nullable<!db.bool>
+            relalg.return %62 : !db.nullable<!db.bool>
         }
         %63 = relalg.sort %27 [(@supplier::@s_suppkey,asc)]
         %64 = relalg.materialize %63 [@supplier::@s_suppkey,@supplier::@s_name,@supplier::@s_address,@supplier::@s_phone,@aggr::@aggfmname2] => ["s_suppkey","s_name","s_address","s_phone","total_revenue"] : !db.table

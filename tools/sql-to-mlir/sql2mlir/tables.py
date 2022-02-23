@@ -23,16 +23,20 @@ def loadSchema(path):
     with open(path) as json_file:
         schema = json.load(json_file)
 
-def convertColumns(cols,scope_name):
-    res={}
+
+def convertColumns(cols, scope_name):
+    res = {}
     for col in cols:
-        res[col["name"]]=Attribute(scope_name,col["name"],DBType(col["type"]["base"],col["type"]["props"]))
+        isTypeNullable = col["type"]["nullable"] if "nullable" in col["type"] else False
+        res[col["name"]] = Attribute(scope_name, col["name"],
+                                     DBType(col["type"]["base"], col["type"]["props"], isTypeNullable))
 
     return res
+
 
 def getTable(name, scope_name):
     for t in schema:
         if t["name"] == name:
-            return Table(t["name"], scope_name, t["rows"], t["pkeys"], convertColumns(t["columns"],scope_name))
+            return Table(t["name"], scope_name, t["rows"], t["pkeys"], convertColumns(t["columns"], scope_name))
 
     raise Exception("unknown table: " + name)

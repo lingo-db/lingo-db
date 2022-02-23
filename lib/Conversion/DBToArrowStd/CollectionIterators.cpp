@@ -103,14 +103,10 @@ class TableIterator : public WhileIterator {
 
 class JoinHtLookupIterator : public WhileIterator {
    Value iteratorInfo;
-   Value initialPtr;
    Type ptrType;
 
    public:
    JoinHtLookupIterator(Value tableInfo, Type elementType, db::codegen::FunctionRegistry& functionRegistry) : WhileIterator(tableInfo.getContext()), iteratorInfo(tableInfo) {
-   }
-   virtual void init(OpBuilder& builder) override {
-      initialPtr = iteratorInfo;
    }
    virtual Type iteratorType(OpBuilder& builder) override {
       ptrType = typeConverter->convertType(iteratorInfo.getType());
@@ -177,9 +173,7 @@ class AggrHtIterator : public ForIterator {
       values = unpacked.getResult(2);
       len = unpacked.getResult(0);
    }
-   virtual Value upper(OpBuilder& builder) override {
-      return len;
-   }
+   virtual Value upper(OpBuilder& builder) override { return len; }
    virtual Value getElement(OpBuilder& builder, Value index) override {
       Value loaded = builder.create<util::LoadOp>(loc, values.getType().cast<mlir::util::RefType>().getElementType(), values, index);
       auto unpacked = builder.create<mlir::util::UnPackOp>(loc, loaded);
@@ -188,14 +182,10 @@ class AggrHtIterator : public ForIterator {
 };
 class JoinHtModifyLookupIterator : public WhileIterator {
    Value iteratorInfo;
-   Value initialPtr;
    Type ptrType;
 
    public:
    JoinHtModifyLookupIterator(Value tableInfo, Type elementType) : WhileIterator(tableInfo.getContext()), iteratorInfo(tableInfo) {
-   }
-   virtual void init(OpBuilder& builder) override {
-      initialPtr = iteratorInfo;
    }
    virtual Type iteratorType(OpBuilder& builder) override {
       ptrType = typeConverter->convertType(iteratorInfo.getType());
@@ -235,17 +225,19 @@ class TableRowIterator : public ForIterator {
    Value chunk;
    Type elementType;
    db::codegen::FunctionRegistry& functionRegistry;
-   Type getValueBufferType(mlir::TypeConverter& typeConverter, OpBuilder& builder, mlir::db::DBType type) {
+   Type getValueBufferType(mlir::TypeConverter& typeConverter, OpBuilder& builder, Type type) {
       if (type.isa<mlir::db::StringType>()) {
          return builder.getI32Type();
       }
       if (type.isa<mlir::db::DecimalType>()) {
          return builder.getIntegerType(128);
       }
-      return typeConverter.convertType(type.getBaseType());
+      return typeConverter.convertType(type);
    }
    struct Column {
-      mlir::db::DBType type;
+      Type completeType;
+      mlir::db::DBType baseType;
+      bool isNullable;
       Type stdType;
       Value offset;
       Value nullMultiplier;
@@ -271,16 +263,19 @@ class TableRowIterator : public ForIterator {
 
       size_t columnIdx = 0;
       for (auto columnType : columnTypes) {
-         auto dbtype = columnType.dyn_cast_or_null<mlir::db::DBType>();
+         auto nullableType = columnType.dyn_cast_or_null<mlir::db::NullableType>();
+         bool isNullable = !!nullableType;
+         Type completeType = columnType;
+         mlir::db::DBType baseType = (isNullable ? nullableType.getType() : completeType).cast<mlir::db::DBType>();
          Value columnId = unpackOp.getResult(1 + columnIdx);
          Value offset;
-         if (dbtype.isa<mlir::db::BoolType>() || dbtype.isNullable()) {
+         if (baseType.isa<mlir::db::BoolType>() || isNullable) {
             offset = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnOffset, mlir::ValueRange({chunk, columnId}))[0];
          }
          Value bitmapBuffer{};
-         auto convertedType = getValueBufferType(*typeConverter, builder, dbtype);
+         auto convertedType = getValueBufferType(*typeConverter, builder, baseType);
          Value valueBuffer;
-         if (!dbtype.isa<mlir::db::BoolType>()) {
+         if (!baseType.isa<mlir::db::BoolType>()) {
             valueBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
             valueBuffer = builder.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, convertedType, llvm::Optional<int64_t>()), valueBuffer);
          } else {
@@ -288,16 +283,16 @@ class TableRowIterator : public ForIterator {
          }
          Value varLenBuffer{};
          Value nullMultiplier;
-         if (dbtype.isNullable()) {
+         if (isNullable) {
             bitmapBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetRawColumnBuffer, mlir::ValueRange({chunk, columnId, const0}))[0];
             Value bitmapSize = builder.create<util::DimOp>(loc, indexType, bitmapBuffer);
             Value emptyBitmap = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, const0, bitmapSize);
             nullMultiplier = builder.create<mlir::arith::SelectOp>(loc, emptyBitmap, const0, const1);
          }
-         if (dbtype.isVarLen()) {
+         if (baseType.isVarLen()) {
             varLenBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const2}))[0];
          }
-         columnInfo.push_back({dbtype, convertedType, offset, nullMultiplier, bitmapBuffer, valueBuffer, varLenBuffer});
+         columnInfo.push_back({completeType, baseType, isNullable, convertedType, offset, nullMultiplier, bitmapBuffer, valueBuffer, varLenBuffer});
          columnIdx++;
       }
    }
@@ -310,9 +305,9 @@ class TableRowIterator : public ForIterator {
       std::vector<Type> types;
       std::vector<Value> values;
       for (auto column : columnInfo) {
-         types.push_back(column.type);
+         types.push_back(column.completeType);
          Value val;
-         if (column.type.isa<db::StringType>()) {
+         if (column.baseType.isa<db::StringType>()) {
             Value pos1 = builder.create<util::LoadOp>(loc, column.stdType, column.values, index);
             pos1.getDefiningOp()->setAttr("nosideffect", builder.getUnitAttr());
 
@@ -323,14 +318,14 @@ class TableRowIterator : public ForIterator {
             Value pos1AsIndex = builder.create<arith::IndexCastOp>(loc, indexType, pos1);
             Value ptr = builder.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, builder.getI8Type(), llvm::Optional<int64_t>()), column.varLenBuffer, pos1AsIndex);
             val = builder.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(builder.getContext()), ptr, len);
-         } else if (column.type.isa<db::BoolType>()) {
+         } else if (column.baseType.isa<db::BoolType>()) {
             Value realPos = builder.create<arith::AddIOp>(loc, indexType, column.offset, index);
             val = mlir::db::codegen::BitUtil::getBit(builder, loc, column.values, realPos);
-         } else if (auto decimalType = column.type.dyn_cast_or_null<db::DecimalType>()) {
+         } else if (auto decimalType = column.baseType.dyn_cast_or_null<db::DecimalType>()) {
             val = builder.create<util::LoadOp>(loc, column.stdType, column.values, index);
             val.getDefiningOp()->setAttr("nosideffect", builder.getUnitAttr());
-            if (typeConverter->convertType(decimalType.getBaseType()).cast<mlir::IntegerType>().getWidth() != 128) {
-               auto converted = builder.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType.getBaseType()), val);
+            if (typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth() != 128) {
+               auto converted = builder.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType), val);
                val = converted;
             }
          } else if (column.stdType.isa<mlir::IntegerType>() || column.stdType.isa<mlir::FloatType>()) {
@@ -339,11 +334,11 @@ class TableRowIterator : public ForIterator {
          } else {
             assert(val && "unhandled type!!");
          }
-         if (column.type.isNullable()) {
+         if (column.isNullable) {
             Value realPos = builder.create<arith::AddIOp>(loc, indexType, column.offset, index);
             realPos = builder.create<arith::MulIOp>(loc, indexType, column.nullMultiplier, realPos);
             Value isnull = mlir::db::codegen::BitUtil::getBit(builder, loc, column.nullBitmap, realPos, true);
-            val = builder.create<mlir::db::CombineNullOp>(loc, column.type, val, isnull);
+            val = builder.create<mlir::db::CombineNullOp>(loc, column.completeType, val, isnull);
          }
          values.push_back(val);
       }

@@ -23,7 +23,7 @@ module @querymodule{
         %2 = relalg.basetable @nation { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=!db.int<32>}),
             n_name => @n_name({type=!db.string}),
             n_regionkey => @n_regionkey({type=!db.int<32>}),
-            n_comment => @n_comment({type=!db.string<nullable>})
+            n_comment => @n_comment({type=!db.nullable<!db.string>})
         }
         %3 = relalg.crossproduct %1, %2
         %5 = relalg.selection %3(%4: !relalg.tuple) {
@@ -88,22 +88,22 @@ module @querymodule{
                     relalg.return %34 : !db.bool
                 }
                 %37 = relalg.aggregation @aggr1 %21 [] (%35 : !relalg.tuplestream, %36 : !relalg.tuple) {
-                    %38 = relalg.aggrfn sum @lineitem::@l_quantity %35 : !db.decimal<15,2,nullable>
-                    %39 = relalg.addattr %36, @aggfmname1({type=!db.decimal<15,2,nullable>}) %38
+                    %38 = relalg.aggrfn sum @lineitem::@l_quantity %35 : !db.nullable<!db.decimal<15,2>>
+                    %39 = relalg.addattr %36, @aggfmname1({type=!db.nullable<!db.decimal<15,2>>}) %38
                     relalg.return %39 : !relalg.tuple
                 }
                 %41 = relalg.map @map3 %37 (%40: !relalg.tuple) {
                     %42 = db.constant ("0.5") :!db.decimal<15,2>
-                    %43 = relalg.getattr %40 @aggr1::@aggfmname1 : !db.decimal<15,2,nullable>
-                    %44 = db.mul %42 : !db.decimal<15,2>,%43 : !db.decimal<15,2,nullable>
-                    %45 = relalg.addattr %40, @aggfmname2({type=!db.decimal<15,2,nullable>}) %44
+                    %43 = relalg.getattr %40 @aggr1::@aggfmname1 : !db.nullable<!db.decimal<15,2>>
+                    %44 = db.mul %42 : !db.decimal<15,2>,%43 : !db.nullable<!db.decimal<15,2>>
+                    %45 = relalg.addattr %40, @aggfmname2({type=!db.nullable<!db.decimal<15,2>>}) %44
                     relalg.return %45 : !relalg.tuple
                 }
-                %46 = relalg.getscalar @map3::@aggfmname2 %41 : !db.decimal<15,2,nullable>
-                %47 = db.cast %18 : !db.int<32> -> !db.decimal<15,2,nullable>
-                %48 = db.compare gt %47 : !db.decimal<15,2,nullable>,%46 : !db.decimal<15,2,nullable>
-                %49 = db.and %17 : !db.bool,%48 : !db.bool<nullable>
-                relalg.return %49 : !db.bool<nullable>
+                %46 = relalg.getscalar @map3::@aggfmname2 %41 : !db.nullable<!db.decimal<15,2>>
+                %47 = db.cast %18 : !db.int<32> -> !db.nullable<!db.decimal<15,2>>
+                %48 = db.compare gt %47 : !db.nullable<!db.decimal<15,2>>,%46 : !db.nullable<!db.decimal<15,2>>
+                %49 = db.and %17 : !db.bool,%48 : !db.nullable<!db.bool>
+                relalg.return %49 : !db.nullable<!db.bool>
             }
             %50 = relalg.projection all [@partsupp::@ps_suppkey]%8
             %51 = relalg.getattr %4 @supplier::@s_suppkey : !db.int<32>

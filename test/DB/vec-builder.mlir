@@ -1,5 +1,5 @@
  // RUN: db-run %s %S/../../resources/data/test | FileCheck %s
- !test_table_tuple=type tuple<!db.string<nullable>,!db.bool<nullable>,!db.int<32,nullable>,!db.int<64,nullable>,!db.float<32,nullable>,!db.float<64,nullable>,!db.date<day,nullable>,!db.date<millisecond,nullable>,!db.decimal<5,2,nullable>>
+ !test_table_tuple=type tuple<!db.nullable<!db.string>,!db.nullable<!db.bool>,!db.nullable<!db.int<32>>,!db.nullable<!db.int<64>>,!db.nullable<!db.float<32>>,!db.nullable<!db.float<64>>,!db.nullable<!db.date<day>>,!db.nullable<!db.date<millisecond>>,!db.nullable<!db.decimal<5,2>>>
  module {
     //CHECK: string("str")
     //CHECK: bool(true)
@@ -34,16 +34,16 @@
         }
         %vector=db.builder_build %final_builder : !db.vector_builder<!test_table_tuple> -> !db.vector<!test_table_tuple>
         db.for %row in %vector : !db.vector<!test_table_tuple> {
-            %1,%2,%3,%4,%5,%6,%7,%8,%9 = util.unpack %row : !test_table_tuple -> !db.string<nullable>,!db.bool<nullable>,!db.int<32,nullable>,!db.int<64,nullable>,!db.float<32,nullable>,!db.float<64,nullable>,!db.date<day,nullable>,!db.date<millisecond,nullable>,!db.decimal<5,2,nullable>
-            db.dump %1 : !db.string<nullable>
-            db.dump %2 : !db.bool<nullable>
-            db.dump %3 : !db.int<32,nullable>
-            db.dump %4 : !db.int<64,nullable>
-            db.dump %5 : !db.float<32,nullable>
-            db.dump %6 : !db.float<64,nullable>
-            db.dump %7 : !db.date<day,nullable>
-            db.dump %8 : !db.date<millisecond,nullable>
-            db.dump %9 : !db.decimal<5,2,nullable>
+            %1,%2,%3,%4,%5,%6,%7,%8,%9 = util.unpack %row : !test_table_tuple -> !db.nullable<!db.string>,!db.nullable<!db.bool>,!db.nullable<!db.int<32>>,!db.nullable<!db.int<64>>,!db.nullable<!db.float<32>>,!db.nullable<!db.float<64>>,!db.nullable<!db.date<day>>,!db.nullable<!db.date<millisecond>>,!db.nullable<!db.decimal<5,2>>
+            db.dump %1 : !db.nullable<!db.string>
+            db.dump %2 : !db.nullable<!db.bool>
+            db.dump %3 : !db.nullable<!db.int<32>>
+            db.dump %4 : !db.nullable<!db.int<64>>
+            db.dump %5 : !db.nullable<!db.float<32>>
+            db.dump %6 : !db.nullable<!db.float<64>>
+            db.dump %7 : !db.nullable<!db.date<day>>
+            db.dump %8 : !db.nullable<!db.date<millisecond>>
+            db.dump %9 : !db.nullable<!db.decimal<5,2>>
             db.dump %str_const : !db.string
         }
 		return

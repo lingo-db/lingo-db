@@ -66,19 +66,19 @@ module @querymodule{
             relalg.return %35 : !relalg.tuple
         }
         %38 = relalg.aggregation @aggr %17 [] (%36 : !relalg.tuplestream, %37 : !relalg.tuple) {
-            %39 = relalg.aggrfn sum @map::@aggfmname1 %36 : !db.decimal<15,2,nullable>
-            %40 = relalg.addattr %37, @aggfmname2({type=!db.decimal<15,2,nullable>}) %39
-            %41 = relalg.aggrfn sum @map::@aggfmname3 %36 : !db.decimal<15,2,nullable>
-            %42 = relalg.addattr %40, @aggfmname4({type=!db.decimal<15,2,nullable>}) %41
+            %39 = relalg.aggrfn sum @map::@aggfmname1 %36 : !db.nullable<!db.decimal<15,2>>
+            %40 = relalg.addattr %37, @aggfmname2({type=!db.nullable<!db.decimal<15,2>>}) %39
+            %41 = relalg.aggrfn sum @map::@aggfmname3 %36 : !db.nullable<!db.decimal<15,2>>
+            %42 = relalg.addattr %40, @aggfmname4({type=!db.nullable<!db.decimal<15,2>>}) %41
             relalg.return %42 : !relalg.tuple
         }
         %44 = relalg.map @map1 %38 (%43: !relalg.tuple) {
             %45 = db.constant ("100.0") :!db.decimal<15,2>
-            %46 = relalg.getattr %43 @aggr::@aggfmname2 : !db.decimal<15,2,nullable>
-            %47 = db.mul %45 : !db.decimal<15,2>,%46 : !db.decimal<15,2,nullable>
-            %48 = relalg.getattr %43 @aggr::@aggfmname4 : !db.decimal<15,2,nullable>
-            %49 = db.div %47 : !db.decimal<15,2,nullable>,%48 : !db.decimal<15,2,nullable>
-            %50 = relalg.addattr %43, @aggfmname5({type=!db.decimal<15,2,nullable>}) %49
+            %46 = relalg.getattr %43 @aggr::@aggfmname2 : !db.nullable<!db.decimal<15,2>>
+            %47 = db.mul %45 : !db.decimal<15,2>,%46 : !db.nullable<!db.decimal<15,2>>
+            %48 = relalg.getattr %43 @aggr::@aggfmname4 : !db.nullable<!db.decimal<15,2>>
+            %49 = db.div %47 : !db.nullable<!db.decimal<15,2>>,%48 : !db.nullable<!db.decimal<15,2>>
+            %50 = relalg.addattr %43, @aggfmname5({type=!db.nullable<!db.decimal<15,2>>}) %49
             relalg.return %50 : !relalg.tuple
         }
         %51 = relalg.materialize %44 [@map1::@aggfmname5] => ["promo_revenue"] : !db.table

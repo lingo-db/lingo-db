@@ -175,8 +175,8 @@ module @querymodule{
             relalg.return %143 : !relalg.tuple
         }
         %146 = relalg.aggregation @aggr %137 [] (%144 : !relalg.tuplestream, %145 : !relalg.tuple) {
-            %147 = relalg.aggrfn sum @map::@aggfmname1 %144 : !db.decimal<15,2,nullable>
-            %148 = relalg.addattr %145, @aggfmname2({type=!db.decimal<15,2,nullable>}) %147
+            %147 = relalg.aggrfn sum @map::@aggfmname1 %144 : !db.nullable<!db.decimal<15,2>>
+            %148 = relalg.addattr %145, @aggfmname2({type=!db.nullable<!db.decimal<15,2>>}) %147
             relalg.return %148 : !relalg.tuple
         }
         %149 = relalg.materialize %146 [@aggr::@aggfmname2] => ["revenue"] : !db.table

@@ -1,5 +1,5 @@
  // RUN: db-run %s %S/../../resources/data/test | FileCheck %s
- !test_table_tuple=type tuple<!db.string<nullable>,!db.bool<nullable>,!db.int<32,nullable>,!db.int<64,nullable>,!db.float<32,nullable>,!db.float<64,nullable>,!db.date<day,nullable>,!db.date<millisecond,nullable>,!db.decimal<5,2,nullable>>
+ !test_table_tuple=type tuple<!db.nullable<!db.string>,!db.nullable<!db.bool>,!db.nullable<!db.int<32>>,!db.nullable<!db.int<64>>,!db.nullable<!db.float<32>>,!db.nullable<!db.float<64>>,!db.nullable<!db.date<day>>,!db.nullable<!db.date<millisecond>>,!db.nullable<!db.decimal<5,2>>>
  module {
     //CHECK: |                          str!  |                         bool!  |                        int32!  |                        int64!  |                      float32!  |                      float64!  |                       date32!  |                       date64!  |                      decimal!  |
     //CHECK: ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

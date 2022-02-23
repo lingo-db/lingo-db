@@ -76,12 +76,12 @@ module @querymodule{
         %6 = relalg.basetable @nation { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=!db.int<32>}),
             n_name => @n_name({type=!db.string}),
             n_regionkey => @n_regionkey({type=!db.int<32>}),
-            n_comment => @n_comment({type=!db.string<nullable>})
+            n_comment => @n_comment({type=!db.nullable<!db.string>})
         }
         %7 = relalg.crossproduct %5, %6
         %8 = relalg.basetable @region { table_identifier="region", rows=5 , pkey=["r_regionkey"]} columns: {r_regionkey => @r_regionkey({type=!db.int<32>}),
             r_name => @r_name({type=!db.string}),
-            r_comment => @r_comment({type=!db.string<nullable>})
+            r_comment => @r_comment({type=!db.nullable<!db.string>})
         }
         %9 = relalg.crossproduct %7, %8
         %11 = relalg.selection %9(%10: !relalg.tuple) {
@@ -126,12 +126,12 @@ module @querymodule{
             %38 = relalg.basetable @nation1 { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=!db.int<32>}),
                 n_name => @n_name({type=!db.string}),
                 n_regionkey => @n_regionkey({type=!db.int<32>}),
-                n_comment => @n_comment({type=!db.string<nullable>})
+                n_comment => @n_comment({type=!db.nullable<!db.string>})
             }
             %39 = relalg.crossproduct %37, %38
             %40 = relalg.basetable @region1 { table_identifier="region", rows=5 , pkey=["r_regionkey"]} columns: {r_regionkey => @r_regionkey({type=!db.int<32>}),
                 r_name => @r_name({type=!db.string}),
-                r_comment => @r_comment({type=!db.string<nullable>})
+                r_comment => @r_comment({type=!db.nullable<!db.string>})
             }
             %41 = relalg.crossproduct %39, %40
             %43 = relalg.selection %41(%42: !relalg.tuple) {
@@ -154,14 +154,14 @@ module @querymodule{
                 relalg.return %59 : !db.bool
             }
             %62 = relalg.aggregation @aggr %43 [] (%60 : !relalg.tuplestream, %61 : !relalg.tuple) {
-                %63 = relalg.aggrfn min @partsupp1::@ps_supplycost %60 : !db.decimal<15,2,nullable>
-                %64 = relalg.addattr %61, @aggfmname1({type=!db.decimal<15,2,nullable>}) %63
+                %63 = relalg.aggrfn min @partsupp1::@ps_supplycost %60 : !db.nullable<!db.decimal<15,2>>
+                %64 = relalg.addattr %61, @aggfmname1({type=!db.nullable<!db.decimal<15,2>>}) %63
                 relalg.return %64 : !relalg.tuple
             }
-            %65 = relalg.getscalar @aggr::@aggfmname1 %62 : !db.decimal<15,2,nullable>
-            %66 = db.compare eq %34 : !db.decimal<15,2>,%65 : !db.decimal<15,2,nullable>
-            %67 = db.and %14 : !db.bool,%17 : !db.bool,%21 : !db.bool,%24 : !db.bool,%27 : !db.bool,%30 : !db.bool,%33 : !db.bool,%66 : !db.bool<nullable>
-            relalg.return %67 : !db.bool<nullable>
+            %65 = relalg.getscalar @aggr::@aggfmname1 %62 : !db.nullable<!db.decimal<15,2>>
+            %66 = db.compare eq %34 : !db.decimal<15,2>,%65 : !db.nullable<!db.decimal<15,2>>
+            %67 = db.and %14 : !db.bool,%17 : !db.bool,%21 : !db.bool,%24 : !db.bool,%27 : !db.bool,%30 : !db.bool,%33 : !db.bool,%66 : !db.nullable<!db.bool>
+            relalg.return %67 : !db.nullable<!db.bool>
         }
         %68 = relalg.sort %11 [(@supplier::@s_acctbal,desc),(@nation::@n_name,asc),(@supplier::@s_name,asc),(@part::@p_partkey,asc)]
         %69 = relalg.limit 100 %68

@@ -20,8 +20,8 @@ class NotOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto notOp = cast<mlir::db::NotOp>(op);
       Value trueValue = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-      mlir::db::DBType valType = notOp.val().getType().cast<mlir::db::DBType>();
-      if (valType.isNullable()) {
+      auto valType = notOp.val().getType();
+      if (valType.isa<mlir::db::NullableType>()) {
          auto tupleType = typeConverter->convertType(notOp.val().getType());
          Value val = rewriter.create<util::GetTupleOp>(op->getLoc(), rewriter.getI1Type(), operands[0], 1);
          val = rewriter.create<arith::XOrIOp>(op->getLoc(), val, trueValue);
@@ -51,7 +51,7 @@ class AndOpLowering : public ConversionPattern {
 
       for (size_t i = 0; i < operands.size(); i++) {
          auto currType = andOp.vals()[i].getType();
-         bool currNullable = currType.dyn_cast_or_null<mlir::db::DBType>().isNullable();
+         bool currNullable = currType.isa<mlir::db::NullableType>();
          Value currNull;
          Value currVal;
          if (currNullable) {
@@ -83,7 +83,7 @@ class AndOpLowering : public ConversionPattern {
             }
          }
       }
-      if (andOp.getResult().getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
+      if (andOp.getResult().getType().isa<mlir::db::NullableType>()) {
          isNull = rewriter.create<arith::SelectOp>(loc, result, isNull, falseValue);
          Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({isNull, result}));
          rewriter.replaceOp(op, combined);
@@ -111,7 +111,7 @@ class OrOpLowering : public ConversionPattern {
 
       for (size_t i = 0; i < operands.size(); i++) {
          auto currType = orOp.vals()[i].getType();
-         bool currNullable = currType.dyn_cast_or_null<mlir::db::DBType>().isNullable();
+         bool currNullable = currType.isa<mlir::db::NullableType>();
          Value currNull;
          Value currVal;
          if (currNullable) {
@@ -143,7 +143,7 @@ class OrOpLowering : public ConversionPattern {
             }
          }
       }
-      if (orOp.getResult().getType().dyn_cast_or_null<mlir::db::DBType>().isNullable()) {
+      if (orOp.getResult().getType().isa<mlir::db::NullableType>()) {
          isNull = rewriter.create<arith::SelectOp>(loc, result, falseValue, isNull);
          Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({isNull, result}));
          rewriter.replaceOp(op, combined);
@@ -167,8 +167,8 @@ class BinOpLowering : public ConversionPattern {
       using AT = typename OpClass::Adaptor;
       auto adaptor = AT(operands);
       db::NullHandler nullHandler(*typeConverter, rewriter, op->getLoc());
-      auto type = addOp.left().getType();
-      Type resType = addOp.result().getType().template cast<db::DBType>().getBaseType();
+      auto type = getBaseType(addOp.left().getType());
+      Type resType = getBaseType(addOp.result().getType());
       Value left = nullHandler.getValue(addOp.left(), adaptor.left());
       Value right = nullHandler.getValue(addOp.right(), adaptor.right());
       if (type.template isa<OperandType>()) {
@@ -196,11 +196,11 @@ class DecimalOpScaledLowering : public ConversionPattern {
       if (left.getType() != right.getType()) {
          return failure();
       }
-      auto type = addOp.getType();
+      auto type = getBaseType(addOp.getType());
       if (auto decimalType = type.template dyn_cast_or_null<mlir::db::DecimalType>()) {
          auto [low, high] = support::getDecimalScaleMultiplier(decimalType.getS());
          std::vector<uint64_t> parts = {low, high};
-         auto stdType = typeConverter->convertType(decimalType.getBaseType());
+         auto stdType = typeConverter->convertType(decimalType);
          auto multiplier = rewriter.create<arith::ConstantOp>(op->getLoc(), stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.template cast<mlir::IntegerType>().getWidth(), parts)));
          left = rewriter.create<arith::MulIOp>(op->getLoc(), stdType, left, multiplier);
          auto replacement = rewriter.create<Op>(op->getLoc(), stdType, left, right);
@@ -370,7 +370,7 @@ class CmpOpLowering : public ConversionPattern {
       auto loc = op->getLoc();
       auto cmpOp = cast<db::CmpOp>(op);
       mlir::db::CmpOpAdaptor adaptor(operands);
-      auto type = cmpOp.left().getType().cast<db::DBType>().getBaseType();
+      auto type = getBaseType(cmpOp.left().getType());
       if (type.isa<db::StringType>()) {
          return failure();
       }
@@ -400,16 +400,18 @@ class CastOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto castOp = cast<mlir::db::CastOp>(op);
       auto loc = op->getLoc();
-      auto sourceType = castOp.val().getType().cast<db::DBType>();
-      auto targetType = castOp.getType().cast<db::DBType>();
-      auto scalarSourceType = sourceType.getBaseType();
-      auto scalarTargetType = targetType.getBaseType();
+      auto sourceType = castOp.val().getType();
+      auto targetType = castOp.getType();
+      auto sourceNullableType = sourceType.dyn_cast_or_null<mlir::db::NullableType>();
+      auto targetNullableType = targetType.dyn_cast_or_null<mlir::db::NullableType>();
+      auto scalarSourceType = sourceNullableType ? sourceNullableType.getType() : sourceType;
+      auto scalarTargetType = targetNullableType ? targetNullableType.getType() : targetType;
       auto convertedSourceType = typeConverter->convertType(scalarSourceType);
       auto convertedTargetType = typeConverter->convertType(scalarTargetType);
       if (scalarSourceType.isa<mlir::db::StringType>() || scalarTargetType.isa<mlir::db::StringType>()) return failure();
       Value isNull;
       Value value;
-      if (sourceType.isNullable()) {
+      if (sourceNullableType) {
          auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, operands[0]);
          isNull = unPackOp.vals()[0];
          value = unPackOp.vals()[1];
@@ -487,7 +489,7 @@ class CastOpLowering : public ConversionPattern {
          return failure();
       }
       //todo convert types
-      if (targetType.isNullable()) {
+      if (targetNullableType) {
          Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({isNull, value}));
          rewriter.replaceOp(op, combined);
       } else {
@@ -587,10 +589,9 @@ class HashLowering : public ConversionPattern {
                totalHash = hashImpl(builder, loc, v, totalHash, originalTupleType.getType(i++));
             }
             return totalHash;
-         } else if (auto dbType = originalType.dyn_cast_or_null<mlir::db::DBType>()) {
-            assert(dbType.isNullable());
+         } else if (originalType.isa<mlir::db::NullableType>()) {
             auto unpacked = builder.create<util::UnPackOp>(loc, v);
-            mlir::Value hashedIfNotNull = hashImpl(builder, loc, unpacked.getResult(1), totalHash, dbType.getBaseType());
+            mlir::Value hashedIfNotNull = hashImpl(builder, loc, unpacked.getResult(1), totalHash, getBaseType(originalType));
             if (!totalHash) {
                totalHash = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(0));
             }
@@ -668,11 +669,10 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
                            }
                         })
                         .Default([](::mlir::Type) { return Type(); });
-      if (type.isNullable()) {
-         return (Type) TupleType::get(patterns.getContext(), {IntegerType::get(patterns.getContext(), 1), rawType});
-      } else {
-         return rawType;
-      }
+      return rawType;
+   });
+   typeConverter.addConversion([&](mlir::db::NullableType type) {
+      return (Type) TupleType::get(patterns.getContext(), {IntegerType::get(patterns.getContext(), 1), typeConverter.convertType(type.getType())});
    });
    typeConverter.addConversion([&](mlir::db::FlagType type) {
       auto boolType = typeConverter.convertType(mlir::db::BoolType::get(patterns.getContext()));

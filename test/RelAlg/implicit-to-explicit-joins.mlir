@@ -57,10 +57,10 @@ module @querymodule  {
   	//CHECK: %{{.*}} =  relalg.singlejoin @singlejoin %{{.*}}, %{{.*}} (%arg0: !relalg.tuple)
   	%2 = relalg.selection %0 (%arg0: !relalg.tuple) {
   		  //CHECK: %{{.*}} = relalg.getattr %arg0 @singlejoin::@sjattr
-  	      %3 = relalg.getscalar @constrel2::@attr1 %1 : !db.int<32,nullable>
+  	      %3 = relalg.getscalar @constrel2::@attr1 %1 : !db.nullable<!db.int<32>>
   	      %4 = db.constant( 1 ) : !db.int<32>
-  	      %5 = db.compare eq %3 : !db.int<32,nullable>, %4 : !db.int<32>
-          relalg.return %5 : !db.bool<nullable>
+  	      %5 = db.compare eq %3 : !db.nullable<!db.int<32>>, %4 : !db.int<32>
+          relalg.return %5 : !db.nullable<!db.bool>
   	}
     return
   }

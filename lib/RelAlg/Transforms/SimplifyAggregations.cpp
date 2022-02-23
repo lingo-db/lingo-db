@@ -31,8 +31,8 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
          mlir::OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(block);
          auto tplType = mlir::relalg::TupleType::get(getContext());
-         block->addArgument(mlir::relalg::TupleStreamType::get(getContext()),op->getLoc());
-         block->addArgument(tplType,op->getLoc());
+         block->addArgument(mlir::relalg::TupleStreamType::get(getContext()), op->getLoc());
+         block->addArgument(tplType, op->getLoc());
 
          auto relArgument = block->getArgument(0);
          auto tplArgument = block->getArgument(1);
@@ -40,10 +40,10 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
          auto tuple = rewriter.create<mlir::relalg::AddAttrOp>(op->getLoc(), tplType, tplArgument, def, val);
          rewriter.create<mlir::relalg::ReturnOp>(op->getLoc(), mlir::ValueRange({tuple}));
       }
-      auto nullableType = aggrFuncOp.getType().cast<mlir::db::DBType>().asNullable();
+      auto nullableType = aggrFuncOp.getType().dyn_cast_or_null<mlir::db::NullableType>();
       mlir::Value getScalarOp = rewriter.replaceOpWithNewOp<mlir::relalg::GetScalarOp>(op, nullableType, attributeManager.createRef(&def.getRelationalAttribute()), aggrOp.asRelation());
       mlir::Value res = getScalarOp;
-      if (!aggrFuncOp.getType().cast<mlir::db::DBType>().isNullable()) {
+      if (!nullableType) {
          res = rewriter.create<mlir::db::CastOp>(op->getLoc(), aggrFuncOp.getType(), getScalarOp);
       }
       rewriter.replaceOp(op, res);
@@ -74,8 +74,8 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
          mlir::OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(block);
          auto tplType = mlir::relalg::TupleType::get(getContext());
-         block->addArgument(mlir::relalg::TupleStreamType::get(getContext()),op->getLoc());
-         block->addArgument(tplType,op->getLoc());
+         block->addArgument(mlir::relalg::TupleStreamType::get(getContext()), op->getLoc());
+         block->addArgument(tplType, op->getLoc());
 
          auto relArgument = block->getArgument(0);
          auto tplArgument = block->getArgument(1);
@@ -83,7 +83,10 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
          auto tuple = rewriter.create<mlir::relalg::AddAttrOp>(op->getLoc(), tplType, tplArgument, def, val);
          rewriter.create<mlir::relalg::ReturnOp>(op->getLoc(), mlir::ValueRange({tuple}));
       }
-      auto nullableType = aggrFuncOp.getType().cast<mlir::db::DBType>().asNullable();
+      auto nullableType = aggrFuncOp.getType();
+      if(!nullableType.isa<mlir::db::NullableType>()){
+         nullableType=mlir::db::NullableType::get(rewriter.getContext(),nullableType);
+      }
       mlir::Value getScalarOp = rewriter.create<mlir::relalg::GetScalarOp>(op->getLoc(), nullableType, attributeManager.createRef(&def.getRelationalAttribute()), aggrOp.asRelation());
       mlir::Value res = rewriter.create<mlir::db::CastOp>(op->getLoc(), aggrFuncOp.getType(), getScalarOp);
       rewriter.replaceOp(op, res);

@@ -128,7 +128,7 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 static bool hasDBType(TypeRange types) {
    bool res = false;
    for (Type type : types) {
-      if (type.isa<db::DBType>()) {
+      if (type.isa<db::DBType>()||type.isa<db::NullableType>()) {
          res |= true;
       } else if (auto tupleType = type.dyn_cast_or_null<TupleType>()) {
          res |= hasDBType(tupleType.getTypes());
@@ -161,7 +161,6 @@ void DBToStdLoweringPass::runOnOperation() {
 
    target.addLegalDialect<StandardOpsDialect>();
    target.addLegalDialect<arith::ArithmeticDialect>();
-
    target.addLegalDialect<memref::MemRefDialect>();
 
    target.addLegalDialect<scf::SCFDialect>();
@@ -243,9 +242,7 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::TableType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
-
-
-   typeConverter.addSourceMaterialization([&](OpBuilder&, MemRefType type, ValueRange valueRange, Location loc) {
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::NullableType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
 

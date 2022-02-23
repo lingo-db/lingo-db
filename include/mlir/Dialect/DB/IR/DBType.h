@@ -6,9 +6,6 @@ class DBType : public mlir::Type {
    public:
    using Type::Type;
 
-   bool isNullable();
-   DBType getBaseType() const;
-   DBType asNullable() const;
    bool isVarLen() const;
    static bool classof(Type);
 };

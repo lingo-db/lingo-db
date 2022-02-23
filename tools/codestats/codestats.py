@@ -54,9 +54,13 @@ for k in schema:
     format(k,runCLOC(schema[k]["inc"],schema[k]["exc"]),"nosum" in schema[k])
 print(" \\midrule")
 print("$\Sigma$",end='')
+totalsum=0
 for l in languages:
     print(" & "+str(sums[l]),end='');
+    totalsum+=sums[l]
 print(" \\\\\\bottomrule")
+print(totalsum)
+
 
 
 

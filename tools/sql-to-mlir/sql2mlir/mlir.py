@@ -5,14 +5,15 @@ class DBType:
         self.nullable=nullable
     def to_string(self):
         type_props=",".join(self.baseprops)
-        if self.nullable:
-            if len(type_props)>0:
-                type_props+=","
-            type_props+="nullable"
+        res=""
         if type_props=="":
-            return '!db.%s' % (self.name)
+            res= '!db.%s' % (self.name)
         else:
-            return '!db.%s<%s>' % (self.name,type_props)
+            res= '!db.%s<%s>' % (self.name,type_props)
+        if self.nullable:
+            return "!db.nullable<"+res+">"
+        else:
+            return res
 class TupleType:
     def __init__ (self,types):
         self.types=types

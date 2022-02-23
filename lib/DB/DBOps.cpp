@@ -8,51 +8,63 @@
 #include <queue>
 using namespace mlir;
 
-LogicalResult mlir::db::CmpOp::inferReturnTypes(
-   MLIRContext *context, Optional<Location> location, ValueRange operands,
-   DictionaryAttr attributes, RegionRange regions,
-   SmallVectorImpl<Type> &inferredReturnTypes) {
-   bool nullable = operands[0].getType().cast<mlir::db::DBType>().isNullable() || operands[1].getType().cast<mlir::db::DBType>().isNullable();
+mlir::Type constructNullableBool(MLIRContext* context, ValueRange operands) {
+   bool nullable = llvm::any_of(operands, [](auto operand) { return operand.getType().template isa<mlir::db::NullableType>(); });
+   mlir::Type restype = mlir::db::BoolType::get(context);
+   if (nullable) {
+      restype = mlir::db::NullableType::get(context, restype);
+   }
+   return restype;
+}
+mlir::Type getBaseType(mlir::Type t){
+   if(auto nullableT=t.dyn_cast_or_null<mlir::db::NullableType>()){
+      return nullableT.getType();
+   }
+   return t;
+}
 
-   inferredReturnTypes.assign({mlir::db::BoolType::get(context, nullable)});
+LogicalResult mlir::db::CmpOp::inferReturnTypes(
+   MLIRContext* context, Optional<Location> location, ValueRange operands,
+   DictionaryAttr attributes, RegionRange regions,
+   SmallVectorImpl<Type>& inferredReturnTypes) {
+   inferredReturnTypes.assign({constructNullableBool(context, operands)});
    return success();
 }
-static void buildDBAndOp(OpBuilder& build, OperationState& result, ValueRange operands) {
+static void buildDBAndOp(OpBuilder& builder, OperationState& result, ValueRange operands) {
    result.addOperands(operands);
-   bool nullable = llvm::any_of(operands,[](auto operand){return operand.getType().template dyn_cast_or_null<mlir::db::DBType>().isNullable();});
-
-   result.types.push_back(mlir::db::BoolType::get(build.getContext(), nullable));
+   result.types.push_back(constructNullableBool(builder.getContext(), operands));
 }
-static void buildDBOrOp(OpBuilder& build, OperationState& result, ValueRange operands) {
+static void buildDBOrOp(OpBuilder& builder, OperationState& result, ValueRange operands) {
    result.addOperands(operands);
-   bool nullable = llvm::any_of(operands,[](auto operand){return operand.getType().template dyn_cast_or_null<mlir::db::DBType>().isNullable();});
-
-   result.types.push_back(mlir::db::BoolType::get(build.getContext(), nullable));
+   result.types.push_back(constructNullableBool(builder.getContext(), operands));
 }
 
-static mlir::db::DBType inferResultType(OpAsmParser& parser, ArrayRef<mlir::db::DBType> types) {
+static Type inferResultType(OpAsmParser& parser, ArrayRef<Type> types) {
    assert(types.size());
-   bool anyNullables = llvm::any_of(types, [](mlir::db::DBType t) { return t.isNullable(); });
-   db::DBType baseType = types[0].getBaseType();
+   bool anyNullables = llvm::any_of(types, [](Type t) { return t.isa<mlir::db::NullableType>(); });
+   auto firstNullable = types[0].dyn_cast_or_null<mlir::db::NullableType>();
+   Type baseType = firstNullable ? firstNullable.getType() : types[0];
    for (auto t : types) {
-      if (t.getBaseType() != baseType) {
+      auto asNullable = t.dyn_cast_or_null<mlir::db::NullableType>();
+      Type currBaseType = asNullable ? asNullable.getType() : t;
+      if (baseType != currBaseType) {
          parser.emitError(parser.getCurrentLocation(), "types do not have same base type");
          return mlir::db::DBType();
       }
    }
    if (anyNullables) {
-      return baseType.asNullable();
+      return mlir::db::NullableType::get(parser.getContext(), baseType);
    }
    return baseType;
 }
 static ParseResult parseImplicitResultSameOperandBaseTypeOp(OpAsmParser& parser,
                                                             OperationState& result) {
    SmallVector<OpAsmParser::OperandType, 4> args;
-   SmallVector<mlir::db::DBType, 4> argTypes;
+   SmallVector<mlir::Type, 4> argTypes;
 
    while (true) {
       OpAsmParser::OperandType arg;
-      mlir::db::DBType argType;
+      mlir::Type argType;
       auto parseRes = parser.parseOptionalOperand(arg);
       if (!parseRes.hasValue() || parseRes.getValue().failed()) {
          break;
@@ -75,7 +87,7 @@ static ParseResult parseImplicitResultSameOperandBaseTypeOp(OpAsmParser& parser,
 
 static void printImplicitResultSameOperandBaseTypeOp(Operation* op, OpAsmPrinter& p) {
    bool first = true;
-   p  << " ";
+   p << " ";
    for (auto operand : op->getOperands()) {
       if (first) {
          first = false;
@@ -85,7 +97,6 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation* op, OpAsmPrinter
       p << operand << ":" << operand.getType();
    }
 }
-
 
 static ParseResult parseDateOp(OpAsmParser& parser,
                                OperationState& result) {
@@ -97,14 +108,16 @@ static ParseResult parseDateOp(OpAsmParser& parser,
    if (parser.resolveOperand(left, leftType, result.operands).failed() || parser.resolveOperand(right, rightType, result.operands).failed()) {
       return failure();
    }
-   bool nullable = rightType.isNullable() || leftType.isNullable();
-   parser.addTypeToList(db::DateType::get(parser.getBuilder().getContext(), nullable, leftType.dyn_cast_or_null<db::DateType>().getUnit()), result.types);
+   bool nullable = rightType.isa<mlir::db::NullableType>() || leftType.isa<mlir::db::NullableType>();
+   mlir::Type resType = db::DateType::get(parser.getBuilder().getContext(), leftType.dyn_cast_or_null<db::DateType>().getUnit());
+   if (nullable) resType = mlir::db::NullableType::get(parser.getContext(), resType);
+   parser.addTypeToList(resType, result.types);
    return success();
 }
 
 static void printDateOp(Operation* op, OpAsmPrinter& p) {
    bool first = true;
-   p  << " ";
+   p << " ";
    for (auto operand : op->getOperands()) {
       if (first) {
          first = false;
@@ -170,8 +183,7 @@ static void print(OpAsmPrinter& p, mlir::db::IfOp op) {
    p.printOptionalAttrDict(op->getAttrs());
 }
 
-
-static void printInitializationList(OpAsmPrinter &p,
+static void printInitializationList(OpAsmPrinter& p,
                                     Block::BlockArgListType blocksArgs,
                                     ValueRange initializers,
                                     StringRef prefix = "") {
@@ -182,29 +194,29 @@ static void printInitializationList(OpAsmPrinter &p,
 
    p << prefix << '(';
    llvm::interleaveComma(llvm::zip(blocksArgs, initializers), p, [&](auto it) {
-     p << std::get<0>(it) << " = " << std::get<1>(it);
+      p << std::get<0>(it) << " = " << std::get<1>(it);
    });
    p << ")";
 }
 //adapted from scf::ForOp
-static void print(OpAsmPrinter &p, mlir::db::ForOp op) {
-   p  << " " << op.getInductionVar() << " in "
-     << op.collection() <<" : "<<op.collection().getType()<<" ";
-   if(op.until()){
-      p<<"until "<<op.until()<<" ";
+static void print(OpAsmPrinter& p, mlir::db::ForOp op) {
+   p << " " << op.getInductionVar() << " in "
+     << op.collection() << " : " << op.collection().getType() << " ";
+   if (op.until()) {
+      p << "until " << op.until() << " ";
    }
    printInitializationList(p, op.getRegionIterArgs(), op.getIterOperands(),
                            " iter_args");
    if (!op.getIterOperands().empty())
       p << " -> (" << op.getIterOperands().getTypes() << ')';
    p.printRegion(op.region(),
-      /*printEntryBlockArgs=*/false,
-      /*printBlockTerminators=*/op.hasIterOperands());
-   p.printOptionalAttrDict(op->getAttrs(),{"operand_segment_sizes"});
+                 /*printEntryBlockArgs=*/false,
+                 /*printBlockTerminators=*/op.hasIterOperands());
+   p.printOptionalAttrDict(op->getAttrs(), {"operand_segment_sizes"});
 }
 //adapted from scf::ForOp
-static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
-   auto &builder = parser.getBuilder();
+static ParseResult parseForOp(OpAsmParser& parser, OperationState& result) {
+   auto& builder = parser.getBuilder();
    OpAsmParser::OperandType inductionVariable, collection;
    Type collType;
    mlir::db::CollectionType collectionType;
@@ -217,7 +229,7 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
        parser.parseColonType(collType))
       return failure();
 
-   if(!(collectionType=collType.dyn_cast_or_null<mlir::db::CollectionType>())){
+   if (!(collectionType = collType.dyn_cast_or_null<mlir::db::CollectionType>())) {
       return failure();
    }
    parser.resolveOperand(collection, collectionType, result.operands);
@@ -226,15 +238,15 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
    SmallVector<OpAsmParser::OperandType, 4> regionArgs, operands;
    SmallVector<Type, 4> argTypes;
    regionArgs.push_back(inductionVariable);
-   bool hasUntil=false;
-   if (succeeded(parser.parseOptionalKeyword("until"))){
+   bool hasUntil = false;
+   if (succeeded(parser.parseOptionalKeyword("until"))) {
       OpAsmParser::OperandType until;
-      if(parser.parseOperand(until)||parser.resolveOperand(until,mlir::db::FlagType::get(parser.getBuilder().getContext()),result.operands)){
+      if (parser.parseOperand(until) || parser.resolveOperand(until, mlir::db::FlagType::get(parser.getBuilder().getContext()), result.operands)) {
          return failure();
       }
-      hasUntil=true;
+      hasUntil = true;
    }
-   size_t iterArgs=0;
+   size_t iterArgs = 0;
    if (succeeded(parser.parseOptionalKeyword("iter_args"))) {
       // Parse assignment list and results type list.
       if (parser.parseAssignmentList(regionArgs, operands) ||
@@ -254,7 +266,7 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
    // Loop carried variables
    argTypes.append(result.types.begin(), result.types.end());
    // Parse the body region.
-   Region *body = result.addRegion();
+   Region* body = result.addRegion();
    if (regionArgs.size() != argTypes.size())
       return parser.emitError(
          parser.getNameLoc(),
@@ -273,12 +285,11 @@ static ParseResult parseForOp(OpAsmParser &parser, OperationState &result) {
    return success();
 }
 
-
 //taken from scf::WhileOp
-static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseWhileOp(OpAsmParser& parser, OperationState& result) {
    SmallVector<OpAsmParser::OperandType, 4> regionArgs, operands;
-   Region *before = result.addRegion();
-   Region *after = result.addRegion();
+   Region* before = result.addRegion();
+   Region* after = result.addRegion();
 
    OptionalParseResult listResult =
       parser.parseOptionalAssignmentList(regionArgs, operands);
@@ -312,8 +323,8 @@ static ParseResult parseWhileOp(OpAsmParser &parser, OperationState &result) {
 }
 
 //taken from scf::WhileOp
-static void print(OpAsmPrinter &p, db::WhileOp op) {
-      printInitializationList(p, op.before().front().getArguments(), op.inits(),
+static void print(OpAsmPrinter& p, db::WhileOp op) {
+   printInitializationList(p, op.before().front().getArguments(), op.inits(),
                            " ");
    p << " : ";
    p.printFunctionalType(op.inits().getTypes(), op.results().getTypes());
@@ -323,16 +334,15 @@ static void print(OpAsmPrinter &p, db::WhileOp op) {
    p.printOptionalAttrDictWithKeyword(op->getAttrs());
 }
 
-
 static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
    OpAsmParser::OperandType toSort;
    db::VectorType vecType;
    if (parser.parseOperand(toSort) || parser.parseColonType(vecType)) {
       return failure();
    }
-   parser.resolveOperand(toSort,vecType,result.operands);
-   OpAsmParser::OperandType left,right;
-   if (parser.parseLParen()||parser.parseRegionArgument(left)||parser.parseComma()||parser.parseRegionArgument(right)||parser.parseRParen()){
+   parser.resolveOperand(toSort, vecType, result.operands);
+   OpAsmParser::OperandType left, right;
+   if (parser.parseLParen() || parser.parseRegionArgument(left) || parser.parseComma() || parser.parseRegionArgument(right) || parser.parseRParen()) {
       return failure();
    }
    Region* body = result.addRegion();
@@ -340,7 +350,7 @@ static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
    return success();
 }
 static void print(OpAsmPrinter& p, db::SortOp& op) {
-   p  << " " << op.toSort() << ":" << op.toSort().getType() << " ";
+   p << " " << op.toSort() << ":" << op.toSort().getType() << " ";
    p << "(";
    bool first = true;
    for (auto arg : op.region().front().getArguments()) {
@@ -358,11 +368,11 @@ static ParseResult parseBuilderMerge(OpAsmParser& parser, OperationState& result
    OpAsmParser::OperandType builder, val;
    db::BuilderType builderType;
    Type valType;
-   if(parser.parseOperand(builder)||parser.parseColonType(builderType)||parser.parseComma()||parser.parseOperand(val)||parser.parseColonType(valType)){
+   if (parser.parseOperand(builder) || parser.parseColonType(builderType) || parser.parseComma() || parser.parseOperand(val) || parser.parseColonType(valType)) {
       return failure();
    }
    Region* body = result.addRegion();
-   if(parser.parseOptionalLParen().succeeded()) {
+   if (parser.parseOptionalLParen().succeeded()) {
       OpAsmParser::OperandType left, right;
       Type leftArgType;
       Type rightArgType;
@@ -371,14 +381,14 @@ static ParseResult parseBuilderMerge(OpAsmParser& parser, OperationState& result
       }
       if (parser.parseRegion(*body, {left, right}, {leftArgType, rightArgType})) return failure();
    }
-   parser.resolveOperand(builder,builderType,result.operands);
-   parser.resolveOperand(val,valType,result.operands);
-   parser.addTypeToList(builderType,result.types);
+   parser.resolveOperand(builder, builderType, result.operands);
+   parser.resolveOperand(val, valType, result.operands);
+   parser.addTypeToList(builderType, result.types);
    return success();
 }
 static void print(OpAsmPrinter& p, db::BuilderMerge& op) {
-   p  << " "<< op.builder() <<" : "<<op.builder().getType()<<", "<<op.val()<<" : "<<op.val().getType();
-   if(!op.fn().empty()) {
+   p << " " << op.builder() << " : " << op.builder().getType() << ", " << op.val() << " : " << op.val().getType();
+   if (!op.fn().empty()) {
       p << "(";
       bool first = true;
       for (auto arg : op.fn().front().getArguments()) {
@@ -394,117 +404,114 @@ static void print(OpAsmPrinter& p, db::BuilderMerge& op) {
    }
 }
 
-
-static void print(OpAsmPrinter &p, mlir::db::SelectOp op) {
-   p <<" " << op.condition() <<" : "<<op.condition().getType() << ", "<<op.true_value()<<", "<<op.false_value();
+static void print(OpAsmPrinter& p, mlir::db::SelectOp op) {
+   p << " " << op.condition() << " : " << op.condition().getType() << ", " << op.true_value() << ", " << op.false_value();
    p.printOptionalAttrDict(op->getAttrs());
    p << " : ";
    p << op.getType();
 }
 
-static ParseResult parseSelectOp(OpAsmParser &parser, OperationState &result) {
+static ParseResult parseSelectOp(OpAsmParser& parser, OperationState& result) {
    Type conditionType, resultType;
-   OpAsmParser::OperandType condition, trueVal,falseVal;
-      if (parser.parseOperand(condition)  ||parser.parseColonType(conditionType) || parser.parseComma() || parser.parseOperand(trueVal) ||   parser.parseComma() || parser.parseOperand(falseVal) ||
+   OpAsmParser::OperandType condition, trueVal, falseVal;
+   if (parser.parseOperand(condition) || parser.parseColonType(conditionType) || parser.parseComma() || parser.parseOperand(trueVal) || parser.parseComma() || parser.parseOperand(falseVal) ||
        parser.parseOptionalAttrDict(result.attributes) ||
        parser.parseColonType(resultType))
       return failure();
 
-
    result.addTypes(resultType);
-   return parser.resolveOperands({condition,trueVal,falseVal},
+   return parser.resolveOperands({condition, trueVal, falseVal},
                                  {conditionType, resultType, resultType},
                                  parser.getNameLoc(), result.operands);
 }
-LogicalResult mlir::db::OrOp::canonicalize(mlir::db::OrOp orOp, mlir::PatternRewriter& rewriter){
-   llvm::SmallDenseMap<mlir::Value,size_t> usage;
-   for(auto val:orOp.vals()){
-      if(!val.getDefiningOp())return failure();
-      if(auto andOp=mlir::dyn_cast_or_null<mlir::db::AndOp>(val.getDefiningOp())){
-         llvm::SmallPtrSet<mlir::Value,4> alreadyUsed;
-         for(auto andOperand:andOp.vals()){
-            if(!alreadyUsed.contains(andOperand)) {
+LogicalResult mlir::db::OrOp::canonicalize(mlir::db::OrOp orOp, mlir::PatternRewriter& rewriter) {
+   llvm::SmallDenseMap<mlir::Value, size_t> usage;
+   for (auto val : orOp.vals()) {
+      if (!val.getDefiningOp()) return failure();
+      if (auto andOp = mlir::dyn_cast_or_null<mlir::db::AndOp>(val.getDefiningOp())) {
+         llvm::SmallPtrSet<mlir::Value, 4> alreadyUsed;
+         for (auto andOperand : andOp.vals()) {
+            if (!alreadyUsed.contains(andOperand)) {
                usage[andOperand]++;
                alreadyUsed.insert(andOperand);
             }
          }
-      }else{
+      } else {
          return failure();
       }
    }
-   size_t totalAnds=orOp.vals().size();
-   llvm::SmallPtrSet<mlir::Value,4> extracted;
+   size_t totalAnds = orOp.vals().size();
+   llvm::SmallPtrSet<mlir::Value, 4> extracted;
    std::vector<mlir::Value> newOrOperands;
-   for(auto val:orOp.vals()){
-      if(auto andOp=mlir::dyn_cast_or_null<mlir::db::AndOp>(val.getDefiningOp())){
+   for (auto val : orOp.vals()) {
+      if (auto andOp = mlir::dyn_cast_or_null<mlir::db::AndOp>(val.getDefiningOp())) {
          std::vector<mlir::Value> keep;
-         for(auto andOperand:andOp.vals()){
-            if(usage[andOperand]==totalAnds){
+         for (auto andOperand : andOp.vals()) {
+            if (usage[andOperand] == totalAnds) {
                extracted.insert(andOperand);
-            }else{
+            } else {
                keep.push_back(andOperand);
             }
          }
-         if(keep.size()!=andOp.vals().size()){
-            if(keep.size()) {
+         if (keep.size() != andOp.vals().size()) {
+            if (keep.size()) {
                newOrOperands.push_back(rewriter.create<mlir::db::AndOp>(andOp->getLoc(), keep));
             }
-         }else{
+         } else {
             newOrOperands.push_back(andOp);
          }
       }
    }
    std::vector<Value> extractedAsVec;
-   extractedAsVec.insert(extractedAsVec.end(),extracted.begin(),extracted.end());
-   if(!extracted.empty()){
-      Value newOrOp=rewriter.create<mlir::db::OrOp>(orOp->getLoc(),newOrOperands);
+   extractedAsVec.insert(extractedAsVec.end(), extracted.begin(), extracted.end());
+   if (!extracted.empty()) {
+      Value newOrOp = rewriter.create<mlir::db::OrOp>(orOp->getLoc(), newOrOperands);
       extractedAsVec.push_back(newOrOp);
-      rewriter.replaceOpWithNewOp<mlir::db::AndOp>(orOp,extractedAsVec);
+      rewriter.replaceOpWithNewOp<mlir::db::AndOp>(orOp, extractedAsVec);
       return success();
    }
    return failure();
 }
-LogicalResult mlir::db::AndOp::canonicalize(mlir::db::AndOp andOp, mlir::PatternRewriter& rewriter){
+LogicalResult mlir::db::AndOp::canonicalize(mlir::db::AndOp andOp, mlir::PatternRewriter& rewriter) {
    std::vector<mlir::Value> rawValues;
    std::queue<mlir::Value> queue;
    queue.push(andOp);
-   while(!queue.empty()){
-      auto current=queue.front();
+   while (!queue.empty()) {
+      auto current = queue.front();
       queue.pop();
-      if(auto *definingOp=current.getDefiningOp()){
-         if(auto nestedAnd=mlir::dyn_cast_or_null<mlir::db::AndOp>(definingOp)){
-            for(auto v:nestedAnd.vals()){
+      if (auto* definingOp = current.getDefiningOp()) {
+         if (auto nestedAnd = mlir::dyn_cast_or_null<mlir::db::AndOp>(definingOp)) {
+            for (auto v : nestedAnd.vals()) {
                queue.push(v);
             }
-         }else{
+         } else {
             rawValues.push_back(current);
          }
-      }else{
+      } else {
          rawValues.push_back(current);
       }
-
    }
-   if(rawValues.size()!=andOp.vals().size()){
-      rewriter.replaceOpWithNewOp<mlir::db::AndOp>(andOp,rawValues);
+   if (rawValues.size() != andOp.vals().size()) {
+      rewriter.replaceOpWithNewOp<mlir::db::AndOp>(andOp, rawValues);
       return success();
    }
    return failure();
 }
-void mlir::db::IfOp::build(OpBuilder &builder, OperationState &result,
-                 TypeRange resultTypes, Value cond,
-                 function_ref<void(OpBuilder &, Location)> thenBuilder,
-                 function_ref<void(OpBuilder &, Location)> elseBuilder) {
+void mlir::db::IfOp::build(OpBuilder& builder, OperationState& result,
+                           TypeRange resultTypes, Value cond,
+                           function_ref<void(OpBuilder&, Location)> thenBuilder,
+                           function_ref<void(OpBuilder&, Location)> elseBuilder) {
    assert(thenBuilder && "the builder callback for 'then' must be present");
 
    result.addOperands(cond);
    result.addTypes(resultTypes);
 
    OpBuilder::InsertionGuard guard(builder);
-   Region *thenRegion = result.addRegion();
+   Region* thenRegion = result.addRegion();
    builder.createBlock(thenRegion);
    thenBuilder(builder, result.location);
 
-   Region *elseRegion = result.addRegion();
+   Region* elseRegion = result.addRegion();
    if (!elseBuilder)
       return;
 
