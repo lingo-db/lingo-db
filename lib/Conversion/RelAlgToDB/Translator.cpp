@@ -98,44 +98,7 @@ void Translator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attri
 mlir::relalg::Attributes Translator::getAvailableAttributes() {
    return op.getAvailableAttributes();
 };
-std::unique_ptr<mlir::relalg::Translator> Translator::createJoinTranslator(mlir::Operation* joinOp) {
-   bool reversed = false;
-   bool hash = false;
-   bool constant = false;
-   if (joinOp->hasAttr("impl")) {
-      if (auto impl = joinOp->getAttr("impl").dyn_cast_or_null<mlir::StringAttr>()) {
-         if (impl.getValue() == "hash") {
-            hash = true;
-         }
-         if (impl.getValue() == "markhash") {
-            hash = true;
-            reversed = true;
-         }
-         if (impl.getValue() == "constant") {
-            constant = true;
-         }
-      }
-   }
-   if (constant) {
-      return createConstSingleJoinTranslator(mlir::cast<SingleJoinOp>(joinOp));
-   }
-   auto joinImpl = ::llvm::TypeSwitch<mlir::Operation*, std::shared_ptr<mlir::relalg::JoinImpl>>(joinOp)
-                      .Case<CrossProductOp>([&](auto x) { return createCrossProductImpl(x); })
-                      .Case<InnerJoinOp>([&](auto x) { return createInnerJoinImpl(x); })
-                      .Case<SemiJoinOp>([&](auto x) { return createSemiJoinImpl(x, reversed); })
-                      .Case<AntiSemiJoinOp>([&](auto x) { return createAntiSemiJoinImpl(x, reversed); })
-                      .Case<OuterJoinOp>([&](auto x) { return createOuterJoinImpl(x, reversed); })
-                      .Case<SingleJoinOp>([&](auto x) { return createSingleJoinImpl(x); })
-                      .Case<MarkJoinOp>([&](auto x) { return createMarkJoinImpl(x); })
-                      .Case<CollectionJoinOp>([&](auto x) { return createCollectionJoinImpl(x); })
-                      .Default([](auto x) { assert(false&&"should not happen"); return std::shared_ptr<JoinImpl>(); });
 
-   if (hash) {
-      return std::make_unique<mlir::relalg::HashJoinTranslator>(joinImpl);
-   } else {
-      return std::make_unique<mlir::relalg::NLJoinTranslator>(joinImpl);
-   }
-}
 std::unique_ptr<mlir::relalg::Translator> Translator::createTranslator(mlir::Operation* operation) {
    return ::llvm::TypeSwitch<mlir::Operation*, std::unique_ptr<mlir::relalg::Translator>>(operation)
       .Case<BaseTableOp>([&](auto x) { return createBaseTableTranslator(x); })

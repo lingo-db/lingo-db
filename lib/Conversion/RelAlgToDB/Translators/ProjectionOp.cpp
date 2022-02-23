@@ -1,8 +1,8 @@
+#include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
-#include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
 
 class ProjectionTranslator : public mlir::relalg::Translator {
    mlir::relalg::ProjectionOp projectionOp;
@@ -35,7 +35,6 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
    mlir::TupleType valTupleType;
    mlir::TupleType entryType;
 
-
    public:
    DistinctProjectionTranslator(mlir::relalg::ProjectionOp projectionOp) : mlir::relalg::Translator(projectionOp), projectionOp(projectionOp) {
    }
@@ -52,7 +51,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       auto mergedBuilder = builder.create<mlir::db::BuilderMerge>(projectionOp->getLoc(), htBuilder.getType(), htBuilder, packed);
       mlir::Block* aggrBuilderBlock = new mlir::Block;
       mergedBuilder.fn().push_back(aggrBuilderBlock);
-      aggrBuilderBlock->addArguments({valTupleType, valTupleType}, {projectionOp->getLoc(),projectionOp->getLoc()});
+      aggrBuilderBlock->addArguments({valTupleType, valTupleType}, {projectionOp->getLoc(), projectionOp->getLoc()});
       mlir::OpBuilder builder2(builder.getContext());
       builder2.setInsertionPointToStart(aggrBuilderBlock);
       builder2.create<mlir::db::YieldOp>(projectionOp->getLoc(), aggrBuilderBlock->getArgument(0));
@@ -61,9 +60,9 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
 
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      key=mlir::relalg::OrderedAttributes::fromRefArr(projectionOp.attrs());
+      key = mlir::relalg::OrderedAttributes::fromRefArr(projectionOp.attrs());
       valTupleType = mlir::TupleType::get(builder.getContext(), {});
-      auto keyTupleType=key.getTupleType(builder.getContext());
+      auto keyTupleType = key.getTupleType(builder.getContext());
       auto parentPipeline = context.pipelineManager.getCurrentPipeline();
       auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
       context.pipelineManager.setCurrentPipeline(p);
@@ -95,7 +94,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), forOp2.getInductionVar()).getResults();
          auto unpackedKey = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), unpacked[0]).getResults();
-         key.setValuesForAttributes(context,scope,unpackedKey);
+         key.setValuesForAttributes(context, scope, unpackedKey);
          consumer->consume(this, builder2, context);
          builder2.create<mlir::db::YieldOp>(projectionOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());

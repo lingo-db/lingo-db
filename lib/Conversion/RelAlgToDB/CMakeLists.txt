@@ -8,18 +8,11 @@ add_mlir_conversion_library(MLIRRelAlgToDB
         Translators/BaseTableOp.cpp
         Translators/AggregationOp.cpp
         Translators/ConstRelationOp.cpp
-        Translators/CrossProductOp.cpp
         Translators/MapOp.cpp
         Translators/MaterializeOp.cpp
         Translators/SelectionOp.cpp
         Translators/SortOp.cpp
-        Translators/InnerJoinOp.cpp
-        Translators/OuterJoinOp.cpp
-        Translators/SingleJoinOp.cpp
-        Translators/MarkJoinOp.cpp
-        Translators/CollectionJoinOp.cpp
-        Translators/SemiJoinOp.cpp
-        Translators/AntiSemiJoinOp.cpp
+        Translators/Joins.cpp
         Translators/RenamingOp.cpp
         Translators/ProjectionOp.cpp
         Translators/LimitOp.cpp

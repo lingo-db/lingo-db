@@ -13,8 +13,6 @@
 
 namespace mlir {
 namespace relalg {
-class JoinImpl;
-
 class Translator {
    public:
    Translator* consumer;
@@ -42,15 +40,6 @@ class Translator {
    virtual void produce(TranslatorContext& context, mlir::OpBuilder& builder) = 0;
    virtual void done() {}
    virtual ~Translator() {}
-   static std::shared_ptr<mlir::relalg::JoinImpl> createAntiSemiJoinImpl(AntiSemiJoinOp operation,bool reversed);
-   static std::shared_ptr<mlir::relalg::JoinImpl> createInnerJoinImpl(InnerJoinOp operation);
-   static std::shared_ptr<mlir::relalg::JoinImpl> createSemiJoinImpl(SemiJoinOp operation,bool reversed);
-   static std::shared_ptr<mlir::relalg::JoinImpl> createOuterJoinImpl(OuterJoinOp operation,bool reversed);
-   static std::shared_ptr<mlir::relalg::JoinImpl> createSingleJoinImpl(SingleJoinOp operation);
-   static std::shared_ptr<mlir::relalg::JoinImpl> createMarkJoinImpl(MarkJoinOp operation);
-   static std::shared_ptr<mlir::relalg::JoinImpl> createCollectionJoinImpl(CollectionJoinOp operation);
-   static std::shared_ptr<mlir::relalg::JoinImpl> createCrossProductImpl(CrossProductOp operation);
-
    static std::unique_ptr<mlir::relalg::Translator> createBaseTableTranslator(BaseTableOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createConstRelTranslator(ConstRelationOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createMaterializeTranslator(MaterializeOp operation);
@@ -62,21 +51,10 @@ class Translator {
    static std::unique_ptr<mlir::relalg::Translator> createProjectionTranslator(ProjectionOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createLimitTranslator(LimitOp operation);
    static std::unique_ptr<mlir::relalg::Translator> createTmpTranslator(TmpOp operation);
-   static std::unique_ptr<mlir::relalg::Translator> createConstSingleJoinTranslator(SingleJoinOp operation);
 
    static std::unique_ptr<mlir::relalg::Translator> createTranslator(mlir::Operation* operation);
    static std::unique_ptr<mlir::relalg::Translator> createJoinTranslator(mlir::Operation* operation);
 
-};
-class DummyTranslator : public mlir::relalg::Translator {
-   public:
-   DummyTranslator() : mlir::relalg::Translator(ValueRange{}) {
-   }
-   virtual void setInfo(Translator* consumer, mlir::relalg::Attributes requiredAttributes) override{};
-   virtual mlir::relalg::Attributes getAvailableAttributes() override { return {}; };
-   virtual void consume(Translator* child, mlir::OpBuilder& builder, TranslatorContext& context) override{};
-   virtual void produce(TranslatorContext& context, mlir::OpBuilder& builder) override{};
-   virtual ~DummyTranslator() {}
 };
 } // end namespace relalg
 } // end namespace mlir

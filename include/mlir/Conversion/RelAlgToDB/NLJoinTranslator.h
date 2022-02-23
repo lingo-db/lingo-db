@@ -21,7 +21,7 @@ class NLJoinTranslator : public mlir::relalg::JoinTranslator {
    virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) override;
 
    void build(mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context);
-   virtual void scanHT(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder);
+   virtual void scanHT(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override;
 
    void probe(mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context);
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override;

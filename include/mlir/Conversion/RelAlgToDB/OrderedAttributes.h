@@ -1,12 +1,13 @@
-#ifndef DB_DIALECTS_ORDEREDATTRIBUTES_H
-#define DB_DIALECTS_ORDEREDATTRIBUTES_H
+#ifndef MLIR_CONVERSION_RELALGTODB_ORDEREDATTRIBUTES_H
+#define MLIR_CONVERSION_RELALGTODB_ORDEREDATTRIBUTES_H
 #include "mlir/Conversion/RelAlgToDB/TranslatorContext.h"
 #include "mlir/Dialect/RelAlg/Attributes.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/Value.h"
 
-namespace mlir::relalg {
+namespace mlir {
+namespace relalg {
 class OrderedAttributes {
    std::vector<Type> types;
    std::vector<const mlir::relalg::RelationalAttribute*> attrs;
@@ -76,6 +77,6 @@ class OrderedAttributes {
       return std::find(attrs.begin(), attrs.end(), attr) - attrs.begin();
    }
 };
-}
-
-#endif //DB_DIALECTS_ORDEREDATTRIBUTES_H
+} // end namespace relalg
+} // end namespace mlir
+#endif // MLIR_CONVERSION_RELALGTODB_ORDEREDATTRIBUTES_H

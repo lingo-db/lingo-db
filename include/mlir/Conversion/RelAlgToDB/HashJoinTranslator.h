@@ -142,7 +142,7 @@ class HashJoinTranslator : public mlir::relalg::JoinTranslator {
    void unpackValues(TranslatorContext::AttributeResolverScope& scope, OpBuilder& builder, Value packed, TranslatorContext& context, Value& marker);
    void unpackKeys(TranslatorContext::AttributeResolverScope& scope, OpBuilder& builder, Value packed, TranslatorContext& context);
 
-   virtual void scanHT(TranslatorContext& context, mlir::OpBuilder& builder);
+   virtual void scanHT(TranslatorContext& context, mlir::OpBuilder& builder) override;
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override;
 
    virtual ~HashJoinTranslator() {}
