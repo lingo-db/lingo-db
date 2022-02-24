@@ -291,7 +291,7 @@ static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::Funct
          return FunctionId::ArrowTableBuilderAddSmallDecimal;
       }
       return FunctionId::ArrowTableBuilderAddDecimal;
-   } else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
+   } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
       switch (floatType.getWidth()) {
          case 32: return FunctionId ::ArrowTableBuilderAddFloat32;
          case 64: return FunctionId ::ArrowTableBuilderAddFloat64;

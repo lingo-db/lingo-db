@@ -141,11 +141,6 @@ let parameters = (ins "unsigned":$bytes);
 let assemblyFormat="`<` $bytes `>` ";
 
 }
-def DB_FloatType : DB_Type<"Float","float"> {
-let summary = "database float type";
-let parameters = (ins "unsigned":$width);
-let assemblyFormat="`<` $width  `>` ";
-}
 def DB_DateType : DB_Type<"Date","date"> {
 let summary = "database date type";
 let parameters = (ins "DateUnitAttr":$unit);

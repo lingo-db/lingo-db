@@ -227,9 +227,6 @@ void DBToStdLoweringPass::runOnOperation() {
       return valueRange.front();
    });
 
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::FloatType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::StringType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });

@@ -53,19 +53,19 @@ module {
         %floatstr= db.constant ("1.00001") : !db.string
         %decimalstr= db.constant ("1.000001") : !db.string
         %int = db.constant (42) : i32
-        %float32 = db.constant (1.01) : !db.float<32>
-        %float64 = db.constant (1.0001) : !db.float<64>
+        %float32 = db.constant (1.01) : f32
+        %float64 = db.constant (1.0001) : f64
         %decimal = db.constant ("1.0000001") : !db.decimal<10,7>
 
         //CHECK: int(42)
         %14 = db.cast %intstr : !db.string -> i32
         db.dump %14 : i32
         //CHECK: float(1.00001)
-        %15 = db.cast %floatstr : !db.string -> !db.float<32>
-        db.dump %15 : !db.float<32>
+        %15 = db.cast %floatstr : !db.string -> f32
+        db.dump %15 : f32
         //CHECK: float(1.00001)
-        %16 = db.cast %floatstr : !db.string -> !db.float<64>
-        db.dump %16 : !db.float<64>
+        %16 = db.cast %floatstr : !db.string -> f64
+        db.dump %16 : f64
         //CHECK: decimal(1.0000010)
         %17 = db.cast %decimalstr : !db.string -> !db.decimal<10,7>
         db.dump %17 :  !db.decimal<10,7>
@@ -73,10 +73,10 @@ module {
         %18 = db.cast %int : i32 -> !db.string
         db.dump %18 :  !db.string
         //CHECK: string("1.01")
-        %19 = db.cast %float32 : !db.float<32> -> !db.string
+        %19 = db.cast %float32 : f32 -> !db.string
         db.dump %19 :  !db.string
         //CHECK: string("1.0001")
-        %20 = db.cast %float64 : !db.float<64> -> !db.string
+        %20 = db.cast %float64 : f64 -> !db.string
         db.dump %20 :  !db.string
         //CHECK: string("1.0000001")
         %21 = db.cast %decimal : !db.decimal<10,7> -> !db.string

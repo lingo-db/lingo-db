@@ -381,7 +381,7 @@ class CmpOpLowering : public ConversionPattern {
          Value res = rewriter.create<arith::CmpIOp>(loc, translateIPredicate(cmpOp.predicate()), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(res));
          return success();
-      } else if (type.isa<db::FloatType>()) {
+      } else if (type.isa<FloatType>()) {
          Value res = rewriter.create<arith::CmpFOp>(loc, translateFPredicate(cmpOp.predicate()), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(res));
          return success();
@@ -422,7 +422,7 @@ class CastOpLowering : public ConversionPattern {
       if (scalarSourceType == scalarTargetType) {
          //nothing to do here
       } else if (auto sourceIntWidth = getIntegerWidth(scalarSourceType,false)) {
-         if (scalarTargetType.isa<db::FloatType>()) {
+         if (scalarTargetType.isa<FloatType>()) {
             value = rewriter.create<arith::SIToFPOp>(loc, convertedTargetType, value);
          } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto sourceScale = decimalTargetType.getS();
@@ -443,7 +443,7 @@ class CastOpLowering : public ConversionPattern {
          } else {
             return failure();
          }
-      } else if (auto floatType = scalarSourceType.dyn_cast_or_null<db::FloatType>()) {
+      } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
          if (getIntegerWidth(scalarTargetType,false)) {
             value = rewriter.create<arith::FPToSIOp>(loc, convertedTargetType, value);
          } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
@@ -466,7 +466,7 @@ class CastOpLowering : public ConversionPattern {
             } else {
                value = rewriter.create<arith::DivSIOp>(loc, convertedTargetType, value, multiplier);
             }
-         } else if (scalarTargetType.isa<db::FloatType>()) {
+         } else if (scalarTargetType.isa<FloatType>()) {
             auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, FloatAttr::get(convertedTargetType, powf(10, decimalSourceType.getS())));
             value = rewriter.create<arith::SIToFPOp>(loc, convertedTargetType, value);
             value = rewriter.create<arith::DivFOp>(loc, convertedTargetType, value, multiplier);
@@ -636,15 +636,6 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
       if (t.getBytes() > 8) return mlir::Type();
       return (Type) mlir::IntegerType::get(patterns.getContext(), t.getBytes() * 8);
    });
-   typeConverter.addConversion([&](::mlir::db::FloatType t) {
-      mlir::Type res;
-      if (t.getWidth() == 32) {
-         res = mlir::FloatType::getF32(patterns.getContext());
-      } else if (t.getWidth() == 64) {
-         res = mlir::FloatType::getF64(patterns.getContext());
-      }
-      return res;
-   });
    typeConverter.addConversion([&](::mlir::db::StringType t) {
       return mlir::util::VarLen32Type::get(patterns.getContext());
    });
@@ -685,11 +676,11 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    //patterns.insert<BinOpLowering<mlir::db::DivOp, mlir::db::UIntType, arith::DivUIOp>>(typeConverter, patterns.getContext());//todo: fix unsigned division
    //patterns.insert<BinOpLowering<mlir::db::ModOp, mlir::db::UIntType, arith::RemUIOp>>(typeConverter, patterns.getContext());//todo: fix unsigned division
 
-   patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::db::FloatType, arith::AddFOp>>(typeConverter, patterns.getContext());
-   patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::FloatType, arith::SubFOp>>(typeConverter, patterns.getContext());
-   patterns.insert<BinOpLowering<mlir::db::MulOp, mlir::db::FloatType, arith::MulFOp>>(typeConverter, patterns.getContext());
-   patterns.insert<BinOpLowering<mlir::db::DivOp, mlir::db::FloatType, arith::DivFOp>>(typeConverter, patterns.getContext());
-   patterns.insert<BinOpLowering<mlir::db::ModOp, mlir::db::FloatType, arith::RemFOp>>(typeConverter, patterns.getContext());
+   patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::FloatType, arith::AddFOp>>(typeConverter, patterns.getContext());
+   patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::FloatType, arith::SubFOp>>(typeConverter, patterns.getContext());
+   patterns.insert<BinOpLowering<mlir::db::MulOp, mlir::FloatType, arith::MulFOp>>(typeConverter, patterns.getContext());
+   patterns.insert<BinOpLowering<mlir::db::DivOp, mlir::FloatType, arith::DivFOp>>(typeConverter, patterns.getContext());
+   patterns.insert<BinOpLowering<mlir::db::ModOp, mlir::FloatType, arith::RemFOp>>(typeConverter, patterns.getContext());
 
    patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::db::DecimalType, arith::AddIOp>>(typeConverter, patterns.getContext());
    patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::DecimalType, arith::SubIOp>>(typeConverter, patterns.getContext());

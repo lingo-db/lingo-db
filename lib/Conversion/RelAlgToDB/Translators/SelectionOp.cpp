@@ -33,7 +33,7 @@ class SelectionTranslator : public mlir::relalg::Translator {
                             .Case<::mlir::IntegerType>([&](::mlir::IntegerType t) { return 1; })
                             .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) { return 2; })
                             .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) { return 3; })
-                            .Case<::mlir::db::CharType, ::mlir::db::TimestampType, ::mlir::db::IntervalType, ::mlir::db::FloatType>([&](mlir::Type t) { return 2; })
+                            .Case<::mlir::db::CharType, ::mlir::db::TimestampType, ::mlir::db::IntervalType, ::mlir::FloatType>([&](mlir::Type t) { return 2; })
                             .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) { return 10; })
                             .Default([](::mlir::Type) { return 100; });
                   }

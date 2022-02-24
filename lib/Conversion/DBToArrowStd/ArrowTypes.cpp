@@ -23,7 +23,7 @@ std::tuple<arrow::Type::type, uint32_t, uint32_t> mlir::db::codegen::convertType
       typeConstant = arrow::Type::type::DECIMAL128;
       param1 = decimalType.getP();
       param2 = decimalType.getS();
-   } else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
+   } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
       switch (floatType.getWidth()) {
          case 16: typeConstant = arrow::Type::type::HALF_FLOAT; break;
          case 32: typeConstant = arrow::Type::type::FLOAT; break;

@@ -10,6 +10,8 @@ class DBType:
             res="i1"
         elif self.name=="int":
             res="i"+type_props
+        elif self.name=="float":
+            res="f"+type_props
         else:
             if type_props=="":
                 res= '!db.%s' % (self.name)

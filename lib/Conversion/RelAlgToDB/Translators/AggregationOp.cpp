@@ -78,7 +78,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
                                       .Case<::mlir::IntegerType>([&](::mlir::IntegerType) {
                                          return builder.getI64IntegerAttr(std::numeric_limits<int64_t>::max());
                                       })
-                                      .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
+                                      .Case<::mlir::FloatType>([&](::mlir::FloatType t) {
                                          if (t.getWidth() == 32) {
                                             return (mlir::Attribute) builder.getF32FloatAttr(std::numeric_limits<float>::max());
                                          } else if (t.getWidth() == 64) {

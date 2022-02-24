@@ -140,7 +140,7 @@ class StringCastOpLowering : public ConversionPattern {
             if (intWidth < 64) {
                value = rewriter.create<arith::TruncIOp>(loc, convertedTargetType, value);
             }
-         } else if (auto floatType = scalarTargetType.dyn_cast_or_null<db::FloatType>()) {
+         } else if (auto floatType = scalarTargetType.dyn_cast_or_null<FloatType>()) {
             FunctionId castFn = floatType.getWidth() == 32 ? FunctionId ::CastStringToFloat32 : FunctionId ::CastStringToFloat64;
             value = functionRegistry.call(rewriter, loc, castFn, ValueRange({isNull, value}))[0];
          } else if (auto decimalType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
@@ -162,7 +162,7 @@ class StringCastOpLowering : public ConversionPattern {
          } else {
             return failure();
          }
-      } else if (auto floatType = scalarSourceType.dyn_cast_or_null<db::FloatType>()) {
+      } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
          if (scalarTargetType.isa<db::StringType>()) {
             FunctionId castFn = floatType.getWidth() == 32 ? FunctionId ::CastFloat32ToString : FunctionId ::CastFloat64ToString;
             value = functionRegistry.call(rewriter, loc, castFn, ValueRange({isNull, value}))[0];
@@ -354,7 +354,7 @@ class DumpOpLowering : public ConversionPattern {
             functionRegistry.call(rewriter, loc, FunctionId::DumpIntervalDayTime, ValueRange({isNull, val}));
          }
 
-      } else if (auto floatType = baseType.dyn_cast_or_null<mlir::db::FloatType>()) {
+      } else if (auto floatType = baseType.dyn_cast_or_null<mlir::FloatType>()) {
          if (floatType.getWidth() < 64) {
             val = rewriter.create<arith::ExtFOp>(loc, f64Type, val);
          }
