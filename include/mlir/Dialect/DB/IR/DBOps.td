@@ -34,28 +34,21 @@ let printer = [{ return ::print(p, *this); }];
 let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
-class DB_Type<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,[],"::mlir::db::DBType"> {
-  let mnemonic = typeMnemonic;
-}
 
-class DB_Type_<string name, string typeMnemonic> : TypeDef<DB_Dialect, name> {
+
+class DB_Type<string name, string typeMnemonic> : TypeDef<DB_Dialect, name> {
   let mnemonic = typeMnemonic;
 }
-def NullableType : DB_Type_<"Nullable","nullable"> {
+def NullableType : DB_Type<"Nullable","nullable"> {
     let parameters = (ins "Type":$type);
     let assemblyFormat = "`<` $type `>`";
 }
-def DBType : Type<CPred<"$_self.isa<::mlir::db::DBType>()">,"DB dialect type">;
 
 class DB_Collection<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,[],"::mlir::db::CollectionType"> {
     let mnemonic = typeMnemonic;
 }
-class DB_Builder<string name, string typeMnemonic>  : TypeDef<DB_Dialect, name,[],"::mlir::db::BuilderType"> {
-    let mnemonic = typeMnemonic;
-}
 
 def DBCollection : Type<CPred<"$_self.isa<::mlir::db::CollectionType>()">,"DB dialect collection">;
-def DBBuilder : Type<CPred<"$_self.isa<::mlir::db::BuilderType>()">,"DB dialect builder">;
 
 def DB_GenericIterable : DB_Collection<"GenericIterable","iterable"> {
 let summary = "generic iterable";
@@ -72,7 +65,7 @@ def DB_Flag: DB_Type<"Flag","flag"> {
 let summary = "flag";
 let assemblyFormat = "";
 }
-def DB_TableBuilder : DB_Builder<"TableBuilder","table_builder"> {
+def DB_TableBuilder : DB_Type<"TableBuilder","table_builder"> {
 let summary = "builder for table";
 let parameters = (ins "TupleType":$rowType);
 let assemblyFormat = "`<` $rowType `>`";
@@ -82,7 +75,7 @@ let summary = "vector";
 let parameters = (ins "Type":$elementType);
 let assemblyFormat = "`<` $elementType `>`";
 }
-def DB_VectorBuilder : DB_Builder<"VectorBuilder","vector_builder"> {
+def DB_VectorBuilder : DB_Type<"VectorBuilder","vector_builder"> {
 let summary = "builder for vector";
 let parameters = (ins "Type":$elementType);
 let assemblyFormat = "`<` $elementType `>`";
@@ -97,12 +90,12 @@ let summary = "join hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
 let assemblyFormat = "`<` $keyType `,` $valType `>`";
 }
-def DB_AggrHTBuilder : DB_Builder<"AggrHTBuilder","aggr_ht_builder"> {
+def DB_AggrHTBuilder : DB_Type<"AggrHTBuilder","aggr_ht_builder"> {
 let summary = "builder for aggregation hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType,"TupleType":$aggrType);
 let assemblyFormat = "`<` $keyType `,` $valType `,` $aggrType `>`";
 }
-def DB_JoinHTBuilder : DB_Builder<"JoinHTBuilder","join_ht_builder"> {
+def DB_JoinHTBuilder : DB_Type<"JoinHTBuilder","join_ht_builder"> {
 let summary = "builder for join hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
 let assemblyFormat = "`<` $keyType `,` $valType `>`";
@@ -210,7 +203,7 @@ let parameters = (ins );
 
 }
 def AnyBool: AnyTypeOf<[DB_BoolType,NullableType]>;
-def NullableDBType: AnyTypeOf<[DBType,NullableType]>;
+def NullableDBType: AnyTypeOf<[AnyType,NullableType]>;
 
 def DB_ConstantOp : DB_Op<"constant",
     [NoSideEffect]> {
@@ -218,7 +211,7 @@ let summary = "constant";
 
 
 let arguments = (ins AnyAttr:$value);
-let results = (outs DBType:$result);
+let results = (outs AnyType:$result);
 
 let extraClassDeclaration = [{
 Attribute getValue() { return (*this)->getAttr("value"); }
@@ -258,7 +251,7 @@ let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
 def DB_CombineNullOp : DB_Op<"combine_null", [NoSideEffect]> {
-let arguments = (ins DBType: $val,DB_BoolType: $null);
+let arguments = (ins AnyType: $val,DB_BoolType: $null);
 let results = (outs  NullableType : $res);
 let assemblyFormat = "$val `:` type($val) `,` $null  `:` type($res) attr-dict";
 }
@@ -278,14 +271,14 @@ let assemblyFormat = " `:` type($builder) attr-dict";
 def DB_BuilderMerge : DB_Op<"builder_merge",
 [NoSideEffect]> {
 let summary = "merge value";
-let arguments = (ins DBBuilder:$builder,AnyType:$val);
-let results = (outs DBBuilder:$result_builder);
+let arguments = (ins AnyType:$builder,AnyType:$val);
+let results = (outs AnyType:$result_builder);
 let regions = (region AnyRegion:$fn);
 }
 def DB_BuilderBuild : DB_Op<"builder_build",
 [NoSideEffect]> {
 let summary = "build builder";
-let arguments = (ins DBBuilder:$builder);
+let arguments = (ins AnyType:$builder);
 let results = (outs AnyType:$builded);
 let assemblyFormat = "$builder `:` type($builder) `->` type($builded) attr-dict";
 }

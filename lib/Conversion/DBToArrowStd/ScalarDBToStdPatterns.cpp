@@ -282,7 +282,7 @@ class ConstantLowering : public ConversionPattern {
       auto constantOp = cast<mlir::db::ConstantOp>(op);
       auto type = constantOp.getType();
       auto stdType = typeConverter->convertType(type);
-      auto [arrowType, param1, param2] = mlir::db::codegen::convertTypeToArrow(type.cast<mlir::db::DBType>());
+      auto [arrowType, param1, param2] = mlir::db::codegen::convertTypeToArrow(type);
       std::variant<int64_t, double, std::string> parseArg;
       if (auto integerAttr = constantOp.value().dyn_cast_or_null<IntegerAttr>()) {
          parseArg = integerAttr.getInt();
@@ -618,59 +618,55 @@ class HashLowering : public ConversionPattern {
 
 } // namespace
 void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, RewritePatternSet& patterns) {
-   typeConverter.addConversion([&](mlir::db::DBType type) {
-      Type rawType = ::llvm::TypeSwitch<::mlir::db::DBType, mlir::Type>(type)
-                        .Case<::mlir::db::BoolType>([&](::mlir::db::BoolType t) {
-                           return mlir::IntegerType::get(patterns.getContext(), 1);
-                        })
-                        .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) {
-                           if (t.getUnit() == mlir::db::DateUnitAttr::day) {
-                              return mlir::IntegerType::get(patterns.getContext(), 32);
-                           } else {
-                              return mlir::IntegerType::get(patterns.getContext(), 64);
-                           }
-                        })
-                        .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
-                           if (t.getP() < 19) {
-                              return mlir::IntegerType::get(patterns.getContext(), 64);
-                           }
-                           return mlir::IntegerType::get(patterns.getContext(), 128);
-                        })
-                        .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
-                           return mlir::IntegerType::get(patterns.getContext(), t.getWidth());
-                        })
-                        .Case<::mlir::db::CharType>([&](::mlir::db::CharType t) {
-                           if (t.getBytes() > 8) return mlir::Type();
-                           return (Type) mlir::IntegerType::get(patterns.getContext(), t.getBytes() * 8);
-                        })
-                        .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
-                           return mlir::IntegerType::get(patterns.getContext(), t.getWidth());
-                        })
-                        .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
-                           mlir::Type res;
-                           if (t.getWidth() == 32) {
-                              res = mlir::FloatType::getF32(patterns.getContext());
-                           } else if (t.getWidth() == 64) {
-                              res = mlir::FloatType::getF64(patterns.getContext());
-                           }
-                           return res;
-                        })
-                        .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
-                           return mlir::util::VarLen32Type::get(patterns.getContext());
-                        })
-                        .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
-                           return mlir::IntegerType::get(patterns.getContext(), 64);
-                        })
-                        .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
-                           if (t.getUnit() == mlir::db::IntervalUnitAttr::daytime) {
-                              return mlir::IntegerType::get(patterns.getContext(), 64);
-                           } else {
-                              return mlir::IntegerType::get(patterns.getContext(), 32);
-                           }
-                        })
-                        .Default([](::mlir::Type) { return Type(); });
-      return rawType;
+   typeConverter.addConversion([&](::mlir::db::BoolType t) {
+      return mlir::IntegerType::get(patterns.getContext(), 1);
    });
+   typeConverter.addConversion([&](::mlir::db::DateType t) {
+      if (t.getUnit() == mlir::db::DateUnitAttr::day) {
+         return mlir::IntegerType::get(patterns.getContext(), 32);
+      } else {
+         return mlir::IntegerType::get(patterns.getContext(), 64);
+      }
+   });
+   typeConverter.addConversion([&](::mlir::db::DecimalType t) {
+      if (t.getP() < 19) {
+         return mlir::IntegerType::get(patterns.getContext(), 64);
+      }
+      return mlir::IntegerType::get(patterns.getContext(), 128);
+   });
+   typeConverter.addConversion([&](::mlir::db::IntType t) {
+      return mlir::IntegerType::get(patterns.getContext(), t.getWidth());
+   });
+   typeConverter.addConversion([&](::mlir::db::CharType t) {
+      if (t.getBytes() > 8) return mlir::Type();
+      return (Type) mlir::IntegerType::get(patterns.getContext(), t.getBytes() * 8);
+   });
+   typeConverter.addConversion([&](::mlir::db::UIntType t) {
+      return mlir::IntegerType::get(patterns.getContext(), t.getWidth());
+   });
+   typeConverter.addConversion([&](::mlir::db::FloatType t) {
+      mlir::Type res;
+      if (t.getWidth() == 32) {
+         res = mlir::FloatType::getF32(patterns.getContext());
+      } else if (t.getWidth() == 64) {
+         res = mlir::FloatType::getF64(patterns.getContext());
+      }
+      return res;
+   });
+   typeConverter.addConversion([&](::mlir::db::StringType t) {
+      return mlir::util::VarLen32Type::get(patterns.getContext());
+   });
+   typeConverter.addConversion([&](::mlir::db::TimestampType t) {
+      return mlir::IntegerType::get(patterns.getContext(), 64);
+   });
+   typeConverter.addConversion([&](::mlir::db::IntervalType t) {
+      if (t.getUnit() == mlir::db::IntervalUnitAttr::daytime) {
+         return mlir::IntegerType::get(patterns.getContext(), 64);
+      } else {
+         return mlir::IntegerType::get(patterns.getContext(), 32);
+      }
+   });
+
    typeConverter.addConversion([&](mlir::db::NullableType type) {
       return (Type) TupleType::get(patterns.getContext(), {IntegerType::get(patterns.getContext(), 1), typeConverter.convertType(type.getType())});
    });

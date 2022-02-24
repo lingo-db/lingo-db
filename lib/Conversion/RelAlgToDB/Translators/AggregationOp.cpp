@@ -63,10 +63,10 @@ class AggregationTranslator : public mlir::relalg::Translator {
       builder2.create<mlir::db::YieldOp>(aggregationOp->getLoc(), packedx);
    }
 
-   mlir::Attribute getMaxValueAttr(mlir::db::DBType type) {
+   mlir::Attribute getMaxValueAttr(mlir::Type type) {
       auto* context = aggregationOp->getContext();
       mlir::OpBuilder builder(context);
-      mlir::Attribute maxValAttr = ::llvm::TypeSwitch<::mlir::db::DBType, mlir::Attribute>(type)
+      mlir::Attribute maxValAttr = ::llvm::TypeSwitch<::mlir::Type, mlir::Attribute>(type)
 
                                       .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
                                          if (t.getP() < 19) {
@@ -145,7 +145,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
                if (resultingType.isa<mlir::db::NullableType>()) {
                   initVal = builder.create<mlir::db::NullOp>(aggregationOp.getLoc(), resultingType);
                } else {
-                  initVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(),getBaseType(resultingType), getMaxValueAttr(resultingType.cast<mlir::db::DBType>()));
+                  initVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(),getBaseType(resultingType), getMaxValueAttr(resultingType));
                }
                defaultValues.push_back(initVal);
                aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, attrIsNullable, resultingType = resultingType, currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {

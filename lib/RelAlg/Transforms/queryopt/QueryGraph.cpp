@@ -71,7 +71,7 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
          return support::eval::createInvalid();
       }
 
-      auto [arrowType, param1, param2] = mlir::db::codegen::convertTypeToArrow(constantOp.getType().cast<mlir::db::DBType>());
+      auto [arrowType, param1, param2] = mlir::db::codegen::convertTypeToArrow(constantOp.getType());
       auto parseResult = support::parse(parseArg, arrowType, param1);
       return support::eval::createLiteral(parseResult, std::make_tuple(arrowType, param1, param2));
    } else if (auto attrRefOp = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {

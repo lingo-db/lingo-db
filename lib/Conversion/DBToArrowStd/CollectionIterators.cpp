@@ -236,7 +236,7 @@ class TableRowIterator : public ForIterator {
    }
    struct Column {
       Type completeType;
-      mlir::db::DBType baseType;
+      Type baseType;
       bool isNullable;
       Type stdType;
       Value offset;
@@ -266,7 +266,7 @@ class TableRowIterator : public ForIterator {
          auto nullableType = columnType.dyn_cast_or_null<mlir::db::NullableType>();
          bool isNullable = !!nullableType;
          Type completeType = columnType;
-         mlir::db::DBType baseType = (isNullable ? nullableType.getType() : completeType).cast<mlir::db::DBType>();
+         mlir::Type baseType = isNullable ? nullableType.getType() : completeType;
          Value columnId = unpackOp.getResult(1 + columnIdx);
          Value offset;
          if (baseType.isa<mlir::db::BoolType>() || isNullable) {
@@ -289,7 +289,7 @@ class TableRowIterator : public ForIterator {
             Value emptyBitmap = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, const0, bitmapSize);
             nullMultiplier = builder.create<mlir::arith::SelectOp>(loc, emptyBitmap, const0, const1);
          }
-         if (baseType.isVarLen()) {
+         if (baseType.isa<mlir::db::StringType>()) {
             varLenBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const2}))[0];
          }
          columnInfo.push_back({completeType, baseType, isNullable, convertedType, offset, nullMultiplier, bitmapBuffer, valueBuffer, varLenBuffer});

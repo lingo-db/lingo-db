@@ -49,7 +49,7 @@ static Type inferResultType(OpAsmParser& parser, ArrayRef<Type> types) {
       Type currBaseType = asNullable ? asNullable.getType() : t;
       if (baseType != currBaseType) {
          parser.emitError(parser.getCurrentLocation(), "types do not have same base type");
-         return mlir::db::DBType();
+         return Type();
       }
    }
    if (anyNullables) {
@@ -101,7 +101,7 @@ static void printImplicitResultSameOperandBaseTypeOp(Operation* op, OpAsmPrinter
 static ParseResult parseDateOp(OpAsmParser& parser,
                                OperationState& result) {
    OpAsmParser::OperandType left, right;
-   mlir::db::DBType leftType, rightType;
+   mlir::Type leftType, rightType;
    if (parser.parseOperand(left) || parser.parseColonType(leftType) || parser.parseComma() || parser.parseOperand(right) || parser.parseColonType(rightType)) {
       return failure();
    }
@@ -366,7 +366,7 @@ static void print(OpAsmPrinter& p, db::SortOp& op) {
 }
 static ParseResult parseBuilderMerge(OpAsmParser& parser, OperationState& result) {
    OpAsmParser::OperandType builder, val;
-   db::BuilderType builderType;
+   Type builderType;
    Type valType;
    if (parser.parseOperand(builder) || parser.parseColonType(builderType) || parser.parseComma() || parser.parseOperand(val) || parser.parseColonType(valType)) {
       return failure();

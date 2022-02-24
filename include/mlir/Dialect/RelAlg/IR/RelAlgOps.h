@@ -7,7 +7,6 @@
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
 #include "mlir/Dialect/DB/IR/DBCollectionType.h"
-#include "mlir/Dialect/DB/IR/DBType.h"
 #include "mlir/Dialect/DB/IR/DBTypes.h"
 
 #include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"

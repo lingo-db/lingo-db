@@ -1,5 +1,4 @@
 #include "mlir/Conversion/DBToArrowStd/NullHandler.h"
-#include <mlir/Dialect/DB/IR/DBType.h>
 #include <mlir/Dialect/DB/IR/DBTypes.h>
 #include <mlir/Dialect/util/UtilOps.h>
 

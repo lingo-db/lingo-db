@@ -7,47 +7,6 @@
 
 #include <llvm/ADT/TypeSwitch.h>
 
-bool mlir::db::DBType::classof(Type t) {
-   return ::llvm::TypeSwitch<Type, bool>(t)
-      .Case<::mlir::db::BoolType>([&](::mlir::db::BoolType t) {
-         return true;
-      })
-      .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) {
-         return true;
-      })
-      .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
-         return true;
-      })
-      .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
-         return true;
-      })
-      .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
-         return true;
-      })
-      .Case<::mlir::db::CharType>([&](::mlir::db::CharType t) {
-         return true;
-      })
-      .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
-         return true;
-      })
-      .Case<::mlir::db::TimestampType>([&](::mlir::db::TimestampType t) {
-         return true;
-      })
-      .Case<::mlir::db::IntervalType>([&](::mlir::db::IntervalType t) {
-         return true;
-      })
-      .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
-         return true;
-      })
-      .Default([](::mlir::Type) { return false; });
-}
-bool mlir::db::DBType::isVarLen() const {
-   return ::llvm::TypeSwitch<::mlir::db::DBType, bool>(*this)
-      .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) {
-         return true;
-      })
-      .Default([](::mlir::Type) { return false; });
-}
 mlir::Type mlir::db::CollectionType::getElementType() const {
    return ::llvm::TypeSwitch<::mlir::db::CollectionType, Type>(*this)
       .Case<::mlir::db::GenericIterableType>([&](::mlir::db::GenericIterableType t) {
