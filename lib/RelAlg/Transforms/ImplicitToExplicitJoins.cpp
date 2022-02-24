@@ -1,10 +1,10 @@
+#include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include "mlir/Dialect/DB/IR/DBDialect.h"
 
 namespace {
 

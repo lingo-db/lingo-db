@@ -94,7 +94,7 @@ class ToSQL {
                output << "interval ";
             }
             if (auto strAttr = val.dyn_cast_or_null<mlir::StringAttr>()) {
-               if (t.isa<mlir::db::IntType>() || t.isa<mlir::db::DecimalType>() || t.isa<mlir::db::FloatType>()) {
+               if (t.isa<mlir::IntegerType>() || t.isa<mlir::db::DecimalType>() || t.isa<mlir::FloatType>()) {
                   output << std::string(strAttr.getValue());
 
                } else if (auto intervalType = t.dyn_cast_or_null<mlir::db::IntervalType>()) {
