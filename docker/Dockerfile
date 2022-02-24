@@ -1,4 +1,4 @@
-FROM ubuntu:focal
+FROM ubuntu:impish
 RUN apt-get update
 RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
 RUN apt-get -y install libjemalloc-dev libboost-dev \
@@ -9,7 +9,11 @@ RUN apt-get -y install libjemalloc-dev libboost-dev \
                                  autoconf \
                                  flex \
                                  bison
-RUN apt-get -y install python3-pip
+
+RUN apt-get -y install python3-pip python3-venv
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN pip3 install numpy
 RUN pip3 install Cython
 RUN pip3 install requests moz_sql_parser numpy pandas pyarrow
@@ -39,14 +43,22 @@ RUN cmake --build /build/arrow -j$(nproc)
 RUN cmake --install /build/arrow --prefix /build/arrow/install
 RUN cd arrow/python; python3 setup.py build_ext --inplace --extra-cmake-args="-DArrow_DIR=/build/arrow/install/lib/cmake/arrow -D ArrowPython_DIR=/build/arrow/install/lib/cmake/arrow"
 RUN git submodule update llvm-project
+RUN git submodule update torch-mlir
+RUN python -m pip install -r torch-mlir/requirements.txt
 
 RUN mkdir /build/llvm
+
 RUN cmake -G Ninja llvm-project/llvm  -B /build/llvm \
     -DLLVM_ENABLE_PROJECTS="mlir" \
     -DLLVM_BUILD_EXAMPLES=OFF \
     -DLLVM_TARGETS_TO_BUILD="X86" \
     -DCMAKE_BUILD_TYPE=Release \
-    -DLLVM_ENABLE_ASSERTIONS=ON
+    -DLLVM_ENABLE_ASSERTIONS=ON \
+    -DPython3_FIND_VIRTUALENV=ONLY \
+    -DLLVM_EXTERNAL_PROJECTS="torch-mlir;torch-mlir-dialects" \
+    -DLLVM_EXTERNAL_TORCH_MLIR_SOURCE_DIR="/repo/torch-mlir" \
+    -DLLVM_EXTERNAL_TORCH_MLIR_DIALECTS_SOURCE_DIR="/repo/torch-mlir/external/llvm-external-projects/torch-mlir-dialects" \
+    -DMLIR_ENABLE_BINDINGS_PYTHON=ON
 RUN cmake --build /build/llvm -j$(nproc)
 RUN mkdir /build/mlirdb
 RUN git submodule update pybind11
