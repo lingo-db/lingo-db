@@ -17,14 +17,12 @@ std::tuple<arrow::Type::type, uint32_t, uint32_t> mlir::db::codegen::convertType
          case 32: typeConstant = arrow::Type::type::UINT32; break;
          case 64: typeConstant = arrow::Type::type::UINT64; break;
       }
-   } else if (auto boolType = type.dyn_cast_or_null<mlir::db::BoolType>()) {
+   } else if (isIntegerType(type,1)) {
       typeConstant = arrow::Type::type::BOOL;
    } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
       typeConstant = arrow::Type::type::DECIMAL128;
       param1 = decimalType.getP();
       param2 = decimalType.getS();
-   } else if (auto boolType = type.dyn_cast_or_null<mlir::db::BoolType>()) {
-      typeConstant = arrow::Type::type::BOOL;
    } else if (auto floatType = type.dyn_cast_or_null<mlir::db::FloatType>()) {
       switch (floatType.getWidth()) {
          case 16: typeConstant = arrow::Type::type::HALF_FLOAT; break;

@@ -8,45 +8,45 @@ module {
 
 		//CHECK: bool(false)
         %0 = db.compare eq %conststr1 : !db.string, %conststr2 : !db.string
-        db.dump %0 : !db.bool
+        db.dump %0 : i1
         //CHECK: bool(true)
         %1 = db.compare eq %conststr1 : !db.string, %conststr1 : !db.string
-        db.dump %1 : !db.bool
+        db.dump %1 : i1
 		//CHECK: bool(true)
         %2 = db.compare lt %conststr1 : !db.string, %conststr2 : !db.string
-        db.dump %2 : !db.bool
+        db.dump %2 : i1
         //CHECK: bool(false)
         %3 = db.compare lt %conststr1 : !db.string, %conststr1 : !db.string
-        db.dump %3 : !db.bool
+        db.dump %3 : i1
 		//CHECK: bool(true)
         %4 = db.compare lte %conststr1 : !db.string, %conststr2 : !db.string
-        db.dump %4 : !db.bool
+        db.dump %4 : i1
         //CHECK: bool(true)
         %5 = db.compare lte %conststr1 : !db.string, %conststr1 : !db.string
-        db.dump %5 : !db.bool
+        db.dump %5 : i1
         %6 = db.compare gt %conststr2 : !db.string, %conststr1 : !db.string
-        db.dump %6 : !db.bool
+        db.dump %6 : i1
         //CHECK: bool(false)
         %7 = db.compare gt %conststr1 : !db.string, %conststr1 : !db.string
-        db.dump %7 : !db.bool
+        db.dump %7 : i1
 		//CHECK: bool(true)
         %8 = db.compare gte %conststr2 : !db.string, %conststr1: !db.string
-        db.dump %8 : !db.bool
+        db.dump %8 : i1
         //CHECK: bool(true)
         %9 = db.compare gte %conststr1 : !db.string, %conststr1 : !db.string
-        db.dump %9 : !db.bool
+        db.dump %9 : i1
 		//CHECK: bool(true)
         %10 = db.compare neq %conststr1 : !db.string, %conststr2 : !db.string
-        db.dump %10 : !db.bool
+        db.dump %10 : i1
         //CHECK: bool(false)
         %11 = db.compare neq %conststr1 : !db.string, %conststr1 : !db.string
-        db.dump %11 : !db.bool
+        db.dump %11 : i1
 		//CHECK: bool(true)
         %12 = db.compare like %conststr1 : !db.string, %pattern : !db.string
-        db.dump %12 : !db.bool
+        db.dump %12 : i1
 		//CHECK: bool(false)
         %13 = db.compare like %conststr3 : !db.string, %pattern : !db.string
-        db.dump %13 : !db.bool
+        db.dump %13 : i1
 
 
         %intstr= db.constant ("42") : !db.string

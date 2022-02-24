@@ -88,23 +88,23 @@ module @querymodule{
             %32 = relalg.getattr %12 @nation1::@n_name : !db.string
             %33 = db.constant ("GERMANY") :!db.string
             %34 = db.compare eq %32 : !db.string,%33 : !db.string
-            %35 = db.and %31 : !db.bool,%34 : !db.bool
+            %35 = db.and %31 : i1,%34 : i1
             %36 = relalg.getattr %12 @nation::@n_name : !db.string
             %37 = db.constant ("GERMANY") :!db.string
             %38 = db.compare eq %36 : !db.string,%37 : !db.string
             %39 = relalg.getattr %12 @nation1::@n_name : !db.string
             %40 = db.constant ("FRANCE") :!db.string
             %41 = db.compare eq %39 : !db.string,%40 : !db.string
-            %42 = db.and %38 : !db.bool,%41 : !db.bool
-            %43 = db.or %35 : !db.bool,%42 : !db.bool
+            %42 = db.and %38 : i1,%41 : i1
+            %43 = db.or %35 : i1,%42 : i1
             %44 = relalg.getattr %12 @lineitem::@l_shipdate : !db.date<day>
             %45 = db.constant ("1995-01-01") :!db.date<day>
             %46 = db.constant ("1996-12-31") :!db.date<day>
             %47 = db.compare gte %44 : !db.date<day>,%45 : !db.date<day>
             %48 = db.compare lte %44 : !db.date<day>,%46 : !db.date<day>
-            %49 = db.and %47 : !db.bool,%48 : !db.bool
-            %50 = db.and %16 : !db.bool,%19 : !db.bool,%22 : !db.bool,%25 : !db.bool,%28 : !db.bool,%43 : !db.bool,%49 : !db.bool
-            relalg.return %50 : !db.bool
+            %49 = db.and %47 : i1,%48 : i1
+            %50 = db.and %16 : i1,%19 : i1,%22 : i1,%25 : i1,%28 : i1,%43 : i1,%49 : i1
+            relalg.return %50 : i1
         }
         %52 = relalg.map @map1 %13 (%51: !relalg.tuple) {
             %53 = relalg.getattr %51 @lineitem::@l_shipdate : !db.date<day>

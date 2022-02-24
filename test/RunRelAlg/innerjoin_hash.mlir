@@ -28,7 +28,7 @@ module @querymodule{
                                                  %8 = relalg.getattr %6 @hoeren::@matrnr : !db.int<64>
                                                  %9 = relalg.getattr %6 @studenten::@matrnr : !db.int<64>
                                                  %10 = db.compare eq %8 : !db.int<64>,%9 : !db.int<64>
-                                                 relalg.return %10 : !db.bool
+                                                 relalg.return %10 : i1
                                              } attributes { impl="hash" }
         %4 = relalg.basetable @vorlesungen { table_identifier="vorlesungen" } columns: {vorlnr => @vorlnr({type=!db.int<64>}),
             titel => @titel({type=!db.string}),
@@ -39,7 +39,7 @@ module @querymodule{
             %11 = relalg.getattr %6 @hoeren::@vorlnr : !db.int<64>
             %12 = relalg.getattr %6 @vorlesungen::@vorlnr : !db.int<64>
             %13 = db.compare eq %11 : !db.int<64>,%12 : !db.int<64>
-            relalg.return %13 : !db.bool
+            relalg.return %13 : i1
         } attributes { impl="hash" }
         %15 = relalg.materialize %5 [@studenten::@name,@vorlesungen::@titel] => ["s.name","v.titel"] : !db.table
         return %15 : !db.table

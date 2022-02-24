@@ -255,7 +255,7 @@ void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir:
    if (terminator->getNumOperands() > 0) {
       mlir::Value oldValue = terminator->getOperand(0);
       bool nullable = oldValue.getType().isa<mlir::db::NullableType>() || additionalPred.getType().isa<mlir::db::NullableType>();
-      mlir::Type restype = mlir::db::BoolType::get(builder.getContext());
+      mlir::Type restype = builder.getI1Type();
       if (nullable) {
          restype = mlir::db::NullableType::get(builder.getContext(), restype);
       }

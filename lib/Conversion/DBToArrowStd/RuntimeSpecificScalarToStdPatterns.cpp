@@ -319,7 +319,7 @@ class DumpOpLowering : public ConversionPattern {
             val = rewriter.create<arith::ExtUIOp>(loc, i64Type, val);
          }
          functionRegistry.call(rewriter, loc, FunctionId::DumpUInt, ValueRange({isNull, val}));
-      } else if (baseType.isa<mlir::db::BoolType>()) {
+      } else if (isIntegerType(baseType, 1)) {
          functionRegistry.call(rewriter, loc, FunctionId::DumpBool, ValueRange({isNull, val}));
       } else if (auto decType = baseType.dyn_cast_or_null<mlir::db::DecimalType>()) {
          if (typeConverter->convertType(decType).cast<mlir::IntegerType>().getWidth() < 128) {

@@ -8,12 +8,12 @@ module @querymodule  {
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 	//CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>
-	//CHECK: relalg.return %{{.*}} : !db.bool
+	//CHECK: relalg.return %{{.*}} : i1
 	//CHECK: %{{.*}} = relalg.selection %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr2 : !db.int<32>
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr2 : !db.int<32>
 	//CHECK: %{{.*}} = db.compare eq %{{.*}} : !db.int<32>, %{{.*}} : !db.int<32>
-	//CHECK: relalg.return %{{.*}} : !db.bool
+	//CHECK: relalg.return %{{.*}} : i1
   	%0 = relalg.const_relation @constrel  attributes: [@attr1({type = !db.int<32>}),@attr2({type = !db.int<32>})] values: [[1, 1], [2, 2]]
   	%1 = relalg.const_relation @constrel2  attributes: [@attr1({type = !db.int<32>}),@attr2({type = !db.int<32>})] values: [[1, 1], [2, 2]]
   	%2 = relalg.crossproduct %0, %1
@@ -24,8 +24,8 @@ module @querymodule  {
 		%7 = relalg.getattr %arg0 @constrel::@attr2 : !db.int<32>
 		%8 = relalg.getattr %arg0 @constrel2::@attr2 : !db.int<32>
 		%9 = db.compare eq %7 : !db.int<32>, %8 : !db.int<32>
-		%10 = db.and %6:!db.bool,%9:!db.bool
-        relalg.return %10 : !db.bool
+		%10 = db.and %6:i1,%9:i1
+        relalg.return %10 : i1
   	}
     return
   }

@@ -377,7 +377,7 @@ class CmpOpLowering : public ConversionPattern {
       db::NullHandler nullHandler(*typeConverter, rewriter, loc);
       Value left = nullHandler.getValue(cmpOp.left(), adaptor.left());
       Value right = nullHandler.getValue(cmpOp.right(), adaptor.right());
-      if (type.isa<db::BoolType>() || type.isa<db::IntType>() || type.isa<db::DecimalType>() || type.isa<db::DateType>() || type.isa<db::TimestampType>() || type.isa<db::IntervalType>() || type.isa<db::CharType>()) {
+      if (isIntegerType(type,1) || type.isa<db::IntType>() || type.isa<db::DecimalType>() || type.isa<db::DateType>() || type.isa<db::TimestampType>() || type.isa<db::IntervalType>() || type.isa<db::CharType>()) {
          Value res = rewriter.create<arith::CmpIOp>(loc, translateIPredicate(cmpOp.predicate()), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(res));
          return success();
@@ -504,7 +504,7 @@ class CreateFlagLowering : public ConversionPattern {
       : ConversionPattern(typeConverter, mlir::db::CreateFlag::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto boolType = mlir::db::BoolType::get(rewriter.getContext());
+      auto boolType = rewriter.getI1Type();
       Type memrefType = util::RefType::get(rewriter.getContext(), boolType, llvm::Optional<int64_t>());
       Value alloca;
       {
@@ -539,7 +539,7 @@ class GetFlagLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::GetFlagAdaptor adaptor(operands);
-      auto boolType = mlir::db::BoolType::get(rewriter.getContext());
+      auto boolType = rewriter.getI1Type();
 
       Value flagValue = rewriter.create<util::LoadOp>(op->getLoc(), boolType, adaptor.flag(), Value());
       rewriter.replaceOp(op, flagValue);
@@ -618,9 +618,7 @@ class HashLowering : public ConversionPattern {
 
 } // namespace
 void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, RewritePatternSet& patterns) {
-   typeConverter.addConversion([&](::mlir::db::BoolType t) {
-      return mlir::IntegerType::get(patterns.getContext(), 1);
-   });
+
    typeConverter.addConversion([&](::mlir::db::DateType t) {
       if (t.getUnit() == mlir::db::DateUnitAttr::day) {
          return mlir::IntegerType::get(patterns.getContext(), 32);
@@ -671,8 +669,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
       return (Type) TupleType::get(patterns.getContext(), {IntegerType::get(patterns.getContext(), 1), typeConverter.convertType(type.getType())});
    });
    typeConverter.addConversion([&](mlir::db::FlagType type) {
-      auto boolType = typeConverter.convertType(mlir::db::BoolType::get(patterns.getContext()));
-      Type memrefType = util::RefType::get(patterns.getContext(), boolType, llvm::Optional<int64_t>());
+      Type memrefType = util::RefType::get(patterns.getContext(), IntegerType::get(type.getContext(),1), llvm::Optional<int64_t>());
       return memrefType;
    });
 

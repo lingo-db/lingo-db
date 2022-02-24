@@ -45,7 +45,7 @@ module {
              db.dump %1 : !db.string
              db.dump %2 : !db.int<32>
              %cmp = db.compare gte %2 : !db.int<32>, %int3 : !db.int<32>
-             db.dump %cmp : !db.bool
+             db.dump %cmp : i1
              db.setflag %flag, %cmp
              db.dump %str_const : !db.string
          }

@@ -23,7 +23,7 @@ module @querymodule{
             %6 = db.constant ("7776000000") :!db.interval<daytime>
             %7 = db.date_sub %5 : !db.date<day>,%6 : !db.interval<daytime>
             %8 = db.compare lte %4 : !db.date<day>,%7 : !db.date<day>
-            relalg.return %8 : !db.bool
+            relalg.return %8 : i1
         }
         %10 = relalg.map @map %3 (%9: !relalg.tuple) {
             %11 = relalg.getattr %9 @lineitem::@l_extendedprice : !db.decimal<15,2>

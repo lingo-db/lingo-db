@@ -41,12 +41,12 @@ module @querymodule{
                 %16 = relalg.getattr %11 @lineitem::@l_commitdate : !db.date<day>
                 %17 = relalg.getattr %11 @lineitem::@l_receiptdate : !db.date<day>
                 %18 = db.compare lt %16 : !db.date<day>,%17 : !db.date<day>
-                %19 = db.and %15 : !db.bool,%18 : !db.bool
-                relalg.return %19 : !db.bool
+                %19 = db.and %15 : i1,%18 : i1
+                relalg.return %19 : i1
             }
             %20 = relalg.exists%12
-            %21 = db.and %6 : !db.bool,%9 : !db.bool,%20 : !db.bool
-            relalg.return %21 : !db.bool
+            %21 = db.and %6 : i1,%9 : i1,%20 : i1
+            relalg.return %21 : i1
         }
         %24 = relalg.aggregation @aggr1 %3 [@orders::@o_orderpriority] (%22 : !relalg.tuplestream, %23 : !relalg.tuple) {
             %25 = relalg.count %22

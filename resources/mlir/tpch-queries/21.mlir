@@ -80,8 +80,8 @@ module @querymodule{
                 %28 = relalg.getattr %23 @lineitem1::@l_suppkey : !db.int<32>
                 %29 = relalg.getattr %8 @lineitem::@l_suppkey : !db.int<32>
                 %30 = db.compare neq %28 : !db.int<32>,%29 : !db.int<32>
-                %31 = db.and %27 : !db.bool,%30 : !db.bool
-                relalg.return %31 : !db.bool
+                %31 = db.and %27 : i1,%30 : i1
+                relalg.return %31 : i1
             }
             %32 = relalg.exists%24
             %33 = relalg.basetable @lineitem2 { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
@@ -111,19 +111,19 @@ module @querymodule{
                 %42 = relalg.getattr %34 @lineitem2::@l_receiptdate : !db.date<day>
                 %43 = relalg.getattr %34 @lineitem2::@l_commitdate : !db.date<day>
                 %44 = db.compare gt %42 : !db.date<day>,%43 : !db.date<day>
-                %45 = db.and %38 : !db.bool,%41 : !db.bool,%44 : !db.bool
-                relalg.return %45 : !db.bool
+                %45 = db.and %38 : i1,%41 : i1,%44 : i1
+                relalg.return %45 : i1
             }
             %46 = relalg.exists%35
-            %47 = db.not %46 : !db.bool
+            %47 = db.not %46 : i1
             %48 = relalg.getattr %8 @supplier::@s_nationkey : !db.int<32>
             %49 = relalg.getattr %8 @nation::@n_nationkey : !db.int<32>
             %50 = db.compare eq %48 : !db.int<32>,%49 : !db.int<32>
             %51 = relalg.getattr %8 @nation::@n_name : !db.string
             %52 = db.constant ("SAUDI ARABIA") :!db.string
             %53 = db.compare eq %51 : !db.string,%52 : !db.string
-            %54 = db.and %12 : !db.bool,%15 : !db.bool,%18 : !db.bool,%21 : !db.bool,%32 : !db.bool,%47 : !db.bool,%50 : !db.bool,%53 : !db.bool
-            relalg.return %54 : !db.bool
+            %54 = db.and %12 : i1,%15 : i1,%18 : i1,%21 : i1,%32 : i1,%47 : i1,%50 : i1,%53 : i1
+            relalg.return %54 : i1
         }
         %57 = relalg.aggregation @aggr2 %9 [@supplier::@s_name] (%55 : !relalg.tuplestream, %56 : !relalg.tuple) {
             %58 = relalg.count %55

@@ -83,8 +83,8 @@ module @querymodule{
             %32 = relalg.getattr %12 @part::@p_name : !db.string
             %33 = db.constant ("%green%") :!db.string
             %34 = db.compare like %32 : !db.string,%33 : !db.string
-            %35 = db.and %16 : !db.bool,%19 : !db.bool,%22 : !db.bool,%25 : !db.bool,%28 : !db.bool,%31 : !db.bool,%34 : !db.bool
-            relalg.return %35 : !db.bool
+            %35 = db.and %16 : i1,%19 : i1,%22 : i1,%25 : i1,%28 : i1,%31 : i1,%34 : i1
+            relalg.return %35 : i1
         }
         %37 = relalg.map @map1 %13 (%36: !relalg.tuple) {
             %38 = relalg.getattr %36 @orders::@o_orderdate : !db.date<day>

@@ -13,13 +13,13 @@ module @querymodule  {
 		%4 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 		%5 = relalg.getattr %arg0 @constrel::@attr2 : !db.int<32>
 		%6 = db.compare eq %4 : !db.int<32>, %5 : !db.int<32>
-        relalg.return %6 : !db.bool
+        relalg.return %6 : i1
   	}
 	%4 = relalg.selection %3 (%arg0: !relalg.tuple) {
 		%4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 		%5 = relalg.getattr %arg0 @constrel2::@attr2 : !db.int<32>
 		%6 = db.compare eq %4 : !db.int<32>, %5 : !db.int<32>
-		relalg.return %6 : !db.bool
+		relalg.return %6 : i1
 	}
     return
   }
@@ -40,19 +40,19 @@ module @querymodule  {
 		%10 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 		%11 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 		%12 = db.compare eq %10 : !db.int<32>, %11 : !db.int<32>
-		relalg.return %12 : !db.bool
+		relalg.return %12 : i1
 	}
   	%4 = relalg.selection %3 (%arg0: !relalg.tuple) {
 		%10 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 		%11 = relalg.getattr %arg0 @constrel::@attr2 : !db.int<32>
 		%12 = db.compare eq %10 : !db.int<32>, %11 : !db.int<32>
-		relalg.return %12 : !db.bool
+		relalg.return %12 : i1
   	}
 	%5 = relalg.selection %4 (%arg0: !relalg.tuple) {
 		%10 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 		%11 = relalg.getattr %arg0 @constrel2::@attr2 : !db.int<32>
 		%12 = db.compare eq %10 : !db.int<32>, %11 : !db.int<32>
-		relalg.return %12 : !db.bool
+		relalg.return %12 : i1
 	}
     return
   }
@@ -74,13 +74,13 @@ module @querymodule  {
 		%4 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 		%5 = relalg.getattr %arg0 @constrel::@attr2 : !db.int<32>
 		%6 = db.compare eq %4 : !db.int<32>, %5 : !db.int<32>
-        relalg.return %6 : !db.bool
+        relalg.return %6 : i1
   	}
 	%4 = relalg.selection %3 (%arg0: !relalg.tuple) {
 		%4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 		%5 = relalg.getattr %arg0 @constrel2::@attr2 : !db.int<32>
 		%6 = db.compare eq %4 : !db.int<32>, %5 : !db.int<32>
-		relalg.return %6 : !db.bool
+		relalg.return %6 : i1
 	}
     return
   }
@@ -102,13 +102,13 @@ module @querymodule  {
 		%4 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 		%5 = relalg.getattr %arg0 @constrel::@attr2 : !db.int<32>
 		%6 = db.compare eq %4 : !db.int<32>, %5 : !db.int<32>
-        relalg.return %6 : !db.bool
+        relalg.return %6 : i1
   	}
 	%4 = relalg.selection %3 (%arg0: !relalg.tuple) {
 		%4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 		%5 = relalg.getattr %arg0 @constrel2::@attr2 : !db.int<32>
 		%6 = db.compare eq %4 : !db.int<32>, %5 : !db.int<32>
-		relalg.return %6 : !db.bool
+		relalg.return %6 : i1
 	}
     return
   }
@@ -131,13 +131,13 @@ module @querymodule  {
 		%4 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 		%5 = relalg.getattr %arg0 @constrel::@attr2 : !db.int<32>
 		%6 = db.compare eq %4 : !db.int<32>, %5 : !db.int<32>
-        relalg.return %6 : !db.bool
+        relalg.return %6 : i1
   	}
 	%4 = relalg.selection %3 (%arg0: !relalg.tuple) {
 		%4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 		%5 = relalg.getattr %arg0 @constrel2::@attr2 : !db.int<32>
 		%6 = db.compare eq %4 : !db.int<32>, %5 : !db.int<32>
-		relalg.return %6 : !db.bool
+		relalg.return %6 : i1
 	}
     return
   }

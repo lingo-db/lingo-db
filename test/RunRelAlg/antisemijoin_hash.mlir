@@ -19,7 +19,7 @@ module @querymodule{
                                                  %8 = relalg.getattr %6 @hoeren::@matrnr : !db.int<64>
                                                  %9 = relalg.getattr %6 @studenten::@matrnr : !db.int<64>
                                                  %10 = db.compare eq %8 : !db.int<64>,%9 : !db.int<64>
-                                                 relalg.return %10 : !db.bool
+                                                 relalg.return %10 : i1
                                              } attributes { impl="hash" }
 
         %15 = relalg.materialize %3 [@studenten::@name] => ["s.name"] : !db.table

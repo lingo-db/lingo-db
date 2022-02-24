@@ -26,7 +26,7 @@ module @querymodule{
             %16 = db.compare eq %4 : !db.string,%15 : !db.string
             %17 = db.constant ("17") :!db.string
             %18 = db.compare eq %4 : !db.string,%17 : !db.string
-            %19 = db.or %6 : !db.bool,%8 : !db.bool,%10 : !db.bool,%12 : !db.bool,%14 : !db.bool,%16 : !db.bool,%18 : !db.bool
+            %19 = db.or %6 : i1,%8 : i1,%10 : i1,%12 : i1,%14 : i1,%16 : i1,%18 : i1
             %20 = relalg.getattr %2 @customer::@c_acctbal : !db.decimal<15,2>
             %21 = relalg.basetable @customer1 { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<32>}),
                 c_name => @c_name({type=!db.string}),
@@ -57,9 +57,9 @@ module @querymodule{
                 %39 = db.compare eq %27 : !db.string,%38 : !db.string
                 %40 = db.constant ("17") :!db.string
                 %41 = db.compare eq %27 : !db.string,%40 : !db.string
-                %42 = db.or %29 : !db.bool,%31 : !db.bool,%33 : !db.bool,%35 : !db.bool,%37 : !db.bool,%39 : !db.bool,%41 : !db.bool
-                %43 = db.and %26 : !db.bool,%42 : !db.bool
-                relalg.return %43 : !db.bool
+                %42 = db.or %29 : i1,%31 : i1,%33 : i1,%35 : i1,%37 : i1,%39 : i1,%41 : i1
+                %43 = db.and %26 : i1,%42 : i1
+                relalg.return %43 : i1
             }
             %45 = relalg.aggregation @aggr1 %23 [] (%44 : !relalg.tuplestream,%tuple : !relalg.tuple) {
                 %46 = relalg.aggrfn avg @customer1::@c_acctbal %44 : !db.nullable<!db.decimal<15,2>>
@@ -82,12 +82,12 @@ module @querymodule{
                 %52 = relalg.getattr %50 @orders::@o_custkey : !db.int<32>
                 %53 = relalg.getattr %2 @customer::@c_custkey : !db.int<32>
                 %54 = db.compare eq %52 : !db.int<32>,%53 : !db.int<32>
-                relalg.return %54 : !db.bool
+                relalg.return %54 : i1
             }
             %55 = relalg.exists%51
-            %56 = db.not %55 : !db.bool
-            %57 = db.and %19 : !db.bool,%48 : !db.nullable<!db.bool> ,%56 : !db.bool
-            relalg.return %57 : !db.nullable<!db.bool>
+            %56 = db.not %55 : i1
+            %57 = db.and %19 : i1,%48 : !db.nullable<i1> ,%56 : i1
+            relalg.return %57 : !db.nullable<i1>
         }
         %mapped = relalg.map @map %3 (%maparg: !relalg.tuple) {
             %c_phone = relalg.getattr %maparg @customer::@c_phone : !db.string

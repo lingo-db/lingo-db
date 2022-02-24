@@ -73,7 +73,7 @@ module @querymodule{
                 %16 = relalg.getattr %14 @aggr::@aggfmname1 : !db.decimal<15,2>
                 %17 = db.constant (300) :!db.decimal<15,2>
                 %18 = db.compare gt %16 : !db.decimal<15,2>,%17 : !db.decimal<15,2>
-                relalg.return %18 : !db.bool
+                relalg.return %18 : i1
             }
             %19 = relalg.projection all [@lineitem1::@l_orderkey]%15
             %20 = relalg.getattr %6 @orders::@o_orderkey : !db.int<32>
@@ -84,8 +84,8 @@ module @querymodule{
             %25 = relalg.getattr %6 @orders::@o_orderkey : !db.int<32>
             %26 = relalg.getattr %6 @lineitem::@l_orderkey : !db.int<32>
             %27 = db.compare eq %25 : !db.int<32>,%26 : !db.int<32>
-            %28 = db.and %21 : !db.bool,%24 : !db.bool,%27 : !db.bool
-            relalg.return %28 : !db.bool
+            %28 = db.and %21 : i1,%24 : i1,%27 : i1
+            relalg.return %28 : i1
         }
         %31 = relalg.aggregation @aggr1 %7 [@customer::@c_name,@customer::@c_custkey,@orders::@o_orderkey,@orders::@o_orderdate,@orders::@o_totalprice] (%29 : !relalg.tuplestream, %30 : !relalg.tuple) {
             %32 = relalg.aggrfn sum @lineitem::@l_quantity %29 : !db.decimal<15,2>

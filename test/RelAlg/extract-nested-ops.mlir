@@ -25,18 +25,18 @@ module  {
           %14 = relalg.getattr %arg2 @constrel3::@attr1 : !db.int<32>
           %15 = db.compare eq %13 : !db.int<32>, %14 : !db.int<32>
           %16 = db.compare eq %6 : !db.int<32>, %14 : !db.int<32>
-          %17 = db.and %15:!db.bool,%16:!db.bool
-          relalg.return %17 : !db.bool
+          %17 = db.and %15:i1,%16:i1
+          relalg.return %17 : i1
         }
         %8 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
         %9 = relalg.getattr %arg1 @constrel2::@attr1 : !db.int<32>
         %10 = db.compare eq %8 : !db.int<32>, %9 : !db.int<32>
         %11 = relalg.exists %7
-        %12 = db.and %10:!db.bool,%11:!db.bool
-        relalg.return %12 : !db.bool
+        %12 = db.and %10:i1,%11:i1
+        relalg.return %12 : i1
       }
       %4 = relalg.exists %3
-      relalg.return %4 : !db.bool
+      relalg.return %4 : i1
     }
     return
   }

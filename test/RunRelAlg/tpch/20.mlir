@@ -48,7 +48,7 @@ module @querymodule{
                     %12 = relalg.getattr %10 @part::@p_name : !db.string
                     %13 = db.constant ("forest%") :!db.string
                     %14 = db.compare like %12 : !db.string,%13 : !db.string
-                    relalg.return %14 : !db.bool
+                    relalg.return %14 : i1
                 }
                 %15 = relalg.projection all [@part::@p_partkey]%11
                 %16 = relalg.getattr %7 @partsupp::@ps_partkey : !db.int<32>
@@ -84,8 +84,8 @@ module @querymodule{
                     %31 = relalg.getattr %20 @lineitem::@l_shipdate : !db.date<day>
                     %32 = db.constant ("1995-01-01") :!db.date<day>
                     %33 = db.compare lt %31 : !db.date<day>,%32 : !db.date<day>
-                    %34 = db.and %24 : !db.bool,%27 : !db.bool,%30 : !db.bool,%33 : !db.bool
-                    relalg.return %34 : !db.bool
+                    %34 = db.and %24 : i1,%27 : i1,%30 : i1,%33 : i1
+                    relalg.return %34 : i1
                 }
                 %37 = relalg.aggregation @aggr1 %21 [] (%35 : !relalg.tuplestream, %36 : !relalg.tuple) {
                     %38 = relalg.aggrfn sum @lineitem::@l_quantity %35 : !db.nullable<!db.decimal<15,2>>
@@ -102,8 +102,8 @@ module @querymodule{
                 %46 = relalg.getscalar @map3::@aggfmname2 %41 : !db.nullable<!db.decimal<15,2>>
                 %47 = db.cast %18 : !db.int<32> -> !db.nullable<!db.decimal<15,2>>
                 %48 = db.compare gt %47 : !db.nullable<!db.decimal<15,2>>,%46 : !db.nullable<!db.decimal<15,2>>
-                %49 = db.and %17 : !db.bool,%48 : !db.nullable<!db.bool>
-                relalg.return %49 : !db.nullable<!db.bool>
+                %49 = db.and %17 : i1,%48 : !db.nullable<i1>
+                relalg.return %49 : !db.nullable<i1>
             }
             %50 = relalg.projection all [@partsupp::@ps_suppkey]%8
             %51 = relalg.getattr %4 @supplier::@s_suppkey : !db.int<32>
@@ -114,8 +114,8 @@ module @querymodule{
             %56 = relalg.getattr %4 @nation::@n_name : !db.string
             %57 = db.constant ("CANADA") :!db.string
             %58 = db.compare eq %56 : !db.string,%57 : !db.string
-            %59 = db.and %52 : !db.bool,%55 : !db.bool,%58 : !db.bool
-            relalg.return %59 : !db.bool
+            %59 = db.and %52 : i1,%55 : i1,%58 : i1
+            relalg.return %59 : i1
         }
         %60 = relalg.sort %5 [(@supplier::@s_name,asc)]
         %61 = relalg.materialize %60 [@supplier::@s_name,@supplier::@s_address] => ["s_name","s_address"] : !db.table

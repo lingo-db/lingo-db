@@ -150,8 +150,8 @@ module @querymodule{
                 %56 = relalg.getattr %42 @region1::@r_name : !db.string
                 %57 = db.constant ("EUROPE") :!db.string
                 %58 = db.compare eq %56 : !db.string,%57 : !db.string
-                %59 = db.and %46 : !db.bool,%49 : !db.bool,%52 : !db.bool,%55 : !db.bool,%58 : !db.bool
-                relalg.return %59 : !db.bool
+                %59 = db.and %46 : i1,%49 : i1,%52 : i1,%55 : i1,%58 : i1
+                relalg.return %59 : i1
             }
             %62 = relalg.aggregation @aggr %43 [] (%60 : !relalg.tuplestream, %61 : !relalg.tuple) {
                 %63 = relalg.aggrfn min @partsupp1::@ps_supplycost %60 : !db.nullable<!db.decimal<15,2>>
@@ -160,8 +160,8 @@ module @querymodule{
             }
             %65 = relalg.getscalar @aggr::@aggfmname1 %62 : !db.nullable<!db.decimal<15,2>>
             %66 = db.compare eq %34 : !db.decimal<15,2>,%65 : !db.nullable<!db.decimal<15,2>>
-            %67 = db.and %14 : !db.bool,%17 : !db.bool,%21 : !db.bool,%24 : !db.bool,%27 : !db.bool,%30 : !db.bool,%33 : !db.bool,%66 : !db.nullable<!db.bool>
-            relalg.return %67 : !db.nullable<!db.bool>
+            %67 = db.and %14 : i1,%17 : i1,%21 : i1,%24 : i1,%27 : i1,%30 : i1,%33 : i1,%66 : !db.nullable<i1>
+            relalg.return %67 : !db.nullable<i1>
         }
         %68 = relalg.sort %11 [(@supplier::@s_acctbal,desc),(@nation::@n_name,asc),(@supplier::@s_name,asc),(@part::@p_partkey,asc)]
         %69 = relalg.limit 100 %68

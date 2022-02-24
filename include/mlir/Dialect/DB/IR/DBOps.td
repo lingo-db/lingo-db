@@ -101,17 +101,6 @@ let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
 let assemblyFormat = "`<` $keyType `,` $valType `>`";
 }
 
-def DB_BoolType : DB_Type<"Bool","bool"> {
-  let summary = "database boolean type";
-  let parameters = (ins );
-    let builders = [
-    TypeBuilder<(ins ), [{
-    return $_get($_ctxt, false);
-    }]>
-    ];
-let builderCall = "$_builder.getType<" # dialect.cppNamespace #
-"::" # cppClassName # ">()";
-}
 
 
 
@@ -202,7 +191,7 @@ let summary = "database date type";
 let parameters = (ins );
 
 }
-def AnyBool: AnyTypeOf<[DB_BoolType,NullableType]>;
+def AnyBool: AnyTypeOf<[I1,NullableType]>;
 def NullableDBType: AnyTypeOf<[AnyType,NullableType]>;
 
 def DB_ConstantOp : DB_Op<"constant",
@@ -234,14 +223,14 @@ let assemblyFormat = "attr-dict";
 }
 def DB_SetFlag : DB_Op<"setflag"> {
 let summary = "set flag to true";
-let arguments = (ins DB_Flag:$flag, DB_BoolType:$val);
+let arguments = (ins DB_Flag:$flag, I1:$val);
 let assemblyFormat = "$flag `,` $val attr-dict";
 }
 def DB_GetFlag : DB_Op<"getflag",
 [NoSideEffect]> {
 let summary = "get flag value";
 let arguments = (ins DB_Flag:$flag);
-let results= (outs DB_BoolType:$res);
+let results= (outs I1:$res);
 let assemblyFormat = "$flag attr-dict";
 }
 def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
@@ -251,7 +240,7 @@ let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
 def DB_CombineNullOp : DB_Op<"combine_null", [NoSideEffect]> {
-let arguments = (ins AnyType: $val,DB_BoolType: $null);
+let arguments = (ins AnyType: $val,I1: $null);
 let results = (outs  NullableType : $res);
 let assemblyFormat = "$val `:` type($val) `,` $null  `:` type($res) attr-dict";
 }
@@ -374,7 +363,7 @@ def DB_IsNullOp : DB_Op<"isnull",
 [NoSideEffect]> {
 let summary = "isnull";
 let arguments = (ins NullableType:$val);
-let results = (outs DB_BoolType:$result);
+let results = (outs I1:$result);
 let assemblyFormat = "$val `:` type($val) attr-dict";
 
 }

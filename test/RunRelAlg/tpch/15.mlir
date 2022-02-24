@@ -36,8 +36,8 @@ module @querymodule{
             %8 = relalg.getattr %3 @lineitem::@l_shipdate : !db.date<day>
             %9 = db.constant ("1996-04-01") :!db.date<day>
             %10 = db.compare lt %8 : !db.date<day>,%9 : !db.date<day>
-            %11 = db.and %7 : !db.bool,%10 : !db.bool
-            relalg.return %11 : !db.bool
+            %11 = db.and %7 : i1,%10 : i1
+            relalg.return %11 : i1
         }
         %13 = relalg.map @map %4 (%12: !relalg.tuple) {
             %14 = relalg.getattr %12 @lineitem::@l_extendedprice : !db.decimal<15,2>
@@ -83,8 +83,8 @@ module @querymodule{
                 %38 = relalg.getattr %33 @lineitem1::@l_shipdate : !db.date<day>
                 %39 = db.constant ("1996-04-01") :!db.date<day>
                 %40 = db.compare lt %38 : !db.date<day>,%39 : !db.date<day>
-                %41 = db.and %37 : !db.bool,%40 : !db.bool
-                relalg.return %41 : !db.bool
+                %41 = db.and %37 : i1,%40 : i1
+                relalg.return %41 : i1
             }
             %43 = relalg.map @map2 %34 (%42: !relalg.tuple) {
                 %44 = relalg.getattr %42 @lineitem1::@l_extendedprice : !db.decimal<15,2>
@@ -107,8 +107,8 @@ module @querymodule{
             }
             %60 = relalg.getscalar @aggr2::@aggfmname1 %57 : !db.nullable<!db.decimal<15,2>>
             %61 = db.compare eq %31 : !db.decimal<15,2>,%60 : !db.nullable<!db.decimal<15,2>>
-            %62 = db.and %30 : !db.bool,%61 : !db.nullable<!db.bool>
-            relalg.return %62 : !db.nullable<!db.bool>
+            %62 = db.and %30 : i1,%61 : !db.nullable<i1>
+            relalg.return %62 : !db.nullable<i1>
         }
         %63 = relalg.sort %27 [(@supplier::@s_suppkey,asc)]
         %64 = relalg.materialize %63 [@supplier::@s_suppkey,@supplier::@s_name,@supplier::@s_address,@supplier::@s_phone,@aggr::@aggfmname2] => ["s_suppkey","s_name","s_address","s_phone","total_revenue"] : !db.table

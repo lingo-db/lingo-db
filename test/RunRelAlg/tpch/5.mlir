@@ -94,8 +94,8 @@ module @querymodule{
             %38 = relalg.getattr %12 @orders::@o_orderdate : !db.date<day>
             %39 = db.constant ("1995-01-01") :!db.date<day>
             %40 = db.compare lt %38 : !db.date<day>,%39 : !db.date<day>
-            %41 = db.and %16 : !db.bool,%19 : !db.bool,%22 : !db.bool,%25 : !db.bool,%28 : !db.bool,%31 : !db.bool,%34 : !db.bool,%37 : !db.bool,%40 : !db.bool
-            relalg.return %41 : !db.bool
+            %41 = db.and %16 : i1,%19 : i1,%22 : i1,%25 : i1,%28 : i1,%31 : i1,%34 : i1,%37 : i1,%40 : i1
+            relalg.return %41 : i1
         }
         %43 = relalg.map @map %13 (%42: !relalg.tuple) {
             %44 = relalg.getattr %42 @lineitem::@l_extendedprice : !db.decimal<15,2>

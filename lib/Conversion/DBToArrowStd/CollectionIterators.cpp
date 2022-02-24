@@ -92,9 +92,7 @@ class TableIterator : public WhileIterator {
       return currElement;
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
-      Value rawValue = functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorValid, iterator)[0];
-      Value dbValue = builder.create<mlir::db::TypeCastOp>(loc, mlir::db::BoolType::get(builder.getContext()), rawValue);
-      return dbValue;
+      return functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorValid, iterator)[0];
    }
    virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
       functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorFree, iterator);
@@ -269,13 +267,13 @@ class TableRowIterator : public ForIterator {
          mlir::Type baseType = isNullable ? nullableType.getType() : completeType;
          Value columnId = unpackOp.getResult(1 + columnIdx);
          Value offset;
-         if (baseType.isa<mlir::db::BoolType>() || isNullable) {
+         if (isIntegerType(baseType,1) || isNullable) {
             offset = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnOffset, mlir::ValueRange({chunk, columnId}))[0];
          }
          Value bitmapBuffer{};
          auto convertedType = getValueBufferType(*typeConverter, builder, baseType);
          Value valueBuffer;
-         if (!baseType.isa<mlir::db::BoolType>()) {
+         if (!isIntegerType(baseType,1)) {
             valueBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
             valueBuffer = builder.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, convertedType, llvm::Optional<int64_t>()), valueBuffer);
          } else {
@@ -318,7 +316,7 @@ class TableRowIterator : public ForIterator {
             Value pos1AsIndex = builder.create<arith::IndexCastOp>(loc, indexType, pos1);
             Value ptr = builder.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, builder.getI8Type(), llvm::Optional<int64_t>()), column.varLenBuffer, pos1AsIndex);
             val = builder.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(builder.getContext()), ptr, len);
-         } else if (column.baseType.isa<db::BoolType>()) {
+         } else if (isIntegerType(column.baseType,1)) {
             Value realPos = builder.create<arith::AddIOp>(loc, indexType, column.offset, index);
             val = mlir::db::codegen::BitUtil::getBit(builder, loc, column.values, realPos);
          } else if (auto decimalType = column.baseType.dyn_cast_or_null<db::DecimalType>()) {
@@ -427,12 +425,9 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       auto arg1 = whileOp.before().front().getArgument(0);
       Value condition = iterator->iteratorValid(builder, arg1);
       if (flag) {
-         if (!condition.getType().isa<mlir::db::BoolType>()) {
-            condition = builder.create<mlir::db::TypeCastOp>(loc, mlir::db::BoolType::get(builder.getContext()), condition);
-         }
-         Value flagValue = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), flag);
-         Value shouldContinue = builder.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(builder.getContext()), flagValue);
-         Value anded = builder.create<mlir::db::AndOp>(loc, mlir::db::BoolType::get(builder.getContext()), ValueRange({condition, shouldContinue}));
+         Value flagValue = builder.create<mlir::db::GetFlag>(loc, builder.getI1Type(), flag);
+         Value shouldContinue = builder.create<mlir::db::NotOp>(loc, builder.getI1Type(), flagValue);
+         Value anded = builder.create<mlir::db::AndOp>(loc, builder.getI1Type(), ValueRange({condition, shouldContinue}));
          condition = anded;
       }
       builder.create<mlir::db::ConditionOp>(loc, condition, whileOp.before().front().getArguments());
@@ -525,14 +520,13 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       builder.setInsertionPointToStart(&whileOp.before().front());
       auto arg1 = whileOp.before().front().getArgument(0);
       Value condition = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, arg1, upper);
-      Value dbcondition = builder.create<mlir::db::TypeCastOp>(loc, mlir::db::BoolType::get(builder.getContext()), condition);
       if (flag) {
-         Value flagValue = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), flag);
-         Value shouldContinue = builder.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(builder.getContext()), flagValue);
-         Value anded = builder.create<mlir::db::AndOp>(loc, mlir::db::BoolType::get(builder.getContext()), ValueRange({dbcondition, shouldContinue}));
-         dbcondition = anded;
+         Value flagValue = builder.create<mlir::db::GetFlag>(loc, builder.getI1Type(), flag);
+         Value shouldContinue = builder.create<mlir::db::NotOp>(loc, builder.getI1Type(), flagValue);
+         Value anded = builder.create<mlir::db::AndOp>(loc, builder.getI1Type(), ValueRange({condition, shouldContinue}));
+         condition = anded;
       }
-      builder.create<mlir::db::ConditionOp>(loc, dbcondition, whileOp.before().front().getArguments());
+      builder.create<mlir::db::ConditionOp>(loc, condition, whileOp.before().front().getArguments());
       builder.setInsertionPointToStart(&whileOp.after().front());
       auto arg2 = whileOp.after().front().getArgument(0);
       Value nextIterator = builder.create<arith::AddIOp>(loc, builder.getIndexType(), arg2, step);

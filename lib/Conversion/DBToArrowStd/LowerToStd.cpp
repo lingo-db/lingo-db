@@ -216,9 +216,6 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::FloatType fType) { return fType; });
    typeConverter.addConversion([&](mlir::MemRefType refType) { return refType; });
 
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::BoolType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::DateType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });

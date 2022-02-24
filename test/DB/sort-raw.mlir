@@ -68,7 +68,7 @@
            %left1,%left2 = util.unpack %left : !test_tuple_type -> !db.string,!db.int<32>
            %right1,%right2 = util.unpack %right : !test_tuple_type -> !db.string,!db.int<32>
            %lt = db.compare gte %left1 : !db.string, %right1 : !db.string
-           db.yield %lt : !db.bool
+           db.yield %lt : i1
         }
 
         db.for %row in %vector : !db.vector<!test_tuple_type> {

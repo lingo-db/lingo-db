@@ -27,7 +27,7 @@ module @querymodule{
             %12 = relalg.getattr %4 @part::@p_type : !db.string
             %13 = db.constant ("MEDIUM POLISHED%") :!db.string
             %14 = db.compare like %12 : !db.string,%13 : !db.string
-            %15 = db.not %14 : !db.bool
+            %15 = db.not %14 : i1
             %16 = relalg.getattr %4 @part::@p_size : !db.int<32>
             %17 = db.constant (49) :!db.int<32>
             %18 = db.compare eq %16 : !db.int<32>,%17 : !db.int<32>
@@ -45,7 +45,7 @@ module @querymodule{
             %30 = db.compare eq %16 : !db.int<32>,%29 : !db.int<32>
             %31 = db.constant (9) :!db.int<32>
             %32 = db.compare eq %16 : !db.int<32>,%31 : !db.int<32>
-            %33 = db.or %18 : !db.bool,%20 : !db.bool,%22 : !db.bool,%24 : !db.bool,%26 : !db.bool,%28 : !db.bool,%30 : !db.bool,%32 : !db.bool
+            %33 = db.or %18 : i1,%20 : i1,%22 : i1,%24 : i1,%26 : i1,%28 : i1,%30 : i1,%32 : i1
             %34 = relalg.basetable @supplier { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=!db.int<32>}),
                 s_name => @s_name({type=!db.string}),
                 s_address => @s_address({type=!db.string}),
@@ -58,14 +58,14 @@ module @querymodule{
                 %37 = relalg.getattr %35 @supplier::@s_comment : !db.string
                 %38 = db.constant ("%Customer%Complaints%") :!db.string
                 %39 = db.compare like %37 : !db.string,%38 : !db.string
-                relalg.return %39 : !db.bool
+                relalg.return %39 : i1
             }
             %40 = relalg.projection all [@supplier::@s_suppkey]%36
             %41 = relalg.getattr %4 @partsupp::@ps_suppkey : !db.int<32>
             %42 = relalg.in %41 : !db.int<32>, %40
-            %43 = db.not %42 : !db.bool
-            %44 = db.and %8 : !db.bool,%11 : !db.bool,%15 : !db.bool,%33 : !db.bool,%43 : !db.bool
-            relalg.return %44 : !db.bool
+            %43 = db.not %42 : i1
+            %44 = db.and %8 : i1,%11 : i1,%15 : i1,%33 : i1,%43 : i1
+            relalg.return %44 : i1
         }
         %47 = relalg.aggregation @aggr1 %5 [@part::@p_brand,@part::@p_type,@part::@p_size] (%45 : !relalg.tuplestream, %46 : !relalg.tuple) {
             %48 = relalg.projection distinct [@partsupp::@ps_suppkey]%45

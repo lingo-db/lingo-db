@@ -197,7 +197,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          nullable |= higherPredVal.getType().isa<mlir::db::NullableType>();
          values.push_back(mapping.lookup(higherPredVal));
       }
-      mlir::Type resType=mlir::db::BoolType::get(builder.getContext());
+      mlir::Type resType=builder.getI1Type();
       if(nullable){
          resType=mlir::db::NullableType::get(builder.getContext(),resType);
       }

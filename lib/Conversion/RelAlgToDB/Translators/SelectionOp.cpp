@@ -30,7 +30,7 @@ class SelectionTranslator : public mlir::relalg::Translator {
                   if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(defOp)) {
                      auto t = cmpOp.left().getType();
                      p = ::llvm::TypeSwitch<mlir::Type, int>(t)
-                            .Case<::mlir::db::BoolType>([&](::mlir::db::BoolType t) { return 1; })
+                            .Case<::mlir::IntegerType>([&](::mlir::IntegerType t) { return 1; })
                             .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) { return 2; })
                             .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) { return 3; })
                             .Case<::mlir::db::UIntType, ::mlir::db::IntType, ::mlir::db::CharType, ::mlir::db::TimestampType, ::mlir::db::IntervalType, ::mlir::db::FloatType>([&](mlir::Type t) { return 2; })

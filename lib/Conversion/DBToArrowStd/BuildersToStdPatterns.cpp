@@ -91,7 +91,7 @@ class AggrHtHelper {
       return casted;
    }
    Value compareKeys(mlir::OpBuilder& rewriter, Value left, Value right) {
-      Value equal = rewriter.create<mlir::db::ConstantOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      Value equal = rewriter.create<mlir::db::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
       auto leftUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, left);
       auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, right);
       for (size_t i = 0; i < leftUnpacked.getNumResults(); i++) {
@@ -101,9 +101,9 @@ class AggrHtHelper {
          auto currLeftNullableType = currLeftType.dyn_cast_or_null<mlir::db::NullableType>();
          auto currRightNullableType = currRightType.dyn_cast_or_null<mlir::db::NullableType>();
          if (currLeftNullableType && currRightNullableType) {
-            Value isNull1 = rewriter.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), leftUnpacked->getResult(i));
-            Value isNull2 = rewriter.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), rightUnpacked->getResult(i));
-            Value bothNull = rewriter.create<mlir::db::AndOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), ValueRange({isNull1, isNull2}));
+            Value isNull1 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), leftUnpacked->getResult(i));
+            Value isNull2 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), rightUnpacked->getResult(i));
+            Value bothNull = rewriter.create<mlir::db::AndOp>(loc, rewriter.getI1Type(), ValueRange({isNull1, isNull2}));
             Value casted = rewriter.create<mlir::db::CastOp>(loc, compared.getType(), bothNull);
             Value tmp = rewriter.create<mlir::db::SelectOp>(loc, bothNull, casted, compared);
             compared = tmp;
@@ -112,10 +112,10 @@ class AggrHtHelper {
          equal = localEqual;
       }
       if (equal.getType().isa<mlir::db::NullableType>()) {
-         Value isNull = rewriter.create<mlir::db::IsNullOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), equal);
-         Value notNull = rewriter.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), isNull);
-         Value value = rewriter.create<mlir::db::CastOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), equal);
-         equal = rewriter.create<mlir::db::AndOp>(loc, mlir::db::BoolType::get(rewriter.getContext()), ValueRange({notNull, value}));
+         Value isNull = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), equal);
+         Value notNull = rewriter.create<mlir::db::NotOp>(loc, rewriter.getI1Type(), isNull);
+         Value value = rewriter.create<mlir::db::CastOp>(loc, rewriter.getI1Type(), equal);
+         equal = rewriter.create<mlir::db::AndOp>(loc, rewriter.getI1Type(), ValueRange({notNull, value}));
       }
       return equal;
    }
@@ -284,7 +284,7 @@ static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::Funct
          case 32: return FunctionId::ArrowTableBuilderAddInt32;
          case 64: return FunctionId::ArrowTableBuilderAddInt64;
       }
-   } else if (auto boolType = type.dyn_cast_or_null<mlir::db::BoolType>()) {
+   } else if (isIntegerType(type,1)) {
       return FunctionId::ArrowTableBuilderAddBool;
    } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
       if (decimalType.getP() < 19) {

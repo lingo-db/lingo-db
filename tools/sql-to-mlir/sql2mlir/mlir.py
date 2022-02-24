@@ -6,10 +6,13 @@ class DBType:
     def to_string(self):
         type_props=",".join(self.baseprops)
         res=""
-        if type_props=="":
-            res= '!db.%s' % (self.name)
+        if self.name=="bool":
+            res="i1"
         else:
-            res= '!db.%s<%s>' % (self.name,type_props)
+            if type_props=="":
+                res= '!db.%s' % (self.name)
+            else:
+                res= '!db.%s<%s>' % (self.name,type_props)
         if self.nullable:
             return "!db.nullable<"+res+">"
         else:

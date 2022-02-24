@@ -1,37 +1,37 @@
 // RUN: db-run %s | FileCheck %s
 
  module {
-  	func @test (%arg0: !db.bool) {
+  	func @test (%arg0: i1) {
   	    %t = db.constant ( "true" ) :!db.string
   	    %f = db.constant ( "false" ) :!db.string
-  		%1 = db.select %arg0 : !db.bool, %t, %f : !db.string
+  		%1 = db.select %arg0 : i1, %t, %f : !db.string
         db.dump %1 : !db.string
   		return
   	}
-   	func @test2 (%arg0: !db.nullable<!db.bool>) {
+   	func @test2 (%arg0: !db.nullable<i1>) {
   	    %t = db.constant ( "true" ) :!db.string
   	    %f = db.constant ( "false" ) :!db.string
-  		%1 = db.select %arg0 : !db.nullable<!db.bool>, %t, %f : !db.string
+  		%1 = db.select %arg0 : !db.nullable<i1>, %t, %f : !db.string
         db.dump %1 : !db.string
   		return
    	}
 
  	func @main () {
- 		%false = db.constant ( 0 ) : !db.bool
- 		%true = db.constant ( 1 ) : !db.bool
- 		%null = db.null : !db.nullable<!db.bool>
- 		%false_nullable = db.cast %false : !db.bool -> !db.nullable<!db.bool>
-        %true_nullable = db.cast %true : !db.bool -> !db.nullable<!db.bool>
+ 		%false = db.constant ( 0 ) : i1
+ 		%true = db.constant ( 1 ) : i1
+ 		%null = db.null : !db.nullable<i1>
+ 		%false_nullable = db.cast %false : i1 -> !db.nullable<i1>
+        %true_nullable = db.cast %true : i1 -> !db.nullable<i1>
  		//CHECK: string("false")
- 		call  @test(%false) : (!db.bool) -> ()
+ 		call  @test(%false) : (i1) -> ()
  		 //CHECK: string("true")
- 		call  @test(%true) : (!db.bool) -> ()
+ 		call  @test(%true) : (i1) -> ()
         //CHECK: string("false")
-        call  @test2(%false_nullable) : (!db.nullable<!db.bool>) -> ()
+        call  @test2(%false_nullable) : (!db.nullable<i1>) -> ()
          //CHECK: string("true")
-        call  @test2(%true_nullable) : (!db.nullable<!db.bool>) -> ()
+        call  @test2(%true_nullable) : (!db.nullable<i1>) -> ()
         //CHECK: string("false")
-        call  @test2(%null) : (!db.nullable<!db.bool>) -> ()
+        call  @test2(%null) : (!db.nullable<i1>) -> ()
  		return
  	}
  }

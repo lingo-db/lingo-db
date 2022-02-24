@@ -235,8 +235,8 @@ module @querymodule{
             %14 = relalg.getattr %6 @nation::@n_name : !db.string
             %15 = db.constant ("GERMANY") :!db.string
             %16 = db.compare eq %14 : !db.string,%15 : !db.string
-            %17 = db.and %10 : !db.bool,%13 : !db.bool,%16 : !db.bool
-            relalg.return %17 : !db.bool
+            %17 = db.and %10 : i1,%13 : i1,%16 : i1
+            relalg.return %17 : i1
         }
         %19 = relalg.map @map %7 (%18: !relalg.tuple) {
             %20 = relalg.getattr %18 @partsupp::@ps_supplycost : !db.decimal<15,2>
@@ -291,8 +291,8 @@ module @querymodule{
                 %53 = relalg.getattr %45 @nation1::@n_name : !db.string
                 %54 = db.constant ("GERMANY") :!db.string
                 %55 = db.compare eq %53 : !db.string,%54 : !db.string
-                %56 = db.and %49 : !db.bool,%52 : !db.bool,%55 : !db.bool
-                relalg.return %56 : !db.bool
+                %56 = db.and %49 : i1,%52 : i1,%55 : i1
+                relalg.return %56 : i1
             }
             %58 = relalg.map @map2 %46 (%57: !relalg.tuple) {
                 %59 = relalg.getattr %57 @partsupp1::@ps_supplycost : !db.decimal<15,2>
@@ -318,7 +318,7 @@ module @querymodule{
             %76 = relalg.getscalar @map3::@aggfmname3 %70 : !db.nullable<!db.decimal<15,4>>
             %77 = db.cast %39 : !db.decimal<15,2> -> !db.nullable<!db.decimal<15,4>>
             %78 = db.compare gt %77 : !db.nullable<!db.decimal<15,4>>,%76 : !db.nullable<!db.decimal<15,4>>
-            relalg.return %78 : !db.nullable<!db.bool>
+            relalg.return %78 : !db.nullable<i1>
         }
         %79 = relalg.sort %38 [(@aggr::@aggfmname4,desc)]
         %80 = relalg.materialize %79 [@partsupp::@ps_partkey,@aggr::@aggfmname4] => ["ps_partkey","value"] : !db.table

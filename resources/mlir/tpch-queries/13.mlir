@@ -26,9 +26,9 @@ module @querymodule{
             %8 = relalg.getattr %3 @orders::@o_comment : !db.string
             %9 = db.constant ("%special%requests%") :!db.string
             %10 = db.compare like %8 : !db.string,%9 : !db.string
-            %11 = db.not %10 : !db.bool
-            %12 = db.and %7 : !db.bool,%11 : !db.bool
-            relalg.return %12 : !db.bool
+            %11 = db.not %10 : i1
+            %12 = db.and %7 : i1,%11 : i1
+            relalg.return %12 : i1
         } mapping: {@o_orderkey({type=!db.nullable<!db.int<32>>})=[@orders::@o_orderkey],@o_custkey({type=!db.nullable<!db.int<32>>})=[@orders::@o_custkey],@o_orderstatus({type=!db.nullable<!db.char<1>>})=[@orders::@o_orderstatus],@o_totalprice({type=!db.nullable<!db.decimal<15,2>>})=[@orders::@o_totalprice],@o_orderdate({type=!db.nullable<!db.date<day>>})=[@orders::@o_orderdate],@o_orderpriority({type=!db.nullable<!db.string>})=[@orders::@o_orderpriority],@o_clerk({type=!db.nullable<!db.string>})=[@orders::@o_clerk],@o_shippriority({type=!db.nullable<!db.int<32>>})=[@orders::@o_shippriority],@o_comment({type=!db.nullable<!db.string>})=[@orders::@o_comment]}
         %15 = relalg.aggregation @aggr %4 [@customer::@c_custkey] (%13 : !relalg.tuplestream, %14 : !relalg.tuple) {
             %16 = relalg.aggrfn count @outerjoin::@o_orderkey %13 : !db.int<64>

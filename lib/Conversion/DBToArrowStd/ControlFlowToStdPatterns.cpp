@@ -9,7 +9,7 @@ namespace {
 
 static Value convertBooleanCondition(mlir::Location loc, mlir::OpBuilder& rewriter, Type t, Value v) {
    auto nullableType=t.dyn_cast_or_null<db::NullableType>();
-   if (nullableType && nullableType.getType().isa<mlir::db::BoolType>()) {
+   if (nullableType && isIntegerType(nullableType.getType(),1)) {
       auto i1Type = rewriter.getI1Type();
       auto unpacked = rewriter.create<util::UnPackOp>(loc, v);
       Value constTrue = rewriter.create<arith::ConstantOp>(loc, i1Type, rewriter.getIntegerAttr(i1Type, 1));

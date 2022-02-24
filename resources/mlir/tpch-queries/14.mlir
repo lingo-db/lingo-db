@@ -38,14 +38,14 @@ module @querymodule{
             %12 = relalg.getattr %4 @lineitem::@l_shipdate : !db.date<day>
             %13 = db.constant ("1995-10-01") :!db.date<day>
             %14 = db.compare lt %12 : !db.date<day>,%13 : !db.date<day>
-            %15 = db.and %8 : !db.bool,%11 : !db.bool,%14 : !db.bool
-            relalg.return %15 : !db.bool
+            %15 = db.and %8 : i1,%11 : i1,%14 : i1
+            relalg.return %15 : i1
         }
         %17 = relalg.map @map %5 (%16: !relalg.tuple) {
             %18 = relalg.getattr %16 @part::@p_type : !db.string
             %19 = db.constant ("PROMO%") :!db.string
             %20 = db.compare like %18 : !db.string,%19 : !db.string
-            %28 = db.if %20 : !db.bool  -> (!db.decimal<15,2>) {
+            %28 = db.if %20 : i1  -> (!db.decimal<15,2>) {
                 %22 = relalg.getattr %16 @lineitem::@l_extendedprice : !db.decimal<15,2>
                 %23 = db.constant (1) :!db.decimal<15,2>
                 %24 = relalg.getattr %16 @lineitem::@l_discount : !db.decimal<15,2>

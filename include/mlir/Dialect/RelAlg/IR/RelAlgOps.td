@@ -40,9 +40,6 @@ let parser = [{ return ::parse$cppClass(parser, result); }];
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Types
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-def DB_BoolType : Type<CPred<"$_self.isa<::mlir::db::BoolType>()">,"DB bool type">{
-let builderCall = "::mlir::db::BoolType::get($_builder.getContext())";
-}
 def DB_TableType : Type<CPred<"$_self.isa<::mlir::db::TableType>()">,"DB table type">;
 def DB_CollectionType : Type<CPred<"$_self.isa<::mlir::db::CollectionType>()">,"DB collection type">;
 def DB_IntType : Type<CPred<"$_self.isa<::mlir::db::IntType>()">,"DB int type">{
@@ -379,7 +376,7 @@ let assemblyFormat = [{  $rel attr-dict }];
 
 def ExistsOp : RelAlg_Op<"exists"> {
 let arguments = (ins RelAlg_TupleStream:$rel);
-let results = (outs DB_BoolType:$result);
+let results = (outs I1:$result);
 let assemblyFormat = [{  $rel attr-dict }];
 }
 def MaterializeOp : RelAlg_Op<"materialize",[NoSideEffect]> {
@@ -410,7 +407,7 @@ def GetListOp : RelAlg_Op<"getlist"> {
 def InOp : RelAlg_Op<"in"> {
 let summary = "in operation";
 let arguments = (ins AnyType:$val, RelAlg_TupleStream:$rel);
-let results = (outs DB_BoolType : $res);
+let results = (outs I1 : $res);
 let assemblyFormat = [{ $val `:` type($val) `,` $rel attr-dict }];
 }
 #endif// OPS

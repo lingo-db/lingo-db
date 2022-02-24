@@ -110,12 +110,12 @@ module @querymodule{
             %44 = db.constant ("1996-12-31") :!db.date<day>
             %45 = db.compare gte %42 : !db.date<day>,%43 : !db.date<day>
             %46 = db.compare lte %42 : !db.date<day>,%44 : !db.date<day>
-            %47 = db.and %45 : !db.bool,%46 : !db.bool
+            %47 = db.and %45 : i1,%46 : i1
             %48 = relalg.getattr %16 @part::@p_type : !db.string
             %49 = db.constant ("ECONOMY ANODIZED STEEL") :!db.string
             %50 = db.compare eq %48 : !db.string,%49 : !db.string
-            %51 = db.and %20 : !db.bool,%23 : !db.bool,%26 : !db.bool,%29 : !db.bool,%32 : !db.bool,%35 : !db.bool,%38 : !db.bool,%41 : !db.bool,%47 : !db.bool,%50 : !db.bool
-            relalg.return %51 : !db.bool
+            %51 = db.and %20 : i1,%23 : i1,%26 : i1,%29 : i1,%32 : i1,%35 : i1,%38 : i1,%41 : i1,%47 : i1,%50 : i1
+            relalg.return %51 : i1
         }
         %53 = relalg.map @map1 %17 (%52: !relalg.tuple) {
             %54 = relalg.getattr %52 @orders::@o_orderdate : !db.date<day>
@@ -133,7 +133,7 @@ module @querymodule{
             %65 = relalg.getattr %63 @nation1::@n_name : !db.string
             %66 = db.constant ("BRAZIL") :!db.string
             %67 = db.compare eq %65 : !db.string,%66 : !db.string
-            %71 = db.if %67 : !db.bool  -> (!db.decimal<15,2>) {
+            %71 = db.if %67 : i1  -> (!db.decimal<15,2>) {
                 %69 = relalg.getattr %63 @map1::@aggfmname2 : !db.decimal<15,2>
                 db.yield %69 : !db.decimal<15,2>
             } else {

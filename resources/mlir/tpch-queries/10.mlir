@@ -63,8 +63,8 @@ module @querymodule{
             %25 = relalg.getattr %8 @customer::@c_nationkey : !db.int<32>
             %26 = relalg.getattr %8 @nation::@n_nationkey : !db.int<32>
             %27 = db.compare eq %25 : !db.int<32>,%26 : !db.int<32>
-            %28 = db.and %12 : !db.bool,%15 : !db.bool,%18 : !db.bool,%21 : !db.bool,%24 : !db.bool,%27 : !db.bool
-            relalg.return %28 : !db.bool
+            %28 = db.and %12 : i1,%15 : i1,%18 : i1,%21 : i1,%24 : i1,%27 : i1
+            relalg.return %28 : i1
         }
         %30 = relalg.map @map %9 (%29: !relalg.tuple) {
             %31 = relalg.getattr %29 @lineitem::@l_extendedprice : !db.decimal<15,2>

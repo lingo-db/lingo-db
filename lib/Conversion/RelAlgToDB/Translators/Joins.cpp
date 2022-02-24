@@ -76,7 +76,7 @@ class OuterJoinTranslator : public mlir::relalg::JoinImpl {
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       translator->handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
          translator->handleMapping(builder, context, scope);
-         auto trueVal = builder.create<mlir::db::ConstantOp>(loc, mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
+         auto trueVal = builder.create<mlir::db::ConstantOp>(loc, builder.getI1Type(), builder.getIntegerAttr(builder.getI64Type(), 1));
          builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, trueVal);
       });
    }
@@ -85,8 +85,8 @@ class OuterJoinTranslator : public mlir::relalg::JoinImpl {
       matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
    }
    void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
-      mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(builder.getContext()), matchFound);
+      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, builder.getI1Type(), matchFoundFlag);
+      mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(loc, builder.getI1Type(), matchFound);
       translator->handlePotentialMatch(builder, context, noMatchFound, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
          translator->handleMappingNull(builder, context, scope);
       });
@@ -112,7 +112,7 @@ class ReversedOuterJoinImpl : public mlir::relalg::JoinImpl {
       auto scope = context.createScope();
       auto zero = builder.create<mlir::arith::ConstantOp>(loc, marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
       auto isZero = builder.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, marker, zero);
-      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(loc, mlir::db::BoolType::get(builder.getContext()), isZero);
+      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(loc, builder.getI1Type(), isZero);
       translator->handlePotentialMatch(builder, context, isZeroDB, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
          translator->handleMappingNull(builder, context, scope);
       });
@@ -142,10 +142,10 @@ class SemiJoinImpl : public mlir::relalg::JoinImpl {
       matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
    }
    void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
+      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, builder.getI1Type(), matchFoundFlag);
       mlir::Value emit = matchFound;
       if (doAnti) {
-         emit = builder.create<mlir::db::NotOp>(loc, mlir::db::BoolType::get(builder.getContext()), matchFound);
+         emit = builder.create<mlir::db::NotOp>(loc, builder.getI1Type(), matchFound);
       }
       translator->handlePotentialMatch(builder, context, emit);
    }
@@ -165,7 +165,7 @@ class ReversedSemiJoinImpl : public mlir::relalg::JoinImpl {
             {
                auto zero = builder1.create<mlir::arith::ConstantOp>(loc, markerBefore.getType(), builder1.getIntegerAttr(markerBefore.getType(), 0));
                auto isZero = builder1.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, markerBefore, zero);
-               auto isZeroDB = builder1.create<mlir::db::TypeCastOp>(loc, mlir::db::BoolType::get(builder1.getContext()), isZero);
+               auto isZeroDB = builder1.create<mlir::db::TypeCastOp>(loc, builder1.getI1Type(), isZero);
                translator->handlePotentialMatch(builder,context,isZeroDB);
             }
             builder1.create<mlir::db::YieldOp>(loc, translator->getRequiredBuilderValues(context)); },
@@ -199,7 +199,7 @@ class ReversedAntiSemiJoinImpl : public mlir::relalg::JoinImpl {
    void handleScanned(mlir::Value marker, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto zero = builder.create<mlir::arith::ConstantOp>(loc, marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
       auto isZero = builder.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, marker, zero);
-      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(loc, mlir::db::BoolType::get(builder.getContext()), isZero);
+      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(loc, builder.getI1Type(), isZero);
       translator->handlePotentialMatch(builder, context, isZeroDB);
    }
 
@@ -298,7 +298,7 @@ class MarkJoinImpl : public mlir::relalg::JoinImpl {
    }
    void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, mlir::db::BoolType::get(builder.getContext()), matchFoundFlag);
+      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, builder.getI1Type(), matchFoundFlag);
       context.setValueForAttribute(scope, &cast<mlir::relalg::MarkJoinOp>(joinOp).markattr().getRelationalAttribute(), matchFound);
       translator->forwardConsume(builder, context);
    }

@@ -38,8 +38,8 @@
  	     %char_const = db.constant ( "AB" ) : !db.char<2>
  		 %int32_const = db.constant ( 10 ) : !db.int<32>
  		 %int64_const = db.constant ( 10 ) : !db.int<64>
- 		 %bool_true_const = db.constant ( 1 ) : !db.bool
-		 %bool_false_const = db.constant ( 0 ) : !db.bool
+ 		 %bool_true_const = db.constant ( 1 ) : i1
+		 %bool_false_const = db.constant ( 0 ) : i1
 		 %decimal10_const = db.constant ( "100.0000000001" ):!db.decimal<15,10>
 		 %decimal2_const = db.constant ( "100.01" ):!db.decimal<15,2>
 		 %date_const = db.constant ( "2020-06-11") : !db.date<day>
@@ -73,8 +73,8 @@
          db.dump %char_const : !db.char<2>
  		 db.dump %int32_const : !db.int<32>
  		 db.dump %int64_const : !db.int<64>
- 		 db.dump %bool_true_const : !db.bool
- 		 db.dump %bool_false_const : !db.bool
+ 		 db.dump %bool_true_const : i1
+ 		 db.dump %bool_false_const : i1
  		 db.dump %decimal10_const : !db.decimal<15,10>
  		 db.dump %date_const : !db.date<day>
  		 db.dump %timestamp_const : !db.timestamp<second>

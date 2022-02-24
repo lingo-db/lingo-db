@@ -64,7 +64,7 @@ module @querymodule{
                 %19 = relalg.getattr %17 @lineitem1::@l_partkey : !db.int<32>
                 %20 = relalg.getattr %4 @part::@p_partkey : !db.int<32>
                 %21 = db.compare eq %19 : !db.int<32>,%20 : !db.int<32>
-                relalg.return %21 : !db.bool
+                relalg.return %21 : i1
             }
             %24 = relalg.aggregation @aggr %18 [] (%22 : !relalg.tuplestream, %23 : !relalg.tuple) {
                 %25 = relalg.aggrfn avg @lineitem1::@l_quantity %22 : !db.nullable<!db.decimal<15,2>>
@@ -80,8 +80,8 @@ module @querymodule{
             }
             %33 = relalg.getscalar @map1::@aggfmname2 %28 : !db.nullable<!db.decimal<15,2>>
             %34 = db.compare lt %15 : !db.decimal<15,2>,%33 : !db.nullable<!db.decimal<15,2>>
-            %35 = db.and %8 : !db.bool,%11 : !db.bool,%14 : !db.bool,%34 : !db.nullable<!db.bool>
-            relalg.return %35 : !db.nullable<!db.bool>
+            %35 = db.and %8 : i1,%11 : i1,%14 : i1,%34 : !db.nullable<i1>
+            relalg.return %35 : !db.nullable<i1>
         }
         %38 = relalg.aggregation @aggr1 %5 [] (%36 : !relalg.tuplestream, %37 : !relalg.tuple) {
             %39 = relalg.aggrfn sum @lineitem::@l_extendedprice %36 : !db.nullable<!db.decimal<15,2>>

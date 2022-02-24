@@ -55,14 +55,14 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
          attributeManager.setCurrentScope(scopeName);
          relalg::RelationalAttributeDefAttr markAttrDef = attributeManager.createDef(attributeName);
          auto& ra = markAttrDef.getRelationalAttribute();
-         ra.type = mlir::db::BoolType::get(&getContext());
+         ra.type = builder.getI1Type();
          PredicateOperator markJoin = builder.create<relalg::MarkJoinOp>(loc, relType, scopeName, markAttrDef, treeVal, relOperator.asRelation());
          markJoin.initPredicate();
          apply(markJoin);
          attributeManager.setCurrentScope(scopeName);
          relalg::RelationalAttributeRefAttr markAttrRef = attributeManager.createRef(scopeName, attributeName);
          builder.setInsertionPoint(op);
-         auto replacement = builder.create<relalg::GetAttrOp>(loc, db::BoolType::get(builder.getContext()), markAttrRef, surroundingOperator.getLambdaRegion().getArgument(0));
+         auto replacement = builder.create<relalg::GetAttrOp>(loc, builder.getI1Type(), markAttrRef, surroundingOperator.getLambdaRegion().getArgument(0));
          op->replaceAllUsesWith(replacement);
          op->remove();
          op->destroy();

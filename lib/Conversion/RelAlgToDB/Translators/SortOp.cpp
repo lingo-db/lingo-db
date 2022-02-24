@@ -26,9 +26,9 @@ class SortTranslator : public mlir::relalg::Translator {
       if (pos < sortCriteria.size()) {
          auto lt = builder.create<mlir::db::CmpOp>(sortOp->getLoc(), mlir::db::DBCmpPredicate::lt, sortCriteria[pos].first, sortCriteria[pos].second);
          auto ifOp = builder.create<mlir::db::IfOp>(
-            sortOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), lt, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::db::YieldOp>(loc, trueVal); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+            sortOp->getLoc(), builder.getI1Type(), lt, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::db::YieldOp>(loc, trueVal); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
                auto eq = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, sortCriteria[pos].first, sortCriteria[pos].second);
-               auto ifOp2 = builder.create<mlir::db::IfOp>(loc, mlir::db::BoolType::get(builder.getContext()), eq,[&](mlir::OpBuilder& builder, mlir::Location loc) {
+               auto ifOp2 = builder.create<mlir::db::IfOp>(loc, builder.getI1Type(), eq,[&](mlir::OpBuilder& builder, mlir::Location loc) {
                   builder.create<mlir::db::YieldOp>(loc, createSortPredicate(builder, sortCriteria, trueVal, falseVal, pos + 1));
                   },[&](mlir::OpBuilder& builder, mlir::Location loc) {
                      builder.create<mlir::db::YieldOp>(loc, falseVal);
@@ -78,8 +78,8 @@ class SortTranslator : public mlir::relalg::Translator {
                }
                sortCriteria.push_back({left, right});
             }
-            auto trueVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 1));
-            auto falseVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), mlir::db::BoolType::get(builder.getContext()), builder.getIntegerAttr(builder.getI64Type(), 0));
+            auto trueVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), builder.getI1Type(), builder.getIntegerAttr(builder.getI64Type(), 1));
+            auto falseVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), builder.getI1Type(), builder.getIntegerAttr(builder.getI64Type(), 0));
 
             builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), createSortPredicate(builder2, sortCriteria, trueVal, falseVal, 0));
          }

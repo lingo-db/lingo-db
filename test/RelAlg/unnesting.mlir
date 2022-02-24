@@ -11,7 +11,7 @@ module @querymodule  {
 		%3 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 		%4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 		%5 = db.compare eq %3 : !db.int<32>, %4 : !db.int<32>
-		relalg.return %5 : !db.bool
+		relalg.return %5 : i1
 	}
 	%110 = relalg.fullouterjoin %2, %10 (%arg0: !relalg.tuple) {
     	relalg.return
@@ -54,7 +54,7 @@ module @querymodule  {
 	    %3 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	    %4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 	    %5 = db.compare eq %3 : !db.int<32>, %4 : !db.int<32>
-		relalg.return %5 : !db.bool
+		relalg.return %5 : i1
   	}
   	%20 = relalg.aggregation @aggr %2 [@constrel2::@attr1] (%arg0: !relalg.tuplestream) {
 		relalg.return
@@ -86,7 +86,7 @@ module @querymodule  {
 	    %3 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	    %4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 	    %5 = db.compare eq %3 : !db.int<32>, %4 : !db.int<32>
-		relalg.return %5 : !db.bool
+		relalg.return %5 : i1
   	}
   	%20 = relalg.projection all [@constrel2::@attr1] %2
   	%3 = relalg.join %0, %20 (%arg0: !relalg.tuple) {
@@ -108,7 +108,7 @@ module @querymodule  {
 	    %3 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	    %4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 	    %5 = db.compare eq %3 : !db.int<32>, %4 : !db.int<32>
-		relalg.return %5 : !db.bool
+		relalg.return %5 : i1
   	}
   	%3 = relalg.join %0, %2 (%arg0: !relalg.tuple) {
 		relalg.return
@@ -129,7 +129,7 @@ module @querymodule  {
 	    %3 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	    %4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 	    %5 = db.compare eq %3 : !db.int<32>, %4 : !db.int<32>
-		relalg.return %5 : !db.bool
+		relalg.return %5 : i1
   	}
   	%3 = relalg.join %2, %0 (%arg0: !relalg.tuple) {
 		relalg.return
@@ -147,7 +147,7 @@ module @querymodule  {
 		%3 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 		%4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 		%5 = db.compare eq %3 : !db.int<32>, %4 : !db.int<32>
-		relalg.return %5 : !db.bool
+		relalg.return %5 : i1
 	}
 	%110 = relalg.semijoin %10, %2 (%arg0: !relalg.tuple) {
     	relalg.return
@@ -188,7 +188,7 @@ module @querymodule  {
 	    %3 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	    %4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 	    %5 = db.compare eq %3 : !db.int<32>, %4 : !db.int<32>
-		relalg.return %5 : !db.bool
+		relalg.return %5 : i1
   	}
   	%3 = relalg.join %0, %2 (%arg0: !relalg.tuple) {
 		relalg.return
@@ -216,7 +216,7 @@ module @querymodule  {
 	    %3 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	    %4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 	    %5 = db.compare eq %3 : !db.int<32>, %4 : !db.int<32>
-		relalg.return %5 : !db.bool
+		relalg.return %5 : i1
   	}
   	%3 = relalg.join %0, %2 (%arg0: !relalg.tuple) {
 		relalg.return
@@ -244,7 +244,7 @@ module @querymodule  {
 	    %3 = relalg.getattr %arg0 @constrel::@attr1 : !db.int<32>
 	    %4 = relalg.getattr %arg0 @constrel2::@attr1 : !db.int<32>
 	    %5 = db.compare eq %3 : !db.int<32>, %4 : !db.int<32>
-		relalg.return %5 : !db.bool
+		relalg.return %5 : i1
   	}
   	%3 = relalg.join %0, %2 (%arg0: !relalg.tuple) {
 		relalg.return

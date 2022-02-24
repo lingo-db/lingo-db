@@ -23,7 +23,7 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Oper
       builder.setInsertionPointToEnd(&lower.getPredicateBlock());
       mlir::relalg::detail::inlineOpIntoBlock(higherPredVal.getDefiningOp(), higherPredVal.getDefiningOp()->getParentOp(), lower.getOperation(), &lower.getPredicateBlock(), mapping);
       auto nullable = higherPredVal.getType().isa<mlir::db::NullableType>() || lowerPredVal.getType().isa<mlir::db::NullableType>();
-      mlir::Type restype = mlir::db::BoolType::get(builder.getContext());
+      mlir::Type restype = builder.getI1Type();
       if (nullable) {
          restype = mlir::db::NullableType::get(builder.getContext(), restype);
       }

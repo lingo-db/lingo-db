@@ -1,37 +1,37 @@
  // RUN: db-run %s | FileCheck %s
  module {
 	func @main () {
-		%false = db.constant ( 0 ) : !db.bool
-		%true = db.constant ( 1 ) : !db.bool
-		%0 = util.undef_tuple : tuple<!db.bool, !db.bool>
-		%1 = util.set_tuple %0[0]= %true : (tuple<!db.bool, !db.bool>,!db.bool) -> tuple<!db.bool, !db.bool>
-		%2 = util.set_tuple %1[1]= %false : (tuple<!db.bool, !db.bool>,!db.bool) -> tuple<!db.bool, !db.bool>
-		%3,%4 = util.unpack %2 : tuple<!db.bool, !db.bool> -> !db.bool, !db.bool
+		%false = db.constant ( 0 ) : i1
+		%true = db.constant ( 1 ) : i1
+		%0 = util.undef_tuple : tuple<i1, i1>
+		%1 = util.set_tuple %0[0]= %true : (tuple<i1, i1>,i1) -> tuple<i1, i1>
+		%2 = util.set_tuple %1[1]= %false : (tuple<i1, i1>,i1) -> tuple<i1, i1>
+		%3,%4 = util.unpack %2 : tuple<i1, i1> -> i1, i1
 		//CHECK: bool(true)
 		//CHECK: bool(false)
-		db.dump %3 : !db.bool
-		db.dump %4 : !db.bool
+		db.dump %3 : i1
+		db.dump %4 : i1
 
-		%5 = util.pack %true, %false : !db.bool, !db.bool -> tuple<!db.bool, !db.bool>
-		%6,%7 = util.unpack %5 : tuple<!db.bool, !db.bool> -> !db.bool, !db.bool
+		%5 = util.pack %true, %false : i1, i1 -> tuple<i1, i1>
+		%6,%7 = util.unpack %5 : tuple<i1, i1> -> i1, i1
 		//CHECK: bool(true)
 		//CHECK: bool(false)
-		db.dump %6 : !db.bool
-		db.dump %7 : !db.bool
+		db.dump %6 : i1
+		db.dump %7 : i1
 
-		%8 = util.pack %true, %false : !db.bool, !db.bool -> tuple<!db.bool, !db.bool>
-		%9 = util.pack %8, %8 : tuple<!db.bool, !db.bool>,tuple<!db.bool, !db.bool> -> tuple<tuple<!db.bool, !db.bool>,tuple<!db.bool, !db.bool>>
-		%10,%11 = util.unpack %9 : tuple<tuple<!db.bool, !db.bool>,tuple<!db.bool, !db.bool>> -> tuple<!db.bool, !db.bool>,tuple<!db.bool, !db.bool>
-		%12,%13 = util.unpack %10 : tuple<!db.bool, !db.bool> -> !db.bool, !db.bool
-		%14,%15 = util.unpack %10 : tuple<!db.bool, !db.bool> -> !db.bool, !db.bool
+		%8 = util.pack %true, %false : i1, i1 -> tuple<i1, i1>
+		%9 = util.pack %8, %8 : tuple<i1, i1>,tuple<i1, i1> -> tuple<tuple<i1, i1>,tuple<i1, i1>>
+		%10,%11 = util.unpack %9 : tuple<tuple<i1, i1>,tuple<i1, i1>> -> tuple<i1, i1>,tuple<i1, i1>
+		%12,%13 = util.unpack %10 : tuple<i1, i1> -> i1, i1
+		%14,%15 = util.unpack %10 : tuple<i1, i1> -> i1, i1
 		//CHECK: bool(true)
 		//CHECK: bool(false)
-		db.dump %12 : !db.bool
-		db.dump %13 : !db.bool
+		db.dump %12 : i1
+		db.dump %13 : i1
 		//CHECK: bool(true)
 		//CHECK: bool(false)
-		db.dump %14 : !db.bool
-		db.dump %15 : !db.bool
+		db.dump %14 : i1
+		db.dump %15 : i1
 		return
 	}
  }
