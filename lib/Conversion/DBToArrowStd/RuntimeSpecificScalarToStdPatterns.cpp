@@ -135,9 +135,9 @@ class StringCastOpLowering : public ConversionPattern {
       if (scalarSourceType == scalarTargetType) {
          //nothing to do here
       } else if (auto stringType = scalarSourceType.dyn_cast_or_null<db::StringType>()) {
-         if (auto intType = scalarTargetType.dyn_cast_or_null<db::IntType>()) {
+         if (auto intWidth = getIntegerWidth(scalarTargetType, false)) {
             value = functionRegistry.call(rewriter, loc, FunctionId::CastStringToInt64, ValueRange({isNull, value}))[0];
-            if (intType.getWidth() < 64) {
+            if (intWidth < 64) {
                value = rewriter.create<arith::TruncIOp>(loc, convertedTargetType, value);
             }
          } else if (auto floatType = scalarTargetType.dyn_cast_or_null<db::FloatType>()) {
@@ -153,9 +153,9 @@ class StringCastOpLowering : public ConversionPattern {
          } else {
             return failure();
          }
-      } else if (auto intType = scalarSourceType.dyn_cast_or_null<db::IntType>()) {
+      } else if (auto intWidth = getIntegerWidth(scalarSourceType, false)) {
          if (scalarTargetType.isa<db::StringType>()) {
-            if (intType.getWidth() < 64) {
+            if (intWidth < 64) {
                value = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), value);
             }
             value = functionRegistry.call(rewriter, loc, FunctionId ::CastInt64ToString, ValueRange({isNull, value}))[0];
@@ -309,18 +309,18 @@ class DumpOpLowering : public ConversionPattern {
          val = dumpOpAdaptor.val();
       }
 
-      if (auto dbIntType = baseType.dyn_cast_or_null<mlir::db::IntType>()) {
-         if (dbIntType.getWidth() < 64) {
+      if (isIntegerType(baseType, 1)) {
+         functionRegistry.call(rewriter, loc, FunctionId::DumpBool, ValueRange({isNull, val}));
+      } else if (auto intWidth = getIntegerWidth(baseType, false)) {
+         if (intWidth < 64) {
             val = rewriter.create<arith::ExtSIOp>(loc, i64Type, val);
          }
          functionRegistry.call(rewriter, loc, FunctionId::DumpInt, ValueRange({isNull, val}));
-      } else if (auto dbUIntType = baseType.dyn_cast_or_null<mlir::db::UIntType>()) {
-         if (dbUIntType.getWidth() < 64) {
+      } else if (auto uIntWidth = getIntegerWidth(baseType, true)) {
+         if (uIntWidth < 64) {
             val = rewriter.create<arith::ExtUIOp>(loc, i64Type, val);
          }
          functionRegistry.call(rewriter, loc, FunctionId::DumpUInt, ValueRange({isNull, val}));
-      } else if (isIntegerType(baseType, 1)) {
-         functionRegistry.call(rewriter, loc, FunctionId::DumpBool, ValueRange({isNull, val}));
       } else if (auto decType = baseType.dyn_cast_or_null<mlir::db::DecimalType>()) {
          if (typeConverter->convertType(decType).cast<mlir::IntegerType>().getWidth() < 128) {
             auto converted = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), val);
@@ -530,7 +530,7 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
       patterns.getContext(), ensureDate64, identity, rightleft, dateAddFunction, transformDateBack);
    patterns.insert<SimpleBinOpToFuncLowering<mlir::db::DateSubOp, mlir::db::DateType, mlir::db::IntervalType, mlir::db::DateType>>(
       patterns.getContext(), ensureDate64, negateInterval, rightleft, dateAddFunction, transformDateBack);
-   patterns.insert<SimpleUnOpToFuncLowering<mlir::db::DateExtractOp, mlir::db::DateType, mlir::db::IntType>>(
+   patterns.insert<SimpleUnOpToFuncLowering<mlir::db::DateExtractOp, mlir::db::DateType, mlir::IntegerType>>(
       patterns.getContext(), ensureDate64, dateExtractFunction, identity);
    patterns.insert<StringCmpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<StringCastOpLowering>(functionRegistry, typeConverter, patterns.getContext());

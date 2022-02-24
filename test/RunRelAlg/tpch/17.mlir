@@ -4,10 +4,10 @@
 //CHECK: |                      23512.75  |
 module @querymodule{
     func  @main ()  -> !db.table{
-        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
-            l_partkey => @l_partkey({type=!db.int<32>}),
-            l_suppkey => @l_suppkey({type=!db.int<32>}),
-            l_linenumber => @l_linenumber({type=!db.int<32>}),
+        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=i32}),
+            l_partkey => @l_partkey({type=i32}),
+            l_suppkey => @l_suppkey({type=i32}),
+            l_linenumber => @l_linenumber({type=i32}),
             l_quantity => @l_quantity({type=!db.decimal<15,2>}),
             l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
             l_discount => @l_discount({type=!db.decimal<15,2>}),
@@ -21,21 +21,21 @@ module @querymodule{
             l_shipmode => @l_shipmode({type=!db.string}),
             l_comment => @l_comment({type=!db.string})
         }
-        %2 = relalg.basetable @part { table_identifier="part", rows=20000 , pkey=["p_partkey"]} columns: {p_partkey => @p_partkey({type=!db.int<32>}),
+        %2 = relalg.basetable @part { table_identifier="part", rows=20000 , pkey=["p_partkey"]} columns: {p_partkey => @p_partkey({type=i32}),
             p_name => @p_name({type=!db.string}),
             p_mfgr => @p_mfgr({type=!db.string}),
             p_brand => @p_brand({type=!db.string}),
             p_type => @p_type({type=!db.string}),
-            p_size => @p_size({type=!db.int<32>}),
+            p_size => @p_size({type=i32}),
             p_container => @p_container({type=!db.string}),
             p_retailprice => @p_retailprice({type=!db.decimal<15,2>}),
             p_comment => @p_comment({type=!db.string})
         }
         %3 = relalg.crossproduct %1, %2
         %5 = relalg.selection %3(%4: !relalg.tuple) {
-            %6 = relalg.getattr %4 @part::@p_partkey : !db.int<32>
-            %7 = relalg.getattr %4 @lineitem::@l_partkey : !db.int<32>
-            %8 = db.compare eq %6 : !db.int<32>,%7 : !db.int<32>
+            %6 = relalg.getattr %4 @part::@p_partkey : i32
+            %7 = relalg.getattr %4 @lineitem::@l_partkey : i32
+            %8 = db.compare eq %6 : i32,%7 : i32
             %9 = relalg.getattr %4 @part::@p_brand : !db.string
             %10 = db.constant ("Brand#23") :!db.string
             %11 = db.compare eq %9 : !db.string,%10 : !db.string
@@ -43,10 +43,10 @@ module @querymodule{
             %13 = db.constant ("MED BOX") :!db.string
             %14 = db.compare eq %12 : !db.string,%13 : !db.string
             %15 = relalg.getattr %4 @lineitem::@l_quantity : !db.decimal<15,2>
-            %16 = relalg.basetable @lineitem1 { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
-                l_partkey => @l_partkey({type=!db.int<32>}),
-                l_suppkey => @l_suppkey({type=!db.int<32>}),
-                l_linenumber => @l_linenumber({type=!db.int<32>}),
+            %16 = relalg.basetable @lineitem1 { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=i32}),
+                l_partkey => @l_partkey({type=i32}),
+                l_suppkey => @l_suppkey({type=i32}),
+                l_linenumber => @l_linenumber({type=i32}),
                 l_quantity => @l_quantity({type=!db.decimal<15,2>}),
                 l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
                 l_discount => @l_discount({type=!db.decimal<15,2>}),
@@ -61,9 +61,9 @@ module @querymodule{
                 l_comment => @l_comment({type=!db.string})
             }
             %18 = relalg.selection %16(%17: !relalg.tuple) {
-                %19 = relalg.getattr %17 @lineitem1::@l_partkey : !db.int<32>
-                %20 = relalg.getattr %4 @part::@p_partkey : !db.int<32>
-                %21 = db.compare eq %19 : !db.int<32>,%20 : !db.int<32>
+                %19 = relalg.getattr %17 @lineitem1::@l_partkey : i32
+                %20 = relalg.getattr %4 @part::@p_partkey : i32
+                %21 = db.compare eq %19 : i32,%20 : i32
                 relalg.return %21 : i1
             }
             %24 = relalg.aggregation @aggr %18 [] (%22 : !relalg.tuplestream, %23 : !relalg.tuple) {

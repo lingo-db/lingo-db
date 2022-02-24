@@ -4,12 +4,15 @@
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "mlir/Dialect/DB/IR/DBDialect.h"
 
 namespace {
 
 class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-implicit-to-explicit-joins"; }
-
+   void getDependentDialects(mlir::DialectRegistry& registry) const override {
+      registry.insert<mlir::db::DBDialect>();
+   }
    llvm::SmallVector<mlir::Operation*> toDestroy;
    void handleScalarBoolOp(mlir::Location loc, TupleLamdaOperator surroundingOperator, mlir::Operation* op, Operator relOperator, std::function<void(PredicateOperator)> apply) {
       using namespace mlir;

@@ -222,15 +222,11 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::DecimalType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::IntType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
+
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::CharType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::UIntType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
+
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::FloatType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });

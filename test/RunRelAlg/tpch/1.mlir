@@ -7,10 +7,10 @@
 //CHECK: |                             R  |                             F  |                    3785523.00  |                 5337950526.47  |                 5071817924.80  |                 5274404231.65  |                         25.52  |                      35994.02  |                          0.04  |                        148301  |
 module @querymodule{
     func  @main ()  -> !db.table{
-        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
-            l_partkey => @l_partkey({type=!db.int<32>}),
-            l_suppkey => @l_suppkey({type=!db.int<32>}),
-            l_linenumber => @l_linenumber({type=!db.int<32>}),
+        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=i32}),
+            l_partkey => @l_partkey({type=i32}),
+            l_suppkey => @l_suppkey({type=i32}),
+            l_linenumber => @l_linenumber({type=i32}),
             l_quantity => @l_quantity({type=!db.decimal<15,2>}),
             l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
             l_discount => @l_discount({type=!db.decimal<15,2>}),
@@ -67,7 +67,7 @@ module @querymodule{
             %42 = relalg.aggrfn avg @lineitem::@l_discount %27 : !db.decimal<15,2>
             %43 = relalg.addattr %41, @aggfmname9({type=!db.decimal<15,2>}) %42
             %44 = relalg.count %27
-            %45 = relalg.addattr %43, @aggfmname10({type=!db.int<64>}) %44
+            %45 = relalg.addattr %43, @aggfmname10({type=i64}) %44
             relalg.return %45 : !relalg.tuple
         }
         %46 = relalg.sort %29 [(@lineitem::@l_returnflag,asc),(@lineitem::@l_linestatus,asc)]

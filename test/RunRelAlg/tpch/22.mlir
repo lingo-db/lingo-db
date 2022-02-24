@@ -10,10 +10,10 @@
 //CHECK: |                          "31"  |                            87  |                     647372.50  |
 module @querymodule{
     func @main ()  -> !db.table{
-        %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<32>}),
+        %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=i32}),
             c_name => @c_name({type=!db.string}),
             c_address => @c_address({type=!db.string}),
-            c_nationkey => @c_nationkey({type=!db.int<32>}),
+            c_nationkey => @c_nationkey({type=i32}),
             c_phone => @c_phone({type=!db.string}),
             c_acctbal => @c_acctbal({type=!db.decimal<15,2>}),
             c_mktsegment => @c_mktsegment({type=!db.string}),
@@ -38,10 +38,10 @@ module @querymodule{
             %18 = db.compare eq %4 : !db.string,%17 : !db.string
             %19 = db.or %6 : i1,%8 : i1,%10 : i1,%12 : i1,%14 : i1,%16 : i1,%18 : i1
             %20 = relalg.getattr %2 @customer::@c_acctbal : !db.decimal<15,2>
-            %21 = relalg.basetable @customer1 { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<32>}),
+            %21 = relalg.basetable @customer1 { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=i32}),
                 c_name => @c_name({type=!db.string}),
                 c_address => @c_address({type=!db.string}),
-                c_nationkey => @c_nationkey({type=!db.int<32>}),
+                c_nationkey => @c_nationkey({type=i32}),
                 c_phone => @c_phone({type=!db.string}),
                 c_acctbal => @c_acctbal({type=!db.decimal<15,2>}),
                 c_mktsegment => @c_mktsegment({type=!db.string}),
@@ -78,20 +78,20 @@ module @querymodule{
             }
             %47 = relalg.getscalar @aggr1::@aggfmname1 %45 : !db.nullable<!db.decimal<15,2>>
             %48 = db.compare gt %20 : !db.decimal<15,2>,%47 : !db.nullable<!db.decimal<15,2>>
-            %49 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=!db.int<32>}),
-                o_custkey => @o_custkey({type=!db.int<32>}),
+            %49 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=i32}),
+                o_custkey => @o_custkey({type=i32}),
                 o_orderstatus => @o_orderstatus({type=!db.char<1>}),
                 o_totalprice => @o_totalprice({type=!db.decimal<15,2>}),
                 o_orderdate => @o_orderdate({type=!db.date<day>}),
                 o_orderpriority => @o_orderpriority({type=!db.string}),
                 o_clerk => @o_clerk({type=!db.string}),
-                o_shippriority => @o_shippriority({type=!db.int<32>}),
+                o_shippriority => @o_shippriority({type=i32}),
                 o_comment => @o_comment({type=!db.string})
             }
             %51 = relalg.selection %49(%50: !relalg.tuple) {
-                %52 = relalg.getattr %50 @orders::@o_custkey : !db.int<32>
-                %53 = relalg.getattr %2 @customer::@c_custkey : !db.int<32>
-                %54 = db.compare eq %52 : !db.int<32>,%53 : !db.int<32>
+                %52 = relalg.getattr %50 @orders::@o_custkey : i32
+                %53 = relalg.getattr %2 @customer::@c_custkey : i32
+                %54 = db.compare eq %52 : i32,%53 : i32
                 relalg.return %54 : i1
             }
             %55 = relalg.exists%51
@@ -107,7 +107,7 @@ module @querymodule{
         }
         %59 = relalg.aggregation @aggr4 %mapped [@map::@cntrycode] (%58 : !relalg.tuplestream, %tuple : !relalg.tuple) {
             %60 = relalg.count %58
-            relalg.addattr %tuple, @aggfmname1({type=!db.int<64>}) %60
+            relalg.addattr %tuple, @aggfmname1({type=i64}) %60
             %61 = relalg.aggrfn sum @customer::@c_acctbal %58 : !db.decimal<15,2>
             relalg.addattr %tuple, @aggfmname2({type=!db.decimal<15,2>}) %61
             relalg.return

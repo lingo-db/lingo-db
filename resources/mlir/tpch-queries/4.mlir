@@ -1,13 +1,13 @@
 module @querymodule{
     func  @main ()  -> !db.table{
-        %1 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=!db.int<32>}),
-            o_custkey => @o_custkey({type=!db.int<32>}),
+        %1 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=i32}),
+            o_custkey => @o_custkey({type=i32}),
             o_orderstatus => @o_orderstatus({type=!db.char<1>}),
             o_totalprice => @o_totalprice({type=!db.decimal<15,2>}),
             o_orderdate => @o_orderdate({type=!db.date<day>}),
             o_orderpriority => @o_orderpriority({type=!db.string}),
             o_clerk => @o_clerk({type=!db.string}),
-            o_shippriority => @o_shippriority({type=!db.int<32>}),
+            o_shippriority => @o_shippriority({type=i32}),
             o_comment => @o_comment({type=!db.string})
         }
         %3 = relalg.selection %1(%2: !relalg.tuple) {
@@ -17,10 +17,10 @@ module @querymodule{
             %7 = relalg.getattr %2 @orders::@o_orderdate : !db.date<day>
             %8 = db.constant ("1993-10-01") :!db.date<day>
             %9 = db.compare lt %7 : !db.date<day>,%8 : !db.date<day>
-            %10 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
-                l_partkey => @l_partkey({type=!db.int<32>}),
-                l_suppkey => @l_suppkey({type=!db.int<32>}),
-                l_linenumber => @l_linenumber({type=!db.int<32>}),
+            %10 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=i32}),
+                l_partkey => @l_partkey({type=i32}),
+                l_suppkey => @l_suppkey({type=i32}),
+                l_linenumber => @l_linenumber({type=i32}),
                 l_quantity => @l_quantity({type=!db.decimal<15,2>}),
                 l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
                 l_discount => @l_discount({type=!db.decimal<15,2>}),
@@ -35,9 +35,9 @@ module @querymodule{
                 l_comment => @l_comment({type=!db.string})
             }
             %12 = relalg.selection %10(%11: !relalg.tuple) {
-                %13 = relalg.getattr %11 @lineitem::@l_orderkey : !db.int<32>
-                %14 = relalg.getattr %2 @orders::@o_orderkey : !db.int<32>
-                %15 = db.compare eq %13 : !db.int<32>,%14 : !db.int<32>
+                %13 = relalg.getattr %11 @lineitem::@l_orderkey : i32
+                %14 = relalg.getattr %2 @orders::@o_orderkey : i32
+                %15 = db.compare eq %13 : i32,%14 : i32
                 %16 = relalg.getattr %11 @lineitem::@l_commitdate : !db.date<day>
                 %17 = relalg.getattr %11 @lineitem::@l_receiptdate : !db.date<day>
                 %18 = db.compare lt %16 : !db.date<day>,%17 : !db.date<day>
@@ -50,7 +50,7 @@ module @querymodule{
         }
         %24 = relalg.aggregation @aggr1 %3 [@orders::@o_orderpriority] (%22 : !relalg.tuplestream, %23 : !relalg.tuple) {
             %25 = relalg.count %22
-            %26 = relalg.addattr %23, @aggfmname1({type=!db.int<64>}) %25
+            %26 = relalg.addattr %23, @aggfmname1({type=i64}) %25
             relalg.return %26 : !relalg.tuple
         }
         %27 = relalg.sort %24 [(@orders::@o_orderpriority,asc)]

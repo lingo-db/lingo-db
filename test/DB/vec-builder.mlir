@@ -1,5 +1,5 @@
  // RUN: db-run %s %S/../../resources/data/test | FileCheck %s
- !test_table_tuple=type tuple<!db.nullable<!db.string>,!db.nullable<i1>,!db.nullable<!db.int<32>>,!db.nullable<!db.int<64>>,!db.nullable<!db.float<32>>,!db.nullable<!db.float<64>>,!db.nullable<!db.date<day>>,!db.nullable<!db.date<millisecond>>,!db.nullable<!db.decimal<5,2>>>
+ !test_table_tuple=type tuple<!db.nullable<!db.string>,!db.nullable<i1>,!db.nullable<i32>,!db.nullable<i64>,!db.nullable<!db.float<32>>,!db.nullable<!db.float<64>>,!db.nullable<!db.date<day>>,!db.nullable<!db.date<millisecond>>,!db.nullable<!db.decimal<5,2>>>
  module {
     //CHECK: string("str")
     //CHECK: bool(true)
@@ -34,11 +34,11 @@
         }
         %vector=db.builder_build %final_builder : !db.vector_builder<!test_table_tuple> -> !db.vector<!test_table_tuple>
         db.for %row in %vector : !db.vector<!test_table_tuple> {
-            %1,%2,%3,%4,%5,%6,%7,%8,%9 = util.unpack %row : !test_table_tuple -> !db.nullable<!db.string>,!db.nullable<i1>,!db.nullable<!db.int<32>>,!db.nullable<!db.int<64>>,!db.nullable<!db.float<32>>,!db.nullable<!db.float<64>>,!db.nullable<!db.date<day>>,!db.nullable<!db.date<millisecond>>,!db.nullable<!db.decimal<5,2>>
+            %1,%2,%3,%4,%5,%6,%7,%8,%9 = util.unpack %row : !test_table_tuple -> !db.nullable<!db.string>,!db.nullable<i1>,!db.nullable<i32>,!db.nullable<i64>,!db.nullable<!db.float<32>>,!db.nullable<!db.float<64>>,!db.nullable<!db.date<day>>,!db.nullable<!db.date<millisecond>>,!db.nullable<!db.decimal<5,2>>
             db.dump %1 : !db.nullable<!db.string>
             db.dump %2 : !db.nullable<i1>
-            db.dump %3 : !db.nullable<!db.int<32>>
-            db.dump %4 : !db.nullable<!db.int<64>>
+            db.dump %3 : !db.nullable<i32>
+            db.dump %4 : !db.nullable<i64>
             db.dump %5 : !db.nullable<!db.float<32>>
             db.dump %6 : !db.nullable<!db.float<64>>
             db.dump %7 : !db.nullable<!db.date<day>>

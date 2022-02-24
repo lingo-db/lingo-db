@@ -1,9 +1,9 @@
 module @querymodule{
     func  @main ()  -> !db.table{
-        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
-            l_partkey => @l_partkey({type=!db.int<32>}),
-            l_suppkey => @l_suppkey({type=!db.int<32>}),
-            l_linenumber => @l_linenumber({type=!db.int<32>}),
+        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=i32}),
+            l_partkey => @l_partkey({type=i32}),
+            l_suppkey => @l_suppkey({type=i32}),
+            l_linenumber => @l_linenumber({type=i32}),
             l_quantity => @l_quantity({type=!db.decimal<15,2>}),
             l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
             l_discount => @l_discount({type=!db.decimal<15,2>}),
@@ -17,21 +17,21 @@ module @querymodule{
             l_shipmode => @l_shipmode({type=!db.string}),
             l_comment => @l_comment({type=!db.string})
         }
-        %2 = relalg.basetable @part { table_identifier="part", rows=20000 , pkey=["p_partkey"]} columns: {p_partkey => @p_partkey({type=!db.int<32>}),
+        %2 = relalg.basetable @part { table_identifier="part", rows=20000 , pkey=["p_partkey"]} columns: {p_partkey => @p_partkey({type=i32}),
             p_name => @p_name({type=!db.string}),
             p_mfgr => @p_mfgr({type=!db.string}),
             p_brand => @p_brand({type=!db.string}),
             p_type => @p_type({type=!db.string}),
-            p_size => @p_size({type=!db.int<32>}),
+            p_size => @p_size({type=i32}),
             p_container => @p_container({type=!db.string}),
             p_retailprice => @p_retailprice({type=!db.decimal<15,2>}),
             p_comment => @p_comment({type=!db.string})
         }
         %3 = relalg.crossproduct %1, %2
         %5 = relalg.selection %3(%4: !relalg.tuple) {
-            %6 = relalg.getattr %4 @part::@p_partkey : !db.int<32>
-            %7 = relalg.getattr %4 @lineitem::@l_partkey : !db.int<32>
-            %8 = db.compare eq %6 : !db.int<32>,%7 : !db.int<32>
+            %6 = relalg.getattr %4 @part::@p_partkey : i32
+            %7 = relalg.getattr %4 @lineitem::@l_partkey : i32
+            %8 = db.compare eq %6 : i32,%7 : i32
             %9 = relalg.getattr %4 @part::@p_brand : !db.string
             %10 = db.constant ("Brand#12") :!db.string
             %11 = db.compare eq %9 : !db.string,%10 : !db.string
@@ -49,18 +49,18 @@ module @querymodule{
             %23 = db.constant (1) :!db.decimal<15,2>
             %24 = db.compare gte %22 : !db.decimal<15,2>,%23 : !db.decimal<15,2>
             %25 = relalg.getattr %4 @lineitem::@l_quantity : !db.decimal<15,2>
-            %26 = db.constant (1) :!db.int<64>
-            %27 = db.constant (10) :!db.int<64>
-            %28 = db.add %26 : !db.int<64>,%27 : !db.int<64>
-            %29 = db.cast %28 : !db.int<64> -> !db.decimal<15,2>
+            %26 = db.constant (1) :i64
+            %27 = db.constant (10) :i64
+            %28 = db.add %26 : i64,%27 : i64
+            %29 = db.cast %28 : i64 -> !db.decimal<15,2>
             %30 = db.compare lte %25 : !db.decimal<15,2>,%29 : !db.decimal<15,2>
-            %31 = relalg.getattr %4 @part::@p_size : !db.int<32>
-            %32 = db.constant (1) :!db.int<64>
-            %33 = db.constant (5) :!db.int<64>
-            %34 = db.cast %31 : !db.int<32> -> !db.int<64>
-            %35 = db.compare gte %34 : !db.int<64>,%32 : !db.int<64>
-            %36 = db.cast %31 : !db.int<32> -> !db.int<64>
-            %37 = db.compare lte %36 : !db.int<64>,%33 : !db.int<64>
+            %31 = relalg.getattr %4 @part::@p_size : i32
+            %32 = db.constant (1) :i64
+            %33 = db.constant (5) :i64
+            %34 = db.cast %31 : i32 -> i64
+            %35 = db.compare gte %34 : i64,%32 : i64
+            %36 = db.cast %31 : i32 -> i64
+            %37 = db.compare lte %36 : i64,%33 : i64
             %38 = db.and %35 : i1,%37 : i1
             %39 = relalg.getattr %4 @lineitem::@l_shipmode : !db.string
             %40 = db.constant ("AIR") :!db.string
@@ -72,9 +72,9 @@ module @querymodule{
             %46 = db.constant ("DELIVER IN PERSON") :!db.string
             %47 = db.compare eq %45 : !db.string,%46 : !db.string
             %48 = db.and %8 : i1,%11 : i1,%21 : i1,%24 : i1,%30 : i1,%38 : i1,%44 : i1,%47 : i1
-            %49 = relalg.getattr %4 @part::@p_partkey : !db.int<32>
-            %50 = relalg.getattr %4 @lineitem::@l_partkey : !db.int<32>
-            %51 = db.compare eq %49 : !db.int<32>,%50 : !db.int<32>
+            %49 = relalg.getattr %4 @part::@p_partkey : i32
+            %50 = relalg.getattr %4 @lineitem::@l_partkey : i32
+            %51 = db.compare eq %49 : i32,%50 : i32
             %52 = relalg.getattr %4 @part::@p_brand : !db.string
             %53 = db.constant ("Brand#23") :!db.string
             %54 = db.compare eq %52 : !db.string,%53 : !db.string
@@ -92,18 +92,18 @@ module @querymodule{
             %66 = db.constant (10) :!db.decimal<15,2>
             %67 = db.compare gte %65 : !db.decimal<15,2>,%66 : !db.decimal<15,2>
             %68 = relalg.getattr %4 @lineitem::@l_quantity : !db.decimal<15,2>
-            %69 = db.constant (10) :!db.int<64>
-            %70 = db.constant (10) :!db.int<64>
-            %71 = db.add %69 : !db.int<64>,%70 : !db.int<64>
-            %72 = db.cast %71 : !db.int<64> -> !db.decimal<15,2>
+            %69 = db.constant (10) :i64
+            %70 = db.constant (10) :i64
+            %71 = db.add %69 : i64,%70 : i64
+            %72 = db.cast %71 : i64 -> !db.decimal<15,2>
             %73 = db.compare lte %68 : !db.decimal<15,2>,%72 : !db.decimal<15,2>
-            %74 = relalg.getattr %4 @part::@p_size : !db.int<32>
-            %75 = db.constant (1) :!db.int<64>
-            %76 = db.constant (10) :!db.int<64>
-            %77 = db.cast %74 : !db.int<32> -> !db.int<64>
-            %78 = db.compare gte %77 : !db.int<64>,%75 : !db.int<64>
-            %79 = db.cast %74 : !db.int<32> -> !db.int<64>
-            %80 = db.compare lte %79 : !db.int<64>,%76 : !db.int<64>
+            %74 = relalg.getattr %4 @part::@p_size : i32
+            %75 = db.constant (1) :i64
+            %76 = db.constant (10) :i64
+            %77 = db.cast %74 : i32 -> i64
+            %78 = db.compare gte %77 : i64,%75 : i64
+            %79 = db.cast %74 : i32 -> i64
+            %80 = db.compare lte %79 : i64,%76 : i64
             %81 = db.and %78 : i1,%80 : i1
             %82 = relalg.getattr %4 @lineitem::@l_shipmode : !db.string
             %83 = db.constant ("AIR") :!db.string
@@ -115,9 +115,9 @@ module @querymodule{
             %89 = db.constant ("DELIVER IN PERSON") :!db.string
             %90 = db.compare eq %88 : !db.string,%89 : !db.string
             %91 = db.and %51 : i1,%54 : i1,%64 : i1,%67 : i1,%73 : i1,%81 : i1,%87 : i1,%90 : i1
-            %92 = relalg.getattr %4 @part::@p_partkey : !db.int<32>
-            %93 = relalg.getattr %4 @lineitem::@l_partkey : !db.int<32>
-            %94 = db.compare eq %92 : !db.int<32>,%93 : !db.int<32>
+            %92 = relalg.getattr %4 @part::@p_partkey : i32
+            %93 = relalg.getattr %4 @lineitem::@l_partkey : i32
+            %94 = db.compare eq %92 : i32,%93 : i32
             %95 = relalg.getattr %4 @part::@p_brand : !db.string
             %96 = db.constant ("Brand#34") :!db.string
             %97 = db.compare eq %95 : !db.string,%96 : !db.string
@@ -135,18 +135,18 @@ module @querymodule{
             %109 = db.constant (20) :!db.decimal<15,2>
             %110 = db.compare gte %108 : !db.decimal<15,2>,%109 : !db.decimal<15,2>
             %111 = relalg.getattr %4 @lineitem::@l_quantity : !db.decimal<15,2>
-            %112 = db.constant (20) :!db.int<64>
-            %113 = db.constant (10) :!db.int<64>
-            %114 = db.add %112 : !db.int<64>,%113 : !db.int<64>
-            %115 = db.cast %114 : !db.int<64> -> !db.decimal<15,2>
+            %112 = db.constant (20) :i64
+            %113 = db.constant (10) :i64
+            %114 = db.add %112 : i64,%113 : i64
+            %115 = db.cast %114 : i64 -> !db.decimal<15,2>
             %116 = db.compare lte %111 : !db.decimal<15,2>,%115 : !db.decimal<15,2>
-            %117 = relalg.getattr %4 @part::@p_size : !db.int<32>
-            %118 = db.constant (1) :!db.int<64>
-            %119 = db.constant (15) :!db.int<64>
-            %120 = db.cast %117 : !db.int<32> -> !db.int<64>
-            %121 = db.compare gte %120 : !db.int<64>,%118 : !db.int<64>
-            %122 = db.cast %117 : !db.int<32> -> !db.int<64>
-            %123 = db.compare lte %122 : !db.int<64>,%119 : !db.int<64>
+            %117 = relalg.getattr %4 @part::@p_size : i32
+            %118 = db.constant (1) :i64
+            %119 = db.constant (15) :i64
+            %120 = db.cast %117 : i32 -> i64
+            %121 = db.compare gte %120 : i64,%118 : i64
+            %122 = db.cast %117 : i32 -> i64
+            %123 = db.compare lte %122 : i64,%119 : i64
             %124 = db.and %121 : i1,%123 : i1
             %125 = relalg.getattr %4 @lineitem::@l_shipmode : !db.string
             %126 = db.constant ("AIR") :!db.string

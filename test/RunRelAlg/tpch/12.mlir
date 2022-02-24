@@ -5,20 +5,20 @@
 //CHECK: |                        "SHIP"  |                           620  |                           943  |
 module @querymodule{
     func  @main ()  -> !db.table{
-        %1 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=!db.int<32>}),
-            o_custkey => @o_custkey({type=!db.int<32>}),
+        %1 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=i32}),
+            o_custkey => @o_custkey({type=i32}),
             o_orderstatus => @o_orderstatus({type=!db.char<1>}),
             o_totalprice => @o_totalprice({type=!db.decimal<15,2>}),
             o_orderdate => @o_orderdate({type=!db.date<day>}),
             o_orderpriority => @o_orderpriority({type=!db.string}),
             o_clerk => @o_clerk({type=!db.string}),
-            o_shippriority => @o_shippriority({type=!db.int<32>}),
+            o_shippriority => @o_shippriority({type=i32}),
             o_comment => @o_comment({type=!db.string})
         }
-        %2 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
-            l_partkey => @l_partkey({type=!db.int<32>}),
-            l_suppkey => @l_suppkey({type=!db.int<32>}),
-            l_linenumber => @l_linenumber({type=!db.int<32>}),
+        %2 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=i32}),
+            l_partkey => @l_partkey({type=i32}),
+            l_suppkey => @l_suppkey({type=i32}),
+            l_linenumber => @l_linenumber({type=i32}),
             l_quantity => @l_quantity({type=!db.decimal<15,2>}),
             l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
             l_discount => @l_discount({type=!db.decimal<15,2>}),
@@ -34,9 +34,9 @@ module @querymodule{
         }
         %3 = relalg.crossproduct %1, %2
         %5 = relalg.selection %3(%4: !relalg.tuple) {
-            %6 = relalg.getattr %4 @orders::@o_orderkey : !db.int<32>
-            %7 = relalg.getattr %4 @lineitem::@l_orderkey : !db.int<32>
-            %8 = db.compare eq %6 : !db.int<32>,%7 : !db.int<32>
+            %6 = relalg.getattr %4 @orders::@o_orderkey : i32
+            %7 = relalg.getattr %4 @lineitem::@l_orderkey : i32
+            %8 = db.compare eq %6 : i32,%7 : i32
             %9 = relalg.getattr %4 @lineitem::@l_shipmode : !db.string
             %10 = db.constant ("MAIL") :!db.string
             %11 = db.compare eq %9 : !db.string,%10 : !db.string
@@ -66,14 +66,14 @@ module @querymodule{
             %34 = db.constant ("2-HIGH") :!db.string
             %35 = db.compare eq %33 : !db.string,%34 : !db.string
             %36 = db.or %32 : i1,%35 : i1
-            %40 = db.if %36 : i1  -> (!db.int<64>) {
-                %38 = db.constant (1) :!db.int<64>
-                db.yield %38 : !db.int<64>
+            %40 = db.if %36 : i1  -> (i64) {
+                %38 = db.constant (1) :i64
+                db.yield %38 : i64
             } else {
-                %39 = db.constant (0) :!db.int<64>
-                db.yield %39 : !db.int<64>
+                %39 = db.constant (0) :i64
+                db.yield %39 : i64
             }
-            %41 = relalg.addattr %28, @aggfmname1({type=!db.int<64>}) %40
+            %41 = relalg.addattr %28, @aggfmname1({type=i64}) %40
             %42 = relalg.getattr %28 @orders::@o_orderpriority : !db.string
             %43 = db.constant ("1-URGENT") :!db.string
             %44 = db.compare neq %42 : !db.string,%43 : !db.string
@@ -81,21 +81,21 @@ module @querymodule{
             %46 = db.constant ("2-HIGH") :!db.string
             %47 = db.compare neq %45 : !db.string,%46 : !db.string
             %48 = db.and %44 : i1,%47 : i1
-            %52 = db.if %48 : i1  -> (!db.int<64>) {
-                %50 = db.constant (1) :!db.int<64>
-                db.yield %50 : !db.int<64>
+            %52 = db.if %48 : i1  -> (i64) {
+                %50 = db.constant (1) :i64
+                db.yield %50 : i64
             } else {
-                %51 = db.constant (0) :!db.int<64>
-                db.yield %51 : !db.int<64>
+                %51 = db.constant (0) :i64
+                db.yield %51 : i64
             }
-            %53 = relalg.addattr %41, @aggfmname3({type=!db.int<64>}) %52
+            %53 = relalg.addattr %41, @aggfmname3({type=i64}) %52
             relalg.return %53 : !relalg.tuple
         }
         %56 = relalg.aggregation @aggr %29 [@lineitem::@l_shipmode] (%54 : !relalg.tuplestream, %55 : !relalg.tuple) {
-            %57 = relalg.aggrfn sum @map::@aggfmname1 %54 : !db.int<64>
-            %58 = relalg.addattr %55, @aggfmname2({type=!db.int<64>}) %57
-            %59 = relalg.aggrfn sum @map::@aggfmname3 %54 : !db.int<64>
-            %60 = relalg.addattr %58, @aggfmname4({type=!db.int<64>}) %59
+            %57 = relalg.aggrfn sum @map::@aggfmname1 %54 : i64
+            %58 = relalg.addattr %55, @aggfmname2({type=i64}) %57
+            %59 = relalg.aggrfn sum @map::@aggfmname3 %54 : i64
+            %60 = relalg.addattr %58, @aggfmname4({type=i64}) %59
             relalg.return %60 : !relalg.tuple
         }
         %61 = relalg.sort %56 [(@lineitem::@l_shipmode,asc)]

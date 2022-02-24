@@ -277,15 +277,15 @@ class CreateVectorBuilderLowering : public ConversionPattern {
 
 static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::FunctionRegistry& functionRegistry, Type type) {
    using FunctionId = db::codegen::FunctionRegistry::FunctionId;
-   if (auto intType = type.dyn_cast_or_null<mlir::db::IntType>()) {
-      switch (intType.getWidth()) {
+   if (isIntegerType(type,1)) {
+      return FunctionId::ArrowTableBuilderAddBool;
+   } else if (auto intWidth= getIntegerWidth(type,false)) {
+      switch (intWidth) {
          case 8: return FunctionId::ArrowTableBuilderAddInt8;
          case 16: return FunctionId::ArrowTableBuilderAddInt16;
          case 32: return FunctionId::ArrowTableBuilderAddInt32;
          case 64: return FunctionId::ArrowTableBuilderAddInt64;
       }
-   } else if (isIntegerType(type,1)) {
-      return FunctionId::ArrowTableBuilderAddBool;
    } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
       if (decimalType.getP() < 19) {
          return FunctionId::ArrowTableBuilderAddSmallDecimal;

@@ -10,7 +10,7 @@ using namespace mlir;
 
 mlir::Type constructNullableBool(MLIRContext* context, ValueRange operands) {
    bool nullable = llvm::any_of(operands, [](auto operand) { return operand.getType().template isa<mlir::db::NullableType>(); });
-   mlir::Type restype = IntegerType::get(context,1);
+   mlir::Type restype = IntegerType::get(context, 1);
    if (nullable) {
       restype = mlir::db::NullableType::get(context, restype);
    }
@@ -25,6 +25,13 @@ mlir::Type getBaseType(mlir::Type t) {
 bool isIntegerType(mlir::Type type, int width) {
    auto asStdInt = type.dyn_cast_or_null<mlir::IntegerType>();
    return asStdInt && asStdInt.getWidth() == width;
+}
+int getIntegerWidth(mlir::Type type, bool isUnSigned) {
+   auto asStdInt = type.dyn_cast_or_null<mlir::IntegerType>();
+   if (asStdInt && asStdInt.isUnsigned() == isUnSigned) {
+      return asStdInt.getWidth();
+   }
+   return 0;
 }
 LogicalResult mlir::db::CmpOp::inferReturnTypes(
    MLIRContext* context, Optional<Location> location, ValueRange operands,

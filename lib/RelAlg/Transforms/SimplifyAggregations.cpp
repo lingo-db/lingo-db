@@ -83,9 +83,9 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
          auto tuple = rewriter.create<mlir::relalg::AddAttrOp>(op->getLoc(), tplType, tplArgument, def, val);
          rewriter.create<mlir::relalg::ReturnOp>(op->getLoc(), mlir::ValueRange({tuple}));
       }
-      auto nullableType = aggrFuncOp.getType();
-      if(!nullableType.isa<mlir::db::NullableType>()){
-         nullableType=mlir::db::NullableType::get(rewriter.getContext(),nullableType);
+      mlir::Type nullableType = aggrFuncOp.getType();
+      if (!nullableType.isa<mlir::db::NullableType>()) {
+         nullableType = mlir::db::NullableType::get(rewriter.getContext(), nullableType);
       }
       mlir::Value getScalarOp = rewriter.create<mlir::relalg::GetScalarOp>(op->getLoc(), nullableType, attributeManager.createRef(&def.getRelationalAttribute()), aggrOp.asRelation());
       mlir::Value res = rewriter.create<mlir::db::CastOp>(op->getLoc(), aggrFuncOp.getType(), getScalarOp);

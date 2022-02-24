@@ -8,30 +8,30 @@
 //CHECK: |          "Customer#000011459"  |                         11459  |                        551136  |                    1993-05-19  |                     386812.74  |                        308.00  |
 module @querymodule{
     func  @main ()  -> !db.table{
-        %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<32>}),
+        %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=i32}),
             c_name => @c_name({type=!db.string}),
             c_address => @c_address({type=!db.string}),
-            c_nationkey => @c_nationkey({type=!db.int<32>}),
+            c_nationkey => @c_nationkey({type=i32}),
             c_phone => @c_phone({type=!db.string}),
             c_acctbal => @c_acctbal({type=!db.decimal<15,2>}),
             c_mktsegment => @c_mktsegment({type=!db.string}),
             c_comment => @c_comment({type=!db.string})
         }
-        %2 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=!db.int<32>}),
-            o_custkey => @o_custkey({type=!db.int<32>}),
+        %2 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=i32}),
+            o_custkey => @o_custkey({type=i32}),
             o_orderstatus => @o_orderstatus({type=!db.char<1>}),
             o_totalprice => @o_totalprice({type=!db.decimal<15,2>}),
             o_orderdate => @o_orderdate({type=!db.date<day>}),
             o_orderpriority => @o_orderpriority({type=!db.string}),
             o_clerk => @o_clerk({type=!db.string}),
-            o_shippriority => @o_shippriority({type=!db.int<32>}),
+            o_shippriority => @o_shippriority({type=i32}),
             o_comment => @o_comment({type=!db.string})
         }
         %3 = relalg.crossproduct %1, %2
-        %4 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
-            l_partkey => @l_partkey({type=!db.int<32>}),
-            l_suppkey => @l_suppkey({type=!db.int<32>}),
-            l_linenumber => @l_linenumber({type=!db.int<32>}),
+        %4 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=i32}),
+            l_partkey => @l_partkey({type=i32}),
+            l_suppkey => @l_suppkey({type=i32}),
+            l_linenumber => @l_linenumber({type=i32}),
             l_quantity => @l_quantity({type=!db.decimal<15,2>}),
             l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
             l_discount => @l_discount({type=!db.decimal<15,2>}),
@@ -47,10 +47,10 @@ module @querymodule{
         }
         %5 = relalg.crossproduct %3, %4
         %7 = relalg.selection %5(%6: !relalg.tuple) {
-            %8 = relalg.basetable @lineitem1 { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
-                l_partkey => @l_partkey({type=!db.int<32>}),
-                l_suppkey => @l_suppkey({type=!db.int<32>}),
-                l_linenumber => @l_linenumber({type=!db.int<32>}),
+            %8 = relalg.basetable @lineitem1 { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=i32}),
+                l_partkey => @l_partkey({type=i32}),
+                l_suppkey => @l_suppkey({type=i32}),
+                l_linenumber => @l_linenumber({type=i32}),
                 l_quantity => @l_quantity({type=!db.decimal<15,2>}),
                 l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
                 l_discount => @l_discount({type=!db.decimal<15,2>}),
@@ -76,14 +76,14 @@ module @querymodule{
                 relalg.return %18 : i1
             }
             %19 = relalg.projection all [@lineitem1::@l_orderkey]%15
-            %20 = relalg.getattr %6 @orders::@o_orderkey : !db.int<32>
-            %21 = relalg.in %20 : !db.int<32>, %19
-            %22 = relalg.getattr %6 @customer::@c_custkey : !db.int<32>
-            %23 = relalg.getattr %6 @orders::@o_custkey : !db.int<32>
-            %24 = db.compare eq %22 : !db.int<32>,%23 : !db.int<32>
-            %25 = relalg.getattr %6 @orders::@o_orderkey : !db.int<32>
-            %26 = relalg.getattr %6 @lineitem::@l_orderkey : !db.int<32>
-            %27 = db.compare eq %25 : !db.int<32>,%26 : !db.int<32>
+            %20 = relalg.getattr %6 @orders::@o_orderkey : i32
+            %21 = relalg.in %20 : i32, %19
+            %22 = relalg.getattr %6 @customer::@c_custkey : i32
+            %23 = relalg.getattr %6 @orders::@o_custkey : i32
+            %24 = db.compare eq %22 : i32,%23 : i32
+            %25 = relalg.getattr %6 @orders::@o_orderkey : i32
+            %26 = relalg.getattr %6 @lineitem::@l_orderkey : i32
+            %27 = db.compare eq %25 : i32,%26 : i32
             %28 = db.and %21 : i1,%24 : i1,%27 : i1
             relalg.return %28 : i1
         }

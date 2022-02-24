@@ -42,9 +42,7 @@ let parser = [{ return ::parse$cppClass(parser, result); }];
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 def DB_TableType : Type<CPred<"$_self.isa<::mlir::db::TableType>()">,"DB table type">;
 def DB_CollectionType : Type<CPred<"$_self.isa<::mlir::db::CollectionType>()">,"DB collection type">;
-def DB_IntType : Type<CPred<"$_self.isa<::mlir::db::IntType>()">,"DB int type">{
-let builderCall = "::mlir::db::IntType::get($_builder.getContext(),64)";
-}
+
 
 def RelAlg_TupleStream :  TypeDef<RelAlg_Dialect, "TupleStream"> {
 let summary = "tuple stream type";
@@ -369,7 +367,7 @@ let assemblyFormat = [{  $fn custom<CustRef>($attr) $rel `:` type($result) attr-
 def CountRowsOp : RelAlg_Op<"count"> {
 let summary = "count rows";
 let arguments = (ins RelAlg_TupleStream:$rel);
-let results = (outs DB_IntType:$res);
+let results = (outs I64:$res);
 let assemblyFormat = [{  $rel attr-dict }];
 }
 

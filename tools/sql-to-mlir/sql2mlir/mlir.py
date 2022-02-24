@@ -8,6 +8,8 @@ class DBType:
         res=""
         if self.name=="bool":
             res="i1"
+        elif self.name=="int":
+            res="i"+type_props
         else:
             if type_props=="":
                 res= '!db.%s' % (self.name)

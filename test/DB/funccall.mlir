@@ -1,15 +1,15 @@
 // RUN: db-run %s | FileCheck %s
 
  module {
- 	func @test (%arg0: !db.nullable<!db.int<32>>,%arg1: !db.nullable<!db.int<32>>) -> !db.nullable<!db.int<32>> {
- 		%0 = db.add  %arg0 : !db.nullable<!db.int<32>>, %arg1 : !db.nullable<!db.int<32>>
- 		return %0 : !db.nullable<!db.int<32>>
+ 	func @test (%arg0: !db.nullable<i32>,%arg1: !db.nullable<i32>) -> !db.nullable<i32> {
+ 		%0 = db.add  %arg0 : !db.nullable<i32>, %arg1 : !db.nullable<i32>
+ 		return %0 : !db.nullable<i32>
  	}
  	func @main () {
- 		%0 = db.null : !db.nullable<!db.int<32>>
- 		%1 = call @test(%0, %0) : (!db.nullable<!db.int<32>>,!db.nullable<!db.int<32>>) -> !db.nullable<!db.int<32>>
+ 		%0 = db.null : !db.nullable<i32>
+ 		%1 = call @test(%0, %0) : (!db.nullable<i32>,!db.nullable<i32>) -> !db.nullable<i32>
  		//CHECK: int(NULL)
-        db.dump %1 : !db.nullable<!db.int<32>>
+        db.dump %1 : !db.nullable<i32>
  		return
  	}
  }

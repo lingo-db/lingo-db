@@ -13,30 +13,30 @@
 //CHECK: |                        178727  |                     309728.91  |                    1995-02-25  |                             0  |
 module @querymodule{
     func  @main ()  -> !db.table{
-        %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=!db.int<32>}),
+        %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=i32}),
             c_name => @c_name({type=!db.string}),
             c_address => @c_address({type=!db.string}),
-            c_nationkey => @c_nationkey({type=!db.int<32>}),
+            c_nationkey => @c_nationkey({type=i32}),
             c_phone => @c_phone({type=!db.string}),
             c_acctbal => @c_acctbal({type=!db.decimal<15,2>}),
             c_mktsegment => @c_mktsegment({type=!db.string}),
             c_comment => @c_comment({type=!db.string})
         }
-        %2 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=!db.int<32>}),
-            o_custkey => @o_custkey({type=!db.int<32>}),
+        %2 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=i32}),
+            o_custkey => @o_custkey({type=i32}),
             o_orderstatus => @o_orderstatus({type=!db.char<1>}),
             o_totalprice => @o_totalprice({type=!db.decimal<15,2>}),
             o_orderdate => @o_orderdate({type=!db.date<day>}),
             o_orderpriority => @o_orderpriority({type=!db.string}),
             o_clerk => @o_clerk({type=!db.string}),
-            o_shippriority => @o_shippriority({type=!db.int<32>}),
+            o_shippriority => @o_shippriority({type=i32}),
             o_comment => @o_comment({type=!db.string})
         }
         %3 = relalg.crossproduct %1, %2
-        %4 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=!db.int<32>}),
-            l_partkey => @l_partkey({type=!db.int<32>}),
-            l_suppkey => @l_suppkey({type=!db.int<32>}),
-            l_linenumber => @l_linenumber({type=!db.int<32>}),
+        %4 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=i32}),
+            l_partkey => @l_partkey({type=i32}),
+            l_suppkey => @l_suppkey({type=i32}),
+            l_linenumber => @l_linenumber({type=i32}),
             l_quantity => @l_quantity({type=!db.decimal<15,2>}),
             l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
             l_discount => @l_discount({type=!db.decimal<15,2>}),
@@ -55,12 +55,12 @@ module @querymodule{
             %8 = relalg.getattr %6 @customer::@c_mktsegment : !db.string
             %9 = db.constant ("BUILDING") :!db.string
             %10 = db.compare eq %8 : !db.string,%9 : !db.string
-            %11 = relalg.getattr %6 @customer::@c_custkey : !db.int<32>
-            %12 = relalg.getattr %6 @orders::@o_custkey : !db.int<32>
-            %13 = db.compare eq %11 : !db.int<32>,%12 : !db.int<32>
-            %14 = relalg.getattr %6 @lineitem::@l_orderkey : !db.int<32>
-            %15 = relalg.getattr %6 @orders::@o_orderkey : !db.int<32>
-            %16 = db.compare eq %14 : !db.int<32>,%15 : !db.int<32>
+            %11 = relalg.getattr %6 @customer::@c_custkey : i32
+            %12 = relalg.getattr %6 @orders::@o_custkey : i32
+            %13 = db.compare eq %11 : i32,%12 : i32
+            %14 = relalg.getattr %6 @lineitem::@l_orderkey : i32
+            %15 = relalg.getattr %6 @orders::@o_orderkey : i32
+            %16 = db.compare eq %14 : i32,%15 : i32
             %17 = relalg.getattr %6 @orders::@o_orderdate : !db.date<day>
             %18 = db.constant ("1995-03-15") :!db.date<day>
             %19 = db.compare lt %17 : !db.date<day>,%18 : !db.date<day>

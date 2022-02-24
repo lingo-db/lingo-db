@@ -31,7 +31,7 @@ class LimitTranslator : public mlir::relalg::Translator {
 
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      mlir::Value counter = builder.create<mlir::db::ConstantOp>(limitOp.getLoc(), mlir::db::IntType::get(builder.getContext(), 64),builder.getI64IntegerAttr(0));
+      mlir::Value counter = builder.create<mlir::db::ConstantOp>(limitOp.getLoc(), builder.getI64Type(),builder.getI64IntegerAttr(0));
       finishedFlag = builder.create<mlir::db::CreateFlag>(limitOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
       context.pipelineManager.getCurrentPipeline()->setFlag(finishedFlag);
       counterId = context.getBuilderId();

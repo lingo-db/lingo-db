@@ -75,11 +75,8 @@ class AggregationTranslator : public mlir::relalg::Translator {
                                          std::vector<uint64_t> parts = {0xFFFFFFFFFFFFFFFF, 0x7FFFFFFFFFFFFFFF};
                                          return (mlir::Attribute) builder.getIntegerAttr(mlir::IntegerType::get(context, 128), mlir::APInt(128, parts));
                                       })
-                                      .Case<::mlir::db::IntType>([&](::mlir::db::IntType t) {
+                                      .Case<::mlir::IntegerType>([&](::mlir::IntegerType) {
                                          return builder.getI64IntegerAttr(std::numeric_limits<int64_t>::max());
-                                      })
-                                      .Case<::mlir::db::UIntType>([&](::mlir::db::UIntType t) {
-                                         return builder.getI64IntegerAttr(std::numeric_limits<uint64_t>::max());
                                       })
                                       .Case<::mlir::db::FloatType>([&](::mlir::db::FloatType t) {
                                          if (t.getWidth() == 32) {
@@ -97,7 +94,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
    void analyze(mlir::OpBuilder& builder) {
       key = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_attrsAttr());
 
-      auto counterType = mlir::db::IntType::get(builder.getContext(), 64);
+      auto counterType = builder.getI64Type();
 
       aggregationOp.aggr_func().walk([&](mlir::relalg::AddAttrOp addAttrOp) {
          if (auto aggrFn = mlir::dyn_cast_or_null<mlir::relalg::AggrFuncOp>(addAttrOp.val().getDefiningOp())) {

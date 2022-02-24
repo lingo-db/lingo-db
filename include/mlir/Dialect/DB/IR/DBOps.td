@@ -104,14 +104,7 @@ let assemblyFormat = "`<` $keyType `,` $valType `>`";
 
 
 
-class IntType<int width>
-    : Type<CPred<"$_self.isa<::mlir::db::IntType>()&&$_self.cast<mlir::db::IntType>().getWidth()==" # width # "">,
-                  "int", "::mlir::db::IntType">,
-      BuildableType<
-        "mlir::db::IntType::get($_builder.getContext()," # width # ")"> {
-  int intWidth = width;
-}
-def DBInt64 : IntType<64>;
+
 def DB_TimeUnit_S  : I64EnumAttrCase<"second", 0>;
 def DB_TimeUnit_MS  : I64EnumAttrCase<"millisecond", 1>;
 def DB_TimeUnit_MUS : I64EnumAttrCase<"microsecond", 2>;
@@ -142,18 +135,6 @@ let cppNamespace = "::mlir::db";
 
 }
 
-
-def DB_UIntType : DB_Type<"UInt","uint"> {
-let summary = "database unsigned integer type";
-let parameters = (ins "unsigned":$width);
-let assemblyFormat="`<` $width  `>` ";
-}
-def DB_IntType : DB_Type<"Int","int"> {
-let summary = "database integer type";
-let parameters = (ins "unsigned":$width);
-let assemblyFormat="`<` $width  `>` ";
-
-}
 def DB_CharType : DB_Type<"Char","char"> {
 let summary = "database char<> type";
 let parameters = (ins "unsigned":$bytes);
@@ -544,7 +525,7 @@ return printDateOp(this->getOperation(), p);
 def DateExtractOp : DB_Op<"date_extract"> {
 let summary = "date sub function";
 let arguments = (ins DB_ExtractableTimeUnitAttr:$unit, DB_DateType:$val );
-let results = (outs  DBInt64 : $res);
+let results = (outs  I64 : $res);
 let assemblyFormat = "$unit `,` $val `:` type($val) attr-dict";
 
 }
