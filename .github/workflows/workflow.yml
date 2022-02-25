@@ -24,8 +24,6 @@ jobs:
         id: smid
         run: |
           echo "::set-output name=id::$(git submodule status | cut -c 2-9 | tr '\n' '-' )"
-          echo "::set-output name=sha_short::$(git rev-parse --short HEAD)"
-
       -
         name: Build and export
         uses: docker/build-push-action@v2
@@ -36,4 +34,30 @@ jobs:
           build-args: |
             buildImage=ghcr.io/jungmair/mlirdb-buildimg:${{ steps.smid.outputs.id }}
           push: true
-          tags: ghcr.io/jungmair/mlirdb:${{ steps.smid.outputs.sha_short }}
+          tags: ghcr.io/jungmair/mlirdb:${{ github.sha }}
+  filecheck-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    container: ghcr.io/jungmair/mlirdb:${{ github.sha }}
+    steps:
+      - name: Run Test
+        run: |
+          export LD_LIBRARY_PATH=/build/arrow/install/lib && /build/llvm/bin/llvm-lit -v /build/mlirdb/test
+  sql-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    container: ghcr.io/jungmair/mlirdb:${{ github.sha }}
+    steps:
+      - name: Run Test
+        run: |
+          python3 /repo/tools/sql-roundtrip-tests/test.py /build/mlirdb
+  lint:
+    needs: build
+    runs-on: ubuntu-latest
+    container: ghcr.io/jungmair/mlirdb:${{ github.sha }}
+    steps:
+      - name: Run Test
+        run: |
+          git submodule init
+          git submodule update pybind11
+          python3 /repo/tools/scripts/run-clang-tidy.py -p /build/mlirdb -quiet  -exclude="arrow" -header-filter="$PWD/include/.*"
