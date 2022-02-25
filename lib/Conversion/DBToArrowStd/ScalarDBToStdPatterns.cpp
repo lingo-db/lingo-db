@@ -426,7 +426,7 @@ class CastOpLowering : public ConversionPattern {
             value = rewriter.create<arith::SIToFPOp>(loc, convertedTargetType, value);
          } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto sourceScale = decimalTargetType.getS();
-            size_t decimalWidth = typeConverter->convertType(decimalTargetType).cast<mlir::IntegerType>().getWidth();
+            int decimalWidth = typeConverter->convertType(decimalTargetType).cast<mlir::IntegerType>().getWidth();
             auto [low, high] = support::getDecimalScaleMultiplier(sourceScale);
             std::vector<uint64_t> parts = {low, high};
             auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(decimalWidth, parts)));
@@ -473,7 +473,7 @@ class CastOpLowering : public ConversionPattern {
          } else if (auto targetIntWidth=getIntegerWidth(scalarTargetType,false)) {
             auto sourceScale = decimalSourceType.getS();
             auto [low, high] = support::getDecimalScaleMultiplier(sourceScale);
-            size_t decimalWidth = convertedSourceType.cast<mlir::IntegerType>().getWidth();
+            int decimalWidth = convertedSourceType.cast<mlir::IntegerType>().getWidth();
 
             std::vector<uint64_t> parts = {low, high};
 

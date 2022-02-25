@@ -63,11 +63,7 @@ struct FieldParser<mlir::db::DateUnitAttr> {
       return failure();
    }
 };
-llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const mlir::db::DateUnitAttr& dt)
-{
-   os<<mlir::db::stringifyDateUnitAttr(dt);
-   return os;
-}
+
 template<>
 struct FieldParser<mlir::db::IntervalUnitAttr> {
    static FailureOr<mlir::db::IntervalUnitAttr> parse(AsmParser& parser) {
@@ -80,11 +76,7 @@ struct FieldParser<mlir::db::IntervalUnitAttr> {
       return failure();
    }
 };
-llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const mlir::db::IntervalUnitAttr& dt)
-{
-   os<<mlir::db::stringifyIntervalUnitAttr(dt);
-   return os;
-}
+
 template <>
 struct FieldParser<mlir::db::TimeUnitAttr> {
    static FailureOr<mlir::db::TimeUnitAttr> parse(AsmParser& parser) {
@@ -97,11 +89,24 @@ struct FieldParser<mlir::db::TimeUnitAttr> {
       return failure();
    }
 };
+
+namespace db{
+llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const mlir::db::DateUnitAttr& dt)
+{
+   os<<mlir::db::stringifyDateUnitAttr(dt);
+   return os;
+}
+llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const mlir::db::IntervalUnitAttr& dt)
+{
+   os<<mlir::db::stringifyIntervalUnitAttr(dt);
+   return os;
+}
 llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const mlir::db::TimeUnitAttr& dt)
 {
    os<<mlir::db::stringifyTimeUnitAttr(dt);
    return os;
 }
+} // end namespace db
 } // end namespace mlir
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/DB/IR/DBOpsTypes.cpp.inc"

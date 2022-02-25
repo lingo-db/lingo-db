@@ -22,7 +22,7 @@ mlir::Type getBaseType(mlir::Type t) {
    }
    return t;
 }
-bool isIntegerType(mlir::Type type, int width) {
+bool isIntegerType(mlir::Type type, unsigned int width) {
    auto asStdInt = type.dyn_cast_or_null<mlir::IntegerType>();
    return asStdInt && asStdInt.getWidth() == width;
 }

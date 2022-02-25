@@ -20,6 +20,6 @@
 #include "mlir/Dialect/DB/IR/DBOps.h.inc"
 mlir::Type constructNullableBool(mlir::MLIRContext* context, mlir::ValueRange operands);
 mlir::Type getBaseType(mlir::Type t);
-bool isIntegerType(mlir::Type, int width);
+bool isIntegerType(mlir::Type, unsigned int width);
 int getIntegerWidth(mlir::Type, bool isUnSigned);
 #endif // MLIR_DIALECT_DB_IR_DBOPS_H
