@@ -8,14 +8,15 @@ jobs:
     container: ghcr.io/jungmair/mlirdb:latest
     steps:
       - uses: actions/checkout@v2
-      - name: test
-        run: find /__w/db-dialects/db-dialects
       - run: rm -rf /build/mlirdb
       - run: mkdir /build/mlirdb
-      - run: git submodule init
-      - run: git submodule update llvm-project
-      - run: git submodule update arrow
-      - run: git submodule update torch-mlir
-      - run: git submodule update pybind11
+      - run: rm -r arrow pybind11 llvm-project torch-mlir
+      - run: cp -r /repo/arrow arrow
+      - run: cp -r /repo/pybind11 pybind11
+      - run: cp -r /repo/llvm-project llvm-project
+      - run: cp -r /repo/torch-mlir torch-mlir
+      - run: find /__w/db-dialects/db-dialects/pybind11
       - run: cmake -G Ninja . -B /build/mlirdb            -DMLIR_DIR=/build/llvm/lib/cmake/mlir            -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit            -DArrow_DIR="/build/arrow/install/lib/cmake/arrow"            -DARROW_BUILD_DIR="/build/arrow"            -DBoost_INCLUDE_DIR="/build/arrow/boost_ep-prefix/src/boost_ep"            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release 
       - run: cmake --build /build/mlirdb -j$(nproc)
+      - name: file-based tests
+        run:  LD_LIBRARY_PATH=/build/arrow/install/lib && /build/llvm/bin/llvm-lit -v /build/mlirdb/test
