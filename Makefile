@@ -1,5 +1,6 @@
 ROOT_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 NPROCS := $(shell echo $$(nproc))
+SUBID := $(shell echo "$$(git submodule status)" | cut -c 2-9 | tr '\n' '-')
 
 build/llvm-build:
 	mkdir -p build/llvm-build
@@ -90,17 +91,22 @@ run-benchmark: build/build-llvm-release
 coverage-clean:
 	rm -rf build/build-debug-llvm-release-coverage/coverage
 
+docker-buildimg:
+	DOCKER_BUILDKIT=1 docker build -f "docker/Dockerfile" -t mlirdb-buildimg:${SUBID} --target buildimg "."
 build-docker:
-	docker build -f "docker/Dockerfile" -t mlirdb:latest "."
-.docker-built:
-	$(MAKE) build-docker
-	touch .docker-built
+	DOCKER_BUILDKIT=1 docker build -f "docker/Dockerfile" -t mlirdb:latest --target mlirdb  "."
+build-repr-docker:
+	DOCKER_BUILDKIT=1 docker build -f "docker/Dockerfile" -t mlirdb-repr:latest --target reproduce "."
+
+.repr-docker-built:
+	$(MAKE) build-repr-docker
+	touch .repr-docker-built
 clean:
 	rm -rf build
 
 
-reproduce: .docker-built
-	docker run -it mlirdb /bin/bash -c "python3 tools/benchmark-tpch.py /build/mlirdb/ tpch-1"
+reproduce: .repr-docker-built
+	 docker run --privileged -it mlirdb-repr /bin/bash -c "python3 tools/benchmark-tpch.py /build/mlirdb/ tpch-1"
 
 lint:
 	python3 tools/scripts/run-clang-tidy.py -p build/build-debug-llvm-release -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow"
@@ -108,3 +114,6 @@ lint:
 #	 perf record -k 1 -F 1000  --call-graph dwarf [cmd]
 #	 perf inject -j -i perf.data -o perf.data.jitted
 #	perf report --no-children -i perf.data.jitted
+
+test-subid:
+	echo ${SUBID}
