@@ -29,8 +29,7 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Oper
       }
       mlir::Value combined = builder.create<mlir::db::AndOp>(higher->getLoc(), restype, ValueRange{lowerPredVal, mapping.lookup(higherPredVal)});
       builder.create<mlir::relalg::ReturnOp>(higher->getLoc(), combined);
-      lowerTerminator->remove();
-      lowerTerminator->destroy();
+      lowerTerminator->erase();
    }
 
    void runOnOperation() override {
@@ -40,8 +39,7 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Oper
          if (canCombine) {
             combine(op, lower.getDefiningOp());
             op.replaceAllUsesWith(lower);
-            op->remove();
-            op->destroy();
+            op->erase();
          }
       });
    }

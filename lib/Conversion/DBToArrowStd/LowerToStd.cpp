@@ -23,22 +23,6 @@ using namespace mlir;
 
 namespace {
 
-class GetTableLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
-
-   public:
-   explicit GetTableLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::GetTable::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto getTableOp = cast<mlir::db::GetTable>(op);
-      auto executionContext = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::GetExecutionContext, {})[0];
-      auto tableName = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), getTableOp.tablenameAttr());
-      auto tablePtr = functionRegistry.call(rewriter, op->getLoc(), db::codegen::FunctionRegistry::FunctionId::ExecutionContextGetTable, mlir::ValueRange({executionContext, tableName}))[0];
-      rewriter.replaceOp(getTableOp, tablePtr);
-      return success();
-   }
-};
 class ScanSourceLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
 
@@ -268,8 +252,6 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<TypeCastLowering>(typeConverter, &getContext());
 
    patterns.insert<ScanSourceLowering>(functionRegistry, typeConverter, &getContext());
-
-   patterns.insert<GetTableLowering>(functionRegistry, typeConverter, &getContext());
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();

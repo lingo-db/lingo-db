@@ -17,8 +17,6 @@ void populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegistry& joinH
 
 std::unique_ptr<Pass> createLowerToStdPass();
 
-//todo: remove hack
-Value createStringConstant(mlir::Location loc,ConversionPatternRewriter& rewriter, mlir::ModuleOp parentModule,const std::string& str);
 } // end namespace db
 } // end namespace mlir
 

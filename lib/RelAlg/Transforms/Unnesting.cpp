@@ -203,8 +203,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
       }
       mlir::Value combined = builder.create<mlir::db::AndOp>(loc, resType, values);
       builder.create<mlir::relalg::ReturnOp>(loc, combined);
-      lowerTerminator->remove();
-      lowerTerminator->destroy();
+      lowerTerminator->erase();
    }
    bool trySimpleUnnesting(BinaryOperator binaryOperator) {
       if (auto predicateOperator = mlir::dyn_cast_or_null<PredicateOperator>(binaryOperator.getOperation())) {
@@ -225,8 +224,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          combine(binaryOperator->getLoc(),selectionOps, predicateOperator);
          for (auto selOp : selectionOps) {
             selOp.replaceAllUsesWith(selOp.rel());
-            selOp->remove();
-            selOp->destroy();
+            selOp->erase();
          }
          return true;
       }

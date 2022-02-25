@@ -12,3 +12,4 @@ perf.*
 events.parquet
 operations.parquet
 .vscode
+mlir_venv

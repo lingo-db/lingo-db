@@ -67,8 +67,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
          builder.setInsertionPoint(op);
          auto replacement = builder.create<relalg::GetAttrOp>(loc, builder.getI1Type(), markAttrRef, surroundingOperator.getLambdaRegion().getArgument(0));
          op->replaceAllUsesWith(replacement);
-         op->remove();
-         op->destroy();
+         op->erase();
          surroundingOperator->setOperand(0, markJoin->getResult(0));
       }
    }
@@ -102,8 +101,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             builder.setInsertionPoint(getscalarop);
             Operation* replacement = builder.create<relalg::GetAttrOp>(getscalarop->getLoc(), newAttrType, attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
             getscalarop.replaceAllUsesWith(replacement);
-            getscalarop->remove();
-            getscalarop->destroy();
+            getscalarop->erase();
             treeVal = singleJoin;
             surroundingOperator->setOperand(0, treeVal);
          } else if (auto getlistop = mlir::dyn_cast_or_null<mlir::relalg::GetListOp>(op)) {
@@ -120,8 +118,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             builder.setInsertionPoint(getlistop);
             Operation* replacement = builder.create<relalg::GetAttrOp>(getlistop->getLoc(), getlistop.getType(), attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
             getlistop.replaceAllUsesWith(replacement);
-            getlistop->remove();
-            getlistop->destroy();
+            getlistop->erase();
             treeVal = collectionJoin;
             surroundingOperator->setOperand(0, treeVal);
          } else if (auto existsop = mlir::dyn_cast_or_null<mlir::relalg::ExistsOp>(op)) {

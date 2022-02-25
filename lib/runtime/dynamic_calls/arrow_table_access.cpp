@@ -4,17 +4,6 @@
 #include <iostream>
 #include <arrow/array.h>
 #include <arrow/table.h>
-EXPORT uint64_t rt_get_column_id(std::shared_ptr<arrow::Table>* table, runtime::VarLen32 columnName) {
-   auto column_names = (*table)->ColumnNames();
-   size_t column_id = 0;
-   for (auto column : column_names) {
-      if (column == columnName.str()) {
-         return column_id;
-      }
-      column_id++;
-   }
-   throw std::runtime_error("column not found: " + columnName.str());
-}
 EXPORT uint64_t get_column_id(std::shared_ptr<arrow::Table>* table, std::string columnName) {
    auto column_names = (*table)->ColumnNames();
    size_t column_id = 0;

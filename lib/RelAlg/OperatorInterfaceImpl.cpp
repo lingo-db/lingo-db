@@ -264,8 +264,7 @@ void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir:
    } else {
       builder.create<mlir::relalg::ReturnOp>(op->getLoc(), additionalPred);
    }
-   terminator->remove();
-   terminator->destroy();
+   terminator->erase();
 }
 void mlir::relalg::detail::initPredicate(mlir::Operation* op) {
    auto* context = op->getContext();

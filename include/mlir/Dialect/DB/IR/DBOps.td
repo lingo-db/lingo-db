@@ -247,13 +247,7 @@ let arguments = (ins AnyType:$builder);
 let results = (outs AnyType:$builded);
 let assemblyFormat = "$builder `:` type($builder) `->` type($builded) attr-dict";
 }
-def DB_GetTable : DB_Op<"get_table",
-[NoSideEffect]> {
-let summary = "get table";
-let arguments = (ins StrAttr:$tablename);
-let results = (outs DB_Table:$table);
-let assemblyFormat = "$tablename attr-dict";
-}
+
 def DB_ScanSource : DB_Op<"scan_source",
 [NoSideEffect]> {
 let summary = "scans a source";

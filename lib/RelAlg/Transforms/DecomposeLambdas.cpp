@@ -84,8 +84,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
             }
             mlir::Value ored = builder.create<mlir::db::OrOp>(orOp->getLoc(), c2);
             builder.create<mlir::relalg::ReturnOp>(currentSel->getLoc(), ored);
-            terminator->remove();
-            terminator->destroy();
+            terminator->erase();
          }
       }
    }
@@ -111,8 +110,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          mlir::relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), newsel.getOperation(), &newsel.getPredicateBlock(), mapping);
          builder.create<mlir::relalg::ReturnOp>(currentSel->getLoc(), mapping.lookup(v));
          auto* terminator = newsel.getLambdaBlock().getTerminator();
-         terminator->remove();
-         terminator->destroy();
+         terminator->erase();
       }
    }
    static llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> analyze(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
@@ -210,15 +208,13 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          mlir::Value val = op.rel();
          decomposeSelection(retval, val);
          op.replaceAllUsesWith(val);
-         op->remove();
-         op->destroy();
+         op->erase();
       });
       getOperation().walk([&](mlir::relalg::MapOp op) {
          mlir::Value val = op.rel();
          decomposeMap(op, val);
          op.replaceAllUsesWith(val);
-         op->remove();
-         op->destroy();
+         op->erase();
       });
       getOperation().walk([&](mlir::relalg::OuterJoinOp op) {
          auto* terminator = op.getRegion().front().getTerminator();
@@ -229,8 +225,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          auto val = decomposeOuterJoin(retval, availableLeft, availableRight, mapped);
          mlir::OpBuilder builder(terminator);
          builder.create<mlir::relalg::ReturnOp>(terminator->getLoc(), val ? mlir::ValueRange{val} : mlir::ValueRange{});
-         terminator->remove();
-         terminator->destroy();
+         terminator->erase();
       });
    }
 };
