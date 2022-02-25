@@ -42,6 +42,7 @@ jobs:
     steps:
       - name: Run Test
         run: |
+          cd /repo
           export LD_LIBRARY_PATH=/build/arrow/install/lib && /build/llvm/bin/llvm-lit -v /build/mlirdb/test
   sql-tests:
     needs: build
@@ -50,6 +51,7 @@ jobs:
     steps:
       - name: Run Test
         run: |
+          cd /repo
           python3 /repo/tools/sql-roundtrip-tests/test.py /build/mlirdb
   lint:
     needs: build
@@ -58,6 +60,5 @@ jobs:
     steps:
       - name: Run Test
         run: |
-          git submodule init
-          git submodule update pybind11
+          cd /repo
           python3 /repo/tools/scripts/run-clang-tidy.py -p /build/mlirdb -quiet  -exclude="arrow" -header-filter="$PWD/include/.*"

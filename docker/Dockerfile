@@ -72,6 +72,7 @@ COPY --from=buildllvm /llvm-src/llvm-project/mlir /llvm-src/llvm-project/mlir
 COPY --from=buildllvm /build/llvm/bin/mlir-tblgen /build/llvm/bin/mlir-tblgen
 COPY --from=buildllvm /build/llvm/bin/llvm-lit /build/llvm/bin/llvm-lit
 COPY --from=buildllvm /build/llvm/bin/llvm-link /build/llvm/bin/llvm-link
+COPY --from=buildllvm /build/llvm/bin/FileCheck /build/llvm/bin/FileCheck
 
 COPY --from=buildllvm /build/llvm/lib /build/llvm/lib
 COPY --from=buildllvm /build/llvm/include /build/llvm/include
