@@ -133,33 +133,34 @@ module @querymodule{
             %65 = relalg.getattr %63 @nation1::@n_name : !db.string
             %66 = db.constant ("BRAZIL") :!db.string
             %67 = db.compare eq %65 : !db.string,%66 : !db.string
-            %71 = db.if %67 : i1  -> (!db.decimal<15,2>) {
-                %69 = relalg.getattr %63 @map1::@aggfmname2 : !db.decimal<15,2>
-                db.yield %69 : !db.decimal<15,2>
+            %68 = db.derive_truth %67 : i1
+            %72 = scf.if %68  -> (!db.decimal<15,2>) {
+                %70 = relalg.getattr %63 @map1::@aggfmname2 : !db.decimal<15,2>
+                scf.yield %70 : !db.decimal<15,2>
             } else {
-                %70 = db.constant (0) :!db.decimal<15,2>
-                db.yield %70 : !db.decimal<15,2>
+                %71 = db.constant (0) :!db.decimal<15,2>
+                scf.yield %71 : !db.decimal<15,2>
             }
-            %72 = relalg.addattr %63, @aggfmname1({type=!db.decimal<15,2>}) %71
-            relalg.return %72 : !relalg.tuple
+            %73 = relalg.addattr %63, @aggfmname1({type=!db.decimal<15,2>}) %72
+            relalg.return %73 : !relalg.tuple
         }
-        %75 = relalg.aggregation @aggr1 %64 [@map1::@aggfmname1] (%73 : !relalg.tuplestream, %74 : !relalg.tuple) {
-            %76 = relalg.aggrfn sum @map2::@aggfmname1 %73 : !db.decimal<15,2>
-            %77 = relalg.addattr %74, @aggfmname2({type=!db.decimal<15,2>}) %76
-            %78 = relalg.aggrfn sum @map1::@aggfmname2 %73 : !db.decimal<15,2>
-            %79 = relalg.addattr %77, @aggfmname3({type=!db.decimal<15,2>}) %78
-            relalg.return %79 : !relalg.tuple
+        %76 = relalg.aggregation @aggr1 %64 [@map1::@aggfmname1] (%74 : !relalg.tuplestream, %75 : !relalg.tuple) {
+            %77 = relalg.aggrfn sum @map2::@aggfmname1 %74 : !db.decimal<15,2>
+            %78 = relalg.addattr %75, @aggfmname2({type=!db.decimal<15,2>}) %77
+            %79 = relalg.aggrfn sum @map1::@aggfmname2 %74 : !db.decimal<15,2>
+            %80 = relalg.addattr %78, @aggfmname3({type=!db.decimal<15,2>}) %79
+            relalg.return %80 : !relalg.tuple
         }
-        %81 = relalg.map @map3 %75 (%80: !relalg.tuple) {
-            %82 = relalg.getattr %80 @aggr1::@aggfmname2 : !db.decimal<15,2>
-            %83 = relalg.getattr %80 @aggr1::@aggfmname3 : !db.decimal<15,2>
-            %84 = db.div %82 : !db.decimal<15,2>,%83 : !db.decimal<15,2>
-            %85 = relalg.addattr %80, @aggfmname4({type=!db.decimal<15,2>}) %84
-            relalg.return %85 : !relalg.tuple
+        %82 = relalg.map @map3 %76 (%81: !relalg.tuple) {
+            %83 = relalg.getattr %81 @aggr1::@aggfmname2 : !db.decimal<15,2>
+            %84 = relalg.getattr %81 @aggr1::@aggfmname3 : !db.decimal<15,2>
+            %85 = db.div %83 : !db.decimal<15,2>,%84 : !db.decimal<15,2>
+            %86 = relalg.addattr %81, @aggfmname4({type=!db.decimal<15,2>}) %85
+            relalg.return %86 : !relalg.tuple
         }
-        %86 = relalg.sort %81 [(@map1::@aggfmname1,asc)]
-        %87 = relalg.materialize %86 [@map1::@aggfmname1,@map3::@aggfmname4] => ["o_year","mkt_share"] : !db.table
-        return %87 : !db.table
+        %87 = relalg.sort %82 [(@map1::@aggfmname1,asc)]
+        %88 = relalg.materialize %87 [@map1::@aggfmname1,@map3::@aggfmname4] => ["o_year","mkt_share"] : !db.table
+        return %88 : !db.table
     }
 }
 

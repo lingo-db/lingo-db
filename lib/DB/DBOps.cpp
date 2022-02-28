@@ -137,62 +137,6 @@ static void printDateOp(Operation* op, OpAsmPrinter& p) {
       p << operand << ":" << operand.getType();
    }
 }
-
-static ParseResult parseIfOp(OpAsmParser& parser, OperationState& result) {
-   // Create the regions for 'then'.
-   result.regions.reserve(2);
-   Region* thenRegion = result.addRegion();
-   Region* elseRegion = result.addRegion();
-
-   OpAsmParser::OperandType cond;
-   Type condType;
-   if (parser.parseOperand(cond) || parser.parseColonType(condType) ||
-       parser.resolveOperand(cond, condType, result.operands))
-      return failure();
-   // Parse optional results type list.
-   if (parser.parseOptionalArrowTypeList(result.types))
-      return failure();
-   // Parse the 'then' region.
-   if (parser.parseRegion(*thenRegion, /*arguments=*/{}, /*argTypes=*/{}))
-      return failure();
-
-   // If we find an 'else' keyword then parse the 'else' region.
-   if (!parser.parseOptionalKeyword("else")) {
-      if (parser.parseRegion(*elseRegion, /*arguments=*/{}, /*argTypes=*/{}))
-         return failure();
-   }
-
-   // Parse the optional attribute list.
-   if (parser.parseOptionalAttrDict(result.attributes))
-      return failure();
-   return success();
-}
-
-static void print(OpAsmPrinter& p, mlir::db::IfOp op) {
-   bool printBlockTerminators = false;
-
-   p << " " << op.condition() << " : " << op.condition().getType();
-   if (!op.results().empty()) {
-      p << " -> (" << op.getResultTypes() << ")";
-      // Print yield explicitly if the op defines values.
-      printBlockTerminators = true;
-   }
-   p.printRegion(op.thenRegion(),
-                 /*printEntryBlockArgs=*/false,
-                 /*printBlockTerminators=*/printBlockTerminators);
-
-   // Print the 'else' regions if it exists and has a block.
-   auto& elseRegion = op.elseRegion();
-   if (!elseRegion.empty()) {
-      p << " else";
-      p.printRegion(elseRegion,
-                    /*printEntryBlockArgs=*/false,
-                    /*printBlockTerminators=*/printBlockTerminators);
-   }
-
-   p.printOptionalAttrDict(op->getAttrs());
-}
-
 static void printInitializationList(OpAsmPrinter& p,
                                     Block::BlockArgListType blocksArgs,
                                     ValueRange initializers,
@@ -438,27 +382,6 @@ LogicalResult mlir::db::AndOp::canonicalize(mlir::db::AndOp andOp, mlir::Pattern
       return success();
    }
    return failure();
-}
-void mlir::db::IfOp::build(OpBuilder& builder, OperationState& result,
-                           TypeRange resultTypes, Value cond,
-                           function_ref<void(OpBuilder&, Location)> thenBuilder,
-                           function_ref<void(OpBuilder&, Location)> elseBuilder) {
-   assert(thenBuilder && "the builder callback for 'then' must be present");
-
-   result.addOperands(cond);
-   result.addTypes(resultTypes);
-
-   OpBuilder::InsertionGuard guard(builder);
-   Region* thenRegion = result.addRegion();
-   builder.createBlock(thenRegion);
-   thenBuilder(builder, result.location);
-
-   Region* elseRegion = result.addRegion();
-   if (!elseBuilder)
-      return;
-
-   builder.createBlock(elseRegion);
-   elseBuilder(builder, result.location);
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.cpp.inc"

@@ -266,7 +266,7 @@ void DBToStdLoweringPass::runOnOperation() {
    mlir::db::populateBuilderToStdPatterns(functionRegistry, typeConverter, patterns);
    mlir::db::populateCollectionsToStdPatterns(functionRegistry, typeConverter, patterns);
    mlir::util::populateUtilTypeConversionPatterns(typeConverter, patterns);
-
+   mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns, target);
    patterns.insert<FuncConstLowering>(typeConverter, &getContext());
    patterns.insert<TypeCastLowering>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());

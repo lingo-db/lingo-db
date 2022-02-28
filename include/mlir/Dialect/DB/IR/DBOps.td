@@ -538,25 +538,10 @@ let results=(outs AnyType:$res);
 let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
 }
 
-def IfOp : DB_Op<"if",
-[SingleBlockImplicitTerminator<"db::YieldOp">, RecursiveSideEffects,
-NoRegionArguments]> {
-let summary = "if-then-else operation";
-
-let arguments = (ins AnyType:$condition);
-let results = (outs Variadic<AnyType>:$results);
-let regions = (region SizedRegion<1>:$thenRegion, AnyRegion:$elseRegion);
-let builders = [
-        OpBuilder<(ins "TypeRange":$resultTypes, "Value":$cond,
-                CArg<"function_ref<void(OpBuilder &, Location)>">:$thenBuilder,
-                CArg<"function_ref<void(OpBuilder &, Location)>",
-                "nullptr">:$elseBuilder)>,
-        ];
-}
 
 
 def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
-        ParentOneOf<["IfOp","ForOp","SortOp","BuilderMerge"]>]> {
+        ParentOneOf<["ForOp","SortOp","BuilderMerge"]>]> {
 let summary = "loop yield and termination operation";
 
 let arguments = (ins Variadic<AnyType>:$results);

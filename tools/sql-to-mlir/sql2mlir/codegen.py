@@ -327,7 +327,8 @@ class CodeGen:
     def endSelection(self,res):
         self.endRegionOpWith(Operation(None,None,["relalg.return ",ValueRef(res)," : ",TypeRef(res)]))
     def startIf(self,val):
-        self.startRegionOp(None,["db.if ", ValueRef(val)," : ",TypeRef(val)," "])
+        cond= self.addOp(DBType("bool",[],False),["db.derive_truth ",ValueRef(val)," : ",TypeRef(val)])
+        self.startRegionOp(None,["scf.if ", ValueRef(cond)," "])
     def startFor(self,param, collection,iter_args,initial_vals):
         iter_arg_str=",".join(list(map(lambda tpl: tpl[0]+" = "+tpl[1],zip(iter_args,initial_vals))))
 
@@ -338,6 +339,9 @@ class CodeGen:
     def create_db_yield(self,yieldValues):
         yieldTypes=list(map(lambda x:self.getType(x).to_string(),yieldValues))
         return self.addExistingOp(Operation(None,None,["db.yield ",",".join(yieldValues)," : " if len(yieldValues)>0 else "", ",".join(yieldTypes)]))
+    def create_scf_yield(self,yieldValues):
+        yieldTypes=list(map(lambda x:self.getType(x).to_string(),yieldValues))
+        return self.addExistingOp(Operation(None,None,["scf.yield ",",".join(yieldValues)," : " if len(yieldValues)>0 else "", ",".join(yieldTypes)]))
 
     def endFor(self,yieldValues):
         forop = self.stacked_ops[-1]
@@ -349,7 +353,7 @@ class CodeGen:
         self.endRegionOp()
         return resParams
     def addElse(self, yieldValues=[]):
-        self.create_db_yield(yieldValues)
+        self.create_scf_yield(yieldValues)
         ifop=self.stacked_ops[-1]
         self.addIfReturnTypes(ifop,yieldValues)
 
@@ -375,7 +379,7 @@ class CodeGen:
         for yieldValue in yieldValues:
             resParams.append(self.newParam(self.getType(yieldValue)))
         ifop.print_vars=resParams
-        self.create_db_yield(yieldValues)
+        self.create_scf_yield(yieldValues)
         self.endRegionOp()
         return resParams
 

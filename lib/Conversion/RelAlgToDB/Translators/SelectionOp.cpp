@@ -1,6 +1,7 @@
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
 class SelectionTranslator : public mlir::relalg::Translator {
@@ -51,11 +52,12 @@ class SelectionTranslator : public mlir::relalg::Translator {
          consumer->consume(this, builder, context);
       } else {
          auto builderValuesBefore = getRequiredBuilderValues(context);
-         auto ifOp = builder.create<mlir::db::IfOp>(
+         matched = builder.create<mlir::db::DeriveTruth>(selectionOp.getLoc(), matched);
+         auto ifOp = builder.create<mlir::scf::IfOp>(
             selectionOp->getLoc(), getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
                consumer->consume(this, builder1, context);
-               builder1.create<mlir::db::YieldOp>(selectionOp->getLoc(), getRequiredBuilderValues(context)); },
-            requiredBuilders.empty() ? noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location loc) { builder2.create<mlir::db::YieldOp>(loc, builderValuesBefore); });
+               builder1.create<mlir::scf::YieldOp>(selectionOp->getLoc(), getRequiredBuilderValues(context)); },
+            requiredBuilders.empty() ? noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location loc) { builder2.create<mlir::scf::YieldOp>(loc, builderValuesBefore); });
          setRequiredBuilderValues(context, ifOp.getResults());
       }
    }

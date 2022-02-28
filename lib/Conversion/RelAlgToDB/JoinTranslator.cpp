@@ -1,3 +1,4 @@
+#include "mlir/Dialect/SCF/SCF.h"
 #include <mlir/Conversion/RelAlgToDB/JoinTranslator.h>
 using namespace mlir::relalg;
 JoinTranslator::JoinTranslator(std::shared_ptr<JoinImpl> joinImpl) : Translator({joinImpl->builderChild, joinImpl->lookupChild}), joinOp(joinImpl->joinOp), impl(joinImpl) {
@@ -53,13 +54,13 @@ void JoinTranslator::handleMapping(OpBuilder& builder, TranslatorContext& contex
 void JoinTranslator::handlePotentialMatch(OpBuilder& builder, TranslatorContext& context, Value matches, mlir::function_ref<void(OpBuilder&, TranslatorContext& context, TranslatorContext::AttributeResolverScope&)> onMatch) {
    auto scope = context.createScope();
    auto builderValuesBefore = getRequiredBuilderValues(context);
-   auto ifOp = builder.create<mlir::db::IfOp>(
+   auto ifOp = builder.create<mlir::scf::IfOp>(
       joinOp->getLoc(), getRequiredBuilderTypes(context), matches, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
          if(onMatch){
             onMatch(builder1,context,scope);
          }
          consumer->consume(this, builder1, context);
-         builder1.create<mlir::db::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); }, requiredBuilders.empty() ? noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::db::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
+         builder1.create<mlir::scf::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); }, requiredBuilders.empty() ? noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::scf::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
    setRequiredBuilderValues(context, ifOp.getResults());
 }
 std::vector<mlir::Type> JoinTranslator::getRequiredBuilderTypesCustom(TranslatorContext& context) {
@@ -104,8 +105,9 @@ mlir::Value JoinTranslator::evaluatePredicate(TranslatorContext& context, mlir::
       hasRealPredicate = !terminator.results().empty();
    }
    if (hasRealPredicate) {
-      return mergeRelationalBlock(
+      auto val = mergeRelationalBlock(
          builder.getInsertionBlock(), joinOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
+      return builder.create<mlir::db::DeriveTruth>(joinOp->getLoc(), val);
    } else {
       return builder.create<mlir::db::ConstantOp>(joinOp.getLoc(), builder.getI1Type(), builder.getIntegerAttr(builder.getI64Type(), 1));
    }

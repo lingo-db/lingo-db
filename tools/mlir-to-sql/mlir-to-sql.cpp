@@ -3,6 +3,7 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -129,6 +130,9 @@ class ToSQL {
             joinstr(output, "or", op.vals());
             output << ")";
          })
+         .Case<mlir::db::DeriveTruth>([&](mlir::db::DeriveTruth op) {
+            output << resolveVal(op.val());
+         })
          .Case<DateSubOp>([&](DateSubOp op) {
             handleBinOp(output, "-", op.left(), op.right());
          })
@@ -191,12 +195,12 @@ class ToSQL {
          .Case<NotOp>([&](NotOp op) {
             output << "not " << resolveVal(op.val());
          })
-         .Case<mlir::db::IfOp>([&](mlir::db::IfOp op) {
+         .Case<mlir::scf::IfOp>([&](mlir::scf::IfOp op) {
             output << " case \n";
-            output << " when " << resolveVal(op.condition());
-            output << " then " << resolveVal(mlir::dyn_cast_or_null<mlir::db::YieldOp>(op.thenRegion().front().getTerminator()).getOperand(0));
-            if (!op.elseRegion().empty()) {
-               output << " else " << resolveVal(mlir::dyn_cast_or_null<mlir::db::YieldOp>(op.elseRegion().front().getTerminator()).getOperand(0));
+            output << " when " << resolveVal(op.getCondition());
+            output << " then " << resolveVal(mlir::dyn_cast_or_null<mlir::scf::YieldOp>(op.getThenRegion().front().getTerminator()).getOperand(0));
+            if (!op.getElseRegion().empty()) {
+               output << " else " << resolveVal(mlir::dyn_cast_or_null<mlir::scf::YieldOp>(op.getElseRegion().front().getTerminator()).getOperand(0));
             }
             output << "\n end";
          })
@@ -220,7 +224,7 @@ class ToSQL {
             }
             output << "\n from " << operatorName(op.rel().getDefiningOp());
          })
-         .Case<mlir::relalg::ReturnOp, mlir::ReturnOp, AddAttrOp, mlir::db::YieldOp>([&](mlir::Operation* others) {
+         .Case<mlir::relalg::ReturnOp, mlir::ReturnOp, AddAttrOp, mlir::scf::YieldOp>([&](mlir::Operation* others) {
 
          })
          .Default([&](mlir::Operation* others) {
@@ -285,8 +289,8 @@ class ToSQL {
                      output << "select ";
                      auto first = true;
                      for (auto mapping : op.columns()) {
-                        auto columnName =mapping.getName();
-                        auto attr=mapping.getValue();
+                        auto columnName = mapping.getName();
+                        auto attr = mapping.getValue();
                         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
                         if (first) {
                            first = false;
@@ -588,6 +592,7 @@ int main(int argc, char** argv) {
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::StandardOpsDialect>();
    registry.insert<mlir::util::UtilDialect>();
+   registry.insert<mlir::scf::SCFDialect>();
 
    mlir::MLIRContext context;
    context.appendDialectRegistry(registry);

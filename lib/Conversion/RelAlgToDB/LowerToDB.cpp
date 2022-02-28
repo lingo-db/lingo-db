@@ -7,6 +7,7 @@
 
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 
 namespace {
@@ -17,6 +18,7 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::OperationPas
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::util::UtilDialect>();
       registry.insert<mlir::memref::MemRefDialect>();
+      registry.insert<mlir::scf::SCFDialect>();
    }
    bool isTranslationHook(mlir::Operation* op) {
       return ::llvm::TypeSwitch<mlir::Operation*, bool>(op)
