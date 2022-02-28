@@ -96,12 +96,7 @@ class AggrHtHelper {
       auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, right);
       for (size_t i = 0; i < leftUnpacked.getNumResults(); i++) {
          Value compared = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, leftUnpacked->getResult(i), rightUnpacked.getResult(i));
-         if (compared.getType().isa<mlir::db::NullableType>()) {
-            Value isNull = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), compared);
-            Value notNull = rewriter.create<mlir::db::NotOp>(loc, rewriter.getI1Type(), isNull);
-            Value value = rewriter.create<mlir::db::CastOp>(loc, rewriter.getI1Type(), compared);
-            compared = rewriter.create<mlir::db::AndOp>(loc, rewriter.getI1Type(), ValueRange({notNull, value}));
-         }
+         compared = rewriter.create<mlir::db::DeriveTruth>(loc, compared);
          auto currLeftType = leftUnpacked->getResult(i).getType();
          auto currRightType = rightUnpacked.getResult(i).getType();
          auto currLeftNullableType = currLeftType.dyn_cast_or_null<mlir::db::NullableType>();

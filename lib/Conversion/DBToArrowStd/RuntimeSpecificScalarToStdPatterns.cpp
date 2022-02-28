@@ -13,92 +13,6 @@
 using namespace mlir;
 namespace {
 
-template <class OpClass, class LeftT, class RightT, class ResT>
-class SimpleBinOpToFuncLowering : public ConversionPattern {
-   std::function<Value(mlir::Location, LeftT, Value, ConversionPatternRewriter&)> processLeft;
-   std::function<Value(mlir::Location, RightT, Value, ConversionPatternRewriter&)> processRight;
-   std::function<std::vector<Value>(Value, Value)> combine;
-   std::function<FuncOp(OpClass, LeftT, RightT, ConversionPatternRewriter& rewriter)> provideFunc;
-   std::function<Value(mlir::Location, ResT, Value, ConversionPatternRewriter&)> processResult;
-
-   public:
-   explicit SimpleBinOpToFuncLowering(MLIRContext* context,
-                                      std::function<Value(mlir::Location, LeftT, Value, ConversionPatternRewriter&)>
-                                         processLeft,
-                                      std::function<Value(mlir::Location, RightT, Value, ConversionPatternRewriter&)>
-                                         processRight,
-                                      std::function<std::vector<Value>(Value, Value)>
-                                         combine,
-                                      std::function<FuncOp(OpClass, LeftT, RightT, ConversionPatternRewriter& rewriter)>
-                                         provideFunc,
-                                      std::function<Value(mlir::Location, ResT, Value, ConversionPatternRewriter&)>
-                                         processResult)
-      : ConversionPattern(OpClass::getOperationName(), 1, context), processLeft(processLeft), processRight(processRight), combine(combine), provideFunc(provideFunc), processResult(processResult) {}
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      typename OpClass::Adaptor opAdaptor(operands);
-      auto loc = op->getLoc();
-      db::NullHandler nullHandler(*typeConverter, rewriter, loc);
-      auto casted = cast<OpClass>(op);
-      LeftT leftType = casted.left().getType().template dyn_cast_or_null<LeftT>();
-      RightT rightType = casted.right().getType().template dyn_cast_or_null<RightT>();
-      ResT resType = casted.getResult().getType().template dyn_cast_or_null<ResT>();
-      if (!(leftType && rightType && resType)) {
-         return failure();
-      }
-
-      Value left = nullHandler.getValue(casted.left(), opAdaptor.left());
-      Value right = nullHandler.getValue(casted.right(), opAdaptor.right());
-
-      left = processLeft(loc, leftType, left, rewriter);
-      right = processRight(loc, rightType, right, rewriter);
-      FuncOp func = provideFunc(casted, leftType, rightType, rewriter);
-      auto call = rewriter.create<CallOp>(loc, func, combine(left, right));
-      Value res = call.getResult(0);
-      res = processResult(loc, resType, res, rewriter);
-      rewriter.replaceOp(op, nullHandler.combineResult(res));
-      return success();
-   }
-};
-template <class OpClass, class ValT, class ResT>
-class SimpleUnOpToFuncLowering : public ConversionPattern {
-   std::function<Value(mlir::Location, ValT, Value, ConversionPatternRewriter&)> processVal;
-   std::function<FuncOp(OpClass, ValT, ConversionPatternRewriter& rewriter)> provideFunc;
-   std::function<Value(mlir::Location, ResT, Value, ConversionPatternRewriter&)> processResult;
-
-   public:
-   explicit SimpleUnOpToFuncLowering(MLIRContext* context,
-                                     std::function<Value(mlir::Location, ValT, Value, ConversionPatternRewriter&)>
-                                        processIn,
-                                     std::function<FuncOp(OpClass, ValT, ConversionPatternRewriter& rewriter)>
-                                        provideFunc,
-                                     std::function<Value(mlir::Location, ResT, Value, ConversionPatternRewriter&)>
-                                        processResult)
-      : ConversionPattern(OpClass::getOperationName(), 1, context), processVal(processIn), provideFunc(provideFunc), processResult(processResult) {}
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      typename OpClass::Adaptor opAdaptor(operands);
-      auto loc = op->getLoc();
-      db::NullHandler nullHandler(*typeConverter, rewriter, loc);
-      auto casted = cast<OpClass>(op);
-      ValT valType = casted.val().getType().template dyn_cast_or_null<ValT>();
-      ResT resType = casted.getResult().getType().template dyn_cast_or_null<ResT>();
-      if (!(valType && resType)) {
-         return failure();
-      }
-      Value val = nullHandler.getValue(casted.val(), opAdaptor.val());
-      val = processVal(loc, valType, val, rewriter);
-      FuncOp func = provideFunc(casted, valType, rewriter);
-      auto call = rewriter.create<CallOp>(loc, func, val);
-      Value res = call.getResult(0);
-      res = processResult(loc, resType, res, rewriter);
-      rewriter.replaceOp(op, nullHandler.combineResult(res));
-      return success();
-   }
-};
-
 class StringCastOpLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
 
@@ -464,47 +378,63 @@ class FreeOpLowering : public ConversionPattern {
       return success();
    }
 };
-} // namespace
+class DateAddOpLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
 
-void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
-   using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+   public:
+   explicit DateAddOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::DateAddOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
-   auto ensureDate64 = [](mlir::Location loc, mlir::db::DateType dateType, Value v, ConversionPatternRewriter& rewriter) {
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+      auto dateAddOp = mlir::cast<mlir::db::DateAddOp>(op);
+      mlir::db::DateAddOpAdaptor adaptor(operands);
+      auto dateVal = adaptor.left();
+      auto invervalVal = adaptor.right();
+      auto loc = op->getLoc();
+      auto dateType = dateAddOp.left().getType().cast<mlir::db::DateType>().getUnit();
+      if (dateType == db::DateUnitAttr::day) {
+         auto i64Type = IntegerType::get(rewriter.getContext(), 64);
+         dateVal = rewriter.create<arith::ExtUIOp>(loc, i64Type, dateVal);
+         Value multiplier = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i64Type, 24 * 60 * 60 * 1000));
+         dateVal = rewriter.create<arith::MulIOp>(loc, dateVal, multiplier);
+      }
+      if (dateAddOp.right().getType().cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
+         dateVal = rewriter.create<mlir::arith::AddIOp>(op->getLoc(),dateVal,invervalVal);
+      } else {
+         dateVal = functionRegistry.call(rewriter, loc, FunctionId::TimestampAddMonth, ValueRange({invervalVal, dateVal}))[0];
+      }
+      if (dateType == db::DateUnitAttr::day) {
+         auto i64Type = IntegerType::get(rewriter.getContext(), 64);
+         auto i32Type = IntegerType::get(rewriter.getContext(), 32);
+         Value multiplier = rewriter.template create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i64Type, 24 * 60 * 60 * 1000));
+         dateVal = rewriter.template create<arith::DivUIOp>(loc, dateVal, multiplier);
+         dateVal = rewriter.template create<arith::TruncIOp>(loc, i32Type, dateVal);
+      }
+      rewriter.replaceOp(op, dateVal);
+      return success();
+   }
+};
+class DateExtractOpLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
+   public:
+   explicit DateExtractOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::DateExtractOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
+      auto dateExtractOp = mlir::cast<mlir::db::DateExtractOp>(op);
+      mlir::db::DateExtractOpAdaptor adaptor(operands);
+      auto v = adaptor.val();
+      auto loc = op->getLoc();
+      auto dateType = dateExtractOp.val().getType().cast<mlir::db::DateType>();
       if (dateType.getUnit() == db::DateUnitAttr::day) {
          auto i64Type = IntegerType::get(rewriter.getContext(), 64);
          v = rewriter.template create<arith::ExtUIOp>(loc, i64Type, v);
          Value multiplier = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i64Type, 24 * 60 * 60 * 1000));
          v = rewriter.template create<arith::MulIOp>(loc, v, multiplier);
-         return v;
-      } else {
-         return v;
       }
-   };
-   auto negateInterval = [](mlir::Location loc, mlir::db::IntervalType dateType, Value v, ConversionPatternRewriter& rewriter) {
-      Value multiplier = rewriter.template create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(v.getType(), -1));
-      return rewriter.template create<arith::MulIOp>(loc, v, multiplier);
-   };
-   auto transformDateBack = [](mlir::Location loc, mlir::db::DateType dateType, Value v, ConversionPatternRewriter& rewriter) {
-      if (dateType.getUnit() == db::DateUnitAttr::day) {
-         auto i64Type = IntegerType::get(rewriter.getContext(), 64);
-         auto i32Type = IntegerType::get(rewriter.getContext(), 32);
-         Value multiplier = rewriter.template create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i64Type, 24 * 60 * 60 * 1000));
-         v = rewriter.template create<arith::DivUIOp>(loc, v, multiplier);
-         v = rewriter.template create<arith::TruncIOp>(loc, i32Type, v);
-         return v;
-      }
-      return v;
-   };
-   auto identity = [](auto, auto, Value v, auto&) { return v; };
-   auto rightleft = [](Value left, Value right) { return std::vector<Value>({right, left}); };
-   auto dateAddFunction = [&](Operation* op, mlir::db::DateType dateType, mlir::db::IntervalType intervalType, ConversionPatternRewriter& rewriter) {
-      if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime) {
-         return functionRegistry.getFunction(rewriter, FunctionId::TimestampAddMillis);
-      } else {
-         return functionRegistry.getFunction(rewriter, FunctionId::TimestampAddMonth);
-      }
-   };
-   auto dateExtractFunction = [&](mlir::db::DateExtractOp dateExtractOp, mlir::db::DateType dateType, ConversionPatternRewriter& rewriter) {
       FunctionId functionId;
       switch (dateExtractOp.unit()) {
          case mlir::db::ExtractableTimeUnitAttr::second: functionId = FunctionId::DateExtractSecond; break;
@@ -523,15 +453,15 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
          default:
             assert(false && "not implemented yet");
       }
-      return functionRegistry.getFunction(rewriter, functionId);
-   };
+      rewriter.replaceOp(op, functionRegistry.call(rewriter, op->getLoc(), functionId, v)[0]);
+      return success();
+   }
+};
+} // namespace
 
-   patterns.insert<SimpleBinOpToFuncLowering<mlir::db::DateAddOp, mlir::db::DateType, mlir::db::IntervalType, mlir::db::DateType>>(
-      patterns.getContext(), ensureDate64, identity, rightleft, dateAddFunction, transformDateBack);
-   patterns.insert<SimpleBinOpToFuncLowering<mlir::db::DateSubOp, mlir::db::DateType, mlir::db::IntervalType, mlir::db::DateType>>(
-      patterns.getContext(), ensureDate64, negateInterval, rightleft, dateAddFunction, transformDateBack);
-   patterns.insert<SimpleUnOpToFuncLowering<mlir::db::DateExtractOp, mlir::db::DateType, mlir::IntegerType>>(
-      patterns.getContext(), ensureDate64, dateExtractFunction, identity);
+void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
+   patterns.insert<DateExtractOpLowering>(functionRegistry, typeConverter, patterns.getContext());
+   patterns.insert<DateAddOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<StringCmpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<StringCastOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, patterns.getContext());

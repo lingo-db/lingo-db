@@ -1,4 +1,6 @@
 import functools
+import re
+
 from sql2mlir.mlir import DBType, Attribute, Function, TupleType, DBVectorType
 
 
@@ -192,6 +194,12 @@ class CodeGen:
         types_as_string=list(map(lambda val:val.to_string(),func.operandTypes))
         return self.addOp(func.resultType,["call"," @",func.name,"(",",".join(casted_params),") : (",",".join(types_as_string),") -> ", func.resultType.to_string()])
     def create_db_date_binary_op(self, name,values):
+        if name == "sub":
+            name="add"
+            intervalOp=self.ops[values[1]]
+            if 'db.constant' in intervalOp.print_args[0]:
+                m = re.search(r'\("([0-9]*)"\)', intervalOp.print_args[1])
+                intervalOp.print_args[1]='("-'+ m.group(1)+'")'
         args=["db.date_"+name+" "]
         self.addValuesWithTypes(args,values)
         return self.addOp(DBType("date",["day"]),args)

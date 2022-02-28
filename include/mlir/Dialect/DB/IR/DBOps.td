@@ -506,17 +506,7 @@ def DB_ExtractableTimeUnitAttr : I64EnumAttr<
                 DB_ExtractableTimeUnit_MIL]> {
 let cppNamespace = "::mlir::db";
 }
-def DateSubOp : DB_Op<"date_sub"> {
-let summary = "date sub function";
-let arguments = (ins DB_DateType:$left, DB_IntervalType:$right );
-let results = (outs  DB_DateType : $res);
-let parser = [{
-return parseDateOp(parser, result);
-}];
-let printer = [{
-return printDateOp(this->getOperation(), p);
-}];
-}
+
 
 def DateExtractOp : DB_Op<"date_extract"> {
 let summary = "date sub function";

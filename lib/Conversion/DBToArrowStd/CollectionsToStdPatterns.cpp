@@ -233,18 +233,6 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
    patterns.insert<ForOpLowering>(functionRegistry, typeConverter, context);
    patterns.insert<LookupOpLowering>(typeConverter, context);
 
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::AggregationHashtableType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::JoinHashtableType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::VectorType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::GenericIterableType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
    auto indexType = IndexType::get(context);
    auto i8ptrType = mlir::util::RefType::get(context, IntegerType::get(context, 8), llvm::Optional<int64_t>());
    auto i8PtrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));

@@ -20,8 +20,8 @@ module @querymodule{
         %3 = relalg.selection %1(%2: !relalg.tuple) {
             %4 = relalg.getattr %2 @lineitem::@l_shipdate : !db.date<day>
             %5 = db.constant ("1998-12-01") :!db.date<day>
-            %6 = db.constant ("7776000000") :!db.interval<daytime>
-            %7 = db.date_sub %5 : !db.date<day>,%6 : !db.interval<daytime>
+            %6 = db.constant ("-7776000000") :!db.interval<daytime>
+            %7 = db.date_add %5 : !db.date<day>,%6 : !db.interval<daytime>
             %8 = db.compare lte %4 : !db.date<day>,%7 : !db.date<day>
             relalg.return %8 : i1
         }

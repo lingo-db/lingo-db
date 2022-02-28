@@ -67,7 +67,7 @@ class ToSQL {
       return values[definingOp];
    }
    void handleBinOp(std::stringstream& output, std::string op, mlir::Value a, mlir::Value b) {
-      output << "(" << resolveVal(a) << " " << op << " " << resolveVal(b) << ")";
+      output << "( (" << resolveVal(a) << ") " << op << " (" << resolveVal(b) << ") )";
    }
    void joinstr(std::stringstream& output, std::string op, mlir::ValueRange vr) {
       auto first = true;
@@ -102,8 +102,8 @@ class ToSQL {
                   if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
                      output << "'" << std::string(strAttr.getValue()) << "' month";
                   } else {
-                     uint64_t valAsInt = std::stoll(std::string(strAttr.getValue()));
-                     uint64_t valInDays = valAsInt / (24ll * 60ll * 60ll * 1000ll);
+                     int64_t valAsInt = std::stoll(std::string(strAttr.getValue()));
+                     int64_t valInDays = valAsInt / (24ll * 60ll * 60ll * 1000ll);
                      output << "'" << std::to_string(valInDays) << "' day";
                   }
 
@@ -133,8 +133,8 @@ class ToSQL {
          .Case<mlir::db::DeriveTruth>([&](mlir::db::DeriveTruth op) {
             output << resolveVal(op.val());
          })
-         .Case<DateSubOp>([&](DateSubOp op) {
-            handleBinOp(output, "-", op.left(), op.right());
+         .Case<DateAddOp>([&](DateAddOp op) {
+            handleBinOp(output, "+", op.left(), op.right());
          })
          .Case<AddOp>([&](AddOp op) {
             handleBinOp(output, "+", op.left(), op.right());

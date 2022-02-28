@@ -94,9 +94,6 @@ extern "C" uint64_t rt_extract_year(uint64_t millis){
 extern "C" uint64_t rt_extract_doy(uint64_t millis){
    return DateHelper(millis).TmYday();
 }
-extern "C" uint64_t rt_timestamp_add_millis(uint64_t val,int64_t millis) {
-   return val+millis;
-}
 extern "C" uint64_t rt_timestamp_add_months(uint32_t months,int64_t millis) {
    return DateHelper(millis).AddMonths(months).MillisSinceEpoch();
 }

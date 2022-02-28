@@ -41,19 +41,6 @@ class ScanSourceLowering : public ConversionPattern {
       return success();
    }
 };
-
-static Type convertFunctionType(FunctionType type, TypeConverter& typeConverter) {
-   TypeConverter::SignatureConversion result(type.getNumInputs());
-   SmallVector<Type, 1> newResults;
-   if (failed(typeConverter.convertSignatureArgs(type.getInputs(), result)) ||
-       failed(typeConverter.convertTypes(type.getResults(), newResults))) {
-      return Type();
-   }
-
-   auto newType = FunctionType::get(type.getContext(),
-                                    result.getConvertedTypes(), newResults);
-   return newType;
-}
 class FuncConstLowering : public ConversionPattern {
    public:
    explicit FuncConstLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -63,15 +50,8 @@ class FuncConstLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       mlir::ConstantOp constantOp = mlir::cast<mlir::ConstantOp>(op);
-      if (auto type = constantOp.getType().dyn_cast_or_null<mlir::FunctionType>()) {
-         // Convert the original function types.
-
-         rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, convertFunctionType(type, *typeConverter), constantOp.getValue());
-         return success();
-
-      } else {
-         return failure();
-      }
+      rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, typeConverter->convertType(constantOp.getType()), constantOp.getValue());
+      return success();
    }
 };
 class TypeCastLowering : public ConversionPattern {
@@ -110,13 +90,7 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 }
 } // end anonymous namespace
 static bool hasDBType(TypeConverter& converter, TypeRange types) {
-   for (Type type : types) {
-      auto converted = converter.convertType(type);
-      if (converted && converted != type) {
-         return true;
-      }
-   }
-   return false;
+   return llvm::any_of(types,[&converter](mlir::Type t){ auto converted = converter.convertType(t);return converted&&converted!=t;});
 }
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
@@ -147,23 +121,19 @@ void DBToStdLoweringPass::runOnOperation() {
    target.addLegalDialect<memref::MemRefDialect>();
    TypeConverter typeConverter;
 
-   target.addDynamicallyLegalDialect<scf::SCFDialect>([&](Operation* op) { return !hasDBType(typeConverter, op->getOperandTypes()) && !hasDBType(typeConverter, op->getResultTypes()); });
-   target.addDynamicallyLegalDialect<arith::ArithmeticDialect>([&](Operation* op) { return !hasDBType(typeConverter, op->getOperandTypes()) && !hasDBType(typeConverter, op->getResultTypes()); });
+   auto opIsWithoutDBTypes = [&](Operation* op) { return !hasDBType(typeConverter, op->getOperandTypes()) && !hasDBType(typeConverter, op->getResultTypes()); };
+   target.addDynamicallyLegalDialect<scf::SCFDialect>(opIsWithoutDBTypes);
+   target.addDynamicallyLegalDialect<arith::ArithmeticDialect>(opIsWithoutDBTypes);
 
    target.addLegalDialect<cf::ControlFlowDialect>();
 
-   target.addLegalDialect<util::UtilDialect>();
+   target.addDynamicallyLegalDialect<util::UtilDialect>(opIsWithoutDBTypes);
    target.addLegalOp<mlir::db::CondSkipOp>();
 
-   target.addDynamicallyLegalOp<mlir::db::CondSkipOp>([&](db::CondSkipOp op) {
-      auto isLegal = !hasDBType(typeConverter, op->getOperandTypes());
-      return isLegal;
-   });
+   target.addDynamicallyLegalOp<mlir::db::CondSkipOp>(opIsWithoutDBTypes);
    target.addDynamicallyLegalOp<FuncOp>([&](FuncOp op) {
       auto isLegal = !hasDBType(typeConverter, op.getType().getInputs()) &&
          !hasDBType(typeConverter, op.getType().getResults());
-      //op->dump();
-      //llvm::dbgs() << "isLegal:" << isLegal << "\n";
       return isLegal;
    });
    target.addDynamicallyLegalOp<ConstantOp>([&](ConstantOp op) {
@@ -175,37 +145,16 @@ void DBToStdLoweringPass::runOnOperation() {
          return true;
       }
    });
-   target.addDynamicallyLegalOp<CallOp, CallIndirectOp, ReturnOp>(
-      [&typeConverter](Operation* op) {
-         auto isLegal = !hasDBType(typeConverter, op->getOperandTypes()) &&
-            !hasDBType(typeConverter, op->getResultTypes());
-         //op->dump();
-         //llvm::dbgs() << "isLegal:" << isLegal << "\n";
-         return isLegal;
-      });
-   target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::InvalidRefOp, util::IsRefValidOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::ToMemrefOp, util::StoreOp, util::LoadOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp, util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp>(
-      [&typeConverter](Operation* op) {
-         auto isLegal = !hasDBType(typeConverter, op->getOperandTypes()) &&
-            !hasDBType(typeConverter, op->getResultTypes());
+   target.addDynamicallyLegalOp<CallOp, CallIndirectOp, ReturnOp>(opIsWithoutDBTypes);
 
-         return isLegal;
-      });
    target.addDynamicallyLegalOp<util::SizeOfOp>(
       [&typeConverter](util::SizeOfOp op) {
          auto isLegal = !hasDBType(typeConverter, op.type());
          return isLegal;
       });
 
-   //Add own types to LLVMTypeConverter
-
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
-   });
-   typeConverter.addConversion([&](mlir::FunctionType functionType) {
-      return convertFunctionType(functionType, typeConverter);
-   });
-   typeConverter.addConversion([&](mlir::FunctionType functionType) {
-      return convertFunctionType(functionType, typeConverter);
    });
    typeConverter.addConversion([&](mlir::db::TableType tableType) {
       return mlir::util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8), llvm::Optional<int64_t>());
@@ -215,45 +164,17 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::IndexType iType) { return iType; });
    typeConverter.addConversion([&](mlir::FloatType fType) { return fType; });
    typeConverter.addConversion([&](mlir::MemRefType refType) { return refType; });
-
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::DateType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::DecimalType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::CharType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::StringType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::TimestampType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::IntervalType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-
-   typeConverter.addSourceMaterialization([&](OpBuilder&, IntegerType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::TableType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::NullableType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-   typeConverter.addTargetMaterialization([&](OpBuilder&, db::NullableType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
-
-   typeConverter.addSourceMaterialization([&](OpBuilder&, TupleType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::DateType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::DecimalType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::CharType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::StringType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::TimestampType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::IntervalType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, IntegerType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::TableType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, db::NullableType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, db::NullableType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
+   typeConverter.addSourceMaterialization([&](OpBuilder&, TupleType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
 
    RewritePatternSet patterns(&getContext());
 

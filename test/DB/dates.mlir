@@ -21,15 +21,6 @@
    		//CHECK: int(2020)
 		%5 = db.date_extract year, %date_const : !db.date<day>
 		db.dump %5 : i64
-		//CHECK: date(2020-05-13)
-		%7 = db.date_sub %date_const:!db.date<day>, %interval_1_month_const :!db.interval<months>
-		db.dump %7 : !db.date<day>
-		//CHECK: date(2019-06-13)
-		%8 = db.date_sub %date_const:!db.date<day>, %interval_1_year_const :!db.interval<months>
-		db.dump %8 : !db.date<day>
-		//CHECK: date(2020-03-15)
-		%9 = db.date_sub %date_const:!db.date<day>, %interval_90_days_const :!db.interval<daytime>
-		db.dump %9 : !db.date<day>
 		return
 	}
  }
