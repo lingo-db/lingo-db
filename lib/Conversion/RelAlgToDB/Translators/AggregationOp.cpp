@@ -124,12 +124,12 @@ class AggregationTranslator : public mlir::relalg::Translator {
                   mlir::Value updatedVal = added;
                   if (attrIsNullable) {
                      mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), newVal);
-                     updatedVal = builder.create<mlir::db::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
+                     updatedVal = builder.create<mlir::arith::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
                   }
                   if (resultingType.isa<mlir::db::NullableType>()) {
                      mlir::Value casted = builder.create<mlir::db::CastOp>(loc, currVal.getType(), newVal);
                      mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), aggr[currDestIdx]);
-                     res.push_back(builder.create<mlir::db::SelectOp>(loc, isNull, casted, added));
+                     res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, added));
                   } else {
                      res.push_back(updatedVal);
                   }
@@ -151,15 +151,17 @@ class AggregationTranslator : public mlir::relalg::Translator {
                   mlir::Value newVal = val[currValIdx];
                   mlir::Value currLtNew = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, currVal, newVal);
                   mlir::Value casted = builder.create<mlir::db::CastOp>(loc, currVal.getType(), newVal);
-                  mlir::Value added = builder.create<mlir::db::SelectOp>(loc, currLtNew, currVal, casted);
+                  mlir::Value currLtNewT=builder.create<mlir::db::DeriveTruth>(loc,currLtNew);
+
+                  mlir::Value added = builder.create<mlir::arith::SelectOp>(loc, currLtNewT, currVal, casted);
                   mlir::Value updatedVal = added;
                   if (attrIsNullable) {
                      mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), newVal);
-                     updatedVal = builder.create<mlir::db::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
+                     updatedVal = builder.create<mlir::arith::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
                   }
                   if (resultingType.isa<mlir::db::NullableType>()) {
                      mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), aggr[currDestIdx]);
-                     res.push_back(builder.create<mlir::db::SelectOp>(loc, isNull, casted, added));
+                     res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, added));
                   } else {
                      res.push_back(updatedVal);
                   }
@@ -181,15 +183,16 @@ class AggregationTranslator : public mlir::relalg::Translator {
                   mlir::Value newVal = val[currValIdx];
                   mlir::Value currGtNew = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::gt, currVal, newVal);
                   mlir::Value casted = builder.create<mlir::db::CastOp>(loc, currVal.getType(), newVal);
-                  mlir::Value added = builder.create<mlir::db::SelectOp>(loc, currGtNew, currVal, casted);
+                  mlir::Value currGTNewT=builder.create<mlir::db::DeriveTruth>(loc,currGtNew);
+                  mlir::Value added = builder.create<mlir::arith::SelectOp>(loc, currGTNewT, currVal, casted);
                   mlir::Value updatedVal = added;
                   if (attrIsNullable) {
                      mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), newVal);
-                     updatedVal = builder.create<mlir::db::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
+                     updatedVal = builder.create<mlir::arith::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
                   }
                   if (resultingType.isa<mlir::db::NullableType>()) {
                      mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), aggr[currDestIdx]);
-                     res.push_back(builder.create<mlir::db::SelectOp>(loc, isNull, casted, added));
+                     res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, added));
                   } else {
                      res.push_back(updatedVal);
                   }
@@ -214,8 +217,8 @@ class AggregationTranslator : public mlir::relalg::Translator {
                   mlir::Value added2 = builder.create<mlir::db::AddOp>(loc, counterType, aggr[currDestIdx + 1], one);
                   if (attrIsNullable) {
                      mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), val[currValIdx]);
-                     res.push_back(builder.create<mlir::db::SelectOp>(loc, isNull1, aggr[currDestIdx], added1));
-                     res.push_back(builder.create<mlir::db::SelectOp>(loc, isNull1, aggr[currDestIdx + 1], added2));
+                     res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull1, aggr[currDestIdx], added1));
+                     res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull1, aggr[currDestIdx + 1], added2));
                   } else {
                      res.push_back(added1);
                      res.push_back(added2);
@@ -236,7 +239,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
                   mlir::Value value = builder.create<mlir::db::AddOp>(loc, resultingType, aggr[currDestIdx], one);
                   if (attrIsNullable) {
                      mlir::Value isNull2 = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), val[currValIdx]);
-                     mlir::Value tmp = builder.create<mlir::db::SelectOp>(loc, isNull2, aggr[currDestIdx], value);
+                     mlir::Value tmp = builder.create<mlir::arith::SelectOp>(loc, isNull2, aggr[currDestIdx], value);
                      value = tmp;
                   }
 

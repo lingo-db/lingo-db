@@ -2,15 +2,14 @@
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/DialectImplementation.h"
 #include <mlir/Transforms/InliningUtils.h>
-using namespace mlir;
-using namespace mlir::util;
-struct UtilInlinerInterface : public DialectInlinerInterface {
+
+struct UtilInlinerInterface : public mlir::DialectInlinerInterface {
    using DialectInlinerInterface::DialectInlinerInterface;
-   bool isLegalToInline(Operation*, Region*, bool, BlockAndValueMapping&) const final override {
+   bool isLegalToInline(mlir::Operation*, mlir::Region*, bool, mlir::BlockAndValueMapping&) const final override {
       return true;
    }
 };
-void UtilDialect::initialize() {
+void mlir::util::UtilDialect::initialize() {
    addOperations<
 #define GET_OP_LIST
 #include "mlir/Dialect/util/UtilOps.cpp.inc"

@@ -295,54 +295,6 @@ static ParseResult parseForOp(OpAsmParser& parser, OperationState& result) {
    return success();
 }
 
-//taken from scf::WhileOp
-static ParseResult parseWhileOp(OpAsmParser& parser, OperationState& result) {
-   SmallVector<OpAsmParser::OperandType, 4> regionArgs, operands;
-   Region* before = result.addRegion();
-   Region* after = result.addRegion();
-
-   OptionalParseResult listResult =
-      parser.parseOptionalAssignmentList(regionArgs, operands);
-   if (listResult.hasValue() && failed(listResult.getValue()))
-      return failure();
-
-   FunctionType functionType;
-   llvm::SMLoc typeLoc = parser.getCurrentLocation();
-   if (failed(parser.parseColonType(functionType)))
-      return failure();
-
-   result.addTypes(functionType.getResults());
-
-   if (functionType.getNumInputs() != operands.size()) {
-      return parser.emitError(typeLoc)
-         << "expected as many input types as operands "
-         << "(expected " << operands.size() << " got "
-         << functionType.getNumInputs() << ")";
-   }
-
-   // Resolve input operands.
-   if (failed(parser.resolveOperands(operands, functionType.getInputs(),
-                                     parser.getCurrentLocation(),
-                                     result.operands)))
-      return failure();
-
-   return failure(
-      parser.parseRegion(*before, regionArgs, functionType.getInputs()) ||
-      parser.parseKeyword("do") || parser.parseRegion(*after) ||
-      parser.parseOptionalAttrDictWithKeyword(result.attributes));
-}
-
-//taken from scf::WhileOp
-static void print(OpAsmPrinter& p, db::WhileOp op) {
-   printInitializationList(p, op.before().front().getArguments(), op.inits(),
-                           " ");
-   p << " : ";
-   p.printFunctionalType(op.inits().getTypes(), op.results().getTypes());
-   p.printRegion(op.before(), /*printEntryBlockArgs=*/false);
-   p << " do";
-   p.printRegion(op.after());
-   p.printOptionalAttrDictWithKeyword(op->getAttrs());
-}
 
 static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
    OpAsmParser::OperandType toSort;
@@ -414,26 +366,6 @@ static void print(OpAsmPrinter& p, db::BuilderMerge& op) {
    }
 }
 
-static void print(OpAsmPrinter& p, mlir::db::SelectOp op) {
-   p << " " << op.condition() << " : " << op.condition().getType() << ", " << op.true_value() << ", " << op.false_value();
-   p.printOptionalAttrDict(op->getAttrs());
-   p << " : ";
-   p << op.getType();
-}
-
-static ParseResult parseSelectOp(OpAsmParser& parser, OperationState& result) {
-   Type conditionType, resultType;
-   OpAsmParser::OperandType condition, trueVal, falseVal;
-   if (parser.parseOperand(condition) || parser.parseColonType(conditionType) || parser.parseComma() || parser.parseOperand(trueVal) || parser.parseComma() || parser.parseOperand(falseVal) ||
-       parser.parseOptionalAttrDict(result.attributes) ||
-       parser.parseColonType(resultType))
-      return failure();
-
-   result.addTypes(resultType);
-   return parser.resolveOperands({condition, trueVal, falseVal},
-                                 {conditionType, resultType, resultType},
-                                 parser.getNameLoc(), result.operands);
-}
 LogicalResult mlir::db::OrOp::canonicalize(mlir::db::OrOp orOp, mlir::PatternRewriter& rewriter) {
    llvm::SmallDenseMap<mlir::Value, size_t> usage;
    for (auto val : orOp.vals()) {

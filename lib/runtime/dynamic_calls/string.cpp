@@ -145,7 +145,7 @@ extern "C" __int128 rt_cast_string_decimal(bool null, runtime::VarLen32 string, 
    int32_t scale;
    arrow::Decimal128 decimalrep;
    if (!arrow::Decimal128::FromString(string.str(), &decimalrep, &precision, &scale).ok()) {
-      //todo
+      throw std::runtime_error("could not cast decimal");
    }
    auto x = decimalrep.Rescale(scale, reqScale);
    decimalrep = x.ValueUnsafe();

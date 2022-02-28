@@ -209,6 +209,13 @@ let arguments = (ins DB_Flag:$flag);
 let results= (outs I1:$res);
 let assemblyFormat = "$flag attr-dict";
 }
+
+def DB_DeriveTruth : DB_Op<"derive_truth",
+[NoSideEffect]> {
+let arguments = (ins AnyType:$val);
+let results= (outs I1:$res);
+let assemblyFormat = "$val `:` type($val) attr-dict";
+}
 def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
 let arguments = (ins AnyType: $val);
 let results = (outs  Index : $hash);
@@ -547,47 +554,9 @@ let builders = [
         ];
 }
 
-def ConditionOp : DB_Op<"condition",
-[HasParent<"WhileOp">, NoSideEffect, Terminator]> {
-let summary = "loop continuation condition";
-
-
-let arguments = (ins AnyType:$condition, Variadic<AnyType>:$args);
-
-let assemblyFormat =
-[{ `(` $condition `:` type($condition) `)` attr-dict ($args^ `:` type($args))? }];
-}
-
-def SelectOp : DB_Op<"select", [NoSideEffect,
-        AllTypesMatch<["true_value", "false_value", "result"]>] #
-ElementwiseMappable.traits> {
-
-
-let arguments = (ins AnyBool:$condition,
-AnyType:$true_value,
-AnyType:$false_value);
-let results = (outs AnyType:$result);
-
-
-let extraClassDeclaration = [{
-Value getCondition() { return condition(); }
-Value getTrueValue() { return true_value(); }
-Value getFalseValue() { return false_value(); }
-}];
-//let hasCustomAssemblyFormat = 1;
-
-}
-def WhileOp : DB_Op<"while",
-[RecursiveSideEffects]> {
-let summary = "a generic 'while' loop";
-let arguments = (ins Variadic<AnyType>:$inits);
-let results = (outs Variadic<AnyType>:$results);
-let regions = (region SizedRegion<1>:$before, SizedRegion<1>:$after);
-
-}
 
 def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
-        ParentOneOf<["IfOp","ForOp","WhileOp","SortOp","BuilderMerge"]>]> {
+        ParentOneOf<["IfOp","ForOp","SortOp","BuilderMerge"]>]> {
 let summary = "loop yield and termination operation";
 
 let arguments = (ins Variadic<AnyType>:$results);

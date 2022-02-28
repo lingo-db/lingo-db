@@ -7,23 +7,12 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 
-//===----------------------------------------------------------------------===//
-// Util dialect definition.
-//===----------------------------------------------------------------------===//
-
 def Util_Dialect : Dialect {
 let name = "util";
-let summary = "A util out-of-tree MLIR dialect.";
-let description = [{
-This dialect is an example of an out-of-tree MLIR dialect designed to
-        illustrate the basic setup required to develop MLIR-based tools without
-        working inside of the LLVM source tree.
-}];
 let cppNamespace = "::mlir::util";
 let extraClassDeclaration = [{
 private:
 void registerTypes();
-
 public:
 }];
 }

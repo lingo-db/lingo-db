@@ -118,6 +118,21 @@ static bool hasDBType(TypeConverter& converter, TypeRange types) {
    }
    return false;
 }
+template <class Op>
+class SimpleTypeConversionPattern : public ConversionPattern {
+   public:
+   explicit SimpleTypeConversionPattern(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, Op::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      llvm::SmallVector<mlir::Type> convertedTypes;
+      assert(typeConverter->convertTypes(op->getResultTypes(), convertedTypes).succeeded());
+      rewriter.replaceOpWithNewOp<Op>(op, convertedTypes, ValueRange(operands), op->getAttrs());
+      return success();
+   }
+};
 void DBToStdLoweringPass::runOnOperation() {
    auto module = getOperation();
    mlir::db::codegen::FunctionRegistry functionRegistry(module);
@@ -129,31 +144,32 @@ void DBToStdLoweringPass::runOnOperation() {
    target.addLegalOp<UnrealizedConversionCastOp>();
 
    target.addLegalDialect<StandardOpsDialect>();
-   target.addLegalDialect<arith::ArithmeticDialect>();
    target.addLegalDialect<memref::MemRefDialect>();
+   TypeConverter typeConverter;
 
-   target.addLegalDialect<scf::SCFDialect>();
+   target.addDynamicallyLegalDialect<scf::SCFDialect>([&](Operation* op) { return !hasDBType(typeConverter, op->getOperandTypes()) && !hasDBType(typeConverter, op->getResultTypes()); });
+   target.addDynamicallyLegalDialect<arith::ArithmeticDialect>([&](Operation* op) { return !hasDBType(typeConverter, op->getOperandTypes()) && !hasDBType(typeConverter, op->getResultTypes()); });
+
    target.addLegalDialect<cf::ControlFlowDialect>();
 
    target.addLegalDialect<util::UtilDialect>();
    target.addLegalOp<mlir::db::CondSkipOp>();
-   TypeConverter typeConverter;
 
    target.addDynamicallyLegalOp<mlir::db::CondSkipOp>([&](db::CondSkipOp op) {
-      auto isLegal = !hasDBType(typeConverter,op->getOperandTypes());
+      auto isLegal = !hasDBType(typeConverter, op->getOperandTypes());
       return isLegal;
    });
    target.addDynamicallyLegalOp<FuncOp>([&](FuncOp op) {
-      auto isLegal = !hasDBType(typeConverter,op.getType().getInputs()) &&
-         !hasDBType(typeConverter,op.getType().getResults());
+      auto isLegal = !hasDBType(typeConverter, op.getType().getInputs()) &&
+         !hasDBType(typeConverter, op.getType().getResults());
       //op->dump();
       //llvm::dbgs() << "isLegal:" << isLegal << "\n";
       return isLegal;
    });
    target.addDynamicallyLegalOp<ConstantOp>([&](ConstantOp op) {
       if (auto functionType = op.getType().dyn_cast_or_null<mlir::FunctionType>()) {
-         auto isLegal = !hasDBType(typeConverter,functionType.getInputs()) &&
-            !hasDBType(typeConverter,functionType.getResults());
+         auto isLegal = !hasDBType(typeConverter, functionType.getInputs()) &&
+            !hasDBType(typeConverter, functionType.getResults());
          return isLegal;
       } else {
          return true;
@@ -161,22 +177,22 @@ void DBToStdLoweringPass::runOnOperation() {
    });
    target.addDynamicallyLegalOp<CallOp, CallIndirectOp, ReturnOp>(
       [&typeConverter](Operation* op) {
-         auto isLegal = !hasDBType(typeConverter,op->getOperandTypes()) &&
-            !hasDBType(typeConverter,op->getResultTypes());
+         auto isLegal = !hasDBType(typeConverter, op->getOperandTypes()) &&
+            !hasDBType(typeConverter, op->getResultTypes());
          //op->dump();
          //llvm::dbgs() << "isLegal:" << isLegal << "\n";
          return isLegal;
       });
    target.addDynamicallyLegalOp<util::DimOp, util::SetTupleOp, util::InvalidRefOp, util::IsRefValidOp, util::GetTupleOp, util::UndefTupleOp, util::PackOp, util::UnPackOp, util::ToGenericMemrefOp, util::ToMemrefOp, util::StoreOp, util::LoadOp, util::AllocOp, util::DeAllocOp, util::AllocaOp, util::AllocaOp, util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp>(
       [&typeConverter](Operation* op) {
-         auto isLegal = !hasDBType(typeConverter,op->getOperandTypes()) &&
-            !hasDBType(typeConverter,op->getResultTypes());
+         auto isLegal = !hasDBType(typeConverter, op->getOperandTypes()) &&
+            !hasDBType(typeConverter, op->getResultTypes());
 
          return isLegal;
       });
    target.addDynamicallyLegalOp<util::SizeOfOp>(
       [&typeConverter](util::SizeOfOp op) {
-         auto isLegal = !hasDBType(typeConverter,op.type());
+         auto isLegal = !hasDBType(typeConverter, op.type());
          return isLegal;
       });
 
@@ -231,6 +247,9 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::NullableType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
+   typeConverter.addTargetMaterialization([&](OpBuilder&, db::NullableType type, ValueRange valueRange, Location loc) {
+      return valueRange.front();
+   });
 
    typeConverter.addSourceMaterialization([&](OpBuilder&, TupleType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
@@ -250,7 +269,7 @@ void DBToStdLoweringPass::runOnOperation() {
 
    patterns.insert<FuncConstLowering>(typeConverter, &getContext());
    patterns.insert<TypeCastLowering>(typeConverter, &getContext());
-
+   patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
    patterns.insert<ScanSourceLowering>(functionRegistry, typeConverter, &getContext());
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))

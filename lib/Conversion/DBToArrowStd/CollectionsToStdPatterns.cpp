@@ -50,7 +50,6 @@ class SortOpLowering : public ConversionPattern {
          rewriter.mergeBlockBefore(sortLambda, terminator, {tupleLeft, tupleRight});
          mlir::db::YieldOp yieldOp = mlir::cast<mlir::db::YieldOp>(terminator->getPrevNode());
          Value x = yieldOp.results()[0];
-         x.setType(rewriter.getI1Type()); //todo: bad hack ;)
          rewriter.create<mlir::ReturnOp>(sortOp.getLoc(), x);
          rewriter.eraseOp(sortLambdaTerminator);
          rewriter.eraseOp(terminator);

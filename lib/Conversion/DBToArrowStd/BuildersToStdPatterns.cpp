@@ -91,11 +91,17 @@ class AggrHtHelper {
       return casted;
    }
    Value compareKeys(mlir::OpBuilder& rewriter, Value left, Value right) {
-      Value equal = rewriter.create<mlir::db::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      Value equal = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
       auto leftUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, left);
       auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, right);
       for (size_t i = 0; i < leftUnpacked.getNumResults(); i++) {
          Value compared = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, leftUnpacked->getResult(i), rightUnpacked.getResult(i));
+         if (compared.getType().isa<mlir::db::NullableType>()) {
+            Value isNull = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), compared);
+            Value notNull = rewriter.create<mlir::db::NotOp>(loc, rewriter.getI1Type(), isNull);
+            Value value = rewriter.create<mlir::db::CastOp>(loc, rewriter.getI1Type(), compared);
+            compared = rewriter.create<mlir::db::AndOp>(loc, rewriter.getI1Type(), ValueRange({notNull, value}));
+         }
          auto currLeftType = leftUnpacked->getResult(i).getType();
          auto currRightType = rightUnpacked.getResult(i).getType();
          auto currLeftNullableType = currLeftType.dyn_cast_or_null<mlir::db::NullableType>();
@@ -104,18 +110,11 @@ class AggrHtHelper {
             Value isNull1 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), leftUnpacked->getResult(i));
             Value isNull2 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), rightUnpacked->getResult(i));
             Value bothNull = rewriter.create<mlir::db::AndOp>(loc, rewriter.getI1Type(), ValueRange({isNull1, isNull2}));
-            Value casted = rewriter.create<mlir::db::CastOp>(loc, compared.getType(), bothNull);
-            Value tmp = rewriter.create<mlir::db::SelectOp>(loc, bothNull, casted, compared);
+            Value tmp = rewriter.create<mlir::arith::SelectOp>(loc, bothNull, bothNull, compared);
             compared = tmp;
          }
-         Value localEqual = rewriter.create<mlir::db::AndOp>(loc, constructNullableBool(rewriter.getContext(), mlir::ValueRange({equal,compared})), ValueRange({equal, compared}));
+         Value localEqual = rewriter.create<mlir::arith::AndIOp>(loc, rewriter.getI1Type(), ValueRange({equal, compared}));
          equal = localEqual;
-      }
-      if (equal.getType().isa<mlir::db::NullableType>()) {
-         Value isNull = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), equal);
-         Value notNull = rewriter.create<mlir::db::NotOp>(loc, rewriter.getI1Type(), isNull);
-         Value value = rewriter.create<mlir::db::CastOp>(loc, rewriter.getI1Type(), equal);
-         equal = rewriter.create<mlir::db::AndOp>(loc, rewriter.getI1Type(), ValueRange({notNull, value}));
       }
       return equal;
    }
@@ -277,9 +276,9 @@ class CreateVectorBuilderLowering : public ConversionPattern {
 
 static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::FunctionRegistry& functionRegistry, Type type) {
    using FunctionId = db::codegen::FunctionRegistry::FunctionId;
-   if (isIntegerType(type,1)) {
+   if (isIntegerType(type, 1)) {
       return FunctionId::ArrowTableBuilderAddBool;
-   } else if (auto intWidth= getIntegerWidth(type,false)) {
+   } else if (auto intWidth = getIntegerWidth(type, false)) {
       switch (intWidth) {
          case 8: return FunctionId::ArrowTableBuilderAddInt8;
          case 16: return FunctionId::ArrowTableBuilderAddInt16;

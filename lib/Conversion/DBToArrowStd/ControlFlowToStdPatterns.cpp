@@ -62,72 +62,6 @@ class IfLowering : public ConversionPattern {
       return success();
    }
 };
-class WhileLowering : public ConversionPattern {
-   public:
-   explicit WhileLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::WhileOp::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto whileOp = cast<mlir::db::WhileOp>(op);
-      mlir::db::WhileOpAdaptor adaptor(operands);
-      auto loc = op->getLoc();
-      std::vector<Type> resultTypes;
-      for (auto res : whileOp.results()) {
-         resultTypes.push_back(typeConverter->convertType(res.getType()));
-      }
-      auto newWhileOp = rewriter.create<mlir::scf::WhileOp>(loc, TypeRange(resultTypes), adaptor.inits());
-      Block* before = new Block;
-      Block* after = new Block;
-      newWhileOp.getBefore().push_back(before);
-      newWhileOp.getAfter().push_back(after);
-      for (auto t : resultTypes) {
-         before->addArgument(t,loc);
-         after->addArgument(t,loc);
-      }
-
-      {
-         scf::IfOp::ensureTerminator(newWhileOp.getBefore(), rewriter, loc);
-         auto insertPt = rewriter.saveInsertionPoint();
-         rewriter.setInsertionPointToStart(&newWhileOp.getBefore().front());
-         Block* originalThenBlock = &whileOp.before().front();
-         auto* terminator = rewriter.getInsertionBlock()->getTerminator();
-         rewriter.mergeBlockBefore(originalThenBlock, terminator, newWhileOp.getBefore().front().getArguments());
-         rewriter.eraseOp(terminator);
-         rewriter.restoreInsertionPoint(insertPt);
-      }
-      {
-         scf::IfOp::ensureTerminator(newWhileOp.getAfter(), rewriter, loc);
-         auto insertPt = rewriter.saveInsertionPoint();
-         rewriter.setInsertionPointToStart(&newWhileOp.getAfter().front());
-         Block* originalElseBlock = &whileOp.after().front();
-         auto* terminator = rewriter.getInsertionBlock()->getTerminator();
-         rewriter.mergeBlockBefore(originalElseBlock, terminator, newWhileOp.getAfter().front().getArguments());
-         rewriter.eraseOp(terminator);
-         rewriter.restoreInsertionPoint(insertPt);
-      }
-      {
-         OpBuilder::InsertionGuard insertionGuard(rewriter);
-         whileOp.before().push_back(new Block());
-         for (auto t : resultTypes) {
-            whileOp.before().addArgument(t,loc);
-         }
-         rewriter.setInsertionPointToStart(&whileOp.before().front());
-         rewriter.create<mlir::db::YieldOp>(whileOp.getLoc());
-      }
-      {
-         OpBuilder::InsertionGuard insertionGuard(rewriter);
-         whileOp.after().push_back(new Block());
-         for (auto t : resultTypes) {
-            whileOp.after().addArgument(t,loc);
-         }
-         rewriter.setInsertionPointToStart(&whileOp.after().front());
-         rewriter.create<mlir::db::YieldOp>(whileOp.getLoc());
-      }
-      rewriter.replaceOp(whileOp, newWhileOp.getResults());
-
-      return success();
-   }
-};
 class YieldLowering : public ConversionPattern {
    public:
    explicit YieldLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -138,27 +72,15 @@ class YieldLowering : public ConversionPattern {
       return success();
    }
 };
-class ConditionLowering : public ConversionPattern {
+class DeriveTruthLowering : public ConversionPattern {
    public:
-   explicit ConditionLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::ConditionOp::getOperationName(), 1, context) {}
+   explicit DeriveTruthLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::DeriveTruth::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      db::ConditionOpAdaptor adaptor(operands);
-      db::ConditionOp conditionOp = cast<db::ConditionOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::scf::ConditionOp>(op, convertBooleanCondition(conditionOp.getLoc(), rewriter, conditionOp.condition().getType(), adaptor.condition()), adaptor.args());
-      return success();
-   }
-};
-class SelectLowering : public ConversionPattern {
-   public:
-   explicit SelectLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::SelectOp::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      db::SelectOpAdaptor adaptor(operands);
-      db::SelectOp selectOp = cast<db::SelectOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::arith::SelectOp>(op, convertBooleanCondition(selectOp.getLoc(), rewriter, selectOp.getCondition().getType(), adaptor.condition()), adaptor.true_value(), adaptor.false_value());
+      db::DeriveTruthAdaptor adaptor(operands);
+      db::DeriveTruth deriveTruth = cast<db::DeriveTruth>(op);
+      rewriter.replaceOp(op,convertBooleanCondition(deriveTruth.getLoc(), rewriter, deriveTruth.val().getType(), adaptor.val()));
       return success();
    }
 };
@@ -178,9 +100,7 @@ class CondSkipTypeConversion : public ConversionPattern {
 } // namespace
 void mlir::db::populateControlFlowToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    patterns.insert<IfLowering>(typeConverter, patterns.getContext());
-   patterns.insert<WhileLowering>(typeConverter, patterns.getContext());
-   patterns.insert<ConditionLowering>(typeConverter, patterns.getContext());
    patterns.insert<YieldLowering>(typeConverter, patterns.getContext());
-   patterns.insert<SelectLowering>(typeConverter, patterns.getContext());
    patterns.insert<CondSkipTypeConversion>(typeConverter, patterns.getContext());
+   patterns.insert<DeriveTruthLowering>(typeConverter, patterns.getContext());
 }

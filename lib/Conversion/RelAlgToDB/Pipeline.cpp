@@ -74,7 +74,6 @@ mlir::Value mlir::relalg::Pipeline::addDependency(PipelineDependency dep) {
    }
    dependencies.push_back(dep);
    mainArgTypes.push_back(dep.getT());
-   //todo: persist dependency
    auto& mainFnBlock = (*mainFn.body().begin());
    return mainFnBlock.addArgument(dep.getT(), OpBuilder(mainFn.getContext()).getUnknownLoc());
 }
