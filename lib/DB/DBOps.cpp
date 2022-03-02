@@ -52,12 +52,9 @@ static void buildDBOrOp(OpBuilder& builder, OperationState& result, ValueRange o
 static Type inferResultType(OpAsmParser& parser, ArrayRef<Type> types) {
    assert(types.size());
    bool anyNullables = llvm::any_of(types, [](Type t) { return t.isa<mlir::db::NullableType>(); });
-   auto firstNullable = types[0].dyn_cast_or_null<mlir::db::NullableType>();
-   Type baseType = firstNullable ? firstNullable.getType() : types[0];
+   Type baseType = getBaseType(types[0]);
    for (auto t : types) {
-      auto asNullable = t.dyn_cast_or_null<mlir::db::NullableType>();
-      Type currBaseType = asNullable ? asNullable.getType() : t;
-      if (baseType != currBaseType) {
+      if (baseType != getBaseType(t)) {
          parser.emitError(parser.getCurrentLocation(), "types do not have same base type");
          return Type();
       }
