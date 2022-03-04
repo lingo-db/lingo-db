@@ -103,7 +103,7 @@ class ToSQL {
                      output << "'" << std::string(strAttr.getValue()) << "' month";
                   } else {
                      int64_t valAsInt = std::stoll(std::string(strAttr.getValue()));
-                     int64_t valInDays = valAsInt / (24ll * 60ll * 60ll * 1000ll);
+                     int64_t valInDays = valAsInt;
                      output << "'" << std::to_string(valInDays) << "' day";
                   }
 
@@ -129,6 +129,22 @@ class ToSQL {
             output << "(";
             joinstr(output, "or", op.vals());
             output << ")";
+         })
+         .Case<mlir::db::BetweenOp>([&](mlir::db::BetweenOp op) {
+            output << resolveVal(op.val()) << " between " << resolveVal(op.lower()) << " and " << resolveVal(op.upper())<<" ";
+         })
+         .Case<mlir::db::OneOfOp>([&](mlir::db::OneOfOp op) {
+            output << resolveVal(op.val()) << " in (";
+            bool first=true;
+            for(auto v:op.vals()){
+               if(first){
+                  first=false;
+               }else{
+                  output<<", ";
+               }
+               output<<resolveVal(v);
+            }
+            output << ") ";
          })
          .Case<mlir::db::DeriveTruth>([&](mlir::db::DeriveTruth op) {
             output << resolveVal(op.val());

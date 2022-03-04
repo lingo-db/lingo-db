@@ -1,182 +1,126 @@
-module @querymodule{
-    func  @main ()  -> !db.table{
-        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=i32}),
-            l_partkey => @l_partkey({type=i32}),
-            l_suppkey => @l_suppkey({type=i32}),
-            l_linenumber => @l_linenumber({type=i32}),
-            l_quantity => @l_quantity({type=!db.decimal<15,2>}),
-            l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
-            l_discount => @l_discount({type=!db.decimal<15,2>}),
-            l_tax => @l_tax({type=!db.decimal<15,2>}),
-            l_returnflag => @l_returnflag({type=!db.char<1>}),
-            l_linestatus => @l_linestatus({type=!db.char<1>}),
-            l_shipdate => @l_shipdate({type=!db.date<day>}),
-            l_commitdate => @l_commitdate({type=!db.date<day>}),
-            l_receiptdate => @l_receiptdate({type=!db.date<day>}),
-            l_shipinstruct => @l_shipinstruct({type=!db.string}),
-            l_shipmode => @l_shipmode({type=!db.string}),
-            l_comment => @l_comment({type=!db.string})
-        }
-        %2 = relalg.basetable @part { table_identifier="part", rows=20000 , pkey=["p_partkey"]} columns: {p_partkey => @p_partkey({type=i32}),
-            p_name => @p_name({type=!db.string}),
-            p_mfgr => @p_mfgr({type=!db.string}),
-            p_brand => @p_brand({type=!db.string}),
-            p_type => @p_type({type=!db.string}),
-            p_size => @p_size({type=i32}),
-            p_container => @p_container({type=!db.string}),
-            p_retailprice => @p_retailprice({type=!db.decimal<15,2>}),
-            p_comment => @p_comment({type=!db.string})
-        }
-        %3 = relalg.crossproduct %1, %2
-        %5 = relalg.selection %3(%4: !relalg.tuple) {
-            %6 = relalg.getattr %4 @part::@p_partkey : i32
-            %7 = relalg.getattr %4 @lineitem::@l_partkey : i32
-            %8 = db.compare eq %6 : i32,%7 : i32
-            %9 = relalg.getattr %4 @part::@p_brand : !db.string
-            %10 = db.constant ("Brand#12") :!db.string
-            %11 = db.compare eq %9 : !db.string,%10 : !db.string
-            %12 = relalg.getattr %4 @part::@p_container : !db.string
-            %13 = db.constant ("SM CASE") :!db.string
-            %14 = db.compare eq %12 : !db.string,%13 : !db.string
-            %15 = db.constant ("SM BOX") :!db.string
-            %16 = db.compare eq %12 : !db.string,%15 : !db.string
-            %17 = db.constant ("SM PACK") :!db.string
-            %18 = db.compare eq %12 : !db.string,%17 : !db.string
-            %19 = db.constant ("SM PKG") :!db.string
-            %20 = db.compare eq %12 : !db.string,%19 : !db.string
-            %21 = db.or %14 : i1,%16 : i1,%18 : i1,%20 : i1
-            %22 = relalg.getattr %4 @lineitem::@l_quantity : !db.decimal<15,2>
-            %23 = db.constant (1) :!db.decimal<15,2>
-            %24 = db.compare gte %22 : !db.decimal<15,2>,%23 : !db.decimal<15,2>
-            %25 = relalg.getattr %4 @lineitem::@l_quantity : !db.decimal<15,2>
-            %26 = db.constant (1) :i64
-            %27 = db.constant (10) :i64
-            %28 = db.add %26 : i64,%27 : i64
-            %29 = db.cast %28 : i64 -> !db.decimal<15,2>
-            %30 = db.compare lte %25 : !db.decimal<15,2>,%29 : !db.decimal<15,2>
-            %31 = relalg.getattr %4 @part::@p_size : i32
-            %32 = db.constant (1) :i64
-            %33 = db.constant (5) :i64
-            %34 = db.cast %31 : i32 -> i64
-            %35 = db.compare gte %34 : i64,%32 : i64
-            %36 = db.cast %31 : i32 -> i64
-            %37 = db.compare lte %36 : i64,%33 : i64
-            %38 = db.and %35 : i1,%37 : i1
-            %39 = relalg.getattr %4 @lineitem::@l_shipmode : !db.string
-            %40 = db.constant ("AIR") :!db.string
-            %41 = db.compare eq %39 : !db.string,%40 : !db.string
-            %42 = db.constant ("AIR REG") :!db.string
-            %43 = db.compare eq %39 : !db.string,%42 : !db.string
-            %44 = db.or %41 : i1,%43 : i1
-            %45 = relalg.getattr %4 @lineitem::@l_shipinstruct : !db.string
-            %46 = db.constant ("DELIVER IN PERSON") :!db.string
-            %47 = db.compare eq %45 : !db.string,%46 : !db.string
-            %48 = db.and %8 : i1,%11 : i1,%21 : i1,%24 : i1,%30 : i1,%38 : i1,%44 : i1,%47 : i1
-            %49 = relalg.getattr %4 @part::@p_partkey : i32
-            %50 = relalg.getattr %4 @lineitem::@l_partkey : i32
-            %51 = db.compare eq %49 : i32,%50 : i32
-            %52 = relalg.getattr %4 @part::@p_brand : !db.string
-            %53 = db.constant ("Brand#23") :!db.string
-            %54 = db.compare eq %52 : !db.string,%53 : !db.string
-            %55 = relalg.getattr %4 @part::@p_container : !db.string
-            %56 = db.constant ("MED BAG") :!db.string
-            %57 = db.compare eq %55 : !db.string,%56 : !db.string
-            %58 = db.constant ("MED BOX") :!db.string
-            %59 = db.compare eq %55 : !db.string,%58 : !db.string
-            %60 = db.constant ("MED PKG") :!db.string
-            %61 = db.compare eq %55 : !db.string,%60 : !db.string
-            %62 = db.constant ("MED PACK") :!db.string
-            %63 = db.compare eq %55 : !db.string,%62 : !db.string
-            %64 = db.or %57 : i1,%59 : i1,%61 : i1,%63 : i1
-            %65 = relalg.getattr %4 @lineitem::@l_quantity : !db.decimal<15,2>
-            %66 = db.constant (10) :!db.decimal<15,2>
-            %67 = db.compare gte %65 : !db.decimal<15,2>,%66 : !db.decimal<15,2>
-            %68 = relalg.getattr %4 @lineitem::@l_quantity : !db.decimal<15,2>
-            %69 = db.constant (10) :i64
-            %70 = db.constant (10) :i64
-            %71 = db.add %69 : i64,%70 : i64
-            %72 = db.cast %71 : i64 -> !db.decimal<15,2>
-            %73 = db.compare lte %68 : !db.decimal<15,2>,%72 : !db.decimal<15,2>
-            %74 = relalg.getattr %4 @part::@p_size : i32
-            %75 = db.constant (1) :i64
-            %76 = db.constant (10) :i64
-            %77 = db.cast %74 : i32 -> i64
-            %78 = db.compare gte %77 : i64,%75 : i64
-            %79 = db.cast %74 : i32 -> i64
-            %80 = db.compare lte %79 : i64,%76 : i64
-            %81 = db.and %78 : i1,%80 : i1
-            %82 = relalg.getattr %4 @lineitem::@l_shipmode : !db.string
-            %83 = db.constant ("AIR") :!db.string
-            %84 = db.compare eq %82 : !db.string,%83 : !db.string
-            %85 = db.constant ("AIR REG") :!db.string
-            %86 = db.compare eq %82 : !db.string,%85 : !db.string
-            %87 = db.or %84 : i1,%86 : i1
-            %88 = relalg.getattr %4 @lineitem::@l_shipinstruct : !db.string
-            %89 = db.constant ("DELIVER IN PERSON") :!db.string
-            %90 = db.compare eq %88 : !db.string,%89 : !db.string
-            %91 = db.and %51 : i1,%54 : i1,%64 : i1,%67 : i1,%73 : i1,%81 : i1,%87 : i1,%90 : i1
-            %92 = relalg.getattr %4 @part::@p_partkey : i32
-            %93 = relalg.getattr %4 @lineitem::@l_partkey : i32
-            %94 = db.compare eq %92 : i32,%93 : i32
-            %95 = relalg.getattr %4 @part::@p_brand : !db.string
-            %96 = db.constant ("Brand#34") :!db.string
-            %97 = db.compare eq %95 : !db.string,%96 : !db.string
-            %98 = relalg.getattr %4 @part::@p_container : !db.string
-            %99 = db.constant ("LG CASE") :!db.string
-            %100 = db.compare eq %98 : !db.string,%99 : !db.string
-            %101 = db.constant ("LG BOX") :!db.string
-            %102 = db.compare eq %98 : !db.string,%101 : !db.string
-            %103 = db.constant ("LG PACK") :!db.string
-            %104 = db.compare eq %98 : !db.string,%103 : !db.string
-            %105 = db.constant ("LG PKG") :!db.string
-            %106 = db.compare eq %98 : !db.string,%105 : !db.string
-            %107 = db.or %100 : i1,%102 : i1,%104 : i1,%106 : i1
-            %108 = relalg.getattr %4 @lineitem::@l_quantity : !db.decimal<15,2>
-            %109 = db.constant (20) :!db.decimal<15,2>
-            %110 = db.compare gte %108 : !db.decimal<15,2>,%109 : !db.decimal<15,2>
-            %111 = relalg.getattr %4 @lineitem::@l_quantity : !db.decimal<15,2>
-            %112 = db.constant (20) :i64
-            %113 = db.constant (10) :i64
-            %114 = db.add %112 : i64,%113 : i64
-            %115 = db.cast %114 : i64 -> !db.decimal<15,2>
-            %116 = db.compare lte %111 : !db.decimal<15,2>,%115 : !db.decimal<15,2>
-            %117 = relalg.getattr %4 @part::@p_size : i32
-            %118 = db.constant (1) :i64
-            %119 = db.constant (15) :i64
-            %120 = db.cast %117 : i32 -> i64
-            %121 = db.compare gte %120 : i64,%118 : i64
-            %122 = db.cast %117 : i32 -> i64
-            %123 = db.compare lte %122 : i64,%119 : i64
-            %124 = db.and %121 : i1,%123 : i1
-            %125 = relalg.getattr %4 @lineitem::@l_shipmode : !db.string
-            %126 = db.constant ("AIR") :!db.string
-            %127 = db.compare eq %125 : !db.string,%126 : !db.string
-            %128 = db.constant ("AIR REG") :!db.string
-            %129 = db.compare eq %125 : !db.string,%128 : !db.string
-            %130 = db.or %127 : i1,%129 : i1
-            %131 = relalg.getattr %4 @lineitem::@l_shipinstruct : !db.string
-            %132 = db.constant ("DELIVER IN PERSON") :!db.string
-            %133 = db.compare eq %131 : !db.string,%132 : !db.string
-            %134 = db.and %94 : i1,%97 : i1,%107 : i1,%110 : i1,%116 : i1,%124 : i1,%130 : i1,%133 : i1
-            %135 = db.or %48 : i1,%91 : i1,%134 : i1
-            relalg.return %135 : i1
-        }
-        %137 = relalg.map @map %5 (%136: !relalg.tuple) {
-            %138 = relalg.getattr %136 @lineitem::@l_extendedprice : !db.decimal<15,2>
-            %139 = db.constant (1) :!db.decimal<15,2>
-            %140 = relalg.getattr %136 @lineitem::@l_discount : !db.decimal<15,2>
-            %141 = db.sub %139 : !db.decimal<15,2>,%140 : !db.decimal<15,2>
-            %142 = db.mul %138 : !db.decimal<15,2>,%141 : !db.decimal<15,2>
-            %143 = relalg.addattr %136, @aggfmname1({type=!db.decimal<15,2>}) %142
-            relalg.return %143 : !relalg.tuple
-        }
-        %146 = relalg.aggregation @aggr %137 [] (%144 : !relalg.tuplestream, %145 : !relalg.tuple) {
-            %147 = relalg.aggrfn sum @map::@aggfmname1 %144 : !db.nullable<!db.decimal<15,2>>
-            %148 = relalg.addattr %145, @aggfmname2({type=!db.nullable<!db.decimal<15,2>>}) %147
-            relalg.return %148 : !relalg.tuple
-        }
-        %149 = relalg.materialize %146 [@aggr::@aggfmname2] => ["revenue"] : !db.table
-        return %149 : !db.table
+module {
+  func @main() -> !db.table {
+    %0 = relalg.basetable @lineitem  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
+    %1 = relalg.basetable @part  {table_identifier = "part"} columns: {p_brand => @p_brand({type = !db.string}), p_comment => @p_comment({type = !db.string}), p_container => @p_container({type = !db.string}), p_mfgr => @p_mfgr({type = !db.string}), p_name => @p_name({type = !db.string}), p_partkey => @p_partkey({type = i32}), p_retailprice => @p_retailprice({type = !db.decimal<15, 2>}), p_size => @p_size({type = i32}), p_type => @p_type({type = !db.string})}
+    %2 = relalg.crossproduct %0, %1
+    %3 = relalg.selection %2 (%arg0: !relalg.tuple){
+      %7 = relalg.getattr %arg0 @part::@p_partkey : i32
+      %8 = relalg.getattr %arg0 @lineitem::@l_partkey : i32
+      %9 = db.compare eq %7 : i32, %8 : i32
+      %10 = relalg.getattr %arg0 @part::@p_brand : !db.string
+      %11 = db.constant("Brand#12") : !db.string
+      %12 = db.compare eq %10 : !db.string, %11 : !db.string
+      %13 = db.constant("SM CASE") : !db.string
+      %14 = db.constant("SM BOX") : !db.string
+      %15 = db.constant("SM PACK") : !db.string
+      %16 = db.constant("SM PKG") : !db.string
+      %17 = relalg.getattr %arg0 @part::@p_container : !db.string
+      %18 = db.oneof %17 : !db.string ? %13, %14, %15, %16 : !db.string, !db.string, !db.string, !db.string
+      %19 = relalg.getattr %arg0 @lineitem::@l_quantity : !db.decimal<15, 2>
+      %20 = db.constant(1 : i32) : !db.decimal<15, 2>
+      %21 = db.compare gte %19 : !db.decimal<15, 2>, %20 : !db.decimal<15, 2>
+      %22 = relalg.getattr %arg0 @lineitem::@l_quantity : !db.decimal<15, 2>
+      %23 = db.constant(1 : i32) : i32
+      %24 = db.constant(10 : i32) : i32
+      %25 = db.add %23 : i32, %24 : i32
+      %26 = db.cast %25 : i32 -> !db.decimal<15, 2>
+      %27 = db.compare lte %22 : !db.decimal<15, 2>, %26 : !db.decimal<15, 2>
+      %28 = relalg.getattr %arg0 @part::@p_size : i32
+      %29 = db.constant(1 : i32) : i32
+      %30 = db.constant(5 : i32) : i32
+      %31 = db.between %28 : i32 between %29 : i32, %30 : i32
+      %32 = db.constant("AIR") : !db.string
+      %33 = db.constant("AIR REG") : !db.string
+      %34 = relalg.getattr %arg0 @lineitem::@l_shipmode : !db.string
+      %35 = db.oneof %34 : !db.string ? %32, %33 : !db.string, !db.string
+      %36 = relalg.getattr %arg0 @lineitem::@l_shipinstruct : !db.string
+      %37 = db.constant("DELIVER IN PERSON") : !db.string
+      %38 = db.compare eq %36 : !db.string, %37 : !db.string
+      %39 = db.and %9:i1,%12:i1,%18:i1,%21:i1,%27:i1,%31:i1,%35:i1,%38:i1
+      %40 = relalg.getattr %arg0 @part::@p_partkey : i32
+      %41 = relalg.getattr %arg0 @lineitem::@l_partkey : i32
+      %42 = db.compare eq %40 : i32, %41 : i32
+      %43 = relalg.getattr %arg0 @part::@p_brand : !db.string
+      %44 = db.constant("Brand#23") : !db.string
+      %45 = db.compare eq %43 : !db.string, %44 : !db.string
+      %46 = db.constant("MED BAG") : !db.string
+      %47 = db.constant("MED BOX") : !db.string
+      %48 = db.constant("MED PKG") : !db.string
+      %49 = db.constant("MED PACK") : !db.string
+      %50 = relalg.getattr %arg0 @part::@p_container : !db.string
+      %51 = db.oneof %50 : !db.string ? %46, %47, %48, %49 : !db.string, !db.string, !db.string, !db.string
+      %52 = relalg.getattr %arg0 @lineitem::@l_quantity : !db.decimal<15, 2>
+      %53 = db.constant(10 : i32) : !db.decimal<15, 2>
+      %54 = db.compare gte %52 : !db.decimal<15, 2>, %53 : !db.decimal<15, 2>
+      %55 = relalg.getattr %arg0 @lineitem::@l_quantity : !db.decimal<15, 2>
+      %56 = db.constant(10 : i32) : i32
+      %57 = db.constant(10 : i32) : i32
+      %58 = db.add %56 : i32, %57 : i32
+      %59 = db.cast %58 : i32 -> !db.decimal<15, 2>
+      %60 = db.compare lte %55 : !db.decimal<15, 2>, %59 : !db.decimal<15, 2>
+      %61 = relalg.getattr %arg0 @part::@p_size : i32
+      %62 = db.constant(1 : i32) : i32
+      %63 = db.constant(10 : i32) : i32
+      %64 = db.between %61 : i32 between %62 : i32, %63 : i32
+      %65 = db.constant("AIR") : !db.string
+      %66 = db.constant("AIR REG") : !db.string
+      %67 = relalg.getattr %arg0 @lineitem::@l_shipmode : !db.string
+      %68 = db.oneof %67 : !db.string ? %65, %66 : !db.string, !db.string
+      %69 = relalg.getattr %arg0 @lineitem::@l_shipinstruct : !db.string
+      %70 = db.constant("DELIVER IN PERSON") : !db.string
+      %71 = db.compare eq %69 : !db.string, %70 : !db.string
+      %72 = db.and %42:i1,%45:i1,%51:i1,%54:i1,%60:i1,%64:i1,%68:i1,%71:i1
+      %73 = relalg.getattr %arg0 @part::@p_partkey : i32
+      %74 = relalg.getattr %arg0 @lineitem::@l_partkey : i32
+      %75 = db.compare eq %73 : i32, %74 : i32
+      %76 = relalg.getattr %arg0 @part::@p_brand : !db.string
+      %77 = db.constant("Brand#34") : !db.string
+      %78 = db.compare eq %76 : !db.string, %77 : !db.string
+      %79 = db.constant("LG CASE") : !db.string
+      %80 = db.constant("LG BOX") : !db.string
+      %81 = db.constant("LG PACK") : !db.string
+      %82 = db.constant("LG PKG") : !db.string
+      %83 = relalg.getattr %arg0 @part::@p_container : !db.string
+      %84 = db.oneof %83 : !db.string ? %79, %80, %81, %82 : !db.string, !db.string, !db.string, !db.string
+      %85 = relalg.getattr %arg0 @lineitem::@l_quantity : !db.decimal<15, 2>
+      %86 = db.constant(20 : i32) : !db.decimal<15, 2>
+      %87 = db.compare gte %85 : !db.decimal<15, 2>, %86 : !db.decimal<15, 2>
+      %88 = relalg.getattr %arg0 @lineitem::@l_quantity : !db.decimal<15, 2>
+      %89 = db.constant(20 : i32) : i32
+      %90 = db.constant(10 : i32) : i32
+      %91 = db.add %89 : i32, %90 : i32
+      %92 = db.cast %91 : i32 -> !db.decimal<15, 2>
+      %93 = db.compare lte %88 : !db.decimal<15, 2>, %92 : !db.decimal<15, 2>
+      %94 = relalg.getattr %arg0 @part::@p_size : i32
+      %95 = db.constant(1 : i32) : i32
+      %96 = db.constant(15 : i32) : i32
+      %97 = db.between %94 : i32 between %95 : i32, %96 : i32
+      %98 = db.constant("AIR") : !db.string
+      %99 = db.constant("AIR REG") : !db.string
+      %100 = relalg.getattr %arg0 @lineitem::@l_shipmode : !db.string
+      %101 = db.oneof %100 : !db.string ? %98, %99 : !db.string, !db.string
+      %102 = relalg.getattr %arg0 @lineitem::@l_shipinstruct : !db.string
+      %103 = db.constant("DELIVER IN PERSON") : !db.string
+      %104 = db.compare eq %102 : !db.string, %103 : !db.string
+      %105 = db.and %75:i1,%78:i1,%84:i1,%87:i1,%93:i1,%97:i1,%101:i1,%104:i1
+      %106 = db.or %39:i1,%72:i1,%105:i1
+      relalg.return %106 : i1
     }
+    %4 = relalg.map @map0 %3 (%arg0: !relalg.tuple){
+      %7 = relalg.getattr %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
+      %8 = db.constant(1 : i32) : !db.decimal<15, 2>
+      %9 = relalg.getattr %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
+      %10 = db.sub %8 : !db.decimal<15, 2>, %9 : !db.decimal<15, 2>
+      %11 = db.mul %7 : !db.decimal<15, 2>, %10 : !db.decimal<15, 2>
+      %12 = relalg.addattr %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %11
+      relalg.return %12 : !relalg.tuple
+    }
+    %5 = relalg.aggregation @aggr0 %4 [] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+      %7 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 2>>
+      %8 = relalg.addattr %arg1, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %7
+      relalg.return %8 : !relalg.tuple
+    }
+    %6 = relalg.materialize %5 [@aggr0::@tmp_attr0] => ["revenue"] : !db.table
+    return %6 : !db.table
+  }
 }
-

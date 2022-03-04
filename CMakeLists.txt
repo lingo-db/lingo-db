@@ -33,6 +33,7 @@ include_directories(${PROJECT_SOURCE_DIR}/torch-mlir/include)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/vendored)
+add_subdirectory(${PROJECT_SOURCE_DIR}/vendored/libpg_query/ EXCLUDE_FROM_ALL)
 
 include_directories(${PROJECT_BINARY_DIR}/include)
 link_directories(${LLVM_BUILD_LIBRARY_DIR})
@@ -134,6 +135,11 @@ llvm_update_compile_flags(mlir-ctxt-opt)
 target_link_libraries(mlir-ctxt-opt PUBLIC ${LIBS} runtime PRIVATE arrow_shared)
 add_subdirectory(tools)
 add_subdirectory(test)
+
+
+add_executable(sql-to-mlir sql-to-mlir.cpp)
+llvm_update_compile_flags(sql-to-mlir)
+target_link_libraries(sql-to-mlir PUBLIC ${LIBS} pg_query::pg_query runtime)
 
 
 find_package(Python COMPONENTS Interpreter Development REQUIRED)

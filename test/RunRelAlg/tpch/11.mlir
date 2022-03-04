@@ -202,128 +202,95 @@
 //CHECK: |                         10179  |                    1004920.00  |
 //CHECK: |                           883  |                    1004650.68  |
 //CHECK: |                          3627  |                    1004461.04  |
-module @querymodule{
-    func  @main ()  -> !db.table{
-        %1 = relalg.basetable @partsupp { table_identifier="partsupp", rows=80000 , pkey=["ps_partkey","ps_suppkey"]} columns: {ps_partkey => @ps_partkey({type=i32}),
-            ps_suppkey => @ps_suppkey({type=i32}),
-            ps_availqty => @ps_availqty({type=i32}),
-            ps_supplycost => @ps_supplycost({type=!db.decimal<15,2>}),
-            ps_comment => @ps_comment({type=!db.string})
-        }
-        %2 = relalg.basetable @supplier { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=i32}),
-            s_name => @s_name({type=!db.string}),
-            s_address => @s_address({type=!db.string}),
-            s_nationkey => @s_nationkey({type=i32}),
-            s_phone => @s_phone({type=!db.string}),
-            s_acctbal => @s_acctbal({type=!db.decimal<15,2>}),
-            s_comment => @s_comment({type=!db.string})
-        }
-        %3 = relalg.crossproduct %1, %2
-        %4 = relalg.basetable @nation { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=i32}),
-            n_name => @n_name({type=!db.string}),
-            n_regionkey => @n_regionkey({type=i32}),
-            n_comment => @n_comment({type=!db.nullable<!db.string>})
-        }
-        %5 = relalg.crossproduct %3, %4
-        %7 = relalg.selection %5(%6: !relalg.tuple) {
-            %8 = relalg.getattr %6 @partsupp::@ps_suppkey : i32
-            %9 = relalg.getattr %6 @supplier::@s_suppkey : i32
-            %10 = db.compare eq %8 : i32,%9 : i32
-            %11 = relalg.getattr %6 @supplier::@s_nationkey : i32
-            %12 = relalg.getattr %6 @nation::@n_nationkey : i32
-            %13 = db.compare eq %11 : i32,%12 : i32
-            %14 = relalg.getattr %6 @nation::@n_name : !db.string
-            %15 = db.constant ("GERMANY") :!db.string
-            %16 = db.compare eq %14 : !db.string,%15 : !db.string
-            %17 = db.and %10 : i1,%13 : i1,%16 : i1
-            relalg.return %17 : i1
-        }
-        %19 = relalg.map @map %7 (%18: !relalg.tuple) {
-            %20 = relalg.getattr %18 @partsupp::@ps_supplycost : !db.decimal<15,2>
-            %21 = relalg.getattr %18 @partsupp::@ps_availqty : i32
-            %22 = db.cast %21 : i32 -> !db.decimal<15,2>
-            %23 = db.mul %20 : !db.decimal<15,2>,%22 : !db.decimal<15,2>
-            %24 = relalg.addattr %18, @aggfmname1({type=!db.decimal<15,2>}) %23
-            %25 = relalg.getattr %18 @partsupp::@ps_supplycost : !db.decimal<15,2>
-            %26 = relalg.getattr %18 @partsupp::@ps_availqty : i32
-            %27 = db.cast %26 : i32 -> !db.decimal<15,2>
-            %28 = db.mul %25 : !db.decimal<15,2>,%27 : !db.decimal<15,2>
-            %29 = relalg.addattr %24, @aggfmname3({type=!db.decimal<15,2>}) %28
-            relalg.return %29 : !relalg.tuple
-        }
-        %32 = relalg.aggregation @aggr %19 [@partsupp::@ps_partkey] (%30 : !relalg.tuplestream, %31 : !relalg.tuple) {
-            %33 = relalg.aggrfn sum @map::@aggfmname1 %30 : !db.decimal<15,2>
-            %34 = relalg.addattr %31, @aggfmname2({type=!db.decimal<15,2>}) %33
-            %35 = relalg.aggrfn sum @map::@aggfmname3 %30 : !db.decimal<15,2>
-            %36 = relalg.addattr %34, @aggfmname4({type=!db.decimal<15,2>}) %35
-            relalg.return %36 : !relalg.tuple
-        }
-        %38 = relalg.selection %32(%37: !relalg.tuple) {
-            %39 = relalg.getattr %37 @aggr::@aggfmname2 : !db.decimal<15,2>
-            %40 = relalg.basetable @partsupp1 { table_identifier="partsupp", rows=80000 , pkey=["ps_partkey","ps_suppkey"]} columns: {ps_partkey => @ps_partkey({type=i32}),
-                ps_suppkey => @ps_suppkey({type=i32}),
-                ps_availqty => @ps_availqty({type=i32}),
-                ps_supplycost => @ps_supplycost({type=!db.decimal<15,2>}),
-                ps_comment => @ps_comment({type=!db.string})
-            }
-            %41 = relalg.basetable @supplier1 { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=i32}),
-                s_name => @s_name({type=!db.string}),
-                s_address => @s_address({type=!db.string}),
-                s_nationkey => @s_nationkey({type=i32}),
-                s_phone => @s_phone({type=!db.string}),
-                s_acctbal => @s_acctbal({type=!db.decimal<15,2>}),
-                s_comment => @s_comment({type=!db.string})
-            }
-            %42 = relalg.crossproduct %40, %41
-            %43 = relalg.basetable @nation1 { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=i32}),
-                n_name => @n_name({type=!db.string}),
-                n_regionkey => @n_regionkey({type=i32}),
-                n_comment => @n_comment({type=!db.nullable<!db.string>})
-            }
-            %44 = relalg.crossproduct %42, %43
-            %46 = relalg.selection %44(%45: !relalg.tuple) {
-                %47 = relalg.getattr %45 @partsupp1::@ps_suppkey : i32
-                %48 = relalg.getattr %45 @supplier1::@s_suppkey : i32
-                %49 = db.compare eq %47 : i32,%48 : i32
-                %50 = relalg.getattr %45 @supplier1::@s_nationkey : i32
-                %51 = relalg.getattr %45 @nation1::@n_nationkey : i32
-                %52 = db.compare eq %50 : i32,%51 : i32
-                %53 = relalg.getattr %45 @nation1::@n_name : !db.string
-                %54 = db.constant ("GERMANY") :!db.string
-                %55 = db.compare eq %53 : !db.string,%54 : !db.string
-                %56 = db.and %49 : i1,%52 : i1,%55 : i1
-                relalg.return %56 : i1
-            }
-            %58 = relalg.map @map2 %46 (%57: !relalg.tuple) {
-                %59 = relalg.getattr %57 @partsupp1::@ps_supplycost : !db.decimal<15,2>
-                %60 = relalg.getattr %57 @partsupp1::@ps_availqty : i32
-                %61 = db.cast %60 : i32 -> !db.decimal<15,2>
-                %62 = db.mul %59 : !db.decimal<15,2>,%61 : !db.decimal<15,2>
-                %63 = relalg.addattr %57, @aggfmname1({type=!db.decimal<15,2>}) %62
-                relalg.return %63 : !relalg.tuple
-            }
-            %66 = relalg.aggregation @aggr1 %58 [] (%64 : !relalg.tuplestream, %65 : !relalg.tuple) {
-                %67 = relalg.aggrfn sum @map2::@aggfmname1 %64 : !db.nullable<!db.decimal<15,2>>
-                %68 = relalg.addattr %65, @aggfmname2({type=!db.nullable<!db.decimal<15,2>>}) %67
-                relalg.return %68 : !relalg.tuple
-            }
-            %70 = relalg.map @map3 %66 (%69: !relalg.tuple) {
-                %71 = relalg.getattr %69 @aggr1::@aggfmname2 : !db.nullable<!db.decimal<15,2>>
-                %72 = db.constant ("0.0001") :!db.decimal<15,4>
-                %73 = db.cast %71 : !db.nullable<!db.decimal<15,2>> -> !db.nullable<!db.decimal<15,4>>
-                %74 = db.mul %73 : !db.nullable<!db.decimal<15,4>>,%72 : !db.decimal<15,4>
-                %75 = relalg.addattr %69, @aggfmname3({type=!db.nullable<!db.decimal<15,4>>}) %74
-                relalg.return %75 : !relalg.tuple
-            }
-            %76 = relalg.getscalar @map3::@aggfmname3 %70 : !db.nullable<!db.decimal<15,4>>
-            %77 = db.cast %39 : !db.decimal<15,2> -> !db.nullable<!db.decimal<15,4>>
-            %78 = db.compare gt %77 : !db.nullable<!db.decimal<15,4>>,%76 : !db.nullable<!db.decimal<15,4>>
-            relalg.return %78 : !db.nullable<i1>
-        }
-        %79 = relalg.sort %38 [(@aggr::@aggfmname4,desc)]
-        %80 = relalg.materialize %79 [@partsupp::@ps_partkey,@aggr::@aggfmname4] => ["ps_partkey","value"] : !db.table
-        return %80 : !db.table
+module {
+  func @main() -> !db.table {
+    %0 = relalg.basetable @partsupp  {table_identifier = "partsupp"} columns: {ps_availqty => @ps_availqty({type = i32}), ps_comment => @ps_comment({type = !db.string}), ps_partkey => @ps_partkey({type = i32}), ps_suppkey => @ps_suppkey({type = i32}), ps_supplycost => @ps_supplycost({type = !db.decimal<15, 2>})}
+    %1 = relalg.basetable @supplier  {table_identifier = "supplier"} columns: {s_acctbal => @s_acctbal({type = !db.decimal<15, 2>}), s_address => @s_address({type = !db.string}), s_comment => @s_comment({type = !db.string}), s_name => @s_name({type = !db.string}), s_nationkey => @s_nationkey({type = i32}), s_phone => @s_phone({type = !db.string}), s_suppkey => @s_suppkey({type = i32})}
+    %2 = relalg.crossproduct %0, %1
+    %3 = relalg.basetable @nation  {table_identifier = "nation"} columns: {n_comment => @n_comment({type = !db.nullable<!db.string>}), n_name => @n_name({type = !db.string}), n_nationkey => @n_nationkey({type = i32}), n_regionkey => @n_regionkey({type = i32})}
+    %4 = relalg.crossproduct %2, %3
+    %5 = relalg.selection %4 (%arg0: !relalg.tuple){
+      %11 = relalg.getattr %arg0 @partsupp::@ps_suppkey : i32
+      %12 = relalg.getattr %arg0 @supplier::@s_suppkey : i32
+      %13 = db.compare eq %11 : i32, %12 : i32
+      %14 = relalg.getattr %arg0 @supplier::@s_nationkey : i32
+      %15 = relalg.getattr %arg0 @nation::@n_nationkey : i32
+      %16 = db.compare eq %14 : i32, %15 : i32
+      %17 = relalg.getattr %arg0 @nation::@n_name : !db.string
+      %18 = db.constant("GERMANY") : !db.string
+      %19 = db.compare eq %17 : !db.string, %18 : !db.string
+      %20 = db.and %13:i1,%16:i1,%19:i1
+      relalg.return %20 : i1
     }
+    %6 = relalg.map @map0 %5 (%arg0: !relalg.tuple){
+      %11 = relalg.getattr %arg0 @partsupp::@ps_supplycost : !db.decimal<15, 2>
+      %12 = relalg.getattr %arg0 @partsupp::@ps_availqty : i32
+      %13 = db.cast %12 : i32 -> !db.decimal<15, 2>
+      %14 = db.mul %11 : !db.decimal<15, 2>, %13 : !db.decimal<15, 2>
+      %15 = relalg.addattr %arg0, @tmp_attr3({type = !db.decimal<15, 2>}) %14
+      %16 = relalg.getattr %15 @partsupp::@ps_supplycost : !db.decimal<15, 2>
+      %17 = relalg.getattr %15 @partsupp::@ps_availqty : i32
+      %18 = db.cast %17 : i32 -> !db.decimal<15, 2>
+      %19 = db.mul %16 : !db.decimal<15, 2>, %18 : !db.decimal<15, 2>
+      %20 = relalg.addattr %15, @tmp_attr1({type = !db.decimal<15, 2>}) %19
+      relalg.return %20 : !relalg.tuple
+    }
+    %7 = relalg.aggregation @aggr0 %6 [@partsupp::@ps_partkey] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+      %11 = relalg.aggrfn sum @map0::@tmp_attr3 %arg0 : !db.nullable<!db.decimal<15, 2>>
+      %12 = relalg.addattr %arg1, @tmp_attr2({type = !db.nullable<!db.decimal<15, 2>>}) %11
+      %13 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 2>>
+      %14 = relalg.addattr %12, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %13
+      relalg.return %14 : !relalg.tuple
+    }
+    %8 = relalg.selection %7 (%arg0: !relalg.tuple){
+      %11 = relalg.getattr %arg0 @aggr0::@tmp_attr2 : !db.nullable<!db.decimal<15, 2>>
+      %12 = relalg.basetable @partsupp  {table_identifier = "partsupp"} columns: {ps_availqty => @ps_availqty({type = i32}), ps_comment => @ps_comment({type = !db.string}), ps_partkey => @ps_partkey({type = i32}), ps_suppkey => @ps_suppkey({type = i32}), ps_supplycost => @ps_supplycost({type = !db.decimal<15, 2>})}
+      %13 = relalg.basetable @supplier  {table_identifier = "supplier"} columns: {s_acctbal => @s_acctbal({type = !db.decimal<15, 2>}), s_address => @s_address({type = !db.string}), s_comment => @s_comment({type = !db.string}), s_name => @s_name({type = !db.string}), s_nationkey => @s_nationkey({type = i32}), s_phone => @s_phone({type = !db.string}), s_suppkey => @s_suppkey({type = i32})}
+      %14 = relalg.crossproduct %12, %13
+      %15 = relalg.basetable @nation  {table_identifier = "nation"} columns: {n_comment => @n_comment({type = !db.nullable<!db.string>}), n_name => @n_name({type = !db.string}), n_nationkey => @n_nationkey({type = i32}), n_regionkey => @n_regionkey({type = i32})}
+      %16 = relalg.crossproduct %14, %15
+      %17 = relalg.selection %16 (%arg1: !relalg.tuple){
+        %24 = relalg.getattr %arg1 @partsupp::@ps_suppkey : i32
+        %25 = relalg.getattr %arg1 @supplier::@s_suppkey : i32
+        %26 = db.compare eq %24 : i32, %25 : i32
+        %27 = relalg.getattr %arg1 @supplier::@s_nationkey : i32
+        %28 = relalg.getattr %arg1 @nation::@n_nationkey : i32
+        %29 = db.compare eq %27 : i32, %28 : i32
+        %30 = relalg.getattr %arg1 @nation::@n_name : !db.string
+        %31 = db.constant("GERMANY") : !db.string
+        %32 = db.compare eq %30 : !db.string, %31 : !db.string
+        %33 = db.and %26:i1,%29:i1,%32:i1
+        relalg.return %33 : i1
+      }
+      %18 = relalg.map @map1 %17 (%arg1: !relalg.tuple){
+        %24 = relalg.getattr %arg1 @partsupp::@ps_supplycost : !db.decimal<15, 2>
+        %25 = relalg.getattr %arg1 @partsupp::@ps_availqty : i32
+        %26 = db.cast %25 : i32 -> !db.decimal<15, 2>
+        %27 = db.mul %24 : !db.decimal<15, 2>, %26 : !db.decimal<15, 2>
+        %28 = relalg.addattr %arg1, @tmp_attr5({type = !db.decimal<15, 2>}) %27
+        relalg.return %28 : !relalg.tuple
+      }
+      %19 = relalg.aggregation @aggr1 %18 [] (%arg1: !relalg.tuplestream,%arg2: !relalg.tuple){
+        %24 = relalg.aggrfn sum @map1::@tmp_attr5 %arg1 : !db.nullable<!db.decimal<15, 2>>
+        %25 = relalg.addattr %arg2, @tmp_attr4({type = !db.nullable<!db.decimal<15, 2>>}) %24
+        relalg.return %25 : !relalg.tuple
+      }
+      %20 = relalg.map @map2 %19 (%arg1: !relalg.tuple){
+        %24 = relalg.getattr %arg1 @aggr1::@tmp_attr4 : !db.nullable<!db.decimal<15, 2>>
+        %25 = db.constant("0.0001") : !db.decimal<15, 4>
+        %26 = db.cast %24 : !db.nullable<!db.decimal<15, 2>> -> !db.nullable<!db.decimal<15, 4>>
+        %27 = db.mul %26 : !db.nullable<!db.decimal<15, 4>>, %25 : !db.decimal<15, 4>
+        %28 = relalg.addattr %arg1, @tmp_attr6({type = !db.nullable<!db.decimal<15, 4>>}) %27
+        relalg.return %28 : !relalg.tuple
+      }
+      %21 = relalg.getscalar @map2::@tmp_attr6 %20 : !db.nullable<!db.decimal<15, 4>>
+      %22 = db.cast %11 : !db.nullable<!db.decimal<15, 2>> -> !db.nullable<!db.decimal<15, 4>>
+      %23 = db.compare gt %22 : !db.nullable<!db.decimal<15, 4>>, %21 : !db.nullable<!db.decimal<15, 4>>
+      relalg.return %23 : !db.nullable<i1>
+    }
+    %9 = relalg.sort %8 [(@aggr0::@tmp_attr0,desc)]
+    %10 = relalg.materialize %9 [@partsupp::@ps_partkey,@aggr0::@tmp_attr0] => ["ps_partkey", "value"] : !db.table
+    return %10 : !db.table
+  }
 }
-
 

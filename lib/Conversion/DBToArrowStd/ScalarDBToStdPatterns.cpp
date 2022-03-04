@@ -377,7 +377,7 @@ class CmpOpLowering : public ConversionPattern {
       db::NullHandler nullHandler(*typeConverter, rewriter, loc);
       Value left = nullHandler.getValue(cmpOp.left(), adaptor.left());
       Value right = nullHandler.getValue(cmpOp.right(), adaptor.right());
-      if (isIntegerType(type,1) || getIntegerWidth(type,false) || type.isa<db::DecimalType>() || type.isa<db::DateType>() || type.isa<db::TimestampType>() || type.isa<db::IntervalType>() || type.isa<db::CharType>()) {
+      if (isIntegerType(type, 1) || getIntegerWidth(type, false) || type.isa<db::DecimalType>() || type.isa<db::DateType>() || type.isa<db::TimestampType>() || type.isa<db::IntervalType>() || type.isa<db::CharType>()) {
          Value res = rewriter.create<arith::CmpIOp>(loc, translateIPredicate(cmpOp.predicate()), left, right);
          rewriter.replaceOp(op, nullHandler.combineResult(res));
          return success();
@@ -421,7 +421,7 @@ class CastOpLowering : public ConversionPattern {
       }
       if (scalarSourceType == scalarTargetType) {
          //nothing to do here
-      } else if (auto sourceIntWidth = getIntegerWidth(scalarSourceType,false)) {
+      } else if (auto sourceIntWidth = getIntegerWidth(scalarSourceType, false)) {
          if (scalarTargetType.isa<FloatType>()) {
             value = rewriter.create<arith::SIToFPOp>(loc, convertedTargetType, value);
          } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
@@ -434,7 +434,7 @@ class CastOpLowering : public ConversionPattern {
                value = rewriter.create<arith::ExtSIOp>(loc, convertedTargetType, value);
             }
             value = rewriter.create<arith::MulIOp>(loc, convertedTargetType, value, multiplier);
-         } else if (auto targetIntWidth=getIntegerWidth(scalarTargetType,false)) {
+         } else if (auto targetIntWidth = getIntegerWidth(scalarTargetType, false)) {
             if (targetIntWidth < sourceIntWidth) {
                value = rewriter.create<arith::TruncIOp>(loc, convertedTargetType, value);
             } else {
@@ -444,7 +444,7 @@ class CastOpLowering : public ConversionPattern {
             return failure();
          }
       } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
-         if (getIntegerWidth(scalarTargetType,false)) {
+         if (getIntegerWidth(scalarTargetType, false)) {
             value = rewriter.create<arith::FPToSIOp>(loc, convertedTargetType, value);
          } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedSourceType, FloatAttr::get(convertedSourceType, powf(10, decimalTargetType.getS())));
@@ -470,7 +470,7 @@ class CastOpLowering : public ConversionPattern {
             auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, FloatAttr::get(convertedTargetType, powf(10, decimalSourceType.getS())));
             value = rewriter.create<arith::SIToFPOp>(loc, convertedTargetType, value);
             value = rewriter.create<arith::DivFOp>(loc, convertedTargetType, value, multiplier);
-         } else if (auto targetIntWidth=getIntegerWidth(scalarTargetType,false)) {
+         } else if (auto targetIntWidth = getIntegerWidth(scalarTargetType, false)) {
             auto sourceScale = decimalSourceType.getS();
             auto [low, high] = support::getDecimalScaleMultiplier(sourceScale);
             int decimalWidth = convertedSourceType.cast<mlir::IntegerType>().getWidth();
@@ -516,6 +516,36 @@ class CreateFlagLowering : public ConversionPattern {
       Value falseVal = rewriter.create<mlir::db::ConstantOp>(op->getLoc(), boolType, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
       rewriter.create<util::StoreOp>(op->getLoc(), falseVal, alloca, Value());
       rewriter.replaceOp(op, alloca);
+      return success();
+   }
+};
+class BetweenLowering : public ConversionPattern {
+   public:
+   explicit BetweenLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::BetweenOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto betweenOp = mlir::cast<mlir::db::BetweenOp>(op);
+      auto isGteLower = rewriter.create<mlir::db::CmpOp>(op->getLoc(), mlir::db::DBCmpPredicate::gte, betweenOp.val(), betweenOp.lower());
+      auto isLteUpper = rewriter.create<mlir::db::CmpOp>(op->getLoc(), mlir::db::DBCmpPredicate::lte, betweenOp.val(), betweenOp.upper());
+      auto isInRange = rewriter.create<mlir::db::AndOp>(op->getLoc(), ValueRange({isGteLower, isLteUpper}));
+      rewriter.replaceOp(op, isInRange.res());
+      return success();
+   }
+};
+class OneOfLowering : public ConversionPattern {
+   public:
+   explicit OneOfLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::OneOfOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto oneOfOp = mlir::cast<mlir::db::OneOfOp>(op);
+      std::vector<Value> compared;
+      for (auto ele : oneOfOp.vals()) {
+         compared.push_back(rewriter.create<mlir::db::CmpOp>(op->getLoc(), mlir::db::DBCmpPredicate::eq, oneOfOp.val(), ele));
+      }
+      auto isInRange = rewriter.create<mlir::db::OrOp>(op->getLoc(), compared);
+      rewriter.replaceOp(op, isInRange.res());
       return success();
    }
 };
@@ -618,7 +648,6 @@ class HashLowering : public ConversionPattern {
 
 } // namespace
 void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, RewritePatternSet& patterns) {
-
    typeConverter.addConversion([&](::mlir::db::DateType t) {
       if (t.getUnit() == mlir::db::DateUnitAttr::day) {
          return mlir::IntegerType::get(patterns.getContext(), 32);
@@ -654,11 +683,13 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
       return (Type) TupleType::get(patterns.getContext(), {IntegerType::get(patterns.getContext(), 1), typeConverter.convertType(type.getType())});
    });
    typeConverter.addConversion([&](mlir::db::FlagType type) {
-      Type memrefType = util::RefType::get(patterns.getContext(), IntegerType::get(type.getContext(),1), llvm::Optional<int64_t>());
+      Type memrefType = util::RefType::get(patterns.getContext(), IntegerType::get(type.getContext(), 1), llvm::Optional<int64_t>());
       return memrefType;
    });
 
    patterns.insert<CmpOpLowering>(typeConverter, patterns.getContext());
+   patterns.insert<BetweenLowering>(typeConverter, patterns.getContext());
+   patterns.insert<OneOfLowering>(typeConverter, patterns.getContext());
 
    patterns.insert<NotOpLowering>(typeConverter, patterns.getContext());
 

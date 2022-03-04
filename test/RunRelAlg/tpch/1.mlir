@@ -5,75 +5,58 @@
 //CHECK: |                             N  |                             F  |                      95257.00  |                  133737795.84  |                  127132357.30  |                  132286258.95  |                         25.30  |                      35521.32  |                          0.04  |                          3765  |
 //CHECK: |                             N  |                             O  |                    7459297.00  |                10512270008.90  |                 9986237142.30  |                10385575878.94  |                         25.54  |                      36000.92  |                          0.05  |                        292000  |
 //CHECK: |                             R  |                             F  |                    3785523.00  |                 5337950526.47  |                 5071817924.80  |                 5274404231.65  |                         25.52  |                      35994.02  |                          0.04  |                        148301  |
-module @querymodule{
-    func  @main ()  -> !db.table{
-        %1 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=i32}),
-            l_partkey => @l_partkey({type=i32}),
-            l_suppkey => @l_suppkey({type=i32}),
-            l_linenumber => @l_linenumber({type=i32}),
-            l_quantity => @l_quantity({type=!db.decimal<15,2>}),
-            l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
-            l_discount => @l_discount({type=!db.decimal<15,2>}),
-            l_tax => @l_tax({type=!db.decimal<15,2>}),
-            l_returnflag => @l_returnflag({type=!db.char<1>}),
-            l_linestatus => @l_linestatus({type=!db.char<1>}),
-            l_shipdate => @l_shipdate({type=!db.date<day>}),
-            l_commitdate => @l_commitdate({type=!db.date<day>}),
-            l_receiptdate => @l_receiptdate({type=!db.date<day>}),
-            l_shipinstruct => @l_shipinstruct({type=!db.string}),
-            l_shipmode => @l_shipmode({type=!db.string}),
-            l_comment => @l_comment({type=!db.string})
-        }
-        %3 = relalg.selection %1(%2: !relalg.tuple) {
-            %4 = relalg.getattr %2 @lineitem::@l_shipdate : !db.date<day>
-            %5 = db.constant ("1998-12-01") :!db.date<day>
-            %6 = db.constant ("-7776000000") :!db.interval<daytime>
-            %7 = db.date_add %5 : !db.date<day>,%6 : !db.interval<daytime>
-            %8 = db.compare lte %4 : !db.date<day>,%7 : !db.date<day>
-            relalg.return %8 : i1
-        }
-        %10 = relalg.map @map %3 (%9: !relalg.tuple) {
-            %11 = relalg.getattr %9 @lineitem::@l_extendedprice : !db.decimal<15,2>
-            %12 = db.constant (1) :!db.decimal<15,2>
-            %13 = relalg.getattr %9 @lineitem::@l_discount : !db.decimal<15,2>
-            %14 = db.sub %12 : !db.decimal<15,2>,%13 : !db.decimal<15,2>
-            %15 = db.mul %11 : !db.decimal<15,2>,%14 : !db.decimal<15,2>
-            %16 = relalg.addattr %9, @aggfmname3({type=!db.decimal<15,2>}) %15
-            %17 = relalg.getattr %9 @lineitem::@l_extendedprice : !db.decimal<15,2>
-            %18 = db.constant (1) :!db.decimal<15,2>
-            %19 = relalg.getattr %9 @lineitem::@l_discount : !db.decimal<15,2>
-            %20 = db.sub %18 : !db.decimal<15,2>,%19 : !db.decimal<15,2>
-            %21 = db.constant (1) :!db.decimal<15,2>
-            %22 = relalg.getattr %9 @lineitem::@l_tax : !db.decimal<15,2>
-            %23 = db.add %21 : !db.decimal<15,2>,%22 : !db.decimal<15,2>
-            %24 = db.mul %17 : !db.decimal<15,2>,%20 : !db.decimal<15,2>
-            %25 = db.mul %23 : !db.decimal<15,2>,%24 : !db.decimal<15,2>
-            %26 = relalg.addattr %16, @aggfmname5({type=!db.decimal<15,2>}) %25
-            relalg.return %26 : !relalg.tuple
-        }
-        %29 = relalg.aggregation @aggr %10 [@lineitem::@l_returnflag,@lineitem::@l_linestatus] (%27 : !relalg.tuplestream, %28 : !relalg.tuple) {
-            %30 = relalg.aggrfn sum @lineitem::@l_quantity %27 : !db.decimal<15,2>
-            %31 = relalg.addattr %28, @aggfmname1({type=!db.decimal<15,2>}) %30
-            %32 = relalg.aggrfn sum @lineitem::@l_extendedprice %27 : !db.decimal<15,2>
-            %33 = relalg.addattr %31, @aggfmname2({type=!db.decimal<15,2>}) %32
-            %34 = relalg.aggrfn sum @map::@aggfmname3 %27 : !db.decimal<15,2>
-            %35 = relalg.addattr %33, @aggfmname4({type=!db.decimal<15,2>}) %34
-            %36 = relalg.aggrfn sum @map::@aggfmname5 %27 : !db.decimal<15,2>
-            %37 = relalg.addattr %35, @aggfmname6({type=!db.decimal<15,2>}) %36
-            %38 = relalg.aggrfn avg @lineitem::@l_quantity %27 : !db.decimal<15,2>
-            %39 = relalg.addattr %37, @aggfmname7({type=!db.decimal<15,2>}) %38
-            %40 = relalg.aggrfn avg @lineitem::@l_extendedprice %27 : !db.decimal<15,2>
-            %41 = relalg.addattr %39, @aggfmname8({type=!db.decimal<15,2>}) %40
-            %42 = relalg.aggrfn avg @lineitem::@l_discount %27 : !db.decimal<15,2>
-            %43 = relalg.addattr %41, @aggfmname9({type=!db.decimal<15,2>}) %42
-            %44 = relalg.count %27
-            %45 = relalg.addattr %43, @aggfmname10({type=i64}) %44
-            relalg.return %45 : !relalg.tuple
-        }
-        %46 = relalg.sort %29 [(@lineitem::@l_returnflag,asc),(@lineitem::@l_linestatus,asc)]
-        %47 = relalg.materialize %46 [@lineitem::@l_returnflag,@lineitem::@l_linestatus,@aggr::@aggfmname1,@aggr::@aggfmname2,@aggr::@aggfmname4,@aggr::@aggfmname6,@aggr::@aggfmname7,@aggr::@aggfmname8,@aggr::@aggfmname9,@aggr::@aggfmname10] => ["l_returnflag","l_linestatus","sum_qty","sum_base_price","sum_disc_price","sum_charge","avg_qty","avg_price","avg_disc","count_order"] : !db.table
-        return %47 : !db.table
+module {
+  func @main() -> !db.table {
+    %0 = relalg.basetable @lineitem  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
+    %1 = relalg.selection %0 (%arg0: !relalg.tuple){
+      %6 = relalg.getattr %arg0 @lineitem::@l_shipdate : !db.date<day>
+      %7 = db.constant("1998-12-01") : !db.date<day>
+      %8 = db.constant("-90days") : !db.interval<daytime>
+      %9 = db.date_add %7:!db.date<day>,%8:!db.interval<daytime>
+      %10 = db.compare lte %6 : !db.date<day>, %9 : !db.date<day>
+      relalg.return %10 : i1
     }
+    %2 = relalg.map @map0 %1 (%arg0: !relalg.tuple){
+      %6 = relalg.getattr %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
+      %7 = db.constant(1 : i32) : !db.decimal<15, 2>
+      %8 = relalg.getattr %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
+      %9 = db.sub %7 : !db.decimal<15, 2>, %8 : !db.decimal<15, 2>
+      %10 = db.mul %6 : !db.decimal<15, 2>, %9 : !db.decimal<15, 2>
+      %11 = db.constant(1 : i32) : !db.decimal<15, 2>
+      %12 = relalg.getattr %arg0 @lineitem::@l_tax : !db.decimal<15, 2>
+      %13 = db.add %11 : !db.decimal<15, 2>, %12 : !db.decimal<15, 2>
+      %14 = db.mul %10 : !db.decimal<15, 2>, %13 : !db.decimal<15, 2>
+      %15 = relalg.addattr %arg0, @tmp_attr5({type = !db.decimal<15, 2>}) %14
+      %16 = relalg.getattr %15 @lineitem::@l_extendedprice : !db.decimal<15, 2>
+      %17 = db.constant(1 : i32) : !db.decimal<15, 2>
+      %18 = relalg.getattr %15 @lineitem::@l_discount : !db.decimal<15, 2>
+      %19 = db.sub %17 : !db.decimal<15, 2>, %18 : !db.decimal<15, 2>
+      %20 = db.mul %16 : !db.decimal<15, 2>, %19 : !db.decimal<15, 2>
+      %21 = relalg.addattr %15, @tmp_attr3({type = !db.decimal<15, 2>}) %20
+      relalg.return %21 : !relalg.tuple
+    }
+    %3 = relalg.aggregation @aggr0 %2 [@lineitem::@l_returnflag,@lineitem::@l_linestatus] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+      %6 = relalg.aggrfn avg @lineitem::@l_discount %arg0 : !db.nullable<!db.decimal<15, 2>>
+      %7 = relalg.addattr %arg1, @tmp_attr8({type = !db.nullable<!db.decimal<15, 2>>}) %6
+      %8 = relalg.count %arg0
+      %9 = relalg.addattr %7, @tmp_attr9({type = i64}) %8
+      %10 = relalg.aggrfn avg @lineitem::@l_extendedprice %arg0 : !db.nullable<!db.decimal<15, 2>>
+      %11 = relalg.addattr %9, @tmp_attr7({type = !db.nullable<!db.decimal<15, 2>>}) %10
+      %12 = relalg.aggrfn sum @map0::@tmp_attr5 %arg0 : !db.nullable<!db.decimal<15, 2>>
+      %13 = relalg.addattr %11, @tmp_attr4({type = !db.nullable<!db.decimal<15, 2>>}) %12
+      %14 = relalg.aggrfn sum @map0::@tmp_attr3 %arg0 : !db.nullable<!db.decimal<15, 2>>
+      %15 = relalg.addattr %13, @tmp_attr2({type = !db.nullable<!db.decimal<15, 2>>}) %14
+      %16 = relalg.aggrfn sum @lineitem::@l_extendedprice %arg0 : !db.nullable<!db.decimal<15, 2>>
+      %17 = relalg.addattr %15, @tmp_attr1({type = !db.nullable<!db.decimal<15, 2>>}) %16
+      %18 = relalg.aggrfn avg @lineitem::@l_quantity %arg0 : !db.nullable<!db.decimal<15, 2>>
+      %19 = relalg.addattr %17, @tmp_attr6({type = !db.nullable<!db.decimal<15, 2>>}) %18
+      %20 = relalg.aggrfn sum @lineitem::@l_quantity %arg0 : !db.nullable<!db.decimal<15, 2>>
+      %21 = relalg.addattr %19, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %20
+      relalg.return %21 : !relalg.tuple
+    }
+    %4 = relalg.sort %3 [(@lineitem::@l_returnflag,asc),(@lineitem::@l_linestatus,asc)]
+    %5 = relalg.materialize %4 [@lineitem::@l_returnflag,@lineitem::@l_linestatus,@aggr0::@tmp_attr0,@aggr0::@tmp_attr1,@aggr0::@tmp_attr2,@aggr0::@tmp_attr4,@aggr0::@tmp_attr6,@aggr0::@tmp_attr7,@aggr0::@tmp_attr8,@aggr0::@tmp_attr9] => ["l_returnflag", "l_linestatus", "sum_qty", "sum_base_price", "sum_disc_price", "sum_charge", "avg_qty", "avg_price", "avg_disc", "count_order"] : !db.table
+    return %5 : !db.table
+  }
 }
-
 

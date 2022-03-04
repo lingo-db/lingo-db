@@ -159,19 +159,19 @@ module{
 //aggregation functions
 // -----
 module{
-%0 = relalg.const_relation @constrel  attributes : [@attr1({type = !db.string}),@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
-//CHECK: %1 = relalg.aggrfn min @constrel::@attr1 %0 : i32
-%1 = relalg.aggrfn min @constrel::@attr1 %0 : i32
-//CHECK: %2 = relalg.aggrfn max @constrel::@attr1 %0 : i32
-%2 = relalg.aggrfn max @constrel::@attr1 %0 : i32
-//CHECK: %3 = relalg.aggrfn sum @constrel::@attr1 %0 : i32
-%3 = relalg.aggrfn sum @constrel::@attr1 %0 : i32
-//CHECK: %4 = relalg.aggrfn sum @constrel::@attr1 %0 : i32
-%4 = relalg.aggrfn sum @constrel::@attr1 %0 : i32
-//CHECK: %5 = relalg.aggrfn avg @constrel::@attr1 %0 : i32
-%5 = relalg.aggrfn avg @constrel::@attr1 %0 : i32
-//CHECK: %6 = relalg.aggrfn count @constrel::@attr1 %0 : i32
-%6 = relalg.aggrfn count @constrel::@attr1 %0 : i32
+%0 = relalg.const_relation @constrel  attributes : [@attr1({type = i32}),@attr2({type = i32})] values : [[1,1], [0,0]]
+//CHECK: %1 = relalg.aggrfn min @constrel::@attr1 %0 : !db.nullable<i32>
+%1 = relalg.aggrfn min @constrel::@attr1 %0 : !db.nullable<i32>
+//CHECK: %2 = relalg.aggrfn max @constrel::@attr1 %0 : !db.nullable<i32>
+%2 = relalg.aggrfn max @constrel::@attr1 %0 : !db.nullable<i32>
+//CHECK: %3 = relalg.aggrfn sum @constrel::@attr1 %0 : !db.nullable<i32>
+%3 = relalg.aggrfn sum @constrel::@attr1 %0 : !db.nullable<i32>
+//CHECK: %4 = relalg.aggrfn sum @constrel::@attr1 %0 : !db.nullable<i32>
+%4 = relalg.aggrfn sum @constrel::@attr1 %0 : !db.nullable<i32>
+//CHECK: %5 = relalg.aggrfn avg @constrel::@attr1 %0 : !db.nullable<i32>
+%5 = relalg.aggrfn avg @constrel::@attr1 %0 : !db.nullable<i32>
+//CHECK: %6 = relalg.aggrfn count @constrel::@attr1 %0 : i64
+%6 = relalg.aggrfn count @constrel::@attr1 %0 : i64
 }
 
 //scalar operations

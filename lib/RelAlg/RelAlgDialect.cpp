@@ -1,7 +1,9 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/IR/DialectImplementation.h"
-#include <mlir/Transforms/InliningUtils.h>
+#include "mlir/Transforms/InliningUtils.h"
+
+#include "mlir/Dialect/DB/IR/DBDialect.h"
 
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -35,6 +37,7 @@ void RelAlgDialect::initialize() {
       >();
    addInterfaces<RelalgInlinerInterface>();
    relationalAttributeManager.setContext(getContext());
+   getContext()->loadDialect<mlir::db::DBDialect>();
 }
 
 ::mlir::Attribute mlir::relalg::TableMetaDataAttr::parse(::mlir::AsmParser& parser, ::mlir::Type type) {

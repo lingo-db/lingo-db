@@ -4,6 +4,7 @@
 include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
+include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 
 include "RelAlgInterfaces.td"
@@ -357,7 +358,7 @@ let arguments = (ins RelAlg_Tuple:$tuple,RelationalAttributeDefAttr:$attr, AnyTy
 let results = (outs RelAlg_Tuple:$tuple_out);
 }
 
-def AggrFuncOp : RelAlg_Op<"aggrfn"> {
+def AggrFuncOp : RelAlg_Op<"aggrfn",[DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
 let summary = "aggregation operation";
 let arguments = (ins RelAlg_AggrFunc:$fn,RelAlg_TupleStream:$rel,RelationalAttributeRefAttr:$attr);
 let results = (outs AnyType:$result);

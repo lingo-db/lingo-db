@@ -42,13 +42,13 @@ module @querymodule  {
     //CHECK: %{{.*}} = relalg.map @map %{{.*}} (%arg0: !relalg.tuple)
     //CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr2 : i32
     //CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr2 : i32
-    //CHECK: %{{.*}} = db.add %{{.*}}:i32,%{{.*}}:i32
+    //CHECK: %{{.*}} = db.add %{{.*}} : i32, %{{.*}} : i32
     //CHECK: relalg.addattr %{{.*}}, @attr4({type = i32}) %{{.*}}
     //CHECK: relalg.return %{{.*}} : !relalg.tuple
 	//CHECK: %{{.*}} = relalg.map @map %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel::@attr1 : i32
 	//CHECK: %{{.*}} = relalg.getattr %arg0 @constrel2::@attr1 : i32
-	//CHECK: %{{.*}} = db.add %5:i32,%6:i32
+	//CHECK: %{{.*}} = db.add %5 : i32, %6 : i32
 	//CHECK: %{{.*}} = relalg.addattr %{{.*}}, @attr3({type = i32}) %{{.*}}
 	//CHECK: relalg.return %{{.*}} : !relalg.tuple
   	%3 = relalg.map @map %2 (%arg0: !relalg.tuple) {

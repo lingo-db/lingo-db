@@ -109,7 +109,7 @@ reproduce: .repr-docker-built
 	 docker run --privileged -it mlirdb-repr /bin/bash -c "python3 tools/benchmark-tpch.py /build/mlirdb/ tpch-1"
 
 lint:
-	python3 tools/scripts/run-clang-tidy.py -p build/build-debug-llvm-release -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow"
+	python3 tools/scripts/run-clang-tidy.py -p build/build-debug-llvm-release -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored"
 #perf:
 #	 perf record -k 1 -F 1000  --call-graph dwarf [cmd]
 #	 perf inject -j -i perf.data -o perf.data.jitted

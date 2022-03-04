@@ -5,128 +5,77 @@
 //CHECK: |                      "FRANCE"  |                     "GERMANY"  |                          1996  |                    5224778.93  |
 //CHECK: |                     "GERMANY"  |                      "FRANCE"  |                          1995  |                    6232817.94  |
 //CHECK: |                     "GERMANY"  |                      "FRANCE"  |                          1996  |                    5557311.38  |
-module @querymodule{
-    func  @main ()  -> !db.table{
-        %1 = relalg.basetable @supplier { table_identifier="supplier", rows=1000 , pkey=["s_suppkey"]} columns: {s_suppkey => @s_suppkey({type=i32}),
-            s_name => @s_name({type=!db.string}),
-            s_address => @s_address({type=!db.string}),
-            s_nationkey => @s_nationkey({type=i32}),
-            s_phone => @s_phone({type=!db.string}),
-            s_acctbal => @s_acctbal({type=!db.decimal<15,2>}),
-            s_comment => @s_comment({type=!db.string})
-        }
-        %2 = relalg.basetable @lineitem { table_identifier="lineitem", rows=600572 , pkey=["l_orderkey","l_linenumber"]} columns: {l_orderkey => @l_orderkey({type=i32}),
-            l_partkey => @l_partkey({type=i32}),
-            l_suppkey => @l_suppkey({type=i32}),
-            l_linenumber => @l_linenumber({type=i32}),
-            l_quantity => @l_quantity({type=!db.decimal<15,2>}),
-            l_extendedprice => @l_extendedprice({type=!db.decimal<15,2>}),
-            l_discount => @l_discount({type=!db.decimal<15,2>}),
-            l_tax => @l_tax({type=!db.decimal<15,2>}),
-            l_returnflag => @l_returnflag({type=!db.char<1>}),
-            l_linestatus => @l_linestatus({type=!db.char<1>}),
-            l_shipdate => @l_shipdate({type=!db.date<day>}),
-            l_commitdate => @l_commitdate({type=!db.date<day>}),
-            l_receiptdate => @l_receiptdate({type=!db.date<day>}),
-            l_shipinstruct => @l_shipinstruct({type=!db.string}),
-            l_shipmode => @l_shipmode({type=!db.string}),
-            l_comment => @l_comment({type=!db.string})
-        }
-        %3 = relalg.crossproduct %1, %2
-        %4 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=i32}),
-            o_custkey => @o_custkey({type=i32}),
-            o_orderstatus => @o_orderstatus({type=!db.char<1>}),
-            o_totalprice => @o_totalprice({type=!db.decimal<15,2>}),
-            o_orderdate => @o_orderdate({type=!db.date<day>}),
-            o_orderpriority => @o_orderpriority({type=!db.string}),
-            o_clerk => @o_clerk({type=!db.string}),
-            o_shippriority => @o_shippriority({type=i32}),
-            o_comment => @o_comment({type=!db.string})
-        }
-        %5 = relalg.crossproduct %3, %4
-        %6 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=i32}),
-            c_name => @c_name({type=!db.string}),
-            c_address => @c_address({type=!db.string}),
-            c_nationkey => @c_nationkey({type=i32}),
-            c_phone => @c_phone({type=!db.string}),
-            c_acctbal => @c_acctbal({type=!db.decimal<15,2>}),
-            c_mktsegment => @c_mktsegment({type=!db.string}),
-            c_comment => @c_comment({type=!db.string})
-        }
-        %7 = relalg.crossproduct %5, %6
-        %8 = relalg.basetable @nation { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=i32}),
-            n_name => @n_name({type=!db.string}),
-            n_regionkey => @n_regionkey({type=i32}),
-            n_comment => @n_comment({type=!db.nullable<!db.string>})
-        }
-        %9 = relalg.crossproduct %7, %8
-        %10 = relalg.basetable @nation1 { table_identifier="nation", rows=25 , pkey=["n_nationkey"]} columns: {n_nationkey => @n_nationkey({type=i32}),
-            n_name => @n_name({type=!db.string}),
-            n_regionkey => @n_regionkey({type=i32}),
-            n_comment => @n_comment({type=!db.nullable<!db.string>})
-        }
-        %11 = relalg.crossproduct %9, %10
-        %13 = relalg.selection %11(%12: !relalg.tuple) {
-            %14 = relalg.getattr %12 @supplier::@s_suppkey : i32
-            %15 = relalg.getattr %12 @lineitem::@l_suppkey : i32
-            %16 = db.compare eq %14 : i32,%15 : i32
-            %17 = relalg.getattr %12 @orders::@o_orderkey : i32
-            %18 = relalg.getattr %12 @lineitem::@l_orderkey : i32
-            %19 = db.compare eq %17 : i32,%18 : i32
-            %20 = relalg.getattr %12 @customer::@c_custkey : i32
-            %21 = relalg.getattr %12 @orders::@o_custkey : i32
-            %22 = db.compare eq %20 : i32,%21 : i32
-            %23 = relalg.getattr %12 @supplier::@s_nationkey : i32
-            %24 = relalg.getattr %12 @nation::@n_nationkey : i32
-            %25 = db.compare eq %23 : i32,%24 : i32
-            %26 = relalg.getattr %12 @customer::@c_nationkey : i32
-            %27 = relalg.getattr %12 @nation1::@n_nationkey : i32
-            %28 = db.compare eq %26 : i32,%27 : i32
-            %29 = relalg.getattr %12 @nation::@n_name : !db.string
-            %30 = db.constant ("FRANCE") :!db.string
-            %31 = db.compare eq %29 : !db.string,%30 : !db.string
-            %32 = relalg.getattr %12 @nation1::@n_name : !db.string
-            %33 = db.constant ("GERMANY") :!db.string
-            %34 = db.compare eq %32 : !db.string,%33 : !db.string
-            %35 = db.and %31 : i1,%34 : i1
-            %36 = relalg.getattr %12 @nation::@n_name : !db.string
-            %37 = db.constant ("GERMANY") :!db.string
-            %38 = db.compare eq %36 : !db.string,%37 : !db.string
-            %39 = relalg.getattr %12 @nation1::@n_name : !db.string
-            %40 = db.constant ("FRANCE") :!db.string
-            %41 = db.compare eq %39 : !db.string,%40 : !db.string
-            %42 = db.and %38 : i1,%41 : i1
-            %43 = db.or %35 : i1,%42 : i1
-            %44 = relalg.getattr %12 @lineitem::@l_shipdate : !db.date<day>
-            %45 = db.constant ("1995-01-01") :!db.date<day>
-            %46 = db.constant ("1996-12-31") :!db.date<day>
-            %47 = db.compare gte %44 : !db.date<day>,%45 : !db.date<day>
-            %48 = db.compare lte %44 : !db.date<day>,%46 : !db.date<day>
-            %49 = db.and %47 : i1,%48 : i1
-            %50 = db.and %16 : i1,%19 : i1,%22 : i1,%25 : i1,%28 : i1,%43 : i1,%49 : i1
-            relalg.return %50 : i1
-        }
-        %52 = relalg.map @map1 %13 (%51: !relalg.tuple) {
-            %53 = relalg.getattr %51 @lineitem::@l_shipdate : !db.date<day>
-            %54 = db.date_extract year, %53 : !db.date<day>
-            %55 = relalg.addattr %51, @aggfmname1({type=i64}) %54
-            %56 = relalg.getattr %51 @lineitem::@l_extendedprice : !db.decimal<15,2>
-            %57 = db.constant (1) :!db.decimal<15,2>
-            %58 = relalg.getattr %51 @lineitem::@l_discount : !db.decimal<15,2>
-            %59 = db.sub %57 : !db.decimal<15,2>,%58 : !db.decimal<15,2>
-            %60 = db.mul %56 : !db.decimal<15,2>,%59 : !db.decimal<15,2>
-            %61 = relalg.addattr %55, @aggfmname2({type=!db.decimal<15,2>}) %60
-            relalg.return %61 : !relalg.tuple
-        }
-        %64 = relalg.aggregation @aggr1 %52 [@nation::@n_name,@nation1::@n_name,@map1::@aggfmname1] (%62 : !relalg.tuplestream, %63 : !relalg.tuple) {
-            %65 = relalg.aggrfn sum @map1::@aggfmname2 %62 : !db.decimal<15,2>
-            %66 = relalg.addattr %63, @aggfmname1({type=!db.decimal<15,2>}) %65
-            relalg.return %66 : !relalg.tuple
-        }
-        %67 = relalg.sort %64 [(@nation::@n_name,asc),(@nation1::@n_name,asc),(@map1::@aggfmname1,asc)]
-        %68 = relalg.materialize %67 [@nation::@n_name,@nation1::@n_name,@map1::@aggfmname1,@aggr1::@aggfmname1] => ["supp_nation","cust_nation","l_year","revenue"] : !db.table
-        return %68 : !db.table
+module {
+  func @main() -> !db.table {
+    %0 = relalg.basetable @supplier  {table_identifier = "supplier"} columns: {s_acctbal => @s_acctbal({type = !db.decimal<15, 2>}), s_address => @s_address({type = !db.string}), s_comment => @s_comment({type = !db.string}), s_name => @s_name({type = !db.string}), s_nationkey => @s_nationkey({type = i32}), s_phone => @s_phone({type = !db.string}), s_suppkey => @s_suppkey({type = i32})}
+    %1 = relalg.basetable @lineitem  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
+    %2 = relalg.crossproduct %0, %1
+    %3 = relalg.basetable @orders  {table_identifier = "orders"} columns: {o_clerk => @o_clerk({type = !db.string}), o_comment => @o_comment({type = !db.string}), o_custkey => @o_custkey({type = i32}), o_orderdate => @o_orderdate({type = !db.date<day>}), o_orderkey => @o_orderkey({type = i32}), o_orderpriority => @o_orderpriority({type = !db.string}), o_orderstatus => @o_orderstatus({type = !db.char<1>}), o_shippriority => @o_shippriority({type = i32}), o_totalprice => @o_totalprice({type = !db.decimal<15, 2>})}
+    %4 = relalg.crossproduct %2, %3
+    %5 = relalg.basetable @customer  {table_identifier = "customer"} columns: {c_acctbal => @c_acctbal({type = !db.decimal<15, 2>}), c_address => @c_address({type = !db.string}), c_comment => @c_comment({type = !db.string}), c_custkey => @c_custkey({type = i32}), c_mktsegment => @c_mktsegment({type = !db.string}), c_name => @c_name({type = !db.string}), c_nationkey => @c_nationkey({type = i32}), c_phone => @c_phone({type = !db.string})}
+    %6 = relalg.crossproduct %4, %5
+    %7 = relalg.basetable @n1  {table_identifier = "nation"} columns: {n_comment => @n_comment({type = !db.nullable<!db.string>}), n_name => @n_name({type = !db.string}), n_nationkey => @n_nationkey({type = i32}), n_regionkey => @n_regionkey({type = i32})}
+    %8 = relalg.crossproduct %6, %7
+    %9 = relalg.basetable @n2  {table_identifier = "nation"} columns: {n_comment => @n_comment({type = !db.nullable<!db.string>}), n_name => @n_name({type = !db.string}), n_nationkey => @n_nationkey({type = i32}), n_regionkey => @n_regionkey({type = i32})}
+    %10 = relalg.crossproduct %8, %9
+    %11 = relalg.selection %10 (%arg0: !relalg.tuple){
+      %16 = relalg.getattr %arg0 @supplier::@s_suppkey : i32
+      %17 = relalg.getattr %arg0 @lineitem::@l_suppkey : i32
+      %18 = db.compare eq %16 : i32, %17 : i32
+      %19 = relalg.getattr %arg0 @orders::@o_orderkey : i32
+      %20 = relalg.getattr %arg0 @lineitem::@l_orderkey : i32
+      %21 = db.compare eq %19 : i32, %20 : i32
+      %22 = relalg.getattr %arg0 @customer::@c_custkey : i32
+      %23 = relalg.getattr %arg0 @orders::@o_custkey : i32
+      %24 = db.compare eq %22 : i32, %23 : i32
+      %25 = relalg.getattr %arg0 @supplier::@s_nationkey : i32
+      %26 = relalg.getattr %arg0 @n1::@n_nationkey : i32
+      %27 = db.compare eq %25 : i32, %26 : i32
+      %28 = relalg.getattr %arg0 @customer::@c_nationkey : i32
+      %29 = relalg.getattr %arg0 @n2::@n_nationkey : i32
+      %30 = db.compare eq %28 : i32, %29 : i32
+      %31 = relalg.getattr %arg0 @n1::@n_name : !db.string
+      %32 = db.constant("FRANCE") : !db.string
+      %33 = db.compare eq %31 : !db.string, %32 : !db.string
+      %34 = relalg.getattr %arg0 @n2::@n_name : !db.string
+      %35 = db.constant("GERMANY") : !db.string
+      %36 = db.compare eq %34 : !db.string, %35 : !db.string
+      %37 = db.and %33:i1,%36:i1
+      %38 = relalg.getattr %arg0 @n1::@n_name : !db.string
+      %39 = db.constant("GERMANY") : !db.string
+      %40 = db.compare eq %38 : !db.string, %39 : !db.string
+      %41 = relalg.getattr %arg0 @n2::@n_name : !db.string
+      %42 = db.constant("FRANCE") : !db.string
+      %43 = db.compare eq %41 : !db.string, %42 : !db.string
+      %44 = db.and %40:i1,%43:i1
+      %45 = db.or %37:i1,%44:i1
+      %46 = relalg.getattr %arg0 @lineitem::@l_shipdate : !db.date<day>
+      %47 = db.constant("1995-01-01") : !db.date<day>
+      %48 = db.constant("1996-12-31") : !db.date<day>
+      %49 = db.between %46 : !db.date<day> between %47 : !db.date<day>, %48 : !db.date<day>
+      %50 = db.and %18:i1,%21:i1,%24:i1,%27:i1,%30:i1,%45:i1,%49:i1
+      relalg.return %50 : i1
     }
+    %12 = relalg.map @map0 %11 (%arg0: !relalg.tuple){
+      %16 = relalg.getattr %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
+      %17 = db.constant(1 : i32) : !db.decimal<15, 2>
+      %18 = relalg.getattr %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
+      %19 = db.sub %17 : !db.decimal<15, 2>, %18 : !db.decimal<15, 2>
+      %20 = db.mul %16 : !db.decimal<15, 2>, %19 : !db.decimal<15, 2>
+      %21 = relalg.addattr %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %20
+      %22 = relalg.getattr %21 @lineitem::@l_shipdate : !db.date<day>
+      %23 = db.date_extract year, %22 : <day>
+      %24 = relalg.addattr %21, @tmp_attr0({type = i64}) %23
+      relalg.return %24 : !relalg.tuple
+    }
+    %13 = relalg.aggregation @aggr0 %12 [@n1::@n_name,@n2::@n_name,@map0::@tmp_attr0] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+      %16 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 2>>
+      %17 = relalg.addattr %arg1, @tmp_attr2({type = !db.nullable<!db.decimal<15, 2>>}) %16
+      relalg.return %17 : !relalg.tuple
+    }
+    %14 = relalg.sort %13 [(@n1::@n_name,asc),(@n2::@n_name,asc),(@map0::@tmp_attr0,asc)]
+    %15 = relalg.materialize %14 [@n1::@n_name,@n2::@n_name,@map0::@tmp_attr0,@aggr0::@tmp_attr2] => ["supp_nation", "cust_nation", "l_year", "revenue"] : !db.table
+    return %15 : !db.table
+  }
 }
-
 

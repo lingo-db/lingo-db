@@ -61,4 +61,4 @@ jobs:
       - name: Run Test
         run: |
           cd /repo
-          python3 /repo/tools/scripts/run-clang-tidy.py -p /build/mlirdb -quiet  -exclude="arrow" -header-filter="$PWD/include/.*"
+          python3 /repo/tools/scripts/run-clang-tidy.py -p /build/mlirdb -quiet  -exclude="arrow|vendored" -header-filter="$PWD/include/.*"

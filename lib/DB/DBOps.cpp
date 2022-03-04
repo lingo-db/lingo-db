@@ -33,6 +33,16 @@ int getIntegerWidth(mlir::Type type, bool isUnSigned) {
    }
    return 0;
 }
+LogicalResult inferReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
+   bool anyNullables = llvm::any_of(operands, [](Value v) { return v.getType().isa<mlir::db::NullableType>(); });
+   Type baseType = getBaseType(operands[0].getType());
+   if (anyNullables) {
+      inferredReturnTypes.push_back(mlir::db::NullableType::get(context, baseType));
+   }else{
+      inferredReturnTypes.push_back(baseType);
+   }
+   return success();
+}
 LogicalResult mlir::db::CmpOp::inferReturnTypes(
    MLIRContext* context, Optional<Location> location, ValueRange operands,
    DictionaryAttr attributes, RegionRange regions,
@@ -235,7 +245,6 @@ static ParseResult parseForOp(OpAsmParser& parser, OperationState& result) {
 
    return success();
 }
-
 
 static ParseResult parseSortOp(OpAsmParser& parser, OperationState& result) {
    OpAsmParser::OperandType toSort;

@@ -8,114 +8,74 @@
 //CHECK: |                          "29"  |                            85  |                     632693.46  |
 //CHECK: |                          "30"  |                            87  |                     646748.02  |
 //CHECK: |                          "31"  |                            87  |                     647372.50  |
-module @querymodule{
-    func @main ()  -> !db.table{
-        %1 = relalg.basetable @customer { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=i32}),
-            c_name => @c_name({type=!db.string}),
-            c_address => @c_address({type=!db.string}),
-            c_nationkey => @c_nationkey({type=i32}),
-            c_phone => @c_phone({type=!db.string}),
-            c_acctbal => @c_acctbal({type=!db.decimal<15,2>}),
-            c_mktsegment => @c_mktsegment({type=!db.string}),
-            c_comment => @c_comment({type=!db.string})
-        }
-        %3 = relalg.selection %1(%2: !relalg.tuple) {
-            %c_phone2 = relalg.getattr %2 @customer::@c_phone : !db.string
-            %4 = db.substr %c_phone2[1:2] : !db.string
-            %5 = db.constant ("13") :!db.string
-            %6 = db.compare eq %4 : !db.string,%5 : !db.string
-            %7 = db.constant ("31") :!db.string
-            %8 = db.compare eq %4 : !db.string,%7 : !db.string
-            %9 = db.constant ("23") :!db.string
-            %10 = db.compare eq %4 : !db.string,%9 : !db.string
-            %11 = db.constant ("29") :!db.string
-            %12 = db.compare eq %4 : !db.string,%11 : !db.string
-            %13 = db.constant ("30") :!db.string
-            %14 = db.compare eq %4 : !db.string,%13 : !db.string
-            %15 = db.constant ("18") :!db.string
-            %16 = db.compare eq %4 : !db.string,%15 : !db.string
-            %17 = db.constant ("17") :!db.string
-            %18 = db.compare eq %4 : !db.string,%17 : !db.string
-            %19 = db.or %6 : i1,%8 : i1,%10 : i1,%12 : i1,%14 : i1,%16 : i1,%18 : i1
-            %20 = relalg.getattr %2 @customer::@c_acctbal : !db.decimal<15,2>
-            %21 = relalg.basetable @customer1 { table_identifier="customer", rows=15000 , pkey=["c_custkey"]} columns: {c_custkey => @c_custkey({type=i32}),
-                c_name => @c_name({type=!db.string}),
-                c_address => @c_address({type=!db.string}),
-                c_nationkey => @c_nationkey({type=i32}),
-                c_phone => @c_phone({type=!db.string}),
-                c_acctbal => @c_acctbal({type=!db.decimal<15,2>}),
-                c_mktsegment => @c_mktsegment({type=!db.string}),
-                c_comment => @c_comment({type=!db.string})
-            }
-            %23 = relalg.selection %21(%22: !relalg.tuple) {
-                %24 = relalg.getattr %22 @customer1::@c_acctbal : !db.decimal<15,2>
-                %25 = db.constant ("0.0") :!db.decimal<15,2>
-                %26 = db.compare gt %24 : !db.decimal<15,2>,%25 : !db.decimal<15,2>
-                %c_phone = relalg.getattr %22 @customer1::@c_phone : !db.string
-                %27 = db.substr %c_phone[1:2] : !db.string
-                %28 = db.constant ("13") :!db.string
-                %29 = db.compare eq %27 : !db.string,%28 : !db.string
-                %30 = db.constant ("31") :!db.string
-                %31 = db.compare eq %27 : !db.string,%30 : !db.string
-                %32 = db.constant ("23") :!db.string
-                %33 = db.compare eq %27 : !db.string,%32 : !db.string
-                %34 = db.constant ("29") :!db.string
-                %35 = db.compare eq %27 : !db.string,%34 : !db.string
-                %36 = db.constant ("30") :!db.string
-                %37 = db.compare eq %27 : !db.string,%36 : !db.string
-                %38 = db.constant ("18") :!db.string
-                %39 = db.compare eq %27 : !db.string,%38 : !db.string
-                %40 = db.constant ("17") :!db.string
-                %41 = db.compare eq %27 : !db.string,%40 : !db.string
-                %42 = db.or %29 : i1,%31 : i1,%33 : i1,%35 : i1,%37 : i1,%39 : i1,%41 : i1
-                %43 = db.and %26 : i1,%42 : i1
-                relalg.return %43 : i1
-            }
-            %45 = relalg.aggregation @aggr1 %23 [] (%44 : !relalg.tuplestream,%tuple : !relalg.tuple) {
-                %46 = relalg.aggrfn avg @customer1::@c_acctbal %44 : !db.nullable<!db.decimal<15,2>>
-                relalg.addattr %tuple, @aggfmname1({type=!db.nullable<!db.decimal<15,2>>}) %46
-                relalg.return
-            }
-            %47 = relalg.getscalar @aggr1::@aggfmname1 %45 : !db.nullable<!db.decimal<15,2>>
-            %48 = db.compare gt %20 : !db.decimal<15,2>,%47 : !db.nullable<!db.decimal<15,2>>
-            %49 = relalg.basetable @orders { table_identifier="orders", rows=150000 , pkey=["o_orderkey"]} columns: {o_orderkey => @o_orderkey({type=i32}),
-                o_custkey => @o_custkey({type=i32}),
-                o_orderstatus => @o_orderstatus({type=!db.char<1>}),
-                o_totalprice => @o_totalprice({type=!db.decimal<15,2>}),
-                o_orderdate => @o_orderdate({type=!db.date<day>}),
-                o_orderpriority => @o_orderpriority({type=!db.string}),
-                o_clerk => @o_clerk({type=!db.string}),
-                o_shippriority => @o_shippriority({type=i32}),
-                o_comment => @o_comment({type=!db.string})
-            }
-            %51 = relalg.selection %49(%50: !relalg.tuple) {
-                %52 = relalg.getattr %50 @orders::@o_custkey : i32
-                %53 = relalg.getattr %2 @customer::@c_custkey : i32
-                %54 = db.compare eq %52 : i32,%53 : i32
-                relalg.return %54 : i1
-            }
-            %55 = relalg.exists%51
-            %56 = db.not %55 : i1
-            %57 = db.and %19 : i1,%48 : !db.nullable<i1> ,%56 : i1
-            relalg.return %57 : !db.nullable<i1>
-        }
-        %mapped = relalg.map @map %3 (%maparg: !relalg.tuple) {
-            %c_phone = relalg.getattr %maparg @customer::@c_phone : !db.string
-            %cntrycode = db.substr %c_phone[1:2] : !db.string
-        	%tpl=relalg.addattr %maparg, @cntrycode({type = !db.string}) %cntrycode
-        	relalg.return %tpl : !relalg.tuple
-        }
-        %59 = relalg.aggregation @aggr4 %mapped [@map::@cntrycode] (%58 : !relalg.tuplestream, %tuple : !relalg.tuple) {
-            %60 = relalg.count %58
-            relalg.addattr %tuple, @aggfmname1({type=i64}) %60
-            %61 = relalg.aggrfn sum @customer::@c_acctbal %58 : !db.decimal<15,2>
-            relalg.addattr %tuple, @aggfmname2({type=!db.decimal<15,2>}) %61
-            relalg.return
-        }
-        %62 = relalg.sort %59 [(@map::@cntrycode,asc)]
-        %63 = relalg.materialize %62 [@map::@cntrycode,@aggr4::@aggfmname1,@aggr4::@aggfmname2] => ["cntrycode","numcust","totacctbal"] : !db.table
-        return %63 : !db.table
+module {
+  func @main() -> !db.table {
+    %0 = relalg.basetable @customer  {table_identifier = "customer"} columns: {c_acctbal => @c_acctbal({type = !db.decimal<15, 2>}), c_address => @c_address({type = !db.string}), c_comment => @c_comment({type = !db.string}), c_custkey => @c_custkey({type = i32}), c_mktsegment => @c_mktsegment({type = !db.string}), c_name => @c_name({type = !db.string}), c_nationkey => @c_nationkey({type = i32}), c_phone => @c_phone({type = !db.string})}
+    %1 = relalg.selection %0 (%arg0: !relalg.tuple){
+      %6 = db.constant("13") : !db.string
+      %7 = db.constant("31") : !db.string
+      %8 = db.constant("23") : !db.string
+      %9 = db.constant("29") : !db.string
+      %10 = db.constant("30") : !db.string
+      %11 = db.constant("18") : !db.string
+      %12 = db.constant("17") : !db.string
+      %13 = relalg.getattr %arg0 @customer::@c_phone : !db.string
+      %14 = db.substr %13[1 : 2] : !db.string
+      %15 = db.oneof %14 : !db.string ? %6, %7, %8, %9, %10, %11, %12 : !db.string, !db.string, !db.string, !db.string, !db.string, !db.string, !db.string
+      %16 = relalg.getattr %arg0 @customer::@c_acctbal : !db.decimal<15, 2>
+      %17 = relalg.basetable @customer  {table_identifier = "customer"} columns: {c_acctbal => @c_acctbal({type = !db.decimal<15, 2>}), c_address => @c_address({type = !db.string}), c_comment => @c_comment({type = !db.string}), c_custkey => @c_custkey({type = i32}), c_mktsegment => @c_mktsegment({type = !db.string}), c_name => @c_name({type = !db.string}), c_nationkey => @c_nationkey({type = i32}), c_phone => @c_phone({type = !db.string})}
+      %18 = relalg.selection %17 (%arg1: !relalg.tuple){
+        %27 = relalg.getattr %arg1 @customer::@c_acctbal : !db.decimal<15, 2>
+        %28 = db.constant("0.00") : !db.decimal<15, 2>
+        %29 = db.compare gt %27 : !db.decimal<15, 2>, %28 : !db.decimal<15, 2>
+        %30 = db.constant("13") : !db.string
+        %31 = db.constant("31") : !db.string
+        %32 = db.constant("23") : !db.string
+        %33 = db.constant("29") : !db.string
+        %34 = db.constant("30") : !db.string
+        %35 = db.constant("18") : !db.string
+        %36 = db.constant("17") : !db.string
+        %37 = relalg.getattr %arg1 @customer::@c_phone : !db.string
+        %38 = db.substr %37[1 : 2] : !db.string
+        %39 = db.oneof %38 : !db.string ? %30, %31, %32, %33, %34, %35, %36 : !db.string, !db.string, !db.string, !db.string, !db.string, !db.string, !db.string
+        %40 = db.and %29:i1,%39:i1
+        relalg.return %40 : i1
+      }
+      %19 = relalg.aggregation @aggr0 %18 [] (%arg1: !relalg.tuplestream,%arg2: !relalg.tuple){
+        %27 = relalg.aggrfn avg @customer::@c_acctbal %arg1 : !db.nullable<!db.decimal<15, 2>>
+        %28 = relalg.addattr %arg2, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %27
+        relalg.return %28 : !relalg.tuple
+      }
+      %20 = relalg.getscalar @aggr0::@tmp_attr0 %19 : !db.nullable<!db.decimal<15, 2>>
+      %21 = db.compare gt %16 : !db.decimal<15, 2>, %20 : !db.nullable<!db.decimal<15, 2>>
+      %22 = relalg.basetable @orders  {table_identifier = "orders"} columns: {o_clerk => @o_clerk({type = !db.string}), o_comment => @o_comment({type = !db.string}), o_custkey => @o_custkey({type = i32}), o_orderdate => @o_orderdate({type = !db.date<day>}), o_orderkey => @o_orderkey({type = i32}), o_orderpriority => @o_orderpriority({type = !db.string}), o_orderstatus => @o_orderstatus({type = !db.char<1>}), o_shippriority => @o_shippriority({type = i32}), o_totalprice => @o_totalprice({type = !db.decimal<15, 2>})}
+      %23 = relalg.selection %22 (%arg1: !relalg.tuple){
+        %27 = relalg.getattr %arg1 @orders::@o_custkey : i32
+        %28 = relalg.getattr %arg1 @customer::@c_custkey : i32
+        %29 = db.compare eq %27 : i32, %28 : i32
+        relalg.return %29 : i1
+      }
+      %24 = relalg.exists %23
+      %25 = db.not %24 : i1
+      %26 = db.and %15:i1,%21:!db.nullable<i1>,%25:i1
+      relalg.return %26 : !db.nullable<i1>
     }
+    %2 = relalg.map @map0 %1 (%arg0: !relalg.tuple){
+      %6 = relalg.getattr %arg0 @customer::@c_phone : !db.string
+      %7 = db.substr %6[1 : 2] : !db.string
+      %8 = relalg.addattr %arg0, @tmp_attr1({type = !db.string}) %7
+      relalg.return %8 : !relalg.tuple
+    }
+    %3 = relalg.aggregation @aggr1 %2 [@map0::@tmp_attr1] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+      %6 = relalg.aggrfn sum @customer::@c_acctbal %arg0 : !db.nullable<!db.decimal<15, 2>>
+      %7 = relalg.addattr %arg1, @tmp_attr3({type = !db.nullable<!db.decimal<15, 2>>}) %6
+      %8 = relalg.count %arg0
+      %9 = relalg.addattr %7, @tmp_attr2({type = i64}) %8
+      relalg.return %9 : !relalg.tuple
+    }
+    %4 = relalg.sort %3 [(@map0::@tmp_attr1,asc)]
+    %5 = relalg.materialize %4 [@map0::@tmp_attr1,@aggr1::@tmp_attr2,@aggr1::@tmp_attr3] => ["cntrycode", "numcust", "totacctbal"] : !db.table
+    return %5 : !db.table
+  }
 }
-
 

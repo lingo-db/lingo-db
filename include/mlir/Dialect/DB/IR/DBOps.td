@@ -348,15 +348,17 @@ let assemblyFormat = "$val `:` type($val) attr-dict";
 
 class DB_BinaryOp<string mnemonic, list<Trait> traits = []> :
 Op<DB_Dialect, mnemonic,
-    !listconcat(traits, [NoSideEffect])>,Arguments<(ins NullableDBType:$left, NullableDBType:$right)> {
+    !listconcat(traits, [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>])>,Arguments<(ins NullableDBType:$left, NullableDBType:$right)> {
 let results = (outs AnyType:$result);
-let parser = [{
-return parseImplicitResultSameOperandBaseTypeOp(parser, result);
-}];
-
-let printer = [{
-return printImplicitResultSameOperandBaseTypeOp(this->getOperation(), p);
-}];
+  let extraClassDefinition = [{
+    LogicalResult $cppClass::inferReturnTypes(
+   MLIRContext* context, Optional<Location> location, ValueRange operands,
+   DictionaryAttr attributes, RegionRange regions,
+   SmallVectorImpl<Type>& inferredReturnTypes) {
+         return inferReturnType(context,location,operands,inferredReturnTypes);
+    }
+  }];
+let assemblyFormat = "$left `:` type($left) `,` $right `:` type($right) attr-dict";
 }
 class DB_UnaryOp<string mnemonic, list<Trait> traits = []> :
 Op<DB_Dialect, mnemonic,
@@ -411,6 +413,45 @@ static StringRef getPredicateAttrName() { return "predicate"; }
 let assemblyFormat = "$predicate $left `:` type($left) `,` $right `:` type($right) attr-dict";
 }
 
+def DB_BetweenOp : DB_Op<"between",
+    [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+
+let arguments = (ins
+NullableDBType:$val,
+NullableDBType:$lower,
+NullableDBType:$upper
+);
+let results = (outs AnyBool:$result);
+
+  let extraClassDefinition = [{
+    LogicalResult $cppClass::inferReturnTypes(
+   MLIRContext* context, Optional<Location> location, ValueRange operands,
+   DictionaryAttr attributes, RegionRange regions,
+   SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.assign({constructNullableBool(context, operands)});
+    return success();
+    }
+  }];
+let assemblyFormat = "$val `:` type ($val) `between` $lower `:` type($lower) `,` $upper `:` type($upper) attr-dict";
+}
+
+def DB_OneOfOp : DB_Op<"oneof",
+    [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+
+let arguments = (ins NullableDBType:$val,Variadic<NullableDBType>:$vals );
+let results = (outs AnyBool:$result);
+
+  let extraClassDefinition = [{
+    LogicalResult $cppClass::inferReturnTypes(
+   MLIRContext* context, Optional<Location> location, ValueRange operands,
+   DictionaryAttr attributes, RegionRange regions,
+   SmallVectorImpl<Type>& inferredReturnTypes) {
+    inferredReturnTypes.assign({constructNullableBool(context, operands)});
+    return success();
+    }
+  }];
+let assemblyFormat = "$val `:` type ($val) `?` $vals `:` type ($vals) attr-dict";
+}
 
 def DumpOp : DB_Op<"dump"> {
 let summary = "dump function";
