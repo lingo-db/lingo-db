@@ -57,8 +57,8 @@ module {
       relalg.return %8 : !relalg.tuple
     }
     %3 = relalg.aggregation @aggr1 %2 [@map0::@tmp_attr1] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
-      %6 = relalg.aggrfn sum @customer::@c_acctbal %arg0 : !db.nullable<!db.decimal<15, 2>>
-      %7 = relalg.addattr %arg1, @tmp_attr3({type = !db.nullable<!db.decimal<15, 2>>}) %6
+      %6 = relalg.aggrfn sum @customer::@c_acctbal %arg0 : !db.decimal<15, 2>
+      %7 = relalg.addattr %arg1, @tmp_attr3({type = !db.decimal<15, 2>}) %6
       %8 = relalg.count %arg0
       %9 = relalg.addattr %7, @tmp_attr2({type = i64}) %8
       relalg.return %9 : !relalg.tuple

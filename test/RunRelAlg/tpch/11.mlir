@@ -236,14 +236,14 @@ module {
       relalg.return %20 : !relalg.tuple
     }
     %7 = relalg.aggregation @aggr0 %6 [@partsupp::@ps_partkey] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
-      %11 = relalg.aggrfn sum @map0::@tmp_attr3 %arg0 : !db.nullable<!db.decimal<15, 2>>
-      %12 = relalg.addattr %arg1, @tmp_attr2({type = !db.nullable<!db.decimal<15, 2>>}) %11
-      %13 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 2>>
-      %14 = relalg.addattr %12, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %13
+      %11 = relalg.aggrfn sum @map0::@tmp_attr3 %arg0 : !db.decimal<15, 2>
+      %12 = relalg.addattr %arg1, @tmp_attr2({type = !db.decimal<15, 2>}) %11
+      %13 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
+      %14 = relalg.addattr %12, @tmp_attr0({type = !db.decimal<15, 2>}) %13
       relalg.return %14 : !relalg.tuple
     }
     %8 = relalg.selection %7 (%arg0: !relalg.tuple){
-      %11 = relalg.getattr %arg0 @aggr0::@tmp_attr2 : !db.nullable<!db.decimal<15, 2>>
+      %11 = relalg.getattr %arg0 @aggr0::@tmp_attr2 : !db.decimal<15, 2>
       %12 = relalg.basetable @partsupp  {table_identifier = "partsupp"} columns: {ps_availqty => @ps_availqty({type = i32}), ps_comment => @ps_comment({type = !db.string}), ps_partkey => @ps_partkey({type = i32}), ps_suppkey => @ps_suppkey({type = i32}), ps_supplycost => @ps_supplycost({type = !db.decimal<15, 2>})}
       %13 = relalg.basetable @supplier  {table_identifier = "supplier"} columns: {s_acctbal => @s_acctbal({type = !db.decimal<15, 2>}), s_address => @s_address({type = !db.string}), s_comment => @s_comment({type = !db.string}), s_name => @s_name({type = !db.string}), s_nationkey => @s_nationkey({type = i32}), s_phone => @s_phone({type = !db.string}), s_suppkey => @s_suppkey({type = i32})}
       %14 = relalg.crossproduct %12, %13
@@ -284,8 +284,8 @@ module {
         relalg.return %28 : !relalg.tuple
       }
       %21 = relalg.getscalar @map2::@tmp_attr6 %20 : !db.nullable<!db.decimal<15, 4>>
-      %22 = db.cast %11 : !db.nullable<!db.decimal<15, 2>> -> !db.nullable<!db.decimal<15, 4>>
-      %23 = db.compare gt %22 : !db.nullable<!db.decimal<15, 4>>, %21 : !db.nullable<!db.decimal<15, 4>>
+      %22 = db.cast %11 : !db.decimal<15, 2> -> !db.decimal<15, 4>
+      %23 = db.compare gt %22 : !db.decimal<15, 4>, %21 : !db.nullable<!db.decimal<15, 4>>
       relalg.return %23 : !db.nullable<i1>
     }
     %9 = relalg.sort %8 [(@aggr0::@tmp_attr0,desc)]

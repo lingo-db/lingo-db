@@ -13,15 +13,6 @@ using namespace mlir;
 // Utility Functions
 ///////////////////////////////////////////////////////////////////////////////////
 
-::mlir::LogicalResult mlir::relalg::AggrFuncOp::inferReturnTypes(::mlir::MLIRContext* context, ::llvm::Optional<::mlir::Location> location, ::mlir::ValueRange operands, ::mlir::DictionaryAttr attributes, ::mlir::RegionRange regions, ::llvm::SmallVectorImpl<::mlir::Type>& inferredReturnTypes) {
-   mlir::relalg::AggrFuncOpAdaptor aggrFuncOpAdaptor(operands, attributes);
-   if (aggrFuncOpAdaptor.fn() == AggrFunc::count) {
-      inferredReturnTypes.push_back(mlir::IntegerType::get(context, 64));
-   } else {
-      inferredReturnTypes.push_back(mlir::db::NullableType::get(context, getBaseType(aggrFuncOpAdaptor.attr().getRelationalAttribute().type)));
-   }
-   return success();
-}
 mlir::relalg::RelationalAttributeManager& getRelationalAttributeManager(::mlir::OpAsmParser& parser) {
    return parser.getBuilder().getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getRelationalAttributeManager();
 }

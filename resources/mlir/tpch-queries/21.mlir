@@ -15,48 +15,47 @@ module {
       %16 = relalg.getattr %arg0 @l1::@l_orderkey : i32
       %17 = db.compare eq %15 : i32, %16 : i32
       %18 = relalg.getattr %arg0 @orders::@o_orderstatus : !db.char<1>
-      %19 = db.constant("F") : !db.string
-      %20 = db.cast %18 : !db.char<1> -> !db.string
-      %21 = db.compare eq %20 : !db.string, %19 : !db.string
-      %22 = relalg.getattr %arg0 @l1::@l_receiptdate : !db.date<day>
-      %23 = relalg.getattr %arg0 @l1::@l_commitdate : !db.date<day>
-      %24 = db.compare gt %22 : !db.date<day>, %23 : !db.date<day>
-      %25 = relalg.basetable @l2  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
-      %26 = relalg.selection %25 (%arg1: !relalg.tuple){
-        %39 = relalg.getattr %arg1 @l2::@l_orderkey : i32
-        %40 = relalg.getattr %arg1 @l1::@l_orderkey : i32
-        %41 = db.compare eq %39 : i32, %40 : i32
-        %42 = relalg.getattr %arg1 @l2::@l_suppkey : i32
-        %43 = relalg.getattr %arg1 @l1::@l_suppkey : i32
-        %44 = db.compare neq %42 : i32, %43 : i32
-        %45 = db.and %41:i1,%44:i1
-        relalg.return %45 : i1
+      %19 = db.constant("F") : !db.char<1>
+      %20 = db.compare eq %18 : !db.char<1>, %19 : !db.char<1>
+      %21 = relalg.getattr %arg0 @l1::@l_receiptdate : !db.date<day>
+      %22 = relalg.getattr %arg0 @l1::@l_commitdate : !db.date<day>
+      %23 = db.compare gt %21 : !db.date<day>, %22 : !db.date<day>
+      %24 = relalg.basetable @l2  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
+      %25 = relalg.selection %24 (%arg1: !relalg.tuple){
+        %38 = relalg.getattr %arg1 @l2::@l_orderkey : i32
+        %39 = relalg.getattr %arg1 @l1::@l_orderkey : i32
+        %40 = db.compare eq %38 : i32, %39 : i32
+        %41 = relalg.getattr %arg1 @l2::@l_suppkey : i32
+        %42 = relalg.getattr %arg1 @l1::@l_suppkey : i32
+        %43 = db.compare neq %41 : i32, %42 : i32
+        %44 = db.and %40:i1,%43:i1
+        relalg.return %44 : i1
       }
-      %27 = relalg.exists %26
-      %28 = relalg.basetable @l3  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
-      %29 = relalg.selection %28 (%arg1: !relalg.tuple){
-        %39 = relalg.getattr %arg1 @l3::@l_orderkey : i32
-        %40 = relalg.getattr %arg1 @l1::@l_orderkey : i32
-        %41 = db.compare eq %39 : i32, %40 : i32
-        %42 = relalg.getattr %arg1 @l3::@l_suppkey : i32
-        %43 = relalg.getattr %arg1 @l1::@l_suppkey : i32
-        %44 = db.compare neq %42 : i32, %43 : i32
-        %45 = relalg.getattr %arg1 @l3::@l_receiptdate : !db.date<day>
-        %46 = relalg.getattr %arg1 @l3::@l_commitdate : !db.date<day>
-        %47 = db.compare gt %45 : !db.date<day>, %46 : !db.date<day>
-        %48 = db.and %41:i1,%44:i1,%47:i1
-        relalg.return %48 : i1
+      %26 = relalg.exists %25
+      %27 = relalg.basetable @l3  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
+      %28 = relalg.selection %27 (%arg1: !relalg.tuple){
+        %38 = relalg.getattr %arg1 @l3::@l_orderkey : i32
+        %39 = relalg.getattr %arg1 @l1::@l_orderkey : i32
+        %40 = db.compare eq %38 : i32, %39 : i32
+        %41 = relalg.getattr %arg1 @l3::@l_suppkey : i32
+        %42 = relalg.getattr %arg1 @l1::@l_suppkey : i32
+        %43 = db.compare neq %41 : i32, %42 : i32
+        %44 = relalg.getattr %arg1 @l3::@l_receiptdate : !db.date<day>
+        %45 = relalg.getattr %arg1 @l3::@l_commitdate : !db.date<day>
+        %46 = db.compare gt %44 : !db.date<day>, %45 : !db.date<day>
+        %47 = db.and %40:i1,%43:i1,%46:i1
+        relalg.return %47 : i1
       }
-      %30 = relalg.exists %29
-      %31 = db.not %30 : i1
-      %32 = relalg.getattr %arg0 @supplier::@s_nationkey : i32
-      %33 = relalg.getattr %arg0 @nation::@n_nationkey : i32
-      %34 = db.compare eq %32 : i32, %33 : i32
-      %35 = relalg.getattr %arg0 @nation::@n_name : !db.string
-      %36 = db.constant("SAUDI ARABIA") : !db.string
-      %37 = db.compare eq %35 : !db.string, %36 : !db.string
-      %38 = db.and %14:i1,%17:i1,%21:i1,%24:i1,%27:i1,%31:i1,%34:i1,%37:i1
-      relalg.return %38 : i1
+      %29 = relalg.exists %28
+      %30 = db.not %29 : i1
+      %31 = relalg.getattr %arg0 @supplier::@s_nationkey : i32
+      %32 = relalg.getattr %arg0 @nation::@n_nationkey : i32
+      %33 = db.compare eq %31 : i32, %32 : i32
+      %34 = relalg.getattr %arg0 @nation::@n_name : !db.string
+      %35 = db.constant("SAUDI ARABIA") : !db.string
+      %36 = db.compare eq %34 : !db.string, %35 : !db.string
+      %37 = db.and %14:i1,%17:i1,%20:i1,%23:i1,%26:i1,%30:i1,%33:i1,%36:i1
+      relalg.return %37 : i1
     }
     %8 = relalg.aggregation @aggr0 %7 [@supplier::@s_name] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %12 = relalg.count %arg0

@@ -65,10 +65,10 @@ module {
       relalg.return %25 : !relalg.tuple
     }
     %5 = relalg.aggregation @aggr0 %4 [@lineitem::@l_shipmode] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
-      %8 = relalg.aggrfn sum @map0::@tmp_attr3 %arg0 : !db.nullable<i32>
-      %9 = relalg.addattr %arg1, @tmp_attr2({type = !db.nullable<i32>}) %8
-      %10 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<i32>
-      %11 = relalg.addattr %9, @tmp_attr0({type = !db.nullable<i32>}) %10
+      %8 = relalg.aggrfn sum @map0::@tmp_attr3 %arg0 : i32
+      %9 = relalg.addattr %arg1, @tmp_attr2({type = i32}) %8
+      %10 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : i32
+      %11 = relalg.addattr %9, @tmp_attr0({type = i32}) %10
       relalg.return %11 : !relalg.tuple
     }
     %6 = relalg.sort %5 [(@lineitem::@l_shipmode,asc)]

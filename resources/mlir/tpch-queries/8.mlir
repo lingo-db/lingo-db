@@ -77,17 +77,17 @@ module {
       relalg.return %26 : !relalg.tuple
     }
     %18 = relalg.aggregation @aggr0 %17 [@map0::@tmp_attr0] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
-      %22 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 2>>
-      %23 = relalg.addattr %arg1, @tmp_attr4({type = !db.nullable<!db.decimal<15, 2>>}) %22
-      %24 = relalg.aggrfn sum @map1::@tmp_attr3 %arg0 : !db.nullable<!db.decimal<15, 2>>
-      %25 = relalg.addattr %23, @tmp_attr2({type = !db.nullable<!db.decimal<15, 2>>}) %24
+      %22 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
+      %23 = relalg.addattr %arg1, @tmp_attr4({type = !db.decimal<15, 2>}) %22
+      %24 = relalg.aggrfn sum @map1::@tmp_attr3 %arg0 : !db.decimal<15, 2>
+      %25 = relalg.addattr %23, @tmp_attr2({type = !db.decimal<15, 2>}) %24
       relalg.return %25 : !relalg.tuple
     }
     %19 = relalg.map @map2 %18 (%arg0: !relalg.tuple){
-      %22 = relalg.getattr %arg0 @aggr0::@tmp_attr2 : !db.nullable<!db.decimal<15, 2>>
-      %23 = relalg.getattr %arg0 @aggr0::@tmp_attr4 : !db.nullable<!db.decimal<15, 2>>
-      %24 = db.div %22 : !db.nullable<!db.decimal<15, 2>>, %23 : !db.nullable<!db.decimal<15, 2>>
-      %25 = relalg.addattr %arg0, @tmp_attr5({type = !db.nullable<!db.decimal<15, 2>>}) %24
+      %22 = relalg.getattr %arg0 @aggr0::@tmp_attr2 : !db.decimal<15, 2>
+      %23 = relalg.getattr %arg0 @aggr0::@tmp_attr4 : !db.decimal<15, 2>
+      %24 = db.div %22 : !db.decimal<15, 2>, %23 : !db.decimal<15, 2>
+      %25 = relalg.addattr %arg0, @tmp_attr5({type = !db.decimal<15, 2>}) %24
       relalg.return %25 : !relalg.tuple
     }
     %20 = relalg.sort %19 [(@map0::@tmp_attr0,asc)]

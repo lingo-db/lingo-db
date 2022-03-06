@@ -558,7 +558,14 @@ struct SQLTranslator {
             auto constVal = reinterpret_cast<A_Const*>(node)->val_;
             switch (constVal.type_) {
                case T_Integer: return builder.create<mlir::db::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(constVal.val_.ival_));
-               case T_String: return builder.create<mlir::db::ConstantOp>(loc, mlir::db::StringType::get(builder.getContext()), builder.getStringAttr(constVal.val_.str_));
+               case T_String: {
+                  std::string stringVal = constVal.val_.str_;
+                  mlir::Type stringType = mlir::db::StringType::get(builder.getContext());
+                  if (stringVal.size() <= 8) {
+                     stringType = mlir::db::CharType::get(builder.getContext(), stringVal.size());
+                  }
+                  return builder.create<mlir::db::ConstantOp>(loc, stringType, builder.getStringAttr(stringVal));
+               }
                case T_Float: {
                   std::string value(constVal.val_.str_);
                   auto decimalPos = value.find('.');
@@ -590,7 +597,8 @@ struct SQLTranslator {
                   values.push_back(translateExpression(builder, node, context));
                }
                auto val = translateExpression(builder, expr->lexpr_, context);
-               return builder.create<mlir::db::OneOfOp>(loc, val, values);
+               values.insert(values.begin(),val);
+               return builder.create<mlir::db::OneOfOp>(loc, toCommonTypes(builder,values));
             }
             if (expr->kind_ == AEXPR_BETWEEN) {
                mlir::Value val = translateExpression(builder, expr->lexpr_, context);
@@ -1057,7 +1065,16 @@ struct SQLTranslator {
                if (distinct) {
                   currRel = aggrBuilder.create<mlir::relalg::ProjectionOp>(builder.getUnknownLoc(), mlir::relalg::SetSemantic::distinct, currRel, builder.getArrayAttr({refAttr}));
                }
-               expr = aggrBuilder.create<mlir::relalg::AggrFuncOp>(builder.getUnknownLoc(), aggrFunc, currRel, refAttr);
+               mlir::Type  aggrResultType;
+               if(aggrFunc==mlir::relalg::AggrFunc::count){
+                  aggrResultType=builder.getI64Type();
+               }else{
+                  aggrResultType=refAttr.getRelationalAttribute().type;
+                  if(!aggrResultType.isa<mlir::db::NullableType>()&&groupByAttrs.empty()){
+                     aggrResultType=mlir::db::NullableType::get(builder.getContext(),aggrResultType);
+                  }
+               }
+               expr = aggrBuilder.create<mlir::relalg::AggrFuncOp>(builder.getUnknownLoc(),aggrResultType, aggrFunc, currRel, refAttr);
             }
             attrManager.setCurrentScope(groupByName);
             auto attrDef = attrManager.createDef(toAggr.first->colId);

@@ -34,8 +34,8 @@ module {
       relalg.return %16 : !relalg.tuple
     }
     %7 = relalg.aggregation @aggr0 %6 [@lineitem::@l_orderkey,@orders::@o_orderdate,@orders::@o_shippriority] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
-      %11 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 2>>
-      %12 = relalg.addattr %arg1, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %11
+      %11 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
+      %12 = relalg.addattr %arg1, @tmp_attr0({type = !db.decimal<15, 2>}) %11
       relalg.return %12 : !relalg.tuple
     }
     %8 = relalg.sort %7 [(@aggr0::@tmp_attr0,desc),(@orders::@o_orderdate,asc)]

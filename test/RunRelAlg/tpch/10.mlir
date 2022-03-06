@@ -44,14 +44,13 @@ module {
       %23 = db.constant("1994-01-01") : !db.date<day>
       %24 = db.compare lt %22 : !db.date<day>, %23 : !db.date<day>
       %25 = relalg.getattr %arg0 @lineitem::@l_returnflag : !db.char<1>
-      %26 = db.constant("R") : !db.string
-      %27 = db.cast %25 : !db.char<1> -> !db.string
-      %28 = db.compare eq %27 : !db.string, %26 : !db.string
-      %29 = relalg.getattr %arg0 @customer::@c_nationkey : i32
-      %30 = relalg.getattr %arg0 @nation::@n_nationkey : i32
-      %31 = db.compare eq %29 : i32, %30 : i32
-      %32 = db.and %15:i1,%18:i1,%21:i1,%24:i1,%28:i1,%31:i1
-      relalg.return %32 : i1
+      %26 = db.constant("R") : !db.char<1>
+      %27 = db.compare eq %25 : !db.char<1>, %26 : !db.char<1>
+      %28 = relalg.getattr %arg0 @customer::@c_nationkey : i32
+      %29 = relalg.getattr %arg0 @nation::@n_nationkey : i32
+      %30 = db.compare eq %28 : i32, %29 : i32
+      %31 = db.and %15:i1,%18:i1,%21:i1,%24:i1,%27:i1,%30:i1
+      relalg.return %31 : i1
     }
     %8 = relalg.map @map0 %7 (%arg0: !relalg.tuple){
       %13 = relalg.getattr %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
@@ -63,8 +62,8 @@ module {
       relalg.return %18 : !relalg.tuple
     }
     %9 = relalg.aggregation @aggr0 %8 [@customer::@c_custkey,@customer::@c_name,@customer::@c_acctbal,@customer::@c_phone,@nation::@n_name,@customer::@c_address,@customer::@c_comment] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
-      %13 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 2>>
-      %14 = relalg.addattr %arg1, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %13
+      %13 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
+      %14 = relalg.addattr %arg1, @tmp_attr0({type = !db.decimal<15, 2>}) %13
       relalg.return %14 : !relalg.tuple
     }
     %10 = relalg.sort %9 [(@aggr0::@tmp_attr0,desc)]

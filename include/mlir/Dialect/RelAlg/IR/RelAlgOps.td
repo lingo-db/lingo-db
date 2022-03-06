@@ -358,7 +358,7 @@ let arguments = (ins RelAlg_Tuple:$tuple,RelationalAttributeDefAttr:$attr, AnyTy
 let results = (outs RelAlg_Tuple:$tuple_out);
 }
 
-def AggrFuncOp : RelAlg_Op<"aggrfn",[DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+def AggrFuncOp : RelAlg_Op<"aggrfn"> {
 let summary = "aggregation operation";
 let arguments = (ins RelAlg_AggrFunc:$fn,RelAlg_TupleStream:$rel,RelationalAttributeRefAttr:$attr);
 let results = (outs AnyType:$result);
