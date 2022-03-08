@@ -608,7 +608,8 @@ struct SQLTranslator {
                auto* upperNode = reinterpret_cast<Node*>(list->tail->data.ptr_value);
                mlir::Value lower = translateExpression(builder, lowerNode, context);
                mlir::Value upper = translateExpression(builder, upperNode, context);
-               return builder.create<mlir::db::BetweenOp>(loc, toCommonTypes(builder, {val, lower, upper}));
+               auto ct = toCommonTypes(builder, {val, lower, upper});
+               return builder.create<mlir::db::BetweenOp>(loc, ct[0], ct[1], ct[2], true, true);
             }
             if (expr->kind_ == AEXPR_LIKE) {
                expr->kind_ = AEXPR_OP;

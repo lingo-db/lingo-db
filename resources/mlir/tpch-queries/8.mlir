@@ -43,7 +43,7 @@ module {
       %46 = relalg.getattr %arg0 @orders::@o_orderdate : !db.date<day>
       %47 = db.constant("1995-01-01") : !db.date<day>
       %48 = db.constant("1996-12-31") : !db.date<day>
-      %49 = db.between %46 : !db.date<day> between %47 : !db.date<day>, %48 : !db.date<day>
+      %49 = db.between %46 : !db.date<day> between %47 : !db.date<day>, %48 : !db.date<day>, lowerInclusive : true, upperInclusive : true
       %50 = relalg.getattr %arg0 @part::@p_type : !db.string
       %51 = db.constant("ECONOMY ANODIZED STEEL") : !db.string
       %52 = db.compare eq %50 : !db.string, %51 : !db.string

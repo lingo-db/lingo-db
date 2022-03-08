@@ -1,10 +1,11 @@
+from profile_data import createOpNameFromRepr
 
 def memory_heatmaps(data):
     relevant_ops = data.getOperations(cols=["id", "repr"], level=0, nested_inside="func")
     figs = []
     for op in relevant_ops:
         opId = op[0]
-        opName = op[1].split(" ")[0]
+        opName = createOpNameFromRepr(op[1])
         data.con.execute("""select  e.virt_addr as addr,e.time as t 
                             from event e, operation op, operation op1, operation op2, operation op3 
                             where op1.mapping=op.id and op2.mapping=op1.id and op3.mapping=op2.id and op3.loc=e.jit_srcline and (op.id=? or op.parent=? ) and e.virt_addr is not null

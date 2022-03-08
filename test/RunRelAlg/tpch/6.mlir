@@ -21,7 +21,7 @@ module {
       %17 = db.add %15 : !db.decimal<3, 2>, %16 : !db.decimal<3, 2>
       %18 = db.cast %14 : !db.decimal<3, 2> -> !db.decimal<15, 2>
       %19 = db.cast %17 : !db.decimal<3, 2> -> !db.decimal<15, 2>
-      %20 = db.between %11 : !db.decimal<15, 2> between %18 : !db.decimal<15, 2>, %19 : !db.decimal<15, 2>
+      %20 = db.between %11 : !db.decimal<15, 2> between %18 : !db.decimal<15, 2>, %19 : !db.decimal<15, 2>, lowerInclusive : true, upperInclusive : true
       %21 = relalg.getattr %arg0 @lineitem::@l_quantity : !db.decimal<15, 2>
       %22 = db.constant(24 : i32) : !db.decimal<15, 2>
       %23 = db.compare lt %21 : !db.decimal<15, 2>, %22 : !db.decimal<15, 2>

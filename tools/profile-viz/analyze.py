@@ -21,7 +21,7 @@ con.execute("SELECT op.id,op.repr from operation op where op.loc like 'snapshot-
 operations = con.fetchall()
 nested_op_stats = {}
 for op in operations:
-    nested_op_stats[op[0]] = {"operation": op[1].split(" ")[0], "count": 0, "children": []}
+    nested_op_stats[op[0]] = {"operation": createOpNameFromRepr(op[1]), "count": 0, "children": []}
 con.execute(
     """select op.id, count(*) as cnt
        from operation op, operation op1, operation op2, operation op3, event e

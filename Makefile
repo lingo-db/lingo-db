@@ -82,7 +82,7 @@ test-coverage:  build/build-debug-llvm-release-coverage
 			'**/build/llvm-build/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*'
 	genhtml  --ignore-errors source build/build-debug-llvm-release-coverage/filtered-coverage.info --legend --title "lcov-test" --output-directory=build/build-debug-llvm-release-coverage/coverage-report
 run-test: build/build-debug-llvm-release
-	cmake --build build/build-debug-llvm-release --target mlir-db-opt db-run-query db-run pymlirdbext -- -j${NPROCS}
+	cmake --build build/build-debug-llvm-release --target mlir-db-opt db-run-query db-run pymlirdbext sql-to-mlir -- -j${NPROCS}
 	export LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib && ./build/llvm-build/bin/llvm-lit -v build/build-debug-llvm-release/test
 run-benchmark: build/build-llvm-release
 	cmake --build build/build-llvm-release --target db-run-query -- -j${NPROCS}

@@ -526,8 +526,8 @@ class BetweenLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto betweenOp = mlir::cast<mlir::db::BetweenOp>(op);
-      auto isGteLower = rewriter.create<mlir::db::CmpOp>(op->getLoc(), mlir::db::DBCmpPredicate::gte, betweenOp.val(), betweenOp.lower());
-      auto isLteUpper = rewriter.create<mlir::db::CmpOp>(op->getLoc(), mlir::db::DBCmpPredicate::lte, betweenOp.val(), betweenOp.upper());
+      auto isGteLower = rewriter.create<mlir::db::CmpOp>(op->getLoc(), betweenOp.lowerInclusive() ? mlir::db::DBCmpPredicate::gte : mlir::db::DBCmpPredicate::gt, betweenOp.val(), betweenOp.lower());
+      auto isLteUpper = rewriter.create<mlir::db::CmpOp>(op->getLoc(), betweenOp.upperInclusive() ? mlir::db::DBCmpPredicate::lte : mlir::db::DBCmpPredicate::lt, betweenOp.val(), betweenOp.upper());
       auto isInRange = rewriter.create<mlir::db::AndOp>(op->getLoc(), ValueRange({isGteLower, isLteUpper}));
       rewriter.replaceOp(op, isInRange.res());
       return success();

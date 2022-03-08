@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy
 import plotly.express as px
+from profile_data import createOpNameFromRepr
 
 
 def create_swimline_chart(data, colo_map, cond="",normalized=None):
@@ -12,12 +13,12 @@ def create_swimline_chart(data, colo_map, cond="",normalized=None):
     ops = {}
     dcm={}
     for o in relevant_ops:
-        name=o[1].split(" ")[0]
-        ops[o[0]] = {"parent": o[0], "name": o[1].split(" ")[0]}
+        name=createOpNameFromRepr(o[1])
+        ops[o[0]] = {"parent": o[0], "name": createOpNameFromRepr(o[1])}
         dcm[name+"("+str(o[0])+")"]=colo_map.lookup(o[0])
     for o in all_ops:
         if o[0] not in ops:
-            ops[o[0]] = {"parent": None, "name": o[1].split(" ")[0]}
+            ops[o[0]] = {"parent": None, "name": createOpNameFromRepr(o[1])}
     for p in data.getOperations(["id", "parent"], level=0, order="id desc"):
         if p[1] is not None:
             parent = p[1]

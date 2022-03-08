@@ -28,7 +28,7 @@ module {
       %28 = relalg.getattr %arg0 @part::@p_size : i32
       %29 = db.constant(1 : i32) : i32
       %30 = db.constant(5 : i32) : i32
-      %31 = db.between %28 : i32 between %29 : i32, %30 : i32
+      %31 = db.between %28 : i32 between %29 : i32, %30 : i32, lowerInclusive : true, upperInclusive : true
       %32 = db.constant("AIR") : !db.string
       %33 = db.constant("AIR REG") : !db.string
       %34 = relalg.getattr %arg0 @lineitem::@l_shipmode : !db.string
@@ -61,7 +61,7 @@ module {
       %61 = relalg.getattr %arg0 @part::@p_size : i32
       %62 = db.constant(1 : i32) : i32
       %63 = db.constant(10 : i32) : i32
-      %64 = db.between %61 : i32 between %62 : i32, %63 : i32
+      %64 = db.between %61 : i32 between %62 : i32, %63 : i32, lowerInclusive : true, upperInclusive : true
       %65 = db.constant("AIR") : !db.string
       %66 = db.constant("AIR REG") : !db.string
       %67 = relalg.getattr %arg0 @lineitem::@l_shipmode : !db.string
@@ -94,7 +94,7 @@ module {
       %94 = relalg.getattr %arg0 @part::@p_size : i32
       %95 = db.constant(1 : i32) : i32
       %96 = db.constant(15 : i32) : i32
-      %97 = db.between %94 : i32 between %95 : i32, %96 : i32
+      %97 = db.between %94 : i32 between %95 : i32, %96 : i32, lowerInclusive : true, upperInclusive : true
       %98 = db.constant("AIR") : !db.string
       %99 = db.constant("AIR REG") : !db.string
       %100 = relalg.getattr %arg0 @lineitem::@l_shipmode : !db.string

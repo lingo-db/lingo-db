@@ -419,7 +419,9 @@ def DB_BetweenOp : DB_Op<"between",
 let arguments = (ins
 NullableDBType:$val,
 NullableDBType:$lower,
-NullableDBType:$upper
+NullableDBType:$upper,
+I1Attr:$lowerInclusive,
+I1Attr:$upperInclusive
 );
 let results = (outs AnyBool:$result);
 
@@ -432,7 +434,7 @@ let results = (outs AnyBool:$result);
     return success();
     }
   }];
-let assemblyFormat = "$val `:` type ($val) `between` $lower `:` type($lower) `,` $upper `:` type($upper) attr-dict";
+let assemblyFormat = "$val `:` type ($val) `between` $lower `:` type($lower) `,` $upper `:` type($upper) `,` `lowerInclusive` `:` $lowerInclusive `,` `upperInclusive` `:` $upperInclusive attr-dict";
 }
 
 def DB_OneOfOp : DB_Op<"oneof",

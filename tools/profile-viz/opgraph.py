@@ -1,4 +1,6 @@
 import dash_cytoscape as cyto
+from profile_data import createOpNameFromRepr
+
 cyto.load_extra_layouts()
 
 def opgraph(plot_data,colo_map,vertical=False):
@@ -42,7 +44,7 @@ def opgraph(plot_data,colo_map,vertical=False):
     ]
     graph = []
     for op in plot_data.getOperations(["id", "repr", "dependencies"], level=0, nested_inside="func"):
-        graph.append({'data': {'id': "id_" + str(op[0]), "label": op[1].split(" ")[0],"color":colo_map.lookup(op[0])}})
+        graph.append({'data': {'id': "id_" + str(op[0]), "label": createOpNameFromRepr(op[1]),"color":colo_map.lookup(op[0])}})
         if op[2] is not None:
             for dep in op[2]:
                 graph.append({'data': {'target': "id_" + str(op[0]), "source": "id_" + str(dep)}})

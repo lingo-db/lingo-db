@@ -45,7 +45,7 @@ module {
       %46 = relalg.getattr %arg0 @lineitem::@l_shipdate : !db.date<day>
       %47 = db.constant("1995-01-01") : !db.date<day>
       %48 = db.constant("1996-12-31") : !db.date<day>
-      %49 = db.between %46 : !db.date<day> between %47 : !db.date<day>, %48 : !db.date<day>
+      %49 = db.between %46 : !db.date<day> between %47 : !db.date<day>, %48 : !db.date<day>, lowerInclusive : true, upperInclusive : true
       %50 = db.and %18:i1,%21:i1,%24:i1,%27:i1,%30:i1,%45:i1,%49:i1
       relalg.return %50 : i1
     }

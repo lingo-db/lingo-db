@@ -19,6 +19,12 @@ def gen_colors(num_colors):
     random.shuffle(colors)
     return colors
 
+def createOpNameFromRepr(repr):
+    splitted=repr.split(" ")
+    if len(splitted)>1 and splitted[1].startswith("@"):
+        return splitted[0]+splitted[1]
+    else:
+        return splitted[0]
 
 class OpColorMap:
     def __init__(self, op_ids):

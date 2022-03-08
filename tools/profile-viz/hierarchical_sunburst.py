@@ -1,4 +1,4 @@
-
+from profile_data import createOpNameFromRepr
 def hierarchical_sunburst(profile_data, colo_map,cond=""):
     con = profile_data.con
     if len(cond) > 0:
@@ -8,7 +8,7 @@ def hierarchical_sunburst(profile_data, colo_map,cond=""):
     ops=profile_data.getOperations(["id", "repr"], level=0)
 
     for op in ops:
-        nested_op_stats[op[0]] = {"operation": op[1].split(" ")[0], "count": 0, "parent": None,"color":colo_map.lookup(op[0])}
+        nested_op_stats[op[0]] = {"operation": createOpNameFromRepr(op[1]), "count": 0, "parent": None,"color":colo_map.lookup(op[0])}
     con.execute(
         """select op.id, count(*) as cnt
            from operation op, operation op1, operation op2, operation op3, event e

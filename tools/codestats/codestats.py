@@ -7,6 +7,7 @@ directory=sys.argv[1]
 languages={"C/C++ Header":"Headers","C++":"C++","TableGen":"TableGen"}
 
 schema={
+    "Parser": {"inc": ["sql-to-mlir.cpp"], "exc": ["Transforms"]},
     "Dialects": {"inc": ["include/mlir/Dialect", "lib/RelAlg","lib/DB","lib/util"], "exc": ["Transforms"],"nosum":True},
     " $\\rightarrow$ relalg": {"inc": ["include/mlir/Dialect/RelAlg", "lib/RelAlg"], "exc": ["Transforms"]},
     " $\\rightarrow$ db": {"inc": ["include/mlir/Dialect/DB", "lib/DB"], "exc": []},

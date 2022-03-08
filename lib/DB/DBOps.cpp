@@ -38,7 +38,7 @@ LogicalResult inferReturnType(MLIRContext* context, Optional<Location> location,
    Type baseType = getBaseType(operands[0].getType());
    if (anyNullables) {
       inferredReturnTypes.push_back(mlir::db::NullableType::get(context, baseType));
-   }else{
+   } else {
       inferredReturnTypes.push_back(baseType);
    }
    return success();
@@ -365,7 +365,8 @@ LogicalResult mlir::db::OrOp::canonicalize(mlir::db::OrOp orOp, mlir::PatternRew
    return failure();
 }
 LogicalResult mlir::db::AndOp::canonicalize(mlir::db::AndOp andOp, mlir::PatternRewriter& rewriter) {
-   std::vector<mlir::Value> rawValues;
+   llvm::DenseSet<mlir::Value> rawValues;
+   llvm::DenseMap<mlir::Value, std::vector<mlir::db::CmpOp>> cmps;
    std::queue<mlir::Value> queue;
    queue.push(andOp);
    while (!queue.empty()) {
@@ -376,15 +377,64 @@ LogicalResult mlir::db::AndOp::canonicalize(mlir::db::AndOp andOp, mlir::Pattern
             for (auto v : nestedAnd.vals()) {
                queue.push(v);
             }
+         } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(definingOp)) {
+            cmps[cmpOp.left()].push_back(cmpOp);
+            cmps[cmpOp.right()].push_back(cmpOp);
+            rawValues.insert(current);
          } else {
-            rawValues.push_back(current);
+            rawValues.insert(current);
          }
       } else {
-         rawValues.push_back(current);
+         rawValues.insert(current);
+      }
+   }
+   for (auto m : cmps) {
+      mlir::Value lower, upper;
+      mlir::db::CmpOp lowerCmp, upperCmp;
+      mlir::Value current = m.getFirst();
+      if (auto* definingOp = current.getDefiningOp()) {
+         if (mlir::isa<mlir::db::ConstantOp>(definingOp)) {
+            continue;
+         }
+      }
+      for (auto cmp : m.second) {
+         if (!rawValues.contains(cmp)) continue;
+         switch (cmp.predicate()) {
+            case DBCmpPredicate::lt:
+            case DBCmpPredicate::lte:
+               if (cmp.left() == current) {
+                  upper = cmp.right();
+                  upperCmp = cmp;
+               } else {
+                  lower = cmp.left();
+                  lowerCmp = cmp;
+               }
+               break;
+            case DBCmpPredicate::gt:
+            case DBCmpPredicate::gte:
+               if (cmp.left() == current) {
+                  lower = cmp.right();
+                  lowerCmp = cmp;
+               } else {
+                  upper = cmp.left();
+                  upperCmp = cmp;
+               }
+               break;
+            default: break;
+         }
+      }
+      if (lower && upper && lower.getDefiningOp() && upper.getDefiningOp() && mlir::isa<mlir::db::ConstantOp>(lower.getDefiningOp()) && mlir::isa<mlir::db::ConstantOp>(upper.getDefiningOp())) {
+         auto lowerInclusive = lowerCmp.predicate() == DBCmpPredicate::gte || lowerCmp.predicate() == DBCmpPredicate::lte;
+         auto upperInclusive = upperCmp.predicate() == DBCmpPredicate::gte || upperCmp.predicate() == DBCmpPredicate::lte;
+         mlir::Value between = rewriter.create<mlir::db::BetweenOp>(lowerCmp->getLoc(), current, lower, upper, lowerInclusive, upperInclusive);
+         rawValues.erase(lowerCmp);
+         rawValues.erase(upperCmp);
+         rawValues.insert(between);
+         between.dump();
       }
    }
    if (rawValues.size() != andOp.vals().size()) {
-      rewriter.replaceOpWithNewOp<mlir::db::AndOp>(andOp, rawValues);
+      rewriter.replaceOpWithNewOp<mlir::db::AndOp>(andOp, std::vector<mlir::Value>(rawValues.begin(), rawValues.end()));
       return success();
    }
    return failure();
