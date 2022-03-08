@@ -1,6 +1,6 @@
 add_mlir_library(MLIRCustomTransforms
         SinkOp.cpp
-
+        SimplifyMemrefs.cpp
 
 
 

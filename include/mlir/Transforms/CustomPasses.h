@@ -5,5 +5,7 @@
 
 namespace mlir{
 std::unique_ptr<Pass> createSinkOpPass();
+std::unique_ptr<Pass> createSimplifyMemrefsPass();
+
 } // end namespace mlir
 #endif // MLIR_TRANSFORMS_CUSTOMPASSES_H
