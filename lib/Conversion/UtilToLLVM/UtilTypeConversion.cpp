@@ -72,6 +72,7 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    patterns.add<SimpleTypeConversionPattern<LoadOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<TupleElementPtrOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<ArrayElementPtrOp>>(typeConverter, patterns.getContext());
+   patterns.add<SimpleTypeConversionPattern<FilterTaggedPtr>>(typeConverter, patterns.getContext());
 
    typeConverter.addConversion([&](mlir::util::RefType genericMemrefType) {
       return mlir::util::RefType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());

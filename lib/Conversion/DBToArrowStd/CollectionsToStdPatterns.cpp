@@ -219,6 +219,8 @@ class LookupOpLowering : public ConversionPattern {
       Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.getIndexType(), lookupAdaptor.key()); //hash key value
       Value buckedPos = rewriter.create<arith::AndIOp>(loc, htMask, hashed);
       Value ptr = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(ht.getType()).cast<mlir::util::RefType>().getElementType(), ht, buckedPos);
+      //optimization
+      ptr = rewriter.create<mlir::util::FilterTaggedPtr>(loc, ptr.getType(), ptr, hashed);
       rewriter.replaceOp(op, ptr);
       return success();
    }

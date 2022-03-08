@@ -83,6 +83,11 @@ def HashCombine : Util_Op<"hash_combine",[NoSideEffect]> {
     let results = (outs Index:$hash);
     let assemblyFormat = "$h1 `,` $h2 attr-dict";
 }
+def FilterTaggedPtr : Util_Op<"filter_tagged_ptr",[NoSideEffect]> {
+    let arguments = (ins RefType:$ref,Index:$hash);
+    let results = (outs RefType:$res);
+    let assemblyFormat = "$hash `,` $ref `:` type($ref) `->` type($res) attr-dict";
+}
 def AllocOp  : Util_Op<"alloc"> {
 let arguments = (ins Optional<Index>:$size);
 let results=(outs RefType:$ref);

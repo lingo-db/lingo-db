@@ -1,4 +1,5 @@
 #include "runtime/helpers.h"
+#include <iostream>
 
 struct Vec {
    size_t len;
@@ -70,20 +71,38 @@ EXPORT uint64_t next_pow_2(uint64_t v) {
    v++;
    return v;
 }
-
+template <typename T>
+T* tag(T* ptr, T* previousPtr, size_t hash) {
+   constexpr uint64_t ptrMask = 0x0000ffffffffffffull;
+   constexpr uint64_t tagMask = 0xffff000000000000ull;
+   size_t asInt = reinterpret_cast<size_t>(ptr);
+   size_t previousAsInt = reinterpret_cast<size_t>(previousPtr);
+   size_t previousTag = previousAsInt & tagMask;
+   size_t currentTag = hash & tagMask;
+   auto tagged = (asInt & ptrMask) | previousTag | currentTag;
+   auto *res = reinterpret_cast<T*>(tagged);
+   return res;
+}
+template <typename T>
+T* untag(T* ptr) {
+   constexpr size_t ptrMask = 0x0000ffffffffffffull;
+   size_t asInt = reinterpret_cast<size_t>(ptr);
+   return reinterpret_cast<T*>(asInt & ptrMask);
+}
 EXPORT JoinHt* rt_build_join_ht(Vec* v, size_t typeSize) {
    size_t htSize = next_pow_2(v->len);
    size_t htMask = htSize - 1;
-   auto *joinHt = new JoinHt(v->bytes, v->len, htMask, htSize);
+   auto* joinHt = new JoinHt(v->bytes, v->len, htMask, htSize);
    joinHt->ht.fill(0x00);
    auto* valuesPtr = joinHt->values.getPtr();
    auto* ht = (JoinHt::Entry**) joinHt->ht.getPtr();
    for (size_t i = 0; i < v->len; i++) {
       auto* entry = (JoinHt::Entry*) &valuesPtr[i * typeSize];
-      auto pos = ((size_t) entry->next) & htMask;
+      size_t hash = (size_t) entry->next;
+      auto pos = hash & htMask;
       auto* previousPtr = ht[pos];
-      ht[pos] = entry;
-      entry->next = previousPtr;
+      ht[pos] = tag(entry, ht[pos], hash);
+      entry->next = untag(previousPtr);
    }
    return joinHt;
 }

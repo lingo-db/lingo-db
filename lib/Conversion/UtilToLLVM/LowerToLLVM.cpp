@@ -688,6 +688,32 @@ class HashVarLenLowering : public ConversionPattern {
    }
 };
 
+class FilterTaggedPtrLowering : public ConversionPattern {
+   public:
+   explicit FilterTaggedPtrLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::util::FilterTaggedPtr::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      mlir::util::FilterTaggedPtrAdaptor adaptor(operands);
+      auto loc = op->getLoc();
+      auto tagMask = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0xffff000000000000ull));
+      auto ptrMask = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0x0000ffffffffffffull));
+      Value maskedHash = rewriter.create<LLVM::AndOp>(loc, adaptor.hash(), tagMask);
+      Value ptrAsInt = rewriter.create<LLVM::PtrToIntOp>(loc, rewriter.getI64Type(), adaptor.ref());
+      Value maskedPtr = rewriter.create<LLVM::AndOp>(loc, ptrAsInt, ptrMask);
+      maskedPtr = rewriter.create<LLVM::IntToPtrOp>(loc, adaptor.ref().getType(), maskedPtr);
+      Value ored = rewriter.create<LLVM::OrOp>(loc, ptrAsInt, maskedHash);
+      Value contained = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, ored, ptrAsInt);
+      Value nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, adaptor.ref().getType());
+
+      Value filtered = rewriter.create<LLVM::SelectOp>(loc, contained, maskedPtr, nullPtr);
+      rewriter.replaceOp(op, filtered);
+      return success();
+   }
+};
+
 } // end anonymous namespace
 
 //===----------------------------------------------------------------------===//
@@ -750,4 +776,5 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<HashCombineLowering>(typeConverter, patterns.getContext());
    patterns.add<Hash64Lowering>(typeConverter, patterns.getContext());
    patterns.add<HashVarLenLowering>(typeConverter, patterns.getContext());
+   patterns.add<FilterTaggedPtrLowering>(typeConverter, patterns.getContext());
 }
