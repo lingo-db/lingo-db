@@ -102,7 +102,7 @@ EXPORT JoinHt* rt_build_join_ht(Vec* v, size_t typeSize) {
       auto pos = hash & htMask;
       auto* previousPtr = ht[pos];
       ht[pos] = tag(entry, ht[pos], hash);
-      entry->next = untag(previousPtr);
+      entry->next = previousPtr;
    }
    return joinHt;
 }

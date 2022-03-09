@@ -102,23 +102,31 @@ class TableIterator : public WhileIterator {
 class JoinHtLookupIterator : public WhileIterator {
    Value iteratorInfo;
    Type ptrType;
+   Value hash;
+   Value ptr;
+   TupleType tupleType;
 
    public:
    JoinHtLookupIterator(Value tableInfo, Type elementType, db::codegen::FunctionRegistry& functionRegistry) : WhileIterator(tableInfo.getContext()), iteratorInfo(tableInfo) {
    }
    virtual Type iteratorType(OpBuilder& builder) override {
-      ptrType = typeConverter->convertType(iteratorInfo.getType());
-      return typeConverter->convertType(iteratorInfo.getType());
+      tupleType = typeConverter->convertType(iteratorInfo.getType()).cast<mlir::TupleType>();
+      ptrType = tupleType.getType(0);
+      return ptrType;
    }
 
    virtual Value iterator(OpBuilder& builder) override {
-      return iteratorInfo;
+      auto unpacked = builder.create<mlir::util::UnPackOp>(loc, tupleType.getTypes(), iteratorInfo);
+      ptr = unpacked.getResult(0);
+      hash = unpacked.getResult(1);
+      return ptr;
    }
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
       auto i8PtrType = mlir::util::RefType::get(builder.getContext(), builder.getI8Type());
       Value nextPtr = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), i8PtrType), iterator, 0);
-      auto next = builder.create<mlir::util::LoadOp>(loc, i8PtrType, nextPtr);
-      return builder.create<util::GenericMemrefCastOp>(loc, ptrType, next);
+      mlir::Value next = builder.create<mlir::util::LoadOp>(loc, i8PtrType, nextPtr);
+      next = builder.create<util::GenericMemrefCastOp>(loc, ptrType, next);
+      return builder.create<mlir::util::FilterTaggedPtr>(loc, next.getType(), next, hash);
    }
    virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
       auto payloadType = iterator.getType().cast<mlir::util::RefType>().getElementType().cast<TupleType>().getType(1);
@@ -181,23 +189,30 @@ class AggrHtIterator : public ForIterator {
 class JoinHtModifyLookupIterator : public WhileIterator {
    Value iteratorInfo;
    Type ptrType;
+   Value hash;
+   Value ptr;
+   TupleType tupleType;
 
    public:
    JoinHtModifyLookupIterator(Value tableInfo, Type elementType) : WhileIterator(tableInfo.getContext()), iteratorInfo(tableInfo) {
    }
    virtual Type iteratorType(OpBuilder& builder) override {
-      ptrType = typeConverter->convertType(iteratorInfo.getType());
-      return typeConverter->convertType(iteratorInfo.getType());
+      tupleType = typeConverter->convertType(iteratorInfo.getType()).cast<mlir::TupleType>();
+      ptrType = tupleType.getType(0);
+      return ptrType;
    }
-
    virtual Value iterator(OpBuilder& builder) override {
-      return iteratorInfo;
+      auto unpacked = builder.create<mlir::util::UnPackOp>(loc, tupleType.getTypes(), iteratorInfo);
+      ptr = unpacked.getResult(0);
+      hash = unpacked.getResult(1);
+      return ptr;
    }
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
       auto i8PtrType = mlir::util::RefType::get(builder.getContext(), builder.getI8Type());
       Value nextPtr = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), i8PtrType), iterator, 0);
-      auto next = builder.create<mlir::util::LoadOp>(loc, i8PtrType, nextPtr);
-      return builder.create<util::GenericMemrefCastOp>(loc, ptrType, next);
+      mlir::Value next = builder.create<mlir::util::LoadOp>(loc, i8PtrType, nextPtr);
+      next = builder.create<util::GenericMemrefCastOp>(loc, ptrType, next);
+      return builder.create<mlir::util::FilterTaggedPtr>(loc, ptr.getType(), next, hash);
    }
    virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
       auto bucketType = iterator.getType().cast<mlir::util::RefType>().getElementType();

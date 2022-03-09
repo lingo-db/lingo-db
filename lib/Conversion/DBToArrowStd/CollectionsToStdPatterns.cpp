@@ -221,7 +221,8 @@ class LookupOpLowering : public ConversionPattern {
       Value ptr = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(ht.getType()).cast<mlir::util::RefType>().getElementType(), ht, buckedPos);
       //optimization
       ptr = rewriter.create<mlir::util::FilterTaggedPtr>(loc, ptr.getType(), ptr, hashed);
-      rewriter.replaceOp(op, ptr);
+      Value packed = rewriter.create<mlir::util::PackOp>(loc, ValueRange{ptr, hashed});
+      rewriter.replaceOp(op, packed);
       return success();
    }
 };
@@ -294,11 +295,11 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
          return (Type) TupleType::get(context, types);
       } else if (genericIterableType.getIteratorName() == "join_ht_iterator") {
          auto ptrType = mlir::util::RefType::get(context, typeConverter.convertType(TupleType::get(context, {i8ptrType, genericIterableType.getElementType()})));
-         return (Type) ptrType;
+         return (Type) TupleType::get(context, {ptrType, indexType});
       } else if (genericIterableType.getIteratorName() == "join_ht_mod_iterator") {
          auto types = genericIterableType.getElementType().cast<mlir::TupleType>().getTypes();
          auto ptrType = mlir::util::RefType::get(context, typeConverter.convertType(TupleType::get(context, {i8ptrType, types[0]})));
-         return (Type) ptrType;
+         return (Type) TupleType::get(context, {ptrType, indexType});
       }
       return Type();
    });
