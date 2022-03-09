@@ -75,7 +75,9 @@ void Plan::dump() {
 
 static void fix(Operator tree) {
    for (auto child : tree.getChildren()) {
-      child.moveSubTreeBefore(tree);
+      if(!child->isBeforeInBlock(tree)){
+         child.moveSubTreeBefore(tree);
+      }
       fix(child);
    }
 }

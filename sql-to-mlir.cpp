@@ -252,7 +252,13 @@ struct SQLTranslator {
    PgQueryInternalParsetreeAndError result;
    Schema& schema;
    std::vector<std::unique_ptr<FakeNode>> fakeNodes;
-   std::unordered_map<std::string, SelectStmt*> ctes;
+   struct TargetInfo {
+      std::vector<std::pair<std::string, const mlir::relalg::RelationalAttribute*>> namedResults;
+      void map(std::string name, const mlir::relalg::RelationalAttribute* attr) {
+         namedResults.push_back({name, attr});
+      }
+   };
+   std::unordered_map<std::string, std::pair<mlir::Value, TargetInfo>> ctes;
    FakeNode* createFakeNode(std::string name, Node* original) {
       static size_t fakeNodeId = 0;
       std::string colId = "tmp_attr" + std::to_string(fakeNodeId++);
@@ -359,12 +365,7 @@ struct SQLTranslator {
       std::unordered_map<FakeNode*, Node*> evalBeforeAggr;
       std::unordered_map<FakeNode*, std::tuple<std::string, Node*, bool>> aggrs;
    };
-   struct TargetInfo {
-      std::vector<std::pair<std::string, const mlir::relalg::RelationalAttribute*>> namedResults;
-      void map(std::string name, const mlir::relalg::RelationalAttribute* attr) {
-         namedResults.push_back({name, attr});
-      }
-   };
+
    mlir::FloatType getHigherFloatType(mlir::Type left, mlir::Type right) {
       mlir::FloatType leftFloat = left.dyn_cast_or_null<mlir::FloatType>();
       if (auto rightFloat = right.dyn_cast_or_null<mlir::FloatType>()) {
@@ -597,8 +598,8 @@ struct SQLTranslator {
                   values.push_back(translateExpression(builder, node, context));
                }
                auto val = translateExpression(builder, expr->lexpr_, context);
-               values.insert(values.begin(),val);
-               return builder.create<mlir::db::OneOfOp>(loc, toCommonTypes(builder,values));
+               values.insert(values.begin(), val);
+               return builder.create<mlir::db::OneOfOp>(loc, toCommonTypes(builder, values));
             }
             if (expr->kind_ == AEXPR_BETWEEN) {
                mlir::Value val = translateExpression(builder, expr->lexpr_, context);
@@ -821,7 +822,12 @@ struct SQLTranslator {
       }
       if (!schema.tables.contains(relation)) {
          if (ctes.contains(relation)) {
-            return translateSubSelect(builder, ctes.at(relation), alias, context, scope);
+            auto [tree, targetInfo] = ctes.at(relation);
+            for (auto x : targetInfo.namedResults) {
+               context.mapAttribute(scope, alias + "." + x.first, x.second);
+               context.mapAttribute(scope, x.first, x.second);
+            }
+            return tree;
          } else {
             error("unknown relation " + relation);
          }
@@ -1066,16 +1072,16 @@ struct SQLTranslator {
                if (distinct) {
                   currRel = aggrBuilder.create<mlir::relalg::ProjectionOp>(builder.getUnknownLoc(), mlir::relalg::SetSemantic::distinct, currRel, builder.getArrayAttr({refAttr}));
                }
-               mlir::Type  aggrResultType;
-               if(aggrFunc==mlir::relalg::AggrFunc::count){
-                  aggrResultType=builder.getI64Type();
-               }else{
-                  aggrResultType=refAttr.getRelationalAttribute().type;
-                  if(!aggrResultType.isa<mlir::db::NullableType>()&&groupByAttrs.empty()){
-                     aggrResultType=mlir::db::NullableType::get(builder.getContext(),aggrResultType);
+               mlir::Type aggrResultType;
+               if (aggrFunc == mlir::relalg::AggrFunc::count) {
+                  aggrResultType = builder.getI64Type();
+               } else {
+                  aggrResultType = refAttr.getRelationalAttribute().type;
+                  if (!aggrResultType.isa<mlir::db::NullableType>() && groupByAttrs.empty()) {
+                     aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
                   }
                }
-               expr = aggrBuilder.create<mlir::relalg::AggrFuncOp>(builder.getUnknownLoc(),aggrResultType, aggrFunc, currRel, refAttr);
+               expr = aggrBuilder.create<mlir::relalg::AggrFuncOp>(builder.getUnknownLoc(), aggrResultType, aggrFunc, currRel, refAttr);
             }
             attrManager.setCurrentScope(groupByName);
             auto attrDef = attrManager.createDef(toAggr.first->colId);
@@ -1169,7 +1175,15 @@ struct SQLTranslator {
                for (auto* cell = stmt->with_clause_->ctes_->head; cell != nullptr; cell = cell->next) {
                   auto* cte = reinterpret_cast<CommonTableExpr*>(cell->data.ptr_value);
                   assert(cte->ctequery_->type == T_SelectStmt);
-                  ctes.insert({cte->ctename_, reinterpret_cast<SelectStmt*>(cte->ctequery_)});
+                  mlir::Value subQuery;
+                  TargetInfo targetInfo;
+                  {
+                     auto subQueryScope = context.createResolverScope();
+                     auto [subQuery_, targetInfo_] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(cte->ctequery_), context, subQueryScope);
+                     subQuery = subQuery_;
+                     targetInfo = targetInfo_;
+                  }
+                  ctes.insert({cte->ctename_, {subQuery, targetInfo}});
                }
             }
             mlir::Value tree = translateFrom(builder, stmt, context, scope);
