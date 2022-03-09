@@ -57,7 +57,7 @@ void mlir::relalg::QueryGraph::print(llvm::raw_ostream& out) {
 }
 
 std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unordered_map<const mlir::relalg::RelationalAttribute*, std::string>& mapping) {
-   auto *op = val.getDefiningOp();
+   auto* op = val.getDefiningOp();
    if (!op) return std::move(support::eval::createInvalid());
    if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(op)) {
       std::variant<int64_t, double, std::string> parseArg;
@@ -83,6 +83,12 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
          return support::eval::createLt(buildEvalExpr(cmpOp.left(), mapping), buildEvalExpr(cmpOp.right(), mapping));
       } else if (cmpOp.predicate() == mlir::db::DBCmpPredicate::gt) {
          return support::eval::createGt(buildEvalExpr(cmpOp.left(), mapping), buildEvalExpr(cmpOp.right(), mapping));
+      } else if (cmpOp.predicate() == mlir::db::DBCmpPredicate::like) {
+         if (!cmpOp.right().getDefiningOp()) return support::eval::createInvalid();
+         if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(cmpOp.right().getDefiningOp())) {
+            return support::eval::createLike(buildEvalExpr(cmpOp.left(), mapping), constantOp.value().cast<mlir::StringAttr>().str());
+         }
+         return support::eval::createInvalid();
       } else {
          return support::eval::createInvalid();
       }
@@ -160,7 +166,7 @@ mlir::relalg::Attributes mlir::relalg::QueryGraph::getPKey(mlir::relalg::QueryGr
 double getRows(mlir::relalg::QueryGraph::Node& n) {
    if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
       auto numRows = baseTableOp.meta().getMeta()->getNumRows();
-      baseTableOp->setAttr("rows",mlir::FloatAttr::get(mlir::FloatType::getF64(n.op.getContext()), numRows));
+      baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(n.op.getContext()), numRows));
       return numRows == 0 ? 1 : numRows;
    }
    return 1;
@@ -204,14 +210,14 @@ void mlir::relalg::QueryGraph::estimate() {
       edge.selectivity = estimateSelectivity(edge.op, edge.left, edge.right);
    }
    for (auto& edge : selections) {
-      if(edge.required.count()==2) {
+      if (edge.required.count() == 2) {
          auto left = NodeSet::single(this->numNodes, edge.required.findFirst());
          edge.selectivity = estimateSelectivity(edge.op, left, edge.required);
       }
    }
 }
 double mlir::relalg::QueryGraph::calculateSelectivity(SelectionEdge& edge, NodeSet left, NodeSet right) {
-   if(edge.required.count()==2&&left.any()&&right.any())return edge.selectivity;
+   if (edge.required.count() == 2 && left.any() && right.any()) return edge.selectivity;
    auto key = left & edge.required;
    if (edge.cachedSel.contains(key)) {
       return edge.cachedSel[key];

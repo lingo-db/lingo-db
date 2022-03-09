@@ -2,6 +2,8 @@
 
 #include <arrow/api.h>
 #include <arrow/compute/api.h>
+#include <arrow/compute/api_scalar.h>
+
 
 namespace support::eval {
 struct ArrowExpr : public Expr {
@@ -121,6 +123,14 @@ std::unique_ptr<expr> createLiteral(std::variant<int64_t, double, std::string> p
       }
       default: return {};
    }
+}
+
+std::unique_ptr<expr> createLike(std::unique_ptr<expr> a, std::string like){
+   if (!a) return {};
+   auto options= std::make_shared<arrow::compute::MatchSubstringOptions>(like);
+   std::vector<arrow::compute::Expression> args({unpack(a)});
+   auto res = arrow::compute::call("match_like",args,options);
+   return pack(res);
 }
 std::unique_ptr<expr> createInvalid() {
    return {};
