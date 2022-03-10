@@ -218,9 +218,15 @@ class IsNullOpLowering : public ConversionPattern {
       : ConversionPattern(typeConverter, mlir::db::IsNullOp::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto isNullOp = mlir::dyn_cast_or_null<mlir::db::IsNullOp>(op);
       mlir::db::IsNullOpAdaptor isNullOpAdaptor(operands);
-      auto unPackOp = rewriter.create<mlir::util::UnPackOp>(op->getLoc(), isNullOpAdaptor.val());
-      rewriter.replaceOp(op, unPackOp.vals()[0]);
+
+      if (isNullOp.val().getType().isa<mlir::db::NullableType>()) {
+         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(op->getLoc(), isNullOpAdaptor.val());
+         rewriter.replaceOp(op, unPackOp.vals()[0]);
+      } else {
+         rewriter.replaceOp(op, isNullOpAdaptor.val());
+      }
       return success();
    }
 };

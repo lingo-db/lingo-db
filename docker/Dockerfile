@@ -1,4 +1,5 @@
 ARG buildImage="buildimg"
+ARG builtImage="mlirdb"
 FROM ubuntu:impish AS baseimg
 RUN apt-get update
 RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
@@ -103,6 +104,7 @@ RUN cmake -G Ninja . -B /build/mlirdb\
         
 RUN cmake --build /build/mlirdb -j$(nproc)
 
-FROM mlirdb as reproduce
+
+FROM ${builtImage} as reproduce
 WORKDIR /repo
 COPY --from=tpchgen /tpch-1 ./resources/data/tpch-1

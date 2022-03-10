@@ -6,6 +6,7 @@
 #include "mlir/Support/MlirOptMain.h"
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 
+#include "mlir/Dialect/DB/Passes.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
@@ -145,6 +146,12 @@ int main(int argc, char** argv) {
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::createSimplifyArithmeticsPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::db::createEliminateNullsPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::db::createSimplifyToArithPass();
    });
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();

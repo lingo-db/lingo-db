@@ -42,7 +42,7 @@ class DB_Type<string name, string typeMnemonic> : TypeDef<DB_Dialect, name> {
 }
 def NullableType : DB_Type<"Nullable","nullable"> {
     let parameters = (ins "Type":$type);
-    let assemblyFormat = "`<` $type `>`";
+    let assemblyFormat = " `<` $type `>`";
 }
 
 class DB_Collection<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,[],"::mlir::db::CollectionType"> {
@@ -227,6 +227,20 @@ def DB_CombineNullOp : DB_Op<"combine_null", [NoSideEffect]> {
 let arguments = (ins AnyType: $val,I1: $null);
 let results = (outs  NullableType : $res);
 let assemblyFormat = "$val `:` type($val) `,` $null  `:` type($res) attr-dict";
+}
+def DB_NullableGetVal : DB_Op<"nullable_get_val", [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+let arguments = (ins NullableType: $val);
+let results = (outs  AnyType : $res);
+let assemblyFormat = "$val `:` type($val)  attr-dict";
+  let extraClassDefinition = [{
+    LogicalResult $cppClass::inferReturnTypes(
+   MLIRContext* context, Optional<Location> location, ValueRange operands,
+   DictionaryAttr attributes, RegionRange regions,
+   SmallVectorImpl<Type>& inferredReturnTypes) {
+     inferredReturnTypes.assign({operands[0].getType().cast<mlir::db::NullableType>().getType()});
+     return success();
+    }
+  }];
 }
 def DB_CreateTableBuilder : DB_Op<"create_table_builder",
 [NoSideEffect]> {
