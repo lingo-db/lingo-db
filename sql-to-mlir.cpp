@@ -193,10 +193,11 @@ struct SQLTranslator {
    };
    struct Schema {
       struct Table {
-         std::unordered_map<std::string, mlir::Type> columns;
+         std::vector<std::pair<std::string, mlir::Type>> columns;
+         //std::unordered_map<;
          Table(std::initializer_list<std::pair<std::string, mlir::Type>> list) : columns() {
             for (auto x : list) {
-               columns.insert(x);
+               columns.push_back(x);
             }
          }
       };
@@ -824,8 +825,8 @@ struct SQLTranslator {
          if (ctes.contains(relation)) {
             auto [tree, targetInfo] = ctes.at(relation);
             for (auto x : targetInfo.namedResults) {
-               context.mapAttribute(scope, alias + "." + x.first, x.second);
                context.mapAttribute(scope, x.first, x.second);
+               context.mapAttribute(scope, alias + "." + x.first, x.second);
             }
             return tree;
          } else {
@@ -848,7 +849,7 @@ struct SQLTranslator {
       //::mlir::Type result, ::llvm::StringRef sym_name, ::llvm::StringRef table_identifier, ::mlir::relalg::TableMetaDataAttr meta, ::mlir::DictionaryAttr columns
       return builder.create<mlir::relalg::BaseTableOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), scopeName, relation, mlir::relalg::TableMetaDataAttr::get(builder.getContext(), std::make_shared<runtime::TableMetaData>()), builder.getDictionaryAttr(columns));
    }
-   mlir::Value translateSubSelect(mlir::OpBuilder& builder, SelectStmt* stmt, std::string alias, TranslationContext& context, TranslationContext::ResolverScope& scope) {
+   mlir::Value translateSubSelect(mlir::OpBuilder& builder, SelectStmt* stmt, std::string alias, std::vector<std::string> colAlias, TranslationContext& context, TranslationContext::ResolverScope& scope) {
       mlir::Value subQuery;
       TargetInfo targetInfo;
       {
@@ -857,10 +858,18 @@ struct SQLTranslator {
          subQuery = subQuery_;
          targetInfo = targetInfo_;
       }
-      for (auto x : targetInfo.namedResults) {
-         context.mapAttribute(scope, alias + "." + x.first, x.second);
-         context.mapAttribute(scope, x.first, x.second);
+      if (colAlias.empty()) {
+         for (auto x : targetInfo.namedResults) {
+            context.mapAttribute(scope, x.first, x.second);
+            context.mapAttribute(scope, alias + "." + x.first, x.second);
+         }
+      } else {
+         for (size_t i = 0; i < colAlias.size(); i++) {
+            context.mapAttribute(scope, colAlias[i], targetInfo.namedResults.at(i).second);
+            context.mapAttribute(scope, alias + "." + colAlias[i], targetInfo.namedResults.at(i).second);
+         }
       }
+
       return subQuery;
    }
    mlir::Block* translatePredicate(mlir::OpBuilder& builder, Node* node, TranslationContext& context) {
@@ -875,6 +884,17 @@ struct SQLTranslator {
       predBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), expr);
       return block;
    }
+   std::vector<std::string> listToStringVec(List* l) {
+      std::vector<std::string> res;
+      if (l != nullptr) {
+         for (auto *cell = l->head; cell != nullptr; cell = cell->next) {
+            auto *const target = reinterpret_cast<Value*>(cell->data.ptr_value);
+            auto *const column = target->val_.str_;
+            res.push_back(column);
+         }
+      }
+      return res;
+   }
    mlir::Value translateFromPart(mlir::OpBuilder& builder, Node* node, TranslationContext& context, TranslationContext::ResolverScope& scope) {
       switch (node->type) {
          case T_RangeVar: return translateRangeVar(builder, reinterpret_cast<RangeVar*>(node), context, scope);
@@ -886,7 +906,8 @@ struct SQLTranslator {
             } else {
                error("no alias for subquery");
             }
-            return translateSubSelect(builder, reinterpret_cast<SelectStmt*>(stmt->subquery_), alias, context, scope);
+            std::vector<std::string> colAlias = listToStringVec(stmt->alias_->colnames_);
+            return translateSubSelect(builder, reinterpret_cast<SelectStmt*>(stmt->subquery_), alias, colAlias, context, scope);
          }
 
          case T_JoinExpr: {
@@ -1127,7 +1148,14 @@ struct SQLTranslator {
                         break;
                      }
                      case T_A_Star: {
-                        break;
+                        std::unordered_set<const mlir::relalg::RelationalAttribute*> handledAttrs;
+                        for (auto p : context.allAttributes) {
+                           if (!handledAttrs.contains(p.second)) {
+                              targetInfo.namedResults.push_back({p.first, p.second});
+                              handledAttrs.insert(p.second);
+                           }
+                        }
+                        continue;
                      }
                      default: error("unexpected colref type in target list");
                   }
@@ -1170,6 +1198,95 @@ struct SQLTranslator {
    std::pair<mlir::Value, TargetInfo> translateSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
       switch (stmt->op_) {
          case SETOP_NONE: {
+            if (stmt->values_lists_) {
+               size_t numColumns = 0;
+               std::vector<mlir::Type> globalTypes;
+               std::vector<mlir::Attribute> rows;
+               bool first = true;
+               for (auto * valueList = stmt->values_lists_->head; valueList != nullptr; valueList = valueList->next) {
+                  auto *target = reinterpret_cast<List*>(valueList->data.ptr_value);
+                  size_t i = 0;
+                  std::vector<mlir::Type> types;
+                  std::vector<mlir::Attribute> values;
+                  for (auto *cell = target->head; cell != nullptr; cell = cell->next, i++) {
+                     auto * expr = reinterpret_cast<Expr*>(cell->data.ptr_value);
+                     switch (expr->type_) {
+                        case T_A_Const: {
+                           auto *constExpr = reinterpret_cast<A_Const*>(expr);
+                           auto constVal = constExpr->val_;
+                           mlir::Attribute value;
+                           mlir::Type t;
+                           switch (constVal.type_) {
+                              case T_Integer: {
+                                 t = builder.getI32Type();
+                                 value = builder.getI32IntegerAttr(constVal.val_.ival_);
+                                 break;
+                              }
+                              case T_String: {
+                                 std::string stringVal = constVal.val_.str_;
+                                 t = mlir::db::StringType::get(builder.getContext());
+                                 if (stringVal.size() <= 8) {
+                                    t = mlir::db::CharType::get(builder.getContext(), stringVal.size());
+                                 }
+                                 value = builder.getStringAttr(stringVal);
+                                 break;
+                              }
+                              case T_Float: {
+                                 std::string stringValue(constVal.val_.str_);
+                                 auto decimalPos = stringValue.find('.');
+                                 if (decimalPos == std::string::npos) {
+                                    t = builder.getI64Type();
+                                    value = builder.getI64IntegerAttr(std::stoll(constVal.val_.str_));
+                                 } else {
+                                    auto s = stringValue.size() - decimalPos - 1;
+                                    auto p = stringValue.size() - 1;
+                                    t = mlir::db::DecimalType::get(builder.getContext(), p, s);
+                                    value = builder.getStringAttr(constVal.val_.str_);
+                                 }
+                                 break;
+                              }
+                              //case T_Null: return builder.create<mlir::db::NullOp>(loc, mlir::db::NullableType::get(builder.getContext(), builder.getNoneType()));
+                              default:
+                                 error("unhandled constant type");
+                           }
+                           types.push_back(t);
+                           values.push_back(value);
+                           break;
+                        }
+                        default: {
+                           error("could not handle values content");
+                        }
+                     }
+                  }
+                  rows.push_back(builder.getArrayAttr(values));
+                  if (first) {
+                     first = false;
+                     numColumns = i;
+                     globalTypes = types;
+                  } else {
+                     for (size_t j = 0; j < numColumns; j++) {
+                        globalTypes[j] = getCommonType(globalTypes.at(j), types.at(j));
+                     }
+                  }
+               }
+               static size_t constRelId = 0;
+               std::string symName = "constrel" + std::to_string(constRelId++);
+               attrManager.setCurrentScope(symName);
+               std::vector<mlir::Attribute> attributes;
+
+               TargetInfo targetInfo;
+               for (size_t i = 0; i < numColumns; i++) {
+                  std::string columnName = "const" + std::to_string(i);
+                  auto attrDef = attrManager.createDef(columnName);
+                  attrDef.getRelationalAttribute().type = globalTypes[i];
+                  attributes.push_back(attrDef);
+                  targetInfo.namedResults.push_back({columnName, &attrDef.getRelationalAttribute()});
+               }
+               //::llvm::StringRef sym_name, ::mlir::ArrayAttr attributes, ::mlir::ArrayAttr values
+               mlir::Value constRel = builder.create<mlir::relalg::ConstRelationOp>(builder.getUnknownLoc(), symName, builder.getArrayAttr(attributes), builder.getArrayAttr(rows));
+               return std::make_pair(constRel, targetInfo);
+            }
+
             //todo: auto with = WithTransform(builder, stmt->with_clause_);
             if (stmt->with_clause_) {
                for (auto* cell = stmt->with_clause_->ctes_->head; cell != nullptr; cell = cell->next) {
