@@ -7,7 +7,11 @@
 #include <llvm/Support/Debug.h>
 #include <queue>
 using namespace mlir;
-
+bool mlir::db::CmpOp::isEqualityPred() { return predicate() == mlir::db::DBCmpPredicate::eq; }
+bool mlir::db::CmpOp::isLessPred(bool eq) { return predicate() == (eq ? mlir::db::DBCmpPredicate::lte : mlir::db::DBCmpPredicate::lt); }
+bool mlir::db::CmpOp::isGreaterPred(bool eq) { return predicate() == (eq ? mlir::db::DBCmpPredicate::gte : mlir::db::DBCmpPredicate::gt); }
+mlir::Value mlir::db::CmpOp::getLeft() { return left(); }
+mlir::Value mlir::db::CmpOp::getRight() { return right(); }
 mlir::Type constructNullableBool(MLIRContext* context, ValueRange operands) {
    bool nullable = llvm::any_of(operands, [](auto operand) { return operand.getType().template isa<mlir::db::NullableType>(); });
    mlir::Type restype = IntegerType::get(context, 1);

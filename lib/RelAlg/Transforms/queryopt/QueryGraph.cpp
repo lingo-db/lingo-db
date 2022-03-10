@@ -76,17 +76,21 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
       return support::eval::createLiteral(parseResult, std::make_tuple(arrowType, param1, param2));
    } else if (auto attrRefOp = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
       return support::eval::createAttrRef(mapping.at(&attrRefOp.attr().getRelationalAttribute()));
-   } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(op)) {
-      if (cmpOp.predicate() == mlir::db::DBCmpPredicate::eq) {
-         return support::eval::createEq(buildEvalExpr(cmpOp.left(), mapping), buildEvalExpr(cmpOp.right(), mapping));
-      } else if (cmpOp.predicate() == mlir::db::DBCmpPredicate::lt) {
-         return support::eval::createLt(buildEvalExpr(cmpOp.left(), mapping), buildEvalExpr(cmpOp.right(), mapping));
-      } else if (cmpOp.predicate() == mlir::db::DBCmpPredicate::gt) {
-         return support::eval::createGt(buildEvalExpr(cmpOp.left(), mapping), buildEvalExpr(cmpOp.right(), mapping));
-      } else if (cmpOp.predicate() == mlir::db::DBCmpPredicate::like) {
-         if (!cmpOp.right().getDefiningOp()) return support::eval::createInvalid();
-         if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(cmpOp.right().getDefiningOp())) {
-            return support::eval::createLike(buildEvalExpr(cmpOp.left(), mapping), constantOp.value().cast<mlir::StringAttr>().str());
+   } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
+      auto left = cmpOp.getLeft();
+      auto right = cmpOp.getRight();
+      if (cmpOp.isEqualityPred()) {
+         return support::eval::createEq(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));
+      } else if (cmpOp.isLessPred(false)) {
+         return support::eval::createLt(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));
+      } else if (cmpOp.isGreaterPred(false)) {
+         return support::eval::createGt(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));
+      } else if (auto dbCmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(op)) {
+         if (dbCmpOp.predicate() == mlir::db::DBCmpPredicate::like) {
+            if (!dbCmpOp.right().getDefiningOp()) return support::eval::createInvalid();
+            if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(dbCmpOp.right().getDefiningOp())) {
+               return support::eval::createLike(buildEvalExpr(dbCmpOp.left(), mapping), constantOp.value().cast<mlir::StringAttr>().str());
+            }
          }
          return support::eval::createInvalid();
       } else {

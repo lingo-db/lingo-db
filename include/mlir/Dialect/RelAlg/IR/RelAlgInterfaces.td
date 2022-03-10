@@ -1,6 +1,39 @@
 #ifndef Interfaces
 #define Interfaces
 include "mlir/IR/OpBase.td"
+def Relalg_CmpOpInterface : OpInterface<"CmpOpInterface"> {
+  let cppNamespace = "::mlir::relalg";
+
+  let methods = [
+    InterfaceMethod<
+      /*description=*/"Returns true if it is Equality Predicate",
+      /*retTy=*/"bool",
+      /*methodName=*/"isEqualityPred"
+    >,
+    InterfaceMethod<
+      /*description=*/"Returns true if it is Equality Predicate",
+      /*retTy=*/"bool",
+      /*methodName=*/"isLessPred"
+      ,(ins "bool":$eq)
+    >,
+    InterfaceMethod<
+      /*description=*/"Returns true if it is Equality Predicate",
+      /*retTy=*/"bool",
+      /*methodName=*/"isGreaterPred"
+      ,(ins "bool":$eq)
+    >,
+    InterfaceMethod<
+      /*description=*/"Returns true if it is Equality Predicate",
+      /*retTy=*/"mlir::Value",
+      /*methodName=*/"getLeft"
+    >,
+    InterfaceMethod<
+      /*description=*/"Returns true if it is Equality Predicate",
+      /*retTy=*/"mlir::Value",
+      /*methodName=*/"getRight"
+    >,
+  ];
+}
 
 def Operator : OpInterface<"Operator"> {
 let methods = [

@@ -39,8 +39,8 @@ class SelectionTranslator : public mlir::relalg::Translator {
                             .Default([](::mlir::Type) { return 100; });
                      p -= 1;
                   }
-                  else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(defOp)) {
-                     auto t = cmpOp.left().getType();
+                  else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(defOp)) {
+                     auto t = cmpOp.getLeft().getType();
                      p = ::llvm::TypeSwitch<mlir::Type, int>(t)
                             .Case<::mlir::IntegerType>([&](::mlir::IntegerType t) { return 1; })
                             .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) { return 2; })

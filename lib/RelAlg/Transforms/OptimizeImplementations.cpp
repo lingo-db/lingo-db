@@ -19,10 +19,10 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       block->walk([&](mlir::Operation* op) {
          if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
             required.insert({getAttr.getResult(), mlir::relalg::Attributes::from(getAttr.attr())});
-         } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(op)) {
-            if (cmpOp.predicate() == mlir::db::DBCmpPredicate::eq && mlir::relalg::HashJoinUtils::isAndedResult(op)) {
-               auto leftAttributes = required[cmpOp.left()];
-               auto rightAttributes = required[cmpOp.right()];
+         } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
+            if (cmpOp.isEqualityPred() && mlir::relalg::HashJoinUtils::isAndedResult(op)) {
+               auto leftAttributes = required[cmpOp.getLeft()];
+               auto rightAttributes = required[cmpOp.getRight()];
                if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {
                   res = true;
                } else if (leftAttributes.isSubsetOf(availableRight) && rightAttributes.isSubsetOf(availableLeft)) {

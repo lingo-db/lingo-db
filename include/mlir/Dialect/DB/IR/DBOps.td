@@ -5,7 +5,8 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
-include "DBInterfaces.td"
+//include "mlir/Dialect/DB/IR/DBInterfaces.td"
+include "mlir/Dialect/RelAlg/IR/RelAlgInterfaces.td"
 
 //===----------------------------------------------------------------------===//
 // DB dialect definition.
@@ -395,7 +396,7 @@ let cppNamespace = "::mlir::db";
 }
 
 def DB_CmpOp : DB_Op<"compare",
-    [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+    [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>,DeclareOpInterfaceMethods<Relalg_CmpOpInterface>]> {
 let summary = "integer comparison operation";
 
 let arguments = (ins

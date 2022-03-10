@@ -26,23 +26,23 @@ class HashJoinUtils {
          if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
             required.insert({getAttr.getResult(), mlir::relalg::Attributes::from(getAttr.attr())});
             pureAttribute.insert(getAttr.getResult());
-         } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(op)) {
-            if (cmpOp.predicate() == mlir::db::DBCmpPredicate::eq && isAndedResult(op)) {
-               auto leftAttributes = required[cmpOp.left()];
-               auto rightAttributes = required[cmpOp.right()];
+         } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
+            if (cmpOp.isEqualityPred() && isAndedResult(op)) {
+               auto leftAttributes = required[cmpOp.getLeft()];
+               auto rightAttributes = required[cmpOp.getRight()];
                if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {
                   leftKeys.insert(leftAttributes);
                   rightKeys.insert(rightAttributes);
                   leftKeyAttributes.push_back(leftAttributes);
-                  canSave.push_back(pureAttribute.contains(cmpOp.left()));
-                  types.push_back(cmpOp.left().getType());
+                  canSave.push_back(pureAttribute.contains(cmpOp.getLeft()));
+                  types.push_back(cmpOp.getRight().getType());
 
                } else if (leftAttributes.isSubsetOf(availableRight) && rightAttributes.isSubsetOf(availableLeft)) {
                   leftKeys.insert(rightAttributes);
                   rightKeys.insert(leftAttributes);
                   leftKeyAttributes.push_back(rightAttributes);
-                  canSave.push_back(pureAttribute.contains(cmpOp.right()));
-                  types.push_back(cmpOp.right().getType());
+                  canSave.push_back(pureAttribute.contains(cmpOp.getRight()));
+                  types.push_back(cmpOp.getRight().getType());
                }
             }
          } else {
@@ -83,15 +83,15 @@ class HashJoinUtils {
             if (keyAttributes.intersects(mlir::relalg::Attributes::from(getAttr.attr()))) {
                mapping.map(getAttr.getResult(), context.getValueForAttribute(&getAttr.attr().getRelationalAttribute()));
             }
-         } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(op)) {
-            if (cmpOp.predicate() == mlir::db::DBCmpPredicate::eq && isAndedResult(op)) {
-               auto leftAttributes = required[cmpOp.left()];
-               auto rightAttributes = required[cmpOp.right()];
+         } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
+            if (cmpOp.isEqualityPred() && isAndedResult(op)) {
+               auto leftAttributes = required[cmpOp.getLeft()];
+               auto rightAttributes = required[cmpOp.getRight()];
                mlir::Value keyVal;
                if (leftAttributes.isSubsetOf(keyAttributes)) {
-                  keyVal = cmpOp.left();
+                  keyVal = cmpOp.getLeft();
                } else if (rightAttributes.isSubsetOf(keyAttributes)) {
-                  keyVal = cmpOp.right();
+                  keyVal = cmpOp.getRight();
                }
                if (keyVal) {
                   if (!mapping.contains(keyVal)) {

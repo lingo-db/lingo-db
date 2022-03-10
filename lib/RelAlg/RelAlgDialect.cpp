@@ -3,6 +3,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Transforms/InliningUtils.h"
 
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 
 #include "llvm/ADT/TypeSwitch.h"
@@ -18,6 +19,88 @@ struct RelalgInlinerInterface : public DialectInlinerInterface {
    virtual bool isLegalToInline(Region* dest, Region* src, bool wouldBeCloned,
                                 BlockAndValueMapping& valueMapping) const override {
       return true;
+   }
+};
+struct ArithCmpICmpInterface
+   : public CmpOpInterface::ExternalModel<ArithCmpICmpInterface, mlir::arith::CmpIOp> {
+   // No need to define `exampleInterfaceHook` that has a default implementation
+   // in `ExternalModel`. But it can be overridden if desired.
+   bool isEqualityPred(mlir::Operation* op) const {
+      auto cmpOp = mlir::cast<mlir::arith::CmpIOp>(op);
+      return cmpOp.getPredicate() == mlir::arith::CmpIPredicate::eq;
+   }
+   bool isLessPred(mlir::Operation* op, bool eq) const {
+      auto cmpOp = mlir::cast<mlir::arith::CmpIOp>(op);
+      switch (cmpOp.getPredicate()) {
+         case mlir::arith::CmpIPredicate::sle:
+         case mlir::arith::CmpIPredicate::ule:
+            return eq;
+         case mlir::arith::CmpIPredicate::ult:
+         case mlir::arith::CmpIPredicate::slt:
+            return !eq;
+         default: return false;
+      }
+   }
+   bool isGreaterPred(mlir::Operation* op, bool eq) const {
+      auto cmpOp = mlir::cast<mlir::arith::CmpIOp>(op);
+      switch (cmpOp.getPredicate()) {
+         case mlir::arith::CmpIPredicate::sge:
+         case mlir::arith::CmpIPredicate::uge:
+            return eq;
+         case mlir::arith::CmpIPredicate::ugt:
+         case mlir::arith::CmpIPredicate::sgt:
+            return !eq;
+         default: return false;
+      }
+   }
+   mlir::Value getLeft(mlir::Operation* op) const {
+      auto cmpOp = mlir::cast<mlir::arith::CmpIOp>(op);
+      return cmpOp.getLhs();
+   }
+   mlir::Value getRight(mlir::Operation* op) const {
+      auto cmpOp = mlir::cast<mlir::arith::CmpIOp>(op);
+      return cmpOp.getRhs();
+   }
+};
+struct ArithCmpFCmpInterface
+   : public CmpOpInterface::ExternalModel<ArithCmpFCmpInterface, mlir::arith::CmpFOp> {
+   // No need to define `exampleInterfaceHook` that has a default implementation
+   // in `ExternalModel`. But it can be overridden if desired.
+   bool isEqualityPred(mlir::Operation* op) const {
+      auto cmpOp = mlir::cast<mlir::arith::CmpFOp>(op);
+      return cmpOp.getPredicate() == mlir::arith::CmpFPredicate::OEQ || cmpOp.getPredicate() == mlir::arith::CmpFPredicate::UEQ;
+   }
+   bool isLessPred(mlir::Operation* op, bool eq) const {
+      auto cmpOp = mlir::cast<mlir::arith::CmpFOp>(op);
+      switch (cmpOp.getPredicate()) {
+         case mlir::arith::CmpFPredicate::ULE:
+         case mlir::arith::CmpFPredicate::OLE:
+            return eq;
+         case mlir::arith::CmpFPredicate::ULT:
+         case mlir::arith::CmpFPredicate::OLT:
+            return !eq;
+         default: return false;
+      }
+   }
+   bool isGreaterPred(mlir::Operation* op, bool eq) const {
+      auto cmpOp = mlir::cast<mlir::arith::CmpFOp>(op);
+      switch (cmpOp.getPredicate()) {
+         case mlir::arith::CmpFPredicate::UGE:
+         case mlir::arith::CmpFPredicate::OGE:
+            return eq;
+         case mlir::arith::CmpFPredicate::UGT:
+         case mlir::arith::CmpFPredicate::OGT:
+            return !eq;
+         default: return false;
+      }
+   }
+   mlir::Value getLeft(mlir::Operation* op) const {
+      auto cmpOp = mlir::cast<mlir::arith::CmpFOp>(op);
+      return cmpOp.getLhs();
+   }
+   mlir::Value getRight(mlir::Operation* op) const {
+      auto cmpOp = mlir::cast<mlir::arith::CmpFOp>(op);
+      return cmpOp.getRhs();
    }
 };
 #define GET_ATTRDEF_CLASSES
@@ -38,6 +121,8 @@ void RelAlgDialect::initialize() {
    addInterfaces<RelalgInlinerInterface>();
    relationalAttributeManager.setContext(getContext());
    getContext()->loadDialect<mlir::db::DBDialect>();
+   getContext()->loadDialect<mlir::arith::ArithmeticDialect>();
+   mlir::arith::CmpIOp::attachInterface<ArithCmpFCmpInterface>(*getContext());
 }
 
 ::mlir::Attribute mlir::relalg::TableMetaDataAttr::parse(::mlir::AsmParser& parser, ::mlir::Type type) {
