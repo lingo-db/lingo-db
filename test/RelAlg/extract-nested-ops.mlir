@@ -25,14 +25,14 @@ module  {
           %14 = relalg.getattr %arg2 @constrel3::@attr1 : i32
           %15 = db.compare eq %13 : i32, %14 : i32
           %16 = db.compare eq %6 : i32, %14 : i32
-          %17 = db.and %15:i1,%16:i1
+          %17 = db.and %15,%16:i1,i1
           relalg.return %17 : i1
         }
         %8 = relalg.getattr %arg0 @constrel::@attr1 : i32
         %9 = relalg.getattr %arg1 @constrel2::@attr1 : i32
         %10 = db.compare eq %8 : i32, %9 : i32
         %11 = relalg.exists %7
-        %12 = db.and %10:i1,%11:i1
+        %12 = db.and %10,%11:i1,i1
         relalg.return %12 : i1
       }
       %4 = relalg.exists %3

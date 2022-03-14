@@ -219,7 +219,7 @@ module {
       %17 = relalg.getattr %arg0 @nation::@n_name : !db.string
       %18 = db.constant("GERMANY") : !db.string
       %19 = db.compare eq %17 : !db.string, %18 : !db.string
-      %20 = db.and %13:i1,%16:i1,%19:i1
+      %20 = db.and %13, %16, %19 : i1, i1, i1
       relalg.return %20 : i1
     }
     %6 = relalg.map @map0 %5 (%arg0: !relalg.tuple){
@@ -259,7 +259,7 @@ module {
         %30 = relalg.getattr %arg1 @nation::@n_name : !db.string
         %31 = db.constant("GERMANY") : !db.string
         %32 = db.compare eq %30 : !db.string, %31 : !db.string
-        %33 = db.and %26:i1,%29:i1,%32:i1
+        %33 = db.and %26, %29, %32 : i1, i1, i1
         relalg.return %33 : i1
       }
       %18 = relalg.map @map1 %17 (%arg1: !relalg.tuple){

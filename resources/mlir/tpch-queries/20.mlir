@@ -31,7 +31,7 @@ module {
           %41 = relalg.getattr %arg2 @lineitem::@l_shipdate : !db.date<day>
           %42 = db.constant("1995-01-01") : !db.date<day>
           %43 = db.compare lt %41 : !db.date<day>, %42 : !db.date<day>
-          %44 = db.and %34:i1,%37:i1,%40:i1,%43:i1
+          %44 = db.and %34, %37, %40, %43 : i1, i1, i1, i1
           relalg.return %44 : i1
         }
         %26 = relalg.aggregation @aggr0 %25 [] (%arg2: !relalg.tuplestream,%arg3: !relalg.tuple){
@@ -49,7 +49,7 @@ module {
         %28 = relalg.getscalar @map0::@tmp_attr1 %27 : !db.nullable<!db.decimal<15, 2>>
         %29 = db.cast %23 : i32 -> !db.decimal<15, 2>
         %30 = db.compare gt %29 : !db.decimal<15, 2>, %28 : !db.nullable<!db.decimal<15, 2>>
-        %31 = db.and %22:i1,%30:!db.nullable<i1>
+        %31 = db.and %22, %30 : i1, !db.nullable<i1>
         relalg.return %31 : !db.nullable<i1>
       }
       %8 = relalg.projection all [@partsupp::@ps_suppkey] %7
@@ -61,7 +61,7 @@ module {
       %14 = relalg.getattr %arg0 @nation::@n_name : !db.string
       %15 = db.constant("CANADA") : !db.string
       %16 = db.compare eq %14 : !db.string, %15 : !db.string
-      %17 = db.and %10:i1,%13:i1,%16:i1
+      %17 = db.and %10, %13, %16 : i1, i1, i1
       relalg.return %17 : i1
     }
     %4 = relalg.sort %3 [(@supplier::@s_name,asc)]

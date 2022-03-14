@@ -40,7 +40,7 @@ module {
       %36 = relalg.getattr %arg0 @lineitem::@l_shipinstruct : !db.string
       %37 = db.constant("DELIVER IN PERSON") : !db.string
       %38 = db.compare eq %36 : !db.string, %37 : !db.string
-      %39 = db.and %9:i1,%12:i1,%18:i1,%21:i1,%27:i1,%31:i1,%35:i1,%38:i1
+      %39 = db.and %9, %12, %18, %21, %27, %31, %35, %38 : i1, i1, i1, i1, i1, i1, i1, i1
       %40 = relalg.getattr %arg0 @part::@p_partkey : i32
       %41 = relalg.getattr %arg0 @lineitem::@l_partkey : i32
       %42 = db.compare eq %40 : i32, %41 : i32
@@ -73,7 +73,7 @@ module {
       %69 = relalg.getattr %arg0 @lineitem::@l_shipinstruct : !db.string
       %70 = db.constant("DELIVER IN PERSON") : !db.string
       %71 = db.compare eq %69 : !db.string, %70 : !db.string
-      %72 = db.and %42:i1,%45:i1,%51:i1,%54:i1,%60:i1,%64:i1,%68:i1,%71:i1
+      %72 = db.and %42, %45, %51, %54, %60, %64, %68, %71 : i1, i1, i1, i1, i1, i1, i1, i1
       %73 = relalg.getattr %arg0 @part::@p_partkey : i32
       %74 = relalg.getattr %arg0 @lineitem::@l_partkey : i32
       %75 = db.compare eq %73 : i32, %74 : i32
@@ -106,8 +106,8 @@ module {
       %102 = relalg.getattr %arg0 @lineitem::@l_shipinstruct : !db.string
       %103 = db.constant("DELIVER IN PERSON") : !db.string
       %104 = db.compare eq %102 : !db.string, %103 : !db.string
-      %105 = db.and %75:i1,%78:i1,%84:i1,%87:i1,%93:i1,%97:i1,%101:i1,%104:i1
-      %106 = db.or %39:i1,%72:i1,%105:i1
+      %105 = db.and %75, %78, %84, %87, %93, %97, %101, %104 : i1, i1, i1, i1, i1, i1, i1, i1
+      %106 = db.or %39, %72, %105 : i1, i1, i1
       relalg.return %106 : i1
     }
     %4 = relalg.map @map0 %3 (%arg0: !relalg.tuple){

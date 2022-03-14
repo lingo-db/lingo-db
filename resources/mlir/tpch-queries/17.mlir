@@ -35,7 +35,7 @@ module {
       }
       %21 = relalg.getscalar @map0::@tmp_attr1 %20 : !db.nullable<!db.decimal<15, 2>>
       %22 = db.compare lt %16 : !db.decimal<15, 2>, %21 : !db.nullable<!db.decimal<15, 2>>
-      %23 = db.and %9:i1,%12:i1,%15:i1,%22:!db.nullable<i1>
+      %23 = db.and %9, %12, %15, %22 : i1, i1, i1, !db.nullable<i1>
       relalg.return %23 : !db.nullable<i1>
     }
     %4 = relalg.aggregation @aggr1 %3 [] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){

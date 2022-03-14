@@ -107,8 +107,7 @@
             %marker_ptr=util.generic_memref_cast %ptr : !util.ref<tuple<i64,i32,i32>> -> !util.ref<i64>
             %marker=util.to_memref %marker_ptr : !util.ref<i64> -> memref<i64>
             %marker_val=memref.atomic_rmw "assign" %one_i64 , %marker[] : (i64, memref<i64>) -> i64
-            %db_marker_val = db.type_cast %marker_val : i64 -> i64
-            db.dump %db_marker_val : i64
+            db.dump %marker_val : i64
         }
             db.dump %str_const : !db.string
         db.for %entry in %matches : !db.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator> {
@@ -125,8 +124,7 @@
              %marker_ptr=util.generic_memref_cast %ptr : !util.ref<tuple<i64,i32,i32>> -> !util.ref<i64>
              %marker=util.to_memref %marker_ptr : !util.ref<i64> -> memref<i64>
              %marker_val=memref.atomic_rmw "assign" %one_i64 , %marker[] : (i64, memref<i64>) -> i64
-             %db_marker_val = db.type_cast %marker_val : i64 -> i64
-             db.dump %db_marker_val : i64
+             db.dump %marker_val : i64
          }
             db.dump %str_const : !db.string
 
@@ -144,8 +142,7 @@
             db.dump %k2 : i32
             db.dump %v1 : i32
             db.dump %v2 : i32
-            %db_marker_val = db.type_cast %marker : i64 -> i64
-            db.dump %db_marker_val : i64
+            db.dump %marker : i64
             db.dump %str_const : !db.string
         }
         return

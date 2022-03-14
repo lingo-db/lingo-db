@@ -222,7 +222,9 @@ class DumpOpLowering : public ConversionPattern {
          isNull = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
          val = dumpOpAdaptor.val();
       }
-
+      if(baseType.isa<mlir::IndexType>()){
+         functionRegistry.call(rewriter, op->getLoc(), FunctionId::DumpIndex, operands[0]);
+      }else
       if (isIntegerType(baseType, 1)) {
          functionRegistry.call(rewriter, loc, FunctionId::DumpBool, ValueRange({isNull, val}));
       } else if (auto intWidth = getIntegerWidth(baseType, false)) {
@@ -282,22 +284,6 @@ class DumpOpLowering : public ConversionPattern {
          }
          functionRegistry.call(rewriter, loc, FunctionId::DumpChar, ValueRange({isNull, val, numBytes}));
       }
-      rewriter.eraseOp(op);
-
-      return success();
-   }
-};
-class DumpIndexOpLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
-
-   public:
-   explicit DumpIndexOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::DumpIndexOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
-      functionRegistry.call(rewriter, op->getLoc(), FunctionId::DumpIndex, operands[0]);
-
       rewriter.eraseOp(op);
 
       return success();
@@ -465,7 +451,6 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
    patterns.insert<StringCmpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<StringCastOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<DumpIndexOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<FreeOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DecimalMulLowering>(typeConverter, patterns.getContext());
 }

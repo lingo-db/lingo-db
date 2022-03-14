@@ -17,7 +17,7 @@ module {
       %14 = relalg.getattr %arg0 @lineitem::@l_shipdate : !db.date<day>
       %15 = db.constant("1995-10-01") : !db.date<day>
       %16 = db.compare lt %14 : !db.date<day>, %15 : !db.date<day>
-      %17 = db.and %10:i1,%13:i1,%16:i1
+      %17 = db.and %10, %13, %16 : i1, i1, i1
       relalg.return %17 : i1
     }
     %4 = relalg.map @map0 %3 (%arg0: !relalg.tuple){

@@ -28,7 +28,7 @@ module {
       %24 = relalg.getattr %arg0 @lineitem::@l_receiptdate : !db.date<day>
       %25 = db.constant("1995-01-01") : !db.date<day>
       %26 = db.compare lt %24 : !db.date<day>, %25 : !db.date<day>
-      %27 = db.and %10:i1,%14:i1,%17:i1,%20:i1,%23:i1,%26:i1
+      %27 = db.and %10, %14, %17, %20, %23, %26 : i1, i1, i1, i1, i1, i1
       relalg.return %27 : i1
     }
     %4 = relalg.map @map0 %3 (%arg0: !relalg.tuple){
@@ -38,7 +38,7 @@ module {
       %11 = relalg.getattr %arg0 @orders::@o_orderpriority : !db.string
       %12 = db.constant("2-HIGH") : !db.string
       %13 = db.compare neq %11 : !db.string, %12 : !db.string
-      %14 = db.and %10:i1,%13:i1
+      %14 = db.and %10, %13 : i1, i1
       %15 = scf.if %14 -> (i32) {
         %26 = db.constant(1 : i32) : i32
         scf.yield %26 : i32
@@ -53,7 +53,7 @@ module {
       %20 = relalg.getattr %16 @orders::@o_orderpriority : !db.string
       %21 = db.constant("2-HIGH") : !db.string
       %22 = db.compare eq %20 : !db.string, %21 : !db.string
-      %23 = db.or %19:i1,%22:i1
+      %23 = db.or %19, %22 : i1, i1
       %24 = scf.if %23 -> (i32) {
         %26 = db.constant(1 : i32) : i32
         scf.yield %26 : i32

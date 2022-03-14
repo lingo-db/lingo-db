@@ -16,11 +16,11 @@ module {
         %18 = relalg.getattr %arg1 @lineitem::@l_commitdate : !db.date<day>
         %19 = relalg.getattr %arg1 @lineitem::@l_receiptdate : !db.date<day>
         %20 = db.compare lt %18 : !db.date<day>, %19 : !db.date<day>
-        %21 = db.and %17:i1,%20:i1
+        %21 = db.and %17, %20 : i1, i1
         relalg.return %21 : i1
       }
       %13 = relalg.exists %12
-      %14 = db.and %7:i1,%10:i1,%13:i1
+      %14 = db.and %7, %10, %13 : i1, i1, i1
       relalg.return %14 : i1
     }
     %2 = relalg.aggregation @aggr0 %1 [@orders::@o_orderpriority] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){

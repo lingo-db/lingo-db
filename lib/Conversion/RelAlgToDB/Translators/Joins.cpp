@@ -113,8 +113,7 @@ class ReversedOuterJoinImpl : public mlir::relalg::JoinImpl {
       auto scope = context.createScope();
       auto zero = builder.create<mlir::arith::ConstantOp>(loc, marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
       auto isZero = builder.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, marker, zero);
-      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(loc, builder.getI1Type(), isZero);
-      translator->handlePotentialMatch(builder, context, isZeroDB, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
+      translator->handlePotentialMatch(builder, context, isZero, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
          translator->handleMappingNull(builder, context, scope);
       });
    }
@@ -166,8 +165,7 @@ class ReversedSemiJoinImpl : public mlir::relalg::JoinImpl {
             {
                auto zero = builder1.create<mlir::arith::ConstantOp>(loc, markerBefore.getType(), builder1.getIntegerAttr(markerBefore.getType(), 0));
                auto isZero = builder1.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, markerBefore, zero);
-               auto isZeroDB = builder1.create<mlir::db::TypeCastOp>(loc, builder1.getI1Type(), isZero);
-               translator->handlePotentialMatch(builder,context,isZeroDB);
+               translator->handlePotentialMatch(builder,context,isZero);
             }
             builder1.create<mlir::scf::YieldOp>(loc, translator->getRequiredBuilderValues(context)); },
          translator->requiredBuilders.empty() ? translator->noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::scf::YieldOp>(loc, beforeBuilderValues); });
@@ -200,8 +198,7 @@ class ReversedAntiSemiJoinImpl : public mlir::relalg::JoinImpl {
    void handleScanned(mlir::Value marker, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto zero = builder.create<mlir::arith::ConstantOp>(loc, marker.getType(), builder.getIntegerAttr(marker.getType(), 0));
       auto isZero = builder.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, marker, zero);
-      auto isZeroDB = builder.create<mlir::db::TypeCastOp>(loc, builder.getI1Type(), isZero);
-      translator->handlePotentialMatch(builder, context, isZeroDB);
+      translator->handlePotentialMatch(builder, context, isZero);
    }
 
    virtual ~ReversedAntiSemiJoinImpl() {}

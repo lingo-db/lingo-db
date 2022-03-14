@@ -52,7 +52,7 @@ module {
       %50 = relalg.getattr %arg0 @part::@p_type : !db.string
       %51 = db.constant("ECONOMY ANODIZED STEEL") : !db.string
       %52 = db.compare eq %50 : !db.string, %51 : !db.string
-      %53 = db.and %24:i1,%27:i1,%30:i1,%33:i1,%36:i1,%39:i1,%42:i1,%45:i1,%49:i1,%52:i1
+      %53 = db.and %24, %27, %30, %33, %36, %39, %42, %45, %49, %52 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
       relalg.return %53 : i1
     }
     %16 = relalg.map @map0 %15 (%arg0: !relalg.tuple){

@@ -21,7 +21,7 @@ module {
       %21 = relalg.getattr %arg0 @lineitem::@l_quantity : !db.decimal<15, 2>
       %22 = db.constant(24 : i32) : !db.decimal<15, 2>
       %23 = db.compare lt %21 : !db.decimal<15, 2>, %22 : !db.decimal<15, 2>
-      %24 = db.and %7:i1,%10:i1,%20:i1,%23:i1
+      %24 = db.and %7, %10, %20, %23 : i1, i1, i1, i1
       relalg.return %24 : i1
     }
     %2 = relalg.map @map0 %1 (%arg0: !relalg.tuple){

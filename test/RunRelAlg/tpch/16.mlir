@@ -239,7 +239,7 @@ module {
       %30 = relalg.getattr %arg0 @partsupp::@ps_suppkey : i32
       %31 = relalg.in %30 : i32, %29
       %32 = db.not %31 : i1
-      %33 = db.and %9:i1,%12:i1,%16:i1,%26:i1,%32:i1
+      %33 = db.and %9, %12, %16, %26, %32 : i1, i1, i1, i1, i1
       relalg.return %33 : i1
     }
     %4 = relalg.aggregation @aggr0 %3 [@part::@p_brand,@part::@p_type,@part::@p_size] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){

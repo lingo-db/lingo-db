@@ -28,7 +28,7 @@ module {
         %37 = relalg.getattr %arg1 @customer::@c_phone : !db.string
         %38 = db.substr %37[1 : 2] : !db.string
         %39 = db.oneof %38 : !db.string ? %30, %31, %32, %33, %34, %35, %36 : !db.string, !db.string, !db.string, !db.string, !db.string, !db.string, !db.string
-        %40 = db.and %29:i1,%39:i1
+        %40 = db.and %29, %39 : i1, i1
         relalg.return %40 : i1
       }
       %19 = relalg.aggregation @aggr0 %18 [] (%arg1: !relalg.tuplestream,%arg2: !relalg.tuple){
@@ -47,7 +47,7 @@ module {
       }
       %24 = relalg.exists %23
       %25 = db.not %24 : i1
-      %26 = db.and %15:i1,%21:!db.nullable<i1>,%25:i1
+      %26 = db.and %15, %21, %25 : i1, !db.nullable<i1>, i1
       relalg.return %26 : !db.nullable<i1>
     }
     %2 = relalg.map @map0 %1 (%arg0: !relalg.tuple){

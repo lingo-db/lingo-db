@@ -26,7 +26,7 @@ module {
       %28 = relalg.getattr %arg0 @customer::@c_nationkey : i32
       %29 = relalg.getattr %arg0 @nation::@n_nationkey : i32
       %30 = db.compare eq %28 : i32, %29 : i32
-      %31 = db.and %15:i1,%18:i1,%21:i1,%24:i1,%27:i1,%30:i1
+      %31 = db.and %15, %18, %21, %24, %27, %30 : i1, i1, i1, i1, i1, i1
       relalg.return %31 : i1
     }
     %8 = relalg.map @map0 %7 (%arg0: !relalg.tuple){

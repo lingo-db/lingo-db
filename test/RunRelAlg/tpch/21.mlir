@@ -78,7 +78,7 @@ module {
         %41 = relalg.getattr %arg1 @l2::@l_suppkey : i32
         %42 = relalg.getattr %arg1 @l1::@l_suppkey : i32
         %43 = db.compare neq %41 : i32, %42 : i32
-        %44 = db.and %40:i1,%43:i1
+        %44 = db.and %40, %43 : i1, i1
         relalg.return %44 : i1
       }
       %26 = relalg.exists %25
@@ -93,7 +93,7 @@ module {
         %44 = relalg.getattr %arg1 @l3::@l_receiptdate : !db.date<day>
         %45 = relalg.getattr %arg1 @l3::@l_commitdate : !db.date<day>
         %46 = db.compare gt %44 : !db.date<day>, %45 : !db.date<day>
-        %47 = db.and %40:i1,%43:i1,%46:i1
+        %47 = db.and %40, %43, %46 : i1, i1, i1
         relalg.return %47 : i1
       }
       %29 = relalg.exists %28
@@ -104,7 +104,7 @@ module {
       %34 = relalg.getattr %arg0 @nation::@n_name : !db.string
       %35 = db.constant("SAUDI ARABIA") : !db.string
       %36 = db.compare eq %34 : !db.string, %35 : !db.string
-      %37 = db.and %14:i1,%17:i1,%20:i1,%23:i1,%26:i1,%30:i1,%33:i1,%36:i1
+      %37 = db.and %14, %17, %20, %23, %26, %30, %33, %36 : i1, i1, i1, i1, i1, i1, i1, i1
       relalg.return %37 : i1
     }
     %8 = relalg.aggregation @aggr0 %7 [@supplier::@s_name] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){

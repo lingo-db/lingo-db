@@ -8,7 +8,7 @@ module {
       %12 = relalg.getattr %arg0 @lineitem::@l_shipdate : !db.date<day>
       %13 = db.constant("1996-04-01") : !db.date<day>
       %14 = db.compare lt %12 : !db.date<day>, %13 : !db.date<day>
-      %15 = db.and %11:i1,%14:i1
+      %15 = db.and %11, %14 : i1, i1
       relalg.return %15 : i1
     }
     %2 = relalg.map @map0 %1 (%arg0: !relalg.tuple){
@@ -39,7 +39,7 @@ module {
       }
       %14 = relalg.getscalar @aggr1::@tmp_attr2 %13 : !db.nullable<!db.decimal<15, 2>>
       %15 = db.compare eq %12 : !db.decimal<15, 2>, %14 : !db.nullable<!db.decimal<15, 2>>
-      %16 = db.and %11:i1,%15:!db.nullable<i1>
+      %16 = db.and %11, %15 : i1, !db.nullable<i1>
       relalg.return %16 : !db.nullable<i1>
     }
     %7 = relalg.sort %6 [(@supplier::@s_suppkey,asc)]

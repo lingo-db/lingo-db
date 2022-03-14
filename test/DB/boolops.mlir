@@ -2,22 +2,22 @@
 
  module {
 	func @test_or (%arg0: i1,%arg1: i1,%arg2: i1) {
-		%1 = db.or %arg0 : i1, %arg1 : i1, %arg2 : i1
+		%1 = db.or %arg0, %arg1, %arg2 : i1,i1,i1
 		db.dump %1 : i1
 		return
 	}
 	func @test_or_nullable (%arg0: !db.nullable<i1>,%arg1: !db.nullable<i1>,%arg2: !db.nullable<i1>) {
-		%1 = db.or %arg0 : !db.nullable<i1>, %arg1 : !db.nullable<i1>, %arg2 : !db.nullable<i1>
+		%1 = db.or %arg0, %arg1, %arg2 : !db.nullable<i1>, !db.nullable<i1>, !db.nullable<i1>
 		db.dump %1 : !db.nullable<i1>
 		return
 	}
 	func @test_and (%arg0: i1,%arg1: i1,%arg2: i1) {
-		%1 = db.and %arg0 : i1, %arg1 : i1, %arg2 : i1
+		%1 = db.and %arg0, %arg1, %arg2 : i1, i1, i1
 		db.dump %1 : i1
 		return
 	}
 	func @test_and_nullable (%arg0: !db.nullable<i1>,%arg1: !db.nullable<i1>,%arg2: !db.nullable<i1>) {
-		%1 = db.and %arg0 : !db.nullable<i1>, %arg1 : !db.nullable<i1>, %arg2 : !db.nullable<i1>
+		%1 = db.and %arg0, %arg1, %arg2 : !db.nullable<i1>, !db.nullable<i1>, !db.nullable<i1>
 		db.dump %1 : !db.nullable<i1>
 		return
 	}	

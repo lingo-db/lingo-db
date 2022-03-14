@@ -19,16 +19,6 @@ static Value convertBooleanCondition(mlir::Location loc, mlir::OpBuilder& rewrit
       return v;
    }
 }
-class YieldLowering : public ConversionPattern {
-   public:
-   explicit YieldLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::YieldOp::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOpWithNewOp<scf::YieldOp>(op, operands);
-      return success();
-   }
-};
 class DeriveTruthLowering : public ConversionPattern {
    public:
    explicit DeriveTruthLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -56,7 +46,6 @@ class CondSkipTypeConversion : public ConversionPattern {
 
 } // namespace
 void mlir::db::populateControlFlowToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
-   patterns.insert<YieldLowering>(typeConverter, patterns.getContext());
    patterns.insert<CondSkipTypeConversion>(typeConverter, patterns.getContext());
    patterns.insert<DeriveTruthLowering>(typeConverter, patterns.getContext());
 }

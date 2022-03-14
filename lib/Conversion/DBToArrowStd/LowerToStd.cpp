@@ -54,18 +54,6 @@ class FuncConstLowering : public ConversionPattern {
       return success();
    }
 };
-class TypeCastLowering : public ConversionPattern {
-   public:
-   explicit TypeCastLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::TypeCastOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOp(op, operands);
-      return success();
-   }
-};
 } // end anonymous namespace
 
 namespace {
@@ -189,7 +177,6 @@ void DBToStdLoweringPass::runOnOperation() {
    mlir::util::populateUtilTypeConversionPatterns(typeConverter, patterns);
    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns, target);
    patterns.insert<FuncConstLowering>(typeConverter, &getContext());
-   patterns.insert<TypeCastLowering>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
    patterns.insert<ScanSourceLowering>(functionRegistry, typeConverter, &getContext());
 

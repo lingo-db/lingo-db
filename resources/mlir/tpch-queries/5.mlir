@@ -39,7 +39,7 @@ module {
       %40 = relalg.getattr %arg0 @orders::@o_orderdate : !db.date<day>
       %41 = db.constant("1995-01-01") : !db.date<day>
       %42 = db.compare lt %40 : !db.date<day>, %41 : !db.date<day>
-      %43 = db.and %18:i1,%21:i1,%24:i1,%27:i1,%30:i1,%33:i1,%36:i1,%39:i1,%42:i1
+      %43 = db.and %18, %21, %24, %27, %30, %33, %36, %39, %42 : i1, i1, i1, i1, i1, i1, i1, i1, i1
       relalg.return %43 : i1
     }
     %12 = relalg.map @map0 %11 (%arg0: !relalg.tuple){

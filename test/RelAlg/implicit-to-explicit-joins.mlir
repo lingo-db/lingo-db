@@ -41,7 +41,7 @@ module @querymodule  {
   		  //CHECK: %{{.*}} = relalg.getattr %arg0 @markjoin::@markattr
   	      %3 = relalg.exists %1
   	      %4 = db.constant( "true" ) : i1
-  	      %5 = db.and %3:i1,%4:i1
+  	      %5 = db.and %3,%4:i1,i1
           relalg.return %5 : i1
   	}
     return
@@ -117,7 +117,7 @@ module @querymodule  {
   		%3 = relalg.getattr %arg0 @constrel::@attr1 : i32
   	    %4 = relalg.in %3 : i32, %1
         %5 = db.constant( "true" ) : i1
-		%6 = db.and %4:i1,%5:i1
+		%6 = db.and %4,%5:i1,i1
 		relalg.return %6 : i1
   	}
     return

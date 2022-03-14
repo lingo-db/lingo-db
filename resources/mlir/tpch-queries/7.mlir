@@ -33,20 +33,20 @@ module {
       %34 = relalg.getattr %arg0 @n2::@n_name : !db.string
       %35 = db.constant("GERMANY") : !db.string
       %36 = db.compare eq %34 : !db.string, %35 : !db.string
-      %37 = db.and %33:i1,%36:i1
+      %37 = db.and %33, %36 : i1, i1
       %38 = relalg.getattr %arg0 @n1::@n_name : !db.string
       %39 = db.constant("GERMANY") : !db.string
       %40 = db.compare eq %38 : !db.string, %39 : !db.string
       %41 = relalg.getattr %arg0 @n2::@n_name : !db.string
       %42 = db.constant("FRANCE") : !db.string
       %43 = db.compare eq %41 : !db.string, %42 : !db.string
-      %44 = db.and %40:i1,%43:i1
-      %45 = db.or %37:i1,%44:i1
+      %44 = db.and %40, %43 : i1, i1
+      %45 = db.or %37, %44 : i1, i1
       %46 = relalg.getattr %arg0 @lineitem::@l_shipdate : !db.date<day>
       %47 = db.constant("1995-01-01") : !db.date<day>
       %48 = db.constant("1996-12-31") : !db.date<day>
       %49 = db.between %46 : !db.date<day> between %47 : !db.date<day>, %48 : !db.date<day>, lowerInclusive : true, upperInclusive : true
-      %50 = db.and %18:i1,%21:i1,%24:i1,%27:i1,%30:i1,%45:i1,%49:i1
+      %50 = db.and %18, %21, %24, %27, %30, %45, %49 : i1, i1, i1, i1, i1, i1, i1
       relalg.return %50 : i1
     }
     %12 = relalg.map @map0 %11 (%arg0: !relalg.tuple){

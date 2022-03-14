@@ -92,8 +92,8 @@ class AggrHtHelper {
    }
    Value compareKeys(mlir::OpBuilder& rewriter, Value left, Value right) {
       Value equal = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-      auto leftUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, left);
-      auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, right);
+      auto leftUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, oKeyType.cast<mlir::TupleType>().getTypes(), left);
+      auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, oKeyType.cast<mlir::TupleType>().getTypes(), right);
       for (size_t i = 0; i < leftUnpacked.getNumResults(); i++) {
          Value compared = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, leftUnpacked->getResult(i), rightUnpacked.getResult(i));
          compared = rewriter.create<mlir::db::DeriveTruth>(loc, compared);
@@ -189,7 +189,7 @@ class AggrHtHelper {
                         Value entryKeyAddress=rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, kvAddress, 0);
                         Value entryKey = rewriter.create<util::LoadOp>(loc, keyType, entryKeyAddress);
 
-                        Value keyMatches = b.create<mlir::db::TypeCastOp>(loc,b.getI1Type(),compareKeys(b,b.create<mlir::db::TypeCastOp>(loc,oKeyType,entryKey),key));
+                        Value keyMatches = compareKeys(b,entryKey,key);
                         auto ifOp2 = b.create<scf::IfOp>(
                            loc, TypeRange({doneType,ptrType}), keyMatches, [&](OpBuilder& b, Location loc) {
                               //          entry.aggr = update(vec.aggr,val)

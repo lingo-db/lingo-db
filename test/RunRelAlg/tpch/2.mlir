@@ -102,7 +102,7 @@ module {
         %59 = relalg.getattr %arg1 @region::@r_name : !db.string
         %60 = db.constant("EUROPE") : !db.string
         %61 = db.compare eq %59 : !db.string, %60 : !db.string
-        %62 = db.and %49:i1,%52:i1,%55:i1,%58:i1,%61:i1
+        %62 = db.and %49, %52, %55, %58, %61 : i1, i1, i1, i1, i1
         relalg.return %62 : i1
       }
       %43 = relalg.aggregation @aggr0 %42 [] (%arg1: !relalg.tuplestream,%arg2: !relalg.tuple){
@@ -112,7 +112,7 @@ module {
       }
       %44 = relalg.getscalar @aggr0::@tmp_attr0 %43 : !db.nullable<!db.decimal<15, 2>>
       %45 = db.compare eq %34 : !db.decimal<15, 2>, %44 : !db.nullable<!db.decimal<15, 2>>
-      %46 = db.and %15:i1,%18:i1,%21:i1,%24:i1,%27:i1,%30:i1,%33:i1,%45:!db.nullable<i1>
+      %46 = db.and %15, %18, %21, %24, %27, %30, %33, %45 : i1, i1, i1, i1, i1, i1, i1, !db.nullable<i1>
       relalg.return %46 : !db.nullable<i1>
     }
     %10 = relalg.sort %9 [(@supplier::@s_acctbal,desc),(@nation::@n_name,asc),(@supplier::@s_name,asc),(@part::@p_partkey,asc)]

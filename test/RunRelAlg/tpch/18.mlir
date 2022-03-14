@@ -35,7 +35,7 @@ module {
       %19 = relalg.getattr %arg0 @orders::@o_orderkey : i32
       %20 = relalg.getattr %arg0 @lineitem::@l_orderkey : i32
       %21 = db.compare eq %19 : i32, %20 : i32
-      %22 = db.and %15:i1,%18:i1,%21:i1
+      %22 = db.and %15, %18, %21 : i1, i1, i1
       relalg.return %22 : i1
     }
     %6 = relalg.aggregation @aggr1 %5 [@customer::@c_name,@customer::@c_custkey,@orders::@o_orderkey,@orders::@o_orderdate,@orders::@o_totalprice] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){

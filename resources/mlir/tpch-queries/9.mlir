@@ -33,7 +33,7 @@ module {
       %34 = relalg.getattr %arg0 @part::@p_name : !db.string
       %35 = db.constant("%green%") : !db.string
       %36 = db.compare like %34 : !db.string, %35 : !db.string
-      %37 = db.and %18:i1,%21:i1,%24:i1,%27:i1,%30:i1,%33:i1,%36:i1
+      %37 = db.and %18, %21, %24, %27, %30, %33, %36 : i1, i1, i1, i1, i1, i1, i1
       relalg.return %37 : i1
     }
     %12 = relalg.map @map0 %11 (%arg0: !relalg.tuple){

@@ -24,7 +24,7 @@ module @querymodule  {
 		%7 = relalg.getattr %arg0 @constrel::@attr2 : i32
 		%8 = relalg.getattr %arg0 @constrel2::@attr2 : i32
 		%9 = db.compare eq %7 : i32, %8 : i32
-		%10 = db.and %6:i1,%9:i1
+		%10 = db.and %6,%9:i1,i1
         relalg.return %10 : i1
   	}
     return
