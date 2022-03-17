@@ -44,7 +44,7 @@ class SortTranslator : public mlir::relalg::Translator {
    }
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      orderedAttributes = mlir::relalg::OrderedAttributes::fromAttributes(requiredAttributes);
+      orderedAttributes = mlir::relalg::OrderedAttributes::fromColumns(requiredAttributes);
       auto parentPipeline = context.pipelineManager.getCurrentPipeline();
       auto childPipeline = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
       context.pipelineManager.setCurrentPipeline(childPipeline);
@@ -73,7 +73,7 @@ class SortTranslator : public mlir::relalg::Translator {
             std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria;
             for (auto attr : sortOp.sortspecs()) {
                auto sortspecAttr = attr.cast<mlir::relalg::SortSpecificationAttr>();
-               auto pos = orderedAttributes.getPos(&sortspecAttr.getAttr().getRelationalAttribute());
+               auto pos = orderedAttributes.getPos(&sortspecAttr.getAttr().getColumn());
                mlir::Value left = unpackedLeft.getResult(pos);
                mlir::Value right = unpackedRight.getResult(pos);
                if (sortspecAttr.getSortSpec() == mlir::relalg::SortSpec::desc) {
@@ -99,7 +99,7 @@ class SortTranslator : public mlir::relalg::Translator {
          mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), forOp2.getInductionVar());
-         orderedAttributes.setValuesForAttributes(context, scope, unpacked.getResults());
+         orderedAttributes.setValuesForColumns(context, scope, unpacked.getResults());
          consumer->consume(this, builder2, context);
          builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());

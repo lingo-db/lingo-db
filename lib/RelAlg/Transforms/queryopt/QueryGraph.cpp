@@ -56,7 +56,7 @@ void mlir::relalg::QueryGraph::print(llvm::raw_ostream& out) {
    out << "}\n";
 }
 
-std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unordered_map<const mlir::relalg::RelationalAttribute*, std::string>& mapping) {
+std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unordered_map<const mlir::relalg::Column*, std::string>& mapping) {
    auto* op = val.getDefiningOp();
    if (!op) return std::move(support::eval::createInvalid());
    if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(op)) {
@@ -74,8 +74,8 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
       auto [arrowType, param1, param2] = mlir::db::codegen::convertTypeToArrow(constantOp.getType());
       auto parseResult = support::parse(parseArg, arrowType, param1);
       return support::eval::createLiteral(parseResult, std::make_tuple(arrowType, param1, param2));
-   } else if (auto attrRefOp = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
-      return support::eval::createAttrRef(mapping.at(&attrRefOp.attr().getRelationalAttribute()));
+   } else if (auto attrRefOp = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(op)) {
+      return support::eval::createAttrRef(mapping.at(&attrRefOp.attr().getColumn()));
    } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
       auto left = cmpOp.getLeft();
       auto right = cmpOp.getRight();
@@ -127,9 +127,9 @@ std::optional<double> estimateUsingSample(mlir::relalg::QueryGraph::Node& n) {
    if (!n.op) return {};
    if (n.additionalPredicates.empty()) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
-      std::unordered_map<const mlir::relalg::RelationalAttribute*, std::string> mapping;
+      std::unordered_map<const mlir::relalg::Column*, std::string> mapping;
       for (auto c : baseTableOp.columns()) {
-         mapping[&c.getValue().cast<mlir::relalg::RelationalAttributeDefAttr>().getRelationalAttribute()] = c.getName().str();
+         mapping[&c.getValue().cast<mlir::relalg::ColumnDefAttr>().getColumn()] = c.getName().str();
       }
       auto meta = baseTableOp.meta().getMeta();
       auto sample = meta->getSample();
@@ -150,14 +150,14 @@ std::optional<double> estimateUsingSample(mlir::relalg::QueryGraph::Node& n) {
 
    return {};
 }
-mlir::relalg::Attributes mlir::relalg::QueryGraph::getPKey(mlir::relalg::QueryGraph::Node& n) {
+mlir::relalg::ColumnSet mlir::relalg::QueryGraph::getPKey(mlir::relalg::QueryGraph::Node& n) {
    if (!n.op) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
       auto meta = baseTableOp.meta().getMeta();
-      mlir::relalg::Attributes attributes;
-      std::unordered_map<std::string, const mlir::relalg::RelationalAttribute*> mapping;
+      mlir::relalg::ColumnSet attributes;
+      std::unordered_map<std::string, const mlir::relalg::Column*> mapping;
       for (auto c : baseTableOp.columns()) {
-         mapping[c.getName().str()] = &c.getValue().cast<mlir::relalg::RelationalAttributeDefAttr>().getRelationalAttribute();
+         mapping[c.getName().str()] = &c.getValue().cast<mlir::relalg::ColumnDefAttr>().getColumn();
       }
       for (auto c : meta->getPrimaryKey()) {
          attributes.insert(mapping.at(c));
@@ -180,14 +180,14 @@ void mlir::relalg::QueryGraph::estimate() {
       node.selectivity = 1;
       if (node.op) {
          node.rows = getRows(node);
-         auto availableLeft = node.op.getAvailableAttributes();
-         mlir::relalg::Attributes availableRight;
+         auto availableLeft = node.op.getAvailableColumns();
+         mlir::relalg::ColumnSet availableRight;
          std::vector<Predicate> predicates;
          for (auto pred : node.additionalPredicates) {
             addPredicates(predicates, pred, availableLeft, availableRight);
          }
-         Attributes pkey = getPKey(node);
-         Attributes predicatesLeft;
+         ColumnSet pkey = getPKey(node);
+         ColumnSet predicatesLeft;
          for (auto predicate : predicates) {
             predicatesLeft.insert(predicate.left);
          }
@@ -236,8 +236,8 @@ double mlir::relalg::QueryGraph::estimateSelectivity(Operator op, NodeSet left, 
    std::vector<Predicate> predicates;
    addPredicates(predicates, op, availableLeft, availableRight);
    double selectivity = 1.0;
-   std::vector<std::pair<double, Attributes>> pkeysLeft;
-   std::vector<std::pair<double, Attributes>> pkeysRight;
+   std::vector<std::pair<double, ColumnSet>> pkeysLeft;
+   std::vector<std::pair<double, ColumnSet>> pkeysRight;
    iterateNodes(left, [&](auto node) {
       if (node.op) {
          if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(node.op.getOperation())) {
@@ -253,8 +253,8 @@ double mlir::relalg::QueryGraph::estimateSelectivity(Operator op, NodeSet left, 
       }
    });
 
-   Attributes predicatesLeft;
-   Attributes predicatesRight;
+   ColumnSet predicatesLeft;
+   ColumnSet predicatesRight;
    for (auto predicate : predicates) {
       predicatesLeft.insert(predicate.left);
       predicatesRight.insert(predicate.right);

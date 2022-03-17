@@ -25,8 +25,8 @@ module @querymodule{
             semester => @semester({type=i64})
         }
         %3 = relalg.join %1, %2 (%6: !relalg.tuple) {
-                                                 %8 = relalg.getattr %6 @hoeren::@matrnr : i64
-                                                 %9 = relalg.getattr %6 @studenten::@matrnr : i64
+                                                 %8 = relalg.getcol %6 @hoeren::@matrnr : i64
+                                                 %9 = relalg.getcol %6 @studenten::@matrnr : i64
                                                  %10 = db.compare eq %8 : i64,%9 : i64
                                                  relalg.return %10 : i1
                                              } attributes { impl="hash" }
@@ -36,8 +36,8 @@ module @querymodule{
             gelesenvon => @gelesenvon({type=i64})
         }
         %5 = relalg.join %3, %4 (%6: !relalg.tuple) {
-            %11 = relalg.getattr %6 @hoeren::@vorlnr : i64
-            %12 = relalg.getattr %6 @vorlesungen::@vorlnr : i64
+            %11 = relalg.getcol %6 @hoeren::@vorlnr : i64
+            %12 = relalg.getcol %6 @vorlesungen::@vorlnr : i64
             %13 = db.compare eq %11 : i64,%12 : i64
             relalg.return %13 : i1
         } attributes { impl="hash" }

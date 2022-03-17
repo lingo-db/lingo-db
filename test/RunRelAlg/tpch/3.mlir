@@ -19,36 +19,36 @@ module {
     %3 = relalg.basetable @lineitem  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
     %4 = relalg.crossproduct %2, %3
     %5 = relalg.selection %4 (%arg0: !relalg.tuple){
-      %11 = relalg.getattr %arg0 @customer::@c_mktsegment : !db.string
+      %11 = relalg.getcol %arg0 @customer::@c_mktsegment : !db.string
       %12 = db.constant("BUILDING") : !db.string
       %13 = db.compare eq %11 : !db.string, %12 : !db.string
-      %14 = relalg.getattr %arg0 @customer::@c_custkey : i32
-      %15 = relalg.getattr %arg0 @orders::@o_custkey : i32
+      %14 = relalg.getcol %arg0 @customer::@c_custkey : i32
+      %15 = relalg.getcol %arg0 @orders::@o_custkey : i32
       %16 = db.compare eq %14 : i32, %15 : i32
-      %17 = relalg.getattr %arg0 @lineitem::@l_orderkey : i32
-      %18 = relalg.getattr %arg0 @orders::@o_orderkey : i32
+      %17 = relalg.getcol %arg0 @lineitem::@l_orderkey : i32
+      %18 = relalg.getcol %arg0 @orders::@o_orderkey : i32
       %19 = db.compare eq %17 : i32, %18 : i32
-      %20 = relalg.getattr %arg0 @orders::@o_orderdate : !db.date<day>
+      %20 = relalg.getcol %arg0 @orders::@o_orderdate : !db.date<day>
       %21 = db.constant("1995-03-15") : !db.date<day>
       %22 = db.compare lt %20 : !db.date<day>, %21 : !db.date<day>
-      %23 = relalg.getattr %arg0 @lineitem::@l_shipdate : !db.date<day>
+      %23 = relalg.getcol %arg0 @lineitem::@l_shipdate : !db.date<day>
       %24 = db.constant("1995-03-15") : !db.date<day>
       %25 = db.compare gt %23 : !db.date<day>, %24 : !db.date<day>
       %26 = db.and %13, %16, %19, %22, %25 : i1, i1, i1, i1, i1
       relalg.return %26 : i1
     }
     %6 = relalg.map @map0 %5 (%arg0: !relalg.tuple){
-      %11 = relalg.getattr %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
+      %11 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %12 = db.constant(1 : i32) : !db.decimal<15, 2>
-      %13 = relalg.getattr %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
+      %13 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
       %14 = db.sub %12 : !db.decimal<15, 2>, %13 : !db.decimal<15, 2>
       %15 = db.mul %11 : !db.decimal<15, 2>, %14 : !db.decimal<15, 2>
-      %16 = relalg.addattr %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %15
+      %16 = relalg.addcol %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %15
       relalg.return %16 : !relalg.tuple
     }
     %7 = relalg.aggregation @aggr0 %6 [@lineitem::@l_orderkey,@orders::@o_orderdate,@orders::@o_shippriority] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %11 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
-      %12 = relalg.addattr %arg1, @tmp_attr0({type = !db.decimal<15, 2>}) %11
+      %12 = relalg.addcol %arg1, @tmp_attr0({type = !db.decimal<15, 2>}) %11
       relalg.return %12 : !relalg.tuple
     }
     %8 = relalg.sort %7 [(@aggr0::@tmp_attr0,desc),(@orders::@o_orderdate,asc)]

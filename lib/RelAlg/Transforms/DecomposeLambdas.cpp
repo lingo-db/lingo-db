@@ -13,7 +13,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
    bool checkRestriction(std::string& str, mlir::Value v) {
       auto *op = v.getDefiningOp();
       if (!op) return true;
-      if (auto refOp = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
+      if (auto refOp = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(op)) {
          auto scope = refOp.attr().getName().getRootReference().str();
          if (str.empty() || str == scope) {
             str = scope;
@@ -35,7 +35,6 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          std::string scope = "";
          if (checkRestriction(scope, operand)) {
             restrictions[scope].push_back(operand);
-            llvm::dbgs() << "restrictions[" << scope << "].push_back(" << operand << ")\n";
          }
       }
       return restrictions;
@@ -113,15 +112,15 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          terminator->erase();
       }
    }
-   static llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> analyze(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
-      llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;
-      mlir::relalg::Attributes leftKeys, rightKeys;
+   static llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> analyze(mlir::Block* block, mlir::relalg::ColumnSet availableLeft, mlir::relalg::ColumnSet availableRight) {
+      llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> required;
+      mlir::relalg::ColumnSet leftKeys, rightKeys;
       std::vector<mlir::Type> types;
       block->walk([&](mlir::Operation* op) {
-         if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
-            required.insert({getAttr.getResult(), mlir::relalg::Attributes::from(getAttr.attr())});
+         if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(op)) {
+            required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.attr())});
          } else {
-            mlir::relalg::Attributes attributes;
+            mlir::relalg::ColumnSet attributes;
             for (auto operand : op->getOperands()) {
                if (required.count(operand)) {
                   attributes.insert(required[operand]);
@@ -134,7 +133,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
       });
       return required;
    }
-   mlir::Value decomposeOuterJoin(mlir::Value v, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight, llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required) {
+   mlir::Value decomposeOuterJoin(mlir::Value v, mlir::relalg::ColumnSet availableLeft, mlir::relalg::ColumnSet availableRight, llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> required) {
       auto currentJoinOp = mlir::dyn_cast_or_null<mlir::relalg::OuterJoinOp>(v.getDefiningOp()->getParentOp());
       using namespace mlir;
       if (auto andop = dyn_cast_or_null<mlir::db::AndOp>(v.getDefiningOp())) {
@@ -178,8 +177,8 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
       if (auto returnOp = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(terminator)) {
          assert(returnOp.results().size() == 1);
          auto* definingOp = returnOp.results()[0].getDefiningOp();
-         mlir::relalg::AddAttrOp addAttrOp = definingOp ? mlir::dyn_cast_or_null<mlir::relalg::AddAttrOp>(definingOp) : relalg::AddAttrOp();
-         while (mlir::isa_and_nonnull<mlir::relalg::AddAttrOp>(addAttrOp)) {
+         mlir::relalg::AddColumnOp addColumnOp = definingOp ? mlir::dyn_cast_or_null<mlir::relalg::AddColumnOp>(definingOp) : relalg::AddColumnOp();
+         while (mlir::isa_and_nonnull<mlir::relalg::AddColumnOp>(addColumnOp)) {
             OpBuilder builder(currentMap);
             mlir::BlockAndValueMapping mapping;
             auto newmap = builder.create<relalg::MapOp>(currentMap->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), currentMap.sym_name(), tree);
@@ -189,15 +188,15 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
             builder.setInsertionPointToStart(&newmap.predicate().front());
             auto ret1 = builder.create<relalg::ReturnOp>(currentMap->getLoc());
             mapping.map(currentMap.getLambdaArgument(), newmap.getLambdaArgument());
-            mapping.map(addAttrOp.tuple(), newmap.getLambdaArgument());
-            mlir::relalg::detail::inlineOpIntoBlock(addAttrOp.getOperation(), addAttrOp->getParentOp(), newmap.getOperation(), &newmap.getLambdaBlock(), mapping);
-            builder.create<relalg::ReturnOp>(currentMap->getLoc(), mapping.lookup(addAttrOp.tuple_out()));
+            mapping.map(addColumnOp.tuple(), newmap.getLambdaArgument());
+            mlir::relalg::detail::inlineOpIntoBlock(addColumnOp.getOperation(), addColumnOp->getParentOp(), newmap.getOperation(), &newmap.getLambdaBlock(), mapping);
+            builder.create<relalg::ReturnOp>(currentMap->getLoc(), mapping.lookup(addColumnOp.tuple_out()));
             ret1->remove();
             ret1->dropAllReferences();
             ret1->destroy();
             //go to next in chain:
-            definingOp = addAttrOp.tuple().getDefiningOp();
-            addAttrOp = definingOp ? mlir::dyn_cast_or_null<mlir::relalg::AddAttrOp>(definingOp) : relalg::AddAttrOp();
+            definingOp = addColumnOp.tuple().getDefiningOp();
+            addColumnOp = definingOp ? mlir::dyn_cast_or_null<mlir::relalg::AddColumnOp>(definingOp) : relalg::AddColumnOp();
          }
       }
    }
@@ -218,8 +217,8 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
       getOperation().walk([&](mlir::relalg::OuterJoinOp op) {
          auto* terminator = op.getRegion().front().getTerminator();
          auto retval = terminator->getOperand(0);
-         auto availableLeft = op.getChildren()[0].getAvailableAttributes();
-         auto availableRight = op.getChildren()[1].getAvailableAttributes();
+         auto availableLeft = op.getChildren()[0].getAvailableColumns();
+         auto availableRight = op.getChildren()[1].getAvailableColumns();
          auto mapped = analyze(&op.getPredicateBlock(), availableLeft, availableRight);
          auto val = decomposeOuterJoin(retval, availableLeft, availableRight, mapped);
          mlir::OpBuilder builder(terminator);

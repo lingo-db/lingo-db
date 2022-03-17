@@ -5,7 +5,7 @@
 
 class RenamingTranslator : public mlir::relalg::Translator {
    mlir::relalg::RenamingOp renamingOp;
-   std::vector<std::pair<mlir::relalg::RelationalAttribute*, mlir::Value>> saved;
+   std::vector<std::pair<mlir::relalg::Column*, mlir::Value>> saved;
 
    public:
    RenamingTranslator(mlir::relalg::RenamingOp renamingOp) : mlir::relalg::Translator(renamingOp), renamingOp(renamingOp) {
@@ -17,11 +17,11 @@ class RenamingTranslator : public mlir::relalg::Translator {
 
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       auto scope = context.createScope();
-      for(mlir::Attribute attr:renamingOp.attributes()){
-         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+      for(mlir::Attribute attr:renamingOp.columns()){
+         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::ColumnDefAttr>();
          mlir::Attribute from=relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[0];
-         auto relationRefAttr = from.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>();
-         context.setValueForAttribute(scope,&relationDefAttr.getRelationalAttribute(),context.getValueForAttribute(&relationRefAttr.getRelationalAttribute()));
+         auto relationRefAttr = from.dyn_cast_or_null<mlir::relalg::ColumnRefAttr>();
+         context.setValueForAttribute(scope,&relationDefAttr.getColumn(),context.getValueForAttribute(&relationRefAttr.getColumn()));
       }
       for(auto s:saved){
          context.setValueForAttribute(scope,s.first,s.second);
@@ -29,11 +29,11 @@ class RenamingTranslator : public mlir::relalg::Translator {
       consumer->consume(this, builder, context);
    }
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      for(mlir::Attribute attr:renamingOp.attributes()){
-         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
+      for(mlir::Attribute attr:renamingOp.columns()){
+         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::ColumnDefAttr>();
          mlir::Attribute from=relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[0];
-         auto relationRefAttr = from.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>();
-         auto *attrptr=&relationRefAttr.getRelationalAttribute();
+         auto relationRefAttr = from.dyn_cast_or_null<mlir::relalg::ColumnRefAttr>();
+         auto *attrptr=&relationRefAttr.getColumn();
          auto val=context.getUnsafeValueForAttribute(attrptr);
          saved.push_back({attrptr,val});
       }

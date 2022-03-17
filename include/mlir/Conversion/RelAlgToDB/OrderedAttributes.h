@@ -1,7 +1,7 @@
 #ifndef MLIR_CONVERSION_RELALGTODB_ORDEREDATTRIBUTES_H
 #define MLIR_CONVERSION_RELALGTODB_ORDEREDATTRIBUTES_H
 #include "mlir/Conversion/RelAlgToDB/TranslatorContext.h"
-#include "mlir/Dialect/RelAlg/Attributes.h"
+#include "mlir/Dialect/RelAlg/ColumnSet.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/Value.h"
@@ -10,29 +10,29 @@ namespace mlir {
 namespace relalg {
 class OrderedAttributes {
    std::vector<Type> types;
-   std::vector<const mlir::relalg::RelationalAttribute*> attrs;
+   std::vector<const mlir::relalg::Column*> attrs;
 
    public:
    static OrderedAttributes fromRefArr(ArrayAttr arrayAttr) {
       OrderedAttributes res;
       for (auto attr : arrayAttr) {
-         if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeRefAttr>()) {
-            res.insert(&attrRef.getRelationalAttribute());
+         if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::ColumnRefAttr>()) {
+            res.insert(&attrRef.getColumn());
          }
-         if (auto attrDef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>()) {
-            res.insert(&attrDef.getRelationalAttribute());
+         if (auto attrDef = attr.dyn_cast_or_null<mlir::relalg::ColumnDefAttr>()) {
+            res.insert(&attrDef.getColumn());
          }
       }
       return res;
    }
-   static OrderedAttributes fromAttributes(mlir::relalg::Attributes attrs) {
+   static OrderedAttributes fromColumns(mlir::relalg::ColumnSet attrs) {
       OrderedAttributes res;
       for (auto* attr : attrs) {
          res.insert(attr);
       }
       return res;
    }
-   static OrderedAttributes fromVec(std::vector<const mlir::relalg::RelationalAttribute*> vec) {
+   static OrderedAttributes fromVec(std::vector<const mlir::relalg::Column*> vec) {
       OrderedAttributes res;
       for (auto* attr : vec) {
          res.insert(attr);
@@ -49,7 +49,7 @@ class OrderedAttributes {
       }
       return builder.create<mlir::util::PackOp>(loc, values);
    }
-   size_t insert(const mlir::relalg::RelationalAttribute* attr, Type alternativeType = {}) {
+   size_t insert(const mlir::relalg::Column* attr, Type alternativeType = {}) {
       attrs.push_back(attr);
       if (attr) {
          types.push_back(attr->type);
@@ -63,17 +63,17 @@ class OrderedAttributes {
       tps.insert(tps.end(), types.begin(), types.end());
       return mlir::TupleType::get(ctxt, tps);
    }
-   void setValuesForAttributes(TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope, ValueRange values) {
+   void setValuesForColumns(TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope, ValueRange values) {
       for (size_t i = 0; i < attrs.size(); i++) {
          if (attrs[i]) {
             context.setValueForAttribute(scope, attrs[i], values[i]);
          }
       }
    }
-   const std::vector<const mlir::relalg::RelationalAttribute*>& getAttrs() const {
+   const std::vector<const mlir::relalg::Column*>& getAttrs() const {
       return attrs;
    }
-   size_t getPos(const mlir::relalg::RelationalAttribute* attr) {
+   size_t getPos(const mlir::relalg::Column* attr) {
       return std::find(attrs.begin(), attrs.end(), attr) - attrs.begin();
    }
 };

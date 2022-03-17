@@ -9,7 +9,7 @@
 #include "mlir/Dialect/DB/IR/DBCollectionType.h"
 #include "mlir/Dialect/DB/IR/DBTypes.h"
 
-#include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"
+#include "mlir/Dialect/RelAlg/IR/Column.h"
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsEnums.h"

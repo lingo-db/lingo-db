@@ -11,14 +11,14 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
    virtual llvm::StringRef getArgument() const override { return "relalg-optimize-implementations"; }
 
    public:
-   bool hashImplPossible(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) { //todo: does not work always
-      llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;
-      mlir::relalg::Attributes leftKeys, rightKeys;
+   bool hashImplPossible(mlir::Block* block, mlir::relalg::ColumnSet availableLeft, mlir::relalg::ColumnSet availableRight) { //todo: does not work always
+      llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> required;
+      mlir::relalg::ColumnSet leftKeys, rightKeys;
       std::vector<mlir::Type> types;
       bool res = false;
       block->walk([&](mlir::Operation* op) {
-         if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
-            required.insert({getAttr.getResult(), mlir::relalg::Attributes::from(getAttr.attr())});
+         if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(op)) {
+            required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.attr())});
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
             if (cmpOp.isEqualityPred() && mlir::relalg::HashJoinUtils::isAndedResult(op)) {
                auto leftAttributes = required[cmpOp.getLeft()];
@@ -30,7 +30,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                }
             }
          } else {
-            mlir::relalg::Attributes attributes;
+            mlir::relalg::ColumnSet attributes;
             for (auto operand : op->getOperands()) {
                if (required.count(operand)) {
                   attributes.insert(required[operand]);
@@ -50,7 +50,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
                auto left = mlir::cast<Operator>(binOp.leftChild());
                auto right = mlir::cast<Operator>(binOp.rightChild());
-               if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableAttributes(), right.getAvailableAttributes())) {
+               if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
                   op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
                }
             })
@@ -58,7 +58,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
                auto left = mlir::cast<Operator>(binOp.leftChild());
                auto right = mlir::cast<Operator>(binOp.rightChild());
-               if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableAttributes(), right.getAvailableAttributes())) {
+               if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
                   if (left->hasAttr("rows") && right->hasAttr("rows")) {
                      double rowsLeft = 0;
                      double rowsRight = 0;
@@ -90,7 +90,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                }
                auto left = mlir::cast<Operator>(op.leftChild());
                auto right = mlir::cast<Operator>(op.rightChild());
-               if (hashImplPossible(&op.getPredicateBlock(), left.getAvailableAttributes(), right.getAvailableAttributes())) {
+               if (hashImplPossible(&op.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
                   op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
                }
             })

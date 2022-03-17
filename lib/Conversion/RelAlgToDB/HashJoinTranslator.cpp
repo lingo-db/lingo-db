@@ -1,13 +1,13 @@
 #include <mlir/Conversion/RelAlgToDB/HashJoinTranslator.h>
 using namespace mlir::relalg;
-void HashJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) {
+void HashJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg::ColumnSet requiredAttributes) {
    this->consumer = consumer;
    this->requiredAttributes = requiredAttributes;
-   addJoinRequiredAttributes();
-   impl->addAdditionalRequiredAttributes();
+   addJoinRequiredColumns();
+   impl->addAdditionalRequiredColumns();
    propagateInfo();
-   auto availableLeft = builderChild->getAvailableAttributes();
-   auto availableRight = lookupChild->getAvailableAttributes();
+   auto availableLeft = builderChild->getAvailableColumns();
+   auto availableRight = lookupChild->getAvailableColumns();
    auto [leftKeys, rightKeys, keyTypes, leftKeyAttributes, canSave] = mlir::relalg::HashJoinUtils::analyzeHJPred(&op->getRegion(0).front(), availableLeft, availableRight);
    this->leftKeys = leftKeys;
    this->rightKeys = rightKeys;
@@ -21,7 +21,7 @@ void HashJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relal
          orderedKeys.insert(nullptr,keyTypes[i]);
       }
    }
-   this->orderedValues = mlir::relalg::OrderedAttributes::fromAttributes(leftValues);
+   this->orderedValues = mlir::relalg::OrderedAttributes::fromColumns(leftValues);
    keyTupleType = orderedKeys.getTupleType(op.getContext());
    valTupleType = orderedValues.getTupleType(op.getContext(), impl->markable ? std::vector<Type>({mlir::IntegerType::get(op->getContext(), 64)}) : std::vector<Type>());
    entryType = mlir::TupleType::get(op.getContext(), {keyTupleType, valTupleType});
@@ -55,7 +55,7 @@ void HashJoinTranslator::unpackValues(TranslatorContext::AttributeResolverScope&
    auto payloadUnpacked = builder.create<mlir::util::UnPackOp>(loc, packed).getResults();
    if (!valTupleType.getTypes().empty()) {
       auto unpackedValue = impl->markable ? payloadUnpacked.drop_front() : payloadUnpacked;
-      orderedValues.setValuesForAttributes(context, scope, unpackedValue);
+      orderedValues.setValuesForColumns(context, scope, unpackedValue);
       if (impl->markable) {
          marker = payloadUnpacked[0];
       }
@@ -63,7 +63,7 @@ void HashJoinTranslator::unpackValues(TranslatorContext::AttributeResolverScope&
 }
 void HashJoinTranslator::unpackKeys(TranslatorContext::AttributeResolverScope& scope, OpBuilder& builder, Value packed, TranslatorContext& context) {
    mlir::ValueRange unpackedKey = builder.create<mlir::util::UnPackOp>(loc, packed).getResults();
-   orderedKeys.setValuesForAttributes(context, scope, unpackedKey);
+   orderedKeys.setValuesForColumns(context, scope, unpackedKey);
 }
 
 void HashJoinTranslator::scanHT(TranslatorContext& context, mlir::OpBuilder& builder) {

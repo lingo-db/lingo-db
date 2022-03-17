@@ -185,7 +185,7 @@ ExpressionType stringToExpressionType(const std::string& parserStr) {
       .Default(ExpressionType::INVALID);
 }
 struct SQLTranslator {
-   mlir::relalg::RelationalAttributeManager attrManager;
+   mlir::relalg::ColumnManager attrManager;
    struct StringInfo {
       static bool isEqual(std::string a, std::string b) { return a == b; }
       static std::string getEmptyKey() { return ""; }
@@ -211,9 +211,9 @@ struct SQLTranslator {
    };
    struct TranslationContext {
       std::stack<mlir::Value> currTuple;
-      std::vector<std::pair<std::string, const mlir::relalg::RelationalAttribute*>> allAttributes;
-      llvm::ScopedHashTable<std::string, const mlir::relalg::RelationalAttribute*, StringInfo> resolver;
-      using ResolverScope = llvm::ScopedHashTable<std::string, const mlir::relalg::RelationalAttribute*, StringInfo>::ScopeTy;
+      std::vector<std::pair<std::string, const mlir::relalg::Column*>> allAttributes;
+      llvm::ScopedHashTable<std::string, const mlir::relalg::Column*, StringInfo> resolver;
+      using ResolverScope = llvm::ScopedHashTable<std::string, const mlir::relalg::Column*, StringInfo>::ScopeTy;
       struct TupleScope {
          TranslationContext* context;
          bool active;
@@ -235,11 +235,11 @@ struct SQLTranslator {
       void setCurrentTuple(mlir::Value v) {
          currTuple.top() = v;
       }
-      void mapAttribute(ResolverScope& scope, std::string name, const mlir::relalg::RelationalAttribute* attr) {
+      void mapAttribute(ResolverScope& scope, std::string name, const mlir::relalg::Column* attr) {
          allAttributes.push_back({name, attr});
          resolver.insertIntoScope(&scope, name, attr);
       }
-      const mlir::relalg::RelationalAttribute* getAttribute(std::string name) {
+      const mlir::relalg::Column* getAttribute(std::string name) {
          assert(resolver.lookup(name));
          return resolver.lookup(name);
       }
@@ -255,8 +255,8 @@ struct SQLTranslator {
    Schema& schema;
    std::vector<std::unique_ptr<FakeNode>> fakeNodes;
    struct TargetInfo {
-      std::vector<std::pair<std::string, const mlir::relalg::RelationalAttribute*>> namedResults;
-      void map(std::string name, const mlir::relalg::RelationalAttribute* attr) {
+      std::vector<std::pair<std::string, const mlir::relalg::Column*>> namedResults;
+      void map(std::string name, const mlir::relalg::Column* attr) {
          namedResults.push_back({name, attr});
       }
    };
@@ -730,12 +730,12 @@ struct SQLTranslator {
          }
          case T_ColumnRef: {
             const auto* attr = resolveColRef(node, context);
-            return builder.create<mlir::relalg::GetAttrOp>(builder.getUnknownLoc(), attr->type, attrManager.createRef(attr), context.getCurrentTuple());
+            return builder.create<mlir::relalg::GetColumnOp>(builder.getUnknownLoc(), attr->type, attrManager.createRef(attr), context.getCurrentTuple());
             break;
          }
          case T_FakeNode: { //
             const auto* attr = context.getAttribute(reinterpret_cast<FakeNode*>(node)->colId);
-            return builder.create<mlir::relalg::GetAttrOp>(builder.getUnknownLoc(), attr->type, attrManager.createRef(attr), context.getCurrentTuple());
+            return builder.create<mlir::relalg::GetColumnOp>(builder.getUnknownLoc(), attr->type, attrManager.createRef(attr), context.getCurrentTuple());
             break;
          }
          case T_FuncCall: {
@@ -841,10 +841,10 @@ struct SQLTranslator {
       attrManager.setCurrentScope(scopeName);
       for (auto c : table.columns) {
          auto attrDef = attrManager.createDef(c.first);
-         attrDef.getRelationalAttribute().type = c.second;
+         attrDef.getColumn().type = c.second;
          columns.push_back(builder.getNamedAttr(c.first, attrDef));
-         context.mapAttribute(scope, c.first, &attrDef.getRelationalAttribute()); //todo check for existing and overwrite...
-         context.mapAttribute(scope, alias + "." + c.first, &attrDef.getRelationalAttribute());
+         context.mapAttribute(scope, c.first, &attrDef.getColumn()); //todo check for existing and overwrite...
+         context.mapAttribute(scope, alias + "." + c.first, &attrDef.getColumn());
       }
 
       //::mlir::Type result, ::llvm::StringRef sym_name, ::llvm::StringRef table_identifier, ::mlir::relalg::TableMetaDataAttr meta, ::mlir::DictionaryAttr columns
@@ -919,7 +919,7 @@ struct SQLTranslator {
 
             mlir::Value left = translateFromPart(builder, joinExpr->larg_, context, scope);
             mlir::Value right;
-            std::vector<std::pair<std::string, const mlir::relalg::RelationalAttribute*>> mapping;
+            std::vector<std::pair<std::string, const mlir::relalg::Column*>> mapping;
             if (joinExpr->jointype_ == JOIN_LEFT) {
                TranslationContext rightContext;
                auto rightResolverScope = rightContext.createResolverScope();
@@ -949,16 +949,16 @@ struct SQLTranslator {
                if (!mapping.empty()) {
                   outerjoinName = "oj" + std::to_string(id++);
                   attrManager.setCurrentScope(outerjoinName);
-                  std::unordered_map<const mlir::relalg::RelationalAttribute*, const mlir::relalg::RelationalAttribute*> remapped;
+                  std::unordered_map<const mlir::relalg::Column*, const mlir::relalg::Column*> remapped;
                   for (auto x : mapping) {
                      if (!remapped.contains(x.second)) {
                         auto [scopename, name] = attrManager.getName(x.second);
 
                         auto attrDef = attrManager.createDef(name, builder.getArrayAttr({attrManager.createRef(x.second)}));
-                        attrDef.getRelationalAttribute().type = mlir::db::NullableType::get(builder.getContext(), x.second->type);
+                        attrDef.getColumn().type = mlir::db::NullableType::get(builder.getContext(), x.second->type);
                         outerJoinMapping.push_back(attrDef);
                         attrDef.dump();
-                        remapped.insert({x.second, &attrDef.getRelationalAttribute()});
+                        remapped.insert({x.second, &attrDef.getColumn()});
                      }
                      context.mapAttribute(scope, x.first, remapped[x.second]);
                   }
@@ -1000,9 +1000,9 @@ struct SQLTranslator {
          mlir::Value expr = translateExpression(mapBuilder, p.second, context);
          attrManager.setCurrentScope(mapName);
          auto attrDef = attrManager.createDef(p.first->colId);
-         attrDef.getRelationalAttribute().type = expr.getType();
-         context.mapAttribute(scope, p.first->colId, &attrDef.getRelationalAttribute());
-         tuple = mapBuilder.create<mlir::relalg::AddAttrOp>(builder.getUnknownLoc(), mlir::relalg::TupleType::get(builder.getContext()), tuple, attrDef, expr);
+         attrDef.getColumn().type = expr.getType();
+         context.mapAttribute(scope, p.first->colId, &attrDef.getColumn());
+         tuple = mapBuilder.create<mlir::relalg::AddColumnOp>(builder.getUnknownLoc(), mlir::relalg::TupleType::get(builder.getContext()), tuple, attrDef, expr);
          context.setCurrentTuple(tuple);
       }
       mapBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), tuple);
@@ -1084,7 +1084,7 @@ struct SQLTranslator {
                                   .Case("max", mlir::relalg::AggrFunc::max)
                                   .Case("count", mlir::relalg::AggrFunc::count)
                                   .Default(mlir::relalg::AggrFunc::count);
-               mlir::relalg::RelationalAttributeRefAttr refAttr;
+               mlir::relalg::ColumnRefAttr refAttr;
                switch (attrNode->type) {
                   case T_ColumnRef: refAttr = attrManager.createRef(resolveColRef(attrNode, context)); break;
                   case T_FakeNode: refAttr = attrManager.createRef(context.getAttribute(reinterpret_cast<FakeNode*>(attrNode)->colId)); break;
@@ -1098,7 +1098,7 @@ struct SQLTranslator {
                if (aggrFunc == mlir::relalg::AggrFunc::count) {
                   aggrResultType = builder.getI64Type();
                } else {
-                  aggrResultType = refAttr.getRelationalAttribute().type;
+                  aggrResultType = refAttr.getColumn().type;
                   if (!aggrResultType.isa<mlir::db::NullableType>() && groupByAttrs.empty()) {
                      aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
                   }
@@ -1107,9 +1107,9 @@ struct SQLTranslator {
             }
             attrManager.setCurrentScope(groupByName);
             auto attrDef = attrManager.createDef(toAggr.first->colId);
-            attrDef.getRelationalAttribute().type = expr.getType();
-            context.mapAttribute(scope, toAggr.first->colId, &attrDef.getRelationalAttribute());
-            tuple = aggrBuilder.create<mlir::relalg::AddAttrOp>(builder.getUnknownLoc(), mlir::relalg::TupleType::get(builder.getContext()), tuple, attrDef, expr);
+            attrDef.getColumn().type = expr.getType();
+            context.mapAttribute(scope, toAggr.first->colId, &attrDef.getColumn());
+            tuple = aggrBuilder.create<mlir::relalg::AddColumnOp>(builder.getUnknownLoc(), mlir::relalg::TupleType::get(builder.getContext()), tuple, attrDef, expr);
             context.setCurrentTuple(tuple);
          }
          aggrBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), tuple);
@@ -1133,7 +1133,7 @@ struct SQLTranslator {
             auto* resTarget = reinterpret_cast<ResTarget*>(node);
             auto* targetExpr = resTarget->val_;
             std::string name;
-            const mlir::relalg::RelationalAttribute* attribute;
+            const mlir::relalg::Column* attribute;
             FakeNode* fakeNode = nullptr;
             //todo: handle T_A_STAR
             switch (targetExpr->type) {
@@ -1149,7 +1149,7 @@ struct SQLTranslator {
                         break;
                      }
                      case T_A_Star: {
-                        std::unordered_set<const mlir::relalg::RelationalAttribute*> handledAttrs;
+                        std::unordered_set<const mlir::relalg::Column*> handledAttrs;
                         for (auto p : context.allAttributes) {
                            if (!handledAttrs.contains(p.second)) {
                               targetInfo.namedResults.push_back({p.first, p.second});
@@ -1279,9 +1279,9 @@ struct SQLTranslator {
                for (size_t i = 0; i < numColumns; i++) {
                   std::string columnName = "const" + std::to_string(i);
                   auto attrDef = attrManager.createDef(columnName);
-                  attrDef.getRelationalAttribute().type = globalTypes[i];
+                  attrDef.getColumn().type = globalTypes[i];
                   attributes.push_back(attrDef);
-                  targetInfo.namedResults.push_back({columnName, &attrDef.getRelationalAttribute()});
+                  targetInfo.namedResults.push_back({columnName, &attrDef.getColumn()});
                }
                //::llvm::StringRef sym_name, ::mlir::ArrayAttr attributes, ::mlir::ArrayAttr values
                mlir::Value constRel = builder.create<mlir::relalg::ConstRelationOp>(builder.getUnknownLoc(), symName, builder.getArrayAttr(attributes), builder.getArrayAttr(rows));

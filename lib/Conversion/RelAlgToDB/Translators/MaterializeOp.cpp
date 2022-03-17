@@ -12,19 +12,19 @@ class MaterializeTranslator : public mlir::relalg::Translator {
 
    public:
    MaterializeTranslator(mlir::relalg::MaterializeOp materializeOp) : mlir::relalg::Translator(materializeOp.rel()), materializeOp(materializeOp) {
-      orderedAttributes = mlir::relalg::OrderedAttributes::fromRefArr(materializeOp.attrs());
+      orderedAttributes = mlir::relalg::OrderedAttributes::fromRefArr(materializeOp.cols());
    }
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
       children[0]->addRequiredBuilders(requiredBuilders);
    }
-   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) override {
+   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::ColumnSet requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(mlir::relalg::Attributes::fromArrayAttr(materializeOp.attrs()));
+      this->requiredAttributes.insert(mlir::relalg::ColumnSet::fromArrayAttr(materializeOp.cols()));
       propagateInfo();
    }
-   virtual mlir::relalg::Attributes getAvailableAttributes() override {
+   virtual mlir::relalg::ColumnSet getAvailableColumns() override {
       return {};
    }
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {

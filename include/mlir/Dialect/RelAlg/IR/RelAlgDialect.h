@@ -6,7 +6,7 @@ class hash_code;// NOLINT (readability-identifier-naming)
 template <typename T>
 llvm::hash_code hash_value(std::shared_ptr<T> arg);// NOLINT (readability-identifier-naming)
 } // end namespace llvm
-#include "mlir/Dialect/RelAlg/IR/RelationalAttributeManager.h"
+#include "mlir/Dialect/RelAlg/IR/ColumnManager.h"
 #include "mlir/IR/Dialect.h"
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsDialect.h.inc"

@@ -8,27 +8,27 @@ module {
       %7 = relalg.selection %6 (%arg1: !relalg.tuple){
         %18 = relalg.basetable @part  {table_identifier = "part"} columns: {p_brand => @p_brand({type = !db.string}), p_comment => @p_comment({type = !db.string}), p_container => @p_container({type = !db.string}), p_mfgr => @p_mfgr({type = !db.string}), p_name => @p_name({type = !db.string}), p_partkey => @p_partkey({type = i32}), p_retailprice => @p_retailprice({type = !db.decimal<15, 2>}), p_size => @p_size({type = i32}), p_type => @p_type({type = !db.string})}
         %19 = relalg.selection %18 (%arg2: !relalg.tuple){
-          %32 = relalg.getattr %arg2 @part::@p_name : !db.string
+          %32 = relalg.getcol %arg2 @part::@p_name : !db.string
           %33 = db.constant("forest%") : !db.string
           %34 = db.compare like %32 : !db.string, %33 : !db.string
           relalg.return %34 : i1
         }
         %20 = relalg.projection all [@part::@p_partkey] %19
-        %21 = relalg.getattr %arg1 @partsupp::@ps_partkey : i32
+        %21 = relalg.getcol %arg1 @partsupp::@ps_partkey : i32
         %22 = relalg.in %21 : i32, %20
-        %23 = relalg.getattr %arg1 @partsupp::@ps_availqty : i32
+        %23 = relalg.getcol %arg1 @partsupp::@ps_availqty : i32
         %24 = relalg.basetable @lineitem  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
         %25 = relalg.selection %24 (%arg2: !relalg.tuple){
-          %32 = relalg.getattr %arg2 @lineitem::@l_partkey : i32
-          %33 = relalg.getattr %arg2 @partsupp::@ps_partkey : i32
+          %32 = relalg.getcol %arg2 @lineitem::@l_partkey : i32
+          %33 = relalg.getcol %arg2 @partsupp::@ps_partkey : i32
           %34 = db.compare eq %32 : i32, %33 : i32
-          %35 = relalg.getattr %arg2 @lineitem::@l_suppkey : i32
-          %36 = relalg.getattr %arg2 @partsupp::@ps_suppkey : i32
+          %35 = relalg.getcol %arg2 @lineitem::@l_suppkey : i32
+          %36 = relalg.getcol %arg2 @partsupp::@ps_suppkey : i32
           %37 = db.compare eq %35 : i32, %36 : i32
-          %38 = relalg.getattr %arg2 @lineitem::@l_shipdate : !db.date<day>
+          %38 = relalg.getcol %arg2 @lineitem::@l_shipdate : !db.date<day>
           %39 = db.constant("1994-01-01") : !db.date<day>
           %40 = db.compare gte %38 : !db.date<day>, %39 : !db.date<day>
-          %41 = relalg.getattr %arg2 @lineitem::@l_shipdate : !db.date<day>
+          %41 = relalg.getcol %arg2 @lineitem::@l_shipdate : !db.date<day>
           %42 = db.constant("1995-01-01") : !db.date<day>
           %43 = db.compare lt %41 : !db.date<day>, %42 : !db.date<day>
           %44 = db.and %34, %37, %40, %43 : i1, i1, i1, i1
@@ -36,14 +36,14 @@ module {
         }
         %26 = relalg.aggregation @aggr0 %25 [] (%arg2: !relalg.tuplestream,%arg3: !relalg.tuple){
           %32 = relalg.aggrfn sum @lineitem::@l_quantity %arg2 : !db.nullable<!db.decimal<15, 2>>
-          %33 = relalg.addattr %arg3, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %32
+          %33 = relalg.addcol %arg3, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %32
           relalg.return %33 : !relalg.tuple
         }
         %27 = relalg.map @map0 %26 (%arg2: !relalg.tuple){
           %32 = db.constant("0.5") : !db.decimal<15, 2>
-          %33 = relalg.getattr %arg2 @aggr0::@tmp_attr0 : !db.nullable<!db.decimal<15, 2>>
+          %33 = relalg.getcol %arg2 @aggr0::@tmp_attr0 : !db.nullable<!db.decimal<15, 2>>
           %34 = db.mul %32 : !db.decimal<15, 2>, %33 : !db.nullable<!db.decimal<15, 2>>
-          %35 = relalg.addattr %arg2, @tmp_attr1({type = !db.nullable<!db.decimal<15, 2>>}) %34
+          %35 = relalg.addcol %arg2, @tmp_attr1({type = !db.nullable<!db.decimal<15, 2>>}) %34
           relalg.return %35 : !relalg.tuple
         }
         %28 = relalg.getscalar @map0::@tmp_attr1 %27 : !db.nullable<!db.decimal<15, 2>>
@@ -53,12 +53,12 @@ module {
         relalg.return %31 : !db.nullable<i1>
       }
       %8 = relalg.projection all [@partsupp::@ps_suppkey] %7
-      %9 = relalg.getattr %arg0 @supplier::@s_suppkey : i32
+      %9 = relalg.getcol %arg0 @supplier::@s_suppkey : i32
       %10 = relalg.in %9 : i32, %8
-      %11 = relalg.getattr %arg0 @supplier::@s_nationkey : i32
-      %12 = relalg.getattr %arg0 @nation::@n_nationkey : i32
+      %11 = relalg.getcol %arg0 @supplier::@s_nationkey : i32
+      %12 = relalg.getcol %arg0 @nation::@n_nationkey : i32
       %13 = db.compare eq %11 : i32, %12 : i32
-      %14 = relalg.getattr %arg0 @nation::@n_name : !db.string
+      %14 = relalg.getcol %arg0 @nation::@n_name : !db.string
       %15 = db.constant("CANADA") : !db.string
       %16 = db.compare eq %14 : !db.string, %15 : !db.string
       %17 = db.and %10, %13, %16 : i1, i1, i1

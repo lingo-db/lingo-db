@@ -1,10 +1,10 @@
 #include <mlir/Conversion/RelAlgToDB/NLJoinTranslator.h>
 using namespace mlir::relalg;
-void NLJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) {
+void NLJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg::ColumnSet requiredAttributes) {
    this->consumer = consumer;
    this->requiredAttributes = requiredAttributes;
-   addJoinRequiredAttributes();
-   impl->addAdditionalRequiredAttributes();
+   addJoinRequiredColumns();
+   impl->addAdditionalRequiredColumns();
    propagateInfo();
 }
 
@@ -26,7 +26,7 @@ void NLJoinTranslator::scanHT(mlir::relalg::TranslatorContext& context, mlir::Op
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
       auto unpacked = builder2.create<mlir::util::UnPackOp>(loc, forOp2.getInductionVar());
-      orderedAttributesLeft.setValuesForAttributes(context, scope, unpacked.getResults());
+      orderedAttributesLeft.setValuesForColumns(context, scope, unpacked.getResults());
       Value marker = impl->markable ? unpacked.getResult(unpacked.getNumResults() - 1) : Value();
       impl->handleScanned(marker, context, builder2);
       builder2.create<mlir::db::YieldOp>(loc, getRequiredBuilderValues(context));
@@ -46,7 +46,7 @@ void NLJoinTranslator::probe(mlir::OpBuilder& builder, mlir::relalg::TranslatorC
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
       auto unpacked = builder2.create<mlir::util::UnPackOp>(loc, forOp2.getInductionVar());
-      orderedAttributesLeft.setValuesForAttributes(context, scope, unpacked.getResults());
+      orderedAttributesLeft.setValuesForColumns(context, scope, unpacked.getResults());
       Value markerLeft = impl->markable ? unpacked.getResult(unpacked.getNumResults() - 1) : Value();
       Value matched = evaluatePredicate(context, builder2, scope);
       impl->handleLookup(matched, markerLeft, context, builder2);
@@ -63,8 +63,8 @@ void NLJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilder&
    }
 }
 void NLJoinTranslator::produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) {
-   auto leftAttributes = this->requiredAttributes.intersect(children[0]->getAvailableAttributes());
-   orderedAttributesLeft = mlir::relalg::OrderedAttributes::fromAttributes(leftAttributes);
+   auto leftAttributes = this->requiredAttributes.intersect(children[0]->getAvailableColumns());
+   orderedAttributesLeft = mlir::relalg::OrderedAttributes::fromColumns(leftAttributes);
    tupleType = orderedAttributesLeft.getTupleType(op.getContext(), impl->markable ? std::vector<Type>({mlir::IntegerType::get(op->getContext(), 64)}) : std::vector<Type>());
    mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(loc, mlir::db::VectorBuilderType::get(builder.getContext(), tupleType));
    vecBuilderId = context.getBuilderId();

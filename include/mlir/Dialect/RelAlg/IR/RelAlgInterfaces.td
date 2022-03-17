@@ -38,15 +38,15 @@ def Relalg_CmpOpInterface : OpInterface<"CmpOpInterface"> {
 def Operator : OpInterface<"Operator"> {
 let methods = [
 InterfaceMethod<
-        "get all attributes that are used directly by this operator",
-        "mlir::relalg::Attributes", "getUsedAttributes",(ins ),"", /*defaultImplementation=*/[{
-    return mlir::relalg::detail::getUsedAttributes(this->getOperation());
+        "get all columns that are used directly by this operator",
+        "mlir::relalg::ColumnSet", "getUsedColumns",(ins ),"", /*defaultImplementation=*/[{
+    return mlir::relalg::detail::getUsedColumns(this->getOperation());
 }]
 >,
 InterfaceMethod<
-        "get all attributes that are available after this operator",
-        "mlir::relalg::Attributes", "getAvailableAttributes",(ins ),"", /*defaultImplementation=*/[{
-return mlir::relalg::detail::getAvailableAttributes(this->getOperation());
+        "get all columns that are available after this operator",
+        "mlir::relalg::ColumnSet", "getAvailableColumns",(ins ),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::getAvailableColumns(this->getOperation());
 }]
 >,
 InterfaceMethod<
@@ -112,15 +112,15 @@ return this->getOperation()->getResult(0);
 }]
 >,
 InterfaceMethod<
-        "get all 'free' attributes",
-        "mlir::relalg::Attributes", "getFreeAttributes",(ins ),"", /*defaultImplementation=*/[{
-return mlir::relalg::detail::getFreeAttributes(this->getOperation());
+        "get all 'free' columns",
+        "mlir::relalg::ColumnSet", "getFreeColumns",(ins ),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::getFreeColumns(this->getOperation());
 }]
 >,
 InterfaceMethod<
-        "get all attributes that are created by this operator",
-        "mlir::relalg::Attributes", "getCreatedAttributes",(ins ),"", /*defaultImplementation=*/[{
-return mlir::relalg::detail::getCreatedAttributes(this->getOperation());
+        "get all columns that are created by this operator",
+        "mlir::relalg::ColumnSet", "getCreatedColumns",(ins ),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::getCreatedColumns(this->getOperation());
 }]
 >
 ];

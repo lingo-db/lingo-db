@@ -60,7 +60,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
 
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      key = mlir::relalg::OrderedAttributes::fromRefArr(projectionOp.attrs());
+      key = mlir::relalg::OrderedAttributes::fromRefArr(projectionOp.cols());
       valTupleType = mlir::TupleType::get(builder.getContext(), {});
       auto keyTupleType = key.getTupleType(builder.getContext());
       auto parentPipeline = context.pipelineManager.getCurrentPipeline();
@@ -94,7 +94,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), forOp2.getInductionVar()).getResults();
          auto unpackedKey = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), unpacked[0]).getResults();
-         key.setValuesForAttributes(context, scope, unpackedKey);
+         key.setValuesForColumns(context, scope, unpackedKey);
          consumer->consume(this, builder2, context);
          builder2.create<mlir::db::YieldOp>(projectionOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());

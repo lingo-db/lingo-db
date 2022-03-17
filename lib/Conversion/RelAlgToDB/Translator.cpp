@@ -12,13 +12,13 @@ std::vector<mlir::Value> mlir::relalg::Translator::mergeRelationalBlock(mlir::Bl
    mlir::Block* source = getBlockFn(cloned);
    auto* terminator = source->getTerminator();
 
-   source->walk([&](mlir::relalg::GetAttrOp getAttrOp) {
-      getAttrOp.replaceAllUsesWith(context.getValueForAttribute(&getAttrOp.attr().getRelationalAttribute()));
-      toErase.push_back(getAttrOp.getOperation());
+   source->walk([&](mlir::relalg::GetColumnOp getColumnOp) {
+      getColumnOp.replaceAllUsesWith(context.getValueForAttribute(&getColumnOp.attr().getColumn()));
+      toErase.push_back(getColumnOp.getOperation());
    });
-   for (auto addAttrOp : source->getOps<mlir::relalg::AddAttrOp>()) {
-      context.setValueForAttribute(scope, &addAttrOp.attr().getRelationalAttribute(), addAttrOp.val());
-      toErase.push_back(addAttrOp.getOperation());
+   for (auto addColumnOp : source->getOps<mlir::relalg::AddColumnOp>()) {
+      context.setValueForAttribute(scope, &addColumnOp.attr().getColumn(), addColumnOp.val());
+      toErase.push_back(addColumnOp.getOperation());
    }
 
    dest->getOperations().splice(dest->end(), source->getOperations());
@@ -34,8 +34,8 @@ std::vector<mlir::Value> mlir::relalg::Translator::mergeRelationalBlock(mlir::Bl
 
 void Translator::propagateInfo() {
    for (auto& c : children) {
-      auto available = c->getAvailableAttributes();
-      mlir::relalg::Attributes toPropagate = requiredAttributes.intersect(available);
+      auto available = c->getAvailableColumns();
+      mlir::relalg::ColumnSet toPropagate = requiredAttributes.intersect(available);
       c->setInfo(this, toPropagate);
    }
 }
@@ -87,16 +87,16 @@ void Translator::addRequiredBuilders(std::vector<size_t> requiredBuilders) {
    }
 }
 
-void Translator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) {
+void Translator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg::ColumnSet requiredAttributes) {
    this->consumer = consumer;
    this->requiredAttributes = requiredAttributes;
    if (op) {
-      this->requiredAttributes.insert(op.getUsedAttributes());
+      this->requiredAttributes.insert(op.getUsedColumns());
       propagateInfo();
    }
 }
-mlir::relalg::Attributes Translator::getAvailableAttributes() {
-   return op.getAvailableAttributes();
+mlir::relalg::ColumnSet Translator::getAvailableColumns() {
+   return op.getAvailableColumns();
 };
 
 std::unique_ptr<mlir::relalg::Translator> Translator::createTranslator(mlir::Operation* operation) {

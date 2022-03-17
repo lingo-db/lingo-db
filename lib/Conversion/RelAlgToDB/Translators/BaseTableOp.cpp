@@ -21,7 +21,7 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       auto scope = context.createScope();
       using namespace mlir;
       std::vector<mlir::Type> types;
-      std::vector<const mlir::relalg::RelationalAttribute*> attrs;
+      std::vector<const mlir::relalg::Column*> cols;
       std::vector<mlir::Attribute> columnNames;
       std::string tableName = baseTableOp->getAttr("table_identifier").cast<mlir::StringAttr>().str();
       std::string scanDescription = R"({ "table": ")" + tableName + R"(", "columns": [ )";
@@ -29,8 +29,8 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       for (auto namedAttr : baseTableOp.columnsAttr().getValue()) {
          auto identifier = namedAttr.getName();
          auto attr = namedAttr.getValue();
-         auto attrDef = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
-         if (requiredAttributes.contains(&attrDef.getRelationalAttribute())) {
+         auto attrDef = attr.dyn_cast_or_null<mlir::relalg::ColumnDefAttr>();
+         if (requiredAttributes.contains(&attrDef.getColumn())) {
             if(!first){
                scanDescription+=",";
             }else{
@@ -38,8 +38,8 @@ class BaseTableTranslator : public mlir::relalg::Translator {
             }
             scanDescription+="\""+identifier.str()+"\"";
             columnNames.push_back(builder.getStringAttr(identifier.strref()));
-            types.push_back(attrDef.getRelationalAttribute().type);
-            attrs.push_back(&attrDef.getRelationalAttribute());
+            types.push_back(attrDef.getColumn().type);
+            cols.push_back(&attrDef.getColumn());
          }
       }
       scanDescription+="] }";
@@ -69,7 +69,7 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
       auto unpacked = builder2.create<mlir::util::UnPackOp>(baseTableOp->getLoc(), forOp2.getInductionVar());
       size_t i = 0;
-      for (const auto* attr : attrs) {
+      for (const auto* attr : cols) {
          context.setValueForAttribute(scope, attr, unpacked.getResult(i++));
       }
       consumer->consume(this, builder2, context);

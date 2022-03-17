@@ -15,7 +15,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
    mlir::relalg::OrderedAttributes key;
    mlir::relalg::OrderedAttributes val;
 
-   std::vector<std::function<std::pair<const mlir::relalg::RelationalAttribute*, mlir::Value>(mlir::ValueRange, mlir::OpBuilder& builder)>> finalizeFunctions;
+   std::vector<std::function<std::pair<const mlir::relalg::Column*, mlir::Value>(mlir::ValueRange, mlir::OpBuilder& builder)>> finalizeFunctions;
    std::vector<std::function<std::vector<mlir::Value>(mlir::ValueRange, mlir::ValueRange, mlir::OpBuilder& builder)>> aggregationFunctions;
    std::vector<mlir::Value> defaultValues;
    std::vector<mlir::Type> aggrTypes;
@@ -92,18 +92,18 @@ class AggregationTranslator : public mlir::relalg::Translator {
       return maxValAttr;
    }
    void analyze(mlir::OpBuilder& builder) {
-      key = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_attrsAttr());
+      key = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_colsAttr());
 
       auto counterType = builder.getI64Type();
 
-      aggregationOp.aggr_func().walk([&](mlir::relalg::AddAttrOp addAttrOp) {
-         if (auto aggrFn = mlir::dyn_cast_or_null<mlir::relalg::AggrFuncOp>(addAttrOp.val().getDefiningOp())) {
+      aggregationOp.aggr_func().walk([&](mlir::relalg::AddColumnOp addColumnOp) {
+         if (auto aggrFn = mlir::dyn_cast_or_null<mlir::relalg::AggrFuncOp>(addColumnOp.val().getDefiningOp())) {
             auto loc = aggrFn->getLoc();
-            auto* destAttr = &addAttrOp.attr().getRelationalAttribute();
-            auto* attr = &aggrFn.attr().getRelationalAttribute();
+            auto* destAttr = &addColumnOp.attr().getColumn();
+            auto* attr = &aggrFn.attr().getColumn();
             auto attrIsNullable = attr->type.isa<mlir::db::NullableType>();
             size_t currValIdx = val.insert(attr);
-            mlir::Type resultingType = addAttrOp.attr().getRelationalAttribute().type;
+            mlir::Type resultingType = addColumnOp.attr().getColumn().type;
             size_t currDestIdx = aggrTypes.size();
 
             if (aggrFn.fn() == mlir::relalg::AggrFunc::sum) {
@@ -248,10 +248,10 @@ class AggregationTranslator : public mlir::relalg::Translator {
                });
             }
          }
-         if (auto countOp = mlir::dyn_cast_or_null<mlir::relalg::CountRowsOp>(addAttrOp.val().getDefiningOp())) {
+         if (auto countOp = mlir::dyn_cast_or_null<mlir::relalg::CountRowsOp>(addColumnOp.val().getDefiningOp())) {
             auto loc = countOp->getLoc();
 
-            auto* destAttr = &addAttrOp.attr().getRelationalAttribute();
+            auto* destAttr = &addColumnOp.attr().getColumn();
             size_t currDestIdx = aggrTypes.size();
             aggrTypes.push_back(counterType);
             auto initCounterVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), counterType, builder.getI64IntegerAttr(0));
@@ -318,7 +318,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
             auto [attr, val] = fn(unpackedAggr, builder2);
             context.setValueForAttribute(scope, attr, val);
          }
-         key.setValuesForAttributes(context,scope,unpackedKey);
+         key.setValuesForColumns(context,scope,unpackedKey);
          consumer->consume(this, builder2, context);
          builder2.create<mlir::db::YieldOp>(aggregationOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());

@@ -18,7 +18,7 @@ class NLJoinTranslator : public mlir::relalg::JoinTranslator {
    public:
    NLJoinTranslator(std::shared_ptr<JoinImpl> impl) : JoinTranslator(impl), loc(joinOp.getLoc()) {}
 
-   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) override;
+   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::ColumnSet requiredAttributes) override;
 
    void build(mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context);
    virtual void scanHT(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override;

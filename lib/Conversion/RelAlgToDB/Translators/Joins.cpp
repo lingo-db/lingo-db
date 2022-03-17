@@ -25,14 +25,14 @@ std::shared_ptr<mlir::relalg::JoinImpl> createInnerJoinImpl(mlir::relalg::InnerJ
 
 class CollectionJoinImpl : public mlir::relalg::JoinImpl {
    size_t vectorBuilderId;
-   mlir::relalg::OrderedAttributes attrs;
+   mlir::relalg::OrderedAttributes cols;
 
    public:
    CollectionJoinImpl(mlir::relalg::CollectionJoinOp collectionJoinOp) : mlir::relalg::JoinImpl(collectionJoinOp, collectionJoinOp.right(), collectionJoinOp.left()) {
-      attrs = mlir::relalg::OrderedAttributes::fromRefArr(collectionJoinOp.attrs());
+      cols = mlir::relalg::OrderedAttributes::fromRefArr(collectionJoinOp.cols());
    }
-   virtual void addAdditionalRequiredAttributes() override {
-      for (const auto* attr : attrs.getAttrs()) {
+   virtual void addAdditionalRequiredColumns() override {
+      for (const auto* attr : cols.getAttrs()) {
          translator->requiredAttributes.insert(attr);
       }
    }
@@ -40,23 +40,23 @@ class CollectionJoinImpl : public mlir::relalg::JoinImpl {
       mlir::Value vectorBuilder = context.builders[vectorBuilderId];
       auto ifOp = builder.create<mlir::scf::IfOp>(
          loc, mlir::TypeRange{vectorBuilder.getType()}, matched, [&](mlir::OpBuilder& builder, mlir::Location loc) {
-            mlir::Value packed = attrs.pack(context,builder,loc);
+            mlir::Value packed = cols.pack(context,builder,loc);
             mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, vectorBuilder.getType(), vectorBuilder, packed);
             builder.create<mlir::scf::YieldOp>(loc, mlir::ValueRange{mergedBuilder}); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, mlir::ValueRange{vectorBuilder}); });
       context.builders[vectorBuilderId] = ifOp.getResult(0);
    }
 
    void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(joinOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), attrs.getTupleType(builder.getContext())));
+      mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(joinOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), cols.getTupleType(builder.getContext())));
       vectorBuilderId = context.getBuilderId();
       context.builders[vectorBuilderId] = vectorBuilder;
       translator->customLookupBuilders.push_back(vectorBuilderId);
    }
    void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      mlir::Value vector = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), attrs.getTupleType(builder.getContext())), context.builders[vectorBuilderId]);
+      mlir::Value vector = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), cols.getTupleType(builder.getContext())), context.builders[vectorBuilderId]);
 
-      context.setValueForAttribute(scope, &cast<mlir::relalg::CollectionJoinOp>(joinOp).collAttr().getRelationalAttribute(), vector);
+      context.setValueForAttribute(scope, &cast<mlir::relalg::CollectionJoinOp>(joinOp).collAttr().getColumn(), vector);
       translator->forwardConsume(builder, context);
       builder.create<mlir::db::FreeOp>(loc, vector);
    }
@@ -209,27 +209,27 @@ std::shared_ptr<mlir::relalg::JoinImpl> createAntiSemiJoinImpl(mlir::relalg::Ant
 
 class ConstantSingleJoinTranslator : public mlir::relalg::Translator {
    mlir::relalg::SingleJoinOp joinOp;
-   std::vector<const mlir::relalg::RelationalAttribute*> attrs;
-   std::vector<const mlir::relalg::RelationalAttribute*> origAttrs;
+   std::vector<const mlir::relalg::Column*> cols;
+   std::vector<const mlir::relalg::Column*> origAttrs;
    std::vector<mlir::Type> types;
    size_t builderId;
 
    public:
    ConstantSingleJoinTranslator(mlir::relalg::SingleJoinOp singleJoinOp) : mlir::relalg::Translator(singleJoinOp), joinOp(singleJoinOp) {
    }
-   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) override {
+   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::ColumnSet requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(joinOp.getUsedAttributes());
+      this->requiredAttributes.insert(joinOp.getUsedColumns());
       for (mlir::Attribute attr : joinOp.mapping()) {
-         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::RelationalAttributeDefAttr>();
-         auto* defAttr = &relationDefAttr.getRelationalAttribute();
+         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::ColumnDefAttr>();
+         auto* defAttr = &relationDefAttr.getColumn();
          if (this->requiredAttributes.contains(defAttr)) {
             auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();
-            const auto* refAttr = *mlir::relalg::Attributes::fromArrayAttr(fromExisting).begin();
+            const auto* refAttr = *mlir::relalg::ColumnSet::fromArrayAttr(fromExisting).begin();
             this->requiredAttributes.insert(refAttr);
             origAttrs.push_back(refAttr);
-            attrs.push_back(defAttr);
+            cols.push_back(defAttr);
             types.push_back(defAttr->type);
          }
       }
@@ -243,16 +243,16 @@ class ConstantSingleJoinTranslator : public mlir::relalg::Translator {
       auto scope = context.createScope();
       if (child == this->children[0].get()) {
          auto unpacked = builder.create<mlir::util::UnPackOp>(joinOp->getLoc(), context.builders[builderId]);
-         for (size_t i = 0; i < attrs.size(); i++) {
-            context.setValueForAttribute(scope, attrs[i], unpacked.getResult(i));
+         for (size_t i = 0; i < cols.size(); i++) {
+            context.setValueForAttribute(scope, cols[i], unpacked.getResult(i));
          }
          consumer->consume(this, builder, context);
       } else if (child == this->children[1].get()) {
          std::vector<mlir::Value> values;
          for (size_t i = 0; i < origAttrs.size(); i++) {
             mlir::Value value = context.getValueForAttribute(origAttrs[i]);
-            if (origAttrs[i]->type != attrs[i]->type) {
-               mlir::Value tmp = builder.create<mlir::db::CastOp>(op->getLoc(), attrs[i]->type, value);
+            if (origAttrs[i]->type != cols[i]->type) {
+               mlir::Value tmp = builder.create<mlir::db::CastOp>(op->getLoc(), cols[i]->type, value);
                value = tmp;
             }
             values.push_back(value);
@@ -297,7 +297,7 @@ class MarkJoinImpl : public mlir::relalg::JoinImpl {
    void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, builder.getI1Type(), matchFoundFlag);
-      context.setValueForAttribute(scope, &cast<mlir::relalg::MarkJoinOp>(joinOp).markattr().getRelationalAttribute(), matchFound);
+      context.setValueForAttribute(scope, &cast<mlir::relalg::MarkJoinOp>(joinOp).markattr().getColumn(), matchFound);
       translator->forwardConsume(builder, context);
    }
    virtual ~MarkJoinImpl() {}

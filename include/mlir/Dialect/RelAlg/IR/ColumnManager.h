@@ -1,23 +1,23 @@
-#ifndef MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEMANAGER_H
-#define MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEMANAGER_H
+#ifndef MLIR_DIALECT_RELALG_IR_COLUMNMANAGER_H
+#define MLIR_DIALECT_RELALG_IR_COLUMNMANAGER_H
 
-#include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"
+#include "mlir/Dialect/RelAlg/IR/Column.h"
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.h"
 
 namespace mlir::relalg {
-class RelationalAttributeManager {
+class ColumnManager {
    public:
    void setContext(MLIRContext* context);
-   std::shared_ptr<RelationalAttribute> get(StringRef scope, StringRef attribute);
-   RelationalAttributeDefAttr createDef(SymbolRefAttr name, Attribute fromExisting = Attribute());
-   RelationalAttributeDefAttr createDef(StringRef name, Attribute fromExisting = Attribute());
+   std::shared_ptr<Column> get(StringRef scope, StringRef attribute);
+   ColumnDefAttr createDef(SymbolRefAttr name, Attribute fromExisting = Attribute());
+   ColumnDefAttr createDef(StringRef name, Attribute fromExisting = Attribute());
 
-   RelationalAttributeRefAttr createRef(SymbolRefAttr name);
-   RelationalAttributeRefAttr createRef(const RelationalAttribute* attr);
+   ColumnRefAttr createRef(SymbolRefAttr name);
+   ColumnRefAttr createRef(const Column* attr);
 
-   RelationalAttributeRefAttr createRef(StringRef scope, StringRef name);
-   std::pair<std::string,std::string> getName(const RelationalAttribute* attr);
+   ColumnRefAttr createRef(StringRef scope, StringRef name);
+   std::pair<std::string,std::string> getName(const Column* attr);
 
    void setCurrentScope(StringRef scope) {
       currentScope = scope;
@@ -46,11 +46,11 @@ class RelationalAttributeManager {
          return hash1 ^ hash2;
       }
    };
-   std::unordered_map<std::pair<std::string, std::string>, std::shared_ptr<RelationalAttribute>, HashPair> attributes;
-   std::unordered_map<const RelationalAttribute*, std::pair<std::string, std::string>> attributesRev;
+   std::unordered_map<std::pair<std::string, std::string>, std::shared_ptr<Column>, HashPair> attributes;
+   std::unordered_map<const Column*, std::pair<std::string, std::string>> attributesRev;
 
    std::unordered_map<std::string, size_t> scopeUnifier;
 };
 } // namespace mlir::relalg
 
-#endif // MLIR_DIALECT_RELALG_IR_RELATIONALATTRIBUTEMANAGER_H
+#endif // MLIR_DIALECT_RELALG_IR_COLUMNMANAGER_H

@@ -255,16 +255,16 @@ class QueryGraph {
       return res;
    }
    struct Predicate {
-      mlir::relalg::Attributes left, right;
+      mlir::relalg::ColumnSet left, right;
       bool isEq;
-      Predicate(mlir::relalg::Attributes left, mlir::relalg::Attributes right, bool isEq) : left(left), right(right), isEq(isEq) {}
+      Predicate(mlir::relalg::ColumnSet left, mlir::relalg::ColumnSet right, bool isEq) : left(left), right(right), isEq(isEq) {}
    };
-   std::vector<Predicate> analyzePred(mlir::Block* block, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
-      llvm::DenseMap<mlir::Value, mlir::relalg::Attributes> required;
+   std::vector<Predicate> analyzePred(mlir::Block* block, mlir::relalg::ColumnSet availableLeft, mlir::relalg::ColumnSet availableRight) {
+      llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> required;
       std::vector<Predicate> predicates;
       block->walk([&](mlir::Operation* op) {
-         if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetAttrOp>(op)) {
-            required.insert({getAttr.getResult(), mlir::relalg::Attributes::from(getAttr.attr())});
+         if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(op)) {
+            required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.attr())});
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
             if (cmpOp.isEqualityPred()) {
                auto leftAttributes = required[cmpOp.getLeft()];
@@ -284,7 +284,7 @@ class QueryGraph {
                }
             }
          } else {
-            mlir::relalg::Attributes attributes;
+            mlir::relalg::ColumnSet attributes;
             for (auto operand : op->getOperands()) {
                if (required.count(operand)) {
                   attributes.insert(required[operand]);
@@ -297,20 +297,20 @@ class QueryGraph {
       });
       return predicates;
    }
-   Attributes getAttributesForNodeSet(NodeSet& nodeSet) {
-      Attributes a;
+   ColumnSet getAttributesForNodeSet(NodeSet& nodeSet) {
+      ColumnSet a;
       iterateNodes(nodeSet, [&](Node& n) {
-         a.insert(n.op.getAvailableAttributes());
+         a.insert(n.op.getAvailableColumns());
       });
       return a;
    }
-   void addPredicates(std::vector<Predicate>& predicates, Operator op, mlir::relalg::Attributes availableLeft, mlir::relalg::Attributes availableRight) {
+   void addPredicates(std::vector<Predicate>& predicates, Operator op, mlir::relalg::ColumnSet availableLeft, mlir::relalg::ColumnSet availableRight) {
       if (auto predicateOp = mlir::dyn_cast_or_null<PredicateOperator>(op.getOperation())) {
          auto newPredicates = analyzePred(&predicateOp.getPredicateBlock(), availableLeft, availableRight);
          predicates.insert(predicates.end(), newPredicates.begin(), newPredicates.end());
       }
    }
-   Attributes getPKey(mlir::relalg::QueryGraph::Node& n);
+   ColumnSet getPKey(mlir::relalg::QueryGraph::Node& n);
    double estimateSelectivity(Operator op,NodeSet left,NodeSet right);
    void estimate();
    double calculateSelectivity(SelectionEdge& edge,NodeSet left,NodeSet right);

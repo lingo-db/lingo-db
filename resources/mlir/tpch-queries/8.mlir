@@ -16,78 +16,78 @@ module {
     %13 = relalg.basetable @region  {table_identifier = "region"} columns: {r_comment => @r_comment({type = !db.nullable<!db.string>}), r_name => @r_name({type = !db.string}), r_regionkey => @r_regionkey({type = i32})}
     %14 = relalg.crossproduct %12, %13
     %15 = relalg.selection %14 (%arg0: !relalg.tuple){
-      %22 = relalg.getattr %arg0 @part::@p_partkey : i32
-      %23 = relalg.getattr %arg0 @lineitem::@l_partkey : i32
+      %22 = relalg.getcol %arg0 @part::@p_partkey : i32
+      %23 = relalg.getcol %arg0 @lineitem::@l_partkey : i32
       %24 = db.compare eq %22 : i32, %23 : i32
-      %25 = relalg.getattr %arg0 @supplier::@s_suppkey : i32
-      %26 = relalg.getattr %arg0 @lineitem::@l_suppkey : i32
+      %25 = relalg.getcol %arg0 @supplier::@s_suppkey : i32
+      %26 = relalg.getcol %arg0 @lineitem::@l_suppkey : i32
       %27 = db.compare eq %25 : i32, %26 : i32
-      %28 = relalg.getattr %arg0 @lineitem::@l_orderkey : i32
-      %29 = relalg.getattr %arg0 @orders::@o_orderkey : i32
+      %28 = relalg.getcol %arg0 @lineitem::@l_orderkey : i32
+      %29 = relalg.getcol %arg0 @orders::@o_orderkey : i32
       %30 = db.compare eq %28 : i32, %29 : i32
-      %31 = relalg.getattr %arg0 @orders::@o_custkey : i32
-      %32 = relalg.getattr %arg0 @customer::@c_custkey : i32
+      %31 = relalg.getcol %arg0 @orders::@o_custkey : i32
+      %32 = relalg.getcol %arg0 @customer::@c_custkey : i32
       %33 = db.compare eq %31 : i32, %32 : i32
-      %34 = relalg.getattr %arg0 @customer::@c_nationkey : i32
-      %35 = relalg.getattr %arg0 @n1::@n_nationkey : i32
+      %34 = relalg.getcol %arg0 @customer::@c_nationkey : i32
+      %35 = relalg.getcol %arg0 @n1::@n_nationkey : i32
       %36 = db.compare eq %34 : i32, %35 : i32
-      %37 = relalg.getattr %arg0 @n1::@n_regionkey : i32
-      %38 = relalg.getattr %arg0 @region::@r_regionkey : i32
+      %37 = relalg.getcol %arg0 @n1::@n_regionkey : i32
+      %38 = relalg.getcol %arg0 @region::@r_regionkey : i32
       %39 = db.compare eq %37 : i32, %38 : i32
-      %40 = relalg.getattr %arg0 @region::@r_name : !db.string
+      %40 = relalg.getcol %arg0 @region::@r_name : !db.string
       %41 = db.constant("AMERICA") : !db.string
       %42 = db.compare eq %40 : !db.string, %41 : !db.string
-      %43 = relalg.getattr %arg0 @supplier::@s_nationkey : i32
-      %44 = relalg.getattr %arg0 @n2::@n_nationkey : i32
+      %43 = relalg.getcol %arg0 @supplier::@s_nationkey : i32
+      %44 = relalg.getcol %arg0 @n2::@n_nationkey : i32
       %45 = db.compare eq %43 : i32, %44 : i32
-      %46 = relalg.getattr %arg0 @orders::@o_orderdate : !db.date<day>
+      %46 = relalg.getcol %arg0 @orders::@o_orderdate : !db.date<day>
       %47 = db.constant("1995-01-01") : !db.date<day>
       %48 = db.constant("1996-12-31") : !db.date<day>
       %49 = db.between %46 : !db.date<day> between %47 : !db.date<day>, %48 : !db.date<day>, lowerInclusive : true, upperInclusive : true
-      %50 = relalg.getattr %arg0 @part::@p_type : !db.string
+      %50 = relalg.getcol %arg0 @part::@p_type : !db.string
       %51 = db.constant("ECONOMY ANODIZED STEEL") : !db.string
       %52 = db.compare eq %50 : !db.string, %51 : !db.string
       %53 = db.and %24, %27, %30, %33, %36, %39, %42, %45, %49, %52 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
       relalg.return %53 : i1
     }
     %16 = relalg.map @map0 %15 (%arg0: !relalg.tuple){
-      %22 = relalg.getattr %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
+      %22 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %23 = db.constant(1 : i32) : !db.decimal<15, 2>
-      %24 = relalg.getattr %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
+      %24 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
       %25 = db.sub %23 : !db.decimal<15, 2>, %24 : !db.decimal<15, 2>
       %26 = db.mul %22 : !db.decimal<15, 2>, %25 : !db.decimal<15, 2>
-      %27 = relalg.addattr %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %26
-      %28 = relalg.getattr %27 @orders::@o_orderdate : !db.date<day>
+      %27 = relalg.addcol %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %26
+      %28 = relalg.getcol %27 @orders::@o_orderdate : !db.date<day>
       %29 = db.date_extract year, %28 : <day>
-      %30 = relalg.addattr %27, @tmp_attr0({type = i64}) %29
+      %30 = relalg.addcol %27, @tmp_attr0({type = i64}) %29
       relalg.return %30 : !relalg.tuple
     }
     %17 = relalg.map @map1 %16 (%arg0: !relalg.tuple){
-      %22 = relalg.getattr %arg0 @n2::@n_name : !db.string
+      %22 = relalg.getcol %arg0 @n2::@n_name : !db.string
       %23 = db.constant("BRAZIL") : !db.string
       %24 = db.compare eq %22 : !db.string, %23 : !db.string
       %25 = scf.if %24 -> (!db.decimal<15, 2>) {
-        %27 = relalg.getattr %arg0 @map0::@tmp_attr1 : !db.decimal<15, 2>
+        %27 = relalg.getcol %arg0 @map0::@tmp_attr1 : !db.decimal<15, 2>
         scf.yield %27 : !db.decimal<15, 2>
       } else {
         %27 = db.constant(0 : i32) : !db.decimal<15, 2>
         scf.yield %27 : !db.decimal<15, 2>
       }
-      %26 = relalg.addattr %arg0, @tmp_attr3({type = !db.decimal<15, 2>}) %25
+      %26 = relalg.addcol %arg0, @tmp_attr3({type = !db.decimal<15, 2>}) %25
       relalg.return %26 : !relalg.tuple
     }
     %18 = relalg.aggregation @aggr0 %17 [@map0::@tmp_attr0] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %22 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
-      %23 = relalg.addattr %arg1, @tmp_attr4({type = !db.decimal<15, 2>}) %22
+      %23 = relalg.addcol %arg1, @tmp_attr4({type = !db.decimal<15, 2>}) %22
       %24 = relalg.aggrfn sum @map1::@tmp_attr3 %arg0 : !db.decimal<15, 2>
-      %25 = relalg.addattr %23, @tmp_attr2({type = !db.decimal<15, 2>}) %24
+      %25 = relalg.addcol %23, @tmp_attr2({type = !db.decimal<15, 2>}) %24
       relalg.return %25 : !relalg.tuple
     }
     %19 = relalg.map @map2 %18 (%arg0: !relalg.tuple){
-      %22 = relalg.getattr %arg0 @aggr0::@tmp_attr2 : !db.decimal<15, 2>
-      %23 = relalg.getattr %arg0 @aggr0::@tmp_attr4 : !db.decimal<15, 2>
+      %22 = relalg.getcol %arg0 @aggr0::@tmp_attr2 : !db.decimal<15, 2>
+      %23 = relalg.getcol %arg0 @aggr0::@tmp_attr4 : !db.decimal<15, 2>
       %24 = db.div %22 : !db.decimal<15, 2>, %23 : !db.decimal<15, 2>
-      %25 = relalg.addattr %arg0, @tmp_attr5({type = !db.decimal<15, 2>}) %24
+      %25 = relalg.addcol %arg0, @tmp_attr5({type = !db.decimal<15, 2>}) %24
       relalg.return %25 : !relalg.tuple
     }
     %20 = relalg.sort %19 [(@map0::@tmp_attr0,asc)]

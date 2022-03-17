@@ -2,15 +2,15 @@
 #define MLIR_CONVERSION_RELALGTODB_JOINTRANSLATOR_H
 #include "Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include <mlir/Dialect/RelAlg/IR/Column.h>
 #include <mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h>
-#include <mlir/Dialect/RelAlg/IR/RelationalAttribute.h>
 
 namespace mlir::relalg {
 
 class JoinTranslator;
 struct JoinImpl {
    virtual mlir::Value getFlag() { return stopOnFlag ? matchFoundFlag : Value(); }
-   virtual void addAdditionalRequiredAttributes() {}
+   virtual void addAdditionalRequiredColumns() {}
    virtual void handleLookup(Value matched, Value markerBefore, TranslatorContext& context, mlir::OpBuilder& builder) = 0;
    virtual void beforeLookup(TranslatorContext& context, mlir::OpBuilder& builder) {}
    virtual void afterLookup(TranslatorContext& context, mlir::OpBuilder& builder) {}
@@ -36,7 +36,7 @@ class JoinTranslator : public Translator {
 
    public:
    JoinTranslator(std::shared_ptr<JoinImpl> joinImpl);
-   void addJoinRequiredAttributes();
+   void addJoinRequiredColumns();
    void handleMappingNull(OpBuilder& builder, TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope);
    void handleMapping(OpBuilder& builder, TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope);
    void handlePotentialMatch(OpBuilder& builder, TranslatorContext& context, Value matches, mlir::function_ref<void(OpBuilder&, TranslatorContext& context, TranslatorContext::AttributeResolverScope&)> onMatch = nullptr);

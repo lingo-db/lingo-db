@@ -3,7 +3,7 @@
 
 #include "llvm/ADT/SmallPtrSet.h"
 
-#include "mlir/Dialect/RelAlg/Attributes.h"
+#include "mlir/Dialect/RelAlg/ColumnSet.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgTypes.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
@@ -12,10 +12,10 @@
 #include "mlir/IR/SymbolTable.h"
 
 namespace mlir::relalg::detail {
-Attributes getUsedAttributes(mlir::Operation* op);
-Attributes getAvailableAttributes(mlir::Operation* op);
-Attributes getFreeAttributes(mlir::Operation* op);
-Attributes getCreatedAttributes(mlir::Operation* op);
+ColumnSet getUsedColumns(mlir::Operation* op);
+ColumnSet getAvailableColumns(mlir::Operation* op);
+ColumnSet getFreeColumns(mlir::Operation* op);
+ColumnSet getCreatedColumns(mlir::Operation* op);
 bool isDependentJoin(mlir::Operation* op);
 void moveSubTreeBefore(mlir::Operation* tree, mlir::Operation* before);
 

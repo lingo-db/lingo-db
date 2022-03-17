@@ -14,8 +14,8 @@ static NodeSet getNodeSetFromClass(llvm::EquivalenceClasses<size_t>& classes, si
 size_t countCreatingOperators(Operator op, llvm::SmallPtrSet<mlir::Operation*, 12>& alreadyOptimized) {
    size_t res = 0;
    auto children = op.getChildren();
-   auto used = op.getUsedAttributes();
-   auto created = op.getCreatedAttributes();
+   auto used = op.getUsedColumns();
+   auto created = op.getCreatedColumns();
    if (alreadyOptimized.count(op.getOperation())) {
       res += 1;
       return res;
@@ -28,11 +28,11 @@ size_t countCreatingOperators(Operator op, llvm::SmallPtrSet<mlir::Operation*, 1
 }
 void mlir::relalg::QueryGraphBuilder::populateQueryGraph(Operator op) {
    auto children = op.getChildren();
-   auto used = op.getUsedAttributes();
-   auto created = op.getCreatedAttributes();
+   auto used = op.getUsedColumns();
+   auto created = op.getCreatedColumns();
    if (alreadyOptimized.count(op.getOperation())) {
       size_t newNode = addNode(op);
-      for (const auto* attr : op.getAvailableAttributes()) {
+      for (const auto* attr : op.getAvailableColumns()) {
          attrToNodes[attr] = newNode;
       }
       return;
@@ -59,7 +59,7 @@ void mlir::relalg::QueryGraphBuilder::populateQueryGraph(Operator op) {
       llvm::Optional<size_t> createdNode;
       if (!created.empty()) {
          size_t newNode = qg.addPseudoNode();
-         for (const auto* attr : op.getCreatedAttributes()) {
+         for (const auto* attr : op.getCreatedColumns()) {
             attrToNodes[attr] = newNode;
          }
          createdNode = newNode;
@@ -153,7 +153,7 @@ NodeSet QueryGraphBuilder::calcTES(Operator op) {
 }
 NodeSet QueryGraphBuilder::calcSES(Operator op) const {
    NodeSet res = NodeSet(numNodes);
-   for (const auto* attr : op.getUsedAttributes()) {
+   for (const auto* attr : op.getUsedColumns()) {
       res.set(attrToNodes.at(attr));
    }
    return res;

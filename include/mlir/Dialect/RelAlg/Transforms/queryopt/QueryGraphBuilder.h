@@ -10,7 +10,7 @@ class QueryGraphBuilder {
    llvm::SmallPtrSet<mlir::Operation*,12>& alreadyOptimized;
    size_t numNodes;
    QueryGraph qg;
-   std::unordered_map<const relalg::RelationalAttribute*, size_t> attrToNodes;
+   std::unordered_map<const relalg::Column*, size_t> attrToNodes;
 
    size_t addNode(Operator op) {
       QueryGraph::Node n(op);

@@ -19,7 +19,7 @@ class Translator {
    Operator op;
    std::vector<std::unique_ptr<Translator>> children;
    std::vector<size_t> requiredBuilders;
-   mlir::relalg::Attributes requiredAttributes;
+   mlir::relalg::ColumnSet requiredAttributes;
    const mlir::function_ref<void(mlir::OpBuilder&, mlir::Location)> noBuilder = nullptr;
 
    std::vector<mlir::Value> mergeRelationalBlock(mlir::Block* dest, mlir::Operation* op, mlir::function_ref<mlir::Block*(mlir::Operation*)> getBlockFn, TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope);
@@ -34,8 +34,8 @@ class Translator {
    Translator(Operator op);
    virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders);
 
-   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes);
-   virtual mlir::relalg::Attributes getAvailableAttributes();
+   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::ColumnSet requiredAttributes);
+   virtual mlir::relalg::ColumnSet getAvailableColumns();
    virtual void consume(Translator* child, mlir::OpBuilder& builder, TranslatorContext& context) = 0;
    virtual void produce(TranslatorContext& context, mlir::OpBuilder& builder) = 0;
    virtual void done() {}

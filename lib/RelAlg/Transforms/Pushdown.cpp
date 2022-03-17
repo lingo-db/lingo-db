@@ -1,5 +1,5 @@
 #include "llvm/ADT/TypeSwitch.h"
-#include "mlir/Dialect/RelAlg/Attributes.h"
+#include "mlir/Dialect/RelAlg/ColumnSet.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
@@ -13,12 +13,12 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::Fu
 
    Operator pushdown(Operator topush, Operator curr) {
       UnaryOperator topushUnary = mlir::dyn_cast_or_null<UnaryOperator>(topush.getOperation());
-      mlir::relalg::Attributes usedAttributes = topush.getUsedAttributes();
+      mlir::relalg::ColumnSet usedAttributes = topush.getUsedColumns();
       auto res = ::llvm::TypeSwitch<mlir::Operation*, Operator>(curr.getOperation())
                     .Case<UnaryOperator>([&](UnaryOperator unaryOperator) {
                        Operator asOp = mlir::dyn_cast_or_null<Operator>(unaryOperator.getOperation());
                        auto child = mlir::dyn_cast_or_null<Operator>(unaryOperator.child());
-                       auto availableChild = child.getAvailableAttributes();
+                       auto availableChild = child.getAvailableColumns();
                        if (topushUnary.reorderable(unaryOperator) && usedAttributes.isSubsetOf(availableChild)) {
                           topush->moveBefore(asOp.getOperation());
                           asOp.setChildren({pushdown(topush, child)});
@@ -31,8 +31,8 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::Fu
                        Operator asOp = mlir::dyn_cast_or_null<Operator>(binop.getOperation());
                        auto left = mlir::dyn_cast_or_null<Operator>(binop.leftChild());
                        auto right = mlir::dyn_cast_or_null<Operator>(binop.rightChild());
-                       auto availableLeft = left.getAvailableAttributes();
-                       auto availableRight = right.getAvailableAttributes();
+                       auto availableLeft = left.getAvailableColumns();
+                       auto availableRight = right.getAvailableColumns();
                        auto pushableLeft = topushUnary.lPushable(binop) && usedAttributes.isSubsetOf(availableLeft);
                        auto pushableRight = topushUnary.rPushable(binop) && usedAttributes.isSubsetOf(availableRight);
                        if (!pushableLeft && !pushableRight) {

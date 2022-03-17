@@ -119,7 +119,7 @@ void RelAlgDialect::initialize() {
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.cpp.inc"
       >();
    addInterfaces<RelalgInlinerInterface>();
-   relationalAttributeManager.setContext(getContext());
+   columnManager.setContext(getContext());
    getContext()->loadDialect<mlir::db::DBDialect>();
    getContext()->loadDialect<mlir::arith::ArithmeticDialect>();
    mlir::arith::CmpIOp::attachInterface<ArithCmpFCmpInterface>(*getContext());
@@ -133,21 +133,21 @@ void RelAlgDialect::initialize() {
 void mlir::relalg::TableMetaDataAttr::print(::mlir::AsmPrinter& printer) const {
    printer << "<" << getMeta()->serialize() << ">";
 }
-void mlir::relalg::RelationalAttributeDefAttr::print(::mlir::AsmPrinter& printer) const {
+void mlir::relalg::ColumnDefAttr::print(::mlir::AsmPrinter& printer) const {
    printer << "<" << getName() << ">";
 }
-::mlir::Attribute mlir::relalg::RelationalAttributeDefAttr::parse(::mlir::AsmParser& parser, ::mlir::Type odsType) {
+::mlir::Attribute mlir::relalg::ColumnDefAttr::parse(::mlir::AsmParser& parser, ::mlir::Type odsType) {
    std::string str;
    if (parser.parseLess() || parser.parseString(&str) || parser.parseGreater()) return Attribute();
-   return mlir::relalg::RelationalAttributeDefAttr::get(parser.getContext(), str, {}, {});
+   return mlir::relalg::ColumnDefAttr::get(parser.getContext(), str, {}, {});
 }
-void mlir::relalg::RelationalAttributeRefAttr::print(::mlir::AsmPrinter& printer) const {
+void mlir::relalg::ColumnRefAttr::print(::mlir::AsmPrinter& printer) const {
    printer << "<" << getName() << ">";
 }
-::mlir::Attribute mlir::relalg::RelationalAttributeRefAttr::parse(::mlir::AsmParser& parser, ::mlir::Type odsType) {
+::mlir::Attribute mlir::relalg::ColumnRefAttr::parse(::mlir::AsmParser& parser, ::mlir::Type odsType) {
    mlir::SymbolRefAttr sym;
    if (parser.parseLess() || parser.parseAttribute(sym) || parser.parseGreater()) return Attribute();
-   return mlir::relalg::RelationalAttributeRefAttr::get(parser.getContext(), sym, {});
+   return mlir::relalg::ColumnRefAttr::get(parser.getContext(), sym, {});
 }
 void mlir::relalg::SortSpecificationAttr::print(::mlir::AsmPrinter& printer) const {
    printer << "<"

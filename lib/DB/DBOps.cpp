@@ -370,7 +370,6 @@ LogicalResult mlir::db::AndOp::canonicalize(mlir::db::AndOp andOp, mlir::Pattern
          rawValues.erase(lowerCmp);
          rawValues.erase(upperCmp);
          rawValues.insert(between);
-         between.dump();
       }
    }
    if (rawValues.size() != andOp.vals().size()) {

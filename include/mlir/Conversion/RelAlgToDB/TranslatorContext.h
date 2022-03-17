@@ -3,27 +3,27 @@
 #include "llvm/ADT/ScopedHashTable.h"
 
 #include "mlir/Conversion/RelAlgToDB/Pipeline.h"
-#include "mlir/Dialect/RelAlg/IR/RelationalAttribute.h"
+#include "mlir/Dialect/RelAlg/IR/Column.h"
 #include "mlir/IR/Value.h"
 namespace mlir {
 namespace relalg {
 class TranslatorContext {
-   llvm::ScopedHashTable<const mlir::relalg::RelationalAttribute*, mlir::Value> symbolTable;
+   llvm::ScopedHashTable<const mlir::relalg::Column*, mlir::Value> symbolTable;
 
    public:
-   using AttributeResolverScope = llvm::ScopedHashTableScope<const mlir::relalg::RelationalAttribute*, mlir::Value>;
+   using AttributeResolverScope = llvm::ScopedHashTableScope<const mlir::relalg::Column*, mlir::Value>;
 
-   mlir::Value getValueForAttribute(const mlir::relalg::RelationalAttribute* attribute) const {
+   mlir::Value getValueForAttribute(const mlir::relalg::Column* attribute) const {
       if (!symbolTable.lookup(attribute)) {
          assert(symbolTable.count(attribute));
       }
 
       return symbolTable.lookup(attribute);
    }
-   mlir::Value getUnsafeValueForAttribute(const mlir::relalg::RelationalAttribute* attribute) const {
+   mlir::Value getUnsafeValueForAttribute(const mlir::relalg::Column* attribute) const {
       return symbolTable.lookup(attribute);
    }
-   void setValueForAttribute(AttributeResolverScope& scope, const mlir::relalg::RelationalAttribute* iu, mlir::Value v) {
+   void setValueForAttribute(AttributeResolverScope& scope, const mlir::relalg::Column* iu, mlir::Value v) {
       symbolTable.insertIntoScope(&scope, iu, v);
    }
    AttributeResolverScope createScope() {
@@ -36,7 +36,7 @@ class TranslatorContext {
       static size_t id = 0;
       return id++;
    }
-   std::unordered_map<mlir::Operation*, std::pair<PipelineDependency, std::vector<const mlir::relalg::RelationalAttribute*>>> materializedTmp;
+   std::unordered_map<mlir::Operation*, std::pair<PipelineDependency, std::vector<const mlir::relalg::Column*>>> materializedTmp;
 };
 } // end namespace relalg
 } // end namespace mlir

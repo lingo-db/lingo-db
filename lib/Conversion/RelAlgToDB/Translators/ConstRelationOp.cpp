@@ -19,7 +19,7 @@ class ConstRelTranslator : public mlir::relalg::Translator {
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       using namespace mlir;
-      mlir::relalg::OrderedAttributes attributes = mlir::relalg::OrderedAttributes::fromRefArr(constRelationOp.attributes());
+      mlir::relalg::OrderedAttributes attributes = mlir::relalg::OrderedAttributes::fromRefArr(constRelationOp.columns());
       auto tupleType = attributes.getTupleType(builder.getContext());
       mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(constRelationOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType));
       for (auto rowAttr : constRelationOp.valuesAttr()) {
@@ -44,7 +44,7 @@ class ConstRelTranslator : public mlir::relalg::Translator {
          mlir::OpBuilder builder2(forOp2.getBodyRegion());
          setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(constRelationOp->getLoc(), forOp2.getInductionVar());
-         attributes.setValuesForAttributes(context, scope, unpacked.getResults());
+         attributes.setValuesForColumns(context, scope, unpacked.getResults());
          consumer->consume(this, builder2, context);
          builder2.create<mlir::db::YieldOp>(constRelationOp->getLoc(), getRequiredBuilderValues(context));
          setRequiredBuilderValues(context, forOp2.results());

@@ -21,10 +21,10 @@ class TmpTranslator : public mlir::relalg::Translator {
    void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
-   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::Attributes requiredAttributes) override {
+   virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::ColumnSet requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
-      this->requiredAttributes.insert(mlir::relalg::Attributes::fromArrayAttr(tmpOp.attrs()));
+      this->requiredAttributes.insert(mlir::relalg::ColumnSet::fromArrayAttr(tmpOp.cols()));
       propagateInfo();
       for (const auto* attr : this->requiredAttributes) {
          attributes.insert(attr);
@@ -51,7 +51,7 @@ class TmpTranslator : public mlir::relalg::Translator {
          context.pipelineManager.setCurrentPipeline(p);
          context.pipelineManager.addPipeline(p);
          auto tupleType = attributes.getTupleType(builder.getContext());
-         std::unordered_map<const mlir::relalg::RelationalAttribute*, size_t> attributePos;
+         std::unordered_map<const mlir::relalg::Column*, size_t> attributePos;
          auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
             return std::vector<mlir::Value>({builder.create<mlir::db::CreateVectorBuilder>(tmpOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType))});
          });
@@ -79,7 +79,7 @@ class TmpTranslator : public mlir::relalg::Translator {
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
       setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
       auto unpacked = builder2.create<mlir::util::UnPackOp>(tmpOp->getLoc(), forOp2.getInductionVar());
-      attributes.setValuesForAttributes(context,scope,unpacked.getResults());
+      attributes.setValuesForColumns(context,scope,unpacked.getResults());
       consumer->consume(this, builder2, context);
       builder2.create<mlir::db::YieldOp>(tmpOp->getLoc(), getRequiredBuilderValues(context));
       setRequiredBuilderValues(context, forOp2.results());
