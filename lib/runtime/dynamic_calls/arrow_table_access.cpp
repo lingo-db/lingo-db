@@ -80,8 +80,11 @@ EXPORT uint8_t* rt_table_chunk_get_column_buffer(arrow::RecordBatch* tableChunk,
       return &alternative; //always return valid pointer to at least one byte filled with ones
    }
 }
-
-EXPORT runtime::Bytes rt_table_chunk_get_raw_column_buffer(arrow::RecordBatch* tableChunk, uint64_t columnId, uint64_t bufferId) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+struct TuplePtrSize{
+   uint8_t* data;
+   size_t len;
+};
+EXPORT TuplePtrSize rt_table_chunk_get_raw_column_buffer(arrow::RecordBatch* tableChunk, uint64_t columnId, uint64_t bufferId) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    static uint8_t alternative = 0b11111111;
    auto* buffer = (tableChunk)->column_data(columnId)->buffers[bufferId].get();
    if (buffer) {

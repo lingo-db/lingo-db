@@ -145,7 +145,7 @@ void DBToStdLoweringPass::runOnOperation() {
       return convertTuple(tupleType, typeConverter);
    });
    typeConverter.addConversion([&](mlir::db::TableType tableType) {
-      return mlir::util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8), llvm::Optional<int64_t>());
+      return mlir::util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));
    });
 
    typeConverter.addConversion([&](mlir::IntegerType iType) { return iType; });

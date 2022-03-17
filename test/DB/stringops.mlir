@@ -5,7 +5,8 @@ module {
         %conststr2 = db.constant ( "str2" ) : !db.string
         %conststr3 = db.constant ( "nostr" ) : !db.string
         %pattern = db.constant ( "str%" ) : !db.string
-
+        %substr = db.substr %conststr1[1 : 2] : !db.string
+        db.dump %substr : !db.string
 		//CHECK: bool(false)
         %0 = db.compare eq %conststr1 : !db.string, %conststr2 : !db.string
         db.dump %0 : i1

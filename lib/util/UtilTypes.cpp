@@ -11,30 +11,19 @@ using namespace mlir;
 
 void mlir::util::RefType::print(::mlir::AsmPrinter& printer) const {
    printer << "<";
-   if (getSize() && getSize().getValue() == -1) {
-      printer << "? x ";
-   } else if (getSize()) {
-      printer << getSize().getValue() << " x ";
-   }
    printer << getElementType() << ">";
 }
 ::mlir::Type mlir::util::RefType::parse(::mlir::AsmParser& parser) {
    Type elementType;
-   llvm::Optional<int64_t> size;
    if (parser.parseLess()) {
       return Type();
    }
-   if (parser.parseOptionalQuestion().succeeded()) {
-      if (parser.parseKeyword("x")) {
-         return Type();
-      }
-      size = -1;
-   }
+
    if (parser.parseType(elementType) || parser.parseGreater()) {
       return Type();
       return Type();
    }
-   return mlir::util::RefType::get(parser.getContext(), elementType, size);
+   return mlir::util::RefType::get(parser.getContext(), elementType);
 }
 
 #define GET_TYPEDEF_CLASSES

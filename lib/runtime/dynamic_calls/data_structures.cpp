@@ -5,7 +5,7 @@ struct Vec {
    size_t len;
    size_t cap;
    runtime::Bytes bytes;
-   Vec(size_t len, size_t cap, size_t numBytes) : len(len), cap(cap), bytes((uint8_t*) malloc(numBytes), numBytes) {}
+   Vec(size_t len, size_t cap, size_t numBytes) : len(len), cap(cap), bytes((uint8_t*) malloc(numBytes)) {}
 };
 struct AggrHt {
    struct Entry {
@@ -18,27 +18,31 @@ struct AggrHt {
    runtime::Bytes values;
    runtime::Bytes ht;
    //initial value follows...
-   AggrHt(size_t initialCapacity, size_t typeSize) : numValues(0), capacity(initialCapacity), values((uint8_t*) malloc(initialCapacity * typeSize), initialCapacity * typeSize), ht((uint8_t*) malloc(initialCapacity * 2 * sizeof(uint64_t)), initialCapacity * 2 * sizeof(uint64_t)) {
-      ht.fill(0x00);
+   AggrHt(size_t initialCapacity, size_t typeSize) : numValues(0), capacity(initialCapacity), values((uint8_t*) malloc(initialCapacity * typeSize)), ht((uint8_t*) malloc(initialCapacity * 2 * sizeof(uint64_t))) {
+      ht.fill(0x00, initialCapacity * 2 * sizeof(uint64_t));
    }
 };
 EXPORT Vec* rt_create_vec(size_t sizeOfType, size_t initialCapacity) {
    return new Vec(0, initialCapacity, initialCapacity * sizeOfType);
 }
-EXPORT void rt_resize_vec(Vec* v) {
+EXPORT void rt_resize_vec(Vec* v, size_t typeSize) {
+   v->bytes.resize(v->cap * typeSize, v->cap * 2 * typeSize);
    v->cap *= 2;
-   v->bytes.resize(2);
 }
 EXPORT AggrHt* rt_create_aggr_ht(size_t typeSize, size_t initialCapacity) {
    return new (malloc(sizeof(AggrHt) + typeSize)) AggrHt(initialCapacity, typeSize);
 }
 EXPORT void rt_resize_aggr_ht(AggrHt* aggrHt, size_t typeSize) {
-   aggrHt->values.resize(2);
-   aggrHt->ht.resize(2);
-   aggrHt->ht.fill(0x00);
+   size_t oldHtSize = aggrHt->capacity * 2 * sizeof(uint64_t);
+   size_t oldVecSize = aggrHt->capacity * typeSize;
+   size_t newVecSize = oldVecSize * 2;
+   size_t newHtSize = oldHtSize * 2;
+   aggrHt->values.resize(oldVecSize, newVecSize);
+   aggrHt->ht.resize(oldHtSize, newHtSize);
+   aggrHt->ht.fill(0x00, newHtSize);
    aggrHt->capacity *= 2;
    auto* ht = (AggrHt::Entry**) aggrHt->ht.getPtr();
-   size_t hashMask = (aggrHt->ht.getSize() / sizeof(size_t)) - 1;
+   size_t hashMask = (newHtSize / sizeof(size_t)) - 1;
    auto* valuesPtr = aggrHt->values.getPtr();
    for (size_t i = 0; i < aggrHt->numValues; i++) {
       auto* entry = (AggrHt::Entry*) &valuesPtr[i * typeSize];
@@ -58,7 +62,7 @@ struct JoinHt {
    size_t numValues;
    runtime::Bytes ht;
    size_t htMask;
-   JoinHt(const runtime::Bytes& values, size_t numValues, size_t htMask, size_t htSize) : values(values), numValues(numValues), ht((uint8_t*) malloc(htSize * sizeof(uint64_t)), htSize * sizeof(uint64_t)), htMask(htMask) {}
+   JoinHt(const runtime::Bytes& values, size_t numValues, size_t htMask, size_t htSize) : values(values), numValues(numValues), ht((uint8_t*) malloc(htSize * sizeof(uint64_t))), htMask(htMask) {}
 };
 EXPORT uint64_t next_pow_2(uint64_t v) {
    v--;
@@ -80,7 +84,7 @@ T* tag(T* ptr, T* previousPtr, size_t hash) {
    size_t previousTag = previousAsInt & tagMask;
    size_t currentTag = hash & tagMask;
    auto tagged = (asInt & ptrMask) | previousTag | currentTag;
-   auto *res = reinterpret_cast<T*>(tagged);
+   auto* res = reinterpret_cast<T*>(tagged);
    return res;
 }
 template <typename T>
@@ -93,7 +97,7 @@ EXPORT JoinHt* rt_build_join_ht(Vec* v, size_t typeSize) {
    size_t htSize = next_pow_2(v->len);
    size_t htMask = htSize - 1;
    auto* joinHt = new JoinHt(v->bytes, v->len, htMask, htSize);
-   joinHt->ht.fill(0x00);
+   joinHt->ht.fill(0x00, htSize * sizeof(uint64_t));
    auto* valuesPtr = joinHt->values.getPtr();
    auto* ht = (JoinHt::Entry**) joinHt->ht.getPtr();
    for (size_t i = 0; i < v->len; i++) {

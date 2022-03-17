@@ -68,19 +68,18 @@ class TableIterator : public WhileIterator {
    db::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   TableIterator(Value tableInfo, db::codegen::FunctionRegistry& functionRegistry) : WhileIterator(tableInfo.getContext()), tableInfo(tableInfo), functionRegistry(functionRegistry) {
-   }
+   TableIterator(Value tableInfo, db::codegen::FunctionRegistry& functionRegistry) : WhileIterator(tableInfo.getContext()), tableInfo(tableInfo), functionRegistry(functionRegistry) {}
    virtual void init(OpBuilder& builder) override {
       auto convertedType = typeConverter->convertType(tableInfo.getType()).cast<mlir::util::RefType>();
       tableInfo = builder.create<mlir::util::LoadOp>(loc, convertedType.getElementType(), tableInfo);
    }
 
    virtual Type iteratorType(OpBuilder& builder) override {
-      return mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8), llvm::Optional<int64_t>());
+      return mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8));
    }
 
    virtual Value iterator(OpBuilder& builder) override {
-      Value tablePtr = builder.create<util::GetTupleOp>(loc, mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8), llvm::Optional<int64_t>()), tableInfo, 0);
+      Value tablePtr = builder.create<util::GetTupleOp>(loc, mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8)), tableInfo, 0);
       return functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorInit, tablePtr)[0];
    }
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
@@ -88,8 +87,7 @@ class TableIterator : public WhileIterator {
    }
    virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
       Value currElementPtr = functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorCurr, iterator)[0];
-      Value currElement = builder.create<mlir::util::SetTupleOp>(loc, tableInfo.getType(), tableInfo, currElementPtr, 0);
-      return currElement;
+      return builder.create<mlir::util::SetTupleOp>(loc, tableInfo.getType(), tableInfo, currElementPtr, 0);
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
       return functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorValid, iterator)[0];
@@ -220,11 +218,11 @@ class JoinHtModifyLookupIterator : public WhileIterator {
 
       auto valType = elemType.cast<TupleType>().getTypes()[1];
 
-      Value elemAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), elemType, Optional<int64_t>()), iterator, 1);
+      Value elemAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), elemType), iterator, 1);
 
       Value loadedValue = builder.create<util::LoadOp>(loc, elemType, elemAddress);
 
-      Value valAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valType, Optional<int64_t>()), elemAddress, 1);
+      Value valAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valType), elemAddress, 1);
 
       return builder.create<mlir::util::PackOp>(loc, mlir::ValueRange{loadedValue, valAddress});
    }
@@ -264,7 +262,6 @@ class TableRowIterator : public ForIterator {
    TableRowIterator(Value tableChunkInfo, Type elementType, db::codegen::FunctionRegistry& functionRegistry) : ForIterator(tableChunkInfo.getContext()), tableChunkInfo(tableChunkInfo), elementType(elementType), functionRegistry(functionRegistry) {
    }
    virtual void init(OpBuilder& builder) override {
-      auto indexType = IndexType::get(builder.getContext());
       auto tableChunkInfoType = typeConverter->convertType(tableChunkInfo.getType()).cast<TupleType>();
       auto columnTypes = elementType.dyn_cast_or_null<TupleType>().getTypes();
       auto unpackOp = builder.create<util::UnPackOp>(loc, tableChunkInfoType.getTypes(), tableChunkInfo);
@@ -290,15 +287,16 @@ class TableRowIterator : public ForIterator {
          Value valueBuffer;
          if (!isIntegerType(baseType, 1)) {
             valueBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
-            valueBuffer = builder.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, convertedType, llvm::Optional<int64_t>()), valueBuffer);
+            valueBuffer = builder.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, convertedType), valueBuffer);
          } else {
-            valueBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetRawColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
+            valueBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
          }
          Value varLenBuffer{};
          Value nullMultiplier;
          if (isNullable) {
-            bitmapBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetRawColumnBuffer, mlir::ValueRange({chunk, columnId, const0}))[0];
-            Value bitmapSize = builder.create<util::DimOp>(loc, indexType, bitmapBuffer);
+            auto rawColBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetRawColumnBuffer, mlir::ValueRange({chunk, columnId, const0}));
+            Value bitmapSize = rawColBuffer[1];
+            bitmapBuffer = rawColBuffer[0];
             Value emptyBitmap = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, const0, bitmapSize);
             nullMultiplier = builder.create<mlir::arith::SelectOp>(loc, emptyBitmap, const0, const1);
          }
@@ -329,7 +327,7 @@ class TableRowIterator : public ForIterator {
             pos2.getDefiningOp()->setAttr("nosideffect", builder.getUnitAttr());
             Value len = builder.create<arith::SubIOp>(loc, builder.getI32Type(), pos2, pos1);
             Value pos1AsIndex = builder.create<arith::IndexCastOp>(loc, indexType, pos1);
-            Value ptr = builder.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, builder.getI8Type(), llvm::Optional<int64_t>()), column.varLenBuffer, pos1AsIndex);
+            Value ptr = builder.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, builder.getI8Type()), column.varLenBuffer, pos1AsIndex);
             val = builder.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(builder.getContext()), ptr, len);
          } else if (isIntegerType(column.baseType, 1)) {
             Value realPos = builder.create<arith::AddIOp>(loc, indexType, column.offset, index);
@@ -369,7 +367,7 @@ class VectorIterator : public ForIterator {
    VectorIterator(mlir::db::codegen::FunctionRegistry& functionRegistry, Value vector, Type elementType) : ForIterator(vector.getContext()), vector(vector), elementType(elementType) {
    }
    virtual void init(OpBuilder& builder) override {
-      Type typedPtrType = util::RefType::get(builder.getContext(), elementType, -1);
+      Type typedPtrType = util::RefType::get(builder.getContext(), elementType);
       auto loaded = builder.create<util::LoadOp>(loc, mlir::TupleType::get(builder.getContext(), TypeRange({builder.getIndexType(), builder.getIndexType(), typedPtrType})), vector, Value());
       auto unpacked = builder.create<util::UnPackOp>(loc, loaded);
 

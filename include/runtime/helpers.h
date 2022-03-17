@@ -11,32 +11,24 @@
 namespace runtime {
 class Bytes {
    uint8_t* pointer;
-   size_t size;
 
    public:
-   Bytes(uint8_t* ptr, size_t bytes) : pointer(ptr), size(bytes) {}
+   Bytes(uint8_t* ptr) : pointer(ptr) {}
    uint8_t* getPtr() {
       return pointer;
    }
-   size_t getSize() {
-      return size;
-   }
+
    void setPointer(uint8_t* pointer) {
       Bytes::pointer = pointer;
    }
-   void setSize(size_t size) {
-      Bytes::size = size;
-   }
-   void resize(size_t factor) {
-      auto newNumBytes = getSize() * factor;
+   void resize(size_t oldNumBytes,size_t newNumBytes) {
       uint8_t* newBytes = (uint8_t*) malloc(newNumBytes);
-      memcpy(newBytes, getPtr(), getSize());
-      setSize(newNumBytes);
+      memcpy(newBytes, getPtr(), oldNumBytes);
       free(getPtr());
       setPointer(newBytes);
    }
-   void fill(uint8_t val){
-      memset(getPtr(), val, getSize());
+   void fill(uint8_t val,size_t size){
+      memset(getPtr(), val,size);
    }
 };
 static uint64_t unalignedLoad64(const uint8_t* p) {

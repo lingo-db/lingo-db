@@ -225,13 +225,6 @@ STR_CMP(lte, <=)
 STR_CMP(gt, >)
 STR_CMP(gte, >=)
 
-extern "C" void rt_cpy(runtime::Bytes to, runtime::Bytes from) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   memcpy(to.getPtr(), from.getPtr(), from.getSize());
-}
-extern "C" void rt_fill(runtime::Bytes from, char val) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   memset(from.getPtr(), val, from.getSize());
-}
-
 
 
 EXPORT bool rt_cmp_string_eq(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
@@ -251,6 +244,6 @@ EXPORT runtime::VarLen32 rt_varlen_from_ptr(uint8_t* ptr, uint32_t len) { // NOL
 }
 
 EXPORT runtime::Bytes rt_varlen_to_ref(runtime::VarLen32* varlen) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return runtime::Bytes((uint8_t*) varlen->data(), varlen->getLen());
+   return runtime::Bytes((uint8_t*) varlen->data());
 }
 

@@ -17,7 +17,7 @@ class VectorHelper {
 
    public:
    static Type createSType(MLIRContext* context, Type elementType) {
-      return mlir::TupleType::get(context, {IndexType::get(context), IndexType::get(context), mlir::util::RefType::get(context, elementType, -1)});
+      return mlir::TupleType::get(context, {IndexType::get(context), IndexType::get(context), mlir::util::RefType::get(context, elementType)});
    }
    static mlir::util::RefType createType(MLIRContext* context, Type elementType) {
       return mlir::util::RefType::get(context, createSType(context, elementType));
@@ -31,8 +31,8 @@ class VectorHelper {
    }
    void insert(mlir::OpBuilder& builder, Value vec, Value newVal, mlir::db::codegen::FunctionRegistry& functionRegistry) {
       auto idxType = builder.getIndexType();
-      auto idxPtrType = util::RefType::get(builder.getContext(), idxType, {});
-      auto valuesType = mlir::util::RefType::get(builder.getContext(), elementType, -1);
+      auto idxPtrType = util::RefType::get(builder.getContext(), idxType);
+      auto valuesType = mlir::util::RefType::get(builder.getContext(), elementType);
       Value lenAddress = builder.create<util::TupleElementPtrOp>(loc, idxPtrType, vec, 0);
       Value capacityAddress = builder.create<util::TupleElementPtrOp>(loc, idxPtrType, vec, 1);
 
@@ -41,10 +41,11 @@ class VectorHelper {
       Value cmp = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, len, capacity);
       builder.create<scf::IfOp>(
          loc, TypeRange({}), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
-            Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type(),{}), vec);
-            functionRegistry.call(b,loc,mlir::db::codegen::FunctionRegistry::FunctionId::VecResize,downCasted);
+            Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type()), vec);
+            auto typeSize = b.create<mlir::util::SizeOfOp>(loc, b.getIndexType(), elementType);
+            functionRegistry.call(b,loc,mlir::db::codegen::FunctionRegistry::FunctionId::VecResize,ValueRange{downCasted,typeSize});
             b.create<scf::YieldOp>(loc); });
-      Value valuesAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valuesType, {}), vec, 2);
+      Value valuesAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valuesType), vec, 2);
       auto values = builder.create<mlir::util::LoadOp>(loc, valuesType, valuesAddress, Value());
 
       builder.create<util::StoreOp>(loc, newVal, values, len);
@@ -73,10 +74,10 @@ class AggrHtHelper {
       auto idxType = IndexType::get(context);
       auto entryType = createEntryType(context, keyType, aggrType);
       auto entryPtrType = mlir::util::RefType::get(context, entryType);
-      auto valuesType = mlir::util::RefType::get(context, entryType, -1);
-      auto htType = mlir::util::RefType::get(context, entryPtrType, -1);
+      auto valuesType = mlir::util::RefType::get(context, entryType);
+      auto htType = mlir::util::RefType::get(context, entryPtrType);
       auto tplType = mlir::TupleType::get(context, {idxType, idxType, valuesType, htType, aggrType});
-      return mlir::util::RefType::get(context, tplType, {});
+      return mlir::util::RefType::get(context, tplType);
    }
    AggrHtHelper(MLIRContext* context, Type keyType, Type aggrType, Location loc, TypeConverter* converter) : entryType(createEntryType(context, converter->convertType(keyType), converter->convertType(aggrType))), loc(loc), keyType(converter->convertType(keyType)), aggrType(converter->convertType(aggrType)), oKeyType(keyType), oAggrType(aggrType) {
    }
@@ -117,14 +118,14 @@ class AggrHtHelper {
       auto* context = rewriter.getContext();
       auto i8PtrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
       auto idxType = rewriter.getIndexType();
-      auto idxPtrType = util::RefType::get(rewriter.getContext(), idxType, {});
+      auto idxPtrType = util::RefType::get(rewriter.getContext(), idxType);
       auto kvType = AggrHtHelper::kvType(context, keyType, aggrType);
       auto kvPtrType = mlir::util::RefType::get(context, kvType);
       auto keyPtrType = mlir::util::RefType::get(context, keyType);
       auto aggrPtrType = mlir::util::RefType::get(context, aggrType);
-      auto valuesType = mlir::util::RefType::get(context, entryType, -1);
+      auto valuesType = mlir::util::RefType::get(context, entryType);
       auto entryPtrType = mlir::util::RefType::get(context, entryType);
-      auto htType = mlir::util::RefType::get(context, entryPtrType, -1);
+      auto htType = mlir::util::RefType::get(context, entryPtrType);
 
       Value lenAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 0);
       Value capacityAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 1);
@@ -138,7 +139,7 @@ class AggrHtHelper {
       Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, len, capacityInitial);
       rewriter.create<scf::IfOp>(
          loc, TypeRange(), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
-            Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type(),{}), aggrHtBuilder);
+            Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type()), aggrHtBuilder);
             auto typeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), createEntryType(rewriter.getContext(),keyType,aggrType));
             functionRegistry.call(b,loc,mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtResize,ValueRange{downCasted,typeSize});
             b.create<scf::YieldOp>(loc); });
@@ -540,7 +541,7 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
       return valueRange.front();
    });
    typeConverter.addConversion([&](mlir::db::TableBuilderType tableType) {
-      return mlir::util::RefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8), llvm::Optional<int64_t>());
+      return mlir::util::RefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8));
    });
    typeConverter.addConversion([&](mlir::db::VectorBuilderType vectorBuilderType) {
       return VectorHelper::createType(patterns.getContext(), typeConverter.convertType(vectorBuilderType.getElementType()));

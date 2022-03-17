@@ -8,8 +8,8 @@
 		%testbyte = arith.constant 1 : i8
         %memref1=memref.alloc(%c10) : memref<?xi8>
         memref.store %testbyte, %memref1[%c1] :memref<?xi8>
-        %generic_memref1= util.to_generic_memref %memref1 : memref<?xi8> -> !util.ref<?x!db.nullable<i32>>
-        %memref_reloaded=util.to_memref %generic_memref1 : !util.ref<?x!db.nullable<i32>> -> memref<?xi8>
+        %generic_memref1= util.to_generic_memref %memref1 : memref<?xi8> -> !util.ref<!db.nullable<i32>>
+        %memref_reloaded=util.to_memref %generic_memref1 : !util.ref<!db.nullable<i32>> -> memref<?xi8>
         %reloaded=memref.load %memref_reloaded[%c1] :memref<?xi8>
 
         %generic_memref=util.alloc(%c2) : !util.ref<!db.nullable<i32>>

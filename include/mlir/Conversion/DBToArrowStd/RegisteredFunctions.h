@@ -28,7 +28,7 @@
    F(TableChunkIteratorFree, table_chunk_iterator_free, OPERANDS(POINTER_TYPE), RETURNS())                                                                 \
    F(TableChunkNumRows, table_chunk_num_rows, OPERANDS(POINTER_TYPE), RETURNS(INDEX_TYPE))                                                                 \
    F(TableChunkGetColumnBuffer, table_chunk_get_column_buffer, OPERANDS(POINTER_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                      \
-   F(TableChunkGetRawColumnBuffer, table_chunk_get_raw_column_buffer, OPERANDS(POINTER_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(BYTES_TYPE))                 \
+   F(TableChunkGetRawColumnBuffer, table_chunk_get_raw_column_buffer, OPERANDS(POINTER_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE,INDEX_TYPE))                 \
    F(TableChunkGetColumnOffset, table_chunk_get_column_offset, OPERANDS(POINTER_TYPE, INDEX_TYPE), RETURNS(INDEX_TYPE))                                    \
    F(ArrowGetType2Param, arrow_type2, OPERANDS(INT_TYPE(32), INT_TYPE(32), INT_TYPE(32)), RETURNS(POINTER_TYPE))                                           \
    F(ArrowGetType1Param, arrow_type1, OPERANDS(INT_TYPE(32), INT_TYPE(32)), RETURNS(POINTER_TYPE))                                                         \
@@ -81,7 +81,7 @@
    F(DateExtractHour, extract_hour, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                         \
    F(DateExtractMinute, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                     \
    F(DateExtractSecond, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                     \
-   F(VecResize, resize_vec, OPERANDS(POINTER_TYPE), RETURNS())                                                                                             \
+   F(VecResize, resize_vec, OPERANDS(POINTER_TYPE,INDEX_TYPE), RETURNS())                                                                                             \
    F(VecCreate, create_vec, OPERANDS(INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                       \
    F(AggrHtCreate, create_aggr_ht, OPERANDS(INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                 \
    F(AggrHtResize, resize_aggr_ht, OPERANDS(POINTER_TYPE, INDEX_TYPE), RETURNS()) \

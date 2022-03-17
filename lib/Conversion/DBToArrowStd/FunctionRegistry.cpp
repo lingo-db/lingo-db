@@ -10,9 +10,8 @@ void mlir::db::codegen::FunctionRegistry::registerFunctions() {
 
 #define INDEX_TYPE IndexType::get(context)
 
-#define POINTER_TYPE mlir::util::RefType::get(context,IntegerType::get(context, 8),llvm::Optional<int64_t>())
+#define POINTER_TYPE mlir::util::RefType::get(context,IntegerType::get(context, 8))
 #define STRING_TYPE mlir::util::VarLen32Type::get(context)
-#define BYTES_TYPE mlir::util::RefType::get(context,IntegerType::get(context, 8),-1)
 #define TUPLE_TYPE(...) TupleType::get(context, TypeRange({__VA_ARGS__}))
 #define OPERANDS_(...)  { __VA_ARGS__ }
 #define RETURNS_(...)  { __VA_ARGS__ }

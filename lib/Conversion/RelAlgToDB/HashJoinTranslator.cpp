@@ -98,7 +98,7 @@ void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilde
       mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, htBuilder.getType(), htBuilder, packed);
       context.builders[builderId] = mergedBuilder;
    } else if (child == this->children[1].get()) {
-      mlir::TupleType entryAndValuePtrType = mlir::TupleType::get(ctxt, TypeRange{entryType, util::RefType::get(ctxt, valTupleType, llvm::Optional<int64_t>())});
+      mlir::TupleType entryAndValuePtrType = mlir::TupleType::get(ctxt, TypeRange{entryType, util::RefType::get(ctxt, valTupleType )});
       Type iteratorType = impl->markable ? entryAndValuePtrType : entryType;
       auto packedKey = builder.create<mlir::util::PackOp>(loc, mlir::relalg::HashJoinUtils::inlineKeys(&joinOp->getRegion(0).front(), rightKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context));
       mlir::Type htIterable = mlir::db::GenericIterableType::get(ctxt, iteratorType, impl->markable ? "join_ht_mod_iterator" : "join_ht_iterator");
@@ -128,7 +128,7 @@ void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilde
             mlir::Value matched = evaluatePredicate(context, builder2, scope);
             Value marker;
             if (impl->markable) {
-               Value castedRef = builder2.create<util::GenericMemrefCastOp>(loc, util::RefType::get(ctxt, builder.getI64Type(), llvm::Optional<int64_t>()), valuePtr);
+               Value castedRef = builder2.create<util::GenericMemrefCastOp>(loc, util::RefType::get(ctxt, builder.getI64Type()), valuePtr);
                marker = builder2.create<util::ToMemrefOp>(loc, MemRefType::get({}, builder.getIntegerType(64)), castedRef);
             }
             impl->handleLookup(matched, marker, context, builder2);

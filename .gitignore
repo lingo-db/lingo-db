@@ -2,7 +2,7 @@
 build/
 test*.mlir
 test.sql
-resources/data/tpch-1
+resources/data/tpch-*
 __pycache__
 llvm-jit-static.*
 perf-result.json

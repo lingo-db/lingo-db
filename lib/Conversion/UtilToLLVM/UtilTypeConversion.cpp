@@ -66,7 +66,6 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    patterns.add<SimpleTypeConversionPattern<AllocOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<AllocaOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<DeAllocOp>>(typeConverter, patterns.getContext());
-   patterns.add<SimpleTypeConversionPattern<DimOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<GenericMemrefCastOp>>(typeConverter, patterns.getContext());
    patterns.add<SizeOfLowering>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<LoadOp>>(typeConverter, patterns.getContext());
@@ -75,7 +74,7 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    patterns.add<SimpleTypeConversionPattern<FilterTaggedPtr>>(typeConverter, patterns.getContext());
 
    typeConverter.addConversion([&](mlir::util::RefType genericMemrefType) {
-      return mlir::util::RefType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getElementType()), genericMemrefType.getSize());
+      return mlir::util::RefType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getElementType()));
    });
    typeConverter.addConversion([&](mlir::util::VarLen32Type varType) {
       return varType;

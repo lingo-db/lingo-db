@@ -30,13 +30,10 @@ class Util_Type<string name, string typeMnemonic> : TypeDef<Util_Dialect, name> 
 
 def RefType : Util_Type<"Ref","ref"> {
 let summary = "ref type";
-let parameters = (ins "Type":$elementType,OptionalParameter<"llvm::Optional<int64_t>">: $size);
+let parameters = (ins "Type":$elementType);
     let builders = [
-    TypeBuilder<(ins "Type":$elementType), [{
-    return $_get($_ctxt, elementType,llvm::Optional<int64_t>());
-    }]>,
     TypeBuilder<(ins ), [{
-    return $_get($_ctxt, mlir::IntegerType::get($_ctxt,8),llvm::Optional<int64_t>());
+    return $_get($_ctxt, mlir::IntegerType::get($_ctxt,8));
     }]>
     ];
 let builderCall = "$_builder.getType<" # dialect.cppNamespace # "::" # cppClassName # ">()";
@@ -131,11 +128,6 @@ let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
 def StoreOp  : Util_Op<"store"> {
 let arguments = (ins AnyType:$val,RefType:$ref,Optional<Index>:$idx);
 let assemblyFormat = "$val `:` type($val) `,` $ref `[` $idx `]` `:`type($ref) attr-dict";
-}
-def DimOp  : Util_Op<"dim",[NoSideEffect]> {
-let arguments = (ins RefType:$ref);
-let results=(outs Index:$size);
-let assemblyFormat = "$ref `:`type($ref) attr-dict";
 }
 def LoadOp  : Util_Op<"load",[DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
 let arguments = (ins RefType:$ref,Optional<Index>:$idx);

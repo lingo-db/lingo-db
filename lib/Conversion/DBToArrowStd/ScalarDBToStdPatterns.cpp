@@ -265,8 +265,7 @@ class SubStrOpLowering : public ConversionPattern {
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto subStrOp = cast<mlir::db::SubStrOp>(op);
       mlir::db::SubStrOpAdaptor adaptor(operands);
-      Value ref = rewriter.create<mlir::util::VarLenGetRef>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type(), -1), adaptor.val());
-      ref = rewriter.create<mlir::util::GenericMemrefCastOp>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type()), ref);
+      Value ref = rewriter.create<mlir::util::VarLenGetRef>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type()), adaptor.val());
       Value pos1AsIndex = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.from() - 1));
 
       Value len = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(subStrOp.to() - subStrOp.from() + 1));
@@ -511,7 +510,7 @@ class CreateFlagLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto boolType = rewriter.getI1Type();
-      Type memrefType = util::RefType::get(rewriter.getContext(), boolType, llvm::Optional<int64_t>());
+      Type memrefType = util::RefType::get(rewriter.getContext(), boolType);
       Value alloca;
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
@@ -689,7 +688,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
       return (Type) TupleType::get(patterns.getContext(), {IntegerType::get(patterns.getContext(), 1), typeConverter.convertType(type.getType())});
    });
    typeConverter.addConversion([&](mlir::db::FlagType type) {
-      Type memrefType = util::RefType::get(patterns.getContext(), IntegerType::get(type.getContext(), 1), llvm::Optional<int64_t>());
+      Type memrefType = util::RefType::get(patterns.getContext(), IntegerType::get(type.getContext(), 1));
       return memrefType;
    });
 

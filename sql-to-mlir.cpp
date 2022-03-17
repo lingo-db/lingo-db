@@ -22,6 +22,7 @@
 
 #include <llvm/ADT/StringSwitch.h>
 
+#include <chrono>
 #include <fstream>
 #include <functional>
 #include <iostream>
@@ -887,9 +888,9 @@ struct SQLTranslator {
    std::vector<std::string> listToStringVec(List* l) {
       std::vector<std::string> res;
       if (l != nullptr) {
-         for (auto *cell = l->head; cell != nullptr; cell = cell->next) {
-            auto *const target = reinterpret_cast<Value*>(cell->data.ptr_value);
-            auto *const column = target->val_.str_;
+         for (auto* cell = l->head; cell != nullptr; cell = cell->next) {
+            auto* const target = reinterpret_cast<Value*>(cell->data.ptr_value);
+            auto* const column = target->val_.str_;
             res.push_back(column);
          }
       }
@@ -1203,16 +1204,16 @@ struct SQLTranslator {
                std::vector<mlir::Type> globalTypes;
                std::vector<mlir::Attribute> rows;
                bool first = true;
-               for (auto * valueList = stmt->values_lists_->head; valueList != nullptr; valueList = valueList->next) {
-                  auto *target = reinterpret_cast<List*>(valueList->data.ptr_value);
+               for (auto* valueList = stmt->values_lists_->head; valueList != nullptr; valueList = valueList->next) {
+                  auto* target = reinterpret_cast<List*>(valueList->data.ptr_value);
                   size_t i = 0;
                   std::vector<mlir::Type> types;
                   std::vector<mlir::Attribute> values;
-                  for (auto *cell = target->head; cell != nullptr; cell = cell->next, i++) {
-                     auto * expr = reinterpret_cast<Expr*>(cell->data.ptr_value);
+                  for (auto* cell = target->head; cell != nullptr; cell = cell->next, i++) {
+                     auto* expr = reinterpret_cast<Expr*>(cell->data.ptr_value);
                      switch (expr->type_) {
                         case T_A_Const: {
-                           auto *constExpr = reinterpret_cast<A_Const*>(expr);
+                           auto* constExpr = reinterpret_cast<A_Const*>(expr);
                            auto constVal = constExpr->val_;
                            mlir::Attribute value;
                            mlir::Type t;
@@ -1419,6 +1420,7 @@ int main(int argc, char** argv) {
    std::ifstream istream{filename};
    std::stringstream buffer;
    buffer << istream.rdbuf();
+   auto start = std::chrono::high_resolution_clock::now();
    SQLTranslator translator(buffer.str(), schema, &context);
    mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
 
@@ -1427,7 +1429,10 @@ int main(int argc, char** argv) {
    funcOp.body().push_back(new mlir::Block);
    builder.setInsertionPointToStart(&funcOp.body().front());
    mlir::Value val = translator.translate(builder);
+
    builder.create<mlir::ReturnOp>(builder.getUnknownLoc(), val);
+   auto end = std::chrono::high_resolution_clock::now();
+   std::cerr << "time:" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
 
    moduleOp->print(llvm::outs());
    return 0;

@@ -364,7 +364,7 @@ bool Runner::lowerToLLVM() {
       mlir::OpBuilder builder(moduleOp->getContext());
       builder.setInsertionPointToStart(moduleOp.getBody());
       mainFunc->setAttr("passthrough", builder.getArrayAttr({builder.getStringAttr("noinline"), builder.getStringAttr("optnone")}));
-      builder.create<mlir::FuncOp>(moduleOp.getLoc(), "rt_set_execution_context", builder.getFunctionType(mlir::TypeRange({mlir::util::RefType::get(moduleOp->getContext(), mlir::IntegerType::get(moduleOp->getContext(), 8), llvm::Optional<int64_t>())}), mlir::TypeRange()), builder.getStringAttr("private"));
+      builder.create<mlir::FuncOp>(moduleOp.getLoc(), "rt_set_execution_context", builder.getFunctionType(mlir::TypeRange({mlir::util::RefType::get(moduleOp->getContext(), mlir::IntegerType::get(moduleOp->getContext(), 8))}), mlir::TypeRange()), builder.getStringAttr("private"));
    }
    mlir::PassManager pm2(&ctxt->context);
    pm2.enableVerifier(runMode == RunMode::DEBUGGING);
