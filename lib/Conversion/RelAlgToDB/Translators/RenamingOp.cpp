@@ -8,12 +8,7 @@ class RenamingTranslator : public mlir::relalg::Translator {
    std::vector<std::pair<mlir::relalg::Column*, mlir::Value>> saved;
 
    public:
-   RenamingTranslator(mlir::relalg::RenamingOp renamingOp) : mlir::relalg::Translator(renamingOp), renamingOp(renamingOp) {
-   }
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
-      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-      children[0]->addRequiredBuilders(requiredBuilders);
-   }
+   RenamingTranslator(mlir::relalg::RenamingOp renamingOp) : mlir::relalg::Translator(renamingOp), renamingOp(renamingOp) {}
 
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       auto scope = context.createScope();

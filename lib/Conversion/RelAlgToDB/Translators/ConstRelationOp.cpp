@@ -7,11 +7,7 @@ class ConstRelTranslator : public mlir::relalg::Translator {
    mlir::relalg::ConstRelationOp constRelationOp;
 
    public:
-   ConstRelTranslator(mlir::relalg::ConstRelationOp constRelationOp) : mlir::relalg::Translator(constRelationOp), constRelationOp(constRelationOp) {
-   }
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
-      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-   }
+   ConstRelTranslator(mlir::relalg::ConstRelationOp constRelationOp) : mlir::relalg::Translator(constRelationOp), constRelationOp(constRelationOp) {}
 
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       assert(false && "should not happen");

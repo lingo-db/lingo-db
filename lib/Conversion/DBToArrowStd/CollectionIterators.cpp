@@ -40,6 +40,7 @@ class ForIterator {
    mlir::TypeConverter* typeConverter;
    MLIRContext* context;
    mlir::Location loc;
+   mlir::Value len;
    ForIterator(mlir::MLIRContext* context) : context(context), loc(mlir::UnknownLoc::get(context)) {}
 
    public:
@@ -51,7 +52,9 @@ class ForIterator {
       return builder.create<arith::ConstantIndexOp>(loc, 0);
    }
 
-   virtual Value upper(OpBuilder& builder) = 0;
+   virtual Value upper(OpBuilder& builder) {
+      return len;
+   }
    virtual Value step(OpBuilder& builder) {
       return builder.create<arith::ConstantIndexOp>(loc, 1);
    }
@@ -140,7 +143,6 @@ class JoinHtLookupIterator : public WhileIterator {
 class JoinHtIterator : public ForIterator {
    Value hashTable;
    Value values;
-   Value len;
 
    public:
    JoinHtIterator(Value hashTable) : ForIterator(hashTable.getContext()), hashTable(hashTable) {
@@ -151,21 +153,15 @@ class JoinHtIterator : public ForIterator {
       values = unpacked.getResult(0);
       len = unpacked.getResult(1);
    }
-   virtual Value upper(OpBuilder& builder) override {
-      return len;
-   }
    virtual Value getElement(OpBuilder& builder, Value index) override {
       Value loaded = builder.create<util::LoadOp>(loc, values.getType().cast<mlir::util::RefType>().getElementType(), values, index);
       auto unpacked = builder.create<mlir::util::UnPackOp>(loc, loaded);
-
-      Value loadedValue = unpacked.getResult(1);
-      return loadedValue;
+      return unpacked.getResult(1);
    }
 };
 class AggrHtIterator : public ForIterator {
    Value hashTable;
    Value values;
-   Value len;
 
    public:
    AggrHtIterator(Value hashTable) : ForIterator(hashTable.getContext()), hashTable(hashTable) {
@@ -177,7 +173,6 @@ class AggrHtIterator : public ForIterator {
       values = unpacked.getResult(2);
       len = unpacked.getResult(0);
    }
-   virtual Value upper(OpBuilder& builder) override { return len; }
    virtual Value getElement(OpBuilder& builder, Value index) override {
       Value loaded = builder.create<util::LoadOp>(loc, values.getType().cast<mlir::util::RefType>().getElementType(), values, index);
       auto unpacked = builder.create<mlir::util::UnPackOp>(loc, loaded);
@@ -360,7 +355,6 @@ class VectorIterator : public ForIterator {
    Value vector;
    Type elementType;
    Value values;
-   Value len;
    using FunctionId = mlir::db::codegen::FunctionRegistry::FunctionId;
 
    public:
@@ -373,9 +367,6 @@ class VectorIterator : public ForIterator {
 
       values = unpacked.getResult(2);
       len = unpacked.getResult(0);
-   }
-   virtual Value upper(OpBuilder& builder) override {
-      return len;
    }
    virtual Value getElement(OpBuilder& builder, Value index) override {
       Value loaded = builder.create<util::LoadOp>(loc, elementType, values, index);

@@ -6,11 +6,6 @@ class MapTranslator : public mlir::relalg::Translator {
    public:
    MapTranslator(mlir::relalg::MapOp mapOp) : mlir::relalg::Translator(mapOp) {}
 
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
-      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-      children[0]->addRequiredBuilders(requiredBuilders);
-   }
-
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       auto scope = context.createScope();
       mergeRelationalBlock(

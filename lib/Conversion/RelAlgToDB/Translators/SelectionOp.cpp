@@ -8,13 +8,7 @@ class SelectionTranslator : public mlir::relalg::Translator {
    mlir::relalg::SelectionOp selectionOp;
 
    public:
-   SelectionTranslator(mlir::relalg::SelectionOp selectionOp) : mlir::relalg::Translator(selectionOp), selectionOp(selectionOp) {
-   }
-
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
-      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-      children[0]->addRequiredBuilders(requiredBuilders);
-   }
+   SelectionTranslator(mlir::relalg::SelectionOp selectionOp) : mlir::relalg::Translator(selectionOp), selectionOp(selectionOp) {}
 
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       auto scope = context.createScope();

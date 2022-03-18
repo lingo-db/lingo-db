@@ -10,13 +10,7 @@ class LimitTranslator : public mlir::relalg::Translator {
    mlir::Value finishedFlag;
 
    public:
-   LimitTranslator(mlir::relalg::LimitOp limitOp) : mlir::relalg::Translator(limitOp), limitOp(limitOp) {
-   }
-
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override{
-      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-      this->children[0]->addRequiredBuilders(requiredBuilders);
-   }
+   LimitTranslator(mlir::relalg::LimitOp limitOp) : mlir::relalg::Translator(limitOp), limitOp(limitOp) {}
 
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       mlir::Value counter = context.builders[counterId];

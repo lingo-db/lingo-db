@@ -9,11 +9,7 @@ class BaseTableTranslator : public mlir::relalg::Translator {
    mlir::relalg::BaseTableOp baseTableOp;
 
    public:
-   BaseTableTranslator(mlir::relalg::BaseTableOp baseTableOp) : mlir::relalg::Translator(baseTableOp), baseTableOp(baseTableOp) {
-   }
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
-      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-   }
+   BaseTableTranslator(mlir::relalg::BaseTableOp baseTableOp) : mlir::relalg::Translator(baseTableOp), baseTableOp(baseTableOp) {}
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       assert(false && "should not happen");
    }
