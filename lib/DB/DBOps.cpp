@@ -62,6 +62,12 @@ bool mlir::db::CmpOp::canHandleInvalidValues() {
    }
    return true;
 }
+bool mlir::db::CastOp::canHandleInvalidValues() {
+   if (getBaseType(getResult().getType()).isa<db::StringType>() || getBaseType(val().getType()).isa<db::StringType>()) {
+      return false;
+   }
+   return true;
+}
 
 static ParseResult parseDateOp(OpAsmParser& parser,
                                OperationState& result) {

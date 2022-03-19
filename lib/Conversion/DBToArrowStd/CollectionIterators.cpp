@@ -105,8 +105,9 @@ class JoinHtLookupIterator : public WhileIterator {
    Value ptr;
    TupleType tupleType;
    bool modifiable;
+
    public:
-   JoinHtLookupIterator(Value tableInfo, Type elementType, bool modifiable=false) : WhileIterator(tableInfo.getContext()), iteratorInfo(tableInfo),modifiable(modifiable) {
+   JoinHtLookupIterator(Value tableInfo, Type elementType, bool modifiable = false) : WhileIterator(tableInfo.getContext()), iteratorInfo(tableInfo), modifiable(modifiable) {
    }
    virtual Type iteratorType(OpBuilder& builder) override {
       tupleType = typeConverter->convertType(iteratorInfo.getType()).cast<mlir::TupleType>();
@@ -133,10 +134,10 @@ class JoinHtLookupIterator : public WhileIterator {
       auto valType = elemType.cast<TupleType>().getTypes()[1];
       Value elemAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), elemType), iterator, 1);
       Value loadedValue = builder.create<util::LoadOp>(loc, elemType, elemAddress);
-      if(modifiable){
+      if (modifiable) {
          Value valAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valType), elemAddress, 1);
          return builder.create<mlir::util::PackOp>(loc, mlir::ValueRange{loadedValue, valAddress});
-      }else{
+      } else {
          return loadedValue;
       }
    }
@@ -302,7 +303,7 @@ class TableRowIterator : public ForIterator {
             Value realPos = builder.create<arith::AddIOp>(loc, indexType, column.offset, index);
             realPos = builder.create<arith::MulIOp>(loc, indexType, column.nullMultiplier, realPos);
             Value isnull = mlir::db::codegen::BitUtil::getBit(builder, loc, column.nullBitmap, realPos, true);
-            val = builder.create<mlir::db::CombineNullOp>(loc, column.completeType, val, isnull);
+            val = builder.create<mlir::db::AsNullableOp>(loc, column.completeType, val, isnull);
          }
          values.push_back(val);
       }

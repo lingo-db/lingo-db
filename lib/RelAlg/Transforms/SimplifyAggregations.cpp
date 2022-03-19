@@ -44,7 +44,7 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
       mlir::Value getScalarOp = rewriter.replaceOpWithNewOp<mlir::relalg::GetScalarOp>(op, nullableType, attributeManager.createRef(&def.getColumn()), aggrOp.asRelation());
       mlir::Value res = getScalarOp;
       if (!nullableType) {
-         res = rewriter.create<mlir::db::CastOp>(op->getLoc(), aggrFuncOp.getType(), getScalarOp);
+         res = rewriter.create<mlir::db::NullableGetVal>(op->getLoc(), aggrFuncOp.getType(), getScalarOp);
       }
       rewriter.replaceOp(op, res);
       return mlir::success(true);
@@ -88,7 +88,7 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
          nullableType = mlir::db::NullableType::get(rewriter.getContext(), nullableType);
       }
       mlir::Value getScalarOp = rewriter.create<mlir::relalg::GetScalarOp>(op->getLoc(), nullableType, attributeManager.createRef(&def.getColumn()), aggrOp.asRelation());
-      mlir::Value res = rewriter.create<mlir::db::CastOp>(op->getLoc(), aggrFuncOp.getType(), getScalarOp);
+      mlir::Value res = rewriter.create<mlir::db::AsNullableOp>(op->getLoc(), aggrFuncOp.getType(), getScalarOp);
       rewriter.replaceOp(op, res);
       return mlir::success(true);
    }

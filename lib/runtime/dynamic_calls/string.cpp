@@ -96,8 +96,7 @@ extern "C" bool rt_cmp_string_starts_with(runtime::VarLen32 str1, runtime::VarLe
 //source https://github.com/apache/arrow/blob/41d115071587d68891b219cc137551d3ea9a568b/cpp/src/gandiva/gdv_function_stubs.cc
 //Apache-2.0 License
 #define CAST_NUMERIC_FROM_STRING(OUT_TYPE, ARROW_TYPE, TYPE_NAME)                                                                          \
-   extern "C" OUT_TYPE rt_cast_string_##TYPE_NAME(bool null, runtime::VarLen32 str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
-      if (null) return (OUT_TYPE) 0;                                                                                                       \
+   extern "C" OUT_TYPE rt_cast_string_##TYPE_NAME(runtime::VarLen32 str) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       char* data = (str).data();                                                                                                           \
       int32_t len = (str).getLen();                                                                                                        \
       OUT_TYPE val = 0;                                                                                                                    \
@@ -125,10 +124,7 @@ CAST_NUMERIC_FROM_STRING(float, arrow::FloatType, float32)
 CAST_NUMERIC_FROM_STRING(double, arrow::DoubleType, float64)
 //end taken from gandiva
 
-extern "C" __int128 rt_cast_string_decimal(bool null, runtime::VarLen32 string, unsigned reqScale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   if (null) {
-      return 0;
-   }
+extern "C" __int128 rt_cast_string_decimal(runtime::VarLen32 string, unsigned reqScale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    int32_t precision;
    int32_t scale;
    arrow::Decimal128 decimalrep;
@@ -143,10 +139,7 @@ extern "C" __int128 rt_cast_string_decimal(bool null, runtime::VarLen32 string, 
    return res;
 }
 #define CAST_NUMERIC_TO_STRING(IN_TYPE, ARROW_TYPE, TYPE_NAME)                                                                                \
-   extern "C" runtime::VarLen32 rt_cast_##TYPE_NAME##_string(bool null, IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
-      if (null) {                                                                                                                             \
-         return runtime::VarLen32(nullptr, 0);                                                                                                \
-      }                                                                                                                                       \
+   extern "C" runtime::VarLen32 rt_cast_##TYPE_NAME##_string(IN_TYPE value) { /* NOLINT (clang-diagnostic-return-type-c-linkage)*/ \
       arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                                 \
       uint8_t* data = nullptr;                                                                                                                \
       size_t len = 0;                                                                                                                         \
@@ -163,10 +156,8 @@ CAST_NUMERIC_TO_STRING(int64_t, arrow::Int64Type, int)
 CAST_NUMERIC_TO_STRING(float, arrow::FloatType, float32)
 CAST_NUMERIC_TO_STRING(double, arrow::DoubleType, float64)
 
-extern "C" runtime::VarLen32 rt_cast_decimal_string(bool null, uint64_t low, uint64_t high, uint32_t scale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   if (null) {
-      return runtime::VarLen32(nullptr, 0);
-   }
+extern "C" runtime::VarLen32 rt_cast_decimal_string(uint64_t low, uint64_t high, uint32_t scale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+
    arrow::Decimal128 decimalrep(arrow::BasicDecimal128(high, low));
    std::string str = decimalrep.ToString(scale);
    size_t len = str.length();
@@ -176,7 +167,7 @@ extern "C" runtime::VarLen32 rt_cast_decimal_string(bool null, uint64_t low, uin
    return runtime::VarLen32(data, len);
 }
 
-EXPORT runtime::VarLen32 rt_cast_char_string(bool null, uint64_t val, size_t bytes) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+EXPORT runtime::VarLen32 rt_cast_char_string(uint64_t val, size_t bytes) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    char* data = new char[bytes];
    memcpy(data, &val, bytes);
    return runtime::VarLen32((uint8_t*) data, bytes);

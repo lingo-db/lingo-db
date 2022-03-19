@@ -205,10 +205,10 @@ let results = (outs  Index : $hash);
 let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
-def DB_CombineNullOp : DB_Op<"combine_null", [NoSideEffect]> {
-let arguments = (ins AnyType: $val,I1: $null);
+def DB_AsNullableOp : DB_Op<"as_nullable", [NoSideEffect]> {
+let arguments = (ins AnyType: $val,Optional<I1>: $null);
 let results = (outs  NullableType : $res);
-let assemblyFormat = "$val `:` type($val) `,` $null  `:` type($res) attr-dict";
+let assemblyFormat = "$val `:` type($val) ( `,` $null^ )?  `->` type($res) attr-dict";
 }
 def DB_NullableGetVal : DB_Op<"nullable_get_val", [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
 let arguments = (ins NullableType: $val);
@@ -441,10 +441,13 @@ let hasCanonicalizeMethod = 1;
 let assemblyFormat = "$vals `:` type($vals) attr-dict";
 
 }
-def NotOp : DB_Op<"not", [NoSideEffect,SameOperandsAndResultType]> {
+def NotOp : DB_Op<"not", [NoSideEffect,SameOperandsAndResultType,DeclareOpInterfaceMethods<DB_HandleNullInterface>]> {
 let arguments = (ins AnyBool: $val);
 let results = (outs  AnyBool : $res);
 let assemblyFormat = "$val `:` type($val) attr-dict";
+  let extraClassDefinition = [{
+    bool $cppClass::canHandleInvalidValues(){ return true; }
+  }];
 }
 def FreeOp : DB_Op<"free"> {
 let arguments = (ins AnyType: $val);
@@ -497,7 +500,7 @@ let results = (outs  I64 : $res);
 let assemblyFormat = "$unit `,` $val `:` type($val) attr-dict";
 
 }
-def CastOp : DB_Op<"cast"> {
+def CastOp : DB_Op<"cast",[DeclareOpInterfaceMethods<DB_HandleNullInterface>]> {
 let arguments = (ins NullableDBType:$val);
 let results=(outs NullableDBType:$res);
 let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";

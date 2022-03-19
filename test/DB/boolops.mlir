@@ -42,8 +42,8 @@
  		call @test_and(%true,%true,%true) : (i1,i1,i1) -> ()
 		%sep =db.constant ( "and-------------" ) : !db.string
 		db.dump %sep : !db.string
- 		%false_nullable = db.cast %false : i1 -> !db.nullable<i1>
- 		%true_nullable = db.cast %true : i1 -> !db.nullable<i1>
+ 		%false_nullable = db.as_nullable %false : i1 -> !db.nullable<i1>
+ 		%true_nullable = db.as_nullable %true : i1 -> !db.nullable<i1>
  		%null_nullable = db.null : !db.nullable<i1>
  		//CHECK: bool(false)
  		call @test_and_nullable (%false_nullable,%false_nullable,%false_nullable) : (!db.nullable<i1>,!db.nullable<i1>,!db.nullable<i1>) -> ()
@@ -122,8 +122,8 @@
  		call @test_or(%true,%true,%true) : (i1,i1,i1) -> ()
 		%sep =db.constant ( "or-------------" ) : !db.string
 		db.dump %sep : !db.string
- 		%false_nullable = db.cast %false : i1 -> !db.nullable<i1>
- 		%true_nullable = db.cast %true : i1 -> !db.nullable<i1>
+ 		%false_nullable = db.as_nullable %false : i1 -> !db.nullable<i1>
+ 		%true_nullable = db.as_nullable %true : i1 -> !db.nullable<i1>
  		%null_nullable = db.null : !db.nullable<i1>
  		//CHECK: bool(false)
  		call @test_or_nullable (%false_nullable,%false_nullable,%false_nullable) : (!db.nullable<i1>,!db.nullable<i1>,!db.nullable<i1>) -> ()
@@ -184,8 +184,8 @@
 	func @test_not () {
  		%false = db.constant ( 0 ) : i1
  		%true = db.constant ( 1 ) : i1
-		%false_nullable = db.cast %false : i1 -> !db.nullable<i1>
-		%true_nullable = db.cast %true : i1 -> !db.nullable<i1>
+		%false_nullable = db.as_nullable %false : i1 -> !db.nullable<i1>
+		%true_nullable = db.as_nullable %true : i1 -> !db.nullable<i1>
 		%null_nullable = db.null : !db.nullable<i1>
  		%not_true = db.not %true : i1
  		%not_false = db.not %false : i1

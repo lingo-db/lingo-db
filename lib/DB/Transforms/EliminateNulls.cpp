@@ -49,7 +49,7 @@ class WrapWithNullCheck : public mlir::RewritePattern {
          auto *cloned = rewriter.clone(*op, mapping);
          if (op->getNumResults() == 1) {
             cloned->getResult(0).setType(getBaseType(cloned->getResult(0).getType()));
-            rewriter.replaceOpWithNewOp<mlir::db::CombineNullOp>(op, op->getResultTypes()[0], cloned->getResult(0), isAnyNull);
+            rewriter.replaceOpWithNewOp<mlir::db::AsNullableOp>(op, op->getResultTypes()[0], cloned->getResult(0), isAnyNull);
          } else {
             rewriter.eraseOp(op);
          }
@@ -71,7 +71,7 @@ class WrapWithNullCheck : public mlir::RewritePattern {
             auto *cloned=b.clone(*op,mapping);
             if(op->getNumResults()==1){
                cloned->getResult(0).setType(getBaseType(cloned->getResult(0).getType()));
-               mlir::Value nullResult=b.create<mlir::db::CastOp>(op->getLoc(),op->getResultTypes()[0],cloned->getResult(0));
+               mlir::Value nullResult=b.create<mlir::db::AsNullableOp>(op->getLoc(),op->getResultTypes()[0],cloned->getResult(0));
                b.create<mlir::scf::YieldOp>(loc,nullResult);
             }else{
                b.create<mlir::scf::YieldOp>(loc);

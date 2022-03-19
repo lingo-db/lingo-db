@@ -26,39 +26,26 @@ class StringCastOpLowering : public ConversionPattern {
 
       auto castOp = cast<mlir::db::CastOp>(op);
       auto loc = op->getLoc();
-      auto sourceType = castOp.val().getType();
-      auto targetType = castOp.getType();
-      auto sourceNullableType = sourceType.dyn_cast_or_null<mlir::db::NullableType>();
-      auto targetNullableType = targetType.dyn_cast_or_null<mlir::db::NullableType>();
-      auto scalarSourceType = sourceNullableType ? sourceNullableType.getType() : sourceType;
-      auto scalarTargetType = targetNullableType ? targetNullableType.getType() : targetType;
+      auto scalarSourceType = castOp.val().getType();
+      auto scalarTargetType = castOp.getType();
       auto convertedTargetType = typeConverter->convertType(scalarTargetType);
       if (!scalarSourceType.isa<mlir::db::StringType>() && !scalarTargetType.isa<mlir::db::StringType>()) return failure();
 
-      Value isNull;
-      Value value;
-      if (sourceNullableType) {
-         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, operands[0]);
-         isNull = unPackOp.vals()[0];
-         value = unPackOp.vals()[1];
-      } else {
-         isNull = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-         value = operands[0];
-      }
+      Value value = operands[0];
       if (scalarSourceType == scalarTargetType) {
          //nothing to do here
       } else if (auto stringType = scalarSourceType.dyn_cast_or_null<db::StringType>()) {
          if (auto intWidth = getIntegerWidth(scalarTargetType, false)) {
-            value = functionRegistry.call(rewriter, loc, FunctionId::CastStringToInt64, ValueRange({isNull, value}))[0];
+            value = functionRegistry.call(rewriter, loc, FunctionId::CastStringToInt64, ValueRange({value}))[0];
             if (intWidth < 64) {
                value = rewriter.create<arith::TruncIOp>(loc, convertedTargetType, value);
             }
          } else if (auto floatType = scalarTargetType.dyn_cast_or_null<FloatType>()) {
             FunctionId castFn = floatType.getWidth() == 32 ? FunctionId ::CastStringToFloat32 : FunctionId ::CastStringToFloat64;
-            value = functionRegistry.call(rewriter, loc, castFn, ValueRange({isNull, value}))[0];
+            value = functionRegistry.call(rewriter, loc, castFn, ValueRange({value}))[0];
          } else if (auto decimalType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto scale = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalType.getS()));
-            value = functionRegistry.call(rewriter, loc, FunctionId ::CastStringToDecimal, ValueRange({isNull, value, scale}))[0];
+            value = functionRegistry.call(rewriter, loc, FunctionId ::CastStringToDecimal, ValueRange({value, scale}))[0];
             if (typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth() < 128) {
                auto converted = rewriter.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType), value);
                value = converted;
@@ -71,14 +58,14 @@ class StringCastOpLowering : public ConversionPattern {
             if (intWidth < 64) {
                value = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), value);
             }
-            value = functionRegistry.call(rewriter, loc, FunctionId ::CastInt64ToString, ValueRange({isNull, value}))[0];
+            value = functionRegistry.call(rewriter, loc, FunctionId ::CastInt64ToString, ValueRange({value}))[0];
          } else {
             return failure();
          }
       } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
          if (scalarTargetType.isa<db::StringType>()) {
             FunctionId castFn = floatType.getWidth() == 32 ? FunctionId ::CastFloat32ToString : FunctionId ::CastFloat64ToString;
-            value = functionRegistry.call(rewriter, loc, castFn, ValueRange({isNull, value}))[0];
+            value = functionRegistry.call(rewriter, loc, castFn, ValueRange({value}))[0];
 
          } else {
             return failure();
@@ -90,7 +77,7 @@ class StringCastOpLowering : public ConversionPattern {
                auto converted = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), value);
                value = converted;
             }
-            value = functionRegistry.call(rewriter, loc, FunctionId ::CastDecimalToString, ValueRange({isNull, value, scale}))[0];
+            value = functionRegistry.call(rewriter, loc, FunctionId ::CastDecimalToString, ValueRange({value, scale}))[0];
 
          } else {
             return failure();
@@ -101,20 +88,14 @@ class StringCastOpLowering : public ConversionPattern {
                value = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), value);
             }
             auto bytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(charType.getBytes()));
-            value = functionRegistry.call(rewriter, loc, FunctionId ::CastCharToString, ValueRange({isNull, value, bytes}))[0];
+            value = functionRegistry.call(rewriter, loc, FunctionId ::CastCharToString, ValueRange({value, bytes}))[0];
          } else {
             return failure();
          }
       } else {
          return failure();
       }
-      //todo convert types
-      if (targetNullableType) {
-         Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({isNull, value}));
-         rewriter.replaceOp(op, combined);
-      } else {
-         rewriter.replaceOp(op, value);
-      }
+      rewriter.replaceOp(op, value);
       return success();
    }
 };
@@ -361,9 +342,8 @@ class DateAddOpLowering : public ConversionPattern {
       auto loc = op->getLoc();
       auto dateType = dateAddOp.left().getType().cast<mlir::db::DateType>().getUnit();
       if (dateType == db::DateUnitAttr::day) {
-         auto i64Type = IntegerType::get(rewriter.getContext(), 64);
-         dateVal = rewriter.create<arith::ExtUIOp>(loc, i64Type, dateVal);
-         Value multiplier = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i64Type, 24 * 60 * 60 * 1000));
+         dateVal = rewriter.create<arith::ExtUIOp>(loc, rewriter.getI64Type(), dateVal);
+         Value multiplier = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI64Type(), 24 * 60 * 60 * 1000));
          dateVal = rewriter.create<arith::MulIOp>(loc, dateVal, multiplier);
       }
       if (dateAddOp.right().getType().cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
@@ -372,11 +352,9 @@ class DateAddOpLowering : public ConversionPattern {
          dateVal = functionRegistry.call(rewriter, loc, FunctionId::TimestampAddMonth, ValueRange({invervalVal, dateVal}))[0];
       }
       if (dateType == db::DateUnitAttr::day) {
-         auto i64Type = IntegerType::get(rewriter.getContext(), 64);
-         auto i32Type = IntegerType::get(rewriter.getContext(), 32);
-         Value multiplier = rewriter.template create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i64Type, 24 * 60 * 60 * 1000));
+         Value multiplier = rewriter.template create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI64Type(), 24 * 60 * 60 * 1000));
          dateVal = rewriter.template create<arith::DivUIOp>(loc, dateVal, multiplier);
-         dateVal = rewriter.template create<arith::TruncIOp>(loc, i32Type, dateVal);
+         dateVal = rewriter.template create<arith::TruncIOp>(loc, rewriter.getI32Type(), dateVal);
       }
       rewriter.replaceOp(op, dateVal);
       return success();

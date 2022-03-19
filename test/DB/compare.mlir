@@ -9,8 +9,8 @@
         %constf2 = db.constant ( 2. ) : f32
 
 
-		%const1_nullable = db.cast %const1 : i32 -> !db.nullable<i32>
-		%const2_nullable = db.cast %const2 : i32 -> !db.nullable<i32>
+		%const1_nullable = db.as_nullable %const1 : i32 -> !db.nullable<i32>
+		%const2_nullable = db.as_nullable %const2 : i32 -> !db.nullable<i32>
 		%null_nullable = db.null : !db.nullable<i32>
 		//CHECK: bool(NULL)
 		%n_eq_n = db.compare eq %null_nullable:!db.nullable<i32>, %null_nullable:!db.nullable<i32>

@@ -8,7 +8,7 @@
         %generic_memref=util.alloca(%c2) : !util.ref<!db.nullable<i32>>
         %testval1= db.null : !db.nullable<i32>
         %testval2c= db.constant (42) : i32
-        %testval2= db.cast %testval2c  : i32 -> !db.nullable<i32>
+        %testval2= db.as_nullable %testval2c  : i32 -> !db.nullable<i32>
 
         util.store %testval1:!db.nullable<i32>,%generic_memref[%c1] :!util.ref<!db.nullable<i32>>
         util.store %testval2:!db.nullable<i32>,%generic_memref[] :!util.ref<!db.nullable<i32>>

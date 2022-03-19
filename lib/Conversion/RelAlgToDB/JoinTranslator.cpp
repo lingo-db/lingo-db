@@ -43,7 +43,7 @@ void JoinTranslator::handleMapping(OpBuilder& builder, TranslatorContext& contex
             const auto* refAttr = *mlir::relalg::ColumnSet::fromArrayAttr(fromExisting).begin();
             auto value = context.getValueForAttribute(refAttr);
             if (refAttr->type != defAttr->type) {
-               mlir::Value tmp = builder.create<mlir::db::CastOp>(joinOp->getLoc(), defAttr->type, value);
+               mlir::Value tmp = builder.create<mlir::db::AsNullableOp>(joinOp->getLoc(), defAttr->type, value);
                value = tmp;
             }
             context.setValueForAttribute(scope, defAttr, value);

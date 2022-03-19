@@ -17,19 +17,9 @@ class NotOpLowering : public ConversionPattern {
       : ConversionPattern(typeConverter, mlir::db::NotOp::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto notOp = cast<mlir::db::NotOp>(op);
       Value trueValue = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-      auto valType = notOp.val().getType();
-      if (valType.isa<mlir::db::NullableType>()) {
-         auto tupleType = typeConverter->convertType(notOp.val().getType());
-         Value val = rewriter.create<util::GetTupleOp>(op->getLoc(), rewriter.getI1Type(), operands[0], 1);
-         val = rewriter.create<arith::XOrIOp>(op->getLoc(), val, trueValue);
-         rewriter.replaceOpWithNewOp<util::SetTupleOp>(op, tupleType, operands[0], val, 1);
-         return success();
-      } else {
-         rewriter.replaceOpWithNewOp<arith::XOrIOp>(op, operands[0], trueValue);
-         return success();
-      }
+      rewriter.replaceOpWithNewOp<arith::XOrIOp>(op, operands[0], trueValue);
+      return success();
    }
 };
 class AndOpLowering : public ConversionPattern {
@@ -226,14 +216,18 @@ class NullableGetValOpLowering : public ConversionPattern {
       return success();
    }
 };
-class CombineNullOpLowering : public ConversionPattern {
+class AsNullableOpLowering : public ConversionPattern {
    public:
-   explicit CombineNullOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CombineNullOp::getOperationName(), 1, context) {}
+   explicit AsNullableOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::AsNullableOp::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::db::CombineNullOpAdaptor adaptor(operands);
-      auto packOp = rewriter.create<mlir::util::PackOp>(op->getLoc(), ValueRange({adaptor.null(), adaptor.val()}));
+      mlir::db::AsNullableOpAdaptor adaptor(operands);
+      mlir::Value isNull = adaptor.null();
+      if (!isNull) {
+         isNull = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+      }
+      auto packOp = rewriter.create<mlir::util::PackOp>(op->getLoc(), ValueRange({isNull, adaptor.val()}));
       rewriter.replaceOp(op, packOp.tuple());
       return success();
    }
@@ -392,25 +386,12 @@ class CastOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto castOp = cast<mlir::db::CastOp>(op);
       auto loc = op->getLoc();
-      auto sourceType = castOp.val().getType();
-      auto targetType = castOp.getType();
-      auto sourceNullableType = sourceType.dyn_cast_or_null<mlir::db::NullableType>();
-      auto targetNullableType = targetType.dyn_cast_or_null<mlir::db::NullableType>();
-      auto scalarSourceType = sourceNullableType ? sourceNullableType.getType() : sourceType;
-      auto scalarTargetType = targetNullableType ? targetNullableType.getType() : targetType;
+      auto scalarSourceType = castOp.val().getType();
+      auto scalarTargetType = castOp.getType();
       auto convertedSourceType = typeConverter->convertType(scalarSourceType);
       auto convertedTargetType = typeConverter->convertType(scalarTargetType);
       if (scalarSourceType.isa<mlir::db::StringType>() || scalarTargetType.isa<mlir::db::StringType>()) return failure();
-      Value isNull;
-      Value value;
-      if (sourceNullableType) {
-         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, operands[0]);
-         isNull = unPackOp.vals()[0];
-         value = unPackOp.vals()[1];
-      } else {
-         isNull = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-         value = operands[0];
-      }
+      Value value = operands[0];
       if (scalarSourceType == scalarTargetType) {
          //nothing to do here
       } else if (auto sourceIntWidth = getIntegerWidth(scalarSourceType, false)) {
@@ -480,13 +461,7 @@ class CastOpLowering : public ConversionPattern {
       } else {
          return failure();
       }
-      //todo convert types
-      if (targetNullableType) {
-         Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({isNull, value}));
-         rewriter.replaceOp(op, combined);
-      } else {
-         rewriter.replaceOp(op, value);
-      }
+      rewriter.replaceOp(op, value);
       return success();
    }
 };
@@ -712,7 +687,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    patterns.insert<SubStrOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<NullOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<IsNullOpLowering>(typeConverter, patterns.getContext());
-   patterns.insert<CombineNullOpLowering>(typeConverter, patterns.getContext());
+   patterns.insert<AsNullableOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<NullableGetValOpLowering>(typeConverter, patterns.getContext());
 
    patterns.insert<ConstantLowering>(typeConverter, patterns.getContext());

@@ -24,10 +24,10 @@
          %str2c=db.constant ( "strb" ) :!db.string
          %str3c=db.constant ( "strc" ) :!db.string
          %str4c=db.constant ( "strd" ) :!db.string
-         %str1 = db.cast %str1c  : !db.string -> !db.nullable<!db.string>
-         %str2 = db.cast %str2c  : !db.string -> !db.nullable<!db.string>
-         %str3 = db.cast %str3c  : !db.string -> !db.nullable<!db.string>
-         %str4 = db.cast %str4c  : !db.string -> !db.nullable<!db.string>
+         %str1 = db.as_nullable %str1c  : !db.string -> !db.nullable<!db.string>
+         %str2 = db.as_nullable %str2c  : !db.string -> !db.nullable<!db.string>
+         %str3 = db.as_nullable %str3c  : !db.string -> !db.nullable<!db.string>
+         %str4 = db.as_nullable %str4c  : !db.string -> !db.nullable<!db.string>
          %int1=db.constant ( 4 ) : i32
          %int2=db.constant ( 2 ) : i32
          %int3=db.constant ( 3 ) : i32
