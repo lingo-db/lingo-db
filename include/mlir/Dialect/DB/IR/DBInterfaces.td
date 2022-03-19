@@ -1,6 +1,15 @@
-#ifndef Interfaces
-#define Interfaces
+#ifndef DBInterfaces
+#define DBInterfaces
 include "mlir/IR/OpBase.td"
+def DB_HandleNullInterface : OpInterface<"HandleNullInterface"> {
+  let cppNamespace = "::mlir::db";
 
+  let methods = [
+    InterfaceMethod<
+      /*description=*/"",
+      /*retTy=*/"bool",
+      /*methodName=*/"canHandleInvalidValues"
+    >];
+}
 
-#endif// Interfaces
+#endif// DBInterfaces

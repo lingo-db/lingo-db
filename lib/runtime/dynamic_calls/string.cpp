@@ -80,28 +80,16 @@ bool like(const char* str, size_t str_len, const char* pattern, size_t pattern_l
 }
 //end taken from noisepage
 
-extern "C" bool rt_cmp_string_like(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
-   if (null) {
-      return false;
-   } else {
-      return like((str1).data(), (str1).getLen(), (str2).data(), (str2).getLen(), '\\');
-   }
+extern "C" bool rt_cmp_string_like(runtime::VarLen32 str1, runtime::VarLen32 str2) {
+   return like((str1).data(), (str1).getLen(), (str2).data(), (str2).getLen(), '\\');
 }
-extern "C" bool rt_cmp_string_ends_with(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
-   if (null) {
-      return false;
-   } else {
-      if (str1.getLen() < str2.getLen()) return false;
-      return memcmp(str1.data() + str1.getLen() - str2.getLen(), str2.data(), str2.getLen()) == 0;
-   }
+extern "C" bool rt_cmp_string_ends_with(runtime::VarLen32 str1, runtime::VarLen32 str2) {
+   if (str1.getLen() < str2.getLen()) return false;
+   return memcmp(str1.data() + str1.getLen() - str2.getLen(), str2.data(), str2.getLen()) == 0;
 }
-extern "C" bool rt_cmp_string_starts_with(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
-   if (null) {
-      return false;
-   } else {
-      if (str1.getLen() < str2.getLen()) return false;
-      return memcmp(str1.data(), str2.data(), str2.getLen()) == 0;
-   }
+extern "C" bool rt_cmp_string_starts_with(runtime::VarLen32 str1, runtime::VarLen32 str2) {
+   if (str1.getLen() < str2.getLen()) return false;
+   return memcmp(str1.data(), str2.data(), str2.getLen()) == 0;
 }
 
 //taken from gandiva
@@ -211,13 +199,9 @@ __attribute__((always_inline)) inline int64_t mem_compare(const char* left, int6
    }
 }
 //end taken from apache gandiva
-#define STR_CMP(NAME, OP)                                                                            \
-   extern "C" bool rt_cmp_string_##NAME(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) { \
-      if (null) {                                                                                    \
-         return false;                                                                               \
-      } else {                                                                                       \
-         return mem_compare((str1).data(), (str1).getLen(), (str2).data(), (str2).getLen()) OP 0;    \
-      }                                                                                              \
+#define STR_CMP(NAME, OP)                                                                      \
+   extern "C" bool rt_cmp_string_##NAME(runtime::VarLen32 str1, runtime::VarLen32 str2) {      \
+      return mem_compare((str1).data(), (str1).getLen(), (str2).data(), (str2).getLen()) OP 0; \
    }
 
 STR_CMP(lt, <)
@@ -225,17 +209,11 @@ STR_CMP(lte, <=)
 STR_CMP(gt, >)
 STR_CMP(gte, >=)
 
-
-
-EXPORT bool rt_cmp_string_eq(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
-   if (null) return false;
-
+EXPORT bool rt_cmp_string_eq(runtime::VarLen32 str1, runtime::VarLen32 str2) {
    if (str1.getLen() != str2.getLen()) return false;
    return memcmp(str1.data(), str2.data(), str1.getLen()) == 0;
 }
-EXPORT bool rt_cmp_string_neq(bool null, runtime::VarLen32 str1, runtime::VarLen32 str2) {
-   if (null) return false;
-
+EXPORT bool rt_cmp_string_neq(runtime::VarLen32 str1, runtime::VarLen32 str2) {
    if (str1.getLen() != str2.getLen()) return true;
    return memcmp(str1.data(), str2.data(), str1.getLen()) != 0;
 }
@@ -246,4 +224,3 @@ EXPORT runtime::VarLen32 rt_varlen_from_ptr(uint8_t* ptr, uint32_t len) { // NOL
 EXPORT runtime::Bytes rt_varlen_to_ref(runtime::VarLen32* varlen) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return runtime::Bytes((uint8_t*) varlen->data());
 }
-

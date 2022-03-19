@@ -55,6 +55,14 @@ LogicalResult mlir::db::CmpOp::inferReturnTypes(
    return success();
 }
 
+bool mlir::db::CmpOp::canHandleInvalidValues() {
+   auto type = getBaseType(left().getType());
+   if (type.isa<db::StringType>()) {
+      return false;
+   }
+   return true;
+}
+
 static ParseResult parseDateOp(OpAsmParser& parser,
                                OperationState& result) {
    OpAsmParser::OperandType left, right;

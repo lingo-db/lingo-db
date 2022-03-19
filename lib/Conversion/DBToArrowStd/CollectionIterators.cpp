@@ -59,8 +59,6 @@ class ForIterator {
       return builder.create<arith::ConstantIndexOp>(loc, 1);
    }
    virtual Value getElement(OpBuilder& builder, Value index) = 0;
-   virtual void destroyElement(OpBuilder& builder, Value elem){};
-   virtual void down(OpBuilder& builder){};
    virtual ~ForIterator() {}
    void setTypeConverter(TypeConverter* typeConverter) {
       ForIterator::typeConverter = typeConverter;
@@ -106,9 +104,9 @@ class JoinHtLookupIterator : public WhileIterator {
    Value hash;
    Value ptr;
    TupleType tupleType;
-
+   bool modifiable;
    public:
-   JoinHtLookupIterator(Value tableInfo, Type elementType, db::codegen::FunctionRegistry& functionRegistry) : WhileIterator(tableInfo.getContext()), iteratorInfo(tableInfo) {
+   JoinHtLookupIterator(Value tableInfo, Type elementType, bool modifiable=false) : WhileIterator(tableInfo.getContext()), iteratorInfo(tableInfo),modifiable(modifiable) {
    }
    virtual Type iteratorType(OpBuilder& builder) override {
       tupleType = typeConverter->convertType(iteratorInfo.getType()).cast<mlir::TupleType>();
@@ -130,10 +128,17 @@ class JoinHtLookupIterator : public WhileIterator {
       return builder.create<mlir::util::FilterTaggedPtr>(loc, next.getType(), next, hash);
    }
    virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
-      auto payloadType = iterator.getType().cast<mlir::util::RefType>().getElementType().cast<TupleType>().getType(1);
-      auto payloadPtrType = mlir::util::RefType::get(builder.getContext(), payloadType);
-      Value payloadPtr = builder.create<util::TupleElementPtrOp>(loc, payloadPtrType, iterator, 1);
-      return builder.create<mlir::util::LoadOp>(loc, payloadType, payloadPtr);
+      auto bucketType = iterator.getType().cast<mlir::util::RefType>().getElementType();
+      auto elemType = bucketType.cast<TupleType>().getTypes()[1];
+      auto valType = elemType.cast<TupleType>().getTypes()[1];
+      Value elemAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), elemType), iterator, 1);
+      Value loadedValue = builder.create<util::LoadOp>(loc, elemType, elemAddress);
+      if(modifiable){
+         Value valAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valType), elemAddress, 1);
+         return builder.create<mlir::util::PackOp>(loc, mlir::ValueRange{loadedValue, valAddress});
+      }else{
+         return loadedValue;
+      }
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
       return builder.create<mlir::util::IsRefValidOp>(loc, builder.getI1Type(), iterator);
@@ -179,53 +184,6 @@ class AggrHtIterator : public ForIterator {
       return unpacked.getResult(2);
    }
 };
-class JoinHtModifyLookupIterator : public WhileIterator {
-   Value iteratorInfo;
-   Type ptrType;
-   Value hash;
-   Value ptr;
-   TupleType tupleType;
-
-   public:
-   JoinHtModifyLookupIterator(Value tableInfo, Type elementType) : WhileIterator(tableInfo.getContext()), iteratorInfo(tableInfo) {
-   }
-   virtual Type iteratorType(OpBuilder& builder) override {
-      tupleType = typeConverter->convertType(iteratorInfo.getType()).cast<mlir::TupleType>();
-      ptrType = tupleType.getType(0);
-      return ptrType;
-   }
-   virtual Value iterator(OpBuilder& builder) override {
-      auto unpacked = builder.create<mlir::util::UnPackOp>(loc, tupleType.getTypes(), iteratorInfo);
-      ptr = unpacked.getResult(0);
-      hash = unpacked.getResult(1);
-      return ptr;
-   }
-   virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
-      auto i8PtrType = mlir::util::RefType::get(builder.getContext(), builder.getI8Type());
-      Value nextPtr = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), i8PtrType), iterator, 0);
-      mlir::Value next = builder.create<mlir::util::LoadOp>(loc, i8PtrType, nextPtr);
-      next = builder.create<util::GenericMemrefCastOp>(loc, ptrType, next);
-      return builder.create<mlir::util::FilterTaggedPtr>(loc, ptr.getType(), next, hash);
-   }
-   virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
-      auto bucketType = iterator.getType().cast<mlir::util::RefType>().getElementType();
-      auto elemType = bucketType.cast<TupleType>().getTypes()[1];
-
-      auto valType = elemType.cast<TupleType>().getTypes()[1];
-
-      Value elemAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), elemType), iterator, 1);
-
-      Value loadedValue = builder.create<util::LoadOp>(loc, elemType, elemAddress);
-
-      Value valAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valType), elemAddress, 1);
-
-      return builder.create<mlir::util::PackOp>(loc, mlir::ValueRange{loadedValue, valAddress});
-   }
-   virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
-      return builder.create<mlir::util::IsRefValidOp>(loc, builder.getI1Type(), iterator);
-   }
-};
-
 class TableRowIterator : public ForIterator {
    Value tableChunkInfo;
    Value chunk;
@@ -486,13 +444,11 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       bodyArguments.insert(bodyArguments.end(), forOp.getRegionIterArgs().begin(), forOp.getRegionIterArgs().end());
       Value element;
       auto results = bodyBuilder([&](mlir::OpBuilder& b) { return element = iterator->getElement(b, forOp.getInductionVar()); }, bodyArguments, builder);
-      iterator->destroyElement(builder, element);
       if (iterArgs.size()) {
          builder.create<scf::YieldOp>(loc, remap(results, builder));
          builder.eraseOp(terminator);
       }
       builder.restoreInsertionPoint(insertionPoint);
-      iterator->down(builder);
       return std::vector<Value>(forOp.getResults().begin(), forOp.getResults().end());
    }
    std::vector<Value> implementLoopCondition(mlir::Location loc, const ValueRange& iterArgs, Value flag, TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) {
@@ -557,9 +513,9 @@ std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIteration
       } else if (generic.getIteratorName() == "table_row_iterator") {
          return std::make_unique<ForIteratorIterationImpl>(std::make_unique<TableRowIterator>(collection, generic.getElementType(), functionRegistry));
       } else if (generic.getIteratorName() == "join_ht_iterator") {
-         return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(collection, generic.getElementType(), functionRegistry));
+         return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(collection, generic.getElementType(), false));
       } else if (generic.getIteratorName() == "join_ht_mod_iterator") {
-         return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtModifyLookupIterator>(collection, generic.getElementType()));
+         return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(collection, generic.getElementType(), true));
       }
    } else if (auto vector = collectionType.dyn_cast_or_null<mlir::db::VectorType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<VectorIterator>(functionRegistry, collection, vector.getElementType()));

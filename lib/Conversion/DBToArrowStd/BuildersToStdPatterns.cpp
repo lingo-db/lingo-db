@@ -96,18 +96,27 @@ class AggrHtHelper {
       auto leftUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, oKeyType.cast<mlir::TupleType>().getTypes(), left);
       auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, oKeyType.cast<mlir::TupleType>().getTypes(), right);
       for (size_t i = 0; i < leftUnpacked.getNumResults(); i++) {
-         Value compared = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, leftUnpacked->getResult(i), rightUnpacked.getResult(i));
-         compared = rewriter.create<mlir::db::DeriveTruth>(loc, compared);
+         Value compared;
          auto currLeftType = leftUnpacked->getResult(i).getType();
          auto currRightType = rightUnpacked.getResult(i).getType();
          auto currLeftNullableType = currLeftType.dyn_cast_or_null<mlir::db::NullableType>();
          auto currRightNullableType = currRightType.dyn_cast_or_null<mlir::db::NullableType>();
-         if (currLeftNullableType && currRightNullableType) {
+         if (currLeftNullableType || currRightNullableType) {
             Value isNull1 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), leftUnpacked->getResult(i));
             Value isNull2 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), rightUnpacked->getResult(i));
-            Value bothNull = rewriter.create<mlir::db::AndOp>(loc, rewriter.getI1Type(), ValueRange({isNull1, isNull2}));
-            Value tmp = rewriter.create<mlir::arith::SelectOp>(loc, bothNull, bothNull, compared);
-            compared = tmp;
+            Value anyNull = rewriter.create<mlir::arith::OrIOp>(loc, isNull1, isNull2);
+            Value bothNull = rewriter.create<mlir::arith::AndIOp>(loc, isNull1, isNull2);
+            compared = rewriter.create<mlir::scf::IfOp>(
+                                  loc, rewriter.getI1Type(), anyNull, [&](mlir::OpBuilder& b, mlir::Location loc) { b.create<mlir::scf::YieldOp>(loc, bothNull); },
+                                  [&](mlir::OpBuilder& b, mlir::Location loc) {
+                                     Value left = rewriter.create<mlir::db::NullableGetVal>(loc, leftUnpacked->getResult(i));
+                                     Value right = rewriter.create<mlir::db::NullableGetVal>(loc, rightUnpacked->getResult(i));
+                                     Value cmpRes = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, left, right);
+                                     b.create<mlir::scf::YieldOp>(loc, cmpRes);
+                                  })
+                          .getResult(0);
+         } else {
+            compared = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, leftUnpacked->getResult(i), rightUnpacked.getResult(i));
          }
          Value localEqual = rewriter.create<mlir::arith::AndIOp>(loc, rewriter.getI1Type(), ValueRange({equal, compared}));
          equal = localEqual;

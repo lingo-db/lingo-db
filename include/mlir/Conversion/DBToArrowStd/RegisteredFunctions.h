@@ -52,15 +52,15 @@
    F(ArrowTableBuilderAddFixedBinary, table_builder_add_fixed_binary, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(64)), RETURNS())            \
    F(ArrowTableBuilderFinishRow, table_builder_finish_row, OPERANDS(POINTER_TYPE), RETURNS())                                                              \
    F(ArrowTableBuilderBuild, table_builder_build, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                           \
-   F(CmpStringEQ, cmp_string_eq, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
-   F(CmpStringNEQ, cmp_string_neq, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                      \
-   F(CmpStringLT, cmp_string_lt, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
-   F(CmpStringLTE, cmp_string_lte, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                      \
-   F(CmpStringGT, cmp_string_gt, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
-   F(CmpStringGTE, cmp_string_gte, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                      \
-   F(CmpStringLike, cmp_string_like, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                    \
-   F(CmpStringStartsWith, cmp_string_starts_with, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                       \
-   F(CmpStringEndsWith, cmp_string_ends_with, OPERANDS(BOOL_TYPE, STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                           \
+   F(CmpStringEQ, cmp_string_eq, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
+   F(CmpStringNEQ, cmp_string_neq, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                      \
+   F(CmpStringLT, cmp_string_lt, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
+   F(CmpStringLTE, cmp_string_lte, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                      \
+   F(CmpStringGT, cmp_string_gt, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
+   F(CmpStringGTE, cmp_string_gte, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                      \
+   F(CmpStringLike, cmp_string_like, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                    \
+   F(CmpStringStartsWith, cmp_string_starts_with, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                       \
+   F(CmpStringEndsWith, cmp_string_ends_with, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                           \
    F(CastStringToInt64, cast_string_int, OPERANDS(BOOL_TYPE, STRING_TYPE), RETURNS(INT_TYPE(64)))                                                          \
    F(CastStringToFloat32, cast_string_float32, OPERANDS(BOOL_TYPE, STRING_TYPE), RETURNS(FLOAT_TYPE))                                                      \
    F(CastStringToFloat64, cast_string_float64, OPERANDS(BOOL_TYPE, STRING_TYPE), RETURNS(DOUBLE_TYPE))                                                     \

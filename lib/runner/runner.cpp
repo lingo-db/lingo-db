@@ -28,6 +28,7 @@
 
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
+#include "mlir/Dialect/DB/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
@@ -68,14 +69,14 @@ namespace {
 struct ToLLVMLoweringPass
    : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
-      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect,mlir::cf::ControlFlowDialect, mlir::arith::ArithmeticDialect>();
+      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::cf::ControlFlowDialect, mlir::arith::ArithmeticDialect>();
    }
    void runOnOperation() final;
 };
 struct InsertPerfAsmPass
    : public mlir::PassWrapper<InsertPerfAsmPass, mlir::OperationPass<mlir::ModuleOp>> {
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
-      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect,mlir::cf::ControlFlowDialect, mlir::arith::ArithmeticDialect>();
+      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::cf::ControlFlowDialect, mlir::arith::ArithmeticDialect>();
    }
    void runOnOperation() final;
 };
@@ -85,7 +86,7 @@ void ToLLVMLoweringPass::runOnOperation() {
    // The first thing to define is the conversion target. This will define the
    // final target for this lowering. For this lowering, we are only targeting
    // the LLVM dialect.
-   const auto &dataLayoutAnalysis = getAnalysis<mlir::DataLayoutAnalysis>();
+   const auto& dataLayoutAnalysis = getAnalysis<mlir::DataLayoutAnalysis>();
 
    mlir::LLVMConversionTarget target(getContext());
    target.addLegalOp<mlir::ModuleOp>();
@@ -95,9 +96,9 @@ void ToLLVMLoweringPass::runOnOperation() {
    // conversion we use a TypeConverter as part of the lowering. This converter
    // details how one type maps to another. This is necessary now that we will be
    // doing more complicated lowerings, involving loop region arguments.
-   mlir::LowerToLLVMOptions options(&getContext(),dataLayoutAnalysis.getAtOrAbove(getOperation()));
+   mlir::LowerToLLVMOptions options(&getContext(), dataLayoutAnalysis.getAtOrAbove(getOperation()));
    //options.emitCWrappers = true;
-   mlir::LLVMTypeConverter typeConverter(&getContext(), options,&dataLayoutAnalysis);
+   mlir::LLVMTypeConverter typeConverter(&getContext(), options, &dataLayoutAnalysis);
    typeConverter.addSourceMaterialization([&](mlir::OpBuilder&, mlir::FunctionType type, mlir::ValueRange valueRange, mlir::Location loc) {
       return valueRange.front();
    });
@@ -330,24 +331,24 @@ bool Runner::lower() {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
    pm.enableVerifier(runMode == RunMode::DEBUGGING);
+   pm.addPass(mlir::db::createEliminateNullsPass());
    pm.addPass(mlir::db::createLowerToStdPass());
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
    }
-   mlir::PassManager pmFunc(&ctxt->context,mlir::FuncOp::getOperationName());
+   mlir::PassManager pmFunc(&ctxt->context, mlir::FuncOp::getOperationName());
    pmFunc.enableVerifier(runMode == RunMode::DEBUGGING);
    pmFunc.addPass(mlir::createCanonicalizerPass());
    pmFunc.addPass(mlir::createSinkOpPass());
    pmFunc.addPass(mlir::createCSEPass());
 
-   ctxt->module.get().walk([&](mlir::FuncOp f){
-      if(!f->hasAttr("passthrough")){
+   ctxt->module.get().walk([&](mlir::FuncOp f) {
+      if (!f->hasAttr("passthrough")) {
          if (mlir::failed(pmFunc.run(f))) {
-            return;//todo:fixed
+            return; //todo:fixed
          }
       }
    });
-
 
    auto end = std::chrono::high_resolution_clock::now();
    std::cout << "lowering to std took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;

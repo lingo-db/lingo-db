@@ -41,19 +41,6 @@ class ScanSourceLowering : public ConversionPattern {
       return success();
    }
 };
-class FuncConstLowering : public ConversionPattern {
-   public:
-   explicit FuncConstLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::ConstantOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      mlir::ConstantOp constantOp = mlir::cast<mlir::ConstantOp>(op);
-      rewriter.replaceOpWithNewOp<mlir::ConstantOp>(op, typeConverter->convertType(constantOp.getType()), constantOp.getValue());
-      return success();
-   }
-};
 } // end anonymous namespace
 
 namespace {
@@ -170,14 +157,14 @@ void DBToStdLoweringPass::runOnOperation() {
    mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
    mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
    mlir::db::populateScalarToStdPatterns(typeConverter, patterns);
-   mlir::db::populateControlFlowToStdPatterns(typeConverter, patterns);
    mlir::db::populateRuntimeSpecificScalarToStdPatterns(functionRegistry, typeConverter, patterns);
    mlir::db::populateBuilderToStdPatterns(functionRegistry, typeConverter, patterns);
    mlir::db::populateCollectionsToStdPatterns(functionRegistry, typeConverter, patterns);
    mlir::util::populateUtilTypeConversionPatterns(typeConverter, patterns);
    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns, target);
-   patterns.insert<FuncConstLowering>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::ConstantOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::db::CondSkipOp>>(typeConverter, &getContext());
    patterns.insert<ScanSourceLowering>(functionRegistry, typeConverter, &getContext());
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))

@@ -5,7 +5,7 @@ include "mlir/IR/OpBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
-//include "mlir/Dialect/DB/IR/DBInterfaces.td"
+include "mlir/Dialect/DB/IR/DBInterfaces.td"
 include "mlir/Dialect/RelAlg/IR/RelAlgInterfaces.td"
 
 //===----------------------------------------------------------------------===//
@@ -331,7 +331,7 @@ let assemblyFormat = "$val `:` type($val) attr-dict";
 
 class DB_BinaryOp<string mnemonic, list<Trait> traits = []> :
 Op<DB_Dialect, mnemonic,
-    !listconcat(traits, [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>])>,Arguments<(ins NullableDBType:$left, NullableDBType:$right)> {
+    !listconcat(traits, [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>,DeclareOpInterfaceMethods<DB_HandleNullInterface>])>,Arguments<(ins NullableDBType:$left, NullableDBType:$right)> {
 let results = (outs AnyType:$result);
   let extraClassDefinition = [{
     LogicalResult $cppClass::inferReturnTypes(
@@ -339,6 +339,9 @@ let results = (outs AnyType:$result);
    DictionaryAttr attributes, RegionRange regions,
    SmallVectorImpl<Type>& inferredReturnTypes) {
          return inferReturnType(context,location,operands,inferredReturnTypes);
+    }
+    bool $cppClass::canHandleInvalidValues(){
+        return true;
     }
   }];
 let assemblyFormat = "$left `:` type($left) `,` $right `:` type($right) attr-dict";
@@ -365,7 +368,7 @@ let cppNamespace = "::mlir::db";
 }
 
 def DB_CmpOp : DB_Op<"compare",
-    [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>,DeclareOpInterfaceMethods<Relalg_CmpOpInterface>]> {
+    [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>,DeclareOpInterfaceMethods<Relalg_CmpOpInterface>,DeclareOpInterfaceMethods<DB_HandleNullInterface>]> {
 let arguments = (ins DB_CmpPredicateAttr:$predicate, NullableDBType:$left, NullableDBType:$right);
 let results = (outs AnyBool:$result);
 let assemblyFormat = "$predicate $left `:` type($left) `,` $right `:` type($right) attr-dict";
