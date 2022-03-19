@@ -160,6 +160,12 @@ class BinOpLowering : public ConversionPattern {
       return failure();
    }
 };
+mlir::Value getDecimalScaleMultiplierConstant(mlir::OpBuilder& builder, unsigned s, mlir::Type stdType, mlir::Location loc) {
+   auto [low, high] = support::getDecimalScaleMultiplier(s);
+   std::vector<uint64_t> parts = {low, high};
+   auto multiplier = builder.create<arith::ConstantOp>(loc, stdType, builder.getIntegerAttr(stdType, APInt(stdType.template cast<mlir::IntegerType>().getWidth(), parts)));
+   return multiplier;
+}
 template <class DBOp, class Op>
 class DecimalOpScaledLowering : public ConversionPattern {
    public:
@@ -173,18 +179,32 @@ class DecimalOpScaledLowering : public ConversionPattern {
       typename DBOp::Adaptor adaptor(operands);
       auto type = getBaseType(addOp.getType());
       if (auto decimalType = type.template dyn_cast_or_null<mlir::db::DecimalType>()) {
-         auto [low, high] = support::getDecimalScaleMultiplier(decimalType.getS());
-         std::vector<uint64_t> parts = {low, high};
          auto stdType = typeConverter->convertType(decimalType);
-         auto multiplier = rewriter.create<arith::ConstantOp>(op->getLoc(), stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.template cast<mlir::IntegerType>().getWidth(), parts)));
-         auto scaled = rewriter.create<arith::MulIOp>(op->getLoc(), stdType, adaptor.left(), multiplier);
+         auto scaled = rewriter.create<arith::MulIOp>(op->getLoc(), stdType, adaptor.left(), getDecimalScaleMultiplierConstant(rewriter, decimalType.getS(), stdType, op->getLoc()));
          rewriter.template replaceOpWithNewOp<Op>(op, stdType, scaled, adaptor.right());
          return success();
       }
       return failure();
    }
 };
+class DecimalMulLowering : public ConversionPattern {
+   public:
+   explicit DecimalMulLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::MulOp::getOperationName(), 1, context) {}
 
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto mulOp = cast<mlir::db::MulOp>(op);
+      typename mlir::db::MulOpAdaptor adaptor(operands);
+      if (auto decimalType = mulOp.getType().template dyn_cast_or_null<mlir::db::DecimalType>()) {
+         auto stdType = typeConverter->convertType(decimalType);
+         auto multiplied = rewriter.create<mlir::arith::MulIOp>(op->getLoc(), stdType, adaptor.left(), adaptor.right());
+         rewriter.replaceOpWithNewOp<arith::DivSIOp>(op, stdType, multiplied, getDecimalScaleMultiplierConstant(rewriter, decimalType.getS(), stdType, op->getLoc()));
+         return success();
+      }
+      return failure();
+   }
+};
 class IsNullOpLowering : public ConversionPattern {
    public:
    explicit IsNullOpLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -212,7 +232,6 @@ class NullableGetValOpLowering : public ConversionPattern {
       mlir::db::NullableGetValAdaptor nullableGetValAdaptor(operands);
       auto unPackOp = rewriter.create<mlir::util::UnPackOp>(op->getLoc(), nullableGetValAdaptor.val());
       rewriter.replaceOp(op, unPackOp.vals()[1]);
-
       return success();
    }
 };
@@ -393,38 +412,38 @@ class CastOpLowering : public ConversionPattern {
       if (scalarSourceType.isa<mlir::db::StringType>() || scalarTargetType.isa<mlir::db::StringType>()) return failure();
       Value value = operands[0];
       if (scalarSourceType == scalarTargetType) {
-         //nothing to do here
-      } else if (auto sourceIntWidth = getIntegerWidth(scalarSourceType, false)) {
+         rewriter.replaceOp(op, value);
+         return success();
+      }
+      if (auto sourceIntWidth = getIntegerWidth(scalarSourceType, false)) {
          if (scalarTargetType.isa<FloatType>()) {
             value = rewriter.create<arith::SIToFPOp>(loc, convertedTargetType, value);
+            rewriter.replaceOp(op, value);
+            return success();
          } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
-            auto sourceScale = decimalTargetType.getS();
             int decimalWidth = typeConverter->convertType(decimalTargetType).cast<mlir::IntegerType>().getWidth();
-            auto [low, high] = support::getDecimalScaleMultiplier(sourceScale);
-            std::vector<uint64_t> parts = {low, high};
-            auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(decimalWidth, parts)));
             if (sourceIntWidth < decimalWidth) {
                value = rewriter.create<arith::ExtSIOp>(loc, convertedTargetType, value);
             }
-            value = rewriter.create<arith::MulIOp>(loc, convertedTargetType, value, multiplier);
+            rewriter.replaceOpWithNewOp<arith::MulIOp>(op, convertedTargetType, value, getDecimalScaleMultiplierConstant(rewriter, decimalTargetType.getS(), convertedTargetType, op->getLoc()));
+            return success();
          } else if (auto targetIntWidth = getIntegerWidth(scalarTargetType, false)) {
             if (targetIntWidth < sourceIntWidth) {
-               value = rewriter.create<arith::TruncIOp>(loc, convertedTargetType, value);
+               rewriter.replaceOpWithNewOp<arith::TruncIOp>(op, convertedTargetType, value);
             } else {
-               value = rewriter.create<arith::ExtSIOp>(loc, convertedTargetType, value);
+               rewriter.replaceOpWithNewOp<arith::ExtSIOp>(op, convertedTargetType, value);
             }
-         } else {
-            return failure();
+            return success();
          }
       } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
          if (getIntegerWidth(scalarTargetType, false)) {
-            value = rewriter.create<arith::FPToSIOp>(loc, convertedTargetType, value);
+            value = rewriter.replaceOpWithNewOp<arith::FPToSIOp>(op, convertedTargetType, value);
+            return success();
          } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedSourceType, FloatAttr::get(convertedSourceType, powf(10, decimalTargetType.getS())));
             value = rewriter.create<arith::MulFOp>(loc, convertedSourceType, value, multiplier);
-            value = rewriter.create<arith::FPToSIOp>(loc, convertedTargetType, value);
-         } else {
-            return failure();
+            rewriter.replaceOpWithNewOp<arith::FPToSIOp>(op, convertedTargetType, value);
+            return success();
          }
       } else if (auto decimalSourceType = scalarSourceType.dyn_cast_or_null<db::DecimalType>()) {
          if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
@@ -435,34 +454,28 @@ class CastOpLowering : public ConversionPattern {
             std::vector<uint64_t> parts = {low, high};
             auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(decimalWidth, parts)));
             if (sourceScale < targetScale) {
-               value = rewriter.create<arith::MulIOp>(loc, convertedTargetType, value, multiplier);
+               rewriter.replaceOpWithNewOp<arith::MulIOp>(op, convertedTargetType, value, multiplier);
             } else {
-               value = rewriter.create<arith::DivSIOp>(loc, convertedTargetType, value, multiplier);
+               rewriter.replaceOpWithNewOp<arith::DivSIOp>(op, convertedTargetType, value, multiplier);
             }
+            return success();
          } else if (scalarTargetType.isa<FloatType>()) {
             auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, FloatAttr::get(convertedTargetType, powf(10, decimalSourceType.getS())));
             value = rewriter.create<arith::SIToFPOp>(loc, convertedTargetType, value);
-            value = rewriter.create<arith::DivFOp>(loc, convertedTargetType, value, multiplier);
+            rewriter.replaceOpWithNewOp<arith::DivFOp>(op, convertedTargetType, value, multiplier);
+            return success();
          } else if (auto targetIntWidth = getIntegerWidth(scalarTargetType, false)) {
-            auto sourceScale = decimalSourceType.getS();
-            auto [low, high] = support::getDecimalScaleMultiplier(sourceScale);
             int decimalWidth = convertedSourceType.cast<mlir::IntegerType>().getWidth();
-
-            std::vector<uint64_t> parts = {low, high};
-
-            auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedSourceType, rewriter.getIntegerAttr(convertedSourceType, APInt(decimalWidth, parts)));
+            auto multiplier = getDecimalScaleMultiplierConstant(rewriter, decimalSourceType.getS(), convertedSourceType, op->getLoc());
             value = rewriter.create<arith::DivSIOp>(loc, convertedSourceType, value, multiplier);
             if (targetIntWidth < decimalWidth) {
                value = rewriter.create<arith::TruncIOp>(loc, convertedTargetType, value);
             }
-         } else {
-            return failure();
+            rewriter.replaceOp(op, value);
+            return success();
          }
-      } else {
-         return failure();
       }
-      rewriter.replaceOp(op, value);
-      return success();
+      return failure();
    }
 };
 class CreateFlagLowering : public ConversionPattern {
@@ -523,7 +536,6 @@ class SetFlagLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::db::SetFlagAdaptor adaptor(operands);
-
       rewriter.create<util::StoreOp>(op->getLoc(), adaptor.val(), adaptor.flag(), Value());
       rewriter.eraseOp(op);
       return success();
@@ -684,6 +696,8 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::db::DecimalType, arith::SubIOp>>(typeConverter, patterns.getContext());
    patterns.insert<DecimalOpScaledLowering<mlir::db::DivOp, arith::DivSIOp>>(typeConverter, patterns.getContext());
    patterns.insert<DecimalOpScaledLowering<mlir::db::ModOp, arith::RemSIOp>>(typeConverter, patterns.getContext());
+   patterns.insert<DecimalMulLowering>(typeConverter, patterns.getContext());
+
    patterns.insert<SubStrOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<NullOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<IsNullOpLowering>(typeConverter, patterns.getContext());

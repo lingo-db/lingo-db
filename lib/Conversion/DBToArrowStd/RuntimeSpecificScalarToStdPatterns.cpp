@@ -31,72 +31,62 @@ class StringCastOpLowering : public ConversionPattern {
       auto convertedTargetType = typeConverter->convertType(scalarTargetType);
       if (!scalarSourceType.isa<mlir::db::StringType>() && !scalarTargetType.isa<mlir::db::StringType>()) return failure();
 
-      Value value = operands[0];
+      Value valueToCast = operands[0];
+      Value result;
       if (scalarSourceType == scalarTargetType) {
          //nothing to do here
       } else if (auto stringType = scalarSourceType.dyn_cast_or_null<db::StringType>()) {
          if (auto intWidth = getIntegerWidth(scalarTargetType, false)) {
-            value = functionRegistry.call(rewriter, loc, FunctionId::CastStringToInt64, ValueRange({value}))[0];
+            result = functionRegistry.call(rewriter, loc, FunctionId::CastStringToInt64, ValueRange({valueToCast}))[0];
             if (intWidth < 64) {
-               value = rewriter.create<arith::TruncIOp>(loc, convertedTargetType, value);
+               result = rewriter.create<arith::TruncIOp>(loc, convertedTargetType, result);
             }
          } else if (auto floatType = scalarTargetType.dyn_cast_or_null<FloatType>()) {
             FunctionId castFn = floatType.getWidth() == 32 ? FunctionId ::CastStringToFloat32 : FunctionId ::CastStringToFloat64;
-            value = functionRegistry.call(rewriter, loc, castFn, ValueRange({value}))[0];
+            result = functionRegistry.call(rewriter, loc, castFn, ValueRange({valueToCast}))[0];
          } else if (auto decimalType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto scale = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalType.getS()));
-            value = functionRegistry.call(rewriter, loc, FunctionId ::CastStringToDecimal, ValueRange({value, scale}))[0];
+            result = functionRegistry.call(rewriter, loc, FunctionId ::CastStringToDecimal, ValueRange({valueToCast, scale}))[0];
             if (typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth() < 128) {
-               auto converted = rewriter.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType), value);
-               value = converted;
+               auto converted = rewriter.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType), result);
+               result = converted;
             }
-         } else {
-            return failure();
          }
       } else if (auto intWidth = getIntegerWidth(scalarSourceType, false)) {
          if (scalarTargetType.isa<db::StringType>()) {
             if (intWidth < 64) {
-               value = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), value);
+               valueToCast = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), valueToCast);
             }
-            value = functionRegistry.call(rewriter, loc, FunctionId ::CastInt64ToString, ValueRange({value}))[0];
-         } else {
-            return failure();
+            result = functionRegistry.call(rewriter, loc, FunctionId ::CastInt64ToString, ValueRange({valueToCast}))[0];
          }
       } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
          if (scalarTargetType.isa<db::StringType>()) {
             FunctionId castFn = floatType.getWidth() == 32 ? FunctionId ::CastFloat32ToString : FunctionId ::CastFloat64ToString;
-            value = functionRegistry.call(rewriter, loc, castFn, ValueRange({value}))[0];
-
-         } else {
-            return failure();
+            result = functionRegistry.call(rewriter, loc, castFn, ValueRange({valueToCast}))[0];
          }
       } else if (auto decimalSourceType = scalarSourceType.dyn_cast_or_null<db::DecimalType>()) {
          if (scalarTargetType.isa<db::StringType>()) {
             auto scale = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalSourceType.getS()));
             if (typeConverter->convertType(decimalSourceType).cast<mlir::IntegerType>().getWidth() < 128) {
-               auto converted = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), value);
-               value = converted;
+               valueToCast = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), valueToCast);
             }
-            value = functionRegistry.call(rewriter, loc, FunctionId ::CastDecimalToString, ValueRange({value, scale}))[0];
-
-         } else {
-            return failure();
+            result = functionRegistry.call(rewriter, loc, FunctionId ::CastDecimalToString, ValueRange({valueToCast, scale}))[0];
          }
       } else if (auto charType = scalarSourceType.dyn_cast_or_null<db::CharType>()) {
          if (scalarTargetType.isa<db::StringType>()) {
             if (charType.getBytes() < 8) {
-               value = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), value);
+               valueToCast = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), valueToCast);
             }
             auto bytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(charType.getBytes()));
-            value = functionRegistry.call(rewriter, loc, FunctionId ::CastCharToString, ValueRange({value, bytes}))[0];
-         } else {
-            return failure();
+            result = functionRegistry.call(rewriter, loc, FunctionId ::CastCharToString, ValueRange({valueToCast, bytes}))[0];
          }
+      }
+      if (result) {
+         rewriter.replaceOp(op, result);
+         return success();
       } else {
          return failure();
       }
-      rewriter.replaceOp(op, value);
-      return success();
    }
 };
 class StringCmpOpLowering : public ConversionPattern {
@@ -263,28 +253,6 @@ class DumpOpLowering : public ConversionPattern {
    }
 };
 
-class DecimalMulLowering : public ConversionPattern {
-   public:
-   explicit DecimalMulLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::MulOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto mulOp = cast<mlir::db::MulOp>(op);
-      typename mlir::db::MulOpAdaptor adaptor(operands);
-      if (auto decimalType = mulOp.getType().template dyn_cast_or_null<mlir::db::DecimalType>()) {
-         auto [low, high] = support::getDecimalScaleMultiplier(decimalType.getS());
-         std::vector<uint64_t> parts = {low, high};
-         auto stdType = typeConverter->convertType(decimalType);
-         auto divider = rewriter.create<arith::ConstantOp>(mulOp->getLoc(), stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.cast<mlir::IntegerType>().getWidth(), parts)));
-         auto multiplied = rewriter.create<mlir::arith::MulIOp>(op->getLoc(), stdType, adaptor.left(), adaptor.right());
-         rewriter.replaceOpWithNewOp<arith::DivSIOp>(op, stdType, multiplied, divider);
-         return success();
-      }
-      return failure();
-   }
-};
 class FreeOpLowering : public ConversionPattern {
    public:
    explicit FreeOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
@@ -411,5 +379,4 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
    patterns.insert<StringCastOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<FreeOpLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<DecimalMulLowering>(typeConverter, patterns.getContext());
 }
