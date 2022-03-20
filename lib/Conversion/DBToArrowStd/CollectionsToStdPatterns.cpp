@@ -214,8 +214,8 @@ class LookupOpLowering : public ConversionPattern {
       mlir::db::LookupAdaptor lookupAdaptor(operands);
       auto loaded = rewriter.create<util::LoadOp>(loc, lookupAdaptor.collection().getType().cast<mlir::util::RefType>().getElementType(), lookupAdaptor.collection(), Value());
       auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, loaded);
-      Value ht = unpacked.getResult(2);
-      Value htMask = unpacked.getResult(3);
+      Value ht = unpacked.getResult(0);
+      Value htMask = unpacked.getResult(1);
       Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.getIndexType(), lookupAdaptor.key()); //hash key value
       Value buckedPos = rewriter.create<arith::AndIOp>(loc, htMask, hashed);
       Value ptr = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(ht.getType()).cast<mlir::util::RefType>().getElementType(), ht, buckedPos);
@@ -250,7 +250,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
 
          auto vecType = mlir::util::RefType::get(context, entryType);
          auto htType = mlir::util::RefType::get(context, entryPtrType);
-         auto t = (Type) util::RefType::get(context, TupleType::get(context, {indexType, indexType, vecType, htType, typeConverter.convertType(aggregationHashtableType.getValType())}));
+         auto t = (Type) util::RefType::get(context, TupleType::get(context, {htType,indexType, indexType, vecType, indexType, typeConverter.convertType(aggregationHashtableType.getValType())}));
          return t;
       }
    });
@@ -261,7 +261,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
 
       auto vecType = mlir::util::RefType::get(context, entryType);
       auto htType = util::RefType::get(context, mlir::util::RefType::get(context, entryType));
-      return (Type) util::RefType::get(context, TupleType::get(context, {vecType, indexType, htType, indexType}));
+      return (Type) util::RefType::get(context, TupleType::get(context, {htType, indexType, indexType, indexType, vecType}));
    });
 
    typeConverter.addConversion([context, &typeConverter, indexType](mlir::db::VectorType vectorType) {

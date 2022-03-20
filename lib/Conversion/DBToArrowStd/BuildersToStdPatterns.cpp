@@ -42,8 +42,7 @@ class VectorHelper {
       builder.create<scf::IfOp>(
          loc, TypeRange({}), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
             Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type()), vec);
-            auto typeSize = b.create<mlir::util::SizeOfOp>(loc, b.getIndexType(), elementType);
-            functionRegistry.call(b,loc,mlir::db::codegen::FunctionRegistry::FunctionId::VecResize,ValueRange{downCasted,typeSize});
+            functionRegistry.call(b,loc,mlir::db::codegen::FunctionRegistry::FunctionId::VecResize,ValueRange{downCasted});
             b.create<scf::YieldOp>(loc); });
       Value valuesAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valuesType), vec, 2);
       auto values = builder.create<mlir::util::LoadOp>(loc, valuesType, valuesAddress, Value());
@@ -76,7 +75,7 @@ class AggrHtHelper {
       auto entryPtrType = mlir::util::RefType::get(context, entryType);
       auto valuesType = mlir::util::RefType::get(context, entryType);
       auto htType = mlir::util::RefType::get(context, entryPtrType);
-      auto tplType = mlir::TupleType::get(context, {idxType, idxType, valuesType, htType, aggrType});
+      auto tplType = mlir::TupleType::get(context, {htType, idxType, idxType, valuesType, idxType, aggrType});
       return mlir::util::RefType::get(context, tplType);
    }
    AggrHtHelper(MLIRContext* context, Type keyType, Type aggrType, Location loc, TypeConverter* converter) : entryType(createEntryType(context, converter->convertType(keyType), converter->convertType(aggrType))), loc(loc), keyType(converter->convertType(keyType)), aggrType(converter->convertType(aggrType)), oKeyType(keyType), oAggrType(aggrType) {
@@ -87,7 +86,7 @@ class AggrHtHelper {
       Value initialCapacity = builder.create<arith::ConstantIndexOp>(loc, 4);
       auto ptr = functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtCreate, ValueRange({typeSize, initialCapacity}))[0];
       auto casted = builder.create<mlir::util::GenericMemrefCastOp>(loc, createType(builder.getContext(), keyType, aggrType), ptr);
-      Value initValAddress = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), initialValue.getType()), casted, 4);
+      Value initValAddress = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), initialValue.getType()), casted, 5);
       builder.create<mlir::util::StoreOp>(loc, initialValue, initValAddress, Value());
       return casted;
    }
@@ -136,8 +135,8 @@ class AggrHtHelper {
       auto entryPtrType = mlir::util::RefType::get(context, entryType);
       auto htType = mlir::util::RefType::get(context, entryPtrType);
 
-      Value lenAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 0);
-      Value capacityAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 1);
+      Value lenAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 1);
+      Value capacityAddress = rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, aggrHtBuilder, 2);
 
       Value len = rewriter.create<util::LoadOp>(loc, idxType, lenAddress);
       Value capacityInitial = rewriter.create<util::LoadOp>(loc, idxType, capacityAddress);
@@ -149,11 +148,10 @@ class AggrHtHelper {
       rewriter.create<scf::IfOp>(
          loc, TypeRange(), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
             Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type()), aggrHtBuilder);
-            auto typeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), createEntryType(rewriter.getContext(),keyType,aggrType));
-            functionRegistry.call(b,loc,mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtResize,ValueRange{downCasted,typeSize});
+            functionRegistry.call(b,loc,mlir::db::codegen::FunctionRegistry::FunctionId::AggrHtResize,ValueRange{downCasted});
             b.create<scf::YieldOp>(loc); });
 
-      Value htAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), htType), aggrHtBuilder, 3);
+      Value htAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), htType), aggrHtBuilder, 0);
       Value ht = rewriter.create<util::LoadOp>(loc, htType, htAddress);
 
       Value capacity = rewriter.create<util::LoadOp>(loc, idxType, capacityAddress);
@@ -164,7 +162,6 @@ class AggrHtHelper {
       Value htSize = rewriter.create<arith::MulIOp>(loc, capacity, two);
 
       Value htMask = rewriter.create<arith::SubIOp>(loc, htSize, one);
-
       //position = hash & hashTableMask
       Value position = rewriter.create<arith::AndIOp>(loc, htMask, hash);
       // ptr = &hashtable[position]
@@ -222,14 +219,14 @@ class AggrHtHelper {
                         //          yield ptr,done=false
                         b.create<scf::YieldOp>(loc, ValueRange{trueValue, newPtr });});
                   b.create<scf::YieldOp>(loc, ifOpH.getResults()); }, [&](OpBuilder& b, Location loc) {
-               Value initValAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), aggrType), aggrHtBuilder, 4);
+               Value initValAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), aggrType), aggrHtBuilder, 5);
                Value initialVal = b.create<util::LoadOp>(loc, aggrType, initValAddress);
                Value newAggr = updateFn(b,initialVal, val);
                Value newKVPair = b.create<util::PackOp>(loc,ValueRange({key, newAggr}));
                Value invalidNext  = b.create<util::InvalidRefOp>(loc,i8PtrType);
                //       %newEntry = ...
                Value newEntry = b.create<util::PackOp>(loc, ValueRange({invalidNext, hash, newKVPair}));
-               Value valuesAddress = b.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(b.getContext(),valuesType), aggrHtBuilder, 2);
+               Value valuesAddress = b.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(b.getContext(),valuesType), aggrHtBuilder, 3);
                Value values = b.create<util::LoadOp>(loc, valuesType, valuesAddress);
                Value newValueLocPtr=b.create<util::ArrayElementPtrOp>(loc,bucketPtrType,values,len);
                //       append(vec,newEntry)
@@ -468,12 +465,8 @@ class BuilderBuildLowering : public ConversionPattern {
          }
       } else if (auto joinHtBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::JoinHTBuilderType>()) {
          auto lowBType = mlir::util::RefType::get(op->getContext(), rewriter.getI8Type());
-
-         Type kvType = TupleType::get(getContext(), {joinHtBuilderType.getKeyType(), joinHtBuilderType.getValType()});
-         Type entryType = TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), kvType});
-         auto elemsize = rewriter.create<mlir::util::SizeOfOp>(op->getLoc(), rewriter.getIndexType(), entryType);
          Value toLB = rewriter.create<util::GenericMemrefCastOp>(op->getLoc(), lowBType, buildAdaptor.builder());
-         auto called = functionRegistry.call(rewriter, op->getLoc(), mlir::db::codegen::FunctionRegistry::FunctionId::JoinHtBuild, ValueRange({toLB, elemsize}))[0];
+         auto called = functionRegistry.call(rewriter, op->getLoc(), mlir::db::codegen::FunctionRegistry::FunctionId::JoinHtBuild, ValueRange({toLB}))[0];
          Value res = rewriter.create<util::GenericMemrefCastOp>(op->getLoc(), typeConverter->convertType(buildOp.getType()), called);
          rewriter.replaceOp(op, res);
       }

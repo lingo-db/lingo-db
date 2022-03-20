@@ -156,8 +156,8 @@ class JoinHtIterator : public ForIterator {
    virtual void init(OpBuilder& builder) override {
       auto loaded = builder.create<util::LoadOp>(loc, typeConverter->convertType(hashTable.getType()).cast<mlir::util::RefType>().getElementType(), hashTable, Value());
       auto unpacked = builder.create<mlir::util::UnPackOp>(loc, loaded);
-      values = unpacked.getResult(0);
-      len = unpacked.getResult(1);
+      values = unpacked.getResult(4);
+      len = unpacked.getResult(2);
    }
    virtual Value getElement(OpBuilder& builder, Value index) override {
       Value loaded = builder.create<util::LoadOp>(loc, values.getType().cast<mlir::util::RefType>().getElementType(), values, index);
@@ -176,8 +176,8 @@ class AggrHtIterator : public ForIterator {
       auto elemType = typeConverter->convertType(hashTable.getType()).cast<mlir::util::RefType>().getElementType();
       auto loaded = builder.create<mlir::util::LoadOp>(loc, elemType, hashTable, Value());
       auto unpacked = builder.create<mlir::util::UnPackOp>(loc, elemType.cast<mlir::TupleType>().getTypes(), loaded);
-      values = unpacked.getResult(2);
-      len = unpacked.getResult(0);
+      values = unpacked.getResult(3);
+      len = unpacked.getResult(1);
    }
    virtual Value getElement(OpBuilder& builder, Value index) override {
       Value loaded = builder.create<util::LoadOp>(loc, values.getType().cast<mlir::util::RefType>().getElementType(), values, index);

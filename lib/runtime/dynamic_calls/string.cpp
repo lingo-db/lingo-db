@@ -212,6 +212,6 @@ EXPORT runtime::VarLen32 rt_varlen_from_ptr(uint8_t* ptr, uint32_t len) { // NOL
    return runtime::VarLen32(ptr, len);
 }
 
-EXPORT runtime::Bytes rt_varlen_to_ref(runtime::VarLen32* varlen) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return runtime::Bytes((uint8_t*) varlen->data());
+EXPORT char* rt_varlen_to_ref(runtime::VarLen32* varlen) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   return varlen->data();
 }

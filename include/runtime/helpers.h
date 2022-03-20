@@ -9,28 +9,20 @@
 #define EXPORT extern "C" __attribute__((visibility("default")))
 #define INLINE __attribute__((always_inline))
 namespace runtime {
-class Bytes {
-   uint8_t* pointer;
 
-   public:
-   Bytes(uint8_t* ptr) : pointer(ptr) {}
-   uint8_t* getPtr() {
-      return pointer;
-   }
-
-   void setPointer(uint8_t* pointer) {
-      Bytes::pointer = pointer;
-   }
-   void resize(size_t oldNumBytes,size_t newNumBytes) {
+struct MemoryHelper {
+   static uint8_t* resize(uint8_t* old, size_t oldNumBytes, size_t newNumBytes) {
       uint8_t* newBytes = (uint8_t*) malloc(newNumBytes);
-      memcpy(newBytes, getPtr(), oldNumBytes);
-      free(getPtr());
-      setPointer(newBytes);
+      memcpy(newBytes, old, oldNumBytes);
+      free(old);
+      return newBytes;
    }
-   void fill(uint8_t val,size_t size){
-      memset(getPtr(), val,size);
+   static void fill(uint8_t* ptr, uint8_t val, size_t size) {
+      memset(ptr, val, size);
    }
+   static void zero(uint8_t* ptr, size_t size) { fill(ptr, 0, size); }
 };
+
 static uint64_t unalignedLoad64(const uint8_t* p) {
    uint64_t result;
    memcpy(&result, p, sizeof(result));
