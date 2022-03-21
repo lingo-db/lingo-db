@@ -16,8 +16,8 @@ struct RuntimeFunction {
    std::string name;
    NullHandleType nullHandleType;
    bool hasSideEffects;
-   class LoweringImpl {
-      public:
+   struct LoweringImpl {
+      size_t loweringType;
       virtual mlir::Value lower(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType) = 0;
       virtual ~LoweringImpl(){}
    };

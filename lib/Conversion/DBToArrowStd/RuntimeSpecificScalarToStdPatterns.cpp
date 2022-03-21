@@ -276,9 +276,27 @@ class DateExtractOpLowering : public ConversionPattern {
       return success();
    }
 };
-class OpRFLowering : public mlir::db::RuntimeFunction::LoweringImpl {
+class DBToArrowRFLowering : public mlir::db::RuntimeFunction::LoweringImpl {
+   protected:
    mlir::db::codegen::FunctionRegistry* nativeFunctionRegistry;
    mlir::TypeConverter* typeConverter;
+
+   public:
+   DBToArrowRFLowering() {
+      this->loweringType = 0;
+   }
+   virtual ~DBToArrowRFLowering() {}
+   void setNativeFunctionRegistry(db::codegen::FunctionRegistry* nativeFunctionRegistry) {
+      DBToArrowRFLowering::nativeFunctionRegistry = nativeFunctionRegistry;
+   }
+   void setTypeConverter(TypeConverter* typeConverter) {
+      DBToArrowRFLowering::typeConverter = typeConverter;
+   }
+   static bool classof(const mlir::db::RuntimeFunction::LoweringImpl* impl) {
+      return impl->loweringType == 0;
+   }
+};
+class OpRFLowering : public DBToArrowRFLowering {
    using loweringFn_t = std::function<mlir::Value(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter*, mlir::db::codegen::FunctionRegistry*)>;
    loweringFn_t fn;
 
@@ -287,16 +305,8 @@ class OpRFLowering : public mlir::db::RuntimeFunction::LoweringImpl {
    mlir::Value lower(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType) override {
       return fn(builder, loweredArguments, originalArgumentTypes, resType, typeConverter, nativeFunctionRegistry);
    }
-   void setNativeFunctionRegistry(db::codegen::FunctionRegistry* nativeFunctionRegistry) {
-      OpRFLowering::nativeFunctionRegistry = nativeFunctionRegistry;
-   }
-   void setTypeConverter(TypeConverter* typeConverter) {
-      OpRFLowering::typeConverter = typeConverter;
-   }
 };
-class FnRFLowering : public mlir::db::RuntimeFunction::LoweringImpl {
-   mlir::db::codegen::FunctionRegistry* nativeFunctionRegistry;
-   mlir::TypeConverter* typeConverter;
+class FnRFLowering : public DBToArrowRFLowering {
    mlir::db::codegen::FunctionRegistry::FunctionId functionId;
 
    public:
@@ -320,12 +330,6 @@ class FnRFLowering : public mlir::db::RuntimeFunction::LoweringImpl {
       assert((res.size() == 1 && resType) || (res.empty() && !resType));
       return res.size() == 1 ? res[0] : mlir::Value();
    }
-   void setNativeFunctionRegistry(db::codegen::FunctionRegistry* nativeFunctionRegistry) {
-      FnRFLowering::nativeFunctionRegistry = nativeFunctionRegistry;
-   }
-   void setTypeConverter(TypeConverter* typeConverter) {
-      FnRFLowering::typeConverter = typeConverter;
-   }
 };
 
 class RuntimeCallLowering : public ConversionPattern {
@@ -340,17 +344,14 @@ class RuntimeCallLowering : public ConversionPattern {
 
       auto runtimeCallOp = mlir::cast<mlir::db::RuntimeCall>(op);
       mlir::db::RuntimeCallAdaptor adaptor(operands);
-      auto *fn = reg->lookup(runtimeCallOp.fn().str());
+      auto* fn = reg->lookup(runtimeCallOp.fn().str());
       if (!fn) return failure();
       if (!fn->lowering) return failure();
-      if (auto *opRfLowering = dynamic_cast<OpRFLowering*>(fn->lowering.get())) {
-         opRfLowering->setNativeFunctionRegistry(&functionRegistry);
-         opRfLowering->setTypeConverter(typeConverter);
+      if (auto* toArrowLowering = llvm::dyn_cast<DBToArrowRFLowering>(fn->lowering.get())) {
+         toArrowLowering->setNativeFunctionRegistry(&functionRegistry);
+         toArrowLowering->setTypeConverter(typeConverter);
       }
-      if (auto *fnRfLowering = dynamic_cast<FnRFLowering*>(fn->lowering.get())) {
-         fnRfLowering->setNativeFunctionRegistry(&functionRegistry);
-         fnRfLowering->setTypeConverter(typeConverter);
-      }
+
       mlir::Value res = fn->lowering->lower(rewriter, adaptor.args(), runtimeCallOp.args().getTypes(), runtimeCallOp->getNumResults() == 1 ? runtimeCallOp->getResultTypes()[0] : mlir::Type());
       if (runtimeCallOp->getNumResults() == 0) {
          rewriter.eraseOp(op);
