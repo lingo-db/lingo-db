@@ -27,10 +27,10 @@ module {
 //CHECK: index(9003023063795233148)
 //CHECK: index(14576801547736533962)
 //CHECK: index(5768746606534069840)
-//CHECK: index(17331534688241223152)
+//CHECK: index(5158205948029867335)
 //CHECK: index(12374225058675341995)
 //CHECK: index(11221175996223801097)
-//CHECK: index(14428801650687329114)
+//CHECK: index(9164047498175828973)
 
          db.runtime_call "DumpValue" (%hash1) : (index) -> ()
          db.runtime_call "DumpValue" (%hash2) : (index) -> ()

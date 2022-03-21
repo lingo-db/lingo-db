@@ -10,8 +10,7 @@
    F(DumpUInt, dump_uint, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                                                    \
    F(DumpBool, dump_bool, OPERANDS(BOOL_TYPE, BOOL_TYPE), RETURNS())                                                                                       \
    F(DumpDecimal, dump_decimal, OPERANDS(BOOL_TYPE, INT_TYPE(64), INT_TYPE(64), INT_TYPE(32)), RETURNS())                                                  \
-   F(DumpDateDay, dump_date_day, OPERANDS(BOOL_TYPE, INT_TYPE(32)), RETURNS())                                                                             \
-   F(DumpDateMillisecond, dump_date_millisecond, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                             \
+   F(DumpDate, dump_date, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                                             \
    F(DumpTimestampSecond, dump_timestamp_second, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                             \
    F(DumpTimestampMillisecond, dump_timestamp_millisecond, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                   \
    F(DumpTimestampMicrosecond, dump_timestamp_microsecond, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                   \
@@ -43,7 +42,7 @@
    F(ArrowTableBuilderAddInt64, table_builder_add_int_64, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(64)), RETURNS())                        \
    F(ArrowTableBuilderAddDecimal, table_builder_add_decimal, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(128)), RETURNS())                    \
    F(ArrowTableBuilderAddSmallDecimal, table_builder_add_small_decimal, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(64)), RETURNS())          \
-   F(ArrowTableBuilderAddDate32, table_builder_add_date_32, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(32)), RETURNS())                      \
+   F(ArrowTableBuilderAddDate32, table_builder_add_date_32, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(64)), RETURNS())                      \
    F(ArrowTableBuilderAddDate64, table_builder_add_date_64, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(64)), RETURNS())                      \
    F(ArrowTableBuilderAddFloat32, table_builder_add_float_32, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, FLOAT_TYPE), RETURNS())                      \
    F(ArrowTableBuilderAddFloat64, table_builder_add_float_64, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, DOUBLE_TYPE), RETURNS())                     \

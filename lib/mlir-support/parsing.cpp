@@ -54,7 +54,7 @@ std::variant<int64_t, double, std::string> parseInterval(std::variant<int64_t, d
    } else {
       res = std::stoll(std::get<std::string>(val));
       if (std::get<std::string>(val).ends_with("days")) {
-         res *= 24 * 60 * 60 * 1000;
+         res *= 24 * 60 * 60 * 1000000000ll;
       }
    }
    return res;
@@ -109,8 +109,8 @@ std::variant<int64_t, double, std::string> parseDate(std::variant<int64_t, doubl
    }
    std::string str = std::get<std::string>(val);
    int64_t parsed = parseDate32(str);
-   int64_t date64 = parsed * 24 * 60 * 60 * 1000;
-   return parse64 ? date64 : parsed;
+   int64_t date64 = parsed * 24 * 60 * 60 * 1000000000ll;
+   return date64;
 }
 std::variant<int64_t, double, std::string> toI64(std::variant<int64_t, double, std::string> val) {
    if (std::holds_alternative<std::string>(val)) {

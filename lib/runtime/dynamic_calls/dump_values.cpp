@@ -38,18 +38,11 @@ EXPORT void rt_dump_decimal(bool null, uint64_t low, uint64_t high, int32_t scal
    }
 }
 arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
-EXPORT void rt_dump_date_day(bool null, uint32_t date) {
+EXPORT void rt_dump_date(bool null, int64_t date) {
    if (null) {
       std::cout << "date(NULL)" << std::endl;
    } else {
-      std::cout << "date(" << arrow_vendored::date::format("%F", epoch + arrow_vendored::date::days{date}) << ")" << std::endl;
-   }
-}
-EXPORT void rt_dump_date_millisecond(bool null, int64_t date) {
-   if (null) {
-      std::cout << "date(NULL)" << std::endl;
-   } else {
-      std::cout << "date(" << arrow_vendored::date::format("%F", epoch + std::chrono::milliseconds{date}) << ")" << std::endl;
+      std::cout << "date(" << arrow_vendored::date::format("%F", epoch + std::chrono::nanoseconds {date}) << ")" << std::endl;
    }
 }
 template <class Unit>

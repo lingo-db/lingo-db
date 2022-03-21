@@ -13,7 +13,7 @@ struct TableBuilder {
    std::shared_ptr<arrow::Schema> schema;
    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
    std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder;
-   size_t current_batch_size=0;
+   size_t current_batch_size = 0;
    TableBuilder(std::shared_ptr<arrow::Schema> schema) : schema(schema) {
       arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), &batchBuilder); //NOLINT (clang-diagnostic-unused-result)
    }
@@ -38,7 +38,7 @@ struct TableBuilder {
    std::shared_ptr<arrow::Table> build() {
       flushBatch();
       std::shared_ptr<arrow::Table> table;
-      if(arrow::Table::FromRecordBatches(schema, batches).Value(&table)!=arrow::Status::OK()) {
+      if (arrow::Table::FromRecordBatches(schema, batches).Value(&table) != arrow::Status::OK()) {
          throw std::runtime_error("could not create table");
       }
       return table;
@@ -57,23 +57,39 @@ EXPORT void rt_table_builder_add_bool(TableBuilder* builder, int column, bool is
    }
 }
 
-#define TABLE_BUILDER_ADD_PRIMITIVE(name, type)                                                                                                    \
+#define TABLE_BUILDER_ADD_PRIMITIVE(name, type)                                                                        \
    EXPORT void rt_table_builder_add_##name(TableBuilder* builder, int column, bool isNull, arrow::type ::c_type val) { \
-      auto* typed_builder = (builder)->GetBuilderForColumn<arrow::NumericBuilder<arrow::type>>(column);                                           \
-      if (isNull) {                                                                                                                                \
-         typed_builder->AppendNull(); /*NOLINT (clang-diagnostic-unused-result)*/                                                                  \
-      } else {                                                                                                                                     \
-         typed_builder->Append(val); /*NOLINT (clang-diagnostic-unused-result)*/                                                                   \
-      }                                                                                                                                            \
+      auto* typed_builder = (builder)->GetBuilderForColumn<arrow::NumericBuilder<arrow::type>>(column);                \
+      if (isNull) {                                                                                                    \
+         typed_builder->AppendNull(); /*NOLINT (clang-diagnostic-unused-result)*/                                      \
+      } else {                                                                                                         \
+         typed_builder->Append(val); /*NOLINT (clang-diagnostic-unused-result)*/                                       \
+      }                                                                                                                \
    }
+EXPORT void rt_table_builder_add_date_32(TableBuilder* builder, int column, bool isNull, int64_t val) {
+   val = val / 86400000000000;
+   auto* typed_builder = (builder)->GetBuilderForColumn<arrow::NumericBuilder<arrow::Date32Type>>(column);
+   if (isNull) {
+      typed_builder->AppendNull(); /*NOLINT (clang-diagnostic-unused-result)*/
+   } else {
+      typed_builder->Append(val); /*NOLINT (clang-diagnostic-unused-result)*/
+   }
+}
+EXPORT void rt_table_builder_add_date_64(TableBuilder* builder, int column, bool isNull, int64_t val) {
+   val = val / 1000000;
+   auto* typed_builder = (builder)->GetBuilderForColumn<arrow::NumericBuilder<arrow::Date64Type>>(column);
+   if (isNull) {
+      typed_builder->AppendNull(); /*NOLINT (clang-diagnostic-unused-result)*/
+   } else {
+      typed_builder->Append(val); /*NOLINT (clang-diagnostic-unused-result)*/
+   }
+}
 TABLE_BUILDER_ADD_PRIMITIVE(int_8, Int8Type)
 TABLE_BUILDER_ADD_PRIMITIVE(int_16, Int16Type)
 TABLE_BUILDER_ADD_PRIMITIVE(int_32, Int32Type)
 TABLE_BUILDER_ADD_PRIMITIVE(int_64, Int64Type)
 TABLE_BUILDER_ADD_PRIMITIVE(float_32, FloatType)
 TABLE_BUILDER_ADD_PRIMITIVE(float_64, DoubleType)
-TABLE_BUILDER_ADD_PRIMITIVE(date_32, Date32Type)
-TABLE_BUILDER_ADD_PRIMITIVE(date_64, Date64Type)
 EXPORT void rt_table_builder_add_decimal(TableBuilder* builder, int column, bool isNull, int64_t low, int64_t high) {
    auto* typed_builder = (builder)->GetBuilderForColumn<arrow::Decimal128Builder>(column);
    if (isNull) {
@@ -84,8 +100,8 @@ EXPORT void rt_table_builder_add_decimal(TableBuilder* builder, int column, bool
    }
 }
 EXPORT void rt_table_builder_add_small_decimal(TableBuilder* builder, int column, bool isNull, int64_t low) {
-   __int128 total=low;
-   int64_t high=total>>64;
+   __int128 total = low;
+   int64_t high = total >> 64;
    auto* typed_builder = (builder)->GetBuilderForColumn<arrow::Decimal128Builder>(column);
    if (isNull) {
       typed_builder->AppendNull(); //NOLINT (clang-diagnostic-unused-result)
@@ -108,7 +124,7 @@ EXPORT void rt_table_builder_add_fixed_binary(TableBuilder* builder, int column,
    if (isNull) {
       typed_builder->AppendNull(); //NOLINT (clang-diagnostic-unused-result)
    } else {
-      typed_builder->Append((char*)&x);
+      typed_builder->Append((char*) &x);
    }
 }
 EXPORT void rt_table_builder_finish_row(TableBuilder* builder) {

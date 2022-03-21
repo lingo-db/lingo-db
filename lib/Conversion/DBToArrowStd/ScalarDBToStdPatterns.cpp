@@ -610,11 +610,7 @@ class HashLowering : public ConversionPattern {
 } // namespace
 void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, RewritePatternSet& patterns) {
    typeConverter.addConversion([&](::mlir::db::DateType t) {
-      if (t.getUnit() == mlir::db::DateUnitAttr::day) {
-         return mlir::IntegerType::get(patterns.getContext(), 32);
-      } else {
-         return mlir::IntegerType::get(patterns.getContext(), 64);
-      }
+      return mlir::IntegerType::get(patterns.getContext(), 64);
    });
    typeConverter.addConversion([&](::mlir::db::DecimalType t) {
       if (t.getP() < 19) {

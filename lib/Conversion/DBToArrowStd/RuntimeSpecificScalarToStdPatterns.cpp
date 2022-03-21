@@ -214,21 +214,10 @@ class DateAddOpLowering : public ConversionPattern {
       auto dateVal = adaptor.left();
       auto invervalVal = adaptor.right();
       auto loc = op->getLoc();
-      auto dateType = dateAddOp.left().getType().cast<mlir::db::DateType>().getUnit();
-      if (dateType == db::DateUnitAttr::day) {
-         dateVal = rewriter.create<arith::ExtUIOp>(loc, rewriter.getI64Type(), dateVal);
-         Value multiplier = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI64Type(), 24 * 60 * 60 * 1000));
-         dateVal = rewriter.create<arith::MulIOp>(loc, dateVal, multiplier);
-      }
       if (dateAddOp.right().getType().cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
          dateVal = rewriter.create<mlir::arith::AddIOp>(op->getLoc(), dateVal, invervalVal);
       } else {
          dateVal = functionRegistry.call(rewriter, loc, FunctionId::TimestampAddMonth, ValueRange({invervalVal, dateVal}))[0];
-      }
-      if (dateType == db::DateUnitAttr::day) {
-         Value multiplier = rewriter.template create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI64Type(), 24 * 60 * 60 * 1000));
-         dateVal = rewriter.template create<arith::DivUIOp>(loc, dateVal, multiplier);
-         dateVal = rewriter.template create<arith::TruncIOp>(loc, rewriter.getI32Type(), dateVal);
       }
       rewriter.replaceOp(op, dateVal);
       return success();
@@ -246,14 +235,6 @@ class DateExtractOpLowering : public ConversionPattern {
       auto dateExtractOp = mlir::cast<mlir::db::DateExtractOp>(op);
       mlir::db::DateExtractOpAdaptor adaptor(operands);
       auto v = adaptor.val();
-      auto loc = op->getLoc();
-      auto dateType = dateExtractOp.val().getType().cast<mlir::db::DateType>();
-      if (dateType.getUnit() == db::DateUnitAttr::day) {
-         auto i64Type = IntegerType::get(rewriter.getContext(), 64);
-         v = rewriter.template create<arith::ExtUIOp>(loc, i64Type, v);
-         Value multiplier = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i64Type, 24 * 60 * 60 * 1000));
-         v = rewriter.template create<arith::MulIOp>(loc, v, multiplier);
-      }
       FunctionId functionId;
       switch (dateExtractOp.unit()) {
          case mlir::db::ExtractableTimeUnitAttr::second: functionId = FunctionId::DateExtractSecond; break;
@@ -411,11 +392,7 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
          high = rewriter.create<arith::TruncIOp>(loc, i64Type, high);
          functionRegistry->call(rewriter, loc, FunctionId::DumpDecimal, ValueRange({isNull, low, high, scale}));
       } else if (auto dateType = baseType.dyn_cast_or_null<mlir::db::DateType>()) {
-         if (dateType.getUnit() == mlir::db::DateUnitAttr::millisecond) {
-            functionRegistry->call(rewriter, loc, FunctionId::DumpDateMillisecond, ValueRange({isNull, val}));
-         } else {
-            functionRegistry->call(rewriter, loc, FunctionId::DumpDateDay, ValueRange({isNull, val}));
-         }
+            functionRegistry->call(rewriter, loc, FunctionId::DumpDate, ValueRange({isNull, val}));
       } else if (auto timestampType = baseType.dyn_cast_or_null<mlir::db::TimestampType>()) {
          FunctionId functionId;
          switch (timestampType.getUnit()) {

@@ -197,6 +197,11 @@ class TableRowIterator : public ForIterator {
       if (type.isa<mlir::db::DecimalType>()) {
          return builder.getIntegerType(128);
       }
+      if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
+         if (dateType.getUnit() == mlir::db::DateUnitAttr::day) {
+            return builder.getI32Type();
+         }
+      }
       return typeConverter.convertType(type);
    }
    struct Column {
@@ -286,6 +291,26 @@ class TableRowIterator : public ForIterator {
          } else if (isIntegerType(column.baseType, 1)) {
             Value realPos = builder.create<arith::AddIOp>(loc, indexType, column.offset, index);
             val = mlir::db::codegen::BitUtil::getBit(builder, loc, column.values, realPos);
+         } else if (column.baseType.isa<mlir::db::DateType, mlir::db::TimestampType>()) {
+            val = builder.create<util::LoadOp>(loc, column.stdType, column.values, index);
+            if (val.getType() != builder.getI64Type()) {
+               val = builder.create<mlir::arith::ExtUIOp>(loc, builder.getI64Type(), val);
+            }
+            size_t multiplier = 1;
+            if (auto dateType = column.baseType.dyn_cast_or_null<mlir::db::DateType>()) {
+               multiplier = dateType.getUnit() == mlir::db::DateUnitAttr::day ? 86400000000000 : 1000000;
+            } else if (auto timeStampType = column.baseType.dyn_cast_or_null<mlir::db::TimestampType>()) {
+               switch (timeStampType.getUnit()) {
+                  case mlir::db::TimeUnitAttr::second: multiplier = 1000000000; break;
+                  case mlir::db::TimeUnitAttr::millisecond: multiplier = 1000000; break;
+                  case mlir::db::TimeUnitAttr::microsecond: multiplier = 1000; break;
+                  default: multiplier = 1;
+               }
+            }
+            if (multiplier != 1) {
+               mlir::Value multiplierConst = builder.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
+               val = builder.create<mlir::arith::MulIOp>(loc, val, multiplierConst);
+            }
          } else if (auto decimalType = column.baseType.dyn_cast_or_null<db::DecimalType>()) {
             val = builder.create<util::LoadOp>(loc, column.stdType, column.values, index);
             val.getDefiningOp()->setAttr("nosideffect", builder.getUnitAttr());

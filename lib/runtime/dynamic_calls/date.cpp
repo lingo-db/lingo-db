@@ -7,11 +7,11 @@
 namespace date=arrow_vendored::date;
 class DateHelper {
    public:
-   explicit DateHelper(std::chrono::milliseconds millis_since_epoch)
-   : tp_(millis_since_epoch) {}
+   explicit DateHelper(std::chrono::nanoseconds nanos_since_epoch)
+   : tp_(nanos_since_epoch) {}
 
-   explicit DateHelper(int64_t millis_since_epoch)
-   : DateHelper(std::chrono::milliseconds(millis_since_epoch)) {}
+   explicit DateHelper(int64_t nanoseconds_since_epoch)
+   : DateHelper(std::chrono::nanoseconds (nanoseconds_since_epoch)) {}
 
    int64_t TmYear() const { return static_cast<int>(YearMonthDay().year()) - 1900; }
 
@@ -51,7 +51,7 @@ class DateHelper {
 
    bool operator==(const DateHelper& other) const { return tp_ == other.tp_; }
 
-   int64_t MillisSinceEpoch() const { return tp_.time_since_epoch().count(); }
+   int64_t NanosSinceEpoch() const { return tp_.time_since_epoch().count(); }
 
    private:
    date::year_month_day YearMonthDay() const {
@@ -59,41 +59,41 @@ class DateHelper {
          date::floor<date::days>(tp_)};  // NOLINT
    }
 
-   date::time_of_day<std::chrono::milliseconds> TimeOfDay() const {
-      auto millis_since_midnight =
+   date::time_of_day<std::chrono::nanoseconds> TimeOfDay() const {
+      auto nanos_since_midnight =
          tp_ -date::floor<date::days>(tp_);
-      return date::time_of_day<std::chrono::milliseconds>(
-         millis_since_midnight);
+      return date::time_of_day<std::chrono::nanoseconds>(
+         nanos_since_midnight);
    }
 
-   std::chrono::time_point<std::chrono::system_clock, std::chrono::milliseconds> tp_;
+   std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> tp_;
 };
 //end adapted from apache gandiva
 
-extern "C"  uint64_t rt_extract_second(uint64_t millis){
-   return DateHelper(millis).TmSec();
+extern "C"  uint64_t rt_extract_second(uint64_t nanos){
+   return DateHelper(nanos).TmSec();
 }
-extern "C"  uint64_t rt_extract_minute(uint64_t millis){
-   return DateHelper(millis).TmMin();
+extern "C"  uint64_t rt_extract_minute(uint64_t nanos){
+   return DateHelper(nanos).TmMin();
 }
-extern "C"  uint64_t rt_extract_hour(uint64_t millis){
-   return DateHelper(millis).TmHour();
+extern "C"  uint64_t rt_extract_hour(uint64_t nanos){
+   return DateHelper(nanos).TmHour();
 }
-extern "C"  uint64_t rt_extract_dow(uint64_t millis){
-   return DateHelper(millis).TmWday()+1;
+extern "C"  uint64_t rt_extract_dow(uint64_t nanos){
+   return DateHelper(nanos).TmWday()+1;
 }
-extern "C"  uint64_t rt_extract_day(uint64_t millis){
-   return DateHelper(millis).TmMday();
+extern "C"  uint64_t rt_extract_day(uint64_t nanos){
+   return DateHelper(nanos).TmMday();
 }
-extern "C"  uint64_t rt_extract_month(uint64_t millis){
-   return DateHelper(millis).TmMon()+1;
+extern "C"  uint64_t rt_extract_month(uint64_t nanos){
+   return DateHelper(nanos).TmMon()+1;
 }
-extern "C" uint64_t rt_extract_year(uint64_t millis){
-   return DateHelper(millis).TmYear()+1900;
+extern "C" uint64_t rt_extract_year(uint64_t nanos){
+   return DateHelper(nanos).TmYear()+1900;
 }
-extern "C" uint64_t rt_extract_doy(uint64_t millis){
-   return DateHelper(millis).TmYday();
+extern "C" uint64_t rt_extract_doy(uint64_t nanos){
+   return DateHelper(nanos).TmYday();
 }
-extern "C" uint64_t rt_timestamp_add_months(uint32_t months,int64_t millis) {
-   return DateHelper(millis).AddMonths(months).MillisSinceEpoch();
+extern "C" uint64_t rt_timestamp_add_months(uint32_t months,int64_t nanos) {
+   return DateHelper(nanos).AddMonths(months).NanosSinceEpoch();
 }
