@@ -7,6 +7,7 @@ namespace mlir {
 namespace db {
 std::unique_ptr<Pass> createEliminateNullsPass();
 std::unique_ptr<Pass> createSimplifyToArithPass();
+std::unique_ptr<Pass> createOptimizeRuntimeFunctionsPass();
 } // end namespace db
 } // end namespace mlir
 #endif // MLIR_DIALECT_DB_PASSES_H

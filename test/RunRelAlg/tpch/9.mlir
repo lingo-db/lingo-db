@@ -225,10 +225,11 @@ module {
       %23 = db.mul %21 : !db.decimal<15, 2>, %22 : !db.decimal<15, 2>
       %24 = db.sub %20 : !db.decimal<15, 2>, %23 : !db.decimal<15, 2>
       %25 = relalg.addcol %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %24
-      %26 = relalg.getcol %25 @orders::@o_orderdate : !db.date<day>
-      %27 = db.date_extract year, %26 : <day>
-      %28 = relalg.addcol %25, @tmp_attr0({type = i64}) %27
-      relalg.return %28 : !relalg.tuple
+      %26 = db.constant("year") : !db.char<4>
+      %27 = relalg.getcol %25 @orders::@o_orderdate : !db.date<day>
+      %28 = db.runtime_call "ExtractFromDate"(%26, %27) : (!db.char<4>, !db.date<day>) -> i64
+      %29 = relalg.addcol %25, @tmp_attr0({type = i64}) %28
+      relalg.return %29 : !relalg.tuple
     }
     %13 = relalg.aggregation @aggr0 %12 [@nation::@n_name,@map0::@tmp_attr0] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %16 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>

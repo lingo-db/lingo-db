@@ -11,8 +11,8 @@ module {
     %1 = relalg.selection %0 (%arg0: !relalg.tuple){
       %6 = relalg.getcol %arg0 @lineitem::@l_shipdate : !db.date<day>
       %7 = db.constant("1998-12-01") : !db.date<day>
-      %8 = db.constant("-90days") : !db.interval<daytime>
-      %9 = db.date_add %7:!db.date<day>,%8:!db.interval<daytime>
+      %8 = db.constant("90days") : !db.interval<daytime>
+      %9 = db.runtime_call "DateSubtract"(%7, %8) : (!db.date<day>, !db.interval<daytime>) -> !db.date<day>
       %10 = db.compare lte %6 : !db.date<day>, %9 : !db.date<day>
       relalg.return %10 : i1
     }

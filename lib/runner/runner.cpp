@@ -332,6 +332,7 @@ bool Runner::lower() {
    mlir::PassManager pm(&ctxt->context);
    pm.enableVerifier(runMode == RunMode::DEBUGGING);
    pm.addPass(mlir::db::createEliminateNullsPass());
+   pm.addPass(mlir::db::createOptimizeRuntimeFunctionsPass());
    pm.addPass(mlir::db::createLowerToStdPass());
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;

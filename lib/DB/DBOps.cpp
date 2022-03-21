@@ -94,35 +94,7 @@ bool mlir::db::CastOp::canHandleInvalidValues() {
    return true;
 }
 
-static ParseResult parseDateOp(OpAsmParser& parser,
-                               OperationState& result) {
-   OpAsmParser::OperandType left, right;
-   mlir::Type leftType, rightType;
-   if (parser.parseOperand(left) || parser.parseColonType(leftType) || parser.parseComma() || parser.parseOperand(right) || parser.parseColonType(rightType)) {
-      return failure();
-   }
-   if (parser.resolveOperand(left, leftType, result.operands).failed() || parser.resolveOperand(right, rightType, result.operands).failed()) {
-      return failure();
-   }
-   bool nullable = rightType.isa<mlir::db::NullableType>() || leftType.isa<mlir::db::NullableType>();
-   mlir::Type resType = db::DateType::get(parser.getBuilder().getContext(), leftType.dyn_cast_or_null<db::DateType>().getUnit());
-   if (nullable) resType = mlir::db::NullableType::get(parser.getContext(), resType);
-   parser.addTypeToList(resType, result.types);
-   return success();
-}
 
-static void printDateOp(Operation* op, OpAsmPrinter& p) {
-   bool first = true;
-   p << " ";
-   for (auto operand : op->getOperands()) {
-      if (first) {
-         first = false;
-      } else {
-         p << ",";
-      }
-      p << operand << ":" << operand.getType();
-   }
-}
 static void printInitializationList(OpAsmPrinter& p,
                                     Block::BlockArgListType blocksArgs,
                                     ValueRange initializers,

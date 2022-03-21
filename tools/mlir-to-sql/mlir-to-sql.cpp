@@ -131,27 +131,25 @@ class ToSQL {
             output << ")";
          })
          .Case<mlir::db::BetweenOp>([&](mlir::db::BetweenOp op) {
-            output << resolveVal(op.val()) << " between " << resolveVal(op.lower()) << " and " << resolveVal(op.upper())<<" ";
+            output << resolveVal(op.val()) << " between " << resolveVal(op.lower()) << " and " << resolveVal(op.upper()) << " ";
          })
          .Case<mlir::db::OneOfOp>([&](mlir::db::OneOfOp op) {
             output << resolveVal(op.val()) << " in (";
-            bool first=true;
-            for(auto v:op.vals()){
-               if(first){
-                  first=false;
-               }else{
-                  output<<", ";
+            bool first = true;
+            for (auto v : op.vals()) {
+               if (first) {
+                  first = false;
+               } else {
+                  output << ", ";
                }
-               output<<resolveVal(v);
+               output << resolveVal(v);
             }
             output << ") ";
          })
          .Case<mlir::db::DeriveTruth>([&](mlir::db::DeriveTruth op) {
             output << resolveVal(op.val());
          })
-         .Case<DateAddOp>([&](DateAddOp op) {
-            handleBinOp(output, "+", op.left(), op.right());
-         })
+
          .Case<AddOp>([&](AddOp op) {
             handleBinOp(output, "+", op.left(), op.right());
          })
@@ -220,8 +218,16 @@ class ToSQL {
             }
             output << "\n end";
          })
-         .Case<mlir::db::DateExtractOp>([&](mlir::db::DateExtractOp op) {
-            output << "extract(" << mlir::db::stringifyExtractableTimeUnitAttr(op.unit()).str() << " from " << resolveVal(op.val()) << " )";
+         .Case<mlir::db::RuntimeCall>([&](mlir::db::RuntimeCall op) {
+            if (op.fn() == "ExtractFromDate") {
+               output << "extract(" << resolveVal(op.args()[0]) << " from " << resolveVal(op.args()[1]) << " )";
+            }
+            if (op.fn().startswith("DateAdd")) {
+               handleBinOp(output, "+", op.args()[0], op.args()[1]);
+            }
+            if (op.fn().startswith("DateSubtract")) {
+               handleBinOp(output, "-", op.args()[0], op.args()[1]);
+            }
          })
          .Case<MaterializeOp>([&](MaterializeOp op) {
             std::vector<std::string> attrs;

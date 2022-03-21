@@ -63,10 +63,11 @@ module {
       %19 = db.sub %17 : !db.decimal<15, 2>, %18 : !db.decimal<15, 2>
       %20 = db.mul %16 : !db.decimal<15, 2>, %19 : !db.decimal<15, 2>
       %21 = relalg.addcol %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %20
-      %22 = relalg.getcol %21 @lineitem::@l_shipdate : !db.date<day>
-      %23 = db.date_extract year, %22 : <day>
-      %24 = relalg.addcol %21, @tmp_attr0({type = i64}) %23
-      relalg.return %24 : !relalg.tuple
+      %22 = db.constant("year") : !db.char<4>
+      %23 = relalg.getcol %21 @lineitem::@l_shipdate : !db.date<day>
+      %24 = db.runtime_call "ExtractFromDate"(%22, %23) : (!db.char<4>, !db.date<day>) -> i64
+      %25 = relalg.addcol %21, @tmp_attr0({type = i64}) %24
+      relalg.return %25 : !relalg.tuple
     }
     %13 = relalg.aggregation @aggr0 %12 [@n1::@n_name,@n2::@n_name,@map0::@tmp_attr0] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %16 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>

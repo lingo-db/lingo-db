@@ -631,22 +631,13 @@ struct SQLTranslator {
 
                switch (opType) {
                   case ExpressionType::OPERATOR_PLUS:
-                     if (left.getType().isa<mlir::db::DateType>()) {
-                        return builder.create<mlir::db::DateAddOp>(builder.getUnknownLoc(), left.getType(), left, right);
+                     if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
+                        return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateAdd", mlir::ValueRange({left, right})).res();
                      }
                      return builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), toCommonTypes(builder, {left, right}));
                   case ExpressionType::OPERATOR_MINUS:
-                     if (left.getType().isa<mlir::db::DateType>()) {
-                        if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(right.getDefiningOp())) {
-                           if (auto intAttr = constOp.getValue().dyn_cast_or_null<mlir::IntegerAttr>()) {
-                              constOp->setAttr("value", builder.getIntegerAttr(intAttr.getType(), -intAttr.getInt()));
-                           } else if (auto strAttr = constOp.getValue().dyn_cast_or_null<mlir::StringAttr>()) {
-                              constOp->setAttr("value", builder.getStringAttr("-" + strAttr.str()));
-                           }
-                           return builder.create<mlir::db::DateAddOp>(builder.getUnknownLoc(), left.getType(), left, right);
-                        } else {
-                           error("expected constant");
-                        }
+                     if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
+                        return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateSubtract", mlir::ValueRange({left, right})).res();
                      }
                      return builder.create<mlir::db::SubOp>(builder.getUnknownLoc(), toCommonTypes(builder, {left, right}));
                   case ExpressionType::OPERATOR_MULTIPLY:
@@ -746,13 +737,9 @@ struct SQLTranslator {
                funcName = reinterpret_cast<value*>(funcCall->funcname_->tail->data.ptr_value)->val_.str_;
             }
             if (funcName == "date_part") {
-               auto part = getStringFromConst(reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value));
+               auto part = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
                auto arg2 = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
-               auto unit = mlir::db::symbolizeExtractableTimeUnitAttr(part);
-               if (!unit) {
-                  error("expected valid unit");
-               }
-               return builder.create<mlir::db::DateExtractOp>(loc, builder.getI64Type(), unit.getValue(), arg2);
+               return builder.create<mlir::db::RuntimeCall>(loc, builder.getI64Type(), "ExtractFromDate", mlir::ValueRange({part, arg2})).res();
             }
             if (funcName == "substring") {
                auto str = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);

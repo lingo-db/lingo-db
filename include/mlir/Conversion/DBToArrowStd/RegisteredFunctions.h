@@ -71,8 +71,8 @@
    F(CastDecimalToString, cast_decimal_string, OPERANDS(INT_TYPE(128), INT_TYPE(32)), RETURNS(STRING_TYPE))                                     \
    F(CastCharToString, cast_char_string, OPERANDS(INT_TYPE(64), INT_TYPE(64)), RETURNS(STRING_TYPE))                                            \
    F(SortVector, sort, OPERANDS(INDEX_TYPE, POINTER_TYPE, INDEX_TYPE, FUNCTION_TYPE(OPERANDS(POINTER_TYPE, POINTER_TYPE), RETURNS(BOOL_TYPE))), RETURNS()) \
-   F(TimestampAddMillis, timestamp_add_millis, OPERANDS(INT_TYPE(64), INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                \
-   F(TimestampAddMonth, timestamp_add_months, OPERANDS(INT_TYPE(32), INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                 \
+   F(TimestampAddMonth, timestamp_add_months, OPERANDS(INT_TYPE(64), INT_TYPE(32)), RETURNS(INT_TYPE(64)))                                                 \
+   F(TimestampSubtractMonth, timestamp_subtract_months, OPERANDS(INT_TYPE(64), INT_TYPE(32)), RETURNS(INT_TYPE(64)))                                                 \
    F(DateExtractYear, extract_year, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                         \
    F(DateExtractDoy, extract_doy, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                           \
    F(DateExtractMonth, extract_month, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                       \

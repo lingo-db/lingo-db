@@ -57,10 +57,11 @@ module {
       %25 = db.sub %23 : !db.decimal<15, 2>, %24 : !db.decimal<15, 2>
       %26 = db.mul %22 : !db.decimal<15, 2>, %25 : !db.decimal<15, 2>
       %27 = relalg.addcol %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %26
-      %28 = relalg.getcol %27 @orders::@o_orderdate : !db.date<day>
-      %29 = db.date_extract year, %28 : <day>
-      %30 = relalg.addcol %27, @tmp_attr0({type = i64}) %29
-      relalg.return %30 : !relalg.tuple
+      %28 = db.constant("year") : !db.char<4>
+      %29 = relalg.getcol %27 @orders::@o_orderdate : !db.date<day>
+      %30 = db.runtime_call "ExtractFromDate"(%28, %29) : (!db.char<4>, !db.date<day>) -> i64
+      %31 = relalg.addcol %27, @tmp_attr0({type = i64}) %30
+      relalg.return %31 : !relalg.tuple
     }
     %17 = relalg.map @map1 %16 (%arg0: !relalg.tuple){
       %22 = relalg.getcol %arg0 @n2::@n_name : !db.string

@@ -200,7 +200,7 @@ class FreeOpLowering : public ConversionPattern {
       return success();
    }
 };
-class DateAddOpLowering : public ConversionPattern {
+/*class DateAddOpLowering : public ConversionPattern {
    db::codegen::FunctionRegistry& functionRegistry;
 
    public:
@@ -222,41 +222,7 @@ class DateAddOpLowering : public ConversionPattern {
       rewriter.replaceOp(op, dateVal);
       return success();
    }
-};
-class DateExtractOpLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
-
-   public:
-   explicit DateExtractOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::DateExtractOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
-      auto dateExtractOp = mlir::cast<mlir::db::DateExtractOp>(op);
-      mlir::db::DateExtractOpAdaptor adaptor(operands);
-      auto v = adaptor.val();
-      FunctionId functionId;
-      switch (dateExtractOp.unit()) {
-         case mlir::db::ExtractableTimeUnitAttr::second: functionId = FunctionId::DateExtractSecond; break;
-         case mlir::db::ExtractableTimeUnitAttr::minute: functionId = FunctionId::DateExtractMinute; break;
-         case mlir::db::ExtractableTimeUnitAttr::hour: functionId = FunctionId::DateExtractHour; break;
-         case mlir::db::ExtractableTimeUnitAttr::dow: functionId = FunctionId::DateExtractDow; break;
-         //case mlir::db::ExtractableTimeUnitAttr::week: functionId = FunctionId::DateExtractWeek; break;
-         case mlir::db::ExtractableTimeUnitAttr::day: functionId = FunctionId::DateExtractDay; break;
-         case mlir::db::ExtractableTimeUnitAttr::month: functionId = FunctionId::DateExtractMonth; break;
-         case mlir::db::ExtractableTimeUnitAttr::doy: functionId = FunctionId::DateExtractDoy; break;
-         //case mlir::db::ExtractableTimeUnitAttr::quarter: functionId = FunctionId::DateExtractQuarter; break;
-         case mlir::db::ExtractableTimeUnitAttr::year: functionId = FunctionId::DateExtractYear; break;
-         //case mlir::db::ExtractableTimeUnitAttr::decade: functionId = FunctionId::DateExtractDecade; break;
-         //case mlir::db::ExtractableTimeUnitAttr::century: functionId = FunctionId::DateExtractCentury; break;
-         //case mlir::db::ExtractableTimeUnitAttr::millennium: functionId = FunctionId::DateExtractMillenium; break;
-         default:
-            assert(false && "not implemented yet");
-      }
-      rewriter.replaceOp(op, functionRegistry.call(rewriter, op->getLoc(), functionId, v)[0]);
-      return success();
-   }
-};
+};*/
 class DBToArrowRFLowering : public mlir::db::RuntimeFunction::LoweringImpl {
    protected:
    mlir::db::codegen::FunctionRegistry* nativeFunctionRegistry;
@@ -347,6 +313,23 @@ class RuntimeCallLowering : public ConversionPattern {
 void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    auto reg = patterns.getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
    reg->lookup("Substring")->lowering = std::make_unique<FnRFLowering>(mlir::db::codegen::FunctionRegistry::FunctionId::Substring);
+   reg->lookup("ExtractDayFromDate")->lowering = std::make_unique<FnRFLowering>(mlir::db::codegen::FunctionRegistry::FunctionId::DateExtractDay);
+   reg->lookup("ExtractMonthFromDate")->lowering = std::make_unique<FnRFLowering>(mlir::db::codegen::FunctionRegistry::FunctionId::DateExtractMonth);
+   reg->lookup("ExtractYearFromDate")->lowering = std::make_unique<FnRFLowering>(mlir::db::codegen::FunctionRegistry::FunctionId::DateExtractYear);
+   reg->lookup("DateAdd")->lowering = std::make_unique<OpRFLowering>([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::db::codegen::FunctionRegistry* functionRegistry) -> Value {
+      if (originalArgumentTypes[1].cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
+         return rewriter.create<mlir::arith::AddIOp>(rewriter.getUnknownLoc(), loweredArguments);
+      } else {
+         return functionRegistry->call(rewriter, rewriter.getUnknownLoc(), mlir::db::codegen::FunctionRegistry::FunctionId::TimestampAddMonth,loweredArguments)[0];
+      }
+   });
+   reg->lookup("DateSubtract")->lowering = std::make_unique<OpRFLowering>([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::db::codegen::FunctionRegistry* functionRegistry) -> Value {
+      if (originalArgumentTypes[1].cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
+         return rewriter.create<mlir::arith::SubIOp>(rewriter.getUnknownLoc(), loweredArguments);
+      } else {
+         return functionRegistry->call(rewriter, rewriter.getUnknownLoc(), mlir::db::codegen::FunctionRegistry::FunctionId::TimestampSubtractMonth,loweredArguments)[0];
+      }
+   });
    reg->lookup("DumpValue")->lowering = std::make_unique<OpRFLowering>([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::db::codegen::FunctionRegistry* functionRegistry) -> Value {
       using FunctionId = mlir::db::codegen::FunctionRegistry::FunctionId;
       auto loc = rewriter.getUnknownLoc();
@@ -392,7 +375,7 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
          high = rewriter.create<arith::TruncIOp>(loc, i64Type, high);
          functionRegistry->call(rewriter, loc, FunctionId::DumpDecimal, ValueRange({isNull, low, high, scale}));
       } else if (auto dateType = baseType.dyn_cast_or_null<mlir::db::DateType>()) {
-            functionRegistry->call(rewriter, loc, FunctionId::DumpDate, ValueRange({isNull, val}));
+         functionRegistry->call(rewriter, loc, FunctionId::DumpDate, ValueRange({isNull, val}));
       } else if (auto timestampType = baseType.dyn_cast_or_null<mlir::db::TimestampType>()) {
          FunctionId functionId;
          switch (timestampType.getUnit()) {
@@ -425,8 +408,7 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
       }
       return mlir::Value();
    });
-   patterns.insert<DateExtractOpLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<DateAddOpLowering>(functionRegistry, typeConverter, patterns.getContext());
+   //patterns.insert<DateAddOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<StringCmpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<StringCastOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<FreeOpLowering>(functionRegistry, typeConverter, patterns.getContext());

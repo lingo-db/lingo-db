@@ -12,6 +12,7 @@ add_mlir_dialect_library(MLIRDB
         RuntimeFunctions.cpp
         Transforms/EliminateNulls.cpp
         Transforms/SimplifyToArith.cpp
+        Transforms/OptimizeRuntimeFunctions.cpp
         ADDITIONAL_HEADER_DIRS
         ../../include/mlir/Dialect/DB
 
