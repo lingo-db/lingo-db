@@ -17,10 +17,10 @@ class FunctionRegistry {
 #undef OPERANDS_
 #undef RETURNS_
    };
-   FunctionRegistry(ModuleOp parentModule) : context(parentModule->getContext()),parentModule(parentModule) {
+   FunctionRegistry(ModuleOp parentModule) : context(parentModule->getContext()), parentModule(parentModule) {
    }
    FuncOp getFunction(OpBuilder builder, FunctionId function);
-   ResultRange call(OpBuilder builder,mlir::Location loc, FunctionId function, ValueRange values);
+   ResultRange call(OpBuilder builder, mlir::Location loc, FunctionId function, ValueRange values);
    void registerFunctions();
 
    private:
@@ -34,6 +34,11 @@ class FunctionRegistry {
    std::vector<FuncOp> insertedFunctions;
    MLIRContext* context;
    ModuleOp parentModule;
+
+   public:
+   RegisteredFunction& getRegisteredFunction(FunctionId functionId);
+
+   private:
    FuncOp insertFunction(OpBuilder builder, RegisteredFunction& function);
    void registerFunction(FunctionId funcId, std::string name, std::vector<mlir::Type> ops, std::vector<mlir::Type> returns, bool useWrapper = true);
 };

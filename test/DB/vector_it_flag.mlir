@@ -42,12 +42,12 @@ module {
          %flag = db.createflag
          db.for %row in %vector : !db.vector<!test_tuple_type> until %flag {
              %1,%2 = util.unpack %row : !test_tuple_type -> !db.string,i32
-             db.dump %1 : !db.string
-             db.dump %2 : i32
+             db.runtime_call "DumpValue" (%1) : (!db.string) -> ()
+             db.runtime_call "DumpValue" (%2) : (i32) -> ()
              %cmp = db.compare gte %2 : i32, %int3 : i32
-             db.dump %cmp : i1
+             db.runtime_call "DumpValue" (%cmp) : (i1) -> ()
              db.setflag %flag, %cmp
-             db.dump %str_const : !db.string
+             db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
          }
          return
     }

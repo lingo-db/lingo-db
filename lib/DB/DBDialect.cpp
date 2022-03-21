@@ -1,5 +1,6 @@
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/DB/IR/RuntimeFunctions.h"
 #include "mlir/IR/DialectImplementation.h"
 #include <mlir/Transforms/InliningUtils.h>
 using namespace mlir;
@@ -20,5 +21,6 @@ void DBDialect::initialize() {
       >();
    addInterfaces<DBInlinerInterface>();
    registerTypes();
+   runtimeFunctionRegistry = mlir::db::RuntimeFunctionRegistry::getBuiltinRegistry(getContext());
 }
 #include "mlir/Dialect/DB/IR/DBOpsDialect.cpp.inc"

@@ -2,9 +2,9 @@
 
  module {
 	func @test (%arg0: !db.nullable<i1>) {
-	 	db.dump %arg0 : !db.nullable<i1>
+	 	db.runtime_call "DumpValue" (%arg0) : (!db.nullable<i1>) -> ()
 		%1 = db.isnull %arg0 : !db.nullable<i1>
-		db.dump %1 : i1
+		db.runtime_call "DumpValue" (%1) : (i1) -> ()
 		return
 	}
 	func @main () {
@@ -19,10 +19,10 @@
  		call  @test(%not_null) : (!db.nullable<i1>) -> ()
  		//CHECK: bool(true)
  		%not_null_value =db.nullable_get_val %not_null :  !db.nullable<i1>
- 		db.dump %not_null_value : i1
+ 		db.runtime_call "DumpValue" (%not_null_value) : (i1) -> ()
 		//CHECK: bool(NULL)
 		%const_null = db.as_nullable %const : i1, %const -> !db.nullable<i1>
-		db.dump %const_null : !db.nullable<i1>
+		db.runtime_call "DumpValue" (%const_null) : (!db.nullable<i1>) -> ()
 		return
 	}
  }

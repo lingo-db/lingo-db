@@ -98,52 +98,52 @@
             %key,%val = util.unpack %tpl : tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>> -> tuple<!db.string,i32>,tuple<i64,i32,i32>
             %k1,%k2 = util.unpack %key : tuple<!db.string,i32> -> !db.string,i32
             %m,%v1,%v2 = util.unpack %val : tuple<i64,i32,i32> -> i64, i32,i32
-            db.dump %k1 : !db.string
-            db.dump %k2 : i32
-            db.dump %v1 : i32
-            db.dump %v2 : i32
-            db.dump %str_const : !db.string
+            db.runtime_call "DumpValue" (%k1) : (!db.string) -> ()
+            db.runtime_call "DumpValue" (%k2) : (i32) -> ()
+            db.runtime_call "DumpValue" (%v1) : (i32) -> ()
+            db.runtime_call "DumpValue" (%v2) : (i32) -> ()
+            db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
             %one_i64 = arith.constant 1 : i64
             %marker_ptr=util.generic_memref_cast %ptr : !util.ref<tuple<i64,i32,i32>> -> !util.ref<i64>
             %marker=util.to_memref %marker_ptr : !util.ref<i64> -> memref<i64>
             %marker_val=memref.atomic_rmw "assign" %one_i64 , %marker[] : (i64, memref<i64>) -> i64
-            db.dump %marker_val : i64
+            db.runtime_call "DumpValue" (%marker_val) : (i64) -> ()
         }
-            db.dump %str_const : !db.string
+            db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
         db.for %entry in %matches : !db.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator> {
              %tpl,%ptr = util.unpack %entry : tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>> -> tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>
              %key,%val = util.unpack %tpl : tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>> -> tuple<!db.string,i32>,tuple<i64,i32,i32>
              %k1,%k2 = util.unpack %key : tuple<!db.string,i32> -> !db.string,i32
              %m,%v1,%v2 = util.unpack %val : tuple<i64,i32,i32> -> i64, i32,i32
-             db.dump %k1 : !db.string
-             db.dump %k2 : i32
-             db.dump %v1 : i32
-             db.dump %v2 : i32
-             db.dump %str_const : !db.string
+             db.runtime_call "DumpValue" (%k1) : (!db.string) -> ()
+             db.runtime_call "DumpValue" (%k2) : (i32) -> ()
+             db.runtime_call "DumpValue" (%v1) : (i32) -> ()
+             db.runtime_call "DumpValue" (%v2) : (i32) -> ()
+             db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
              %one_i64 = arith.constant 1 : i64
              %marker_ptr=util.generic_memref_cast %ptr : !util.ref<tuple<i64,i32,i32>> -> !util.ref<i64>
              %marker=util.to_memref %marker_ptr : !util.ref<i64> -> memref<i64>
              %marker_val=memref.atomic_rmw "assign" %one_i64 , %marker[] : (i64, memref<i64>) -> i64
-             db.dump %marker_val : i64
+             db.runtime_call "DumpValue" (%marker_val) : (i64) -> ()
          }
-            db.dump %str_const : !db.string
+            db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
 
 
-            db.dump %str_const : !db.string
-            db.dump %str_const : !db.string
-            db.dump %str_const : !db.string
-            db.dump %str_const : !db.string
+            db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
+            db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
+            db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
+            db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
 
         db.for %entry in %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>> {
             %key,%val = util.unpack %entry : tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>> -> tuple<!db.string,i32>,tuple<i64,i32,i32>
             %k1,%k2 = util.unpack %key : tuple<!db.string,i32> -> !db.string,i32
             %marker,%v1,%v2 = util.unpack %val : tuple<i64,i32,i32> -> i64,i32,i32
-            db.dump %k1 : !db.string
-            db.dump %k2 : i32
-            db.dump %v1 : i32
-            db.dump %v2 : i32
-            db.dump %marker : i64
-            db.dump %str_const : !db.string
+            db.runtime_call "DumpValue" (%k1) : (!db.string) -> ()
+            db.runtime_call "DumpValue" (%k2) : (i32) -> ()
+            db.runtime_call "DumpValue" (%v1) : (i32) -> ()
+            db.runtime_call "DumpValue" (%v2) : (i32) -> ()
+            db.runtime_call "DumpValue" (%marker) : (i64) -> ()
+            db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
         }
         return
 	}

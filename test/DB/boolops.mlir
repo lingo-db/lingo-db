@@ -3,22 +3,22 @@
  module {
 	func @test_or (%arg0: i1,%arg1: i1,%arg2: i1) {
 		%1 = db.or %arg0, %arg1, %arg2 : i1,i1,i1
-		db.dump %1 : i1
+		db.runtime_call "DumpValue" (%1) : (i1) -> ()
 		return
 	}
 	func @test_or_nullable (%arg0: !db.nullable<i1>,%arg1: !db.nullable<i1>,%arg2: !db.nullable<i1>) {
 		%1 = db.or %arg0, %arg1, %arg2 : !db.nullable<i1>, !db.nullable<i1>, !db.nullable<i1>
-		db.dump %1 : !db.nullable<i1>
+		db.runtime_call "DumpValue" (%1) : (!db.nullable<i1>) -> ()
 		return
 	}
 	func @test_and (%arg0: i1,%arg1: i1,%arg2: i1) {
 		%1 = db.and %arg0, %arg1, %arg2 : i1, i1, i1
-		db.dump %1 : i1
+		db.runtime_call "DumpValue" (%1) : (i1) -> ()
 		return
 	}
 	func @test_and_nullable (%arg0: !db.nullable<i1>,%arg1: !db.nullable<i1>,%arg2: !db.nullable<i1>) {
 		%1 = db.and %arg0, %arg1, %arg2 : !db.nullable<i1>, !db.nullable<i1>, !db.nullable<i1>
-		db.dump %1 : !db.nullable<i1>
+		db.runtime_call "DumpValue" (%1) : (!db.nullable<i1>) -> ()
 		return
 	}	
 	func @test_ands () {
@@ -41,7 +41,7 @@
  		//CHECK: bool(true)
  		call @test_and(%true,%true,%true) : (i1,i1,i1) -> ()
 		%sep =db.constant ( "and-------------" ) : !db.string
-		db.dump %sep : !db.string
+		db.runtime_call "DumpValue" (%sep) : (!db.string) -> ()
  		%false_nullable = db.as_nullable %false : i1 -> !db.nullable<i1>
  		%true_nullable = db.as_nullable %true : i1 -> !db.nullable<i1>
  		%null_nullable = db.null : !db.nullable<i1>
@@ -121,7 +121,7 @@
  		//CHECK: bool(true)
  		call @test_or(%true,%true,%true) : (i1,i1,i1) -> ()
 		%sep =db.constant ( "or-------------" ) : !db.string
-		db.dump %sep : !db.string
+		db.runtime_call "DumpValue" (%sep) : (!db.string) -> ()
  		%false_nullable = db.as_nullable %false : i1 -> !db.nullable<i1>
  		%true_nullable = db.as_nullable %true : i1 -> !db.nullable<i1>
  		%null_nullable = db.null : !db.nullable<i1>
@@ -193,15 +193,15 @@
 		%not_false_nullable = db.not %false_nullable : !db.nullable<i1>
 		%not_null_nullable = db.not %null_nullable : !db.nullable<i1>
  		//CHECK: bool(false)
- 		db.dump %not_true : i1
+ 		db.runtime_call "DumpValue" (%not_true) : (i1) -> ()
   		//CHECK: bool(true)
-  		db.dump %not_false : i1
+  		db.runtime_call "DumpValue" (%not_false) : (i1) -> ()
 		//CHECK: bool(false)
-		db.dump %not_true_nullable : !db.nullable<i1>
+		db.runtime_call "DumpValue" (%not_true_nullable) : (!db.nullable<i1>) -> ()
 		//CHECK: bool(true)
-		db.dump %not_false_nullable : !db.nullable<i1>
+		db.runtime_call "DumpValue" (%not_false_nullable) : (!db.nullable<i1>) -> ()
 		//CHECK: bool(NULL)
-		db.dump %not_null_nullable : !db.nullable<i1>
+		db.runtime_call "DumpValue" (%not_null_nullable) : (!db.nullable<i1>) -> ()
  		return
  	}
 	func @main () {

@@ -9,15 +9,15 @@
 		%3,%4 = util.unpack %2 : tuple<i1, i1> -> i1, i1
 		//CHECK: bool(true)
 		//CHECK: bool(false)
-		db.dump %3 : i1
-		db.dump %4 : i1
+		db.runtime_call "DumpValue" (%3) : (i1) -> ()
+		db.runtime_call "DumpValue" (%4) : (i1) -> ()
 
 		%5 = util.pack %true, %false : i1, i1 -> tuple<i1, i1>
 		%6,%7 = util.unpack %5 : tuple<i1, i1> -> i1, i1
 		//CHECK: bool(true)
 		//CHECK: bool(false)
-		db.dump %6 : i1
-		db.dump %7 : i1
+		db.runtime_call "DumpValue" (%6) : (i1) -> ()
+		db.runtime_call "DumpValue" (%7) : (i1) -> ()
 
 		%8 = util.pack %true, %false : i1, i1 -> tuple<i1, i1>
 		%9 = util.pack %8, %8 : tuple<i1, i1>,tuple<i1, i1> -> tuple<tuple<i1, i1>,tuple<i1, i1>>
@@ -26,12 +26,12 @@
 		%14,%15 = util.unpack %10 : tuple<i1, i1> -> i1, i1
 		//CHECK: bool(true)
 		//CHECK: bool(false)
-		db.dump %12 : i1
-		db.dump %13 : i1
+		db.runtime_call "DumpValue" (%12) : (i1) -> ()
+		db.runtime_call "DumpValue" (%13) : (i1) -> ()
 		//CHECK: bool(true)
 		//CHECK: bool(false)
-		db.dump %14 : i1
-		db.dump %15 : i1
+		db.runtime_call "DumpValue" (%14) : (i1) -> ()
+		db.runtime_call "DumpValue" (%15) : (i1) -> ()
 		return
 	}
  }

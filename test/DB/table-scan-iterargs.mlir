@@ -29,23 +29,23 @@
 			%total_count=db.for %table_chunk in %0 : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator> iter_args(%count_iter = %count_0) -> (i32){
 				%count = db.for %table_row in %table_chunk : !db.iterable<!test_table_tuple,table_row_iterator> iter_args(%count_iter_2 = %count_iter) -> (i32){
 					%1,%2,%3,%4,%5,%6,%7,%8,%9 = util.unpack %table_row : !test_table_tuple -> !db.nullable<!db.string>,!db.nullable<f32>,!db.nullable<f64>,!db.nullable<!db.decimal<5,2>>,!db.nullable<i32>,!db.nullable<i64>,!db.nullable<i1>,!db.nullable<!db.date<day>>,!db.nullable<!db.date<millisecond>>
-					db.dump %1 : !db.nullable<!db.string>
-					db.dump %2 : !db.nullable<f32>
-					db.dump %3 : !db.nullable<f64>
-					db.dump %4 : !db.nullable<!db.decimal<5,2>>
-					db.dump %5 : !db.nullable<i32>
-					db.dump %6 : !db.nullable<i64>
-					db.dump %7 : !db.nullable<i1>
-					db.dump %8 : !db.nullable<!db.date<day>>
-					db.dump %9 : !db.nullable<!db.date<millisecond>>
-					db.dump %str_const : !db.string
+					db.runtime_call "DumpValue" (%1) : (!db.nullable<!db.string>) -> ()
+					db.runtime_call "DumpValue" (%2) : (!db.nullable<f32>) -> ()
+					db.runtime_call "DumpValue" (%3) : (!db.nullable<f64>) -> ()
+					db.runtime_call "DumpValue" (%4) : (!db.nullable<!db.decimal<5,2>>) -> ()
+					db.runtime_call "DumpValue" (%5) : (!db.nullable<i32>) -> ()
+					db.runtime_call "DumpValue" (%6) : (!db.nullable<i64>) -> ()
+					db.runtime_call "DumpValue" (%7) : (!db.nullable<i1>) -> ()
+					db.runtime_call "DumpValue" (%8) : (!db.nullable<!db.date<day>>) -> ()
+					db.runtime_call "DumpValue" (%9) : (!db.nullable<!db.date<millisecond>>) -> ()
+					db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
 					%curr_count=db.add %count_iter_2 : i32, %one : i32
 					db.yield %curr_count : i32
 				}
 				%curr_count=db.add %count_iter : i32, %count : i32
                 db.yield %curr_count : i32
 			}
-			db.dump %total_count : i32
+			db.runtime_call "DumpValue" (%total_count) : (i32) -> ()
 		return
 	}
  }

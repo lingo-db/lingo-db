@@ -9,6 +9,12 @@ def DB_HandleNullInterface : OpInterface<"HandleNullInterface"> {
       /*description=*/"",
       /*retTy=*/"bool",
       /*methodName=*/"canHandleInvalidValues"
+    >,    InterfaceMethod<
+      /*description=*/"",
+      /*retTy=*/"bool",
+      /*methodName=*/"canHandleNulls",(ins ),"", /*defaultImplementation=*/[{
+    return false;
+}]
     >];
 }
 

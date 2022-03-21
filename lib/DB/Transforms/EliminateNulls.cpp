@@ -18,7 +18,7 @@ class WrapWithNullCheck : public mlir::RewritePattern {
       if (op->getNumResults() > 1) return mlir::failure();
       if (op->getNumResults() == 1 && !op->getResultTypes()[0].isa<mlir::db::NullableType>()) return mlir::failure();
       auto handleNullInterface = mlir::dyn_cast_or_null<mlir::db::HandleNullInterface>(op);
-      if (handleNullInterface) {
+      if (handleNullInterface && !handleNullInterface.canHandleNulls()) {
          if (llvm::any_of(op->getOperands(), [](auto operand) { return operand.getType().template isa<mlir::db::NullableType>(); })) {
             return mlir::success();
          }
@@ -46,7 +46,7 @@ class WrapWithNullCheck : public mlir::RewritePattern {
                mapping.map(operand, rewriter.create<mlir::db::NullableGetVal>(op->getLoc(), operand));
             }
          }
-         auto *cloned = rewriter.clone(*op, mapping);
+         auto* cloned = rewriter.clone(*op, mapping);
          if (op->getNumResults() == 1) {
             cloned->getResult(0).setType(getBaseType(cloned->getResult(0).getType()));
             rewriter.replaceOpWithNewOp<mlir::db::AsNullableOp>(op, op->getResultTypes()[0], cloned->getResult(0), isAnyNull);

@@ -15,9 +15,9 @@
         %res1=util.load %generic_memref[%c1] :!util.ref<!db.nullable<i32>> -> !db.nullable<i32>
         %res2=util.load %generic_memref[] :!util.ref<!db.nullable<i32>> -> !db.nullable<i32>
         //CHECK: int(NULL)
-        db.dump %res1 : !db.nullable<i32>
+        db.runtime_call "DumpValue" (%res1) : (!db.nullable<i32>) -> ()
         //CHECK: int(42)
-        db.dump %res2 : !db.nullable<i32>
+        db.runtime_call "DumpValue" (%res2) : (!db.nullable<i32>) -> ()
 		return
 	}
  }

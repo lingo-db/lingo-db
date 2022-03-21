@@ -59,6 +59,7 @@
    F(CmpStringGT, cmp_string_gt, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
    F(CmpStringGTE, cmp_string_gte, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                      \
    F(CmpStringLike, cmp_string_like, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                    \
+   F(Substring, substring, OPERANDS(STRING_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(STRING_TYPE))                                                    \
    F(CmpStringStartsWith, cmp_string_starts_with, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                       \
    F(CmpStringEndsWith, cmp_string_ends_with, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                           \
    F(CastStringToInt64, cast_string_int, OPERANDS(STRING_TYPE), RETURNS(INT_TYPE(64)))                                                          \

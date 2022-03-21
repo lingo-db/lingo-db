@@ -2,7 +2,9 @@
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include <mlir/Dialect/util/UtilOps.h>
 
+#include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/DB/IR/RuntimeFunctions.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
@@ -156,102 +158,6 @@ class StringCmpOpLowering : public ConversionPattern {
       return success();
    }
 };
-class DumpOpLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
-
-   public:
-   explicit DumpOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::DumpOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      using FunctionId = mlir::db::codegen::FunctionRegistry::FunctionId;
-      mlir::db::DumpOp::Adaptor dumpOpAdaptor(operands);
-      auto loc = op->getLoc();
-      auto printOp = cast<mlir::db::DumpOp>(op);
-      Value val = printOp.val();
-      auto i128Type = IntegerType::get(rewriter.getContext(), 128);
-      auto i64Type = IntegerType::get(rewriter.getContext(), 64);
-      auto nullableType = val.getType().dyn_cast_or_null<mlir::db::NullableType>();
-      auto baseType = nullableType ? nullableType.getType() : val.getType();
-
-      auto f64Type = FloatType::getF64(rewriter.getContext());
-      Value isNull;
-      if (nullableType) {
-         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, dumpOpAdaptor.val());
-         isNull = unPackOp.vals()[0];
-         val = unPackOp.vals()[1];
-      } else {
-         isNull = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-         val = dumpOpAdaptor.val();
-      }
-      if (baseType.isa<mlir::IndexType>()) {
-         functionRegistry.call(rewriter, op->getLoc(), FunctionId::DumpIndex, operands[0]);
-      } else if (isIntegerType(baseType, 1)) {
-         functionRegistry.call(rewriter, loc, FunctionId::DumpBool, ValueRange({isNull, val}));
-      } else if (auto intWidth = getIntegerWidth(baseType, false)) {
-         if (intWidth < 64) {
-            val = rewriter.create<arith::ExtSIOp>(loc, i64Type, val);
-         }
-         functionRegistry.call(rewriter, loc, FunctionId::DumpInt, ValueRange({isNull, val}));
-      } else if (auto uIntWidth = getIntegerWidth(baseType, true)) {
-         if (uIntWidth < 64) {
-            val = rewriter.create<arith::ExtUIOp>(loc, i64Type, val);
-         }
-         functionRegistry.call(rewriter, loc, FunctionId::DumpUInt, ValueRange({isNull, val}));
-      } else if (auto decType = baseType.dyn_cast_or_null<mlir::db::DecimalType>()) {
-         if (typeConverter->convertType(decType).cast<mlir::IntegerType>().getWidth() < 128) {
-            auto converted = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), val);
-            val = converted;
-         }
-         Value low = rewriter.create<arith::TruncIOp>(loc, i64Type, val);
-         Value shift = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i128Type, 64));
-         Value scale = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32IntegerAttr(decType.getS()));
-         Value high = rewriter.create<arith::ShRUIOp>(loc, i128Type, val, shift);
-         high = rewriter.create<arith::TruncIOp>(loc, i64Type, high);
-         functionRegistry.call(rewriter, loc, FunctionId::DumpDecimal, ValueRange({isNull, low, high, scale}));
-      } else if (auto dateType = baseType.dyn_cast_or_null<mlir::db::DateType>()) {
-         if (dateType.getUnit() == mlir::db::DateUnitAttr::millisecond) {
-            functionRegistry.call(rewriter, loc, FunctionId::DumpDateMillisecond, ValueRange({isNull, val}));
-         } else {
-            functionRegistry.call(rewriter, loc, FunctionId::DumpDateDay, ValueRange({isNull, val}));
-         }
-      } else if (auto timestampType = baseType.dyn_cast_or_null<mlir::db::TimestampType>()) {
-         FunctionId functionId;
-         switch (timestampType.getUnit()) {
-            case mlir::db::TimeUnitAttr::second: functionId = FunctionId::DumpTimestampSecond; break;
-            case mlir::db::TimeUnitAttr::millisecond: functionId = FunctionId::DumpTimestampMillisecond; break;
-            case mlir::db::TimeUnitAttr::microsecond: functionId = FunctionId::DumpTimestampMicrosecond; break;
-            case mlir::db::TimeUnitAttr::nanosecond: functionId = FunctionId::DumpTimestampNanosecond; break;
-         }
-         functionRegistry.call(rewriter, loc, functionId, ValueRange({isNull, val}));
-      } else if (auto intervalType = baseType.dyn_cast_or_null<mlir::db::IntervalType>()) {
-         if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
-            functionRegistry.call(rewriter, loc, FunctionId::DumpIntervalMonths, ValueRange({isNull, val}));
-         } else {
-            functionRegistry.call(rewriter, loc, FunctionId::DumpIntervalDayTime, ValueRange({isNull, val}));
-         }
-
-      } else if (auto floatType = baseType.dyn_cast_or_null<mlir::FloatType>()) {
-         if (floatType.getWidth() < 64) {
-            val = rewriter.create<arith::ExtFOp>(loc, f64Type, val);
-         }
-         functionRegistry.call(rewriter, loc, FunctionId::DumpFloat, ValueRange({isNull, val}));
-      } else if (baseType.isa<mlir::db::StringType>()) {
-         functionRegistry.call(rewriter, loc, FunctionId::DumpString, ValueRange({isNull, val}));
-      } else if (auto charType = baseType.dyn_cast_or_null<mlir::db::CharType>()) {
-         Value numBytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(charType.getBytes()));
-         if (charType.getBytes() < 8) {
-            val = rewriter.create<arith::ExtSIOp>(loc, i64Type, val);
-         }
-         functionRegistry.call(rewriter, loc, FunctionId::DumpChar, ValueRange({isNull, val, numBytes}));
-      }
-      rewriter.eraseOp(op);
-
-      return success();
-   }
-};
 
 class FreeOpLowering : public ConversionPattern {
    public:
@@ -370,13 +276,181 @@ class DateExtractOpLowering : public ConversionPattern {
       return success();
    }
 };
+class OpRFLowering : public mlir::db::RuntimeFunction::LoweringImpl {
+   mlir::db::codegen::FunctionRegistry* nativeFunctionRegistry;
+   mlir::TypeConverter* typeConverter;
+   using loweringFn_t = std::function<mlir::Value(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter*, mlir::db::codegen::FunctionRegistry*)>;
+   loweringFn_t fn;
+
+   public:
+   OpRFLowering(const loweringFn_t& fn) : fn(fn) {}
+   mlir::Value lower(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType) override {
+      return fn(builder, loweredArguments, originalArgumentTypes, resType, typeConverter, nativeFunctionRegistry);
+   }
+   void setNativeFunctionRegistry(db::codegen::FunctionRegistry* nativeFunctionRegistry) {
+      OpRFLowering::nativeFunctionRegistry = nativeFunctionRegistry;
+   }
+   void setTypeConverter(TypeConverter* typeConverter) {
+      OpRFLowering::typeConverter = typeConverter;
+   }
+};
+class FnRFLowering : public mlir::db::RuntimeFunction::LoweringImpl {
+   mlir::db::codegen::FunctionRegistry* nativeFunctionRegistry;
+   mlir::TypeConverter* typeConverter;
+   mlir::db::codegen::FunctionRegistry::FunctionId functionId;
+
+   public:
+   FnRFLowering(mlir::db::codegen::FunctionRegistry::FunctionId functionId) : functionId(functionId) {}
+   mlir::Value convert(mlir::OpBuilder& builder, mlir::Value v, mlir::Type target) {
+      if (v.getType() == target) return v;
+      if (target.isIndex()) {
+         return builder.create<mlir::arith::IndexCastOp>(builder.getUnknownLoc(), target, v);
+      }
+      assert(false && "should not happen");
+      return v;
+   }
+   mlir::Value lower(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType) override {
+      auto registeredFunction = nativeFunctionRegistry->getRegisteredFunction(functionId);
+      std::vector<mlir::Value> args;
+      assert(registeredFunction.operands.size() == loweredArguments.size());
+      for (size_t i = 0; i < loweredArguments.size(); i++) {
+         args.push_back(convert(builder, loweredArguments[i], registeredFunction.operands[i]));
+      }
+      auto res = nativeFunctionRegistry->call(builder, builder.getUnknownLoc(), functionId, args);
+      assert((res.size() == 1 && resType) || (res.empty() && !resType));
+      return res.size() == 1 ? res[0] : mlir::Value();
+   }
+   void setNativeFunctionRegistry(db::codegen::FunctionRegistry* nativeFunctionRegistry) {
+      FnRFLowering::nativeFunctionRegistry = nativeFunctionRegistry;
+   }
+   void setTypeConverter(TypeConverter* typeConverter) {
+      FnRFLowering::typeConverter = typeConverter;
+   }
+};
+
+class RuntimeCallLowering : public ConversionPattern {
+   db::codegen::FunctionRegistry& functionRegistry;
+
+   public:
+   explicit RuntimeCallLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::RuntimeCall::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto reg = getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
+
+      auto runtimeCallOp = mlir::cast<mlir::db::RuntimeCall>(op);
+      mlir::db::RuntimeCallAdaptor adaptor(operands);
+      auto *fn = reg->lookup(runtimeCallOp.fn().str());
+      if (!fn) return failure();
+      if (!fn->lowering) return failure();
+      if (auto *opRfLowering = dynamic_cast<OpRFLowering*>(fn->lowering.get())) {
+         opRfLowering->setNativeFunctionRegistry(&functionRegistry);
+         opRfLowering->setTypeConverter(typeConverter);
+      }
+      if (auto *fnRfLowering = dynamic_cast<FnRFLowering*>(fn->lowering.get())) {
+         fnRfLowering->setNativeFunctionRegistry(&functionRegistry);
+         fnRfLowering->setTypeConverter(typeConverter);
+      }
+      mlir::Value res = fn->lowering->lower(rewriter, adaptor.args(), runtimeCallOp.args().getTypes(), runtimeCallOp->getNumResults() == 1 ? runtimeCallOp->getResultTypes()[0] : mlir::Type());
+      if (runtimeCallOp->getNumResults() == 0) {
+         rewriter.eraseOp(op);
+      } else {
+         rewriter.replaceOp(op, res);
+      }
+      return success();
+   }
+};
 } // namespace
 
 void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
+   auto reg = patterns.getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
+   reg->lookup("Substring")->lowering = std::make_unique<FnRFLowering>(mlir::db::codegen::FunctionRegistry::FunctionId::Substring);
+   reg->lookup("DumpValue")->lowering = std::make_unique<OpRFLowering>([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::db::codegen::FunctionRegistry* functionRegistry) -> Value {
+      using FunctionId = mlir::db::codegen::FunctionRegistry::FunctionId;
+      auto loc = rewriter.getUnknownLoc();
+      auto i128Type = IntegerType::get(rewriter.getContext(), 128);
+      auto i64Type = IntegerType::get(rewriter.getContext(), 64);
+      auto nullableType = originalArgumentTypes[0].dyn_cast_or_null<mlir::db::NullableType>();
+      auto baseType = getBaseType(originalArgumentTypes[0]);
+
+      auto f64Type = FloatType::getF64(rewriter.getContext());
+      Value isNull;
+      Value val;
+      if (nullableType) {
+         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, loweredArguments[0]);
+         isNull = unPackOp.vals()[0];
+         val = unPackOp.vals()[1];
+      } else {
+         isNull = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+         val = loweredArguments[0];
+      }
+      if (baseType.isa<mlir::IndexType>()) {
+         functionRegistry->call(rewriter, loc, FunctionId::DumpIndex, loweredArguments[0]);
+      } else if (isIntegerType(baseType, 1)) {
+         functionRegistry->call(rewriter, loc, FunctionId::DumpBool, ValueRange({isNull, val}));
+      } else if (auto intWidth = getIntegerWidth(baseType, false)) {
+         if (intWidth < 64) {
+            val = rewriter.create<arith::ExtSIOp>(loc, i64Type, val);
+         }
+         functionRegistry->call(rewriter, loc, FunctionId::DumpInt, ValueRange({isNull, val}));
+      } else if (auto uIntWidth = getIntegerWidth(baseType, true)) {
+         if (uIntWidth < 64) {
+            val = rewriter.create<arith::ExtUIOp>(loc, i64Type, val);
+         }
+         functionRegistry->call(rewriter, loc, FunctionId::DumpUInt, ValueRange({isNull, val}));
+      } else if (auto decType = baseType.dyn_cast_or_null<mlir::db::DecimalType>()) {
+         if (typeConverter->convertType(decType).cast<mlir::IntegerType>().getWidth() < 128) {
+            auto converted = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), val);
+            val = converted;
+         }
+         Value low = rewriter.create<arith::TruncIOp>(loc, i64Type, val);
+         Value shift = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(i128Type, 64));
+         Value scale = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32IntegerAttr(decType.getS()));
+         Value high = rewriter.create<arith::ShRUIOp>(loc, i128Type, val, shift);
+         high = rewriter.create<arith::TruncIOp>(loc, i64Type, high);
+         functionRegistry->call(rewriter, loc, FunctionId::DumpDecimal, ValueRange({isNull, low, high, scale}));
+      } else if (auto dateType = baseType.dyn_cast_or_null<mlir::db::DateType>()) {
+         if (dateType.getUnit() == mlir::db::DateUnitAttr::millisecond) {
+            functionRegistry->call(rewriter, loc, FunctionId::DumpDateMillisecond, ValueRange({isNull, val}));
+         } else {
+            functionRegistry->call(rewriter, loc, FunctionId::DumpDateDay, ValueRange({isNull, val}));
+         }
+      } else if (auto timestampType = baseType.dyn_cast_or_null<mlir::db::TimestampType>()) {
+         FunctionId functionId;
+         switch (timestampType.getUnit()) {
+            case mlir::db::TimeUnitAttr::second: functionId = FunctionId::DumpTimestampSecond; break;
+            case mlir::db::TimeUnitAttr::millisecond: functionId = FunctionId::DumpTimestampMillisecond; break;
+            case mlir::db::TimeUnitAttr::microsecond: functionId = FunctionId::DumpTimestampMicrosecond; break;
+            case mlir::db::TimeUnitAttr::nanosecond: functionId = FunctionId::DumpTimestampNanosecond; break;
+         }
+         functionRegistry->call(rewriter, loc, functionId, ValueRange({isNull, val}));
+      } else if (auto intervalType = baseType.dyn_cast_or_null<mlir::db::IntervalType>()) {
+         if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
+            functionRegistry->call(rewriter, loc, FunctionId::DumpIntervalMonths, ValueRange({isNull, val}));
+         } else {
+            functionRegistry->call(rewriter, loc, FunctionId::DumpIntervalDayTime, ValueRange({isNull, val}));
+         }
+
+      } else if (auto floatType = baseType.dyn_cast_or_null<mlir::FloatType>()) {
+         if (floatType.getWidth() < 64) {
+            val = rewriter.create<arith::ExtFOp>(loc, f64Type, val);
+         }
+         functionRegistry->call(rewriter, loc, FunctionId::DumpFloat, ValueRange({isNull, val}));
+      } else if (baseType.isa<mlir::db::StringType>()) {
+         functionRegistry->call(rewriter, loc, FunctionId::DumpString, ValueRange({isNull, val}));
+      } else if (auto charType = baseType.dyn_cast_or_null<mlir::db::CharType>()) {
+         Value numBytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(charType.getBytes()));
+         if (charType.getBytes() < 8) {
+            val = rewriter.create<arith::ExtSIOp>(loc, i64Type, val);
+         }
+         functionRegistry->call(rewriter, loc, FunctionId::DumpChar, ValueRange({isNull, val, numBytes}));
+      }
+      return mlir::Value();
+   });
    patterns.insert<DateExtractOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<DateAddOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<StringCmpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<StringCastOpLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<DumpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<FreeOpLowering>(functionRegistry, typeConverter, patterns.getContext());
+   patterns.insert<RuntimeCallLowering>(functionRegistry, typeConverter, patterns.getContext());
 }

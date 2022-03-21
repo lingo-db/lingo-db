@@ -32,14 +32,14 @@ module {
 //CHECK: index(11221175996223801097)
 //CHECK: index(14428801650687329114)
 
-         db.dump %hash1      :index
-         db.dump %hash2      :index
-         db.dump %hash3      :index
-         db.dump %hash4      :index
-         db.dump %hash5      :index
-         db.dump %hash6      :index
-         db.dump %hash7      :index
-         db.dump %tuple_hash :index
+         db.runtime_call "DumpValue" (%hash1) : (index) -> ()
+         db.runtime_call "DumpValue" (%hash2) : (index) -> ()
+         db.runtime_call "DumpValue" (%hash3) : (index) -> ()
+         db.runtime_call "DumpValue" (%hash4) : (index) -> ()
+         db.runtime_call "DumpValue" (%hash5) : (index) -> ()
+         db.runtime_call "DumpValue" (%hash6) : (index) -> ()
+         db.runtime_call "DumpValue" (%hash7) : (index) -> ()
+         db.runtime_call "DumpValue" (%tuple_hash) : (index) -> ()
         return
     }
 }

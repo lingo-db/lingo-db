@@ -43,7 +43,7 @@
                                                                                                                                                                           		   %updated_tuple = util.pack %add1, %mul1 : i32, i32 -> tuple<i32, i32>
                                                                                                                                                                                      db.yield %updated_tuple : tuple<i32, i32>
                                                                                                                                                                                   }
-        db.dump %str_const : !db.string
+        db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
         %builder2= db.builder_merge %builder1 : !db.aggr_ht_builder<tuple<>,tuple<i32,i32>, tuple<i32,i32>>, %entry2 : !entry_type (%curr:tuple<i32,i32>, %new:tuple<i32,i32>) {
                                                                                                                                                                               %curr1,%curr2 = util.unpack %curr : tuple<i32,i32> -> i32,i32
                                                                                                                                                                               %new1,%new2 = util.unpack %new : tuple<i32,i32> -> i32,i32
@@ -52,7 +52,7 @@
                                                                                                                                                                    		   %updated_tuple = util.pack %add1, %mul1 : i32, i32 -> tuple<i32, i32>
                                                                                                                                                                               db.yield %updated_tuple : tuple<i32, i32>
                                                                                                                                                                            }
-        db.dump %str_const : !db.string
+        db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
         %builder3= db.builder_merge %builder2 : !db.aggr_ht_builder<tuple<>,tuple<i32,i32>, tuple<i32,i32>>, %entry3 : !entry_type (%curr:tuple<i32,i32>, %new:tuple<i32,i32>) {
                                                                                                                                                                               %curr1,%curr2 = util.unpack %curr : tuple<i32,i32> -> i32,i32
                                                                                                                                                                               %new1,%new2 = util.unpack %new : tuple<i32,i32> -> i32,i32
@@ -61,7 +61,7 @@
                                                                                                                                                                    		   %updated_tuple = util.pack %add1, %mul1 : i32, i32 -> tuple<i32, i32>
                                                                                                                                                                               db.yield %updated_tuple : tuple<i32, i32>
                                                                                                                                                                            }
-        db.dump %str_const : !db.string
+        db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
         %builder4= db.builder_merge %builder3 : !db.aggr_ht_builder<tuple<>,tuple<i32,i32>, tuple<i32,i32>>, %entry4 : !entry_type (%curr:tuple<i32,i32>, %new:tuple<i32,i32>) {
                                                                                                                                                                               %curr1,%curr2 = util.unpack %curr : tuple<i32,i32> -> i32,i32
                                                                                                                                                                               %new1,%new2 = util.unpack %new : tuple<i32,i32> -> i32,i32
@@ -70,15 +70,15 @@
                                                                                                                                                                    		   %updated_tuple = util.pack %add1, %mul1 : i32, i32 -> tuple<i32, i32>
                                                                                                                                                                               db.yield %updated_tuple : tuple<i32, i32>
                                                                                                                                                                            }
-        db.dump %str_const : !db.string
+        db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
        %ht  = db.builder_build %builder4 : !db.aggr_ht_builder<tuple<>,tuple<i32,i32>, tuple<i32,i32>> -> !db.aggr_ht<tuple<>,tuple<i32,i32>>
         db.for %entry in %ht : !db.aggr_ht<tuple<>,tuple<i32,i32>> {
             %key,%val = util.unpack %entry : tuple<tuple<>,tuple<i32,i32>> -> tuple<>,tuple<i32,i32>
             %v1,%v2 = util.unpack %val : tuple<i32,i32> -> i32,i32
 
-            db.dump %v1 : i32
-            db.dump %v2 : i32
-            db.dump %str_const : !db.string
+            db.runtime_call "DumpValue" (%v1) : (i32) -> ()
+            db.runtime_call "DumpValue" (%v2) : (i32) -> ()
+            db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
         }
         return
 	}

@@ -9,6 +9,7 @@ add_mlir_dialect_library(MLIRDB
         DBOps.cpp
         DBOpsEnums.cpp
         DBTypes.cpp
+        RuntimeFunctions.cpp
         Transforms/EliminateNulls.cpp
         Transforms/SimplifyToArith.cpp
         ADDITIONAL_HEADER_DIRS

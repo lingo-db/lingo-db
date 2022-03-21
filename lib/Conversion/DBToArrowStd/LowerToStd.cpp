@@ -5,6 +5,7 @@
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
+#include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
@@ -50,7 +51,7 @@ struct DBToStdLoweringPass
 
    DBToStdLoweringPass() {}
    void getDependentDialects(DialectRegistry& registry) const override {
-      registry.insert<LLVM::LLVMDialect, scf::SCFDialect, mlir::cf::ControlFlowDialect, util::UtilDialect, memref::MemRefDialect, arith::ArithmeticDialect>();
+      registry.insert<LLVM::LLVMDialect, mlir::db::DBDialect, scf::SCFDialect, mlir::cf::ControlFlowDialect, util::UtilDialect, memref::MemRefDialect, arith::ArithmeticDialect>();
    }
    void runOnOperation() final;
 };
@@ -65,7 +66,7 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 }
 } // end anonymous namespace
 static bool hasDBType(TypeConverter& converter, TypeRange types) {
-   return llvm::any_of(types,[&converter](mlir::Type t){ auto converted = converter.convertType(t);return converted&&converted!=t;});
+   return llvm::any_of(types, [&converter](mlir::Type t) { auto converted = converter.convertType(t);return converted&&converted!=t; });
 }
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {

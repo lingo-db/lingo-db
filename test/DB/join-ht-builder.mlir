@@ -53,11 +53,11 @@
             %key,%val = util.unpack %entry : tuple<tuple<!db.string,i32>,tuple<i32,i32>> -> tuple<!db.string,i32>,tuple<i32,i32>
             %k1,%k2 = util.unpack %key : tuple<!db.string,i32> -> !db.string,i32
             %v1,%v2 = util.unpack %val : tuple<i32,i32> -> i32,i32
-            db.dump %k1 : !db.string
-            db.dump %k2 : i32
-            db.dump %v1 : i32
-            db.dump %v2 : i32
-            db.dump %str_const : !db.string
+            db.runtime_call "DumpValue" (%k1) : (!db.string) -> ()
+            db.runtime_call "DumpValue" (%k2) : (i32) -> ()
+            db.runtime_call "DumpValue" (%v1) : (i32) -> ()
+            db.runtime_call "DumpValue" (%v2) : (i32) -> ()
+            db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
         }
         return
 	}

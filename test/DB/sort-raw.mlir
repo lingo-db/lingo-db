@@ -56,13 +56,13 @@
 
         db.for %row in %vector : !db.vector<!test_tuple_type> {
             %1,%2 = util.unpack %row : !test_tuple_type -> !db.string,i32
-            db.dump %1 : !db.string
-            db.dump %2 : i32
-            db.dump %str_const : !db.string
+            db.runtime_call "DumpValue" (%1) : (!db.string) -> ()
+            db.runtime_call "DumpValue" (%2) : (i32) -> ()
+            db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
         }
 
-        db.dump %str_const : !db.string
-        db.dump %str_const : !db.string
+        db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
+        db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
 
         db.sort %vector : !db.vector<!test_tuple_type> (%left,%right) {
            %left1,%left2 = util.unpack %left : !test_tuple_type -> !db.string,i32
@@ -73,9 +73,9 @@
 
         db.for %row in %vector : !db.vector<!test_tuple_type> {
             %1,%2 = util.unpack %row : !test_tuple_type -> !db.string,i32
-            db.dump %1 : !db.string
-            db.dump %2 : i32
-            db.dump %str_const : !db.string
+            db.runtime_call "DumpValue" (%1) : (!db.string) -> ()
+            db.runtime_call "DumpValue" (%2) : (i32) -> ()
+            db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
         }
         return
 	}

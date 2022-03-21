@@ -70,39 +70,39 @@
 		 %float32_div= db.div %float32_const : f32, %float32_const : f32
 		 %float64_div= db.div %float64_const : f64, %float64_const : f64
 		 %decimal2_div = db.div %decimal2_const : !db.decimal<15,2>, %decimal2_const : !db.decimal<15,2>
-         db.dump %char_const : !db.char<2>
- 		 db.dump %int32_const : i32
- 		 db.dump %int64_const : i64
- 		 db.dump %bool_true_const : i1
- 		 db.dump %bool_false_const : i1
- 		 db.dump %decimal10_const : !db.decimal<15,10>
- 		 db.dump %date_const : !db.date<day>
- 		 db.dump %timestamp_const : !db.timestamp<second>
- 		 db.dump %interval_days_const : !db.interval<daytime>
- 		 db.dump %interval_months_const : !db.interval<months>
- 		 db.dump %float32_const : f32
- 		 db.dump %float64_const : f64
- 		 db.dump %str_const : !db.string
- 		 db.dump %int32_add: i32
- 		 db.dump %int64_add: i64
- 		 db.dump %float32_add: f32
- 		 db.dump %float64_add: f64
- 		 db.dump %decimal10_add : !db.decimal<15,10>
- 		 db.dump %int32_sub: i32
- 		 db.dump %int64_sub: i64
- 		 db.dump %float32_sub: f32
- 		 db.dump %float64_sub: f64
- 		 db.dump %decimal10_sub : !db.decimal<15,10>
-		 db.dump %int32_mul: i32
-		 db.dump %int64_mul: i64
-		 db.dump %float32_mul: f32
-		 db.dump %float64_mul: f64
-		 db.dump %decimal2_mul : !db.decimal<15,2>
- 		 db.dump %int32_div: i32
- 		 db.dump %int64_div: i64
- 		 db.dump %float32_div: f32
- 		 db.dump %float64_div: f64
- 		 db.dump %decimal2_div : !db.decimal<15,2>
+         db.runtime_call "DumpValue" (%char_const) : (!db.char<2>) -> ()
+ 		 db.runtime_call "DumpValue" (%int32_const) : (i32) -> ()
+ 		 db.runtime_call "DumpValue" (%int64_const) : (i64) -> ()
+ 		 db.runtime_call "DumpValue" (%bool_true_const) : (i1) -> ()
+ 		 db.runtime_call "DumpValue" (%bool_false_const) : (i1) -> ()
+ 		 db.runtime_call "DumpValue" (%decimal10_const) : (!db.decimal<15,10>) -> ()
+ 		 db.runtime_call "DumpValue" (%date_const) : (!db.date<day>) -> ()
+ 		 db.runtime_call "DumpValue" (%timestamp_const) : (!db.timestamp<second>) -> ()
+ 		 db.runtime_call "DumpValue" (%interval_days_const) : (!db.interval<daytime>) -> ()
+ 		 db.runtime_call "DumpValue" (%interval_months_const) : (!db.interval<months>) -> ()
+ 		 db.runtime_call "DumpValue" (%float32_const) : (f32) -> ()
+ 		 db.runtime_call "DumpValue" (%float64_const) : (f64) -> ()
+ 		 db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
+ 		 db.runtime_call "DumpValue" (%int32_add) : (i32) -> ()
+ 		 db.runtime_call "DumpValue" (%int64_add) : (i64) -> ()
+ 		 db.runtime_call "DumpValue" (%float32_add) : (f32) -> ()
+ 		 db.runtime_call "DumpValue" (%float64_add) : (f64) -> ()
+ 		 db.runtime_call "DumpValue" (%decimal10_add) : (!db.decimal<15,10>) -> ()
+ 		 db.runtime_call "DumpValue" (%int32_sub) : (i32) -> ()
+ 		 db.runtime_call "DumpValue" (%int64_sub) : (i64) -> ()
+ 		 db.runtime_call "DumpValue" (%float32_sub) : (f32) -> ()
+ 		 db.runtime_call "DumpValue" (%float64_sub) : (f64) -> ()
+ 		 db.runtime_call "DumpValue" (%decimal10_sub) : (!db.decimal<15,10>) -> ()
+		 db.runtime_call "DumpValue" (%int32_mul) : (i32) -> ()
+		 db.runtime_call "DumpValue" (%int64_mul) : (i64) -> ()
+		 db.runtime_call "DumpValue" (%float32_mul) : (f32) -> ()
+		 db.runtime_call "DumpValue" (%float64_mul) : (f64) -> ()
+		 db.runtime_call "DumpValue" (%decimal2_mul) : (!db.decimal<15,2>) -> ()
+ 		 db.runtime_call "DumpValue" (%int32_div) : (i32) -> ()
+ 		 db.runtime_call "DumpValue" (%int64_div) : (i64) -> ()
+ 		 db.runtime_call "DumpValue" (%float32_div) : (f32) -> ()
+ 		 db.runtime_call "DumpValue" (%float64_div) : (f64) -> ()
+ 		 db.runtime_call "DumpValue" (%decimal2_div) : (!db.decimal<15,2>) -> ()
 
  		return
   }

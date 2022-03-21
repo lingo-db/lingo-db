@@ -1,5 +1,7 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
+#include "mlir/Dialect/DB/IR/RuntimeFunctions.h"
+
 #include "mlir/IR/OpImplementation.h"
 #include <unordered_set>
 
@@ -53,6 +55,29 @@ LogicalResult mlir::db::CmpOp::inferReturnTypes(
    SmallVectorImpl<Type>& inferredReturnTypes) {
    inferredReturnTypes.assign({constructNullableBool(context, operands)});
    return success();
+}
+
+::mlir::LogicalResult verify(mlir::db::RuntimeCall runtimeCall) {
+   auto reg = runtimeCall.getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
+   if (!reg->verify(runtimeCall.fn().str(), runtimeCall.args().getTypes(), runtimeCall.getNumResults() == 1 ? runtimeCall.getResultTypes()[0] : mlir::Type())) {
+      runtimeCall->emitError("could not find matching runtime function");
+      return failure();
+   }
+   return success();
+}
+bool mlir::db::RuntimeCall::canHandleInvalidValues() {
+   auto reg = getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
+   if (auto *fn=reg->lookup(this->fn().str())) {
+      return fn->nullHandleType==RuntimeFunction::HandlesInvalidVaues;
+   }
+   return false;
+}
+bool mlir::db::RuntimeCall::canHandleNulls() {
+   auto reg = getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
+   if (auto *fn=reg->lookup(this->fn().str())) {
+      return fn->nullHandleType==RuntimeFunction::HandlesNulls;
+   }
+   return false;
 }
 
 bool mlir::db::CmpOp::canHandleInvalidValues() {

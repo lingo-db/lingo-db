@@ -756,9 +756,9 @@ struct SQLTranslator {
             }
             if (funcName == "substring") {
                auto str = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
-               auto* fromNode = reinterpret_cast<Node*>(funcCall->args_->head->next->data.ptr_value);
-               auto* toNode = reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value);
-               return builder.create<mlir::db::SubStrOp>(loc, str.getType(), str, getIntFromConst(fromNode), getIntFromConst(toNode));
+               auto from = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->next->data.ptr_value), context);
+               auto to = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
+               return builder.create<mlir::db::RuntimeCall>(loc, str.getType(), "Substring", mlir::ValueRange({str, from, to})).res();
             }
 
             break;

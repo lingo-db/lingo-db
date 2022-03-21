@@ -18,8 +18,12 @@ let cppNamespace = "::mlir::db";
 let extraClassDeclaration = [{
 private:
 void registerTypes();
+std::shared_ptr<mlir::db::RuntimeFunctionRegistry> runtimeFunctionRegistry;
 
 public:
+    std::shared_ptr<mlir::db::RuntimeFunctionRegistry> getRuntimeFunctionRegistry(){
+        return runtimeFunctionRegistry;
+    }
 }];
 }
 
@@ -261,6 +265,17 @@ let arguments = (ins DBCollection:$collection,AnyType:$key);
 let results = (outs DB_GenericIterable:$iterable);
 let assemblyFormat = "$collection `:` type($collection) `,` $key `:` type($key) `->` type($iterable) attr-dict";
 }
+def DB_RuntimeCall : DB_Op<"runtime_call",[DB_HandleNullInterface]> {
+let arguments = (ins StrAttr:$fn,Variadic<AnyType>: $args);
+let results = (outs Optional<AnyType>:$res);
+let assemblyFormat = "$fn  `(` $args `)` `:`  functional-type($args,$res)  attr-dict";
+let verifier = [{ return ::verify(*this); }];
+let extraClassDeclaration = [{
+public:
+    bool canHandleInvalidValues();
+    bool canHandleNulls();
+}];
+}
 
 def DB_SortOp : DB_Op<"sort",
 []> {
@@ -406,10 +421,7 @@ let results = (outs AnyBool:$result);
 let assemblyFormat = "$val `:` type ($val) `?` $vals `:` type ($vals) attr-dict";
 }
 
-def DumpOp : DB_Op<"dump"> {
-let arguments = (ins NullableDBType: $val);
-let assemblyFormat = "$val `:` type($val) attr-dict";
-}
+
 
 
 
@@ -453,11 +465,7 @@ def FreeOp : DB_Op<"free"> {
 let arguments = (ins AnyType: $val);
 let assemblyFormat = "$val `:` type($val) attr-dict";
 }
-def SubStrOp : DB_Op<"substr", [NoSideEffect,SameOperandsAndResultType]> {
-let arguments = (ins DB_StringType: $val,I32Attr:$from,I32Attr:$to);
-let results = (outs  DB_StringType : $res);
-let assemblyFormat = "$val `[` $from `:` $to `]` `:` type($val) attr-dict";
-}
+
 
 def DateAddOp : DB_Op<"date_add"> {
 let arguments = (ins DB_DateType:$left, DB_IntervalType:$right );

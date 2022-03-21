@@ -22,9 +22,9 @@
         %res1=util.load %generic_memref[%c1] :!util.ref<!db.nullable<i32>> -> !db.nullable<i32>
         %res2=util.load %generic_memref[] :!util.ref<!db.nullable<i32>> -> !db.nullable<i32>
         //CHECK: int(NULL)
-        db.dump %res1 : !db.nullable<i32>
+        db.runtime_call "DumpValue" (%res1) : (!db.nullable<i32>) -> ()
         //CHECK: int(42)
-        db.dump %res2 : !db.nullable<i32>
+        db.runtime_call "DumpValue" (%res2) : (!db.nullable<i32>) -> ()
         util.dealloc %generic_memref : !util.ref<!db.nullable<i32>>
 
 
@@ -36,9 +36,9 @@
         %res1casted=util.load %generic_memref_casted[%c1] :!util.ref<!db.nullable<i32>> -> !db.nullable<i32>
         %res2casted=util.load %generic_memref_casted[] :!util.ref<!db.nullable<i32>> -> !db.nullable<i32>
         //CHECK: int(NULL)
-        db.dump %res1casted : !db.nullable<i32>
+        db.runtime_call "DumpValue" (%res1casted) : (!db.nullable<i32>) -> ()
         //CHECK: int(42)
-        db.dump %res2casted : !db.nullable<i32>
+        db.runtime_call "DumpValue" (%res2casted) : (!db.nullable<i32>) -> ()
         util.dealloc %generic_memref_casted : !util.ref<!db.nullable<i32>>
 		return
 	}

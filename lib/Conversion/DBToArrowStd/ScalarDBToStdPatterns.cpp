@@ -266,25 +266,7 @@ class NullOpLowering : public ConversionPattern {
       return success();
    }
 };
-class SubStrOpLowering : public ConversionPattern {
-   public:
-   explicit SubStrOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::SubStrOp::getOperationName(), 1, context) {}
 
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto subStrOp = cast<mlir::db::SubStrOp>(op);
-      mlir::db::SubStrOpAdaptor adaptor(operands);
-      Value ref = rewriter.create<mlir::util::VarLenGetRef>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type()), adaptor.val());
-      Value pos1AsIndex = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIndexType(), rewriter.getIndexAttr(subStrOp.from() - 1));
-
-      Value len = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(subStrOp.to() - subStrOp.from() + 1));
-      Value indexed = rewriter.create<mlir::util::ArrayElementPtrOp>(op->getLoc(), mlir::util::RefType::get(getContext(), rewriter.getI8Type()), ref, pos1AsIndex);
-
-      Value val = rewriter.create<mlir::util::CreateVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(getContext()), indexed, len);
-      rewriter.replaceOp(op, val);
-      return success();
-   }
-};
 class ConstantLowering : public ConversionPattern {
    public:
    explicit ConstantLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -698,7 +680,6 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    patterns.insert<DecimalOpScaledLowering<mlir::db::ModOp, arith::RemSIOp>>(typeConverter, patterns.getContext());
    patterns.insert<DecimalMulLowering>(typeConverter, patterns.getContext());
 
-   patterns.insert<SubStrOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<NullOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<IsNullOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<AsNullableOpLowering>(typeConverter, patterns.getContext());
