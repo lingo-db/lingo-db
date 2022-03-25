@@ -98,8 +98,8 @@ std::unique_ptr<expr> createLiteral(std::variant<int64_t, double, std::string> p
       case arrow::Type::type::INTERVAL_DAY_TIME: return {};
       case arrow::Type::type::INTERVAL_MONTHS: return {};
       case arrow::Type::type::INTERVAL_MONTH_DAY_NANO: return {};
-      case arrow::Type::type::DATE32: return pack(arrow::compute::literal(std::make_shared<arrow::Date32Scalar>(std::get<int64_t>(parsed))));
-      case arrow::Type::type::DATE64: return pack(arrow::compute::literal(std::make_shared<arrow::Date64Scalar>(std::get<int64_t>(parsed))));
+      case arrow::Type::type::DATE32: return pack(arrow::compute::literal(std::make_shared<arrow::Date32Scalar>(std::get<int64_t>(parsed)/86400000000000ll)));
+      case arrow::Type::type::DATE64: return pack(arrow::compute::literal(std::make_shared<arrow::Date64Scalar>(std::get<int64_t>(parsed)/1000000ll)));
       case arrow::Type::type::TIMESTAMP: return pack(arrow::compute::literal(std::make_shared<arrow::TimestampScalar>(std::get<int64_t>(parsed), static_cast<arrow::TimeUnit::type>(tp1))));
       case arrow::Type::type::HALF_FLOAT: return pack(arrow::compute::literal(std::make_shared<arrow::HalfFloatScalar>(std::get<double>(parsed))));
       case arrow::Type::type::FLOAT: return pack(arrow::compute::literal(std::make_shared<arrow::FloatScalar>(std::get<double>(parsed))));

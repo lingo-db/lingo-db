@@ -241,7 +241,7 @@ void mlir::db::populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegis
    auto i8PtrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
    typeConverter.addConversion([&typeConverter, context, indexType, i8ptrType](mlir::db::AggregationHashtableType aggregationHashtableType) {
       if (aggregationHashtableType.getKeyType().getTypes().empty()) {
-         return (Type) typeConverter.convertType(aggregationHashtableType.getValType());
+         return (Type)  mlir::util::RefType::get(context,typeConverter.convertType(aggregationHashtableType.getValType()));
       } else {
          Type kvType = typeConverter.convertType(TupleType::get(context, {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()}));
 

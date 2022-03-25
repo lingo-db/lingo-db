@@ -374,8 +374,10 @@ class BuilderMergeLowering : public ConversionPattern {
          };
          if (aggrHTBuilderType.getKeyType().getTypes().empty()) {
             auto unPacked = rewriter.create<mlir::util::UnPackOp>(loc, mergeOpAdaptor.val())->getResults();
-            auto newAggr = updateFnBuilder(rewriter, mergeOpAdaptor.builder(), unPacked[1]);
-            rewriter.replaceOp(op, newAggr);
+            auto loaded = rewriter.create<mlir::util::LoadOp>(loc, mergeOpAdaptor.builder().getType().cast<mlir::util::RefType>().getElementType(), mergeOpAdaptor.builder(), mlir::Value());
+            auto newAggr = updateFnBuilder(rewriter, loaded, unPacked[1]);
+            rewriter.create<mlir::util::StoreOp>(loc, newAggr, mergeOpAdaptor.builder(), mlir::Value());
+            rewriter.replaceOp(op, mergeOpAdaptor.builder());
          } else {
             auto unPacked = rewriter.create<mlir::util::UnPackOp>(loc, mergeOp.val())->getResults();
             Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.getIndexType(), unPacked[0]);
@@ -411,12 +413,14 @@ class CreateAggrHTBuilderLowering : public ConversionPattern {
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto createOp = cast<mlir::db::CreateAggrHTBuilder>(op);
-
+      mlir::db::CreateAggrHTBuilderAdaptor adaptor(operands);
       TupleType keyType = createOp.builder().getType().cast<mlir::db::AggrHTBuilderType>().getKeyType();
       TupleType aggrType = createOp.builder().getType().cast<mlir::db::AggrHTBuilderType>().getAggrType();
 
       if (keyType.getTypes().empty()) {
-         rewriter.replaceOp(op, createOp.initial());
+         mlir::Value ref = rewriter.create<mlir::util::AllocOp>(op->getLoc(), typeConverter->convertType(createOp.builder().getType()), mlir::Value());
+         rewriter.create<mlir::util::StoreOp>(op->getLoc(), adaptor.initial(), ref, mlir::Value());
+         rewriter.replaceOp(op, ref);
          return success();
       } else {
          Value initialVal = createOp.initial();
@@ -550,7 +554,7 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
    });
    typeConverter.addConversion([&](mlir::db::AggrHTBuilderType aggrHtBuilderType) {
       if (aggrHtBuilderType.getKeyType().getTypes().empty()) {
-         return (Type) typeConverter.convertType(aggrHtBuilderType.getAggrType());
+         return (Type) mlir::util::RefType::get(patterns.getContext(), typeConverter.convertType(aggrHtBuilderType.getAggrType()));
       } else {
          return AggrHtHelper::createType(patterns.getContext(), typeConverter.convertType(aggrHtBuilderType.getKeyType()), typeConverter.convertType(aggrHtBuilderType.getAggrType()));
       }

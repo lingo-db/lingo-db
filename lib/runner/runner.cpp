@@ -409,8 +409,8 @@ static llvm::Error optimizeModule(llvm::Module* module) {
    funcPM.add(llvm::createReassociatePass());
    funcPM.add(llvm::createGVNPass());
    funcPM.add(llvm::createCFGSimplificationPass());
-   funcPM.add(llvm::createAggressiveDCEPass());
-   funcPM.add(llvm::createCFGSimplificationPass());
+   //funcPM.add(llvm::createAggressiveDCEPass());
+   //funcPM.add(llvm::createCFGSimplificationPass());
 
    funcPM.doInitialization();
    for (auto& func : *module) {
