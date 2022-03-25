@@ -130,7 +130,7 @@ class HashJoinTranslator : public mlir::relalg::JoinTranslator {
    mlir::relalg::OrderedAttributes orderedKeys;
    mlir::relalg::OrderedAttributes orderedValues;
    mlir::TupleType keyTupleType, valTupleType, entryType;
-   size_t builderId;
+   mlir::Value joinHashtable;
    mlir::relalg::PipelineDependency joinHt;
 
    HashJoinTranslator(std::shared_ptr<JoinImpl> impl) : JoinTranslator(impl), loc(joinOp.getLoc()) {}

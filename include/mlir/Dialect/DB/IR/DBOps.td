@@ -94,11 +94,7 @@ let summary = "builder for aggregation hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType,"TupleType":$aggrType);
 let assemblyFormat = "`<` $keyType `,` $valType `,` $aggrType `>`";
 }
-def DB_JoinHTBuilder : DB_Type<"JoinHTBuilder","join_ht_builder"> {
-let summary = "builder for join hashtable";
-let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
-let assemblyFormat = "`<` $keyType `,` $valType `>`";
-}
+
 
 
 
@@ -246,6 +242,18 @@ let arguments = (ins AnyType:$builder,AnyType:$val);
 let results = (outs AnyType:$result_builder);
 let regions = (region AnyRegion:$fn);
 }
+def DB_HashtableCreate : DB_Op<"ht_create"> {
+    let results =(outs AnyType:$ht);
+    let assemblyFormat = "type($ht) attr-dict";
+}
+def DB_HashtableInsert: DB_Op<"ht_insert"> {
+    let arguments = (ins AnyType:$ht, AnyType:$key, Optional<AnyType>: $val);
+    let assemblyFormat = "$ht `:` type($ht) `,` $key `:` type($key) ( `,` $val^ `:` type($val) )? attr-dict";
+}
+def DB_HashtableFinalize: DB_Op<"ht_finalize"> {
+    let arguments = (ins AnyType:$ht );
+    let assemblyFormat = "$ht `:` type($ht) attr-dict";
+}
 def DB_BuilderBuild : DB_Op<"builder_build",
 [NoSideEffect]> {
 let arguments = (ins AnyType:$builder);
@@ -289,11 +297,7 @@ let arguments = (ins AnyType: $initial);
 let results = (outs DB_AggrHTBuilder:$builder);
 let assemblyFormat = " $initial `:` type($initial) `->` type($builder) attr-dict";
 }
-def DB_CreateJoinHTBuilder : DB_Op<"create_join_ht_builder",
-[NoSideEffect]> {
-let results = (outs DB_JoinHTBuilder:$builder);
-let assemblyFormat = " `:` type($builder) attr-dict";
-}
+
 
 
 def ForOp : DB_Op<"for",

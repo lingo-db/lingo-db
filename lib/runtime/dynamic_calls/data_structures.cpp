@@ -10,7 +10,7 @@ struct Vec {
    void resize() {
       size_t newCapacity = cap * 2;
       ptr = runtime::MemoryHelper::resize(ptr, len * typeSize, newCapacity * typeSize);
-      cap=newCapacity;
+      cap = newCapacity;
    }
    template <class T>
    T* ptrAt(size_t i) {
@@ -99,7 +99,8 @@ struct JoinHt {
    FixedSizedBuffer<Entry*> ht;
    size_t htMask;
    Vec values;
-   JoinHt(Vec* values, size_t htMask, size_t htSize) : ht(htSize), htMask(htMask),values(*values) {}
+   JoinHt(Vec* values, size_t htMask, size_t htSize) : ht(htSize), htMask(htMask), values(*values) {}
+   JoinHt(size_t initial, size_t typeSize) : ht(0), htMask(0), values(initial, typeSize) {}
    static uint64_t next_pow_2(uint64_t v) {
       v--;
       v |= v >> 1;
@@ -110,6 +111,19 @@ struct JoinHt {
       v |= v >> 32;
       v++;
       return v;
+   }
+   static void finalize(JoinHt* ht) {
+      size_t htSize = next_pow_2(ht->values.len);
+      ht->htMask = htSize - 1;
+      ht->ht.setNewSize(htSize);
+      for (size_t i = 0; i < ht->values.len; i++) {
+         auto* entry = ht->values.ptrAt<Entry>(i);
+         size_t hash = (size_t) entry->next;
+         auto pos = hash & ht->htMask;
+         auto* previousPtr = ht->ht.at(pos);
+         ht->ht.at(pos) = tag(entry, previousPtr, hash);
+         entry->next = previousPtr;
+      }
    }
    static JoinHt* build(Vec* values) {
       size_t htSize = next_pow_2(values->len);
@@ -126,7 +140,15 @@ struct JoinHt {
       return joinHt;
    }
 };
-
+EXPORT JoinHt* rt_create_join_ht(size_t typeSize) {
+   return new JoinHt(1024, typeSize);
+}
+EXPORT void rt_join_ht_resize(JoinHt* ht) {
+   ht->values.resize();
+}
+EXPORT void rt_join_ht_finalize(JoinHt* ht) {
+   JoinHt::finalize(ht);
+}
 EXPORT JoinHt* rt_build_join_ht(Vec* v) {
    return JoinHt::build(v);
 }

@@ -80,18 +80,12 @@
         %val3 = util.pack %default_marker, %int3, %int3 : i64,i32,i32 -> tuple<i64,i32,i32>
         %val4 = util.pack %default_marker, %int4, %int4 : i64,i32,i32 -> tuple<i64,i32,i32>
 
-        %entry1 = util.pack %key1,%val1 :tuple<!db.string,i32>,tuple<i64,i32,i32> -> tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>
-        %entry2 = util.pack %key2,%val2 :tuple<!db.string,i32>,tuple<i64,i32,i32> -> tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>
-        %entry3 = util.pack %key3,%val3 :tuple<!db.string,i32>,tuple<i64,i32,i32> -> tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>
-        %entry4 = util.pack %key4,%val4 :tuple<!db.string,i32>,tuple<i64,i32,i32> -> tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>
-
-
-        %join_ht_builder= db.create_join_ht_builder : !db.join_ht_builder<tuple<!db.string,i32>,tuple<i64,i32,i32>>
-        %builder1= db.builder_merge %join_ht_builder : !db.join_ht_builder<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %entry1 : !entry_type
-        %builder2= db.builder_merge %builder1 : !db.join_ht_builder<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %entry2 : !entry_type
-        %builder3= db.builder_merge %builder2 : !db.join_ht_builder<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %entry3 : !entry_type
-        %builder4= db.builder_merge %builder3 : !db.join_ht_builder<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %entry4 : !entry_type
-        %ht  = db.builder_build %builder4 : !db.join_ht_builder<tuple<!db.string,i32>,tuple<i64,i32,i32>> -> !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
+        %ht= db.ht_create  !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
+        db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key1 : tuple<!db.string,i32>, %val1 : tuple<i64,i32,i32>
+        db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key2 : tuple<!db.string,i32>, %val2 : tuple<i64,i32,i32>
+        db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key3 : tuple<!db.string,i32>, %val3 : tuple<i64,i32,i32>
+        db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key4 : tuple<!db.string,i32>, %val4 : tuple<i64,i32,i32>
+        db.ht_finalize %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
         %matches = db.lookup %ht :  !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key1  : tuple<!db.string,i32> -> !db.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator>
        db.for %entry in %matches : !db.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator> {
            %tpl,%ptr = util.unpack %entry : tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>> -> tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>

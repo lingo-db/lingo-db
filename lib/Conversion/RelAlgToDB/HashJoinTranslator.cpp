@@ -18,7 +18,7 @@ void HashJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relal
          leftValues.remove(x);
          orderedKeys.insert(*x.begin());
       } else {
-         orderedKeys.insert(nullptr,keyTypes[i]);
+         orderedKeys.insert(nullptr, keyTypes[i]);
       }
    }
    this->orderedValues = mlir::relalg::OrderedAttributes::fromColumns(leftValues);
@@ -32,17 +32,15 @@ void HashJoinTranslator::produce(mlir::relalg::TranslatorContext& context, mlir:
    context.pipelineManager.setCurrentPipeline(p);
    context.pipelineManager.addPipeline(p);
    auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
-      auto joinHtBuilder = builder.create<mlir::db::CreateJoinHTBuilder>(loc, mlir::db::JoinHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType));
+      auto joinHtBuilder = builder.create<mlir::db::HashtableCreate>(loc, mlir::db::JoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType));
       return std::vector<mlir::Value>({joinHtBuilder});
    });
-   builderId = context.getBuilderId();
-   context.builders[builderId] = p->addDependency(res[0]);
-   children[0]->addRequiredBuilders({builderId});
+   joinHashtable = p->addDependency(res[0]);
    children[0]->produce(context, p->getBuilder());
-   p->finishMainFunction({context.builders[builderId]});
+   p->finishMainFunction({joinHashtable});
    auto hashtableRes = p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
-      mlir::Value hashtable = builder.create<mlir::db::BuilderBuild>(loc, mlir::db::JoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType), args[0]);
-      return std::vector<mlir::Value>{hashtable};
+      builder.create<mlir::db::HashtableFinalize>(loc, args[0]);
+      return std::vector<mlir::Value>{args[0]};
    });
    context.pipelineManager.setCurrentPipeline(parentPipeline);
    joinHt = hashtableRes[0];
@@ -93,12 +91,9 @@ void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilde
       mlir::Value packedKey = builder.create<mlir::util::PackOp>(loc, inlinedKeys);
       auto const0 = builder.create<mlir::arith::ConstantOp>(loc, builder.getIntegerType(64), builder.getI64IntegerAttr(0));
       mlir::Value packedValues = orderedValues.pack(context, builder, loc, impl->markable ? std::vector<Value>{const0} : std::vector<Value>());
-      mlir::Value htBuilder = context.builders[builderId];
-      mlir::Value packed = builder.create<mlir::util::PackOp>(loc, mlir::ValueRange({packedKey, packedValues}));
-      mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, htBuilder.getType(), htBuilder, packed);
-      context.builders[builderId] = mergedBuilder;
+      builder.create<mlir::db::HashtableInsert>(loc, joinHashtable, packedKey, packedValues);
    } else if (child == this->children[1].get()) {
-      mlir::TupleType entryAndValuePtrType = mlir::TupleType::get(ctxt, TypeRange{entryType, util::RefType::get(ctxt, valTupleType )});
+      mlir::TupleType entryAndValuePtrType = mlir::TupleType::get(ctxt, TypeRange{entryType, util::RefType::get(ctxt, valTupleType)});
       Type iteratorType = impl->markable ? entryAndValuePtrType : entryType;
       auto packedKey = builder.create<mlir::util::PackOp>(loc, mlir::relalg::HashJoinUtils::inlineKeys(&joinOp->getRegion(0).front(), rightKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context));
       mlir::Type htIterable = mlir::db::GenericIterableType::get(ctxt, iteratorType, impl->markable ? "join_ht_mod_iterator" : "join_ht_iterator");

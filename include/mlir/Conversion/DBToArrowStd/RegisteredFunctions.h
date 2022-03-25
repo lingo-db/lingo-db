@@ -83,9 +83,12 @@
    F(DateExtractSecond, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                     \
    F(VecResize, resize_vec, OPERANDS(POINTER_TYPE), RETURNS())                                                                                             \
    F(VecCreate, create_vec, OPERANDS(INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                       \
+   F(JoinHtCreate, create_join_ht, OPERANDS(INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                       \
+   F(JoinHtResize, join_ht_resize, OPERANDS(POINTER_TYPE), RETURNS())                                                                       \
    F(AggrHtCreate, create_aggr_ht, OPERANDS(INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                 \
    F(AggrHtResize, resize_aggr_ht, OPERANDS(POINTER_TYPE), RETURNS()) \
    F(JoinHtBuild, build_join_ht, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE)) \
+   F(JoinHtFinalize, join_ht_finalize, OPERANDS(POINTER_TYPE), RETURNS()) \
    F(ScanSourceInit, scan_source_init, OPERANDS(POINTER_TYPE, STRING_TYPE), RETURNS(POINTER_TYPE))
 
 #endif // MLIR_CONVERSION_DBTOARROWSTD_REGISTEREDFUNCTIONS_H

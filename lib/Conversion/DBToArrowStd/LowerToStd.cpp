@@ -160,6 +160,7 @@ void DBToStdLoweringPass::runOnOperation() {
    mlir::db::populateScalarToStdPatterns(typeConverter, patterns);
    mlir::db::populateRuntimeSpecificScalarToStdPatterns(functionRegistry, typeConverter, patterns);
    mlir::db::populateBuilderToStdPatterns(functionRegistry, typeConverter, patterns);
+   mlir::db::populateDsToStdPatterns(functionRegistry, typeConverter, patterns);
    mlir::db::populateCollectionsToStdPatterns(functionRegistry, typeConverter, patterns);
    mlir::util::populateUtilTypeConversionPatterns(typeConverter, patterns);
    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns, target);
