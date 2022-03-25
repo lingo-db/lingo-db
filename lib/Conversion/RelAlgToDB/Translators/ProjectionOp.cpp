@@ -2,6 +2,7 @@
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
 class ProjectionTranslator : public mlir::relalg::Translator {
@@ -23,8 +24,8 @@ class ProjectionTranslator : public mlir::relalg::Translator {
 
 class DistinctProjectionTranslator : public mlir::relalg::Translator {
    mlir::relalg::ProjectionOp projectionOp;
-   size_t builderId;
-   mlir::Value table;
+   mlir::Value aggrHt;
+
    mlir::relalg::OrderedAttributes key;
 
    mlir::TupleType valTupleType;
@@ -38,21 +39,56 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
-      mlir::Value htBuilder = context.builders[builderId];
       mlir::Value emptyVals = builder.create<mlir::util::UndefTupleOp>(projectionOp->getLoc(), valTupleType);
       mlir::Value packedKey = key.pack(context, builder, projectionOp->getLoc());
-      mlir::Value packed = builder.create<mlir::util::PackOp>(projectionOp->getLoc(), mlir::ValueRange({packedKey, emptyVals}));
 
-      auto mergedBuilder = builder.create<mlir::db::BuilderMerge>(projectionOp->getLoc(), htBuilder.getType(), htBuilder, packed);
+      auto reduceOp = builder.create<mlir::db::HashtableInsertReduce>(projectionOp->getLoc(), aggrHt, packedKey, emptyVals);
       mlir::Block* aggrBuilderBlock = new mlir::Block;
-      mergedBuilder.fn().push_back(aggrBuilderBlock);
-      aggrBuilderBlock->addArguments({valTupleType, valTupleType}, {projectionOp->getLoc(), projectionOp->getLoc()});
-      mlir::OpBuilder builder2(builder.getContext());
-      builder2.setInsertionPointToStart(aggrBuilderBlock);
-      builder2.create<mlir::db::YieldOp>(projectionOp->getLoc(), aggrBuilderBlock->getArgument(0));
-      context.builders[builderId] = mergedBuilder.result_builder();
+      reduceOp.equal().push_back(aggrBuilderBlock);
+      aggrBuilderBlock->addArguments({packedKey.getType(), packedKey.getType()}, {projectionOp->getLoc(), projectionOp->getLoc()});
+      {
+         mlir::OpBuilder::InsertionGuard guard(builder);
+         builder.setInsertionPointToStart(aggrBuilderBlock);
+         auto yieldOp = builder.create<mlir::db::YieldOp>(projectionOp->getLoc());
+         builder.setInsertionPointToStart(aggrBuilderBlock);
+         mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1));
+         builder.create<mlir::db::YieldOp>(projectionOp->getLoc(), matches);
+         yieldOp.erase();
+      }
    }
-
+   mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::Value left, mlir::Value right) {
+      auto loc = rewriter.getUnknownLoc();
+      mlir::Value equal = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      auto leftUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, left);
+      auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, right);
+      for (size_t i = 0; i < leftUnpacked.getNumResults(); i++) {
+         mlir::Value compared;
+         auto currLeftType = leftUnpacked->getResult(i).getType();
+         auto currRightType = rightUnpacked.getResult(i).getType();
+         auto currLeftNullableType = currLeftType.dyn_cast_or_null<mlir::db::NullableType>();
+         auto currRightNullableType = currRightType.dyn_cast_or_null<mlir::db::NullableType>();
+         if (currLeftNullableType || currRightNullableType) {
+            mlir::Value isNull1 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), leftUnpacked->getResult(i));
+            mlir::Value isNull2 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), rightUnpacked->getResult(i));
+            mlir::Value anyNull = rewriter.create<mlir::arith::OrIOp>(loc, isNull1, isNull2);
+            mlir::Value bothNull = rewriter.create<mlir::arith::AndIOp>(loc, isNull1, isNull2);
+            compared = rewriter.create<mlir::scf::IfOp>(
+                                  loc, rewriter.getI1Type(), anyNull, [&](mlir::OpBuilder& b, mlir::Location loc) { b.create<mlir::scf::YieldOp>(loc, bothNull); },
+                                  [&](mlir::OpBuilder& b, mlir::Location loc) {
+                                     mlir::Value left = rewriter.create<mlir::db::NullableGetVal>(loc, leftUnpacked->getResult(i));
+                                     mlir::Value right = rewriter.create<mlir::db::NullableGetVal>(loc, rightUnpacked->getResult(i));
+                                     mlir::Value cmpRes = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, left, right);
+                                     b.create<mlir::scf::YieldOp>(loc, cmpRes);
+                                  })
+                          .getResult(0);
+         } else {
+            compared = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, leftUnpacked->getResult(i), rightUnpacked.getResult(i));
+         }
+         mlir::Value localEqual = rewriter.create<mlir::arith::AndIOp>(loc, rewriter.getI1Type(), mlir::ValueRange({equal, compared}));
+         equal = localEqual;
+      }
+      return equal;
+   }
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       key = mlir::relalg::OrderedAttributes::fromRefArr(projectionOp.cols());
@@ -64,18 +100,15 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       context.pipelineManager.addPipeline(p);
       auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
          mlir::Value emptyTuple = builder.create<mlir::util::UndefTupleOp>(projectionOp.getLoc(), mlir::TupleType::get(builder.getContext()));
-         auto aggrBuilder = builder.create<mlir::db::CreateAggrHTBuilder>(projectionOp.getLoc(), mlir::db::AggrHTBuilderType::get(builder.getContext(), keyTupleType, valTupleType, valTupleType), emptyTuple);
+         auto aggrBuilder = builder.create<mlir::db::CreateDS>(projectionOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), emptyTuple);
          return std::vector<mlir::Value>({aggrBuilder});
       });
-      builderId = context.getBuilderId();
-      context.builders[builderId] = p->addDependency(res[0]);
+      aggrHt = p->addDependency(res[0]);
       entryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, valTupleType});
-      children[0]->addRequiredBuilders({builderId});
       children[0]->produce(context, p->getBuilder());
-      p->finishMainFunction({context.builders[builderId]});
+      p->finishMainFunction({aggrHt});
       auto hashtableRes = p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
-         mlir::Value hashtable = builder.create<mlir::db::BuilderBuild>(projectionOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), args[0]);
-         return std::vector<mlir::Value>{hashtable};
+         return std::vector<mlir::Value>{args[0]};
       });
       context.pipelineManager.setCurrentPipeline(parentPipeline);
 

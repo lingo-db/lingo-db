@@ -85,11 +85,6 @@ let summary = "join hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
 let assemblyFormat = "`<` $keyType `,` $valType `>`";
 }
-def DB_AggrHTBuilder : DB_Type<"AggrHTBuilder","aggr_ht_builder"> {
-let summary = "builder for aggregation hashtable";
-let parameters = (ins "TupleType":$keyType,"TupleType":$valType,"TupleType":$aggrType);
-let assemblyFormat = "`<` $keyType `,` $valType `,` $aggrType `>`";
-}
 
 
 
@@ -227,20 +222,28 @@ let results = (outs DB_TableBuilder:$builder);
 let assemblyFormat = "$columns `:` type($builder) attr-dict";
 }
 
-def DB_BuilderMerge : DB_Op<"builder_merge",
-[NoSideEffect]> {
-let arguments = (ins AnyType:$builder,AnyType:$val);
-let results = (outs AnyType:$result_builder);
-let regions = (region AnyRegion:$fn);
+def DB_AddTableRow : DB_Op<"add_row"> {
+let arguments = (ins AnyType:$builder,AnyType:$row);
+let assemblyFormat = "$builder `:` type($builder) `,` $row `:` type($row) attr-dict";
+
 }
 def DB_CreateDS : DB_Op<"create_ds"> {
+    let arguments =(ins Optional<AnyType>:$init_val);
     let results =(outs AnyType:$ds);
-    let assemblyFormat = "type($ds) attr-dict";
+    let assemblyFormat = "( $init_val^ `:` type($init_val) `->`)? type($ds) attr-dict";
+    let builders = [OpBuilder<(ins "mlir::Type":$t), [{
+    build($_builder, $_state, t, mlir::Value());
+    }]>];
 }
 def DB_HashtableInsert: DB_Op<"ht_insert"> {
     let arguments = (ins AnyType:$ht, AnyType:$key, Optional<AnyType>: $val);
     let assemblyFormat = "$ht `:` type($ht) `,` $key `:` type($key) ( `,` $val^ `:` type($val) )? attr-dict";
 }
+def DB_HashtableInsertReduce: DB_Op<"ht_insert_reduce"> {
+    let arguments = (ins AnyType:$ht, AnyType:$key, Optional<AnyType>: $val);
+    let regions = (region AnyRegion:$equal, AnyRegion:$reduce);
+}
+
 def DB_HashtableFinalize: DB_Op<"ht_finalize"> {
     let arguments = (ins AnyType:$ht );
     let assemblyFormat = "$ht `:` type($ht) attr-dict";
@@ -249,11 +252,11 @@ def DB_Append : DB_Op<"ds_append"> {
     let arguments = (ins AnyType:$ds, AnyType:$val);
     let assemblyFormat = "$ds `:` type($ds) `,` $val `:` type($val)  attr-dict";
 }
-def DB_BuilderBuild : DB_Op<"builder_build",
+def DB_FinalizeTable : DB_Op<"finalize_table",
 [NoSideEffect]> {
 let arguments = (ins AnyType:$builder);
-let results = (outs AnyType:$builded);
-let assemblyFormat = "$builder `:` type($builder) `->` type($builded) attr-dict";
+let results = (outs DB_Table:$builded);
+let assemblyFormat = "$builder `:` type($builder) attr-dict";
 }
 
 def DB_ScanSource : DB_Op<"scan_source",
@@ -286,12 +289,7 @@ let arguments = (ins DB_Vector:$toSort);
 let regions = (region SizedRegion<1>:$region);
 }
 
-def DB_CreateAggrHTBuilder : DB_Op<"create_aggr_ht_builder",
-[NoSideEffect]> {
-let arguments = (ins AnyType: $initial);
-let results = (outs DB_AggrHTBuilder:$builder);
-let assemblyFormat = " $initial `:` type($initial) `->` type($builder) attr-dict";
-}
+
 
 
 
@@ -476,13 +474,13 @@ let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
 
 
 def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
-        ParentOneOf<["ForOp","SortOp","BuilderMerge"]>]> {
+        ParentOneOf<["ForOp","SortOp","HashtableInsertReduce"]>]> {
 let arguments = (ins Variadic<AnyType>:$results);
 let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 let assemblyFormat = [{  attr-dict ($results^ `:` type($results))? }];
 }
 def CondSkipOp : DB_Op<"cond_skip", [ParentOneOf<["ForOp"]>]> {
 let arguments = (ins AnyType:$condition, Variadic<AnyType>:$args);
-let assemblyFormat = [{ `(` $condition `:` type($condition) `)` attr-dict ($args^ `:` type($args))? }];
+let assemblyFormat = [{ `(` $condition `:` type($condition) `)` attr-dict ( `(` $args^ `:` type($args)`)`)? }];
 }
 #endif// OPS

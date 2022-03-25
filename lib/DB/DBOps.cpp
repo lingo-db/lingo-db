@@ -67,15 +67,15 @@ LogicalResult mlir::db::CmpOp::inferReturnTypes(
 }
 bool mlir::db::RuntimeCall::canHandleInvalidValues() {
    auto reg = getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
-   if (auto *fn=reg->lookup(this->fn().str())) {
-      return fn->nullHandleType==RuntimeFunction::HandlesInvalidVaues;
+   if (auto* fn = reg->lookup(this->fn().str())) {
+      return fn->nullHandleType == RuntimeFunction::HandlesInvalidVaues;
    }
    return false;
 }
 bool mlir::db::RuntimeCall::canHandleNulls() {
    auto reg = getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
-   if (auto *fn=reg->lookup(this->fn().str())) {
-      return fn->nullHandleType==RuntimeFunction::HandlesNulls;
+   if (auto* fn = reg->lookup(this->fn().str())) {
+      return fn->nullHandleType == RuntimeFunction::HandlesNulls;
    }
    return false;
 }
@@ -93,7 +93,6 @@ bool mlir::db::CastOp::canHandleInvalidValues() {
    }
    return true;
 }
-
 
 static void printInitializationList(OpAsmPrinter& p,
                                     Block::BlockArgListType blocksArgs,
@@ -227,34 +226,56 @@ static void print(OpAsmPrinter& p, db::SortOp& op) {
    p << ")";
    p.printRegion(op.region(), false, true);
 }
-static ParseResult parseBuilderMerge(OpAsmParser& parser, OperationState& result) {
-   OpAsmParser::OperandType builder, val;
-   Type builderType;
+
+
+static ParseResult parseHashtableInsertReduce(OpAsmParser& parser, OperationState& result) {
+   OpAsmParser::OperandType ht, key, val;
+   Type htType;
+   Type keyType;
    Type valType;
-   if (parser.parseOperand(builder) || parser.parseColonType(builderType) || parser.parseComma() || parser.parseOperand(val) || parser.parseColonType(valType)) {
+   if (parser.parseOperand(ht) || parser.parseColonType(htType) || parser.parseComma() || parser.parseOperand(key) || parser.parseColonType(keyType)) {
       return failure();
    }
-   Region* body = result.addRegion();
-   if (parser.parseOptionalLParen().succeeded()) {
+   parser.resolveOperand(ht, htType, result.operands);
+   parser.resolveOperand(key, keyType, result.operands);
+   if (parser.parseOptionalComma().succeeded()) {
+      if (parser.parseOperand(val) || parser.parseColonType(valType)) {
+         return failure();
+      }
+      parser.resolveOperand(val, valType, result.operands);
+   }
+   Region* equal = result.addRegion();
+   Region* reduce = result.addRegion();
+
+   if (parser.parseOptionalKeyword("eq").succeeded()) {
       OpAsmParser::OperandType left, right;
       Type leftArgType;
       Type rightArgType;
-      if (parser.parseRegionArgument(left) || parser.parseColonType(leftArgType) || parser.parseComma() || parser.parseRegionArgument(right), parser.parseColonType(rightArgType) || parser.parseRParen()) {
+      if (parser.parseColon()||parser.parseLParen() || parser.parseRegionArgument(left) || parser.parseColonType(leftArgType) || parser.parseComma() || parser.parseRegionArgument(right), parser.parseColonType(rightArgType) || parser.parseRParen()) {
          return failure();
       }
-      if (parser.parseRegion(*body, {left, right}, {leftArgType, rightArgType})) return failure();
+      if (parser.parseRegion(*equal, {left, right}, {leftArgType, rightArgType})) return failure();
    }
-   parser.resolveOperand(builder, builderType, result.operands);
-   parser.resolveOperand(val, valType, result.operands);
-   parser.addTypeToList(builderType, result.types);
+   if (parser.parseOptionalKeyword("reduce").succeeded()) {
+      OpAsmParser::OperandType left, right;
+      Type leftArgType;
+      Type rightArgType;
+      if (parser.parseColon()||parser.parseLParen() || parser.parseRegionArgument(left) || parser.parseColonType(leftArgType) || parser.parseComma() || parser.parseRegionArgument(right), parser.parseColonType(rightArgType) || parser.parseRParen()) {
+         return failure();
+      }
+      if (parser.parseRegion(*reduce, {left, right}, {leftArgType, rightArgType})) return failure();
+   }
    return success();
 }
-static void print(OpAsmPrinter& p, db::BuilderMerge& op) {
-   p << " " << op.builder() << " : " << op.builder().getType() << ", " << op.val() << " : " << op.val().getType();
-   if (!op.fn().empty()) {
-      p << "(";
+static void print(OpAsmPrinter& p, db::HashtableInsertReduce& op) {
+   p << " " << op.ht() << " : " << op.ht().getType() << ", " << op.key() << " : " << op.key().getType();
+   if(op.val()){
+      p << ", " << op.val() << " : " << op.val().getType();
+   }
+   if (!op.equal().empty()) {
+      p << " eq: (";
       bool first = true;
-      for (auto arg : op.fn().front().getArguments()) {
+      for (auto arg : op.equal().front().getArguments()) {
          if (first) {
             first = false;
          } else {
@@ -263,7 +284,21 @@ static void print(OpAsmPrinter& p, db::BuilderMerge& op) {
          p << arg << ":" << arg.getType();
       }
       p << ")";
-      p.printRegion(op.fn(), false, true);
+      p.printRegion(op.equal(), false, true);
+   }
+   if (!op.reduce().empty()) {
+      p << " reduce: (";
+      bool first = true;
+      for (auto arg : op.reduce().front().getArguments()) {
+         if (first) {
+            first = false;
+         } else {
+            p << ",";
+         }
+         p << arg << ":" << arg.getType();
+      }
+      p << ")";
+      p.printRegion(op.reduce(), false, true);
    }
 }
 

@@ -6,7 +6,7 @@
 
 class MaterializeTranslator : public mlir::relalg::Translator {
    mlir::relalg::MaterializeOp materializeOp;
-   size_t builderId;
+   mlir::Value tableBuilder;
    mlir::Value table;
    mlir::relalg::OrderedAttributes orderedAttributes;
 
@@ -24,10 +24,8 @@ class MaterializeTranslator : public mlir::relalg::Translator {
       return {};
    }
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
-      mlir::Value tableBuilder = context.builders[builderId];
       mlir::Value packed = orderedAttributes.pack(context, builder, materializeOp->getLoc());
-      mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(materializeOp->getLoc(), tableBuilder.getType(), tableBuilder, packed);
-      context.builders[builderId] = mergedBuilder;
+      builder.create<mlir::db::AddTableRow>(materializeOp->getLoc(), tableBuilder, packed);
    }
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& bX) override {
       auto p = std::make_shared<mlir::relalg::Pipeline>(bX.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
@@ -36,13 +34,11 @@ class MaterializeTranslator : public mlir::relalg::Translator {
       auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
          return std::vector<mlir::Value>({builder.create<mlir::db::CreateTableBuilder>(materializeOp.getLoc(), mlir::db::TableBuilderType::get(builder.getContext(), orderedAttributes.getTupleType(builder.getContext())), materializeOp.columns())});
       });
-      builderId = context.getBuilderId();
-      context.builders[builderId] = p->addDependency(res[0]);
-      children[0]->addRequiredBuilders({builderId});
+      tableBuilder= p->addDependency(res[0]);
       children[0]->produce(context, p->getBuilder());
-      p->finishMainFunction({context.builders[builderId]});
+      p->finishMainFunction({tableBuilder});
       p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
-         auto table = builder.create<mlir::db::BuilderBuild>(materializeOp.getLoc(), mlir::db::TableType::get(builder.getContext()), args[0]);
+         auto table = builder.create<mlir::db::FinalizeTable>(materializeOp.getLoc(), mlir::db::TableType::get(builder.getContext()), args[0]);
          return std::vector<mlir::Value>{table};
       });
       context.pipelineManager.execute(bX);
