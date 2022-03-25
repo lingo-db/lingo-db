@@ -6,11 +6,11 @@
 
 class TmpTranslator : public mlir::relalg::Translator {
    mlir::relalg::TmpOp tmpOp;
-   size_t builderId;
    bool materialize;
    mlir::relalg::OrderedAttributes attributes;
    size_t userCount;
    size_t producedCount;
+   mlir::Value vector;
 
    public:
    TmpTranslator(mlir::relalg::TmpOp tmpOp) : mlir::relalg::Translator(tmpOp), tmpOp(tmpOp) {
@@ -33,10 +33,8 @@ class TmpTranslator : public mlir::relalg::Translator {
 
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       if (materialize) {
-         mlir::Value vectorBuilder = context.builders[builderId];
          mlir::Value packed = attributes.pack(context, builder, tmpOp->getLoc());
-         mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(tmpOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
-         context.builders[builderId] = mergedBuilder;
+         builder.create<mlir::db::Append>(tmpOp->getLoc(), vector, packed);
       }
    }
 
@@ -53,17 +51,14 @@ class TmpTranslator : public mlir::relalg::Translator {
          auto tupleType = attributes.getTupleType(builder.getContext());
          std::unordered_map<const mlir::relalg::Column*, size_t> attributePos;
          auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
-            return std::vector<mlir::Value>({builder.create<mlir::db::CreateVectorBuilder>(tmpOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType))});
+            return std::vector<mlir::Value>({builder.create<mlir::db::CreateDS>(tmpOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType))});
          });
-         builderId = context.getBuilderId();
-         context.builders[builderId] = p->addDependency(res[0]);
+         vector = p->addDependency(res[0]);
 
-         children[0]->addRequiredBuilders({builderId});
          children[0]->produce(context, p->getBuilder());
-         p->finishMainFunction({context.builders[builderId]});
+         p->finishMainFunction({vector});
          auto vectorRes = p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
-            mlir::Value vector = builder.create<mlir::db::BuilderBuild>(tmpOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), args[0]);
-            return std::vector<mlir::Value>{vector};
+            return std::vector<mlir::Value>{args[0]};
          });
          context.materializedTmp[tmpOp.getOperation()] = {vectorRes[0], attributes.getAttrs()};
          context.pipelineManager.setCurrentPipeline(parentPipeline);

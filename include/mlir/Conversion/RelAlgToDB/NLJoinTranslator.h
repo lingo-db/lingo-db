@@ -6,8 +6,6 @@
 
 namespace mlir::relalg {
 class NLJoinTranslator : public mlir::relalg::JoinTranslator {
-   //bool markable;
-   size_t vecBuilderId;
    Value vector;
    mlir::relalg::OrderedAttributes orderedAttributesLeft;
    mlir::TupleType tupleType;

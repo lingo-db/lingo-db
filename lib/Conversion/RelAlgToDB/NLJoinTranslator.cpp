@@ -9,11 +9,9 @@ void NLJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg:
 }
 
 void NLJoinTranslator::build(mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) {
-   mlir::Value vectorBuilder = context.builders[vecBuilderId];
    auto const0 = builder.create<mlir::arith::ConstantOp>(loc, builder.getIntegerType(64), builder.getI64IntegerAttr(0));
    mlir::Value packed = orderedAttributesLeft.pack(context, builder, op->getLoc(), impl->markable ? std::vector<Value>{const0} : std::vector<Value>());
-   mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, vectorBuilder.getType(), vectorBuilder, packed);
-   context.builders[vecBuilderId] = mergedBuilder;
+   builder.create<mlir::db::Append>(loc, vector, packed);
 }
 void NLJoinTranslator::scanHT(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) {
    auto scope = context.createScope();
@@ -66,12 +64,8 @@ void NLJoinTranslator::produce(mlir::relalg::TranslatorContext& context, mlir::O
    auto leftAttributes = this->requiredAttributes.intersect(children[0]->getAvailableColumns());
    orderedAttributesLeft = mlir::relalg::OrderedAttributes::fromColumns(leftAttributes);
    tupleType = orderedAttributesLeft.getTupleType(op.getContext(), impl->markable ? std::vector<Type>({mlir::IntegerType::get(op->getContext(), 64)}) : std::vector<Type>());
-   mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(loc, mlir::db::VectorBuilderType::get(builder.getContext(), tupleType));
-   vecBuilderId = context.getBuilderId();
-   context.builders[vecBuilderId] = vectorBuilder;
-   children[0]->addRequiredBuilders({vecBuilderId});
+   vector = builder.create<mlir::db::CreateDS>(loc, mlir::db::VectorType::get(builder.getContext(), tupleType));
    children[0]->produce(context, builder);
-   vector = builder.create<mlir::db::BuilderBuild>(loc, mlir::db::VectorType::get(builder.getContext(), tupleType), context.builders[vecBuilderId]);
    children[1]->produce(context, builder);
    impl->after(context, builder);
    builder.create<mlir::db::FreeOp>(loc, vector);

@@ -7,7 +7,6 @@
 
 class SortTranslator : public mlir::relalg::Translator {
    mlir::relalg::SortOp sortOp;
-   size_t builderId;
    mlir::Value vector;
    mlir::relalg::OrderedAttributes orderedAttributes;
 
@@ -18,10 +17,8 @@ class SortTranslator : public mlir::relalg::Translator {
       this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
    }
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
-      mlir::Value vectorBuilder = context.builders[builderId];
       mlir::Value packed = orderedAttributes.pack(context, builder, sortOp->getLoc());
-      mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(sortOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
-      context.builders[builderId] = mergedBuilder;
+      builder.create<mlir::db::Append>(sortOp->getLoc(), vector, packed);
    }
    mlir::Value createSortPredicate(mlir::OpBuilder& builder, std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria, mlir::Value trueVal, mlir::Value falseVal, size_t pos) {
       if (pos < sortCriteria.size()) {
@@ -51,16 +48,14 @@ class SortTranslator : public mlir::relalg::Translator {
       context.pipelineManager.addPipeline(childPipeline);
       auto tupleType = orderedAttributes.getTupleType(builder.getContext());
       auto res = childPipeline->addInitFn([&](mlir::OpBuilder& builder) {
-         return std::vector<mlir::Value>({builder.create<mlir::db::CreateVectorBuilder>(sortOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType))});
+         return std::vector<mlir::Value>({builder.create<mlir::db::CreateDS>(sortOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType))});
       });
-      builderId = context.getBuilderId();
-      context.builders[builderId] = childPipeline->addDependency(res[0]);
-      children[0]->addRequiredBuilders({builderId});
+      vector = childPipeline->addDependency(res[0]);
       children[0]->produce(context, childPipeline->getBuilder());
-      childPipeline->finishMainFunction({context.builders[builderId]});
+      childPipeline->finishMainFunction({vector});
 
       auto sortedRes = childPipeline->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
-         mlir::Value vector = builder.create<mlir::db::BuilderBuild>(sortOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), args[0]);
+            mlir::Value vector=args[0];
          {
             auto dbSortOp = builder.create<mlir::db::SortOp>(sortOp->getLoc(), vector);
             mlir::Block* block2 = new mlir::Block;

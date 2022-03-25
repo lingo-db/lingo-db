@@ -32,7 +32,7 @@ void HashJoinTranslator::produce(mlir::relalg::TranslatorContext& context, mlir:
    context.pipelineManager.setCurrentPipeline(p);
    context.pipelineManager.addPipeline(p);
    auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
-      auto joinHtBuilder = builder.create<mlir::db::HashtableCreate>(loc, mlir::db::JoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType));
+      auto joinHtBuilder = builder.create<mlir::db::CreateDS>(loc, mlir::db::JoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType));
       return std::vector<mlir::Value>({joinHtBuilder});
    });
    joinHashtable = p->addDependency(res[0]);

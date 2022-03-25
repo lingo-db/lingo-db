@@ -259,22 +259,7 @@ class AggrHtHelper {
       return aggrHtBuilder;
    }
 };
-class CreateVectorBuilderLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
 
-   public:
-   explicit CreateVectorBuilderLowering(TypeConverter& typeConverter, MLIRContext* context, db::codegen::FunctionRegistry& functionRegistry)
-      : ConversionPattern(typeConverter, mlir::db::CreateVectorBuilder::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
-
-   LogicalResult matchAndRewrite(mlir::Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto vecBuilderOp = mlir::cast<mlir::db::CreateVectorBuilder>(op);
-      Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 1024);
-      auto elementType = typeConverter->convertType(vecBuilderOp.getType().getElementType());
-      VectorHelper vectorHelper(elementType, op->getLoc());
-      rewriter.replaceOp(op, vectorHelper.create(rewriter, initialCapacity, functionRegistry));
-      return success();
-   }
-};
 
 static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::FunctionRegistry& functionRegistry, Type type) {
    using FunctionId = db::codegen::FunctionRegistry::FunctionId;
@@ -350,13 +335,6 @@ class BuilderMergeLowering : public ConversionPattern {
          }
          functionRegistry.call(rewriter, loc, FunctionId::ArrowTableBuilderFinishRow, mergeOpAdaptor.builder());
          rewriter.replaceOp(op, mergeOpAdaptor.builder());
-      } else if (auto vectorBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::VectorBuilderType>()) {
-         Value builderVal = mergeOpAdaptor.builder();
-         Value v = mergeOpAdaptor.val();
-         auto convertedElementType = typeConverter->convertType(vectorBuilderType.getElementType());
-         VectorHelper helper(convertedElementType, op->getLoc());
-         helper.insert(rewriter, builderVal, v, functionRegistry);
-         rewriter.replaceOp(op, builderVal);
       } else if (auto aggrHTBuilderType = mergeOp.builder().getType().dyn_cast<mlir::db::AggrHTBuilderType>()) {
          auto updateFnBuilder = [&mergeOp](OpBuilder& rewriter, Value left, Value right) {
             Block* sortLambda = &mergeOp.fn().front();
@@ -448,8 +426,6 @@ class BuilderBuildLowering : public ConversionPattern {
       if (auto tableBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::TableBuilderType>()) {
          Value table = functionRegistry.call(rewriter, op->getLoc(), FunctionId::ArrowTableBuilderBuild, buildAdaptor.builder())[0];
          rewriter.replaceOp(op, table);
-      } else if (auto vectorBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::VectorBuilderType>()) {
-         rewriter.replaceOp(op, buildAdaptor.builder());
       } else if (auto aggrHTBuilderType = buildOp.builder().getType().dyn_cast<mlir::db::AggrHTBuilderType>()) {
          if (aggrHTBuilderType.getKeyType().getTypes().empty()) {
             rewriter.replaceOp(op, buildAdaptor.builder());
@@ -496,25 +472,20 @@ class CreateTableBuilderLowering : public ConversionPattern {
 } // namespace
 void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<CreateVectorBuilderLowering>(typeConverter, patterns.getContext(), functionRegistry);
    patterns.insert<CreateAggrHTBuilderLowering>(typeConverter, patterns.getContext(), functionRegistry);
    patterns.insert<BuilderMergeLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<BuilderBuildLowering>(functionRegistry, typeConverter, patterns.getContext());
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::AggrHTBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::VectorBuilderType type, ValueRange valueRange, Location loc) {
-      return valueRange.front();
-   });
+
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::TableBuilderType type, ValueRange valueRange, Location loc) {
       return valueRange.front();
    });
    typeConverter.addConversion([&](mlir::db::TableBuilderType tableType) {
       return mlir::util::RefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8));
    });
-   typeConverter.addConversion([&](mlir::db::VectorBuilderType vectorBuilderType) {
-      return VectorHelper::createType(patterns.getContext(), typeConverter.convertType(vectorBuilderType.getElementType()));
-   });
+
    typeConverter.addConversion([&](mlir::db::AggrHTBuilderType aggrHtBuilderType) {
       if (aggrHtBuilderType.getKeyType().getTypes().empty()) {
          return (Type) mlir::util::RefType::get(patterns.getContext(), typeConverter.convertType(aggrHtBuilderType.getAggrType()));

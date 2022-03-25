@@ -38,7 +38,7 @@
 
 
 
-        %ht= db.ht_create !db.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>
+        %ht= db.create_ds !db.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>
         db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %key1 : tuple<!db.string,i32> , %val1 : tuple<i32,i32>
         db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %key2 : tuple<!db.string,i32> , %val2 : tuple<i32,i32>
         db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %key3 : tuple<!db.string,i32> , %val3 : tuple<i32,i32>

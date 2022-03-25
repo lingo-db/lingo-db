@@ -47,12 +47,12 @@
         %row3 = util.pack %str3, %int3 : !db.string,i32 -> tuple<!db.string,i32>
         %row4 = util.pack %str4, %int4 : !db.string,i32 -> tuple<!db.string,i32>
 
-        %vector_builder=db.create_vector_builder : !db.vector_builder<!test_tuple_type>
-        %builder1=db.builder_merge %vector_builder : !db.vector_builder<!test_tuple_type>, %row1 : !test_tuple_type
-        %builder2=db.builder_merge %builder1 : !db.vector_builder<!test_tuple_type>, %row2 : !test_tuple_type
-        %builder3=db.builder_merge %builder2 : !db.vector_builder<!test_tuple_type>, %row3 : !test_tuple_type
-        %builder4=db.builder_merge %builder3 : !db.vector_builder<!test_tuple_type>, %row4 : !test_tuple_type
-        %vector=db.builder_build %builder4 : !db.vector_builder<!test_tuple_type> -> !db.vector<!test_tuple_type>
+	    %vector = db.create_ds !db.vector<!test_tuple_type>
+        db.ds_append %vector : !db.vector<!test_tuple_type> , %row1 : !test_tuple_type
+        db.ds_append %vector : !db.vector<!test_tuple_type> , %row2 : !test_tuple_type
+        db.ds_append %vector : !db.vector<!test_tuple_type> , %row3 : !test_tuple_type
+        db.ds_append %vector : !db.vector<!test_tuple_type> , %row4 : !test_tuple_type
+
 
         db.for %row in %vector : !db.vector<!test_tuple_type> {
             %1,%2 = util.unpack %row : !test_tuple_type -> !db.string,i32

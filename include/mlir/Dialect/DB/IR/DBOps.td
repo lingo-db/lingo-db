@@ -74,11 +74,7 @@ let summary = "vector";
 let parameters = (ins "Type":$elementType);
 let assemblyFormat = "`<` $elementType `>`";
 }
-def DB_VectorBuilder : DB_Type<"VectorBuilder","vector_builder"> {
-let summary = "builder for vector";
-let parameters = (ins "Type":$elementType);
-let assemblyFormat = "`<` $elementType `>`";
-}
+
 def DB_AggregationHashtable : DB_Collection<"AggregationHashtable","aggr_ht"> {
 let summary = "aggregation hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
@@ -230,21 +226,16 @@ let arguments = (ins ArrayAttr:$columns);
 let results = (outs DB_TableBuilder:$builder);
 let assemblyFormat = "$columns `:` type($builder) attr-dict";
 }
-def DB_CreateVectorBuilder : DB_Op<"create_vector_builder",
-[NoSideEffect]> {
-let summary = "create vector builder";
-let results = (outs DB_VectorBuilder:$builder);
-let assemblyFormat = " `:` type($builder) attr-dict";
-}
+
 def DB_BuilderMerge : DB_Op<"builder_merge",
 [NoSideEffect]> {
 let arguments = (ins AnyType:$builder,AnyType:$val);
 let results = (outs AnyType:$result_builder);
 let regions = (region AnyRegion:$fn);
 }
-def DB_HashtableCreate : DB_Op<"ht_create"> {
-    let results =(outs AnyType:$ht);
-    let assemblyFormat = "type($ht) attr-dict";
+def DB_CreateDS : DB_Op<"create_ds"> {
+    let results =(outs AnyType:$ds);
+    let assemblyFormat = "type($ds) attr-dict";
 }
 def DB_HashtableInsert: DB_Op<"ht_insert"> {
     let arguments = (ins AnyType:$ht, AnyType:$key, Optional<AnyType>: $val);
@@ -253,6 +244,10 @@ def DB_HashtableInsert: DB_Op<"ht_insert"> {
 def DB_HashtableFinalize: DB_Op<"ht_finalize"> {
     let arguments = (ins AnyType:$ht );
     let assemblyFormat = "$ht `:` type($ht) attr-dict";
+}
+def DB_Append : DB_Op<"ds_append"> {
+    let arguments = (ins AnyType:$ds, AnyType:$val);
+    let assemblyFormat = "$ds `:` type($ds) `,` $val `:` type($val)  attr-dict";
 }
 def DB_BuilderBuild : DB_Op<"builder_build",
 [NoSideEffect]> {

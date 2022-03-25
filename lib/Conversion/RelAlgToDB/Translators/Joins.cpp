@@ -24,9 +24,8 @@ std::shared_ptr<mlir::relalg::JoinImpl> createInnerJoinImpl(mlir::relalg::InnerJ
 }
 
 class CollectionJoinImpl : public mlir::relalg::JoinImpl {
-   size_t vectorBuilderId;
    mlir::relalg::OrderedAttributes cols;
-
+   mlir::Value vector;
    public:
    CollectionJoinImpl(mlir::relalg::CollectionJoinOp collectionJoinOp) : mlir::relalg::JoinImpl(collectionJoinOp, collectionJoinOp.right(), collectionJoinOp.left()) {
       cols = mlir::relalg::OrderedAttributes::fromRefArr(collectionJoinOp.cols());
@@ -37,25 +36,18 @@ class CollectionJoinImpl : public mlir::relalg::JoinImpl {
       }
    }
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value vectorBuilder = context.builders[vectorBuilderId];
-      auto ifOp = builder.create<mlir::scf::IfOp>(
-         loc, mlir::TypeRange{vectorBuilder.getType()}, matched, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+      builder.create<mlir::scf::IfOp>(
+         loc, mlir::TypeRange{}, matched, [&](mlir::OpBuilder& builder, mlir::Location loc) {
             mlir::Value packed = cols.pack(context,builder,loc);
-            mlir::Value mergedBuilder = builder.create<mlir::db::BuilderMerge>(loc, vectorBuilder.getType(), vectorBuilder, packed);
-            builder.create<mlir::scf::YieldOp>(loc, mlir::ValueRange{mergedBuilder}); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, mlir::ValueRange{vectorBuilder}); });
-      context.builders[vectorBuilderId] = ifOp.getResult(0);
+            builder.create<mlir::db::Append>(loc, vector, packed);
+            builder.create<mlir::scf::YieldOp>(loc, mlir::ValueRange{}); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, mlir::ValueRange{}); });
    }
 
    void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(joinOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), cols.getTupleType(builder.getContext())));
-      vectorBuilderId = context.getBuilderId();
-      context.builders[vectorBuilderId] = vectorBuilder;
-      translator->customLookupBuilders.push_back(vectorBuilderId);
+      vector = builder.create<mlir::db::CreateDS>(joinOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), cols.getTupleType(builder.getContext())));
    }
    void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      mlir::Value vector = builder.create<mlir::db::BuilderBuild>(joinOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), cols.getTupleType(builder.getContext())), context.builders[vectorBuilderId]);
-
       context.setValueForAttribute(scope, &cast<mlir::relalg::CollectionJoinOp>(joinOp).collAttr().getColumn(), vector);
       translator->forwardConsume(builder, context);
       builder.create<mlir::db::FreeOp>(loc, vector);

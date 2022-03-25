@@ -17,7 +17,7 @@ class ConstRelTranslator : public mlir::relalg::Translator {
       using namespace mlir;
       mlir::relalg::OrderedAttributes attributes = mlir::relalg::OrderedAttributes::fromRefArr(constRelationOp.columns());
       auto tupleType = attributes.getTupleType(builder.getContext());
-      mlir::Value vectorBuilder = builder.create<mlir::db::CreateVectorBuilder>(constRelationOp.getLoc(), mlir::db::VectorBuilderType::get(builder.getContext(), tupleType));
+      mlir::Value vector = builder.create<mlir::db::CreateDS>(constRelationOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType));
       for (auto rowAttr : constRelationOp.valuesAttr()) {
          auto row = rowAttr.cast<ArrayAttr>();
          std::vector<Value> values;
@@ -28,9 +28,8 @@ class ConstRelTranslator : public mlir::relalg::Translator {
             i++;
          }
          mlir::Value packed = builder.create<mlir::util::PackOp>(constRelationOp->getLoc(), values);
-         vectorBuilder = builder.create<mlir::db::BuilderMerge>(constRelationOp->getLoc(), vectorBuilder.getType(), vectorBuilder, packed);
+         builder.create<mlir::db::Append>(constRelationOp->getLoc(), vector, packed);
       }
-      Value vector = builder.create<mlir::db::BuilderBuild>(constRelationOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType), vectorBuilder);
       {
          auto forOp2 = builder.create<mlir::db::ForOp>(constRelationOp->getLoc(), getRequiredBuilderTypes(context), vector, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
          mlir::Block* block2 = new mlir::Block;

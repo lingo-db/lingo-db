@@ -80,7 +80,7 @@
         %val3 = util.pack %default_marker, %int3, %int3 : i64,i32,i32 -> tuple<i64,i32,i32>
         %val4 = util.pack %default_marker, %int4, %int4 : i64,i32,i32 -> tuple<i64,i32,i32>
 
-        %ht= db.ht_create  !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
+        %ht= db.create_ds  !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
         db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key1 : tuple<!db.string,i32>, %val1 : tuple<i64,i32,i32>
         db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key2 : tuple<!db.string,i32>, %val2 : tuple<i64,i32,i32>
         db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key3 : tuple<!db.string,i32>, %val3 : tuple<i64,i32,i32>
