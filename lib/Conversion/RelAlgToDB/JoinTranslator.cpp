@@ -53,50 +53,19 @@ void JoinTranslator::handleMapping(OpBuilder& builder, TranslatorContext& contex
 }
 void JoinTranslator::handlePotentialMatch(OpBuilder& builder, TranslatorContext& context, Value matches, mlir::function_ref<void(OpBuilder&, TranslatorContext& context, TranslatorContext::AttributeResolverScope&)> onMatch) {
    auto scope = context.createScope();
-   auto builderValuesBefore = getRequiredBuilderValues(context);
-   auto ifOp = builder.create<mlir::scf::IfOp>(
-      joinOp->getLoc(), getRequiredBuilderTypes(context), matches, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+   auto builderValuesBefore = mlir::ValueRange{};
+   builder.create<mlir::scf::IfOp>(
+      joinOp->getLoc(), mlir::TypeRange{}, matches, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
          if(onMatch){
             onMatch(builder1,context,scope);
          }
          consumer->consume(this, builder1, context);
-         builder1.create<mlir::scf::YieldOp>(joinOp->getLoc(), getRequiredBuilderValues(context)); }, requiredBuilders.empty() ? noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::scf::YieldOp>(joinOp->getLoc(), builderValuesBefore); });
-   setRequiredBuilderValues(context, ifOp.getResults());
+         builder1.create<mlir::scf::YieldOp>(joinOp->getLoc(), mlir::ValueRange{}); });
 }
-std::vector<mlir::Type> JoinTranslator::getRequiredBuilderTypesCustom(TranslatorContext& context) {
-   auto requiredBuilderTypes = getRequiredBuilderTypes(context);
-   for (auto x : customLookupBuilders) {
-      requiredBuilderTypes.push_back(context.builders[x].getType());
-   }
-   return requiredBuilderTypes;
-}
-std::vector<mlir::Location> JoinTranslator::getRequiredBuilderLocsCustom(TranslatorContext& context) {
-   auto requiredBuilderLocs = getRequiredBuilderLocs(context);
-   for (auto x : customLookupBuilders) {
-      requiredBuilderLocs.push_back(context.builders[x].getLoc());
-   }
-   return requiredBuilderLocs;
-}
-std::vector<mlir::Value> JoinTranslator::getRequiredBuilderValuesCustom(TranslatorContext& context) {
-   auto requiredBuilderValues = getRequiredBuilderValues(context);
-   for (auto x : customLookupBuilders) {
-      requiredBuilderValues.push_back(context.builders[x]);
-   }
-   return requiredBuilderValues;
-}
-void JoinTranslator::setRequiredBuilderValuesCustom(TranslatorContext& context, mlir::ValueRange values) {
-   size_t i = 0;
-   for (auto x : requiredBuilders) {
-      context.builders[x] = values[i++];
-   }
-   for (auto y : customLookupBuilders) {
-      context.builders[y] = values[i++];
-   }
-}
-void JoinTranslator::addRequiredBuilders(std::vector<size_t> requiredBuilders) {
-   this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-   children[1]->addRequiredBuilders(requiredBuilders);
-}
+
+
+
+
 
 mlir::Value JoinTranslator::evaluatePredicate(TranslatorContext& context, mlir::OpBuilder& builder, TranslatorContext::AttributeResolverScope& scope) {
    bool hasRealPredicate = false;

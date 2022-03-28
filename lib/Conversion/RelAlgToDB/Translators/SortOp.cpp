@@ -13,9 +13,6 @@ class SortTranslator : public mlir::relalg::Translator {
    public:
    SortTranslator(mlir::relalg::SortOp sortOp) : mlir::relalg::Translator(sortOp), sortOp(sortOp) {
    }
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
-      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-   }
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       mlir::Value packed = orderedAttributes.pack(context, builder, sortOp->getLoc());
       builder.create<mlir::db::Append>(sortOp->getLoc(), vector, packed);
@@ -86,18 +83,15 @@ class SortTranslator : public mlir::relalg::Translator {
       vector = parentPipeline->addDependency(sortedRes[0]);
       context.pipelineManager.setCurrentPipeline(parentPipeline);
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(sortOp->getLoc(), getRequiredBuilderTypes(context), vector, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
+         auto forOp2 = builder.create<mlir::db::ForOp>(sortOp->getLoc(), mlir::TypeRange{}, vector, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType, sortOp->getLoc());
-         block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
          forOp2.getBodyRegion().push_back(block2);
          mlir::OpBuilder builder2(forOp2.getBodyRegion());
-         setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), forOp2.getInductionVar());
          orderedAttributes.setValuesForColumns(context, scope, unpacked.getResults());
          consumer->consume(this, builder2, context);
-         builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), getRequiredBuilderValues(context));
-         setRequiredBuilderValues(context, forOp2.results());
+         builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), mlir::ValueRange{});
       }
       builder.create<mlir::db::FreeOp>(sortOp->getLoc(), vector);
    }

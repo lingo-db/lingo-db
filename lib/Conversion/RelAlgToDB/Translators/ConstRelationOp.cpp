@@ -31,18 +31,15 @@ class ConstRelTranslator : public mlir::relalg::Translator {
          builder.create<mlir::db::Append>(constRelationOp->getLoc(), vector, packed);
       }
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(constRelationOp->getLoc(), getRequiredBuilderTypes(context), vector, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
+         auto forOp2 = builder.create<mlir::db::ForOp>(constRelationOp->getLoc(), mlir::TypeRange{}, vector, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType, constRelationOp->getLoc());
-         block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
          forOp2.getBodyRegion().push_back(block2);
          mlir::OpBuilder builder2(forOp2.getBodyRegion());
-         setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(constRelationOp->getLoc(), forOp2.getInductionVar());
          attributes.setValuesForColumns(context, scope, unpacked.getResults());
          consumer->consume(this, builder2, context);
-         builder2.create<mlir::db::YieldOp>(constRelationOp->getLoc(), getRequiredBuilderValues(context));
-         setRequiredBuilderValues(context, forOp2.results());
+         builder2.create<mlir::db::YieldOp>(constRelationOp->getLoc(), mlir::ValueRange{});
       }
       builder.create<mlir::db::FreeOp>(constRelationOp->getLoc(), vector);
    }

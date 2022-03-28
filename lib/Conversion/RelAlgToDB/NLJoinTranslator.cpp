@@ -16,19 +16,16 @@ void NLJoinTranslator::build(mlir::OpBuilder& builder, mlir::relalg::TranslatorC
 void NLJoinTranslator::scanHT(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) {
    auto scope = context.createScope();
    {
-      auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), vector, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
+      auto forOp2 = builder.create<mlir::db::ForOp>(loc, mlir::TypeRange{}, vector, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(tupleType, loc);
-      block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
-      setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
       auto unpacked = builder2.create<mlir::util::UnPackOp>(loc, forOp2.getInductionVar());
       orderedAttributesLeft.setValuesForColumns(context, scope, unpacked.getResults());
       Value marker = impl->markable ? unpacked.getResult(unpacked.getNumResults() - 1) : Value();
       impl->handleScanned(marker, context, builder2);
-      builder2.create<mlir::db::YieldOp>(loc, getRequiredBuilderValues(context));
-      setRequiredBuilderValues(context, forOp2.results());
+      builder2.create<mlir::db::YieldOp>(loc, mlir::ValueRange{});
    }
 }
 
@@ -36,20 +33,17 @@ void NLJoinTranslator::probe(mlir::OpBuilder& builder, mlir::relalg::TranslatorC
    auto scope = context.createScope();
    impl->beforeLookup(context, builder);
    {
-      auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), vector, impl->getFlag(), getRequiredBuilderValues(context));
+      auto forOp2 = builder.create<mlir::db::ForOp>(loc, mlir::TypeRange{}, vector, impl->getFlag(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(tupleType, loc);
-      block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
-      setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
       auto unpacked = builder2.create<mlir::util::UnPackOp>(loc, forOp2.getInductionVar());
       orderedAttributesLeft.setValuesForColumns(context, scope, unpacked.getResults());
       Value markerLeft = impl->markable ? unpacked.getResult(unpacked.getNumResults() - 1) : Value();
       Value matched = evaluatePredicate(context, builder2, scope);
       impl->handleLookup(matched, markerLeft, context, builder2);
-      builder2.create<mlir::db::YieldOp>(loc, getRequiredBuilderValues(context));
-      setRequiredBuilderValues(context, forOp2.results());
+      builder2.create<mlir::db::YieldOp>(loc, mlir::ValueRange{});
    }
    impl->afterLookup(context, builder);
 }

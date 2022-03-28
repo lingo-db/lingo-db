@@ -53,18 +53,15 @@ class SelectionTranslator : public mlir::relalg::Translator {
          std::sort(conditions.begin(), conditions.end(), [](auto a, auto b) { return a.first < b.first; });
          for (auto c : conditions) {
             auto negated = builder.create<mlir::db::NotOp>(selectionOp.getLoc(), c.second);
-            builder.create<mlir::db::CondSkipOp>(selectionOp->getLoc(), negated, getRequiredBuilderValues(context));
+            builder.create<mlir::db::CondSkipOp>(selectionOp->getLoc(), negated,mlir::ValueRange{});
          }
          consumer->consume(this, builder, context);
       } else {
-         auto builderValuesBefore = getRequiredBuilderValues(context);
          matched = builder.create<mlir::db::DeriveTruth>(selectionOp.getLoc(), matched);
-         auto ifOp = builder.create<mlir::scf::IfOp>(
-            selectionOp->getLoc(), getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
+         builder.create<mlir::scf::IfOp>(
+            selectionOp->getLoc(), mlir::TypeRange{}, matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
                consumer->consume(this, builder1, context);
-               builder1.create<mlir::scf::YieldOp>(selectionOp->getLoc(), getRequiredBuilderValues(context)); },
-            requiredBuilders.empty() ? noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location loc) { builder2.create<mlir::scf::YieldOp>(loc, builderValuesBefore); });
-         setRequiredBuilderValues(context, ifOp.getResults());
+               builder1.create<mlir::scf::YieldOp>(selectionOp->getLoc()); });
       }
    }
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {

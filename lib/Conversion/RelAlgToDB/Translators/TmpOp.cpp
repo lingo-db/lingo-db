@@ -18,9 +18,6 @@ class TmpTranslator : public mlir::relalg::Translator {
       userCount = users.size();
       producedCount = 0;
    }
-   void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
-      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-   }
    virtual void setInfo(mlir::relalg::Translator* consumer, mlir::relalg::ColumnSet requiredAttributes) override {
       this->consumer = consumer;
       this->requiredAttributes = requiredAttributes;
@@ -66,18 +63,15 @@ class TmpTranslator : public mlir::relalg::Translator {
       auto [vector, attributes_] = context.materializedTmp[tmpOp.getOperation()];
       auto attributes=mlir::relalg::OrderedAttributes::fromVec(attributes_);
       auto tupleType = attributes.getTupleType(builder.getContext());
-      auto forOp2 = builder.create<mlir::db::ForOp>(tmpOp->getLoc(), getRequiredBuilderTypes(context), context.pipelineManager.getCurrentPipeline()->addDependency(vector), context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
+      auto forOp2 = builder.create<mlir::db::ForOp>(tmpOp->getLoc(), mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(vector), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(tupleType, tmpOp->getLoc());
-      block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
-      setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
       auto unpacked = builder2.create<mlir::util::UnPackOp>(tmpOp->getLoc(), forOp2.getInductionVar());
       attributes.setValuesForColumns(context,scope,unpacked.getResults());
       consumer->consume(this, builder2, context);
-      builder2.create<mlir::db::YieldOp>(tmpOp->getLoc(), getRequiredBuilderValues(context));
-      setRequiredBuilderValues(context, forOp2.results());
+      builder2.create<mlir::db::YieldOp>(tmpOp->getLoc(), mlir::ValueRange{});
 
       if (producedCount >= userCount) {
          auto [vector, attributes] = context.materializedTmp[tmpOp.getOperation()];

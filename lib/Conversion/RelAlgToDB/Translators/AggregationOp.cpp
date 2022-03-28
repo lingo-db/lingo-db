@@ -24,10 +24,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
    public:
    AggregationTranslator(mlir::relalg::AggregationOp aggregationOp) : mlir::relalg::Translator(aggregationOp), aggregationOp(aggregationOp) {
    }
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
-      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-      //do not forwared requiredBuilders to children
-   }
+
    mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::Value left, mlir::Value right) {
       auto loc = rewriter.getUnknownLoc();
       mlir::Value equal = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
@@ -349,13 +346,11 @@ class AggregationTranslator : public mlir::relalg::Translator {
       context.pipelineManager.setCurrentPipeline(parentPipeline);
       auto hashtable = context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]);
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(aggregationOp->getLoc(), getRequiredBuilderTypes(context), hashtable, context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
+         auto forOp2 = builder.create<mlir::db::ForOp>(aggregationOp->getLoc(), mlir::TypeRange{}, hashtable, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(iterEntryType, aggregationOp->getLoc());
-         block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
          forOp2.getBodyRegion().push_back(block2);
          mlir::OpBuilder builder2(forOp2.getBodyRegion());
-         setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
          auto unpacked = builder2.create<mlir::util::UnPackOp>(aggregationOp->getLoc(), forOp2.getInductionVar()).getResults();
          mlir::ValueRange unpackedKey;
          if (!keyTupleType.getTypes().empty()) {
@@ -369,8 +364,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
          }
          key.setValuesForColumns(context, scope, unpackedKey);
          consumer->consume(this, builder2, context);
-         builder2.create<mlir::db::YieldOp>(aggregationOp->getLoc(), getRequiredBuilderValues(context));
-         setRequiredBuilderValues(context, forOp2.results());
+         builder2.create<mlir::db::YieldOp>(aggregationOp->getLoc(), mlir::ValueRange{});
       }
       builder.create<mlir::db::FreeOp>(aggregationOp->getLoc(), hashtable);
    }

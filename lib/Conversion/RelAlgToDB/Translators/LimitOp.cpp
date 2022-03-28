@@ -5,33 +5,32 @@
 
 class LimitTranslator : public mlir::relalg::Translator {
    mlir::relalg::LimitOp limitOp;
-   size_t counterId;
    mlir::Value vector;
    mlir::Value finishedFlag;
+   mlir::Value counter;
 
    public:
    LimitTranslator(mlir::relalg::LimitOp limitOp) : mlir::relalg::Translator(limitOp), limitOp(limitOp) {}
 
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
-      mlir::Value counter = context.builders[counterId];
       consumer->consume(this, builder, context);
-      auto one = builder.create<mlir::db::ConstantOp>(limitOp.getLoc(), counter.getType(), builder.getI64IntegerAttr(1));
-      mlir::Value addedCounter = builder.create<mlir::db::AddOp>(limitOp.getLoc(), counter.getType(), counter, one);
-      mlir::Value upper=builder.create<mlir::db::ConstantOp>(limitOp.getLoc(),counter.getType(),builder.getI64IntegerAttr(limitOp.rows()));
-      mlir::Value finished=builder.create<mlir::db::CmpOp>(limitOp.getLoc(),mlir::db::DBCmpPredicate::gte,addedCounter,upper);
-      builder.create<mlir::db::SetFlag>(limitOp->getLoc(), finishedFlag,finished);
-      context.builders[counterId] = addedCounter;
+      auto one = builder.create<mlir::arith::ConstantIntOp>(limitOp.getLoc(), 1, 64);
+      mlir::Value loadedCounter = builder.create<mlir::util::LoadOp>(limitOp.getLoc(), builder.getI64Type(), counter, mlir::Value());
+      mlir::Value addedCounter = builder.create<mlir::arith::AddIOp>(limitOp.getLoc(), loadedCounter, one);
+      mlir::Value upper = builder.create<mlir::arith::ConstantIntOp>(limitOp.getLoc(), limitOp.rows(), 64);
+      mlir::Value finished = builder.create<mlir::arith::CmpIOp>(limitOp.getLoc(), mlir::arith::CmpIPredicate::eq, addedCounter, upper);
+      builder.create<mlir::db::SetFlag>(limitOp->getLoc(), finishedFlag, finished);
+      builder.create<mlir::util::StoreOp>(limitOp.getLoc(), addedCounter, counter, mlir::Value());
    }
 
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      mlir::Value counter = builder.create<mlir::db::ConstantOp>(limitOp.getLoc(), builder.getI64Type(),builder.getI64IntegerAttr(0));
+      counter = builder.create<mlir::util::AllocaOp>(limitOp.getLoc(), mlir::util::RefType::get(builder.getContext(), builder.getI64Type()), mlir::Value());
+      mlir::Value zero = builder.create<mlir::db::ConstantOp>(limitOp.getLoc(), builder.getI64Type(), builder.getI64IntegerAttr(0));
+      builder.create<mlir::util::StoreOp>(limitOp.getLoc(), zero, counter, mlir::Value());
       finishedFlag = builder.create<mlir::db::CreateFlag>(limitOp->getLoc(), mlir::db::FlagType::get(builder.getContext()));
       context.pipelineManager.getCurrentPipeline()->setFlag(finishedFlag);
-      counterId = context.getBuilderId();
-      context.builders[counterId] = counter;
 
-      children[0]->addRequiredBuilders({counterId});
       children[0]->produce(context, builder);
    }
 
@@ -39,5 +38,5 @@ class LimitTranslator : public mlir::relalg::Translator {
 };
 
 std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createLimitTranslator(mlir::relalg::LimitOp limitOp) {
-  return std::make_unique<LimitTranslator>(limitOp);
+   return std::make_unique<LimitTranslator>(limitOp);
 }

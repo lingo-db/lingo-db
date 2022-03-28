@@ -67,20 +67,17 @@ void HashJoinTranslator::unpackKeys(TranslatorContext::AttributeResolverScope& s
 void HashJoinTranslator::scanHT(TranslatorContext& context, mlir::OpBuilder& builder) {
    auto scope = context.createScope();
    {
-      auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypes(context), context.pipelineManager.getCurrentPipeline()->addDependency(joinHt), context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
+      auto forOp2 = builder.create<mlir::db::ForOp>(loc, mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(joinHt), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(entryType, loc);
-      block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocsCustom(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
-      setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
       auto unpacked = builder2.create<mlir::util::UnPackOp>(loc, forOp2.getInductionVar()).getResults();
       unpackKeys(scope, builder2, unpacked[0], context);
       Value marker;
       unpackValues(scope, builder2, unpacked[1], context, marker);
       impl->handleScanned(marker, context, builder2);
-      builder2.create<mlir::db::YieldOp>(loc, getRequiredBuilderValues(context));
-      setRequiredBuilderValues(context, forOp2.results());
+      builder2.create<mlir::db::YieldOp>(loc, mlir::ValueRange{});
    }
 }
 void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) {
@@ -100,13 +97,11 @@ void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilde
       impl->beforeLookup(context, builder);
       auto matches = builder.create<mlir::db::Lookup>(loc, htIterable, context.pipelineManager.getCurrentPipeline()->addDependency(joinHt), packedKey);
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(loc, getRequiredBuilderTypesCustom(context), matches, impl->getFlag(), getRequiredBuilderValuesCustom(context));
+         auto forOp2 = builder.create<mlir::db::ForOp>(loc, mlir::TypeRange{}, matches, impl->getFlag(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(iteratorType, loc);
-         block2->addArguments(getRequiredBuilderTypesCustom(context), getRequiredBuilderLocsCustom(context));
          forOp2.getBodyRegion().push_back(block2);
          mlir::OpBuilder builder2(forOp2.getBodyRegion());
-         setRequiredBuilderValuesCustom(context, block2->getArguments().drop_front(1));
 
          Value entry = forOp2.getInductionVar();
          Value valuePtr;
@@ -128,8 +123,7 @@ void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilde
             }
             impl->handleLookup(matched, marker, context, builder2);
          }
-         builder2.create<mlir::db::YieldOp>(loc, getRequiredBuilderValuesCustom(context));
-         setRequiredBuilderValuesCustom(context, forOp2.results());
+         builder2.create<mlir::db::YieldOp>(loc);
       }
       impl->afterLookup(context, builder);
    }

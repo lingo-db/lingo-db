@@ -39,34 +39,6 @@ void Translator::propagateInfo() {
       c->setInfo(this, toPropagate);
    }
 }
-std::vector<mlir::Value> Translator::getRequiredBuilderValues(TranslatorContext& context) {
-   std::vector<mlir::Value> res;
-   for (auto x : requiredBuilders) {
-      res.push_back(context.builders[x]);
-   }
-   return res;
-}
-void Translator::setRequiredBuilderValues(TranslatorContext& context, const mlir::ValueRange& values) {
-   size_t i = 0;
-   for (auto x : requiredBuilders) {
-      context.builders[x] = values[i++];
-   }
-}
-
-std::vector<mlir::Type> Translator::getRequiredBuilderTypes(TranslatorContext& context) {
-   std::vector<mlir::Type> res;
-   for (auto x : requiredBuilders) {
-      res.push_back(context.builders[x].getType());
-   }
-   return res;
-}
-std::vector<mlir::Location> Translator::getRequiredBuilderLocs(TranslatorContext& context) {
-   std::vector<mlir::Location> res;
-   for (auto x : requiredBuilders) {
-      res.push_back(context.builders[x].getLoc());
-   }
-   return res;
-}
 mlir::relalg::Translator::Translator(Operator op) : op(op) {
    for (auto child : op.getChildren()) {
       children.push_back(mlir::relalg::Translator::createTranslator(child.getOperation()));
@@ -80,12 +52,7 @@ mlir::relalg::Translator::Translator(mlir::ValueRange potentialChildren) : op() 
       }
    }
 }
-void Translator::addRequiredBuilders(std::vector<size_t> requiredBuilders) {
-   this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-   for (auto& child : children) {
-      child->addRequiredBuilders(requiredBuilders);
-   }
-}
+
 
 void Translator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg::ColumnSet requiredAttributes) {
    this->consumer = consumer;

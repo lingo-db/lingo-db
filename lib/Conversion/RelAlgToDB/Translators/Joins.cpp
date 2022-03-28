@@ -26,6 +26,7 @@ std::shared_ptr<mlir::relalg::JoinImpl> createInnerJoinImpl(mlir::relalg::InnerJ
 class CollectionJoinImpl : public mlir::relalg::JoinImpl {
    mlir::relalg::OrderedAttributes cols;
    mlir::Value vector;
+
    public:
    CollectionJoinImpl(mlir::relalg::CollectionJoinOp collectionJoinOp) : mlir::relalg::JoinImpl(collectionJoinOp, collectionJoinOp.right(), collectionJoinOp.left()) {
       cols = mlir::relalg::OrderedAttributes::fromRefArr(collectionJoinOp.cols());
@@ -149,9 +150,8 @@ class ReversedSemiJoinImpl : public mlir::relalg::JoinImpl {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      auto beforeBuilderValues = translator->getRequiredBuilderValues(context);
-      auto ifOp = builder.create<mlir::scf::IfOp>(
-         loc, translator->getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
+      builder.create<mlir::scf::IfOp>(
+         loc, mlir::TypeRange{}, matched, [&](mlir::OpBuilder& builder1, mlir::Location) {
             auto const1 = builder1.create<mlir::arith::ConstantOp>(loc, builder1.getIntegerType(64), builder1.getI64IntegerAttr(1));
             auto markerBefore = builder1.create<mlir::memref::AtomicRMWOp>(loc, builder1.getIntegerType(64), mlir::arith::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
             {
@@ -159,9 +159,7 @@ class ReversedSemiJoinImpl : public mlir::relalg::JoinImpl {
                auto isZero = builder1.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, markerBefore, zero);
                translator->handlePotentialMatch(builder,context,isZero);
             }
-            builder1.create<mlir::scf::YieldOp>(loc, translator->getRequiredBuilderValues(context)); },
-         translator->requiredBuilders.empty() ? translator->noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::scf::YieldOp>(loc, beforeBuilderValues); });
-      translator->setRequiredBuilderValues(context, ifOp.getResults());
+            builder1.create<mlir::scf::YieldOp>(loc); });
    }
 
    virtual ~ReversedSemiJoinImpl() {}
@@ -176,13 +174,11 @@ class ReversedAntiSemiJoinImpl : public mlir::relalg::JoinImpl {
    ReversedAntiSemiJoinImpl(mlir::relalg::AntiSemiJoinOp innerJoinOp) : mlir::relalg::JoinImpl(innerJoinOp, innerJoinOp.left(), innerJoinOp.right(), true) {}
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      auto builderValuesBefore = translator->getRequiredBuilderValues(context);
-      auto ifOp = builder.create<mlir::scf::IfOp>(
-         loc, translator->getRequiredBuilderTypes(context), matched, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+      builder.create<mlir::scf::IfOp>(
+         loc, mlir::TypeRange{}, matched, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
             auto const1 = builder1.create<mlir::arith::ConstantOp>(loc, builder1.getIntegerType(64), builder1.getI64IntegerAttr(1));
             builder1.create<mlir::memref::AtomicRMWOp>(loc, builder1.getIntegerType(64), mlir::arith::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
-            builder1.create<mlir::scf::YieldOp>(loc, translator->getRequiredBuilderValues(context)); }, translator->requiredBuilders.empty() ? translator->noBuilder : [&](mlir::OpBuilder& builder2, mlir::Location) { builder2.create<mlir::scf::YieldOp>(loc, builderValuesBefore); });
-      translator->setRequiredBuilderValues(context, ifOp.getResults());
+            builder1.create<mlir::scf::YieldOp>(loc, mlir::ValueRange{}); });
    }
    virtual void after(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       translator->scanHT(context, builder);
@@ -204,7 +200,7 @@ class ConstantSingleJoinTranslator : public mlir::relalg::Translator {
    std::vector<const mlir::relalg::Column*> cols;
    std::vector<const mlir::relalg::Column*> origAttrs;
    std::vector<mlir::Type> types;
-   size_t builderId;
+   mlir::Value singleValPtr;
 
    public:
    ConstantSingleJoinTranslator(mlir::relalg::SingleJoinOp singleJoinOp) : mlir::relalg::Translator(singleJoinOp), joinOp(singleJoinOp) {
@@ -227,14 +223,12 @@ class ConstantSingleJoinTranslator : public mlir::relalg::Translator {
       }
       propagateInfo();
    }
-   virtual void addRequiredBuilders(std::vector<size_t> requiredBuilders) override {
-      this->requiredBuilders.insert(this->requiredBuilders.end(), requiredBuilders.begin(), requiredBuilders.end());
-      children[0]->addRequiredBuilders(requiredBuilders);
-   }
+
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       auto scope = context.createScope();
       if (child == this->children[0].get()) {
-         auto unpacked = builder.create<mlir::util::UnPackOp>(joinOp->getLoc(), context.builders[builderId]);
+         mlir::Value singleVal = builder.create<mlir::util::LoadOp>(joinOp->getLoc(), singleValPtr.getType().cast<mlir::util::RefType>().getElementType(), singleValPtr, mlir::Value());
+         auto unpacked = builder.create<mlir::util::UnPackOp>(joinOp->getLoc(), singleVal);
          for (size_t i = 0; i < cols.size(); i++) {
             context.setValueForAttribute(scope, cols[i], unpacked.getResult(i));
          }
@@ -249,7 +243,8 @@ class ConstantSingleJoinTranslator : public mlir::relalg::Translator {
             }
             values.push_back(value);
          }
-         context.builders[builderId] = builder.create<mlir::util::PackOp>(joinOp->getLoc(), values);
+         mlir::Value singleVal = builder.create<mlir::util::PackOp>(joinOp->getLoc(), values);
+         builder.create<mlir::util::StoreOp>(joinOp->getLoc(), singleVal, singleValPtr, mlir::Value());
       }
    }
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
@@ -257,9 +252,9 @@ class ConstantSingleJoinTranslator : public mlir::relalg::Translator {
       for (auto type : types) {
          values.push_back(builder.create<mlir::db::NullOp>(joinOp.getLoc(), type));
       }
-      builderId = context.getBuilderId();
-      context.builders[builderId] = builder.create<mlir::util::PackOp>(joinOp->getLoc(), values);
-      children[1]->addRequiredBuilders({builderId});
+      mlir::Value singleVal = builder.create<mlir::util::PackOp>(joinOp->getLoc(), values);
+      singleValPtr = builder.create<mlir::util::AllocaOp>(joinOp->getLoc(), mlir::util::RefType::get(builder.getContext(), singleVal.getType()), mlir::Value());
+      builder.create<mlir::util::StoreOp>(joinOp->getLoc(), singleVal, singleValPtr, mlir::Value());
       children[1]->produce(context, builder);
       children[0]->produce(context, builder);
    }

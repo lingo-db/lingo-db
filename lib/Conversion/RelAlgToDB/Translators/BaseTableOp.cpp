@@ -27,18 +27,18 @@ class BaseTableTranslator : public mlir::relalg::Translator {
          auto attr = namedAttr.getValue();
          auto attrDef = attr.dyn_cast_or_null<mlir::relalg::ColumnDefAttr>();
          if (requiredAttributes.contains(&attrDef.getColumn())) {
-            if(!first){
-               scanDescription+=",";
-            }else{
-               first=false;
+            if (!first) {
+               scanDescription += ",";
+            } else {
+               first = false;
             }
-            scanDescription+="\""+identifier.str()+"\"";
+            scanDescription += "\"" + identifier.str() + "\"";
             columnNames.push_back(builder.getStringAttr(identifier.strref()));
             types.push_back(attrDef.getColumn().type);
             cols.push_back(&attrDef.getColumn());
          }
       }
-      scanDescription+="] }";
+      scanDescription += "] }";
 
       auto tupleType = mlir::TupleType::get(builder.getContext(), types);
       mlir::Type rowIterable = mlir::db::GenericIterableType::get(builder.getContext(), tupleType, "table_row_iterator");
@@ -50,28 +50,24 @@ class BaseTableTranslator : public mlir::relalg::Translator {
 
          return std::vector<Value>({chunkIterator});
       });
-      auto forOp = builder.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), currPipeline->addDependency(initRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), getRequiredBuilderValues(context));
+      auto forOp = builder.create<mlir::db::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, currPipeline->addDependency(initRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
       block->addArgument(rowIterable, baseTableOp->getLoc());
-      block->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
       forOp.getBodyRegion().push_back(block);
       mlir::OpBuilder builder1(forOp.getBodyRegion());
-      auto forOp2 = builder1.create<mlir::db::ForOp>(baseTableOp->getLoc(), getRequiredBuilderTypes(context), forOp.getInductionVar(), context.pipelineManager.getCurrentPipeline()->getFlag(), block->getArguments().drop_front(1));
+      auto forOp2 = builder1.create<mlir::db::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, forOp.getInductionVar(), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(tupleType, baseTableOp->getLoc());
-      block2->addArguments(getRequiredBuilderTypes(context), getRequiredBuilderLocs(context));
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
-      setRequiredBuilderValues(context, block2->getArguments().drop_front(1));
       auto unpacked = builder2.create<mlir::util::UnPackOp>(baseTableOp->getLoc(), forOp2.getInductionVar());
       size_t i = 0;
       for (const auto* attr : cols) {
          context.setValueForAttribute(scope, attr, unpacked.getResult(i++));
       }
       consumer->consume(this, builder2, context);
-      builder2.create<mlir::db::YieldOp>(baseTableOp->getLoc(), getRequiredBuilderValues(context));
-      builder1.create<mlir::db::YieldOp>(baseTableOp->getLoc(), forOp2.getResults());
-      setRequiredBuilderValues(context, forOp.results());
+      builder2.create<mlir::db::YieldOp>(baseTableOp->getLoc());
+      builder1.create<mlir::db::YieldOp>(baseTableOp->getLoc());
    }
    virtual ~BaseTableTranslator() {}
 };
