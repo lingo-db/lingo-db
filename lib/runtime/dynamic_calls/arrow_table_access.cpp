@@ -16,7 +16,6 @@ EXPORT uint64_t get_column_id(std::shared_ptr<arrow::Table>* table, std::string 
    throw std::runtime_error("column not found: " + columnName);
 }
 EXPORT void* rt_scan_source_init(runtime::ExecutionContext* executionContext, runtime::VarLen32 description) {
-
    nlohmann::json descr = nlohmann::json::parse(description.str());
    std::string tableName = descr["table"];
    auto table = (executionContext)->db->getTable(tableName);
@@ -68,34 +67,42 @@ EXPORT uint64_t rt_table_chunk_num_rows(arrow::RecordBatch* tableChunk) {
    return (tableChunk)->num_rows();
 }
 
-EXPORT uint8_t* rt_table_chunk_get_column_buffer(arrow::RecordBatch* tableChunk, uint64_t columnId, uint64_t bufferId) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+struct ColumnInfo {
+   size_t offset;
+   size_t validMultiplier;
+   uint8_t* validBuffer;
+   uint8_t* dataBuffer;
+   uint8_t* varLenBuffer;
+};
+struct RecordBatchInfo {
+   size_t numRows;
+   ColumnInfo columnInfo[];
+};
+struct IteratorInfo {
+   void* ptr;
+   size_t columnIds[];
+};
+
+uint8_t* get_buffer(arrow::RecordBatch* batch, size_t columnId, size_t bufferId) {
    static uint8_t alternative = 0b11111111;
-   auto* buffer = (tableChunk)->column_data(columnId)->buffers[bufferId].get();
-   if (buffer) {
-      size_t offset = (tableChunk)->column_data(columnId)->offset;
-      uint8_t* data = (uint8_t*) buffer->address();
-      data += offset;
-      return data;
+   if (batch->column_data(columnId)->buffers.size() > bufferId && batch->column_data(columnId)->buffers[bufferId]) {
+      auto* buffer = batch->column_data(columnId)->buffers[bufferId].get();
+      size_t offset = batch->column_data(columnId)->offset;
+      return (uint8_t*) buffer->address();
    } else {
       return &alternative; //always return valid pointer to at least one byte filled with ones
    }
 }
-struct TuplePtrSize{
-   uint8_t* data;
-   size_t len;
-};
-EXPORT TuplePtrSize rt_table_chunk_get_raw_column_buffer(arrow::RecordBatch* tableChunk, uint64_t columnId, uint64_t bufferId) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   static uint8_t alternative = 0b11111111;
-   auto* buffer = (tableChunk)->column_data(columnId)->buffers[bufferId].get();
-   if (buffer) {
-      uint8_t* data = (uint8_t*) buffer->address();
-      size_t len = (tableChunk)->column_data(columnId)->buffers[bufferId].get()->size();
-
-      return {data, len};
-   } else {
-      return {&alternative, 0}; //always return valid pointer to at least one byte filled with ones
+EXPORT void rt_access_record_batch(size_t numColumns, IteratorInfo* iteratorInfo, RecordBatchInfo* res, arrow::RecordBatch* recordBatch) {
+   for (size_t i = 0; i < numColumns; i++) {
+      auto colId = iteratorInfo->columnIds[i];
+      ColumnInfo& colInfo = res->columnInfo[i];
+      size_t off = recordBatch->column_data(colId)->offset;
+      colInfo.offset = off;
+      colInfo.validMultiplier = recordBatch->column_data(colId)->buffers[0] ? 1 : 0;
+      colInfo.validBuffer = get_buffer(recordBatch, colId, 0);
+      colInfo.dataBuffer = get_buffer(recordBatch, colId, 1);
+      colInfo.varLenBuffer = get_buffer(recordBatch, colId, 2);
    }
-}
-EXPORT uint64_t rt_table_chunk_get_column_offset(arrow::RecordBatch* tableChunk, uint64_t columnId) {
-   return (tableChunk)->column_data(columnId)->offset;
+   res->numRows = recordBatch->num_rows();
 }

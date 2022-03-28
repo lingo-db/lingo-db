@@ -53,7 +53,6 @@ void JoinTranslator::handleMapping(OpBuilder& builder, TranslatorContext& contex
 }
 void JoinTranslator::handlePotentialMatch(OpBuilder& builder, TranslatorContext& context, Value matches, mlir::function_ref<void(OpBuilder&, TranslatorContext& context, TranslatorContext::AttributeResolverScope&)> onMatch) {
    auto scope = context.createScope();
-   auto builderValuesBefore = mlir::ValueRange{};
    builder.create<mlir::scf::IfOp>(
       joinOp->getLoc(), mlir::TypeRange{}, matches, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
          if(onMatch){

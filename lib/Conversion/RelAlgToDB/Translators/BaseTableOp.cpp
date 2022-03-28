@@ -41,8 +41,8 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       scanDescription += "] }";
 
       auto tupleType = mlir::TupleType::get(builder.getContext(), types);
-      mlir::Type rowIterable = mlir::db::GenericIterableType::get(builder.getContext(), tupleType, "table_row_iterator");
-      mlir::Type chunkIterable = mlir::db::GenericIterableType::get(builder.getContext(), rowIterable, "table_chunk_iterator");
+      auto recordBatch = mlir::db::RecordBatchType::get(builder.getContext(), tupleType);
+      mlir::Type chunkIterable = mlir::db::GenericIterableType::get(builder.getContext(), recordBatch, "table_chunk_iterator");
       auto currPipeline = context.pipelineManager.getCurrentPipeline();
 
       auto initRes = currPipeline->addInitFn([&](mlir::OpBuilder& builder) {
@@ -52,18 +52,18 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       });
       auto forOp = builder.create<mlir::db::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, currPipeline->addDependency(initRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
-      block->addArgument(rowIterable, baseTableOp->getLoc());
+      block->addArgument(recordBatch, baseTableOp->getLoc());
       forOp.getBodyRegion().push_back(block);
       mlir::OpBuilder builder1(forOp.getBodyRegion());
       auto forOp2 = builder1.create<mlir::db::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, forOp.getInductionVar(), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
-      block2->addArgument(tupleType, baseTableOp->getLoc());
+      block2->addArgument(recordBatch.getElementType(), baseTableOp->getLoc());
       forOp2.getBodyRegion().push_back(block2);
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
-      auto unpacked = builder2.create<mlir::util::UnPackOp>(baseTableOp->getLoc(), forOp2.getInductionVar());
       size_t i = 0;
       for (const auto* attr : cols) {
-         context.setValueForAttribute(scope, attr, unpacked.getResult(i++));
+         mlir::Value colVal = builder2.create<mlir::db::At>(baseTableOp->getLoc(), attr->type, forOp2.getInductionVar(), i++);
+         context.setValueForAttribute(scope, attr, colVal);
       }
       consumer->consume(this, builder2, context);
       builder2.create<mlir::db::YieldOp>(baseTableOp->getLoc());

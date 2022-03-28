@@ -23,13 +23,21 @@
     //CHECK: string("---------------")
 	func @main () {
 			%str_const = db.constant ( "---------------" ) :!db.string
-            %0 = db.scan_source "{ \"table\": \"test\", \"columns\": [\"str\",\"float32\",\"float64\",\"decimal\",\"int32\",\"int64\",\"bool\",\"date32\",\"date64\"] }" : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator>
+            %0 = db.scan_source "{ \"table\": \"test\", \"columns\": [\"str\",\"float32\",\"float64\",\"decimal\",\"int32\",\"int64\",\"bool\",\"date32\",\"date64\"] }" : !db.iterable<!db.record_batch<!test_table_tuple>,table_chunk_iterator>
             %count_0 = db.constant (0) : i32
             %one = db.constant (1) : i32
-			%total_count=db.for %table_chunk in %0 : !db.iterable<!db.iterable<!test_table_tuple,table_row_iterator>,table_chunk_iterator> iter_args(%count_iter = %count_0) -> (i32){
-				%count = db.for %table_row in %table_chunk : !db.iterable<!test_table_tuple,table_row_iterator> iter_args(%count_iter_2 = %count_iter) -> (i32){
-					%1,%2,%3,%4,%5,%6,%7,%8,%9 = util.unpack %table_row : !test_table_tuple -> !db.nullable<!db.string>,!db.nullable<f32>,!db.nullable<f64>,!db.nullable<!db.decimal<5,2>>,!db.nullable<i32>,!db.nullable<i64>,!db.nullable<i1>,!db.nullable<!db.date<day>>,!db.nullable<!db.date<millisecond>>
-					db.runtime_call "DumpValue" (%1) : (!db.nullable<!db.string>) -> ()
+            %total_count = db.for %record_batch in %0 : !db.iterable<!db.record_batch<!test_table_tuple>,table_chunk_iterator>  iter_args(%count_iter = %count_0) -> (i32){
+                %count = db.for %row in %record_batch : !db.record_batch<!test_table_tuple>  iter_args(%count_iter_2 = %count_iter) -> (i32) {
+                    %1 = db.at %row[0] : !db.record<!test_table_tuple> -> !db.nullable<!db.string>
+                    %2 = db.at %row[1] : !db.record<!test_table_tuple> -> !db.nullable<f32>
+                    %3 = db.at %row[2] : !db.record<!test_table_tuple> -> !db.nullable<f64>
+                    %4 = db.at %row[3] : !db.record<!test_table_tuple> -> !db.nullable<!db.decimal<5,2>>
+                    %5 = db.at %row[4] : !db.record<!test_table_tuple> -> !db.nullable<i32>
+                    %6 = db.at %row[5] : !db.record<!test_table_tuple> -> !db.nullable<i64>
+                    %7 = db.at %row[6] : !db.record<!test_table_tuple> -> !db.nullable<i1>
+                    %8 = db.at %row[7] : !db.record<!test_table_tuple> -> !db.nullable<!db.date<day>>
+                    %9 = db.at %row[8] : !db.record<!test_table_tuple> ->  !db.nullable<!db.date<millisecond>>
+            	    db.runtime_call "DumpValue" (%1) : (!db.nullable<!db.string>) -> ()
 					db.runtime_call "DumpValue" (%2) : (!db.nullable<f32>) -> ()
 					db.runtime_call "DumpValue" (%3) : (!db.nullable<f64>) -> ()
 					db.runtime_call "DumpValue" (%4) : (!db.nullable<!db.decimal<5,2>>) -> ()

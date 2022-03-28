@@ -10,7 +10,7 @@
    F(DumpUInt, dump_uint, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                                                    \
    F(DumpBool, dump_bool, OPERANDS(BOOL_TYPE, BOOL_TYPE), RETURNS())                                                                                       \
    F(DumpDecimal, dump_decimal, OPERANDS(BOOL_TYPE, INT_TYPE(64), INT_TYPE(64), INT_TYPE(32)), RETURNS())                                                  \
-   F(DumpDate, dump_date, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                                             \
+   F(DumpDate, dump_date, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                                                    \
    F(DumpTimestampSecond, dump_timestamp_second, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                             \
    F(DumpTimestampMillisecond, dump_timestamp_millisecond, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                   \
    F(DumpTimestampMicrosecond, dump_timestamp_microsecond, OPERANDS(BOOL_TYPE, INT_TYPE(64)), RETURNS())                                                   \
@@ -26,8 +26,9 @@
    F(TableChunkIteratorValid, table_chunk_iterator_valid, OPERANDS(POINTER_TYPE), RETURNS(BOOL_TYPE))                                                      \
    F(TableChunkIteratorFree, table_chunk_iterator_free, OPERANDS(POINTER_TYPE), RETURNS())                                                                 \
    F(TableChunkNumRows, table_chunk_num_rows, OPERANDS(POINTER_TYPE), RETURNS(INDEX_TYPE))                                                                 \
+   F(AccessRecordBatch, access_record_batch, OPERANDS(INDEX_TYPE, POINTER_TYPE, POINTER_TYPE,POINTER_TYPE), RETURNS())                                                  \
    F(TableChunkGetColumnBuffer, table_chunk_get_column_buffer, OPERANDS(POINTER_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                      \
-   F(TableChunkGetRawColumnBuffer, table_chunk_get_raw_column_buffer, OPERANDS(POINTER_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE,INDEX_TYPE))                 \
+   F(TableChunkGetRawColumnBuffer, table_chunk_get_raw_column_buffer, OPERANDS(POINTER_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE, INDEX_TYPE))   \
    F(TableChunkGetColumnOffset, table_chunk_get_column_offset, OPERANDS(POINTER_TYPE, INDEX_TYPE), RETURNS(INDEX_TYPE))                                    \
    F(ArrowGetType2Param, arrow_type2, OPERANDS(INT_TYPE(32), INT_TYPE(32), INT_TYPE(32)), RETURNS(POINTER_TYPE))                                           \
    F(ArrowGetType1Param, arrow_type1, OPERANDS(INT_TYPE(32), INT_TYPE(32)), RETURNS(POINTER_TYPE))                                                         \
@@ -51,28 +52,28 @@
    F(ArrowTableBuilderAddFixedBinary, table_builder_add_fixed_binary, OPERANDS(POINTER_TYPE, INT_TYPE(32), BOOL_TYPE, INT_TYPE(64)), RETURNS())            \
    F(ArrowTableBuilderFinishRow, table_builder_finish_row, OPERANDS(POINTER_TYPE), RETURNS())                                                              \
    F(ArrowTableBuilderBuild, table_builder_build, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                           \
-   F(CmpStringEQ, cmp_string_eq, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
-   F(CmpStringNEQ, cmp_string_neq, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                      \
-   F(CmpStringLT, cmp_string_lt, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
-   F(CmpStringLTE, cmp_string_lte, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                      \
-   F(CmpStringGT, cmp_string_gt, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                        \
-   F(CmpStringGTE, cmp_string_gte, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                      \
-   F(CmpStringLike, cmp_string_like, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                    \
-   F(Substring, substring, OPERANDS(STRING_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(STRING_TYPE))                                                    \
-   F(CmpStringStartsWith, cmp_string_starts_with, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                       \
-   F(CmpStringEndsWith, cmp_string_ends_with, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                           \
-   F(CastStringToInt64, cast_string_int, OPERANDS(STRING_TYPE), RETURNS(INT_TYPE(64)))                                                          \
-   F(CastStringToFloat32, cast_string_float32, OPERANDS(STRING_TYPE), RETURNS(FLOAT_TYPE))                                                      \
-   F(CastStringToFloat64, cast_string_float64, OPERANDS(STRING_TYPE), RETURNS(DOUBLE_TYPE))                                                     \
-   F(CastStringToDecimal, cast_string_decimal, OPERANDS(STRING_TYPE, INT_TYPE(32)), RETURNS(INT_TYPE(128)))                                     \
-   F(CastInt64ToString, cast_int_string, OPERANDS(INT_TYPE(64)), RETURNS(STRING_TYPE))                                                          \
-   F(CastFloat32ToString, cast_float32_string, OPERANDS(FLOAT_TYPE), RETURNS(STRING_TYPE))                                                      \
-   F(CastFloat64ToString, cast_float64_string, OPERANDS(DOUBLE_TYPE), RETURNS(STRING_TYPE))                                                     \
-   F(CastDecimalToString, cast_decimal_string, OPERANDS(INT_TYPE(128), INT_TYPE(32)), RETURNS(STRING_TYPE))                                     \
-   F(CastCharToString, cast_char_string, OPERANDS(INT_TYPE(64), INT_TYPE(64)), RETURNS(STRING_TYPE))                                            \
+   F(CmpStringEQ, cmp_string_eq, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                                   \
+   F(CmpStringNEQ, cmp_string_neq, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                                 \
+   F(CmpStringLT, cmp_string_lt, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                                   \
+   F(CmpStringLTE, cmp_string_lte, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                                 \
+   F(CmpStringGT, cmp_string_gt, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                                   \
+   F(CmpStringGTE, cmp_string_gte, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                                 \
+   F(CmpStringLike, cmp_string_like, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                               \
+   F(Substring, substring, OPERANDS(STRING_TYPE, INDEX_TYPE, INDEX_TYPE), RETURNS(STRING_TYPE))                                                            \
+   F(CmpStringStartsWith, cmp_string_starts_with, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                  \
+   F(CmpStringEndsWith, cmp_string_ends_with, OPERANDS(STRING_TYPE, STRING_TYPE), RETURNS(BOOL_TYPE))                                                      \
+   F(CastStringToInt64, cast_string_int, OPERANDS(STRING_TYPE), RETURNS(INT_TYPE(64)))                                                                     \
+   F(CastStringToFloat32, cast_string_float32, OPERANDS(STRING_TYPE), RETURNS(FLOAT_TYPE))                                                                 \
+   F(CastStringToFloat64, cast_string_float64, OPERANDS(STRING_TYPE), RETURNS(DOUBLE_TYPE))                                                                \
+   F(CastStringToDecimal, cast_string_decimal, OPERANDS(STRING_TYPE, INT_TYPE(32)), RETURNS(INT_TYPE(128)))                                                \
+   F(CastInt64ToString, cast_int_string, OPERANDS(INT_TYPE(64)), RETURNS(STRING_TYPE))                                                                     \
+   F(CastFloat32ToString, cast_float32_string, OPERANDS(FLOAT_TYPE), RETURNS(STRING_TYPE))                                                                 \
+   F(CastFloat64ToString, cast_float64_string, OPERANDS(DOUBLE_TYPE), RETURNS(STRING_TYPE))                                                                \
+   F(CastDecimalToString, cast_decimal_string, OPERANDS(INT_TYPE(128), INT_TYPE(32)), RETURNS(STRING_TYPE))                                                \
+   F(CastCharToString, cast_char_string, OPERANDS(INT_TYPE(64), INT_TYPE(64)), RETURNS(STRING_TYPE))                                                       \
    F(SortVector, sort, OPERANDS(INDEX_TYPE, POINTER_TYPE, INDEX_TYPE, FUNCTION_TYPE(OPERANDS(POINTER_TYPE, POINTER_TYPE), RETURNS(BOOL_TYPE))), RETURNS()) \
    F(TimestampAddMonth, timestamp_add_months, OPERANDS(INT_TYPE(64), INT_TYPE(32)), RETURNS(INT_TYPE(64)))                                                 \
-   F(TimestampSubtractMonth, timestamp_subtract_months, OPERANDS(INT_TYPE(64), INT_TYPE(32)), RETURNS(INT_TYPE(64)))                                                 \
+   F(TimestampSubtractMonth, timestamp_subtract_months, OPERANDS(INT_TYPE(64), INT_TYPE(32)), RETURNS(INT_TYPE(64)))                                       \
    F(DateExtractYear, extract_year, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                         \
    F(DateExtractDoy, extract_doy, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                           \
    F(DateExtractMonth, extract_month, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                       \
@@ -83,12 +84,12 @@
    F(DateExtractSecond, extract_minute, OPERANDS(INT_TYPE(64)), RETURNS(INT_TYPE(64)))                                                                     \
    F(VecResize, resize_vec, OPERANDS(POINTER_TYPE), RETURNS())                                                                                             \
    F(VecCreate, create_vec, OPERANDS(INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                       \
-   F(JoinHtCreate, create_join_ht, OPERANDS(INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                       \
-   F(JoinHtResize, join_ht_resize, OPERANDS(POINTER_TYPE), RETURNS())                                                                       \
-   F(AggrHtCreate, create_aggr_ht, OPERANDS(INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                 \
-   F(AggrHtResize, resize_aggr_ht, OPERANDS(POINTER_TYPE), RETURNS()) \
-   F(JoinHtBuild, build_join_ht, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE)) \
-   F(JoinHtFinalize, join_ht_finalize, OPERANDS(POINTER_TYPE), RETURNS()) \
+   F(JoinHtCreate, create_join_ht, OPERANDS(INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                            \
+   F(JoinHtResize, join_ht_resize, OPERANDS(POINTER_TYPE), RETURNS())                                                                                      \
+   F(AggrHtCreate, create_aggr_ht, OPERANDS(INDEX_TYPE, INDEX_TYPE), RETURNS(POINTER_TYPE))                                                                \
+   F(AggrHtResize, resize_aggr_ht, OPERANDS(POINTER_TYPE), RETURNS())                                                                                      \
+   F(JoinHtBuild, build_join_ht, OPERANDS(POINTER_TYPE), RETURNS(POINTER_TYPE))                                                                            \
+   F(JoinHtFinalize, join_ht_finalize, OPERANDS(POINTER_TYPE), RETURNS())                                                                                  \
    F(ScanSourceInit, scan_source_init, OPERANDS(POINTER_TYPE, STRING_TYPE), RETURNS(POINTER_TYPE))
 
 #endif // MLIR_CONVERSION_DBTOARROWSTD_REGISTEREDFUNCTIONS_H

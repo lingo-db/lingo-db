@@ -21,6 +21,9 @@ mlir::Type mlir::db::CollectionType::getElementType() const {
       .Case<::mlir::db::AggregationHashtableType>([&](::mlir::db::AggregationHashtableType t) {
          return TupleType::get(t.getContext(), {t.getKeyType(), t.getValType()});
       })
+      .Case<mlir::db::RecordBatchType>([&](mlir::db::RecordBatchType t) {
+         return mlir::db::RecordType::get(t.getContext(), t.getRowType());
+      })
       .Default([](::mlir::Type) { return Type(); });
 }
 bool mlir::db::CollectionType::classof(Type t) {
@@ -33,6 +36,9 @@ bool mlir::db::CollectionType::classof(Type t) {
          return true;
       })
       .Case<::mlir::db::AggregationHashtableType>([&](::mlir::db::AggregationHashtableType t) {
+         return true;
+      })
+      .Case<::mlir::db::RecordBatchType>([&](::mlir::db::RecordBatchType t) {
          return true;
       })
       .Default([](::mlir::Type) { return false; });
@@ -64,7 +70,7 @@ struct FieldParser<mlir::db::DateUnitAttr> {
    }
 };
 
-template<>
+template <>
 struct FieldParser<mlir::db::IntervalUnitAttr> {
    static FailureOr<mlir::db::IntervalUnitAttr> parse(AsmParser& parser) {
       llvm::StringRef str;
@@ -90,20 +96,17 @@ struct FieldParser<mlir::db::TimeUnitAttr> {
    }
 };
 
-namespace db{
-llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const mlir::db::DateUnitAttr& dt)
-{
-   os<<mlir::db::stringifyDateUnitAttr(dt);
+namespace db {
+llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const mlir::db::DateUnitAttr& dt) {
+   os << mlir::db::stringifyDateUnitAttr(dt);
    return os;
 }
-llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const mlir::db::IntervalUnitAttr& dt)
-{
-   os<<mlir::db::stringifyIntervalUnitAttr(dt);
+llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const mlir::db::IntervalUnitAttr& dt) {
+   os << mlir::db::stringifyIntervalUnitAttr(dt);
    return os;
 }
-llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const mlir::db::TimeUnitAttr& dt)
-{
-   os<<mlir::db::stringifyTimeUnitAttr(dt);
+llvm::raw_ostream& operator<<(llvm::raw_ostream& os, const mlir::db::TimeUnitAttr& dt) {
+   os << mlir::db::stringifyTimeUnitAttr(dt);
    return os;
 }
 } // end namespace db

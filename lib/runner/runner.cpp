@@ -340,6 +340,7 @@ bool Runner::lower() {
    mlir::PassManager pmFunc(&ctxt->context, mlir::FuncOp::getOperationName());
    pmFunc.enableVerifier(runMode == RunMode::DEBUGGING);
    pmFunc.addPass(mlir::createCanonicalizerPass());
+   pmFunc.addPass(mlir::createLoopInvariantCodeMotionPass());
    pmFunc.addPass(mlir::createSinkOpPass());
    pmFunc.addPass(mlir::createCSEPass());
 

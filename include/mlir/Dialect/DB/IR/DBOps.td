@@ -60,6 +60,7 @@ def DB_Table: DB_Type<"Table","table"> {
 let summary = "table";
 let assemblyFormat = "";
 }
+
 def DB_Flag: DB_Type<"Flag","flag"> {
 let summary = "flag";
 let assemblyFormat = "";
@@ -74,7 +75,22 @@ let summary = "vector";
 let parameters = (ins "Type":$elementType);
 let assemblyFormat = "`<` $elementType `>`";
 }
-
+def DB_RecordBatch: DB_Collection<"RecordBatch","record_batch"> {
+let summary = "record_batch";
+let parameters = (ins "TupleType":$rowType);
+let assemblyFormat = "`<` $rowType `>`";
+}
+def DB_Record: DB_Collection<"Record","record"> {
+let summary = "record";
+let parameters = (ins "TupleType":$rowType);
+let assemblyFormat = "`<` $rowType `>`";
+}
+def DB_At : DB_Op<"at",
+[NoSideEffect]> {
+let arguments = (ins AnyType:$collection,I32Attr:$pos);
+let results = (outs AnyType:$val);
+let assemblyFormat = "$collection  `[` $pos `]` `:` type($collection) `->` type($val) attr-dict";
+}
 def DB_AggregationHashtable : DB_Collection<"AggregationHashtable","aggr_ht"> {
 let summary = "aggregation hashtable";
 let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
@@ -284,7 +300,7 @@ public:
 }
 
 def DB_SortOp : DB_Op<"sort",
-[]> {
+[IsolatedFromAbove]> {
 let arguments = (ins DB_Vector:$toSort);
 let regions = (region SizedRegion<1>:$region);
 }

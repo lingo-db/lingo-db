@@ -64,31 +64,41 @@ class ForIterator {
       ForIterator::typeConverter = typeConverter;
    }
 };
-class TableIterator : public WhileIterator {
+class TableIterator2 : public WhileIterator {
    Value tableInfo;
    db::codegen::FunctionRegistry& functionRegistry;
+   mlir::db::RecordBatchType recordBatchType;
 
    public:
-   TableIterator(Value tableInfo, db::codegen::FunctionRegistry& functionRegistry) : WhileIterator(tableInfo.getContext()), tableInfo(tableInfo), functionRegistry(functionRegistry) {}
-   virtual void init(OpBuilder& builder) override {
-      auto convertedType = typeConverter->convertType(tableInfo.getType()).cast<mlir::util::RefType>();
-      tableInfo = builder.create<mlir::util::LoadOp>(loc, convertedType.getElementType(), tableInfo);
-   }
+   TableIterator2(Value tableInfo, mlir::db::RecordBatchType recordBatchType, db::codegen::FunctionRegistry& functionRegistry) : WhileIterator(tableInfo.getContext()), tableInfo(tableInfo), functionRegistry(functionRegistry), recordBatchType(recordBatchType) {}
 
    virtual Type iteratorType(OpBuilder& builder) override {
       return mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8));
    }
 
    virtual Value iterator(OpBuilder& builder) override {
-      Value tablePtr = builder.create<util::GetTupleOp>(loc, mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8)), tableInfo, 0);
+      mlir::Value loaded = builder.create<mlir::util::LoadOp>(loc, tableInfo.getType().cast<mlir::util::RefType>().getElementType(), tableInfo);
+      Value tablePtr = builder.create<util::GetTupleOp>(loc, mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8)), loaded, 0);
       return functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorInit, tablePtr)[0];
    }
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
       return functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorNext, iterator)[0];
    }
    virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
-      Value currElementPtr = functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorCurr, iterator)[0];
-      return builder.create<mlir::util::SetTupleOp>(loc, tableInfo.getType(), tableInfo, currElementPtr, 0);
+      Value recordBatchPtr = functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorCurr, iterator)[0];
+      mlir::Value recordBatchInfoPtr;
+      {
+         mlir::OpBuilder::InsertionGuard guard(builder);
+         builder.setInsertionPointToStart(&recordBatchPtr.getDefiningOp()->getParentOfType<mlir::FuncOp>().body().front());
+         recordBatchInfoPtr = builder.create<mlir::util::AllocaOp>(loc, mlir::util::RefType::get(builder.getContext(), typeConverter->convertType(recordBatchType)), mlir::Value());
+      }
+
+      auto numColumns = builder.create<mlir::arith::ConstantIndexOp>(loc, recordBatchType.getRowType().getTypes().size());
+      auto i8PtrType = mlir::util::RefType::get(builder.getContext(), builder.getI8Type());
+      auto ptr1 = builder.create<util::GenericMemrefCastOp>(loc, i8PtrType, tableInfo);
+      auto ptr2 = builder.create<util::GenericMemrefCastOp>(loc, i8PtrType, recordBatchInfoPtr);
+      functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::AccessRecordBatch, mlir::ValueRange{numColumns, ptr1, ptr2, recordBatchPtr});
+      return builder.create<mlir::util::LoadOp>(loc, typeConverter->convertType(recordBatchType), recordBatchInfoPtr, mlir::Value());
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
       return functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorValid, iterator)[0];
@@ -185,156 +195,20 @@ class AggrHtIterator : public ForIterator {
       return unpacked.getResult(2);
    }
 };
-class TableRowIterator : public ForIterator {
-   Value tableChunkInfo;
-   Value chunk;
-   Type elementType;
-   db::codegen::FunctionRegistry& functionRegistry;
-   Type getValueBufferType(mlir::TypeConverter& typeConverter, OpBuilder& builder, Type type) {
-      if (type.isa<mlir::db::StringType>()) {
-         return builder.getI32Type();
-      }
-      if (type.isa<mlir::db::DecimalType>()) {
-         return builder.getIntegerType(128);
-      }
-      if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
-         if (dateType.getUnit() == mlir::db::DateUnitAttr::day) {
-            return builder.getI32Type();
-         }
-      }
-      return typeConverter.convertType(type);
-   }
-   struct Column {
-      Type completeType;
-      Type baseType;
-      bool isNullable;
-      Type stdType;
-      Value offset;
-      Value nullMultiplier;
-      Value nullBitmap;
-      Value values;
-      Value varLenBuffer;
-   };
-   std::vector<Column> columnInfo;
-
+class RecordBatchIterator : public ForIterator {
+   mlir::Value recordBatch;
+   mlir::db::RecordBatchType recordBatchType;
    public:
-   TableRowIterator(Value tableChunkInfo, Type elementType, db::codegen::FunctionRegistry& functionRegistry) : ForIterator(tableChunkInfo.getContext()), tableChunkInfo(tableChunkInfo), elementType(elementType), functionRegistry(functionRegistry) {
-   }
-   virtual void init(OpBuilder& builder) override {
-      auto tableChunkInfoType = typeConverter->convertType(tableChunkInfo.getType()).cast<TupleType>();
-      auto columnTypes = elementType.dyn_cast_or_null<TupleType>().getTypes();
-      auto unpackOp = builder.create<util::UnPackOp>(loc, tableChunkInfoType.getTypes(), tableChunkInfo);
-      chunk = unpackOp.getResult(0);
-
-      Value const0 = builder.create<arith::ConstantIndexOp>(loc, 0);
-      Value const1 = builder.create<arith::ConstantIndexOp>(loc, 1);
-      Value const2 = builder.create<arith::ConstantIndexOp>(loc, 2);
-
-      size_t columnIdx = 0;
-      for (auto columnType : columnTypes) {
-         auto nullableType = columnType.dyn_cast_or_null<mlir::db::NullableType>();
-         bool isNullable = !!nullableType;
-         Type completeType = columnType;
-         mlir::Type baseType = isNullable ? nullableType.getType() : completeType;
-         Value columnId = unpackOp.getResult(1 + columnIdx);
-         Value offset;
-         if (isIntegerType(baseType, 1) || isNullable) {
-            offset = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnOffset, mlir::ValueRange({chunk, columnId}))[0];
-         }
-         Value bitmapBuffer{};
-         auto convertedType = getValueBufferType(*typeConverter, builder, baseType);
-         Value valueBuffer;
-         if (!isIntegerType(baseType, 1)) {
-            valueBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
-            valueBuffer = builder.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, convertedType), valueBuffer);
-         } else {
-            valueBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const1}))[0];
-         }
-         Value varLenBuffer{};
-         Value nullMultiplier;
-         if (isNullable) {
-            auto rawColBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetRawColumnBuffer, mlir::ValueRange({chunk, columnId, const0}));
-            Value bitmapSize = rawColBuffer[1];
-            bitmapBuffer = rawColBuffer[0];
-            Value emptyBitmap = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, const0, bitmapSize);
-            nullMultiplier = builder.create<mlir::arith::SelectOp>(loc, emptyBitmap, const0, const1);
-         }
-         if (baseType.isa<mlir::db::StringType>()) {
-            varLenBuffer = functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkGetColumnBuffer, mlir::ValueRange({chunk, columnId, const2}))[0];
-         }
-         columnInfo.push_back({completeType, baseType, isNullable, convertedType, offset, nullMultiplier, bitmapBuffer, valueBuffer, varLenBuffer});
-         columnIdx++;
-      }
+   RecordBatchIterator(Value recordBatch, Type recordBatchType) : ForIterator(recordBatch.getContext()), recordBatch(recordBatch), recordBatchType(recordBatchType.cast<mlir::db::RecordBatchType>()) {
    }
    virtual Value upper(OpBuilder& builder) override {
-      return functionRegistry.call(builder, loc, db::codegen::FunctionRegistry::FunctionId::TableChunkNumRows, mlir::ValueRange({chunk}))[0];
+      return builder.create<mlir::util::GetTupleOp>(loc, builder.getIndexType(), recordBatch, 0);
    }
    virtual Value getElement(OpBuilder& builder, Value index) override {
-      auto indexType = IndexType::get(builder.getContext());
-      Value const1 = builder.create<arith::ConstantOp>(loc, indexType, builder.getIntegerAttr(indexType, 1));
-      std::vector<Type> types;
-      std::vector<Value> values;
-      for (auto column : columnInfo) {
-         types.push_back(column.completeType);
-         Value val;
-         if (column.baseType.isa<db::StringType>()) {
-            Value pos1 = builder.create<util::LoadOp>(loc, column.stdType, column.values, index);
-            pos1.getDefiningOp()->setAttr("nosideffect", builder.getUnitAttr());
-
-            Value ip1 = builder.create<arith::AddIOp>(loc, indexType, index, const1);
-            Value pos2 = builder.create<util::LoadOp>(loc, column.stdType, column.values, ip1);
-            pos2.getDefiningOp()->setAttr("nosideffect", builder.getUnitAttr());
-            Value len = builder.create<arith::SubIOp>(loc, builder.getI32Type(), pos2, pos1);
-            Value pos1AsIndex = builder.create<arith::IndexCastOp>(loc, indexType, pos1);
-            Value ptr = builder.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, builder.getI8Type()), column.varLenBuffer, pos1AsIndex);
-            val = builder.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(builder.getContext()), ptr, len);
-         } else if (isIntegerType(column.baseType, 1)) {
-            Value realPos = builder.create<arith::AddIOp>(loc, indexType, column.offset, index);
-            val = mlir::db::codegen::BitUtil::getBit(builder, loc, column.values, realPos);
-         } else if (column.baseType.isa<mlir::db::DateType, mlir::db::TimestampType>()) {
-            val = builder.create<util::LoadOp>(loc, column.stdType, column.values, index);
-            if (val.getType() != builder.getI64Type()) {
-               val = builder.create<mlir::arith::ExtUIOp>(loc, builder.getI64Type(), val);
-            }
-            size_t multiplier = 1;
-            if (auto dateType = column.baseType.dyn_cast_or_null<mlir::db::DateType>()) {
-               multiplier = dateType.getUnit() == mlir::db::DateUnitAttr::day ? 86400000000000 : 1000000;
-            } else if (auto timeStampType = column.baseType.dyn_cast_or_null<mlir::db::TimestampType>()) {
-               switch (timeStampType.getUnit()) {
-                  case mlir::db::TimeUnitAttr::second: multiplier = 1000000000; break;
-                  case mlir::db::TimeUnitAttr::millisecond: multiplier = 1000000; break;
-                  case mlir::db::TimeUnitAttr::microsecond: multiplier = 1000; break;
-                  default: multiplier = 1;
-               }
-            }
-            if (multiplier != 1) {
-               mlir::Value multiplierConst = builder.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
-               val = builder.create<mlir::arith::MulIOp>(loc, val, multiplierConst);
-            }
-         } else if (auto decimalType = column.baseType.dyn_cast_or_null<db::DecimalType>()) {
-            val = builder.create<util::LoadOp>(loc, column.stdType, column.values, index);
-            val.getDefiningOp()->setAttr("nosideffect", builder.getUnitAttr());
-            if (typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth() != 128) {
-               auto converted = builder.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType), val);
-               val = converted;
-            }
-         } else if (column.stdType.isa<mlir::IntegerType>() || column.stdType.isa<mlir::FloatType>()) {
-            val = builder.create<util::LoadOp>(loc, column.stdType, column.values, index);
-            val.getDefiningOp()->setAttr("nosideffect", builder.getUnitAttr());
-         } else {
-            assert(val && "unhandled type!!");
-         }
-         if (column.isNullable) {
-            Value realPos = builder.create<arith::AddIOp>(loc, indexType, column.offset, index);
-            realPos = builder.create<arith::MulIOp>(loc, indexType, column.nullMultiplier, realPos);
-            Value isnull = mlir::db::codegen::BitUtil::getBit(builder, loc, column.nullBitmap, realPos, true);
-            val = builder.create<mlir::db::AsNullableOp>(loc, column.completeType, val, isnull);
-         }
-         values.push_back(val);
-      }
-      return builder.create<mlir::util::PackOp>(loc, TupleType::get(builder.getContext(), types), ValueRange(values));
+      return builder.create<mlir::util::PackOp>(loc, typeConverter->convertType(mlir::db::RecordType::get(builder.getContext(), recordBatchType.getRowType())), mlir::ValueRange({index, recordBatch}));
    }
 };
+
 class VectorIterator : public ForIterator {
    Value vector;
    Type elementType;
@@ -533,13 +407,13 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       return std::vector<Value>(loopResultValues.begin(), loopResultValues.end());
    }
 };
-std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIterationImpl::getImpl(Type collectionType, Value collection, mlir::db::codegen::FunctionRegistry& functionRegistry) {
+std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIterationImpl::getImpl(Type collectionType, Value collection, Value loweredCollection, mlir::db::codegen::FunctionRegistry& functionRegistry) {
    if (auto generic = collectionType.dyn_cast_or_null<mlir::db::GenericIterableType>()) {
       if (generic.getIteratorName() == "table_chunk_iterator") {
-         return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<TableIterator>(collection, functionRegistry));
-      } else if (generic.getIteratorName() == "table_row_iterator") {
-         return std::make_unique<ForIteratorIterationImpl>(std::make_unique<TableRowIterator>(collection, generic.getElementType(), functionRegistry));
-      } else if (generic.getIteratorName() == "join_ht_iterator") {
+         if (auto recordBatchType = generic.getElementType().dyn_cast_or_null<mlir::db::RecordBatchType>()) {
+            return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<TableIterator2>(loweredCollection, recordBatchType, functionRegistry));
+         }
+      }else if (generic.getIteratorName() == "join_ht_iterator") {
          return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(collection, generic.getElementType(), false));
       } else if (generic.getIteratorName() == "join_ht_mod_iterator") {
          return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(collection, generic.getElementType(), true));
@@ -554,6 +428,8 @@ std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIteration
       }
    } else if (auto joinHt = collectionType.dyn_cast_or_null<mlir::db::JoinHashtableType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<JoinHtIterator>(collection));
+   } else if (auto recordBatch = collectionType.dyn_cast_or_null<mlir::db::RecordBatchType>()) {
+      return std::make_unique<ForIteratorIterationImpl>(std::make_unique<RecordBatchIterator>(loweredCollection, recordBatch));
    }
    return std::unique_ptr<mlir::db::CollectionIterationImpl>();
 }
