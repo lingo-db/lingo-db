@@ -237,8 +237,7 @@ class AtLowering : public ConversionPattern {
       auto loc = op->getLoc();
       mlir::db::AtAdaptor adaptor(operands);
       auto atOp = mlir::cast<mlir::db::At>(op);
-      auto baseType = getBaseType(atOp.getType());
-      auto isNullable = atOp.getType().isa<mlir::db::NullableType>();
+      auto baseType = getBaseType(atOp.getType(0));
       mlir::Value index;
       mlir::Value columnOffset;
       auto indexType = rewriter.getIndexType();
@@ -249,7 +248,7 @@ class AtLowering : public ConversionPattern {
       mlir::Value nullMultiplier;
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
-         if (auto *definingOp = adaptor.collection().getDefiningOp()) {
+         if (auto* definingOp = adaptor.collection().getDefiningOp()) {
             rewriter.setInsertionPointAfter(definingOp);
          }
          auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, adaptor.collection());
@@ -263,10 +262,9 @@ class AtLowering : public ConversionPattern {
          valueBuffer = rewriter.create<mlir::util::ArrayElementPtrOp>(loc, originalValueBuffer.getType(), originalValueBuffer, columnOffset);
          varLenBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, info.getType().cast<TupleType>().getType(baseOffset + 4), info, baseOffset + 4);
          nullMultiplier = rewriter.create<mlir::util::GetTupleOp>(loc, rewriter.getIndexType(), info, baseOffset + 1);
-
       }
       Value val;
-      auto *context = rewriter.getContext();
+      auto* context = rewriter.getContext();
       if (baseType.isa<db::StringType>()) {
          Value pos1 = rewriter.create<util::LoadOp>(loc, rewriter.getI32Type(), valueBuffer, index);
          pos1.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
@@ -314,13 +312,14 @@ class AtLowering : public ConversionPattern {
       } else {
          assert(val && "unhandled type!!");
       }
-      if (isNullable) {
+      if (atOp->getNumResults() == 2) {
          Value realPos = rewriter.create<arith::AddIOp>(loc, indexType, columnOffset, index);
          realPos = rewriter.create<arith::MulIOp>(loc, indexType, nullMultiplier, index);
-         Value isnull = mlir::db::codegen::BitUtil::getBit(rewriter, loc, validityBuffer, realPos, true);
-         val = rewriter.create<mlir::db::AsNullableOp>(loc, mlir::db::NullableType::get(context, val.getType()), val, isnull);
+         Value isValid = mlir::db::codegen::BitUtil::getBit(rewriter, loc, validityBuffer, realPos);
+         rewriter.replaceOp(op, mlir::ValueRange{val, isValid});
+      } else {
+         rewriter.replaceOp(op, val);
       }
-      rewriter.replaceOp(op, val);
       return success();
    }
 };

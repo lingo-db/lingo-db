@@ -62,8 +62,19 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       mlir::OpBuilder builder2(forOp2.getBodyRegion());
       size_t i = 0;
       for (const auto* attr : cols) {
-         mlir::Value colVal = builder2.create<mlir::db::At>(baseTableOp->getLoc(), attr->type, forOp2.getInductionVar(), i++);
-         context.setValueForAttribute(scope, attr, colVal);
+         std::vector<mlir::Type> types;
+         types.push_back(getBaseType(attr->type));
+         if (attr->type.isa<mlir::db::NullableType>()) {
+            types.push_back(builder.getI1Type());
+         }
+         auto atOp = builder2.create<mlir::db::At>(baseTableOp->getLoc(), types, forOp2.getInductionVar(), i++);
+         if (attr->type.isa<mlir::db::NullableType>()) {
+            mlir::Value isNull = builder2.create<mlir::db::NotOp>(baseTableOp->getLoc(), atOp.valid());
+            mlir::Value val=builder2.create<mlir::db::AsNullableOp>(baseTableOp->getLoc(), attr->type, atOp.val(), isNull);
+            context.setValueForAttribute(scope, attr, val);
+         } else {
+            context.setValueForAttribute(scope, attr, atOp.val());
+         }
       }
       consumer->consume(this, builder2, context);
       builder2.create<mlir::db::YieldOp>(baseTableOp->getLoc());

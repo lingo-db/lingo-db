@@ -88,8 +88,8 @@ let assemblyFormat = "`<` $rowType `>`";
 def DB_At : DB_Op<"at",
 [NoSideEffect]> {
 let arguments = (ins AnyType:$collection,I32Attr:$pos);
-let results = (outs AnyType:$val);
-let assemblyFormat = "$collection  `[` $pos `]` `:` type($collection) `->` type($val) attr-dict";
+let results = (outs AnyType:$val,Optional<I1>:$valid);
+let assemblyFormat = "$collection  `[` $pos `]` `:` type($collection) `->` type($val) (`,` type($valid)^)? attr-dict";
 }
 def DB_AggregationHashtable : DB_Collection<"AggregationHashtable","aggr_ht"> {
 let summary = "aggregation hashtable";
