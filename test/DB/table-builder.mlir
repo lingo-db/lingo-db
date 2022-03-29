@@ -10,18 +10,18 @@
 	func @main () -> !db.table {
 	    %str_const = db.constant ( "---------------" ) :!db.string
         %table_builder=db.create_table_builder ["str!","float32!","float64!","decimal!","int32!","int64!","bool","date32!","date64!"] : !db.table_builder<!test_table_tuple2>
-        %0 = db.scan_source "{ \"table\": \"test\", \"columns\": [\"str\",\"float32\",\"float64\",\"decimal\",\"int32\",\"int64\",\"bool\",\"date32\",\"date64\"] }" : !db.iterable<!db.record_batch<!test_table_tuple>,table_chunk_iterator>
-        db.for %record_batch in %0 : !db.iterable<!db.record_batch<!test_table_tuple>,table_chunk_iterator>{
-            db.for %row in %record_batch : !db.record_batch<!test_table_tuple>{
-                %10:2 = db.at %row[0] : !db.record<!test_table_tuple> -> !db.string, i1
-                %20:2 = db.at %row[1] : !db.record<!test_table_tuple> -> f32, i1
-                %30:2 = db.at %row[2] : !db.record<!test_table_tuple> -> f64, i1
-                %40:2 = db.at %row[3] : !db.record<!test_table_tuple> -> !db.decimal<5,2>, i1
-                %50:2 = db.at %row[4] : !db.record<!test_table_tuple> -> i32, i1
-                %60:2 = db.at %row[5] : !db.record<!test_table_tuple> -> i64, i1
-                %70:2 = db.at %row[6] : !db.record<!test_table_tuple> -> i1, i1
-                %80:2 = db.at %row[7] : !db.record<!test_table_tuple> -> !db.date<day>, i1
-                %90:2 = db.at %row[8] : !db.record<!test_table_tuple> ->  !db.date<millisecond>, i1
+        %0 = dsa.scan_source "{ \"table\": \"test\", \"columns\": [\"str\",\"float32\",\"float64\",\"decimal\",\"int32\",\"int64\",\"bool\",\"date32\",\"date64\"] }" : !dsa.iterable<!dsa.record_batch<!test_table_tuple>,table_chunk_iterator>
+        dsa.for %record_batch in %0 : !dsa.iterable<!dsa.record_batch<!test_table_tuple>,table_chunk_iterator>{
+            dsa.for %row in %record_batch : !dsa.record_batch<!test_table_tuple>{
+                %10:2 = dsa.at %row[0] : !dsa.record<!test_table_tuple> -> !db.string, i1
+                %20:2 = dsa.at %row[1] : !dsa.record<!test_table_tuple> -> f32, i1
+                %30:2 = dsa.at %row[2] : !dsa.record<!test_table_tuple> -> f64, i1
+                %40:2 = dsa.at %row[3] : !dsa.record<!test_table_tuple> -> !db.decimal<5,2>, i1
+                %50:2 = dsa.at %row[4] : !dsa.record<!test_table_tuple> -> i32, i1
+                %60:2 = dsa.at %row[5] : !dsa.record<!test_table_tuple> -> i64, i1
+                %70:2 = dsa.at %row[6] : !dsa.record<!test_table_tuple> -> i1, i1
+                %80:2 = dsa.at %row[7] : !dsa.record<!test_table_tuple> -> !db.date<day>, i1
+                %90:2 = dsa.at %row[8] : !dsa.record<!test_table_tuple> ->  !db.date<millisecond>, i1
                 %100= db.not %10#1 : i1
                 %200= db.not %20#1 : i1
                 %300= db.not %30#1 : i1
@@ -43,9 +43,9 @@
 
                 %packed = util.pack %1,%2,%3,%4,%5,%6,%7,%8,%9 : !db.nullable<!db.string>,!db.nullable<f32>,!db.nullable<f64>,!db.nullable<!db.decimal<5,2>>,!db.nullable<i32>,!db.nullable<i64>,!db.nullable<i1>,!db.nullable<!db.date<day>>,!db.nullable<!db.date<millisecond>> -> !test_table_tuple2
                 db.add_row %table_builder : !db.table_builder<!test_table_tuple2>, %packed : !test_table_tuple2
-                db.yield
+                dsa.yield
             }
-            db.yield
+            dsa.yield
         }
         %table_mat=db.finalize_table %table_builder : !db.table_builder<!test_table_tuple2>
 		return %table_mat : !db.table

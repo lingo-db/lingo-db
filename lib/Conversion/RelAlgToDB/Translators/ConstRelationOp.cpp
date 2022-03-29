@@ -1,6 +1,7 @@
 #include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 class ConstRelTranslator : public mlir::relalg::Translator {
@@ -17,7 +18,7 @@ class ConstRelTranslator : public mlir::relalg::Translator {
       using namespace mlir;
       mlir::relalg::OrderedAttributes attributes = mlir::relalg::OrderedAttributes::fromRefArr(constRelationOp.columns());
       auto tupleType = attributes.getTupleType(builder.getContext());
-      mlir::Value vector = builder.create<mlir::db::CreateDS>(constRelationOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType));
+      mlir::Value vector = builder.create<mlir::dsa::CreateDS>(constRelationOp.getLoc(), mlir::dsa::VectorType::get(builder.getContext(), tupleType));
       for (auto rowAttr : constRelationOp.valuesAttr()) {
          auto row = rowAttr.cast<ArrayAttr>();
          std::vector<Value> values;
@@ -28,10 +29,10 @@ class ConstRelTranslator : public mlir::relalg::Translator {
             i++;
          }
          mlir::Value packed = builder.create<mlir::util::PackOp>(constRelationOp->getLoc(), values);
-         builder.create<mlir::db::Append>(constRelationOp->getLoc(), vector, packed);
+         builder.create<mlir::dsa::Append>(constRelationOp->getLoc(), vector, packed);
       }
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(constRelationOp->getLoc(), mlir::TypeRange{}, vector, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+         auto forOp2 = builder.create<mlir::dsa::ForOp>(constRelationOp->getLoc(), mlir::TypeRange{}, vector, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType, constRelationOp->getLoc());
          forOp2.getBodyRegion().push_back(block2);
@@ -39,9 +40,9 @@ class ConstRelTranslator : public mlir::relalg::Translator {
          auto unpacked = builder2.create<mlir::util::UnPackOp>(constRelationOp->getLoc(), forOp2.getInductionVar());
          attributes.setValuesForColumns(context, scope, unpacked.getResults());
          consumer->consume(this, builder2, context);
-         builder2.create<mlir::db::YieldOp>(constRelationOp->getLoc(), mlir::ValueRange{});
+         builder2.create<mlir::dsa::YieldOp>(constRelationOp->getLoc(), mlir::ValueRange{});
       }
-      builder.create<mlir::db::FreeOp>(constRelationOp->getLoc(), vector);
+      builder.create<mlir::dsa::FreeOp>(constRelationOp->getLoc(), vector);
    }
    virtual ~ConstRelTranslator() {}
 };

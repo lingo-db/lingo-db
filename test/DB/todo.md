@@ -36,7 +36,7 @@
 - [x] db.cast float -> decimal
 
 - [x] db.if
-- [x] db.yield
+- [x] dsa.yield
 
 
 - [ ] db.cast int -> string

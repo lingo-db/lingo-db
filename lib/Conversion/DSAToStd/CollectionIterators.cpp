@@ -1,12 +1,12 @@
-#include "mlir/Dialect/DB/IR/DBOps.h"
-#include "mlir/Dialect/DB/IR/DBTypes.h"
+#include "mlir/Dialect/DSA/IR/DSAOps.h"
+#include "mlir/Dialect/DSA/IR/DSATypes.h"
 
 #include "mlir/Dialect/SCF/SCF.h"
 
 #include "mlir/Dialect/util/UtilOps.h"
 
-#include "mlir/Conversion/DBToArrowStd/BitUtil.h"
-#include "mlir/Conversion/DBToArrowStd/CollectionIteration.h"
+#include "mlir/Conversion/DSAToStd/BitUtil.h"
+#include "mlir/Conversion/DSAToStd/CollectionIteration.h"
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/DialectConversion.h>
@@ -66,11 +66,11 @@ class ForIterator {
 };
 class TableIterator2 : public WhileIterator {
    Value tableInfo;
-   db::codegen::FunctionRegistry& functionRegistry;
-   mlir::db::RecordBatchType recordBatchType;
+   dsa::codegen::FunctionRegistry& functionRegistry;
+   mlir::dsa::RecordBatchType recordBatchType;
 
    public:
-   TableIterator2(Value tableInfo, mlir::db::RecordBatchType recordBatchType, db::codegen::FunctionRegistry& functionRegistry) : WhileIterator(tableInfo.getContext()), tableInfo(tableInfo), functionRegistry(functionRegistry), recordBatchType(recordBatchType) {}
+   TableIterator2(Value tableInfo, mlir::dsa::RecordBatchType recordBatchType, dsa::codegen::FunctionRegistry& functionRegistry) : WhileIterator(tableInfo.getContext()), tableInfo(tableInfo), functionRegistry(functionRegistry), recordBatchType(recordBatchType) {}
 
    virtual Type iteratorType(OpBuilder& builder) override {
       return mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8));
@@ -79,13 +79,13 @@ class TableIterator2 : public WhileIterator {
    virtual Value iterator(OpBuilder& builder) override {
       mlir::Value loaded = builder.create<mlir::util::LoadOp>(loc, tableInfo.getType().cast<mlir::util::RefType>().getElementType(), tableInfo);
       Value tablePtr = builder.create<util::GetTupleOp>(loc, mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8)), loaded, 0);
-      return functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorInit, tablePtr)[0];
+      return functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::TableChunkIteratorInit, tablePtr)[0];
    }
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
-      return functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorNext, iterator)[0];
+      return functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::TableChunkIteratorNext, iterator)[0];
    }
    virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
-      Value recordBatchPtr = functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorCurr, iterator)[0];
+      Value recordBatchPtr = functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::TableChunkIteratorCurr, iterator)[0];
       mlir::Value recordBatchInfoPtr;
       {
          mlir::OpBuilder::InsertionGuard guard(builder);
@@ -97,14 +97,14 @@ class TableIterator2 : public WhileIterator {
       auto i8PtrType = mlir::util::RefType::get(builder.getContext(), builder.getI8Type());
       auto ptr1 = builder.create<util::GenericMemrefCastOp>(loc, i8PtrType, tableInfo);
       auto ptr2 = builder.create<util::GenericMemrefCastOp>(loc, i8PtrType, recordBatchInfoPtr);
-      functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::AccessRecordBatch, mlir::ValueRange{numColumns, ptr1, ptr2, recordBatchPtr});
+      functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::AccessRecordBatch, mlir::ValueRange{numColumns, ptr1, ptr2, recordBatchPtr});
       return builder.create<mlir::util::LoadOp>(loc, typeConverter->convertType(recordBatchType), recordBatchInfoPtr, mlir::Value());
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
-      return functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorValid, iterator)[0];
+      return functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::TableChunkIteratorValid, iterator)[0];
    }
    virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
-      functionRegistry.call(builder, loc, mlir::db::codegen::FunctionRegistry::FunctionId::TableChunkIteratorFree, iterator);
+      functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::TableChunkIteratorFree, iterator);
    }
 };
 
@@ -197,15 +197,16 @@ class AggrHtIterator : public ForIterator {
 };
 class RecordBatchIterator : public ForIterator {
    mlir::Value recordBatch;
-   mlir::db::RecordBatchType recordBatchType;
+   mlir::dsa::RecordBatchType recordBatchType;
+
    public:
-   RecordBatchIterator(Value recordBatch, Type recordBatchType) : ForIterator(recordBatch.getContext()), recordBatch(recordBatch), recordBatchType(recordBatchType.cast<mlir::db::RecordBatchType>()) {
+   RecordBatchIterator(Value recordBatch, Type recordBatchType) : ForIterator(recordBatch.getContext()), recordBatch(recordBatch), recordBatchType(recordBatchType.cast<mlir::dsa::RecordBatchType>()) {
    }
    virtual Value upper(OpBuilder& builder) override {
       return builder.create<mlir::util::GetTupleOp>(loc, builder.getIndexType(), recordBatch, 0);
    }
    virtual Value getElement(OpBuilder& builder, Value index) override {
-      return builder.create<mlir::util::PackOp>(loc, typeConverter->convertType(mlir::db::RecordType::get(builder.getContext(), recordBatchType.getRowType())), mlir::ValueRange({index, recordBatch}));
+      return builder.create<mlir::util::PackOp>(loc, typeConverter->convertType(mlir::dsa::RecordType::get(builder.getContext(), recordBatchType.getRowType())), mlir::ValueRange({index, recordBatch}));
    }
 };
 
@@ -213,10 +214,10 @@ class VectorIterator : public ForIterator {
    Value vector;
    Type elementType;
    Value values;
-   using FunctionId = mlir::db::codegen::FunctionRegistry::FunctionId;
+   using FunctionId = mlir::dsa::codegen::FunctionRegistry::FunctionId;
 
    public:
-   VectorIterator(mlir::db::codegen::FunctionRegistry& functionRegistry, Value vector, Type elementType) : ForIterator(vector.getContext()), vector(vector), elementType(elementType) {
+   VectorIterator(mlir::dsa::codegen::FunctionRegistry& functionRegistry, Value vector, Type elementType) : ForIterator(vector.getContext()), vector(vector), elementType(elementType) {
    }
    virtual void init(OpBuilder& builder) override {
       Type typedPtrType = util::RefType::get(builder.getContext(), elementType);
@@ -236,7 +237,7 @@ class ValueOnlyAggrHTIterator : public ForIterator {
    Type valType;
 
    public:
-   ValueOnlyAggrHTIterator(db::codegen::FunctionRegistry& functionRegistry, Value ht, Type valType) : ForIterator(ht.getContext()), ht(ht), valType(valType) {
+   ValueOnlyAggrHTIterator(dsa::codegen::FunctionRegistry& functionRegistry, Value ht, Type valType) : ForIterator(ht.getContext()), ht(ht), valType(valType) {
    }
    virtual Value upper(OpBuilder& builder) override {
       return builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(1));
@@ -255,7 +256,7 @@ static std::vector<Value> remap(std::vector<Value> values, ConversionPatternRewr
    return values;
 }
 
-class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
+class WhileIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
    std::unique_ptr<WhileIterator> iterator;
 
    public:
@@ -289,15 +290,16 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       auto arg1 = whileOp.getBefore().front().getArgument(0);
       Value condition = iterator->iteratorValid(builder, arg1);
       if (flag) {
-         Value flagValue = builder.create<mlir::db::GetFlag>(loc, builder.getI1Type(), flag);
-         Value shouldContinue = builder.create<mlir::db::NotOp>(loc, builder.getI1Type(), flagValue);
-         Value anded = builder.create<mlir::db::AndOp>(loc, builder.getI1Type(), ValueRange({condition, shouldContinue}));
+         Value flagValue = builder.create<mlir::dsa::GetFlag>(loc, builder.getI1Type(), flag);
+         Value trueValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 1));
+         Value shouldContinue = builder.create<arith::XOrIOp>(loc, flagValue, trueValue);
+         Value anded = builder.create<mlir::arith::AndIOp>(loc, builder.getI1Type(), ValueRange({condition, shouldContinue}));
          condition = anded;
       }
       builder.create<mlir::scf::ConditionOp>(loc, builder.getRemappedValue(condition), whileOp.getBefore().front().getArguments());
       builder.setInsertionPointToStart(&whileOp.getAfter().front());
       auto arg2 = whileOp.getAfter().front().getArgument(0);
-      auto terminator = builder.create<mlir::db::YieldOp>(loc);
+      auto terminator = builder.create<mlir::dsa::YieldOp>(loc);
       builder.setInsertionPoint(terminator);
       std::vector<Value> bodyParams = {};
       auto additionalArgs = whileOp.getAfter().front().getArguments().drop_front();
@@ -315,7 +317,7 @@ class WhileIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       return std::vector<Value>(loopResultValues.begin(), loopResultValues.end());
    }
 };
-class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
+class ForIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
    std::unique_ptr<ForIterator> iterator;
 
    public:
@@ -383,16 +385,17 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       auto arg1 = whileOp.getBefore().front().getArgument(0);
       Value condition = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, arg1, upper);
       if (flag) {
-         Value flagValue = builder.create<mlir::db::GetFlag>(loc, builder.getI1Type(), flag);
-         Value shouldContinue = builder.create<mlir::db::NotOp>(loc, builder.getI1Type(), flagValue);
-         Value anded = builder.create<mlir::db::AndOp>(loc, builder.getI1Type(), ValueRange({condition, shouldContinue}));
+         Value flagValue = builder.create<mlir::dsa::GetFlag>(loc, builder.getI1Type(), flag);
+         Value trueValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 1));
+         Value shouldContinue = builder.create<arith::XOrIOp>(loc, flagValue, trueValue);
+         Value anded = builder.create<mlir::arith::AndIOp>(loc, builder.getI1Type(), ValueRange({condition, shouldContinue}));
          condition = anded;
       }
       builder.create<mlir::scf::ConditionOp>(loc, builder.getRemappedValue(condition), whileOp.getBefore().front().getArguments());
       builder.setInsertionPointToStart(&whileOp.getAfter().front());
       auto arg2 = whileOp.getAfter().front().getArgument(0);
       Value nextIterator = builder.create<arith::AddIOp>(loc, builder.getIndexType(), arg2, step);
-      auto terminator = builder.create<mlir::db::YieldOp>(loc);
+      auto terminator = builder.create<mlir::dsa::YieldOp>(loc);
       builder.setInsertionPoint(nextIterator.getDefiningOp());
       std::vector<Value> bodyParams = {};
       auto additionalArgs = whileOp.getAfter().front().getArguments().drop_front();
@@ -407,29 +410,29 @@ class ForIteratorIterationImpl : public mlir::db::CollectionIterationImpl {
       return std::vector<Value>(loopResultValues.begin(), loopResultValues.end());
    }
 };
-std::unique_ptr<mlir::db::CollectionIterationImpl> mlir::db::CollectionIterationImpl::getImpl(Type collectionType, Value collection, Value loweredCollection, mlir::db::codegen::FunctionRegistry& functionRegistry) {
-   if (auto generic = collectionType.dyn_cast_or_null<mlir::db::GenericIterableType>()) {
+std::unique_ptr<mlir::dsa::CollectionIterationImpl> mlir::dsa::CollectionIterationImpl::getImpl(Type collectionType, Value collection, Value loweredCollection, mlir::dsa::codegen::FunctionRegistry& functionRegistry) {
+   if (auto generic = collectionType.dyn_cast_or_null<mlir::dsa::GenericIterableType>()) {
       if (generic.getIteratorName() == "table_chunk_iterator") {
-         if (auto recordBatchType = generic.getElementType().dyn_cast_or_null<mlir::db::RecordBatchType>()) {
+         if (auto recordBatchType = generic.getElementType().dyn_cast_or_null<mlir::dsa::RecordBatchType>()) {
             return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<TableIterator2>(loweredCollection, recordBatchType, functionRegistry));
          }
-      }else if (generic.getIteratorName() == "join_ht_iterator") {
+      } else if (generic.getIteratorName() == "join_ht_iterator") {
          return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(collection, generic.getElementType(), false));
       } else if (generic.getIteratorName() == "join_ht_mod_iterator") {
          return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(collection, generic.getElementType(), true));
       }
-   } else if (auto vector = collectionType.dyn_cast_or_null<mlir::db::VectorType>()) {
+   } else if (auto vector = collectionType.dyn_cast_or_null<mlir::dsa::VectorType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<VectorIterator>(functionRegistry, collection, vector.getElementType()));
-   } else if (auto aggrHt = collectionType.dyn_cast_or_null<mlir::db::AggregationHashtableType>()) {
+   } else if (auto aggrHt = collectionType.dyn_cast_or_null<mlir::dsa::AggregationHashtableType>()) {
       if (aggrHt.getKeyType().getTypes().empty()) {
          return std::make_unique<ForIteratorIterationImpl>(std::make_unique<ValueOnlyAggrHTIterator>(functionRegistry, collection, aggrHt.getValType()));
       } else {
          return std::make_unique<ForIteratorIterationImpl>(std::make_unique<AggrHtIterator>(collection));
       }
-   } else if (auto joinHt = collectionType.dyn_cast_or_null<mlir::db::JoinHashtableType>()) {
+   } else if (auto joinHt = collectionType.dyn_cast_or_null<mlir::dsa::JoinHashtableType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<JoinHtIterator>(collection));
-   } else if (auto recordBatch = collectionType.dyn_cast_or_null<mlir::db::RecordBatchType>()) {
+   } else if (auto recordBatch = collectionType.dyn_cast_or_null<mlir::dsa::RecordBatchType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<RecordBatchIterator>(loweredCollection, recordBatch));
    }
-   return std::unique_ptr<mlir::db::CollectionIterationImpl>();
+   return std::unique_ptr<mlir::dsa::CollectionIterationImpl>();
 }

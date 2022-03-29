@@ -4,6 +4,7 @@
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include <mlir/Conversion/RelAlgToDB/NLJoinTranslator.h>
+#include <mlir/Dialect/DSA/IR/DSAOps.h>
 #include <mlir/IR/BlockAndValueMapping.h>
 
 class SimpleInnerJoinImpl : public mlir::relalg::JoinImpl {
@@ -40,18 +41,18 @@ class CollectionJoinImpl : public mlir::relalg::JoinImpl {
       builder.create<mlir::scf::IfOp>(
          loc, mlir::TypeRange{}, matched, [&](mlir::OpBuilder& builder, mlir::Location loc) {
             mlir::Value packed = cols.pack(context,builder,loc);
-            builder.create<mlir::db::Append>(loc, vector, packed);
+            builder.create<mlir::dsa::Append>(loc, vector, packed);
             builder.create<mlir::scf::YieldOp>(loc, mlir::ValueRange{}); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, mlir::ValueRange{}); });
    }
 
    void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      vector = builder.create<mlir::db::CreateDS>(joinOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), cols.getTupleType(builder.getContext())));
+      vector = builder.create<mlir::dsa::CreateDS>(joinOp.getLoc(), mlir::dsa::VectorType::get(builder.getContext(), cols.getTupleType(builder.getContext())));
    }
    void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       context.setValueForAttribute(scope, &cast<mlir::relalg::CollectionJoinOp>(joinOp).collAttr().getColumn(), vector);
       translator->forwardConsume(builder, context);
-      builder.create<mlir::db::FreeOp>(loc, vector);
+      builder.create<mlir::dsa::FreeOp>(loc, vector);
    }
    virtual ~CollectionJoinImpl() {}
 };
@@ -71,15 +72,15 @@ class OuterJoinTranslator : public mlir::relalg::JoinImpl {
       translator->handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
          translator->handleMapping(builder, context, scope);
          auto trueVal = builder.create<mlir::db::ConstantOp>(loc, builder.getI1Type(), builder.getIntegerAttr(builder.getI64Type(), 1));
-         builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, trueVal);
+         builder.create<mlir::dsa::SetFlag>(loc, matchFoundFlag, trueVal);
       });
    }
 
    void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
+      matchFoundFlag = builder.create<mlir::dsa::CreateFlag>(loc, mlir::dsa::FlagType::get(builder.getContext()));
    }
    void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, builder.getI1Type(), matchFoundFlag);
+      mlir::Value matchFound = builder.create<mlir::dsa::GetFlag>(loc, builder.getI1Type(), matchFoundFlag);
       mlir::Value noMatchFound = builder.create<mlir::db::NotOp>(loc, builder.getI1Type(), matchFound);
       translator->handlePotentialMatch(builder, context, noMatchFound, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
          translator->handleMappingNull(builder, context, scope);
@@ -128,14 +129,14 @@ class SemiJoinImpl : public mlir::relalg::JoinImpl {
       doAnti = true;
    }
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, matched);
+      builder.create<mlir::dsa::SetFlag>(loc, matchFoundFlag, matched);
    }
 
    void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
+      matchFoundFlag = builder.create<mlir::dsa::CreateFlag>(loc, mlir::dsa::FlagType::get(builder.getContext()));
    }
    void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, builder.getI1Type(), matchFoundFlag);
+      mlir::Value matchFound = builder.create<mlir::dsa::GetFlag>(loc, builder.getI1Type(), matchFoundFlag);
       mlir::Value emit = matchFound;
       if (doAnti) {
          emit = builder.create<mlir::db::NotOp>(loc, builder.getI1Type(), matchFound);
@@ -275,15 +276,15 @@ class MarkJoinImpl : public mlir::relalg::JoinImpl {
    }
 
    virtual void handleLookup(mlir::Value matched, mlir::Value /*marker*/, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      builder.create<mlir::db::SetFlag>(loc, matchFoundFlag, matched);
+      builder.create<mlir::dsa::SetFlag>(loc, matchFoundFlag, matched);
    }
 
    void beforeLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
-      matchFoundFlag = builder.create<mlir::db::CreateFlag>(loc, mlir::db::FlagType::get(builder.getContext()));
+      matchFoundFlag = builder.create<mlir::dsa::CreateFlag>(loc, mlir::dsa::FlagType::get(builder.getContext()));
    }
    void afterLookup(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      mlir::Value matchFound = builder.create<mlir::db::GetFlag>(loc, builder.getI1Type(), matchFoundFlag);
+      mlir::Value matchFound = builder.create<mlir::dsa::GetFlag>(loc, builder.getI1Type(), matchFoundFlag);
       context.setValueForAttribute(scope, &cast<mlir::relalg::MarkJoinOp>(joinOp).markattr().getColumn(), matchFound);
       translator->forwardConsume(builder, context);
    }

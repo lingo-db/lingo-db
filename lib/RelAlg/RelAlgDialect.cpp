@@ -5,6 +5,7 @@
 
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
+#include "mlir/Dialect/DSA/IR/DSADialect.h"
 
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -121,6 +122,7 @@ void RelAlgDialect::initialize() {
    addInterfaces<RelalgInlinerInterface>();
    columnManager.setContext(getContext());
    getContext()->loadDialect<mlir::db::DBDialect>();
+   getContext()->loadDialect<mlir::dsa::DSADialect>();
    getContext()->loadDialect<mlir::arith::ArithmeticDialect>();
    mlir::arith::CmpIOp::attachInterface<ArithCmpFCmpInterface>(*getContext());
 }

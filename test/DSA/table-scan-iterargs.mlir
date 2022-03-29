@@ -23,20 +23,20 @@
     //CHECK: string("---------------")
 	func @main () {
 			%str_const = db.constant ( "---------------" ) :!db.string
-            %0 = db.scan_source "{ \"table\": \"test\", \"columns\": [\"str\",\"float32\",\"float64\",\"decimal\",\"int32\",\"int64\",\"bool\",\"date32\",\"date64\"] }" : !db.iterable<!db.record_batch<!test_table_tuple>,table_chunk_iterator>
+            %0 = dsa.scan_source "{ \"table\": \"test\", \"columns\": [\"str\",\"float32\",\"float64\",\"decimal\",\"int32\",\"int64\",\"bool\",\"date32\",\"date64\"] }" : !dsa.iterable<!dsa.record_batch<!test_table_tuple>,table_chunk_iterator>
             %count_0 = db.constant (0) : i32
             %one = db.constant (1) : i32
-            %total_count = db.for %record_batch in %0 : !db.iterable<!db.record_batch<!test_table_tuple>,table_chunk_iterator>  iter_args(%count_iter = %count_0) -> (i32){
-                %count = db.for %row in %record_batch : !db.record_batch<!test_table_tuple>  iter_args(%count_iter_2 = %count_iter) -> (i32) {
-				    %10:2 = db.at %row[0] : !db.record<!test_table_tuple> -> !db.string, i1
-				    %20:2 = db.at %row[1] : !db.record<!test_table_tuple> -> f32, i1
-				    %30:2 = db.at %row[2] : !db.record<!test_table_tuple> -> f64, i1
-				    %40:2 = db.at %row[3] : !db.record<!test_table_tuple> -> !db.decimal<5,2>, i1
-				    %50:2 = db.at %row[4] : !db.record<!test_table_tuple> -> i32, i1
-				    %60:2 = db.at %row[5] : !db.record<!test_table_tuple> -> i64, i1
-				    %70:2 = db.at %row[6] : !db.record<!test_table_tuple> -> i1, i1
-				    %80:2 = db.at %row[7] : !db.record<!test_table_tuple> -> !db.date<day>, i1
-				    %90:2 = db.at %row[8] : !db.record<!test_table_tuple> ->  !db.date<millisecond>, i1
+            %total_count = dsa.for %record_batch in %0 : !dsa.iterable<!dsa.record_batch<!test_table_tuple>,table_chunk_iterator>  iter_args(%count_iter = %count_0) -> (i32){
+                %count = dsa.for %row in %record_batch : !dsa.record_batch<!test_table_tuple>  iter_args(%count_iter_2 = %count_iter) -> (i32) {
+				    %10:2 = dsa.at %row[0] : !dsa.record<!test_table_tuple> -> !db.string, i1
+				    %20:2 = dsa.at %row[1] : !dsa.record<!test_table_tuple> -> f32, i1
+				    %30:2 = dsa.at %row[2] : !dsa.record<!test_table_tuple> -> f64, i1
+				    %40:2 = dsa.at %row[3] : !dsa.record<!test_table_tuple> -> !db.decimal<5,2>, i1
+				    %50:2 = dsa.at %row[4] : !dsa.record<!test_table_tuple> -> i32, i1
+				    %60:2 = dsa.at %row[5] : !dsa.record<!test_table_tuple> -> i64, i1
+				    %70:2 = dsa.at %row[6] : !dsa.record<!test_table_tuple> -> i1, i1
+				    %80:2 = dsa.at %row[7] : !dsa.record<!test_table_tuple> -> !db.date<day>, i1
+				    %90:2 = dsa.at %row[8] : !dsa.record<!test_table_tuple> ->  !db.date<millisecond>, i1
 				    %100= db.not %10#1 : i1
 				    %200= db.not %20#1 : i1
 				    %300= db.not %30#1 : i1
@@ -66,10 +66,10 @@
 					db.runtime_call "DumpValue" (%9) : (!db.nullable<!db.date<millisecond>>) -> ()
 					db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
 					%curr_count=db.add %count_iter_2 : i32, %one : i32
-					db.yield %curr_count : i32
+					dsa.yield %curr_count : i32
 				}
 				%curr_count=db.add %count_iter : i32, %count : i32
-                db.yield %curr_count : i32
+                dsa.yield %curr_count : i32
 			}
 			db.runtime_call "DumpValue" (%total_count) : (i32) -> ()
 		return

@@ -159,70 +159,6 @@ class StringCmpOpLowering : public ConversionPattern {
    }
 };
 
-class FreeOpLowering : public ConversionPattern {
-   public:
-   explicit FreeOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::FreeOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      /*      auto freeOp = cast<mlir::db::FreeOp>(op);
-      mlir::db::FreeOpAdaptor adaptor(operands);
-      auto val = adaptor.val();
-      auto rewritten = ::llvm::TypeSwitch<::mlir::Type, bool>(freeOp.val().getType())
-                          .Case<::mlir::db::AggregationHashtableType>([&](::mlir::db::AggregationHashtableType type) {
-                             if (!type.getKeyType().getTypes().empty()) {
-                                //todo free aggregation hashtable
-                                //functionRegistry.call(rewriter, loc, FunctionId::AggrHtFree, val);
-                             }
-                             return true;
-                          })
-                          .Case<::mlir::db::VectorType>([&](::mlir::db::VectorType) {
-                             //todo: free vector
-                             //functionRegistry.call(rewriter, loc, FunctionId::VectorFree, val);
-                             return true;
-                          })
-                          .Case<::mlir::db::JoinHashtableType>([&](::mlir::db::JoinHashtableType) {
-                             //todo: free join hashtable
-                             //functionRegistry.call(rewriter, loc, FunctionId::JoinHtFree, val);
-                             return true;
-                          })
-                          .Default([&](::mlir::Type) { return false; });
-      if (rewritten) {
-         rewriter.eraseOp(op);
-         return success();
-      } else {
-         return failure();
-      }
-      */
-      rewriter.eraseOp(op);
-      return success();
-   }
-};
-/*class DateAddOpLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
-
-   public:
-   explicit DateAddOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::DateAddOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
-      auto dateAddOp = mlir::cast<mlir::db::DateAddOp>(op);
-      mlir::db::DateAddOpAdaptor adaptor(operands);
-      auto dateVal = adaptor.left();
-      auto invervalVal = adaptor.right();
-      auto loc = op->getLoc();
-      if (dateAddOp.right().getType().cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
-         dateVal = rewriter.create<mlir::arith::AddIOp>(op->getLoc(), dateVal, invervalVal);
-      } else {
-         dateVal = functionRegistry.call(rewriter, loc, FunctionId::TimestampAddMonth, ValueRange({invervalVal, dateVal}))[0];
-      }
-      rewriter.replaceOp(op, dateVal);
-      return success();
-   }
-};*/
 class DBToArrowRFLowering : public mlir::db::RuntimeFunction::LoweringImpl {
    protected:
    mlir::db::codegen::FunctionRegistry* nativeFunctionRegistry;
@@ -411,6 +347,5 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
    //patterns.insert<DateAddOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<StringCmpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<StringCastOpLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<FreeOpLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<RuntimeCallLowering>(functionRegistry, typeConverter, patterns.getContext());
 }

@@ -33,19 +33,19 @@ module {
          %row3 = util.pack %str3, %int3 : !db.string,i32 -> tuple<!db.string,i32>
          %row4 = util.pack %str4, %int4 : !db.string,i32 -> tuple<!db.string,i32>
 
-       	    %vector = db.create_ds !db.vector<!test_tuple_type>
-           db.ds_append %vector : !db.vector<!test_tuple_type> , %row1 : !test_tuple_type
-           db.ds_append %vector : !db.vector<!test_tuple_type> , %row2 : !test_tuple_type
-           db.ds_append %vector : !db.vector<!test_tuple_type> , %row3 : !test_tuple_type
-           db.ds_append %vector : !db.vector<!test_tuple_type> , %row4 : !test_tuple_type
-         %flag = db.createflag
-         db.for %row in %vector : !db.vector<!test_tuple_type> until %flag {
+       	    %vector = dsa.create_ds !dsa.vector<!test_tuple_type>
+           dsa.ds_append %vector : !dsa.vector<!test_tuple_type> , %row1 : !test_tuple_type
+           dsa.ds_append %vector : !dsa.vector<!test_tuple_type> , %row2 : !test_tuple_type
+           dsa.ds_append %vector : !dsa.vector<!test_tuple_type> , %row3 : !test_tuple_type
+           dsa.ds_append %vector : !dsa.vector<!test_tuple_type> , %row4 : !test_tuple_type
+         %flag = dsa.createflag
+         dsa.for %row in %vector : !dsa.vector<!test_tuple_type> until %flag {
              %1,%2 = util.unpack %row : !test_tuple_type -> !db.string,i32
              db.runtime_call "DumpValue" (%1) : (!db.string) -> ()
              db.runtime_call "DumpValue" (%2) : (i32) -> ()
              %cmp = db.compare gte %2 : i32, %int3 : i32
              db.runtime_call "DumpValue" (%cmp) : (i1) -> ()
-             db.setflag %flag, %cmp
+             dsa.setflag %flag, %cmp
              db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
          }
          return

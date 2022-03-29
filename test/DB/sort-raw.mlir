@@ -47,14 +47,14 @@
         %row3 = util.pack %str3, %int3 : !db.string,i32 -> tuple<!db.string,i32>
         %row4 = util.pack %str4, %int4 : !db.string,i32 -> tuple<!db.string,i32>
 
-	    %vector = db.create_ds !db.vector<!test_tuple_type>
-        db.ds_append %vector : !db.vector<!test_tuple_type> , %row1 : !test_tuple_type
-        db.ds_append %vector : !db.vector<!test_tuple_type> , %row2 : !test_tuple_type
-        db.ds_append %vector : !db.vector<!test_tuple_type> , %row3 : !test_tuple_type
-        db.ds_append %vector : !db.vector<!test_tuple_type> , %row4 : !test_tuple_type
+	    %vector = dsa.create_ds !dsa.vector<!test_tuple_type>
+        dsa.ds_append %vector : !dsa.vector<!test_tuple_type> , %row1 : !test_tuple_type
+        dsa.ds_append %vector : !dsa.vector<!test_tuple_type> , %row2 : !test_tuple_type
+        dsa.ds_append %vector : !dsa.vector<!test_tuple_type> , %row3 : !test_tuple_type
+        dsa.ds_append %vector : !dsa.vector<!test_tuple_type> , %row4 : !test_tuple_type
 
 
-        db.for %row in %vector : !db.vector<!test_tuple_type> {
+        dsa.for %row in %vector : !dsa.vector<!test_tuple_type> {
             %1,%2 = util.unpack %row : !test_tuple_type -> !db.string,i32
             db.runtime_call "DumpValue" (%1) : (!db.string) -> ()
             db.runtime_call "DumpValue" (%2) : (i32) -> ()
@@ -64,14 +64,14 @@
         db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
         db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
 
-        db.sort %vector : !db.vector<!test_tuple_type> (%left,%right) {
+        dsa.sort %vector : !dsa.vector<!test_tuple_type> (%left,%right) {
            %left1,%left2 = util.unpack %left : !test_tuple_type -> !db.string,i32
            %right1,%right2 = util.unpack %right : !test_tuple_type -> !db.string,i32
            %lt = db.compare gte %left1 : !db.string, %right1 : !db.string
-           db.yield %lt : i1
+           dsa.yield %lt : i1
         }
 
-        db.for %row in %vector : !db.vector<!test_tuple_type> {
+        dsa.for %row in %vector : !dsa.vector<!test_tuple_type> {
             %1,%2 = util.unpack %row : !test_tuple_type -> !db.string,i32
             db.runtime_call "DumpValue" (%1) : (!db.string) -> ()
             db.runtime_call "DumpValue" (%2) : (i32) -> ()

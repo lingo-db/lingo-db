@@ -8,17 +8,6 @@
 #include <llvm/Support/Debug.h>
 #include <queue>
 using namespace mlir;
-bool isIntegerType(mlir::Type type, unsigned int width) {
-   auto asStdInt = type.dyn_cast_or_null<mlir::IntegerType>();
-   return asStdInt && asStdInt.getWidth() == width;
-}
-int getIntegerWidth(mlir::Type type, bool isUnSigned) {
-   auto asStdInt = type.dyn_cast_or_null<mlir::IntegerType>();
-   if (asStdInt && asStdInt.isUnsigned() == isUnSigned) {
-      return asStdInt.getWidth();
-   }
-   return 0;
-}
 
 
 static void printInitializationList(OpAsmPrinter& p,

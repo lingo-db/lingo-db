@@ -19,6 +19,7 @@
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
+#include "mlir/Conversion/DSAToStd/DSAToStd.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
@@ -28,6 +29,7 @@
 
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
+#include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Dialect/DB/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -235,6 +237,7 @@ bool Runner::load(std::string file) {
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
+   registry.insert<mlir::dsa::DSADialect>();
    registry.insert<mlir::StandardOpsDialect>();
    registry.insert<mlir::arith::ArithmeticDialect>();
    registry.insert<mlir::cf::ControlFlowDialect>();
@@ -263,6 +266,7 @@ bool Runner::loadString(std::string input) {
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
+   registry.insert<mlir::dsa::DSADialect>();
    registry.insert<mlir::StandardOpsDialect>();
    registry.insert<mlir::scf::SCFDialect>();
    registry.insert<mlir::cf::ControlFlowDialect>();
@@ -335,6 +339,12 @@ bool Runner::lower() {
    pm.addPass(mlir::db::createOptimizeRuntimeFunctionsPass());
    pm.addPass(mlir::db::createLowerToStdPass());
    if (mlir::failed(pm.run(ctxt->module.get()))) {
+      return false;
+   }
+   mlir::PassManager pm2(&ctxt->context);
+
+   pm2.addPass(mlir::dsa::createLowerToStdPass());
+   if (mlir::failed(pm2.run(ctxt->module.get()))) {
       return false;
    }
    mlir::PassManager pmFunc(&ctxt->context, mlir::FuncOp::getOperationName());

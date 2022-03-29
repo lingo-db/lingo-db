@@ -460,27 +460,6 @@ class CastOpLowering : public ConversionPattern {
       return failure();
    }
 };
-class CreateFlagLowering : public ConversionPattern {
-   public:
-   explicit CreateFlagLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CreateFlag::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto boolType = rewriter.getI1Type();
-      Type memrefType = util::RefType::get(rewriter.getContext(), boolType);
-      Value alloca;
-      {
-         OpBuilder::InsertionGuard insertionGuard(rewriter);
-         auto func = op->getParentOfType<mlir::FuncOp>();
-         rewriter.setInsertionPointToStart(&func.getBody().front());
-         alloca = rewriter.create<mlir::util::AllocaOp>(op->getLoc(), memrefType, Value());
-      }
-      Value falseVal = rewriter.create<mlir::db::ConstantOp>(op->getLoc(), boolType, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-      rewriter.create<util::StoreOp>(op->getLoc(), falseVal, alloca, Value());
-      rewriter.replaceOp(op, alloca);
-      return success();
-   }
-};
 class BetweenLowering : public ConversionPattern {
    public:
    explicit BetweenLowering(TypeConverter& typeConverter, MLIRContext* context)
@@ -511,33 +490,7 @@ class OneOfLowering : public ConversionPattern {
       return success();
    }
 };
-class SetFlagLowering : public ConversionPattern {
-   public:
-   explicit SetFlagLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::SetFlag::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::db::SetFlagAdaptor adaptor(operands);
-      rewriter.create<util::StoreOp>(op->getLoc(), adaptor.val(), adaptor.flag(), Value());
-      rewriter.eraseOp(op);
-      return success();
-   }
-};
-class GetFlagLowering : public ConversionPattern {
-   public:
-   explicit GetFlagLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::GetFlag::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::db::GetFlagAdaptor adaptor(operands);
-      auto boolType = rewriter.getI1Type();
-
-      Value flagValue = rewriter.create<util::LoadOp>(op->getLoc(), boolType, adaptor.flag(), Value());
-      rewriter.replaceOp(op, flagValue);
-      return success();
-   }
-};
-class HashLowering : public ConversionPattern {
+/*class HashLowering : public ConversionPattern {
    Value combineHashes(OpBuilder& builder, Location loc, Value hash1, Value totalHash) const {
       if (!totalHash) {
          return hash1;
@@ -605,7 +558,7 @@ class HashLowering : public ConversionPattern {
       rewriter.replaceOp(op, hashImpl(rewriter, op->getLoc(), hashAdaptor.val(), Value(), hashOp.val().getType()));
       return success();
    }
-};
+};*/
 
 } // namespace
 void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, RewritePatternSet& patterns) {
@@ -639,10 +592,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    typeConverter.addConversion([&](mlir::db::NullableType type) {
       return (Type) TupleType::get(patterns.getContext(), {IntegerType::get(patterns.getContext(), 1), typeConverter.convertType(type.getType())});
    });
-   typeConverter.addConversion([&](mlir::db::FlagType type) {
-      Type memrefType = util::RefType::get(patterns.getContext(), IntegerType::get(type.getContext(), 1));
-      return memrefType;
-   });
+
 
    patterns.insert<CmpOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<BetweenLowering>(typeConverter, patterns.getContext());
@@ -684,8 +634,5 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    patterns.insert<ConstantLowering>(typeConverter, patterns.getContext());
    patterns.insert<CastOpLowering>(typeConverter, patterns.getContext());
 
-   patterns.insert<CreateFlagLowering>(typeConverter, patterns.getContext());
-   patterns.insert<SetFlagLowering>(typeConverter, patterns.getContext());
-   patterns.insert<GetFlagLowering>(typeConverter, patterns.getContext());
-   patterns.insert<HashLowering>(typeConverter, patterns.getContext());
+   //patterns.insert<HashLowering>(typeConverter, patterns.getContext());
 }

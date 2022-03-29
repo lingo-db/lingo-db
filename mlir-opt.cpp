@@ -13,10 +13,12 @@
 
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
+#include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
+#include "mlir/Conversion/DSAToStd/DSAToStd.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/SCF/SCF.h"
@@ -133,6 +135,9 @@ int main(int argc, char** argv) {
       return mlir::db::createLowerToStdPass();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::dsa::createLowerToStdPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return std::make_unique<ToLLVMLoweringPass>();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
@@ -156,6 +161,7 @@ int main(int argc, char** argv) {
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
+   registry.insert<mlir::dsa::DSADialect>();
    registry.insert<mlir::StandardOpsDialect>();
    registry.insert<mlir::arith::ArithmeticDialect>();
 

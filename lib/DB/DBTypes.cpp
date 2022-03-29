@@ -7,55 +7,6 @@
 
 #include <llvm/ADT/TypeSwitch.h>
 
-mlir::Type mlir::db::CollectionType::getElementType() const {
-   return ::llvm::TypeSwitch<::mlir::db::CollectionType, Type>(*this)
-      .Case<::mlir::db::GenericIterableType>([&](::mlir::db::GenericIterableType t) {
-         return t.getElementType();
-      })
-      .Case<::mlir::db::VectorType>([&](::mlir::db::VectorType t) {
-         return t.getElementType();
-      })
-      .Case<::mlir::db::JoinHashtableType>([&](::mlir::db::JoinHashtableType t) {
-         return TupleType::get(getContext(), {t.getKeyType(), t.getValType()});
-      })
-      .Case<::mlir::db::AggregationHashtableType>([&](::mlir::db::AggregationHashtableType t) {
-         return TupleType::get(t.getContext(), {t.getKeyType(), t.getValType()});
-      })
-      .Case<mlir::db::RecordBatchType>([&](mlir::db::RecordBatchType t) {
-         return mlir::db::RecordType::get(t.getContext(), t.getRowType());
-      })
-      .Default([](::mlir::Type) { return Type(); });
-}
-bool mlir::db::CollectionType::classof(Type t) {
-   return ::llvm::TypeSwitch<Type, bool>(t)
-      .Case<::mlir::db::GenericIterableType>([&](::mlir::db::GenericIterableType t) { return true; })
-      .Case<::mlir::db::VectorType>([&](::mlir::db::VectorType t) {
-         return true;
-      })
-      .Case<::mlir::db::JoinHashtableType>([&](::mlir::db::JoinHashtableType t) {
-         return true;
-      })
-      .Case<::mlir::db::AggregationHashtableType>([&](::mlir::db::AggregationHashtableType t) {
-         return true;
-      })
-      .Case<::mlir::db::RecordBatchType>([&](::mlir::db::RecordBatchType t) {
-         return true;
-      })
-      .Default([](::mlir::Type) { return false; });
-}
-
-::mlir::Type mlir::db::GenericIterableType::parse(mlir::AsmParser& parser) {
-   Type type;
-   StringRef parserName;
-   if (parser.parseLess() || parser.parseType(type) || parser.parseComma(), parser.parseKeyword(&parserName) || parser.parseGreater()) {
-      return mlir::Type();
-   }
-   return mlir::db::GenericIterableType::get(parser.getBuilder().getContext(), type, parserName.str());
-}
-void mlir::db::GenericIterableType::print(mlir::AsmPrinter& p) const {
-   p << "<" << getElementType() << "," << getIteratorName() << ">";
-}
-
 namespace mlir {
 template <>
 struct FieldParser<mlir::db::DateUnitAttr> {

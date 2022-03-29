@@ -43,67 +43,16 @@ def NullableType : DB_Type<"Nullable","nullable"> {
     let assemblyFormat = " `<` $type `>`";
 }
 
-class DB_Collection<string name, string typeMnemonic> : TypeDef<DB_Dialect, name,[],"::mlir::db::CollectionType"> {
-    let mnemonic = typeMnemonic;
-}
-
-def DBCollection : Type<CPred<"$_self.isa<::mlir::db::CollectionType>()">,"DB dialect collection">;
-
-def DB_GenericIterable : DB_Collection<"GenericIterable","iterable"> {
-let summary = "generic iterable";
-let parameters = (ins "Type":$elementType,"std::string":$iteratorName);
-
-}
-
-
 def DB_Table: DB_Type<"Table","table"> {
 let summary = "table";
 let assemblyFormat = "";
 }
 
-def DB_Flag: DB_Type<"Flag","flag"> {
-let summary = "flag";
-let assemblyFormat = "";
-}
 def DB_TableBuilder : DB_Type<"TableBuilder","table_builder"> {
 let summary = "builder for table";
 let parameters = (ins "TupleType":$rowType);
 let assemblyFormat = "`<` $rowType `>`";
 }
-def DB_Vector : DB_Collection<"Vector","vector"> {
-let summary = "vector";
-let parameters = (ins "Type":$elementType);
-let assemblyFormat = "`<` $elementType `>`";
-}
-def DB_RecordBatch: DB_Collection<"RecordBatch","record_batch"> {
-let summary = "record_batch";
-let parameters = (ins "TupleType":$rowType);
-let assemblyFormat = "`<` $rowType `>`";
-}
-def DB_Record: DB_Collection<"Record","record"> {
-let summary = "record";
-let parameters = (ins "TupleType":$rowType);
-let assemblyFormat = "`<` $rowType `>`";
-}
-def DB_At : DB_Op<"at",
-[NoSideEffect]> {
-let arguments = (ins AnyType:$collection,I32Attr:$pos);
-let results = (outs AnyType:$val,Optional<I1>:$valid);
-let assemblyFormat = "$collection  `[` $pos `]` `:` type($collection) `->` type($val) (`,` type($valid)^)? attr-dict";
-}
-def DB_AggregationHashtable : DB_Collection<"AggregationHashtable","aggr_ht"> {
-let summary = "aggregation hashtable";
-let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
-let assemblyFormat = "`<` $keyType `,` $valType `>`";
-}
-def DB_JoinHashtable : DB_Collection<"JoinHashtable","join_ht"> {
-let summary = "join hashtable";
-let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
-let assemblyFormat = "`<` $keyType `,` $valType `>`";
-}
-
-
-
 
 
 
@@ -181,34 +130,11 @@ let summary = "null";
 let results = (outs NullableType:$res);
 let assemblyFormat = "`:` type($res) attr-dict";
 }
-def DB_CreateFlag : DB_Op<"createflag",
-[NoSideEffect]> {
-let summary = "create flag";
-let results = (outs DB_Flag:$flag);
-let assemblyFormat = "attr-dict";
-}
-def DB_SetFlag : DB_Op<"setflag"> {
-let summary = "set flag to true";
-let arguments = (ins DB_Flag:$flag, I1:$val);
-let assemblyFormat = "$flag `,` $val attr-dict";
-}
-def DB_GetFlag : DB_Op<"getflag",
-[NoSideEffect]> {
-let summary = "get flag value";
-let arguments = (ins DB_Flag:$flag);
-let results= (outs I1:$res);
-let assemblyFormat = "$flag attr-dict";
-}
 
 def DB_DeriveTruth : DB_Op<"derive_truth",
 [NoSideEffect]> {
 let arguments = (ins AnyType:$val);
 let results= (outs I1:$res);
-let assemblyFormat = "$val `:` type($val) attr-dict";
-}
-def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
-let arguments = (ins AnyType: $val);
-let results = (outs  Index : $hash);
 let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
@@ -243,49 +169,11 @@ let arguments = (ins AnyType:$builder,AnyType:$row);
 let assemblyFormat = "$builder `:` type($builder) `,` $row `:` type($row) attr-dict";
 
 }
-def DB_CreateDS : DB_Op<"create_ds"> {
-    let arguments =(ins Optional<AnyType>:$init_val);
-    let results =(outs AnyType:$ds);
-    let assemblyFormat = "( $init_val^ `:` type($init_val) `->`)? type($ds) attr-dict";
-    let builders = [OpBuilder<(ins "mlir::Type":$t), [{
-    build($_builder, $_state, t, mlir::Value());
-    }]>];
-}
-def DB_HashtableInsert: DB_Op<"ht_insert"> {
-    let arguments = (ins AnyType:$ht, AnyType:$key, Optional<AnyType>: $val);
-    let assemblyFormat = "$ht `:` type($ht) `,` $key `:` type($key) ( `,` $val^ `:` type($val) )? attr-dict";
-}
-def DB_HashtableInsertReduce: DB_Op<"ht_insert_reduce"> {
-    let arguments = (ins AnyType:$ht, AnyType:$key, Optional<AnyType>: $val);
-    let regions = (region AnyRegion:$equal, AnyRegion:$reduce);
-}
-
-def DB_HashtableFinalize: DB_Op<"ht_finalize"> {
-    let arguments = (ins AnyType:$ht );
-    let assemblyFormat = "$ht `:` type($ht) attr-dict";
-}
-def DB_Append : DB_Op<"ds_append"> {
-    let arguments = (ins AnyType:$ds, AnyType:$val);
-    let assemblyFormat = "$ds `:` type($ds) `,` $val `:` type($val)  attr-dict";
-}
 def DB_FinalizeTable : DB_Op<"finalize_table",
 [NoSideEffect]> {
 let arguments = (ins AnyType:$builder);
 let results = (outs DB_Table:$builded);
 let assemblyFormat = "$builder `:` type($builder) attr-dict";
-}
-
-def DB_ScanSource : DB_Op<"scan_source",
-[NoSideEffect]> {
-let arguments = (ins StrAttr:$descr);
-let results = (outs DB_GenericIterable:$iterable);
-let assemblyFormat = "$descr `:` type($iterable) attr-dict";
-}
-def DB_Lookup : DB_Op<"lookup",
-[NoSideEffect]> {
-let arguments = (ins DBCollection:$collection,AnyType:$key);
-let results = (outs DB_GenericIterable:$iterable);
-let assemblyFormat = "$collection `:` type($collection) `,` $key `:` type($key) `->` type($iterable) attr-dict";
 }
 def DB_RuntimeCall : DB_Op<"runtime_call",[DB_HandleNullInterface]> {
 let arguments = (ins StrAttr:$fn,Variadic<AnyType>: $args);
@@ -297,53 +185,6 @@ public:
     bool canHandleInvalidValues();
     bool canHandleNulls();
 }];
-}
-
-def DB_SortOp : DB_Op<"sort",
-[IsolatedFromAbove]> {
-let arguments = (ins DB_Vector:$toSort);
-let regions = (region SizedRegion<1>:$region);
-}
-
-
-
-
-
-def ForOp : DB_Op<"for",
-[SingleBlockImplicitTerminator<"db::YieldOp">,
-RecursiveSideEffects,AttrSizedOperandSegments]> {
-let arguments = (ins DBCollection:$collection,Optional<DB_Flag>:$until,Variadic<AnyType>:$initArgs);
-let results = (outs Variadic<AnyType>:$results);
-let regions = (region SizedRegion<1>:$region);
-
-let extraClassDeclaration = [{
-Value getInductionVar() { return getBody()->getArgument(0); }
-Block::BlockArgListType getRegionIterArgs() {
-    return getBody()->getArguments().drop_front();
-}
-Operation::operand_range getIterOperands() {
-    return getOperands().drop_front(getNumControlOperands());
-}
-
-
-/// Number of region arguments for loop-carried values
-unsigned getNumRegionIterArgs() {
-    return getBody()->getNumArguments() - 1;
-}
-/// Number of operands controlling the loop: lb, ub, step
-unsigned getNumControlOperands() { return until()?2:1; }
-/// Does the operation hold operands for loop-carried values
-bool hasIterOperands() {
-    return getOperation()->getNumOperands() > getNumControlOperands();
-}
-/// Get Number of loop-carried values
-unsigned getNumIterOperands() {
-    return getOperation()->getNumOperands() - getNumControlOperands();
-}
-
-
-}];
-
 }
 
 
@@ -474,29 +315,10 @@ let assemblyFormat = "$val `:` type($val) attr-dict";
     bool $cppClass::canHandleInvalidValues(){ return true; }
   }];
 }
-def FreeOp : DB_Op<"free"> {
-let arguments = (ins AnyType: $val);
-let assemblyFormat = "$val `:` type($val) attr-dict";
-}
-
-
 
 def CastOp : DB_Op<"cast",[DeclareOpInterfaceMethods<DB_HandleNullInterface>]> {
 let arguments = (ins NullableDBType:$val);
 let results=(outs NullableDBType:$res);
 let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
-}
-
-
-
-def YieldOp : DB_Op<"yield", [NoSideEffect, Terminator,
-        ParentOneOf<["ForOp","SortOp","HashtableInsertReduce"]>]> {
-let arguments = (ins Variadic<AnyType>:$results);
-let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
-let assemblyFormat = [{  attr-dict ($results^ `:` type($results))? }];
-}
-def CondSkipOp : DB_Op<"cond_skip", [ParentOneOf<["ForOp"]>]> {
-let arguments = (ins AnyType:$condition, Variadic<AnyType>:$args);
-let assemblyFormat = [{ `(` $condition `:` type($condition) `)` attr-dict ( `(` $args^ `:` type($args)`)`)? }];
 }
 #endif// OPS

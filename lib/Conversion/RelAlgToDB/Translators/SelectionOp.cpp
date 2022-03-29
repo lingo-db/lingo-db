@@ -1,5 +1,6 @@
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
@@ -16,7 +17,7 @@ class SelectionTranslator : public mlir::relalg::Translator {
       mlir::Value matched = mergeRelationalBlock(
          builder.getInsertionBlock(), selectionOp, [](auto x) { return &x->getRegion(0).front(); }, context, scope)[0];
       auto* parentOp = builder.getBlock()->getParentOp();
-      if (mlir::isa_and_nonnull<mlir::db::ForOp>(parentOp)) {
+      if (mlir::isa_and_nonnull<mlir::dsa::ForOp>(parentOp)) {
          std::vector<std::pair<int, mlir::Value>> conditions;
          if (auto andOp = mlir::dyn_cast_or_null<mlir::db::AndOp>(matched.getDefiningOp())) {
             for (auto c : andOp.vals()) {
@@ -53,7 +54,7 @@ class SelectionTranslator : public mlir::relalg::Translator {
          std::sort(conditions.begin(), conditions.end(), [](auto a, auto b) { return a.first < b.first; });
          for (auto c : conditions) {
             auto negated = builder.create<mlir::db::NotOp>(selectionOp.getLoc(), c.second);
-            builder.create<mlir::db::CondSkipOp>(selectionOp->getLoc(), negated,mlir::ValueRange{});
+            builder.create<mlir::dsa::CondSkipOp>(selectionOp->getLoc(), negated,mlir::ValueRange{});
          }
          consumer->consume(this, builder, context);
       } else {

@@ -1,6 +1,7 @@
 #include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
@@ -15,7 +16,7 @@ class SortTranslator : public mlir::relalg::Translator {
    }
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
       mlir::Value packed = orderedAttributes.pack(context, builder, sortOp->getLoc());
-      builder.create<mlir::db::Append>(sortOp->getLoc(), vector, packed);
+      builder.create<mlir::dsa::Append>(sortOp->getLoc(), vector, packed);
    }
    mlir::Value createSortPredicate(mlir::OpBuilder& builder, std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria, mlir::Value trueVal, mlir::Value falseVal, size_t pos) {
       if (pos < sortCriteria.size()) {
@@ -45,7 +46,7 @@ class SortTranslator : public mlir::relalg::Translator {
       context.pipelineManager.addPipeline(childPipeline);
       auto tupleType = orderedAttributes.getTupleType(builder.getContext());
       auto res = childPipeline->addInitFn([&](mlir::OpBuilder& builder) {
-         return std::vector<mlir::Value>({builder.create<mlir::db::CreateDS>(sortOp.getLoc(), mlir::db::VectorType::get(builder.getContext(), tupleType))});
+         return std::vector<mlir::Value>({builder.create<mlir::dsa::CreateDS>(sortOp.getLoc(), mlir::dsa::VectorType::get(builder.getContext(), tupleType))});
       });
       vector = childPipeline->addDependency(res[0]);
       children[0]->produce(context, childPipeline->getBuilder());
@@ -54,7 +55,7 @@ class SortTranslator : public mlir::relalg::Translator {
       auto sortedRes = childPipeline->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
             mlir::Value vector=args[0];
          {
-            auto dbSortOp = builder.create<mlir::db::SortOp>(sortOp->getLoc(), vector);
+            auto dbSortOp = builder.create<mlir::dsa::SortOp>(sortOp->getLoc(), vector);
             mlir::Block* block2 = new mlir::Block;
             block2->addArgument(tupleType, sortOp->getLoc());
             block2->addArguments(tupleType, sortOp->getLoc());
@@ -76,14 +77,14 @@ class SortTranslator : public mlir::relalg::Translator {
             auto trueVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), builder.getI1Type(), builder.getIntegerAttr(builder.getI64Type(), 1));
             auto falseVal = builder2.create<mlir::db::ConstantOp>(sortOp->getLoc(), builder.getI1Type(), builder.getIntegerAttr(builder.getI64Type(), 0));
 
-            builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), createSortPredicate(builder2, sortCriteria, trueVal, falseVal, 0));
+            builder2.create<mlir::dsa::YieldOp>(sortOp->getLoc(), createSortPredicate(builder2, sortCriteria, trueVal, falseVal, 0));
          }
          return std::vector<mlir::Value>{vector};
       });
       vector = parentPipeline->addDependency(sortedRes[0]);
       context.pipelineManager.setCurrentPipeline(parentPipeline);
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(sortOp->getLoc(), mlir::TypeRange{}, vector, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+         auto forOp2 = builder.create<mlir::dsa::ForOp>(sortOp->getLoc(), mlir::TypeRange{}, vector, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType, sortOp->getLoc());
          forOp2.getBodyRegion().push_back(block2);
@@ -91,9 +92,9 @@ class SortTranslator : public mlir::relalg::Translator {
          auto unpacked = builder2.create<mlir::util::UnPackOp>(sortOp->getLoc(), forOp2.getInductionVar());
          orderedAttributes.setValuesForColumns(context, scope, unpacked.getResults());
          consumer->consume(this, builder2, context);
-         builder2.create<mlir::db::YieldOp>(sortOp->getLoc(), mlir::ValueRange{});
+         builder2.create<mlir::dsa::YieldOp>(sortOp->getLoc(), mlir::ValueRange{});
       }
-      builder.create<mlir::db::FreeOp>(sortOp->getLoc(), vector);
+      builder.create<mlir::dsa::FreeOp>(sortOp->getLoc(), vector);
    }
 
    virtual ~SortTranslator() {}

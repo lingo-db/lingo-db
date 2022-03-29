@@ -4,6 +4,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
+#include "mlir/Dialect/DSA/IR/DSAOps.h"
 
 class ProjectionTranslator : public mlir::relalg::Translator {
    mlir::relalg::ProjectionOp projectionOp;
@@ -39,17 +40,17 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       mlir::Value emptyVals = builder.create<mlir::util::UndefTupleOp>(projectionOp->getLoc(), valTupleType);
       mlir::Value packedKey = key.pack(context, builder, projectionOp->getLoc());
 
-      auto reduceOp = builder.create<mlir::db::HashtableInsertReduce>(projectionOp->getLoc(), aggrHt, packedKey, emptyVals);
+      auto reduceOp = builder.create<mlir::dsa::HashtableInsertReduce>(projectionOp->getLoc(), aggrHt, packedKey, emptyVals);
       mlir::Block* aggrBuilderBlock = new mlir::Block;
       reduceOp.equal().push_back(aggrBuilderBlock);
       aggrBuilderBlock->addArguments({packedKey.getType(), packedKey.getType()}, {projectionOp->getLoc(), projectionOp->getLoc()});
       {
          mlir::OpBuilder::InsertionGuard guard(builder);
          builder.setInsertionPointToStart(aggrBuilderBlock);
-         auto yieldOp = builder.create<mlir::db::YieldOp>(projectionOp->getLoc());
+         auto yieldOp = builder.create<mlir::dsa::YieldOp>(projectionOp->getLoc());
          builder.setInsertionPointToStart(aggrBuilderBlock);
          mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1));
-         builder.create<mlir::db::YieldOp>(projectionOp->getLoc(), matches);
+         builder.create<mlir::dsa::YieldOp>(projectionOp->getLoc(), matches);
          yieldOp.erase();
       }
    }
@@ -97,7 +98,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       context.pipelineManager.addPipeline(p);
       auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
          mlir::Value emptyTuple = builder.create<mlir::util::UndefTupleOp>(projectionOp.getLoc(), mlir::TupleType::get(builder.getContext()));
-         auto aggrBuilder = builder.create<mlir::db::CreateDS>(projectionOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), emptyTuple);
+         auto aggrBuilder = builder.create<mlir::dsa::CreateDS>(projectionOp.getLoc(), mlir::dsa::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), emptyTuple);
          return std::vector<mlir::Value>({aggrBuilder});
       });
       aggrHt = p->addDependency(res[0]);
@@ -110,7 +111,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       context.pipelineManager.setCurrentPipeline(parentPipeline);
 
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(projectionOp->getLoc(), mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+         auto forOp2 = builder.create<mlir::dsa::ForOp>(projectionOp->getLoc(), mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(entryType, projectionOp->getLoc());
          forOp2.getBodyRegion().push_back(block2);
@@ -119,9 +120,9 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
          auto unpackedKey = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), unpacked[0]).getResults();
          key.setValuesForColumns(context, scope, unpackedKey);
          consumer->consume(this, builder2, context);
-         builder2.create<mlir::db::YieldOp>(projectionOp->getLoc(), mlir::ValueRange{});
+         builder2.create<mlir::dsa::YieldOp>(projectionOp->getLoc(), mlir::ValueRange{});
       }
-      builder.create<mlir::db::FreeOp>(projectionOp->getLoc(), context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]));
+      builder.create<mlir::dsa::FreeOp>(projectionOp->getLoc(), context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]));
    }
    virtual void done() override {
    }

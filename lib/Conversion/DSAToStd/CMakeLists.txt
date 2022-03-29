@@ -1,13 +1,14 @@
-add_mlir_conversion_library(MLIRDBToArrowStd
+add_mlir_conversion_library(MLIRDSAToStd
+        CollectionIterators.cpp
         LowerToStd.cpp
         FunctionRegistry.cpp
-        ScalarDBToStdPatterns.cpp
+        ScalarDSAToStdPatterns.cpp
         RuntimeSpecificScalarToStdPatterns.cpp
-        BuildersToStdPatterns.cpp
-        ArrowTypes.cpp
+        DSAToStdPatterns.cpp
+        CollectionsToStdPatterns.cpp
 
         ADDITIONAL_HEADER_DIRS
-        ../../../mlir/Conversion/DBToArrowStd
+        ../../../mlir/Conversion/DSAToStd
 
         DEPENDS
 
@@ -16,6 +17,6 @@ add_mlir_conversion_library(MLIRDBToArrowStd
 
         LINK_LIBS mlir-support PUBLIC
         MLIRIR
-        MLIRDB
+        MLIRDSA
         MLIRSCFTransforms
         )

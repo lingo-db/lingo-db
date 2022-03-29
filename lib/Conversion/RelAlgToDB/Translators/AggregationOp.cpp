@@ -1,6 +1,7 @@
 #include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include <mlir/Dialect/DSA/IR/DSAOps.h>
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
@@ -62,7 +63,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
       mlir::Value packedKey = key.pack(context, builder, aggregationOp->getLoc());
       mlir::Value packedVal = val.pack(context, builder, aggregationOp->getLoc());
 
-      auto reduceOp = builder.create<mlir::db::HashtableInsertReduce>(aggregationOp->getLoc(), aggrHt, packedKey, packedVal);
+      auto reduceOp = builder.create<mlir::dsa::HashtableInsertReduce>(aggregationOp->getLoc(), aggrHt, packedKey, packedVal);
 
       auto scope = context.createScope();
 
@@ -76,10 +77,10 @@ class AggregationTranslator : public mlir::relalg::Translator {
          aggrBuilderBlock->addArguments({packedKey.getType(), packedKey.getType()}, {aggregationOp->getLoc(), aggregationOp->getLoc()});
          mlir::OpBuilder::InsertionGuard guard(builder);
          builder.setInsertionPointToStart(aggrBuilderBlock);
-         auto yieldOp = builder.create<mlir::db::YieldOp>(aggregationOp->getLoc());
+         auto yieldOp = builder.create<mlir::dsa::YieldOp>(aggregationOp->getLoc());
          builder.setInsertionPointToStart(aggrBuilderBlock);
          mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1));
-         builder.create<mlir::db::YieldOp>(aggregationOp->getLoc(), matches);
+         builder.create<mlir::dsa::YieldOp>(aggregationOp->getLoc(), matches);
          yieldOp.erase();
       }
       mlir::Block* aggrBuilderBlock = new mlir::Block;
@@ -100,7 +101,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
 
       mlir::Value packedx = builder2.create<mlir::util::PackOp>(aggregationOp->getLoc(), valuesx);
 
-      builder2.create<mlir::db::YieldOp>(aggregationOp->getLoc(), packedx);
+      builder2.create<mlir::dsa::YieldOp>(aggregationOp->getLoc(), packedx);
    }
 
    mlir::Attribute getMaxValueAttr(mlir::Type type) {
@@ -329,7 +330,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
          auto initTuple = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), aggrTupleType, defaultValues);
          keyTupleType = key.getTupleType(builder.getContext());
          valTupleType = val.getTupleType(builder.getContext());
-         auto aggrBuilder = builder.create<mlir::db::CreateDS>(aggregationOp.getLoc(), mlir::db::AggregationHashtableType::get(builder.getContext(), keyTupleType, aggrTupleType), initTuple);
+         auto aggrBuilder = builder.create<mlir::dsa::CreateDS>(aggregationOp.getLoc(), mlir::dsa::AggregationHashtableType::get(builder.getContext(), keyTupleType, aggrTupleType), initTuple);
          return std::vector<mlir::Value>({aggrBuilder});
       });
       auto aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
@@ -346,7 +347,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
       context.pipelineManager.setCurrentPipeline(parentPipeline);
       auto hashtable = context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]);
       {
-         auto forOp2 = builder.create<mlir::db::ForOp>(aggregationOp->getLoc(), mlir::TypeRange{}, hashtable, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+         auto forOp2 = builder.create<mlir::dsa::ForOp>(aggregationOp->getLoc(), mlir::TypeRange{}, hashtable, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(iterEntryType, aggregationOp->getLoc());
          forOp2.getBodyRegion().push_back(block2);
@@ -364,9 +365,9 @@ class AggregationTranslator : public mlir::relalg::Translator {
          }
          key.setValuesForColumns(context, scope, unpackedKey);
          consumer->consume(this, builder2, context);
-         builder2.create<mlir::db::YieldOp>(aggregationOp->getLoc(), mlir::ValueRange{});
+         builder2.create<mlir::dsa::YieldOp>(aggregationOp->getLoc(), mlir::ValueRange{});
       }
-      builder.create<mlir::db::FreeOp>(aggregationOp->getLoc(), hashtable);
+      builder.create<mlir::dsa::FreeOp>(aggregationOp->getLoc(), hashtable);
    }
    virtual void done() override {
    }

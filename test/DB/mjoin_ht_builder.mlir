@@ -80,14 +80,14 @@
         %val3 = util.pack %default_marker, %int3, %int3 : i64,i32,i32 -> tuple<i64,i32,i32>
         %val4 = util.pack %default_marker, %int4, %int4 : i64,i32,i32 -> tuple<i64,i32,i32>
 
-        %ht= db.create_ds  !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
-        db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key1 : tuple<!db.string,i32>, %val1 : tuple<i64,i32,i32>
-        db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key2 : tuple<!db.string,i32>, %val2 : tuple<i64,i32,i32>
-        db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key3 : tuple<!db.string,i32>, %val3 : tuple<i64,i32,i32>
-        db.ht_insert %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key4 : tuple<!db.string,i32>, %val4 : tuple<i64,i32,i32>
-        db.ht_finalize %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
-        %matches = db.lookup %ht :  !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key1  : tuple<!db.string,i32> -> !db.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator>
-       db.for %entry in %matches : !db.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator> {
+        %ht= dsa.create_ds  !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
+        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key1 : tuple<!db.string,i32>, %val1 : tuple<i64,i32,i32>
+        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key2 : tuple<!db.string,i32>, %val2 : tuple<i64,i32,i32>
+        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key3 : tuple<!db.string,i32>, %val3 : tuple<i64,i32,i32>
+        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key4 : tuple<!db.string,i32>, %val4 : tuple<i64,i32,i32>
+        dsa.ht_finalize %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
+        %matches = dsa.lookup %ht :  !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key1  : tuple<!db.string,i32> -> !dsa.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator>
+       dsa.for %entry in %matches : !dsa.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator> {
            %tpl,%ptr = util.unpack %entry : tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>> -> tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>
             %key,%val = util.unpack %tpl : tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>> -> tuple<!db.string,i32>,tuple<i64,i32,i32>
             %k1,%k2 = util.unpack %key : tuple<!db.string,i32> -> !db.string,i32
@@ -104,7 +104,7 @@
             db.runtime_call "DumpValue" (%marker_val) : (i64) -> ()
         }
             db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
-        db.for %entry in %matches : !db.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator> {
+        dsa.for %entry in %matches : !dsa.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator> {
              %tpl,%ptr = util.unpack %entry : tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>> -> tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>
              %key,%val = util.unpack %tpl : tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>> -> tuple<!db.string,i32>,tuple<i64,i32,i32>
              %k1,%k2 = util.unpack %key : tuple<!db.string,i32> -> !db.string,i32
@@ -128,7 +128,7 @@
             db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
             db.runtime_call "DumpValue" (%str_const) : (!db.string) -> ()
 
-        db.for %entry in %ht : !db.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>> {
+        dsa.for %entry in %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>> {
             %key,%val = util.unpack %entry : tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>> -> tuple<!db.string,i32>,tuple<i64,i32,i32>
             %k1,%k2 = util.unpack %key : tuple<!db.string,i32> -> !db.string,i32
             %marker,%v1,%v2 = util.unpack %val : tuple<i64,i32,i32> -> i64,i32,i32

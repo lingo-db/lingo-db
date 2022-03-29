@@ -1,6 +1,7 @@
 #include "mlir/Conversion/RelAlgToDB/Pipeline.h"
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 
@@ -41,21 +42,21 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       scanDescription += "] }";
 
       auto tupleType = mlir::TupleType::get(builder.getContext(), types);
-      auto recordBatch = mlir::db::RecordBatchType::get(builder.getContext(), tupleType);
-      mlir::Type chunkIterable = mlir::db::GenericIterableType::get(builder.getContext(), recordBatch, "table_chunk_iterator");
+      auto recordBatch = mlir::dsa::RecordBatchType::get(builder.getContext(), tupleType);
+      mlir::Type chunkIterable = mlir::dsa::GenericIterableType::get(builder.getContext(), recordBatch, "table_chunk_iterator");
       auto currPipeline = context.pipelineManager.getCurrentPipeline();
 
       auto initRes = currPipeline->addInitFn([&](mlir::OpBuilder& builder) {
-         auto chunkIterator = builder.create<mlir::db::ScanSource>(baseTableOp->getLoc(), chunkIterable, builder.getStringAttr(scanDescription));
+         auto chunkIterator = builder.create<mlir::dsa::ScanSource>(baseTableOp->getLoc(), chunkIterable, builder.getStringAttr(scanDescription));
 
          return std::vector<Value>({chunkIterator});
       });
-      auto forOp = builder.create<mlir::db::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, currPipeline->addDependency(initRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+      auto forOp = builder.create<mlir::dsa::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, currPipeline->addDependency(initRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
       block->addArgument(recordBatch, baseTableOp->getLoc());
       forOp.getBodyRegion().push_back(block);
       mlir::OpBuilder builder1(forOp.getBodyRegion());
-      auto forOp2 = builder1.create<mlir::db::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, forOp.getInductionVar(), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+      auto forOp2 = builder1.create<mlir::dsa::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, forOp.getInductionVar(), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(recordBatch.getElementType(), baseTableOp->getLoc());
       forOp2.getBodyRegion().push_back(block2);
@@ -67,7 +68,7 @@ class BaseTableTranslator : public mlir::relalg::Translator {
          if (attr->type.isa<mlir::db::NullableType>()) {
             types.push_back(builder.getI1Type());
          }
-         auto atOp = builder2.create<mlir::db::At>(baseTableOp->getLoc(), types, forOp2.getInductionVar(), i++);
+         auto atOp = builder2.create<mlir::dsa::At>(baseTableOp->getLoc(), types, forOp2.getInductionVar(), i++);
          if (attr->type.isa<mlir::db::NullableType>()) {
             mlir::Value isNull = builder2.create<mlir::db::NotOp>(baseTableOp->getLoc(), atOp.valid());
             mlir::Value val=builder2.create<mlir::db::AsNullableOp>(baseTableOp->getLoc(), attr->type, atOp.val(), isNull);
@@ -77,8 +78,8 @@ class BaseTableTranslator : public mlir::relalg::Translator {
          }
       }
       consumer->consume(this, builder2, context);
-      builder2.create<mlir::db::YieldOp>(baseTableOp->getLoc());
-      builder1.create<mlir::db::YieldOp>(baseTableOp->getLoc());
+      builder2.create<mlir::dsa::YieldOp>(baseTableOp->getLoc());
+      builder1.create<mlir::dsa::YieldOp>(baseTableOp->getLoc());
    }
    virtual ~BaseTableTranslator() {}
 };

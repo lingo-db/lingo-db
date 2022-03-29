@@ -95,7 +95,7 @@ class EliminateNulls : public mlir::PassWrapper<EliminateNulls, mlir::OperationP
          //patterns.insert<EliminateNullCmp>(&getContext());
          patterns.insert<EliminateDeriveTruthNonNullable>(&getContext());
          patterns.insert<EliminateDeriveTruthNullable>(&getContext());
-         patterns.insert<SimplifyNullableCondSkip>(&getContext());
+         //patterns.insert<SimplifyNullableCondSkip>(&getContext());
          patterns.insert<WrapWithNullCheck>(&getContext());
          if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");
