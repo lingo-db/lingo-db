@@ -1,0 +1,18 @@
+
+set(LLVM_TARGET_DEFINITIONS DSAOps.td)
+mlir_tablegen(DSAOpsDialect.h.inc -gen-dialect-decls)
+mlir_tablegen(DSAOpsDialect.cpp.inc -gen-dialect-defs)
+mlir_tablegen(DSAOps.h.inc -gen-op-decls)
+mlir_tablegen(DSAOps.cpp.inc -gen-op-defs)
+mlir_tablegen(DSAOpsEnums.h.inc -gen-enum-decls)
+mlir_tablegen(DSAOpsEnums.cpp.inc -gen-enum-defs)
+mlir_tablegen(DSAOpsTypes.h.inc --gen-typedef-decls)
+mlir_tablegen(DSAOpsTypes.cpp.inc --gen-typedef-defs)
+
+set(LLVM_TARGET_DEFINITIONS DSAInterfaces.td)
+mlir_tablegen(DSAOpsInterfaces.h.inc -gen-op-interface-decls)
+mlir_tablegen(DSAOpsInterfaces.cpp.inc -gen-op-interface-defs)
+add_public_tablegen_target(MLIRDSAOpsIncGen)
+#add_mlir_doc(DSADialect -gen-dialect-doc DSADialect DSA/)
+#add_mlir_doc(DSAOps -gen-op-doc DSAOps DSA/)
+

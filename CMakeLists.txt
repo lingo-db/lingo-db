@@ -55,6 +55,7 @@ add_subdirectory(include)
 add_subdirectory(lib/mlir-support)
 add_subdirectory(lib/RelAlg)
 add_subdirectory(lib/DB)
+add_subdirectory(lib/DSA)
 add_subdirectory(lib/util)
 add_subdirectory(lib/Conversion/DBToArrowStd)
 add_subdirectory(lib/Conversion/RelAlgToDB)
@@ -73,6 +74,7 @@ set(LIBS
         MLIRRelAlg
         MLIRUtil
         MLIRDB
+        MLIRDSA
         MLIRIR
         MLIRParser
         MLIRPass
