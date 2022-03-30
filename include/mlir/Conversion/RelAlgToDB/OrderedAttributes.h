@@ -39,16 +39,20 @@ class OrderedAttributes {
       }
       return res;
    }
+   mlir::Value resolve(TranslatorContext& context, size_t pos) {
+      return context.getValueForAttribute(attrs[pos]);
+   }
    mlir::Value pack(TranslatorContext& context, OpBuilder& builder, Location loc, std::vector<Value> additional = {}) {
       std::vector<Value> values(additional);
-      for (const auto* attr : attrs) {
-         values.push_back(context.getValueForAttribute(attr));
+      for (size_t i = 0; i < attrs.size(); i++) {
+         values.push_back(resolve(context, i));
       }
       if (values.size() == 0) {
          return builder.create<mlir::util::UndefTupleOp>(loc, mlir::TupleType::get(builder.getContext()));
       }
       return builder.create<mlir::util::PackOp>(loc, values);
    }
+
    size_t insert(const mlir::relalg::Column* attr, Type alternativeType = {}) {
       attrs.push_back(attr);
       if (attr) {

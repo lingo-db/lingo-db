@@ -16,7 +16,7 @@
 //CHECK: |                       "Jonas"  |           "Glaube und Wissen"  |
 
 module @querymodule{
-    func @main ()  -> !db.table{
+    func @main ()  -> !dsa.table{
         %1 = relalg.basetable @hoeren { table_identifier="hoeren" } columns: {matrnr => @matrnr({type=i64}),
             vorlnr => @vorlnr({type=i64})
         }
@@ -41,7 +41,7 @@ module @querymodule{
             %13 = db.compare eq %11 : i64,%12 : i64
             relalg.return %13 : i1
         } attributes { impl="hash" }
-        %15 = relalg.materialize %5 [@studenten::@name,@vorlesungen::@titel] => ["s.name","v.titel"] : !db.table
-        return %15 : !db.table
+        %15 = relalg.materialize %5 [@studenten::@name,@vorlesungen::@titel] => ["s.name","v.titel"] : !dsa.table
+        return %15 : !dsa.table
     }
 }

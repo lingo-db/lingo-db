@@ -11,7 +11,7 @@
 //CHECK: |          "Supplier#000000729"  |"pqck2ppy758TQpZCUAjPvlU55K3QjfL7Bi"  |
 //CHECK: |          "Supplier#000000935"  |"ij98czM 2KzWe7dDTOxB8sq0UfCdvrX"  |
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @supplier  {table_identifier = "supplier"} columns: {s_acctbal => @s_acctbal({type = !db.decimal<15, 2>}), s_address => @s_address({type = !db.string}), s_comment => @s_comment({type = !db.string}), s_name => @s_name({type = !db.string}), s_nationkey => @s_nationkey({type = i32}), s_phone => @s_phone({type = !db.string}), s_suppkey => @s_suppkey({type = i32})}
     %1 = relalg.basetable @nation  {table_identifier = "nation"} columns: {n_comment => @n_comment({type = !db.nullable<!db.string>}), n_name => @n_name({type = !db.string}), n_nationkey => @n_nationkey({type = i32}), n_regionkey => @n_regionkey({type = i32})}
     %2 = relalg.crossproduct %0, %1
@@ -77,8 +77,8 @@ module {
       relalg.return %17 : i1
     }
     %4 = relalg.sort %3 [(@supplier::@s_name,asc)]
-    %5 = relalg.materialize %4 [@supplier::@s_name,@supplier::@s_address] => ["s_name", "s_address"] : !db.table
-    return %5 : !db.table
+    %5 = relalg.materialize %4 [@supplier::@s_name,@supplier::@s_address] => ["s_name", "s_address"] : !dsa.table
+    return %5 : !dsa.table
   }
 }
 

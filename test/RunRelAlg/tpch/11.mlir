@@ -203,7 +203,7 @@
 //CHECK: |                           883  |                    1004650.68  |
 //CHECK: |                          3627  |                    1004461.04  |
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @partsupp  {table_identifier = "partsupp"} columns: {ps_availqty => @ps_availqty({type = i32}), ps_comment => @ps_comment({type = !db.string}), ps_partkey => @ps_partkey({type = i32}), ps_suppkey => @ps_suppkey({type = i32}), ps_supplycost => @ps_supplycost({type = !db.decimal<15, 2>})}
     %1 = relalg.basetable @supplier  {table_identifier = "supplier"} columns: {s_acctbal => @s_acctbal({type = !db.decimal<15, 2>}), s_address => @s_address({type = !db.string}), s_comment => @s_comment({type = !db.string}), s_name => @s_name({type = !db.string}), s_nationkey => @s_nationkey({type = i32}), s_phone => @s_phone({type = !db.string}), s_suppkey => @s_suppkey({type = i32})}
     %2 = relalg.crossproduct %0, %1
@@ -289,8 +289,8 @@ module {
       relalg.return %23 : !db.nullable<i1>
     }
     %9 = relalg.sort %8 [(@aggr0::@tmp_attr0,desc)]
-    %10 = relalg.materialize %9 [@partsupp::@ps_partkey,@aggr0::@tmp_attr0] => ["ps_partkey", "value"] : !db.table
-    return %10 : !db.table
+    %10 = relalg.materialize %9 [@partsupp::@ps_partkey,@aggr0::@tmp_attr0] => ["ps_partkey", "value"] : !dsa.table
+    return %10 : !dsa.table
   }
 }
 

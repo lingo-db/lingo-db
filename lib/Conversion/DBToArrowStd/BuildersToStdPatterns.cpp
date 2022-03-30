@@ -9,7 +9,8 @@
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
-namespace {
+/*namespace {
+
 static db::codegen::FunctionRegistry::FunctionId getStoreFunc(db::codegen::FunctionRegistry& functionRegistry, Type type) {
    using FunctionId = db::codegen::FunctionRegistry::FunctionId;
    if (isIntegerType(type, 1)) {
@@ -154,8 +155,9 @@ class CreateTableBuilderLowering : public ConversionPattern {
 };
 
 } // namespace
+ */
 void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
-   patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
+   /*patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<AddTableRowLowering>(functionRegistry, typeConverter, patterns.getContext());
    patterns.insert<FinalizeTableLowering>(functionRegistry, typeConverter, patterns.getContext());
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::TableBuilderType type, ValueRange valueRange, Location loc) {
@@ -163,5 +165,5 @@ void mlir::db::populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry&
    });
    typeConverter.addConversion([&](mlir::db::TableBuilderType tableType) {
       return mlir::util::RefType::get(patterns.getContext(), IntegerType::get(patterns.getContext(), 8));
-   });
+   });*/
 }

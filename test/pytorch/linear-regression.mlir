@@ -22,7 +22,7 @@ module {
     return %res : f32
     }
 
-  func @main () -> !db.table attributes { torch.ignore = unit }  {
+  func @main () -> !dsa.table attributes { torch.ignore = unit }  {
     %1 = relalg.basetable @R {table_identifier="R"} columns: {a=>@a({type=f32})}
     %3 = relalg.selection %1 (%4: !relalg.tuple) {
       %5 = relalg.getcol %4 @R::@a : f32
@@ -31,7 +31,7 @@ module {
       %9 = db.compare lt %7 : f32 , %8 : f32
       relalg.return %9 : i1
     }
-    %8 = relalg.materialize %3 [@S::@a ] => ["a"] : !db.table
-    return %8 : !db.table
+    %8 = relalg.materialize %3 [@S::@a ] => ["a"] : !dsa.table
+    return %8 : !dsa.table
   }
 }

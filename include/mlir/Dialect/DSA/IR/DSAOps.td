@@ -36,7 +36,6 @@ class DSA_Type<string name, string typeMnemonic> : TypeDef<DSA_Dialect, name> {
   let mnemonic = typeMnemonic;
 }
 
-
 class DSA_Collection<string name, string typeMnemonic> : TypeDef<DSA_Dialect, name,[],"::mlir::dsa::CollectionType"> {
     let mnemonic = typeMnemonic;
 }
@@ -118,25 +117,23 @@ let assemblyFormat = "$flag attr-dict";
 
 
 
-def DSA_CreateTableBuilder : DSA_Op<"create_table_builder",
-[NoSideEffect]> {
-let arguments = (ins ArrayAttr:$columns);
-let results = (outs DSA_TableBuilder:$builder);
-let assemblyFormat = "$columns `:` type($builder) attr-dict";
-}
-
-def DSA_AddTableRow : DSA_Op<"add_row"> {
-let arguments = (ins AnyType:$builder,AnyType:$row);
-let assemblyFormat = "$builder `:` type($builder) `,` $row `:` type($row) attr-dict";
+def DSA_NextRow : DSA_Op<"next_row"> {
+let arguments = (ins DSA_TableBuilder:$builder);
+let assemblyFormat = "$builder `:` type($builder) attr-dict";
 
 }
 def DSA_CreateDS : DSA_Op<"create_ds"> {
-    let arguments =(ins Optional<AnyType>:$init_val);
+    let arguments =(ins Optional<AnyType>:$init_val,OptionalAttr<AnyAttr>:$init_attr);
     let results =(outs AnyType:$ds);
-    let assemblyFormat = "( $init_val^ `:` type($init_val) `->`)? type($ds) attr-dict";
+    let assemblyFormat = " ( `(` $init_attr^ `)` `->`)? ( $init_val^ `:` type($init_val) `->`)? type($ds) attr-dict";
     let builders = [OpBuilder<(ins "mlir::Type":$t), [{
     build($_builder, $_state, t, mlir::Value());
-    }]>];
+    }]>,OpBuilder<(ins "mlir::Type":$t,"mlir::Value":$v), [{
+            build($_builder, $_state, t,v, mlir::Attribute());
+            }]>,
+            OpBuilder<(ins "mlir::Type":$t,"mlir::Attribute":$attr), [{
+                            build($_builder, $_state, t,mlir::Value(),attr);
+                            }]>];
 }
 
 def DSA_HashtableInsert: DSA_Op<"ht_insert"> {
@@ -144,20 +141,22 @@ def DSA_HashtableInsert: DSA_Op<"ht_insert"> {
     let regions = (region AnyRegion:$hash, AnyRegion:$equal, AnyRegion:$reduce);
 }
 
-def DSA_HashtableFinalize: DSA_Op<"ht_finalize"> {
+def DSA_Finalize: DSA_Op<"finalize"> {
     let arguments = (ins AnyType:$ht );
-    let assemblyFormat = "$ht `:` type($ht) attr-dict";
+    let results = (outs Optional<AnyType>:$res);
+    let assemblyFormat = "$ht `:` type($ht)  (`->` type($res)^)? attr-dict";
+    let builders = [OpBuilder<(ins "mlir::Value":$v), [{
+    build($_builder, $_state, mlir::TypeRange(),v);
+    }]>];
 }
 def DSA_Append : DSA_Op<"ds_append"> {
-    let arguments = (ins AnyType:$ds, AnyType:$val);
-    let assemblyFormat = "$ds `:` type($ds) `,` $val `:` type($val)  attr-dict";
+    let arguments = (ins AnyType:$ds, AnyType:$val,Optional<I1>:$valid);
+    let assemblyFormat = "$ds `:` type($ds) `,` $val `:` type($val) ( `,` $valid^ )? attr-dict";
+        let builders = [OpBuilder<(ins "mlir::Value":$v1, "mlir::Value":$v2), [{
+        build($_builder, $_state, v1,v2, mlir::Value());
+    }]>];
 }
-def DSA_FinalizeTable : DSA_Op<"finalize_table",
-[NoSideEffect]> {
-let arguments = (ins AnyType:$builder);
-let results = (outs DSA_Table:$builded);
-let assemblyFormat = "$builder `:` type($builder) attr-dict";
-}
+
 
 def DSA_ScanSource : DSA_Op<"scan_source",
 [NoSideEffect]> {

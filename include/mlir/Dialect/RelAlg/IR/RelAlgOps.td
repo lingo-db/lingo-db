@@ -41,7 +41,7 @@ let parser = [{ return ::parse$cppClass(parser, result); }];
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Types
 ////////////////////////////////////////////////////////////////////////////////////////////////////
-def DB_TableType : Type<CPred<"$_self.isa<::mlir::db::TableType>()">,"DB table type">;
+def DB_TableType : Type<CPred<"$_self.isa<::mlir::dsa::TableType>()">,"DB table type">;
 def DB_CollectionType : Type<CPred<"$_self.isa<::mlir::dsa::CollectionType>()">,"DB collection type">;
 
 

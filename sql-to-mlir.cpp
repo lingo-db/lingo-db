@@ -292,7 +292,7 @@ struct SQLTranslator {
                names.push_back(builder.getStringAttr(x.first));
                attrs.push_back(attrManager.createRef(x.second));
             }
-            return builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), mlir::db::TableType::get(builder.getContext()), tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
+            return builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), mlir::dsa::TableType::get(builder.getContext()), tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
          } else {
             error("only select statement supported");
          }
@@ -1412,7 +1412,7 @@ int main(int argc, char** argv) {
    mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
 
    builder.setInsertionPointToStart(&moduleOp.body().front());
-   mlir::FuncOp funcOp = builder.create<mlir::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {mlir::db::TableType::get(builder.getContext())}));
+   mlir::FuncOp funcOp = builder.create<mlir::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {mlir::dsa::TableType::get(builder.getContext())}));
    funcOp.body().push_back(new mlir::Block);
    builder.setInsertionPointToStart(&funcOp.body().front());
    mlir::Value val = translator.translate(builder);

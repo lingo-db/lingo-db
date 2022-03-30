@@ -153,6 +153,64 @@ class AtLowering : public ConversionPattern {
       return success();
    }
 };
+class AppendTBLowering : public ConversionPattern {
+   public:
+   explicit AppendTBLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::Append::getOperationName(), 2, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      mlir::dsa::AppendAdaptor adaptor(operands);
+      auto appendOp = mlir::cast<mlir::dsa::Append>(op);
+      if (!appendOp.ds().getType().isa<mlir::dsa::TableBuilderType>()) {
+         return mlir::failure();
+      }
+      auto t = appendOp.val().getType();
+      if (typeConverter->isLegal(t)) {
+         rewriter.startRootUpdate(op);
+         appendOp->setOperands(operands);
+         rewriter.finalizeRootUpdate(op);
+         return mlir::success();
+      }
+      auto* context = getContext();
+      mlir::Type arrowPhysicalType = typeConverter->convertType(t);
+      if (t.isa<mlir::db::DecimalType>()) {
+         arrowPhysicalType = mlir::IntegerType::get(context, 128);
+      } else if (auto dateType = t.dyn_cast_or_null<mlir::db::DateType>()) {
+         arrowPhysicalType = dateType.getUnit() == mlir::db::DateUnitAttr::day ? mlir::IntegerType::get(context, 32) : mlir::IntegerType::get(context, 64);
+      }
+
+      mlir::Value val = adaptor.val();
+      if (t.isa<mlir::db::DateType, mlir::db::TimestampType>()) {
+         size_t multiplier = 1;
+         if (auto dateType = t.dyn_cast_or_null<mlir::db::DateType>()) {
+            multiplier = dateType.getUnit() == mlir::db::DateUnitAttr::day ? 86400000000000 : 1000000;
+         } else if (auto timeStampType = t.dyn_cast_or_null<mlir::db::TimestampType>()) {
+            switch (timeStampType.getUnit()) {
+               case mlir::db::TimeUnitAttr::second: multiplier = 1000000000; break;
+               case mlir::db::TimeUnitAttr::millisecond: multiplier = 1000000; break;
+               case mlir::db::TimeUnitAttr::microsecond: multiplier = 1000; break;
+               default: multiplier = 1;
+            }
+         }
+         if (multiplier != 1) {
+            mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
+            val = rewriter.create<mlir::arith::DivSIOp>(loc, val, multiplierConst);
+         }
+         if (arrowPhysicalType != rewriter.getI64Type()) {
+            val = rewriter.create<mlir::arith::TruncIOp>(loc, arrowPhysicalType, val);
+         }
+      } else if (auto decimalType = t.dyn_cast_or_null<db::DecimalType>()) {
+         if (typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth() != 128) {
+            val = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), val);
+         }
+      }
+      rewriter.create<mlir::dsa::Append>(loc, adaptor.ds(), val, adaptor.valid());
+
+      rewriter.eraseOp(op);
+      return success();
+   }
+};
 void DBToStdLoweringPass::runOnOperation() {
    auto module = getOperation();
    mlir::db::codegen::FunctionRegistry functionRegistry(module);
@@ -203,12 +261,11 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
-   typeConverter.addConversion([&](mlir::db::TableType tableType) {
-      return mlir::util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));
-   });
+
    typeConverter.addConversion([&](mlir::IntegerType iType) { return iType; });
    typeConverter.addConversion([&](mlir::IndexType iType) { return iType; });
    typeConverter.addConversion([&](mlir::dsa::FlagType flagType) { return flagType; });
+   typeConverter.addConversion([&](mlir::dsa::TableType flagType) { return flagType; });
    typeConverter.addConversion([&](mlir::FloatType fType) { return fType; });
    typeConverter.addConversion([&](mlir::MemRefType refType) { return refType; });
    auto convertPhysical = [&](mlir::TupleType tuple) -> mlir::TupleType {
@@ -234,6 +291,7 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::dsa::VectorType r) { return mlir::dsa::VectorType::get(r.getContext(), typeConverter.convertType(r.getElementType())); });
    typeConverter.addConversion([&](mlir::dsa::JoinHashtableType r) { return mlir::dsa::JoinHashtableType::get(r.getContext(), typeConverter.convertType(r.getKeyType()).cast<mlir::TupleType>(), typeConverter.convertType(r.getValType()).cast<mlir::TupleType>()); });
    typeConverter.addConversion([&](mlir::dsa::AggregationHashtableType r) { return mlir::dsa::AggregationHashtableType::get(r.getContext(), typeConverter.convertType(r.getKeyType()).cast<mlir::TupleType>(), typeConverter.convertType(r.getValType()).cast<mlir::TupleType>()); });
+   typeConverter.addConversion([&](mlir::dsa::TableBuilderType r) { return mlir::dsa::TableBuilderType::get(r.getContext(), typeConverter.convertType(r.getRowType()).cast<mlir::TupleType>()); });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::DateType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
    typeConverter.addSourceMaterialization([&](OpBuilder&, dsa::RecordBatchType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
    typeConverter.addTargetMaterialization([&](OpBuilder&, dsa::RecordBatchType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
@@ -243,7 +301,6 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::TimestampType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::IntervalType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
    typeConverter.addSourceMaterialization([&](OpBuilder&, IntegerType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::TableType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
    typeConverter.addSourceMaterialization([&](OpBuilder&, db::NullableType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
    typeConverter.addTargetMaterialization([&](OpBuilder&, db::NullableType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
    typeConverter.addSourceMaterialization([&](OpBuilder&, TupleType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
@@ -264,11 +321,13 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::ScanSource>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::Append>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::CreateDS>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::HashtableFinalize>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::Finalize>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::Lookup>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::FreeOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::YieldOp>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::NextRow>>(typeConverter, &getContext());
    patterns.insert<AtLowering>(typeConverter, &getContext());
+   patterns.insert<AppendTBLowering>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::HashtableInsert>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::SortOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::ForOp>>(typeConverter, &getContext());

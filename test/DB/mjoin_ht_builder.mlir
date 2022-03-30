@@ -97,7 +97,7 @@
                                                                                                                                                           %h = db.hash %key : tuple<!db.string,i32>
                                                                                                                                                           dsa.yield %h : index
                                                                                                                                                        }
-        dsa.ht_finalize %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
+        dsa.finalize %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
         %hash = db.hash %key1  : tuple<!db.string,i32>
         %matches = dsa.lookup %ht :  !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %hash  : index -> !dsa.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator>
        dsa.for %entry in %matches : !dsa.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator> {

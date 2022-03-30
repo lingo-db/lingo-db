@@ -49,7 +49,7 @@
 //CHECK: |          "Supplier#000000846"  |                             6  |
 //CHECK: |          "Supplier#000000920"  |                             4  |
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @supplier  {table_identifier = "supplier"} columns: {s_acctbal => @s_acctbal({type = !db.decimal<15, 2>}), s_address => @s_address({type = !db.string}), s_comment => @s_comment({type = !db.string}), s_name => @s_name({type = !db.string}), s_nationkey => @s_nationkey({type = i32}), s_phone => @s_phone({type = !db.string}), s_suppkey => @s_suppkey({type = i32})}
     %1 = relalg.basetable @l1  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
     %2 = relalg.crossproduct %0, %1
@@ -114,8 +114,8 @@ module {
     }
     %9 = relalg.sort %8 [(@aggr0::@tmp_attr0,desc),(@supplier::@s_name,asc)]
     %10 = relalg.limit 100 %9
-    %11 = relalg.materialize %10 [@supplier::@s_name,@aggr0::@tmp_attr0] => ["s_name", "numwait"] : !db.table
-    return %11 : !db.table
+    %11 = relalg.materialize %10 [@supplier::@s_name,@aggr0::@tmp_attr0] => ["s_name", "numwait"] : !dsa.table
+    return %11 : !dsa.table
   }
 }
 

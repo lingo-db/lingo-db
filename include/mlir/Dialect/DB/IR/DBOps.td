@@ -43,16 +43,6 @@ def NullableType : DB_Type<"Nullable","nullable"> {
     let assemblyFormat = " `<` $type `>`";
 }
 
-def DB_Table: DB_Type<"Table","table"> {
-let summary = "table";
-let assemblyFormat = "";
-}
-
-def DB_TableBuilder : DB_Type<"TableBuilder","table_builder"> {
-let summary = "builder for table";
-let parameters = (ins "TupleType":$rowType);
-let assemblyFormat = "`<` $rowType `>`";
-}
 
 
 
@@ -157,24 +147,7 @@ let assemblyFormat = "$val `:` type($val)  attr-dict";
     }
   }];
 }
-def DB_CreateTableBuilder : DB_Op<"create_table_builder",
-[NoSideEffect]> {
-let arguments = (ins ArrayAttr:$columns);
-let results = (outs DB_TableBuilder:$builder);
-let assemblyFormat = "$columns `:` type($builder) attr-dict";
-}
 
-def DB_AddTableRow : DB_Op<"add_row"> {
-let arguments = (ins AnyType:$builder,AnyType:$row);
-let assemblyFormat = "$builder `:` type($builder) `,` $row `:` type($row) attr-dict";
-
-}
-def DB_FinalizeTable : DB_Op<"finalize_table",
-[NoSideEffect]> {
-let arguments = (ins AnyType:$builder);
-let results = (outs DB_Table:$builded);
-let assemblyFormat = "$builder `:` type($builder) attr-dict";
-}
 def DB_RuntimeCall : DB_Op<"runtime_call",[DB_HandleNullInterface]> {
 let arguments = (ins StrAttr:$fn,Variadic<AnyType>: $args);
 let results = (outs Optional<AnyType>:$res);

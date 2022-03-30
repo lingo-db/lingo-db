@@ -3,7 +3,7 @@
 //CHECK: ----------------------------------
 //CHECK: |                   11803366.91  |
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @lineitem  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
     %1 = relalg.selection %0 (%arg0: !relalg.tuple){
       %5 = relalg.getcol %arg0 @lineitem::@l_shipdate : !db.date<day>
@@ -40,8 +40,8 @@ module {
       %6 = relalg.addcol %arg1, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %5
       relalg.return %6 : !relalg.tuple
     }
-    %4 = relalg.materialize %3 [@aggr0::@tmp_attr0] => ["revenue"] : !db.table
-    return %4 : !db.table
+    %4 = relalg.materialize %3 [@aggr0::@tmp_attr0] => ["revenue"] : !dsa.table
+    return %4 : !dsa.table
   }
 }
 

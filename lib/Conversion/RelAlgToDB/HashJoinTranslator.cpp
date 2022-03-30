@@ -41,7 +41,7 @@ void HashJoinTranslator::produce(mlir::relalg::TranslatorContext& context, mlir:
    children[0]->produce(context, p->getBuilder());
    p->finishMainFunction({joinHashtable});
    auto hashtableRes = p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
-      builder.create<mlir::dsa::HashtableFinalize>(loc, args[0]);
+      builder.create<mlir::dsa::Finalize>(loc, args[0]);
       return std::vector<mlir::Value>{args[0]};
    });
    context.pipelineManager.setCurrentPipeline(parentPipeline);

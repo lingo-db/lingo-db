@@ -4,7 +4,7 @@
 //CHECK: |                        "MAIL"  |                           647  |                           945  |
 //CHECK: |                        "SHIP"  |                           620  |                           943  |
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @orders  {table_identifier = "orders"} columns: {o_clerk => @o_clerk({type = !db.string}), o_comment => @o_comment({type = !db.string}), o_custkey => @o_custkey({type = i32}), o_orderdate => @o_orderdate({type = !db.date<day>}), o_orderkey => @o_orderkey({type = i32}), o_orderpriority => @o_orderpriority({type = !db.string}), o_orderstatus => @o_orderstatus({type = !db.char<1>}), o_shippriority => @o_shippriority({type = i32}), o_totalprice => @o_totalprice({type = !db.decimal<15, 2>})}
     %1 = relalg.basetable @lineitem  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
     %2 = relalg.crossproduct %0, %1
@@ -72,8 +72,8 @@ module {
       relalg.return %11 : !relalg.tuple
     }
     %6 = relalg.sort %5 [(@lineitem::@l_shipmode,asc)]
-    %7 = relalg.materialize %6 [@lineitem::@l_shipmode,@aggr0::@tmp_attr0,@aggr0::@tmp_attr2] => ["l_shipmode", "high_line_count", "low_line_count"] : !db.table
-    return %7 : !db.table
+    %7 = relalg.materialize %6 [@lineitem::@l_shipmode,@aggr0::@tmp_attr0,@aggr0::@tmp_attr2] => ["l_shipmode", "high_line_count", "low_line_count"] : !dsa.table
+    return %7 : !dsa.table
   }
 }
 

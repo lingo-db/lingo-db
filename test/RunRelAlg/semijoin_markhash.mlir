@@ -10,7 +10,7 @@
 
 
 module @querymodule{
-    func @main ()  -> !db.table{
+    func @main ()  -> !dsa.table{
         %1 = relalg.basetable @hoeren { table_identifier="hoeren" } columns: {matrnr => @matrnr({type=i64}),
             vorlnr => @vorlnr({type=i64})
         }
@@ -25,7 +25,7 @@ module @querymodule{
                                                  relalg.return %10 : i1
                                              } attributes { impl="markhash" }
 
-        %15 = relalg.materialize %3 [@studenten::@name] => ["s.name"] : !db.table
-        return %15 : !db.table
+        %15 = relalg.materialize %3 [@studenten::@name] => ["s.name"] : !dsa.table
+        return %15 : !dsa.table
     }
 }

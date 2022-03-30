@@ -135,7 +135,9 @@ void DSAToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::dsa::TableType tableType) {
       return mlir::util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));
    });
-
+   typeConverter.addConversion([&](mlir::dsa::TableBuilderType tableType) {
+      return mlir::util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));
+   });
    typeConverter.addConversion([&](mlir::IntegerType iType) { return iType; });
    typeConverter.addConversion([&](mlir::IndexType iType) { return iType; });
    typeConverter.addConversion([&](mlir::FloatType fType) { return fType; });

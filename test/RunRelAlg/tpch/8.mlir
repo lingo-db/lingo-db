@@ -4,7 +4,7 @@
 //CHECK: |                          1995  |                          0.02  |
 //CHECK: |                          1996  |                          0.01  |
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @part  {table_identifier = "part"} columns: {p_brand => @p_brand({type = !db.string}), p_comment => @p_comment({type = !db.string}), p_container => @p_container({type = !db.string}), p_mfgr => @p_mfgr({type = !db.string}), p_name => @p_name({type = !db.string}), p_partkey => @p_partkey({type = i32}), p_retailprice => @p_retailprice({type = !db.decimal<15, 2>}), p_size => @p_size({type = i32}), p_type => @p_type({type = !db.string})}
     %1 = relalg.basetable @supplier  {table_identifier = "supplier"} columns: {s_acctbal => @s_acctbal({type = !db.decimal<15, 2>}), s_address => @s_address({type = !db.string}), s_comment => @s_comment({type = !db.string}), s_name => @s_name({type = !db.string}), s_nationkey => @s_nationkey({type = i32}), s_phone => @s_phone({type = !db.string}), s_suppkey => @s_suppkey({type = i32})}
     %2 = relalg.crossproduct %0, %1
@@ -97,8 +97,8 @@ module {
       relalg.return %25 : !relalg.tuple
     }
     %20 = relalg.sort %19 [(@map0::@tmp_attr0,asc)]
-    %21 = relalg.materialize %20 [@map0::@tmp_attr0,@map2::@tmp_attr5] => ["o_year", "mkt_share"] : !db.table
-    return %21 : !db.table
+    %21 = relalg.materialize %20 [@map0::@tmp_attr0,@map2::@tmp_attr5] => ["o_year", "mkt_share"] : !dsa.table
+    return %21 : !dsa.table
   }
 }
 

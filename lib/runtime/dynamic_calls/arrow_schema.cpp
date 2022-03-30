@@ -39,8 +39,8 @@ struct SchemaBuilder {
 EXPORT SchemaBuilder* rt_arrow_schema_create_builder() { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return new SchemaBuilder;
 }
-EXPORT void rt_arrow_schema_add_field(SchemaBuilder* builder, std::shared_ptr<arrow::DataType>* datatype, bool nullable, runtime::VarLen32 columnName) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   (builder)->fields.push_back(std::make_shared<arrow::Field>(columnName.str(), (*datatype), nullable));
+EXPORT void rt_arrow_schema_add_field(SchemaBuilder* builder, std::shared_ptr<arrow::DataType>* datatype, runtime::VarLen32 columnName) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+   (builder)->fields.push_back(std::make_shared<arrow::Field>(columnName.str(), (*datatype)));
 }
 EXPORT std::shared_ptr<arrow::Schema>* rt_arrow_schema_build(SchemaBuilder* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return (builder)->build();

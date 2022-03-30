@@ -46,7 +46,7 @@
 //CHECK: |                       -845.44  |          "Supplier#000000704"  |                     "ROMANIA"  |                          9926  |              "Manufacturer#5"  |"hQvlBqbqqnA5Dgo1BffRBX78tkkRu"  |             "29-300-896-5991"  |  "ctions. carefully sly requ"  |
 //CHECK: |                       -942.73  |          "Supplier#000000563"  |                     "GERMANY"  |                          5797  |              "Manufacturer#1"  |             "Rc7U1cRUhYs03JD"  |             "17-108-537-2691"  |"slyly furiously final decoys; silent, special realms poach f"  |
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @part  {table_identifier = "part"} columns: {p_brand => @p_brand({type = !db.string}), p_comment => @p_comment({type = !db.string}), p_container => @p_container({type = !db.string}), p_mfgr => @p_mfgr({type = !db.string}), p_name => @p_name({type = !db.string}), p_partkey => @p_partkey({type = i32}), p_retailprice => @p_retailprice({type = !db.decimal<15, 2>}), p_size => @p_size({type = i32}), p_type => @p_type({type = !db.string})}
     %1 = relalg.basetable @supplier  {table_identifier = "supplier"} columns: {s_acctbal => @s_acctbal({type = !db.decimal<15, 2>}), s_address => @s_address({type = !db.string}), s_comment => @s_comment({type = !db.string}), s_name => @s_name({type = !db.string}), s_nationkey => @s_nationkey({type = i32}), s_phone => @s_phone({type = !db.string}), s_suppkey => @s_suppkey({type = i32})}
     %2 = relalg.crossproduct %0, %1
@@ -117,8 +117,8 @@ module {
     }
     %10 = relalg.sort %9 [(@supplier::@s_acctbal,desc),(@nation::@n_name,asc),(@supplier::@s_name,asc),(@part::@p_partkey,asc)]
     %11 = relalg.limit 100 %10
-    %12 = relalg.materialize %11 [@supplier::@s_acctbal,@supplier::@s_name,@nation::@n_name,@part::@p_partkey,@part::@p_mfgr,@supplier::@s_address,@supplier::@s_phone,@supplier::@s_comment] => ["s_acctbal", "s_name", "n_name", "p_partkey", "p_mfgr", "s_address", "s_phone", "s_comment"] : !db.table
-    return %12 : !db.table
+    %12 = relalg.materialize %11 [@supplier::@s_acctbal,@supplier::@s_name,@nation::@n_name,@part::@p_partkey,@part::@p_mfgr,@supplier::@s_address,@supplier::@s_phone,@supplier::@s_comment] => ["s_acctbal", "s_name", "n_name", "p_partkey", "p_mfgr", "s_address", "s_phone", "s_comment"] : !dsa.table
+    return %12 : !dsa.table
   }
 }
 

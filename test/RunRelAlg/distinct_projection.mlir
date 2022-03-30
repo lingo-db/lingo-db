@@ -10,12 +10,12 @@
 
 
 module @querymodule{
-    func @main ()  -> !db.table{
+    func @main ()  -> !dsa.table{
         %1 = relalg.basetable @hoeren { table_identifier="hoeren" } columns: {matrnr => @matrnr({type=i64}),
             vorlnr => @vorlnr({type=i64})
         }
         %2 = relalg.projection distinct  [@hoeren::@matrnr] %1
-        %3 = relalg.materialize %2 [@hoeren::@matrnr] => ["matrnr"] : !db.table
-        return %3 : !db.table
+        %3 = relalg.materialize %2 [@hoeren::@matrnr] => ["matrnr"] : !dsa.table
+        return %3 : !dsa.table
     }
 }
