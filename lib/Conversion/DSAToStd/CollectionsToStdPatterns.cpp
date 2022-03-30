@@ -218,12 +218,11 @@ class LookupOpLowering : public ConversionPattern {
       auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, loaded);
       Value ht = unpacked.getResult(0);
       Value htMask = unpacked.getResult(1);
-      Value hashed = rewriter.create<mlir::dsa::Hash>(loc, rewriter.getIndexType(), lookupAdaptor.key()); //hash key value
-      Value buckedPos = rewriter.create<arith::AndIOp>(loc, htMask, hashed);
+      Value buckedPos = rewriter.create<arith::AndIOp>(loc, htMask, lookupAdaptor.key());
       Value ptr = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(ht.getType()).cast<mlir::util::RefType>().getElementType(), ht, buckedPos);
       //optimization
-      ptr = rewriter.create<mlir::util::FilterTaggedPtr>(loc, ptr.getType(), ptr, hashed);
-      Value packed = rewriter.create<mlir::util::PackOp>(loc, ValueRange{ptr, hashed});
+      ptr = rewriter.create<mlir::util::FilterTaggedPtr>(loc, ptr.getType(), ptr, lookupAdaptor.key());
+      Value packed = rewriter.create<mlir::util::PackOp>(loc, ValueRange{ptr, lookupAdaptor.key()});
       rewriter.replaceOp(op, packed);
       return success();
    }
@@ -368,7 +367,7 @@ void mlir::dsa::populateCollectionsToStdPatterns(mlir::dsa::codegen::FunctionReg
       auto arrayType = mlir::util::RefType::get(context, entryType);
       return (Type) mlir::util::RefType::get(context, TupleType::get(context, {indexType, indexType, arrayType}));
    });
-   typeConverter.addConversion([context, &typeConverter, i8ptrType, indexType](mlir::dsa::RecordBatchType recordBatchType) {
+   typeConverter.addConversion([context, i8ptrType, indexType](mlir::dsa::RecordBatchType recordBatchType) {
       std::vector<Type> types;
       types.push_back(indexType);
       if (auto tupleT = recordBatchType.getRowType().dyn_cast_or_null<TupleType>()) {

@@ -1,8 +1,8 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/RuntimeFunctions.h"
-#include "mlir/IR/PatternMatch.h"
 #include "mlir/IR/OpImplementation.h"
+#include "mlir/IR/PatternMatch.h"
 #include <unordered_set>
 
 #include <llvm/ADT/SmallPtrSet.h>
@@ -92,22 +92,6 @@ bool mlir::db::CastOp::canHandleInvalidValues() {
       return false;
    }
    return true;
-}
-
-static void printInitializationList(OpAsmPrinter& p,
-                                    Block::BlockArgListType blocksArgs,
-                                    ValueRange initializers,
-                                    StringRef prefix = "") {
-   assert(blocksArgs.size() == initializers.size() &&
-          "expected same length of arguments and initializers");
-   if (initializers.empty())
-      return;
-
-   p << prefix << '(';
-   llvm::interleaveComma(llvm::zip(blocksArgs, initializers), p, [&](auto it) {
-      p << std::get<0>(it) << " = " << std::get<1>(it);
-   });
-   p << ")";
 }
 
 

@@ -196,7 +196,11 @@ let results = (outs I1:$result);
 let assemblyFormat = "$val `:` type($val) attr-dict";
 
 }
-
+def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
+let arguments = (ins AnyType: $val);
+let results = (outs  Index : $hash);
+let assemblyFormat = "$val `:` type($val) attr-dict";
+}
 
 class DB_BinaryOp<string mnemonic, list<Trait> traits = []> :
 Op<DB_Dialect, mnemonic,

@@ -1,5 +1,5 @@
-#ifndef MLIR_CONVERSION_DSATOARROWSTD_REGISTEREDFUNCTIONS_H
-#define MLIR_CONVERSION_DSATOARROWSTD_REGISTEREDFUNCTIONS_H
+#ifndef MLIR_CONVERSION_DSATOSTD_REGISTEREDFUNCTIONS_H
+#define MLIR_CONVERSION_DSATOSTD_REGISTEREDFUNCTIONS_H
 
 #define FUNC_LIST(F, OPERANDS, RETURNS)                                                                                                                    \
    F(SetExecutionContext, set_execution_context, OPERANDS(POINTER_TYPE), RETURNS())                                                                        \
@@ -92,4 +92,4 @@
    F(JoinHtFinalize, join_ht_finalize, OPERANDS(POINTER_TYPE), RETURNS())                                                                                  \
    F(ScanSourceInit, scan_source_init, OPERANDS(POINTER_TYPE, STRING_TYPE), RETURNS(POINTER_TYPE))
 
-#endif // MLIR_CONVERSION_DSATOARROWSTD_REGISTEREDFUNCTIONS_H
+#endif // MLIR_CONVERSION_DSATOSTD_REGISTEREDFUNCTIONS_H

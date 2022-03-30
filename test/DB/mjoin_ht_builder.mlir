@@ -81,12 +81,25 @@
         %val4 = util.pack %default_marker, %int4, %int4 : i64,i32,i32 -> tuple<i64,i32,i32>
 
         %ht= dsa.create_ds  !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
-        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key1 : tuple<!db.string,i32>, %val1 : tuple<i64,i32,i32>
-        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key2 : tuple<!db.string,i32>, %val2 : tuple<i64,i32,i32>
-        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key3 : tuple<!db.string,i32>, %val3 : tuple<i64,i32,i32>
-        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key4 : tuple<!db.string,i32>, %val4 : tuple<i64,i32,i32>
+        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key1 : tuple<!db.string,i32>, %val1 : tuple<i64,i32,i32>  hash: (%key : tuple<!db.string,i32>){
+                                                                                                                                                                 %h = db.hash %key : tuple<!db.string,i32>
+                                                                                                                                                                 dsa.yield %h : index
+                                                                                                                                                              }
+        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key2 : tuple<!db.string,i32>, %val2 : tuple<i64,i32,i32>  hash: (%key : tuple<!db.string,i32>){
+                                                                                                                                                                 %h = db.hash %key : tuple<!db.string,i32>
+                                                                                                                                                                 dsa.yield %h : index
+                                                                                                                                                              }
+        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key3 : tuple<!db.string,i32>, %val3 : tuple<i64,i32,i32>  hash: (%key : tuple<!db.string,i32>){
+                                                                                                                                                                 %h = db.hash %key : tuple<!db.string,i32>
+                                                                                                                                                                 dsa.yield %h : index
+                                                                                                                                                              }
+        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key4 : tuple<!db.string,i32>, %val4 : tuple<i64,i32,i32>  hash: (%key : tuple<!db.string,i32>){
+                                                                                                                                                          %h = db.hash %key : tuple<!db.string,i32>
+                                                                                                                                                          dsa.yield %h : index
+                                                                                                                                                       }
         dsa.ht_finalize %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>
-        %matches = dsa.lookup %ht :  !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %key1  : tuple<!db.string,i32> -> !dsa.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator>
+        %hash = db.hash %key1  : tuple<!db.string,i32>
+        %matches = dsa.lookup %ht :  !dsa.join_ht<tuple<!db.string,i32>,tuple<i64,i32,i32>>, %hash  : index -> !dsa.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator>
        dsa.for %entry in %matches : !dsa.iterable<tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>>,join_ht_mod_iterator> {
            %tpl,%ptr = util.unpack %entry : tuple<tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>> -> tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>>,!util.ref<tuple<i64,i32,i32>>
             %key,%val = util.unpack %tpl : tuple<tuple<!db.string,i32>,tuple<i64,i32,i32>> -> tuple<!db.string,i32>,tuple<i64,i32,i32>

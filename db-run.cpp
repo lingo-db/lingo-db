@@ -35,9 +35,9 @@ int main(int argc, char** argv) {
    runner::Runner runner(runMode);
    runner.load(inputFileName);
    runner.lower();
-   runner.dump();
+   //runner.dump();
    runner.lowerToLLVM();
-   runner.dump();
+   //runner.dump();
    runner.runJit(&context, 1, runner::Runner::printTable);
    return 0;
 }

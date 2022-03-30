@@ -267,16 +267,19 @@ class CreateDsLowering : public ConversionPattern {
       return failure();
    }
 };
-class HashtableInsertReduceLowering : public ConversionPattern {
+class HashtableInsertLowering : public ConversionPattern {
    mlir::dsa::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   explicit HashtableInsertReduceLowering(TypeConverter& typeConverter, MLIRContext* context, dsa::codegen::FunctionRegistry& functionRegistry)
-      : ConversionPattern(typeConverter, mlir::dsa::HashtableInsertReduce::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit HashtableInsertLowering(TypeConverter& typeConverter, MLIRContext* context, dsa::codegen::FunctionRegistry& functionRegistry)
+      : ConversionPattern(typeConverter, mlir::dsa::HashtableInsert::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::dsa::HashtableInsertReduceAdaptor adaptor(operands);
-      auto reduceOp = mlir::cast<mlir::dsa::HashtableInsertReduce>(op);
+      mlir::dsa::HashtableInsertAdaptor adaptor(operands);
+      auto reduceOp = mlir::cast<mlir::dsa::HashtableInsert>(op);
+      if(!reduceOp.ht().getType().isa<mlir::dsa::AggregationHashtableType>()){
+         return failure();
+      }
       std::function<Value(OpBuilder&, Value, Value)> reduceFnBuilder = reduceOp.reduce().empty() ? std::function<Value(OpBuilder&, Value, Value)>() : [&reduceOp](OpBuilder& rewriter, Value left, Value right) {
          Block* sortLambda = &reduceOp.reduce().front();
          auto* sortLambdaTerminator = sortLambda->getTerminator();
@@ -312,7 +315,20 @@ class HashtableInsertReduceLowering : public ConversionPattern {
          rewriter.create<mlir::util::StoreOp>(loc, newAggr, adaptor.ht(), mlir::Value());
          rewriter.eraseOp(op);
       } else {
-         Value hashed = rewriter.create<mlir::dsa::Hash>(loc, rewriter.getIndexType(), adaptor.key());
+         Value hashed;
+         {
+            Block* sortLambda = &reduceOp.hash().front();
+            auto* sortLambdaTerminator = sortLambda->getTerminator();
+            mlir::BlockAndValueMapping mapping;
+            mapping.map(sortLambda->getArgument(0), adaptor.key());
+
+            for (auto& op : sortLambda->getOperations()) {
+               if (&op != sortLambdaTerminator) {
+                  rewriter.clone(op, mapping);
+               }
+            }
+            hashed = mapping.lookup(cast<mlir::dsa::YieldOp>(sortLambdaTerminator).results()[0]);
+         }
 
          AggrHtHelper2 helper(rewriter.getContext(), adaptor.key().getType(), typeConverter->convertType(reduceOp.ht().getType().cast<mlir::dsa::AggregationHashtableType>().getValType()), loc, typeConverter);
          helper.insert(rewriter, adaptor.ht(), adaptor.key(), adaptor.val(), hashed, reduceFnBuilder, equalFnBuilder, functionRegistry);
@@ -321,16 +337,33 @@ class HashtableInsertReduceLowering : public ConversionPattern {
       return success();
    }
 };
-class HashtableInsertLowering : public ConversionPattern {
+class JoinHtHashtableInsertLowering : public ConversionPattern {
    mlir::dsa::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   explicit HashtableInsertLowering(TypeConverter& typeConverter, MLIRContext* context, dsa::codegen::FunctionRegistry& functionRegistry)
+   explicit JoinHtHashtableInsertLowering(TypeConverter& typeConverter, MLIRContext* context, dsa::codegen::FunctionRegistry& functionRegistry)
       : ConversionPattern(typeConverter, mlir::dsa::HashtableInsert::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::dsa::HashtableInsertAdaptor adaptor(operands);
-      Value hashed = rewriter.create<mlir::dsa::Hash>(op->getLoc(), rewriter.getIndexType(), adaptor.key());
+      auto reduceOp = mlir::cast<mlir::dsa::HashtableInsert>(op);
+      if(!reduceOp.ht().getType().isa<mlir::dsa::JoinHashtableType>()){
+         return failure();
+      }
+      Value hashed;
+      {
+         Block* sortLambda = &reduceOp.hash().front();
+         auto* sortLambdaTerminator = sortLambda->getTerminator();
+         mlir::BlockAndValueMapping mapping;
+         mapping.map(sortLambda->getArgument(0), adaptor.key());
+
+         for (auto& op : sortLambda->getOperations()) {
+            if (&op != sortLambdaTerminator) {
+               rewriter.clone(op, mapping);
+            }
+         }
+         hashed = mapping.lookup(cast<mlir::dsa::YieldOp>(sortLambdaTerminator).results()[0]);
+      }
       mlir::Value val = adaptor.val();
       if (!val) {
          val = rewriter.create<mlir::util::UndefTupleOp>(op->getLoc(), mlir::TupleType::get(getContext()));
@@ -406,6 +439,6 @@ void populateDSAToStdPatterns(mlir::dsa::codegen::FunctionRegistry& functionRegi
    patterns.insert<HashtableInsertLowering>(typeConverter, patterns.getContext(), functionRegistry);
    patterns.insert<HashtableFinalizeLowering>(typeConverter, patterns.getContext(), functionRegistry);
    patterns.insert<DSAppendLowering>(typeConverter, patterns.getContext(), functionRegistry);
-   patterns.insert<HashtableInsertReduceLowering>(typeConverter, patterns.getContext(), functionRegistry);
+   patterns.insert<JoinHtHashtableInsertLowering>(typeConverter, patterns.getContext(), functionRegistry);
 }
 } // end namespace mlir::dsa

@@ -1,5 +1,5 @@
-#ifndef MLIR_CONVERSION_DSATOARROWSTD_BITUTIL_H
-#define MLIR_CONVERSION_DSATOARROWSTD_BITUTIL_H
+#ifndef MLIR_CONVERSION_DSATOSTD_BITUTIL_H
+#define MLIR_CONVERSION_DSATOSTD_BITUTIL_H
 #include "FunctionRegistry.h"
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
@@ -29,4 +29,4 @@ class BitUtil {
    }
 };
 } // namespace mlir::dsa::codegen
-#endif // MLIR_CONVERSION_DSATOARROWSTD_BITUTIL_H
+#endif // MLIR_CONVERSION_DSATOSTD_BITUTIL_H

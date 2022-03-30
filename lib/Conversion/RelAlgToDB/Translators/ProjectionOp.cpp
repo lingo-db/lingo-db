@@ -1,10 +1,10 @@
 #include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
-#include "mlir/Dialect/DSA/IR/DSAOps.h"
 
 class ProjectionTranslator : public mlir::relalg::Translator {
    mlir::relalg::ProjectionOp projectionOp;
@@ -40,7 +40,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       mlir::Value emptyVals = builder.create<mlir::util::UndefTupleOp>(projectionOp->getLoc(), valTupleType);
       mlir::Value packedKey = key.pack(context, builder, projectionOp->getLoc());
 
-      auto reduceOp = builder.create<mlir::dsa::HashtableInsertReduce>(projectionOp->getLoc(), aggrHt, packedKey, emptyVals);
+      auto reduceOp = builder.create<mlir::dsa::HashtableInsert>(projectionOp->getLoc(), aggrHt, packedKey, emptyVals);
       mlir::Block* aggrBuilderBlock = new mlir::Block;
       reduceOp.equal().push_back(aggrBuilderBlock);
       aggrBuilderBlock->addArguments({packedKey.getType(), packedKey.getType()}, {projectionOp->getLoc(), projectionOp->getLoc()});
@@ -52,6 +52,15 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
          mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1));
          builder.create<mlir::dsa::YieldOp>(projectionOp->getLoc(), matches);
          yieldOp.erase();
+      }
+      {
+         mlir::Block* aggrBuilderBlock = new mlir::Block;
+         reduceOp.hash().push_back(aggrBuilderBlock);
+         aggrBuilderBlock->addArguments({packedKey.getType()}, {projectionOp->getLoc()});
+         mlir::OpBuilder::InsertionGuard guard(builder);
+         builder.setInsertionPointToStart(aggrBuilderBlock);
+         mlir::Value hashed = builder.create<mlir::db::Hash>(projectionOp->getLoc(), builder.getIndexType(), aggrBuilderBlock->getArgument(0));
+         builder.create<mlir::dsa::YieldOp>(projectionOp->getLoc(), hashed);
       }
    }
    mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::Value left, mlir::Value right) {

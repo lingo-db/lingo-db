@@ -77,7 +77,7 @@ class FreeOpLowering : public ConversionPattern {
       return success();
    }
 };*/
-}
+} // end namespace
 void mlir::dsa::populateRuntimeSpecificScalarToStdPatterns(mlir::dsa::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    patterns.insert<FreeOpLowering>(functionRegistry, typeConverter, patterns.getContext());
 }

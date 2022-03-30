@@ -1,11 +1,11 @@
 #include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
-#include <mlir/Dialect/DSA/IR/DSAOps.h>
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include <llvm/ADT/TypeSwitch.h>
+#include <mlir/Dialect/DSA/IR/DSAOps.h>
 
 class AggregationTranslator : public mlir::relalg::Translator {
    mlir::relalg::AggregationOp aggregationOp;
@@ -63,7 +63,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
       mlir::Value packedKey = key.pack(context, builder, aggregationOp->getLoc());
       mlir::Value packedVal = val.pack(context, builder, aggregationOp->getLoc());
 
-      auto reduceOp = builder.create<mlir::dsa::HashtableInsertReduce>(aggregationOp->getLoc(), aggrHt, packedKey, packedVal);
+      auto reduceOp = builder.create<mlir::dsa::HashtableInsert>(aggregationOp->getLoc(), aggrHt, packedKey, packedVal);
 
       auto scope = context.createScope();
 
@@ -71,17 +71,28 @@ class AggregationTranslator : public mlir::relalg::Translator {
       keyTupleType = key.getTupleType(builder.getContext());
       valTupleType = val.getTupleType(builder.getContext());
       aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
-      {
-         mlir::Block* aggrBuilderBlock = new mlir::Block;
-         reduceOp.equal().push_back(aggrBuilderBlock);
-         aggrBuilderBlock->addArguments({packedKey.getType(), packedKey.getType()}, {aggregationOp->getLoc(), aggregationOp->getLoc()});
-         mlir::OpBuilder::InsertionGuard guard(builder);
-         builder.setInsertionPointToStart(aggrBuilderBlock);
-         auto yieldOp = builder.create<mlir::dsa::YieldOp>(aggregationOp->getLoc());
-         builder.setInsertionPointToStart(aggrBuilderBlock);
-         mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1));
-         builder.create<mlir::dsa::YieldOp>(aggregationOp->getLoc(), matches);
-         yieldOp.erase();
+      if (!keyTupleType.getTypes().empty()) {
+         {
+            mlir::Block* aggrBuilderBlock = new mlir::Block;
+            reduceOp.equal().push_back(aggrBuilderBlock);
+            aggrBuilderBlock->addArguments({packedKey.getType(), packedKey.getType()}, {aggregationOp->getLoc(), aggregationOp->getLoc()});
+            mlir::OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointToStart(aggrBuilderBlock);
+            auto yieldOp = builder.create<mlir::dsa::YieldOp>(aggregationOp->getLoc());
+            builder.setInsertionPointToStart(aggrBuilderBlock);
+            mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1));
+            builder.create<mlir::dsa::YieldOp>(aggregationOp->getLoc(), matches);
+            yieldOp.erase();
+         }
+         {
+            mlir::Block* aggrBuilderBlock = new mlir::Block;
+            reduceOp.hash().push_back(aggrBuilderBlock);
+            aggrBuilderBlock->addArguments({packedKey.getType()}, {aggregationOp->getLoc()});
+            mlir::OpBuilder::InsertionGuard guard(builder);
+            builder.setInsertionPointToStart(aggrBuilderBlock);
+            mlir::Value hashed = builder.create<mlir::db::Hash>(aggregationOp->getLoc(), builder.getIndexType(), aggrBuilderBlock->getArgument(0));
+            builder.create<mlir::dsa::YieldOp>(aggregationOp->getLoc(), hashed);
+         }
       }
       mlir::Block* aggrBuilderBlock = new mlir::Block;
       reduceOp.reduce().push_back(aggrBuilderBlock);

@@ -90,14 +90,24 @@ void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilde
       mlir::Value packedKey = builder.create<mlir::util::PackOp>(loc, inlinedKeys);
       auto const0 = builder.create<mlir::arith::ConstantOp>(loc, builder.getIntegerType(64), builder.getI64IntegerAttr(0));
       mlir::Value packedValues = orderedValues.pack(context, builder, loc, impl->markable ? std::vector<Value>{const0} : std::vector<Value>());
-      builder.create<mlir::dsa::HashtableInsert>(loc, joinHashtable, packedKey, packedValues);
+      auto insertOp = builder.create<mlir::dsa::HashtableInsert>(loc, joinHashtable, packedKey, packedValues);
+      {
+         mlir::Block* aggrBuilderBlock = new mlir::Block;
+         insertOp.hash().push_back(aggrBuilderBlock);
+         aggrBuilderBlock->addArguments({packedKey.getType()}, {loc});
+         mlir::OpBuilder::InsertionGuard guard(builder);
+         builder.setInsertionPointToStart(aggrBuilderBlock);
+         mlir::Value hashed = builder.create<mlir::db::Hash>(loc, builder.getIndexType(), aggrBuilderBlock->getArgument(0));
+         builder.create<mlir::dsa::YieldOp>(loc, hashed);
+      }
    } else if (child == this->children[1].get()) {
       mlir::TupleType entryAndValuePtrType = mlir::TupleType::get(ctxt, TypeRange{entryType, util::RefType::get(ctxt, valTupleType)});
       Type iteratorType = impl->markable ? entryAndValuePtrType : entryType;
       auto packedKey = builder.create<mlir::util::PackOp>(loc, mlir::relalg::HashJoinUtils::inlineKeys(&joinOp->getRegion(0).front(), rightKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context));
       mlir::Type htIterable = mlir::dsa::GenericIterableType::get(ctxt, iteratorType, impl->markable ? "join_ht_mod_iterator" : "join_ht_iterator");
       impl->beforeLookup(context, builder);
-      auto matches = builder.create<mlir::dsa::Lookup>(loc, htIterable, context.pipelineManager.getCurrentPipeline()->addDependency(joinHt), packedKey);
+      mlir::Value hash = builder.create<mlir::db::Hash>(loc, builder.getIndexType(), packedKey);
+      auto matches = builder.create<mlir::dsa::Lookup>(loc, htIterable, context.pipelineManager.getCurrentPipeline()->addDependency(joinHt), hash);
       {
          auto forOp2 = builder.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, matches, impl->getFlag(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;

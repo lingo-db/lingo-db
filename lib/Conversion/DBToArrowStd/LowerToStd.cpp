@@ -48,6 +48,26 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 static bool hasDBType(TypeConverter& converter, TypeRange types) {
    return llvm::any_of(types, [&converter](mlir::Type t) { auto converted = converter.convertType(t);return converted&&converted!=t; });
 }
+mlir::LogicalResult safelyMoveRegion(ConversionPatternRewriter& rewriter, mlir::TypeConverter& typeConverter, mlir::Region& source, mlir::Region& target) {
+   rewriter.inlineRegionBefore(source, target, target.end());
+   {
+      if (!target.empty()) {
+         source.push_back(new Block);
+         std::vector<mlir::Location> locs;
+         for (size_t i = 0; i < target.front().getArgumentTypes().size(); i++) {
+            locs.push_back(rewriter.getUnknownLoc());
+         }
+         source.front().addArguments(target.front().getArgumentTypes(), locs);
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(&source.front());
+         rewriter.create<mlir::dsa::YieldOp>(rewriter.getUnknownLoc());
+      }
+   }
+   if (failed(rewriter.convertRegionTypes(&target, typeConverter))) {
+      return rewriter.notifyMatchFailure(source.getParentOp(), "could not convert body types");
+   }
+   return success();
+}
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
    public:
@@ -59,7 +79,13 @@ class SimpleTypeConversionPattern : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       llvm::SmallVector<mlir::Type> convertedTypes;
       assert(typeConverter->convertTypes(op->getResultTypes(), convertedTypes).succeeded());
-      rewriter.replaceOpWithNewOp<Op>(op, convertedTypes, ValueRange(operands), op->getAttrs());
+      auto newOp = rewriter.create<Op>(op->getLoc(), convertedTypes, ValueRange(operands), op->getAttrs());
+      for (size_t i = 0; i < op->getNumRegions(); i++) {
+         if (safelyMoveRegion(rewriter, *typeConverter, op->getRegion(i), newOp->getRegion(i)).failed()) {
+            return failure();
+         }
+      }
+      rewriter.replaceOp(op, newOp->getResults());
       return success();
    }
 };
@@ -79,7 +105,7 @@ class AtLowering : public ConversionPattern {
          rewriter.finalizeRootUpdate(op);
          return mlir::success();
       }
-      auto context = getContext();
+      auto* context = getContext();
       mlir::Type arrowPhysicalType = typeConverter->convertType(t);
       if (t.isa<mlir::db::DecimalType>()) {
          arrowPhysicalType = mlir::IntegerType::get(context, 128);
@@ -124,202 +150,6 @@ class AtLowering : public ConversionPattern {
          }
       }
       rewriter.replaceOp(op, values);
-      return success();
-   }
-};
-class ConvertForOpTypes : public OpConversionPattern<mlir::dsa::ForOp> {
-   public:
-   using OpConversionPattern::OpConversionPattern;
-   LogicalResult
-   matchAndRewrite(mlir::dsa::ForOp op, OpAdaptor adaptor,
-                   ConversionPatternRewriter& rewriter) const override {
-      SmallVector<Type, 6> newResultTypes;
-      for (auto type : op.getResultTypes()) {
-         Type newType = typeConverter->convertType(type);
-         if (!newType)
-            return rewriter.notifyMatchFailure(op, "not a 1:1 type conversion");
-         newResultTypes.push_back(newType);
-      }
-
-      // Clone the op without the regions and inline the regions from the old op.
-      //
-      // This is a little bit tricky. We have two concerns here:
-      //
-      // 1. We cannot update the op in place because the dialect conversion
-      // framework does not track type changes for ops updated in place, so it
-      // won't insert appropriate materializations on the changed result types.
-      // PR47938 tracks this issue, but it seems hard to fix. Instead, we need to
-      // clone the op.
-      //
-      // 2. We cannot simply call `op.clone()` to get the cloned op. Besides being
-      // inefficient to recursively clone the regions, there is a correctness
-      // issue: if we clone with the regions, then the dialect conversion
-      // framework thinks that we just inserted all the cloned child ops. But what
-      // we want is to "take" the child regions and let the dialect conversion
-      // framework continue recursively into ops inside those regions (which are
-      // already in its worklist; inlining them into the new op's regions doesn't
-      // remove the child ops from the worklist).
-      mlir::dsa::ForOp newOp = cast<mlir::dsa::ForOp>(rewriter.cloneWithoutRegions(*op.getOperation()));
-      // Take the region from the old op and put it in the new op.
-
-      rewriter.inlineRegionBefore(op.getBodyRegion(), newOp.getBodyRegion(),
-                                  newOp.getBodyRegion().end());
-      op.region().push_back(new Block);
-      {
-         std::vector<mlir::Location> locs;
-         for (auto x : newOp.getBody()->getArgumentTypes()) {
-            locs.push_back(rewriter.getUnknownLoc());
-         }
-         op.getBody()->addArguments(newOp.getBody()->getArgumentTypes(), locs);
-         mlir::OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(op.getBody());
-         rewriter.create<mlir::dsa::YieldOp>(rewriter.getUnknownLoc());
-         op.dump();
-      }
-      // Now, update all the types.
-
-      // Convert the type of the entry block of the ForOp's body.
-      if (failed(rewriter.convertRegionTypes(&newOp.getBodyRegion(), *getTypeConverter()))) {
-         return rewriter.notifyMatchFailure(op, "could not convert body types");
-      }
-      // Change the clone to use the updated operands. We could have cloned with
-      // a BlockAndValueMapping, but this seems a bit more direct.
-      newOp->setOperands(adaptor.getOperands());
-      // Update the result types to the new converted types.
-      for (auto t : llvm::zip(newOp.getResults(), newResultTypes))
-         std::get<0>(t).setType(std::get<1>(t));
-
-      rewriter.replaceOp(op, newOp.getResults());
-      return success();
-   }
-};
-class ConvertSortOpTypes : public OpConversionPattern<mlir::dsa::SortOp> {
-   public:
-   using OpConversionPattern::OpConversionPattern;
-   LogicalResult
-   matchAndRewrite(mlir::dsa::SortOp op, OpAdaptor adaptor,
-                   ConversionPatternRewriter& rewriter) const override {
-      // Clone the op without the regions and inline the regions from the old op.
-      //
-      // This is a little bit tricky. We have two concerns here:
-      //
-      // 1. We cannot update the op in place because the dialect conversion
-      // framework does not track type changes for ops updated in place, so it
-      // won't insert appropriate materializations on the changed result types.
-      // PR47938 tracks this issue, but it seems hard to fix. Instead, we need to
-      // clone the op.
-      //
-      // 2. We cannot simply call `op.clone()` to get the cloned op. Besides being
-      // inefficient to recursively clone the regions, there is a correctness
-      // issue: if we clone with the regions, then the dialect conversion
-      // framework thinks that we just inserted all the cloned child ops. But what
-      // we want is to "take" the child regions and let the dialect conversion
-      // framework continue recursively into ops inside those regions (which are
-      // already in its worklist; inlining them into the new op's regions doesn't
-      // remove the child ops from the worklist).
-      mlir::dsa::SortOp newOp = cast<mlir::dsa::SortOp>(rewriter.cloneWithoutRegions(*op.getOperation()));
-      // Take the region from the old op and put it in the new op.
-
-      rewriter.inlineRegionBefore(op.region(), newOp.region(),
-                                  newOp.region().end());
-      op.region().push_back(new Block);
-      {
-         std::vector<mlir::Location> locs;
-         for (auto x : newOp.region().front().getArgumentTypes()) {
-            locs.push_back(rewriter.getUnknownLoc());
-         }
-         op.region().front().addArguments(newOp.getRegion().front().getArgumentTypes(), locs);
-         mlir::OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(&op.region().front());
-         rewriter.create<mlir::dsa::YieldOp>(rewriter.getUnknownLoc());
-         op.dump();
-      }
-      // Now, update all the types.
-
-      // Convert the type of the entry block of the ForOp's body.
-      if (failed(rewriter.convertRegionTypes(&newOp.region(), *getTypeConverter()))) {
-         return rewriter.notifyMatchFailure(op, "could not convert body types");
-      }
-      // Change the clone to use the updated operands. We could have cloned with
-      // a BlockAndValueMapping, but this seems a bit more direct.
-      newOp->setOperands(adaptor.getOperands());
-      // Update the result types to the new converted types.
-
-      rewriter.eraseOp(op);
-      return success();
-   }
-};
-
-class ConvertInsertReduceTypes : public OpConversionPattern<mlir::dsa::HashtableInsertReduce> {
-   public:
-   using OpConversionPattern::OpConversionPattern;
-   LogicalResult
-   matchAndRewrite(mlir::dsa::HashtableInsertReduce op, OpAdaptor adaptor,
-                   ConversionPatternRewriter& rewriter) const override {
-      // Clone the op without the regions and inline the regions from the old op.
-      //
-      // This is a little bit tricky. We have two concerns here:
-      //
-      // 1. We cannot update the op in place because the dialect conversion
-      // framework does not track type changes for ops updated in place, so it
-      // won't insert appropriate materializations on the changed result types.
-      // PR47938 tracks this issue, but it seems hard to fix. Instead, we need to
-      // clone the op.
-      //
-      // 2. We cannot simply call `op.clone()` to get the cloned op. Besides being
-      // inefficient to recursively clone the regions, there is a correctness
-      // issue: if we clone with the regions, then the dialect conversion
-      // framework thinks that we just inserted all the cloned child ops. But what
-      // we want is to "take" the child regions and let the dialect conversion
-      // framework continue recursively into ops inside those regions (which are
-      // already in its worklist; inlining them into the new op's regions doesn't
-      // remove the child ops from the worklist).
-      mlir::dsa::HashtableInsertReduce newOp = cast<mlir::dsa::HashtableInsertReduce>(rewriter.cloneWithoutRegions(*op.getOperation()));
-      // Take the region from the old op and put it in the new op.
-
-      rewriter.inlineRegionBefore(op.equal(), newOp.equal(), newOp.equal().end());
-      rewriter.inlineRegionBefore(op.reduce(), newOp.reduce(), newOp.reduce().end());
-      {
-         if (!newOp.equal().empty()) {
-            op.equal().push_back(new Block);
-            std::vector<mlir::Location> locs;
-            for (auto x : newOp.equal().front().getArgumentTypes()) {
-               locs.push_back(rewriter.getUnknownLoc());
-            }
-            op.equal().front().addArguments(newOp.equal().front().getArgumentTypes(), locs);
-            mlir::OpBuilder::InsertionGuard guard(rewriter);
-            rewriter.setInsertionPointToStart(&op.equal().front());
-            rewriter.create<mlir::dsa::YieldOp>(rewriter.getUnknownLoc());
-         }
-      }
-      {
-         if (!newOp.reduce().empty()) {
-            op.reduce().push_back(new Block);
-            std::vector<mlir::Location> locs;
-            for (auto x : newOp.reduce().front().getArgumentTypes()) {
-               locs.push_back(rewriter.getUnknownLoc());
-            }
-            op.reduce().front().addArguments(newOp.reduce().front().getArgumentTypes(), locs);
-            mlir::OpBuilder::InsertionGuard guard(rewriter);
-            rewriter.setInsertionPointToStart(&op.reduce().front());
-            rewriter.create<mlir::dsa::YieldOp>(rewriter.getUnknownLoc());
-         }
-      }
-      // Now, update all the types.
-
-      // Convert the type of the entry block of the ForOp's body.
-      if (failed(rewriter.convertRegionTypes(&newOp.equal(), *getTypeConverter()))) {
-         return rewriter.notifyMatchFailure(op, "could not convert body types");
-      }
-      if (failed(rewriter.convertRegionTypes(&newOp.reduce(), *getTypeConverter()))) {
-         return rewriter.notifyMatchFailure(op, "could not convert body types");
-      }
-      // Change the clone to use the updated operands. We could have cloned with
-      // a BlockAndValueMapping, but this seems a bit more direct.
-      newOp->setOperands(adaptor.getOperands());
-      // Update the result types to the new converted types.
-
-      rewriter.eraseOp(op);
       return success();
    }
 };
@@ -434,15 +264,14 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::ScanSource>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::Append>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::CreateDS>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::HashtableInsert>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::HashtableFinalize>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::Lookup>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::FreeOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::YieldOp>>(typeConverter, &getContext());
    patterns.insert<AtLowering>(typeConverter, &getContext());
-   patterns.insert<ConvertForOpTypes>(typeConverter, &getContext());
-   patterns.insert<ConvertSortOpTypes>(typeConverter, &getContext());
-   patterns.insert<ConvertInsertReduceTypes>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::HashtableInsert>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::SortOp>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::ForOp>>(typeConverter, &getContext());
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }

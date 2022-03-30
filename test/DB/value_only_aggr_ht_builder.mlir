@@ -28,7 +28,7 @@
 
         %initial = util.pack %zero, %one : i32,i32 -> tuple<i32,i32>
         %ht = dsa.create_ds %initial : tuple<i32,i32> ->  !dsa.aggr_ht<tuple<>,tuple<i32,i32>>
-        dsa.ht_insert_reduce %ht :  !dsa.aggr_ht<tuple<>,tuple<i32,i32>>, %empty_key : tuple<>, %val1 : tuple<i32,i32> reduce: (%curr:tuple<i32,i32>, %new:tuple<i32,i32>) {
+        dsa.ht_insert %ht :  !dsa.aggr_ht<tuple<>,tuple<i32,i32>>, %empty_key : tuple<>, %val1 : tuple<i32,i32> reduce: (%curr:tuple<i32,i32>, %new:tuple<i32,i32>) {
             %curr1,%curr2 = util.unpack %curr : tuple<i32,i32> -> i32,i32
             %new1,%new2 = util.unpack %new : tuple<i32,i32> -> i32,i32
             %add1 = db.add %curr1 : i32,%new1 : i32
@@ -36,7 +36,7 @@
             %updated_tuple = util.pack %add1, %mul1 : i32, i32 -> tuple<i32, i32>
             dsa.yield %updated_tuple : tuple<i32, i32>
          }
-         dsa.ht_insert_reduce %ht :  !dsa.aggr_ht<tuple<>,tuple<i32,i32>>, %empty_key : tuple<>, %val2 : tuple<i32,i32> reduce: (%curr:tuple<i32,i32>, %new:tuple<i32,i32>) {
+         dsa.ht_insert %ht :  !dsa.aggr_ht<tuple<>,tuple<i32,i32>>, %empty_key : tuple<>, %val2 : tuple<i32,i32> reduce: (%curr:tuple<i32,i32>, %new:tuple<i32,i32>) {
              %curr1,%curr2 = util.unpack %curr : tuple<i32,i32> -> i32,i32
              %new1,%new2 = util.unpack %new : tuple<i32,i32> -> i32,i32
              %add1 = db.add %curr1 : i32,%new1 : i32
@@ -44,7 +44,7 @@
              %updated_tuple = util.pack %add1, %mul1 : i32, i32 -> tuple<i32, i32>
              dsa.yield %updated_tuple : tuple<i32, i32>
           }
-         dsa.ht_insert_reduce %ht :  !dsa.aggr_ht<tuple<>,tuple<i32,i32>>, %empty_key : tuple<>, %val3 : tuple<i32,i32> reduce: (%curr:tuple<i32,i32>, %new:tuple<i32,i32>) {
+         dsa.ht_insert %ht :  !dsa.aggr_ht<tuple<>,tuple<i32,i32>>, %empty_key : tuple<>, %val3 : tuple<i32,i32> reduce: (%curr:tuple<i32,i32>, %new:tuple<i32,i32>) {
              %curr1,%curr2 = util.unpack %curr : tuple<i32,i32> -> i32,i32
              %new1,%new2 = util.unpack %new : tuple<i32,i32> -> i32,i32
              %add1 = db.add %curr1 : i32,%new1 : i32
@@ -52,7 +52,7 @@
              %updated_tuple = util.pack %add1, %mul1 : i32, i32 -> tuple<i32, i32>
              dsa.yield %updated_tuple : tuple<i32, i32>
           }
-          dsa.ht_insert_reduce %ht :  !dsa.aggr_ht<tuple<>,tuple<i32,i32>>, %empty_key : tuple<>, %val4 : tuple<i32,i32> reduce: (%curr:tuple<i32,i32>, %new:tuple<i32,i32>) {
+          dsa.ht_insert %ht :  !dsa.aggr_ht<tuple<>,tuple<i32,i32>>, %empty_key : tuple<>, %val4 : tuple<i32,i32> reduce: (%curr:tuple<i32,i32>, %new:tuple<i32,i32>) {
               %curr1,%curr2 = util.unpack %curr : tuple<i32,i32> -> i32,i32
               %new1,%new2 = util.unpack %new : tuple<i32,i32> -> i32,i32
               %add1 = db.add %curr1 : i32,%new1 : i32

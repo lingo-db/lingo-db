@@ -117,11 +117,6 @@ let assemblyFormat = "$flag attr-dict";
 }
 
 
-def DSA_Hash : DSA_Op<"hash", [NoSideEffect]> {
-let arguments = (ins AnyType: $val);
-let results = (outs  Index : $hash);
-let assemblyFormat = "$val `:` type($val) attr-dict";
-}
 
 def DSA_CreateTableBuilder : DSA_Op<"create_table_builder",
 [NoSideEffect]> {
@@ -143,13 +138,10 @@ def DSA_CreateDS : DSA_Op<"create_ds"> {
     build($_builder, $_state, t, mlir::Value());
     }]>];
 }
+
 def DSA_HashtableInsert: DSA_Op<"ht_insert"> {
     let arguments = (ins AnyType:$ht, AnyType:$key, Optional<AnyType>: $val);
-    let assemblyFormat = "$ht `:` type($ht) `,` $key `:` type($key) ( `,` $val^ `:` type($val) )? attr-dict";
-}
-def DSA_HashtableInsertReduce: DSA_Op<"ht_insert_reduce"> {
-    let arguments = (ins AnyType:$ht, AnyType:$key, Optional<AnyType>: $val);
-    let regions = (region AnyRegion:$equal, AnyRegion:$reduce);
+    let regions = (region AnyRegion:$hash, AnyRegion:$equal, AnyRegion:$reduce);
 }
 
 def DSA_HashtableFinalize: DSA_Op<"ht_finalize"> {
@@ -237,7 +229,7 @@ let assemblyFormat = "$val `:` type($val) attr-dict";
 
 
 def YieldOp : DSA_Op<"yield", [NoSideEffect, Terminator,
-        ParentOneOf<["ForOp","SortOp","HashtableInsertReduce"]>]> {
+        ParentOneOf<["ForOp","SortOp","HashtableInsert"]>]> {
 let arguments = (ins Variadic<AnyType>:$results);
 let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
 let assemblyFormat = [{  attr-dict ($results^ `:` type($results))? }];

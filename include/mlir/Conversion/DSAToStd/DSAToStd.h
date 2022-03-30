@@ -1,5 +1,5 @@
-#ifndef MLIR_CONVERSION_DSATOARROWSTD_DSATOARROWSTD_H
-#define MLIR_CONVERSION_DSATOARROWSTD_DSATOARROWSTD_H
+#ifndef MLIR_CONVERSION_DSATOSTD_DSATOSTD_H
+#define MLIR_CONVERSION_DSATOSTD_DSATOSTD_H
 
 #include "mlir/Conversion/DSAToStd/FunctionRegistry.h"
 #include "mlir/Pass/Pass.h"
@@ -20,4 +20,4 @@ std::unique_ptr<Pass> createLowerToStdPass();
 } // end namespace dsa
 } // end namespace mlir
 
-#endif // MLIR_CONVERSION_DSATOARROWSTD_DSATOARROWSTD_H
+#endif // MLIR_CONVERSION_DSATOSTD_DSATOSTD_H

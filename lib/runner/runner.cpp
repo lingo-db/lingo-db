@@ -29,8 +29,8 @@
 
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
-#include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Dialect/DB/Passes.h"
+#include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"

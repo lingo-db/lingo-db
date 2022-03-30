@@ -490,7 +490,7 @@ class OneOfLowering : public ConversionPattern {
       return success();
    }
 };
-/*class HashLowering : public ConversionPattern {
+class HashLowering : public ConversionPattern {
    Value combineHashes(OpBuilder& builder, Location loc, Value hash1, Value totalHash) const {
       if (!totalHash) {
          return hash1;
@@ -558,7 +558,7 @@ class OneOfLowering : public ConversionPattern {
       rewriter.replaceOp(op, hashImpl(rewriter, op->getLoc(), hashAdaptor.val(), Value(), hashOp.val().getType()));
       return success();
    }
-};*/
+};
 
 } // namespace
 void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, RewritePatternSet& patterns) {
@@ -634,5 +634,5 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    patterns.insert<ConstantLowering>(typeConverter, patterns.getContext());
    patterns.insert<CastOpLowering>(typeConverter, patterns.getContext());
 
-   //patterns.insert<HashLowering>(typeConverter, patterns.getContext());
+   patterns.insert<HashLowering>(typeConverter, patterns.getContext());
 }

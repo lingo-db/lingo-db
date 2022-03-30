@@ -39,12 +39,25 @@
 
 
         %ht= dsa.create_ds !dsa.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>
-        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %key1 : tuple<!db.string,i32> , %val1 : tuple<i32,i32>
-        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %key2 : tuple<!db.string,i32> , %val2 : tuple<i32,i32>
-        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %key3 : tuple<!db.string,i32> , %val3 : tuple<i32,i32>
-        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %key4 : tuple<!db.string,i32> , %val4 : tuple<i32,i32>
+        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %key1 : tuple<!db.string,i32> , %val1 : tuple<i32,i32>  hash: (%key : tuple<!db.string,i32>){
+                                                                                                                                                          %h = db.hash %key : tuple<!db.string,i32>
+                                                                                                                                                          dsa.yield %h : index
+                                                                                                                                                       }
+        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %key2 : tuple<!db.string,i32> , %val2 : tuple<i32,i32> hash: (%key : tuple<!db.string,i32>){
+                                                                                                                                                         %h = db.hash %key : tuple<!db.string,i32>
+                                                                                                                                                         dsa.yield %h : index
+                                                                                                                                                      }
+        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %key3 : tuple<!db.string,i32> , %val3 : tuple<i32,i32> hash: (%key : tuple<!db.string,i32>){
+                                                                                                                                                         %h = db.hash %key : tuple<!db.string,i32>
+                                                                                                                                                         dsa.yield %h : index
+                                                                                                                                                      }
+        dsa.ht_insert %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %key4 : tuple<!db.string,i32> , %val4 : tuple<i32,i32> hash: (%key : tuple<!db.string,i32>){
+                                                                                                                                                         %h = db.hash %key : tuple<!db.string,i32>
+                                                                                                                                                         dsa.yield %h : index
+                                                                                                                                                      }
         dsa.ht_finalize %ht : !dsa.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>
-        %matches = dsa.lookup %ht :  !dsa.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %key1  : tuple<!db.string,i32> -> !dsa.iterable<tuple<tuple<!db.string,i32>,tuple<i32,i32>>,join_ht_iterator>
+        %hash = db.hash %key1  : tuple<!db.string,i32>
+        %matches = dsa.lookup %ht :  !dsa.join_ht<tuple<!db.string,i32>,tuple<i32,i32>>, %hash : index -> !dsa.iterable<tuple<tuple<!db.string,i32>,tuple<i32,i32>>,join_ht_iterator>
         dsa.for %entry in %matches : !dsa.iterable<tuple<tuple<!db.string,i32>,tuple<i32,i32>>,join_ht_iterator> {
             %key,%val = util.unpack %entry : tuple<tuple<!db.string,i32>,tuple<i32,i32>> -> tuple<!db.string,i32>,tuple<i32,i32>
             %k1,%k2 = util.unpack %key : tuple<!db.string,i32> -> !db.string,i32

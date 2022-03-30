@@ -1,5 +1,5 @@
-#ifndef MLIR_CONVERSION_DSATOARROWSTD_FUNCTIONREGISTRY_H
-#define MLIR_CONVERSION_DSATOARROWSTD_FUNCTIONREGISTRY_H
+#ifndef MLIR_CONVERSION_DSATOSTD_FUNCTIONREGISTRY_H
+#define MLIR_CONVERSION_DSATOSTD_FUNCTIONREGISTRY_H
 #include "RegisteredFunctions.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -43,4 +43,4 @@ class FunctionRegistry {
    void registerFunction(FunctionId funcId, std::string name, std::vector<mlir::Type> ops, std::vector<mlir::Type> returns, bool useWrapper = true);
 };
 } // namespace mlir::dsa::codegen
-#endif // MLIR_CONVERSION_DSATOARROWSTD_FUNCTIONREGISTRY_H
+#endif // MLIR_CONVERSION_DSATOSTD_FUNCTIONREGISTRY_H

@@ -144,7 +144,7 @@ static void print(OpAsmPrinter& p, dsa::SortOp& op) {
 }
 
 
-static ParseResult parseHashtableInsertReduce(OpAsmParser& parser, OperationState& result) {
+static ParseResult parseHashtableInsert(OpAsmParser& parser, OperationState& result) {
    OpAsmParser::OperandType ht, key, val;
    Type htType;
    Type keyType;
@@ -160,9 +160,20 @@ static ParseResult parseHashtableInsertReduce(OpAsmParser& parser, OperationStat
       }
       parser.resolveOperand(val, valType, result.operands);
    }
+   Region* hash =result.addRegion();
    Region* equal = result.addRegion();
    Region* reduce = result.addRegion();
 
+   if (parser.parseOptionalKeyword("hash").succeeded()) {
+      OpAsmParser::OperandType left;
+      Type leftArgType;
+      if (parser.parseColon()||parser.parseLParen() || parser.parseRegionArgument(left) || parser.parseColonType(leftArgType) || parser.parseRParen()) {
+         return failure();
+      }
+      if (parser.parseRegion(*hash, {left}, {leftArgType})) return failure();
+   }else{
+
+   }
    if (parser.parseOptionalKeyword("eq").succeeded()) {
       OpAsmParser::OperandType left, right;
       Type leftArgType;
@@ -183,10 +194,24 @@ static ParseResult parseHashtableInsertReduce(OpAsmParser& parser, OperationStat
    }
    return success();
 }
-static void print(OpAsmPrinter& p, dsa::HashtableInsertReduce& op) {
+static void print(OpAsmPrinter& p, dsa::HashtableInsert& op) {
    p << " " << op.ht() << " : " << op.ht().getType() << ", " << op.key() << " : " << op.key().getType();
    if(op.val()){
       p << ", " << op.val() << " : " << op.val().getType();
+   }
+   if (!op.hash().empty()) {
+      p << " hash: (";
+      bool first = true;
+      for (auto arg : op.hash().front().getArguments()) {
+         if (first) {
+            first = false;
+         } else {
+            p << ",";
+         }
+         p << arg << ":" << arg.getType();
+      }
+      p << ")";
+      p.printRegion(op.hash(), false, true);
    }
    if (!op.equal().empty()) {
       p << " eq: (";

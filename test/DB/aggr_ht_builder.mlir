@@ -50,7 +50,10 @@
         %initial = util.pack %zero, %one : i32,i32 -> tuple<i32,i32>
 
         %ht = dsa.create_ds %initial : tuple<i32,i32> -> !dsa.aggr_ht<tuple<!db.nullable<!db.string>,i32>,tuple<i32,i32>>
-        dsa.ht_insert_reduce %ht : !dsa.aggr_ht<tuple<!db.nullable<!db.string>,i32>,tuple<i32,i32>>, %key1 : tuple<!db.nullable<!db.string>,i32>, %val1 : tuple<i32,i32> eq: (%left : tuple<!db.nullable<!db.string>,i32>,%right : tuple<!db.nullable<!db.string>,i32>){
+        dsa.ht_insert %ht : !dsa.aggr_ht<tuple<!db.nullable<!db.string>,i32>,tuple<i32,i32>>, %key1 : tuple<!db.nullable<!db.string>,i32>, %val1 : tuple<i32,i32>  hash: (%key : tuple<!db.nullable<!db.string>,i32>){
+            %h = db.hash %key : tuple<!db.nullable<!db.string>,i32>
+            dsa.yield %h : index
+         }  eq: (%left : tuple<!db.nullable<!db.string>,i32>,%right : tuple<!db.nullable<!db.string>,i32>){
             %l1,%l2 = util.unpack %left : tuple<!db.nullable<!db.string>,i32> -> !db.nullable<!db.string>,i32
             %r1,%r2 = util.unpack %right : tuple<!db.nullable<!db.string>,i32> -> !db.nullable<!db.string>,i32
             %cmp1 = db.compare "eq" %l1 : !db.nullable<!db.string>, %r1 : !db.nullable<!db.string>
@@ -66,7 +69,10 @@
             %updated_tuple = util.pack %add1, %mul1 : i32, i32 -> tuple<i32, i32>
             dsa.yield %updated_tuple : tuple<i32, i32>
          }
-         dsa.ht_insert_reduce %ht : !dsa.aggr_ht<tuple<!db.nullable<!db.string>,i32>,tuple<i32,i32>>, %key2 : tuple<!db.nullable<!db.string>,i32>, %val2 : tuple<i32,i32> eq: (%left : tuple<!db.nullable<!db.string>,i32>,%right : tuple<!db.nullable<!db.string>,i32>){
+         dsa.ht_insert %ht : !dsa.aggr_ht<tuple<!db.nullable<!db.string>,i32>,tuple<i32,i32>>, %key2 : tuple<!db.nullable<!db.string>,i32>, %val2 : tuple<i32,i32>  hash: (%key : tuple<!db.nullable<!db.string>,i32>){
+            %h = db.hash %key : tuple<!db.nullable<!db.string>,i32>
+            dsa.yield %h : index
+         }  eq: (%left : tuple<!db.nullable<!db.string>,i32>,%right : tuple<!db.nullable<!db.string>,i32>){
              %l1,%l2 = util.unpack %left : tuple<!db.nullable<!db.string>,i32> -> !db.nullable<!db.string>,i32
              %r1,%r2 = util.unpack %right : tuple<!db.nullable<!db.string>,i32> -> !db.nullable<!db.string>,i32
              %cmp1 = db.compare "eq" %l1 : !db.nullable<!db.string>, %r1 : !db.nullable<!db.string>
@@ -82,7 +88,10 @@
              %updated_tuple = util.pack %add1, %mul1 : i32, i32 -> tuple<i32, i32>
              dsa.yield %updated_tuple : tuple<i32, i32>
           }
-         dsa.ht_insert_reduce %ht : !dsa.aggr_ht<tuple<!db.nullable<!db.string>,i32>,tuple<i32,i32>>, %key3 : tuple<!db.nullable<!db.string>,i32>, %val3 : tuple<i32,i32> eq: (%left : tuple<!db.nullable<!db.string>,i32>,%right : tuple<!db.nullable<!db.string>,i32>){
+         dsa.ht_insert %ht : !dsa.aggr_ht<tuple<!db.nullable<!db.string>,i32>,tuple<i32,i32>>, %key3 : tuple<!db.nullable<!db.string>,i32>, %val3 : tuple<i32,i32> hash: (%key : tuple<!db.nullable<!db.string>,i32>){
+            %h = db.hash %key : tuple<!db.nullable<!db.string>,i32>
+            dsa.yield %h : index
+         } eq: (%left : tuple<!db.nullable<!db.string>,i32>,%right : tuple<!db.nullable<!db.string>,i32>){
              %l1,%l2 = util.unpack %left : tuple<!db.nullable<!db.string>,i32> -> !db.nullable<!db.string>,i32
              %r1,%r2 = util.unpack %right : tuple<!db.nullable<!db.string>,i32> -> !db.nullable<!db.string>,i32
              %cmp1 = db.compare "eq" %l1 : !db.nullable<!db.string>, %r1 : !db.nullable<!db.string>
@@ -98,7 +107,10 @@
              %updated_tuple = util.pack %add1, %mul1 : i32, i32 -> tuple<i32, i32>
              dsa.yield %updated_tuple : tuple<i32, i32>
           }
-          dsa.ht_insert_reduce %ht : !dsa.aggr_ht<tuple<!db.nullable<!db.string>,i32>,tuple<i32,i32>>, %key4 : tuple<!db.nullable<!db.string>,i32>, %val4 : tuple<i32,i32> eq: (%left : tuple<!db.nullable<!db.string>,i32>,%right : tuple<!db.nullable<!db.string>,i32>){
+          dsa.ht_insert %ht : !dsa.aggr_ht<tuple<!db.nullable<!db.string>,i32>,tuple<i32,i32>>, %key4 : tuple<!db.nullable<!db.string>,i32>, %val4 : tuple<i32,i32>  hash: (%key : tuple<!db.nullable<!db.string>,i32>){
+            %h = db.hash %key : tuple<!db.nullable<!db.string>,i32>
+            dsa.yield %h : index
+         }  eq: (%left : tuple<!db.nullable<!db.string>,i32>,%right : tuple<!db.nullable<!db.string>,i32>){
               %l1,%l2 = util.unpack %left : tuple<!db.nullable<!db.string>,i32> -> !db.nullable<!db.string>,i32
               %r1,%r2 = util.unpack %right : tuple<!db.nullable<!db.string>,i32> -> !db.nullable<!db.string>,i32
               %cmp1 = db.compare "eq" %l1 : !db.nullable<!db.string>, %r1 : !db.nullable<!db.string>
