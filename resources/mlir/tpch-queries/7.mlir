@@ -1,5 +1,5 @@
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @supplier  {table_identifier = "supplier"} columns: {s_acctbal => @s_acctbal({type = !db.decimal<15, 2>}), s_address => @s_address({type = !db.string}), s_comment => @s_comment({type = !db.string}), s_name => @s_name({type = !db.string}), s_nationkey => @s_nationkey({type = i32}), s_phone => @s_phone({type = !db.string}), s_suppkey => @s_suppkey({type = i32})}
     %1 = relalg.basetable @lineitem  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
     %2 = relalg.crossproduct %0, %1
@@ -68,7 +68,7 @@ module {
       relalg.return %17 : !relalg.tuple
     }
     %14 = relalg.sort %13 [(@n1::@n_name,asc),(@n2::@n_name,asc),(@map0::@tmp_attr0,asc)]
-    %15 = relalg.materialize %14 [@n1::@n_name,@n2::@n_name,@map0::@tmp_attr0,@aggr0::@tmp_attr2] => ["supp_nation", "cust_nation", "l_year", "revenue"] : !db.table
-    return %15 : !db.table
+    %15 = relalg.materialize %14 [@n1::@n_name,@n2::@n_name,@map0::@tmp_attr0,@aggr0::@tmp_attr2] => ["supp_nation", "cust_nation", "l_year", "revenue"] : !dsa.table
+    return %15 : !dsa.table
   }
 }

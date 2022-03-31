@@ -1,5 +1,5 @@
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @customer  {table_identifier = "customer"} columns: {c_acctbal => @c_acctbal({type = !db.decimal<15, 2>}), c_address => @c_address({type = !db.string}), c_comment => @c_comment({type = !db.string}), c_custkey => @c_custkey({type = i32}), c_mktsegment => @c_mktsegment({type = !db.string}), c_name => @c_name({type = !db.string}), c_nationkey => @c_nationkey({type = i32}), c_phone => @c_phone({type = !db.string})}
     %1 = relalg.selection %0 (%arg0: !relalg.tuple){
       %6 = db.constant("13") : !db.string
@@ -70,7 +70,7 @@ module {
       relalg.return %9 : !relalg.tuple
     }
     %4 = relalg.sort %3 [(@map0::@tmp_attr1,asc)]
-    %5 = relalg.materialize %4 [@map0::@tmp_attr1,@aggr1::@tmp_attr2,@aggr1::@tmp_attr3] => ["cntrycode", "numcust", "totacctbal"] : !db.table
-    return %5 : !db.table
+    %5 = relalg.materialize %4 [@map0::@tmp_attr1,@aggr1::@tmp_attr2,@aggr1::@tmp_attr3] => ["cntrycode", "numcust", "totacctbal"] : !dsa.table
+    return %5 : !dsa.table
   }
 }

@@ -1,6 +1,5 @@
 #ifndef MLIR_CONVERSION_DBTOARROWSTD_BITUTIL_H
 #define MLIR_CONVERSION_DBTOARROWSTD_BITUTIL_H
-#include "FunctionRegistry.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 

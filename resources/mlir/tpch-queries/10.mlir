@@ -1,5 +1,5 @@
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @customer  {table_identifier = "customer"} columns: {c_acctbal => @c_acctbal({type = !db.decimal<15, 2>}), c_address => @c_address({type = !db.string}), c_comment => @c_comment({type = !db.string}), c_custkey => @c_custkey({type = i32}), c_mktsegment => @c_mktsegment({type = !db.string}), c_name => @c_name({type = !db.string}), c_nationkey => @c_nationkey({type = i32}), c_phone => @c_phone({type = !db.string})}
     %1 = relalg.basetable @orders  {table_identifier = "orders"} columns: {o_clerk => @o_clerk({type = !db.string}), o_comment => @o_comment({type = !db.string}), o_custkey => @o_custkey({type = i32}), o_orderdate => @o_orderdate({type = !db.date<day>}), o_orderkey => @o_orderkey({type = i32}), o_orderpriority => @o_orderpriority({type = !db.string}), o_orderstatus => @o_orderstatus({type = !db.char<1>}), o_shippriority => @o_shippriority({type = i32}), o_totalprice => @o_totalprice({type = !db.decimal<15, 2>})}
     %2 = relalg.crossproduct %0, %1
@@ -45,7 +45,7 @@ module {
     }
     %10 = relalg.sort %9 [(@aggr0::@tmp_attr0,desc)]
     %11 = relalg.limit 20 %10
-    %12 = relalg.materialize %11 [@customer::@c_custkey,@customer::@c_name,@aggr0::@tmp_attr0,@customer::@c_acctbal,@nation::@n_name,@customer::@c_address,@customer::@c_phone,@customer::@c_comment] => ["c_custkey", "c_name", "revenue", "c_acctbal", "n_name", "c_address", "c_phone", "c_comment"] : !db.table
-    return %12 : !db.table
+    %12 = relalg.materialize %11 [@customer::@c_custkey,@customer::@c_name,@aggr0::@tmp_attr0,@customer::@c_acctbal,@nation::@n_name,@customer::@c_address,@customer::@c_phone,@customer::@c_comment] => ["c_custkey", "c_name", "revenue", "c_acctbal", "n_name", "c_address", "c_phone", "c_comment"] : !dsa.table
+    return %12 : !dsa.table
   }
 }

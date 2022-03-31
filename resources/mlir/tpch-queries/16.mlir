@@ -1,5 +1,5 @@
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @partsupp  {table_identifier = "partsupp"} columns: {ps_availqty => @ps_availqty({type = i32}), ps_comment => @ps_comment({type = !db.string}), ps_partkey => @ps_partkey({type = i32}), ps_suppkey => @ps_suppkey({type = i32}), ps_supplycost => @ps_supplycost({type = !db.decimal<15, 2>})}
     %1 = relalg.basetable @part  {table_identifier = "part"} columns: {p_brand => @p_brand({type = !db.string}), p_comment => @p_comment({type = !db.string}), p_container => @p_container({type = !db.string}), p_mfgr => @p_mfgr({type = !db.string}), p_name => @p_name({type = !db.string}), p_partkey => @p_partkey({type = i32}), p_retailprice => @p_retailprice({type = !db.decimal<15, 2>}), p_size => @p_size({type = i32}), p_type => @p_type({type = !db.string})}
     %2 = relalg.crossproduct %0, %1
@@ -45,7 +45,7 @@ module {
       relalg.return %9 : !relalg.tuple
     }
     %5 = relalg.sort %4 [(@aggr0::@tmp_attr0,desc),(@part::@p_brand,asc),(@part::@p_type,asc),(@part::@p_size,asc)]
-    %6 = relalg.materialize %5 [@part::@p_brand,@part::@p_type,@part::@p_size,@aggr0::@tmp_attr0] => ["p_brand", "p_type", "p_size", "supplier_cnt"] : !db.table
-    return %6 : !db.table
+    %6 = relalg.materialize %5 [@part::@p_brand,@part::@p_type,@part::@p_size,@aggr0::@tmp_attr0] => ["p_brand", "p_type", "p_size", "supplier_cnt"] : !dsa.table
+    return %6 : !dsa.table
   }
 }

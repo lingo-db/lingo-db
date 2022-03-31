@@ -1,5 +1,5 @@
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @orders  {table_identifier = "orders"} columns: {o_clerk => @o_clerk({type = !db.string}), o_comment => @o_comment({type = !db.string}), o_custkey => @o_custkey({type = i32}), o_orderdate => @o_orderdate({type = !db.date<day>}), o_orderkey => @o_orderkey({type = i32}), o_orderpriority => @o_orderpriority({type = !db.string}), o_orderstatus => @o_orderstatus({type = !db.char<1>}), o_shippriority => @o_shippriority({type = i32}), o_totalprice => @o_totalprice({type = !db.decimal<15, 2>})}
     %1 = relalg.selection %0 (%arg0: !relalg.tuple){
       %5 = relalg.getcol %arg0 @orders::@o_orderdate : !db.date<day>
@@ -29,7 +29,7 @@ module {
       relalg.return %6 : !relalg.tuple
     }
     %3 = relalg.sort %2 [(@orders::@o_orderpriority,asc)]
-    %4 = relalg.materialize %3 [@orders::@o_orderpriority,@aggr0::@tmp_attr0] => ["o_orderpriority", "order_count"] : !db.table
-    return %4 : !db.table
+    %4 = relalg.materialize %3 [@orders::@o_orderpriority,@aggr0::@tmp_attr0] => ["o_orderpriority", "order_count"] : !dsa.table
+    return %4 : !dsa.table
   }
 }

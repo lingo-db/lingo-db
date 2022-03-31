@@ -1,5 +1,5 @@
 module {
-  func @main() -> !db.table {
+  func @main() -> !dsa.table {
     %0 = relalg.basetable @customer  {table_identifier = "customer"} columns: {c_acctbal => @c_acctbal({type = !db.decimal<15, 2>}), c_address => @c_address({type = !db.string}), c_comment => @c_comment({type = !db.string}), c_custkey => @c_custkey({type = i32}), c_mktsegment => @c_mktsegment({type = !db.string}), c_name => @c_name({type = !db.string}), c_nationkey => @c_nationkey({type = i32}), c_phone => @c_phone({type = !db.string})}
     %1 = relalg.basetable @orders  {table_identifier = "orders"} columns: {o_clerk => @o_clerk({type = !db.string}), o_comment => @o_comment({type = !db.string}), o_custkey => @o_custkey({type = i32}), o_orderdate => @o_orderdate({type = !db.date<day>}), o_orderkey => @o_orderkey({type = i32}), o_orderpriority => @o_orderpriority({type = !db.string}), o_orderstatus => @o_orderstatus({type = !db.char<1>}), o_shippriority => @o_shippriority({type = i32}), o_totalprice => @o_totalprice({type = !db.decimal<15, 2>})}
     %2 = relalg.crossproduct %0, %1
@@ -57,7 +57,7 @@ module {
       relalg.return %17 : !relalg.tuple
     }
     %14 = relalg.sort %13 [(@aggr0::@tmp_attr0,desc)]
-    %15 = relalg.materialize %14 [@nation::@n_name,@aggr0::@tmp_attr0] => ["n_name", "revenue"] : !db.table
-    return %15 : !db.table
+    %15 = relalg.materialize %14 [@nation::@n_name,@aggr0::@tmp_attr0] => ["n_name", "revenue"] : !dsa.table
+    return %15 : !dsa.table
   }
 }
