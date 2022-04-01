@@ -11,6 +11,6 @@ add_mlir_dialect_library(MLIRDSA
         MLIRDSAOpsIncGen
         LINK_LIBS PUBLIC
         MLIRIR
-        MLIRStandardOpsTransforms
+        MLIRFuncTransforms
         MLIRUtil
         )

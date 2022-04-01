@@ -1,7 +1,9 @@
 #ifndef MLIR_CONVERSION_RELALGTODB_PIPELINE_H
 #define MLIR_CONVERSION_RELALGTODB_PIPELINE_H
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+
 #include <functional>
-#include <mlir/Dialect/StandardOps/IR/Ops.h>
+
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/BuiltinOps.h>
 
@@ -84,7 +86,7 @@ class Pipeline {
       mlir::Block* functionBlock = new mlir::Block;
       mainFn.body().push_back(functionBlock);
       builder.setInsertionPointToStart(functionBlock);
-      builder.create<mlir::ReturnOp>(builder.getUnknownLoc());
+      builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
       builder.setInsertionPointToStart(functionBlock);
    }
    void finishMainFunction(std::vector<Value> values);

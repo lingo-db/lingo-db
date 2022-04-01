@@ -2,18 +2,18 @@
 
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/SCF/SCF.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/Parser.h"
 #include "mlir/Parser/AsmParserState.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <llvm/ADT/TypeSwitch.h>
 #include <llvm/Support/ErrorOr.h>
@@ -38,7 +38,7 @@ int main(int argc, char** argv) {
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
-   registry.insert<mlir::StandardOpsDialect>();
+   registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::arith::ArithmeticDialect>();
 
@@ -66,7 +66,7 @@ int main(int argc, char** argv) {
       }
       llvm::DenseMap<mlir::Operation*, size_t> opIds;
       block.walk<mlir::WalkOrder::PreOrder>([&](mlir::Operation* op) {
-         const auto *opDef = state.getOpDef(op);
+         const auto* opDef = state.getOpDef(op);
          if (opDef) {
             if (auto fileLineLoc = dropNames(op->getLoc()).dyn_cast<mlir::FileLineColLoc>()) {
                auto loc1 = sourceMgr.getLineAndColumn(opDef->scopeLoc.Start);
@@ -76,20 +76,20 @@ int main(int argc, char** argv) {
                operation["representation"] = std::string(opDef->scopeLoc.Start.getPointer(), opDef->scopeLoc.End.getPointer());
                operation["loc"] = inputFilename + ":" + std::to_string(loc1.first);
                analyzedOps[operation["loc"]] = operation["id"];
-               auto *parentOp = op->getParentOp();
+               auto* parentOp = op->getParentOp();
                if (opIds.count(parentOp)) {
                   operation["parent"] = opIds[parentOp];
                }
                std::vector<size_t> dependencies;
-               for(auto operand:op->getOperands()){
-                  if(auto *defOp=operand.getDefiningOp()){
-                     if(opIds.count(defOp)){
+               for (auto operand : op->getOperands()) {
+                  if (auto* defOp = operand.getDefiningOp()) {
+                     if (opIds.count(defOp)) {
                         dependencies.push_back(opIds[defOp]);
                      }
                   }
                }
-               if(dependencies.size()){
-                  operation["dependencies"]=dependencies;
+               if (dependencies.size()) {
+                  operation["dependencies"] = dependencies;
                }
                auto mappedFile = fileLineLoc.getFilename().str();
                auto mappedLine = fileLineLoc.getLine();

@@ -19,10 +19,11 @@
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
-#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 
 #include "mlir/Transforms/CustomPasses.h"
 
@@ -30,12 +31,12 @@
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/Passes.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/Dialect/SCF/SCF.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/util/UtilDialect.h"
@@ -44,7 +45,7 @@
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/InitAllPasses.h"
-#include "mlir/Parser.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
@@ -108,7 +109,7 @@ void ToLLVMLoweringPass::runOnOperation() {
    populateAffineToStdConversionPatterns(patterns);
    mlir::populateSCFToControlFlowConversionPatterns(patterns);
    mlir::util::populateUtilToLLVMConversionPatterns(typeConverter, patterns);
-   populateStdToLLVMConversionPatterns(typeConverter, patterns);
+   mlir::populateFuncToLLVMConversionPatterns(typeConverter, patterns);
    mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
 
    mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
@@ -161,7 +162,7 @@ int loadMLIR(std::string inputFilename, mlir::MLIRContext& context, mlir::Owning
    // Parse the input mlir.
    llvm::SourceMgr sourceMgr;
    sourceMgr.AddNewSourceBuffer(std::move(*fileOrErr), llvm::SMLoc());
-   module = mlir::parseSourceFile(sourceMgr, &context);
+   module = mlir::parseSourceFile<mlir::ModuleOp>(sourceMgr, &context);
    if (!module) {
       llvm::errs() << "Error can't load file " << inputFilename << "\n";
       return 3;
@@ -169,7 +170,7 @@ int loadMLIR(std::string inputFilename, mlir::MLIRContext& context, mlir::Owning
    return 0;
 }
 int loadMLIRFromString(const std::string& input, mlir::MLIRContext& context, mlir::OwningOpRef<mlir::ModuleOp>& module) {
-   module = mlir::parseSourceString(input, &context);
+   module = mlir::parseSourceString<mlir::ModuleOp>(input, &context);
    if (!module) {
       llvm::errs() << "Error can't load module\n";
       return 3;
@@ -187,11 +188,11 @@ convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context, mlir::LLVM:
    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> bufferOrError =
       llvm::MemoryBuffer::getMemBuffer(bitcode, "precompiled", false);
 
-   std::unique_ptr<llvm::MemoryBuffer> buffer = move(bufferOrError.get());
+   std::unique_ptr<llvm::MemoryBuffer> buffer = std::move(bufferOrError.get());
 
    /// Parse the IR module.
    llvm::Expected<std::unique_ptr<llvm::Module>> moduleOrError =
-      llvm::getOwningLazyBitcodeModule(move(buffer), context);
+      llvm::getOwningLazyBitcodeModule(std::move(buffer), context);
    if (!moduleOrError) {
       // NOTE: llvm::handleAllErrors() fails linking with RTTI-disabled LLVM builds
       // (ARROW-5148)
@@ -200,7 +201,7 @@ convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context, mlir::LLVM:
       stream << moduleOrError.takeError();
       llvm::dbgs() << stream.str() << "\n";
    }
-   std::unique_ptr<llvm::Module> irModule = move(moduleOrError.get());
+   std::unique_ptr<llvm::Module> irModule = std::move(moduleOrError.get());
 
    //////////////////////////////////////////////////////////////////////////////////////
    std::unique_ptr<llvm::Module> mainModule =
@@ -237,7 +238,7 @@ bool Runner::load(std::string file) {
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::dsa::DSADialect>();
-   registry.insert<mlir::StandardOpsDialect>();
+   registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::arith::ArithmeticDialect>();
    registry.insert<mlir::cf::ControlFlowDialect>();
 
@@ -266,7 +267,7 @@ bool Runner::loadString(std::string input) {
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::dsa::DSADialect>();
-   registry.insert<mlir::StandardOpsDialect>();
+   registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::scf::SCFDialect>();
    registry.insert<mlir::cf::ControlFlowDialect>();
 
@@ -465,7 +466,7 @@ class WrappedExecutionEngine {
       auto debuggingLevel = runMode == RunMode::DEBUGGING ? mlir::LLVM::detail::DebuggingLevel::VARIABLES : (runMode == RunMode::PERF ? mlir::LLVM::detail::DebuggingLevel::LINES : mlir::LLVM::detail::DebuggingLevel::OFF);
       auto convertFn = [&](mlir::ModuleOp module, llvm::LLVMContext& context) { return convertMLIRModule(module, context, debuggingLevel); };
       auto optimizeFn = [&](llvm::Module* module) -> llvm::Error {if (runMode==RunMode::DEBUGGING){return llvm::Error::success();}else{return optimizeModule(module);} };
-      auto maybeEngine = mlir::ExecutionEngine::create(module, /*llvmModuleBuilder=*/convertFn, optimizeFn, jitCodeGenLevel);
+      auto maybeEngine = mlir::ExecutionEngine::create(module, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = jitCodeGenLevel});
       assert(maybeEngine && "failed to construct an execution engine");
       engine = std::move(maybeEngine.get());
 

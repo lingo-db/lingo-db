@@ -4,7 +4,7 @@
 
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 
 #include "mlir/Conversion/DSAToStd/FunctionRegistry.h"
 #include "mlir/Transforms/DialectConversion.h" //

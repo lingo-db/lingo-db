@@ -46,7 +46,7 @@ mlir::FuncOp mlir::dsa::codegen::FunctionRegistry::getFunction(OpBuilder builder
 }
 mlir::ResultRange mlir::dsa::codegen::FunctionRegistry::call(OpBuilder builder, Location loc, FunctionId function, ValueRange values) {
    FuncOp func = getFunction(builder, function);
-   auto funcCall = builder.create<CallOp>(loc, func, values);
+   auto funcCall = builder.create<func::CallOp>(loc, func, values);
    return funcCall.getResults();
 }
 void mlir::dsa::codegen::FunctionRegistry::registerFunction(FunctionId funcId, std::string name, std::vector<mlir::Type> ops, std::vector<mlir::Type> returns, bool useWrapper) {

@@ -2,15 +2,15 @@
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/Parser.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <llvm/ADT/TypeSwitch.h>
 #include <llvm/Support/ErrorOr.h>
@@ -39,7 +39,7 @@ int loadMLIR(mlir::MLIRContext& context, mlir::OwningOpRef<mlir::ModuleOp>& modu
    // Parse the input mlir.
    llvm::SourceMgr sourceMgr;
    sourceMgr.AddNewSourceBuffer(std::move(*fileOrErr), llvm::SMLoc());
-   module = mlir::parseSourceFile(sourceMgr, &context);
+   module = mlir::parseSourceFile<mlir::ModuleOp>(sourceMgr, &context);
    if (!module) {
       llvm::errs() << "Error can't load file " << inputFilename << "\n";
       return 3;
@@ -247,7 +247,7 @@ class ToSQL {
             }
             output << "\n from " << operatorName(op.rel().getDefiningOp());
          })
-         .Case<mlir::relalg::ReturnOp, mlir::ReturnOp, AddColumnOp, mlir::scf::YieldOp>([&](mlir::Operation* others) {
+         .Case<mlir::relalg::ReturnOp, mlir::func::ReturnOp, AddColumnOp, mlir::scf::YieldOp>([&](mlir::Operation* others) {
 
          })
          .Default([&](mlir::Operation* others) {
@@ -602,7 +602,7 @@ class ToSQL {
             handleOtherOp(operation);
          }
       });
-      mlir::ReturnOp returnOp = mlir::dyn_cast_or_null<mlir::ReturnOp>(func.getBody().front().getTerminator());
+      mlir::func::ReturnOp returnOp = mlir::dyn_cast_or_null<mlir::func::ReturnOp>(func.getBody().front().getTerminator());
       totalOutput << resolveVal(returnOp.getOperand(0));
       return totalOutput.str();
    }
@@ -614,7 +614,7 @@ int main(int argc, char** argv) {
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::dsa::DSADialect>();
-   registry.insert<mlir::StandardOpsDialect>();
+   registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::scf::SCFDialect>();
 

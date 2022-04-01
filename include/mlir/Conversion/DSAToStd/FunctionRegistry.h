@@ -1,7 +1,7 @@
 #ifndef MLIR_CONVERSION_DSATOSTD_FUNCTIONREGISTRY_H
 #define MLIR_CONVERSION_DSATOSTD_FUNCTIONREGISTRY_H
 #include "RegisteredFunctions.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 
 #include <iostream>

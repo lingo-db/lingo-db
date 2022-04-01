@@ -3,7 +3,8 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
-#include "mlir/Support/MlirOptMain.h"
+#include "mlir/Tools/mlir-opt/MlirOptMain.h"
+#include <mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h>
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 
 #include "mlir/Dialect/DB/Passes.h"
@@ -81,7 +82,7 @@ void ToLLVMLoweringPass::runOnOperation() {
    populateAffineToStdConversionPatterns(patterns);
    mlir::populateSCFToControlFlowConversionPatterns(patterns);
    mlir::util::populateUtilToLLVMConversionPatterns(typeConverter, patterns);
-   populateStdToLLVMConversionPatterns(typeConverter, patterns);
+   mlir::populateFuncToLLVMConversionPatterns(typeConverter, patterns);
    mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
    mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
    mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
@@ -162,7 +163,7 @@ int main(int argc, char** argv) {
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::dsa::DSADialect>();
-   registry.insert<mlir::StandardOpsDialect>();
+   registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::arith::ArithmeticDialect>();
 
    registry.insert<mlir::memref::MemRefDialect>();

@@ -91,7 +91,7 @@ set(LIBS
         MLIRExecutionEngine
         MLIRLLVMToLLVMIRTranslation
         MLIRTargetLLVMIRExport
-        MLIRTranslation
+#        MLIRTranslation
         MLIRSupport
         MLIRAnalysis
         MLIRCallInterfaces
@@ -115,6 +115,8 @@ set(LIBS
         TorchMLIRTorchUtils
         MLIRMathTransforms
         TorchMLIRTMTensorDialect
+        TorchMLIRConversionUtils
+        TorchMLIRTorchToTMTensor
         )
 set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
 

@@ -7,12 +7,12 @@
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -1369,7 +1369,7 @@ int main(int argc, char** argv) {
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
-   registry.insert<mlir::StandardOpsDialect>();
+   registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::arith::ArithmeticDialect>();
 
    registry.insert<mlir::memref::MemRefDialect>();
@@ -1411,13 +1411,13 @@ int main(int argc, char** argv) {
    SQLTranslator translator(buffer.str(), schema, &context);
    mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
 
-   builder.setInsertionPointToStart(&moduleOp.body().front());
+   builder.setInsertionPointToStart(moduleOp.getBody());
    mlir::FuncOp funcOp = builder.create<mlir::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {mlir::dsa::TableType::get(builder.getContext())}));
    funcOp.body().push_back(new mlir::Block);
    builder.setInsertionPointToStart(&funcOp.body().front());
    mlir::Value val = translator.translate(builder);
 
-   builder.create<mlir::ReturnOp>(builder.getUnknownLoc(), val);
+   builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), val);
    auto end = std::chrono::high_resolution_clock::now();
    std::cerr << "time:" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
 

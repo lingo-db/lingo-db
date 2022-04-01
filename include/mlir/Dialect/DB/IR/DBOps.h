@@ -10,7 +10,7 @@
 #include "mlir/Dialect/DB/IR/DBTypes.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h"
 
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/Builders.h"
 
 #define GET_OP_CLASSES

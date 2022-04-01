@@ -37,7 +37,7 @@ std::vector<mlir::relalg::PipelineDependency> mlir::relalg::Pipeline::addInitFn(
       res.push_back({pipelineId, i++, v.getType(), initFnId});
       resTypes.push_back(v.getType());
    }
-   fnBuilder.create<mlir::ReturnOp>(fnBuilder.getUnknownLoc(), values);
+   fnBuilder.create<mlir::func::ReturnOp>(fnBuilder.getUnknownLoc(), values);
    initFn.setType(fnBuilder.getFunctionType({}, resTypes));
    initFns.push_back(initFn);
    return res;
@@ -64,7 +64,7 @@ std::vector<mlir::relalg::PipelineDependency> mlir::relalg::Pipeline::addFinaliz
       res.push_back({pipelineId, i++, v.getType(), 0});
       resTypes.push_back(v.getType());
    }
-   fnBuilder.create<mlir::ReturnOp>(fnBuilder.getUnknownLoc(), values);
+   fnBuilder.create<mlir::func::ReturnOp>(fnBuilder.getUnknownLoc(), values);
    finalizeFn.setType(fnBuilder.getFunctionType(mainFn.getType().getResults(), resTypes));
    return res;
 }
@@ -83,7 +83,7 @@ void mlir::relalg::Pipeline::finishMainFunction(std::vector<Value> values) {
    auto* terminator = mainFnBlock->getTerminator();
    OpBuilder b(terminator);
    //mainFn->setAttr("passthrough", b.getArrayAttr({b.getStringAttr("noinline"), b.getStringAttr("optnone")}));
-   b.create<mlir::ReturnOp>(b.getUnknownLoc(), values);
+   b.create<mlir::func::ReturnOp>(b.getUnknownLoc(), values);
    terminator->erase();
    std::vector<Type> resTypes;
    for (auto v : values) {
@@ -93,9 +93,9 @@ void mlir::relalg::Pipeline::finishMainFunction(std::vector<Value> values) {
 }
 
 mlir::ResultRange mlir::relalg::Pipeline::call(OpBuilder& builder, std::unordered_map<size_t, std::vector<mlir::Value>>& pipelineResults) {
-   std::vector<CallOp> initFnCalls;
+   std::vector<func::CallOp> initFnCalls;
    for (size_t i = 0; i < initFns.size(); i++) {
-      initFnCalls.push_back(builder.create<mlir::CallOp>(builder.getUnknownLoc(), initFns[i], ValueRange()));
+      initFnCalls.push_back(builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), initFns[i], ValueRange()));
    }
    std::vector<Value> mainParams;
    for (auto dep : dependencies) {
@@ -107,9 +107,9 @@ mlir::ResultRange mlir::relalg::Pipeline::call(OpBuilder& builder, std::unordere
          mainParams.push_back(initFnCalls[fid - 1].getResult(dep.getIdx()));
       }
    }
-   CallOp mainCall = builder.create<mlir::CallOp>(builder.getUnknownLoc(), mainFn, mainParams);
+   mlir::func::CallOp mainCall = builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), mainFn, mainParams);
    if (finalizeFn) {
-      CallOp finalizeCall = builder.create<mlir::CallOp>(builder.getUnknownLoc(), finalizeFn, mainCall->getResults());
+      mlir::func::CallOp finalizeCall = builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), finalizeFn, mainCall->getResults());
       pipelineResults[pipelineId] = std::vector<mlir::Value>(finalizeCall->getResults().begin(), finalizeCall->getResults().end());
       return finalizeCall->getResults();
    } else {

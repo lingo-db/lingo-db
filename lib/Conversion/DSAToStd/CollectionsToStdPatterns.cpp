@@ -45,13 +45,13 @@ class SortOpLowering : public ConversionPattern {
          Value genericMemrefRight = rewriter.create<util::GenericMemrefCastOp>(sortOp.getLoc(), util::RefType::get(rewriter.getContext(), elementType), right);
          Value tupleLeft = rewriter.create<util::LoadOp>(sortOp.getLoc(), elementType, genericMemrefLeft, Value());
          Value tupleRight = rewriter.create<util::LoadOp>(sortOp.getLoc(), elementType, genericMemrefRight, Value());
-         auto terminator = rewriter.create<mlir::ReturnOp>(sortOp.getLoc());
+         auto terminator = rewriter.create<mlir::func::ReturnOp>(sortOp.getLoc());
          Block* sortLambda = &sortOp.region().front();
          auto* sortLambdaTerminator = sortLambda->getTerminator();
          rewriter.mergeBlockBefore(sortLambda, terminator, {tupleLeft, tupleRight});
          mlir::dsa::YieldOp yieldOp = mlir::cast<mlir::dsa::YieldOp>(terminator->getPrevNode());
          Value x = yieldOp.results()[0];
-         rewriter.create<mlir::ReturnOp>(sortOp.getLoc(), x);
+         rewriter.create<mlir::func::ReturnOp>(sortOp.getLoc(), x);
          rewriter.eraseOp(sortLambdaTerminator);
          rewriter.eraseOp(terminator);
       }
@@ -63,7 +63,7 @@ class SortOpLowering : public ConversionPattern {
       auto values = unpacked.getResult(2);
       auto rawPtr = rewriter.create<util::GenericMemrefCastOp>(sortOp.getLoc(), ptrType, values);
 
-      Value functionPointer = rewriter.create<mlir::ConstantOp>(sortOp->getLoc(), funcOp.type(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.sym_name())));
+      Value functionPointer = rewriter.create<mlir::func::ConstantOp>(sortOp->getLoc(), funcOp.type(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.sym_name())));
       Value elementSize = rewriter.create<util::SizeOfOp>(sortOp.getLoc(), rewriter.getIndexType(), elementType);
       functionRegistry.call(rewriter, sortOp->getLoc(), FunctionId::SortVector, {len, rawPtr, elementSize, functionPointer});
       rewriter.eraseOp(op);

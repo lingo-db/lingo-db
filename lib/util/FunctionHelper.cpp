@@ -36,7 +36,7 @@ mlir::ResultRange mlir::util::FunctionHelper::call(OpBuilder& builder, mlir::Loc
       convertedValues.push_back(converted);
       assert(converted.getType() == funcOp.getType().getInput(i));
    }
-   auto funcCall = builder.create<CallOp>(loc, funcOp, convertedValues);
+   auto funcCall = builder.create<func::CallOp>(loc, funcOp, convertedValues);
    return funcCall.getResults();
 }
 void mlir::util::FunctionHelper::setParentModule(const mlir::ModuleOp& parentModule) {

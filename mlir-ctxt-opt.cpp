@@ -3,7 +3,7 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
-#include "mlir/Support/MlirOptMain.h"
+#include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -15,25 +15,25 @@
 #include "mlir/Dialect/util/UtilDialect.h"
 
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
-#include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Dialect/SCF/SCF.h"
 
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "runtime/execution_context.h"
-#include<iostream>
+#include <iostream>
 int main(int argc, char** argv) {
-   if (argc <2) {
+   if (argc < 2) {
       std::cerr << "expected more args" << std::endl;
       return 1;
    }
-   char** argvReduced =new char*[argc-1];
-   argvReduced[0]=argv[0];
-   for(int i=2;i<argc;i++){
-      argvReduced[i-1]=argv[i];
+   char** argvReduced = new char*[argc - 1];
+   argvReduced[0] = argv[0];
+   for (int i = 2; i < argc; i++) {
+      argvReduced[i - 1] = argv[i];
    }
 
    runtime::ExecutionContext context;
@@ -49,7 +49,7 @@ int main(int argc, char** argv) {
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
-   registry.insert<mlir::StandardOpsDialect>();
+   registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::arith::ArithmeticDialect>();
 
    registry.insert<mlir::memref::MemRefDialect>();
@@ -57,5 +57,5 @@ int main(int argc, char** argv) {
    registry.insert<mlir::scf::SCFDialect>();
 
    return failed(
-      mlir::MlirOptMain(argc-1, argvReduced, "DB dialects optimization driver\n", registry));
+      mlir::MlirOptMain(argc - 1, argvReduced, "DB dialects optimization driver\n", registry));
 }

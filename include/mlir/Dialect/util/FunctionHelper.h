@@ -1,6 +1,6 @@
 #ifndef MLIR_DIALECT_UTIL_FUNCTIONHELPER_H
 #define MLIR_DIALECT_UTIL_FUNCTIONHELPER_H
-#include "mlir/Dialect/StandardOps/IR/Ops.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 namespace mlir::util {
 class FunctionSpec {

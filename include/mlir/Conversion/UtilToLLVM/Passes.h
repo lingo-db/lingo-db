@@ -3,7 +3,8 @@
 
 #include "mlir/Pass/Pass.h"
 #include <memory>
-#include <mlir/Conversion/StandardToLLVM/ConvertStandardToLLVM.h>
+#include <mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h>
+#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
 #include <mlir/Transforms/DialectConversion.h>
 
 namespace mlir {
