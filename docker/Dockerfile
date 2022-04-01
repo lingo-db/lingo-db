@@ -10,7 +10,7 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN pip3 install numpy
 RUN pip3 install Cython
 RUN pip3 install requests moz_sql_parser numpy pandas pyarrow
-RUN apt-get install -y clang-tidy git cmake  ninja-build clang wget unzip
+RUN apt-get install -y git cmake  ninja-build wget unzip
 RUN mkdir /dbgen
 
 FROM baseimg AS tpchgen
@@ -52,7 +52,7 @@ RUN python -m pip install -r torch-mlir/requirements.txt
 RUN mkdir -p /build/llvm
 
 RUN cmake -G Ninja llvm-project/llvm  -B /build/llvm \
-    -DLLVM_ENABLE_PROJECTS="mlir" \
+    -DLLVM_ENABLE_PROJECTS="mlir;clang;clang-tools-extra" \
     -DLLVM_BUILD_EXAMPLES=OFF \
     -DLLVM_TARGETS_TO_BUILD="X86" \
     -DCMAKE_BUILD_TYPE=Release \
@@ -70,16 +70,19 @@ COPY --from=buildarrow /arrow-src/arrow/python /arrow-src/arrow/python
 COPY --from=buildllvm /llvm-src/torch-mlir /llvm-src/torch-mlir
 COPY --from=buildllvm /llvm-src/llvm-project/llvm /llvm-src/llvm-project/llvm
 COPY --from=buildllvm /llvm-src/llvm-project/mlir /llvm-src/llvm-project/mlir
+COPY --from=buildllvm /llvm-src/llvm-project/clang /llvm-src/llvm-project/clang
 COPY --from=buildllvm /build/llvm/bin/mlir-tblgen /build/llvm/bin/mlir-tblgen
 COPY --from=buildllvm /build/llvm/bin/llvm-lit /build/llvm/bin/llvm-lit
 COPY --from=buildllvm /build/llvm/bin/llvm-link /build/llvm/bin/llvm-link
+COPY --from=buildllvm /build/llvm/bin/clang /build/llvm/bin/clang
+COPY --from=buildllvm /build/llvm/bin/clang-tidy /build/llvm/bin/clang-tidy
 COPY --from=buildllvm /build/llvm/bin/FileCheck /build/llvm/bin/FileCheck
 COPY --from=buildllvm /build/llvm/bin/count /build/llvm/bin/count
 COPY --from=buildllvm /build/llvm/bin/not /build/llvm/bin/not
-
 COPY --from=buildllvm /build/llvm/lib /build/llvm/lib
 COPY --from=buildllvm /build/llvm/include /build/llvm/include
 COPY --from=buildllvm /build/llvm/tools/mlir/include /build/llvm/tools/mlir/include
+COPY --from=buildllvm /build/llvm/tools/clang/include /build/llvm/tools/clang/include
 
 
 
