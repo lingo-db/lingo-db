@@ -45,3 +45,10 @@ EXPORT void rt_arrow_schema_add_field(SchemaBuilder* builder, std::shared_ptr<ar
 EXPORT std::shared_ptr<arrow::Schema>* rt_arrow_schema_build(SchemaBuilder* builder) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return (builder)->build();
 }
+
+int runtime::X::add(std::string, int b) {
+   return b;
+}
+int runtime::X::mul(int x, int y) {
+   return x*y;
+}

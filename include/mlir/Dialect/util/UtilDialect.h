@@ -3,6 +3,6 @@
 
 #include "mlir/IR/Dialect.h"
 
+#include "mlir/Dialect/util/FunctionHelper.h"
 #include "mlir/Dialect/util/UtilOpsDialect.h.inc"
-
 #endif // MLIR_DIALECT_UTIL_UTILDIALECT_H

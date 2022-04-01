@@ -111,5 +111,9 @@ class VarLen32 {
    operator std::string() { return std::string((char*) getPtr(), getLen()); }
    std::string str() { return std::string((char*) getPtr(), getLen()); }
 };
+class X {
+   static int add(std::string, int b);
+   int mul(int x, int y);
+};
 } // end namespace runtime
 #endif // RUNTIME_HELPERS_H

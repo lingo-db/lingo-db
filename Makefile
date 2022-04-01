@@ -5,7 +5,7 @@ SUBID := $(shell echo "$$(git submodule status)" | cut -c 2-9 | tr '\n' '-')
 build/llvm-build:
 	mkdir -p build/llvm-build
 	cmake -G Ninja llvm-project/llvm  -B build/llvm-build \
-	   -DLLVM_ENABLE_PROJECTS=mlir \
+	   -DLLVM_ENABLE_PROJECTS="mlir;clang;clang-tools-extra"\
 	   -DLLVM_USE_PERF=ON \
 	   -DLLVM_BUILD_EXAMPLES=OFF \
 	   -DLLVM_TARGETS_TO_BUILD="X86" \
@@ -109,7 +109,7 @@ reproduce: .repr-docker-built
 	 docker run --privileged -it mlirdb-repr /bin/bash -c "python3 tools/benchmark-tpch.py /build/mlirdb/ tpch-1"
 
 lint:
-	python3 tools/scripts/run-clang-tidy.py -p build/build-debug-llvm-release -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored"
+	python3 tools/scripts/run-clang-tidy.py -p build/build-debug-llvm-release -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored" -clang-tidy-binary=./build/llvm-build/bin/clang-tidy
 #perf:
 #	 perf record -k 1 -F 1000  --call-graph dwarf [cmd]
 #	 perf inject -j -i perf.data -o perf.data.jitted

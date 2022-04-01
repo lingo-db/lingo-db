@@ -85,6 +85,8 @@ class SimpleTypeConversionPattern : public ConversionPattern {
 };
 void DSAToStdLoweringPass::runOnOperation() {
    auto module = getOperation();
+   getContext().getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(module);
+
    mlir::dsa::codegen::FunctionRegistry functionRegistry(module);
    functionRegistry.registerFunctions();
 

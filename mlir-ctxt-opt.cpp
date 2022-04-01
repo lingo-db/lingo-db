@@ -24,7 +24,7 @@
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "runtime/execution_context.h"
-
+#include<iostream>
 int main(int argc, char** argv) {
    if (argc <2) {
       std::cerr << "expected more args" << std::endl;

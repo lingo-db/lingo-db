@@ -1,4 +1,5 @@
 #include "arrow/vendored/datetime/date.h"
+#include "runtime/DateRuntime.h"
 #include "runtime/helpers.h"
 #include <iostream>
 //adapted from apache gandiva
@@ -68,8 +69,22 @@ class DateHelper {
    std::chrono::time_point<std::chrono::system_clock, std::chrono::nanoseconds> tp_;
 };
 //end adapted from apache gandiva
-
-extern "C" uint64_t rt_extract_second(uint64_t nanos) {
+int64_t runtime::DateRuntime::subtractMonths(int64_t date, int64_t months) {
+   return DateHelper(date).AddMonths(-months).NanosSinceEpoch();
+}
+int64_t runtime::DateRuntime::addMonths(int64_t nanos, int64_t months) {
+   return DateHelper(nanos).AddMonths(months).NanosSinceEpoch();
+}
+int64_t runtime::DateRuntime::extractYear(int64_t date) {
+   return DateHelper(date).TmYear() + 1900;
+}
+int64_t runtime::DateRuntime::extractMonth(int64_t date) {
+   return DateHelper(date).TmMon() + 1;
+}
+int64_t runtime::DateRuntime::extractDay(int64_t date) {
+   return DateHelper(date).TmMday();
+}
+/*extern "C" uint64_t rt_extract_second(uint64_t nanos) {
    return DateHelper(nanos).TmSec();
 }
 extern "C" uint64_t rt_extract_minute(uint64_t nanos) {
@@ -81,21 +96,7 @@ extern "C" uint64_t rt_extract_hour(uint64_t nanos) {
 extern "C" uint64_t rt_extract_dow(uint64_t nanos) {
    return DateHelper(nanos).TmWday() + 1;
 }
-extern "C" uint64_t rt_extract_day(uint64_t nanos) {
-   return DateHelper(nanos).TmMday();
-}
-extern "C" uint64_t rt_extract_month(uint64_t nanos) {
-   return DateHelper(nanos).TmMon() + 1;
-}
-extern "C" uint64_t rt_extract_year(uint64_t nanos) {
-   return DateHelper(nanos).TmYear() + 1900;
-}
+
 extern "C" uint64_t rt_extract_doy(uint64_t nanos) {
    return DateHelper(nanos).TmYday();
-}
-extern "C" uint64_t rt_timestamp_add_months(int64_t nanos, uint32_t months) {
-   return DateHelper(nanos).AddMonths(months).NanosSinceEpoch();
-}
-extern "C" uint64_t rt_timestamp_subtract_months(int64_t nanos, uint32_t months) {
-   return DateHelper(nanos).AddMonths(-months).NanosSinceEpoch();
-}
+}*/

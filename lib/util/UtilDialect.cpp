@@ -16,5 +16,6 @@ void mlir::util::UtilDialect::initialize() {
       >();
    addInterfaces<UtilInlinerInterface>();
    registerTypes();
+   functionHelper = std::make_shared<FunctionHelper>();
 }
 #include "mlir/Dialect/util/UtilOpsDialect.cpp.inc"

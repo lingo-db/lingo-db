@@ -1,13 +1,18 @@
 #include "mlir-support/parsing.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
-#include <mlir/Dialect/util/UtilOps.h>
-
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/DB/IR/RuntimeFunctions.h"
 #include "mlir/Dialect/StandardOps/IR/Ops.h"
 
-#include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
+#include <mlir/Dialect/util/UtilOps.h>
+
+#include "runtime-defs/DateRuntime.h"
+#include "runtime-defs/DumpRuntime.h"
+#include "runtime-defs/StringRuntime.h"
+
+#include <mlir/Dialect/util/FunctionHelper.h>
+
 #include "mlir/Transforms/DialectConversion.h" //
 #include <llvm/ADT/TypeSwitch.h>
 
@@ -15,17 +20,13 @@ using namespace mlir;
 namespace {
 
 class StringCastOpLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
-
    public:
-   explicit StringCastOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CastOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit StringCastOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CastOp::getOperationName(), 1, context) {}
 
    LogicalResult
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
-      using FunctionId = db::codegen::FunctionRegistry::FunctionId;
-
       auto castOp = cast<mlir::db::CastOp>(op);
       auto loc = op->getLoc();
       auto scalarSourceType = castOp.val().getType();
@@ -39,16 +40,15 @@ class StringCastOpLowering : public ConversionPattern {
          //nothing to do here
       } else if (auto stringType = scalarSourceType.dyn_cast_or_null<db::StringType>()) {
          if (auto intWidth = getIntegerWidth(scalarTargetType, false)) {
-            result = functionRegistry.call(rewriter, loc, FunctionId::CastStringToInt64, ValueRange({valueToCast}))[0];
+            result = runtime::StringRuntime::toInt(rewriter, loc)({valueToCast})[0];
             if (intWidth < 64) {
                result = rewriter.create<arith::TruncIOp>(loc, convertedTargetType, result);
             }
          } else if (auto floatType = scalarTargetType.dyn_cast_or_null<FloatType>()) {
-            FunctionId castFn = floatType.getWidth() == 32 ? FunctionId ::CastStringToFloat32 : FunctionId ::CastStringToFloat64;
-            result = functionRegistry.call(rewriter, loc, castFn, ValueRange({valueToCast}))[0];
+            result = floatType.getWidth() == 32 ? runtime::StringRuntime::toFloat32(rewriter, loc)({valueToCast})[0] : runtime::StringRuntime::toFloat64(rewriter, loc)({valueToCast})[0];
          } else if (auto decimalType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto scale = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalType.getS()));
-            result = functionRegistry.call(rewriter, loc, FunctionId ::CastStringToDecimal, ValueRange({valueToCast, scale}))[0];
+            result = runtime::StringRuntime::toDecimal(rewriter, loc)({valueToCast, scale})[0];
             if (typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth() < 128) {
                auto converted = rewriter.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType), result);
                result = converted;
@@ -59,12 +59,11 @@ class StringCastOpLowering : public ConversionPattern {
             if (intWidth < 64) {
                valueToCast = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), valueToCast);
             }
-            result = functionRegistry.call(rewriter, loc, FunctionId ::CastInt64ToString, ValueRange({valueToCast}))[0];
+            result = runtime::StringRuntime::fromInt(rewriter, loc)({valueToCast})[0];
          }
       } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
          if (scalarTargetType.isa<db::StringType>()) {
-            FunctionId castFn = floatType.getWidth() == 32 ? FunctionId ::CastFloat32ToString : FunctionId ::CastFloat64ToString;
-            result = functionRegistry.call(rewriter, loc, castFn, ValueRange({valueToCast}))[0];
+            result = floatType.getWidth() == 32 ? runtime::StringRuntime::fromFloat32(rewriter, loc)({valueToCast})[0] : runtime::StringRuntime::fromFloat64(rewriter, loc)({valueToCast})[0];
          }
       } else if (auto decimalSourceType = scalarSourceType.dyn_cast_or_null<db::DecimalType>()) {
          if (scalarTargetType.isa<db::StringType>()) {
@@ -72,7 +71,7 @@ class StringCastOpLowering : public ConversionPattern {
             if (typeConverter->convertType(decimalSourceType).cast<mlir::IntegerType>().getWidth() < 128) {
                valueToCast = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), valueToCast);
             }
-            result = functionRegistry.call(rewriter, loc, FunctionId ::CastDecimalToString, ValueRange({valueToCast, scale}))[0];
+            result = runtime::StringRuntime::fromDecimal(rewriter, loc)({valueToCast, scale})[0];
          }
       } else if (auto charType = scalarSourceType.dyn_cast_or_null<db::CharType>()) {
          if (scalarTargetType.isa<db::StringType>()) {
@@ -80,7 +79,7 @@ class StringCastOpLowering : public ConversionPattern {
                valueToCast = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), valueToCast);
             }
             auto bytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(charType.getBytes()));
-            result = functionRegistry.call(rewriter, loc, FunctionId ::CastCharToString, ValueRange({valueToCast, bytes}))[0];
+            result = runtime::StringRuntime::fromChar(rewriter, loc)({valueToCast, bytes})[0];
          }
       }
       if (result) {
@@ -92,32 +91,10 @@ class StringCastOpLowering : public ConversionPattern {
    }
 };
 class StringCmpOpLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
-   using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
-
    public:
-   explicit StringCmpOpLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CmpOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
-   mlir::db::codegen::FunctionRegistry::FunctionId funcForStrCompare(db::DBCmpPredicate pred) const {
-      switch (pred) {
-         case db::DBCmpPredicate::eq:
-            return FuncId::CmpStringEQ;
-         case db::DBCmpPredicate::neq:
-            return FuncId::CmpStringNEQ;
-         case db::DBCmpPredicate::lt:
-            return FuncId::CmpStringLT;
-         case db::DBCmpPredicate::gt:
-            return FuncId::CmpStringGT;
-         case db::DBCmpPredicate::lte:
-            return FuncId::CmpStringLTE;
-         case db::DBCmpPredicate::gte:
-            return FuncId::CmpStringGTE;
-         case db::DBCmpPredicate::like:
-            return FuncId::CmpStringLike;
-      }
-      assert(false && "unexpected case");
-      return FuncId::CmpStringEQ;
-   }
+   explicit StringCmpOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::CmpOp::getOperationName(), 1, context) {}
+
    bool stringIsOk(std::string str) const {
       for (auto x : str) {
          if (!std::isalnum(x)) return false;
@@ -133,27 +110,50 @@ class StringCmpOpLowering : public ConversionPattern {
       if (!type.isa<db::StringType>()) {
          return failure();
       }
-      using FuncId = mlir::db::codegen::FunctionRegistry::FunctionId;
       if (cmpOp.predicate() == db::DBCmpPredicate::like) {
          if (auto* defOp = cmpOp.right().getDefiningOp()) {
             if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(defOp)) {
                std::string likeCond = constOp.getValue().cast<mlir::StringAttr>().str();
                if (likeCond.ends_with('%') && stringIsOk(likeCond.substr(0, likeCond.size() - 1))) {
                   auto newConst = rewriter.create<mlir::db::ConstantOp>(op->getLoc(), mlir::db::StringType::get(getContext()), rewriter.getStringAttr(likeCond.substr(0, likeCond.size() - 1)));
-                  Value res = functionRegistry.call(rewriter, op->getLoc(), FuncId ::CmpStringStartsWith, ValueRange({adaptor.left(), rewriter.getRemappedValue(newConst)}))[0];
+                  Value res = runtime::StringRuntime::startsWith(rewriter, op->getLoc())({adaptor.left(), rewriter.getRemappedValue(newConst)})[0];
                   rewriter.replaceOp(op, res);
                   return success();
                } else if (likeCond.starts_with('%') && stringIsOk(likeCond.substr(1, likeCond.size() - 1))) {
                   auto newConst = rewriter.create<mlir::db::ConstantOp>(op->getLoc(), mlir::db::StringType::get(getContext()), rewriter.getStringAttr(likeCond.substr(1, likeCond.size() - 1)));
-                  Value res = functionRegistry.call(rewriter, op->getLoc(), FuncId ::CmpStringEndsWith, ValueRange({adaptor.left(), rewriter.getRemappedValue(newConst)}))[0];
+                  Value res = runtime::StringRuntime::endsWith(rewriter, op->getLoc())({adaptor.left(), rewriter.getRemappedValue(newConst)})[0];
                   rewriter.replaceOp(op, res);
                   return success();
                }
             }
          }
       }
-      FuncId cmpFunc = funcForStrCompare(cmpOp.predicate());
-      Value res = functionRegistry.call(rewriter, op->getLoc(), cmpFunc, ValueRange({adaptor.left(), adaptor.right()}))[0];
+      Value res;
+      Value left = adaptor.left();
+      Value right = adaptor.right();
+      switch (cmpOp.predicate()) {
+         case db::DBCmpPredicate::eq:
+            res = runtime::StringRuntime::compareEq(rewriter, op->getLoc())({left, right})[0];
+            break;
+         case db::DBCmpPredicate::neq:
+            res = runtime::StringRuntime::compareNEq(rewriter, op->getLoc())({left, right})[0];
+            break;
+         case db::DBCmpPredicate::lt:
+            res = runtime::StringRuntime::compareLt(rewriter, op->getLoc())({left, right})[0];
+            break;
+         case db::DBCmpPredicate::gt:
+            res = runtime::StringRuntime::compareGt(rewriter, op->getLoc())({left, right})[0];
+            break;
+         case db::DBCmpPredicate::lte:
+            res = runtime::StringRuntime::compareLte(rewriter, op->getLoc())({left, right})[0];
+            break;
+         case db::DBCmpPredicate::gte:
+            res = runtime::StringRuntime::compareGte(rewriter, op->getLoc())({left, right})[0];
+            break;
+         case db::DBCmpPredicate::like:
+            res = runtime::StringRuntime::like(rewriter, op->getLoc())({left, right})[0];
+            break;
+      }
       rewriter.replaceOp(op, res);
       return success();
    }
@@ -161,7 +161,6 @@ class StringCmpOpLowering : public ConversionPattern {
 
 class DBToArrowRFLowering : public mlir::db::RuntimeFunction::LoweringImpl {
    protected:
-   mlir::db::codegen::FunctionRegistry* nativeFunctionRegistry;
    mlir::TypeConverter* typeConverter;
 
    public:
@@ -169,9 +168,6 @@ class DBToArrowRFLowering : public mlir::db::RuntimeFunction::LoweringImpl {
       this->loweringType = 0;
    }
    virtual ~DBToArrowRFLowering() {}
-   void setNativeFunctionRegistry(db::codegen::FunctionRegistry* nativeFunctionRegistry) {
-      DBToArrowRFLowering::nativeFunctionRegistry = nativeFunctionRegistry;
-   }
    void setTypeConverter(TypeConverter* typeConverter) {
       DBToArrowRFLowering::typeConverter = typeConverter;
    }
@@ -180,47 +176,31 @@ class DBToArrowRFLowering : public mlir::db::RuntimeFunction::LoweringImpl {
    }
 };
 class OpRFLowering : public DBToArrowRFLowering {
-   using loweringFn_t = std::function<mlir::Value(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter*, mlir::db::codegen::FunctionRegistry*)>;
+   using loweringFn_t = std::function<mlir::Value(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter*)>;
    loweringFn_t fn;
 
    public:
    OpRFLowering(const loweringFn_t& fn) : fn(fn) {}
    mlir::Value lower(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType) override {
-      return fn(builder, loweredArguments, originalArgumentTypes, resType, typeConverter, nativeFunctionRegistry);
+      return fn(builder, loweredArguments, originalArgumentTypes, resType, typeConverter);
    }
 };
 class FnRFLowering : public DBToArrowRFLowering {
-   mlir::db::codegen::FunctionRegistry::FunctionId functionId;
+   mlir::util::FunctionSpec& func;
 
    public:
-   FnRFLowering(mlir::db::codegen::FunctionRegistry::FunctionId functionId) : functionId(functionId) {}
-   mlir::Value convert(mlir::OpBuilder& builder, mlir::Value v, mlir::Type target) {
-      if (v.getType() == target) return v;
-      if (target.isIndex()) {
-         return builder.create<mlir::arith::IndexCastOp>(builder.getUnknownLoc(), target, v);
-      }
-      assert(false && "should not happen");
-      return v;
-   }
+   FnRFLowering(mlir::util::FunctionSpec& func) : func(func) {}
    mlir::Value lower(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType) override {
-      auto registeredFunction = nativeFunctionRegistry->getRegisteredFunction(functionId);
-      std::vector<mlir::Value> args;
-      assert(registeredFunction.operands.size() == loweredArguments.size());
-      for (size_t i = 0; i < loweredArguments.size(); i++) {
-         args.push_back(convert(builder, loweredArguments[i], registeredFunction.operands[i]));
-      }
-      auto res = nativeFunctionRegistry->call(builder, builder.getUnknownLoc(), functionId, args);
+      auto res = func(builder, builder.getUnknownLoc())(loweredArguments);
       assert((res.size() == 1 && resType) || (res.empty() && !resType));
       return res.size() == 1 ? res[0] : mlir::Value();
    }
 };
 
 class RuntimeCallLowering : public ConversionPattern {
-   db::codegen::FunctionRegistry& functionRegistry;
-
    public:
-   explicit RuntimeCallLowering(db::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::RuntimeCall::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit RuntimeCallLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::db::RuntimeCall::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto reg = getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
@@ -231,7 +211,6 @@ class RuntimeCallLowering : public ConversionPattern {
       if (!fn) return failure();
       if (!fn->lowering) return failure();
       if (auto* toArrowLowering = llvm::dyn_cast<DBToArrowRFLowering>(fn->lowering.get())) {
-         toArrowLowering->setNativeFunctionRegistry(&functionRegistry);
          toArrowLowering->setTypeConverter(typeConverter);
       }
 
@@ -246,28 +225,27 @@ class RuntimeCallLowering : public ConversionPattern {
 };
 } // namespace
 
-void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
+void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    auto reg = patterns.getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
-   reg->lookup("Substring")->lowering = std::make_unique<FnRFLowering>(mlir::db::codegen::FunctionRegistry::FunctionId::Substring);
-   reg->lookup("ExtractDayFromDate")->lowering = std::make_unique<FnRFLowering>(mlir::db::codegen::FunctionRegistry::FunctionId::DateExtractDay);
-   reg->lookup("ExtractMonthFromDate")->lowering = std::make_unique<FnRFLowering>(mlir::db::codegen::FunctionRegistry::FunctionId::DateExtractMonth);
-   reg->lookup("ExtractYearFromDate")->lowering = std::make_unique<FnRFLowering>(mlir::db::codegen::FunctionRegistry::FunctionId::DateExtractYear);
-   reg->lookup("DateAdd")->lowering = std::make_unique<OpRFLowering>([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::db::codegen::FunctionRegistry* functionRegistry) -> Value {
+   reg->lookup("Substring")->lowering = std::make_unique<FnRFLowering>(runtime::StringRuntime::substr);
+   reg->lookup("ExtractDayFromDate")->lowering = std::make_unique<FnRFLowering>(runtime::DateRuntime::extractDay);
+   reg->lookup("ExtractMonthFromDate")->lowering = std::make_unique<FnRFLowering>(runtime::DateRuntime::extractMonth);
+   reg->lookup("ExtractYearFromDate")->lowering = std::make_unique<FnRFLowering>(runtime::DateRuntime::extractYear);
+   reg->lookup("DateAdd")->lowering = std::make_unique<OpRFLowering>([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter) -> Value {
       if (originalArgumentTypes[1].cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
          return rewriter.create<mlir::arith::AddIOp>(rewriter.getUnknownLoc(), loweredArguments);
       } else {
-         return functionRegistry->call(rewriter, rewriter.getUnknownLoc(), mlir::db::codegen::FunctionRegistry::FunctionId::TimestampAddMonth,loweredArguments)[0];
+         return runtime::DateRuntime::addMonths(rewriter, rewriter.getUnknownLoc())(loweredArguments)[0];
       }
    });
-   reg->lookup("DateSubtract")->lowering = std::make_unique<OpRFLowering>([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::db::codegen::FunctionRegistry* functionRegistry) -> Value {
+   reg->lookup("DateSubtract")->lowering = std::make_unique<OpRFLowering>([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter) -> Value {
       if (originalArgumentTypes[1].cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
          return rewriter.create<mlir::arith::SubIOp>(rewriter.getUnknownLoc(), loweredArguments);
       } else {
-         return functionRegistry->call(rewriter, rewriter.getUnknownLoc(), mlir::db::codegen::FunctionRegistry::FunctionId::TimestampSubtractMonth,loweredArguments)[0];
+         return runtime::DateRuntime::subtractMonths(rewriter, rewriter.getUnknownLoc())(loweredArguments)[0];
       }
    });
-   reg->lookup("DumpValue")->lowering = std::make_unique<OpRFLowering>([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::db::codegen::FunctionRegistry* functionRegistry) -> Value {
-      using FunctionId = mlir::db::codegen::FunctionRegistry::FunctionId;
+   reg->lookup("DumpValue")->lowering = std::make_unique<OpRFLowering>([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter) -> Value {
       auto loc = rewriter.getUnknownLoc();
       auto i128Type = IntegerType::get(rewriter.getContext(), 128);
       auto i64Type = IntegerType::get(rewriter.getContext(), 64);
@@ -286,19 +264,19 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
          val = loweredArguments[0];
       }
       if (baseType.isa<mlir::IndexType>()) {
-         functionRegistry->call(rewriter, loc, FunctionId::DumpIndex, loweredArguments[0]);
+         runtime::DumpRuntime::dumpIndex(rewriter, loc)(loweredArguments[0]);
       } else if (isIntegerType(baseType, 1)) {
-         functionRegistry->call(rewriter, loc, FunctionId::DumpBool, ValueRange({isNull, val}));
+         runtime::DumpRuntime::dumpBool(rewriter, loc)({isNull, val});
       } else if (auto intWidth = getIntegerWidth(baseType, false)) {
          if (intWidth < 64) {
             val = rewriter.create<arith::ExtSIOp>(loc, i64Type, val);
          }
-         functionRegistry->call(rewriter, loc, FunctionId::DumpInt, ValueRange({isNull, val}));
+         runtime::DumpRuntime::dumpInt(rewriter, loc)({isNull, val});
       } else if (auto uIntWidth = getIntegerWidth(baseType, true)) {
          if (uIntWidth < 64) {
             val = rewriter.create<arith::ExtUIOp>(loc, i64Type, val);
          }
-         functionRegistry->call(rewriter, loc, FunctionId::DumpUInt, ValueRange({isNull, val}));
+         runtime::DumpRuntime::dumpUInt(rewriter, loc)({isNull, val});
       } else if (auto decType = baseType.dyn_cast_or_null<mlir::db::DecimalType>()) {
          if (typeConverter->convertType(decType).cast<mlir::IntegerType>().getWidth() < 128) {
             auto converted = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), val);
@@ -309,43 +287,39 @@ void mlir::db::populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::Fun
          Value scale = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32IntegerAttr(decType.getS()));
          Value high = rewriter.create<arith::ShRUIOp>(loc, i128Type, val, shift);
          high = rewriter.create<arith::TruncIOp>(loc, i64Type, high);
-         functionRegistry->call(rewriter, loc, FunctionId::DumpDecimal, ValueRange({isNull, low, high, scale}));
+         runtime::DumpRuntime::dumpDecimal(rewriter, loc)({isNull, low, high, scale});
       } else if (auto dateType = baseType.dyn_cast_or_null<mlir::db::DateType>()) {
-         functionRegistry->call(rewriter, loc, FunctionId::DumpDate, ValueRange({isNull, val}));
+         runtime::DumpRuntime::dumpDate(rewriter, loc)({isNull, val});
       } else if (auto timestampType = baseType.dyn_cast_or_null<mlir::db::TimestampType>()) {
-         FunctionId functionId;
          switch (timestampType.getUnit()) {
-            case mlir::db::TimeUnitAttr::second: functionId = FunctionId::DumpTimestampSecond; break;
-            case mlir::db::TimeUnitAttr::millisecond: functionId = FunctionId::DumpTimestampMillisecond; break;
-            case mlir::db::TimeUnitAttr::microsecond: functionId = FunctionId::DumpTimestampMicrosecond; break;
-            case mlir::db::TimeUnitAttr::nanosecond: functionId = FunctionId::DumpTimestampNanosecond; break;
+            case mlir::db::TimeUnitAttr::second: runtime::DumpRuntime::dumpTimestampSecond(rewriter, loc)({isNull, val}); break;
+            case mlir::db::TimeUnitAttr::millisecond: runtime::DumpRuntime::dumpTimestampMilliSecond(rewriter, loc)({isNull, val}); break;
+            case mlir::db::TimeUnitAttr::microsecond: runtime::DumpRuntime::dumpTimestampMicroSecond(rewriter, loc)({isNull, val}); break;
+            case mlir::db::TimeUnitAttr::nanosecond: runtime::DumpRuntime::dumpTimestampNanoSecond(rewriter, loc)({isNull, val}); break;
          }
-         functionRegistry->call(rewriter, loc, functionId, ValueRange({isNull, val}));
       } else if (auto intervalType = baseType.dyn_cast_or_null<mlir::db::IntervalType>()) {
          if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
-            functionRegistry->call(rewriter, loc, FunctionId::DumpIntervalMonths, ValueRange({isNull, val}));
+            runtime::DumpRuntime::dumpIntervalMonths(rewriter, loc)({isNull, val});
          } else {
-            functionRegistry->call(rewriter, loc, FunctionId::DumpIntervalDayTime, ValueRange({isNull, val}));
+            runtime::DumpRuntime::dumpIntervalDaytime(rewriter, loc)({isNull, val});
          }
-
       } else if (auto floatType = baseType.dyn_cast_or_null<mlir::FloatType>()) {
          if (floatType.getWidth() < 64) {
             val = rewriter.create<arith::ExtFOp>(loc, f64Type, val);
          }
-         functionRegistry->call(rewriter, loc, FunctionId::DumpFloat, ValueRange({isNull, val}));
+         runtime::DumpRuntime::dumpFloat(rewriter, loc)({isNull, val});
       } else if (baseType.isa<mlir::db::StringType>()) {
-         functionRegistry->call(rewriter, loc, FunctionId::DumpString, ValueRange({isNull, val}));
+         runtime::DumpRuntime::dumpString(rewriter, loc)({isNull, val});
       } else if (auto charType = baseType.dyn_cast_or_null<mlir::db::CharType>()) {
          Value numBytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(charType.getBytes()));
          if (charType.getBytes() < 8) {
             val = rewriter.create<arith::ExtSIOp>(loc, i64Type, val);
          }
-         functionRegistry->call(rewriter, loc, FunctionId::DumpChar, ValueRange({isNull, val, numBytes}));
+         runtime::DumpRuntime::dumpChar(rewriter, loc)({isNull, val, numBytes});
       }
       return mlir::Value();
    });
-   //patterns.insert<DateAddOpLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<StringCmpOpLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<StringCastOpLowering>(functionRegistry, typeConverter, patterns.getContext());
-   patterns.insert<RuntimeCallLowering>(functionRegistry, typeConverter, patterns.getContext());
+   patterns.insert<StringCmpOpLowering>(typeConverter, patterns.getContext());
+   patterns.insert<StringCastOpLowering>(typeConverter, patterns.getContext());
+   patterns.insert<RuntimeCallLowering>(typeConverter, patterns.getContext());
 }

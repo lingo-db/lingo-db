@@ -1,7 +1,6 @@
 #ifndef MLIR_CONVERSION_DBTOARROWSTD_DBTOARROWSTD_H
 #define MLIR_CONVERSION_DBTOARROWSTD_DBTOARROWSTD_H
 
-#include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 
@@ -10,10 +9,7 @@
 namespace mlir {
 namespace db {
 void populateScalarToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
-void populateRuntimeSpecificScalarToStdPatterns(mlir::db::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
-void populateBuilderToStdPatterns(mlir::db::codegen::FunctionRegistry& joinHtBuilderType, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
-void populateDsToStdPatterns(mlir::db::codegen::FunctionRegistry& joinHtBuilderType, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
-void populateCollectionsToStdPatterns(mlir::db::codegen::FunctionRegistry& joinHashtableType, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
+void populateRuntimeSpecificScalarToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
 
 std::unique_ptr<Pass> createLowerToStdPass();
 

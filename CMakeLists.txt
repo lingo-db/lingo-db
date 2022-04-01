@@ -10,7 +10,10 @@ option(COMPILE_FOR_PERF "compile for perf" OFF)
 if (COMPILE_FOR_PERF)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffixed-r15")
 endif (COMPILE_FOR_PERF)
+set (Clang_DIR "${MLIR_DIR}/../clang")
+message(STATUS "Using ClangConfig.cmake in: ${Clang_DIR}")
 
+find_package(Clang REQUIRED CONFIG)
 find_package(MLIR REQUIRED CONFIG)
 
 message(STATUS "Using MLIRConfig.cmake in: ${MLIR_DIR}")
@@ -22,13 +25,17 @@ set(MLIR_BINARY_DIR ${CMAKE_BINARY_DIR})
 
 list(APPEND CMAKE_MODULE_PATH "${MLIR_CMAKE_DIR}")
 list(APPEND CMAKE_MODULE_PATH "${LLVM_CMAKE_DIR}")
+list(APPEND CMAKE_MODULE_PATH "${CLANG_CMAKE_DIR}")
 include(TableGen)
 include(AddLLVM)
 include(AddMLIR)
+include(AddClang)
 include(HandleLLVMOptions)
+set("CLANG_VERSION" ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_PATCH})
 
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
+include_directories(${CLANG_INCLUDE_DIRS})
 include_directories(${PROJECT_SOURCE_DIR}/torch-mlir/include)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
@@ -52,6 +59,7 @@ include(${Arrow_DIR}/FindArrowPython.cmake)
 include_directories(${ARROW_INCLUDE_DIR})
 
 add_subdirectory(include)
+add_subdirectory(tools/runtime-header-tool)
 add_subdirectory(lib/mlir-support)
 add_subdirectory(lib/RelAlg)
 add_subdirectory(lib/DB)
@@ -151,3 +159,7 @@ add_subdirectory(pybind11)
 pybind11_add_module(pymlirdbext python/mlirdb.cpp)
 target_link_libraries(pymlirdbext PUBLIC runner runtime PRIVATE arrow_shared arrow_python_shared)
 target_link_options(pymlirdbext PUBLIC -Wl,--export-dynamic)
+
+
+
+

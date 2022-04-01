@@ -18,7 +18,6 @@
 
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
-#include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"

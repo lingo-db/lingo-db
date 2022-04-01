@@ -1,7 +1,6 @@
 #include "mlir-support/parsing.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
-#include "mlir/Conversion/DBToArrowStd/FunctionRegistry.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/StandardToLLVM/ConvertStandardToLLVMPass.h"
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
@@ -122,8 +121,6 @@ class AtLowering : public ConversionPattern {
       values.push_back(newAtOp.val());
       if (atOp.valid()) {
          values.push_back(newAtOp.valid());
-      } else {
-         std::cout << "?" << std::endl;
       }
       if (t.isa<mlir::db::DateType, mlir::db::TimestampType>()) {
          if (values[0].getType() != rewriter.getI64Type()) {
@@ -213,8 +210,8 @@ class AppendTBLowering : public ConversionPattern {
 };
 void DBToStdLoweringPass::runOnOperation() {
    auto module = getOperation();
-   mlir::db::codegen::FunctionRegistry functionRegistry(module);
-   functionRegistry.registerFunctions();
+   getContext().getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(module);
+
 
    // Define Conversion Target
    ConversionTarget target(getContext());
@@ -311,8 +308,7 @@ void DBToStdLoweringPass::runOnOperation() {
    mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
    mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
    mlir::db::populateScalarToStdPatterns(typeConverter, patterns);
-   mlir::db::populateRuntimeSpecificScalarToStdPatterns(functionRegistry, typeConverter, patterns);
-   mlir::db::populateBuilderToStdPatterns(functionRegistry, typeConverter, patterns);
+   mlir::db::populateRuntimeSpecificScalarToStdPatterns(typeConverter, patterns);
    mlir::util::populateUtilTypeConversionPatterns(typeConverter, patterns);
    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns, target);
    patterns.insert<SimpleTypeConversionPattern<mlir::ConstantOp>>(typeConverter, &getContext());
