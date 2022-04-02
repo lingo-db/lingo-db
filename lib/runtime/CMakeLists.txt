@@ -2,7 +2,6 @@ add_subdirectory(precompiled)
 add_library(runtime OBJECT
         dynamic_calls/arrow_table_builder.cpp
         dynamic_calls/dump_values.cpp
-        dynamic_calls/arrow_schema.cpp
         dynamic_calls/arrow_table_access.cpp
         dynamic_calls/data_structures.cpp
         dynamic_calls/string.cpp

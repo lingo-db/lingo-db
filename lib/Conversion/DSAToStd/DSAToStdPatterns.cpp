@@ -6,6 +6,7 @@
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
 
+#include "runtime-defs/TableBuilder.h"
 using namespace mlir;
 namespace {
 class VectorHelper2 {
@@ -417,18 +418,17 @@ class FinalizeLowering : public ConversionPattern {
    }
 };
 class FinalizeTBLowering : public ConversionPattern {
-   mlir::dsa::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   explicit FinalizeTBLowering(TypeConverter& typeConverter, MLIRContext* context, dsa::codegen::FunctionRegistry& functionRegistry)
-      : ConversionPattern(typeConverter, mlir::dsa::Finalize::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit FinalizeTBLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::Finalize::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       if (!mlir::cast<mlir::dsa::Finalize>(op).ht().getType().isa<mlir::dsa::TableBuilderType>()) {
          return failure();
       }
       mlir::dsa::FinalizeAdaptor adaptor(operands);
-      mlir::Value res=functionRegistry.call(rewriter, op->getLoc(), mlir::dsa::codegen::FunctionRegistry::FunctionId::ArrowTableBuilderBuild, ValueRange{adaptor.ht()})[0];
+      mlir::Value res=runtime::TableBuilder::build(rewriter, op->getLoc())(adaptor.ht())[0];
       rewriter.replaceOp(op,res);
       return success();
    }
@@ -455,36 +455,12 @@ class DSAppendLowering : public ConversionPattern {
       return success();
    }
 };
-static mlir::dsa::codegen::FunctionRegistry::FunctionId getStoreFunc(dsa::codegen::FunctionRegistry& functionRegistry, Type type) {
-   using FunctionId = dsa::codegen::FunctionRegistry::FunctionId;
-   if (isIntegerType(type, 1)) {
-      return FunctionId::ArrowTableBuilderAddBool;
-   } else if (auto intWidth = getIntegerWidth(type, false)) {
-      switch (intWidth) {
-         case 8: return FunctionId::ArrowTableBuilderAddInt8;
-         case 16: return FunctionId::ArrowTableBuilderAddInt16;
-         case 32: return FunctionId::ArrowTableBuilderAddInt32;
-         case 64: return FunctionId::ArrowTableBuilderAddInt64;
-         case 128: return FunctionId::ArrowTableBuilderAddDecimal;
-      }
-   } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
-      switch (floatType.getWidth()) {
-         case 32: return FunctionId ::ArrowTableBuilderAddFloat32;
-         case 64: return FunctionId ::ArrowTableBuilderAddFloat64;
-      }
-   } else if (auto stringType = type.dyn_cast_or_null<mlir::util::VarLen32Type>()) {
-      return FunctionId::ArrowTableBuilderAddBinary;
-   }
-   assert(false && "unsupported type");
-   //TODO: implement other types too
-   return FunctionId::ArrowTableBuilderAddInt32;
-}
+
 class DSTBAppendLowering : public ConversionPattern {
-   mlir::dsa::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   explicit DSTBAppendLowering(TypeConverter& typeConverter, MLIRContext* context, dsa::codegen::FunctionRegistry& functionRegistry)
-      : ConversionPattern(typeConverter, mlir::dsa::Append::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit DSTBAppendLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::Append::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto appendOp = mlir::cast<mlir::dsa::Append>(op);
@@ -498,42 +474,59 @@ class DSTBAppendLowering : public ConversionPattern {
       if (!isValid) {
          isValid = rewriter.create<mlir::arith::ConstantIntOp>(op->getLoc(), 1, 1);
       }
-      functionRegistry.call(rewriter, op->getLoc(), getStoreFunc(functionRegistry, getBaseType(val.getType())), ValueRange({builderVal, isValid, val}));
+      mlir::Type type=getBaseType(val.getType());
+      auto loc=op->getLoc();
+      if (isIntegerType(type, 1)) {
+         runtime::TableBuilder::addBool(rewriter,loc)({builderVal,isValid,val});
+      } else if (auto intWidth = getIntegerWidth(type, false)) {
+         switch (intWidth) {
+            case 8: runtime::TableBuilder::addInt8(rewriter,loc)({builderVal,isValid,val});break;
+            case 16: runtime::TableBuilder::addInt16(rewriter,loc)({builderVal,isValid,val});break;
+            case 32: runtime::TableBuilder::addInt32(rewriter,loc)({builderVal,isValid,val});break;
+            case 64: runtime::TableBuilder::addInt64(rewriter,loc)({builderVal,isValid,val});break;
+            case 128: runtime::TableBuilder::addDecimal(rewriter,loc)({builderVal,isValid,val});break;
+         }
+      } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
+         switch (floatType.getWidth()) {
+            case 32: runtime::TableBuilder::addFloat32(rewriter,loc)({builderVal,isValid,val});break;
+            case 64: runtime::TableBuilder::addFloat64(rewriter,loc)({builderVal,isValid,val});break;
+         }
+      } else if (auto stringType = type.dyn_cast_or_null<mlir::util::VarLen32Type>()) {
+         runtime::TableBuilder::addBinary(rewriter,loc)({builderVal,isValid,val});
+      }
       rewriter.eraseOp(op);
       return success();
    }
 };
 class NextRowLowering : public ConversionPattern {
-   mlir::dsa::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   explicit NextRowLowering(TypeConverter& typeConverter, MLIRContext* context, dsa::codegen::FunctionRegistry& functionRegistry)
-      : ConversionPattern(typeConverter, mlir::dsa::NextRow::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit NextRowLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::NextRow::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::dsa::NextRowAdaptor adaptor(operands);
-      functionRegistry.call(rewriter, op->getLoc(), mlir::dsa::codegen::FunctionRegistry::FunctionId::ArrowTableBuilderFinishRow, ValueRange({adaptor.builder()}));
+      runtime::TableBuilder::nextRow(rewriter,op->getLoc())({adaptor.builder()});
       rewriter.eraseOp(op);
       return success();
    }
 };
 class CreateTableBuilderLowering : public ConversionPattern {
-   dsa::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   explicit CreateTableBuilderLowering(dsa::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::CreateDS::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit CreateTableBuilderLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::CreateDS::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      using FunctionId = dsa::codegen::FunctionRegistry::FunctionId;
-      auto createTB = cast<mlir::dsa::CreateDS>(op);
+     auto createTB = cast<mlir::dsa::CreateDS>(op);
       if (!createTB.ds().getType().isa<mlir::dsa::TableBuilderType>()) {
          return failure();
       }
       auto loc = op->getLoc();
 
       mlir::Value schema = rewriter.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(getContext()), createTB.init_attr().getValue().cast<StringAttr>().str());
-      Value tableBuilder = functionRegistry.call(rewriter, loc, FunctionId::ArrowTableBuilderCreate, schema)[0];
+
+      Value tableBuilder = runtime::TableBuilder::create(rewriter,loc)({schema})[0];
       rewriter.replaceOp(op, tableBuilder);
       return success();
    }
@@ -545,11 +538,11 @@ void populateDSAToStdPatterns(mlir::dsa::codegen::FunctionRegistry& functionRegi
    patterns.insert<CreateDsLowering>(typeConverter, patterns.getContext(), functionRegistry);
    patterns.insert<HashtableInsertLowering>(typeConverter, patterns.getContext(), functionRegistry);
    patterns.insert<FinalizeLowering>(typeConverter, patterns.getContext(), functionRegistry);
-   patterns.insert<FinalizeTBLowering>(typeConverter, patterns.getContext(), functionRegistry);
+   patterns.insert<FinalizeTBLowering>(typeConverter, patterns.getContext());
    patterns.insert<DSAppendLowering>(typeConverter, patterns.getContext(), functionRegistry);
-   patterns.insert<DSTBAppendLowering>(typeConverter, patterns.getContext(), functionRegistry);
-   patterns.insert<NextRowLowering>(typeConverter, patterns.getContext(), functionRegistry);
+   patterns.insert<DSTBAppendLowering>(typeConverter, patterns.getContext());
+   patterns.insert<NextRowLowering>(typeConverter, patterns.getContext());
    patterns.insert<JoinHtHashtableInsertLowering>(typeConverter, patterns.getContext(), functionRegistry);
-   patterns.insert<CreateTableBuilderLowering>(functionRegistry, typeConverter, patterns.getContext());
+   patterns.insert<CreateTableBuilderLowering>(typeConverter, patterns.getContext());
 }
 } // end namespace mlir::dsa

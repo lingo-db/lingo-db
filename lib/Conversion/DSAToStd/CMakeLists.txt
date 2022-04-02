@@ -1,3 +1,5 @@
+gen_rt_def(tb-rt-defs "TableBuilder.h")
+
 add_mlir_conversion_library(MLIRDSAToStd
         CollectionIterators.cpp
         LowerToStd.cpp
@@ -11,7 +13,7 @@ add_mlir_conversion_library(MLIRDSAToStd
         ../../../mlir/Conversion/DSAToStd
 
         DEPENDS
-
+        tb-rt-defs
         LINK_COMPONENTS
         Core
 

@@ -42,7 +42,10 @@ class MethodPrinter : public MatchFinder::MatchCallback {
       if (const auto* bt = dyn_cast<BuiltinType>(canonicalType)) {
          switch (bt->getKind()) {
             case clang::BuiltinType::Bool: return translateIntegerType(1);
+            case clang::BuiltinType::SChar: return translateIntegerType(8);
+            case clang::BuiltinType::UChar: return translateIntegerType(8);
             case clang::BuiltinType::UShort: return translateIntegerType(16);
+            case clang::BuiltinType::Short: return translateIntegerType(16);
             case clang::BuiltinType::UInt: return translateIntegerType(32);
             case clang::BuiltinType::Int: return translateIntegerType(32);
             case clang::BuiltinType::ULong: return translateIntegerType(64);
@@ -86,6 +89,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             if (method->isVirtual()) continue;
             if (method->isImplicit()) continue;
             if (isa<CXXConstructorDecl>(method)) continue;
+            if (method->getAccess() == clang::AS_protected || method->getAccess() == clang::AS_private) continue;
             //method->dump();
             std::string methodName = method->getNameAsString();
             hStream << " inline static mlir::util::FunctionSpec " << methodName << " = ";
