@@ -1,9 +1,9 @@
 #ifndef DB_DIALECTS_TABLEBUILDER_H
 #define DB_DIALECTS_TABLEBUILDER_H
-#include "../../build/arrow-perf/install/include/arrow/table.h"
 #include "runtime/helpers.h"
 #include <cassert>
 #include <arrow/table_builder.h>
+#include <arrow/table.h>
 namespace runtime {
 class TableBuilder {
    static constexpr size_t max_batch_size = 100000;

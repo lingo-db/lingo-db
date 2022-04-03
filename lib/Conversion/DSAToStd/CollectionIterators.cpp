@@ -10,6 +10,8 @@
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/PatternMatch.h>
 #include <mlir/Transforms/DialectConversion.h>
+
+#include "runtime-defs/DataSourceIteration.h"
 using namespace mlir;
 
 class WhileIterator {
@@ -66,45 +68,40 @@ class ForIterator {
 };
 class TableIterator2 : public WhileIterator {
    Value tableInfo;
-   dsa::codegen::FunctionRegistry& functionRegistry;
    mlir::dsa::RecordBatchType recordBatchType;
 
    public:
-   TableIterator2(Value tableInfo, mlir::dsa::RecordBatchType recordBatchType, dsa::codegen::FunctionRegistry& functionRegistry) : WhileIterator(tableInfo.getContext()), tableInfo(tableInfo), functionRegistry(functionRegistry), recordBatchType(recordBatchType) {}
+   TableIterator2(Value tableInfo, mlir::dsa::RecordBatchType recordBatchType) : WhileIterator(tableInfo.getContext()), tableInfo(tableInfo), recordBatchType(recordBatchType) {}
 
    virtual Type iteratorType(OpBuilder& builder) override {
       return mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8));
    }
 
    virtual Value iterator(OpBuilder& builder) override {
-      mlir::Value loaded = builder.create<mlir::util::LoadOp>(loc, tableInfo.getType().cast<mlir::util::RefType>().getElementType(), tableInfo);
-      Value tablePtr = builder.create<util::GetTupleOp>(loc, mlir::util::RefType::get(builder.getContext(), IntegerType::get(builder.getContext(), 8)), loaded, 0);
-      return functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::TableChunkIteratorInit, tablePtr)[0];
+      return tableInfo;
    }
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
-      return functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::TableChunkIteratorNext, iterator)[0];
+      runtime::DataSourceIteration::next(builder, loc)({iterator});
+      return tableInfo;
    }
    virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
-      Value recordBatchPtr = functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::TableChunkIteratorCurr, iterator)[0];
       mlir::Value recordBatchInfoPtr;
       {
          mlir::OpBuilder::InsertionGuard guard(builder);
-         builder.setInsertionPointToStart(&recordBatchPtr.getDefiningOp()->getParentOfType<mlir::FuncOp>().body().front());
+         builder.setInsertionPointToStart(&iterator.getParentRegion()->getParentOfType<mlir::FuncOp>().body().front());
          recordBatchInfoPtr = builder.create<mlir::util::AllocaOp>(loc, mlir::util::RefType::get(builder.getContext(), typeConverter->convertType(recordBatchType)), mlir::Value());
       }
 
-      auto numColumns = builder.create<mlir::arith::ConstantIndexOp>(loc, recordBatchType.getRowType().getTypes().size());
       auto i8PtrType = mlir::util::RefType::get(builder.getContext(), builder.getI8Type());
-      auto ptr1 = builder.create<util::GenericMemrefCastOp>(loc, i8PtrType, tableInfo);
       auto ptr2 = builder.create<util::GenericMemrefCastOp>(loc, i8PtrType, recordBatchInfoPtr);
-      functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::AccessRecordBatch, mlir::ValueRange{numColumns, ptr1, ptr2, recordBatchPtr});
+      runtime::DataSourceIteration::access(builder,loc)({iterator,ptr2});
       return builder.create<mlir::util::LoadOp>(loc, typeConverter->convertType(recordBatchType), recordBatchInfoPtr, mlir::Value());
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
-      return functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::TableChunkIteratorValid, iterator)[0];
+      return runtime::DataSourceIteration::isValid(builder, loc)({iterator})[0];
    }
    virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
-      functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::TableChunkIteratorFree, iterator);
+      runtime::DataSourceIteration::end(builder, loc)({iterator});
    }
 };
 
@@ -414,7 +411,7 @@ std::unique_ptr<mlir::dsa::CollectionIterationImpl> mlir::dsa::CollectionIterati
    if (auto generic = collectionType.dyn_cast_or_null<mlir::dsa::GenericIterableType>()) {
       if (generic.getIteratorName() == "table_chunk_iterator") {
          if (auto recordBatchType = generic.getElementType().dyn_cast_or_null<mlir::dsa::RecordBatchType>()) {
-            return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<TableIterator2>(loweredCollection, recordBatchType, functionRegistry));
+            return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<TableIterator2>(loweredCollection, recordBatchType));
          }
       } else if (generic.getIteratorName() == "join_ht_iterator") {
          return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(collection, generic.getElementType(), false));

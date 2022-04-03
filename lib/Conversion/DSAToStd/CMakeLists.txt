@@ -1,4 +1,5 @@
 gen_rt_def(tb-rt-defs "TableBuilder.h")
+gen_rt_def(ds-it-rt-defs "DataSourceIteration.h")
 
 add_mlir_conversion_library(MLIRDSAToStd
         CollectionIterators.cpp
@@ -14,6 +15,7 @@ add_mlir_conversion_library(MLIRDSAToStd
 
         DEPENDS
         tb-rt-defs
+        ds-it-rt-defs
         LINK_COMPONENTS
         Core
 

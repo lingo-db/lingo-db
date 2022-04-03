@@ -398,19 +398,7 @@ void mlir::dsa::populateCollectionsToStdPatterns(mlir::dsa::codegen::FunctionReg
          nestedElementType = nested.getElementType();
       }
       if (genericIterableType.getIteratorName() == "table_chunk_iterator") {
-         std::vector<Type> types;
-         types.push_back(i8ptrType);
-         if (auto tupleT = nestedElementType.dyn_cast_or_null<TupleType>()) {
-            for (size_t i = 0; i < tupleT.getTypes().size(); i++) {
-               types.push_back(indexType);
-            }
-         }
-         if (auto recordBatchT = nestedElementType.dyn_cast_or_null<RecordBatchType>()) {
-            for (size_t i = 0; i < recordBatchT.getRowType().getTypes().size(); i++) {
-               types.push_back(indexType);
-            }
-         }
-         return (Type) mlir::util::RefType::get(context, TupleType::get(context, types));
+         return (Type)i8ptrType;
       } else if (genericIterableType.getIteratorName() == "join_ht_iterator") {
          auto ptrType = mlir::util::RefType::get(context, typeConverter.convertType(TupleType::get(context, {i8ptrType, genericIterableType.getElementType()})));
          return (Type) TupleType::get(context, {ptrType, indexType});

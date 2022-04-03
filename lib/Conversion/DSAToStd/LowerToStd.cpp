@@ -20,6 +20,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include <mlir/IR/BuiltinTypes.h>
 
+#include "runtime-defs/DataSourceIteration.h"
 using namespace mlir;
 
 namespace {
@@ -36,9 +37,8 @@ class ScanSourceLowering : public ConversionPattern {
       std::vector<Type> types;
       auto executionContext = functionRegistry.call(rewriter, op->getLoc(), dsa::codegen::FunctionRegistry::FunctionId::GetExecutionContext, {})[0];
       mlir::Value description = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), tablescan.descrAttr());
-      auto rawPtr = functionRegistry.call(rewriter, op->getLoc(), dsa::codegen::FunctionRegistry::FunctionId::ScanSourceInit, ValueRange({executionContext, description}))[0];
-      mlir::Value res = rewriter.create<mlir::util::GenericMemrefCastOp>(op->getLoc(), typeConverter->convertType(tablescan.getType()), rawPtr);
-      rewriter.replaceOp(op, res);
+      auto rawPtr = runtime::DataSourceIteration::start(rewriter, op->getLoc())({executionContext, description})[0];
+      rewriter.replaceOp(op, rawPtr);
       return success();
    }
 };
