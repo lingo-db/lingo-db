@@ -1,21 +1,16 @@
-#include "mlir-support/parsing.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include <llvm/ADT/TypeSwitch.h>
 #include <mlir/Dialect/SCF/SCF.h>
 
 using namespace mlir;
 namespace {
 
-class CreateFlagLowering : public ConversionPattern {
+class CreateFlagLowering : public OpConversionPattern<mlir::dsa::CreateFlag> {
    public:
-   explicit CreateFlagLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::CreateFlag::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+   using OpConversionPattern<mlir::dsa::CreateFlag>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::dsa::CreateFlag op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto boolType = rewriter.getI1Type();
       Type memrefType = util::RefType::get(rewriter.getContext(), boolType);
       Value alloca;
@@ -31,42 +26,29 @@ class CreateFlagLowering : public ConversionPattern {
       return success();
    }
 };
-class SetFlagLowering : public ConversionPattern {
+class SetFlagLowering : public OpConversionPattern<mlir::dsa::SetFlag> {
    public:
-   explicit SetFlagLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::SetFlag::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::dsa::SetFlagAdaptor adaptor(operands);
+   using OpConversionPattern<mlir::dsa::SetFlag>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::dsa::SetFlag op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       rewriter.create<util::StoreOp>(op->getLoc(), adaptor.val(), adaptor.flag(), Value());
       rewriter.eraseOp(op);
       return success();
    }
 };
-class GetFlagLowering : public ConversionPattern {
+class GetFlagLowering : public OpConversionPattern<mlir::dsa::GetFlag> {
    public:
-   explicit GetFlagLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::GetFlag::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::dsa::GetFlagAdaptor adaptor(operands);
-      auto boolType = rewriter.getI1Type();
-
-      Value flagValue = rewriter.create<util::LoadOp>(op->getLoc(), boolType, adaptor.flag(), Value());
+   using OpConversionPattern<mlir::dsa::GetFlag>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::dsa::GetFlag op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      Value flagValue = rewriter.create<util::LoadOp>(op->getLoc(), rewriter.getI1Type(), adaptor.flag(), Value());
       rewriter.replaceOp(op, flagValue);
       return success();
    }
 };
 
-
 } // namespace
 void mlir::dsa::populateScalarToStdPatterns(TypeConverter& typeConverter, RewritePatternSet& patterns) {
    typeConverter.addConversion([&](mlir::dsa::FlagType type) {
-      Type memrefType = util::RefType::get(patterns.getContext(), IntegerType::get(type.getContext(), 1));
-      return memrefType;
+      return util::RefType::get(patterns.getContext(), IntegerType::get(type.getContext(), 1));
    });
-
-   patterns.insert<CreateFlagLowering>(typeConverter, patterns.getContext());
-   patterns.insert<SetFlagLowering>(typeConverter, patterns.getContext());
-   patterns.insert<GetFlagLowering>(typeConverter, patterns.getContext());
+   patterns.insert<CreateFlagLowering, SetFlagLowering, GetFlagLowering>(typeConverter, patterns.getContext());
 }

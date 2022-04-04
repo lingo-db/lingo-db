@@ -5,7 +5,6 @@ add_mlir_conversion_library(MLIRDBToArrowStd
         LowerToStd.cpp
         ScalarDBToStdPatterns.cpp
         RuntimeSpecificScalarToStdPatterns.cpp
-        ArrowTypes.cpp
 
         ADDITIONAL_HEADER_DIRS
         ../../../mlir/Conversion/DBToArrowStd

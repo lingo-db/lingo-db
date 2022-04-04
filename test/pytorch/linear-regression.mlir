@@ -27,7 +27,7 @@ module {
     %3 = relalg.selection %1 (%4: !relalg.tuple) {
       %5 = relalg.getcol %4 @R::@a : f32
       %7 = call @user(%5) : (f32) -> f32
-      %8 = db.constant (5) : f32
+      %8 = db.constant (5.0) : f32
       %9 = db.compare lt %7 : f32 , %8 : f32
       relalg.return %9 : i1
     }

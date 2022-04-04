@@ -4,7 +4,6 @@
 #include <iostream>
 
 #include "mlir-support/parsing.h"
-#include "mlir/Conversion/DBToArrowStd/ArrowTypes.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"

@@ -13,18 +13,15 @@
 using namespace mlir;
 namespace {
 
-class SortOpLowering : public ConversionPattern {
+class SortOpLowering : public OpConversionPattern<mlir::dsa::SortOp> {
    public:
-   explicit SortOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::SortOp::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+   using OpConversionPattern<mlir::dsa::SortOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::dsa::SortOp sortOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       static size_t id = 0;
-      mlir::dsa::SortOpAdaptor sortOpAdaptor(operands);
-      auto sortOp = cast<mlir::dsa::SortOp>(op);
+
       auto ptrType = mlir::util::RefType::get(getContext(), IntegerType::get(getContext(), 8));
 
-      ModuleOp parentModule = op->getParentOfType<ModuleOp>();
+      ModuleOp parentModule = sortOp->getParentOfType<ModuleOp>();
       Type elementType = sortOp.toSort().getType().cast<mlir::dsa::VectorType>().getElementType();
       FuncOp funcOp;
       {
@@ -53,19 +50,17 @@ class SortOpLowering : public ConversionPattern {
          rewriter.eraseOp(terminator);
       }
 
-      auto rawPtr = rewriter.create<util::GenericMemrefCastOp>(sortOp.getLoc(), ptrType, sortOpAdaptor.toSort());
+      auto rawPtr = rewriter.create<util::GenericMemrefCastOp>(sortOp.getLoc(), ptrType, adaptor.toSort());
 
       Value functionPointer = rewriter.create<mlir::func::ConstantOp>(sortOp->getLoc(), funcOp.type(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.sym_name())));
       runtime::Vector::sort(rewriter, sortOp->getLoc())({rawPtr, functionPointer});
-      rewriter.eraseOp(op);
+      rewriter.eraseOp(sortOp);
       return success();
    }
 };
-class ForOpLowering : public ConversionPattern {
-
+class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
    public:
-   explicit ForOpLowering( TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::ForOp::getOperationName(), 1, context){}
+   using OpConversionPattern<mlir::dsa::ForOp>::OpConversionPattern;
    std::vector<Value> remap(std::vector<Value> values, ConversionPatternRewriter& builder) const {
       for (size_t i = 0; i < values.size(); i++) {
          values[i] = builder.getRemappedValue(values[i]);
@@ -73,19 +68,17 @@ class ForOpLowering : public ConversionPattern {
       return values;
    }
 
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::dsa::ForOpAdaptor forOpAdaptor(operands, op->getAttrDictionary());
-      auto forOp = cast<mlir::dsa::ForOp>(op);
+   LogicalResult matchAndRewrite(mlir::dsa::ForOp forOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       std::vector<Type> argumentTypes;
       std::vector<Location> argumentLocs;
       for (auto t : forOp.region().getArgumentTypes()) {
          argumentTypes.push_back(t);
-         argumentLocs.push_back(op->getLoc());
+         argumentLocs.push_back(forOp->getLoc());
       }
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::dsa::CollectionType>();
-      auto iterator = mlir::dsa::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), forOpAdaptor.collection());
+      auto iterator = mlir::dsa::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), adaptor.collection());
 
-      ModuleOp parentModule = op->getParentOfType<ModuleOp>();
+      ModuleOp parentModule = forOp->getParentOfType<ModuleOp>();
       bool containsCondSkip = false;
       for (auto& op : forOp.region().front().getOperations()) {
          containsCondSkip |= mlir::isa<mlir::dsa::CondSkipOp>(&op);
@@ -98,12 +91,12 @@ class ForOpLowering : public ConversionPattern {
          std::vector<Location> locs;
          for (auto t : yieldOp.results()) {
             resTypes.push_back(typeConverter->convertType(t.getType()));
-            locs.push_back(op->getLoc());
+            locs.push_back(forOp->getLoc());
          }
          std::vector<Value> values;
          values.push_back(getElem(builder));
          values.insert(values.end(), iterargs.begin(), iterargs.end());
-         auto execRegion = builder.create<mlir::scf::ExecuteRegionOp>(op->getLoc(), resTypes);
+         auto execRegion = builder.create<mlir::scf::ExecuteRegionOp>(forOp->getLoc(), resTypes);
          auto* execRegionBlock = new Block();
          execRegion.getRegion().push_back(execRegionBlock);
          {
@@ -112,22 +105,22 @@ class ForOpLowering : public ConversionPattern {
 
             builder.setInsertionPointToStart(execRegionBlock);
 
-            auto term = builder.create<mlir::scf::YieldOp>(op->getLoc());
+            auto term = builder.create<mlir::scf::YieldOp>(forOp->getLoc());
             builder.setInsertionPoint(term);
             rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
 
             std::vector<Value> results(yieldOp.results().begin(), yieldOp.results().end());
             rewriter.eraseOp(yieldOp);
-            auto term2 = builder.create<mlir::scf::YieldOp>(op->getLoc(), remap(results, rewriter));
+            auto term2 = builder.create<mlir::scf::YieldOp>(forOp->getLoc(), remap(results, rewriter));
 
             Block* end = rewriter.splitBlock(builder.getBlock(), builder.getInsertionPoint());
             builder.setInsertionPoint(term2);
-            builder.create<mlir::cf::BranchOp>(op->getLoc(), end, remap(results, rewriter));
+            builder.create<mlir::cf::BranchOp>(forOp->getLoc(), end, remap(results, rewriter));
             rewriter.eraseOp(term2);
 
             end->addArguments(resTypes, locs);
             builder.setInsertionPointToEnd(end);
-            builder.create<mlir::scf::YieldOp>(op->getLoc(), end->getArguments());
+            builder.create<mlir::scf::YieldOp>(forOp->getLoc(), end->getArguments());
             std::vector<Operation*> toErase;
             for (auto it = execRegionBlock->getOperations().rbegin(); it != execRegionBlock->getOperations().rend(); it++) {
                if (auto op = mlir::dyn_cast_or_null<mlir::dsa::CondSkipOp>(&*it)) {
@@ -165,12 +158,12 @@ class ForOpLowering : public ConversionPattern {
          std::vector<Location> locs;
          for (auto t : yieldOp.results()) {
             resTypes.push_back(typeConverter->convertType(t.getType()));
-            locs.push_back(op->getLoc());
+            locs.push_back(forOp->getLoc());
          }
          std::vector<Value> values;
          values.push_back(getElem(builder));
          values.insert(values.end(), iterargs.begin(), iterargs.end());
-         auto term = builder.create<mlir::scf::YieldOp>(op->getLoc());
+         auto term = builder.create<mlir::scf::YieldOp>(forOp->getLoc());
          builder.setInsertionPoint(term);
          rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
 
@@ -181,7 +174,7 @@ class ForOpLowering : public ConversionPattern {
          return results;
       };
 
-      std::vector<Value> results = iterator->implementLoop(op->getLoc(), forOpAdaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, containsCondSkip ? fn1 : fn2);
+      std::vector<Value> results = iterator->implementLoop(forOp->getLoc(), adaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, containsCondSkip ? fn1 : fn2);
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
 
@@ -191,19 +184,16 @@ class ForOpLowering : public ConversionPattern {
          rewriter.create<mlir::dsa::YieldOp>(forOp.getLoc());
       }
 
-      rewriter.replaceOp(op, results);
+      rewriter.replaceOp(forOp, results);
       return success();
    }
 };
 
-class LookupOpLowering : public ConversionPattern {
+class LookupOpLowering  : public OpConversionPattern<mlir::dsa::Lookup> {
    public:
-   explicit LookupOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::Lookup::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+   using OpConversionPattern<mlir::dsa::Lookup>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::dsa::Lookup op, OpAdaptor lookupAdaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = op->getLoc();
-      mlir::dsa::LookupAdaptor lookupAdaptor(operands);
       auto loaded = rewriter.create<util::LoadOp>(loc, lookupAdaptor.collection().getType().cast<mlir::util::RefType>().getElementType(), lookupAdaptor.collection(), Value());
       auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, loaded);
       Value ht = unpacked.getResult(0);
@@ -217,7 +207,9 @@ class LookupOpLowering : public ConversionPattern {
       return success();
    }
 };
-class AtLowering : public ConversionPattern {
+class AtLowering  : public OpConversionPattern<mlir::dsa::At> {
+   public:
+   using OpConversionPattern<mlir::dsa::At>::OpConversionPattern;
    static Value getBit(OpBuilder builder, Location loc, Value bits, Value pos) {
       auto i1Type = IntegerType::get(builder.getContext(), 1);
       auto i8Type = IntegerType::get(builder.getContext(), 8);
@@ -238,14 +230,10 @@ class AtLowering : public ConversionPattern {
       Value res = builder.create<arith::CmpIOp>(loc, i1Type, mlir::arith::CmpIPredicate::eq, anded, const1Byte);
       return res;
    }
-   public:
-   explicit AtLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::At::getOperationName(), 1, context) {}
 
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto loc = op->getLoc();
-      mlir::dsa::AtAdaptor adaptor(operands);
-      auto atOp = mlir::cast<mlir::dsa::At>(op);
+   public:
+   LogicalResult matchAndRewrite(mlir::dsa::At atOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = atOp->getLoc();
       auto baseType = getBaseType(atOp.getType(0));
       mlir::Value index;
       mlir::Value columnOffset;
@@ -298,9 +286,9 @@ class AtLowering : public ConversionPattern {
          Value realPos = rewriter.create<arith::AddIOp>(loc, indexType, columnOffset, index);
          realPos = rewriter.create<arith::MulIOp>(loc, indexType, nullMultiplier, index);
          Value isValid = getBit(rewriter, loc, validityBuffer, realPos);
-         rewriter.replaceOp(op, mlir::ValueRange{val, isValid});
+         rewriter.replaceOp(atOp, mlir::ValueRange{val, isValid});
       } else {
-         rewriter.replaceOp(op, val);
+         rewriter.replaceOp(atOp, val);
       }
       return success();
    }
@@ -319,21 +307,7 @@ void mlir::dsa::populateCollectionsToStdPatterns(mlir::TypeConverter& typeConver
    auto indexType = IndexType::get(context);
    auto i8ptrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
    auto i8PtrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
-   typeConverter.addConversion([&typeConverter, context, indexType, i8ptrType](mlir::dsa::AggregationHashtableType aggregationHashtableType) {
-      if (aggregationHashtableType.getKeyType().getTypes().empty()) {
-         return (Type) mlir::util::RefType::get(context, typeConverter.convertType(aggregationHashtableType.getValType()));
-      } else {
-         Type kvType = typeConverter.convertType(TupleType::get(context, {aggregationHashtableType.getKeyType(), aggregationHashtableType.getValType()}));
 
-         Type entryType = TupleType::get(context, {i8ptrType, indexType, kvType});
-         auto entryPtrType = mlir::util::RefType::get(context, entryType);
-
-         auto vecType = mlir::util::RefType::get(context, entryType);
-         auto htType = mlir::util::RefType::get(context, entryPtrType);
-         auto t = (Type) util::RefType::get(context, TupleType::get(context, {htType, indexType, indexType, vecType, indexType, typeConverter.convertType(aggregationHashtableType.getValType())}));
-         return t;
-      }
-   });
 
    typeConverter.addConversion([&typeConverter, indexType, i8PtrType, context](mlir::dsa::JoinHashtableType joinHashtableType) {
       Type kvType = typeConverter.convertType(TupleType::get(context, {joinHashtableType.getKeyType(), joinHashtableType.getValType()}));
@@ -344,11 +318,7 @@ void mlir::dsa::populateCollectionsToStdPatterns(mlir::TypeConverter& typeConver
       return (Type) util::RefType::get(context, TupleType::get(context, {htType, indexType, indexType, indexType, vecType}));
    });
 
-   typeConverter.addConversion([context, &typeConverter, indexType](mlir::dsa::VectorType vectorType) {
-      Type entryType = typeConverter.convertType(vectorType.getElementType());
-      auto arrayType = mlir::util::RefType::get(context, entryType);
-      return (Type) mlir::util::RefType::get(context, TupleType::get(context, {indexType, indexType, arrayType}));
-   });
+
    typeConverter.addConversion([context, i8ptrType, indexType](mlir::dsa::RecordBatchType recordBatchType) {
       std::vector<Type> types;
       types.push_back(indexType);

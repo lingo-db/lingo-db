@@ -24,14 +24,10 @@ using namespace mlir;
 
 namespace {
 
-class ScanSourceLowering : public ConversionPattern {
-
+class ScanSourceLowering : public OpConversionPattern<mlir::dsa::ScanSource> {
    public:
-   explicit ScanSourceLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::ScanSource::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto tablescan = cast<mlir::dsa::ScanSource>(op);
+   using OpConversionPattern<mlir::dsa::ScanSource>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::dsa::ScanSource op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       std::vector<Type> types;
       auto parentModule=op->getParentOfType<ModuleOp>();
       mlir::FuncOp funcOp=parentModule.lookupSymbol<mlir::FuncOp>("rt_get_execution_context");
@@ -43,7 +39,7 @@ class ScanSourceLowering : public ConversionPattern {
       }
 
       mlir::Value executionContext =rewriter.create<mlir::func::CallOp>(op->getLoc(),funcOp,mlir::ValueRange{}).getResult(0);
-      mlir::Value description = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), tablescan.descrAttr());
+      mlir::Value description = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), op.descrAttr());
       auto rawPtr = runtime::DataSourceIteration::start(rewriter, op->getLoc())({executionContext, description})[0];
       rewriter.replaceOp(op, rawPtr);
       return success();

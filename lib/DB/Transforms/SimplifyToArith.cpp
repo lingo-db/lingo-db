@@ -3,8 +3,6 @@
 
 #include <iostream>
 
-#include "mlir-support/parsing.h"
-#include "mlir/Conversion/DBToArrowStd/ArrowTypes.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -54,27 +52,17 @@ mlir::arith::CmpFPredicateAttr convertToCmpFPred(mlir::OpBuilder, ::mlir::db::DB
 }
 mlir::Attribute convertConst(mlir::Attribute attr, mlir::Value v) {
    using namespace mlir;
-   auto [arrowType, param1, param2] = mlir::db::codegen::convertTypeToArrow(v.getType());
    std::variant<int64_t, double, std::string> parseArg;
    if (auto integerAttr = attr.dyn_cast_or_null<IntegerAttr>()) {
-      parseArg = integerAttr.getInt();
+      if (v.getType().isIntOrIndex()) {
+         return IntegerAttr::get(v.getType(), integerAttr.getInt());
+      }
    } else if (auto floatAttr = attr.dyn_cast_or_null<FloatAttr>()) {
-      parseArg = floatAttr.getValueAsDouble();
-   } else if (auto stringAttr = attr.dyn_cast_or_null<StringAttr>()) {
-      parseArg = stringAttr.str();
-   } else {
-      return attr;
+      if (v.getType().isa<mlir::FloatType>()) {
+         return FloatAttr::get(v.getType(), floatAttr.getValueAsDouble());
+      }
    }
-   auto parseResult = support::parse(parseArg, arrowType, param1, param2);
-   mlir::Type resultType = v.getType();
-   mlir::OpBuilder builder(attr.getContext());
-   if (resultType.isa<IntegerType>()) {
-      return builder.getIntegerAttr(resultType, std::get<int64_t>(parseResult));
-   } else if (resultType.isa<FloatType>()) {
-      return builder.getFloatAttr(resultType, std::get<double>(parseResult));
-   } else {
-      return attr;
-   }
+   return attr;
 }
 #include "SimplifyToArith.inc"
 

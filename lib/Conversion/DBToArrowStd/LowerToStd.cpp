@@ -88,20 +88,16 @@ class SimpleTypeConversionPattern : public ConversionPattern {
       return success();
    }
 };
-class AtLowering : public ConversionPattern {
+class AtLowering  : public OpConversionPattern<mlir::dsa::At> {
    public:
-   explicit AtLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::At::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto loc = op->getLoc();
-      mlir::dsa::AtAdaptor adaptor(operands);
-      auto atOp = mlir::cast<mlir::dsa::At>(op);
+   using OpConversionPattern<mlir::dsa::At>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::dsa::At atOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = atOp->getLoc();
       auto t = atOp.getType(0);
       if (typeConverter->isLegal(t)) {
-         rewriter.startRootUpdate(op);
-         atOp->setOperands(operands);
-         rewriter.finalizeRootUpdate(op);
+         rewriter.startRootUpdate(atOp);
+         atOp->setOperands(adaptor.getOperands());
+         rewriter.finalizeRootUpdate(atOp);
          return mlir::success();
       }
       auto* context = getContext();
@@ -146,7 +142,7 @@ class AtLowering : public ConversionPattern {
             values[0] = rewriter.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType), values[0]);
          }
       }
-      rewriter.replaceOp(op, values);
+      rewriter.replaceOp(atOp, values);
       return success();
    }
 };

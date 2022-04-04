@@ -19,22 +19,17 @@
 using namespace mlir;
 namespace {
 
-class StringCastOpLowering : public ConversionPattern {
+class StringCastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
    public:
-   explicit StringCastOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CastOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto castOp = cast<mlir::db::CastOp>(op);
-      auto loc = op->getLoc();
+   using OpConversionPattern<mlir::db::CastOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::CastOp castOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = castOp->getLoc();
       auto scalarSourceType = castOp.val().getType();
       auto scalarTargetType = castOp.getType();
       auto convertedTargetType = typeConverter->convertType(scalarTargetType);
       if (!scalarSourceType.isa<mlir::db::StringType>() && !scalarTargetType.isa<mlir::db::StringType>()) return failure();
 
-      Value valueToCast = operands[0];
+      Value valueToCast = adaptor.val();
       Value result;
       if (scalarSourceType == scalarTargetType) {
          //nothing to do here
@@ -83,17 +78,16 @@ class StringCastOpLowering : public ConversionPattern {
          }
       }
       if (result) {
-         rewriter.replaceOp(op, result);
+         rewriter.replaceOp(castOp, result);
          return success();
       } else {
          return failure();
       }
    }
 };
-class StringCmpOpLowering : public ConversionPattern {
+class StringCmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
    public:
-   explicit StringCmpOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CmpOp::getOperationName(), 1, context) {}
+   using OpConversionPattern<mlir::db::CmpOp>::OpConversionPattern;
 
    bool stringIsOk(std::string str) const {
       for (auto x : str) {
@@ -101,11 +95,7 @@ class StringCmpOpLowering : public ConversionPattern {
       }
       return true;
    }
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto cmpOp = cast<db::CmpOp>(op);
-      db::CmpOpAdaptor adaptor(operands);
+   LogicalResult matchAndRewrite(mlir::db::CmpOp cmpOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto type = cmpOp.left().getType();
       if (!type.isa<db::StringType>()) {
          return failure();
@@ -115,14 +105,14 @@ class StringCmpOpLowering : public ConversionPattern {
             if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(defOp)) {
                std::string likeCond = constOp.getValue().cast<mlir::StringAttr>().str();
                if (likeCond.ends_with('%') && stringIsOk(likeCond.substr(0, likeCond.size() - 1))) {
-                  auto newConst = rewriter.create<mlir::db::ConstantOp>(op->getLoc(), mlir::db::StringType::get(getContext()), rewriter.getStringAttr(likeCond.substr(0, likeCond.size() - 1)));
-                  Value res = runtime::StringRuntime::startsWith(rewriter, op->getLoc())({adaptor.left(), rewriter.getRemappedValue(newConst)})[0];
-                  rewriter.replaceOp(op, res);
+                  auto newConst = rewriter.create<mlir::db::ConstantOp>(cmpOp->getLoc(), mlir::db::StringType::get(getContext()), rewriter.getStringAttr(likeCond.substr(0, likeCond.size() - 1)));
+                  Value res = runtime::StringRuntime::startsWith(rewriter, cmpOp->getLoc())({adaptor.left(), rewriter.getRemappedValue(newConst)})[0];
+                  rewriter.replaceOp(cmpOp, res);
                   return success();
                } else if (likeCond.starts_with('%') && stringIsOk(likeCond.substr(1, likeCond.size() - 1))) {
-                  auto newConst = rewriter.create<mlir::db::ConstantOp>(op->getLoc(), mlir::db::StringType::get(getContext()), rewriter.getStringAttr(likeCond.substr(1, likeCond.size() - 1)));
-                  Value res = runtime::StringRuntime::endsWith(rewriter, op->getLoc())({adaptor.left(), rewriter.getRemappedValue(newConst)})[0];
-                  rewriter.replaceOp(op, res);
+                  auto newConst = rewriter.create<mlir::db::ConstantOp>(cmpOp->getLoc(), mlir::db::StringType::get(getContext()), rewriter.getStringAttr(likeCond.substr(1, likeCond.size() - 1)));
+                  Value res = runtime::StringRuntime::endsWith(rewriter, cmpOp->getLoc())({adaptor.left(), rewriter.getRemappedValue(newConst)})[0];
+                  rewriter.replaceOp(cmpOp, res);
                   return success();
                }
             }
@@ -133,28 +123,28 @@ class StringCmpOpLowering : public ConversionPattern {
       Value right = adaptor.right();
       switch (cmpOp.predicate()) {
          case db::DBCmpPredicate::eq:
-            res = runtime::StringRuntime::compareEq(rewriter, op->getLoc())({left, right})[0];
+            res = runtime::StringRuntime::compareEq(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
          case db::DBCmpPredicate::neq:
-            res = runtime::StringRuntime::compareNEq(rewriter, op->getLoc())({left, right})[0];
+            res = runtime::StringRuntime::compareNEq(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
          case db::DBCmpPredicate::lt:
-            res = runtime::StringRuntime::compareLt(rewriter, op->getLoc())({left, right})[0];
+            res = runtime::StringRuntime::compareLt(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
          case db::DBCmpPredicate::gt:
-            res = runtime::StringRuntime::compareGt(rewriter, op->getLoc())({left, right})[0];
+            res = runtime::StringRuntime::compareGt(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
          case db::DBCmpPredicate::lte:
-            res = runtime::StringRuntime::compareLte(rewriter, op->getLoc())({left, right})[0];
+            res = runtime::StringRuntime::compareLte(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
          case db::DBCmpPredicate::gte:
-            res = runtime::StringRuntime::compareGte(rewriter, op->getLoc())({left, right})[0];
+            res = runtime::StringRuntime::compareGte(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
          case db::DBCmpPredicate::like:
-            res = runtime::StringRuntime::like(rewriter, op->getLoc())({left, right})[0];
+            res = runtime::StringRuntime::like(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
       }
-      rewriter.replaceOp(op, res);
+      rewriter.replaceOp(cmpOp, res);
       return success();
    }
 };
@@ -197,16 +187,11 @@ class FnRFLowering : public DBToArrowRFLowering {
    }
 };
 
-class RuntimeCallLowering : public ConversionPattern {
+class RuntimeCallLowering  : public OpConversionPattern<mlir::db::RuntimeCall> {
    public:
-   explicit RuntimeCallLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::RuntimeCall::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+   using OpConversionPattern<mlir::db::RuntimeCall>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::RuntimeCall runtimeCallOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto reg = getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
-
-      auto runtimeCallOp = mlir::cast<mlir::db::RuntimeCall>(op);
-      mlir::db::RuntimeCallAdaptor adaptor(operands);
       auto* fn = reg->lookup(runtimeCallOp.fn().str());
       if (!fn) return failure();
       if (!fn->lowering) return failure();
@@ -216,9 +201,9 @@ class RuntimeCallLowering : public ConversionPattern {
 
       mlir::Value res = fn->lowering->lower(rewriter, adaptor.args(), runtimeCallOp.args().getTypes(), runtimeCallOp->getNumResults() == 1 ? runtimeCallOp->getResultTypes()[0] : mlir::Type());
       if (runtimeCallOp->getNumResults() == 0) {
-         rewriter.eraseOp(op);
+         rewriter.eraseOp(runtimeCallOp);
       } else {
-         rewriter.replaceOp(op, res);
+         rewriter.replaceOp(runtimeCallOp, res);
       }
       return success();
    }

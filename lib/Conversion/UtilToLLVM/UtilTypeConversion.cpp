@@ -1,6 +1,5 @@
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -24,18 +23,11 @@ class SimpleTypeConversionPattern : public ConversionPattern {
    }
 };
 
-class SizeOfLowering : public ConversionPattern {
+class SizeOfLowering :  public OpConversionPattern<mlir::util::SizeOfOp> {
    public:
-   explicit SizeOfLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::util::SizeOfOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto castedOp = mlir::dyn_cast_or_null<mlir::util::SizeOfOp>(op);
-      auto converted = typeConverter->convertType(castedOp.type());
-      rewriter.replaceOpWithNewOp<mlir::util::SizeOfOp>(op, rewriter.getIndexType(), TypeAttr::get(converted));
-
+   using OpConversionPattern<mlir::util::SizeOfOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::util::SizeOfOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOpWithNewOp<mlir::util::SizeOfOp>(op, rewriter.getIndexType(), TypeAttr::get(typeConverter->convertType(op.type())));
       return success();
    }
 };

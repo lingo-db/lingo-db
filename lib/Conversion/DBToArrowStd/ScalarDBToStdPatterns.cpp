@@ -1,8 +1,6 @@
 #include "mlir-support/parsing.h"
-#include "mlir/Conversion/DBToArrowStd/ArrowTypes.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include <llvm/ADT/TypeSwitch.h>
@@ -11,42 +9,34 @@
 using namespace mlir;
 namespace {
 
-class NotOpLowering : public ConversionPattern {
+class NotOpLowering : public OpConversionPattern<mlir::db::NotOp> {
    public:
-   explicit NotOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::NotOp::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      Value trueValue = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-      rewriter.replaceOpWithNewOp<arith::XOrIOp>(op, operands[0], trueValue);
+   using OpConversionPattern<mlir::db::NotOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::NotOp notOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      Value trueValue = rewriter.create<arith::ConstantOp>(notOp->getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      rewriter.replaceOpWithNewOp<arith::XOrIOp>(notOp, adaptor.val(), trueValue);
       return success();
    }
 };
-class AndOpLowering : public ConversionPattern {
+class AndOpLowering : public OpConversionPattern<mlir::db::AndOp> {
    public:
-   explicit AndOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::AndOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto andOp = cast<mlir::db::AndOp>(op);
-
+   using OpConversionPattern<mlir::db::AndOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::AndOp andOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       Value result;
       Value isNull;
-      auto loc = op->getLoc();
+      auto loc = andOp->getLoc();
 
-      for (size_t i = 0; i < operands.size(); i++) {
+      for (size_t i = 0; i < adaptor.vals().size(); i++) {
          auto currType = andOp.vals()[i].getType();
          bool currNullable = currType.isa<mlir::db::NullableType>();
          Value currNull;
          Value currVal;
          if (currNullable) {
-            auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, operands[i]);
+            auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, adaptor.vals()[i]);
             currNull = unPackOp.vals()[0];
             currVal = unPackOp.vals()[1];
          } else {
-            currVal = operands[i];
+            currVal = adaptor.vals()[i];
          }
          if (i == 0) {
             if (currNullable) {
@@ -73,39 +63,33 @@ class AndOpLowering : public ConversionPattern {
       if (andOp.getResult().getType().isa<mlir::db::NullableType>()) {
          isNull = rewriter.create<arith::AndIOp>(loc, result, isNull);
          Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({isNull, result}));
-         rewriter.replaceOp(op, combined);
+         rewriter.replaceOp(andOp, combined);
       } else {
-         rewriter.replaceOp(op, result);
+         rewriter.replaceOp(andOp, result);
       }
       return success();
    }
 };
-class OrOpLowering : public ConversionPattern {
+class OrOpLowering : public OpConversionPattern<mlir::db::OrOp> {
    public:
-   explicit OrOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::OrOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto orOp = cast<mlir::db::OrOp>(op);
-
+   using OpConversionPattern<mlir::db::OrOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::OrOp orOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       Value result;
       Value isNull;
-      auto loc = op->getLoc();
+      auto loc = orOp->getLoc();
       Value falseValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
 
-      for (size_t i = 0; i < operands.size(); i++) {
+      for (size_t i = 0; i < adaptor.vals().size(); i++) {
          auto currType = orOp.vals()[i].getType();
          bool currNullable = currType.isa<mlir::db::NullableType>();
          Value currNull;
          Value currVal;
          if (currNullable) {
-            auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, operands[i]);
+            auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, adaptor.vals()[i]);
             currNull = unPackOp.vals()[0];
             currVal = unPackOp.vals()[1];
          } else {
-            currVal = operands[i];
+            currVal = adaptor.vals()[i];
          }
          if (i == 0) {
             if (currNullable) {
@@ -132,29 +116,22 @@ class OrOpLowering : public ConversionPattern {
       if (orOp.getResult().getType().isa<mlir::db::NullableType>()) {
          isNull = rewriter.create<arith::SelectOp>(loc, result, falseValue, isNull);
          Value combined = rewriter.create<mlir::util::PackOp>(loc, ValueRange({isNull, result}));
-         rewriter.replaceOp(op, combined);
+         rewriter.replaceOp(orOp, combined);
       } else {
-         rewriter.replaceOp(op, result);
+         rewriter.replaceOp(orOp, result);
       }
       return success();
    }
 };
 
 template <class OpClass, class OperandType, class StdOpClass>
-class BinOpLowering : public ConversionPattern {
+class BinOpLowering : public OpConversionPattern<OpClass> {
    public:
-   explicit BinOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, OpClass::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto addOp = cast<OpClass>(op);
-      using AT = typename OpClass::Adaptor;
-      auto adaptor = AT(operands);
-      auto type = getBaseType(addOp.left().getType());
+   using OpConversionPattern<OpClass>::OpConversionPattern;
+   LogicalResult matchAndRewrite(OpClass binOp, typename OpConversionPattern<OpClass>::OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto type = getBaseType(binOp.left().getType());
       if (type.template isa<OperandType>()) {
-         rewriter.template replaceOpWithNewOp<StdOpClass>(op, typeConverter->convertType(addOp.result().getType()), adaptor.left(), adaptor.right());
+         rewriter.template replaceOpWithNewOp<StdOpClass>(binOp, this->typeConverter->convertType(binOp.result().getType()), adaptor.left(), adaptor.right());
          return success();
       }
       return failure();
@@ -167,81 +144,59 @@ mlir::Value getDecimalScaleMultiplierConstant(mlir::OpBuilder& builder, unsigned
    return multiplier;
 }
 template <class DBOp, class Op>
-class DecimalOpScaledLowering : public ConversionPattern {
+class DecimalOpScaledLowering : public OpConversionPattern<DBOp> {
    public:
-   explicit DecimalOpScaledLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, DBOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto addOp = cast<DBOp>(op);
-      typename DBOp::Adaptor adaptor(operands);
-      auto type = getBaseType(addOp.getType());
+   using OpConversionPattern<DBOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(DBOp decimalOp, typename OpConversionPattern<DBOp>::OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto type = getBaseType(decimalOp.getType());
       if (auto decimalType = type.template dyn_cast_or_null<mlir::db::DecimalType>()) {
-         auto stdType = typeConverter->convertType(decimalType);
-         auto scaled = rewriter.create<arith::MulIOp>(op->getLoc(), stdType, adaptor.left(), getDecimalScaleMultiplierConstant(rewriter, decimalType.getS(), stdType, op->getLoc()));
-         rewriter.template replaceOpWithNewOp<Op>(op, stdType, scaled, adaptor.right());
+         auto stdType = this->typeConverter->convertType(decimalType);
+         auto scaled = rewriter.create<arith::MulIOp>(decimalOp->getLoc(), stdType, adaptor.left(), getDecimalScaleMultiplierConstant(rewriter, decimalType.getS(), stdType, decimalOp->getLoc()));
+         rewriter.template replaceOpWithNewOp<Op>(decimalOp, stdType, scaled, adaptor.right());
          return success();
       }
       return failure();
    }
 };
-class DecimalMulLowering : public ConversionPattern {
+class DecimalMulLowering : public OpConversionPattern<mlir::db::MulOp> {
    public:
-   explicit DecimalMulLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::MulOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto mulOp = cast<mlir::db::MulOp>(op);
-      typename mlir::db::MulOpAdaptor adaptor(operands);
+   using OpConversionPattern<mlir::db::MulOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::MulOp mulOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (auto decimalType = mulOp.getType().template dyn_cast_or_null<mlir::db::DecimalType>()) {
          auto stdType = typeConverter->convertType(decimalType);
-         auto multiplied = rewriter.create<mlir::arith::MulIOp>(op->getLoc(), stdType, adaptor.left(), adaptor.right());
-         rewriter.replaceOpWithNewOp<arith::DivSIOp>(op, stdType, multiplied, getDecimalScaleMultiplierConstant(rewriter, decimalType.getS(), stdType, op->getLoc()));
+         auto multiplied = rewriter.create<mlir::arith::MulIOp>(mulOp->getLoc(), stdType, adaptor.left(), adaptor.right());
+         rewriter.replaceOpWithNewOp<arith::DivSIOp>(mulOp, stdType, multiplied, getDecimalScaleMultiplierConstant(rewriter, decimalType.getS(), stdType, mulOp->getLoc()));
          return success();
       }
       return failure();
    }
 };
-class IsNullOpLowering : public ConversionPattern {
+class IsNullOpLowering : public OpConversionPattern<mlir::db::IsNullOp> {
    public:
-   explicit IsNullOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::IsNullOp::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto isNullOp = mlir::dyn_cast_or_null<mlir::db::IsNullOp>(op);
-      mlir::db::IsNullOpAdaptor isNullOpAdaptor(operands);
-
+   using OpConversionPattern<mlir::db::IsNullOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::IsNullOp isNullOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (isNullOp.val().getType().isa<mlir::db::NullableType>()) {
-         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(op->getLoc(), isNullOpAdaptor.val());
-         rewriter.replaceOp(op, unPackOp.vals()[0]);
+         auto unPackOp = rewriter.create<mlir::util::UnPackOp>(isNullOp->getLoc(), adaptor.val());
+         rewriter.replaceOp(isNullOp, unPackOp.vals()[0]);
       } else {
-         rewriter.replaceOp(op, isNullOpAdaptor.val());
+         rewriter.replaceOp(isNullOp, adaptor.val());
       }
       return success();
    }
 };
-class NullableGetValOpLowering : public ConversionPattern {
+class NullableGetValOpLowering : public OpConversionPattern<mlir::db::NullableGetVal> {
    public:
-   explicit NullableGetValOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::NullableGetVal::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::db::NullableGetValAdaptor nullableGetValAdaptor(operands);
-      auto unPackOp = rewriter.create<mlir::util::UnPackOp>(op->getLoc(), nullableGetValAdaptor.val());
+   using OpConversionPattern<mlir::db::NullableGetVal>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::NullableGetVal op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto unPackOp = rewriter.create<mlir::util::UnPackOp>(op->getLoc(), adaptor.val());
       rewriter.replaceOp(op, unPackOp.vals()[1]);
       return success();
    }
 };
-class AsNullableOpLowering : public ConversionPattern {
+class AsNullableOpLowering : public OpConversionPattern<mlir::db::AsNullableOp> {
    public:
-   explicit AsNullableOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::AsNullableOp::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      mlir::db::AsNullableOpAdaptor adaptor(operands);
+   using OpConversionPattern<mlir::db::AsNullableOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::AsNullableOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       mlir::Value isNull = adaptor.null();
       if (!isNull) {
          isNull = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
@@ -251,34 +206,79 @@ class AsNullableOpLowering : public ConversionPattern {
       return success();
    }
 };
-class NullOpLowering : public ConversionPattern {
+class NullOpLowering : public OpConversionPattern<mlir::db::NullOp> {
    public:
-   explicit NullOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::NullOp::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto nullOp = cast<mlir::db::NullOp>(op);
+   using OpConversionPattern<mlir::db::NullOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::NullOp nullOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto tupleType = typeConverter->convertType(nullOp.getType());
-      auto undefTuple = rewriter.create<mlir::util::UndefTupleOp>(op->getLoc(), tupleType);
-      auto trueValue = rewriter.create<arith::ConstantOp>(op->getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-
-      rewriter.replaceOpWithNewOp<mlir::util::SetTupleOp>(op, tupleType, undefTuple, trueValue, 0);
+      auto undefTuple = rewriter.create<mlir::util::UndefTupleOp>(nullOp->getLoc(), tupleType);
+      auto trueValue = rewriter.create<arith::ConstantOp>(nullOp->getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      rewriter.replaceOpWithNewOp<mlir::util::SetTupleOp>(nullOp, tupleType, undefTuple, trueValue, 0);
       return success();
    }
 };
 
-class ConstantLowering : public ConversionPattern {
-   public:
-   explicit ConstantLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::ConstantOp::getOperationName(), 1, context) {}
+class ConstantLowering : public OpConversionPattern<mlir::db::ConstantOp> {
+   static std::tuple<arrow::Type::type, uint32_t, uint32_t> convertTypeToArrow(mlir::Type type) {
+      arrow::Type::type typeConstant = arrow::Type::type::NA;
+      uint32_t param1 = 0, param2 = 0;
+      if (isIntegerType(type, 1)) {
+         typeConstant = arrow::Type::type::BOOL;
+      } else if (auto intWidth = getIntegerWidth(type, false)) {
+         switch (intWidth) {
+            case 8: typeConstant = arrow::Type::type::INT8; break;
+            case 16: typeConstant = arrow::Type::type::INT16; break;
+            case 32: typeConstant = arrow::Type::type::INT32; break;
+            case 64: typeConstant = arrow::Type::type::INT64; break;
+         }
+      } else if (auto uIntWidth = getIntegerWidth(type, true)) {
+         switch (uIntWidth) {
+            case 8: typeConstant = arrow::Type::type::UINT8; break;
+            case 16: typeConstant = arrow::Type::type::UINT16; break;
+            case 32: typeConstant = arrow::Type::type::UINT32; break;
+            case 64: typeConstant = arrow::Type::type::UINT64; break;
+         }
+      } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
+         typeConstant = arrow::Type::type::DECIMAL128;
+         param1 = decimalType.getP();
+         param2 = decimalType.getS();
+      } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
+         switch (floatType.getWidth()) {
+            case 16: typeConstant = arrow::Type::type::HALF_FLOAT; break;
+            case 32: typeConstant = arrow::Type::type::FLOAT; break;
+            case 64: typeConstant = arrow::Type::type::DOUBLE; break;
+         }
+      } else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {
+         typeConstant = arrow::Type::type::STRING;
+      } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
+         if (dateType.getUnit() == mlir::db::DateUnitAttr::day) {
+            typeConstant = arrow::Type::type::DATE32;
+         } else {
+            typeConstant = arrow::Type::type::DATE64;
+         }
+      } else if (auto charType = type.dyn_cast_or_null<mlir::db::CharType>()) {
+         typeConstant = arrow::Type::type::FIXED_SIZE_BINARY;
+         param1 = charType.getBytes();
+      } else if (auto intervalType = type.dyn_cast_or_null<mlir::db::IntervalType>()) {
+         if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
+            typeConstant = arrow::Type::type::INTERVAL_MONTHS;
+         } else {
+            typeConstant = arrow::Type::type::INTERVAL_DAY_TIME;
+         }
+      } else if (auto timestampType = type.dyn_cast_or_null<mlir::db::TimestampType>()) {
+         typeConstant = arrow::Type::type::TIMESTAMP;
+         param1 = static_cast<uint32_t>(timestampType.getUnit());
+      }
+      assert(typeConstant != arrow::Type::type::NA);
+      return {typeConstant, param1, param2};
+   }
 
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto constantOp = cast<mlir::db::ConstantOp>(op);
+   public:
+   using OpConversionPattern<mlir::db::ConstantOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::ConstantOp constantOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto type = constantOp.getType();
       auto stdType = typeConverter->convertType(type);
-      auto [arrowType, param1, param2] = mlir::db::codegen::convertTypeToArrow(type);
+      auto [arrowType, param1, param2] = convertTypeToArrow(type);
       std::variant<int64_t, double, std::string> parseArg;
       if (auto integerAttr = constantOp.value().dyn_cast_or_null<IntegerAttr>()) {
          parseArg = integerAttr.getInt();
@@ -294,19 +294,19 @@ class ConstantLowering : public ConversionPattern {
          if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
             auto [low, high] = support::parseDecimal(std::get<std::string>(parseResult), decimalType.getS());
             std::vector<uint64_t> parts = {low, high};
-            rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.cast<mlir::IntegerType>().getWidth(), parts)));
+            rewriter.replaceOpWithNewOp<arith::ConstantOp>(constantOp, stdType, rewriter.getIntegerAttr(stdType, APInt(stdType.cast<mlir::IntegerType>().getWidth(), parts)));
             return success();
          } else {
-            rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getIntegerAttr(stdType, std::get<int64_t>(parseResult)));
+            rewriter.replaceOpWithNewOp<arith::ConstantOp>(constantOp, stdType, rewriter.getIntegerAttr(stdType, std::get<int64_t>(parseResult)));
             return success();
          }
       } else if (auto floatType = stdType.dyn_cast_or_null<FloatType>()) {
-         rewriter.replaceOpWithNewOp<arith::ConstantOp>(op, stdType, rewriter.getFloatAttr(stdType, std::get<double>(parseResult)));
+         rewriter.replaceOpWithNewOp<arith::ConstantOp>(constantOp, stdType, rewriter.getFloatAttr(stdType, std::get<double>(parseResult)));
          return success();
       } else if (type.isa<mlir::db::StringType>()) {
          std::string str = std::get<std::string>(parseResult);
 
-         rewriter.replaceOpWithNewOp<mlir::util::CreateConstVarLen>(op, mlir::util::VarLen32Type::get(rewriter.getContext()), rewriter.getStringAttr(str));
+         rewriter.replaceOpWithNewOp<mlir::util::CreateConstVarLen>(constantOp, mlir::util::VarLen32Type::get(rewriter.getContext()), rewriter.getStringAttr(str));
          return success();
       } else {
          return failure();
@@ -314,10 +314,9 @@ class ConstantLowering : public ConversionPattern {
       return failure();
    }
 };
-class CmpOpLowering : public ConversionPattern {
+class CmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
    public:
-   explicit CmpOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CmpOp::getOperationName(), 1, context) {}
+   using OpConversionPattern<mlir::db::CmpOp>::OpConversionPattern;
    arith::CmpIPredicate translateIPredicate(db::DBCmpPredicate pred) const {
       switch (pred) {
          case db::DBCmpPredicate::eq:
@@ -360,39 +359,30 @@ class CmpOpLowering : public ConversionPattern {
       assert(false && "unexpected case");
       return arith::CmpFPredicate::OEQ;
    }
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto cmpOp = cast<db::CmpOp>(op);
-      mlir::db::CmpOpAdaptor adaptor(operands);
+   LogicalResult matchAndRewrite(mlir::db::CmpOp cmpOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (!adaptor.left().getType().isIntOrIndexOrFloat()) {
          return failure();
       }
       if (adaptor.left().getType().isIntOrIndex()) {
-         rewriter.replaceOpWithNewOp<arith::CmpIOp>(op, translateIPredicate(cmpOp.predicate()), adaptor.left(), adaptor.right());
+         rewriter.replaceOpWithNewOp<arith::CmpIOp>(cmpOp, translateIPredicate(cmpOp.predicate()), adaptor.left(), adaptor.right());
       } else {
-         rewriter.replaceOpWithNewOp<arith::CmpFOp>(op, translateFPredicate(cmpOp.predicate()), adaptor.left(), adaptor.right());
+         rewriter.replaceOpWithNewOp<arith::CmpFOp>(cmpOp, translateFPredicate(cmpOp.predicate()), adaptor.left(), adaptor.right());
       }
       return success();
    }
 };
 
-class CastOpLowering : public ConversionPattern {
+class CastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
    public:
-   explicit CastOpLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::CastOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto castOp = cast<mlir::db::CastOp>(op);
+   using OpConversionPattern<mlir::db::CastOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::CastOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = op->getLoc();
-      auto scalarSourceType = castOp.val().getType();
-      auto scalarTargetType = castOp.getType();
+      auto scalarSourceType = op.val().getType();
+      auto scalarTargetType = op.getType();
       auto convertedSourceType = typeConverter->convertType(scalarSourceType);
       auto convertedTargetType = typeConverter->convertType(scalarTargetType);
       if (scalarSourceType.isa<mlir::db::StringType>() || scalarTargetType.isa<mlir::db::StringType>()) return failure();
-      Value value = operands[0];
+      Value value = adaptor.val();
       if (scalarSourceType == scalarTargetType) {
          rewriter.replaceOp(op, value);
          return success();
@@ -460,33 +450,27 @@ class CastOpLowering : public ConversionPattern {
       return failure();
    }
 };
-class BetweenLowering : public ConversionPattern {
+class BetweenLowering : public OpConversionPattern<mlir::db::BetweenOp> {
    public:
-   explicit BetweenLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::BetweenOp::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto betweenOp = mlir::cast<mlir::db::BetweenOp>(op);
-      auto isGteLower = rewriter.create<mlir::db::CmpOp>(op->getLoc(), betweenOp.lowerInclusive() ? mlir::db::DBCmpPredicate::gte : mlir::db::DBCmpPredicate::gt, betweenOp.val(), betweenOp.lower());
-      auto isLteUpper = rewriter.create<mlir::db::CmpOp>(op->getLoc(), betweenOp.upperInclusive() ? mlir::db::DBCmpPredicate::lte : mlir::db::DBCmpPredicate::lt, betweenOp.val(), betweenOp.upper());
-      auto isInRange = rewriter.create<mlir::db::AndOp>(op->getLoc(), ValueRange({isGteLower, isLteUpper}));
-      rewriter.replaceOp(op, isInRange.res());
+   using OpConversionPattern<mlir::db::BetweenOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::BetweenOp betweenOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto isGteLower = rewriter.create<mlir::db::CmpOp>(betweenOp->getLoc(), betweenOp.lowerInclusive() ? mlir::db::DBCmpPredicate::gte : mlir::db::DBCmpPredicate::gt, betweenOp.val(), betweenOp.lower());
+      auto isLteUpper = rewriter.create<mlir::db::CmpOp>(betweenOp->getLoc(), betweenOp.upperInclusive() ? mlir::db::DBCmpPredicate::lte : mlir::db::DBCmpPredicate::lt, betweenOp.val(), betweenOp.upper());
+      auto isInRange = rewriter.create<mlir::db::AndOp>(betweenOp->getLoc(), ValueRange({isGteLower, isLteUpper}));
+      rewriter.replaceOp(betweenOp, isInRange.res());
       return success();
    }
 };
-class OneOfLowering : public ConversionPattern {
+class OneOfLowering : public OpConversionPattern<mlir::db::OneOfOp> {
    public:
-   explicit OneOfLowering(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::db::OneOfOp::getOperationName(), 1, context) {}
-
-   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-      auto oneOfOp = mlir::cast<mlir::db::OneOfOp>(op);
+   using OpConversionPattern<mlir::db::OneOfOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::OneOfOp oneOfOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       std::vector<Value> compared;
       for (auto ele : oneOfOp.vals()) {
-         compared.push_back(rewriter.create<mlir::db::CmpOp>(op->getLoc(), mlir::db::DBCmpPredicate::eq, oneOfOp.val(), ele));
+         compared.push_back(rewriter.create<mlir::db::CmpOp>(oneOfOp->getLoc(), mlir::db::DBCmpPredicate::eq, oneOfOp.val(), ele));
       }
-      auto isInRange = rewriter.create<mlir::db::OrOp>(op->getLoc(), compared);
-      rewriter.replaceOp(op, isInRange.res());
+      auto isInRange = rewriter.create<mlir::db::OrOp>(oneOfOp->getLoc(), compared);
+      rewriter.replaceOp(oneOfOp, isInRange.res());
       return success();
    }
 };
@@ -592,7 +576,6 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    typeConverter.addConversion([&](mlir::db::NullableType type) {
       return (Type) TupleType::get(patterns.getContext(), {IntegerType::get(patterns.getContext(), 1), typeConverter.convertType(type.getType())});
    });
-
 
    patterns.insert<CmpOpLowering>(typeConverter, patterns.getContext());
    patterns.insert<BetweenLowering>(typeConverter, patterns.getContext());
