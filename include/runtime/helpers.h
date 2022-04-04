@@ -111,9 +111,38 @@ class VarLen32 {
    operator std::string() { return std::string((char*) getPtr(), getLen()); }
    std::string str() { return std::string((char*) getPtr(), getLen()); }
 };
-class X {
-   static int add(std::string, int b);
-   int mul(int x, int y);
+template <class T>
+struct FixedSizedBuffer {
+   FixedSizedBuffer(size_t size) : ptr((T*) malloc(size * sizeof(T))) {
+      runtime::MemoryHelper::zero((uint8_t*) ptr, size * sizeof(T));
+   }
+   T* ptr;
+   void setNewSize(size_t newSize) {
+      free(ptr);
+      ptr = (T*) malloc(newSize * sizeof(T));
+      runtime::MemoryHelper::zero((uint8_t*) ptr, newSize * sizeof(T));
+   }
+   T& at(size_t i) {
+      return ptr[i];
+   }
 };
+template <typename T>
+T* tag(T* ptr, T* previousPtr, size_t hash) {
+   constexpr uint64_t ptrMask = 0x0000ffffffffffffull;
+   constexpr uint64_t tagMask = 0xffff000000000000ull;
+   size_t asInt = reinterpret_cast<size_t>(ptr);
+   size_t previousAsInt = reinterpret_cast<size_t>(previousPtr);
+   size_t previousTag = previousAsInt & tagMask;
+   size_t currentTag = hash & tagMask;
+   auto tagged = (asInt & ptrMask) | previousTag | currentTag;
+   auto* res = reinterpret_cast<T*>(tagged);
+   return res;
+}
+template <typename T>
+T* untag(T* ptr) {
+   constexpr size_t ptrMask = 0x0000ffffffffffffull;
+   size_t asInt = reinterpret_cast<size_t>(ptr);
+   return reinterpret_cast<T*>(asInt & ptrMask);
+}
 } // end namespace runtime
 #endif // RUNTIME_HELPERS_H

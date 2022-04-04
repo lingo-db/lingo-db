@@ -32,10 +32,28 @@ class MethodPrinter : public MatchFinder::MatchCallback {
       return "mlir::util::RefType::get(context,mlir::IntegerType::get(context,8))";
    }
    std::string translateType(QualType type) {
+      //type.dump();
       if (const auto* tdType = type->getAs<TypedefType>()) {
          return translateType(tdType->desugar());
       }
-      if (type->isPointerType()) {
+      if (const auto* pointerType = type->getAs<PointerType>()) {
+         auto pointeeType=pointerType->desugar()->getPointeeType();
+         if(const auto* parenType=pointeeType->getAs<ParenType>()){
+            if(const auto* funcProtoType=parenType->getInnerType()->getAs<FunctionProtoType>()){
+               std::string funcType= "mlir::FunctionType::get(context, {";
+               bool first=true;
+               for(auto paramType:funcProtoType->param_types()){
+                  if(first){
+                     first=false;
+                  }else{
+                     funcType+=",";
+                  }
+                  funcType+= translateType(paramType);
+               }
+               funcType+="}, {"+translateType(funcProtoType->getReturnType())+"})";
+               return funcType;
+            }
+         }
          return translatePointer();
       }
       auto canonicalType = type.getCanonicalType();

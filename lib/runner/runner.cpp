@@ -67,6 +67,7 @@
 
 #include <sched.h>
 
+#include <iostream>
 namespace {
 struct ToLLVMLoweringPass
    : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {

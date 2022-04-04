@@ -1,4 +1,3 @@
-#include "mlir/Conversion/DSAToStd/FunctionRegistry.h"
 
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
@@ -6,7 +5,10 @@
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
 
+#include "runtime-defs/Hashtable.h"
+#include "runtime-defs/LazyJoinHashtable.h"
 #include "runtime-defs/TableBuilder.h"
+#include "runtime-defs/Vector.h"
 using namespace mlir;
 namespace {
 class VectorHelper2 {
@@ -22,12 +24,12 @@ class VectorHelper2 {
    }
    VectorHelper2(Type elementType, Location loc) : elementType(elementType), loc(loc) {
    }
-   Value create(mlir::OpBuilder& builder, Value initialCapacity, mlir::dsa::codegen::FunctionRegistry& functionRegistry) {
+   Value create(mlir::OpBuilder& builder, Value initialCapacity) {
       auto typeSize = builder.create<mlir::util::SizeOfOp>(loc, builder.getIndexType(), elementType);
-      auto ptr = functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::VecCreate, ValueRange({typeSize, initialCapacity}))[0];
+      auto ptr = runtime::Vector::create(builder, loc)({typeSize, initialCapacity})[0];
       return builder.create<mlir::util::GenericMemrefCastOp>(loc, createType(builder.getContext(), elementType), ptr);
    }
-   void insert(mlir::OpBuilder& builder, Value vec, Value newVal, mlir::dsa::codegen::FunctionRegistry& functionRegistry) {
+   void insert(mlir::OpBuilder& builder, Value vec, Value newVal) {
       auto idxType = builder.getIndexType();
       auto idxPtrType = util::RefType::get(builder.getContext(), idxType);
       auto valuesType = mlir::util::RefType::get(builder.getContext(), elementType);
@@ -40,7 +42,7 @@ class VectorHelper2 {
       builder.create<scf::IfOp>(
          loc, TypeRange({}), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
             Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type()), vec);
-            functionRegistry.call(b,loc,mlir::dsa::codegen::FunctionRegistry::FunctionId::VecResize,ValueRange{downCasted});
+            runtime::Vector::resize(b,loc)({downCasted});
             b.create<scf::YieldOp>(loc); });
       Value valuesAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valuesType), vec, 2);
       auto values = builder.create<mlir::util::LoadOp>(loc, valuesType, valuesAddress, Value());
@@ -80,16 +82,16 @@ class AggrHtHelper2 {
    AggrHtHelper2(MLIRContext* context, Type keyType, Type aggrType, Location loc, TypeConverter* converter) : entryType(createEntryType(context, converter->convertType(keyType), converter->convertType(aggrType))), loc(loc), keyType(converter->convertType(keyType)), aggrType(converter->convertType(aggrType)), oKeyType(keyType), oAggrType(aggrType) {
    }
 
-   Value create(mlir::OpBuilder& builder, Value initialValue, mlir::dsa::codegen::FunctionRegistry& functionRegistry) {
+   Value create(mlir::OpBuilder& builder, Value initialValue) {
       auto typeSize = builder.create<mlir::util::SizeOfOp>(loc, builder.getIndexType(), createEntryType(builder.getContext(), keyType, aggrType));
       Value initialCapacity = builder.create<arith::ConstantIndexOp>(loc, 4);
-      auto ptr = functionRegistry.call(builder, loc, mlir::dsa::codegen::FunctionRegistry::FunctionId::AggrHtCreate, ValueRange({typeSize, initialCapacity}))[0];
+      auto ptr = runtime::Hashtable::create(builder, loc)({typeSize, initialCapacity})[0];
       auto casted = builder.create<mlir::util::GenericMemrefCastOp>(loc, createType(builder.getContext(), keyType, aggrType), ptr);
       Value initValAddress = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), initialValue.getType()), casted, 5);
       builder.create<mlir::util::StoreOp>(loc, initialValue, initValAddress, Value());
       return casted;
    }
-   void insert(mlir::ConversionPatternRewriter& rewriter, Value aggrHtBuilder, Value key, Value val, Value hash, std::function<Value(mlir::OpBuilder&, Value, Value)> updateFn, std::function<Value(mlir::OpBuilder&, Value, Value)> equalFn, mlir::dsa::codegen::FunctionRegistry& functionRegistry) {
+   void insert(mlir::ConversionPatternRewriter& rewriter, Value aggrHtBuilder, Value key, Value val, Value hash, std::function<Value(mlir::OpBuilder&, Value, Value)> updateFn, std::function<Value(mlir::OpBuilder&, Value, Value)> equalFn) {
       auto* context = rewriter.getContext();
       auto i8PtrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
       auto idxType = rewriter.getIndexType();
@@ -115,7 +117,7 @@ class AggrHtHelper2 {
       rewriter.create<scf::IfOp>(
          loc, TypeRange(), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
             Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type()), aggrHtBuilder);
-            functionRegistry.call(b,loc,mlir::dsa::codegen::FunctionRegistry::FunctionId::AggrHtResize,ValueRange{downCasted});
+            runtime::Hashtable::resize(b,loc)(downCasted);
             b.create<scf::YieldOp>(loc); });
 
       Value htAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), htType), aggrHtBuilder, 0);
@@ -229,11 +231,9 @@ class AggrHtHelper2 {
    }
 };
 class CreateDsLowering : public ConversionPattern {
-   mlir::dsa::codegen::FunctionRegistry& functionRegistry;
-
    public:
-   explicit CreateDsLowering(TypeConverter& typeConverter, MLIRContext* context, dsa::codegen::FunctionRegistry& functionRegistry)
-      : ConversionPattern(typeConverter, mlir::dsa::CreateDS::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit CreateDsLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::CreateDS::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto createOp = mlir::cast<mlir::dsa::CreateDS>(op);
@@ -242,14 +242,14 @@ class CreateDsLowering : public ConversionPattern {
          auto entryType = mlir::TupleType::get(rewriter.getContext(), {joinHtType.getKeyType(), joinHtType.getValType()});
          auto tupleType = mlir::TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), entryType});
          Value typesize = rewriter.create<mlir::util::SizeOfOp>(op->getLoc(), rewriter.getIndexType(), typeConverter->convertType(tupleType));
-         Value ptr = functionRegistry.call(rewriter, op->getLoc(), mlir::dsa::codegen::FunctionRegistry::FunctionId::JoinHtCreate, typesize)[0];
+         Value ptr = runtime::LazyJoinHashtable::create(rewriter, op->getLoc())(typesize)[0];
          rewriter.replaceOpWithNewOp<util::GenericMemrefCastOp>(op, typeConverter->convertType(joinHtType), ptr);
          return success();
       } else if (auto vecType = createOp.ds().getType().dyn_cast<mlir::dsa::VectorType>()) {
          Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(op->getLoc(), 1024);
          auto elementType = typeConverter->convertType(vecType.getElementType());
          VectorHelper2 vectorHelper(elementType, op->getLoc());
-         rewriter.replaceOp(op, vectorHelper.create(rewriter, initialCapacity, functionRegistry));
+         rewriter.replaceOp(op, vectorHelper.create(rewriter, initialCapacity));
          return success();
       } else if (auto aggrHtType = createOp.ds().getType().dyn_cast<mlir::dsa::AggregationHashtableType>()) {
          TupleType keyType = aggrHtType.getKeyType();
@@ -261,7 +261,7 @@ class CreateDsLowering : public ConversionPattern {
             return success();
          } else {
             AggrHtHelper2 helper(rewriter.getContext(), keyType, aggrType, op->getLoc(), typeConverter);
-            rewriter.replaceOp(op, helper.create(rewriter, adaptor.init_val(), functionRegistry));
+            rewriter.replaceOp(op, helper.create(rewriter, adaptor.init_val()));
             return success();
          }
       }
@@ -269,11 +269,9 @@ class CreateDsLowering : public ConversionPattern {
    }
 };
 class HashtableInsertLowering : public ConversionPattern {
-   mlir::dsa::codegen::FunctionRegistry& functionRegistry;
-
    public:
-   explicit HashtableInsertLowering(TypeConverter& typeConverter, MLIRContext* context, dsa::codegen::FunctionRegistry& functionRegistry)
-      : ConversionPattern(typeConverter, mlir::dsa::HashtableInsert::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit HashtableInsertLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::HashtableInsert::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::dsa::HashtableInsertAdaptor adaptor(operands);
@@ -332,18 +330,16 @@ class HashtableInsertLowering : public ConversionPattern {
          }
 
          AggrHtHelper2 helper(rewriter.getContext(), adaptor.key().getType(), typeConverter->convertType(reduceOp.ht().getType().cast<mlir::dsa::AggregationHashtableType>().getValType()), loc, typeConverter);
-         helper.insert(rewriter, adaptor.ht(), adaptor.key(), adaptor.val(), hashed, reduceFnBuilder, equalFnBuilder, functionRegistry);
+         helper.insert(rewriter, adaptor.ht(), adaptor.key(), adaptor.val(), hashed, reduceFnBuilder, equalFnBuilder);
          rewriter.eraseOp(op);
       }
       return success();
    }
 };
 class JoinHtHashtableInsertLowering : public ConversionPattern {
-   mlir::dsa::codegen::FunctionRegistry& functionRegistry;
-
    public:
-   explicit JoinHtHashtableInsertLowering(TypeConverter& typeConverter, MLIRContext* context, dsa::codegen::FunctionRegistry& functionRegistry)
-      : ConversionPattern(typeConverter, mlir::dsa::HashtableInsert::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit JoinHtHashtableInsertLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::HashtableInsert::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::dsa::HashtableInsertAdaptor adaptor(operands);
@@ -384,7 +380,7 @@ class JoinHtHashtableInsertLowering : public ConversionPattern {
       rewriter.create<scf::IfOp>(
          loc, TypeRange({}), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
             Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type()), adaptor.ht());
-            functionRegistry.call(b,loc,mlir::dsa::codegen::FunctionRegistry::FunctionId::JoinHtResize,ValueRange{downCasted});
+            runtime::LazyJoinHashtable::resize(b,loc)(downCasted);
             b.create<scf::YieldOp>(loc); });
       Value valuesAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(getContext(), adaptor.ht().getType().cast<mlir::util::RefType>().getElementType().cast<mlir::TupleType>().getType(4)), adaptor.ht(), 4);
       Value castedValuesAddress = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), valuesType), valuesAddress);
@@ -400,11 +396,9 @@ class JoinHtHashtableInsertLowering : public ConversionPattern {
    }
 };
 class FinalizeLowering : public ConversionPattern {
-   mlir::dsa::codegen::FunctionRegistry& functionRegistry;
-
    public:
-   explicit FinalizeLowering(TypeConverter& typeConverter, MLIRContext* context, dsa::codegen::FunctionRegistry& functionRegistry)
-      : ConversionPattern(typeConverter, mlir::dsa::Finalize::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit FinalizeLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::Finalize::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::dsa::FinalizeAdaptor adaptor(operands);
@@ -412,13 +406,12 @@ class FinalizeLowering : public ConversionPattern {
          return failure();
       }
       Value downCasted = rewriter.create<util::GenericMemrefCastOp>(op->getLoc(), mlir::util::RefType::get(rewriter.getContext(), rewriter.getI8Type()), adaptor.ht());
-      functionRegistry.call(rewriter, op->getLoc(), mlir::dsa::codegen::FunctionRegistry::FunctionId::JoinHtFinalize, ValueRange{downCasted});
+      runtime::LazyJoinHashtable::finalize(rewriter, op->getLoc())(downCasted);
       rewriter.eraseOp(op);
       return success();
    }
 };
 class FinalizeTBLowering : public ConversionPattern {
-
    public:
    explicit FinalizeTBLowering(TypeConverter& typeConverter, MLIRContext* context)
       : ConversionPattern(typeConverter, mlir::dsa::Finalize::getOperationName(), 1, context) {}
@@ -428,17 +421,15 @@ class FinalizeTBLowering : public ConversionPattern {
          return failure();
       }
       mlir::dsa::FinalizeAdaptor adaptor(operands);
-      mlir::Value res=runtime::TableBuilder::build(rewriter, op->getLoc())(adaptor.ht())[0];
-      rewriter.replaceOp(op,res);
+      mlir::Value res = runtime::TableBuilder::build(rewriter, op->getLoc())(adaptor.ht())[0];
+      rewriter.replaceOp(op, res);
       return success();
    }
 };
 class DSAppendLowering : public ConversionPattern {
-   mlir::dsa::codegen::FunctionRegistry& functionRegistry;
-
    public:
-   explicit DSAppendLowering(TypeConverter& typeConverter, MLIRContext* context, dsa::codegen::FunctionRegistry& functionRegistry)
-      : ConversionPattern(typeConverter, mlir::dsa::Append::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit DSAppendLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::Append::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto appendOp = mlir::cast<mlir::dsa::Append>(op);
@@ -450,14 +441,13 @@ class DSAppendLowering : public ConversionPattern {
       Value v = adaptor.val();
       auto convertedElementType = typeConverter->convertType(appendOp.ds().getType().cast<mlir::dsa::VectorType>().getElementType());
       VectorHelper2 helper(convertedElementType, op->getLoc());
-      helper.insert(rewriter, builderVal, v, functionRegistry);
+      helper.insert(rewriter, builderVal, v);
       rewriter.eraseOp(op);
       return success();
    }
 };
 
 class DSTBAppendLowering : public ConversionPattern {
-
    public:
    explicit DSTBAppendLowering(TypeConverter& typeConverter, MLIRContext* context)
       : ConversionPattern(typeConverter, mlir::dsa::Append::getOperationName(), 1, context) {}
@@ -474,51 +464,49 @@ class DSTBAppendLowering : public ConversionPattern {
       if (!isValid) {
          isValid = rewriter.create<mlir::arith::ConstantIntOp>(op->getLoc(), 1, 1);
       }
-      mlir::Type type=getBaseType(val.getType());
-      auto loc=op->getLoc();
+      mlir::Type type = getBaseType(val.getType());
+      auto loc = op->getLoc();
       if (isIntegerType(type, 1)) {
-         runtime::TableBuilder::addBool(rewriter,loc)({builderVal,isValid,val});
+         runtime::TableBuilder::addBool(rewriter, loc)({builderVal, isValid, val});
       } else if (auto intWidth = getIntegerWidth(type, false)) {
          switch (intWidth) {
-            case 8: runtime::TableBuilder::addInt8(rewriter,loc)({builderVal,isValid,val});break;
-            case 16: runtime::TableBuilder::addInt16(rewriter,loc)({builderVal,isValid,val});break;
-            case 32: runtime::TableBuilder::addInt32(rewriter,loc)({builderVal,isValid,val});break;
-            case 64: runtime::TableBuilder::addInt64(rewriter,loc)({builderVal,isValid,val});break;
-            case 128: runtime::TableBuilder::addDecimal(rewriter,loc)({builderVal,isValid,val});break;
+            case 8: runtime::TableBuilder::addInt8(rewriter, loc)({builderVal, isValid, val}); break;
+            case 16: runtime::TableBuilder::addInt16(rewriter, loc)({builderVal, isValid, val}); break;
+            case 32: runtime::TableBuilder::addInt32(rewriter, loc)({builderVal, isValid, val}); break;
+            case 64: runtime::TableBuilder::addInt64(rewriter, loc)({builderVal, isValid, val}); break;
+            case 128: runtime::TableBuilder::addDecimal(rewriter, loc)({builderVal, isValid, val}); break;
          }
       } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
          switch (floatType.getWidth()) {
-            case 32: runtime::TableBuilder::addFloat32(rewriter,loc)({builderVal,isValid,val});break;
-            case 64: runtime::TableBuilder::addFloat64(rewriter,loc)({builderVal,isValid,val});break;
+            case 32: runtime::TableBuilder::addFloat32(rewriter, loc)({builderVal, isValid, val}); break;
+            case 64: runtime::TableBuilder::addFloat64(rewriter, loc)({builderVal, isValid, val}); break;
          }
       } else if (auto stringType = type.dyn_cast_or_null<mlir::util::VarLen32Type>()) {
-         runtime::TableBuilder::addBinary(rewriter,loc)({builderVal,isValid,val});
+         runtime::TableBuilder::addBinary(rewriter, loc)({builderVal, isValid, val});
       }
       rewriter.eraseOp(op);
       return success();
    }
 };
 class NextRowLowering : public ConversionPattern {
-
    public:
    explicit NextRowLowering(TypeConverter& typeConverter, MLIRContext* context)
       : ConversionPattern(typeConverter, mlir::dsa::NextRow::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       mlir::dsa::NextRowAdaptor adaptor(operands);
-      runtime::TableBuilder::nextRow(rewriter,op->getLoc())({adaptor.builder()});
+      runtime::TableBuilder::nextRow(rewriter, op->getLoc())({adaptor.builder()});
       rewriter.eraseOp(op);
       return success();
    }
 };
 class CreateTableBuilderLowering : public ConversionPattern {
-
    public:
    explicit CreateTableBuilderLowering(TypeConverter& typeConverter, MLIRContext* context)
       : ConversionPattern(typeConverter, mlir::dsa::CreateDS::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
-     auto createTB = cast<mlir::dsa::CreateDS>(op);
+      auto createTB = cast<mlir::dsa::CreateDS>(op);
       if (!createTB.ds().getType().isa<mlir::dsa::TableBuilderType>()) {
          return failure();
       }
@@ -526,23 +514,34 @@ class CreateTableBuilderLowering : public ConversionPattern {
 
       mlir::Value schema = rewriter.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(getContext()), createTB.init_attr().getValue().cast<StringAttr>().str());
 
-      Value tableBuilder = runtime::TableBuilder::create(rewriter,loc)({schema})[0];
+      Value tableBuilder = runtime::TableBuilder::create(rewriter, loc)({schema})[0];
       rewriter.replaceOp(op, tableBuilder);
+      return success();
+   }
+};
+class FreeLowering : public ConversionPattern {
+   public:
+   explicit FreeLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::FreeOp::getOperationName(), 1, context) {}
+
+   LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
+      rewriter.eraseOp(op);
       return success();
    }
 };
 
 } // end namespace
 namespace mlir::dsa {
-void populateDSAToStdPatterns(mlir::dsa::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
-   patterns.insert<CreateDsLowering>(typeConverter, patterns.getContext(), functionRegistry);
-   patterns.insert<HashtableInsertLowering>(typeConverter, patterns.getContext(), functionRegistry);
-   patterns.insert<FinalizeLowering>(typeConverter, patterns.getContext(), functionRegistry);
+void populateDSAToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
+   patterns.insert<CreateDsLowering>(typeConverter, patterns.getContext());
+   patterns.insert<HashtableInsertLowering>(typeConverter, patterns.getContext());
+   patterns.insert<FinalizeLowering>(typeConverter, patterns.getContext());
    patterns.insert<FinalizeTBLowering>(typeConverter, patterns.getContext());
-   patterns.insert<DSAppendLowering>(typeConverter, patterns.getContext(), functionRegistry);
+   patterns.insert<DSAppendLowering>(typeConverter, patterns.getContext());
    patterns.insert<DSTBAppendLowering>(typeConverter, patterns.getContext());
    patterns.insert<NextRowLowering>(typeConverter, patterns.getContext());
-   patterns.insert<JoinHtHashtableInsertLowering>(typeConverter, patterns.getContext(), functionRegistry);
+   patterns.insert<JoinHtHashtableInsertLowering>(typeConverter, patterns.getContext());
    patterns.insert<CreateTableBuilderLowering>(typeConverter, patterns.getContext());
+   patterns.insert<FreeLowering>(typeConverter, patterns.getContext());
 }
 } // end namespace mlir::dsa

@@ -5,24 +5,21 @@
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
 
-#include "mlir/Conversion/DSAToStd/BitUtil.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
 
+#include "runtime-defs/Vector.h"
 using namespace mlir;
 namespace {
 
 class SortOpLowering : public ConversionPattern {
-   dsa::codegen::FunctionRegistry& functionRegistry;
-
    public:
-   explicit SortOpLowering(dsa::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::SortOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit SortOpLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::SortOp::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       static size_t id = 0;
-      using FunctionId = dsa::codegen::FunctionRegistry::FunctionId;
       mlir::dsa::SortOpAdaptor sortOpAdaptor(operands);
       auto sortOp = cast<mlir::dsa::SortOp>(op);
       auto ptrType = mlir::util::RefType::get(getContext(), IntegerType::get(getContext(), 8));
@@ -55,27 +52,20 @@ class SortOpLowering : public ConversionPattern {
          rewriter.eraseOp(sortLambdaTerminator);
          rewriter.eraseOp(terminator);
       }
-      Type typedPtrType = util::RefType::get(rewriter.getContext(), typeConverter->convertType(elementType));
-      auto loaded = rewriter.create<mlir::util::LoadOp>(op->getLoc(), mlir::TupleType::get(rewriter.getContext(), TypeRange({rewriter.getIndexType(), rewriter.getIndexType(), typedPtrType})), sortOpAdaptor.toSort(), Value());
-      auto unpacked = rewriter.create<util::UnPackOp>(sortOp.getLoc(), loaded);
 
-      auto len = unpacked.getResult(0);
-      auto values = unpacked.getResult(2);
-      auto rawPtr = rewriter.create<util::GenericMemrefCastOp>(sortOp.getLoc(), ptrType, values);
+      auto rawPtr = rewriter.create<util::GenericMemrefCastOp>(sortOp.getLoc(), ptrType, sortOpAdaptor.toSort());
 
       Value functionPointer = rewriter.create<mlir::func::ConstantOp>(sortOp->getLoc(), funcOp.type(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.sym_name())));
-      Value elementSize = rewriter.create<util::SizeOfOp>(sortOp.getLoc(), rewriter.getIndexType(), elementType);
-      functionRegistry.call(rewriter, sortOp->getLoc(), FunctionId::SortVector, {len, rawPtr, elementSize, functionPointer});
+      runtime::Vector::sort(rewriter, sortOp->getLoc())({rawPtr, functionPointer});
       rewriter.eraseOp(op);
       return success();
    }
 };
 class ForOpLowering : public ConversionPattern {
-   dsa::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   explicit ForOpLowering(dsa::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::ForOp::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit ForOpLowering( TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::ForOp::getOperationName(), 1, context){}
    std::vector<Value> remap(std::vector<Value> values, ConversionPatternRewriter& builder) const {
       for (size_t i = 0; i < values.size(); i++) {
          values[i] = builder.getRemappedValue(values[i]);
@@ -93,7 +83,7 @@ class ForOpLowering : public ConversionPattern {
          argumentLocs.push_back(op->getLoc());
       }
       auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::dsa::CollectionType>();
-      auto iterator = mlir::dsa::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), forOpAdaptor.collection(), functionRegistry);
+      auto iterator = mlir::dsa::CollectionIterationImpl::getImpl(collectionType, forOp.collection(), forOpAdaptor.collection());
 
       ModuleOp parentModule = op->getParentOfType<ModuleOp>();
       bool containsCondSkip = false;
@@ -228,6 +218,26 @@ class LookupOpLowering : public ConversionPattern {
    }
 };
 class AtLowering : public ConversionPattern {
+   static Value getBit(OpBuilder builder, Location loc, Value bits, Value pos) {
+      auto i1Type = IntegerType::get(builder.getContext(), 1);
+      auto i8Type = IntegerType::get(builder.getContext(), 8);
+
+      auto indexType = IndexType::get(builder.getContext());
+      Value const3 = builder.create<arith::ConstantOp>(loc, indexType, builder.getIntegerAttr(indexType, 3));
+      Value const7 = builder.create<arith::ConstantOp>(loc, indexType, builder.getIntegerAttr(indexType, 7));
+      Value const1Byte = builder.create<arith::ConstantOp>(loc, i8Type, builder.getIntegerAttr(i8Type, 1));
+
+      Value div8 = builder.create<arith::ShRUIOp>(loc, indexType, pos, const3);
+      Value rem8 = builder.create<arith::AndIOp>(loc, indexType, pos, const7);
+      Value loadedByte = builder.create<mlir::util::LoadOp>(loc, i8Type, bits, div8);
+      Value rem8AsByte = builder.create<arith::IndexCastOp>(loc, i8Type, rem8);
+      Value shifted = builder.create<arith::ShRUIOp>(loc, i8Type, loadedByte, rem8AsByte);
+      Value res1 = shifted;
+
+      Value anded = builder.create<arith::AndIOp>(loc, i8Type, res1, const1Byte);
+      Value res = builder.create<arith::CmpIOp>(loc, i1Type, mlir::arith::CmpIPredicate::eq, anded, const1Byte);
+      return res;
+   }
    public:
    explicit AtLowering(TypeConverter& typeConverter, MLIRContext* context)
       : ConversionPattern(typeConverter, mlir::dsa::At::getOperationName(), 1, context) {}
@@ -277,36 +287,8 @@ class AtLowering : public ConversionPattern {
          val = rewriter.create<mlir::util::CreateVarLen>(loc, mlir::util::VarLen32Type::get(rewriter.getContext()), ptr, len);
       } else if (isIntegerType(baseType, 1)) {
          Value realPos = rewriter.create<arith::AddIOp>(loc, indexType, columnOffset, index);
-         val = mlir::dsa::codegen::BitUtil::getBit(rewriter, loc, originalValueBuffer, realPos);
-      } /* else if (baseType.isa<mlir::dsa::DateType, mlir::dsa::TimestampType>()) {
-         val = rewriter.create<util::LoadOp>(loc, valueBuffer.getType().cast<mlir::util::RefType>().getElementType(), valueBuffer, index);
-         if (val.getType() != rewriter.getI64Type()) {
-            val = rewriter.create<mlir::arith::ExtUIOp>(loc, rewriter.getI64Type(), val);
-         }
-         size_t multiplier = 1;
-         if (auto dateType = baseType.dyn_cast_or_null<mlir::dsa::DateType>()) {
-            multiplier = dateType.getUnit() == mlir::dsa::DateUnitAttr::day ? 86400000000000 : 1000000;
-         } else if (auto timeStampType = baseType.dyn_cast_or_null<mlir::dsa::TimestampType>()) {
-            switch (timeStampType.getUnit()) {
-               case mlir::dsa::TimeUnitAttr::second: multiplier = 1000000000; break;
-               case mlir::dsa::TimeUnitAttr::millisecond: multiplier = 1000000; break;
-               case mlir::dsa::TimeUnitAttr::microsecond: multiplier = 1000; break;
-               default: multiplier = 1;
-            }
-         }
-         if (multiplier != 1) {
-            mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
-            val = rewriter.create<mlir::arith::MulIOp>(loc, val, multiplierConst);
-         }
-      } else if (auto decimalType = baseType.dyn_cast_or_null<dsa::DecimalType>()) {
-         val = rewriter.create<util::LoadOp>(loc, rewriter.getIntegerType(128), valueBuffer, index);
-         val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
-         if (typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth() != 128) {
-            auto converted = rewriter.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType), val);
-            val = converted;
-         }
-      }*/
-      else if (typeConverter->convertType(baseType).isIntOrIndexOrFloat()) {
+         val = getBit(rewriter, loc, originalValueBuffer, realPos);
+      } else if (typeConverter->convertType(baseType).isIntOrIndexOrFloat()) {
          val = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(baseType), valueBuffer, index);
          val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
       } else {
@@ -315,7 +297,7 @@ class AtLowering : public ConversionPattern {
       if (atOp->getNumResults() == 2) {
          Value realPos = rewriter.create<arith::AddIOp>(loc, indexType, columnOffset, index);
          realPos = rewriter.create<arith::MulIOp>(loc, indexType, nullMultiplier, index);
-         Value isValid = mlir::dsa::codegen::BitUtil::getBit(rewriter, loc, validityBuffer, realPos);
+         Value isValid = getBit(rewriter, loc, validityBuffer, realPos);
          rewriter.replaceOp(op, mlir::ValueRange{val, isValid});
       } else {
          rewriter.replaceOp(op, val);
@@ -325,12 +307,12 @@ class AtLowering : public ConversionPattern {
 };
 } // namespace
 
-void mlir::dsa::populateCollectionsToStdPatterns(mlir::dsa::codegen::FunctionRegistry& functionRegistry, mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
+void mlir::dsa::populateCollectionsToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    auto* context = patterns.getContext();
 
-   patterns.insert<SortOpLowering>(functionRegistry, typeConverter, context);
+   patterns.insert<SortOpLowering>(typeConverter, context);
 
-   patterns.insert<ForOpLowering>(functionRegistry, typeConverter, context);
+   patterns.insert<ForOpLowering>(typeConverter, context);
    patterns.insert<LookupOpLowering>(typeConverter, context);
    patterns.insert<AtLowering>(typeConverter, context);
 
@@ -374,7 +356,7 @@ void mlir::dsa::populateCollectionsToStdPatterns(mlir::dsa::codegen::FunctionReg
          for (auto t : tupleT.getTypes()) {
             if (t.isa<mlir::util::VarLen32Type>()) {
                t = mlir::IntegerType::get(context, 32);
-            }else if (t==mlir::IntegerType::get(context,1)){
+            } else if (t == mlir::IntegerType::get(context, 1)) {
                t = mlir::IntegerType::get(context, 8);
             }
 
@@ -398,7 +380,7 @@ void mlir::dsa::populateCollectionsToStdPatterns(mlir::dsa::codegen::FunctionReg
          nestedElementType = nested.getElementType();
       }
       if (genericIterableType.getIteratorName() == "table_chunk_iterator") {
-         return (Type)i8ptrType;
+         return (Type) i8ptrType;
       } else if (genericIterableType.getIteratorName() == "join_ht_iterator") {
          auto ptrType = mlir::util::RefType::get(context, typeConverter.convertType(TupleType::get(context, {i8ptrType, genericIterableType.getElementType()})));
          return (Type) TupleType::get(context, {ptrType, indexType});

@@ -5,7 +5,6 @@
 
 #include "mlir/Dialect/util/UtilOps.h"
 
-#include "mlir/Conversion/DSAToStd/BitUtil.h"
 #include "mlir/Conversion/DSAToStd/CollectionIteration.h"
 #include <mlir/IR/Builders.h>
 #include <mlir/IR/PatternMatch.h>
@@ -211,10 +210,9 @@ class VectorIterator : public ForIterator {
    Value vector;
    Type elementType;
    Value values;
-   using FunctionId = mlir::dsa::codegen::FunctionRegistry::FunctionId;
 
    public:
-   VectorIterator(mlir::dsa::codegen::FunctionRegistry& functionRegistry, Value vector, Type elementType) : ForIterator(vector.getContext()), vector(vector), elementType(elementType) {
+   VectorIterator(Value vector, Type elementType) : ForIterator(vector.getContext()), vector(vector), elementType(elementType) {
    }
    virtual void init(OpBuilder& builder) override {
       Type typedPtrType = util::RefType::get(builder.getContext(), elementType);
@@ -234,7 +232,7 @@ class ValueOnlyAggrHTIterator : public ForIterator {
    Type valType;
 
    public:
-   ValueOnlyAggrHTIterator(dsa::codegen::FunctionRegistry& functionRegistry, Value ht, Type valType) : ForIterator(ht.getContext()), ht(ht), valType(valType) {
+   ValueOnlyAggrHTIterator(Value ht, Type valType) : ForIterator(ht.getContext()), ht(ht), valType(valType) {
    }
    virtual Value upper(OpBuilder& builder) override {
       return builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(1));
@@ -407,7 +405,7 @@ class ForIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
       return std::vector<Value>(loopResultValues.begin(), loopResultValues.end());
    }
 };
-std::unique_ptr<mlir::dsa::CollectionIterationImpl> mlir::dsa::CollectionIterationImpl::getImpl(Type collectionType, Value collection, Value loweredCollection, mlir::dsa::codegen::FunctionRegistry& functionRegistry) {
+std::unique_ptr<mlir::dsa::CollectionIterationImpl> mlir::dsa::CollectionIterationImpl::getImpl(Type collectionType, Value collection, Value loweredCollection) {
    if (auto generic = collectionType.dyn_cast_or_null<mlir::dsa::GenericIterableType>()) {
       if (generic.getIteratorName() == "table_chunk_iterator") {
          if (auto recordBatchType = generic.getElementType().dyn_cast_or_null<mlir::dsa::RecordBatchType>()) {
@@ -419,10 +417,10 @@ std::unique_ptr<mlir::dsa::CollectionIterationImpl> mlir::dsa::CollectionIterati
          return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(collection, generic.getElementType(), true));
       }
    } else if (auto vector = collectionType.dyn_cast_or_null<mlir::dsa::VectorType>()) {
-      return std::make_unique<ForIteratorIterationImpl>(std::make_unique<VectorIterator>(functionRegistry, collection, vector.getElementType()));
+      return std::make_unique<ForIteratorIterationImpl>(std::make_unique<VectorIterator>(collection, vector.getElementType()));
    } else if (auto aggrHt = collectionType.dyn_cast_or_null<mlir::dsa::AggregationHashtableType>()) {
       if (aggrHt.getKeyType().getTypes().empty()) {
-         return std::make_unique<ForIteratorIterationImpl>(std::make_unique<ValueOnlyAggrHTIterator>(functionRegistry, collection, aggrHt.getValType()));
+         return std::make_unique<ForIteratorIterationImpl>(std::make_unique<ValueOnlyAggrHTIterator>(collection, aggrHt.getValType()));
       } else {
          return std::make_unique<ForIteratorIterationImpl>(std::make_unique<AggrHtIterator>(collection));
       }

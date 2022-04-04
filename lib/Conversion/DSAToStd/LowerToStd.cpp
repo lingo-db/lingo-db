@@ -1,7 +1,6 @@
 #include "mlir-support/parsing.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
-#include "mlir/Conversion/DSAToStd/FunctionRegistry.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
@@ -26,16 +25,24 @@ using namespace mlir;
 namespace {
 
 class ScanSourceLowering : public ConversionPattern {
-   dsa::codegen::FunctionRegistry& functionRegistry;
 
    public:
-   explicit ScanSourceLowering(dsa::codegen::FunctionRegistry& functionRegistry, TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::dsa::ScanSource::getOperationName(), 1, context), functionRegistry(functionRegistry) {}
+   explicit ScanSourceLowering(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::dsa::ScanSource::getOperationName(), 1, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto tablescan = cast<mlir::dsa::ScanSource>(op);
       std::vector<Type> types;
-      auto executionContext = functionRegistry.call(rewriter, op->getLoc(), dsa::codegen::FunctionRegistry::FunctionId::GetExecutionContext, {})[0];
+      auto parentModule=op->getParentOfType<ModuleOp>();
+      mlir::FuncOp funcOp=parentModule.lookupSymbol<mlir::FuncOp>("rt_get_execution_context");
+      if(!funcOp){
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(parentModule.getBody());
+         funcOp = rewriter.create<FuncOp>(op->getLoc(), "rt_get_execution_context", rewriter.getFunctionType({},{mlir::util::RefType::get(getContext(),rewriter.getI8Type())}), rewriter.getStringAttr("private"));
+
+      }
+
+      mlir::Value executionContext =rewriter.create<mlir::func::CallOp>(op->getLoc(),funcOp,mlir::ValueRange{}).getResult(0);
       mlir::Value description = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), tablescan.descrAttr());
       auto rawPtr = runtime::DataSourceIteration::start(rewriter, op->getLoc())({executionContext, description})[0];
       rewriter.replaceOp(op, rawPtr);
@@ -86,10 +93,6 @@ class SimpleTypeConversionPattern : public ConversionPattern {
 void DSAToStdLoweringPass::runOnOperation() {
    auto module = getOperation();
    getContext().getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(module);
-
-   mlir::dsa::codegen::FunctionRegistry functionRegistry(module);
-   functionRegistry.registerFunctions();
-
    // Define Conversion Target
    ConversionTarget target(getContext());
    target.addLegalOp<ModuleOp>();
@@ -154,15 +157,14 @@ void DSAToStdLoweringPass::runOnOperation() {
    mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
    mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
    mlir::dsa::populateScalarToStdPatterns(typeConverter, patterns);
-   mlir::dsa::populateRuntimeSpecificScalarToStdPatterns(functionRegistry, typeConverter, patterns);
-   mlir::dsa::populateDSAToStdPatterns(functionRegistry, typeConverter, patterns);
-   mlir::dsa::populateCollectionsToStdPatterns(functionRegistry, typeConverter, patterns);
+   mlir::dsa::populateDSAToStdPatterns(typeConverter, patterns);
+   mlir::dsa::populateCollectionsToStdPatterns(typeConverter, patterns);
    mlir::util::populateUtilTypeConversionPatterns(typeConverter, patterns);
    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns, target);
    patterns.insert<SimpleTypeConversionPattern<mlir::func::ConstantOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::CondSkipOp>>(typeConverter, &getContext());
-   patterns.insert<ScanSourceLowering>(functionRegistry, typeConverter, &getContext());
+   patterns.insert<ScanSourceLowering>(typeConverter, &getContext());
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
