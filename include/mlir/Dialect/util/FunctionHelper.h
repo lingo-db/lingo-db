@@ -8,6 +8,7 @@ class FunctionSpec {
    std::string mangledName;
    std::function<std::vector<mlir::Type>(mlir::MLIRContext*)> parameterTypes;
    std::function<std::vector<mlir::Type>(mlir::MLIRContext*)> resultTypes;
+   bool noSideEffects;
 
    public:
    const std::string& getName() const {
@@ -16,15 +17,18 @@ class FunctionSpec {
    const std::string& getMangledName() const {
       return mangledName;
    }
-   FunctionSpec(const std::string& name, const std::string& mangledName, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& parameterTypes, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& resultTypes) : name(name), mangledName(mangledName), parameterTypes(parameterTypes), resultTypes(resultTypes) {}
    const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& getParameterTypes() const {
       return parameterTypes;
    }
    const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& getResultTypes() const {
       return resultTypes;
    }
+   FunctionSpec(const std::string& name, const std::string& mangledName, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& parameterTypes, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& resultTypes, bool noSideEffects);
 
    std::function<mlir::ResultRange(mlir::ValueRange)> operator()(mlir::OpBuilder& builder, mlir::Location loc) const;
+   bool isNoSideEffects() const {
+      return noSideEffects;
+   }
 };
 
 class FunctionHelper {

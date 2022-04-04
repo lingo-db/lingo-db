@@ -31,26 +31,29 @@ class MethodPrinter : public MatchFinder::MatchCallback {
    std::string translatePointer() {
       return "mlir::util::RefType::get(context,mlir::IntegerType::get(context,8))";
    }
-   std::string translateType(QualType type) {
+   std::string translateType(QualType type, bool& hasSideEffect) {
       //type.dump();
       if (const auto* tdType = type->getAs<TypedefType>()) {
-         return translateType(tdType->desugar());
+         return translateType(tdType->desugar(), hasSideEffect);
       }
       if (const auto* pointerType = type->getAs<PointerType>()) {
-         auto pointeeType=pointerType->desugar()->getPointeeType();
-         if(const auto* parenType=pointeeType->getAs<ParenType>()){
-            if(const auto* funcProtoType=parenType->getInnerType()->getAs<FunctionProtoType>()){
-               std::string funcType= "mlir::FunctionType::get(context, {";
-               bool first=true;
-               for(auto paramType:funcProtoType->param_types()){
-                  if(first){
-                     first=false;
-                  }else{
-                     funcType+=",";
+         hasSideEffect = true;
+         auto pointeeType = pointerType->desugar()->getPointeeType();
+         if (const auto* parenType = pointeeType->getAs<ParenType>()) {
+            if (const auto* funcProtoType = parenType->getInnerType()->getAs<FunctionProtoType>()) {
+               std::string funcType = "mlir::FunctionType::get(context, {";
+               bool first = true;
+               for (auto paramType : funcProtoType->param_types()) {
+                  if (first) {
+                     first = false;
+                  } else {
+                     funcType += ",";
                   }
-                  funcType+= translateType(paramType);
+                  bool x;
+                  funcType += translateType(paramType, x);
                }
-               funcType+="}, {"+translateType(funcProtoType->getReturnType())+"})";
+               bool x;
+               funcType += "}, {" + translateType(funcProtoType->getReturnType(), x) + "})";
                return funcType;
             }
          }
@@ -108,6 +111,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             if (method->isImplicit()) continue;
             if (isa<CXXConstructorDecl>(method)) continue;
             if (method->getAccess() == clang::AS_protected || method->getAccess() == clang::AS_private) continue;
+            bool hasSideEffect = false;
             //method->dump();
             std::string methodName = method->getNameAsString();
             hStream << " inline static mlir::util::FunctionSpec " << methodName << " = ";
@@ -115,24 +119,28 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             std::vector<std::string> resTypes;
             if (!method->isStatic()) {
                types.push_back(translatePointer());
+               hasSideEffect = true;
             }
             std::string mangled;
             llvm::raw_string_ostream mangleStream(mangled);
             mangleContext->mangleName(method, mangleStream);
             mangleStream.flush();
             for (const auto& p : method->parameters()) {
-               types.push_back(translateType(p->getType()));
+               types.push_back(translateType(p->getType(), hasSideEffect));
             }
             auto resType = method->getReturnType();
             if (!resType->isVoidType()) {
-               resTypes.push_back(translateType(resType));
+               bool x;
+               resTypes.push_back(translateType(resType, x));
+            } else {
+               hasSideEffect = true;
             }
             std::string fullName = "runtime::" + className + "::" + methodName;
             hStream << " mlir::util::FunctionSpec(\"" << fullName << "\", \"" << mangled << "\", ";
             emitTypeCreateFn(hStream, types);
             hStream << ",";
             emitTypeCreateFn(hStream, resTypes);
-            hStream << ");\n";
+            hStream << "," << (hasSideEffect ? "false" : "true") << ");\n";
          }
          hStream << "};\n";
       }
