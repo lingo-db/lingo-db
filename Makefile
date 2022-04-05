@@ -1,6 +1,5 @@
 ROOT_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 NPROCS := $(shell echo $$(nproc))
-SUBID := $(shell echo "$$(git submodule status)" | cut -c 2-9 | tr '\n' '-')
 
 build:
 	mkdir -p $@
@@ -87,7 +86,7 @@ run-benchmark: build/lingodb-release/.stamp resources/data/tpch-1/.stamp
 	python3 tools/benchmark-tpch.py $(dir $<) tpch-1
 
 docker-buildimg:
-	DOCKER_BUILDKIT=1 docker build -f "docker/Dockerfile" -t mlirdb-buildimg:${SUBID} --target buildimg "."
+	DOCKER_BUILDKIT=1 docker build -f "docker/Dockerfile" -t mlirdb-buildimg:$(shell echo "$$(git submodule status)" | cut -c 2-9 | tr '\n' '-') --target buildimg "."
 build-docker:
 	DOCKER_BUILDKIT=1 docker build -f "docker/Dockerfile" -t mlirdb:latest --target mlirdb  "."
 build-repr-docker:
