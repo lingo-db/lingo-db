@@ -1,4 +1,4 @@
-// RUN: db-run %s | FileCheck %s
+// RUN: db-run-query %s | FileCheck %s
 
  module {
 	func @test_or (%arg0: i1,%arg1: i1,%arg2: i1) {

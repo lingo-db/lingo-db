@@ -1,4 +1,4 @@
-// RUN: db-run %s | FileCheck %s
+// RUN: db-run-query %s | FileCheck %s
 
  module {
  	func @test (%arg0: !db.nullable<i32>,%arg1: !db.nullable<i32>) -> !db.nullable<i32> {

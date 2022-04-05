@@ -57,7 +57,6 @@ llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
 tool_dirs = [config.mlirdb_tools_dir, config.llvm_tools_dir]
 tools = [
     'mlir-db-opt',
-    'db-run',
     'db-run-query',
     'sql-to-mlir'
 ]

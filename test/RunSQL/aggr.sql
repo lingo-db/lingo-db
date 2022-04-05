@@ -1,4 +1,4 @@
---//RUN: sql-to-mlir %s | mlir-db-opt -relalg-to-db -canonicalize | db-run "-" %S/../../resources/data/uni | FileCheck %s
+--//RUN: sql-to-mlir %s | mlir-db-opt -relalg-to-db -canonicalize | db-run-query "-" %S/../../resources/data/uni | FileCheck %s
 
 --//CHECK: |                      s.matrnr  |                           sum  |                           min  |                           max  |                           avg  |                         count  |                         count  |
 --//CHECK: ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

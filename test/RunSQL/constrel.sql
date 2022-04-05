@@ -1,4 +1,4 @@
---//RUN: sql-to-mlir %s | mlir-db-opt -relalg-to-db -canonicalize | db-run "-" %S/../../resources/data/uni | FileCheck %s
+--//RUN: sql-to-mlir %s | mlir-db-opt -relalg-to-db -canonicalize | db-run-query "-" %S/../../resources/data/uni | FileCheck %s
 
 --//CHECK: |                         t1.c1  |                         t1.c2  |                        power4  |
 --//CHECK: ----------------------------------------------------------------------------------------------------

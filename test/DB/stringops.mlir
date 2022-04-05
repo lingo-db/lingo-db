@@ -1,4 +1,4 @@
-// RUN: db-run %s | FileCheck %s
+// RUN: db-run-query %s | FileCheck %s
 module {
     func @main ()  {
         %conststr1 = db.constant ( "str1" ) : !db.string

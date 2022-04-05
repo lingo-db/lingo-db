@@ -1,4 +1,4 @@
- // RUN: db-run %s %S/../../resources/data/test | FileCheck %s
+ // RUN: db-run-query %s %S/../../resources/data/test | FileCheck %s
 !test_table_tuple2=type tuple<!db.nullable<!db.string>,!db.nullable<f32>,!db.nullable<f64>,!db.nullable<!db.decimal<5,2>>,!db.nullable<i32>,!db.nullable<i64>,!db.nullable<i1>,!db.nullable<!db.date<day>>,!db.nullable<!db.date<millisecond>>>
 !test_table_tuple=type tuple<!db.string,f32,f64,!db.decimal<5,2>,i32,i64,i1,!db.date<day>,!db.date<millisecond>>
 
