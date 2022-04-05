@@ -96,8 +96,7 @@ let assemblyFormat = "`<` $keyType `,` $valType `>`";
 }
 
 
-def DSA_CreateFlag : DSA_Op<"createflag",
-[NoSideEffect]> {
+def DSA_CreateFlag : DSA_Op<"createflag"> {
 let summary = "create flag";
 let results = (outs DSA_Flag:$flag);
 let assemblyFormat = "attr-dict";
@@ -107,8 +106,7 @@ let summary = "set flag to true";
 let arguments = (ins DSA_Flag:$flag, I1:$val);
 let assemblyFormat = "$flag `,` $val attr-dict";
 }
-def DSA_GetFlag : DSA_Op<"getflag",
-[NoSideEffect]> {
+def DSA_GetFlag : DSA_Op<"getflag"> {
 let summary = "get flag value";
 let arguments = (ins DSA_Flag:$flag);
 let results= (outs I1:$res);
