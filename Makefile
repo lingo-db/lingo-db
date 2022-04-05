@@ -2,9 +2,12 @@ ROOT_DIR := $(dir $(abspath $(firstword $(MAKEFILE_LIST))))
 NPROCS := $(shell echo $$(nproc))
 SUBID := $(shell echo "$$(git submodule status)" | cut -c 2-9 | tr '\n' '-')
 
-build/llvm-build:
-	mkdir -p build/llvm-build
-	cmake -G Ninja llvm-project/llvm  -B build/llvm-build \
+build:
+	mkdir -p $@
+
+build/llvm-build/.stamp:
+	mkdir -p $(dir $@)
+	cmake -G Ninja llvm-project/llvm  -B $(dir $@) \
 	   -DLLVM_ENABLE_PROJECTS="mlir;clang;clang-tools-extra"\
 	   -DLLVM_USE_PERF=ON \
 	   -DLLVM_BUILD_EXAMPLES=OFF \
@@ -16,80 +19,72 @@ build/llvm-build:
        -DLLVM_EXTERNAL_TORCH_MLIR_SOURCE_DIR="${ROOT_DIR}/torch-mlir" \
        -DLLVM_EXTERNAL_TORCH_MLIR_DIALECTS_SOURCE_DIR="${ROOT_DIR}/torch-mlir/external/llvm-external-projects/torch-mlir-dialects" \
        -DMLIR_ENABLE_BINDINGS_PYTHON=ON
+	touch $@
 
-build/arrow:
-	mkdir -p build/arrow
-	cmake arrow/cpp  -B build/arrow -DARROW_PYTHON=ON -DCMAKE_BUILD_TYPE=Release
+build/arrow/.stamp:
+	mkdir -p $(dir $@)
+	cmake arrow/cpp  -B $(dir $@) -DARROW_PYTHON=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_LIBDIR=lib
+	touch $@
 
-build/arrow-perf:
-	mkdir -p build/arrow-perf
-	cmake arrow/cpp  -B build/arrow-perf -DARROW_PYTHON=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_FLAGS=-ffixed-r15
+build/arrow-perf/.stamp:
+	mkdir -p $(dir $@)
+	cmake arrow/cpp  -B $(dir $@) -DARROW_PYTHON=ON -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_CXX_FLAGS=-ffixed-r15
+	touch $@
 
-build-arrow: build/arrow
+build/arrow/.buildstamp: build/arrow/.stamp
 	cmake --build build/arrow -j${NPROCS}
 	cmake --install build/arrow --prefix build/arrow/install
+	touch $@
 
-build-arrow-perf: build/arrow-perf
+build/arrow-perf/.buildstamp: build/arrow-perf/.stamp
 	cmake --build build/arrow-perf -j${NPROCS}
 	cmake --install build/arrow-perf --prefix build/arrow-perf/install
+	touch $@
 
-build/pyarrow:
+build/arrow/.pyarrowstamp: build/arrow/.buildstamp
 	cd arrow/python; python3 setup.py build_ext --inplace --extra-cmake-args="-DArrow_DIR=${ROOT_DIR}/build/arrow/install/lib/cmake/arrow -DArrowPython_DIR=${ROOT_DIR}/build/arrow/install/lib/cmake/arrow"
-build-llvm: build/llvm-build
+	touch $@
+
+build/llvm-build/.buildstamp: build/llvm-build/.stamp
 	cmake --build build/llvm-build -j${NPROCS}
+	touch $@
 
-build/llvm-build-debug:
-	mkdir -p build/llvm-build-debug
-	cmake -G Ninja llvm-project/llvm  -B build/llvm-build-debug \
-	   -DLLVM_ENABLE_PROJECTS=mlir \
-	   -DLLVM_BUILD_EXAMPLES=OFF \
-	   -DLLVM_USE_PERF=ON \
-	   -DLLVM_TARGETS_TO_BUILD="X86" \
-	   -DCMAKE_BUILD_TYPE=Debug \
-	   -DLLVM_ENABLE_ASSERTIONS=ON
+resources/data/tpch-1/.stamp: tools/generate/generate.sh
+	bash $<
+	touch $@
 
-build-llvm-debug: build/llvm-build-debug
-	cmake --build build/llvm-build-debug -j${NPROCS}
+LDB_ARGS=-DMLIR_DIR=${ROOT_DIR}build/llvm-build/lib/cmake/mlir \
+		 -DArrow_DIR=${ROOT_DIR}build/arrow/install/lib/cmake/arrow \
+		 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+LDB_DEPS=build/llvm-build/.buildstamp build/arrow/.buildstamp
+dependencies: $(LDB_DEPS)
 
-build/build-debug-llvm-release:
-	cmake -G Ninja .  -B  build/build-debug-llvm-release \
-		-DMLIR_DIR=${ROOT_DIR}build/llvm-build/lib/cmake/mlir \
-		-DArrow_DIR=${ROOT_DIR}build/arrow/install/lib/cmake/arrow \
-		-DBoost_INCLUDE_DIR=${ROOT_DIR}build/arrow/boost_ep-prefix/src/boost_ep \
-		-DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+build/lingodb-debug/.stamp: $(LDB_DEPS)
+	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS)
+	touch $@
+build/lingodb-release/.stamp: $(LDB_DEPS)
+	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Release
+	touch $@
+build/lingodb-debug-coverage/.stamp: $(LDB_DEPS)
+	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_CXX_FLAGS=--coverage -DCMAKE_C_FLAGS=--coverage
+	touch $@
 
-build/build-llvm-release:
-	cmake -G Ninja .  -B  build/build-llvm-release \
-		-DMLIR_DIR=${ROOT_DIR}build/llvm-build/lib/cmake/mlir \
-		-DArrow_DIR=${ROOT_DIR}build/arrow/install/lib/cmake/arrow \
-		-DBoost_INCLUDE_DIR=${ROOT_DIR}build/arrow/boost_ep-prefix/src/boost_ep \
-		-DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release
-
-build/build-debug-llvm-release-coverage:
-	cmake -G Ninja .  -B  build/build-debug-llvm-release-coverage \
-		-DMLIR_DIR=${ROOT_DIR}build/llvm-build/lib/cmake/mlir \
-		-DArrow_DIR=${ROOT_DIR}build/arrow/install/lib/cmake/arrow \
-		-DBoost_INCLUDE_DIR=${ROOT_DIR}build/arrow/boost_ep-prefix/src/boost_ep \
-		-DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_CXX_FLAGS=--coverage -DCMAKE_C_FLAGS=--coverage
-
-dependencies: build build-llvm build-arrow build/pyarrow
-
-test-coverage:  build/build-debug-llvm-release-coverage
-	cmake --build build/build-debug-llvm-release-coverage --target mlir-db-opt db-run-query db-run pymlirdbext -- -j${NPROCS}
-	export LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib &&./build/llvm-build/bin/llvm-lit build/build-debug-llvm-release-coverage/test
-	lcov --no-external --capture --directory build/build-debug-llvm-release-coverage -b . --output-file build/build-debug-llvm-release-coverage/coverage.info
-		lcov --remove build/build-debug-llvm-release-coverage/coverage.info -o build/build-debug-llvm-release-coverage/filtered-coverage.info \
+.PHONY: test-coverage
+test-coverage: build/lingodb-debug-coverage/.stamp
+	cmake --build $(dir $<) --target mlir-db-opt db-run-query db-run pymlirdbext sql-to-mlir -- -j${NPROCS}
+	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit $(dir $<)/test
+	lcov --no-external --capture --directory $(dir $<) -b . --output-file $(dir $<)/coverage.info
+	lcov --remove $(dir $<)/coverage.info -o $(dir $<)/filtered-coverage.info \
 			'**/build/llvm-build/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*'
-	genhtml  --ignore-errors source build/build-debug-llvm-release-coverage/filtered-coverage.info --legend --title "lcov-test" --output-directory=build/build-debug-llvm-release-coverage/coverage-report
-run-test: build/build-debug-llvm-release
-	cmake --build build/build-debug-llvm-release --target mlir-db-opt db-run-query db-run pymlirdbext sql-to-mlir -- -j${NPROCS}
-	export LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib && ./build/llvm-build/bin/llvm-lit -v build/build-debug-llvm-release/test
-run-benchmark: build/build-llvm-release
-	cmake --build build/build-llvm-release --target db-run-query -- -j${NPROCS}
-	python3 tools/benchmark-tpch.py ./build/build-llvm-release tpch-1
-
-coverage-clean:
-	rm -rf build/build-debug-llvm-release-coverage/coverage
+	genhtml  --ignore-errors source $(dir $<)/filtered-coverage.info --legend --title "lcov-test" --output-directory=$(dir $<)/coverage-report
+.PHONY: run-test
+run-test: build/lingodb-debug/.stamp
+	cmake --build $(dir $<) --target mlir-db-opt db-run-query db-run pymlirdbext sql-to-mlir -- -j${NPROCS}
+	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit -v $(dir $<)/test
+.PHONY: run-benchmark
+run-benchmark: build/lingodb-release/.stamp resources/data/tpch-1/.stamp
+	cmake --build $(dir $<) --target db-run-query -- -j${NPROCS}
+	python3 tools/benchmark-tpch.py $(dir $<) tpch-1
 
 docker-buildimg:
 	DOCKER_BUILDKIT=1 docker build -f "docker/Dockerfile" -t mlirdb-buildimg:${SUBID} --target buildimg "."
@@ -101,19 +96,13 @@ build-repr-docker:
 .repr-docker-built:
 	$(MAKE) build-repr-docker
 	touch .repr-docker-built
+
+.PHONY: clean
 clean:
 	rm -rf build
-
 
 reproduce: .repr-docker-built
 	 docker run --privileged -it mlirdb-repr /bin/bash -c "python3 tools/benchmark-tpch.py /build/mlirdb/ tpch-1"
 
-lint:
-	python3 tools/scripts/run-clang-tidy.py -p build/build-debug-llvm-release -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored" -clang-tidy-binary=./build/llvm-build/bin/clang-tidy
-#perf:
-#	 perf record -k 1 -F 1000  --call-graph dwarf [cmd]
-#	 perf inject -j -i perf.data -o perf.data.jitted
-#	perf report --no-children -i perf.data.jitted
-
-test-subid:
-	echo ${SUBID}
+lint: build/lingodb-debug/.stamp
+	python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored" -clang-tidy-binary=./build/llvm-build/bin/clang-tidy
