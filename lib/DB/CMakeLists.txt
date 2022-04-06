@@ -5,6 +5,11 @@ set(LLVM_TARGET_DEFINITIONS Transforms/SimplifyToArith.td)
 mlir_tablegen(SimplifyToArith.inc -gen-rewriters)
 add_public_tablegen_target(MLIRDBSimplifyToArithIncGen)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+gen_rt_def(dump-rt-defs "DumpRuntime.h")
+gen_rt_def(string-rt-defs "StringRuntime.h")
+gen_rt_def(date-rt-defs "DateRuntime.h")
+
 add_mlir_dialect_library(MLIRDB
         DBDialect.cpp
         DBOps.cpp
@@ -19,6 +24,9 @@ add_mlir_dialect_library(MLIRDB
         ${CMAKE_CURRENT_BINARY_DIR}
 
         DEPENDS
+        dump-rt-defs
+        string-rt-defs
+        date-rt-defs
         MLIRDBOpsIncGen
         MLIRDBEliminateNullsIncGen
         MLIRDBSimplifyToArithIncGen
