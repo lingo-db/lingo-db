@@ -211,6 +211,10 @@ LogicalResult mlir::db::AndOp::canonicalize(mlir::db::AndOp andOp, mlir::Pattern
          rawValues.insert(between);
       }
    }
+   if(rawValues.size()==1){
+      rewriter.replaceOp(andOp,*rawValues.begin());
+      return success();
+   }
    if (rawValues.size() != andOp.vals().size()) {
       rewriter.replaceOpWithNewOp<mlir::db::AndOp>(andOp, std::vector<mlir::Value>(rawValues.begin(), rawValues.end()));
       return success();
