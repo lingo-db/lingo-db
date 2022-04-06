@@ -147,15 +147,17 @@ class AggregationTranslator : public mlir::relalg::Translator {
       key = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_colsAttr());
 
       auto counterType = builder.getI64Type();
+      mlir::relalg::ReturnOp terminator=mlir::cast<mlir::relalg::ReturnOp>(aggregationOp.aggr_func().front().getTerminator());
 
-      aggregationOp.aggr_func().walk([&](mlir::relalg::AddColumnOp addColumnOp) {
-         if (auto aggrFn = mlir::dyn_cast_or_null<mlir::relalg::AggrFuncOp>(addColumnOp.val().getDefiningOp())) {
+      for (size_t i = 0; i < aggregationOp.computed_cols().size(); i++) {
+         auto* destAttr = &aggregationOp.computed_cols()[i].cast<mlir::relalg::ColumnDefAttr>().getColumn();
+         mlir::Value computedVal=terminator.results()[i];
+         if (auto aggrFn = mlir::dyn_cast_or_null<mlir::relalg::AggrFuncOp>(computedVal.getDefiningOp())) {
             auto loc = aggrFn->getLoc();
-            auto* destAttr = &addColumnOp.attr().getColumn();
             auto* attr = &aggrFn.attr().getColumn();
             auto attrIsNullable = attr->type.isa<mlir::db::NullableType>();
             size_t currValIdx = val.insert(attr);
-            mlir::Type resultingType = addColumnOp.attr().getColumn().type;
+            mlir::Type resultingType = destAttr->type;
             size_t currDestIdx = aggrTypes.size();
 
             if (aggrFn.fn() == mlir::relalg::AggrFunc::sum) {
@@ -309,10 +311,10 @@ class AggregationTranslator : public mlir::relalg::Translator {
                });
             }
          }
-         if (auto countOp = mlir::dyn_cast_or_null<mlir::relalg::CountRowsOp>(addColumnOp.val().getDefiningOp())) {
+         if (auto countOp = mlir::dyn_cast_or_null<mlir::relalg::CountRowsOp>(computedVal.getDefiningOp())) {
             auto loc = countOp->getLoc();
 
-            auto* destAttr = &addColumnOp.attr().getColumn();
+
             size_t currDestIdx = aggrTypes.size();
             aggrTypes.push_back(counterType);
             auto initCounterVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), counterType, builder.getI64IntegerAttr(0));
@@ -327,7 +329,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
                return res;
             });
          }
-      });
+      };
    }
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();

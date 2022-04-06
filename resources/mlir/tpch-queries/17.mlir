@@ -21,34 +21,30 @@ module {
         %26 = db.compare eq %24 : i32, %25 : i32
         relalg.return %26 : i1
       }
-      %19 = relalg.aggregation @aggr0 %18 [] (%arg1: !relalg.tuplestream,%arg2: !relalg.tuple){
+      %19 = relalg.aggregation @aggr0 %18 [] computes : [@tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>})] (%arg1: !relalg.tuplestream,%arg2: !relalg.tuple){
         %24 = relalg.aggrfn avg @lineitem::@l_quantity %arg1 : !db.nullable<!db.decimal<15, 2>>
-        %25 = relalg.addcol %arg2, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %24
-        relalg.return %25 : !relalg.tuple
+        relalg.return %24 : !db.nullable<!db.decimal<15, 2>>
       }
-      %20 = relalg.map @map0 %19 (%arg1: !relalg.tuple){
+      %20 = relalg.map @map0 %19 computes : [@tmp_attr1({type = !db.nullable<!db.decimal<15, 2>>})] (%arg1: !relalg.tuple){
         %24 = db.constant("0.2") : !db.decimal<15, 2>
         %25 = relalg.getcol %arg1 @aggr0::@tmp_attr0 : !db.nullable<!db.decimal<15, 2>>
         %26 = db.mul %24 : !db.decimal<15, 2>, %25 : !db.nullable<!db.decimal<15, 2>>
-        %27 = relalg.addcol %arg1, @tmp_attr1({type = !db.nullable<!db.decimal<15, 2>>}) %26
-        relalg.return %27 : !relalg.tuple
+        relalg.return %26 : !db.nullable<!db.decimal<15, 2>>
       }
       %21 = relalg.getscalar @map0::@tmp_attr1 %20 : !db.nullable<!db.decimal<15, 2>>
       %22 = db.compare lt %16 : !db.decimal<15, 2>, %21 : !db.nullable<!db.decimal<15, 2>>
       %23 = db.and %9, %12, %15, %22 : i1, i1, i1, !db.nullable<i1>
       relalg.return %23 : !db.nullable<i1>
     }
-    %4 = relalg.aggregation @aggr1 %3 [] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %4 = relalg.aggregation @aggr1 %3 [] computes : [@tmp_attr2({type = !db.nullable<!db.decimal<15, 2>>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %7 = relalg.aggrfn sum @lineitem::@l_extendedprice %arg0 : !db.nullable<!db.decimal<15, 2>>
-      %8 = relalg.addcol %arg1, @tmp_attr2({type = !db.nullable<!db.decimal<15, 2>>}) %7
-      relalg.return %8 : !relalg.tuple
+      relalg.return %7 : !db.nullable<!db.decimal<15, 2>>
     }
-    %5 = relalg.map @map1 %4 (%arg0: !relalg.tuple){
+    %5 = relalg.map @map1 %4 computes : [@tmp_attr3({type = !db.nullable<!db.decimal<15, 2>>})] (%arg0: !relalg.tuple){
       %7 = relalg.getcol %arg0 @aggr1::@tmp_attr2 : !db.nullable<!db.decimal<15, 2>>
       %8 = db.constant("7.0") : !db.decimal<15, 2>
       %9 = db.div %7 : !db.nullable<!db.decimal<15, 2>>, %8 : !db.decimal<15, 2>
-      %10 = relalg.addcol %arg0, @tmp_attr3({type = !db.nullable<!db.decimal<15, 2>>}) %9
-      relalg.return %10 : !relalg.tuple
+      relalg.return %9 : !db.nullable<!db.decimal<15, 2>>
     }
     %6 = relalg.materialize %5 [@map1::@tmp_attr3] => ["avg_yearly"] : !dsa.table
     return %6 : !dsa.table

@@ -37,19 +37,17 @@ module {
       %26 = db.and %13, %16, %19, %22, %25 : i1, i1, i1, i1, i1
       relalg.return %26 : i1
     }
-    %6 = relalg.map @map0 %5 (%arg0: !relalg.tuple){
+    %6 = relalg.map @map0 %5 computes : [@tmp_attr1({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuple){
       %11 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %12 = db.constant(1 : i32) : !db.decimal<15, 2>
       %13 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
       %14 = db.sub %12 : !db.decimal<15, 2>, %13 : !db.decimal<15, 2>
       %15 = db.mul %11 : !db.decimal<15, 2>, %14 : !db.decimal<15, 2>
-      %16 = relalg.addcol %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %15
-      relalg.return %16 : !relalg.tuple
+      relalg.return %15 : !db.decimal<15, 2>
     }
-    %7 = relalg.aggregation @aggr0 %6 [@lineitem::@l_orderkey,@orders::@o_orderdate,@orders::@o_shippriority] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %7 = relalg.aggregation @aggr0 %6 [@lineitem::@l_orderkey,@orders::@o_orderdate,@orders::@o_shippriority] computes : [@tmp_attr0({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %11 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
-      %12 = relalg.addcol %arg1, @tmp_attr0({type = !db.decimal<15, 2>}) %11
-      relalg.return %12 : !relalg.tuple
+      relalg.return %11 : !db.decimal<15, 2>
     }
     %8 = relalg.sort %7 [(@aggr0::@tmp_attr0,desc),(@orders::@o_orderdate,asc)]
     %9 = relalg.limit 10 %8

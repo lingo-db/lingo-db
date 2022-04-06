@@ -7,13 +7,6 @@
 #include <functional>
 using namespace mlir::relalg;
 using operator_list = llvm::SmallVector<Operator, 4>;
-ColumnSet mlir::relalg::detail::getCreatedColumns(mlir::Operation* op) {
-   ColumnSet creations;
-   op->walk([&](AddColumnOp attrOp) {
-      creations.insert(&attrOp.attr().getColumn());
-   });
-   return creations;
-}
 static operator_list getChildOperators(mlir::Operation* parent) {
    operator_list children;
    for (auto operand : parent->getOperands()) {
@@ -95,7 +88,12 @@ mlir::relalg::detail::UnaryOperatorType mlir::relalg::detail::getUnaryOperatorTy
          return UnaryOperatorType::None;
       });
 }
-
+ColumnSet MapOp::getCreatedColumns() {
+   return ColumnSet::fromArrayAttr(computed_cols());
+}
+ColumnSet AggregationOp::getCreatedColumns() {
+   return ColumnSet::fromArrayAttr(computed_cols());
+}
 ColumnSet AggregationOp::getUsedColumns() {
    auto used = mlir::relalg::detail::getUsedColumns(getOperation());
    used.insert(ColumnSet::fromArrayAttr(group_by_cols()));

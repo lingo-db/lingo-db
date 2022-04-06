@@ -974,8 +974,7 @@ struct SQLTranslator {
       auto* block = new mlir::Block;
       static size_t mapId = 0;
       std::string mapName = "map" + std::to_string(mapId++);
-      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), mapName, tree);
-      mapOp.predicate().push_back(block);
+
       mlir::OpBuilder mapBuilder(builder.getContext());
       block->addArgument(mlir::relalg::TupleType::get(builder.getContext()), builder.getUnknownLoc());
       auto tupleScope = context.createTupleScope();
@@ -983,16 +982,20 @@ struct SQLTranslator {
       context.setCurrentTuple(tuple);
 
       mapBuilder.setInsertionPointToStart(block);
+      std::vector<mlir::Value> createdValues;
+      std::vector<mlir::Attribute> createdCols;
       for (auto p : toMap) {
          mlir::Value expr = translateExpression(mapBuilder, p.second, context);
          attrManager.setCurrentScope(mapName);
          auto attrDef = attrManager.createDef(p.first->colId);
          attrDef.getColumn().type = expr.getType();
          context.mapAttribute(scope, p.first->colId, &attrDef.getColumn());
-         tuple = mapBuilder.create<mlir::relalg::AddColumnOp>(builder.getUnknownLoc(), mlir::relalg::TupleType::get(builder.getContext()), tuple, attrDef, expr);
-         context.setCurrentTuple(tuple);
+         createdCols.push_back(attrDef);
+         createdValues.push_back(expr);
       }
-      mapBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), tuple);
+      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), mapName, tree, builder.getArrayAttr(createdCols));
+      mapOp.predicate().push_back(block);
+      mapBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), createdValues);
       return mapOp.result();
    }
    mlir::Value translateFrom(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
@@ -1046,15 +1049,14 @@ struct SQLTranslator {
          std::string groupByName = "aggr" + std::to_string(groupById++);
          //llvm::StringRef sym_name, ::mlir::Value rel, ::mlir::ArrayAttr group_by_attrs
          auto tupleScope = context.createTupleScope();
-         auto groupByOp = builder.create<mlir::relalg::AggregationOp>(builder.getUnknownLoc(), tupleStreamType, groupByName, tree, builder.getArrayAttr(groupByAttrs));
          auto* block = new mlir::Block;
-         groupByOp.aggr_func().push_back(block);
          block->addArgument(tupleStreamType, builder.getUnknownLoc());
          block->addArgument(tupleType, builder.getUnknownLoc());
-         mlir::Value tuple = block->getArgument(1);
          mlir::Value relation = block->getArgument(0);
          mlir::OpBuilder aggrBuilder(builder.getContext());
          aggrBuilder.setInsertionPointToStart(block);
+         std::vector<mlir::Value> createdValues;
+         std::vector<mlir::Attribute> createdCols;
          for (auto toAggr : replaceState.aggrs) {
             mlir::Value expr; //todo
             auto aggrFuncName = std::get<0>(toAggr.second);
@@ -1096,10 +1098,12 @@ struct SQLTranslator {
             auto attrDef = attrManager.createDef(toAggr.first->colId);
             attrDef.getColumn().type = expr.getType();
             context.mapAttribute(scope, toAggr.first->colId, &attrDef.getColumn());
-            tuple = aggrBuilder.create<mlir::relalg::AddColumnOp>(builder.getUnknownLoc(), mlir::relalg::TupleType::get(builder.getContext()), tuple, attrDef, expr);
-            context.setCurrentTuple(tuple);
+            createdCols.push_back(attrDef);
+            createdValues.push_back(expr);
          }
-         aggrBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), tuple);
+         aggrBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), createdValues);
+         auto groupByOp = builder.create<mlir::relalg::AggregationOp>(builder.getUnknownLoc(), tupleStreamType, groupByName, tree, builder.getArrayAttr(groupByAttrs), builder.getArrayAttr(createdCols));
+         groupByOp.aggr_func().push_back(block);
 
          tree = groupByOp.result();
       }

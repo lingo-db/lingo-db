@@ -31,10 +31,9 @@ module {
       %14 = db.and %7, %10, %13 : i1, i1, i1
       relalg.return %14 : i1
     }
-    %2 = relalg.aggregation @aggr0 %1 [@orders::@o_orderpriority] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %2 = relalg.aggregation @aggr0 %1 [@orders::@o_orderpriority] computes : [@tmp_attr0({type = i64})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %5 = relalg.count %arg0
-      %6 = relalg.addcol %arg1, @tmp_attr0({type = i64}) %5
-      relalg.return %6 : !relalg.tuple
+      relalg.return %5 : i64
     }
     %3 = relalg.sort %2 [(@orders::@o_orderpriority,asc)]
     %4 = relalg.materialize %3 [@orders::@o_orderpriority,@aggr0::@tmp_attr0] => ["o_orderpriority", "order_count"] : !dsa.table

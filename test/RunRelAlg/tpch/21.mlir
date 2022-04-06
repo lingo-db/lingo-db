@@ -107,10 +107,9 @@ module {
       %37 = db.and %14, %17, %20, %23, %26, %30, %33, %36 : i1, i1, i1, i1, i1, i1, i1, i1
       relalg.return %37 : i1
     }
-    %8 = relalg.aggregation @aggr0 %7 [@supplier::@s_name] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %8 = relalg.aggregation @aggr0 %7 [@supplier::@s_name] computes : [@tmp_attr0({type = i64})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %12 = relalg.count %arg0
-      %13 = relalg.addcol %arg1, @tmp_attr0({type = i64}) %12
-      relalg.return %13 : !relalg.tuple
+      relalg.return %12 : i64
     }
     %9 = relalg.sort %8 [(@aggr0::@tmp_attr0,desc),(@supplier::@s_name,asc)]
     %10 = relalg.limit 100 %9

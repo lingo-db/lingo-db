@@ -318,41 +318,8 @@ static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
    p << "}";
 }
 
-///////////////////////////////////////////////////////////////////////////////////
-// AddColumnOp
-///////////////////////////////////////////////////////////////////////////////////
-static ParseResult parseAddColumnOp(OpAsmParser& parser, OperationState& result) {
-   OpAsmParser::OperandType input, tuple, tupleOut;
-   Type inputType;
-   if (parser.parseOperand(tuple) || parser.parseComma()) {
-      return failure();
-   }
-   mlir::relalg::ColumnDefAttr defAttr;
-   if (parseCustDef(parser, defAttr)) {
-      return failure();
-   }
-   result.addAttribute("attr", defAttr);
-   if (parser.parseOperand(input)) {
-      return failure();
-   }
-   inputType = defAttr.getColumn().type;
 
-   auto tupleType = mlir::relalg::TupleType::get(parser.getBuilder().getContext());
-   if (parser.resolveOperand(tuple, tupleType, result.operands)) {
-      return failure();
-   }
-   if (parser.resolveOperand(input, inputType, result.operands)) {
-      return failure();
-   }
-   result.addTypes({tupleType});
-   return success();
-}
-static void print(OpAsmPrinter& p, relalg::AddColumnOp& op) {
-   p << " " << op.tuple();
-   p << ", ";
-   printCustDef(p, op, op.attr());
-   p << " " << op.val();
-}
+
 
 static ParseResult parseAttrNS(OpAsmParser& parser, StringAttr& nameAttr) {
    NamedAttrList attrList;

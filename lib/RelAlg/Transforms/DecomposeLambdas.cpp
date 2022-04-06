@@ -175,28 +175,25 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
 
       auto* terminator = currentMap.predicate().front().getTerminator();
       if (auto returnOp = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(terminator)) {
-         assert(returnOp.results().size() == 1);
-         auto* definingOp = returnOp.results()[0].getDefiningOp();
-         mlir::relalg::AddColumnOp addColumnOp = definingOp ? mlir::dyn_cast_or_null<mlir::relalg::AddColumnOp>(definingOp) : relalg::AddColumnOp();
-         while (mlir::isa_and_nonnull<mlir::relalg::AddColumnOp>(addColumnOp)) {
+         assert(returnOp.results().size() == currentMap.computed_cols().size());
+         auto computedValRange = returnOp.results();
+         for(size_t i=0;i<computedValRange.size();i++){
             OpBuilder builder(currentMap);
             mlir::BlockAndValueMapping mapping;
-            auto newmap = builder.create<relalg::MapOp>(currentMap->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), currentMap.sym_name(), tree);
+            auto currentAttr=currentMap.computed_cols()[i].cast<mlir::relalg::ColumnDefAttr>();
+            mlir::Value currentVal=computedValRange[i];
+            auto newmap = builder.create<relalg::MapOp>(currentMap->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), currentMap.sym_name(), tree,builder.getArrayAttr({currentAttr}));
             tree = newmap;
             newmap.predicate().push_back(new Block);
             newmap.predicate().addArgument(mlir::relalg::TupleType::get(builder.getContext()),currentMap->getLoc());
             builder.setInsertionPointToStart(&newmap.predicate().front());
             auto ret1 = builder.create<relalg::ReturnOp>(currentMap->getLoc());
             mapping.map(currentMap.getLambdaArgument(), newmap.getLambdaArgument());
-            mapping.map(addColumnOp.tuple(), newmap.getLambdaArgument());
-            mlir::relalg::detail::inlineOpIntoBlock(addColumnOp.getOperation(), addColumnOp->getParentOp(), newmap.getOperation(), &newmap.getLambdaBlock(), mapping);
-            builder.create<relalg::ReturnOp>(currentMap->getLoc(), mapping.lookup(addColumnOp.tuple_out()));
+            mlir::relalg::detail::inlineOpIntoBlock(currentVal.getDefiningOp(), currentVal.getDefiningOp()->getParentOp(), newmap.getOperation(), &newmap.getLambdaBlock(), mapping);
+            builder.create<relalg::ReturnOp>(currentMap->getLoc(), mapping.lookup(currentVal));
             ret1->remove();
             ret1->dropAllReferences();
             ret1->destroy();
-            //go to next in chain:
-            definingOp = addColumnOp.tuple().getDefiningOp();
-            addColumnOp = definingOp ? mlir::dyn_cast_or_null<mlir::relalg::AddColumnOp>(definingOp) : relalg::AddColumnOp();
          }
       }
    }

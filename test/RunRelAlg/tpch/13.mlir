@@ -53,15 +53,13 @@ module {
       %14 = db.and %9, %13 : i1, i1
       relalg.return %14 : i1
     }  mapping: {@o_orderkey({type = !db.nullable<i32>})=[@orders::@o_orderkey], @o_custkey({type = !db.nullable<i32>})=[@orders::@o_custkey], @o_orderstatus({type = !db.nullable<!db.char<1>>})=[@orders::@o_orderstatus], @o_totalprice({type = !db.nullable<!db.decimal<15, 2>>})=[@orders::@o_totalprice], @o_orderdate({type = !db.nullable<!db.date<day>>})=[@orders::@o_orderdate], @o_orderpriority({type = !db.nullable<!db.string>})=[@orders::@o_orderpriority], @o_clerk({type = !db.nullable<!db.string>})=[@orders::@o_clerk], @o_shippriority({type = !db.nullable<i32>})=[@orders::@o_shippriority], @o_comment({type = !db.nullable<!db.string>})=[@orders::@o_comment]}
-    %3 = relalg.aggregation @aggr0 %2 [@customer::@c_custkey] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %3 = relalg.aggregation @aggr0 %2 [@customer::@c_custkey] computes : [@tmp_attr0({type = i64})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %7 = relalg.aggrfn count @oj0::@o_orderkey %arg0 : i64
-      %8 = relalg.addcol %arg1, @tmp_attr0({type = i64}) %7
-      relalg.return %8 : !relalg.tuple
+      relalg.return %7 : i64
     }
-    %4 = relalg.aggregation @aggr1 %3 [@aggr0::@tmp_attr0] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %4 = relalg.aggregation @aggr1 %3 [@aggr0::@tmp_attr0] computes : [@tmp_attr1({type = i64})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %7 = relalg.count %arg0
-      %8 = relalg.addcol %arg1, @tmp_attr1({type = i64}) %7
-      relalg.return %8 : !relalg.tuple
+      relalg.return %7 : i64
     }
     %5 = relalg.sort %4 [(@aggr1::@tmp_attr1,desc),(@aggr0::@tmp_attr0,desc)]
     %6 = relalg.materialize %5 [@aggr0::@tmp_attr0,@aggr1::@tmp_attr1] => ["c_count", "custdist"] : !dsa.table

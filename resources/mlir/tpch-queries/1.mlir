@@ -9,7 +9,7 @@ module {
       %10 = db.compare lte %6 : !db.date<day>, %9 : !db.date<day>
       relalg.return %10 : i1
     }
-    %2 = relalg.map @map0 %1 (%arg0: !relalg.tuple){
+    %2 = relalg.map @map0 %1 computes : [@tmp_attr5({type = !db.decimal<15, 2>}),@tmp_attr3({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuple){
       %6 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %7 = db.constant(1 : i32) : !db.decimal<15, 2>
       %8 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
@@ -19,33 +19,23 @@ module {
       %12 = relalg.getcol %arg0 @lineitem::@l_tax : !db.decimal<15, 2>
       %13 = db.add %11 : !db.decimal<15, 2>, %12 : !db.decimal<15, 2>
       %14 = db.mul %10 : !db.decimal<15, 2>, %13 : !db.decimal<15, 2>
-      %15 = relalg.addcol %arg0, @tmp_attr5({type = !db.decimal<15, 2>}) %14
-      %16 = relalg.getcol %15 @lineitem::@l_extendedprice : !db.decimal<15, 2>
-      %17 = db.constant(1 : i32) : !db.decimal<15, 2>
-      %18 = relalg.getcol %15 @lineitem::@l_discount : !db.decimal<15, 2>
-      %19 = db.sub %17 : !db.decimal<15, 2>, %18 : !db.decimal<15, 2>
-      %20 = db.mul %16 : !db.decimal<15, 2>, %19 : !db.decimal<15, 2>
-      %21 = relalg.addcol %15, @tmp_attr3({type = !db.decimal<15, 2>}) %20
-      relalg.return %21 : !relalg.tuple
+      %15 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
+      %16 = db.constant(1 : i32) : !db.decimal<15, 2>
+      %17 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
+      %18 = db.sub %16 : !db.decimal<15, 2>, %17 : !db.decimal<15, 2>
+      %19 = db.mul %15 : !db.decimal<15, 2>, %18 : !db.decimal<15, 2>
+      relalg.return %14, %19 : !db.decimal<15, 2>, !db.decimal<15, 2>
     }
-    %3 = relalg.aggregation @aggr0 %2 [@lineitem::@l_returnflag,@lineitem::@l_linestatus] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %3 = relalg.aggregation @aggr0 %2 [@lineitem::@l_returnflag,@lineitem::@l_linestatus] computes : [@tmp_attr8({type = !db.decimal<15, 2>}),@tmp_attr9({type = i64}),@tmp_attr7({type = !db.decimal<15, 2>}),@tmp_attr4({type = !db.decimal<15, 2>}),@tmp_attr2({type = !db.decimal<15, 2>}),@tmp_attr1({type = !db.decimal<15, 2>}),@tmp_attr6({type = !db.decimal<15, 2>}),@tmp_attr0({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %6 = relalg.aggrfn avg @lineitem::@l_discount %arg0 : !db.decimal<15, 2>
-      %7 = relalg.addcol %arg1, @tmp_attr8({type = !db.decimal<15, 2>}) %6
-      %8 = relalg.count %arg0
-      %9 = relalg.addcol %7, @tmp_attr9({type = i64}) %8
-      %10 = relalg.aggrfn avg @lineitem::@l_extendedprice %arg0 : !db.decimal<15, 2>
-      %11 = relalg.addcol %9, @tmp_attr7({type = !db.decimal<15, 2>}) %10
-      %12 = relalg.aggrfn sum @map0::@tmp_attr5 %arg0 : !db.decimal<15, 2>
-      %13 = relalg.addcol %11, @tmp_attr4({type = !db.decimal<15, 2>}) %12
-      %14 = relalg.aggrfn sum @map0::@tmp_attr3 %arg0 : !db.decimal<15, 2>
-      %15 = relalg.addcol %13, @tmp_attr2({type = !db.decimal<15, 2>}) %14
-      %16 = relalg.aggrfn sum @lineitem::@l_extendedprice %arg0 : !db.decimal<15, 2>
-      %17 = relalg.addcol %15, @tmp_attr1({type = !db.decimal<15, 2>}) %16
-      %18 = relalg.aggrfn avg @lineitem::@l_quantity %arg0 : !db.decimal<15, 2>
-      %19 = relalg.addcol %17, @tmp_attr6({type = !db.decimal<15, 2>}) %18
-      %20 = relalg.aggrfn sum @lineitem::@l_quantity %arg0 : !db.decimal<15, 2>
-      %21 = relalg.addcol %19, @tmp_attr0({type = !db.decimal<15, 2>}) %20
-      relalg.return %21 : !relalg.tuple
+      %7 = relalg.count %arg0
+      %8 = relalg.aggrfn avg @lineitem::@l_extendedprice %arg0 : !db.decimal<15, 2>
+      %9 = relalg.aggrfn sum @map0::@tmp_attr5 %arg0 : !db.decimal<15, 2>
+      %10 = relalg.aggrfn sum @map0::@tmp_attr3 %arg0 : !db.decimal<15, 2>
+      %11 = relalg.aggrfn sum @lineitem::@l_extendedprice %arg0 : !db.decimal<15, 2>
+      %12 = relalg.aggrfn avg @lineitem::@l_quantity %arg0 : !db.decimal<15, 2>
+      %13 = relalg.aggrfn sum @lineitem::@l_quantity %arg0 : !db.decimal<15, 2>
+      relalg.return %6, %7, %8, %9, %10, %11, %12, %13 : !db.decimal<15, 2>, i64, !db.decimal<15, 2>, !db.decimal<15, 2>, !db.decimal<15, 2>, !db.decimal<15, 2>, !db.decimal<15, 2>, !db.decimal<15, 2>
     }
     %4 = relalg.sort %3 [(@lineitem::@l_returnflag,asc),(@lineitem::@l_linestatus,asc)]
     %5 = relalg.materialize %4 [@lineitem::@l_returnflag,@lineitem::@l_linestatus,@aggr0::@tmp_attr0,@aggr0::@tmp_attr1,@aggr0::@tmp_attr2,@aggr0::@tmp_attr4,@aggr0::@tmp_attr6,@aggr0::@tmp_attr7,@aggr0::@tmp_attr8,@aggr0::@tmp_attr9] => ["l_returnflag", "l_linestatus", "sum_qty", "sum_base_price", "sum_disc_price", "sum_charge", "avg_qty", "avg_price", "avg_disc", "count_order"] : !dsa.table

@@ -45,10 +45,9 @@ module {
         %44 = db.and %31, %43 : i1, i1
         relalg.return %44 : i1
       }
-      %21 = relalg.aggregation @aggr0 %20 [] (%arg1: !relalg.tuplestream,%arg2: !relalg.tuple){
+      %21 = relalg.aggregation @aggr0 %20 [] computes : [@tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>})] (%arg1: !relalg.tuplestream,%arg2: !relalg.tuple){
         %29 = relalg.aggrfn avg @customer::@c_acctbal %arg1 : !db.nullable<!db.decimal<15, 2>>
-        %30 = relalg.addcol %arg2, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %29
-        relalg.return %30 : !relalg.tuple
+        relalg.return %29 : !db.nullable<!db.decimal<15, 2>>
       }
       %22 = relalg.getscalar @aggr0::@tmp_attr0 %21 : !db.nullable<!db.decimal<15, 2>>
       %23 = db.compare gt %18 : !db.decimal<15, 2>, %22 : !db.nullable<!db.decimal<15, 2>>
@@ -64,20 +63,17 @@ module {
       %28 = db.and %17, %23, %27 : i1, !db.nullable<i1>, i1
       relalg.return %28 : !db.nullable<i1>
     }
-    %2 = relalg.map @map0 %1 (%arg0: !relalg.tuple){
+    %2 = relalg.map @map0 %1 computes : [@tmp_attr1({type = !db.string})] (%arg0: !relalg.tuple){
       %6 = relalg.getcol %arg0 @customer::@c_phone : !db.string
       %7 = db.constant(1 : i32) : i32
       %8 = db.constant(2 : i32) : i32
       %9 = db.runtime_call "Substring"(%6, %7, %8) : (!db.string, i32, i32) -> !db.string
-      %10 = relalg.addcol %arg0, @tmp_attr1({type = !db.string}) %9
-      relalg.return %10 : !relalg.tuple
+      relalg.return %9 : !db.string
     }
-    %3 = relalg.aggregation @aggr1 %2 [@map0::@tmp_attr1] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %3 = relalg.aggregation @aggr1 %2 [@map0::@tmp_attr1] computes : [@tmp_attr3({type = !db.decimal<15, 2>}),@tmp_attr2({type = i64})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %6 = relalg.aggrfn sum @customer::@c_acctbal %arg0 : !db.decimal<15, 2>
-      %7 = relalg.addcol %arg1, @tmp_attr3({type = !db.decimal<15, 2>}) %6
-      %8 = relalg.count %arg0
-      %9 = relalg.addcol %7, @tmp_attr2({type = i64}) %8
-      relalg.return %9 : !relalg.tuple
+      %7 = relalg.count %arg0
+      relalg.return %6, %7 : !db.decimal<15, 2>, i64
     }
     %4 = relalg.sort %3 [(@map0::@tmp_attr1,asc)]
     %5 = relalg.materialize %4 [@map0::@tmp_attr1,@aggr1::@tmp_attr2,@aggr1::@tmp_attr3] => ["cntrycode", "numcust", "totacctbal"] : !dsa.table

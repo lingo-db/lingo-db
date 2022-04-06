@@ -52,19 +52,17 @@ module {
       %31 = db.and %15, %18, %21, %24, %27, %30 : i1, i1, i1, i1, i1, i1
       relalg.return %31 : i1
     }
-    %8 = relalg.map @map0 %7 (%arg0: !relalg.tuple){
+    %8 = relalg.map @map0 %7 computes : [@tmp_attr1({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuple){
       %13 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %14 = db.constant(1 : i32) : !db.decimal<15, 2>
       %15 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
       %16 = db.sub %14 : !db.decimal<15, 2>, %15 : !db.decimal<15, 2>
       %17 = db.mul %13 : !db.decimal<15, 2>, %16 : !db.decimal<15, 2>
-      %18 = relalg.addcol %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %17
-      relalg.return %18 : !relalg.tuple
+      relalg.return %17 : !db.decimal<15, 2>
     }
-    %9 = relalg.aggregation @aggr0 %8 [@customer::@c_custkey,@customer::@c_name,@customer::@c_acctbal,@customer::@c_phone,@nation::@n_name,@customer::@c_address,@customer::@c_comment] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %9 = relalg.aggregation @aggr0 %8 [@customer::@c_custkey,@customer::@c_name,@customer::@c_acctbal,@customer::@c_phone,@nation::@n_name,@customer::@c_address,@customer::@c_comment] computes : [@tmp_attr0({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %13 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
-      %14 = relalg.addcol %arg1, @tmp_attr0({type = !db.decimal<15, 2>}) %13
-      relalg.return %14 : !relalg.tuple
+      relalg.return %13 : !db.decimal<15, 2>
     }
     %10 = relalg.sort %9 [(@aggr0::@tmp_attr0,desc)]
     %11 = relalg.limit 20 %10

@@ -58,10 +58,9 @@ module {
         %62 = db.and %49, %52, %55, %58, %61 : i1, i1, i1, i1, i1
         relalg.return %62 : i1
       }
-      %43 = relalg.aggregation @aggr0 %42 [] (%arg1: !relalg.tuplestream,%arg2: !relalg.tuple){
+      %43 = relalg.aggregation @aggr0 %42 [] computes : [@tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>})] (%arg1: !relalg.tuplestream,%arg2: !relalg.tuple){
         %47 = relalg.aggrfn min @partsupp::@ps_supplycost %arg1 : !db.nullable<!db.decimal<15, 2>>
-        %48 = relalg.addcol %arg2, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %47
-        relalg.return %48 : !relalg.tuple
+        relalg.return %47 : !db.nullable<!db.decimal<15, 2>>
       }
       %44 = relalg.getscalar @aggr0::@tmp_attr0 %43 : !db.nullable<!db.decimal<15, 2>>
       %45 = db.compare eq %34 : !db.decimal<15, 2>, %44 : !db.nullable<!db.decimal<15, 2>>

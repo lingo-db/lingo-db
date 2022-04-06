@@ -23,20 +23,19 @@ module{
 // -----
 module{
 %0 = relalg.const_relation @constrel  columns : [@attr1({type = !db.string})] values : ["A", "B"]
-//CHECK: %1 = relalg.map @map %0 (%arg0: !relalg.tuple)
-%1 = relalg.map @map %0 (%arg0: !relalg.tuple) {
+//CHECK: %1 = relalg.map @map %0 computes : [@attr2({type = i1})] (%arg0: !relalg.tuple)
+%1 = relalg.map @map %0 computes : [@attr2({type = i1})] (%arg0: !relalg.tuple) {
     //CHECK:    %2 = db.constant("true") : i1
 	%2 = db.constant("true") : i1
-	//CHECK:    %3 = relalg.addcol %arg0, @attr2({type = i1}) %2
-	%tpl=relalg.addcol %arg0, @attr2({type = i1}) %2
-	relalg.return %tpl : !relalg.tuple
+	//CHECK: relalg.return %2 : i1
+	relalg.return %2 : i1
 }
 }
 // -----
 module{
 %0 = relalg.const_relation @constrel  columns : [@attr1({type = !db.string})] values : ["A", "B"]
-//CHECK: %1 = relalg.aggregation @aggr %0 [@constrel::@attr1] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple)
-%1 = relalg.aggregation @aggr %0 [@constrel::@attr1] (%arg0: !relalg.tuplestream, %arg1: !relalg.tuple) {
+//CHECK: %1 = relalg.aggregation @aggr %0 [@constrel::@attr1] computes : [] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple)
+%1 = relalg.aggregation @aggr %0 [@constrel::@attr1] computes : [] (%arg0: !relalg.tuplestream, %arg1: !relalg.tuple) {
 	relalg.return
 }
 }

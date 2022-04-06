@@ -15,7 +15,6 @@ namespace mlir::relalg::detail {
 ColumnSet getUsedColumns(mlir::Operation* op);
 ColumnSet getAvailableColumns(mlir::Operation* op);
 ColumnSet getFreeColumns(mlir::Operation* op);
-ColumnSet getCreatedColumns(mlir::Operation* op);
 bool isDependentJoin(mlir::Operation* op);
 void moveSubTreeBefore(mlir::Operation* tree, mlir::Operation* before);
 

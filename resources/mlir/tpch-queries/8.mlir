@@ -50,46 +50,40 @@ module {
       %53 = db.and %24, %27, %30, %33, %36, %39, %42, %45, %49, %52 : i1, i1, i1, i1, i1, i1, i1, i1, i1, i1
       relalg.return %53 : i1
     }
-    %16 = relalg.map @map0 %15 (%arg0: !relalg.tuple){
+    %16 = relalg.map @map0 %15 computes : [@tmp_attr1({type = !db.decimal<15, 2>}),@tmp_attr0({type = i64})] (%arg0: !relalg.tuple){
       %22 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %23 = db.constant(1 : i32) : !db.decimal<15, 2>
       %24 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
       %25 = db.sub %23 : !db.decimal<15, 2>, %24 : !db.decimal<15, 2>
       %26 = db.mul %22 : !db.decimal<15, 2>, %25 : !db.decimal<15, 2>
-      %27 = relalg.addcol %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %26
-      %28 = db.constant("year") : !db.char<4>
-      %29 = relalg.getcol %27 @orders::@o_orderdate : !db.date<day>
-      %30 = db.runtime_call "ExtractFromDate"(%28, %29) : (!db.char<4>, !db.date<day>) -> i64
-      %31 = relalg.addcol %27, @tmp_attr0({type = i64}) %30
-      relalg.return %31 : !relalg.tuple
+      %27 = db.constant("year") : !db.char<4>
+      %28 = relalg.getcol %arg0 @orders::@o_orderdate : !db.date<day>
+      %29 = db.runtime_call "ExtractFromDate"(%27, %28) : (!db.char<4>, !db.date<day>) -> i64
+      relalg.return %26, %29 : !db.decimal<15, 2>, i64
     }
-    %17 = relalg.map @map1 %16 (%arg0: !relalg.tuple){
+    %17 = relalg.map @map1 %16 computes : [@tmp_attr3({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuple){
       %22 = relalg.getcol %arg0 @n2::@n_name : !db.string
       %23 = db.constant("BRAZIL") : !db.string
       %24 = db.compare eq %22 : !db.string, %23 : !db.string
       %25 = scf.if %24 -> (!db.decimal<15, 2>) {
-        %27 = relalg.getcol %arg0 @map0::@tmp_attr1 : !db.decimal<15, 2>
-        scf.yield %27 : !db.decimal<15, 2>
+        %26 = relalg.getcol %arg0 @map0::@tmp_attr1 : !db.decimal<15, 2>
+        scf.yield %26 : !db.decimal<15, 2>
       } else {
-        %27 = db.constant(0 : i32) : !db.decimal<15, 2>
-        scf.yield %27 : !db.decimal<15, 2>
+        %26 = db.constant(0 : i32) : !db.decimal<15, 2>
+        scf.yield %26 : !db.decimal<15, 2>
       }
-      %26 = relalg.addcol %arg0, @tmp_attr3({type = !db.decimal<15, 2>}) %25
-      relalg.return %26 : !relalg.tuple
+      relalg.return %25 : !db.decimal<15, 2>
     }
-    %18 = relalg.aggregation @aggr0 %17 [@map0::@tmp_attr0] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %18 = relalg.aggregation @aggr0 %17 [@map0::@tmp_attr0] computes : [@tmp_attr4({type = !db.decimal<15, 2>}),@tmp_attr2({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %22 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
-      %23 = relalg.addcol %arg1, @tmp_attr4({type = !db.decimal<15, 2>}) %22
-      %24 = relalg.aggrfn sum @map1::@tmp_attr3 %arg0 : !db.decimal<15, 2>
-      %25 = relalg.addcol %23, @tmp_attr2({type = !db.decimal<15, 2>}) %24
-      relalg.return %25 : !relalg.tuple
+      %23 = relalg.aggrfn sum @map1::@tmp_attr3 %arg0 : !db.decimal<15, 2>
+      relalg.return %22, %23 : !db.decimal<15, 2>, !db.decimal<15, 2>
     }
-    %19 = relalg.map @map2 %18 (%arg0: !relalg.tuple){
+    %19 = relalg.map @map2 %18 computes : [@tmp_attr5({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuple){
       %22 = relalg.getcol %arg0 @aggr0::@tmp_attr2 : !db.decimal<15, 2>
       %23 = relalg.getcol %arg0 @aggr0::@tmp_attr4 : !db.decimal<15, 2>
       %24 = db.div %22 : !db.decimal<15, 2>, %23 : !db.decimal<15, 2>
-      %25 = relalg.addcol %arg0, @tmp_attr5({type = !db.decimal<15, 2>}) %24
-      relalg.return %25 : !relalg.tuple
+      relalg.return %24 : !db.decimal<15, 2>
     }
     %20 = relalg.sort %19 [(@map0::@tmp_attr0,asc)]
     %21 = relalg.materialize %20 [@map0::@tmp_attr0,@map2::@tmp_attr5] => ["o_year", "mkt_share"] : !dsa.table

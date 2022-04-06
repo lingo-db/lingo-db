@@ -26,7 +26,7 @@ module {
       %27 = db.and %10, %14, %17, %20, %23, %26 : i1, i1, i1, i1, i1, i1
       relalg.return %27 : i1
     }
-    %4 = relalg.map @map0 %3 (%arg0: !relalg.tuple){
+    %4 = relalg.map @map0 %3 computes : [@tmp_attr3({type = i32}),@tmp_attr1({type = i32})] (%arg0: !relalg.tuple){
       %8 = relalg.getcol %arg0 @orders::@o_orderpriority : !db.string
       %9 = db.constant("1-URGENT") : !db.string
       %10 = db.compare neq %8 : !db.string, %9 : !db.string
@@ -35,36 +35,32 @@ module {
       %13 = db.compare neq %11 : !db.string, %12 : !db.string
       %14 = db.and %10, %13 : i1, i1
       %15 = scf.if %14 -> (i32) {
-        %26 = db.constant(1 : i32) : i32
-        scf.yield %26 : i32
+        %24 = db.constant(1 : i32) : i32
+        scf.yield %24 : i32
       } else {
-        %26 = db.constant(0 : i32) : i32
-        scf.yield %26 : i32
+        %24 = db.constant(0 : i32) : i32
+        scf.yield %24 : i32
       }
-      %16 = relalg.addcol %arg0, @tmp_attr3({type = i32}) %15
-      %17 = relalg.getcol %16 @orders::@o_orderpriority : !db.string
-      %18 = db.constant("1-URGENT") : !db.string
-      %19 = db.compare eq %17 : !db.string, %18 : !db.string
-      %20 = relalg.getcol %16 @orders::@o_orderpriority : !db.string
-      %21 = db.constant("2-HIGH") : !db.string
-      %22 = db.compare eq %20 : !db.string, %21 : !db.string
-      %23 = db.or %19, %22 : i1, i1
-      %24 = scf.if %23 -> (i32) {
-        %26 = db.constant(1 : i32) : i32
-        scf.yield %26 : i32
+      %16 = relalg.getcol %arg0 @orders::@o_orderpriority : !db.string
+      %17 = db.constant("1-URGENT") : !db.string
+      %18 = db.compare eq %16 : !db.string, %17 : !db.string
+      %19 = relalg.getcol %arg0 @orders::@o_orderpriority : !db.string
+      %20 = db.constant("2-HIGH") : !db.string
+      %21 = db.compare eq %19 : !db.string, %20 : !db.string
+      %22 = db.or %18, %21 : i1, i1
+      %23 = scf.if %22 -> (i32) {
+        %24 = db.constant(1 : i32) : i32
+        scf.yield %24 : i32
       } else {
-        %26 = db.constant(0 : i32) : i32
-        scf.yield %26 : i32
+        %24 = db.constant(0 : i32) : i32
+        scf.yield %24 : i32
       }
-      %25 = relalg.addcol %16, @tmp_attr1({type = i32}) %24
-      relalg.return %25 : !relalg.tuple
+      relalg.return %15, %23 : i32, i32
     }
-    %5 = relalg.aggregation @aggr0 %4 [@lineitem::@l_shipmode] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %5 = relalg.aggregation @aggr0 %4 [@lineitem::@l_shipmode] computes : [@tmp_attr2({type = i32}),@tmp_attr0({type = i32})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %8 = relalg.aggrfn sum @map0::@tmp_attr3 %arg0 : i32
-      %9 = relalg.addcol %arg1, @tmp_attr2({type = i32}) %8
-      %10 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : i32
-      %11 = relalg.addcol %9, @tmp_attr0({type = i32}) %10
-      relalg.return %11 : !relalg.tuple
+      %9 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : i32
+      relalg.return %8, %9 : i32, i32
     }
     %6 = relalg.sort %5 [(@lineitem::@l_shipmode,asc)]
     %7 = relalg.materialize %6 [@lineitem::@l_shipmode,@aggr0::@tmp_attr0,@aggr0::@tmp_attr2] => ["l_shipmode", "high_line_count", "low_line_count"] : !dsa.table

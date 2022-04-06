@@ -16,10 +16,10 @@ std::vector<mlir::Value> mlir::relalg::Translator::mergeRelationalBlock(mlir::Bl
       getColumnOp.replaceAllUsesWith(context.getValueForAttribute(&getColumnOp.attr().getColumn()));
       toErase.push_back(getColumnOp.getOperation());
    });
-   for (auto addColumnOp : source->getOps<mlir::relalg::AddColumnOp>()) {
+   /*for (auto addColumnOp : source->getOps<mlir::relalg::AddColumnOp>()) {
       context.setValueForAttribute(scope, &addColumnOp.attr().getColumn(), addColumnOp.val());
       toErase.push_back(addColumnOp.getOperation());
-   }
+   }*/
 
    dest->getOperations().splice(dest->end(), source->getOperations());
    for (auto* op : toErase) {

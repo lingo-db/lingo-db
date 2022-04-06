@@ -247,7 +247,7 @@ class ToSQL {
             }
             output << "\n from " << operatorName(op.rel().getDefiningOp());
          })
-         .Case<mlir::relalg::ReturnOp, mlir::func::ReturnOp, AddColumnOp, mlir::scf::YieldOp>([&](mlir::Operation* others) {
+         .Case<mlir::relalg::ReturnOp, mlir::func::ReturnOp, mlir::scf::YieldOp>([&](mlir::Operation* others) {
 
          })
          .Default([&](mlir::Operation* others) {
@@ -446,11 +446,13 @@ class ToSQL {
                   })
                   .Case<mlir::relalg::MapOp>([&](mlir::relalg::MapOp op) {
                      std::vector<std::pair<std::string, std::string>> mappings;
-                     op->walk([&](mlir::relalg::AddColumnOp addAttrOp) {
-                        auto attrName = attributeName(addAttrOp.attr().getColumn());
-                        auto attrVal = resolveVal(addAttrOp.val());
+                     auto returnOp = mlir::cast<mlir::relalg::ReturnOp>(op.getLambdaBlock().getTerminator());
+                     size_t i = 0;
+                     for (auto col : op.computed_cols()) {
+                        auto attrName = attributeName(col.cast<mlir::relalg::ColumnDefAttr>().getColumn());
+                        auto attrVal = resolveVal(returnOp.results()[i++]);
                         mappings.push_back({attrName, attrVal});
-                     });
+                     }
                      output << "select ";
                      auto first = true;
                      for (auto mapping : mappings) {
@@ -470,11 +472,13 @@ class ToSQL {
                      for (auto attr : op.group_by_cols()) {
                         groupByAttrs.push_back(attributeName(attr.dyn_cast_or_null<mlir::relalg::ColumnRefAttr>().getColumn()));
                      }
-                     op->walk([&](mlir::relalg::AddColumnOp addAttrOp) {
-                        auto attrName = attributeName(addAttrOp.attr().getColumn());
-                        auto attrVal = resolveVal(addAttrOp.val());
+                     auto returnOp = mlir::cast<mlir::relalg::ReturnOp>(op.aggr_func().front().getTerminator());
+                     size_t i = 0;
+                     for (auto col : op.computed_cols()) {
+                        auto attrName = attributeName(col.cast<mlir::relalg::ColumnDefAttr>().getColumn());
+                        auto attrVal = resolveVal(returnOp.results()[i++]);
                         mappings.push_back({attrName, attrVal});
-                     });
+                     }
                      output << "select ";
                      auto first = true;
                      for (auto attr : groupByAttrs) {

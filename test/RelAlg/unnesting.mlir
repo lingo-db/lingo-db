@@ -44,7 +44,7 @@ module @querymodule  {
   	//CHECK: %{{.*}} = relalg.crossproduct %{{.*}}, %1
   	//CHECK: %{{.*}} = relalg.selection %{{.*}}
   	//CHECK: relalg.return
-  	//CHECK: %{{.*}} = relalg.aggregation @aggr %{{.*}} [{{.*}},{{.*}}]
+  	//CHECK: %{{.*}} = relalg.aggregation @aggr %{{.*}}  [{{.*}},{{.*}}] computes : []
 	//CHECK: %{{.*}} = relalg.renaming @renaming %{{.*}}  renamed : [@renamed0({type = i32})=[@constrel::@attr1]]
 	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getcol %arg0 @constrel::@attr1 : i32
@@ -56,7 +56,7 @@ module @querymodule  {
 	    %5 = db.compare eq %3 : i32, %4 : i32
 		relalg.return %5 : i1
   	}
-  	%20 = relalg.aggregation @aggr %2 [@constrel2::@attr1] (%arg0: !relalg.tuplestream) {
+  	%20 = relalg.aggregation @aggr %2 [@constrel2::@attr1] computes:[] (%arg0: !relalg.tuplestream) {
 		relalg.return
 	}
   	%3 = relalg.join %0, %20 (%arg0: !relalg.tuple) {

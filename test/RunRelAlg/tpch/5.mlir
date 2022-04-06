@@ -50,19 +50,17 @@ module {
       %43 = db.and %18, %21, %24, %27, %30, %33, %36, %39, %42 : i1, i1, i1, i1, i1, i1, i1, i1, i1
       relalg.return %43 : i1
     }
-    %12 = relalg.map @map0 %11 (%arg0: !relalg.tuple){
+    %12 = relalg.map @map0 %11 computes : [@tmp_attr1({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuple){
       %16 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %17 = db.constant(1 : i32) : !db.decimal<15, 2>
       %18 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
       %19 = db.sub %17 : !db.decimal<15, 2>, %18 : !db.decimal<15, 2>
       %20 = db.mul %16 : !db.decimal<15, 2>, %19 : !db.decimal<15, 2>
-      %21 = relalg.addcol %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %20
-      relalg.return %21 : !relalg.tuple
+      relalg.return %20 : !db.decimal<15, 2>
     }
-    %13 = relalg.aggregation @aggr0 %12 [@nation::@n_name] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %13 = relalg.aggregation @aggr0 %12 [@nation::@n_name] computes : [@tmp_attr0({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %16 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
-      %17 = relalg.addcol %arg1, @tmp_attr0({type = !db.decimal<15, 2>}) %16
-      relalg.return %17 : !relalg.tuple
+      relalg.return %16 : !db.decimal<15, 2>
     }
     %14 = relalg.sort %13 [(@aggr0::@tmp_attr0,desc)]
     %15 = relalg.materialize %14 [@nation::@n_name,@aggr0::@tmp_attr0] => ["n_name", "revenue"] : !dsa.table

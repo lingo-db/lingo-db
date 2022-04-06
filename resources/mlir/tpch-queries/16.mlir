@@ -38,11 +38,10 @@ module {
       %33 = db.and %9, %12, %16, %26, %32 : i1, i1, i1, i1, i1
       relalg.return %33 : i1
     }
-    %4 = relalg.aggregation @aggr0 %3 [@part::@p_brand,@part::@p_type,@part::@p_size] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %4 = relalg.aggregation @aggr0 %3 [@part::@p_brand,@part::@p_type,@part::@p_size] computes : [@tmp_attr0({type = i64})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %7 = relalg.projection distinct [@partsupp::@ps_suppkey] %arg0
       %8 = relalg.aggrfn count @partsupp::@ps_suppkey %7 : i64
-      %9 = relalg.addcol %arg1, @tmp_attr0({type = i64}) %8
-      relalg.return %9 : !relalg.tuple
+      relalg.return %8 : i64
     }
     %5 = relalg.sort %4 [(@aggr0::@tmp_attr0,desc),(@part::@p_brand,asc),(@part::@p_type,asc),(@part::@p_size,asc)]
     %6 = relalg.materialize %5 [@part::@p_brand,@part::@p_type,@part::@p_size,@aggr0::@tmp_attr0] => ["p_brand", "p_type", "p_size", "supplier_cnt"] : !dsa.table

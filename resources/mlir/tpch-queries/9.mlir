@@ -36,7 +36,7 @@ module {
       %37 = db.and %18, %21, %24, %27, %30, %33, %36 : i1, i1, i1, i1, i1, i1, i1
       relalg.return %37 : i1
     }
-    %12 = relalg.map @map0 %11 (%arg0: !relalg.tuple){
+    %12 = relalg.map @map0 %11 computes : [@tmp_attr1({type = !db.decimal<15, 2>}),@tmp_attr0({type = i64})] (%arg0: !relalg.tuple){
       %16 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %17 = db.constant(1 : i32) : !db.decimal<15, 2>
       %18 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
@@ -46,17 +46,14 @@ module {
       %22 = relalg.getcol %arg0 @lineitem::@l_quantity : !db.decimal<15, 2>
       %23 = db.mul %21 : !db.decimal<15, 2>, %22 : !db.decimal<15, 2>
       %24 = db.sub %20 : !db.decimal<15, 2>, %23 : !db.decimal<15, 2>
-      %25 = relalg.addcol %arg0, @tmp_attr1({type = !db.decimal<15, 2>}) %24
-      %26 = db.constant("year") : !db.char<4>
-      %27 = relalg.getcol %25 @orders::@o_orderdate : !db.date<day>
-      %28 = db.runtime_call "ExtractFromDate"(%26, %27) : (!db.char<4>, !db.date<day>) -> i64
-      %29 = relalg.addcol %25, @tmp_attr0({type = i64}) %28
-      relalg.return %29 : !relalg.tuple
+      %25 = db.constant("year") : !db.char<4>
+      %26 = relalg.getcol %arg0 @orders::@o_orderdate : !db.date<day>
+      %27 = db.runtime_call "ExtractFromDate"(%25, %26) : (!db.char<4>, !db.date<day>) -> i64
+      relalg.return %24, %27 : !db.decimal<15, 2>, i64
     }
-    %13 = relalg.aggregation @aggr0 %12 [@nation::@n_name,@map0::@tmp_attr0] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %13 = relalg.aggregation @aggr0 %12 [@nation::@n_name,@map0::@tmp_attr0] computes : [@tmp_attr2({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %16 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
-      %17 = relalg.addcol %arg1, @tmp_attr2({type = !db.decimal<15, 2>}) %16
-      relalg.return %17 : !relalg.tuple
+      relalg.return %16 : !db.decimal<15, 2>
     }
     %14 = relalg.sort %13 [(@nation::@n_name,asc),(@map0::@tmp_attr0,desc)]
     %15 = relalg.materialize %14 [@nation::@n_name,@map0::@tmp_attr0,@aggr0::@tmp_attr2] => ["nation", "o_year", "sum_profit"] : !dsa.table

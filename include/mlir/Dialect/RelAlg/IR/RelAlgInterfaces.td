@@ -120,7 +120,7 @@ return mlir::relalg::detail::getFreeColumns(this->getOperation());
 InterfaceMethod<
         "get all columns that are created by this operator",
         "mlir::relalg::ColumnSet", "getCreatedColumns",(ins ),"", /*defaultImplementation=*/[{
-return mlir::relalg::detail::getCreatedColumns(this->getOperation());
+return mlir::relalg::ColumnSet();
 }]
 >
 ];

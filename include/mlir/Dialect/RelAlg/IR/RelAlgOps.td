@@ -156,10 +156,13 @@ let assemblyFormat = [{ $rel custom<CustRegion>($predicate) attr-dict-with-keywo
 }
 def MapOp : RelAlg_Op<"map",[NoSideEffect,Operator,TupleLamdaOperator,UnaryOperator]> {
 let summary = "map operation";
-let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_TupleStream:$rel);
+let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_TupleStream:$rel,ArrayAttr:$computed_cols);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$predicate);
-let assemblyFormat = [{ custom<AttrNS>($sym_name) $rel custom<CustRegion>($predicate) attr-dict-with-keyword }];
+let extraClassDeclaration = [{
+ColumnSet getCreatedColumns();
+}];
+let assemblyFormat = [{ custom<AttrNS>($sym_name) $rel `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($predicate) attr-dict-with-keyword }];
 
 }
 def LimitOp : RelAlg_Op<"limit",[NoSideEffect,Operator,UnaryOperator]> {
@@ -199,14 +202,15 @@ ColumnSet getAvailableColumns();
 
 def AggregationOp : RelAlg_Op<"aggregation",[NoSideEffect,Operator,UnaryOperator]> {
 let summary = "aggregation operation";
-let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_TupleStream:$rel, ArrayAttr:$group_by_cols);
+let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_TupleStream:$rel, ArrayAttr:$group_by_cols, ArrayAttr:$computed_cols);
 let results = (outs RelAlg_TupleStream:$result);
 let regions = (region SizedRegion<1>:$aggr_func);
 let extraClassDeclaration = [{
 ColumnSet getUsedColumns();
 ColumnSet getAvailableColumns();
+ColumnSet getCreatedColumns();
 }];
-let assemblyFormat = [{ custom<AttrNS>($sym_name) $rel custom<CustRefArr>($group_by_cols) custom<CustRegion>($aggr_func) attr-dict-with-keyword }];
+let assemblyFormat = [{ custom<AttrNS>($sym_name) $rel custom<CustRefArr>($group_by_cols) `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($aggr_func)  attr-dict-with-keyword }];
 }
 def SortOp : RelAlg_Op<"sort",[NoSideEffect,Operator,UnaryOperator]> {
 let summary = "sort operation";
@@ -352,11 +356,7 @@ let results = (outs AnyType : $res);
 let assemblyFormat = [{  $tuple custom<CustRef>($attr) `:` type($res) attr-dict }];
 
 }
-def AddColumnOp : RelAlg_Op<"addcol"> {
-let summary = "add column operation";
-let arguments = (ins RelAlg_Tuple:$tuple,ColumnDefAttr:$attr, AnyType:$val);
-let results = (outs RelAlg_Tuple:$tuple_out);
-}
+
 
 def AggrFuncOp : RelAlg_Op<"aggrfn"> {
 let summary = "aggregation operation";

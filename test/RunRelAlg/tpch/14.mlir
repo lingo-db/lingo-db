@@ -20,45 +20,40 @@ module {
       %17 = db.and %10, %13, %16 : i1, i1, i1
       relalg.return %17 : i1
     }
-    %4 = relalg.map @map0 %3 (%arg0: !relalg.tuple){
+    %4 = relalg.map @map0 %3 computes : [@tmp_attr3({type = !db.decimal<15, 2>}),@tmp_attr1({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuple){
       %8 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %9 = db.constant(1 : i32) : !db.decimal<15, 2>
       %10 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
       %11 = db.sub %9 : !db.decimal<15, 2>, %10 : !db.decimal<15, 2>
       %12 = db.mul %8 : !db.decimal<15, 2>, %11 : !db.decimal<15, 2>
-      %13 = relalg.addcol %arg0, @tmp_attr3({type = !db.decimal<15, 2>}) %12
-      %14 = relalg.getcol %13 @part::@p_type : !db.string
-      %15 = db.constant("PROMO%") : !db.string
-      %16 = db.compare like %14 : !db.string, %15 : !db.string
-      %17 = scf.if %16 -> (!db.decimal<15, 2>) {
-        %19 = relalg.getcol %13 @lineitem::@l_extendedprice : !db.decimal<15, 2>
-        %20 = db.constant(1 : i32) : !db.decimal<15, 2>
-        %21 = relalg.getcol %13 @lineitem::@l_discount : !db.decimal<15, 2>
-        %22 = db.sub %20 : !db.decimal<15, 2>, %21 : !db.decimal<15, 2>
-        %23 = db.mul %19 : !db.decimal<15, 2>, %22 : !db.decimal<15, 2>
-        scf.yield %23 : !db.decimal<15, 2>
+      %13 = relalg.getcol %arg0 @part::@p_type : !db.string
+      %14 = db.constant("PROMO%") : !db.string
+      %15 = db.compare like %13 : !db.string, %14 : !db.string
+      %16 = scf.if %15 -> (!db.decimal<15, 2>) {
+        %17 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
+        %18 = db.constant(1 : i32) : !db.decimal<15, 2>
+        %19 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
+        %20 = db.sub %18 : !db.decimal<15, 2>, %19 : !db.decimal<15, 2>
+        %21 = db.mul %17 : !db.decimal<15, 2>, %20 : !db.decimal<15, 2>
+        scf.yield %21 : !db.decimal<15, 2>
       } else {
-        %19 = db.constant(0 : i32) : !db.decimal<15, 2>
-        scf.yield %19 : !db.decimal<15, 2>
+        %17 = db.constant(0 : i32) : !db.decimal<15, 2>
+        scf.yield %17 : !db.decimal<15, 2>
       }
-      %18 = relalg.addcol %13, @tmp_attr1({type = !db.decimal<15, 2>}) %17
-      relalg.return %18 : !relalg.tuple
+      relalg.return %12, %16 : !db.decimal<15, 2>, !db.decimal<15, 2>
     }
-    %5 = relalg.aggregation @aggr0 %4 [] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+    %5 = relalg.aggregation @aggr0 %4 [] computes : [@tmp_attr2({type = !db.nullable<!db.decimal<15, 2>>}),@tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %8 = relalg.aggrfn sum @map0::@tmp_attr3 %arg0 : !db.nullable<!db.decimal<15, 2>>
-      %9 = relalg.addcol %arg1, @tmp_attr2({type = !db.nullable<!db.decimal<15, 2>>}) %8
-      %10 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 2>>
-      %11 = relalg.addcol %9, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %10
-      relalg.return %11 : !relalg.tuple
+      %9 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 2>>
+      relalg.return %8, %9 : !db.nullable<!db.decimal<15, 2>>, !db.nullable<!db.decimal<15, 2>>
     }
-    %6 = relalg.map @map1 %5 (%arg0: !relalg.tuple){
+    %6 = relalg.map @map1 %5 computes : [@tmp_attr4({type = !db.nullable<!db.decimal<15, 2>>})] (%arg0: !relalg.tuple){
       %8 = db.constant("100.00") : !db.decimal<15, 2>
       %9 = relalg.getcol %arg0 @aggr0::@tmp_attr0 : !db.nullable<!db.decimal<15, 2>>
       %10 = db.mul %8 : !db.decimal<15, 2>, %9 : !db.nullable<!db.decimal<15, 2>>
       %11 = relalg.getcol %arg0 @aggr0::@tmp_attr2 : !db.nullable<!db.decimal<15, 2>>
       %12 = db.div %10 : !db.nullable<!db.decimal<15, 2>>, %11 : !db.nullable<!db.decimal<15, 2>>
-      %13 = relalg.addcol %arg0, @tmp_attr4({type = !db.nullable<!db.decimal<15, 2>>}) %12
-      relalg.return %13 : !relalg.tuple
+      relalg.return %12 : !db.nullable<!db.decimal<15, 2>>
     }
     %7 = relalg.materialize %6 [@map1::@tmp_attr4] => ["promo_revenue"] : !dsa.table
     return %7 : !dsa.table

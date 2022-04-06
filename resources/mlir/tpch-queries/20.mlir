@@ -34,17 +34,15 @@ module {
           %44 = db.and %34, %37, %40, %43 : i1, i1, i1, i1
           relalg.return %44 : i1
         }
-        %26 = relalg.aggregation @aggr0 %25 [] (%arg2: !relalg.tuplestream,%arg3: !relalg.tuple){
+        %26 = relalg.aggregation @aggr0 %25 [] computes : [@tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>})] (%arg2: !relalg.tuplestream,%arg3: !relalg.tuple){
           %32 = relalg.aggrfn sum @lineitem::@l_quantity %arg2 : !db.nullable<!db.decimal<15, 2>>
-          %33 = relalg.addcol %arg3, @tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>}) %32
-          relalg.return %33 : !relalg.tuple
+          relalg.return %32 : !db.nullable<!db.decimal<15, 2>>
         }
-        %27 = relalg.map @map0 %26 (%arg2: !relalg.tuple){
+        %27 = relalg.map @map0 %26 computes : [@tmp_attr1({type = !db.nullable<!db.decimal<15, 2>>})] (%arg2: !relalg.tuple){
           %32 = db.constant("0.5") : !db.decimal<15, 2>
           %33 = relalg.getcol %arg2 @aggr0::@tmp_attr0 : !db.nullable<!db.decimal<15, 2>>
           %34 = db.mul %32 : !db.decimal<15, 2>, %33 : !db.nullable<!db.decimal<15, 2>>
-          %35 = relalg.addcol %arg2, @tmp_attr1({type = !db.nullable<!db.decimal<15, 2>>}) %34
-          relalg.return %35 : !relalg.tuple
+          relalg.return %34 : !db.nullable<!db.decimal<15, 2>>
         }
         %28 = relalg.getscalar @map0::@tmp_attr1 %27 : !db.nullable<!db.decimal<15, 2>>
         %29 = db.cast %23 : i32 -> !db.decimal<15, 2>
