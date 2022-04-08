@@ -45,32 +45,16 @@ class StringCastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
             }
          }
       } else if (auto intWidth = getIntegerWidth(scalarSourceType, false)) {
-         if (scalarTargetType.isa<db::StringType>()) {
-            if (intWidth < 64) {
-               valueToCast = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), valueToCast);
-            }
-            result = runtime::StringRuntime::fromInt(rewriter, loc)({valueToCast})[0];
-         }
+         result = runtime::StringRuntime::fromInt(rewriter, loc)({valueToCast})[0];
       } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
-         if (scalarTargetType.isa<db::StringType>()) {
-            result = floatType.getWidth() == 32 ? runtime::StringRuntime::fromFloat32(rewriter, loc)({valueToCast})[0] : runtime::StringRuntime::fromFloat64(rewriter, loc)({valueToCast})[0];
-         }
+         result = floatType.getWidth() == 32 ? runtime::StringRuntime::fromFloat32(rewriter, loc)({valueToCast})[0] : runtime::StringRuntime::fromFloat64(rewriter, loc)({valueToCast})[0];
       } else if (auto decimalSourceType = scalarSourceType.dyn_cast_or_null<db::DecimalType>()) {
-         if (scalarTargetType.isa<db::StringType>()) {
             auto scale = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalSourceType.getS()));
-            if (typeConverter->convertType(decimalSourceType).cast<mlir::IntegerType>().getWidth() < 128) {
-               valueToCast = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), valueToCast);
-            }
             result = runtime::StringRuntime::fromDecimal(rewriter, loc)({valueToCast, scale})[0];
-         }
       } else if (auto charType = scalarSourceType.dyn_cast_or_null<db::CharType>()) {
-         if (scalarTargetType.isa<db::StringType>()) {
-            if (charType.getBytes() < 8) {
-               valueToCast = rewriter.create<arith::ExtSIOp>(loc, rewriter.getI64Type(), valueToCast);
-            }
             auto bytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(charType.getBytes()));
             result = runtime::StringRuntime::fromChar(rewriter, loc)({valueToCast, bytes})[0];
-         }
+
       }
       if (result) {
          rewriter.replaceOp(castOp, result);

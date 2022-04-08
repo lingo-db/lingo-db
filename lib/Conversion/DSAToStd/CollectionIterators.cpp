@@ -90,10 +90,7 @@ class TableIterator2 : public WhileIterator {
          builder.setInsertionPointToStart(&iterator.getParentRegion()->getParentOfType<mlir::FuncOp>().body().front());
          recordBatchInfoPtr = builder.create<mlir::util::AllocaOp>(loc, mlir::util::RefType::get(builder.getContext(), typeConverter->convertType(recordBatchType)), mlir::Value());
       }
-
-      auto i8PtrType = mlir::util::RefType::get(builder.getContext(), builder.getI8Type());
-      auto ptr2 = builder.create<util::GenericMemrefCastOp>(loc, i8PtrType, recordBatchInfoPtr);
-      runtime::DataSourceIteration::access(builder,loc)({iterator,ptr2});
+      runtime::DataSourceIteration::access(builder,loc)({iterator,recordBatchInfoPtr});
       return builder.create<mlir::util::LoadOp>(loc, typeConverter->convertType(recordBatchType), recordBatchInfoPtr, mlir::Value());
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
@@ -223,8 +220,7 @@ class VectorIterator : public ForIterator {
       len = unpacked.getResult(0);
    }
    virtual Value getElement(OpBuilder& builder, Value index) override {
-      Value loaded = builder.create<util::LoadOp>(loc, elementType, values, index);
-      return loaded;
+      return builder.create<util::LoadOp>(loc, elementType, values, index);
    }
 };
 class ValueOnlyAggrHTIterator : public ForIterator {

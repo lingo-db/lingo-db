@@ -19,7 +19,6 @@ class Translator {
    Operator op;
    std::vector<std::unique_ptr<Translator>> children;
    mlir::relalg::ColumnSet requiredAttributes;
-   const mlir::function_ref<void(mlir::OpBuilder&, mlir::Location)> noBuilder = nullptr;
 
    std::vector<mlir::Value> mergeRelationalBlock(mlir::Block* dest, mlir::Operation* op, mlir::function_ref<mlir::Block*(mlir::Operation*)> getBlockFn, TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope);
 

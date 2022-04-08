@@ -50,10 +50,9 @@ class SortOpLowering : public OpConversionPattern<mlir::dsa::SortOp> {
          rewriter.eraseOp(terminator);
       }
 
-      auto rawPtr = rewriter.create<util::GenericMemrefCastOp>(sortOp.getLoc(), ptrType, adaptor.toSort());
 
       Value functionPointer = rewriter.create<mlir::func::ConstantOp>(sortOp->getLoc(), funcOp.type(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.sym_name())));
-      runtime::Vector::sort(rewriter, sortOp->getLoc())({rawPtr, functionPointer});
+      runtime::Vector::sort(rewriter, sortOp->getLoc())({adaptor.toSort(), functionPointer});
       rewriter.eraseOp(sortOp);
       return success();
    }

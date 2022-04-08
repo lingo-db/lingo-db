@@ -2,6 +2,8 @@
 
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/util/UtilDialect.h"
+#include "mlir/Dialect/util/UtilTypes.h"
+#include "mlir/Dialect/util/UtilOps.h"
 static mlir::Value convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t) {
    if (v.getType() == t) return v;
    mlir::Type currentType = v.getType();
@@ -16,6 +18,9 @@ static mlir::Value convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::T
       } else {
          return builder.create<mlir::arith::TruncIOp>(builder.getUnknownLoc(), t, v);
       }
+   }
+   if(t.isa<mlir::util::RefType>()&&currentType.isa<mlir::util::RefType>()){
+      return builder.create<mlir::util::GenericMemrefCastOp>(builder.getUnknownLoc(),t,v);
    }
    return v; //todo
 }

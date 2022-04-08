@@ -158,8 +158,7 @@ class HtInsertLowering : public OpConversionPattern<mlir::dsa::HashtableInsert> 
          Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, len, capacityInitial);
          rewriter.create<scf::IfOp>(
             loc, TypeRange(), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
-               Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type()), adaptor.ht());
-               runtime::Hashtable::resize(b,loc)(downCasted);
+               runtime::Hashtable::resize(b,loc)(adaptor.ht());
                b.create<scf::YieldOp>(loc); });
 
          Value htAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), htType), adaptor.ht(), 0);
@@ -313,8 +312,7 @@ class LazyJHtInsertLowering : public OpConversionPattern<mlir::dsa::HashtableIns
       Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, len, capacity);
       rewriter.create<scf::IfOp>(
          loc, TypeRange({}), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
-            Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type()), adaptor.ht());
-            runtime::LazyJoinHashtable::resize(b,loc)(downCasted);
+            runtime::LazyJoinHashtable::resize(b,loc)(adaptor.ht());
             b.create<scf::YieldOp>(loc); });
       Value valuesAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(getContext(), adaptor.ht().getType().cast<mlir::util::RefType>().getElementType().cast<mlir::TupleType>().getType(4)), adaptor.ht(), 4);
       Value castedValuesAddress = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), valuesType), valuesAddress);
@@ -336,8 +334,7 @@ class FinalizeLowering : public OpConversionPattern<mlir::dsa::Finalize> {
       if (!finalizeOp.ht().getType().isa<mlir::dsa::JoinHashtableType>()) {
          return failure();
       }
-      Value downCasted = rewriter.create<util::GenericMemrefCastOp>(finalizeOp->getLoc(), mlir::util::RefType::get(rewriter.getContext(), rewriter.getI8Type()), adaptor.ht());
-      runtime::LazyJoinHashtable::finalize(rewriter, finalizeOp->getLoc())(downCasted);
+      runtime::LazyJoinHashtable::finalize(rewriter, finalizeOp->getLoc())(adaptor.ht());
       rewriter.eraseOp(finalizeOp);
       return success();
    }
@@ -376,8 +373,7 @@ class DSAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
       Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, len, capacity);
       rewriter.create<scf::IfOp>(
          loc, TypeRange({}), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
-            Value downCasted = b.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(b.getContext(),b.getI8Type()), builderVal);
-            runtime::Vector::resize(b,loc)({downCasted});
+            runtime::Vector::resize(b,loc)({builderVal});
             b.create<scf::YieldOp>(loc); });
       Value valuesAddress = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), valuesType), builderVal, 2);
       auto values = rewriter.create<mlir::util::LoadOp>(loc, valuesType, valuesAddress, Value());
