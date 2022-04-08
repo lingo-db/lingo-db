@@ -230,10 +230,12 @@ Runner::Runner(RunMode mode) : context(nullptr), runMode(mode) {
    if (mode == RunMode::DEBUGGING || mode == RunMode::PERF) {
       mlir::Operation::setTagLocationHook(tagLocHook);
    }
+   RunnerContext* ctxt = new RunnerContext;
+   ctxt->context.disableMultithreading();
+   this->context = (void*) ctxt;
 }
 bool Runner::load(std::string file) {
-   RunnerContext* ctxt = new RunnerContext;
-   this->context = (void*) ctxt;
+   RunnerContext* ctxt = (RunnerContext*) this->context;
 
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
@@ -261,9 +263,7 @@ bool Runner::load(std::string file) {
    return true;
 }
 bool Runner::loadString(std::string input) {
-   RunnerContext* ctxt = new RunnerContext;
-   this->context = (void*) ctxt;
-
+   RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
@@ -467,7 +467,7 @@ class WrappedExecutionEngine {
       auto debuggingLevel = runMode == RunMode::DEBUGGING ? mlir::LLVM::detail::DebuggingLevel::VARIABLES : (runMode == RunMode::PERF ? mlir::LLVM::detail::DebuggingLevel::LINES : mlir::LLVM::detail::DebuggingLevel::OFF);
       auto convertFn = [&](mlir::ModuleOp module, llvm::LLVMContext& context) { return convertMLIRModule(module, context, debuggingLevel); };
       auto optimizeFn = [&](llvm::Module* module) -> llvm::Error {if (runMode==RunMode::DEBUGGING){return llvm::Error::success();}else{return optimizeModule(module);} };
-      auto maybeEngine = mlir::ExecutionEngine::create(module, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = jitCodeGenLevel});
+      auto maybeEngine = mlir::ExecutionEngine::create(module, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = jitCodeGenLevel, .enableObjectCache=true});
       assert(maybeEngine && "failed to construct an execution engine");
       engine = std::move(maybeEngine.get());
 

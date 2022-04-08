@@ -248,7 +248,6 @@ class LoadOpLowering : public OpConversionPattern<mlir::util::LoadOp> {
       if (adaptor.idx()) {
          elementPtr = rewriter.create<LLVM::GEPOp>(op->getLoc(), elementPtr.getType(), elementPtr, adaptor.idx());
       }
-      elementPtr.getType().dump();
       rewriter.replaceOpWithNewOp<LLVM::LoadOp>(op, elementPtr);
       return success();
    }

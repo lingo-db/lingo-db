@@ -80,17 +80,17 @@ class StringCmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
          return failure();
       }
       if (cmpOp.predicate() == db::DBCmpPredicate::like) {
-         if (auto* defOp = cmpOp.right().getDefiningOp()) {
-            if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(defOp)) {
-               std::string likeCond = constOp.getValue().cast<mlir::StringAttr>().str();
+         if (auto* defOp = adaptor.right().getDefiningOp()) {
+            if (auto constOp = mlir::dyn_cast_or_null<mlir::util::CreateConstVarLen>(defOp)) {
+               std::string likeCond = constOp.str().str();
                if (likeCond.ends_with('%') && stringIsOk(likeCond.substr(0, likeCond.size() - 1))) {
-                  auto newConst = rewriter.create<mlir::db::ConstantOp>(cmpOp->getLoc(), mlir::db::StringType::get(getContext()), rewriter.getStringAttr(likeCond.substr(0, likeCond.size() - 1)));
-                  Value res = runtime::StringRuntime::startsWith(rewriter, cmpOp->getLoc())({adaptor.left(), rewriter.getRemappedValue(newConst)})[0];
+                  auto newConst = rewriter.create<mlir::util::CreateConstVarLen>(cmpOp->getLoc(), mlir::util::VarLen32Type::get(getContext()), rewriter.getStringAttr(likeCond.substr(0, likeCond.size() - 1)));
+                  Value res = runtime::StringRuntime::startsWith(rewriter, cmpOp->getLoc())({adaptor.left(), newConst})[0];
                   rewriter.replaceOp(cmpOp, res);
                   return success();
                } else if (likeCond.starts_with('%') && stringIsOk(likeCond.substr(1, likeCond.size() - 1))) {
-                  auto newConst = rewriter.create<mlir::db::ConstantOp>(cmpOp->getLoc(), mlir::db::StringType::get(getContext()), rewriter.getStringAttr(likeCond.substr(1, likeCond.size() - 1)));
-                  Value res = runtime::StringRuntime::endsWith(rewriter, cmpOp->getLoc())({adaptor.left(), rewriter.getRemappedValue(newConst)})[0];
+                  auto newConst = rewriter.create<mlir::util::CreateConstVarLen>(cmpOp->getLoc(), mlir::util::VarLen32Type::get(getContext()), rewriter.getStringAttr(likeCond.substr(1, likeCond.size() - 1)));
+                  Value res = runtime::StringRuntime::endsWith(rewriter, cmpOp->getLoc())({adaptor.left(), newConst})[0];
                   rewriter.replaceOp(cmpOp, res);
                   return success();
                }

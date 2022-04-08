@@ -47,28 +47,29 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 static bool hasDBType(TypeConverter& converter, TypeRange types) {
    return llvm::any_of(types, [&converter](mlir::Type t) { auto converted = converter.convertType(t);return converted&&converted!=t; });
 }
-mlir::LogicalResult safelyMoveRegion(ConversionPatternRewriter& rewriter, mlir::TypeConverter& typeConverter, mlir::Region& source, mlir::Region& target) {
-   rewriter.inlineRegionBefore(source, target, target.end());
-   {
-      if (!target.empty()) {
-         source.push_back(new Block);
-         std::vector<mlir::Location> locs;
-         for (size_t i = 0; i < target.front().getArgumentTypes().size(); i++) {
-            locs.push_back(rewriter.getUnknownLoc());
-         }
-         source.front().addArguments(target.front().getArgumentTypes(), locs);
-         mlir::OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(&source.front());
-         rewriter.create<mlir::dsa::YieldOp>(rewriter.getUnknownLoc());
-      }
-   }
-   if (failed(rewriter.convertRegionTypes(&target, typeConverter))) {
-      return rewriter.notifyMatchFailure(source.getParentOp(), "could not convert body types");
-   }
-   return success();
-}
+
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
+   mlir::LogicalResult safelyMoveRegion(ConversionPatternRewriter& rewriter, mlir::TypeConverter& typeConverter, mlir::Region& source, mlir::Region& target) const {
+      rewriter.inlineRegionBefore(source, target, target.end());
+      {
+         if (!target.empty()) {
+            source.push_back(new Block);
+            std::vector<mlir::Location> locs;
+            for (size_t i = 0; i < target.front().getArgumentTypes().size(); i++) {
+               locs.push_back(rewriter.getUnknownLoc());
+            }
+            source.front().addArguments(target.front().getArgumentTypes(), locs);
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(&source.front());
+            rewriter.create<mlir::dsa::YieldOp>(rewriter.getUnknownLoc());
+         }
+      }
+      if (failed(rewriter.convertRegionTypes(&target, typeConverter))) {
+         return rewriter.notifyMatchFailure(source.getParentOp(), "could not convert body types");
+      }
+      return success();
+   }
    public:
    explicit SimpleTypeConversionPattern(TypeConverter& typeConverter, MLIRContext* context)
       : ConversionPattern(typeConverter, Op::getOperationName(), 1, context) {}
@@ -216,6 +217,7 @@ void DBToStdLoweringPass::runOnOperation() {
    target.addLegalDialect<func::FuncDialect>();
    target.addLegalDialect<memref::MemRefDialect>();
    TypeConverter typeConverter;
+   typeConverter.addConversion([&](mlir::Type type) { return type; });
 
    auto opIsWithoutDBTypes = [&](Operation* op) { return !hasDBType(typeConverter, op->getOperandTypes()) && !hasDBType(typeConverter, op->getResultTypes()); };
    target.addDynamicallyLegalDialect<scf::SCFDialect>(opIsWithoutDBTypes);
@@ -254,12 +256,6 @@ void DBToStdLoweringPass::runOnOperation() {
       return convertTuple(tupleType, typeConverter);
    });
 
-   typeConverter.addConversion([&](mlir::IntegerType iType) { return iType; });
-   typeConverter.addConversion([&](mlir::IndexType iType) { return iType; });
-   typeConverter.addConversion([&](mlir::dsa::FlagType flagType) { return flagType; });
-   typeConverter.addConversion([&](mlir::dsa::TableType flagType) { return flagType; });
-   typeConverter.addConversion([&](mlir::FloatType fType) { return fType; });
-   typeConverter.addConversion([&](mlir::MemRefType refType) { return refType; });
    auto convertPhysical = [&](mlir::TupleType tuple) -> mlir::TupleType {
       std::vector<mlir::Type> types;
       for (auto t : tuple.getTypes()) {
@@ -284,18 +280,6 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::dsa::JoinHashtableType r) { return mlir::dsa::JoinHashtableType::get(r.getContext(), typeConverter.convertType(r.getKeyType()).cast<mlir::TupleType>(), typeConverter.convertType(r.getValType()).cast<mlir::TupleType>()); });
    typeConverter.addConversion([&](mlir::dsa::AggregationHashtableType r) { return mlir::dsa::AggregationHashtableType::get(r.getContext(), typeConverter.convertType(r.getKeyType()).cast<mlir::TupleType>(), typeConverter.convertType(r.getValType()).cast<mlir::TupleType>()); });
    typeConverter.addConversion([&](mlir::dsa::TableBuilderType r) { return mlir::dsa::TableBuilderType::get(r.getContext(), typeConverter.convertType(r.getRowType()).cast<mlir::TupleType>()); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::DateType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, dsa::RecordBatchType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addTargetMaterialization([&](OpBuilder&, dsa::RecordBatchType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::DecimalType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::CharType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::StringType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::TimestampType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::IntervalType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, IntegerType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, db::NullableType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addTargetMaterialization([&](OpBuilder&, db::NullableType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, TupleType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
 
    RewritePatternSet patterns(&getContext());
 

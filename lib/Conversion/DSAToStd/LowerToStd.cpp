@@ -97,6 +97,8 @@ void DSAToStdLoweringPass::runOnOperation() {
    target.addLegalDialect<func::FuncDialect>();
    target.addLegalDialect<memref::MemRefDialect>();
    TypeConverter typeConverter;
+   typeConverter.addConversion([&](mlir::Type type) { return type; });
+
 
    auto opIsWithoutDSATypes = [&](Operation* op) { return !hasDSAType(typeConverter, op->getOperandTypes()) && !hasDSAType(typeConverter, op->getResultTypes()); };
    target.addDynamicallyLegalDialect<scf::SCFDialect>(opIsWithoutDSATypes);
@@ -139,13 +141,6 @@ void DSAToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::dsa::TableBuilderType tableType) {
       return mlir::util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));
    });
-   typeConverter.addConversion([&](mlir::IntegerType iType) { return iType; });
-   typeConverter.addConversion([&](mlir::IndexType iType) { return iType; });
-   typeConverter.addConversion([&](mlir::FloatType fType) { return fType; });
-   typeConverter.addConversion([&](mlir::MemRefType refType) { return refType; });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, IntegerType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, dsa::TableType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
-   typeConverter.addSourceMaterialization([&](OpBuilder&, TupleType type, ValueRange valueRange, Location loc) { return valueRange.front(); });
 
    RewritePatternSet patterns(&getContext());
 
