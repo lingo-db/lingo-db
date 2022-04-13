@@ -137,6 +137,13 @@ def LoadOp  : Util_Op<"load",[DeclareOpInterfaceMethods<MemoryEffectsOpInterface
 let arguments = (ins RefType:$ref,Optional<Index>:$idx);
 let results=(outs AnyType:$val);
 let assemblyFormat = "$ref `[` $idx `]` `:`type($ref) `->` type($val) attr-dict";
+let builders = [
+        OpBuilder<(ins "Value":$ref, "Value":$idx), [{
+    build($_builder, $_state, ref.getType().cast<mlir::util::RefType>().getElementType(), ref, idx);
+}]>,OpBuilder<(ins "Value":$ref), [{
+        build($_builder, $_state, ref.getType().cast<mlir::util::RefType>().getElementType(), ref, mlir::Value());
+    }]>
+];
 }
 def ArrayElementPtrOp  : Util_Op<"arrayelementptr",[NoSideEffect]> {
     let arguments = (ins RefType:$ref,Index:$idx);
