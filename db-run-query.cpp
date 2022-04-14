@@ -43,10 +43,15 @@ int main(int argc, char** argv) {
    runner::Runner runner(runMode);
    runner.load(inputFileName);
    runner.optimize(*context.db);
-   // runner.dump();
-   runner.lower();
    //runner.dump();
+   runner.lower();
+   runner.dump();
    runner.lowerToLLVM();
-   runner.runJit(&context, 5, runner::Runner::printTable);
+   size_t runs = 1;
+   if (const char* numRuns = std::getenv("QUERY_RUNS")) {
+      runs = std::atoi(numRuns);
+      std::cout<<"using "<<runs<<" runs"<<std::endl;
+   }
+   runner.runJit(&context, runs, runner::Runner::printTable);
    return 0;
 }

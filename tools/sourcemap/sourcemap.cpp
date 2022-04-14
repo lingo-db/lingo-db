@@ -2,6 +2,7 @@
 
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
+#include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -38,6 +39,7 @@ int main(int argc, char** argv) {
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
+   registry.insert<mlir::dsa::DSADialect>();
    registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::arith::ArithmeticDialect>();
