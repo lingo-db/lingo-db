@@ -205,11 +205,10 @@ def DB_CMP_P_LT : I64EnumAttrCase<"lt", 2>;
 def DB_CMP_P_LTE : I64EnumAttrCase<"lte", 3>;
 def DB_CMP_P_GT : I64EnumAttrCase<"gt", 4>;
 def DB_CMP_P_GTE : I64EnumAttrCase<"gte", 5>;
-def DB_CMP_P_LIKE : I64EnumAttrCase<"like", 6>;
 
 def DB_CmpPredicateAttr : I64EnumAttr<
     "DBCmpPredicate", "",
-    [DB_CMP_P_EQ, DB_CMP_P_NEQ, DB_CMP_P_LT, DB_CMP_P_LTE, DB_CMP_P_GT,DB_CMP_P_GTE,DB_CMP_P_LIKE]> {
+    [DB_CMP_P_EQ, DB_CMP_P_NEQ, DB_CMP_P_LT, DB_CMP_P_LTE, DB_CMP_P_GT,DB_CMP_P_GTE]> {
 let cppNamespace = "::mlir::db";
 }
 

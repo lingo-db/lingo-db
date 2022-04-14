@@ -651,8 +651,7 @@ struct SQLTranslator {
                   case ExpressionType::COMPARE_LESS_THAN:
                   case ExpressionType::COMPARE_GREATER_THAN:
                   case ExpressionType::COMPARE_LESS_THAN_OR_EQUAL_TO:
-                  case ExpressionType::COMPARE_GREATER_THAN_OR_EQUAL_TO:
-                  case ExpressionType::COMPARE_LIKE: {
+                  case ExpressionType::COMPARE_GREATER_THAN_OR_EQUAL_TO: {
                      mlir::db::DBCmpPredicate pred;
                      switch (opType) {
                         case ExpressionType::COMPARE_EQUAL: pred = mlir::db::DBCmpPredicate::eq; break;
@@ -661,16 +660,16 @@ struct SQLTranslator {
                         case ExpressionType::COMPARE_GREATER_THAN: pred = mlir::db::DBCmpPredicate::gt; break;
                         case ExpressionType::COMPARE_LESS_THAN_OR_EQUAL_TO: pred = mlir::db::DBCmpPredicate::lte; break;
                         case ExpressionType::COMPARE_GREATER_THAN_OR_EQUAL_TO: pred = mlir::db::DBCmpPredicate::gte; break;
-                        case ExpressionType::COMPARE_LIKE: pred = mlir::db::DBCmpPredicate::like; break;
                         default: error("should not happen");
                      }
                      auto ct = toCommonTypes(builder, {left, right});
                      return builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), pred, ct[0], ct[1]);
                   }
+                  case ExpressionType::COMPARE_LIKE:
                   case ExpressionType::COMPARE_NOT_LIKE: {
                      auto ct = toCommonTypes(builder, {left, right});
-                     auto like = builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), mlir::db::DBCmpPredicate::like, ct[0], ct[1]);
-                     return builder.create<mlir::db::NotOp>(loc, like);
+                     auto like = builder.create<mlir::db::RuntimeCall>(loc, builder.getI1Type(), "Like", mlir::ValueRange({ct[0], ct[1]})).res();
+                     return opType == ExpressionType::COMPARE_NOT_LIKE ? builder.create<mlir::db::NotOp>(loc, like) : like;
                   }
                   case ExpressionType::OPERATOR_CAST: {
                      auto* castNode = reinterpret_cast<TypeCast*>(node);
@@ -1371,6 +1370,7 @@ struct SQLTranslator {
 int main(int argc, char** argv) {
    mlir::MLIRContext context;
    mlir::DialectRegistry registry;
+   registry.insert<mlir::BuiltinDialect>();
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::func::FuncDialect>();

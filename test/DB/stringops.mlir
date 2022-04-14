@@ -5,6 +5,10 @@ module {
         %conststr2 = db.constant ( "str2" ) : !db.string
         %conststr3 = db.constant ( "nostr" ) : !db.string
         %pattern = db.constant ( "str%" ) : !db.string
+        %pattern2 = db.constant ( "%o%t%" ) : !db.string
+        %pattern3 = db.constant ( "%str" ) : !db.string
+        %pattern4 = db.constant ( "...." ) : !db.string
+
         %from = db.constant( 1 ) : i32
         %to = db.constant( 2 ) : i32
         %substr = db.runtime_call "Substring" (%conststr1,%from,%to) : (!db.string,i32,i32) -> (!db.string)
@@ -45,13 +49,29 @@ module {
         %11 = db.compare neq %conststr1 : !db.string, %conststr1 : !db.string
         db.runtime_call "DumpValue" (%11) : (i1) -> ()
 		//CHECK: bool(true)
-        %12 = db.compare like %conststr1 : !db.string, %pattern : !db.string
+        %12 = db.runtime_call "Like" (%conststr1,%pattern) : (!db.string,!db.string) -> i1
         db.runtime_call "DumpValue" (%12) : (i1) -> ()
 		//CHECK: bool(false)
-        %13 = db.compare like %conststr3 : !db.string, %pattern : !db.string
+        %13 = db.runtime_call "Like" (%conststr3,%pattern) : (!db.string,!db.string) -> i1
         db.runtime_call "DumpValue" (%13) : (i1) -> ()
-
-
+        //CHECK: bool(false)
+        %like2 = db.runtime_call "Like" (%conststr1,%pattern2) : (!db.string,!db.string) -> i1
+        db.runtime_call "DumpValue" (%like2) : (i1) -> ()
+        //CHECK: bool(true)
+        %like3 = db.runtime_call "Like" (%conststr3,%pattern2) : (!db.string,!db.string) -> i1
+        db.runtime_call "DumpValue" (%like3) : (i1) -> ()
+         //CHECK: bool(false)
+        %like4 = db.runtime_call "Like" (%conststr1,%pattern3) : (!db.string,!db.string) -> i1
+        db.runtime_call "DumpValue" (%like4) : (i1) -> ()
+        //CHECK: bool(true)
+        %like5 = db.runtime_call "Like" (%conststr3,%pattern3) : (!db.string,!db.string) -> i1
+        db.runtime_call "DumpValue" (%like5) : (i1) -> ()
+        //CHECK: bool(true)
+        %like6 = db.runtime_call "Like" (%conststr1,%pattern4) : (!db.string,!db.string) -> i1
+        db.runtime_call "DumpValue" (%like6) : (i1) -> ()
+        //CHECK: bool(false)
+        %like7 = db.runtime_call "Like" (%conststr3,%pattern4) : (!db.string,!db.string) -> i1
+        db.runtime_call "DumpValue" (%like7) : (i1) -> ()
         %intstr= db.constant ("42") : !db.string
         %floatstr= db.constant ("1.00001") : !db.string
         %decimalstr= db.constant ("1.000001") : !db.string

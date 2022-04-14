@@ -23,6 +23,81 @@ static mlir::Value dateSubImpl(mlir::OpBuilder& rewriter, mlir::ValueRange lower
       return runtime::DateRuntime::subtractMonths(rewriter, rewriter.getUnknownLoc())(loweredArguments)[0];
    }
 }
+static mlir::Value matchPart(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value lastMatchEnd, std::string pattern, mlir::Value str, mlir::Value end) {
+   if (pattern.empty()) {
+      if (!lastMatchEnd) {
+         lastMatchEnd = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
+      }
+      return lastMatchEnd;
+   }
+   mlir::Value needleValue = builder.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(builder.getContext()), pattern);
+   if (lastMatchEnd) {
+      mlir::Value matchEnd = runtime::StringRuntime::findMatch(builder, loc)(mlir::ValueRange{str, needleValue, lastMatchEnd, end})[0];
+      return builder.create<mlir::arith::IndexCastOp>(loc, builder.getIndexType(), matchEnd);
+   } else {
+      mlir::Value startsWithPattern = runtime::StringRuntime::startsWith(builder, loc)(mlir::ValueRange{str, needleValue})[0];
+      mlir::Value patternLen = builder.create<mlir::arith::ConstantIndexOp>(loc, pattern.size());
+      mlir::Value invalidPos = builder.create<mlir::arith::ConstantIndexOp>(loc, 0x8000000000000000);
+
+      mlir::Value matchEnd = builder.create<mlir::arith::SelectOp>(loc, startsWithPattern, patternLen, invalidPos);
+
+      return matchEnd;
+   }
+}
+static mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter) {
+   using namespace mlir;
+   mlir::Value str = loweredArguments[0];
+   mlir::Value patternValue = loweredArguments[1];
+   if (auto constStrOp = mlir::dyn_cast_or_null<mlir::util::CreateConstVarLen>(patternValue.getDefiningOp())) {
+      auto pattern = constStrOp.str().str();
+      size_t pos = 0;
+      auto loc = rewriter.getUnknownLoc();
+      std::string currentSubPattern;
+      mlir::Value lastMatchEnd;
+      mlir::Value end = rewriter.create<util::VarLenGetLen>(loc, rewriter.getIndexType(), str);
+      bool flexible=false;
+      while (pos < pattern.size()) {
+         if (pattern[pos] == '\\') {
+            currentSubPattern += pattern[pos + 1];
+            pos += 2;
+         } else if (pattern[pos] == '.') {
+            //match current pattern
+            lastMatchEnd = matchPart(rewriter, loc, lastMatchEnd, currentSubPattern, str, end);
+            mlir::Value one = rewriter.create<arith::ConstantIndexOp>(loc, 1);
+
+            lastMatchEnd = rewriter.create<arith::AddIOp>(loc, lastMatchEnd, one);
+            currentSubPattern = "";
+            //lastMatchEnd+=1
+            pos += 1;
+         } else if (pattern[pos] == '%') {
+            flexible=true;
+            lastMatchEnd = matchPart(rewriter, loc, lastMatchEnd, currentSubPattern, str, end);
+            currentSubPattern = "";
+            pos += 1;
+         } else {
+            currentSubPattern += pattern[pos];
+            pos += 1;
+         }
+      }
+      if (!currentSubPattern.empty()) {
+         mlir::Value needleValue = rewriter.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(rewriter.getContext()), currentSubPattern);
+         mlir::Value endsWith = runtime::StringRuntime::endsWith(rewriter, loc)({str, needleValue})[0];
+         if (lastMatchEnd) {
+            mlir::Value patternLength = rewriter.create<mlir::arith::ConstantIndexOp>(loc, currentSubPattern.size());
+            lastMatchEnd = rewriter.create<mlir::arith::AddIOp>(loc, lastMatchEnd, patternLength);
+            mlir::Value previousMatchesEnd = rewriter.create<mlir::arith::CmpIOp>(loc, flexible?arith::CmpIPredicate::ule:arith::CmpIPredicate::eq, lastMatchEnd, end);
+            return rewriter.create<mlir::arith::AndIOp>(loc, previousMatchesEnd, endsWith);
+         } else {
+            return endsWith;
+         }
+         lastMatchEnd = matchPart(rewriter, loc, lastMatchEnd, currentSubPattern, str, end);
+      }
+
+      return rewriter.create<mlir::arith::CmpIOp>(loc, flexible?arith::CmpIPredicate::ule:arith::CmpIPredicate::eq, lastMatchEnd, end);
+   }
+
+   return Value();
+}
 static mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter) {
    using namespace mlir;
    auto loc = rewriter.getUnknownLoc();
@@ -102,7 +177,11 @@ std::shared_ptr<mlir::db::RuntimeFunctionRegistry> mlir::db::RuntimeFunctionRegi
    auto builtinRegistry = std::make_shared<RuntimeFunctionRegistry>(context);
    builtinRegistry->add("DumpValue").handlesNulls().matchesTypes({RuntimeFunction::anyType}, RuntimeFunction::noReturnType).implementedAs(dumpValuesImpl);
    auto resTypeIsI64 = [](mlir::Type t, mlir::TypeRange) { return t.isInteger(64); };
+   auto resTypeIsBool = [](mlir::Type t, mlir::TypeRange) { return t.isInteger(1); };
    builtinRegistry->add("Substring").implementedAs(runtime::StringRuntime::substr).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("Like").implementedAs(runtime::StringRuntime::like).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool);
+   builtinRegistry->add("ConstLike").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool).implementedAs(constLikeImpl);
+
    builtinRegistry->add("ExtractFromDate").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::dateLike}, resTypeIsI64);
    builtinRegistry->add("ExtractYearFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(runtime::DateRuntime::extractYear);
    builtinRegistry->add("ExtractMonthFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(runtime::DateRuntime::extractMonth);

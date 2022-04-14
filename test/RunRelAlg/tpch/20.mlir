@@ -22,7 +22,7 @@ module {
         %19 = relalg.selection %18 (%arg2: !relalg.tuple){
           %32 = relalg.getcol %arg2 @part::@p_name : !db.string
           %33 = db.constant("forest%") : !db.string
-          %34 = db.compare like %32 : !db.string, %33 : !db.string
+          %34 = db.runtime_call "Like"(%32, %33) : (!db.string, !db.string) -> i1
           relalg.return %34 : i1
         }
         %20 = relalg.projection all [@part::@p_partkey] %19

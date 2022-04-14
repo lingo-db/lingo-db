@@ -48,7 +48,7 @@ module {
       %9 = db.compare eq %7 : i32, %8 : i32
       %10 = relalg.getcol %arg0 @orders::@o_comment : !db.string
       %11 = db.constant("%special%requests%") : !db.string
-      %12 = db.compare like %10 : !db.string, %11 : !db.string
+      %12 = db.runtime_call "Like"(%10, %11) : (!db.string, !db.string) -> i1
       %13 = db.not %12 : i1
       %14 = db.and %9, %13 : i1, i1
       relalg.return %14 : i1

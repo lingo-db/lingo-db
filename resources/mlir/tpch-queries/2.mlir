@@ -21,7 +21,7 @@ module {
       %21 = db.compare eq %19 : i32, %20 : i32
       %22 = relalg.getcol %arg0 @part::@p_type : !db.string
       %23 = db.constant("%BRASS") : !db.string
-      %24 = db.compare like %22 : !db.string, %23 : !db.string
+      %24 = db.runtime_call "Like"(%22, %23) : (!db.string, !db.string) -> i1
       %25 = relalg.getcol %arg0 @supplier::@s_nationkey : i32
       %26 = relalg.getcol %arg0 @nation::@n_nationkey : i32
       %27 = db.compare eq %25 : i32, %26 : i32

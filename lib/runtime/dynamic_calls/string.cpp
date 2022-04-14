@@ -221,3 +221,13 @@ runtime::VarLen32 runtime::StringRuntime::substr(runtime::VarLen32 str, size_t f
    if (from > to || str.getLen() < to) throw std::runtime_error("can not perform substring operation");
    return runtime::VarLen32(&str.getPtr()[from], to - from);
 }
+
+size_t runtime::StringRuntime::findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end) {
+   constexpr size_t invalidPos = 0x8000000000000000;
+   if (start >= invalidPos) return invalidPos;
+   if (start + needle.getLen() > end) return invalidPos;
+   size_t found = std::string_view(str.data(), str.getLen()).find(std::string_view(needle.data(), needle.getLen()), start);
+
+   if (found == std::string::npos || found + needle.getLen() > end) return invalidPos;
+   return found + needle.getLen();
+}

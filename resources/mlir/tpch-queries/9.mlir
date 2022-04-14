@@ -32,7 +32,7 @@ module {
       %33 = db.compare eq %31 : i32, %32 : i32
       %34 = relalg.getcol %arg0 @part::@p_name : !db.string
       %35 = db.constant("%green%") : !db.string
-      %36 = db.compare like %34 : !db.string, %35 : !db.string
+      %36 = db.runtime_call "Like"(%34, %35) : (!db.string, !db.string) -> i1
       %37 = db.and %18, %21, %24, %27, %30, %33, %36 : i1, i1, i1, i1, i1, i1, i1
       relalg.return %37 : i1
     }

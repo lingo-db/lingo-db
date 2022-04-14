@@ -12,7 +12,7 @@ module {
       %12 = db.compare neq %10 : !db.string, %11 : !db.string
       %13 = relalg.getcol %arg0 @part::@p_type : !db.string
       %14 = db.constant("MEDIUM POLISHED%") : !db.string
-      %15 = db.compare like %13 : !db.string, %14 : !db.string
+      %15 = db.runtime_call "Like"(%13, %14) : (!db.string, !db.string) -> i1
       %16 = db.not %15 : i1
       %17 = db.constant(49 : i32) : i32
       %18 = db.constant(14 : i32) : i32
@@ -28,7 +28,7 @@ module {
       %28 = relalg.selection %27 (%arg1: !relalg.tuple){
         %34 = relalg.getcol %arg1 @supplier::@s_comment : !db.string
         %35 = db.constant("%Customer%Complaints%") : !db.string
-        %36 = db.compare like %34 : !db.string, %35 : !db.string
+        %36 = db.runtime_call "Like"(%34, %35) : (!db.string, !db.string) -> i1
         relalg.return %36 : i1
       }
       %29 = relalg.projection all [@supplier::@s_suppkey] %28

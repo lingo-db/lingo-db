@@ -331,9 +331,6 @@ class CmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
             return arith::CmpIPredicate::sle;
          case db::DBCmpPredicate::gte:
             return arith::CmpIPredicate::sge;
-         case db::DBCmpPredicate::like:
-            assert(false && "can not evaluate like on integers");
-            return arith::CmpIPredicate::ne;
       }
       assert(false && "unexpected case");
       return arith::CmpIPredicate::eq;
@@ -352,9 +349,6 @@ class CmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
             return arith::CmpFPredicate::OLE;
          case db::DBCmpPredicate::gte:
             return arith::CmpFPredicate::OGE;
-         case db::DBCmpPredicate::like:
-            assert(false && "can not evaluate like on integers");
-            return arith::CmpFPredicate::OEQ;
       }
       assert(false && "unexpected case");
       return arith::CmpFPredicate::OEQ;

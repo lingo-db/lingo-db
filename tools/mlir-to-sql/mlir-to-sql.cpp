@@ -184,9 +184,6 @@ class ToSQL {
                case DBCmpPredicate::gte:
                   pred = ">=";
                   break;
-               case DBCmpPredicate::like:
-                  pred = "like";
-                  break;
             }
             handleBinOp(output, pred, op.left(), op.right());
          })
@@ -228,6 +225,9 @@ class ToSQL {
             }
             if (op.fn().startswith("DateSubtract")) {
                handleBinOp(output, "-", op.args()[0], op.args()[1]);
+            }
+            if (op.fn().endswith("Like")) {
+               handleBinOp(output, "like", op.args()[0], op.args()[1]);
             }
          })
          .Case<MaterializeOp>([&](MaterializeOp op) {

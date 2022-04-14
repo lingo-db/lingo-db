@@ -134,14 +134,6 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
          return support::eval::createLt(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));
       } else if (cmpOp.isGreaterPred(false)) {
          return support::eval::createGt(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));
-      } else if (auto dbCmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(op)) {
-         if (dbCmpOp.predicate() == mlir::db::DBCmpPredicate::like) {
-            if (!dbCmpOp.right().getDefiningOp()) return support::eval::createInvalid();
-            if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(dbCmpOp.right().getDefiningOp())) {
-               return support::eval::createLike(buildEvalExpr(dbCmpOp.left(), mapping), constantOp.value().cast<mlir::StringAttr>().str());
-            }
-         }
-         return support::eval::createInvalid();
       } else {
          return support::eval::createInvalid();
       }
@@ -168,6 +160,13 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
          expressions.push_back(buildEvalExpr(v, mapping));
       }
       return support::eval::createOr(expressions);
+   } else if (auto runtimeCall = mlir::dyn_cast_or_null<mlir::db::RuntimeCall>(op)) {
+      if (runtimeCall.fn() == "ConstLike" || runtimeCall.fn() == "Like") {
+         if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(runtimeCall.args()[1].getDefiningOp())) {
+            return support::eval::createLike(buildEvalExpr(runtimeCall.args()[0], mapping), constantOp.value().cast<mlir::StringAttr>().str());
+         }
+      }
+      return support::eval::createInvalid();
    }
    return support::eval::createInvalid();
 }

@@ -23,9 +23,6 @@ mlir::arith::CmpIPredicateAttr convertToCmpIPred(mlir::OpBuilder, ::mlir::db::DB
          return mlir::arith::CmpIPredicateAttr::get(p.getContext(), arith::CmpIPredicate::sle);
       case db::DBCmpPredicate::gte:
          return mlir::arith::CmpIPredicateAttr::get(p.getContext(), arith::CmpIPredicate::sge);
-      case db::DBCmpPredicate::like:
-         assert(false && "can not evaluate like on integers");
-         break;
    }
    return mlir::arith::CmpIPredicateAttr::get(p.getContext(), arith::CmpIPredicate::sge);
 }
@@ -44,9 +41,6 @@ mlir::arith::CmpFPredicateAttr convertToCmpFPred(mlir::OpBuilder, ::mlir::db::DB
          return mlir::arith::CmpFPredicateAttr::get(p.getContext(), arith::CmpFPredicate::OLE);
       case db::DBCmpPredicate::gte:
          return mlir::arith::CmpFPredicateAttr::get(p.getContext(), arith::CmpFPredicate::OGE);
-      case db::DBCmpPredicate::like:
-         assert(false && "can not evaluate like on integers");
-         break;
    }
    return mlir::arith::CmpFPredicateAttr::get(p.getContext(), arith::CmpFPredicate::OGE);
 }

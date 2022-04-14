@@ -22,6 +22,7 @@ struct StringRuntime {
    static VarLen32 fromChar(uint64_t, size_t bytes);
    static VarLen32 fromDecimal(__int128, uint32_t scale);
    static VarLen32 substr(VarLen32 str, size_t from,size_t to);
+   static size_t findMatch(VarLen32 str,VarLen32 needle, size_t start, size_t end);
 };
 } // namespace runtime
 #endif // RUNTIME_STRINGRUNTIME_H

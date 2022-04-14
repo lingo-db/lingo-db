@@ -28,7 +28,7 @@ module {
       %12 = db.mul %8 : !db.decimal<15, 2>, %11 : !db.decimal<15, 2>
       %13 = relalg.getcol %arg0 @part::@p_type : !db.string
       %14 = db.constant("PROMO%") : !db.string
-      %15 = db.compare like %13 : !db.string, %14 : !db.string
+      %15 = db.runtime_call "Like"(%13, %14) : (!db.string, !db.string) -> i1
       %16 = scf.if %15 -> (!db.decimal<15, 2>) {
         %17 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
         %18 = db.constant(1 : i32) : !db.decimal<15, 2>
