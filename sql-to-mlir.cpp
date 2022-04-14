@@ -1411,7 +1411,6 @@ int main(int argc, char** argv) {
    std::ifstream istream{filename};
    std::stringstream buffer;
    buffer << istream.rdbuf();
-   auto start = std::chrono::high_resolution_clock::now();
    SQLTranslator translator(buffer.str(), schema, &context);
    mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
 
@@ -1422,9 +1421,8 @@ int main(int argc, char** argv) {
    mlir::Value val = translator.translate(builder);
 
    builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), val);
-   auto end = std::chrono::high_resolution_clock::now();
-   std::cerr << "time:" << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() << std::endl;
-
-   moduleOp->print(llvm::outs());
+   mlir::OpPrintingFlags flags;
+   flags.assumeVerified();
+   moduleOp->print(llvm::outs(), flags);
    return 0;
 }
