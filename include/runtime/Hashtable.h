@@ -17,6 +17,7 @@ class Hashtable {
    public:
    void resize();
    static Hashtable* create(size_t typeSize, size_t initialCapacity);
+   static void destroy(Hashtable*);
 };
 
 } // end namespace runtime

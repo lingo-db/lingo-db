@@ -28,6 +28,7 @@ class LazyJoinHashtable {
    static LazyJoinHashtable* create(size_t typeSize);
    void finalize();
    void resize();
+   static void destroy(LazyJoinHashtable*);
 };
 } // end namespace runtime
 #endif // RUNTIME_LAZYJOINHASHTABLE_H

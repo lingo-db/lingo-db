@@ -19,3 +19,6 @@ void runtime::LazyJoinHashtable::finalize() {
 runtime::LazyJoinHashtable* runtime::LazyJoinHashtable::create(size_t typeSize) {
    return new LazyJoinHashtable(1024, typeSize);
 }
+void runtime::LazyJoinHashtable::destroy(LazyJoinHashtable* ht) {
+   delete ht;
+}

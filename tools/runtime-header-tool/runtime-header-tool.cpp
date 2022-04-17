@@ -110,6 +110,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             if (method->isVirtual()) continue;
             if (method->isImplicit()) continue;
             if (isa<CXXConstructorDecl>(method)) continue;
+            if (isa<CXXDestructorDecl>(method)) continue;
             if (method->getAccess() == clang::AS_protected || method->getAccess() == clang::AS_private) continue;
             bool hasSideEffect = false;
             //method->dump();

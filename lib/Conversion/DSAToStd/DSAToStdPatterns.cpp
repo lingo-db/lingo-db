@@ -452,6 +452,18 @@ class FreeLowering : public OpConversionPattern<mlir::dsa::FreeOp> {
    public:
    using OpConversionPattern<mlir::dsa::FreeOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::FreeOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (auto aggrHtType = op.val().getType().dyn_cast<mlir::dsa::AggregationHashtableType>()) {
+         if (aggrHtType.getKeyType().getTypes().empty()) {
+         } else {
+            runtime::Hashtable::destroy(rewriter, op->getLoc())(ValueRange{adaptor.val()});
+         }
+      }
+      if (op.val().getType().isa<mlir::dsa::JoinHashtableType>()) {
+         runtime::LazyJoinHashtable::destroy(rewriter, op->getLoc())(ValueRange{adaptor.val()});
+      }
+      if (op.val().getType().isa<mlir::dsa::VectorType>()) {
+         runtime::Vector::destroy(rewriter, op->getLoc())(ValueRange{adaptor.val()});
+      }
       rewriter.eraseOp(op);
       return success();
    }

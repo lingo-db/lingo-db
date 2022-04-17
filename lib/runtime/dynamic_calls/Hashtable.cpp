@@ -16,3 +16,7 @@ void runtime::Hashtable::resize() {
       entry->next = previousPtr;
    }
 }
+void runtime::Hashtable::destroy(runtime::Hashtable* ht) {
+   ht->~Hashtable();
+   free(ht);
+}

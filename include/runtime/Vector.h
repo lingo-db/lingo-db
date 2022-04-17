@@ -22,6 +22,10 @@ class Vector {
    uint8_t* getPtr() const;
    size_t getTypeSize() const;
    void sort(bool (*compareFn)(uint8_t*, uint8_t*));
+   static void destroy(Vector* vec);
+   ~Vector(){
+      free(ptr);
+   }
 };
 } // end namespace runtime
 #endif // RUNTIME_VECTOR_H

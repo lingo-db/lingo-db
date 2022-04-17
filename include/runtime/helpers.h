@@ -125,6 +125,9 @@ struct FixedSizedBuffer {
    T& at(size_t i) {
       return ptr[i];
    }
+   ~FixedSizedBuffer(){
+      free(ptr);
+   }
 };
 template <typename T>
 T* tag(T* ptr, T* previousPtr, size_t hash) {

@@ -21,17 +21,20 @@ size_t runtime::Vector::getTypeSize() const {
 }
 void runtime::Vector::sort(bool (*compareFn)(uint8_t*, uint8_t*)) {
    std::vector<uint8_t*> toSort;
-   for (size_t i=0;i<len;i++) {
+   for (size_t i = 0; i < len; i++) {
       toSort.push_back(ptrAt<uint8_t>(i));
    }
    std::sort(toSort.begin(), toSort.end(), [&](uint8_t* left, uint8_t* right) {
-      return compareFn(left,right);
+      return compareFn(left, right);
    });
-   uint8_t* sorted=new uint8_t[typeSize*len];
+   uint8_t* sorted = new uint8_t[typeSize * len];
    for (size_t i = 0; i < len; i++) {
       uint8_t* ptr = sorted + (i * typeSize);
       memcpy(ptr, toSort[i], typeSize);
    }
-   memcpy(ptr,sorted,typeSize*len);
+   memcpy(ptr, sorted, typeSize * len);
    delete[] sorted;
+}
+void runtime::Vector::destroy(Vector* vec) {
+   delete vec;
 }
