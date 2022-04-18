@@ -122,7 +122,7 @@ set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
 
 add_subdirectory(lib/runtime)
 add_subdirectory(lib/runner)
-
+add_subdirectory(lib/frontend/SQL)
 
 add_executable(mlir-db-opt mlir-opt.cpp)
 
@@ -146,9 +146,7 @@ add_subdirectory(tools)
 add_subdirectory(test)
 
 
-add_executable(sql-to-mlir sql-to-mlir.cpp)
-llvm_update_compile_flags(sql-to-mlir)
-target_link_libraries(sql-to-mlir PUBLIC ${LIBS} pg_query::pg_query runtime)
+
 
 
 find_package(Python COMPONENTS Interpreter Development REQUIRED)
