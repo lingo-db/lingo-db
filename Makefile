@@ -72,9 +72,9 @@ build/lingodb-debug-coverage/.stamp: $(LDB_DEPS)
 test-coverage: build/lingodb-debug-coverage/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir pymlirdbext sql-to-mlir -- -j${NPROCS}
 	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit $(dir $<)/test
-	lcov --no-external --capture --directory $(dir $<) -b . --output-file $(dir $<)/coverage.info
+	lcov --capture --directory $(dir $<)  --output-file $(dir $<)/coverage.info
 	lcov --remove $(dir $<)/coverage.info -o $(dir $<)/filtered-coverage.info \
-			'**/build/llvm-build/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*'
+			'**/build/llvm-build/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*' '**/vendored/*' '/usr/*'
 	genhtml  --ignore-errors source $(dir $<)/filtered-coverage.info --legend --title "lcov-test" --output-directory=$(dir $<)/coverage-report
 .PHONY: run-test
 run-test: build/lingodb-debug/.stamp
