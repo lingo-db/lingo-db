@@ -1,6 +1,5 @@
 set(PRECOMPILED_SRCS
         context.cpp
-        shortstring.cpp
         )
 
 find_program(LLVM_LINK_EXECUTABLE llvm-link HINTS ${LLVM_TOOLS_BINARY_DIR})
@@ -51,7 +50,7 @@ foreach(SRC_FILE ${PRECOMPILED_SRCS})
 endforeach()
 set(PRECOMPILED_BC_PATH "${CMAKE_CURRENT_BINARY_DIR}/irhelpers.bc")
 
-set(PRECOMPILED_CC_IN_PATH "${CMAKE_SOURCE_DIR}/tools/scripts/precompiled_bitcode.cc.in")
+set(PRECOMPILED_CC_IN_PATH "${CMAKE_SOURCE_DIR}/tools/build-tools/precompiled_bitcode.cc.in")
 # link all of the bitcode files into a single bitcode file.
 add_custom_command(OUTPUT ${PRECOMPILED_BC_PATH}
         COMMAND ${LLVM_LINK_EXECUTABLE} -o ${PRECOMPILED_BC_PATH}
@@ -62,7 +61,7 @@ find_package(PythonInterp)
 
 add_custom_command(OUTPUT ${PRECOMPILED_CC_PATH}
         COMMAND ${PYTHON_EXECUTABLE}
-        "${CMAKE_SOURCE_DIR}/tools/scripts/make_precompiled_bitcode.py"
+        "${CMAKE_SOURCE_DIR}/tools/build-tools/make_precompiled_bitcode.py"
         "${PRECOMPILED_CC_IN_PATH}"
         ${PRECOMPILED_BC_PATH}
         ${PRECOMPILED_CC_PATH}

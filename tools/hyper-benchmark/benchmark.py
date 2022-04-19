@@ -99,7 +99,7 @@ class Hyper:
 hyper=Hyper()
 for qnum in range(1, 23):
     print("processing: tpch query ", qnum)
-    file1 = "/home/michael/master-thesis/code/resources/sql/hyper/" + str(qnum) + ".sql"
+    file1 = "/home/michael/master-thesis/code/resources/sql/tpch/" + str(qnum) + ".sql"
     with open(file1, 'r') as file:
         query = file.read()
     hyper.evaluateQuery(query)

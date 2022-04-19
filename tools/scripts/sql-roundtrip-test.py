@@ -4,8 +4,8 @@ import sys
 objdir=sys.argv[1]
 for qnum in range(1, 22):
     print("processing:",qnum)
-    file1 = "resources/sql/hyper/" + str(qnum) + ".sql"
-    file2 = "resources/sql/hyper/" + str(qnum) + ".sql"
+    file1 = "resources/sql/tpch/" + str(qnum) + ".sql"
+    file2 = "resources/sql/tpch/" + str(qnum) + ".sql"
 
     proc1 = subprocess.run(
         objdir+"/sql-to-mlir " + file1 + " | "+objdir+"/mlir-db-opt --relalg-extract-nested-operators --relalg-decompose-lambdas --relalg-implicit-to-explicit-joins --relalg-pushdown --relalg-unnesting --relalg-optimize-join-order | "+objdir+"/mlir-to-sql",
