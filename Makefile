@@ -78,7 +78,7 @@ test-coverage: build/lingodb-debug-coverage/.stamp
 	genhtml  --ignore-errors source $(dir $<)/filtered-coverage.info --legend --title "lcov-test" --output-directory=$(dir $<)/coverage-report
 .PHONY: run-test
 run-test: build/lingodb-debug/.stamp
-	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql pymlirdbext sql-to-mlir -- -j${NPROCS}
+	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql pymlirdbext sql-to-mlir mlir-doc -- -j${NPROCS}
 	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit -v $(dir $<)/test
 .PHONY: run-benchmark
 run-benchmark: build/lingodb-release/.stamp resources/data/tpch-1/.stamp

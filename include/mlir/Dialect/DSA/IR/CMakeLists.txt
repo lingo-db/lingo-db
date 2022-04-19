@@ -13,6 +13,4 @@ set(LLVM_TARGET_DEFINITIONS DSAInterfaces.td)
 mlir_tablegen(DSAOpsInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(DSAOpsInterfaces.cpp.inc -gen-op-interface-defs)
 add_public_tablegen_target(MLIRDSAOpsIncGen)
-#add_mlir_doc(DSADialect -gen-dialect-doc DSADialect DSA/)
-#add_mlir_doc(DSAOps -gen-op-doc DSAOps DSA/)
-
+add_mlir_doc(DSAOps DSADialect DSA/ -gen-dialect-doc)
