@@ -37,6 +37,6 @@ ColumnRefAttr ColumnManager::createRef(const Column* attr){
 }
 
 std::pair<std::string, std::string> ColumnManager::getName(const Column* attr) {
-   return attributesRev[attr];
+   return attributesRev.at(attr);
 }
 } // namespace mlir::relalg

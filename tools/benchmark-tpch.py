@@ -23,9 +23,9 @@ class QueryResult:
 results = []
 for qnum in range(1, 23):
     print("processing: tpch query ", qnum)
-    file1 = "resources/mlir/tpch-queries/" + str(qnum) + ".mlir"
+    file1 = "resources/sql/hyper/" + str(qnum) + ".sql"
     proc1 = subprocess.run(
-        objdir + "/db-run-query "+file1+" resources/data/"+dataset,
+        objdir + "/run-sql "+file1+" resources/data/"+dataset,
         stdout=subprocess.PIPE,stderr=subprocess.PIPE, shell=True)
     returncode=proc1.returncode
     runtime =0.0

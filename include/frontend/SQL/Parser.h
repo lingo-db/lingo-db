@@ -158,8 +158,8 @@ struct SQLTypeInference {
    static std::vector<mlir::Value> toCommonTypes2(mlir::OpBuilder& builder, mlir::ValueRange values) {
       std::vector<mlir::Value> res;
       for (auto val : values) {
-         if(!getBaseType(val.getType()).isa<mlir::db::DecimalType>()){
-            return toCommonTypes(builder,values);
+         if (!getBaseType(val.getType()).isa<mlir::db::DecimalType>()) {
+            return toCommonTypes(builder, values);
          }
          res.push_back(val);
       }
@@ -177,7 +177,7 @@ struct FakeNode : Node {
 };
 ExpressionType stringToExpressionType(const std::string& parserStr);
 struct Parser {
-   mlir::relalg::ColumnManager attrManager;
+   mlir::relalg::ColumnManager& attrManager;
    struct StringInfo {
       static bool isEqual(std::string a, std::string b) { return a == b; }
       static std::string getEmptyKey() { return ""; }
@@ -261,10 +261,9 @@ struct Parser {
       fakeNodes.emplace_back(std::move(node));
       return ptr;
    }
-   Parser(std::string sql, Schema& schema, mlir::MLIRContext* context) : sql(sql), schema(schema) {
+   Parser(std::string sql, Schema& schema, mlir::MLIRContext* context) : attrManager(context->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager()), sql(sql), schema(schema) {
       pg_query_parse_init();
       result = pg_query_parse(sql.c_str());
-      attrManager.setContext(context);
    }
    void error(std::string str) {
       std::cerr << str << std::endl;
