@@ -1,16 +1,16 @@
 //RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                    l_orderkey  |                       revenue  |                   o_orderdate  |                o_shippriority  |
 //CHECK: -------------------------------------------------------------------------------------------------------------------------------------
-//CHECK: |                        223140  |                     355369.04  |                    1995-03-14  |                             0  |
-//CHECK: |                        584291  |                     354494.71  |                    1995-02-21  |                             0  |
-//CHECK: |                        405063  |                     353125.42  |                    1995-03-03  |                             0  |
-//CHECK: |                        573861  |                     351238.24  |                    1995-03-09  |                             0  |
-//CHECK: |                        554757  |                     349181.72  |                    1995-03-14  |                             0  |
-//CHECK: |                        506021  |                     321075.55  |                    1995-03-10  |                             0  |
-//CHECK: |                        121604  |                     318576.39  |                    1995-03-07  |                             0  |
-//CHECK: |                        108514  |                     314967.05  |                    1995-02-20  |                             0  |
-//CHECK: |                        462502  |                     312604.51  |                    1995-03-08  |                             0  |
-//CHECK: |                        178727  |                     309728.91  |                    1995-02-25  |                             0  |
+//CHECK: |                        223140  |                   355369.0698  |                    1995-03-14  |                             0  |
+//CHECK: |                        584291  |                   354494.7318  |                    1995-02-21  |                             0  |
+//CHECK: |                        405063  |                   353125.4577  |                    1995-03-03  |                             0  |
+//CHECK: |                        573861  |                   351238.2770  |                    1995-03-09  |                             0  |
+//CHECK: |                        554757  |                   349181.7426  |                    1995-03-14  |                             0  |
+//CHECK: |                        506021  |                   321075.5810  |                    1995-03-10  |                             0  |
+//CHECK: |                        121604  |                   318576.4154  |                    1995-03-07  |                             0  |
+//CHECK: |                        108514  |                   314967.0754  |                    1995-02-20  |                             0  |
+//CHECK: |                        462502  |                   312604.5420  |                    1995-03-08  |                             0  |
+//CHECK: |                        178727  |                   309728.9306  |                    1995-02-25  |                             0  |
 module {
   func @main() -> !dsa.table {
     %0 = relalg.basetable @customer  {table_identifier = "customer"} columns: {c_acctbal => @c_acctbal({type = !db.decimal<15, 2>}), c_address => @c_address({type = !db.string}), c_comment => @c_comment({type = !db.string}), c_custkey => @c_custkey({type = i32}), c_mktsegment => @c_mktsegment({type = !db.string}), c_name => @c_name({type = !db.string}), c_nationkey => @c_nationkey({type = i32}), c_phone => @c_phone({type = !db.string})}
@@ -37,17 +37,17 @@ module {
       %26 = db.and %13, %16, %19, %22, %25 : i1, i1, i1, i1, i1
       relalg.return %26 : i1
     }
-    %6 = relalg.map @map0 %5 computes : [@tmp_attr1({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuple){
+    %6 = relalg.map @map0 %5 computes : [@tmp_attr1({type = !db.decimal<15, 4>})] (%arg0: !relalg.tuple){
       %11 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %12 = db.constant(1 : i32) : !db.decimal<15, 2>
       %13 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
       %14 = db.sub %12 : !db.decimal<15, 2>, %13 : !db.decimal<15, 2>
       %15 = db.mul %11 : !db.decimal<15, 2>, %14 : !db.decimal<15, 2>
-      relalg.return %15 : !db.decimal<15, 2>
+      relalg.return %15 : !db.decimal<15, 4>
     }
-    %7 = relalg.aggregation @aggr0 %6 [@lineitem::@l_orderkey,@orders::@o_orderdate,@orders::@o_shippriority] computes : [@tmp_attr0({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
-      %11 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
-      relalg.return %11 : !db.decimal<15, 2>
+    %7 = relalg.aggregation @aggr0 %6 [@lineitem::@l_orderkey,@orders::@o_orderdate,@orders::@o_shippriority] computes : [@tmp_attr0({type = !db.decimal<15, 4>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+      %11 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 4>
+      relalg.return %11 : !db.decimal<15, 4>
     }
     %8 = relalg.sort %7 [(@aggr0::@tmp_attr0,desc),(@orders::@o_orderdate,asc)]
     %9 = relalg.limit 10 %8

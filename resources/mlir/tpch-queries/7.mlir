@@ -49,7 +49,7 @@ module {
       %50 = db.and %18, %21, %24, %27, %30, %45, %49 : i1, i1, i1, i1, i1, i1, i1
       relalg.return %50 : i1
     }
-    %12 = relalg.map @map0 %11 computes : [@tmp_attr1({type = !db.decimal<15, 2>}),@tmp_attr0({type = i64})] (%arg0: !relalg.tuple){
+    %12 = relalg.map @map0 %11 computes : [@tmp_attr1({type = !db.decimal<15, 4>}),@tmp_attr0({type = i64})] (%arg0: !relalg.tuple){
       %16 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %17 = db.constant(1 : i32) : !db.decimal<15, 2>
       %18 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
@@ -58,11 +58,11 @@ module {
       %21 = db.constant("year") : !db.char<4>
       %22 = relalg.getcol %arg0 @lineitem::@l_shipdate : !db.date<day>
       %23 = db.runtime_call "ExtractFromDate"(%21, %22) : (!db.char<4>, !db.date<day>) -> i64
-      relalg.return %20, %23 : !db.decimal<15, 2>, i64
+      relalg.return %20, %23 : !db.decimal<15, 4>, i64
     }
-    %13 = relalg.aggregation @aggr0 %12 [@n1::@n_name,@n2::@n_name,@map0::@tmp_attr0] computes : [@tmp_attr2({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
-      %16 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
-      relalg.return %16 : !db.decimal<15, 2>
+    %13 = relalg.aggregation @aggr0 %12 [@n1::@n_name,@n2::@n_name,@map0::@tmp_attr0] computes : [@tmp_attr2({type = !db.decimal<15, 4>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+      %16 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 4>
+      relalg.return %16 : !db.decimal<15, 4>
     }
     %14 = relalg.sort %13 [(@n1::@n_name,asc),(@n2::@n_name,asc),(@map0::@tmp_attr0,asc)]
     %15 = relalg.materialize %14 [@n1::@n_name,@n2::@n_name,@map0::@tmp_attr0,@aggr0::@tmp_attr2] => ["supp_nation", "cust_nation", "l_year", "revenue"] : !dsa.table

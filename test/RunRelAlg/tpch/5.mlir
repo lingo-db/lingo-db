@@ -1,11 +1,11 @@
 //RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                        n_name  |                       revenue  |
 //CHECK: -------------------------------------------------------------------
-//CHECK: |                       "CHINA"  |                    7822102.06  |
-//CHECK: |                       "INDIA"  |                    6376120.75  |
-//CHECK: |                       "JAPAN"  |                    6000076.69  |
-//CHECK: |                   "INDONESIA"  |                    5580474.62  |
-//CHECK: |                     "VIETNAM"  |                    4497839.90  |
+//CHECK: |                       "CHINA"  |                  7822103.0000  |
+//CHECK: |                       "INDIA"  |                  6376121.5085  |
+//CHECK: |                       "JAPAN"  |                  6000077.2184  |
+//CHECK: |                   "INDONESIA"  |                  5580475.4027  |
+//CHECK: |                     "VIETNAM"  |                  4497840.5466  |
 module {
   func @main() -> !dsa.table {
     %0 = relalg.basetable @customer  {table_identifier = "customer"} columns: {c_acctbal => @c_acctbal({type = !db.decimal<15, 2>}), c_address => @c_address({type = !db.string}), c_comment => @c_comment({type = !db.string}), c_custkey => @c_custkey({type = i32}), c_mktsegment => @c_mktsegment({type = !db.string}), c_name => @c_name({type = !db.string}), c_nationkey => @c_nationkey({type = i32}), c_phone => @c_phone({type = !db.string})}
@@ -50,17 +50,17 @@ module {
       %43 = db.and %18, %21, %24, %27, %30, %33, %36, %39, %42 : i1, i1, i1, i1, i1, i1, i1, i1, i1
       relalg.return %43 : i1
     }
-    %12 = relalg.map @map0 %11 computes : [@tmp_attr1({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuple){
+    %12 = relalg.map @map0 %11 computes : [@tmp_attr1({type = !db.decimal<15, 4>})] (%arg0: !relalg.tuple){
       %16 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %17 = db.constant(1 : i32) : !db.decimal<15, 2>
       %18 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
       %19 = db.sub %17 : !db.decimal<15, 2>, %18 : !db.decimal<15, 2>
       %20 = db.mul %16 : !db.decimal<15, 2>, %19 : !db.decimal<15, 2>
-      relalg.return %20 : !db.decimal<15, 2>
+      relalg.return %20 : !db.decimal<15, 4>
     }
-    %13 = relalg.aggregation @aggr0 %12 [@nation::@n_name] computes : [@tmp_attr0({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
-      %16 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 2>
-      relalg.return %16 : !db.decimal<15, 2>
+    %13 = relalg.aggregation @aggr0 %12 [@nation::@n_name] computes : [@tmp_attr0({type = !db.decimal<15, 4>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+      %16 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.decimal<15, 4>
+      relalg.return %16 : !db.decimal<15, 4>
     }
     %14 = relalg.sort %13 [(@aggr0::@tmp_attr0,desc)]
     %15 = relalg.materialize %14 [@nation::@n_name,@aggr0::@tmp_attr0] => ["n_name", "revenue"] : !dsa.table

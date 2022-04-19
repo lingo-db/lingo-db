@@ -49,6 +49,40 @@ LogicalResult inferReturnType(MLIRContext* context, Optional<Location> location,
    }
    return success();
 }
+LogicalResult inferMulReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
+   bool anyNullables = llvm::any_of(operands, [](Value v) { return v.getType().isa<mlir::db::NullableType>(); });
+   Type baseTypeLeft = getBaseType(operands[0].getType());
+   Type baseTypeRight = getBaseType(operands[1].getType());
+   Type baseType=baseTypeLeft;
+   if(baseTypeLeft.isa<mlir::db::DecimalType>()){
+      auto leftDecType=baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
+      auto rightDecType=baseTypeRight.dyn_cast<mlir::db::DecimalType>();
+      baseType=mlir::db::DecimalType::get(baseType.getContext(),std::max(leftDecType.getP(),rightDecType.getP()),leftDecType.getS()+rightDecType.getS());
+   }
+   if (anyNullables) {
+      inferredReturnTypes.push_back(mlir::db::NullableType::get(context, baseType));
+   } else {
+      inferredReturnTypes.push_back(baseType);
+   }
+   return success();
+}
+LogicalResult inferDivReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
+   bool anyNullables = llvm::any_of(operands, [](Value v) { return v.getType().isa<mlir::db::NullableType>(); });
+   Type baseTypeLeft = getBaseType(operands[0].getType());
+   Type baseTypeRight = getBaseType(operands[1].getType());
+   Type baseType=baseTypeLeft;
+   if(baseTypeLeft.isa<mlir::db::DecimalType>()){
+      auto leftDecType=baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
+      auto rightDecType=baseTypeRight.dyn_cast<mlir::db::DecimalType>();
+      baseType=mlir::db::DecimalType::get(baseType.getContext(),std::max(leftDecType.getP(),rightDecType.getP()),std::max(leftDecType.getS(),rightDecType.getS()));
+   }
+   if (anyNullables) {
+      inferredReturnTypes.push_back(mlir::db::NullableType::get(context, baseType));
+   } else {
+      inferredReturnTypes.push_back(baseType);
+   }
+   return success();
+}
 LogicalResult mlir::db::CmpOp::inferReturnTypes(
    MLIRContext* context, Optional<Location> location, ValueRange operands,
    DictionaryAttr attributes, RegionRange regions,

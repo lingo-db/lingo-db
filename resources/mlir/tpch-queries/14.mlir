@@ -16,7 +16,7 @@ module {
       %17 = db.and %10, %13, %16 : i1, i1, i1
       relalg.return %17 : i1
     }
-    %4 = relalg.map @map0 %3 computes : [@tmp_attr3({type = !db.decimal<15, 2>}),@tmp_attr1({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuple){
+    %4 = relalg.map @map0 %3 computes : [@tmp_attr3({type = !db.decimal<15, 4>}),@tmp_attr1({type = !db.decimal<15, 4>})] (%arg0: !relalg.tuple){
       %8 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %9 = db.constant(1 : i32) : !db.decimal<15, 2>
       %10 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
@@ -25,31 +25,32 @@ module {
       %13 = relalg.getcol %arg0 @part::@p_type : !db.string
       %14 = db.constant("PROMO%") : !db.string
       %15 = db.runtime_call "Like"(%13, %14) : (!db.string, !db.string) -> i1
-      %16 = scf.if %15 -> (!db.decimal<15, 2>) {
+      %16 = scf.if %15 -> (!db.decimal<15, 4>) {
         %17 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
         %18 = db.constant(1 : i32) : !db.decimal<15, 2>
         %19 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
         %20 = db.sub %18 : !db.decimal<15, 2>, %19 : !db.decimal<15, 2>
         %21 = db.mul %17 : !db.decimal<15, 2>, %20 : !db.decimal<15, 2>
-        scf.yield %21 : !db.decimal<15, 2>
+        scf.yield %21 : !db.decimal<15, 4>
       } else {
-        %17 = db.constant(0 : i32) : !db.decimal<15, 2>
-        scf.yield %17 : !db.decimal<15, 2>
+        %17 = db.constant(0 : i32) : !db.decimal<15, 4>
+        scf.yield %17 : !db.decimal<15, 4>
       }
-      relalg.return %12, %16 : !db.decimal<15, 2>, !db.decimal<15, 2>
+      relalg.return %12, %16 : !db.decimal<15, 4>, !db.decimal<15, 4>
     }
-    %5 = relalg.aggregation @aggr0 %4 [] computes : [@tmp_attr2({type = !db.nullable<!db.decimal<15, 2>>}),@tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
-      %8 = relalg.aggrfn sum @map0::@tmp_attr3 %arg0 : !db.nullable<!db.decimal<15, 2>>
-      %9 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 2>>
-      relalg.return %8, %9 : !db.nullable<!db.decimal<15, 2>>, !db.nullable<!db.decimal<15, 2>>
+    %5 = relalg.aggregation @aggr0 %4 [] computes : [@tmp_attr2({type = !db.nullable<!db.decimal<15, 4>>}),@tmp_attr0({type = !db.nullable<!db.decimal<15, 4>>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+      %8 = relalg.aggrfn sum @map0::@tmp_attr3 %arg0 : !db.nullable<!db.decimal<15, 4>>
+      %9 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 4>>
+      relalg.return %8, %9 : !db.nullable<!db.decimal<15, 4>>, !db.nullable<!db.decimal<15, 4>>
     }
-    %6 = relalg.map @map1 %5 computes : [@tmp_attr4({type = !db.nullable<!db.decimal<15, 2>>})] (%arg0: !relalg.tuple){
-      %8 = db.constant("100.00") : !db.decimal<15, 2>
-      %9 = relalg.getcol %arg0 @aggr0::@tmp_attr0 : !db.nullable<!db.decimal<15, 2>>
-      %10 = db.mul %8 : !db.decimal<15, 2>, %9 : !db.nullable<!db.decimal<15, 2>>
-      %11 = relalg.getcol %arg0 @aggr0::@tmp_attr2 : !db.nullable<!db.decimal<15, 2>>
-      %12 = db.div %10 : !db.nullable<!db.decimal<15, 2>>, %11 : !db.nullable<!db.decimal<15, 2>>
-      relalg.return %12 : !db.nullable<!db.decimal<15, 2>>
+    %6 = relalg.map @map1 %5 computes : [@tmp_attr4({type = !db.nullable<!db.decimal<15, 6>>})] (%arg0: !relalg.tuple){
+      %8 = db.constant("100.00") : !db.decimal<5, 2>
+      %9 = relalg.getcol %arg0 @aggr0::@tmp_attr0 : !db.nullable<!db.decimal<15, 4>>
+      %10 = db.mul %8 : !db.decimal<5, 2>, %9 : !db.nullable<!db.decimal<15, 4>>
+      %11 = relalg.getcol %arg0 @aggr0::@tmp_attr2 : !db.nullable<!db.decimal<15, 4>>
+      %12 = db.cast %11 : !db.nullable<!db.decimal<15, 4>> -> !db.nullable<!db.decimal<15, 6>>
+      %13 = db.div %10 : !db.nullable<!db.decimal<15, 6>>, %12 : !db.nullable<!db.decimal<15, 6>>
+      relalg.return %13 : !db.nullable<!db.decimal<15, 6>>
     }
     %7 = relalg.materialize %6 [@map1::@tmp_attr4] => ["promo_revenue"] : !dsa.table
     return %7 : !dsa.table

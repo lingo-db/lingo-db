@@ -195,9 +195,45 @@ let assemblyFormat = "$left `:` type($left) `,` $right `:` type($right) attr-dic
 
 def DB_AddOp : DB_BinaryOp<"add"> {}
 def DB_SubOp : DB_BinaryOp<"sub"> {}
-def DB_MulOp : DB_BinaryOp<"mul"> {}
-def DB_DivOp : DB_BinaryOp<"div"> {}
-def DB_ModOp : DB_BinaryOp<"mod"> {}
+def DB_MulOp : DB_BinaryOp<"mul"> {
+  let extraClassDefinition = [{
+    LogicalResult $cppClass::inferReturnTypes(
+   MLIRContext* context, Optional<Location> location, ValueRange operands,
+   DictionaryAttr attributes, RegionRange regions,
+   SmallVectorImpl<Type>& inferredReturnTypes) {
+         return inferMulReturnType(context,location,operands,inferredReturnTypes);
+    }
+    bool $cppClass::canHandleInvalidValues(){
+        return true;
+    }
+  }];
+}
+def DB_DivOp : DB_BinaryOp<"div"> {
+  let extraClassDefinition = [{
+    LogicalResult $cppClass::inferReturnTypes(
+   MLIRContext* context, Optional<Location> location, ValueRange operands,
+   DictionaryAttr attributes, RegionRange regions,
+   SmallVectorImpl<Type>& inferredReturnTypes) {
+         return inferDivReturnType(context,location,operands,inferredReturnTypes);
+    }
+    bool $cppClass::canHandleInvalidValues(){
+        return true;
+    }
+  }];
+}
+def DB_ModOp : DB_BinaryOp<"mod"> {
+  let extraClassDefinition = [{
+    LogicalResult $cppClass::inferReturnTypes(
+   MLIRContext* context, Optional<Location> location, ValueRange operands,
+   DictionaryAttr attributes, RegionRange regions,
+   SmallVectorImpl<Type>& inferredReturnTypes) {
+         return inferDivReturnType(context,location,operands,inferredReturnTypes);
+    }
+    bool $cppClass::canHandleInvalidValues(){
+        return true;
+    }
+  }];
+}
 
 def DB_CMP_P_EQ  : I64EnumAttrCase<"eq", 0>;
 def DB_CMP_P_NEQ  : I64EnumAttrCase<"neq", 1>;

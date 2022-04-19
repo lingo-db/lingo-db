@@ -1,7 +1,7 @@
 //RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                       revenue  |
 //CHECK: ----------------------------------
-//CHECK: |                   11803366.91  |
+//CHECK: |                 11803420.2534  |
 module {
   func @main() -> !dsa.table {
     %0 = relalg.basetable @lineitem  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
@@ -28,15 +28,15 @@ module {
       %24 = db.and %7, %10, %20, %23 : i1, i1, i1, i1
       relalg.return %24 : i1
     }
-    %2 = relalg.map @map0 %1 computes : [@tmp_attr1({type = !db.decimal<15, 2>})] (%arg0: !relalg.tuple){
+    %2 = relalg.map @map0 %1 computes : [@tmp_attr1({type = !db.decimal<15, 4>})] (%arg0: !relalg.tuple){
       %5 = relalg.getcol %arg0 @lineitem::@l_extendedprice : !db.decimal<15, 2>
       %6 = relalg.getcol %arg0 @lineitem::@l_discount : !db.decimal<15, 2>
       %7 = db.mul %5 : !db.decimal<15, 2>, %6 : !db.decimal<15, 2>
-      relalg.return %7 : !db.decimal<15, 2>
+      relalg.return %7 : !db.decimal<15, 4>
     }
-    %3 = relalg.aggregation @aggr0 %2 [] computes : [@tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
-      %5 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 2>>
-      relalg.return %5 : !db.nullable<!db.decimal<15, 2>>
+    %3 = relalg.aggregation @aggr0 %2 [] computes : [@tmp_attr0({type = !db.nullable<!db.decimal<15, 4>>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
+      %5 = relalg.aggrfn sum @map0::@tmp_attr1 %arg0 : !db.nullable<!db.decimal<15, 4>>
+      relalg.return %5 : !db.nullable<!db.decimal<15, 4>>
     }
     %4 = relalg.materialize %3 [@aggr0::@tmp_attr0] => ["revenue"] : !dsa.table
     return %4 : !dsa.table

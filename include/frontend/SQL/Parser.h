@@ -154,6 +154,16 @@ struct SQLTypeInference {
       }
       return res;
    }
+   static std::vector<mlir::Value> toCommonTypes2(mlir::OpBuilder& builder, mlir::ValueRange values) {
+      std::vector<mlir::Value> res;
+      for (auto val : values) {
+         if(!getBaseType(val.getType()).isa<mlir::db::DecimalType>()){
+            return toCommonTypes(builder,values);
+         }
+         res.push_back(val);
+      }
+      return res;
+   }
 };
 #define T_FakeNode T_TidScan
 struct FakeNode : Node {
@@ -514,7 +524,7 @@ struct Parser {
                      }
                      return builder.create<mlir::db::SubOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonTypes(builder, {left, right}));
                   case ExpressionType::OPERATOR_MULTIPLY:
-                     return builder.create<mlir::db::MulOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonTypes(builder, {left, right}));
+                     return builder.create<mlir::db::MulOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonTypes2(builder, {left, right}));
                   case ExpressionType::OPERATOR_DIVIDE:
                      return builder.create<mlir::db::DivOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonTypes(builder, {left, right}));
                   case ExpressionType::OPERATOR_MOD:

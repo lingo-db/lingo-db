@@ -164,8 +164,9 @@ class DecimalMulLowering : public OpConversionPattern<mlir::db::MulOp> {
    LogicalResult matchAndRewrite(mlir::db::MulOp mulOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (auto decimalType = mulOp.getType().template dyn_cast_or_null<mlir::db::DecimalType>()) {
          auto stdType = typeConverter->convertType(decimalType);
-         auto multiplied = rewriter.create<mlir::arith::MulIOp>(mulOp->getLoc(), stdType, adaptor.left(), adaptor.right());
-         rewriter.replaceOpWithNewOp<arith::DivSIOp>(mulOp, stdType, multiplied, getDecimalScaleMultiplierConstant(rewriter, decimalType.getS(), stdType, mulOp->getLoc()));
+         mlir::Value multiplied = rewriter.create<mlir::arith::MulIOp>(mulOp->getLoc(), stdType, adaptor.left(), adaptor.right());
+         //rewriter.replaceOpWithNewOp<arith::DivSIOp>(mulOp, stdType, multiplied, getDecimalScaleMultiplierConstant(rewriter, decimalType.getS(), stdType, mulOp->getLoc()));
+         rewriter.replaceOp(mulOp,multiplied);
          return success();
       }
       return failure();
@@ -544,9 +545,9 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
       return mlir::IntegerType::get(patterns.getContext(), 64);
    });
    typeConverter.addConversion([&](::mlir::db::DecimalType t) {
-      if (t.getP() < 19) {
+      /*if (t.getP() < 19) {
          return mlir::IntegerType::get(patterns.getContext(), 64);
-      }
+      }*/
       return mlir::IntegerType::get(patterns.getContext(), 128);
    });
    typeConverter.addConversion([&](::mlir::db::CharType t) {

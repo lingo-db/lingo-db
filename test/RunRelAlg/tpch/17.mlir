@@ -20,25 +20,26 @@ module {
       %16 = relalg.getcol %arg0 @lineitem::@l_quantity : !db.decimal<15, 2>
       %17 = relalg.basetable @lineitem  {table_identifier = "lineitem"} columns: {l_comment => @l_comment({type = !db.string}), l_commitdate => @l_commitdate({type = !db.date<day>}), l_discount => @l_discount({type = !db.decimal<15, 2>}), l_extendedprice => @l_extendedprice({type = !db.decimal<15, 2>}), l_linenumber => @l_linenumber({type = i32}), l_linestatus => @l_linestatus({type = !db.char<1>}), l_orderkey => @l_orderkey({type = i32}), l_partkey => @l_partkey({type = i32}), l_quantity => @l_quantity({type = !db.decimal<15, 2>}), l_receiptdate => @l_receiptdate({type = !db.date<day>}), l_returnflag => @l_returnflag({type = !db.char<1>}), l_shipdate => @l_shipdate({type = !db.date<day>}), l_shipinstruct => @l_shipinstruct({type = !db.string}), l_shipmode => @l_shipmode({type = !db.string}), l_suppkey => @l_suppkey({type = i32}), l_tax => @l_tax({type = !db.decimal<15, 2>})}
       %18 = relalg.selection %17 (%arg1: !relalg.tuple){
-        %24 = relalg.getcol %arg1 @lineitem::@l_partkey : i32
-        %25 = relalg.getcol %arg1 @part::@p_partkey : i32
-        %26 = db.compare eq %24 : i32, %25 : i32
-        relalg.return %26 : i1
+        %25 = relalg.getcol %arg1 @lineitem::@l_partkey : i32
+        %26 = relalg.getcol %arg1 @part::@p_partkey : i32
+        %27 = db.compare eq %25 : i32, %26 : i32
+        relalg.return %27 : i1
       }
       %19 = relalg.aggregation @aggr0 %18 [] computes : [@tmp_attr0({type = !db.nullable<!db.decimal<15, 2>>})] (%arg1: !relalg.tuplestream,%arg2: !relalg.tuple){
-        %24 = relalg.aggrfn avg @lineitem::@l_quantity %arg1 : !db.nullable<!db.decimal<15, 2>>
-        relalg.return %24 : !db.nullable<!db.decimal<15, 2>>
+        %25 = relalg.aggrfn avg @lineitem::@l_quantity %arg1 : !db.nullable<!db.decimal<15, 2>>
+        relalg.return %25 : !db.nullable<!db.decimal<15, 2>>
       }
-      %20 = relalg.map @map0 %19 computes : [@tmp_attr1({type = !db.nullable<!db.decimal<15, 2>>})] (%arg1: !relalg.tuple){
-        %24 = db.constant("0.2") : !db.decimal<15, 2>
-        %25 = relalg.getcol %arg1 @aggr0::@tmp_attr0 : !db.nullable<!db.decimal<15, 2>>
-        %26 = db.mul %24 : !db.decimal<15, 2>, %25 : !db.nullable<!db.decimal<15, 2>>
-        relalg.return %26 : !db.nullable<!db.decimal<15, 2>>
+      %20 = relalg.map @map0 %19 computes : [@tmp_attr1({type = !db.nullable<!db.decimal<15, 3>>})] (%arg1: !relalg.tuple){
+        %25 = db.constant("0.2") : !db.decimal<2, 1>
+        %26 = relalg.getcol %arg1 @aggr0::@tmp_attr0 : !db.nullable<!db.decimal<15, 2>>
+        %27 = db.mul %25 : !db.decimal<2, 1>, %26 : !db.nullable<!db.decimal<15, 2>>
+        relalg.return %27 : !db.nullable<!db.decimal<15, 3>>
       }
-      %21 = relalg.getscalar @map0::@tmp_attr1 %20 : !db.nullable<!db.decimal<15, 2>>
-      %22 = db.compare lt %16 : !db.decimal<15, 2>, %21 : !db.nullable<!db.decimal<15, 2>>
-      %23 = db.and %9, %12, %15, %22 : i1, i1, i1, !db.nullable<i1>
-      relalg.return %23 : !db.nullable<i1>
+      %21 = relalg.getscalar @map0::@tmp_attr1 %20 : !db.nullable<!db.decimal<15, 3>>
+      %22 = db.cast %16 : !db.decimal<15, 2> -> !db.decimal<15, 3>
+      %23 = db.compare lt %22 : !db.decimal<15, 3>, %21 : !db.nullable<!db.decimal<15, 3>>
+      %24 = db.and %9, %12, %15, %23 : i1, i1, i1, !db.nullable<i1>
+      relalg.return %24 : !db.nullable<i1>
     }
     %4 = relalg.aggregation @aggr1 %3 [] computes : [@tmp_attr2({type = !db.nullable<!db.decimal<15, 2>>})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
       %7 = relalg.aggrfn sum @lineitem::@l_extendedprice %arg0 : !db.nullable<!db.decimal<15, 2>>

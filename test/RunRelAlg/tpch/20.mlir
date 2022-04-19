@@ -50,15 +50,15 @@ module {
           %32 = relalg.aggrfn sum @lineitem::@l_quantity %arg2 : !db.nullable<!db.decimal<15, 2>>
           relalg.return %32 : !db.nullable<!db.decimal<15, 2>>
         }
-        %27 = relalg.map @map0 %26 computes : [@tmp_attr1({type = !db.nullable<!db.decimal<15, 2>>})] (%arg2: !relalg.tuple){
-          %32 = db.constant("0.5") : !db.decimal<15, 2>
+        %27 = relalg.map @map0 %26 computes : [@tmp_attr1({type = !db.nullable<!db.decimal<15, 3>>})] (%arg2: !relalg.tuple){
+          %32 = db.constant("0.5") : !db.decimal<2, 1>
           %33 = relalg.getcol %arg2 @aggr0::@tmp_attr0 : !db.nullable<!db.decimal<15, 2>>
-          %34 = db.mul %32 : !db.decimal<15, 2>, %33 : !db.nullable<!db.decimal<15, 2>>
-          relalg.return %34 : !db.nullable<!db.decimal<15, 2>>
+          %34 = db.mul %32 : !db.decimal<2, 1>, %33 : !db.nullable<!db.decimal<15, 2>>
+          relalg.return %34 : !db.nullable<!db.decimal<15, 3>>
         }
-        %28 = relalg.getscalar @map0::@tmp_attr1 %27 : !db.nullable<!db.decimal<15, 2>>
-        %29 = db.cast %23 : i32 -> !db.decimal<15, 2>
-        %30 = db.compare gt %29 : !db.decimal<15, 2>, %28 : !db.nullable<!db.decimal<15, 2>>
+        %28 = relalg.getscalar @map0::@tmp_attr1 %27 : !db.nullable<!db.decimal<15, 3>>
+        %29 = db.cast %23 : i32 -> !db.decimal<15, 3>
+        %30 = db.compare gt %29 : !db.decimal<15, 3>, %28 : !db.nullable<!db.decimal<15, 3>>
         %31 = db.and %22, %30 : i1, !db.nullable<i1>
         relalg.return %31 : !db.nullable<i1>
       }
