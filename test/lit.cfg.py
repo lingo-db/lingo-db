@@ -53,6 +53,8 @@ config.mlirdb_tools_dir = config.mlirdb_obj_root
 
 # Tweak the PATH to include the tools dir.
 llvm_config.with_environment('PATH', config.llvm_tools_dir, append_path=True)
+llvm_config.with_environment('PYTHONPATH', config.mlirdb_obj_root, append_path=True)
+llvm_config.with_environment('PYTHONPATH', os.path.join(config.mlirdb_src_root, "arrow/python"), append_path=True)
 #llvm_config.with_environment('DATABASE_DIR', os.path.join(config.mlirdb_src_root,'resources/data/uni'))
 tool_dirs = [config.mlirdb_tools_dir, config.llvm_tools_dir]
 tools = [

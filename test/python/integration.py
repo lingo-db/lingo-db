@@ -3,9 +3,6 @@
 import sys,os
 sys.setdlopenflags(os.RTLD_NOW|os.RTLD_GLOBAL)
 
-build_dir_path=os.getcwd()+'/../../'
-sys.path.insert(0,build_dir_path)
-sys.path.insert(0,sys.argv[1]+'/../../arrow/python')
 import pyarrow as pa
 import pymlirdbext
 import pandas as pd
