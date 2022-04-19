@@ -58,7 +58,8 @@ tool_dirs = [config.mlirdb_tools_dir, config.llvm_tools_dir]
 tools = [
     'mlir-db-opt',
     'run-mlir',
-    'sql-to-mlir'
+    'sql-to-mlir',
+    'run-sql'
 ]
 
 llvm_config.add_tool_substitutions(tools, tool_dirs)

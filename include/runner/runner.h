@@ -14,6 +14,7 @@ enum class RunMode{
 class Runner {
    public:
    Runner(RunMode runMode);
+   bool loadSQL(std::string sql);
    bool load(std::string fileName);
    bool loadString(std::string input);
    bool optimize(runtime::Database& db);

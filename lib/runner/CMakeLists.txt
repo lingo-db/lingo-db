@@ -1,5 +1,5 @@
 set_source_files_properties(${PRECOMPILED_CC_PATH} PROPERTIES GENERATED TRUE)
 add_library(runner runner.cpp result_formatting.cpp ${PRECOMPILED_CC_PATH})
 llvm_update_compile_flags(runner)
-target_link_libraries(runner PRIVATE ${LIBS} PUBLIC arrow_shared)
+target_link_libraries(runner PRIVATE ${LIBS} MLIRSQLFrontend PUBLIC arrow_shared pg_query::pg_query )
 add_dependencies(runner precompiled)

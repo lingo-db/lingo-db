@@ -21,6 +21,18 @@ else ()
 endif (COMPILE_FOR_PERF)
 set_target_properties(run-mlir PROPERTIES  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
+# run-sql
+add_executable(run-sql run-sql.cpp)
+target_link_libraries(run-sql runner runtime mlir-support)
+target_link_options(run-sql PUBLIC -Wl,--export-dynamic)
+if (COMPILE_FOR_PERF)
+    target_compile_definitions(run-sql PRIVATE RUN_QUERIES_WITH_PERF=1)
+else ()
+    target_compile_definitions(run-sql PRIVATE RUN_QUERIES_WITH_PERF=0)
+endif (COMPILE_FOR_PERF)
+set_target_properties(run-sql PROPERTIES  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+
 # mlir-db-opt
 add_executable(mlir-db-opt mlir-opt.cpp)
 llvm_update_compile_flags(mlir-db-opt)

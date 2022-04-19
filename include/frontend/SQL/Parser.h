@@ -6,6 +6,8 @@
 #include "llvm/ADT/ScopedHashTable.h"
 #include "llvm/ADT/SmallString.h"
 
+#include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
@@ -13,7 +15,6 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
-#include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/IR/Builders.h"
