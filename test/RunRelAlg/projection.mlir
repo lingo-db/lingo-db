@@ -1,4 +1,4 @@
-//RUN: mlir-db-opt -relalg-to-db -canonicalize %s | db-run-query "-" %S/../../resources/data/uni | FileCheck %s
+//RUN: mlir-db-opt -relalg-to-db -canonicalize %s | run-mlir "-" %S/../../resources/data/uni | FileCheck %s
 //CHECK: |                        matrnr  |
 //CHECK: ----------------------------------
 //CHECK: |                         26120  |

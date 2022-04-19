@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                        c_name  |                     c_custkey  |                    o_orderkey  |                   o_orderdate  |                  o_totalprice  |                           sum  |
 //CHECK: -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 //CHECK: |          "Customer#000001639"  |                          1639  |                        502886  |                    1994-04-12  |                     456423.88  |                        312.00  |

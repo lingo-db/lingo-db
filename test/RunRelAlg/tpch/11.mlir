@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                    ps_partkey  |                         value  |
 //CHECK: -------------------------------------------------------------------
 //CHECK: |                         12098  |                 16227681.2100  |

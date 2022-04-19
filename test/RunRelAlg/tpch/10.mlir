@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                     c_custkey  |                        c_name  |                       revenue  |                     c_acctbal  |                        n_name  |                     c_address  |                       c_phone  |                     c_comment  |
 //CHECK: -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 //CHECK: |                          8242  |          "Customer#000008242"  |                   622786.7297  |                       6322.09  |                    "ETHIOPIA"  |"P2n4nJhy,UqSo2s43YfSvYJDZ6lk"  |             "15-792-676-1184"  |"slyly regular packages haggle carefully ironic ideas. courts are furiously. furiously unusual theodolites cajole. i"  |

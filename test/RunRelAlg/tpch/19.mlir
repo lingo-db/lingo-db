@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                       revenue  |
 //CHECK: ----------------------------------
 //CHECK: |                   168597.2860  |

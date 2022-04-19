@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                     s_acctbal  |                        s_name  |                        n_name  |                     p_partkey  |                        p_mfgr  |                     s_address  |                       s_phone  |                     s_comment  |
 //CHECK: -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 //CHECK: |                       9828.21  |          "Supplier#000000647"  |              "UNITED KINGDOM"  |                         13120  |              "Manufacturer#5"  |                "x5U7MBZmwfG9"  |             "33-258-202-4782"  |"s the slyly even ideas poach fluffily "  |

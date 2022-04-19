@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                     cntrycode  |                       numcust  |                    totacctbal  |
 //CHECK: ----------------------------------------------------------------------------------------------------
 //CHECK: |                          "13"  |                            94  |                     714035.05  |

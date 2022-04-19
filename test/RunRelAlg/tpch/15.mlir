@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                     s_suppkey  |                        s_name  |                     s_address  |                       s_phone  |                 total_revenue  |
 //CHECK: ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
 //CHECK: |                           677  |          "Supplier#000000677"  |       "8mhrffG7D2WJBSQbOGstQ"  |             "23-290-639-3315"  |                  1614410.2928  |

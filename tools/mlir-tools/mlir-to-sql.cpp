@@ -1,4 +1,8 @@
+#include "llvm/ADT/TypeSwitch.h"
 #include "llvm/Support/CommandLine.h"
+#include "llvm/Support/ErrorOr.h"
+#include "llvm/Support/MemoryBuffer.h"
+#include "llvm/Support/SourceMgr.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
@@ -12,10 +16,6 @@
 #include "mlir/IR/MLIRContext.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include <llvm/ADT/TypeSwitch.h>
-#include <llvm/Support/ErrorOr.h>
-#include <llvm/Support/MemoryBuffer.h>
-#include <llvm/Support/SourceMgr.h>
 
 #include <iostream>
 #include <list>

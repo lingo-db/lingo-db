@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                       p_brand  |                        p_type  |                        p_size  |                  supplier_cnt  |
 //CHECK: -------------------------------------------------------------------------------------------------------------------------------------
 //CHECK: |                    "Brand#14"  |       "SMALL ANODIZED NICKEL"  |                            45  |                            12  |

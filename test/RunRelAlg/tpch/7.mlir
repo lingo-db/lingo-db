@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                   supp_nation  |                   cust_nation  |                        l_year  |                       revenue  |
 //CHECK: -------------------------------------------------------------------------------------------------------------------------------------
 //CHECK: |                      "FRANCE"  |                     "GERMANY"  |                          1995  |                  4637235.1501  |

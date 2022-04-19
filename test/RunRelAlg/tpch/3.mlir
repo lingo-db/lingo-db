@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                    l_orderkey  |                       revenue  |                   o_orderdate  |                o_shippriority  |
 //CHECK: -------------------------------------------------------------------------------------------------------------------------------------
 //CHECK: |                        223140  |                   355369.0698  |                    1995-03-14  |                             0  |

@@ -1,4 +1,4 @@
---//RUN: sql-to-mlir %s | db-run-query "-" %S/../../resources/data/uni | FileCheck %s
+--//RUN: sql-to-mlir %s | run-mlir "-" %S/../../resources/data/uni | FileCheck %s
 
 --//CHECK: |                           sum  |                           min  |                           max  |                           avg  |                         count  |                         count  |
 --//CHECK: -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

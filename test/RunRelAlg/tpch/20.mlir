@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                        s_name  |                     s_address  |
 //CHECK: -------------------------------------------------------------------
 //CHECK: |          "Supplier#000000157"  |                 ",mEGorBfVIm"  |

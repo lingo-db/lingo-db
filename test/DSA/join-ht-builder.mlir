@@ -1,4 +1,4 @@
- // RUN: db-run-query %s | FileCheck %s
+ // RUN: run-mlir %s | FileCheck %s
  !entry_type=type tuple<tuple<!db.string,i32>,tuple<i32,i32>>
 //CHECK: string("stra")
 //CHECK: int(4)

@@ -1,4 +1,4 @@
- // RUN: db-run-query %s | FileCheck %s
+ // RUN: run-mlir %s | FileCheck %s
  !entry_type=type tuple<tuple<>,tuple<i32,i32>>
 //CHECK: int(10)
 //CHECK: int(24)

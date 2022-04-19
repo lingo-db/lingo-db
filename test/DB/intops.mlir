@@ -1,4 +1,4 @@
-// RUN: db-run-query %s | FileCheck %s
+// RUN: run-mlir %s | FileCheck %s
 
 
  module {

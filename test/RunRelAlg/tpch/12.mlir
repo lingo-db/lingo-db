@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                    l_shipmode  |               high_line_count  |                low_line_count  |
 //CHECK: ----------------------------------------------------------------------------------------------------
 //CHECK: |                        "MAIL"  |                           647  |                           945  |

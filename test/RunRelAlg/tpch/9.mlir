@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                        nation  |                        o_year  |                    sum_profit  |
 //CHECK: ----------------------------------------------------------------------------------------------------
 //CHECK: |                     "ALGERIA"  |                          1998  |                  2321785.3682  |

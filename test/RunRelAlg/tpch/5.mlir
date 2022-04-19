@@ -1,4 +1,4 @@
-//RUN: db-run-query %s %S/../../../resources/data/tpch | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/tpch | FileCheck %s
 //CHECK: |                        n_name  |                       revenue  |
 //CHECK: -------------------------------------------------------------------
 //CHECK: |                       "CHINA"  |                  7822103.0000  |

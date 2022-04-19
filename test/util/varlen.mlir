@@ -1,4 +1,4 @@
-// RUN: db-run-query %s | FileCheck %s
+// RUN: run-mlir %s | FileCheck %s
 
 module  {
   func private @_ZN7runtime11DumpRuntime10dumpStringEbNS_8VarLen32E(i1, !util.varlen32)

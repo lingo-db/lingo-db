@@ -59,7 +59,7 @@ include(${Arrow_DIR}/FindArrowPython.cmake)
 include_directories(${ARROW_INCLUDE_DIR})
 
 add_subdirectory(include)
-add_subdirectory(tools/runtime-header-tool)
+add_subdirectory(tools/build-tools)
 add_subdirectory(lib/mlir-support)
 add_subdirectory(lib/RelAlg)
 add_subdirectory(lib/DB)
@@ -123,25 +123,6 @@ set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
 add_subdirectory(lib/runtime)
 add_subdirectory(lib/runner)
 add_subdirectory(lib/frontend/SQL)
-
-add_executable(mlir-db-opt mlir-opt.cpp)
-
-add_executable(db-run-query db-run-query.cpp)
-target_link_libraries(db-run-query runner runtime mlir-support)
-target_link_options(db-run-query PUBLIC -Wl,--export-dynamic)
-
-
-llvm_update_compile_flags(mlir-db-opt)
-target_link_libraries(mlir-db-opt PUBLIC ${LIBS} runtime mlir-support PRIVATE arrow_shared)
-if (COMPILE_FOR_PERF)
-    target_compile_definitions(db-run-query PRIVATE RUN_QUERIES_WITH_PERF=1)
-else ()
-    target_compile_definitions(db-run-query PRIVATE RUN_QUERIES_WITH_PERF=0)
-endif (COMPILE_FOR_PERF)
-
-add_executable(mlir-ctxt-opt mlir-ctxt-opt.cpp)
-llvm_update_compile_flags(mlir-ctxt-opt)
-target_link_libraries(mlir-ctxt-opt PUBLIC ${LIBS} runtime PRIVATE arrow_shared)
 add_subdirectory(tools)
 add_subdirectory(test)
 

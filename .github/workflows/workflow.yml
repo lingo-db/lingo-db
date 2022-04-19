@@ -52,7 +52,7 @@ jobs:
       - name: Run Test
         run: |
           cd /repo
-          python3 /repo/tools/sql-roundtrip-tests/test.py /build/mlirdb
+          python3 /repo/tools/scripts/sql-roundtrip-test.py /build/mlirdb
   lint:
     needs: build
     runs-on: ubuntu-latest

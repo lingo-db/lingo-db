@@ -11,6 +11,6 @@ for qnum in range(1, 23):
     file1 = "resources/sql/hyper/" + str(qnum) + ".sql"
     fileout = "resources/mlir/tpch-queries/" + str(qnum) + ".mlir"
     proc1 = subprocess.run(
-        "./build/lingodb-debug/tools/sql-to-mlir/sql-to-mlir  " + file1 + " > "+fileout,
+        "./build/lingodb-debug/sql-to-mlir  " + file1 + " > "+fileout,
         stdout=subprocess.PIPE,stderr=subprocess.PIPE, shell=True)
 
