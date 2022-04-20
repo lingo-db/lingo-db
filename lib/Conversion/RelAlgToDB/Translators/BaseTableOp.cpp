@@ -35,7 +35,7 @@ class BaseTableTranslator : public mlir::relalg::Translator {
             }
             scanDescription += "\"" + identifier.str() + "\"";
             columnNames.push_back(builder.getStringAttr(identifier.strref()));
-            types.push_back(attrDef.getColumn().type);
+            types.push_back(getBaseType(attrDef.getColumn().type));
             cols.push_back(&attrDef.getColumn());
          }
       }
