@@ -113,7 +113,7 @@ struct SQLTypeInference {
    static mlir::FloatType getHigherFloatType(mlir::Type left, mlir::Type right);
    static mlir::IntegerType getHigherIntType(mlir::Type left, mlir::Type right);
    static mlir::db::DecimalType getHigherDecimalType(mlir::Type left, mlir::Type right);
-   static mlir::Type getCommonType(mlir::Type left, mlir::Type right) {
+   static mlir::Type getCommonBaseType(mlir::Type left, mlir::Type right) {
       left = getBaseType(left);
       right = getBaseType(right);
       bool stringPresent = left.isa<mlir::db::StringType>() || right.isa<mlir::db::StringType>();
@@ -126,6 +126,22 @@ struct SQLTypeInference {
       if (intPresent) return getHigherIntType(left, right);
       return left;
    }
+   static mlir::Type getCommonType(mlir::Type left, mlir::Type right) {
+      bool isNullable = left.isa<mlir::db::NullableType>() || right.isa<mlir::db::NullableType>();
+      auto commonBaseType = getCommonBaseType(left, right);
+      if (isNullable) {
+         return mlir::db::NullableType::get(left.getContext(), commonBaseType);
+      } else {
+         return commonBaseType;
+      }
+   }
+   static mlir::Type getCommonBaseType(mlir::TypeRange types) {
+      mlir::Type commonType = types.front();
+      for (auto t : types) {
+         commonType = getCommonBaseType(commonType, t);
+      }
+      return commonType;
+   }
    static mlir::Type getCommonType(mlir::TypeRange types) {
       mlir::Type commonType = types.front();
       for (auto t : types) {
@@ -135,31 +151,36 @@ struct SQLTypeInference {
    }
    static mlir::Value toType(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t) {
       bool isNullable = v.getType().isa<mlir::db::NullableType>();
-      if (isNullable) {
+      if (isNullable&&!t.isa<mlir::db::NullableType>()) {
          t = mlir::db::NullableType::get(builder.getContext(), t);
       }
       if (v.getType() == t) { return v; }
       if (auto* defOp = v.getDefiningOp()) {
          if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(defOp)) {
+            assert(!t.isa<mlir::db::NullableType>());
             constOp.getResult().setType(t);
             return constOp;
+         }
+         if (auto nullOp = mlir::dyn_cast_or_null<mlir::db::NullOp>(defOp)) {
+            nullOp.getResult().setType(t);
+            return nullOp;
          }
       }
       return builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), t, v);
    }
-   static std::vector<mlir::Value> toCommonTypes(mlir::OpBuilder& builder, mlir::ValueRange values) {
-      auto commonType = getCommonType(values.getTypes());
+   static std::vector<mlir::Value> toCommonBaseTypes(mlir::OpBuilder& builder, mlir::ValueRange values) {
+      auto commonType = getCommonBaseType(values.getTypes());
       std::vector<mlir::Value> res;
       for (auto val : values) {
          res.push_back(toType(builder, val, commonType));
       }
       return res;
    }
-   static std::vector<mlir::Value> toCommonTypes2(mlir::OpBuilder& builder, mlir::ValueRange values) {
+   static std::vector<mlir::Value> toCommonBaseTypes2(mlir::OpBuilder& builder, mlir::ValueRange values) {
       std::vector<mlir::Value> res;
       for (auto val : values) {
          if (!getBaseType(val.getType()).isa<mlir::db::DecimalType>()) {
-            return toCommonTypes(builder, values);
+            return toCommonBaseTypes(builder, values);
          }
          res.push_back(val);
       }
@@ -484,7 +505,7 @@ struct Parser {
                }
                auto val = translateExpression(builder, expr->lexpr_, context);
                values.insert(values.begin(), val);
-               return builder.create<mlir::db::OneOfOp>(loc, SQLTypeInference::toCommonTypes(builder, values));
+               return builder.create<mlir::db::OneOfOp>(loc, SQLTypeInference::toCommonBaseTypes(builder, values));
             }
             if (expr->kind_ == AEXPR_BETWEEN) {
                mlir::Value val = translateExpression(builder, expr->lexpr_, context);
@@ -494,7 +515,7 @@ struct Parser {
                auto* upperNode = reinterpret_cast<Node*>(list->tail->data.ptr_value);
                mlir::Value lower = translateExpression(builder, lowerNode, context);
                mlir::Value upper = translateExpression(builder, upperNode, context);
-               auto ct = SQLTypeInference::toCommonTypes(builder, {val, lower, upper});
+               auto ct = SQLTypeInference::toCommonBaseTypes(builder, {val, lower, upper});
                return builder.create<mlir::db::BetweenOp>(loc, ct[0], ct[1], ct[2], true, true);
             }
             if (expr->kind_ == AEXPR_LIKE) {
@@ -517,18 +538,18 @@ struct Parser {
                      if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
                         return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateAdd", mlir::ValueRange({left, right})).res();
                      }
-                     return builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonTypes(builder, {left, right}));
+                     return builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
                   case ExpressionType::OPERATOR_MINUS:
                      if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
                         return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateSubtract", mlir::ValueRange({left, right})).res();
                      }
-                     return builder.create<mlir::db::SubOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonTypes(builder, {left, right}));
+                     return builder.create<mlir::db::SubOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
                   case ExpressionType::OPERATOR_MULTIPLY:
-                     return builder.create<mlir::db::MulOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonTypes2(builder, {left, right}));
+                     return builder.create<mlir::db::MulOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes2(builder, {left, right}));
                   case ExpressionType::OPERATOR_DIVIDE:
-                     return builder.create<mlir::db::DivOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonTypes(builder, {left, right}));
+                     return builder.create<mlir::db::DivOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
                   case ExpressionType::OPERATOR_MOD:
-                     return builder.create<mlir::db::ModOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonTypes(builder, {left, right}));
+                     return builder.create<mlir::db::ModOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
                   case ExpressionType::COMPARE_EQUAL:
                   case ExpressionType::COMPARE_NOT_EQUAL:
                   case ExpressionType::COMPARE_LESS_THAN:
@@ -545,12 +566,12 @@ struct Parser {
                         case ExpressionType::COMPARE_GREATER_THAN_OR_EQUAL_TO: pred = mlir::db::DBCmpPredicate::gte; break;
                         default: error("should not happen");
                      }
-                     auto ct = SQLTypeInference::toCommonTypes(builder, {left, right});
+                     auto ct = SQLTypeInference::toCommonBaseTypes(builder, {left, right});
                      return builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), pred, ct[0], ct[1]);
                   }
                   case ExpressionType::COMPARE_LIKE:
                   case ExpressionType::COMPARE_NOT_LIKE: {
-                     auto ct = SQLTypeInference::toCommonTypes(builder, {left, right});
+                     auto ct = SQLTypeInference::toCommonBaseTypes(builder, {left, right});
                      auto like = builder.create<mlir::db::RuntimeCall>(loc, builder.getI1Type(), "Like", mlir::ValueRange({ct[0], ct[1]})).res();
                      return opType == ExpressionType::COMPARE_NOT_LIKE ? builder.create<mlir::db::NotOp>(loc, like) : like;
                   }
