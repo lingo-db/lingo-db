@@ -2,13 +2,13 @@
             { "name": "n_nationkey",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "n_name",  "type":{ "base": "string", "props": []}},
             { "name": "n_regionkey",  "type":{ "base": "int", "props": ["32"]}},
-            { "name": "n_comment",  "type":{ "base": "string", "props": ["nullable"]}}
+            { "name": "n_comment",  "type":{ "base": "string", "nullable": true, "props": []}}
         ]},
 
         { "name": "region", "rows": 5, "pkeys": ["r_regionkey"], "columns": [
             { "name": "r_regionkey",  "type":{ "base": "int", "props": ["32"]}},
             { "name": "r_name",  "type":{ "base": "string", "props": []}},
-            { "name": "r_comment",  "type":{ "base": "string", "props": ["nullable"]}}
+            { "name": "r_comment",  "type":{ "base": "string", "nullable": true, "props": []}}
        ]},
 
         { "name": "part", "rows": 20000, "pkeys": ["p_partkey"], "columns": [

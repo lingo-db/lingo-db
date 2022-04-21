@@ -1,0 +1,28 @@
+#ifndef RUNTIME_DATABASE_H
+#define RUNTIME_DATABASE_H
+
+#include <memory>
+#include <unordered_map>
+
+#include "metadata.h"
+#include <arrow/type_fwd.h>
+namespace runtime {
+
+class Database {
+   public:
+   //void addTable(std::string name, std::shared_ptr<arrow::Table> table);
+   static std::unique_ptr<Database> loadFromDir(std::string directory);
+   virtual bool hasTable(const std::string& name) = 0;
+
+   virtual std::shared_ptr<arrow::Table> getTable(const std::string& name) = 0;
+   virtual std::shared_ptr<arrow::RecordBatch> getSample(const std::string& name) = 0;
+   virtual std::shared_ptr<TableMetaData> getTableMetaData(const std::string& name) = 0;
+
+   static std::string serializeRecordBatch(std::shared_ptr<arrow::RecordBatch> batch);
+   static std::shared_ptr<arrow::RecordBatch> deserializeRecordBatch(std::string str);
+   virtual ~Database(){}
+};
+
+} //end namespace runtime
+
+#endif // RUNTIME_DATABASE_H

@@ -30,7 +30,7 @@ int main(int argc, char** argv) {
    context.id = 42;
    if (argc > 2) {
       std::cout << "Loading Database from: " << argv[2] << '\n';
-      auto database = runtime::Database::load(std::string(argv[2]));
+      auto database = runtime::Database::loadFromDir(std::string(argv[2]));
       context.db = std::move(database);
    }
    support::eval::init();

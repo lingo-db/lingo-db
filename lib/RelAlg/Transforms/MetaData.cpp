@@ -3,7 +3,7 @@
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include "runtime/database.h"
+#include "runtime/Database.h"
 namespace {
 class AttachMetaData : public mlir::PassWrapper<AttachMetaData, mlir::OperationPass<mlir::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-attach-meta-data"; }

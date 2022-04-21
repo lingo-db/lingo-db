@@ -8,7 +8,7 @@ for qnum in range(1, 22):
     file2 = "resources/sql/tpch/" + str(qnum) + ".sql"
 
     proc1 = subprocess.run(
-        objdir+"/sql-to-mlir " + file1 + " | "+objdir+"/mlir-db-opt --relalg-extract-nested-operators --relalg-decompose-lambdas --relalg-implicit-to-explicit-joins --relalg-pushdown --relalg-unnesting --relalg-optimize-join-order | "+objdir+"/mlir-to-sql",
+        objdir+"/sql-to-mlir " + file1 + " resources/data/tpch/metadata.json | "+objdir+"/mlir-db-opt --relalg-extract-nested-operators --relalg-decompose-lambdas --relalg-implicit-to-explicit-joins --relalg-pushdown --relalg-unnesting --relalg-optimize-join-order | "+objdir+"/mlir-to-sql",
         stdout=subprocess.PIPE, shell=True)
     mlir_query = proc1.stdout.decode('utf8')
     r1 = requests.post('https://hyper-db.de/interface/query', data={'query': mlir_query})

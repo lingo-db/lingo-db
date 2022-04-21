@@ -22,6 +22,7 @@
 #include "mlir/InitAllDialects.h"
 
 #include "parsenodes.h"
+#include "runtime/Database.h"
 
 #include <llvm/ADT/StringSwitch.h>
 
@@ -151,7 +152,7 @@ struct SQLTypeInference {
    }
    static mlir::Value toType(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t) {
       bool isNullable = v.getType().isa<mlir::db::NullableType>();
-      if (isNullable&&!t.isa<mlir::db::NullableType>()) {
+      if (isNullable && !t.isa<mlir::db::NullableType>()) {
          t = mlir::db::NullableType::get(builder.getContext(), t);
       }
       if (v.getType() == t) { return v; }
@@ -205,23 +206,6 @@ struct Parser {
       static std::string getTombstoneKey() { return "-"; }
       static size_t getHashValue(std::string str) { return std::hash<std::string>{}(str); }
    };
-   struct Schema {
-      struct Table {
-         std::vector<std::pair<std::string, mlir::Type>> columns;
-         //std::unordered_map<;
-         Table(std::initializer_list<std::pair<std::string, mlir::Type>> list) : columns() {
-            for (auto x : list) {
-               columns.push_back(x);
-            }
-         }
-      };
-      std::unordered_map<std::string, Table> tables;
-      Schema(std::initializer_list<std::pair<std::string, Table>> list) : tables() {
-         for (auto x : list) {
-            tables.insert(x);
-         }
-      }
-   };
    struct TranslationContext {
       std::stack<mlir::Value> currTuple;
       std::vector<std::pair<std::string, const mlir::relalg::Column*>> allAttributes;
@@ -265,7 +249,7 @@ struct Parser {
    };
    std::string sql;
    PgQueryInternalParsetreeAndError result;
-   Schema& schema;
+   runtime::Database& database;
    std::vector<std::unique_ptr<FakeNode>> fakeNodes;
    struct TargetInfo {
       std::vector<std::pair<std::string, const mlir::relalg::Column*>> namedResults;
@@ -282,7 +266,7 @@ struct Parser {
       fakeNodes.emplace_back(std::move(node));
       return ptr;
    }
-   Parser(std::string sql, Schema& schema, mlir::MLIRContext* context) : attrManager(context->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager()), sql(sql), schema(schema) {
+   Parser(std::string sql, runtime::Database& database, mlir::MLIRContext* context) : attrManager(context->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager()), sql(sql), database(database) {
       pg_query_parse_init();
       result = pg_query_parse(sql.c_str());
    }
@@ -686,13 +670,35 @@ struct Parser {
       error("should never happen");
       return mlir::Value();
    }
+   size_t asInt(std::variant<size_t, std::string> intOrStr) {
+      if (std::holds_alternative<size_t>(intOrStr)) {
+         return std::get<size_t>(intOrStr);
+      } else {
+         return std::stoll(std::get<std::string>(intOrStr));
+      }
+   }
+   mlir::Type translateColBaseType(mlir::MLIRContext* context, const runtime::ColumnType& colType) {
+      if (colType.base == "bool") return mlir::IntegerType::get(context, 1);
+      if (colType.base == "int") return mlir::IntegerType::get(context, asInt(colType.modifiers.at(0)));
+      if (colType.base == "float") return asInt(colType.modifiers.at(0)) == 32 ? mlir::FloatType::getF32(context) : mlir::FloatType::getF64(context);
+      if (colType.base == "date") return mlir::db::DateType::get(context, mlir::db::symbolizeDateUnitAttr(std::get<std::string>(colType.modifiers.at(0))).getValue());
+      if (colType.base == "string") return mlir::db::StringType::get(context);
+      if (colType.base == "char") return mlir::db::CharType::get(context, asInt(colType.modifiers.at(0)));
+      if (colType.base == "decimal") return mlir::db::DecimalType::get(context, asInt(colType.modifiers.at(0)), asInt(colType.modifiers.at(1)));
+      assert(false);
+      return mlir::Type();
+   }
+   mlir::Type translateColType(mlir::MLIRContext* context, const runtime::ColumnType& colType) {
+      mlir::Type baseType = translateColBaseType(context, colType);
+      return colType.nullable ? mlir::db::NullableType::get(context, baseType) : baseType;
+   }
    mlir::Value translateRangeVar(mlir::OpBuilder& builder, RangeVar* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
       std::string relation = stmt->relname_;
       std::string alias = relation;
       if (stmt->alias_ && stmt->alias_->type_ == T_Alias && stmt->alias_->aliasname_) {
          alias = stmt->alias_->aliasname_;
       }
-      if (!schema.tables.contains(relation)) {
+      if (!database.hasTable(relation)) {
          if (ctes.contains(relation)) {
             auto [tree, targetInfo] = ctes.at(relation);
             for (auto x : targetInfo.namedResults) {
@@ -704,17 +710,17 @@ struct Parser {
             error("unknown relation " + relation);
          }
       }
-      auto& table = schema.tables.at(relation);
+      auto tableMetaData = database.getTableMetaData(relation);
       static size_t id = 0;
       std::string scopeName = alias + (id != 0 ? std::to_string(id) : "");
       std::vector<mlir::NamedAttribute> columns;
       attrManager.setCurrentScope(scopeName);
-      for (auto c : table.columns) {
-         auto attrDef = attrManager.createDef(c.first);
-         attrDef.getColumn().type = c.second;
-         columns.push_back(builder.getNamedAttr(c.first, attrDef));
-         context.mapAttribute(scope, c.first, &attrDef.getColumn()); //todo check for existing and overwrite...
-         context.mapAttribute(scope, alias + "." + c.first, &attrDef.getColumn());
+      for (auto c : tableMetaData->getOrderedColumns()) {
+         auto attrDef = attrManager.createDef(c);
+         attrDef.getColumn().type = translateColType(builder.getContext(), tableMetaData->getColumnMetaData(c)->getColumnType());
+         columns.push_back(builder.getNamedAttr(c, attrDef));
+         context.mapAttribute(scope, c, &attrDef.getColumn()); //todo check for existing and overwrite...
+         context.mapAttribute(scope, alias + "." + c, &attrDef.getColumn());
       }
       return builder.create<mlir::relalg::BaseTableOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), scopeName, relation, mlir::relalg::TableMetaDataAttr::get(builder.getContext(), std::make_shared<runtime::TableMetaData>()), builder.getDictionaryAttr(columns));
    }

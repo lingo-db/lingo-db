@@ -31,11 +31,14 @@ int main(int argc, char** argv) {
    std::cerr << sqlQuery << std::endl;
    runtime::ExecutionContext context;
    context.id = 42;
-   if (argc > 2) {
-      std::cout << "Loading Database from: " << argv[2] << '\n';
-      auto database = runtime::Database::load(std::string(argv[2]));
-      context.db = std::move(database);
+   if (argc <= 2) {
+      std::cerr << "USAGE: run-sql *.sql database" << std::endl;
+      return 1;
    }
+   std::cout << "Loading Database from: " << argv[2] << '\n';
+   auto database = runtime::Database::loadFromDir(std::string(argv[2]));
+   context.db = std::move(database);
+
    support::eval::init();
    runner::RunMode runMode;
    if (RUN_QUERIES_WITH_PERF) {
@@ -44,7 +47,7 @@ int main(int argc, char** argv) {
       runMode = beingTraced() ? runner::RunMode::DEBUGGING : runner::RunMode::SPEED;
    }
    runner::Runner runner(runMode);
-   runner.loadSQL(sqlQuery);
+   runner.loadSQL(sqlQuery, *context.db);
    runner.dump();
    runner.optimize(*context.db);
    //runner.dump();

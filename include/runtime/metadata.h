@@ -4,19 +4,29 @@
 #include <unordered_map>
 
 #include <arrow/record_batch.h>
+#include<variant>
 namespace runtime {
+struct ColumnType {
+   std::string base;
+   bool nullable;
+   std::vector<std::variant<size_t, std::string>> modifiers;
+};
 class ColumnMetaData {
    std::optional<size_t> distinctValues;
+   ColumnType columnType;
 
    public:
    const std::optional<size_t>& getDistinctValues() const;
    void setDistinctValues(const std::optional<size_t>& distinctValues);
+   const ColumnType& getColumnType() const;
+   void setColumnType(const ColumnType& columnType);
 };
 class TableMetaData {
    bool present;
    size_t numRows;
    std::vector<std::string> primaryKey;
    std::unordered_map<std::string, std::shared_ptr<ColumnMetaData>> columns;
+   std::vector<std::string> orderedColumns;
    std::shared_ptr<arrow::RecordBatch> sample;
 
    public:
@@ -34,6 +44,7 @@ class TableMetaData {
    const std::shared_ptr<arrow::RecordBatch>& getSample() const {
       return sample;
    }
+   const std::vector<std::string>& getOrderedColumns() const;
    static std::shared_ptr<TableMetaData> deserialize(std::string);
    std::string serialize() const;
    static std::shared_ptr<TableMetaData> create(const std::string& json, const std::string& name, std::shared_ptr<arrow::RecordBatch> sample);

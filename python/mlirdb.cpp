@@ -3,11 +3,12 @@
 #include <pybind11/pybind11.h>
 
 #include "runner/runner.h"
+#include "runtime/ExternalArrowDatabase.h"
 
 runtime::ExecutionContext* executionContext;
 void load(pybind11::dict dictionary) {
    executionContext = new runtime::ExecutionContext;
-   auto database = std::make_unique<runtime::Database>();
+   auto database = std::make_unique<runtime::ExternalArrowDatabase>();
    for (auto item : dictionary) {
       std::string name = item.first.cast<pybind11::str>();
       auto arrowTable = arrow::py::unwrap_table(item.second.ptr()).ValueOrDie();
