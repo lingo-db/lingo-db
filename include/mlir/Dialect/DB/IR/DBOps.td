@@ -273,91 +273,72 @@ def DB_ModOp : DB_BinaryOp<"mod"> {
   }];
 }
 
+class DB_LogicalOp<string mnemonic, list<Trait> traits = []> :
+        Op<DB_Dialect, mnemonic,
+            !listconcat(traits, [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>])> {
+    let results = (outs AnyBool:$res);
+    let extraClassDefinition = [{
+        LogicalResult $cppClass::inferReturnTypes(MLIRContext* context, Optional<Location>, ValueRange operands,
+                DictionaryAttr, RegionRange, SmallVectorImpl<Type>& inferredReturnTypes) {
+            inferredReturnTypes.assign({constructNullableBool(context, operands)});
+            return success();
+        }
+    }];
+}
+
 def DB_CMP_P_EQ  : I64EnumAttrCase<"eq", 0>;
 def DB_CMP_P_NEQ  : I64EnumAttrCase<"neq", 1>;
 def DB_CMP_P_LT : I64EnumAttrCase<"lt", 2>;
 def DB_CMP_P_LTE : I64EnumAttrCase<"lte", 3>;
 def DB_CMP_P_GT : I64EnumAttrCase<"gt", 4>;
 def DB_CMP_P_GTE : I64EnumAttrCase<"gte", 5>;
-
 def DB_CmpPredicateAttr : I64EnumAttr<"DBCmpPredicate", "",
         [DB_CMP_P_EQ, DB_CMP_P_NEQ, DB_CMP_P_LT, DB_CMP_P_LTE, DB_CMP_P_GT,DB_CMP_P_GTE]> {
     let cppNamespace = "::mlir::db";
 }
 
-def DB_CmpOp : DB_Op<"compare",
-    [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>,DeclareOpInterfaceMethods<Relalg_CmpOpInterface>,DeclareOpInterfaceMethods<DB_HandleNullInterface>]> {
+def DB_CmpOp : DB_LogicalOp<"compare",
+        [DeclareOpInterfaceMethods<Relalg_CmpOpInterface>,DeclareOpInterfaceMethods<DB_HandleNullInterface>]> {
     let summary = "Compare int/Decimal/String";
 
     let arguments = (ins DB_CmpPredicateAttr:$predicate, NullableDBType:$left, NullableDBType:$right);
-    let results = (outs AnyBool:$result);
     let assemblyFormat = "$predicate $left `:` type($left) `,` $right `:` type($right) attr-dict";
 }
 
-def DB_BetweenOp : DB_Op<"between",
-        [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+def DB_BetweenOp : DB_LogicalOp<"between"> {
     let summary = "whether value is between `lower` and `upper`";
     let description = [{
         Determine whether a value is in a given range. This is preferred over (and also internally derived from) two comparisons to simplify optimizations depending on information about a value range.
     }];
 
     let arguments = (ins NullableDBType:$val, NullableDBType:$lower, NullableDBType:$upper, I1Attr:$lowerInclusive, I1Attr:$upperInclusive);
-    let results = (outs AnyBool:$result);
     let assemblyFormat = "$val `:` type ($val) `between` $lower `:` type($lower) `,` $upper `:` type($upper) `,` `lowerInclusive` `:` $lowerInclusive `,` `upperInclusive` `:` $upperInclusive attr-dict";
 }
 
-def DB_OneOfOp : DB_Op<"oneof",
-    [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+def DB_OneOfOp : DB_LogicalOp<"oneof"> {
     let summary = "whether `val` is included in `vals`";
     let description = [{
         Determine whether `val` is included in `vals`; similar to `IN` in SQL.
     }];
 
     let arguments = (ins NullableDBType:$val,Variadic<NullableDBType>:$vals );
-    let results = (outs AnyBool:$result);
     let assemblyFormat = "$val `:` type ($val) `?` $vals `:` type ($vals) attr-dict";
-
-    let extraClassDefinition = [{
-        LogicalResult $cppClass::inferReturnTypes(MLIRContext* context, Optional<Location>, ValueRange operands,
-                DictionaryAttr, RegionRange, SmallVectorImpl<Type>& inferredReturnTypes) {
-            inferredReturnTypes.assign({constructNullableBool(context, operands)});
-            return success();
-        }
-    }];
 }
 
-
-def AndOp : DB_Op<"and", [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+def AndOp : DB_LogicalOp<"and"> {
     let summary = "Logical And";
 
     let arguments = (ins Variadic<AnyBool>: $vals);
-    let results = (outs  AnyBool : $res);
     let hasCanonicalizeMethod = 1;
     let assemblyFormat = "$vals `:` type($vals) attr-dict";
-
-    let extraClassDefinition = [{
-        LogicalResult $cppClass::inferReturnTypes(MLIRContext* context, Optional<Location>, ValueRange operands,
-                DictionaryAttr, RegionRange, SmallVectorImpl<Type>& inferredReturnTypes) {
-            inferredReturnTypes.assign({constructNullableBool(context, operands)});
-            return success();
-        }
-    }];
 }
-def OrOp : DB_Op<"or", [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+
+def OrOp : DB_LogicalOp<"or"> {
     let summary = "Logical Or";
 
     let arguments = (ins Variadic<AnyType>: $vals);
-    let results = (outs AnyType : $res);
     let hasCanonicalizeMethod = 1;
     let assemblyFormat = "$vals `:` type($vals) attr-dict";
-
-    let extraClassDefinition = [{
-        LogicalResult $cppClass::inferReturnTypes(MLIRContext* context, Optional<Location>, ValueRange operands,
-                    DictionaryAttr, RegionRange, SmallVectorImpl<Type>& inferredReturnTypes) {
-            inferredReturnTypes.assign({constructNullableBool(context, operands)});
-            return success();
-        }
-    }];
 }
 
 def NotOp : DB_Op<"not", [NoSideEffect,SameOperandsAndResultType,DeclareOpInterfaceMethods<DB_HandleNullInterface>]> {

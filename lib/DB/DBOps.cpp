@@ -83,20 +83,6 @@ LogicalResult inferDivReturnType(MLIRContext* context, Optional<Location> locati
    }
    return success();
 }
-LogicalResult mlir::db::CmpOp::inferReturnTypes(
-   MLIRContext* context, Optional<Location> location, ValueRange operands,
-   DictionaryAttr attributes, RegionRange regions,
-   SmallVectorImpl<Type>& inferredReturnTypes) {
-   inferredReturnTypes.assign({constructNullableBool(context, operands)});
-   return success();
-}
-LogicalResult mlir::db::BetweenOp::inferReturnTypes(
-   MLIRContext* context, Optional<Location> location, ValueRange operands,
-   DictionaryAttr attributes, RegionRange regions,
-   SmallVectorImpl<Type>& inferredReturnTypes) {
-   inferredReturnTypes.assign({constructNullableBool(context, operands)});
-   return success();
-}
 
 ::mlir::LogicalResult verify(mlir::db::RuntimeCall runtimeCall) {
    auto reg = runtimeCall.getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
