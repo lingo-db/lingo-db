@@ -88,17 +88,14 @@ mlir::IntegerType frontend::sql::SQLTypeInference::getHigherIntType(mlir::Type l
    return leftInt;
 }
 mlir::db::DecimalType frontend::sql::SQLTypeInference::getHigherDecimalType(mlir::Type left, mlir::Type right) {
-   unsigned p = 0, s = 0;
-
-   if (auto leftDec = left.dyn_cast_or_null<mlir::db::DecimalType>()) {
-      p = std::max(p, leftDec.getP());
-      s = std::max(s, leftDec.getS());
+   auto a = left.dyn_cast_or_null<mlir::db::DecimalType>();
+   if (auto b = right.dyn_cast_or_null<mlir::db::DecimalType>()) {
+      if (!a) return b;
+      int hidig = std::max(a.getP() - a.getS(), b.getP() - b.getS());
+      int maxs = std::max(a.getS(), b.getS());
+      return mlir::db::DecimalType::get(a.getContext(), hidig + maxs, maxs);
    }
-   if (auto rightDec = right.dyn_cast_or_null<mlir::db::DecimalType>()) {
-      p = std::max(p, rightDec.getP());
-      s = std::max(s, rightDec.getS());
-   }
-   return mlir::db::DecimalType::get(left.getContext(), p, s);
+   return a;
 }
 mlir::Value frontend::sql::Parser::translateWhenCase(mlir::OpBuilder& builder, TranslationContext& context, mlir::Value compareValue, ListCell* whenCell, Node* defaultNode)  {
    auto loc = builder.getUnknownLoc();
