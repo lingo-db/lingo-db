@@ -37,10 +37,10 @@
 
   		%4 = db.mul %constm10 : !db.decimal<12,8>,%constm10 : !db.decimal<12,8>
  		//CHECK: decimal(100.0000002000000001)
- 		db.runtime_call "DumpValue" (%4) : (!db.decimal<12,16>) -> ()
+ 		db.runtime_call "DumpValue" (%4) : (!db.decimal<24,16>) -> ()
 		%5 = db.mul %const10 : !db.decimal<12,8>,%const10 : !db.decimal<12,8>
 		//CHECK: decimal(100.0000010000000025)
-		db.runtime_call "DumpValue" (%5) : (!db.decimal<12,16>) -> ()
+		db.runtime_call "DumpValue" (%5) : (!db.decimal<24,16>) -> ()
 
   		%6 = db.div %constm10 : !db.decimal<12,8>,%constm10 : !db.decimal<12,8>
  		//CHECK: decimal(1.00000000)

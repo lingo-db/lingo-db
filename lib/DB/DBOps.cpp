@@ -38,7 +38,18 @@ int getIntegerWidth(mlir::Type type, bool isUnSigned) {
    return 0;
 }
 LogicalResult inferReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
-   Type baseType = getBaseType(operands[0].getType());
+   Type baseTypeLeft = getBaseType(operands[0].getType());
+   Type baseTypeRight = getBaseType(operands[1].getType());
+   Type baseType=baseTypeLeft;
+   if(baseTypeLeft.isa<mlir::db::DecimalType>()){
+      auto a = baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
+      auto b = baseTypeRight.dyn_cast<mlir::db::DecimalType>();
+      auto hidig = std::max(a.getP() - a.getS(), b.getP() - b.getS());
+      auto maxs = std::max(a.getS(), b.getS());
+      // Addition is super-type of both, with larger precision for carry.
+      // TODO: actually add carry precision (+1).
+      baseType = mlir::db::DecimalType::get(a.getContext(), hidig + maxs, maxs);
+   }
    inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
    return success();
 }
@@ -47,9 +58,11 @@ LogicalResult inferMulReturnType(MLIRContext* context, Optional<Location> locati
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType=baseTypeLeft;
    if(baseTypeLeft.isa<mlir::db::DecimalType>()){
-      auto leftDecType=baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
-      auto rightDecType=baseTypeRight.dyn_cast<mlir::db::DecimalType>();
-      baseType=mlir::db::DecimalType::get(baseType.getContext(),std::max(leftDecType.getP(),rightDecType.getP()),leftDecType.getS()+rightDecType.getS());
+      auto a = baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
+      auto b = baseTypeRight.dyn_cast<mlir::db::DecimalType>();
+      auto sump = a.getP() + b.getP();
+      auto sums = a.getS() + b.getS();
+      baseType = mlir::db::DecimalType::get(a.getContext(), sump, sums);
    }
    inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
    return success();

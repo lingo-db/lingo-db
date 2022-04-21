@@ -18,7 +18,9 @@ class MaterializeTranslator : public mlir::relalg::Translator {
       } else if (auto uIntWidth = getIntegerWidth(type, true)) {
          return "uint[" + std::to_string(uIntWidth) + "]";
       } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
-         return "decimal[" + std::to_string(decimalType.getP()) + "," + std::to_string(decimalType.getS()) + "]";
+         // TODO: actually handle cases where 128 bits are insufficient.
+         auto prec = std::min(decimalType.getP(), 38);
+         return "decimal[" + std::to_string(prec) + "," + std::to_string(decimalType.getS()) + "]";
       } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
          return "float[" + std::to_string(intWidth) + "]";
       } else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {

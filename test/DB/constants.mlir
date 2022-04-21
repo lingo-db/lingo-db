@@ -97,7 +97,7 @@
 		 db.runtime_call "DumpValue" (%int64_mul) : (i64) -> ()
 		 db.runtime_call "DumpValue" (%float32_mul) : (f32) -> ()
 		 db.runtime_call "DumpValue" (%float64_mul) : (f64) -> ()
-		 db.runtime_call "DumpValue" (%decimal2_mul) : (!db.decimal<15,4>) -> ()
+		 db.runtime_call "DumpValue" (%decimal2_mul) : (!db.decimal<30,4>) -> ()
  		 db.runtime_call "DumpValue" (%int32_div) : (i32) -> ()
  		 db.runtime_call "DumpValue" (%int64_div) : (i64) -> ()
  		 db.runtime_call "DumpValue" (%float32_div) : (f32) -> ()
