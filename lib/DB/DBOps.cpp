@@ -14,13 +14,11 @@ bool mlir::db::CmpOp::isLessPred(bool eq) { return predicate() == (eq ? mlir::db
 bool mlir::db::CmpOp::isGreaterPred(bool eq) { return predicate() == (eq ? mlir::db::DBCmpPredicate::gte : mlir::db::DBCmpPredicate::gt); }
 mlir::Value mlir::db::CmpOp::getLeft() { return left(); }
 mlir::Value mlir::db::CmpOp::getRight() { return right(); }
-mlir::Type constructNullableBool(MLIRContext* context, ValueRange operands) {
-   bool nullable = llvm::any_of(operands, [](auto operand) { return operand.getType().template isa<mlir::db::NullableType>(); });
-   mlir::Type restype = IntegerType::get(context, 1);
-   if (nullable) {
-      restype = mlir::db::NullableType::get(context, restype);
+static Type wrapNullableType(MLIRContext* context, Type type, ValueRange values) {
+   if (llvm::any_of(values, [](Value v) { return v.getType().isa<mlir::db::NullableType>(); })) {
+      return mlir::db::NullableType::get(context, type);
    }
-   return restype;
+   return type;
 }
 mlir::Type getBaseType(mlir::Type t) {
    if (auto nullableT = t.dyn_cast_or_null<mlir::db::NullableType>()) {
@@ -40,17 +38,11 @@ int getIntegerWidth(mlir::Type type, bool isUnSigned) {
    return 0;
 }
 LogicalResult inferReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
-   bool anyNullables = llvm::any_of(operands, [](Value v) { return v.getType().isa<mlir::db::NullableType>(); });
    Type baseType = getBaseType(operands[0].getType());
-   if (anyNullables) {
-      inferredReturnTypes.push_back(mlir::db::NullableType::get(context, baseType));
-   } else {
-      inferredReturnTypes.push_back(baseType);
-   }
+   inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
    return success();
 }
 LogicalResult inferMulReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
-   bool anyNullables = llvm::any_of(operands, [](Value v) { return v.getType().isa<mlir::db::NullableType>(); });
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType=baseTypeLeft;
@@ -59,15 +51,10 @@ LogicalResult inferMulReturnType(MLIRContext* context, Optional<Location> locati
       auto rightDecType=baseTypeRight.dyn_cast<mlir::db::DecimalType>();
       baseType=mlir::db::DecimalType::get(baseType.getContext(),std::max(leftDecType.getP(),rightDecType.getP()),leftDecType.getS()+rightDecType.getS());
    }
-   if (anyNullables) {
-      inferredReturnTypes.push_back(mlir::db::NullableType::get(context, baseType));
-   } else {
-      inferredReturnTypes.push_back(baseType);
-   }
+   inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
    return success();
 }
 LogicalResult inferDivReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
-   bool anyNullables = llvm::any_of(operands, [](Value v) { return v.getType().isa<mlir::db::NullableType>(); });
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType=baseTypeLeft;
@@ -76,11 +63,7 @@ LogicalResult inferDivReturnType(MLIRContext* context, Optional<Location> locati
       auto rightDecType=baseTypeRight.dyn_cast<mlir::db::DecimalType>();
       baseType=mlir::db::DecimalType::get(baseType.getContext(),std::max(leftDecType.getP(),rightDecType.getP()),std::max(leftDecType.getS(),rightDecType.getS()));
    }
-   if (anyNullables) {
-      inferredReturnTypes.push_back(mlir::db::NullableType::get(context, baseType));
-   } else {
-      inferredReturnTypes.push_back(baseType);
-   }
+   inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
    return success();
 }
 

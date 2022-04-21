@@ -280,7 +280,8 @@ class DB_LogicalOp<string mnemonic, list<Trait> traits = []> :
     let extraClassDefinition = [{
         LogicalResult $cppClass::inferReturnTypes(MLIRContext* context, Optional<Location>, ValueRange operands,
                 DictionaryAttr, RegionRange, SmallVectorImpl<Type>& inferredReturnTypes) {
-            inferredReturnTypes.assign({constructNullableBool(context, operands)});
+            mlir::Type i1 = IntegerType::get(context, 1);
+            inferredReturnTypes.assign({wrapNullableType(context, i1, operands)});
             return success();
         }
     }];
