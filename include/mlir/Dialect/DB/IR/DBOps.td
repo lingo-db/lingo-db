@@ -114,7 +114,7 @@ def DB_DecimalType : DB_Type<"Decimal","decimal"> {
         Decimal type with `p` digits in total and `s` digits after the decimal point.
     }];
 
-    let parameters = (ins "unsigned":$p,"unsigned":$s);
+    let parameters = (ins "int":$p,"int":$s);
     let assemblyFormat="`<` $p `,` $s  `>` ";
 }
 

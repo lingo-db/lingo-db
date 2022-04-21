@@ -137,7 +137,7 @@ class BinOpLowering : public OpConversionPattern<OpClass> {
       return failure();
    }
 };
-mlir::Value getDecimalScaleMultiplierConstant(mlir::OpBuilder& builder, unsigned s, mlir::Type stdType, mlir::Location loc) {
+mlir::Value getDecimalScaleMultiplierConstant(mlir::OpBuilder& builder, int32_t s, mlir::Type stdType, mlir::Location loc) {
    auto [low, high] = support::getDecimalScaleMultiplier(s);
    std::vector<uint64_t> parts = {low, high};
    auto multiplier = builder.create<arith::ConstantOp>(loc, stdType, builder.getIntegerAttr(stdType, APInt(stdType.template cast<mlir::IntegerType>().getWidth(), parts)));

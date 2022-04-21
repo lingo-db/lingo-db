@@ -14,8 +14,8 @@ enum TimeUnit {
    MICRO,
    NANO
 };
-std::pair<uint64_t, uint64_t> getDecimalScaleMultiplier(unsigned scale);
-std::pair<uint64_t, uint64_t> parseDecimal(std::string str, unsigned scale);
+std::pair<uint64_t, uint64_t> getDecimalScaleMultiplier(int32_t scale);
+std::pair<uint64_t, uint64_t> parseDecimal(std::string str, int32_t scale);
 std::variant<int64_t, double, std::string> parse(std::variant<int64_t, double, std::string> val, arrow::Type::type type, uint32_t param1 = 0, uint32_t param2 = 0);
 
 } // end namespace support

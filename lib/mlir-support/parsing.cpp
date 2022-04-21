@@ -16,11 +16,11 @@ arrow::TimeUnit::type convertTimeUnit(support::TimeUnit unit) {
    return arrow::TimeUnit::SECOND;
 }
 
-std::pair<uint64_t, uint64_t> support::getDecimalScaleMultiplier(unsigned scale) {
+std::pair<uint64_t, uint64_t> support::getDecimalScaleMultiplier(int32_t scale) {
    auto decimalrep = arrow::Decimal128::GetScaleMultiplier(scale);
    return {decimalrep.low_bits(), (uint64_t) decimalrep.high_bits()};
 }
-std::pair<uint64_t, uint64_t> support::parseDecimal(std::string str, unsigned reqScale) {
+std::pair<uint64_t, uint64_t> support::parseDecimal(std::string str, int32_t reqScale) {
    int32_t precision;
    int32_t scale;
    arrow::Decimal128 decimalrep;

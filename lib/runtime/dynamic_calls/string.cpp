@@ -125,7 +125,7 @@ CAST_NUMERIC_FROM_STRING(float, arrow::FloatType, Float32)
 CAST_NUMERIC_FROM_STRING(double, arrow::DoubleType, Float64)
 //end taken from gandiva
 
-__int128 runtime::StringRuntime::toDecimal(runtime::VarLen32 string, unsigned reqScale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+__int128 runtime::StringRuntime::toDecimal(runtime::VarLen32 string, int32_t reqScale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    int32_t precision;
    int32_t scale;
    arrow::Decimal128 decimalrep;
@@ -157,7 +157,7 @@ CAST_NUMERIC_TO_STRING(int64_t, arrow::Int64Type, Int)
 CAST_NUMERIC_TO_STRING(float, arrow::FloatType, Float32)
 CAST_NUMERIC_TO_STRING(double, arrow::DoubleType, Float64)
 
-runtime::VarLen32 runtime::StringRuntime::fromDecimal(__int128 val, uint32_t scale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
+runtime::VarLen32 runtime::StringRuntime::fromDecimal(__int128 val, int32_t scale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
 
    arrow::Decimal128 decimalrep(arrow::BasicDecimal128(val >> 64, val));
    std::string str = decimalrep.ToString(scale);
