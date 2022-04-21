@@ -49,6 +49,14 @@ def NullableType : DB_Type<"Nullable","nullable"> {
 
     let parameters = (ins "Type":$type);
     let assemblyFormat = " `<` $type `>`";
+
+    let builders = [
+        TypeBuilderWithInferredContext<(ins "Type":$type), [{
+            return $_get(type.getContext(), type);
+        }]>
+    ];
+    // XXX: remove builder that takes context parameter
+    // let skipDefaultBuilders = 1;
 }
 
 

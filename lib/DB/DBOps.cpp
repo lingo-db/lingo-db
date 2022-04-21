@@ -16,7 +16,7 @@ mlir::Value mlir::db::CmpOp::getLeft() { return left(); }
 mlir::Value mlir::db::CmpOp::getRight() { return right(); }
 static Type wrapNullableType(MLIRContext* context, Type type, ValueRange values) {
    if (llvm::any_of(values, [](Value v) { return v.getType().isa<mlir::db::NullableType>(); })) {
-      return mlir::db::NullableType::get(context, type);
+      return mlir::db::NullableType::get(type);
    }
    return type;
 }
