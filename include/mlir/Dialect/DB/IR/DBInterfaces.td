@@ -1,35 +1,44 @@
 #ifndef DBInterfaces
 #define DBInterfaces
 include "mlir/IR/OpBase.td"
-def DB_HandleNullInterface : OpInterface<"HandleNullInterface"> {
-    let description = [{
-        This interface describes operations that can handle `NULL` values.
-        An operator that can handle `NULL` can do this either by itself
-        (perhaps with special semantics) or can delegate this to the default
-        handler wrapping `NULL` values with a conditional (see `EliminateNulls`
-        pass).
 
-        As an optimization, some operators may even support working on invalid
-        (garbage) values when the value is actually `NULL` (e.g., addition),
-        allowing to omit the conditional check for `NULL`.
+def DB_NeedsNullWrap : OpInterface<"NeedsNullWrap"> {
+    let description = [{
+        This interface allows operations to indicate that they cannot handle
+        `NULL` values themselves and need a wrapper.
     }];
     let cppNamespace = "::mlir::db";
 
     let methods = [
-        InterfaceMethod<"Returns true if the operator handles `NULL` itself.",
-            "bool", "canHandleNulls", (ins), [{}],
+        InterfaceMethod<"Returns true if the operator cannot `NULL` itself.",
+            "bool", "needsNullWrap", (ins), [{}],
             /*defaultImplementation=*/[{
-                return false;
+                return true;
             }]
-        >,
-        InterfaceMethod<[{
-                Returns true if operator can handle invalid (garbage) values if
-                the value is actually `NULL`. Only considered if the operator
-                doesn't handle `NULL` values itself.
-            }],
-            "bool", "canHandleInvalidValues"
         >,
     ];
 }
+
+def DB_MayNeedNullWrap : DeclareOpInterfaceMethods<DB_NeedsNullWrap,["needsNullWrap"]> {}
+
+def DB_SupportsInvalidValues : OpInterface<"SupportsInvalidValues"> {
+    let description = [{
+        This interface allows operations to indicate that they can safely handle
+        invalid (garbage) values (and therefore can be safely executed on the
+        invalid value storage of `NULL` values).
+    }];
+    let cppNamespace = "::mlir::db";
+
+    let methods = [
+        InterfaceMethod<"Returns true if the operator supports invalid values.",
+            "bool", "supportsInvalidValues", (ins), [{}],
+            /*defaultImplementation=*/[{
+                return true;
+            }]
+        >,
+    ];
+}
+
+def DB_MaySupportInvalidValues : DeclareOpInterfaceMethods<DB_SupportsInvalidValues,["supportsInvalidValues"]> {}
 
 #endif// DBInterfaces

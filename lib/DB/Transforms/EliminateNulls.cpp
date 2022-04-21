@@ -17,11 +17,11 @@ class WrapWithNullCheck : public mlir::RewritePattern {
    mlir::LogicalResult match(mlir::Operation* op) const override {
       if (op->getNumResults() > 1) return mlir::failure();
       if (op->getNumResults() == 1 && !op->getResultTypes()[0].isa<mlir::db::NullableType>()) return mlir::failure();
-      auto handleNullInterface = mlir::dyn_cast_or_null<mlir::db::HandleNullInterface>(op);
-      if (handleNullInterface && !handleNullInterface.canHandleNulls()) {
-         if (llvm::any_of(op->getOperands(), [](auto operand) { return operand.getType().template isa<mlir::db::NullableType>(); })) {
-            return mlir::success();
-         }
+      auto needsWrapInterface = mlir::dyn_cast_or_null<mlir::db::NeedsNullWrap>(op);
+      if (!needsWrapInterface) return mlir::failure();
+      if (!needsWrapInterface.needsNullWrap()) return mlir::failure();
+      if (llvm::any_of(op->getOperands(), [](mlir::Value v) { return v.getType().isa<mlir::db::NullableType>(); })) {
+         return mlir::success();
       }
       return mlir::failure();
    }
@@ -39,7 +39,9 @@ class WrapWithNullCheck : public mlir::RewritePattern {
             }
          }
       }
-      if (mlir::cast<mlir::db::HandleNullInterface>(op).canHandleInvalidValues()) {
+
+      auto supInvVal = mlir::dyn_cast_or_null<mlir::db::SupportsInvalidValues>(op);
+      if (supInvVal && supInvVal.supportsInvalidValues()) {
          mlir::BlockAndValueMapping mapping;
          for (auto operand : op->getOperands()) {
             if (operand.getType().isa<mlir::db::NullableType>()) {
@@ -53,29 +55,33 @@ class WrapWithNullCheck : public mlir::RewritePattern {
          } else {
             rewriter.eraseOp(op);
          }
+         return;
       } else {
          rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
             op, op->getResultTypes(), isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
-            if(op->getNumResults()==1){
-               mlir::Value nullResult=b.create<mlir::db::NullOp>(op->getLoc(),op->getResultTypes()[0]);
-               b.create<mlir::scf::YieldOp>(loc,nullResult);
-            }else{
-               b.create<mlir::scf::YieldOp>(loc);
-            } }, [&](mlir::OpBuilder& b, mlir::Location loc) {
-            mlir::BlockAndValueMapping mapping;
-            for (auto operand : op->getOperands()) {
-               if (operand.getType().isa<mlir::db::NullableType>()) {
-                  mapping.map(operand,b.create<mlir::db::NullableGetVal>(op->getLoc(),operand));
+               if(op->getNumResults()==1){
+                  mlir::Value nullResult=b.create<mlir::db::NullOp>(op->getLoc(),op->getResultTypes()[0]);
+                  b.create<mlir::scf::YieldOp>(loc,nullResult);
+               }else{
+                  b.create<mlir::scf::YieldOp>(loc);
+               }
+            }, [&](mlir::OpBuilder& b, mlir::Location loc) {
+               mlir::BlockAndValueMapping mapping;
+               for (auto operand : op->getOperands()) {
+                  if (operand.getType().isa<mlir::db::NullableType>()) {
+                     mapping.map(operand,b.create<mlir::db::NullableGetVal>(op->getLoc(),operand));
+                  }
+               }
+               auto *cloned=b.clone(*op,mapping);
+               if(op->getNumResults()==1){
+                  cloned->getResult(0).setType(getBaseType(cloned->getResult(0).getType()));
+                  mlir::Value nullResult=b.create<mlir::db::AsNullableOp>(op->getLoc(),op->getResultTypes()[0],cloned->getResult(0));
+                  b.create<mlir::scf::YieldOp>(loc,nullResult);
+               }else{
+                  b.create<mlir::scf::YieldOp>(loc);
                }
             }
-            auto *cloned=b.clone(*op,mapping);
-            if(op->getNumResults()==1){
-               cloned->getResult(0).setType(getBaseType(cloned->getResult(0).getType()));
-               mlir::Value nullResult=b.create<mlir::db::AsNullableOp>(op->getLoc(),op->getResultTypes()[0],cloned->getResult(0));
-               b.create<mlir::scf::YieldOp>(loc,nullResult);
-            }else{
-               b.create<mlir::scf::YieldOp>(loc);
-            } });
+         );
       }
    }
 };

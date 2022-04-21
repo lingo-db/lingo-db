@@ -75,29 +75,29 @@ LogicalResult inferDivReturnType(MLIRContext* context, Optional<Location> locati
    }
    return success();
 }
-bool mlir::db::RuntimeCall::canHandleInvalidValues() {
+bool mlir::db::RuntimeCall::supportsInvalidValues() {
    auto reg = getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
    if (auto* fn = reg->lookup(this->fn().str())) {
       return fn->nullHandleType == RuntimeFunction::HandlesInvalidVaues;
    }
    return false;
 }
-bool mlir::db::RuntimeCall::canHandleNulls() {
+bool mlir::db::RuntimeCall::needsNullWrap() {
    auto reg = getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
    if (auto* fn = reg->lookup(this->fn().str())) {
-      return fn->nullHandleType == RuntimeFunction::HandlesNulls;
+      return fn->nullHandleType != RuntimeFunction::HandlesNulls;
    }
    return false;
 }
 
-bool mlir::db::CmpOp::canHandleInvalidValues() {
+bool mlir::db::CmpOp::supportsInvalidValues() {
    auto type = getBaseType(left().getType());
    if (type.isa<db::StringType>()) {
       return false;
    }
    return true;
 }
-bool mlir::db::CastOp::canHandleInvalidValues() {
+bool mlir::db::CastOp::supportsInvalidValues() {
    if (getBaseType(getResult().getType()).isa<db::StringType>() || getBaseType(val().getType()).isa<db::StringType>()) {
       return false;
    }

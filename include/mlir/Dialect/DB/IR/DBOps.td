@@ -188,7 +188,7 @@ def DB_NullableGetVal : DB_Op<"nullable_get_val", [NoSideEffect,DeclareOpInterfa
     }];
 }
 
-def DB_RuntimeCall : DB_Op<"runtime_call",[DB_HandleNullInterface]> {
+def DB_RuntimeCall : DB_Op<"runtime_call", [DB_MayNeedNullWrap,DB_MaySupportInvalidValues]> {
     let summary = "Call runtime function";
 
     let arguments = (ins StrAttr:$fn,Variadic<AnyType>: $args);
@@ -196,11 +196,6 @@ def DB_RuntimeCall : DB_Op<"runtime_call",[DB_HandleNullInterface]> {
     let assemblyFormat = "$fn  `(` $args `)` `:`  functional-type($args,$res)  attr-dict";
 
     let verifier = [{ return ::verify(*this); }];
-    let extraClassDeclaration = [{
-    public:
-        bool canHandleInvalidValues();
-        bool canHandleNulls();
-    }];
 }
 
 def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
@@ -213,7 +208,7 @@ def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
 
 class DB_BinaryOp<string mnemonic, list<Trait> traits = []> :
         Op<DB_Dialect, mnemonic,
-            !listconcat(traits, [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>,DeclareOpInterfaceMethods<DB_HandleNullInterface>])>,Arguments<(ins NullableDBType:$left, NullableDBType:$right)> {
+            !listconcat(traits, [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>,DB_NeedsNullWrap,DB_SupportsInvalidValues])>,Arguments<(ins NullableDBType:$left, NullableDBType:$right)> {
     let results = (outs AnyType:$result);
     let extraClassDefinition = [{
         LogicalResult $cppClass::inferReturnTypes(
@@ -221,9 +216,6 @@ class DB_BinaryOp<string mnemonic, list<Trait> traits = []> :
         DictionaryAttr attributes, RegionRange regions,
         SmallVectorImpl<Type>& inferredReturnTypes) {
             return inferReturnType(context,location,operands,inferredReturnTypes);
-        }
-        bool $cppClass::canHandleInvalidValues(){
-            return true;
         }
     }];
     let assemblyFormat = "$left `:` type($left) `,` $right `:` type($right) attr-dict";
@@ -245,9 +237,6 @@ def DB_MulOp : DB_BinaryOp<"mul"> {
    SmallVectorImpl<Type>& inferredReturnTypes) {
          return inferMulReturnType(context,location,operands,inferredReturnTypes);
     }
-    bool $cppClass::canHandleInvalidValues(){
-        return true;
-    }
   }];
 }
 def DB_DivOp : DB_BinaryOp<"div"> {
@@ -260,9 +249,6 @@ def DB_DivOp : DB_BinaryOp<"div"> {
    SmallVectorImpl<Type>& inferredReturnTypes) {
          return inferDivReturnType(context,location,operands,inferredReturnTypes);
     }
-    bool $cppClass::canHandleInvalidValues(){
-        return true;
-    }
   }];
 }
 def DB_ModOp : DB_BinaryOp<"mod"> {
@@ -274,9 +260,6 @@ def DB_ModOp : DB_BinaryOp<"mod"> {
    DictionaryAttr attributes, RegionRange regions,
    SmallVectorImpl<Type>& inferredReturnTypes) {
          return inferDivReturnType(context,location,operands,inferredReturnTypes);
-    }
-    bool $cppClass::canHandleInvalidValues(){
-        return true;
     }
   }];
 }
@@ -307,7 +290,7 @@ def DB_CmpPredicateAttr : I64EnumAttr<"DBCmpPredicate", "",
 }
 
 def DB_CmpOp : DB_LogicalOp<"compare",
-        [DeclareOpInterfaceMethods<Relalg_CmpOpInterface>,DeclareOpInterfaceMethods<DB_HandleNullInterface>]> {
+        [DeclareOpInterfaceMethods<Relalg_CmpOpInterface>,DB_NeedsNullWrap,DB_MaySupportInvalidValues]> {
     let summary = "Compare int/Decimal/String";
 
     let arguments = (ins DB_CmpPredicateAttr:$predicate, NullableDBType:$left, NullableDBType:$right);
@@ -350,19 +333,15 @@ def OrOp : DB_LogicalOp<"or"> {
     let assemblyFormat = "$vals `:` type($vals) attr-dict";
 }
 
-def NotOp : DB_Op<"not", [NoSideEffect,SameOperandsAndResultType,DeclareOpInterfaceMethods<DB_HandleNullInterface>]> {
+def NotOp : DB_Op<"not", [NoSideEffect,SameOperandsAndResultType,DB_NeedsNullWrap,DB_SupportsInvalidValues]> {
     let summary = "Logical Not";
 
     let arguments = (ins AnyBool: $val);
     let results = (outs AnyBool : $res);
     let assemblyFormat = "$val `:` type($val) attr-dict";
-
-    let extraClassDefinition = [{
-        bool $cppClass::canHandleInvalidValues(){ return true; }
-    }];
 }
 
-def CastOp : DB_Op<"cast",[DeclareOpInterfaceMethods<DB_HandleNullInterface>]> {
+def CastOp : DB_Op<"cast",[DB_NeedsNullWrap,DB_MaySupportInvalidValues]> {
     let summary = "Cast value to different type";
 
     let arguments = (ins NullableDBType:$val);
