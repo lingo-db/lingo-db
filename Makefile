@@ -101,7 +101,7 @@ clean:
 	rm -rf build
 
 reproduce: .repr-docker-built
-	 docker run --privileged -it mlirdb-repr /bin/bash -c "python3 tools/benchmark-tpch.py /build/mlirdb/ tpch-1"
+	 docker run --privileged -it mlirdb-repr /bin/bash -c "python3 tools/scripts/benchmark-tpch.py /build/mlirdb/ tpch-1"
 
 lint: build/lingodb-debug/.stamp
 	python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored" -clang-tidy-binary=./build/llvm-build/bin/clang-tidy

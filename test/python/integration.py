@@ -16,7 +16,6 @@ simpleMLIRQuery="""module {
         %4 = db.constant(2) : i64
         %5 = relalg.getcol %arg0 @df::@col1 : i64
         %6 = db.compare gt %5 : i64, %4: i64
-        %7 = db.constant(1) : i1
         relalg.return %6 : i1
     }
     %2 = relalg.aggregation @aggr0 %1 [] computes : [@tmp_attr0({type = i64})] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple){
