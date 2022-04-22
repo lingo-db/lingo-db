@@ -70,7 +70,7 @@ class MaterializeTranslator : public mlir::relalg::Translator {
       builder.create<mlir::dsa::NextRow>(materializeOp->getLoc(), tableBuilder);
    }
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& bX) override {
-      auto p = std::make_shared<mlir::relalg::Pipeline>(bX.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
+      auto p = std::make_shared<mlir::relalg::Pipeline>(bX.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(),context.getNextPipelineId());
       context.pipelineManager.setCurrentPipeline(p);
       context.pipelineManager.addPipeline(p);
       auto res = p->addInitFn([&](mlir::OpBuilder& builder) {

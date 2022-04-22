@@ -334,7 +334,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       auto parentPipeline = context.pipelineManager.getCurrentPipeline();
-      auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
+      auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(),context.getNextPipelineId());
       context.pipelineManager.setCurrentPipeline(p);
       context.pipelineManager.addPipeline(p);
       auto res = p->addInitFn([&](mlir::OpBuilder& builder) {

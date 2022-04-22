@@ -41,7 +41,7 @@ class SortTranslator : public mlir::relalg::Translator {
       auto scope = context.createScope();
       orderedAttributes = mlir::relalg::OrderedAttributes::fromColumns(requiredAttributes);
       auto parentPipeline = context.pipelineManager.getCurrentPipeline();
-      auto childPipeline = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
+      auto childPipeline = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(),context.getNextPipelineId());
       context.pipelineManager.setCurrentPipeline(childPipeline);
       context.pipelineManager.addPipeline(childPipeline);
       auto tupleType = orderedAttributes.getTupleType(builder.getContext());

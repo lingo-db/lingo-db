@@ -77,9 +77,7 @@ class Pipeline {
    }
 
    public:
-   Pipeline(ModuleOp parentModule) : builder(parentModule.getContext()), parentModule(parentModule), dependsOn(PipelineManager::maxPipelines) {
-      static size_t id = 0;
-      pipelineId = id++;
+   Pipeline(ModuleOp parentModule,size_t pipelineId) : builder(parentModule.getContext()), parentModule(parentModule), dependsOn(PipelineManager::maxPipelines),pipelineId(pipelineId) {
       OpBuilder moduleBuilder(parentModule->getContext());
       moduleBuilder.setInsertionPointToStart(parentModule.getBody());
       mainFn = moduleBuilder.create<FuncOp>(parentModule->getLoc(), createName("main"), builder.getFunctionType({}, {}));

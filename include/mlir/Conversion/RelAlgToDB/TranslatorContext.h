@@ -31,10 +31,9 @@ class TranslatorContext {
    }
    std::unordered_map<size_t, mlir::Value> builders;
    PipelineManager pipelineManager;
-
-   size_t getBuilderId() {
-      static size_t id = 0;
-      return id++;
+   size_t pipelineId=0;
+   size_t getNextPipelineId(){
+      return pipelineId++;
    }
    std::unordered_map<mlir::Operation*, std::pair<PipelineDependency, std::vector<const mlir::relalg::Column*>>> materializedTmp;
 };

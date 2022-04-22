@@ -43,7 +43,7 @@ class TmpTranslator : public mlir::relalg::Translator {
       producedCount++;
       if (materialize) {
          auto parentPipeline = context.pipelineManager.getCurrentPipeline();
-         auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>());
+         auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(),context.getNextPipelineId());
          context.pipelineManager.setCurrentPipeline(p);
          context.pipelineManager.addPipeline(p);
          auto tupleType = attributes.getTupleType(builder.getContext());
