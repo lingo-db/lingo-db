@@ -7,7 +7,7 @@
 #include "mlir-support/eval.h"
 #include "runner/runner.h"
 
-void handleQuery(runtime::ExecutionContext* Context, std::string basicString);
+void handleQuery(runtime::ExecutionContext* context, std::string basicString);
 bool beingTraced() {
    std::ifstream sf("/proc/self/status");
    std::string s;

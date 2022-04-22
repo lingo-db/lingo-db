@@ -1,34 +1,34 @@
-{"tables":{"assistenten":{"rows": 0, "pkeys": ["persnr"], "columns": [
+{"tables":{"assistenten":{"pkey": ["persnr"], "columns": [
   { "name": "persnr",  "type":{ "base": "int", "props": ["64"]}},
   { "name": "name",  "type":{ "base": "string", "props": []}},
   { "name": "fachgebiet",  "type":{ "base": "string", "props": []}},
   { "name": "boss", "type":{ "base":"int", "props":["64"]}}
 ]},"hoeren":
-{ "name": "hoeren", "rows": 0, "pkeys": ["matrnr","vorlnr"], "columns": [
+{ "name": "hoeren", "pkey": ["matrnr","vorlnr"], "columns": [
 { "name": "matrnr",  "type":{ "base": "int", "props": ["64"]}},
 { "name": "vorlnr",  "type":{ "base": "int", "props": ["64"]}}
 ]},"studenten":
-{ "name": "studenten", "rows": 0, "pkeys": ["matrnr"], "columns": [
+{ "name": "studenten", "pkey": ["matrnr"], "columns": [
 { "name": "matrnr",  "type":{ "base": "int", "props": ["64"]}},
 { "name": "name",  "type":{ "base": "string", "props": []}},
 { "name": "semester",  "type":{ "base": "int", "props": ["64"]}}
 ]},"professoren":
-{ "name": "professoren", "rows": 0, "pkeys": ["persnr"], "columns": [
+{ "name": "professoren", "pkey": ["persnr"], "columns": [
 { "name": "persnr",  "type":{ "base": "int", "props": ["64"]}},
 { "name": "name",  "type":{ "base": "string", "props": []}},
 { "name": "rang",  "type":{ "base": "string", "props": []}},
 { "name": "raum",  "type":{ "base": "int", "props": ["64"]}}
 ]}, "vorlesungen":
-{ "name": "vorlesungen", "rows": 0, "pkeys": ["vorlnr"], "columns": [
+{ "name": "vorlesungen", "pkey": ["vorlnr"], "columns": [
 { "name": "vorlnr",  "type":{ "base": "int", "props": ["64"]}},
 { "name": "titel",  "type":{ "base": "string", "props": []}},
 { "name": "sws",  "type":{ "base": "int", "props": ["64"]}},
 { "name": "gelesenvon",  "type":{ "base": "int", "props": ["64"]}}
 ]},"voraussetzen":
-{ "name": "voraussetzen", "rows": 0, "pkeys": ["vorgaenger","nachfolger"], "columns": [
+{ "name": "voraussetzen", "pkey": ["vorgaenger","nachfolger"], "columns": [
 { "name": "vorgaenger",  "type":{ "base": "int", "props": ["64"]}},
 { "name": "nachfolger",  "type":{ "base": "int", "props": ["64"]}}
-]},"pruefen":{ "rows": 0, "pkeys": ["matrnr","vorlrnr","persnr"], "columns": [
+]},"pruefen":{ "pkey": ["matrnr","vorlrnr","persnr"], "columns": [
 { "name": "matrnr",  "type":{ "base": "int", "props": ["64"]}},
 { "name": "vorlnr",  "type":{ "base": "int", "props": ["64"]}},
 { "name": "persnr",  "type":{ "base": "int", "props": ["64"]}},
