@@ -56,7 +56,7 @@ resources/data/tpch-1/.stamp: tools/generate/tpch.sh
 LDB_ARGS=-DMLIR_DIR=${ROOT_DIR}build/llvm-build/lib/cmake/mlir \
 		 -DArrow_DIR=${ROOT_DIR}build/arrow/install/lib/cmake/arrow \
 		 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
-LDB_DEPS=build/llvm-build/.buildstamp build/arrow/.buildstamp
+LDB_DEPS=build/llvm-build/.buildstamp build/arrow/.buildstamp build/arrow/.pyarrowstamp
 dependencies: $(LDB_DEPS)
 
 build/lingodb-debug/.stamp: $(LDB_DEPS)
