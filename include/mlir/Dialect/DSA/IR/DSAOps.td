@@ -37,7 +37,7 @@ class DSA_Collection<string name, string typeMnemonic> : TypeDef<DSA_Dialect, na
     let mnemonic = typeMnemonic;
 }
 
-def DSACollection : Type<CPred<"$_self.isa<::mlir::dsa::CollectionType>()">,"DSA dialect collection">;
+def DSA_Collection : Type<CPred<"$_self.isa<::mlir::dsa::CollectionType>()">,"DSA dialect collection">;
 
 def DSA_GenericIterable : DSA_Collection<"GenericIterable","iterable"> {
     let summary = "generic iterable";
@@ -191,7 +191,7 @@ def DSA_ScanSource : DSA_Op<"scan_source", [NoSideEffect]> {
 def DSA_Lookup : DSA_Op<"lookup", [NoSideEffect]> {
     let summary = "lookup in a hash table";
 
-    let arguments = (ins DSACollection:$collection,AnyType:$key);
+    let arguments = (ins DSA_Collection:$collection,AnyType:$key);
     let results = (outs DSA_GenericIterable:$iterable);
     let assemblyFormat = "$collection `:` type($collection) `,` $key `:` type($key) `->` type($iterable) attr-dict";
 }
@@ -214,7 +214,7 @@ def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
         Iterate over all elements of a collection. The iteration can be interrupted when the optionally specified flag becomes set.
     }];
 
-    let arguments = (ins DSACollection:$collection,Optional<DSA_Flag>:$until,Variadic<AnyType>:$initArgs);
+    let arguments = (ins DSA_Collection:$collection,Optional<DSA_Flag>:$until,Variadic<AnyType>:$initArgs);
     let results = (outs Variadic<AnyType>:$results);
     let regions = (region SizedRegion<1>:$region);
 
