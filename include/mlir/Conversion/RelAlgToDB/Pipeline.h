@@ -58,7 +58,6 @@ class PipelineManager {
 };
 
 class Pipeline {
-   size_t pipelineId;
    OpBuilder builder;
    ModuleOp parentModule;
    std::vector<FuncOp> initFns;
@@ -69,6 +68,7 @@ class Pipeline {
    std::vector<Type> mainArgTypes;
    std::vector<PipelineDependency> dependencies;
    llvm::SmallBitVector dependsOn;
+   size_t pipelineId;
 
    std::unordered_map<std::string, size_t> avoidDupNames;
    std::string createName(std::string base) {

@@ -97,6 +97,8 @@ class ReversedOuterJoinImpl : public mlir::relalg::JoinImpl {
 
    virtual void handleLookup(mlir::Value matched, mlir::Value markerPtr, mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       translator->handlePotentialMatch(builder, context, matched, [&](mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context, mlir::relalg::TranslatorContext::AttributeResolverScope& scope) {
+         auto const1 = builder.create<mlir::arith::ConstantOp>(loc, builder.getIntegerType(64), builder.getI64IntegerAttr(1));
+         builder.create<mlir::memref::AtomicRMWOp>(loc, builder.getIntegerType(64), mlir::arith::AtomicRMWKind::assign, const1, markerPtr, mlir::ValueRange{});
          translator->handleMapping(builder, context, scope);
       });
    }
