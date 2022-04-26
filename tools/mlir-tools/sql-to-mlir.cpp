@@ -18,21 +18,34 @@ int main(int argc, char** argv) {
    context.loadDialect<mlir::relalg::RelAlgDialect>();
    mlir::OpBuilder builder(&context);
    std::string filename = std::string(argv[1]);
-   std::string metadataFile = std::string(argv[2]);
-   auto metadataDB = runtime::MetaDataOnlyDatabase::loadMetaData(metadataFile);
+   auto metadataDB = runtime::MetaDataOnlyDatabase::emptyMetaData();
+   if (argc >= 3) {
+      std::string metadataFile = std::string(argv[2]);
+      metadataDB = runtime::MetaDataOnlyDatabase::loadMetaData(metadataFile);
+   }
    std::ifstream istream{filename};
    std::stringstream buffer;
    buffer << istream.rdbuf();
-   frontend::sql::Parser translator(buffer.str(), *metadataDB, &context);
    mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
+   frontend::sql::Parser translator(buffer.str(), *metadataDB, moduleOp);
 
    builder.setInsertionPointToStart(moduleOp.getBody());
-   mlir::FuncOp funcOp = builder.create<mlir::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {mlir::dsa::TableType::get(builder.getContext())}));
-   funcOp.body().push_back(new mlir::Block);
-   builder.setInsertionPointToStart(&funcOp.body().front());
-   mlir::Value val = translator.translate(builder);
+   auto* queryBlock = new mlir::Block;
+   std::vector<mlir::Type> returnTypes;
+   {
+      mlir::OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToStart(queryBlock);
+      mlir::Value val = translator.translate(builder);
+      if (val) {
+         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), val);
+         returnTypes.push_back(val.getType());
+      } else {
+         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
+      }
+   }
+   mlir::FuncOp funcOp = builder.create<mlir::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, returnTypes));
+   funcOp.body().push_back(queryBlock);
 
-   builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), val);
    mlir::OpPrintingFlags flags;
    flags.assumeVerified();
    moduleOp->print(llvm::outs(), flags);

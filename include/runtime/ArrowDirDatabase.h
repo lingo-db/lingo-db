@@ -15,6 +15,8 @@ class ArrowDirDatabase : public runtime::Database {
    std::shared_ptr<TableMetaData> getTableMetaData(const std::string& name) override;
    bool hasTable(const std::string& name) override;
    static std::unique_ptr<Database> load(std::string dir);
+   void createTable(std::string tableName, std::shared_ptr<TableMetaData>) override;
+   void appendTable(std::string tableName, std::shared_ptr<arrow::Table> newRows) override;
 };
 } // end namespace runtime
 #endif // RUNTIME_ARROWDIRDATABASE_H

@@ -30,30 +30,30 @@ class StringCastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
          //nothing to do here
       } else if (auto stringType = scalarSourceType.dyn_cast_or_null<db::StringType>()) {
          if (auto intWidth = getIntegerWidth(scalarTargetType, false)) {
-            result = runtime::StringRuntime::toInt(rewriter, loc)({valueToCast})[0];
+            result = rt::StringRuntime::toInt(rewriter, loc)({valueToCast})[0];
             if (intWidth < 64) {
                result = rewriter.create<arith::TruncIOp>(loc, convertedTargetType, result);
             }
          } else if (auto floatType = scalarTargetType.dyn_cast_or_null<FloatType>()) {
-            result = floatType.getWidth() == 32 ? runtime::StringRuntime::toFloat32(rewriter, loc)({valueToCast})[0] : runtime::StringRuntime::toFloat64(rewriter, loc)({valueToCast})[0];
+            result = floatType.getWidth() == 32 ? rt::StringRuntime::toFloat32(rewriter, loc)({valueToCast})[0] : rt::StringRuntime::toFloat64(rewriter, loc)({valueToCast})[0];
          } else if (auto decimalType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto scale = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalType.getS()));
-            result = runtime::StringRuntime::toDecimal(rewriter, loc)({valueToCast, scale})[0];
+            result = rt::StringRuntime::toDecimal(rewriter, loc)({valueToCast, scale})[0];
             if (typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth() < 128) {
                auto converted = rewriter.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType), result);
                result = converted;
             }
          }
       } else if (auto intWidth = getIntegerWidth(scalarSourceType, false)) {
-         result = runtime::StringRuntime::fromInt(rewriter, loc)({valueToCast})[0];
+         result = rt::StringRuntime::fromInt(rewriter, loc)({valueToCast})[0];
       } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
-         result = floatType.getWidth() == 32 ? runtime::StringRuntime::fromFloat32(rewriter, loc)({valueToCast})[0] : runtime::StringRuntime::fromFloat64(rewriter, loc)({valueToCast})[0];
+         result = floatType.getWidth() == 32 ? rt::StringRuntime::fromFloat32(rewriter, loc)({valueToCast})[0] : rt::StringRuntime::fromFloat64(rewriter, loc)({valueToCast})[0];
       } else if (auto decimalSourceType = scalarSourceType.dyn_cast_or_null<db::DecimalType>()) {
             auto scale = rewriter.create<arith::ConstantOp>(loc, rewriter.getI32Type(), rewriter.getI32IntegerAttr(decimalSourceType.getS()));
-            result = runtime::StringRuntime::fromDecimal(rewriter, loc)({valueToCast, scale})[0];
+            result = rt::StringRuntime::fromDecimal(rewriter, loc)({valueToCast, scale})[0];
       } else if (auto charType = scalarSourceType.dyn_cast_or_null<db::CharType>()) {
             auto bytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(charType.getBytes()));
-            result = runtime::StringRuntime::fromChar(rewriter, loc)({valueToCast, bytes})[0];
+            result = rt::StringRuntime::fromChar(rewriter, loc)({valueToCast, bytes})[0];
 
       }
       if (result) {
@@ -84,22 +84,22 @@ class StringCmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
       Value right = adaptor.right();
       switch (cmpOp.predicate()) {
          case db::DBCmpPredicate::eq:
-            res = runtime::StringRuntime::compareEq(rewriter, cmpOp->getLoc())({left, right})[0];
+            res = rt::StringRuntime::compareEq(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
          case db::DBCmpPredicate::neq:
-            res = runtime::StringRuntime::compareNEq(rewriter, cmpOp->getLoc())({left, right})[0];
+            res = rt::StringRuntime::compareNEq(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
          case db::DBCmpPredicate::lt:
-            res = runtime::StringRuntime::compareLt(rewriter, cmpOp->getLoc())({left, right})[0];
+            res = rt::StringRuntime::compareLt(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
          case db::DBCmpPredicate::gt:
-            res = runtime::StringRuntime::compareGt(rewriter, cmpOp->getLoc())({left, right})[0];
+            res = rt::StringRuntime::compareGt(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
          case db::DBCmpPredicate::lte:
-            res = runtime::StringRuntime::compareLte(rewriter, cmpOp->getLoc())({left, right})[0];
+            res = rt::StringRuntime::compareLte(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
          case db::DBCmpPredicate::gte:
-            res = runtime::StringRuntime::compareGte(rewriter, cmpOp->getLoc())({left, right})[0];
+            res = rt::StringRuntime::compareGte(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
       }
       rewriter.replaceOp(cmpOp, res);

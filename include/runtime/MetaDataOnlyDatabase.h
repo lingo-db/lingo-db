@@ -9,7 +9,7 @@ class MetaDataOnlyDatabase : public runtime::Database {
 
    public:
    static std::unique_ptr<runtime::Database> loadMetaData(std::string file);
-
+   static std::unique_ptr<runtime::Database> emptyMetaData();
    bool hasTable(const std::string& name) override;
    std::shared_ptr<arrow::Table> getTable(const std::string& name) override;
    std::shared_ptr<arrow::RecordBatch> getSample(const std::string& name) override;

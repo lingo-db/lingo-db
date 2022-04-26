@@ -9,6 +9,7 @@ add_library(runtime OBJECT
         dynamic_calls/string.cpp
         dynamic_calls/hash.cpp
         dynamic_calls/date.cpp
+        dynamic_calls/ExecutionContext.cpp
         database.cpp metadata.cpp ArrowDirDatabase.cpp ExternalArrowDatabase.cpp MetaDataOnlyDatabase.cpp)
 target_link_libraries(runtime PUBLIC arrow_shared)
 target_link_options(runtime PUBLIC -export-dynamic)

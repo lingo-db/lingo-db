@@ -17,12 +17,16 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilDialect.h"
+#include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/InitAllDialects.h"
 
 #include "parsenodes.h"
 #include "runtime/Database.h"
+
+#include "runtime-defs/Database.h"
+#include "runtime-defs/ExecutionContext.h"
 
 #include <llvm/ADT/StringSwitch.h>
 
@@ -266,7 +270,9 @@ struct Parser {
       fakeNodes.emplace_back(std::move(node));
       return ptr;
    }
-   Parser(std::string sql, runtime::Database& database, mlir::MLIRContext* context) : attrManager(context->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager()), sql(sql), database(database) {
+   mlir::ModuleOp moduleOp;
+   Parser(std::string sql, runtime::Database& database, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager()), sql(sql), database(database), moduleOp(moduleOp) {
+      moduleOp.getContext()->getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
       pg_query_parse_init();
       result = pg_query_parse(sql.c_str());
    }
@@ -274,26 +280,189 @@ struct Parser {
       std::cerr << str << std::endl;
       abort();
    }
+   std::pair<std::string, std::shared_ptr<runtime::ColumnMetaData>> translateColumnDef(ColumnDef* columnDef) {
+      auto *typeName = columnDef->type_name_;
+
+      std::vector<std::variant<size_t, std::string>> typeModifiers;
+      if (typeName->typmods_ != nullptr) {
+         for (auto *cell = typeName->typmods_->head; cell != nullptr; cell = cell->next) {
+            auto *node = reinterpret_cast<Node*>(cell->data.ptr_value);
+            switch (node->type) {
+               case T_A_Const: {
+                  auto nodeType = reinterpret_cast<A_Const*>(node)->val_.type_;
+                  switch (nodeType) {
+                     case T_Integer: {
+                        typeModifiers.push_back(static_cast<size_t>(reinterpret_cast<A_Const*>(node)->val_.val_.ival_));
+                        break;
+                     }
+                     default: {
+                        error("unsupported type mod");
+                     }
+                  }
+                  break;
+               }
+               default: {
+                  error("unsupported type mod");
+               }
+            }
+         }
+      }
+
+      std::string datatypeName = reinterpret_cast<value*>(typeName->names_->tail->data.ptr_value)->val_.str_;
+
+      //bool isPrimary = false;
+      bool isNotNull = false;
+      //bool isUnique = false;
+
+      if (columnDef->constraints_ != nullptr) {
+         for (auto *cell = columnDef->constraints_->head; cell != nullptr; cell = cell->next) {
+            auto *constraint = reinterpret_cast<Constraint*>(cell->data.ptr_value);
+            switch (constraint->contype_) {
+               case CONSTR_PRIMARY: {
+                  //isPrimary = true;
+                  break;
+               }
+               case CONSTR_NOTNULL: {
+                  isNotNull = true;
+                  break;
+               }
+               case CONSTR_UNIQUE: {
+                  //isUnique = true;
+                  break;
+               }
+               default: {
+                  error("unsupported column constraint");
+               }
+            }
+         }
+      }
+      datatypeName = llvm::StringSwitch<std::string>(datatypeName)
+                         .Case("bpchar", "char")
+                         .Case("varchar", "string")
+                         .Case("numeric", "decimal")
+                         .Default(datatypeName);
+      if (datatypeName == "int4") {
+         datatypeName = "int";
+         typeModifiers.push_back(32ull);
+      }
+      if (datatypeName == "char" && std::get<size_t>(typeModifiers[0]) > 8) {
+         typeModifiers.clear();
+         datatypeName = "string";
+      }
+      if(datatypeName =="date"){
+         typeModifiers.clear();
+         typeModifiers.push_back("day");
+      }
+      std::string name = columnDef->colname_;
+      runtime::ColumnType columnType;
+      columnType.base = datatypeName;
+      columnType.nullable = !isNotNull;
+      columnType.modifiers = typeModifiers;
+      auto columnMetaData = std::make_shared<runtime::ColumnMetaData>();
+      columnMetaData->setColumnType(columnType);
+      return {name, columnMetaData};
+   }
+   mlir::Value getExecutionContext(mlir::OpBuilder& builder) {
+      mlir::FuncOp funcOp = moduleOp.lookupSymbol<mlir::FuncOp>("rt_get_execution_context");
+      if (!funcOp) {
+         mlir::OpBuilder::InsertionGuard guard(builder);
+         builder.setInsertionPointToStart(moduleOp.getBody());
+         funcOp = builder.create<mlir::FuncOp>(builder.getUnknownLoc(), "rt_get_execution_context", builder.getFunctionType({}, {mlir::util::RefType::get(builder.getContext(), builder.getI8Type())}), builder.getStringAttr("private"));
+      }
+
+      return builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), funcOp, mlir::ValueRange{}).getResult(0);
+   }
+   void translateCreate(mlir::OpBuilder& builder, CreateStmt* statement) {
+      RangeVar* relation = statement->relation_;
+      std::string tableName = relation->relname_ != nullptr ? relation->relname_ : "";
+      auto tableMetaData = std::make_shared<runtime::TableMetaData>();
+      for (auto *cell = statement->table_elts_->head; cell != nullptr; cell = cell->next) {
+         auto *node = reinterpret_cast<Node*>(cell->data.ptr_value);
+         switch (node->type) {
+            case T_ColumnDef: {
+               auto columnDef = translateColumnDef(reinterpret_cast<ColumnDef*>(node));
+               tableMetaData->addColumn(columnDef.first, columnDef.second);
+               break;
+            }
+            case T_Constraint: {
+               auto* constraint = reinterpret_cast<Constraint*>(node);
+               switch (constraint->contype_) {
+                  case CONSTR_PRIMARY: {
+                     std::vector<std::string> primaryKey;
+                     for (auto * keyCell = constraint->keys_->head; keyCell != nullptr; keyCell = keyCell->next) {
+                        primaryKey.push_back(reinterpret_cast<value*>(keyCell->data.ptr_value)->val_.str_);
+                     }
+                     tableMetaData->setPrimaryKey(primaryKey);
+                     break;
+                  }
+                  default: {
+                     error("unsupported constraint type");
+                  }
+               }
+               break;
+            }
+            default: {
+               error("unsupported construct in create statement");
+            }
+         }
+      }
+      tableMetaData->setNumRows(0);
+      auto executionContext = getExecutionContext(builder);
+      auto tableNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(tableName));
+      auto descrValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(tableMetaData->serialize()));
+
+      auto database = rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(executionContext)[0];
+      rt::Database::createTable(builder, builder.getUnknownLoc())(mlir::ValueRange({database, tableNameValue, descrValue}));
+   }
+
    mlir::Value translate(mlir::OpBuilder& builder) {
       if (result.tree && result.tree->length == 1) {
          auto* statement = static_cast<Node*>(result.tree->head->data.ptr_value);
-         if (statement->type == T_SelectStmt) {
-            TranslationContext context;
-            auto scope = context.createResolverScope();
-            auto [tree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(statement), context, scope);
-            //::mlir::Type result, ::mlir::Value rel, ::mlir::ArrayAttr attrs, ::mlir::ArrayAttr columns
-            std::vector<mlir::Attribute> attrs;
-            std::vector<mlir::Attribute> names;
-            for (auto x : targetInfo.namedResults) {
-               names.push_back(builder.getStringAttr(x.first));
-               attrs.push_back(attrManager.createRef(x.second));
+         switch (statement->type) {
+            case T_CreateStmt: {
+               translateCreate(builder, reinterpret_cast<CreateStmt*>(statement));
+               break;
             }
-            return builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), mlir::dsa::TableType::get(builder.getContext()), tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
-         } else {
-            error("only select statement supported");
+            case T_CopyStmt: {
+               auto *copyStatement = reinterpret_cast<CopyStmt*>(statement);
+               std::string fileName = copyStatement->filename_;
+               std::string tableName = copyStatement->relation_->relname_;
+               std::string delimiter = "|";
+               for (auto *optionCell = copyStatement->options_->head; optionCell != nullptr; optionCell = optionCell->next) {
+                  auto *defElem = reinterpret_cast<DefElem*>(optionCell->data.ptr_value);
+                  std::string optionName = defElem->defname_;
+                  if (optionName == "delimiter") {
+                     delimiter = reinterpret_cast<value*>(defElem->arg_)->val_.str_;
+                     if(delimiter!="|"){
+                        error("unsupported delimiter");
+                     }
+                  } else {
+                     error("unsupported copy option");
+                  }
+               }
+               auto executionContext = getExecutionContext(builder);
+               auto database = rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(executionContext)[0];
+               auto tableNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(tableName));
+               auto fileNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(fileName));
+               rt::Database::copyFromIntoTable(builder,builder.getUnknownLoc())(mlir::ValueRange{database,tableNameValue,fileNameValue});
+               break;
+            }
+            case T_SelectStmt: {
+               TranslationContext context;
+               auto scope = context.createResolverScope();
+               auto [tree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(statement), context, scope);
+               //::mlir::Type result, ::mlir::Value rel, ::mlir::ArrayAttr attrs, ::mlir::ArrayAttr columns
+               std::vector<mlir::Attribute> attrs;
+               std::vector<mlir::Attribute> names;
+               for (auto x : targetInfo.namedResults) {
+                  names.push_back(builder.getStringAttr(x.first));
+                  attrs.push_back(attrManager.createRef(x.second));
+               }
+               return builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), mlir::dsa::TableType::get(builder.getContext()), tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
+            }
+            default:
+               error("unsupported statement type");
          }
-      } else {
-         error("expect query with exactly one statement");
       }
       return mlir::Value();
    }

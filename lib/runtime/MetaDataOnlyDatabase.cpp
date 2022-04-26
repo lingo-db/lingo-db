@@ -15,6 +15,9 @@ std::unique_ptr<runtime::Database> MetaDataOnlyDatabase::loadMetaData(std::strin
    }
    return database;
 }
+std::unique_ptr<runtime::Database> MetaDataOnlyDatabase::emptyMetaData() {
+   return std::make_unique<MetaDataOnlyDatabase>();
+}
 bool MetaDataOnlyDatabase::hasTable(const std::string& name) {
    return metaData.contains(name);
 }

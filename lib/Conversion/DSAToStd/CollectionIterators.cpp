@@ -80,7 +80,7 @@ class TableIterator2 : public WhileIterator {
       return tableInfo;
    }
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
-      runtime::DataSourceIteration::next(builder, loc)({iterator});
+      rt::DataSourceIteration::next(builder, loc)({iterator});
       return tableInfo;
    }
    virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
@@ -90,14 +90,14 @@ class TableIterator2 : public WhileIterator {
          builder.setInsertionPointToStart(&iterator.getParentRegion()->getParentOfType<mlir::FuncOp>().body().front());
          recordBatchInfoPtr = builder.create<mlir::util::AllocaOp>(loc, mlir::util::RefType::get(builder.getContext(), typeConverter->convertType(recordBatchType)), mlir::Value());
       }
-      runtime::DataSourceIteration::access(builder,loc)({iterator,recordBatchInfoPtr});
+      rt::DataSourceIteration::access(builder,loc)({iterator,recordBatchInfoPtr});
       return builder.create<mlir::util::LoadOp>(loc, recordBatchInfoPtr, mlir::Value());
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
-      return runtime::DataSourceIteration::isValid(builder, loc)({iterator})[0];
+      return rt::DataSourceIteration::isValid(builder, loc)({iterator})[0];
    }
    virtual void iteratorFree(OpBuilder& builder, Value iterator) override {
-      runtime::DataSourceIteration::end(builder, loc)({iterator});
+      rt::DataSourceIteration::end(builder, loc)({iterator});
    }
 };
 

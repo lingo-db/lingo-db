@@ -71,3 +71,64 @@ std::shared_ptr<arrow::RecordBatch> ArrowDirDatabase::getSample(const std::strin
 bool ArrowDirDatabase::hasTable(const std::string& name) {
    return tables.contains(name);
 }
+size_t asInt(std::variant<size_t, std::string> intOrStr) {
+   if (std::holds_alternative<size_t>(intOrStr)) {
+      return std::get<size_t>(intOrStr);
+   } else {
+      return std::stoll(std::get<std::string>(intOrStr));
+   }
+}
+std::shared_ptr<arrow::DataType> createDataType(const ColumnType& columnType) {
+   if (columnType.base == "bool") return arrow::boolean();
+   if (columnType.base == "int") {
+      switch (asInt(columnType.modifiers.at(0))) {
+         case 8: return arrow::int8();
+         case 16: return arrow::int16();
+         case 32: return arrow::int32();
+         case 64: return arrow::int64();
+      }
+   }
+   if (columnType.base == "float") {
+      switch (asInt(columnType.modifiers.at(0))) {
+         case 16: return arrow::float16();
+         case 32: return arrow::float32();
+         case 64: return arrow::float64();
+      }
+   }
+   if (columnType.base == "date") {
+      return std::get<std::string>(columnType.modifiers.at(0)) == "day" ?
+         arrow::date32() :
+         arrow::date64();
+   }
+   if (columnType.base == "string") return arrow::utf8();
+   if (columnType.base == "char") return arrow::fixed_size_binary(asInt(columnType.modifiers.at(0)));
+   if (columnType.base == "decimal") return arrow::decimal(asInt(columnType.modifiers.at(0)), asInt(columnType.modifiers.at(1)));
+   throw std::runtime_error("unsupported type");
+}
+std::shared_ptr<arrow::Schema> createSchema(std::shared_ptr<TableMetaData> metaData) {
+   arrow::FieldVector fields;
+   for (auto c : metaData->getOrderedColumns()) {
+      auto& columnMetaData = metaData->getColumnMetaData(c);
+      fields.push_back(std::make_shared<arrow::Field>(c, createDataType(columnMetaData->getColumnType())));
+   }
+   return std::make_shared<arrow::Schema>(fields);
+}
+void ArrowDirDatabase::createTable(std::string tableName, std::shared_ptr<TableMetaData> mD) {
+   std::shared_ptr<arrow::Schema> schema = createSchema(mD);
+   std::vector<std::shared_ptr<arrow::ChunkedArray>> cols;
+   for (size_t i = 0; i < mD->getOrderedColumns().size(); i++) {
+      cols.push_back(arrow::ChunkedArray::MakeEmpty(schema->field(i)->type()).ValueOrDie());
+   }
+   tables[tableName] = arrow::Table::Make(schema, cols);
+   metaData[tableName] = mD;
+}
+void ArrowDirDatabase::appendTable(std::string tableName, std::shared_ptr<arrow::Table> newRows) {
+   if (!hasTable(tableName)) {
+      throw std::runtime_error("can not append to non-existing table " + tableName);
+   }
+   auto table = tables[tableName];
+   std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+   batches.push_back(table->CombineChunksToBatch().ValueOrDie());
+   batches.push_back(newRows->CombineChunksToBatch().ValueOrDie());
+   tables[tableName] = arrow::Table::FromRecordBatches(batches).ValueOrDie();
+}

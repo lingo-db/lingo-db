@@ -41,14 +41,14 @@ class CreateDsLowering : public OpConversionPattern<mlir::dsa::CreateDS> {
          auto entryType = mlir::TupleType::get(rewriter.getContext(), {joinHtType.getKeyType(), joinHtType.getValType()});
          auto tupleType = mlir::TupleType::get(rewriter.getContext(), {rewriter.getIndexType(), entryType});
          Value typesize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), typeConverter->convertType(tupleType));
-         Value ptr = runtime::LazyJoinHashtable::create(rewriter, loc)(typesize)[0];
+         Value ptr = rt::LazyJoinHashtable::create(rewriter, loc)(typesize)[0];
          rewriter.replaceOpWithNewOp<util::GenericMemrefCastOp>(createOp, typeConverter->convertType(joinHtType), ptr);
          return success();
       } else if (auto vecType = createOp.ds().getType().dyn_cast<mlir::dsa::VectorType>()) {
          Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(loc, 1024);
          auto elementType = typeConverter->convertType(vecType.getElementType());
          auto typeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), elementType);
-         auto ptr = runtime::Vector::create(rewriter, loc)({typeSize, initialCapacity})[0];
+         auto ptr = rt::Vector::create(rewriter, loc)({typeSize, initialCapacity})[0];
          mlir::Value createdVector = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, getLoweredVectorType(rewriter.getContext(), elementType), ptr);
          rewriter.replaceOp(createOp, createdVector);
          return success();
@@ -63,7 +63,7 @@ class CreateDsLowering : public OpConversionPattern<mlir::dsa::CreateDS> {
          } else {
             auto typeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), getHashtableEntryType(rewriter.getContext(), keyType, aggrType));
             Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(loc, 4);
-            auto ptr = runtime::Hashtable::create(rewriter, loc)({typeSize, initialCapacity})[0];
+            auto ptr = rt::Hashtable::create(rewriter, loc)({typeSize, initialCapacity})[0];
             mlir::Value casted = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, getHashtableType(rewriter.getContext(), keyType, aggrType), ptr);
             Value initValAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), adaptor.init_val().getType()), casted, 5);
             rewriter.create<mlir::util::StoreOp>(loc, adaptor.init_val(), initValAddress, Value());
@@ -158,7 +158,7 @@ class HtInsertLowering : public OpConversionPattern<mlir::dsa::HashtableInsert> 
          Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, len, capacityInitial);
          rewriter.create<scf::IfOp>(
             loc, TypeRange(), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
-               runtime::Hashtable::resize(b,loc)(adaptor.ht());
+               rt::Hashtable::resize(b,loc)(adaptor.ht());
                b.create<scf::YieldOp>(loc); });
 
          Value htAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), htType), adaptor.ht(), 0);
@@ -312,7 +312,7 @@ class LazyJHtInsertLowering : public OpConversionPattern<mlir::dsa::HashtableIns
       Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, len, capacity);
       rewriter.create<scf::IfOp>(
          loc, TypeRange({}), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
-            runtime::LazyJoinHashtable::resize(b,loc)(adaptor.ht());
+            rt::LazyJoinHashtable::resize(b,loc)(adaptor.ht());
             b.create<scf::YieldOp>(loc); });
       Value valuesAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(getContext(), adaptor.ht().getType().cast<mlir::util::RefType>().getElementType().cast<mlir::TupleType>().getType(4)), adaptor.ht(), 4);
       Value castedValuesAddress = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), valuesType), valuesAddress);
@@ -334,7 +334,7 @@ class FinalizeLowering : public OpConversionPattern<mlir::dsa::Finalize> {
       if (!finalizeOp.ht().getType().isa<mlir::dsa::JoinHashtableType>()) {
          return failure();
       }
-      runtime::LazyJoinHashtable::finalize(rewriter, finalizeOp->getLoc())(adaptor.ht());
+      rt::LazyJoinHashtable::finalize(rewriter, finalizeOp->getLoc())(adaptor.ht());
       rewriter.eraseOp(finalizeOp);
       return success();
    }
@@ -346,7 +346,7 @@ class FinalizeTBLowering : public OpConversionPattern<mlir::dsa::Finalize> {
       if (!finalizeOp.ht().getType().isa<mlir::dsa::TableBuilderType>()) {
          return failure();
       }
-      mlir::Value res = runtime::TableBuilder::build(rewriter, finalizeOp->getLoc())(adaptor.ht())[0];
+      mlir::Value res = rt::TableBuilder::build(rewriter, finalizeOp->getLoc())(adaptor.ht())[0];
       rewriter.replaceOp(finalizeOp, res);
       return success();
    }
@@ -373,7 +373,7 @@ class DSAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
       Value cmp = rewriter.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, len, capacity);
       rewriter.create<scf::IfOp>(
          loc, TypeRange({}), cmp, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc); }, [&](OpBuilder& b, Location loc) {
-            runtime::Vector::resize(b,loc)({builderVal});
+            rt::Vector::resize(b,loc)({builderVal});
             b.create<scf::YieldOp>(loc); });
       Value valuesAddress = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(rewriter.getContext(), valuesType), builderVal, 2);
       auto values = rewriter.create<mlir::util::LoadOp>(loc, valuesType, valuesAddress, Value());
@@ -404,22 +404,22 @@ class TBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
       }
       mlir::Type type = getBaseType(val.getType());
       if (isIntegerType(type, 1)) {
-         runtime::TableBuilder::addBool(rewriter, loc)({builderVal, isValid, val});
+         rt::TableBuilder::addBool(rewriter, loc)({builderVal, isValid, val});
       } else if (auto intWidth = getIntegerWidth(type, false)) {
          switch (intWidth) {
-            case 8: runtime::TableBuilder::addInt8(rewriter, loc)({builderVal, isValid, val}); break;
-            case 16: runtime::TableBuilder::addInt16(rewriter, loc)({builderVal, isValid, val}); break;
-            case 32: runtime::TableBuilder::addInt32(rewriter, loc)({builderVal, isValid, val}); break;
-            case 64: runtime::TableBuilder::addInt64(rewriter, loc)({builderVal, isValid, val}); break;
-            case 128: runtime::TableBuilder::addDecimal(rewriter, loc)({builderVal, isValid, val}); break;
+            case 8: rt::TableBuilder::addInt8(rewriter, loc)({builderVal, isValid, val}); break;
+            case 16: rt::TableBuilder::addInt16(rewriter, loc)({builderVal, isValid, val}); break;
+            case 32: rt::TableBuilder::addInt32(rewriter, loc)({builderVal, isValid, val}); break;
+            case 64: rt::TableBuilder::addInt64(rewriter, loc)({builderVal, isValid, val}); break;
+            case 128: rt::TableBuilder::addDecimal(rewriter, loc)({builderVal, isValid, val}); break;
          }
       } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
          switch (floatType.getWidth()) {
-            case 32: runtime::TableBuilder::addFloat32(rewriter, loc)({builderVal, isValid, val}); break;
-            case 64: runtime::TableBuilder::addFloat64(rewriter, loc)({builderVal, isValid, val}); break;
+            case 32: rt::TableBuilder::addFloat32(rewriter, loc)({builderVal, isValid, val}); break;
+            case 64: rt::TableBuilder::addFloat64(rewriter, loc)({builderVal, isValid, val}); break;
          }
       } else if (auto stringType = type.dyn_cast_or_null<mlir::util::VarLen32Type>()) {
-         runtime::TableBuilder::addBinary(rewriter, loc)({builderVal, isValid, val});
+         rt::TableBuilder::addBinary(rewriter, loc)({builderVal, isValid, val});
       }
       rewriter.eraseOp(appendOp);
       return success();
@@ -429,7 +429,7 @@ class NextRowLowering : public OpConversionPattern<mlir::dsa::NextRow> {
    public:
    using OpConversionPattern<mlir::dsa::NextRow>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::NextRow op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      runtime::TableBuilder::nextRow(rewriter, op->getLoc())({adaptor.builder()});
+      rt::TableBuilder::nextRow(rewriter, op->getLoc())({adaptor.builder()});
       rewriter.eraseOp(op);
       return success();
    }
@@ -443,7 +443,7 @@ class CreateTableBuilderLowering : public OpConversionPattern<mlir::dsa::CreateD
       }
       auto loc = createOp->getLoc();
       mlir::Value schema = rewriter.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(getContext()), createOp.init_attr().getValue().cast<StringAttr>().str());
-      Value tableBuilder = runtime::TableBuilder::create(rewriter, loc)({schema})[0];
+      Value tableBuilder = rt::TableBuilder::create(rewriter, loc)({schema})[0];
       rewriter.replaceOp(createOp, tableBuilder);
       return success();
    }
@@ -455,14 +455,14 @@ class FreeLowering : public OpConversionPattern<mlir::dsa::FreeOp> {
       if (auto aggrHtType = op.val().getType().dyn_cast<mlir::dsa::AggregationHashtableType>()) {
          if (aggrHtType.getKeyType().getTypes().empty()) {
          } else {
-            runtime::Hashtable::destroy(rewriter, op->getLoc())(ValueRange{adaptor.val()});
+            rt::Hashtable::destroy(rewriter, op->getLoc())(ValueRange{adaptor.val()});
          }
       }
       if (op.val().getType().isa<mlir::dsa::JoinHashtableType>()) {
-         runtime::LazyJoinHashtable::destroy(rewriter, op->getLoc())(ValueRange{adaptor.val()});
+         rt::LazyJoinHashtable::destroy(rewriter, op->getLoc())(ValueRange{adaptor.val()});
       }
       if (op.val().getType().isa<mlir::dsa::VectorType>()) {
-         runtime::Vector::destroy(rewriter, op->getLoc())(ValueRange{adaptor.val()});
+         rt::Vector::destroy(rewriter, op->getLoc())(ValueRange{adaptor.val()});
       }
       rewriter.eraseOp(op);
       return success();

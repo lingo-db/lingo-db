@@ -40,7 +40,7 @@ class ScanSourceLowering : public OpConversionPattern<mlir::dsa::ScanSource> {
 
       mlir::Value executionContext =rewriter.create<mlir::func::CallOp>(op->getLoc(),funcOp,mlir::ValueRange{}).getResult(0);
       mlir::Value description = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), op.descrAttr());
-      auto rawPtr = runtime::DataSourceIteration::start(rewriter, op->getLoc())({executionContext, description})[0];
+      auto rawPtr = rt::DataSourceIteration::start(rewriter, op->getLoc())({executionContext, description})[0];
       rewriter.replaceOp(op, rawPtr);
       return success();
    }

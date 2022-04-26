@@ -238,10 +238,10 @@ Runner::Runner(RunMode mode) : context(nullptr), runMode(mode) {
    ctxt->context.disableMultithreading();
    this->context = (void*) ctxt;
 }
-bool Runner::loadSQL(std::string sql,runtime::Database& database){
+bool Runner::loadSQL(std::string sql, runtime::Database& database) {
    llvm::DebugFlag = false;
    RunnerContext* ctxt = (RunnerContext*) this->context;
-   mlir::MLIRContext& context=ctxt->context;
+   mlir::MLIRContext& context = ctxt->context;
    mlir::DialectRegistry registry;
    registry.insert<mlir::BuiltinDialect>();
    registry.insert<mlir::relalg::RelAlgDialect>();
@@ -260,17 +260,26 @@ bool Runner::loadSQL(std::string sql,runtime::Database& database){
 
    mlir::OpBuilder builder(&context);
 
-   frontend::sql::Parser translator(sql, database, &context);
    mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
+   frontend::sql::Parser translator(sql, database, moduleOp);
 
    builder.setInsertionPointToStart(moduleOp.getBody());
-   mlir::FuncOp funcOp = builder.create<mlir::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {mlir::dsa::TableType::get(builder.getContext())}));
-   funcOp.body().push_back(new mlir::Block);
-   builder.setInsertionPointToStart(&funcOp.body().front());
-   mlir::Value val = translator.translate(builder);
-
-   builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), val);
-   ctxt->module=moduleOp;
+   auto* queryBlock = new mlir::Block;
+   std::vector<mlir::Type> returnTypes;
+   {
+      mlir::OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToStart(queryBlock);
+      mlir::Value val = translator.translate(builder);
+      if (val) {
+         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), val);
+         returnTypes.push_back(val.getType());
+      } else {
+         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
+      }
+   }
+   mlir::FuncOp funcOp = builder.create<mlir::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, returnTypes));
+   funcOp.body().push_back(queryBlock);
+   ctxt->module = moduleOp;
    return true;
 }
 bool Runner::load(std::string file) {
@@ -506,7 +515,7 @@ class WrappedExecutionEngine {
       auto debuggingLevel = runMode == RunMode::DEBUGGING ? mlir::LLVM::detail::DebuggingLevel::VARIABLES : (runMode == RunMode::PERF ? mlir::LLVM::detail::DebuggingLevel::LINES : mlir::LLVM::detail::DebuggingLevel::OFF);
       auto convertFn = [&](mlir::ModuleOp module, llvm::LLVMContext& context) { return convertMLIRModule(module, context, debuggingLevel); };
       auto optimizeFn = [&](llvm::Module* module) -> llvm::Error {if (runMode==RunMode::DEBUGGING){return llvm::Error::success();}else{return optimizeModule(module);} };
-      auto maybeEngine = mlir::ExecutionEngine::create(module, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = jitCodeGenLevel, .enableObjectCache=true});
+      auto maybeEngine = mlir::ExecutionEngine::create(module, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = jitCodeGenLevel, .enableObjectCache = true});
       assert(maybeEngine && "failed to construct an execution engine");
       engine = std::move(maybeEngine.get());
 

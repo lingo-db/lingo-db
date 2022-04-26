@@ -25,7 +25,11 @@ std::shared_ptr<runtime::ColumnMetaData> createColumnMetaData(const nlohmann::js
       if (typeInfo.contains("props")) {
          for (auto x : typeInfo["props"]) {
             std::variant<size_t, std::string> prop;
-            prop = x;
+            if (x.is_number()) {
+               prop = x.get<size_t>();
+            } else {
+               prop = x.get<std::string>();
+            }
             columnType.modifiers.push_back(prop);
          }
       }
@@ -99,11 +103,9 @@ std::string runtime::TableMetaData::serialize() const {
       json["columns"].push_back(serializedColumn);
    }
    std::string str = json.dump();
-   str = std::regex_replace(str, std::regex("\""), std::string("''"));
    return str;
 }
 std::shared_ptr<runtime::TableMetaData> runtime::TableMetaData::deserialize(std::string str) {
-   str = std::regex_replace(str, std::regex("''"), std::string("\""));
    return create(str);
 }
 bool runtime::TableMetaData::isPresent() const {

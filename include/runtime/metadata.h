@@ -34,7 +34,16 @@ class TableMetaData {
    size_t getNumRows() const {
       return numRows;
    }
-
+   void setNumRows(size_t numRows) {
+      TableMetaData::numRows = numRows;
+   }
+   void addColumn(std::string name,std::shared_ptr<ColumnMetaData> columnMetaData){
+      columns[name]=columnMetaData;
+      orderedColumns.push_back(name);
+   }
+   void setPrimaryKey(const std::vector<std::string>& primaryKey) {
+      TableMetaData::primaryKey = primaryKey;
+   }
    const std::vector<std::string>& getPrimaryKey() const {
       return primaryKey;
    }
