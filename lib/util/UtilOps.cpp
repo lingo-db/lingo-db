@@ -77,6 +77,10 @@ LogicalResult mlir::util::UnPackOp::canonicalize(mlir::util::UnPackOp unPackOp, 
 
 LogicalResult mlir::util::GetTupleOp::canonicalize(mlir::util::GetTupleOp op, mlir::PatternRewriter& rewriter) {
    if (auto* tupleCreationOp = op.tuple().getDefiningOp()) {
+      if (auto packOp = mlir::dyn_cast_or_null<mlir::util::PackOp>(tupleCreationOp)) {
+         rewriter.replaceOp(op.getOperation(), packOp.getOperand(op.offset()));
+         return success();
+      }
       if (auto loadOp = mlir::dyn_cast_or_null<mlir::util::LoadOp>(tupleCreationOp)) {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPoint(loadOp);
