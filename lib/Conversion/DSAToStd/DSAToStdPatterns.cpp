@@ -297,7 +297,7 @@ class LazyJHtInsertLowering : public OpConversionPattern<mlir::dsa::HashtableIns
       auto loc = insertOp->getLoc();
 
       if (!val) {
-         val = rewriter.create<mlir::util::UndefTupleOp>(loc, mlir::TupleType::get(getContext()));
+         val = rewriter.create<mlir::util::UndefOp>(loc, mlir::TupleType::get(getContext()));
       }
       auto entry = rewriter.create<mlir::util::PackOp>(loc, mlir::ValueRange({adaptor.key(), val}));
       auto bucket = rewriter.create<mlir::util::PackOp>(loc, mlir::ValueRange({hashed, entry}));

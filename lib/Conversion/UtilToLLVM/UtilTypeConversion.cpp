@@ -47,7 +47,7 @@ struct UtilToLLVMLoweringPass
 void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter, RewritePatternSet& patterns) {
    patterns.add<SimpleTypeConversionPattern<GetTupleOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<SetTupleOp>>(typeConverter, patterns.getContext());
-   patterns.add<SimpleTypeConversionPattern<UndefTupleOp>>(typeConverter, patterns.getContext());
+   patterns.add<SimpleTypeConversionPattern<UndefOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<PackOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<UnPackOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<ToGenericMemrefOp>>(typeConverter, patterns.getContext());

@@ -231,7 +231,7 @@ class ValueOnlyAggrHTIterator : public ForIterator {
       return builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(1));
    }
    virtual Value getElement(OpBuilder& builder, Value index) override {
-      Value undefTuple = builder.create<mlir::util::UndefTupleOp>(loc, TupleType::get(builder.getContext()));
+      Value undefTuple = builder.create<mlir::util::UndefOp>(loc, TupleType::get(builder.getContext()));
       Value val = builder.create<mlir::util::LoadOp>(loc, ht);
       return builder.create<mlir::util::PackOp>(loc, ValueRange({undefTuple, val}));
    }

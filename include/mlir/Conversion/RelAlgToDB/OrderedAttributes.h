@@ -48,7 +48,7 @@ class OrderedAttributes {
          values.push_back(resolve(context, i));
       }
       if (values.size() == 0) {
-         return builder.create<mlir::util::UndefTupleOp>(loc, mlir::TupleType::get(builder.getContext()));
+         return builder.create<mlir::util::UndefOp>(loc, mlir::TupleType::get(builder.getContext()));
       }
       return builder.create<mlir::util::PackOp>(loc, values);
    }

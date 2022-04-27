@@ -37,7 +37,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
    }
 
    virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
-      mlir::Value emptyVals = builder.create<mlir::util::UndefTupleOp>(projectionOp->getLoc(), valTupleType);
+      mlir::Value emptyVals = builder.create<mlir::util::UndefOp>(projectionOp->getLoc(), valTupleType);
       mlir::Value packedKey = key.pack(context, builder, projectionOp->getLoc());
 
       auto reduceOp = builder.create<mlir::dsa::HashtableInsert>(projectionOp->getLoc(), aggrHt, packedKey, emptyVals);
@@ -106,7 +106,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       context.pipelineManager.setCurrentPipeline(p);
       context.pipelineManager.addPipeline(p);
       auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
-         mlir::Value emptyTuple = builder.create<mlir::util::UndefTupleOp>(projectionOp.getLoc(), mlir::TupleType::get(builder.getContext()));
+         mlir::Value emptyTuple = builder.create<mlir::util::UndefOp>(projectionOp.getLoc(), mlir::TupleType::get(builder.getContext()));
          auto aggrBuilder = builder.create<mlir::dsa::CreateDS>(projectionOp.getLoc(), mlir::dsa::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), emptyTuple);
          return std::vector<mlir::Value>({aggrBuilder});
       });

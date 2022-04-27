@@ -19,7 +19,7 @@
          %zero=db.constant ( 0 ) : i32
          %one=db.constant ( 1 ) : i32
 
-        %empty_key = util.undef_tuple : tuple<>
+        %empty_key = util.undef : tuple<>
 
         %val1 = util.pack %int1, %int1 : i32,i32 -> tuple<i32,i32>
         %val2 = util.pack %int2, %int2 : i32,i32 -> tuple<i32,i32>

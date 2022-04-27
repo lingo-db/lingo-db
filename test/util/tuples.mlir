@@ -3,7 +3,7 @@
 	func @main () {
 		%false = db.constant ( 0 ) : i1
 		%true = db.constant ( 1 ) : i1
-		%0 = util.undef_tuple : tuple<i1, i1>
+		%0 = util.undef : tuple<i1, i1>
 		%1 = util.set_tuple %0[0]= %true : (tuple<i1, i1>,i1) -> tuple<i1, i1>
 		%2 = util.set_tuple %1[1]= %false : (tuple<i1, i1>,i1) -> tuple<i1, i1>
 		%3,%4 = util.unpack %2 : tuple<i1, i1> -> i1, i1

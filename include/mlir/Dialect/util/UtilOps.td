@@ -192,11 +192,11 @@ let builders = [
 }]>
 ];
 }
-def UndefTupleOp : Util_Op<"undef_tuple",[NoSideEffect]> {
-let summary = "undef Tuple";
-let arguments = (ins);
-let results =(outs TupleOf<[AnyType]>:$tuple);
-let assemblyFormat = " attr-dict `:` type($tuple) ";
+def UndefOp : Util_Op<"undef",[NoSideEffect]> {
+    let summary = "undefined value";
+    let arguments = (ins);
+    let results =(outs AnyType:$res);
+    let assemblyFormat = " attr-dict `:` type($res) ";
 }
 def SetTupleOp : Util_Op<"set_tuple",[NoSideEffect]> {
 let summary = "set tuple";

@@ -211,10 +211,10 @@ class NullOpLowering : public OpConversionPattern<mlir::db::NullOp> {
    public:
    using OpConversionPattern<mlir::db::NullOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::db::NullOp nullOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto tupleType = typeConverter->convertType(nullOp.getType());
-      auto undefTuple = rewriter.create<mlir::util::UndefTupleOp>(nullOp->getLoc(), tupleType);
+      auto tupleType = typeConverter->convertType(nullOp.getType()).cast<mlir::TupleType>();
+      auto undefValue = rewriter.create<mlir::util::UndefOp>(nullOp->getLoc(), tupleType.getType(1));
       auto trueValue = rewriter.create<arith::ConstantOp>(nullOp->getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-      rewriter.replaceOpWithNewOp<mlir::util::SetTupleOp>(nullOp, tupleType, undefTuple, trueValue, 0);
+      rewriter.replaceOpWithNewOp<mlir::util::PackOp>(nullOp, tupleType, ValueRange({trueValue, undefValue}));
       return success();
    }
 };
