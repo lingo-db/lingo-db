@@ -135,6 +135,7 @@ let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
 def StoreOp  : Util_Op<"store"> {
 let arguments = (ins AnyType:$val,RefType:$ref,Optional<Index>:$idx);
 let assemblyFormat = "$val `:` type($val) `,` $ref `[` $idx `]` `:`type($ref) attr-dict";
+let hasCanonicalizeMethod = 1;
 }
 def LoadOp  : Util_Op<"load",[DeclareOpInterfaceMethods<MemoryEffectsOpInterface>]> {
 let arguments = (ins RefType:$ref,Optional<Index>:$idx);

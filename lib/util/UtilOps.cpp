@@ -96,6 +96,24 @@ LogicalResult mlir::util::GetTupleOp::canonicalize(mlir::util::GetTupleOp op, ml
    return failure();
 }
 
+LogicalResult mlir::util::StoreOp::canonicalize(mlir::util::StoreOp op, mlir::PatternRewriter& rewriter) {
+   if (auto ty = op.val().getType().dyn_cast_or_null<mlir::TupleType>()) {
+      auto base = op.ref();
+      if (auto idx = op.idx()) {
+         base = rewriter.create<mlir::util::ArrayElementPtrOp>(op.getLoc(), base.getType(), base, idx);
+      }
+      for (size_t i = 0; i < ty.size(); i++) {
+         auto elemRefTy = mlir::util::RefType::get(ty.getType(i));
+         auto gt = rewriter.create<mlir::util::GetTupleOp>(op.getLoc(), ty.getType(i), op.val(), i);
+         auto tep = rewriter.create<mlir::util::TupleElementPtrOp>(op.getLoc(), elemRefTy, base, i);
+         rewriter.create<mlir::util::StoreOp>(op.getLoc(), gt, tep, Value());
+      }
+      rewriter.eraseOp(op);
+      return mlir::success();
+   }
+   return failure();
+}
+
 void mlir::util::LoadOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects::EffectInstance<::mlir::MemoryEffects::Effect>>& effects) {
    if (!getOperation()->hasAttr("nosideffect")) {
       effects.emplace_back(MemoryEffects::Read::get());
