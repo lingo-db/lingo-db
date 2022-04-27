@@ -65,7 +65,14 @@ LogicalResult mlir::util::UnPackOp::canonicalize(mlir::util::UnPackOp unPackOp, 
          }
       }
    }
-   return failure();
+   std::vector<Value> vals;
+   vals.reserve(unPackOp.getNumResults());
+   for (unsigned i = 0; i < unPackOp.getNumResults(); i++) {
+      auto ty = unPackOp.getResultTypes()[i];
+      vals.push_back(rewriter.create<mlir::util::GetTupleOp>(unPackOp.getLoc(), ty, tuple, i));
+   }
+   rewriter.replaceOp(unPackOp.getOperation(), vals);
+   return success();
 }
 void mlir::util::LoadOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects::EffectInstance<::mlir::MemoryEffects::Effect>>& effects) {
    if (!getOperation()->hasAttr("nosideffect")) {
