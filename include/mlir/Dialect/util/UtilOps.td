@@ -208,5 +208,6 @@ let summary = "get tuple";
 let arguments = (ins TupleOf<[AnyType]>:$tuple, I32Attr:$offset);
 let results =(outs AnyType: $val);
 let assemblyFormat = "$tuple `[` $offset `]` `:` `(`type($tuple)`)` `->` type($val) attr-dict";
+let hasCanonicalizeMethod = 1;
 }
 #endif// OPS
