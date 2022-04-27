@@ -198,12 +198,6 @@ def UndefOp : Util_Op<"undef",[NoSideEffect]> {
     let results =(outs AnyType:$res);
     let assemblyFormat = " attr-dict `:` type($res) ";
 }
-def SetTupleOp : Util_Op<"set_tuple",[NoSideEffect]> {
-let summary = "set tuple";
-let arguments = (ins TupleOf<[AnyType]>:$tuple, AnyType: $val, I32Attr:$offset);
-let results =(outs TupleOf<[AnyType]>:$tuple_out);
-let assemblyFormat = "$tuple `[` $offset `]` `=` $val `:` `(` type($tuple)`,` type($val)`)` `->` type($tuple_out) attr-dict";
-}
 def GetTupleOp : Util_Op<"get_tuple",[NoSideEffect]> {
 let summary = "get tuple";
 let arguments = (ins TupleOf<[AnyType]>:$tuple, I32Attr:$offset);

@@ -54,16 +54,6 @@ LogicalResult mlir::util::UnPackOp::canonicalize(mlir::util::UnPackOp unPackOp, 
          rewriter.replaceOp(unPackOp.getOperation(), packOp.vals());
          return success();
       }
-      if (auto setOp = mlir::dyn_cast_or_null<mlir::util::SetTupleOp>(tupleCreationOp)) {
-         if (auto* tupleCreationOp2 = setOp.tuple().getDefiningOp()) {
-            if (auto packOp = mlir::dyn_cast_or_null<mlir::util::PackOp>(tupleCreationOp2)) {
-               std::vector<Value> vals(packOp.vals().begin(), packOp.vals().end());
-               vals[setOp.offset()] = setOp.val();
-               rewriter.replaceOp(unPackOp.getOperation(), vals);
-               return success();
-            }
-         }
-      }
    }
    std::vector<Value> vals;
    vals.reserve(unPackOp.getNumResults());

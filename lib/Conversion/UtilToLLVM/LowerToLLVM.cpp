@@ -49,15 +49,6 @@ class UndefOpLowering : public OpConversionPattern<mlir::util::UndefOp> {
       return success();
    }
 };
-class SetTupleOpLowering : public OpConversionPattern<mlir::util::SetTupleOp> {
-   public:
-   using OpConversionPattern<mlir::util::SetTupleOp>::OpConversionPattern;
-   LogicalResult matchAndRewrite(mlir::util::SetTupleOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto structType = convertTuple(op->getResult(0).getType().cast<TupleType>(), *typeConverter);
-      rewriter.replaceOpWithNewOp<LLVM::InsertValueOp>(op, structType, adaptor.tuple(), adaptor.val(), rewriter.getI64ArrayAttr(adaptor.offset()));
-      return success();
-   }
-};
 class GetTupleOpLowering : public OpConversionPattern<mlir::util::GetTupleOp> {
    public:
    using OpConversionPattern<mlir::util::GetTupleOp>::OpConversionPattern;
@@ -455,7 +446,6 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<CastOpLowering>(typeConverter, patterns.getContext());
    patterns.add<SizeOfOpLowering>(typeConverter, patterns.getContext());
    patterns.add<GetTupleOpLowering>(typeConverter, patterns.getContext());
-   patterns.add<SetTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<UndefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<PackOpLowering>(typeConverter, patterns.getContext());
    patterns.add<AllocOpLowering>(typeConverter, patterns.getContext());
