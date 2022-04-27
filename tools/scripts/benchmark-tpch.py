@@ -22,11 +22,10 @@ class QueryResult:
 
 results = []
 for qnum in range(1, 23):
-    print("processing: tpch query ", qnum)
-    file1 = "resources/sql/tpch/" + str(qnum) + ".sql"
-    proc1 = subprocess.run(
-        objdir + "/run-sql "+file1+" resources/data/"+dataset,
-        stdout=subprocess.PIPE,stderr=subprocess.PIPE, shell=True)
+    file1 = f"resources/sql/tpch/{qnum}.sql"
+    command = [objdir + "/run-sql", file1, "resources/data/"+dataset]
+    print("processing: tpch query ", qnum, command)
+    proc1 = subprocess.run(command, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     returncode=proc1.returncode
     runtime =0.0
     if returncode==0:
