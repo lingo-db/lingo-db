@@ -33,14 +33,17 @@ class Util_Type<string name, string typeMnemonic> : TypeDef<Util_Dialect, name> 
 
 
 def RefType : Util_Type<"Ref","ref"> {
-let summary = "ref type";
-let parameters = (ins "Type":$elementType);
+    let summary = "ref type";
+    let parameters = (ins "Type":$elementType);
     let builders = [
-    TypeBuilder<(ins ), [{
-    return $_get($_ctxt, mlir::IntegerType::get($_ctxt,8));
-    }]>
+        TypeBuilder<(ins), [{
+            return $_get($_ctxt, mlir::IntegerType::get($_ctxt,8));
+        }]>,
+        TypeBuilderWithInferredContext<(ins "Type":$type), [{
+            return $_get(type.getContext(), type);
+        }]>,
     ];
-let builderCall = "$_builder.getType<" # dialect.cppNamespace # "::" # cppClassName # ">()";
+    let builderCall = "$_builder.getType<" # dialect.cppNamespace # "::" # cppClassName # ">()";
 }
 
 
