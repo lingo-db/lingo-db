@@ -89,27 +89,6 @@ class SizeOfOpLowering : public ConversionPattern {
    }
 };
 
-class UnPackOpLowering : public OpConversionPattern<mlir::util::UnPackOp> {
-   public:
-   using OpConversionPattern<mlir::util::UnPackOp>::OpConversionPattern;
-   LogicalResult matchAndRewrite(mlir::util::UnPackOp unPackOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto tupleType = unPackOp.tuple().getType().dyn_cast_or_null<TupleType>();
-      auto structType = convertTuple(tupleType, *typeConverter);
-      unsigned pos = 0;
-      std::vector<Value> values;
-      for (auto type : structType.getBody()) {
-         if (!unPackOp.getResult(pos).use_empty()) {
-            values.push_back(rewriter.create<LLVM::ExtractValueOp>(unPackOp->getLoc(), type, adaptor.tuple(), rewriter.getI64ArrayAttr(pos++)));
-         } else {
-            values.push_back(Value());
-            pos++;
-         }
-      }
-      rewriter.replaceOp(unPackOp, values);
-      return success();
-   }
-};
-
 class ToGenericMemrefOpLowering : public OpConversionPattern<mlir::util::ToGenericMemrefOp> {
    public:
    using OpConversionPattern<mlir::util::ToGenericMemrefOp>::OpConversionPattern;
@@ -479,7 +458,6 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<SetTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<UndefTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<PackOpLowering>(typeConverter, patterns.getContext());
-   patterns.add<UnPackOpLowering>(typeConverter, patterns.getContext());
    patterns.add<AllocOpLowering>(typeConverter, patterns.getContext());
    patterns.add<AllocaOpLowering>(typeConverter, patterns.getContext());
    patterns.add<DeAllocOpLowering>(typeConverter, patterns.getContext());
