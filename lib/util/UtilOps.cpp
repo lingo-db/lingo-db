@@ -71,6 +71,12 @@ LogicalResult mlir::util::GetTupleOp::canonicalize(mlir::util::GetTupleOp op, ml
          rewriter.replaceOp(op.getOperation(), packOp.getOperand(op.offset()));
          return success();
       }
+      if (auto selOp = mlir::dyn_cast_or_null<mlir::arith::SelectOp>(tupleCreationOp)) {
+         auto sel1 = rewriter.create<mlir::util::GetTupleOp>(op.getLoc(), op.val().getType(), selOp.getTrueValue(), op.offset());
+         auto sel2 = rewriter.create<mlir::util::GetTupleOp>(op.getLoc(), op.val().getType(), selOp.getFalseValue(), op.offset());
+         rewriter.replaceOpWithNewOp<mlir::arith::SelectOp>(op, selOp.getCondition(), sel1, sel2);
+         return success();
+      }
       if (auto loadOp = mlir::dyn_cast_or_null<mlir::util::LoadOp>(tupleCreationOp)) {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPoint(loadOp);

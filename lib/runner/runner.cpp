@@ -426,6 +426,7 @@ bool Runner::lower() {
    mlir::PassManager pm2(&ctxt->context);
 
    pm2.addPass(mlir::dsa::createLowerToStdPass());
+   pm2.addPass(mlir::createCanonicalizerPass());
    if (mlir::failed(pm2.run(ctxt->module.get()))) {
       return false;
    }
