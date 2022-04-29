@@ -55,7 +55,7 @@ class TableMetaData {
    }
    const std::vector<std::string>& getOrderedColumns() const;
    static std::shared_ptr<TableMetaData> deserialize(std::string);
-   std::string serialize() const;
+   std::string serialize(bool serializeSample=true) const;
    static std::shared_ptr<TableMetaData> create(const std::string& json, const std::string& name, std::shared_ptr<arrow::RecordBatch> sample);
    bool isPresent() const;
 };

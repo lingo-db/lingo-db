@@ -48,8 +48,9 @@ build/llvm-build/.buildstamp: build/llvm-build/.stamp
 	cmake --build build/llvm-build -j${NPROCS}
 	touch $@
 
-resources/data/tpch-1/.stamp: tools/generate/generate.sh
-	bash $<
+resources/data/tpch-1/.stamp: tools/generate/tpch.sh
+	mkdir -p resources/data/tpch-1
+	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
 	touch $@
 
 LDB_ARGS=-DMLIR_DIR=${ROOT_DIR}build/llvm-build/lib/cmake/mlir \

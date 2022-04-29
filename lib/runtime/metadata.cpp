@@ -89,11 +89,11 @@ nlohmann::json::object_t serializeColumn(std::shared_ptr<runtime::ColumnMetaData
    res["type"]["props"] = props;
    return res;
 }
-std::string runtime::TableMetaData::serialize() const {
+std::string runtime::TableMetaData::serialize(bool serializeSample) const {
    nlohmann::json json;
    json["num_rows"] = numRows;
    json["pkey"] = primaryKey;
-   if (sample) {
+   if (sample&&serializeSample) {
       json["sample"] = Database::serializeRecordBatch(sample);
    }
    json["columns"] = nlohmann::json::array_t();

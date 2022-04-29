@@ -4,10 +4,15 @@
 #include <fstream>
 
 #include <arrow/api.h>
+#include <arrow/compute/api.h>
+#include <arrow/compute/api_scalar.h>
 #include <arrow/io/api.h>
 #include <arrow/ipc/api.h>
 #include <arrow/status.h>
 #include <arrow/table.h>
+
+#include <random>
+#include <ranges>
 
 using namespace runtime;
 std::shared_ptr<runtime::TableMetaData> runtime::ArrowDirDatabase::getTableMetaData(const std::string& name) {
@@ -26,6 +31,20 @@ std::shared_ptr<arrow::Table> ArrowDirDatabase::loadTable(std::string name) {
    }
    return arrow::Table::FromRecordBatches(batchReader->schema(), batches).ValueOrDie();
 }
+void storeTable(std::string file, std::shared_ptr<arrow::Table> table) {
+   auto inputFile = arrow::io::FileOutputStream::Open(file).ValueOrDie();
+   auto batchWriter = arrow::ipc::MakeFileWriter(inputFile, table->schema()).ValueOrDie();
+   assert(batchWriter->WriteTable(*table).ok());
+   assert(batchWriter->Close().ok());
+   assert(inputFile->Close().ok());
+}
+void storeSample(std::string file, std::shared_ptr<arrow::RecordBatch> table) {
+   auto inputFile = arrow::io::FileOutputStream::Open(file).ValueOrDie();
+   auto batchWriter = arrow::ipc::MakeFileWriter(inputFile, table->schema()).ValueOrDie();
+   assert(batchWriter->WriteRecordBatch(*table).ok());
+   assert(batchWriter->Close().ok());
+   assert(inputFile->Close().ok());
+}
 std::shared_ptr<arrow::RecordBatch> ArrowDirDatabase::loadSample(std::string name) {
    auto inputFile = arrow::io::ReadableFile::Open(name).ValueOrDie();
    auto batchReader = arrow::ipc::RecordBatchFileReader::Open(inputFile).ValueOrDie();
@@ -37,6 +56,8 @@ std::shared_ptr<arrow::RecordBatch> ArrowDirDatabase::loadSample(std::string nam
 std::unique_ptr<Database> ArrowDirDatabase::load(std::string directory) {
    std::string json;
    auto database = std::make_unique<ArrowDirDatabase>();
+   database->directory = directory;
+   database->writeback = false;
    for (const auto& p : std::filesystem::directory_iterator(directory)) {
       auto path = p.path();
       if (path.extension().string() == ".arrow") {
@@ -122,6 +143,43 @@ void ArrowDirDatabase::createTable(std::string tableName, std::shared_ptr<TableM
    tables[tableName] = arrow::Table::Make(schema, cols);
    metaData[tableName] = mD;
 }
+template <typename I>
+class BoxedIntegerIterator {
+   I i;
+
+   public:
+   typedef I difference_type;
+   typedef I value_type;
+   typedef I pointer;
+   typedef I reference;
+   typedef std::random_access_iterator_tag iterator_category;
+
+   BoxedIntegerIterator(I i) : i{i} {}
+
+   bool operator==(BoxedIntegerIterator<I>& other) { return i == other.i; }
+   I operator-(BoxedIntegerIterator<I>& other) { return i - other.i; }
+   I operator++() { return i++; }
+   I operator*() { return i; }
+};
+std::shared_ptr<arrow::RecordBatch> createSample(std::shared_ptr<arrow::Table> table) {
+   std::vector<int> result;
+   arrow::NumericBuilder<arrow::Int32Type> numericBuilder;
+
+   auto rng = std::mt19937{std::random_device{}()};
+
+   // sample five values without replacement from [1, 100]
+   std::sample(
+      BoxedIntegerIterator{0l}, BoxedIntegerIterator{table->num_rows() - 1},
+      std::back_inserter(result), std::min(table->num_rows(), 1024l), rng);
+   for (auto i : result) {
+      assert(numericBuilder.Append(i).ok());
+   }
+   auto indices = numericBuilder.Finish().ValueOrDie();
+   std::vector<arrow::Datum> args({table, indices});
+
+   auto res = arrow::compute::CallFunction("take", args).ValueOrDie();
+   return res.table()->CombineChunksToBatch().ValueOrDie();
+}
 void ArrowDirDatabase::appendTable(std::string tableName, std::shared_ptr<arrow::Table> newRows) {
    if (!hasTable(tableName)) {
       throw std::runtime_error("can not append to non-existing table " + tableName);
@@ -131,4 +189,34 @@ void ArrowDirDatabase::appendTable(std::string tableName, std::shared_ptr<arrow:
    batches.push_back(table->CombineChunksToBatch().ValueOrDie());
    batches.push_back(newRows->CombineChunksToBatch().ValueOrDie());
    tables[tableName] = arrow::Table::FromRecordBatches(batches).ValueOrDie();
+   samples[tableName] = createSample(tables[tableName]);
+   metaData[tableName]->setNumRows(tables[tableName]->num_rows());
+}
+ArrowDirDatabase::~ArrowDirDatabase() {
+   if (writeback) {
+      writeMetaData(directory + "/metadata.json");
+      for (auto t : tables) {
+         storeTable(directory + "/" + t.first + ".arrow", t.second);
+      }
+      for (auto s : samples) {
+         storeSample(directory + "/" + s.first + ".arrow.sample", s.second);
+      }
+   }
+}
+void ArrowDirDatabase::writeMetaData(std::string filename) {
+   std::ofstream ostream(filename);
+   ostream << "{ \"tables\": {";
+   bool first = true;
+   for (auto t : metaData) {
+      if (first) {
+         first = false;
+      } else {
+         ostream << ",";
+      }
+      ostream << "\"" << t.first << "\":" << t.second->serialize(false);
+   }
+   ostream << "} }";
+}
+void ArrowDirDatabase::setWriteback(bool writeback) {
+   ArrowDirDatabase::writeback = writeback;
 }

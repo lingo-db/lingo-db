@@ -281,12 +281,12 @@ struct Parser {
       abort();
    }
    std::pair<std::string, std::shared_ptr<runtime::ColumnMetaData>> translateColumnDef(ColumnDef* columnDef) {
-      auto *typeName = columnDef->type_name_;
+      auto* typeName = columnDef->type_name_;
 
       std::vector<std::variant<size_t, std::string>> typeModifiers;
       if (typeName->typmods_ != nullptr) {
-         for (auto *cell = typeName->typmods_->head; cell != nullptr; cell = cell->next) {
-            auto *node = reinterpret_cast<Node*>(cell->data.ptr_value);
+         for (auto* cell = typeName->typmods_->head; cell != nullptr; cell = cell->next) {
+            auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
             switch (node->type) {
                case T_A_Const: {
                   auto nodeType = reinterpret_cast<A_Const*>(node)->val_.type_;
@@ -315,8 +315,8 @@ struct Parser {
       //bool isUnique = false;
 
       if (columnDef->constraints_ != nullptr) {
-         for (auto *cell = columnDef->constraints_->head; cell != nullptr; cell = cell->next) {
-            auto *constraint = reinterpret_cast<Constraint*>(cell->data.ptr_value);
+         for (auto* cell = columnDef->constraints_->head; cell != nullptr; cell = cell->next) {
+            auto* constraint = reinterpret_cast<Constraint*>(cell->data.ptr_value);
             switch (constraint->contype_) {
                case CONSTR_PRIMARY: {
                   //isPrimary = true;
@@ -337,10 +337,10 @@ struct Parser {
          }
       }
       datatypeName = llvm::StringSwitch<std::string>(datatypeName)
-                         .Case("bpchar", "char")
-                         .Case("varchar", "string")
-                         .Case("numeric", "decimal")
-                         .Default(datatypeName);
+                        .Case("bpchar", "char")
+                        .Case("varchar", "string")
+                        .Case("numeric", "decimal")
+                        .Default(datatypeName);
       if (datatypeName == "int4") {
          datatypeName = "int";
          typeModifiers.push_back(32ull);
@@ -349,7 +349,7 @@ struct Parser {
          typeModifiers.clear();
          datatypeName = "string";
       }
-      if(datatypeName =="date"){
+      if (datatypeName == "date") {
          typeModifiers.clear();
          typeModifiers.push_back("day");
       }
@@ -376,8 +376,8 @@ struct Parser {
       RangeVar* relation = statement->relation_;
       std::string tableName = relation->relname_ != nullptr ? relation->relname_ : "";
       auto tableMetaData = std::make_shared<runtime::TableMetaData>();
-      for (auto *cell = statement->table_elts_->head; cell != nullptr; cell = cell->next) {
-         auto *node = reinterpret_cast<Node*>(cell->data.ptr_value);
+      for (auto* cell = statement->table_elts_->head; cell != nullptr; cell = cell->next) {
+         auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
          switch (node->type) {
             case T_ColumnDef: {
                auto columnDef = translateColumnDef(reinterpret_cast<ColumnDef*>(node));
@@ -389,7 +389,7 @@ struct Parser {
                switch (constraint->contype_) {
                   case CONSTR_PRIMARY: {
                      std::vector<std::string> primaryKey;
-                     for (auto * keyCell = constraint->keys_->head; keyCell != nullptr; keyCell = keyCell->next) {
+                     for (auto* keyCell = constraint->keys_->head; keyCell != nullptr; keyCell = keyCell->next) {
                         primaryKey.push_back(reinterpret_cast<value*>(keyCell->data.ptr_value)->val_.str_);
                      }
                      tableMetaData->setPrimaryKey(primaryKey);
@@ -419,21 +419,39 @@ struct Parser {
       if (result.tree && result.tree->length == 1) {
          auto* statement = static_cast<Node*>(result.tree->head->data.ptr_value);
          switch (statement->type) {
+            case T_VariableSetStmt: {
+               auto* variableSetStatement = reinterpret_cast<VariableSetStmt*>(statement);
+               std::string varName = variableSetStatement->name_;
+               auto* args = variableSetStatement->args_;
+               if (varName == "persist") {
+                  assert(args->head != nullptr);
+                  assert(args->head == args->tail);
+                  auto* paramNode = reinterpret_cast<Node*>(args->head->data.ptr_value);
+                  assert(paramNode->type == T_A_Const);
+                  auto *constNode = reinterpret_cast<A_Const*>(paramNode);
+                  assert(constNode->val_.type_ == T_Integer);
+                  auto persistValue = builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), constNode->val_.val_.ival_, 1);
+                  auto executionContext = getExecutionContext(builder);
+                  auto database = rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(executionContext)[0];
+                  rt::Database::setPersist(builder, builder.getUnknownLoc())({database, persistValue});
+               }
+               break;
+            }
             case T_CreateStmt: {
                translateCreate(builder, reinterpret_cast<CreateStmt*>(statement));
                break;
             }
             case T_CopyStmt: {
-               auto *copyStatement = reinterpret_cast<CopyStmt*>(statement);
+               auto* copyStatement = reinterpret_cast<CopyStmt*>(statement);
                std::string fileName = copyStatement->filename_;
                std::string tableName = copyStatement->relation_->relname_;
                std::string delimiter = "|";
-               for (auto *optionCell = copyStatement->options_->head; optionCell != nullptr; optionCell = optionCell->next) {
-                  auto *defElem = reinterpret_cast<DefElem*>(optionCell->data.ptr_value);
+               for (auto* optionCell = copyStatement->options_->head; optionCell != nullptr; optionCell = optionCell->next) {
+                  auto* defElem = reinterpret_cast<DefElem*>(optionCell->data.ptr_value);
                   std::string optionName = defElem->defname_;
                   if (optionName == "delimiter") {
                      delimiter = reinterpret_cast<value*>(defElem->arg_)->val_.str_;
-                     if(delimiter!="|"){
+                     if (delimiter != "|") {
                         error("unsupported delimiter");
                      }
                   } else {
@@ -446,7 +464,7 @@ struct Parser {
                auto fileNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(fileName));
                auto delimiterValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(delimiter));
 
-               rt::Database::copyFromIntoTable(builder,builder.getUnknownLoc())(mlir::ValueRange{database,tableNameValue,fileNameValue,delimiterValue});
+               rt::Database::copyFromIntoTable(builder, builder.getUnknownLoc())(mlir::ValueRange{database, tableNameValue, fileNameValue, delimiterValue});
                break;
             }
             case T_SelectStmt: {

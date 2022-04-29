@@ -11,7 +11,7 @@ void handleQuery(runtime::ExecutionContext* context, std::string basicString);
 bool beingTraced() {
    std::ifstream sf("/proc/self/status");
    std::string s;
-   while (sf >> s) {
+   while (sf >> s ) {
       if (s == "TracerPid:") {
          int pid;
          sf >> pid;
@@ -42,11 +42,11 @@ int main(int argc, char** argv) {
       std::stringstream query;
       std::string line;
       std::getline(std::cin, line);
-      if (line == "exit") {
+      if (line == "exit"||std::cin.eof()) {
          //exit from repl loop
          break;
       }
-      while (true) {
+      while (std::cin.good()) {
          query << line << std::endl;
          if (!line.empty() && line.find(';') == line.size() - 1) {
             break;

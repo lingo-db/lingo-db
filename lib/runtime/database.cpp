@@ -96,4 +96,12 @@ void Database::copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 
    std::shared_ptr<arrow::Table> table = *maybeTable;
    appendTable(tableName.str(), table);
 }
+void Database::setPersistMode(bool persist) {
+   if(persist){
+      throw std::runtime_error("DB does not support persistent data");
+   }
+}
+void Database::setPersist(bool persist) {
+   setPersistMode(persist);
+}
 } //end namespace runtime
