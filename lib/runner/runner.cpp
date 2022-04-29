@@ -18,7 +18,6 @@
 
 #include "frontend/SQL/Parser.h"
 
-
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
@@ -68,7 +67,6 @@
 #include <mlir/Dialect/util/UtilTypes.h>
 #include <runner/runner.h>
 
-
 #include <sched.h>
 
 #include <iostream>
@@ -87,8 +85,61 @@ struct InsertPerfAsmPass
    }
    void runOnOperation() final;
 };
+struct EnforceCPPABIPass
+   : public mlir::PassWrapper<EnforceCPPABIPass, mlir::OperationPass<mlir::LLVM::LLVMFuncOp>> {
+   void getDependentDialects(mlir::DialectRegistry& registry) const override {
+      registry.insert<mlir::LLVM::LLVMDialect>();
+   }
+   void runOnOperation() final;
+};
 } // end anonymous namespace
 
+void EnforceCPPABIPass::runOnOperation() {
+   auto funcOp = getOperation();
+   if (funcOp.isPrivate()) {
+      auto moduleOp = funcOp->getParentOfType<mlir::ModuleOp>();
+      auto& dataLayoutAnalysis = getAnalysis<mlir::DataLayoutAnalysis>();
+      size_t numRegs = 0;
+      std::vector<size_t> passByMem;
+      for (size_t i = 0; i < funcOp.getNumArguments(); i++) {
+         auto dataLayout = dataLayoutAnalysis.getAbove(funcOp.getOperation());
+         auto typeSize = dataLayout.getTypeSize(funcOp.getArgumentTypes()[i]);
+         if (typeSize <= 16) {
+            auto requiredRegs = typeSize <= 8 ? 1 : 2;
+            if (numRegs + requiredRegs > 6) {
+               passByMem.push_back(i);
+            } else {
+               numRegs += requiredRegs;
+            }
+         } else {
+            passByMem.push_back(i);
+         }
+      }
+      if (passByMem.empty()) return;
+      std::vector<mlir::Type> paramTypes(funcOp.getArgumentTypes().begin(), funcOp.getArgumentTypes().end());
+      for (size_t memId : passByMem) {
+         paramTypes[memId] = mlir::LLVM::LLVMPointerType::get(paramTypes[memId]);
+         funcOp.setArgAttr(memId, "llvm.byval", mlir::UnitAttr::get(&getContext()));
+      }
+
+      funcOp.setType(mlir::LLVM::LLVMFunctionType::get(funcOp.getType().getReturnType(), paramTypes));
+      auto uses = mlir::SymbolTable::getSymbolUses(funcOp, moduleOp.getOperation());
+      for (auto use : *uses) {
+         auto callOp = mlir::cast<mlir::LLVM::CallOp>(use.getUser());
+         for (size_t memId : passByMem) {
+            auto userFunc = callOp->getParentOfType<mlir::LLVM::LLVMFuncOp>();
+            mlir::OpBuilder builder(userFunc->getContext());
+            builder.setInsertionPointToStart(&userFunc.getBody().front());
+            auto const1 = builder.create<mlir::LLVM::ConstantOp>(callOp.getLoc(), builder.getI64Type(), builder.getI64IntegerAttr(1));
+            mlir::Value allocatedElementPtr = builder.create<mlir::LLVM::AllocaOp>(callOp.getLoc(), paramTypes[memId], const1, 16);
+            mlir::OpBuilder builder2(userFunc->getContext());
+            builder2.setInsertionPoint(callOp);
+            builder2.create<mlir::LLVM::StoreOp>(callOp->getLoc(), callOp.getOperand(memId), allocatedElementPtr);
+            callOp.setOperand(memId,allocatedElementPtr);
+         }
+      }
+   }
+}
 void ToLLVMLoweringPass::runOnOperation() {
    // The first thing to define is the conversion target. This will define the
    // final target for this lowering. For this lowering, we are only targeting
@@ -432,6 +483,7 @@ bool Runner::lowerToLLVM() {
    pm2.enableVerifier(runMode == RunMode::DEBUGGING);
    pm2.addPass(mlir::createConvertSCFToCFPass());
    pm2.addPass(createLowerToLLVMPass());
+   pm2.addNestedPass<mlir::LLVM::LLVMFuncOp>(std::make_unique<EnforceCPPABIPass>());
    pm2.addPass(mlir::createCSEPass());
    if (mlir::failed(pm2.run(ctxt->module.get()))) {
       return false;

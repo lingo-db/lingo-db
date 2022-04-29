@@ -444,7 +444,9 @@ struct Parser {
                auto database = rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(executionContext)[0];
                auto tableNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(tableName));
                auto fileNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(fileName));
-               rt::Database::copyFromIntoTable(builder,builder.getUnknownLoc())(mlir::ValueRange{database,tableNameValue,fileNameValue});
+               auto delimiterValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(delimiter));
+
+               rt::Database::copyFromIntoTable(builder,builder.getUnknownLoc())(mlir::ValueRange{database,tableNameValue,fileNameValue,delimiterValue});
                break;
             }
             case T_SelectStmt: {

@@ -21,7 +21,7 @@ class Database {
    virtual void createTable(std::string tableName, std::shared_ptr<TableMetaData>);
    virtual void appendTable(std::string tableName, std::shared_ptr<arrow::Table> newRows);
    void createTable(runtime::VarLen32 name, runtime::VarLen32 meta);
-   void copyFromIntoTable(runtime::VarLen32 tableName,runtime::VarLen32 fileName);
+   void copyFromIntoTable(runtime::VarLen32 tableName,runtime::VarLen32 fileName,runtime::VarLen32 delimiter);
    static std::string serializeRecordBatch(std::shared_ptr<arrow::RecordBatch> batch);
    static std::shared_ptr<arrow::RecordBatch> deserializeRecordBatch(std::string str);
    virtual ~Database() {}

@@ -49,15 +49,17 @@ std::shared_ptr<arrow::RecordBatch> Database::deserializeRecordBatch(std::string
    assert(reader->ReadNext(&batch) == arrow::Status::OK());
    return batch;
 }
+static size_t len = 0;
+
 void Database::createTable(runtime::VarLen32 name, runtime::VarLen32 meta) {
    std::cout << "create table:" << name.str() << ", " << meta.str() << std::endl;
    if (hasTable(name.str())) {
       throw std::runtime_error("table " + name.str() + " does already exist");
    }
    createTable(name.str(), runtime::TableMetaData::deserialize(meta.str()));
+   std::cout << len << std::endl;
 }
-void Database::copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 fileName) {
-   std::cout << "copyFromIntoTable:" << tableName.str() << "," << fileName.str() << std::endl;
+void Database::copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 fileName, runtime::VarLen32 delimiter) {
    arrow::io::IOContext ioContext = arrow::io::default_io_context();
    auto inputFile = arrow::io::ReadableFile::Open(fileName.str()).ValueOrDie();
    std::shared_ptr<arrow::io::InputStream> input = inputFile;
@@ -65,7 +67,7 @@ void Database::copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 
    auto readOptions = arrow::csv::ReadOptions::Defaults();
 
    auto parseOptions = arrow::csv::ParseOptions::Defaults();
-   parseOptions.delimiter = '|';
+   parseOptions.delimiter = delimiter.str().front();
    parseOptions.newlines_in_values = true;
    auto convertOptions = arrow::csv::ConvertOptions::Defaults();
    auto schema = getTable(tableName)->schema();
