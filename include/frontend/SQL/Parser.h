@@ -340,6 +340,7 @@ struct Parser {
                         .Case("bpchar", "char")
                         .Case("varchar", "string")
                         .Case("numeric", "decimal")
+                        .Case("text", "string")
                         .Default(datatypeName);
       if (datatypeName == "int4") {
          datatypeName = "int";
@@ -428,7 +429,7 @@ struct Parser {
                   assert(args->head == args->tail);
                   auto* paramNode = reinterpret_cast<Node*>(args->head->data.ptr_value);
                   assert(paramNode->type == T_A_Const);
-                  auto *constNode = reinterpret_cast<A_Const*>(paramNode);
+                  auto* constNode = reinterpret_cast<A_Const*>(paramNode);
                   assert(constNode->val_.type_ == T_Integer);
                   auto persistValue = builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), constNode->val_.val_.ival_, 1);
                   auto executionContext = getExecutionContext(builder);
@@ -445,15 +446,21 @@ struct Parser {
                auto* copyStatement = reinterpret_cast<CopyStmt*>(statement);
                std::string fileName = copyStatement->filename_;
                std::string tableName = copyStatement->relation_->relname_;
-               std::string delimiter = "|";
+               std::string delimiter = ",";
+               std::string escape = "";
                for (auto* optionCell = copyStatement->options_->head; optionCell != nullptr; optionCell = optionCell->next) {
                   auto* defElem = reinterpret_cast<DefElem*>(optionCell->data.ptr_value);
                   std::string optionName = defElem->defname_;
                   if (optionName == "delimiter") {
                      delimiter = reinterpret_cast<value*>(defElem->arg_)->val_.str_;
-                     if (delimiter != "|") {
-                        error("unsupported delimiter");
+                  } else if (optionName == "escape") {
+                     escape = reinterpret_cast<value*>(defElem->arg_)->val_.str_;
+                  } else if (optionName == "format") {
+                     std::string format = reinterpret_cast<value*>(defElem->arg_)->val_.str_;
+                     if (format != "csv") {
+                        error("copy only supports csv");
                      }
+
                   } else {
                      error("unsupported copy option");
                   }
@@ -463,8 +470,9 @@ struct Parser {
                auto tableNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(tableName));
                auto fileNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(fileName));
                auto delimiterValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(delimiter));
+               auto escapeValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(escape));
 
-               rt::Database::copyFromIntoTable(builder, builder.getUnknownLoc())(mlir::ValueRange{database, tableNameValue, fileNameValue, delimiterValue});
+               rt::Database::copyFromIntoTable(builder, builder.getUnknownLoc())(mlir::ValueRange{database, tableNameValue, fileNameValue, delimiterValue, escapeValue});
                break;
             }
             case T_SelectStmt: {
@@ -745,7 +753,9 @@ struct Parser {
                   case ExpressionType::COMPARE_LIKE:
                   case ExpressionType::COMPARE_NOT_LIKE: {
                      auto ct = SQLTypeInference::toCommonBaseTypes(builder, {left, right});
-                     auto like = builder.create<mlir::db::RuntimeCall>(loc, builder.getI1Type(), "Like", mlir::ValueRange({ct[0], ct[1]})).res();
+                     auto isNullable = left.getType().isa<mlir::db::NullableType>() || right.getType().isa<mlir::db::NullableType>();
+                     mlir::Type resType = isNullable ? (mlir::Type) mlir::db::NullableType::get(builder.getContext(), builder.getI1Type()) : (mlir::Type) builder.getI1Type();
+                     auto like = builder.create<mlir::db::RuntimeCall>(loc, resType, "Like", mlir::ValueRange({ct[0], ct[1]})).res();
                      return opType == ExpressionType::COMPARE_NOT_LIKE ? builder.create<mlir::db::NotOp>(loc, like) : like;
                   }
                   case ExpressionType::OPERATOR_CAST: {

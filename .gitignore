@@ -3,6 +3,8 @@ build/
 test*.mlir
 test.sql
 resources/data/tpch-*
+resources/data/job
+resources/data/ssb-*
 __pycache__
 llvm-jit-static.*
 perf-result.json

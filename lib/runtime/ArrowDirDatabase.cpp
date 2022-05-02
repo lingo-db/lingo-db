@@ -184,9 +184,11 @@ void ArrowDirDatabase::appendTable(std::string tableName, std::shared_ptr<arrow:
    if (!hasTable(tableName)) {
       throw std::runtime_error("can not append to non-existing table " + tableName);
    }
-   auto table = tables[tableName];
+   auto table = tables.at(tableName);
    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
-   batches.push_back(table->CombineChunksToBatch().ValueOrDie());
+   if (table->num_rows() != 0) {
+      batches.push_back(table->CombineChunksToBatch().ValueOrDie());
+   }
    batches.push_back(newRows->CombineChunksToBatch().ValueOrDie());
    tables[tableName] = arrow::Table::FromRecordBatches(batches).ValueOrDie();
    samples[tableName] = createSample(tables[tableName]);

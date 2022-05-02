@@ -1,3 +1,5 @@
+#!/usr/bin/env bash
+set -euo pipefail
 TMPDIR=`mktemp --directory`
 echo $TMPDIR
 cp  resources/sql/tpch/initialize.sql $TMPDIR/initialize.sql

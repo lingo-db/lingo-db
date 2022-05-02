@@ -23,7 +23,7 @@ class Database {
    void createTable(runtime::VarLen32 name, runtime::VarLen32 meta);
    virtual void setPersistMode(bool persist);
    void setPersist(bool persist);
-   void copyFromIntoTable(runtime::VarLen32 tableName,runtime::VarLen32 fileName,runtime::VarLen32 delimiter);
+   void copyFromIntoTable(runtime::VarLen32 tableName,runtime::VarLen32 fileName,runtime::VarLen32 delimiter,runtime::VarLen32 escape);
    static std::string serializeRecordBatch(std::shared_ptr<arrow::RecordBatch> batch);
    static std::shared_ptr<arrow::RecordBatch> deserializeRecordBatch(std::string str);
    virtual ~Database() {}

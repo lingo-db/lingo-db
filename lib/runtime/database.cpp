@@ -49,7 +49,6 @@ std::shared_ptr<arrow::RecordBatch> Database::deserializeRecordBatch(std::string
    assert(reader->ReadNext(&batch) == arrow::Status::OK());
    return batch;
 }
-static size_t len = 0;
 
 void Database::createTable(runtime::VarLen32 name, runtime::VarLen32 meta) {
    std::cout << "create table:" << name.str() << ", " << meta.str() << std::endl;
@@ -57,9 +56,8 @@ void Database::createTable(runtime::VarLen32 name, runtime::VarLen32 meta) {
       throw std::runtime_error("table " + name.str() + " does already exist");
    }
    createTable(name.str(), runtime::TableMetaData::deserialize(meta.str()));
-   std::cout << len << std::endl;
 }
-void Database::copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 fileName, runtime::VarLen32 delimiter) {
+void Database::copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 fileName, runtime::VarLen32 delimiter, runtime::VarLen32 escape) {
    arrow::io::IOContext ioContext = arrow::io::default_io_context();
    auto inputFile = arrow::io::ReadableFile::Open(fileName.str()).ValueOrDie();
    std::shared_ptr<arrow::io::InputStream> input = inputFile;
@@ -68,6 +66,10 @@ void Database::copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 
 
    auto parseOptions = arrow::csv::ParseOptions::Defaults();
    parseOptions.delimiter = delimiter.str().front();
+   if(escape.getLen()>0) {
+      parseOptions.escape_char = escape.str().front();
+      parseOptions.escaping=true;
+   }
    parseOptions.newlines_in_values = true;
    auto convertOptions = arrow::csv::ConvertOptions::Defaults();
    auto schema = getTable(tableName)->schema();
@@ -97,7 +99,7 @@ void Database::copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 
    appendTable(tableName.str(), table);
 }
 void Database::setPersistMode(bool persist) {
-   if(persist){
+   if (persist) {
       throw std::runtime_error("DB does not support persistent data");
    }
 }
