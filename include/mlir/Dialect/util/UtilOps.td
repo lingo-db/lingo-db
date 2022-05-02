@@ -48,23 +48,18 @@ def RefType : Util_Type<"Ref","ref"> {
 
 
 def VarLen32Type : Util_Type<"VarLen32","varlen32"> {
-let summary = "type representing variable-length data up to 2^32 bytes";
+    let summary = "type representing variable-length data up to 2^31 bytes";
 }
 
 def CreateVarLen  : Util_Op<"varlen32_create",[NoSideEffect]> {//todo: technically not currect
-let arguments = (ins RefType:$ref, I32: $len);
-let results=(outs VarLen32Type:$varlen);
-let assemblyFormat = " $ref `,` $len attr-dict";
+    let arguments = (ins RefType:$ref, I32: $len);
+    let results=(outs VarLen32Type:$varlen);
+    let assemblyFormat = " $ref `,` $len attr-dict";
 }
 def CreateConstVarLen  : Util_Op<"varlen32_create_const",[NoSideEffect]> {
-let arguments = (ins StrAttr: $str);
-let results=(outs VarLen32Type:$varlen);
-let assemblyFormat = " $str attr-dict";
-}
-def VarLenGetRef : Util_Op<"varlen32_getref"> {
-    let arguments = (ins VarLen32Type:$varlen);
-    let results = (outs RefType: $ref);
-    let assemblyFormat = " $varlen `->` type($ref) attr-dict";
+    let arguments = (ins StrAttr: $str);
+    let results = (outs VarLen32Type:$varlen);
+    let assemblyFormat = " $str attr-dict";
 }
 def VarLenGetLen : Util_Op<"varlen32_getlen"> {
     let arguments = (ins VarLen32Type:$varlen);

@@ -15,17 +15,11 @@ module  {
     %len_2 = arith.constant 15 : i32
 
     %varlen_1 = util.varlen32_create %2, %len_1
-    %ref_1 = util.varlen32_getref %varlen_1 -> !util.ref<i8>
-    //CHECK: string("str1str1str")
-    call @_ZN7runtime11DumpRuntime10dumpStringEbNS_8VarLen32E(%false_14, %varlen_1) : (i1, !util.varlen32) -> ()
     %len_res_1 = util.varlen32_getlen %varlen_1
     //CHECK: index(11)
     call @_ZN7runtime11DumpRuntime9dumpIndexEm(%len_res_1) : (index) -> ()
 
     %varlen_2 = util.varlen32_create %2, %len_2
-    %ref_2 = util.varlen32_getref %varlen_2 -> !util.ref<i8>
-    //CHECK: string("str1str1str1str")
-    call @_ZN7runtime11DumpRuntime10dumpStringEbNS_8VarLen32E(%false_14, %varlen_2) : (i1, !util.varlen32) -> ()
     %len_res_2 = util.varlen32_getlen %varlen_2
     //CHECK: index(15)
     call @_ZN7runtime11DumpRuntime9dumpIndexEm(%len_res_2) : (index) -> ()
