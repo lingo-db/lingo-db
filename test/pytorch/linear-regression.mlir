@@ -23,7 +23,7 @@ module {
     }
 
   func @main () -> !dsa.table attributes { torch.ignore = unit }  {
-    %1 = relalg.basetable @R {table_identifier="R"} columns: {a=>@a({type=f32})}
+    %1 = relalg.basetable {table_identifier="R"} columns: {a=>@R::@a({type=f32})}
     %3 = relalg.selection %1 (%4: !relalg.tuple) {
       %5 = relalg.getcol %4 @R::@a : f32
       %7 = call @user(%5) : (f32) -> f32

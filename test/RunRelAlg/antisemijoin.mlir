@@ -8,12 +8,12 @@
 
 module @querymodule{
     func @main ()  -> !dsa.table{
-        %1 = relalg.basetable @hoeren { table_identifier="hoeren" } columns: {matrnr => @matrnr({type=i64}),
-            vorlnr => @vorlnr({type=i64})
+        %1 = relalg.basetable { table_identifier="hoeren" } columns: {matrnr => @hoeren::@matrnr({type=i64}),
+            vorlnr => @hoeren::@vorlnr({type=i64})
         }
-        %2 = relalg.basetable @studenten { table_identifier="studenten" } columns: {matrnr => @matrnr({type=i64}),
-            name => @name({type=!db.string}),
-            semester => @semester({type=i64})
+        %2 = relalg.basetable { table_identifier="studenten" } columns: {matrnr => @studenten::@matrnr({type=i64}),
+            name => @studenten::@name({type=!db.string}),
+            semester => @studenten::@semester({type=i64})
         }
         %3 = relalg.antisemijoin %2, %1 (%6: !relalg.tuple) {
                                                  %8 = relalg.getcol %6 @hoeren::@matrnr : i64

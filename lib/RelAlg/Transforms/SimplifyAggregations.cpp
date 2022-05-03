@@ -21,10 +21,9 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
       std::string scopeName = attributeManager.getUniqueScope("aggr");
       std::string attributeName = "aggrAttr";
 
-      attributeManager.setCurrentScope(scopeName);
-      auto def = attributeManager.createDef(attributeName);
+      auto def = attributeManager.createDef(scopeName, attributeName);
       def.getColumn().type = aggrFuncOp.getType();
-      auto aggrOp = rewriter.create<mlir::relalg::AggregationOp>(op->getLoc(), mlir::relalg::TupleStreamType::get(getContext()), scopeName, aggrFuncOp.rel(), rewriter.getArrayAttr({}), rewriter.getArrayAttr({def}));
+      auto aggrOp = rewriter.create<mlir::relalg::AggregationOp>(op->getLoc(), mlir::relalg::TupleStreamType::get(getContext()), aggrFuncOp.rel(), rewriter.getArrayAttr({}), rewriter.getArrayAttr({def}));
       auto* block = new mlir::Block;
       aggrOp.aggr_func().push_back(block);
       {
@@ -62,10 +61,9 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
       std::string scopeName = attributeManager.getUniqueScope("aggr");
       std::string attributeName = "aggrAttr";
 
-      attributeManager.setCurrentScope(scopeName);
-      auto def = attributeManager.createDef(attributeName);
+      auto def = attributeManager.createDef(scopeName, attributeName);
       def.getColumn().type = aggrFuncOp.getType();
-      auto aggrOp = rewriter.create<mlir::relalg::AggregationOp>(op->getLoc(), mlir::relalg::TupleStreamType::get(getContext()), scopeName, aggrFuncOp.rel(), rewriter.getArrayAttr({}), rewriter.getArrayAttr({def}));
+      auto aggrOp = rewriter.create<mlir::relalg::AggregationOp>(op->getLoc(), mlir::relalg::TupleStreamType::get(getContext()), aggrFuncOp.rel(), rewriter.getArrayAttr({}), rewriter.getArrayAttr({def}));
       auto* block = new mlir::Block;
       aggrOp.aggr_func().push_back(block);
       {

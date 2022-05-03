@@ -17,8 +17,8 @@
 
 module @querymodule{
     func @main ()  -> !dsa.table{
-        %1 = relalg.basetable @hoeren { table_identifier="hoeren" } columns: {matrnr => @matrnr({type=i64}),
-            vorlnr => @vorlnr({type=i64})
+        %1 = relalg.basetable { table_identifier="hoeren" } columns: {matrnr => @hoeren::@matrnr({type=i64}),
+            vorlnr => @hoeren::@vorlnr({type=i64})
         }
         %2 = relalg.projection all  [@hoeren::@matrnr] %1
         %3 = relalg.materialize %2 [@hoeren::@matrnr] => ["matrnr"] : !dsa.table

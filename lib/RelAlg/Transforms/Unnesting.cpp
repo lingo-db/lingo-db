@@ -118,16 +118,15 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          Operator toRename = renameRight ? newRight : newLeft;
          std::unordered_map<const relalg::Column*, const relalg::Column*> renamed;
          std::string scope = attributeManager.getUniqueScope("renaming");
-         attributeManager.setCurrentScope(scope);
          std::vector<Attribute> renamingDefsAsAttr;
          size_t i = 0;
          for (const auto* attr : dependentAttributes) {
-            auto def = attributeManager.createDef("renamed" + std::to_string(i++), builder.getArrayAttr({attributeManager.createRef(attr)}));
+            auto def = attributeManager.createDef(scope,"renamed" + std::to_string(i++), builder.getArrayAttr({attributeManager.createRef(attr)}));
             renamingDefsAsAttr.push_back(def);
             def.getColumn().type = attr->type;
             renamed.insert({attr, &def.getColumn()});
          }
-         Operator renamingop = builder.create<relalg::RenamingOp>(loc, relType, toRename->getResult(0), scope, builder.getArrayAttr(renamingDefsAsAttr));
+         Operator renamingop = builder.create<relalg::RenamingOp>(loc, relType, toRename->getResult(0), builder.getArrayAttr(renamingDefsAsAttr));
          for (const auto* attr : dependentAttributes) {
             mlir::dyn_cast_or_null<PredicateOperator>(join.getOperation()).addPredicate([&](Value tuple, OpBuilder& builder) {
                auto attrefDependent = attributeManager.createRef(renamed[attr]);

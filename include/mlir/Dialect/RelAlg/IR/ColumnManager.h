@@ -11,20 +11,14 @@ class ColumnManager {
    void setContext(MLIRContext* context);
    std::shared_ptr<Column> get(StringRef scope, StringRef attribute);
    ColumnDefAttr createDef(SymbolRefAttr name, Attribute fromExisting = Attribute());
-   ColumnDefAttr createDef(StringRef name, Attribute fromExisting = Attribute());
+   ColumnDefAttr createDef(StringRef scope, StringRef name, Attribute fromExisting = Attribute());
 
    ColumnRefAttr createRef(SymbolRefAttr name);
    ColumnRefAttr createRef(const Column* attr);
 
    ColumnRefAttr createRef(StringRef scope, StringRef name);
-   std::pair<std::string,std::string> getName(const Column* attr);
+   std::pair<std::string, std::string> getName(const Column* attr);
 
-   void setCurrentScope(StringRef scope) {
-      currentScope = scope;
-      if (!scopeUnifier.count(std::string(scope))) {
-         scopeUnifier[std::string(scope)] = 0;
-      }
-   }
    std::string getUniqueScope(StringRef base) {
       if (scopeUnifier.count(std::string(base))) {
          scopeUnifier[std::string(base)] += 1;
@@ -37,7 +31,6 @@ class ColumnManager {
 
    private:
    MLIRContext* context;
-   std::string currentScope;
    struct HashPair {
       template <class T1, class T2>
       size_t operator()(const std::pair<T1, T2>& p) const {

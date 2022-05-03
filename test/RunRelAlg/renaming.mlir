@@ -12,12 +12,12 @@
 
 module @querymodule{
     func @main ()  -> !dsa.table{
-        %1 = relalg.basetable @studenten { table_identifier="studenten" } columns: {matrnr => @matrnr({type=i64}),
-            name => @name({type=!db.string}),
-            semester => @semester({type=i64})
+        %1 = relalg.basetable { table_identifier="studenten" } columns: {matrnr => @studenten::@matrnr({type=i64}),
+            name => @studenten::@name({type=!db.string}),
+            semester => @studenten::@semester({type=i64})
         }
-        %2 = relalg.renaming @renaming %1  renamed: [@matrnr({type = i64})=[@studenten::@matrnr]]
-        %3 = relalg.materialize %2 [@renaming::@matrnr,@studenten::@name] => ["matrnr","name"] : !dsa.table
+        %2 = relalg.renaming %1  renamed: [@renamed::@matrnr({type = i64})=[@studenten::@matrnr]]
+        %3 = relalg.materialize %2 [@renamed::@matrnr,@studenten::@name] => ["matrnr","name"] : !dsa.table
         return %3 : !dsa.table
     }
 }

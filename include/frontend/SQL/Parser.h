@@ -913,15 +913,14 @@ struct Parser {
       static size_t id = 0;
       std::string scopeName = alias + (id != 0 ? std::to_string(id) : "");
       std::vector<mlir::NamedAttribute> columns;
-      attrManager.setCurrentScope(scopeName);
       for (auto c : tableMetaData->getOrderedColumns()) {
-         auto attrDef = attrManager.createDef(c);
+         auto attrDef = attrManager.createDef(scopeName, c);
          attrDef.getColumn().type = translateColType(builder.getContext(), tableMetaData->getColumnMetaData(c)->getColumnType());
          columns.push_back(builder.getNamedAttr(c, attrDef));
          context.mapAttribute(scope, c, &attrDef.getColumn()); //todo check for existing and overwrite...
          context.mapAttribute(scope, alias + "." + c, &attrDef.getColumn());
       }
-      return builder.create<mlir::relalg::BaseTableOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), scopeName, relation, mlir::relalg::TableMetaDataAttr::get(builder.getContext(), std::make_shared<runtime::TableMetaData>()), builder.getDictionaryAttr(columns));
+      return builder.create<mlir::relalg::BaseTableOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), relation, mlir::relalg::TableMetaDataAttr::get(builder.getContext(), std::make_shared<runtime::TableMetaData>()), builder.getDictionaryAttr(columns));
    }
    mlir::Value translateSubSelect(mlir::OpBuilder& builder, SelectStmt* stmt, std::string alias, std::vector<std::string> colAlias, TranslationContext& context, TranslationContext::ResolverScope& scope) {
       mlir::Value subQuery;
@@ -1021,13 +1020,12 @@ struct Parser {
                std::string outerjoinName;
                if (!mapping.empty()) {
                   outerjoinName = "oj" + std::to_string(id++);
-                  attrManager.setCurrentScope(outerjoinName);
                   std::unordered_map<const mlir::relalg::Column*, const mlir::relalg::Column*> remapped;
                   for (auto x : mapping) {
                      if (!remapped.contains(x.second)) {
                         auto [scopename, name] = attrManager.getName(x.second);
 
-                        auto attrDef = attrManager.createDef(name, builder.getArrayAttr({attrManager.createRef(x.second)}));
+                        auto attrDef = attrManager.createDef(outerjoinName, name, builder.getArrayAttr({attrManager.createRef(x.second)}));
                         attrDef.getColumn().type = mlir::db::NullableType::get(builder.getContext(), x.second->type);
                         outerJoinMapping.push_back(attrDef);
                         attrDef.dump();
@@ -1037,7 +1035,7 @@ struct Parser {
                   }
                }
                mlir::ArrayAttr mapping = builder.getArrayAttr(outerJoinMapping);
-               auto join = builder.create<mlir::relalg::OuterJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), outerjoinName, left, right, mapping);
+               auto join = builder.create<mlir::relalg::OuterJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), left, right, mapping);
                join.predicate().push_back(pred);
                return join;
             } else if (joinExpr->jointype_ == JOIN_INNER) {
@@ -1072,14 +1070,13 @@ struct Parser {
       std::vector<mlir::Attribute> createdCols;
       for (auto p : toMap) {
          mlir::Value expr = translateExpression(mapBuilder, p.second, context);
-         attrManager.setCurrentScope(mapName);
-         auto attrDef = attrManager.createDef(p.first->colId);
+         auto attrDef = attrManager.createDef(mapName, p.first->colId);
          attrDef.getColumn().type = expr.getType();
          context.mapAttribute(scope, p.first->colId, &attrDef.getColumn());
          createdCols.push_back(attrDef);
          createdValues.push_back(expr);
       }
-      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), mapName, tree, builder.getArrayAttr(createdCols));
+      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
       mapOp.predicate().push_back(block);
       mapBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), createdValues);
       return mapOp.result();
@@ -1179,15 +1176,14 @@ struct Parser {
                }
                expr = aggrBuilder.create<mlir::relalg::AggrFuncOp>(builder.getUnknownLoc(), aggrResultType, aggrFunc, currRel, refAttr);
             }
-            attrManager.setCurrentScope(groupByName);
-            auto attrDef = attrManager.createDef(toAggr.first->colId);
+            auto attrDef = attrManager.createDef(groupByName, toAggr.first->colId);
             attrDef.getColumn().type = expr.getType();
             context.mapAttribute(scope, toAggr.first->colId, &attrDef.getColumn());
             createdCols.push_back(attrDef);
             createdValues.push_back(expr);
          }
          aggrBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), createdValues);
-         auto groupByOp = builder.create<mlir::relalg::AggregationOp>(builder.getUnknownLoc(), tupleStreamType, groupByName, tree, builder.getArrayAttr(groupByAttrs), builder.getArrayAttr(createdCols));
+         auto groupByOp = builder.create<mlir::relalg::AggregationOp>(builder.getUnknownLoc(), tupleStreamType, tree, builder.getArrayAttr(groupByAttrs), builder.getArrayAttr(createdCols));
          groupByOp.aggr_func().push_back(block);
 
          tree = groupByOp.result();

@@ -60,16 +60,16 @@ def TableMetaDataAttr : RelAlg_Attr<"TableMetaData"> {
 
 def ColumnDefAttr : RelAlg_Attr<"ColumnDef"> {
     let mnemonic = "columndef";
-    let parameters = (ins "std::string":$name,"std::shared_ptr<Column>":$columnPtr,"Attribute":$fromExisting);
+    let parameters = (ins "SymbolRefAttr":$name,"std::shared_ptr<Column>":$columnPtr,"Attribute":$fromExisting);
     let extraClassDeclaration = [{
-        Column &getColumn() { return *getColumnPtr();  }
+        Column &getColumn() const { return *getColumnPtr();  }
     }];
 }
 def ColumnRefAttr : RelAlg_Attr<"ColumnRef"> {
     let mnemonic = "columnref";
     let parameters = (ins "SymbolRefAttr":$name,"std::shared_ptr<Column>":$columnPtr);
     let extraClassDeclaration = [{
-        Column &getColumn() { return *getColumnPtr();  }
+        Column &getColumn() const { return *getColumnPtr();  }
     }];
 }
 
@@ -126,9 +126,9 @@ class RelAlg_Op<string mnemonic, list<Trait> traits = []> : Op<RelAlg_Dialect, m
 def ConstRelationOp : RelAlg_Op<"const_relation", [RecursiveSideEffects,Operator]> {
     let summary = "constant relation";
 
-    let arguments = (ins SymbolNameAttr:$sym_name,ArrayAttr:$columns,ArrayAttr:$values);
+    let arguments = (ins ArrayAttr:$columns,ArrayAttr:$values);
     let results = (outs RelAlg_TupleStream:$result);
-    let assemblyFormat = [{ custom<AttrNS>($sym_name) `columns` `:` custom<CustDefArr>($columns) `values` `:` $values attr-dict}];
+    let assemblyFormat = [{ `columns` `:` custom<CustDefArr>($columns) `values` `:` $values attr-dict}];
 
     let extraClassDeclaration = [{
         ColumnSet getCreatedColumns();
@@ -140,7 +140,7 @@ def BaseTableOp : RelAlg_Op<"basetable",
          Operator]> {
     let summary = "base table operation";
 
-    let arguments = (ins SymbolNameAttr:$sym_name, StrAttr: $table_identifier, TableMetaDataAttr: $meta, DictionaryAttr: $columns);
+    let arguments = (ins StrAttr: $table_identifier, TableMetaDataAttr: $meta, DictionaryAttr: $columns);
     let results = (outs RelAlg_TupleStream:$result);
 
     let extraClassDeclaration = [{
@@ -170,10 +170,10 @@ def SelectionOp : RelAlg_Op<"selection",
 def MapOp : RelAlg_Op<"map", [NoSideEffect,Operator,TupleLamdaOperator,UnaryOperator]> {
     let summary = "map operation";
 
-    let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_TupleStream:$rel,ArrayAttr:$computed_cols);
+    let arguments = (ins RelAlg_TupleStream:$rel,ArrayAttr:$computed_cols);
     let results = (outs RelAlg_TupleStream:$result);
     let regions = (region SizedRegion<1>:$predicate);
-    let assemblyFormat = [{ custom<AttrNS>($sym_name) $rel `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($predicate) attr-dict-with-keyword }];
+    let assemblyFormat = [{  $rel `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($predicate) attr-dict-with-keyword }];
 
     let extraClassDeclaration = [{
         ColumnSet getCreatedColumns();
@@ -214,9 +214,9 @@ def RenamingOp : RelAlg_Op<"renaming",
         [RecursiveSideEffects,Operator,UnaryOperator]> {
     let summary = "renaming columns in relation";
 
-    let arguments = (ins RelAlg_TupleStream:$rel,SymbolNameAttr:$sym_name,ArrayAttr:$columns);
+    let arguments = (ins RelAlg_TupleStream:$rel,ArrayAttr:$columns);
     let results = (outs RelAlg_TupleStream:$result);
-    let assemblyFormat = [{ custom<AttrNS>($sym_name) $rel `renamed` `:` custom<CustDefArr>($columns) attr-dict-with-keyword }];
+    let assemblyFormat = [{ $rel `renamed` `:` custom<CustDefArr>($columns) attr-dict-with-keyword }];
 
     let extraClassDeclaration = [{
         ColumnSet getCreatedColumns();
@@ -228,10 +228,10 @@ def RenamingOp : RelAlg_Op<"renaming",
 def AggregationOp : RelAlg_Op<"aggregation", [NoSideEffect,Operator,UnaryOperator]> {
     let summary = "aggregation operation";
 
-    let arguments = (ins SymbolNameAttr:$sym_name, RelAlg_TupleStream:$rel, ArrayAttr:$group_by_cols, ArrayAttr:$computed_cols);
+    let arguments = (ins RelAlg_TupleStream:$rel, ArrayAttr:$group_by_cols, ArrayAttr:$computed_cols);
     let results = (outs RelAlg_TupleStream:$result);
     let regions = (region SizedRegion<1>:$aggr_func);
-    let assemblyFormat = [{ custom<AttrNS>($sym_name) $rel custom<CustRefArr>($group_by_cols) `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($aggr_func)  attr-dict-with-keyword }];
+    let assemblyFormat = [{ $rel custom<CustRefArr>($group_by_cols) `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($aggr_func)  attr-dict-with-keyword }];
 
     let extraClassDeclaration = [{
         ColumnSet getUsedColumns();
@@ -284,8 +284,8 @@ def AntiSemiJoinOp : RelAlg_JoinOp<"antisemijoin"> {
 def OuterJoinOp : RelAlg_JoinOp<"outerjoin"> {
     let summary = "outer join operation";
 
-    let arguments = (ins SymbolNameAttr:$sym_name,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
-    let assemblyFormat = [{ custom<AttrNS>($sym_name) $left `,` $right custom<CustRegion>($predicate)  custom<CustAttrMapping>($mapping) attr-dict-with-keyword }];
+    let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
+    let assemblyFormat = [{ $left `,` $right custom<CustRegion>($predicate)  custom<CustAttrMapping>($mapping) attr-dict-with-keyword }];
 
     let extraClassDeclaration = [{
         ColumnSet getCreatedColumns();
@@ -302,8 +302,8 @@ def FullOuterJoinOp : RelAlg_JoinOp<"fullouterjoin"> {
 def SingleJoinOp : RelAlg_JoinOp<"singlejoin"> {
     let summary = "single join operation";
 
-    let arguments = (ins SymbolNameAttr:$sym_name,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
-    let assemblyFormat = [{ custom<AttrNS>($sym_name) $left `,` $right custom<CustRegion>($predicate)  custom<CustAttrMapping>($mapping) attr-dict-with-keyword }];
+    let arguments = (ins RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
+    let assemblyFormat = [{  $left `,` $right custom<CustRegion>($predicate)  custom<CustAttrMapping>($mapping) attr-dict-with-keyword }];
 
     let extraClassDeclaration = [{
         ColumnSet getCreatedColumns();
@@ -315,8 +315,8 @@ def SingleJoinOp : RelAlg_JoinOp<"singlejoin"> {
 def CollectionJoinOp : RelAlg_JoinOp<"collectionjoin"> {
     let summary = "collection join operation";
 
-    let arguments = (ins SymbolNameAttr:$sym_name,ArrayAttr:$cols,ColumnDefAttr:$collAttr,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
-    let assemblyFormat = [{ custom<AttrNS>($sym_name) custom<CustRefArr>($cols) custom<CustDef>($collAttr) $left `,` $right custom<CustRegion>($predicate)  attr-dict }];
+    let arguments = (ins ArrayAttr:$cols,ColumnDefAttr:$collAttr,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+    let assemblyFormat = [{ custom<CustRefArr>($cols) custom<CustDef>($collAttr) $left `,` $right custom<CustRegion>($predicate)  attr-dict }];
 
     let extraClassDeclaration = [{
         ColumnSet getCreatedColumns();
@@ -328,8 +328,8 @@ def CollectionJoinOp : RelAlg_JoinOp<"collectionjoin"> {
 def MarkJoinOp : RelAlg_JoinOp<"markjoin"> {
     let summary = "mark join operation";
 
-    let arguments = (ins SymbolNameAttr:$sym_name,ColumnDefAttr:$markattr,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
-    let assemblyFormat = [{ custom<AttrNS>($sym_name) custom<CustDef>($markattr) $left `,` $right custom<CustRegion>($predicate)  attr-dict }];
+    let arguments = (ins ColumnDefAttr:$markattr,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right);
+    let assemblyFormat = [{ custom<CustDef>($markattr) $left `,` $right custom<CustRegion>($predicate)  attr-dict }];
 
     let extraClassDeclaration = [{
         ColumnSet getAvailableColumns();
@@ -352,9 +352,9 @@ def ProjectionOp : RelAlg_Op<"projection",[NoSideEffect,Operator,UnaryOperator]>
 
 class RelAlg_BinarySetOp<string mnemonic> : RelAlg_Op<mnemonic,
         [NoSideEffect,Operator,BinaryOperator]> {
-    let arguments = (ins SymbolNameAttr:$sym_name,RelAlg_SetSemantic:$set_semantic,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
+    let arguments = (ins RelAlg_SetSemantic:$set_semantic,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
     let results = (outs RelAlg_TupleStream:$result);
-    let assemblyFormat = [{ custom<AttrNS>($sym_name) $set_semantic $left `,` $right custom<CustAttrMapping>($mapping) attr-dict }];
+    let assemblyFormat = [{ $set_semantic $left `,` $right custom<CustAttrMapping>($mapping) attr-dict }];
 }
 
 def UnionOp : RelAlg_BinarySetOp<"union"> {

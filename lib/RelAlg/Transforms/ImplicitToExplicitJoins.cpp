@@ -55,14 +55,12 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
       } else {
          std::string scopeName = attributeManager.getUniqueScope("markjoin");
          std::string attributeName = "markattr";
-         attributeManager.setCurrentScope(scopeName);
-         relalg::ColumnDefAttr markAttrDef = attributeManager.createDef(attributeName);
+         relalg::ColumnDefAttr markAttrDef = attributeManager.createDef(scopeName,attributeName);
          auto& ra = markAttrDef.getColumn();
          ra.type = builder.getI1Type();
-         PredicateOperator markJoin = builder.create<relalg::MarkJoinOp>(loc, relType, scopeName, markAttrDef, treeVal, relOperator.asRelation());
+         PredicateOperator markJoin = builder.create<relalg::MarkJoinOp>(loc, relType, markAttrDef, treeVal, relOperator.asRelation());
          markJoin.initPredicate();
          apply(markJoin);
-         attributeManager.setCurrentScope(scopeName);
          relalg::ColumnRefAttr markAttrRef = attributeManager.createRef(scopeName, attributeName);
          builder.setInsertionPoint(op);
          auto replacement = builder.create<relalg::GetColumnOp>(loc, builder.getI1Type(), markAttrRef, surroundingOperator.getLambdaRegion().getArgument(0));
@@ -84,19 +82,18 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             OpBuilder builder(surroundingOperator);
             std::string scopeName = attributeManager.getUniqueScope("singlejoin");
             std::string attributeName = "sjattr";
-            attributeManager.setCurrentScope(scopeName);
             auto before = getscalarop.attr();
             auto fromExisting = ArrayAttr::get(&getContext(), {before});
 
             auto newAttrType = getscalarop.getType();
-            auto newDef = attributeManager.createDef(attributeName, fromExisting);
+            auto newDef = attributeManager.createDef(scopeName,attributeName, fromExisting);
             if (!newAttrType.isa<mlir::db::NullableType>()) {
                newAttrType = mlir::db::NullableType::get(builder.getContext(), newAttrType);
             }
             newDef.getColumn().type = newAttrType;
 
             auto mapping = ArrayAttr::get(&getContext(), {newDef});
-            auto singleJoin = builder.create<relalg::SingleJoinOp>(getscalarop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), scopeName, treeVal, getscalarop.rel(), mapping);
+            auto singleJoin = builder.create<relalg::SingleJoinOp>(getscalarop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), treeVal, getscalarop.rel(), mapping);
             singleJoin.initPredicate();
             builder.setInsertionPoint(getscalarop);
             Operation* replacement = builder.create<relalg::GetColumnOp>(getscalarop->getLoc(), newAttrType, attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
@@ -108,12 +105,11 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             OpBuilder builder(surroundingOperator);
             std::string scopeName = attributeManager.getUniqueScope("collectionjoin");
             std::string attributeName = "collattr";
-            attributeManager.setCurrentScope(scopeName);
             auto fromAttrs = getlistop.cols();
 
-            auto newDef = attributeManager.createDef(attributeName);
+            auto newDef = attributeManager.createDef(scopeName,attributeName);
             newDef.getColumn().type = getlistop.getType();
-            auto collectionJoin = builder.create<relalg::CollectionJoinOp>(getlistop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), scopeName, fromAttrs, newDef, treeVal, getlistop.rel());
+            auto collectionJoin = builder.create<relalg::CollectionJoinOp>(getlistop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), fromAttrs, newDef, treeVal, getlistop.rel());
             collectionJoin.initPredicate();
             builder.setInsertionPoint(getlistop);
             Operation* replacement = builder.create<relalg::GetColumnOp>(getlistop->getLoc(), getlistop.getType(), attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));

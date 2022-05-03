@@ -97,7 +97,7 @@ mlir::db::DecimalType frontend::sql::SQLTypeInference::getHigherDecimalType(mlir
    }
    return a;
 }
-mlir::Value frontend::sql::Parser::translateWhenCase(mlir::OpBuilder& builder, TranslationContext& context, mlir::Value compareValue, ListCell* whenCell, Node* defaultNode)  {
+mlir::Value frontend::sql::Parser::translateWhenCase(mlir::OpBuilder& builder, TranslationContext& context, mlir::Value compareValue, ListCell* whenCell, Node* defaultNode) {
    auto loc = builder.getUnknownLoc();
    if (!whenCell) {
       return translateExpression(builder, defaultNode, context);
@@ -261,18 +261,17 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    }
    static size_t constRelId = 0;
    std::string symName = "constrel" + std::to_string(constRelId++);
-   attrManager.setCurrentScope(symName);
    std::vector<mlir::Attribute> attributes;
 
    TargetInfo targetInfo;
    for (size_t i = 0; i < numColumns; i++) {
       std::string columnName = "const" + std::to_string(i);
-      auto attrDef = attrManager.createDef(columnName);
+      auto attrDef = attrManager.createDef(symName, columnName);
       attrDef.getColumn().type = globalTypes[i];
       attributes.push_back(attrDef);
       targetInfo.namedResults.push_back({columnName, &attrDef.getColumn()});
    }
    //::llvm::StringRef sym_name, ::mlir::ArrayAttr attributes, ::mlir::ArrayAttr values
-   mlir::Value constRel = builder.create<mlir::relalg::ConstRelationOp>(builder.getUnknownLoc(), symName, builder.getArrayAttr(attributes), builder.getArrayAttr(rows));
+   mlir::Value constRel = builder.create<mlir::relalg::ConstRelationOp>(builder.getUnknownLoc(), builder.getArrayAttr(attributes), builder.getArrayAttr(rows));
    return std::make_pair(constRel, targetInfo);
 }

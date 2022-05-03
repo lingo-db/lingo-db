@@ -1,10 +1,10 @@
 // RUN: mlir-db-opt %s -split-input-file -mlir-print-debuginfo -mlir-print-local-scope  --relalg-implicit-to-explicit-joins | FileCheck %s
 module @querymodule  {
   func @query() {
-    //CHECK: %{{.*}} = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
-    //CHECK: %{{.*}} = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1, 2]
-  	%0 = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
-  	%1 = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
+  	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+  	%1 = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
   	//CHECK: %{{.*}} =  relalg.semijoin %{{.*}}, %{{.*}} (%arg0: !relalg.tuple)
   	%2 = relalg.selection %0 (%arg0: !relalg.tuple) {
   	      %4 = relalg.exists %1
@@ -16,10 +16,10 @@ module @querymodule  {
 // -----
 module @querymodule  {
   func @query() {
-    //CHECK: %{{.*}} = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
-    //CHECK: %{{.*}} = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1, 2]
-  	%0 = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
-  	%1 = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
+  	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+  	%1 = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
   	//CHECK: %{{.*}} =  relalg.antisemijoin %{{.*}}, %{{.*}} (%arg0: !relalg.tuple)
   	%2 = relalg.selection %0 (%arg0: !relalg.tuple) {
   	      %4 = relalg.exists %1
@@ -32,11 +32,11 @@ module @querymodule  {
 // -----
 module @querymodule  {
   func @query() {
-    //CHECK: %{{.*}} = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
-    //CHECK: %{{.*}} = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1, 2]
-  	%0 = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
-  	%1 = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1, 2]
-  	//CHECK: %{{.*}} =  relalg.markjoin @markjoin @markattr({type = i1}) %{{.*}}, %{{.*}} (%arg0: !relalg.tuple)
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
+  	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+  	%1 = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
+  	//CHECK: %{{.*}} =  relalg.markjoin @markjoin::@markattr({type = i1}) %{{.*}}, %{{.*}} (%arg0: !relalg.tuple)
   	%2 = relalg.selection %0 (%arg0: !relalg.tuple) {
   		  //CHECK: %{{.*}} = relalg.getcol %arg0 @markjoin::@markattr
   	      %3 = relalg.exists %1
@@ -50,11 +50,11 @@ module @querymodule  {
 // -----
 module @querymodule  {
   func @query() {
-    //CHECK: %{{.*}} = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
-    //CHECK: %{{.*}} = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1]
-  	%0 = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
-  	%1 = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1]
-  	//CHECK: %{{.*}} =  relalg.singlejoin @singlejoin %{{.*}}, %{{.*}} (%arg0: !relalg.tuple)
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
+  	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+  	%1 = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
+  	//CHECK: %{{.*}} =  relalg.singlejoin %{{.*}}, %{{.*}} (%arg0: !relalg.tuple)
   	%2 = relalg.selection %0 (%arg0: !relalg.tuple) {
   		  //CHECK: %{{.*}} = relalg.getcol %arg0 @singlejoin::@sjattr
   	      %3 = relalg.getscalar @constrel2::@attr1 %1 : !db.nullable<i32>
@@ -68,8 +68,10 @@ module @querymodule  {
 // -----
 module @querymodule  {
   func @query() {
-  	%0 = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
-  	%1 = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
+  	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+  	%1 = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
 	//CHECK: %{{.*}} = relalg.semijoin %0, %1 (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getcol %arg0 @constrel::@attr1 : i32
 	//CHECK: %{{.*}} = relalg.getcol %arg0 @constrel2::@attr1 : i32
@@ -85,8 +87,10 @@ module @querymodule  {
 // -----
 module @querymodule  {
   func @query() {
-  	%0 = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
-  	%1 = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
+  	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+  	%1 = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
 	//CHECK: %{{.*}} = relalg.antisemijoin %0, %1 (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getcol %arg0 @constrel::@attr1 : i32
 	//CHECK: %{{.*}} = relalg.getcol %arg0 @constrel2::@attr1 : i32
@@ -103,9 +107,11 @@ module @querymodule  {
 // -----
 module @querymodule  {
   func @query() {
-  	%0 = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
-  	%1 = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1]
-	//CHECK: %2 = relalg.markjoin @markjoin @markattr({type = i1}) %0, %1 (%arg0: !relalg.tuple)
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
+  	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+  	%1 = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
+	//CHECK: %2 = relalg.markjoin @markjoin::@markattr({type = i1}) %0, %1 (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.getcol %arg0 @constrel::@attr1 : i32
 	//CHECK: %{{.*}} = relalg.getcol %arg0 @constrel2::@attr1 : i32
 	//CHECK: %{{.*}} = db.compare eq %{{.*}} : i32, %{{.*}} : i32

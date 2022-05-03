@@ -167,7 +167,7 @@ static ParseResult parseCustDef(OpAsmParser& parser, mlir::relalg::ColumnDefAttr
    return success();
 }
 static void printCustDef(OpAsmPrinter& p, mlir::Operation* op, mlir::relalg::ColumnDefAttr attr) {
-   p.printSymbolName(attr.getName());
+   p<<attr.getName();
    std::vector<mlir::NamedAttribute> relAttrDefProps;
    MLIRContext* context = attr.getContext();
    const mlir::relalg::Column& relationalAttribute = attr.getColumn();
@@ -249,11 +249,6 @@ static void printCustAttrMapping(OpAsmPrinter& p, mlir::Operation* op, Attribute
 // BaseTableOp
 ///////////////////////////////////////////////////////////////////////////////////
 static ParseResult parseBaseTableOp(OpAsmParser& parser, OperationState& result) {
-   StringAttr nameAttr;
-   if (parser.parseSymbolName(nameAttr, SymbolTable::getSymbolAttrName(), result.attributes)) {
-      return failure();
-   }
-   getColumnManager(parser).setCurrentScope(nameAttr.getValue());
    if (parser.parseOptionalAttrDict(result.attributes)) return failure();
    if (parser.parseKeyword("columns") || parser.parseColon() || parser.parseLBrace()) return failure();
    std::vector<mlir::NamedAttribute> columns;
@@ -286,8 +281,6 @@ static ParseResult parseBaseTableOp(OpAsmParser& parser, OperationState& result)
 }
 static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
    p << " ";
-   p.printSymbolName(op.sym_name());
-   if (op->getAttrs().size() > 1) p << ' ';
    std::vector<mlir::NamedAttribute> colsToPrint;
    for (auto attr : op->getAttrs()) {
       if (attr.getName().str() == "meta") {
@@ -321,17 +314,8 @@ static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
 
 
 
-static ParseResult parseAttrNS(OpAsmParser& parser, StringAttr& nameAttr) {
-   NamedAttrList attrList;
-   if (parser.parseSymbolName(nameAttr, "symbol", attrList)) {
-      return failure();
-   }
-   getColumnManager(parser).setCurrentScope(nameAttr.getValue());
-   return success();
-}
-static void printAttrNS(OpAsmPrinter& p, mlir::Operation* op, StringAttr nameAttr) {
-   p.printSymbolName(nameAttr);
-}
+
+
 
 #define GET_OP_CLASSES
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.cpp.inc"

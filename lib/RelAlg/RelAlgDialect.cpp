@@ -138,14 +138,26 @@ void mlir::relalg::TableMetaDataAttr::print(::mlir::AsmPrinter& printer) const {
    printer << ">";
 }
 void mlir::relalg::ColumnDefAttr::print(::mlir::AsmPrinter& printer) const {
-   printer << "<";
-   printer.printSymbolName(getName());
+   printer << "<" << getName()<<","<<getColumn().type;
+   if (auto fromexisting = getFromExisting()) {
+      printer << "," << fromexisting;
+   }
    printer << ">";
 }
 ::mlir::Attribute mlir::relalg::ColumnDefAttr::parse(::mlir::AsmParser& parser, ::mlir::Type odsType) {
    mlir::SymbolRefAttr sym;
-   if (parser.parseLess() || parser.parseAttribute(sym) || parser.parseGreater()) return Attribute();
-   return mlir::relalg::ColumnDefAttr::get(parser.getContext(), sym.getRootReference().str(), {}, {});
+   mlir::Type t;
+   mlir::ArrayAttr fromExisting;
+   if (parser.parseLess() || parser.parseAttribute(sym)||parser.parseComma()||parser.parseType(t)) return Attribute();
+   if (parser.parseOptionalComma().succeeded()) {
+      if (parser.parseAttribute(fromExisting)) {
+         return Attribute();
+      }
+   }
+   if (parser.parseGreater()) return Attribute();
+   auto columnDef= parser.getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager().createDef(sym, fromExisting);
+   columnDef.getColumn().type=t;
+   return columnDef;
 }
 void mlir::relalg::ColumnRefAttr::print(::mlir::AsmPrinter& printer) const {
    printer << "<" << getName() << ">";
@@ -153,7 +165,7 @@ void mlir::relalg::ColumnRefAttr::print(::mlir::AsmPrinter& printer) const {
 ::mlir::Attribute mlir::relalg::ColumnRefAttr::parse(::mlir::AsmParser& parser, ::mlir::Type odsType) {
    mlir::SymbolRefAttr sym;
    if (parser.parseLess() || parser.parseAttribute(sym) || parser.parseGreater()) return Attribute();
-   return mlir::relalg::ColumnRefAttr::get(parser.getContext(), sym, {});
+   return parser.getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager().createRef(sym);
 }
 void mlir::relalg::SortSpecificationAttr::print(::mlir::AsmPrinter& printer) const {
    printer << "<" << getAttr().getName() << "," << stringifyEnum(getSortSpec()) << ">";
@@ -168,6 +180,7 @@ void mlir::relalg::SortSpecificationAttr::print(::mlir::AsmPrinter& printer) con
    if (!sortSpec.hasValue()) {
       return {};
    }
-   return mlir::relalg::SortSpecificationAttr::get(parser.getContext(), mlir::relalg::ColumnRefAttr::get(parser.getContext(), sym, {}), sortSpec.getValue());
+   auto columnRefAttr = parser.getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager().createRef(sym);
+   return mlir::relalg::SortSpecificationAttr::get(parser.getContext(), columnRefAttr, sortSpec.getValue());
 }
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsDialect.cpp.inc"

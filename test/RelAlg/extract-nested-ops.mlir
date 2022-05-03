@@ -1,9 +1,9 @@
 // RUN: mlir-db-opt %s -split-input-file -mlir-print-debuginfo -mlir-print-local-scope  --relalg-extract-nested-operators | FileCheck %s
 module  {
   func @query() {
-    //CHECK: %{{.*}} = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
-    //CHECK: %{{.*}} = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1, 2]
-    //CHECK: %{{.*}} = relalg.const_relation @constrel3  columns : [@attr1({type = i32})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
+    //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel3::@attr1({type = i32})] values : [1, 2]
     //CHECK: %{{.*}} = relalg.selection %2 (%arg0: !relalg.tuple)
     //CHECK-DAG: %{{.*}} = relalg.getcol %arg0 @constrel::@attr1 : i32
     //CHECK-DAG: %{{.*}} = relalg.getcol %arg0 @constrel3::@attr1 : i32
@@ -14,11 +14,11 @@ module  {
 	//CHECK: %{{.*}} = relalg.selection %0 (%arg0: !relalg.tuple)
 	//CHECK: %{{.*}} = relalg.exists
 	//CHECK: relalg.return
-    %0 = relalg.const_relation @constrel  columns : [@attr1({type = i32})] values : [1, 2]
+    %0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
     %1 = relalg.selection %0 (%arg0: !relalg.tuple) {
-      %2 = relalg.const_relation @constrel2  columns : [@attr1({type = i32})] values : [1, 2]
+      %2 = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
       %3 = relalg.selection %2 (%arg1: !relalg.tuple) {
-        %5 = relalg.const_relation @constrel3  columns : [@attr1({type = i32})] values : [1, 2]
+        %5 = relalg.const_relation columns : [@constrel3::@attr1({type = i32})] values : [1, 2]
         %6 = relalg.getcol %arg1 @constrel2::@attr1 : i32
         %7 = relalg.selection %5 (%arg2: !relalg.tuple) {
           %13 = relalg.getcol %arg0 @constrel::@attr1 : i32
