@@ -545,9 +545,6 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
       return mlir::IntegerType::get(patterns.getContext(), 64);
    });
    typeConverter.addConversion([&](::mlir::db::DecimalType t) {
-      /*if (t.getP() < 19) {
-         return mlir::IntegerType::get(patterns.getContext(), 64);
-      }*/
       return mlir::IntegerType::get(patterns.getContext(), 128);
    });
    typeConverter.addConversion([&](::mlir::db::CharType t) {
@@ -585,12 +582,6 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    patterns.insert<BinOpLowering<mlir::db::MulOp, mlir::IntegerType, arith::MulIOp>>(typeConverter, patterns.getContext());
    patterns.insert<BinOpLowering<mlir::db::DivOp, mlir::IntegerType, arith::DivSIOp>>(typeConverter, patterns.getContext());
    patterns.insert<BinOpLowering<mlir::db::ModOp, mlir::IntegerType, arith::RemSIOp>>(typeConverter, patterns.getContext());
-
-   patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::IntegerType, arith::AddIOp>>(typeConverter, patterns.getContext());
-   patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::IntegerType, arith::SubIOp>>(typeConverter, patterns.getContext());
-   patterns.insert<BinOpLowering<mlir::db::MulOp, mlir::IntegerType, arith::MulIOp>>(typeConverter, patterns.getContext());
-   //patterns.insert<BinOpLowering<mlir::db::DivOp, mlir::db::UIntType, arith::DivUIOp>>(typeConverter, patterns.getContext());//todo: fix unsigned division
-   //patterns.insert<BinOpLowering<mlir::db::ModOp, mlir::db::UIntType, arith::RemUIOp>>(typeConverter, patterns.getContext());//todo: fix unsigned division
 
    patterns.insert<BinOpLowering<mlir::db::AddOp, mlir::FloatType, arith::AddFOp>>(typeConverter, patterns.getContext());
    patterns.insert<BinOpLowering<mlir::db::SubOp, mlir::FloatType, arith::SubFOp>>(typeConverter, patterns.getContext());
