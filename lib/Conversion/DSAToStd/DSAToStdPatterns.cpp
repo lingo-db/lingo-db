@@ -412,6 +412,12 @@ class TBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
             case 32: rt::TableBuilder::addInt32(rewriter, loc)({builderVal, isValid, val}); break;
             case 64: rt::TableBuilder::addInt64(rewriter, loc)({builderVal, isValid, val}); break;
             case 128: rt::TableBuilder::addDecimal(rewriter, loc)({builderVal, isValid, val}); break;
+            default: {
+               val=rewriter.create<arith::ExtUIOp>(loc,rewriter.getI64Type(),val);
+               rt::TableBuilder::addFixedSized(rewriter, loc)({builderVal, isValid, val});
+               break;
+            }
+
          }
       } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
          switch (floatType.getWidth()) {

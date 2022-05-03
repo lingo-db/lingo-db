@@ -69,6 +69,14 @@ void runtime::TableBuilder::addBinary(bool isValid, runtime::VarLen32 string) {
       typed_builder->Append(string.getPtr(), string.getLen()); //NOLINT (clang-diagnostic-unused-result)
    }
 }
+void runtime::TableBuilder::addFixedSized(bool isValid, int64_t val) {
+   auto* typed_builder = GetBuilder<arrow::FixedSizeBinaryBuilder>();
+   if (!isValid) {
+      typed_builder->AppendNull(); //NOLINT (clang-diagnostic-unused-result)
+   } else {
+      typed_builder->Append(reinterpret_cast<char*>(&val));
+   }
+}
 void runtime::TableBuilder::nextRow() {
    assert(currColumn == schema->num_fields());
    currColumn = 0;

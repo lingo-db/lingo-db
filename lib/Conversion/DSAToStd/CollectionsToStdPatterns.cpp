@@ -276,8 +276,20 @@ class AtLowering  : public OpConversionPattern<mlir::dsa::At> {
          Value realPos = rewriter.create<arith::AddIOp>(loc, indexType, columnOffset, index);
          val = getBit(rewriter, loc, originalValueBuffer, realPos);
       } else if (typeConverter->convertType(baseType).isIntOrIndexOrFloat()) {
-         val = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(baseType), valueBuffer, index);
-         val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+         auto convertedType = typeConverter->convertType(baseType);
+         if (convertedType.isInteger(24) || convertedType.isInteger(48) || convertedType.isInteger(56)) {
+            Value factor = rewriter.create<mlir::arith::ConstantIndexOp>(loc, convertedType.cast<mlir::IntegerType>().getWidth() / 8);
+            Value pos = rewriter.create<arith::AddIOp>(loc, columnOffset, index);
+            pos = rewriter.create<arith::MulIOp>(loc, pos, factor);
+            Value valBuffer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, rewriter.getI8Type()), originalValueBuffer);
+            Value ptr = rewriter.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, rewriter.getI8Type()), valBuffer, pos);
+            ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, convertedType), ptr);
+            val = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(baseType), ptr);
+            val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+         } else {
+            val = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(baseType), valueBuffer, index);
+            val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+         }
       } else {
          assert(val && "unhandled type!!");
       }

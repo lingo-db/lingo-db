@@ -2,8 +2,8 @@
 #define DB_DIALECTS_TABLEBUILDER_H
 #include "runtime/helpers.h"
 #include <cassert>
-#include <arrow/table_builder.h>
 #include <arrow/table.h>
+#include <arrow/table_builder.h>
 namespace runtime {
 class TableBuilder {
    static constexpr size_t max_batch_size = 100000;
@@ -147,6 +147,7 @@ class TableBuilder {
    void addFloat32(bool isValid, float);
    void addFloat64(bool isValid, double);
    void addDecimal(bool isValid, __int128);
+   void addFixedSized(bool isValid, int64_t);
    void addBinary(bool isValid, runtime::VarLen32);
    void nextRow();
 };

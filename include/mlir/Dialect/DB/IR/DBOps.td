@@ -297,7 +297,7 @@ def DB_CmpOp : DB_LogicalOp<"compare",
     let assemblyFormat = "$predicate $left `:` type($left) `,` $right `:` type($right) attr-dict";
 }
 
-def DB_BetweenOp : DB_LogicalOp<"between"> {
+def DB_BetweenOp : DB_LogicalOp<"between",[DB_NeedsNullWrap]> {
     let summary = "whether value is between `lower` and `upper`";
     let description = [{
         Determine whether a value is in a given range. This is preferred over (and also internally derived from) two comparisons to simplify optimizations depending on information about a value range.
@@ -307,7 +307,7 @@ def DB_BetweenOp : DB_LogicalOp<"between"> {
     let assemblyFormat = "$val `:` type ($val) `between` $lower `:` type($lower) `,` $upper `:` type($upper) `,` `lowerInclusive` `:` $lowerInclusive `,` `upperInclusive` `:` $upperInclusive attr-dict";
 }
 
-def DB_OneOfOp : DB_LogicalOp<"oneof"> {
+def DB_OneOfOp : DB_LogicalOp<"oneof",[DB_NeedsNullWrap]> {
     let summary = "whether `val` is included in `vals`";
     let description = [{
         Determine whether `val` is included in `vals`; similar to `IN` in SQL.

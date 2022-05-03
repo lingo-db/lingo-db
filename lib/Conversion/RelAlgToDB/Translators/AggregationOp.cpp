@@ -181,7 +181,10 @@ class AggregationTranslator : public mlir::relalg::Translator {
                      updatedVal = builder.create<mlir::arith::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
                   }
                   if (resultingType.isa<mlir::db::NullableType>()) {
-                     mlir::Value casted = builder.create<mlir::db::AsNullableOp>(loc, currVal.getType(), newVal);
+                     mlir::Value casted = newVal;
+                     if (currVal.getType() != newVal.getType()) {
+                        casted = builder.create<mlir::db::AsNullableOp>(loc, currVal.getType(), newVal);
+                     }
                      mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), aggr[currDestIdx]);
                      res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, added));
                   } else {
@@ -268,7 +271,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
                defaultValues.push_back(initCounterVal);
                finalizeFunctions.push_back([loc, currDestIdx = currDestIdx, destAttr = destAttr, resultingType = resultingType](mlir::ValueRange range, mlir::OpBuilder builder) {
                   mlir::Value casted=builder.create<mlir::db::CastOp>(loc, getBaseType(resultingType), range[currDestIdx+1]);
-                  if(resultingType.isa<mlir::db::NullableType>()){
+                  if(resultingType.isa<mlir::db::NullableType>()&&casted.getType()!=resultingType){
                      casted=builder.create<mlir::db::AsNullableOp>(loc, resultingType, casted);
                   }
                   mlir::Value average=builder.create<mlir::db::DivOp>(loc, resultingType, range[currDestIdx], casted);
