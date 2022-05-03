@@ -391,9 +391,7 @@ bool Runner::optimize(runtime::Database& db) {
    pm.enableVerifier(runMode == RunMode::DEBUGGING);
    pm.addPass(mlir::createInlinerPass());
    pm.addPass(mlir::createSymbolDCEPass());
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createAttachMetaDataPass(db));
-   mlir::relalg::createQueryOptPipeline(pm);
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createDetachMetaDataPass());
+   mlir::relalg::createQueryOptPipeline(pm, &db);
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
    }

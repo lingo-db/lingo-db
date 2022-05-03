@@ -3,7 +3,7 @@
 
 #include "mlir/Pass/Pass.h"
 #include <memory>
-namespace runtime{
+namespace runtime {
 class Database;
 } // end namespace runtime
 namespace mlir {
@@ -23,9 +23,7 @@ std::unique_ptr<Pass> createDetachMetaDataPass();
 
 void registerQueryOptimizationPasses();
 void setStaticDB(std::shared_ptr<runtime::Database> db);
-void createQueryOptPipeline(mlir::OpPassManager& pm);
-
-
+void createQueryOptPipeline(mlir::OpPassManager& pm, runtime::Database* db);
 
 } // namespace relalg
 } // end namespace mlir

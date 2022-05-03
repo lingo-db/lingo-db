@@ -8,10 +8,7 @@ void mlir::relalg::setStaticDB(std::shared_ptr<runtime::Database> db) {
    std::cerr << "Warning: setting static database, should only be used in combination with mlir-db-opt" << std::endl;
    staticDB = db;
 }
-void mlir::relalg::createQueryOptPipeline(mlir::OpPassManager& pm) {
-   if (staticDB) {
-      pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createAttachMetaDataPass(*staticDB));
-   }
+void mlir::relalg::createQueryOptPipeline(mlir::OpPassManager& pm, runtime::Database* db) {
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createSimplifyAggregationsPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createExtractNestedOperatorsPass());
    pm.addPass(mlir::createCSEPass());
@@ -21,14 +18,17 @@ void mlir::relalg::createQueryOptPipeline(mlir::OpPassManager& pm) {
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createImplicitToExplicitJoinsPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createPushdownPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createUnnestingPass());
+   if (db) {
+      pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createAttachMetaDataPass(*db));
+   }
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createOptimizeJoinOrderPass());
+   if (db) {
+      pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createDetachMetaDataPass());
+   }
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createCombinePredicatesPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createOptimizeImplementationsPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createIntroduceTmpPass());
    pm.addPass(mlir::createCanonicalizerPass());
-   if (staticDB) {
-      pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createDetachMetaDataPass());
-   }
 }
 void mlir::relalg::registerQueryOptimizationPasses() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
@@ -65,5 +65,5 @@ void mlir::relalg::registerQueryOptimizationPasses() {
    mlir::PassPipelineRegistration<EmptyPipelineOptions>(
       "relalg-query-opt",
       "",
-      createQueryOptPipeline);
+      [](mlir::OpPassManager& pm) { return createQueryOptPipeline(pm, staticDB.get()); });
 }
