@@ -12,6 +12,8 @@ void populateScalarToStdPatterns(mlir::TypeConverter& typeConverter, mlir::Rewri
 void populateRuntimeSpecificScalarToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns);
 
 std::unique_ptr<Pass> createLowerToStdPass();
+void registerDBConversionPasses();
+void createLowerDBPipeline(mlir::OpPassManager& pm);
 
 } // end namespace db
 } // end namespace mlir

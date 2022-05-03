@@ -50,7 +50,7 @@ class ScanSourceLowering : public OpConversionPattern<mlir::dsa::ScanSource> {
 namespace {
 struct DSAToStdLoweringPass
    : public PassWrapper<DSAToStdLoweringPass, OperationPass<ModuleOp>> {
-   virtual llvm::StringRef getArgument() const override { return "dsa-to-std"; }
+   virtual llvm::StringRef getArgument() const override { return "lower-dsa"; }
 
    DSAToStdLoweringPass() {}
    void getDependentDialects(DialectRegistry& registry) const override {

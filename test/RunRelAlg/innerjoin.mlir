@@ -1,4 +1,4 @@
-//RUN: mlir-db-opt -relalg-to-db -canonicalize %s | run-mlir "-" %S/../../resources/data/uni | FileCheck %s
+//RUN: mlir-db-opt -lower-relalg %s | run-mlir "-" %S/../../resources/data/uni | FileCheck %s
 //CHECK: |                        s.name  |                       v.titel  |
 //CHECK: -------------------------------------------------------------------
 //CHECK: |                      "Fichte"  |                  "Grundzuege"  |

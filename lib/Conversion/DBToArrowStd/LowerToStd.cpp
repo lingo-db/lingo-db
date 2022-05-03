@@ -6,7 +6,9 @@
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/DB/Passes.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
+#include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -16,11 +18,11 @@
 #include "mlir/Dialect/SCF/Transforms.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
+#include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
-#include <mlir/Dialect/DSA/IR/DSAOps.h>
-#include <mlir/IR/BuiltinTypes.h>
-
+#include "mlir/Transforms/Passes.h"
 using namespace mlir;
 
 namespace {
@@ -70,6 +72,7 @@ class SimpleTypeConversionPattern : public ConversionPattern {
       }
       return success();
    }
+
    public:
    explicit SimpleTypeConversionPattern(TypeConverter& typeConverter, MLIRContext* context)
       : ConversionPattern(typeConverter, Op::getOperationName(), 1, context) {}
@@ -89,7 +92,7 @@ class SimpleTypeConversionPattern : public ConversionPattern {
       return success();
    }
 };
-class AtLowering  : public OpConversionPattern<mlir::dsa::At> {
+class AtLowering : public OpConversionPattern<mlir::dsa::At> {
    public:
    using OpConversionPattern<mlir::dsa::At>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::At atOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
@@ -313,4 +316,24 @@ void DBToStdLoweringPass::runOnOperation() {
 std::unique_ptr<mlir::Pass>
 mlir::db::createLowerToStdPass() {
    return std::make_unique<DBToStdLoweringPass>();
+}
+void mlir::db::createLowerDBPipeline(mlir::OpPassManager& pm) {
+   pm.addPass(mlir::db::createEliminateNullsPass());
+   pm.addPass(mlir::db::createOptimizeRuntimeFunctionsPass());
+   pm.addPass(mlir::db::createLowerToStdPass());
+}
+void mlir::db::registerDBConversionPasses() {
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::db::createOptimizeRuntimeFunctionsPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::db::createEliminateNullsPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::db::createLowerToStdPass();
+   });
+   mlir::PassPipelineRegistration<EmptyPipelineOptions>(
+      "lower-db",
+      "",
+      createLowerDBPipeline);
 }

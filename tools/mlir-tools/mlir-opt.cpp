@@ -34,6 +34,8 @@
 #include "mlir/InitAllDialects.h"
 #include "torch-mlir/InitAll.h"
 
+#include "runtime/Database.h"
+
 namespace {
 struct ToLLVMLoweringPass
    : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
@@ -97,44 +99,25 @@ void ToLLVMLoweringPass::runOnOperation() {
 }
 
 int main(int argc, char** argv) {
+   if (argc > 2) {
+      if (std::string(argv[1]) == "--use-db") {
+         std::shared_ptr<runtime::Database> database = runtime::Database::loadFromDir(std::string(argv[2]));
+         mlir::relalg::setStaticDB(database);
+         char** argvReduced = new char*[argc - 2];
+         argvReduced[0] = argv[0];
+         for (int i = 3; i < argc; i++) {
+            argvReduced[i - 2] = argv[i];
+         }
+         argc-=2;
+         argv=argvReduced;
+      }
+   }
    mlir::torch::registerAllPasses();
    mlir::registerAllPasses();
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::relalg::createExtractNestedOperatorsPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::relalg::createDecomposeLambdasPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::relalg::createImplicitToExplicitJoinsPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::relalg::createUnnestingPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::relalg::createPushdownPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::relalg::createOptimizeJoinOrderPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::relalg::createCombinePredicatesPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::relalg::createOptimizeImplementationsPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::relalg::createIntroduceTmpPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::relalg::createSimplifyAggregationsPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::relalg::createLowerToDBPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::db::createLowerToStdPass();
-   });
+
+   mlir::relalg::registerRelAlgConversionPasses();
+   mlir::relalg::registerQueryOptimizationPasses();
+   mlir::db::registerDBConversionPasses();
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::dsa::createLowerToStdPass();
    });
@@ -153,14 +136,9 @@ int main(int argc, char** argv) {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::createSimplifyArithmeticsPass();
    });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::db::createEliminateNullsPass();
-   });
+
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::db::createSimplifyToArithPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::db::createOptimizeRuntimeFunctionsPass();
    });
 
    mlir::DialectRegistry registry;

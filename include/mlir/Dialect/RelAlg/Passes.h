@@ -21,6 +21,12 @@ std::unique_ptr<Pass> createSimplifyAggregationsPass();
 std::unique_ptr<Pass> createAttachMetaDataPass(runtime::Database& db);
 std::unique_ptr<Pass> createDetachMetaDataPass();
 
+void registerQueryOptimizationPasses();
+void setStaticDB(std::shared_ptr<runtime::Database> db);
+void createQueryOptPipeline(mlir::OpPassManager& pm);
+
+
+
 } // namespace relalg
 } // end namespace mlir
 

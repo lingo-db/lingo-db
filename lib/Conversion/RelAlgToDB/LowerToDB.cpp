@@ -10,6 +10,8 @@
 #include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Transforms/Passes.h"
 namespace {
 
 class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::OperationPass<mlir::FuncOp>> {
@@ -48,5 +50,21 @@ class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::OperationPas
 namespace mlir {
 namespace relalg {
 std::unique_ptr<Pass> createLowerToDBPass() { return std::make_unique<LowerToDBPass>(); }
+
+void registerRelAlgConversionPasses(){
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::relalg::createLowerToDBPass();
+   });
+
+   mlir::PassPipelineRegistration<EmptyPipelineOptions>(
+      "lower-relalg",
+      "",
+      createLowerRelAlgPipeline);
+}
+void createLowerRelAlgPipeline(mlir::OpPassManager& pm){
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createLowerToDBPass());
+   pm.addPass(mlir::createCanonicalizerPass());
+}
+
 } // end namespace relalg
 } // end namespace mlir

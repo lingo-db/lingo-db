@@ -7,6 +7,8 @@
 namespace mlir {
     namespace relalg {
         std::unique_ptr<Pass> createLowerToDBPass();
+        void registerRelAlgConversionPasses();
+        void createLowerRelAlgPipeline(mlir::OpPassManager& pm);
     }// end namespace relalg
 }// end namespace mlir
 

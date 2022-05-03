@@ -391,22 +391,9 @@ bool Runner::optimize(runtime::Database& db) {
    pm.enableVerifier(runMode == RunMode::DEBUGGING);
    pm.addPass(mlir::createInlinerPass());
    pm.addPass(mlir::createSymbolDCEPass());
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createSimplifyAggregationsPass());
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createExtractNestedOperatorsPass());
-   pm.addPass(mlir::createCSEPass());
-   pm.addPass(mlir::createCanonicalizerPass());
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createDecomposeLambdasPass());
-   pm.addPass(mlir::createCanonicalizerPass());
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createImplicitToExplicitJoinsPass());
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createPushdownPass());
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createUnnestingPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createAttachMetaDataPass(db));
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createOptimizeJoinOrderPass());
+   mlir::relalg::createQueryOptPipeline(pm);
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createDetachMetaDataPass());
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createCombinePredicatesPass());
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createOptimizeImplementationsPass());
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createIntroduceTmpPass());
-   pm.addPass(mlir::createCanonicalizerPass());
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
    }
@@ -419,8 +406,7 @@ bool Runner::optimize(runtime::Database& db) {
 
       mlir::PassManager pm2(&ctxt->context);
       pm2.enableVerifier(runMode == RunMode::DEBUGGING);
-      pm2.addNestedPass<mlir::FuncOp>(mlir::relalg::createLowerToDBPass());
-      pm2.addPass(mlir::createCanonicalizerPass());
+      mlir::relalg::createLowerRelAlgPipeline(pm2);
       if (mlir::failed(pm2.run(ctxt->module.get()))) {
          return false;
       }
@@ -435,9 +421,7 @@ bool Runner::lower() {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
    pm.enableVerifier(runMode == RunMode::DEBUGGING);
-   pm.addPass(mlir::db::createEliminateNullsPass());
-   pm.addPass(mlir::db::createOptimizeRuntimeFunctionsPass());
-   pm.addPass(mlir::db::createLowerToStdPass());
+   mlir::db::createLowerDBPipeline(pm);
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
    }
