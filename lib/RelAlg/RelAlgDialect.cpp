@@ -133,15 +133,19 @@ void RelAlgDialect::initialize() {
    return mlir::relalg::TableMetaDataAttr::get(parser.getContext(), runtime::TableMetaData::deserialize(attr.str()));
 }
 void mlir::relalg::TableMetaDataAttr::print(::mlir::AsmPrinter& printer) const {
-   printer << "<" << getMeta()->serialize() << ">";
+   printer << "<";
+   printer.printAttribute(StringAttr::get(getContext(), getMeta()->serialize()));
+   printer << ">";
 }
 void mlir::relalg::ColumnDefAttr::print(::mlir::AsmPrinter& printer) const {
-   printer << "<" << getName() << ">";
+   printer << "<";
+   printer.printSymbolName(getName());
+   printer << ">";
 }
 ::mlir::Attribute mlir::relalg::ColumnDefAttr::parse(::mlir::AsmParser& parser, ::mlir::Type odsType) {
-   std::string str;
-   if (parser.parseLess() || parser.parseString(&str) || parser.parseGreater()) return Attribute();
-   return mlir::relalg::ColumnDefAttr::get(parser.getContext(), str, {}, {});
+   mlir::SymbolRefAttr sym;
+   if (parser.parseLess() || parser.parseAttribute(sym) || parser.parseGreater()) return Attribute();
+   return mlir::relalg::ColumnDefAttr::get(parser.getContext(), sym.getRootReference().str(), {}, {});
 }
 void mlir::relalg::ColumnRefAttr::print(::mlir::AsmPrinter& printer) const {
    printer << "<" << getName() << ">";
@@ -152,10 +156,18 @@ void mlir::relalg::ColumnRefAttr::print(::mlir::AsmPrinter& printer) const {
    return mlir::relalg::ColumnRefAttr::get(parser.getContext(), sym, {});
 }
 void mlir::relalg::SortSpecificationAttr::print(::mlir::AsmPrinter& printer) const {
-   printer << "<"
-           << ">";
+   printer << "<" << getAttr().getName() << "," << stringifyEnum(getSortSpec()) << ">";
 }
 ::mlir::Attribute mlir::relalg::SortSpecificationAttr::parse(::mlir::AsmParser& parser, ::mlir::Type odsType) {
-   return mlir::relalg::SortSpecificationAttr::get(parser.getContext(), {}, {});
+   mlir::SymbolRefAttr sym;
+   std::string sortSpecDescr;
+   if (parser.parseLess() || parser.parseAttribute(sym) || parser.parseComma() || parser.parseKeywordOrString(&sortSpecDescr) || parser.parseGreater()) {
+      return mlir::Attribute();
+   }
+   auto sortSpec = symbolizeSortSpec(sortSpecDescr);
+   if (!sortSpec.hasValue()) {
+      return {};
+   }
+   return mlir::relalg::SortSpecificationAttr::get(parser.getContext(), mlir::relalg::ColumnRefAttr::get(parser.getContext(), sym, {}), sortSpec.getValue());
 }
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsDialect.cpp.inc"
