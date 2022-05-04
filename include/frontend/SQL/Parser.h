@@ -817,7 +817,18 @@ struct Parser {
          }
          case T_FuncCall: return translateFuncCall(node, builder, loc, context);
          case T_NullTest: {
-            //expr = NullTestTransform(parse_result, reinterpret_cast<NullTest*>(node),context);
+            auto* nullTest = reinterpret_cast<NullTest*>(node);
+            auto expr = translateExpression(builder, reinterpret_cast<Node*>(nullTest->arg_), context);
+            if (expr.getType().isa<mlir::db::NullableType>()) {
+               mlir::Value isNull = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), expr);
+               if (nullTest->nulltesttype_ == IS_NOT_NULL) {
+                  return builder.create<mlir::db::NotOp>(builder.getUnknownLoc(), isNull);
+               } else {
+                  return isNull;
+               }
+            } else {
+               return builder.create<mlir::db::ConstantOp>(builder.getUnknownLoc(), builder.getI1Type(), builder.getIntegerAttr(builder.getI1Type(), 1));
+            }
             break;
          }
          case T_ParamRef: {
