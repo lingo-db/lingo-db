@@ -66,13 +66,15 @@ void Database::copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 
 
    auto parseOptions = arrow::csv::ParseOptions::Defaults();
    parseOptions.delimiter = delimiter.str().front();
-   if(escape.getLen()>0) {
+   if (escape.getLen() > 0) {
       parseOptions.escape_char = escape.str().front();
-      parseOptions.escaping=true;
+      parseOptions.escaping = true;
    }
    parseOptions.newlines_in_values = true;
    auto convertOptions = arrow::csv::ConvertOptions::Defaults();
    auto schema = getTable(tableName)->schema();
+   convertOptions.null_values.push_back("");
+   convertOptions.strings_can_be_null = true;
    for (auto f : schema->fields()) {
       readOptions.column_names.push_back(f->name());
       convertOptions.column_types.insert({f->name(), f->type()});
