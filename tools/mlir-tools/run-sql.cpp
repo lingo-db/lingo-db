@@ -7,21 +7,6 @@
 #include "mlir-support/eval.h"
 #include "runner/runner.h"
 
-bool beingTraced() {
-   std::ifstream sf("/proc/self/status");
-   std::string s;
-   while (sf >> s) {
-      if (s == "TracerPid:") {
-         int pid;
-         sf >> pid;
-         return pid != 0;
-      }
-      std::getline(sf, s);
-   }
-
-   return false;
-}
-
 void check(bool b, std::string message) {
    if (!b) {
       std::cerr << "ERROR: " << message << std::endl;
@@ -46,18 +31,14 @@ int main(int argc, char** argv) {
    context.db = std::move(database);
 
    support::eval::init();
-   runner::RunMode runMode;
-   if (RUN_QUERIES_WITH_PERF) {
-      runMode = runner::RunMode::PERF;
-   } else {
-      runMode = beingTraced() ? runner::RunMode::DEBUGGING : runner::RunMode::SPEED;
-   }
+   runner::RunMode runMode = runner::Runner::getRunMode();
    runner::Runner runner(runMode);
    check(runner.loadSQL(sqlQuery, *context.db), "SQL translation failed");
    check(runner.optimize(*context.db), "query optimization failed");
    check(runner.lower(), "could not lower DSA/DB dialects");
    check(runner.lowerToLLVM(), "lowering to llvm failed");
    size_t runs = 1;
+
    if (const char* numRuns = std::getenv("QUERY_RUNS")) {
       runs = std::atoi(numRuns);
       std::cout << "using " << runs << " runs" << std::endl;

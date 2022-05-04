@@ -6,20 +6,6 @@
 #include "mlir-support/eval.h"
 #include "runner/runner.h"
 
-bool beingTraced() {
-   std::ifstream sf("/proc/self/status");
-   std::string s;
-   while (sf >> s) {
-      if (s == "TracerPid:") {
-         int pid;
-         sf >> pid;
-         return pid != 0;
-      }
-      std::getline(sf, s);
-   }
-
-   return false;
-}
 void check(bool b, std::string message) {
    if (!b) {
       std::cerr << "ERROR: " << message << std::endl;
@@ -40,12 +26,7 @@ int main(int argc, char** argv) {
       context.db = std::move(database);
    }
    support::eval::init();
-   runner::RunMode runMode;
-   if (RUN_QUERIES_WITH_PERF) {
-      runMode = runner::RunMode::PERF;
-   } else {
-      runMode = beingTraced() ? runner::RunMode::DEBUGGING : runner::RunMode::SPEED;
-   }
+   runner::RunMode runMode = runner::Runner::getRunMode();
    runner::Runner runner(runMode);
    check(runner.load(inputFileName), "could not load MLIR module");
    check(runner.optimize(*context.db), "query optimization failed");

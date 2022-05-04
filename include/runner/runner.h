@@ -8,13 +8,16 @@
 
 namespace runner {
 
-enum class RunMode{
-   SPEED=0, PERF=1, DEBUGGING=2
+enum class RunMode {
+   SPEED = 0, //Aim for maximum speed (no verification of generated MLIR
+   DEFAULT = 1, //Execute without introducing extra steps for debugging/profiling, but verify generated MLIR
+   PERF = 2, //Profiling
+   DEBUGGING = 3 //Make generated code debuggable
 };
 class Runner {
    public:
    Runner(RunMode runMode);
-   bool loadSQL(std::string sql,runtime::Database& db);
+   bool loadSQL(std::string sql, runtime::Database& db);
    bool load(std::string fileName);
    bool loadString(std::string input);
    bool optimize(runtime::Database& db);
@@ -22,9 +25,10 @@ class Runner {
    bool lowerToLLVM();
    void dump();
    void snapshot();
-   bool runJit(runtime::ExecutionContext* context,size_t repeats, std::function<void(uint8_t*)> callback);
+   bool runJit(runtime::ExecutionContext* context, size_t repeats, std::function<void(uint8_t*)> callback);
    ~Runner();
    static void printTable(uint8_t* ptr);
+   static RunMode getRunMode();
 
    private:
    void* context;

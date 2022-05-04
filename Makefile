@@ -84,7 +84,7 @@ run-test: build/lingodb-debug/.stamp
 .PHONY: run-benchmark
 run-benchmark: build/lingodb-release/.stamp resources/data/tpch-1/.stamp
 	cmake --build $(dir $<) --target run-sql -- -j${NPROCS}
-	env QUERY_RUNS=5 python3 tools/scripts/benchmark-tpch.py $(dir $<) tpch-1
+	env QUERY_RUNS=5 env LINGO_DEBUG_MODE=SPEED python3 tools/scripts/benchmark-tpch.py $(dir $<) tpch-1
 
 docker-buildimg:
 	DOCKER_BUILDKIT=1 docker build -f "docker/Dockerfile" -t mlirdb-buildimg:$(shell echo "$$(git submodule status)" | cut -c 2-9 | tr '\n' '-') --target buildimg "."

@@ -135,7 +135,7 @@ void EnforceCPPABIPass::runOnOperation() {
             mlir::OpBuilder builder2(userFunc->getContext());
             builder2.setInsertionPoint(callOp);
             builder2.create<mlir::LLVM::StoreOp>(callOp->getLoc(), callOp.getOperand(memId), allocatedElementPtr);
-            callOp.setOperand(memId,allocatedElementPtr);
+            callOp.setOperand(memId, allocatedElementPtr);
          }
       }
    }
@@ -279,6 +279,27 @@ static mlir::Location tagLocHook(mlir::Location loc) {
    auto idAsStr = std::to_string(operationId++);
    return mlir::NameLoc::get(mlir::StringAttr::get(loc.getContext(), idAsStr), loc);
 }
+RunMode Runner::getRunMode() {
+   runner::RunMode runMode;
+   if (RUN_QUERIES_WITH_PERF) {
+      runMode = runner::RunMode::PERF;
+   } else {
+      runMode = runner::RunMode::DEFAULT;
+   }
+   if (const char* mode = std::getenv("LINGO_DEBUG_MODE")) {
+      if (std::string(mode) == "PERF") {
+         runMode = runner::RunMode::PERF;
+      } else if (std::string(mode) == "DEFAULT") {
+         runMode = runner::RunMode::DEFAULT;
+      } else if (std::string(mode) == "DEBUGGING") {
+         runMode = runner::RunMode::DEBUGGING;
+      } else if (std::string(mode) == "SPEED") {
+         std::cout << "using speed mode" << std::endl;
+         runMode = runner::RunMode::SPEED;
+      }
+   }
+   return runMode;
+}
 Runner::Runner(RunMode mode) : context(nullptr), runMode(mode) {
    llvm::DebugFlag = true;
    LLVMInitializeX86AsmParser();
@@ -388,7 +409,7 @@ bool Runner::optimize(runtime::Database& db) {
    auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
-   pm.enableVerifier(runMode == RunMode::DEBUGGING);
+   pm.enableVerifier(runMode != RunMode::SPEED);
    pm.addPass(mlir::createInlinerPass());
    pm.addPass(mlir::createSymbolDCEPass());
    mlir::relalg::createQueryOptPipeline(pm, &db);
@@ -403,7 +424,7 @@ bool Runner::optimize(runtime::Database& db) {
       auto start = std::chrono::high_resolution_clock::now();
 
       mlir::PassManager pm2(&ctxt->context);
-      pm2.enableVerifier(runMode == RunMode::DEBUGGING);
+      pm2.enableVerifier(runMode != RunMode::SPEED);
       mlir::relalg::createLowerRelAlgPipeline(pm2);
       if (mlir::failed(pm2.run(ctxt->module.get()))) {
          return false;
@@ -418,7 +439,7 @@ bool Runner::lower() {
    auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::PassManager pm(&ctxt->context);
-   pm.enableVerifier(runMode == RunMode::DEBUGGING);
+   pm.enableVerifier(runMode != RunMode::SPEED);
    mlir::db::createLowerDBPipeline(pm);
    if (mlir::failed(pm.run(ctxt->module.get()))) {
       return false;
@@ -431,7 +452,7 @@ bool Runner::lower() {
       return false;
    }
    mlir::PassManager pmFunc(&ctxt->context, mlir::FuncOp::getOperationName());
-   pmFunc.enableVerifier(runMode == RunMode::DEBUGGING);
+   pmFunc.enableVerifier(runMode != RunMode::SPEED);
    pmFunc.addPass(mlir::createCanonicalizerPass());
    pmFunc.addPass(mlir::createLoopInvariantCodeMotionPass());
    pmFunc.addPass(mlir::createSinkOpPass());
@@ -463,7 +484,7 @@ bool Runner::lowerToLLVM() {
       builder.create<mlir::FuncOp>(moduleOp.getLoc(), "rt_set_execution_context", builder.getFunctionType(mlir::TypeRange({mlir::util::RefType::get(moduleOp->getContext(), mlir::IntegerType::get(moduleOp->getContext(), 8))}), mlir::TypeRange()), builder.getStringAttr("private"));
    }
    mlir::PassManager pm2(&ctxt->context);
-   pm2.enableVerifier(runMode == RunMode::DEBUGGING);
+   pm2.enableVerifier(runMode != RunMode::SPEED);
    pm2.addPass(mlir::createConvertSCFToCFPass());
    pm2.addPass(createLowerToLLVMPass());
    pm2.addNestedPass<mlir::LLVM::LLVMFuncOp>(std::make_unique<EnforceCPPABIPass>());
@@ -483,7 +504,7 @@ void Runner::dump() {
 }
 
 void Runner::snapshot() {
-   if (runMode != RunMode::SPEED) {
+   if (runMode == RunMode::DEBUGGING || runMode == RunMode::PERF) {
       static size_t cntr = 0;
       RunnerContext* ctxt = (RunnerContext*) this->context;
       mlir::PassManager pm(&ctxt->context);
