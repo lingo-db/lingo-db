@@ -130,13 +130,6 @@ class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
                   Block* after = rewriter.splitBlock(builder.getBlock(), builder.getInsertionPoint());
                   builder.setInsertionPointAfter(op);
                   auto cond = rewriter.getRemappedValue(op.condition());
-                  if (auto tupleType = cond.getType().dyn_cast_or_null<mlir::TupleType>()) {
-                     auto i1Type = builder.getI1Type();
-                     auto unpacked = builder.create<util::UnPackOp>(op->getLoc(), cond);
-                     Value constTrue = builder.create<arith::ConstantOp>(op->getLoc(), i1Type, builder.getIntegerAttr(i1Type, 1));
-                     auto negated = builder.create<arith::XOrIOp>(op->getLoc(), unpacked.getResult(0), constTrue); //negate
-                     cond = builder.create<arith::AndIOp>(op->getLoc(), i1Type, negated, unpacked.getResult(1));
-                  }
                   builder.create<mlir::cf::CondBranchOp>(op->getLoc(), cond, end, remappedArgs, after, ValueRange());
                }
             }

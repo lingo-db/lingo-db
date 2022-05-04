@@ -33,8 +33,7 @@ class SelectionTranslator : public mlir::relalg::Translator {
                             .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) { return 10; })
                             .Default([](::mlir::Type) { return 100; });
                      p -= 1;
-                  }
-                  else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(defOp)) {
+                  } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(defOp)) {
                      auto t = cmpOp.getLeft().getType();
                      p = ::llvm::TypeSwitch<mlir::Type, int>(t)
                             .Case<::mlir::IntegerType>([&](::mlir::IntegerType t) { return 1; })
@@ -45,7 +44,6 @@ class SelectionTranslator : public mlir::relalg::Translator {
                             .Default([](::mlir::Type) { return 100; });
                   }
                   conditions.push_back({p, c});
-
                }
             }
          } else {
@@ -53,8 +51,9 @@ class SelectionTranslator : public mlir::relalg::Translator {
          }
          std::sort(conditions.begin(), conditions.end(), [](auto a, auto b) { return a.first < b.first; });
          for (auto c : conditions) {
-            auto negated = builder.create<mlir::db::NotOp>(selectionOp.getLoc(), c.second);
-            builder.create<mlir::dsa::CondSkipOp>(selectionOp->getLoc(), negated,mlir::ValueRange{});
+            auto truth = builder.create<mlir::db::DeriveTruth>(selectionOp.getLoc(), c.second);
+            auto negated = builder.create<mlir::db::NotOp>(selectionOp.getLoc(), truth);
+            builder.create<mlir::dsa::CondSkipOp>(selectionOp->getLoc(), negated, mlir::ValueRange{});
          }
          consumer->consume(this, builder, context);
       } else {
