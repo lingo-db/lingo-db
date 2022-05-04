@@ -159,10 +159,16 @@ LogicalResult mlir::db::OrOp::canonicalize(mlir::db::OrOp orOp, mlir::PatternRew
    std::vector<Value> extractedAsVec;
    extractedAsVec.insert(extractedAsVec.end(), extracted.begin(), extracted.end());
    if (!extracted.empty()) {
-      Value newOrOp = rewriter.create<mlir::db::OrOp>(orOp->getLoc(), newOrOperands);
-      extractedAsVec.push_back(newOrOp);
+      if (newOrOperands.size() == 1) {
+         extractedAsVec.push_back(newOrOperands[0]);
+      } else if (newOrOperands.size() > 1) {
+         Value newOrOp = rewriter.create<mlir::db::OrOp>(orOp->getLoc(), newOrOperands);
+         extractedAsVec.push_back(newOrOp);
+      }
       rewriter.replaceOpWithNewOp<mlir::db::AndOp>(orOp, extractedAsVec);
       return success();
+   } else if (newOrOperands.size() == 1) {
+      rewriter.replaceOp(orOp, newOrOperands[0]);
    }
    return failure();
 }
