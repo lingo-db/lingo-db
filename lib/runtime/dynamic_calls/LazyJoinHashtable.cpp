@@ -4,7 +4,7 @@ void runtime::LazyJoinHashtable::resize() {
    values.resize();
 }
 void runtime::LazyJoinHashtable::finalize() {
-   size_t htSize = nextPow2(values.getLen());
+   size_t htSize = std::max(nextPow2(values.getLen()), 1ul);
    htMask = htSize - 1;
    ht.setNewSize(htSize);
    for (size_t i = 0; i < values.getLen(); i++) {
