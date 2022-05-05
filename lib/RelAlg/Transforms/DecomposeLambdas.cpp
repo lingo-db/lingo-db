@@ -51,6 +51,8 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
             for (const auto& p : restrictions[restrictions.size() - 1]) {
                availableScopes.insert(p.first);
             }
+         }else{
+            return;
          }
       }
       for (auto scope : availableScopes) {
