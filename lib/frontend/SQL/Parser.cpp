@@ -120,6 +120,7 @@ mlir::Value frontend::sql::Parser::translateWhenCase(mlir::OpBuilder& builder, T
    elseRes = SQLTypeInference::toType(elseBuilder, elseRes, commonType);
    whenBuilder.create<mlir::scf::YieldOp>(loc, whenRes);
    elseBuilder.create<mlir::scf::YieldOp>(loc, elseRes);
+   cond = builder.create<mlir::db::DeriveTruth>(loc, cond);
    auto ifOp = builder.create<mlir::scf::IfOp>(loc, commonType, cond, true);
    ifOp.getThenRegion().getBlocks().clear();
    ifOp.getElseRegion().getBlocks().clear();
