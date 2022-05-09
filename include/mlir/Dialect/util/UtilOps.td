@@ -153,6 +153,7 @@ def TupleElementPtrOp  : Util_Op<"tupleelementptr",[NoSideEffect]> {
     let arguments = (ins RefType:$ref,I32Attr:$idx);
     let results=(outs RefType:$res);
     let assemblyFormat = "$ref `[` $idx `]` `:`type($ref) `->` type($res) attr-dict";
+    let verifier = [{ return ::verify(*this); }];
 }
 def SizeOfOp  : Util_Op<"sizeof",[NoSideEffect]> {
 let arguments = (ins TypeAttr:$type);

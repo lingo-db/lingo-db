@@ -119,6 +119,18 @@ void mlir::util::LoadOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects:
       effects.emplace_back(MemoryEffects::Read::get());
    }
 }
-
+::mlir::LogicalResult verify(mlir::util::TupleElementPtrOp op) {
+   auto resElementType = op.getType().getElementType();
+   auto ptrTupleType = op.ref().getType().cast<mlir::util::RefType>().getElementType().cast<mlir::TupleType>();
+   auto ptrElementType = ptrTupleType.getTypes()[op.idx()];
+   if (resElementType != ptrElementType) {
+      op.emitOpError("Element types do not match");
+      mlir::OpPrintingFlags flags;
+      flags.assumeVerified();
+      op->print(llvm::outs(), flags);
+      return mlir::failure();
+   }
+   return mlir::success();
+}
 #define GET_OP_CLASSES
 #include "mlir/Dialect/util/UtilOps.cpp.inc"
