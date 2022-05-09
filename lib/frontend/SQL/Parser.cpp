@@ -185,6 +185,10 @@ mlir::Value frontend::sql::Parser::translateFuncCall(Node* node, mlir::OpBuilder
       auto to = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
       return builder.create<mlir::db::RuntimeCall>(loc, str.getType(), "Substring", mlir::ValueRange({str, from, to})).res();
    }
+   if (funcName == "abs") {
+      auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
+      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), "AbsInt", val).res();
+   }
    error("could not translate func call");
    return mlir::Value();
 }

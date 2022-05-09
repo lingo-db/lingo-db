@@ -15,6 +15,14 @@ static mlir::Value dateAddImpl(mlir::OpBuilder& rewriter, mlir::ValueRange lower
       return rt::DateRuntime::addMonths(rewriter, rewriter.getUnknownLoc())(loweredArguments)[0];
    }
 }
+static mlir::Value absIntImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter) {
+   using namespace mlir;
+   mlir::Value val = loweredArguments[0];
+   mlir::Value zero = rewriter.create<mlir::arith::ConstantOp>(rewriter.getUnknownLoc(), resType, rewriter.getIntegerAttr(resType, 0));
+   mlir::Value negated = rewriter.create<mlir::arith::SubIOp>(rewriter.getUnknownLoc(), zero, val);
+   mlir::Value ltZero = rewriter.create<mlir::arith::CmpIOp>(rewriter.getUnknownLoc(), mlir::arith::CmpIPredicate::slt, val, zero);
+   return rewriter.create<mlir::arith::SelectOp>(rewriter.getUnknownLoc(), ltZero, negated, val);
+}
 static mlir::Value dateSubImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter) {
    using namespace mlir;
    if (originalArgumentTypes[1].cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
@@ -187,6 +195,7 @@ std::shared_ptr<mlir::db::RuntimeFunctionRegistry> mlir::db::RuntimeFunctionRegi
    builtinRegistry->add("ExtractMonthFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(rt::DateRuntime::extractMonth);
    builtinRegistry->add("ExtractDayFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(rt::DateRuntime::extractDay);
    builtinRegistry->add("DateAdd").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateAddImpl);
+   builtinRegistry->add("AbsInt").handlesInvalid().matchesTypes({RuntimeFunction::intLike}, RuntimeFunction::matchesArgument()).implementedAs(absIntImpl);
    builtinRegistry->add("DateSubtract").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateSubImpl);
    return builtinRegistry;
 }
