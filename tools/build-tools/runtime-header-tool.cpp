@@ -62,6 +62,10 @@ class MethodPrinter : public MatchFinder::MatchCallback {
                return funcType;
             }
          }
+         auto asString = pointeeType.getAsString();
+         if (asString == "struct runtime::ArrowTable") {
+            return "mlir::dsa::TableType::get(context)";
+         }
          return translatePointer();
       }
       auto canonicalType = type.getCanonicalType();

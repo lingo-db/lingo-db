@@ -2,9 +2,9 @@
 #define RUNTIME_METADATA_H
 #include <optional>
 #include <unordered_map>
+#include<variant>
 
 #include <arrow/record_batch.h>
-#include<variant>
 namespace runtime {
 struct ColumnType {
    std::string base;

@@ -108,4 +108,7 @@ void Database::setPersistMode(bool persist) {
 void Database::setPersist(bool persist) {
    setPersistMode(persist);
 }
+void Database::appendTable(runtime::VarLen32 tableName, ArrowTable* newRows) {
+   appendTable(tableName.str(), *reinterpret_cast<std::shared_ptr<arrow::Table>*>(newRows));
+}
 } //end namespace runtime

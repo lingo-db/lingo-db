@@ -415,7 +415,90 @@ struct Parser {
       auto database = rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(executionContext)[0];
       rt::Database::createTable(builder, builder.getUnknownLoc())(mlir::ValueRange({database, tableNameValue, descrValue}));
    }
+   void translateInsertStmt(mlir::OpBuilder& builder, InsertStmt* stmt) {
+      assert(stmt->with_clause_ == nullptr);
+      assert(stmt->on_conflict_clause_ == nullptr);
+      RangeVar* relation = stmt->relation_;
+      std::string tableName = relation->relname_ != nullptr ? relation->relname_ : "";
+      std::cout << "inserting into " << tableName << std::endl;
+      TranslationContext context;
+      auto scope = context.createResolverScope();
+      auto [tree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(stmt->select_stmt_), context, scope);
 
+      auto tableMetaData = database.getTableMetaData(tableName);
+      std::unordered_map<std::string, mlir::Type> tableColumnTypes;
+      for (auto c : tableMetaData->getOrderedColumns()) {
+         auto type = translateColType(builder.getContext(), tableMetaData->getColumnMetaData(c)->getColumnType());
+         tableColumnTypes[c] = type;
+      }
+      std::vector<std::string> insertColNames;
+      if (stmt->cols_) {
+         for (auto* cell = stmt->cols_->head; cell != nullptr; cell = cell->next) {
+            auto* target = reinterpret_cast<ResTarget*>(cell->data.ptr_value);
+            insertColNames.emplace_back(target->name_);
+         }
+      } else {
+         insertColNames = tableMetaData->getOrderedColumns();
+      }
+      assert(insertColNames.size() == tableColumnTypes.size());
+      assert(insertColNames.size() == targetInfo.namedResults.size());
+      std::vector<mlir::Attribute> attrs;
+
+      std::vector<mlir::Value> createdValues;
+      std::vector<mlir::Attribute> createdCols;
+
+      mlir::Block* block = new mlir::Block;
+      mlir::OpBuilder mapBuilder(builder.getContext());
+      block->addArgument(mlir::relalg::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+      auto tupleScope = context.createTupleScope();
+      mlir::Value tuple = block->getArgument(0);
+      context.setCurrentTuple(tuple);
+
+      mapBuilder.setInsertionPointToStart(block);
+
+      std::unordered_map<std::string, mlir::Attribute> insertedCols;
+
+      auto mapName = attrManager.getUniqueScope("map");
+      for (size_t i = 0; i < insertColNames.size(); i++) {
+         auto attrRef = attrManager.createRef(targetInfo.namedResults[i].second);
+         auto currentType = attrRef.getColumn().type;
+         auto tableType = tableColumnTypes.at(insertColNames[i]);
+         if (currentType != tableType) {
+            mlir::Value expr = mapBuilder.create<mlir::relalg::GetColumnOp>(mapBuilder.getUnknownLoc(), attrRef.getColumn().type, attrRef, tuple);
+            auto attrDef = attrManager.createDef(mapName, std::string("inserted") + std::to_string(i));
+            attrDef.getColumn().type = tableType;
+
+            createdCols.push_back(attrDef);
+            mlir::Value casted;
+            if (getBaseType(currentType) == getBaseType(tableType)) {
+               assert(!currentType.isa<mlir::db::NullableType>() && tableType.isa<mlir::db::NullableType>());
+               casted = mapBuilder.create<mlir::db::AsNullableOp>(mapBuilder.getUnknownLoc(), tableType, expr);
+            } else {
+               casted = mapBuilder.create<mlir::db::CastOp>(mapBuilder.getUnknownLoc(), tableType, expr);
+            }
+
+            createdValues.push_back(casted);
+            insertedCols[insertColNames[i]] = attrManager.createRef(&attrDef.getColumn());
+         } else {
+            insertedCols[insertColNames[i]] = attrRef;
+         }
+      }
+      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
+      mapOp.predicate().push_back(block);
+      mapBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), createdValues);
+
+      std::vector<mlir::Attribute> orderedColNamesAttrs;
+      std::vector<mlir::Attribute> orderedColAttrs;
+      for (auto x : tableMetaData->getOrderedColumns()) {
+         orderedColNamesAttrs.push_back(builder.getStringAttr(x));
+         orderedColAttrs.push_back(insertedCols.at(x));
+      }
+      mlir::Value newRows = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), mlir::dsa::TableType::get(builder.getContext()), mapOp.result(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
+      auto executionContext = getExecutionContext(builder);
+      auto database = rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(executionContext)[0];
+      auto tableNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(tableName));
+      rt::Database::appendTable(builder, builder.getUnknownLoc())(mlir::ValueRange{database, tableNameValue, newRows});
+   }
    mlir::Value translate(mlir::OpBuilder& builder) {
       if (result.tree && result.tree->length == 1) {
          auto* statement = static_cast<Node*>(result.tree->head->data.ptr_value);
@@ -487,6 +570,10 @@ struct Parser {
                   attrs.push_back(attrManager.createRef(x.second));
                }
                return builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), mlir::dsa::TableType::get(builder.getContext()), tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
+            }
+            case T_InsertStmt: {
+               translateInsertStmt(builder, reinterpret_cast<InsertStmt*>(statement));
+               break;
             }
             default:
                error("unsupported statement type");
