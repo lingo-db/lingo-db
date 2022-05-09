@@ -717,7 +717,7 @@ struct Parser {
                values.insert(values.begin(), val);
                return builder.create<mlir::db::OneOfOp>(loc, SQLTypeInference::toCommonBaseTypes(builder, values));
             }
-            if (expr->kind_ == AEXPR_BETWEEN) {
+            if (expr->kind_ == AEXPR_BETWEEN || expr->kind_ == AEXPR_NOT_BETWEEN) {
                mlir::Value val = translateExpression(builder, expr->lexpr_, context);
                auto* list = reinterpret_cast<List*>(expr->rexpr_);
                assert(list->length == 2);
@@ -726,7 +726,11 @@ struct Parser {
                mlir::Value lower = translateExpression(builder, lowerNode, context);
                mlir::Value upper = translateExpression(builder, upperNode, context);
                auto ct = SQLTypeInference::toCommonBaseTypes(builder, {val, lower, upper});
-               return builder.create<mlir::db::BetweenOp>(loc, ct[0], ct[1], ct[2], true, true);
+               mlir::Value between = builder.create<mlir::db::BetweenOp>(loc, ct[0], ct[1], ct[2], true, true);
+               if (expr->kind_ == AEXPR_NOT_BETWEEN) {
+                  between = builder.create<mlir::db::NotOp>(loc, between);
+               }
+               return between;
             }
             if (expr->kind_ == AEXPR_LIKE) {
                expr->kind_ = AEXPR_OP;
