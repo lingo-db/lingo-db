@@ -43,7 +43,7 @@ jobs:
       - name: Run Test
         run: |
           cd /repo
-          export LD_LIBRARY_PATH=/build/arrow/install/lib && /build/llvm/bin/llvm-lit -v /build/mlirdb/test
+          export LD_LIBRARY_PATH=/build/arrow/install/lib && /build/llvm/bin/llvm-lit -v /build/mlirdb/test/lit
   sql-tests:
     needs: build
     runs-on: ubuntu-latest

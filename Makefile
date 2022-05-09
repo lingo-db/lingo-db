@@ -72,7 +72,7 @@ build/lingodb-debug-coverage/.stamp: $(LDB_DEPS)
 .PHONY: test-coverage
 test-coverage: build/lingodb-debug-coverage/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql pymlirdbext sql-to-mlir -- -j${NPROCS}
-	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit $(dir $<)/test
+	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit $(dir $<)/test/lit
 	lcov --capture --directory $(dir $<)  --output-file $(dir $<)/coverage.info
 	lcov --remove $(dir $<)/coverage.info -o $(dir $<)/filtered-coverage.info \
 			'**/build/llvm-build/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*' '**/vendored/*' '/usr/*'
@@ -80,7 +80,7 @@ test-coverage: build/lingodb-debug-coverage/.stamp
 .PHONY: run-test
 run-test: build/lingodb-debug/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql pymlirdbext sql-to-mlir mlir-doc -- -j${NPROCS}
-	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit -v $(dir $<)/test
+	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit -v $(dir $<)/test/lit
 .PHONY: run-benchmark
 run-benchmark: build/lingodb-release/.stamp resources/data/tpch-1/.stamp
 	cmake --build $(dir $<) --target run-sql -- -j${NPROCS}
