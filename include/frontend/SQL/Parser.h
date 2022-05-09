@@ -1439,6 +1439,13 @@ struct Parser {
             }
             // FROM
             mlir::Value tree = translateFrom(builder, stmt, context, scope);
+            if (!tree) {
+               auto dummyAttr = attrManager.createDef("dummyScope", "dummyName");
+               dummyAttr.getColumn().type = builder.getI32Type();
+               std::vector<mlir::Attribute> columns{dummyAttr};
+               std::vector<mlir::Attribute> rows{builder.getArrayAttr({builder.getI64IntegerAttr(0)})};
+               tree = builder.create<mlir::relalg::ConstRelationOp>(builder.getUnknownLoc(), builder.getArrayAttr(columns), builder.getArrayAttr(rows));
+            }
             // WHERE
             if (stmt->where_clause_) {
                mlir::Block* pred = translatePredicate(builder, stmt->where_clause_, context);
