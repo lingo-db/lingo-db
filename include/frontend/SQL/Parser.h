@@ -1246,7 +1246,7 @@ struct Parser {
 
       TargetInfo targetInfo;
       std::unordered_map<FakeNode*, Node*> mapForTargetList;
-      std::vector<std::pair<std::string, FakeNode*>> computedTargets;
+      std::vector<std::pair<std::string, std::variant<const mlir::relalg::Column*, FakeNode*>>> targets;
       for (auto* cell = targetList->head; cell != nullptr; cell = cell->next) {
          auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
          if (node->type == T_ResTarget) {
@@ -1300,18 +1300,22 @@ struct Parser {
             }
             if (!fakeNode) {
                assert(attribute);
-               targetInfo.namedResults.push_back({name, attribute});
+               targets.push_back({name, attribute});
             } else {
-               computedTargets.push_back({name, fakeNode});
+               targets.push_back({name, fakeNode});
             }
          } else {
             error("expected res target");
          }
       }
       tree = createMap(builder, mapForTargetList, context, tree, scope);
-      for (auto computedTarget : computedTargets) {
-         auto* fakeNode = computedTarget.second;
-         targetInfo.namedResults.push_back({computedTarget.first, context.getAttribute(fakeNode->colId)});
+      for (auto target : targets) {
+         if (std::holds_alternative<const mlir::relalg::Column*>(target.second)) {
+            targetInfo.namedResults.push_back({target.first, std::get<const mlir::relalg::Column*>(target.second)});
+         } else {
+            auto* fakeNode = std::get<FakeNode*>(target.second);
+            targetInfo.namedResults.push_back({target.first, context.getAttribute(fakeNode->colId)});
+         }
       }
       return std::make_pair(tree, targetInfo);
    }
