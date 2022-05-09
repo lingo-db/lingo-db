@@ -28,6 +28,12 @@ class Runner {
    bool runJit(runtime::ExecutionContext* context, size_t repeats, std::function<void(uint8_t*)> callback);
    ~Runner();
    static void printTable(uint8_t* ptr);
+   enum SortMode {
+      NONE,
+      SORT,
+      SORTROWS
+   };
+   static std::function<void(uint8_t*)> hashResult(SortMode sortMode, size_t& numValues, std::string& result, std::string& lines);
    static RunMode getRunMode();
 
    private:

@@ -53,6 +53,17 @@ jobs:
         run: |
           cd /repo
           python3 /repo/tools/scripts/sql-roundtrip-test.py /build/mlirdb
+  sqlite-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    container: ghcr.io/jungmair/mlirdb:${{ github.sha }}
+    steps:
+      - name: Run Test
+        run: |
+          cd /repo
+          /build/mlirdb/sqlite-tester test/sqlite/select1.test
+          /build/mlirdb/sqlite-tester test/sqlite/select2.test
+          /build/mlirdb/sqlite-tester test/sqlite/select3.test
   lint:
     needs: build
     runs-on: ubuntu-latest
