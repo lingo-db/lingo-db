@@ -55,7 +55,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
       } else {
          std::string scopeName = attributeManager.getUniqueScope("markjoin");
          std::string attributeName = "markattr";
-         relalg::ColumnDefAttr markAttrDef = attributeManager.createDef(scopeName,attributeName);
+         relalg::ColumnDefAttr markAttrDef = attributeManager.createDef(scopeName, attributeName);
          auto& ra = markAttrDef.getColumn();
          ra.type = builder.getI1Type();
          PredicateOperator markJoin = builder.create<relalg::MarkJoinOp>(loc, relType, markAttrDef, treeVal, relOperator.asRelation());
@@ -86,7 +86,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             auto fromExisting = ArrayAttr::get(&getContext(), {before});
 
             auto newAttrType = getscalarop.getType();
-            auto newDef = attributeManager.createDef(scopeName,attributeName, fromExisting);
+            auto newDef = attributeManager.createDef(scopeName, attributeName, fromExisting);
             if (!newAttrType.isa<mlir::db::NullableType>()) {
                newAttrType = mlir::db::NullableType::get(builder.getContext(), newAttrType);
             }
@@ -96,7 +96,14 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             auto singleJoin = builder.create<relalg::SingleJoinOp>(getscalarop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), treeVal, getscalarop.rel(), mapping);
             singleJoin.initPredicate();
             builder.setInsertionPoint(getscalarop);
-            Operation* replacement = builder.create<relalg::GetColumnOp>(getscalarop->getLoc(), newAttrType, attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
+            mlir::Value replacement = builder.create<relalg::GetColumnOp>(getscalarop->getLoc(), newAttrType, attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
+            if (replacement.getType() != getscalarop.getType()) {
+               mlir::Value isNull = builder.create<db::IsNullOp>(builder.getUnknownLoc(), replacement);
+
+               mlir::Value nonNullValue = builder.create<db::NullableGetVal>(builder.getUnknownLoc(), replacement);
+               mlir::Value defaultValue = builder.create<db::ConstantOp>(builder.getUnknownLoc(), getscalarop.getType(), builder.getIntegerAttr(getscalarop.getType(), 0));
+               replacement = builder.create<arith::SelectOp>(builder.getUnknownLoc(), isNull, defaultValue, nonNullValue);
+            }
             getscalarop.replaceAllUsesWith(replacement);
             getscalarop->erase();
             treeVal = singleJoin;
@@ -107,7 +114,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             std::string attributeName = "collattr";
             auto fromAttrs = getlistop.cols();
 
-            auto newDef = attributeManager.createDef(scopeName,attributeName);
+            auto newDef = attributeManager.createDef(scopeName, attributeName);
             newDef.getColumn().type = getlistop.getType();
             auto collectionJoin = builder.create<relalg::CollectionJoinOp>(getlistop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), fromAttrs, newDef, treeVal, getlistop.rel());
             collectionJoin.initPredicate();
