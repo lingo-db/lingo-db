@@ -625,6 +625,35 @@ struct Parser {
       }
       return node;
    }
+   mlir::Value translateCoalesce(mlir::OpBuilder& builder, TranslationContext& context, ListCell* values) {
+      auto loc = builder.getUnknownLoc();
+      if (!values) {
+         return builder.create<mlir::db::NullOp>(loc, mlir::db::NullableType::get(builder.getContext(), builder.getNoneType()));
+      }
+      mlir::Value value = translateExpression(builder, reinterpret_cast<Node*>(values->data.ptr_value), context);
+      mlir::Value isNull = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), value);
+      mlir::Value isNotNull = builder.create<mlir::db::NotOp>(loc, isNull);
+      auto* whenBlock = new mlir::Block;
+      auto* elseBlock = new mlir::Block;
+      mlir::OpBuilder whenBuilder(builder.getContext());
+      whenBuilder.setInsertionPointToStart(whenBlock);
+      mlir::OpBuilder elseBuilder(builder.getContext());
+      elseBuilder.setInsertionPointToStart(elseBlock);
+      auto elseRes = translateCoalesce(elseBuilder, context, values->next);
+      auto commonType = SQLTypeInference::getCommonType(value.getType(), elseRes.getType());
+      value = SQLTypeInference::toType(whenBuilder, value, commonType);
+      elseRes = SQLTypeInference::toType(elseBuilder, elseRes, commonType);
+      whenBuilder.create<mlir::scf::YieldOp>(loc, value);
+      elseBuilder.create<mlir::scf::YieldOp>(loc, elseRes);
+      auto ifOp = builder.create<mlir::scf::IfOp>(loc, commonType, isNotNull, true);
+      ifOp.getThenRegion().getBlocks().clear();
+      ifOp.getElseRegion().getBlocks().clear();
+      ifOp.getThenRegion().push_back(whenBlock);
+      ifOp.getElseRegion().push_back(elseBlock);
+
+      return ifOp.getResult(0);
+   }
+
    /*
     * translate case when SQL expression
     */
@@ -872,6 +901,10 @@ struct Parser {
             Node* defaultNode = reinterpret_cast<Node*>(caseExpr->defresult_);
             auto* startWhen = caseExpr->args_->head;
             return translateWhenCase(builder, context, arg, startWhen, defaultNode);
+         }
+         case T_CoalesceExpr: {
+            auto* coalesceExpr = reinterpret_cast<AExpr*>(node);
+            return translateCoalesce(builder, context, reinterpret_cast<List*>(coalesceExpr->lexpr_)->head);
          }
          default: {
             error("unsupported expression type");
