@@ -1314,7 +1314,7 @@ struct Parser {
    /*
     * translate sort specification into array attribute for relalg::SortOp
     */
-   mlir::ArrayAttr translateSortSpec(List* sortClause, mlir::OpBuilder& builder, TranslationContext& context);
+   mlir::ArrayAttr translateSortSpec(List* sortClause, mlir::OpBuilder& builder, TranslationContext& context, TargetInfo);
    /*
     * translate values -> const relation
     */
@@ -1360,7 +1360,7 @@ struct Parser {
             }
             // ORDER BY
             if (stmt->sort_clause_) {
-               tree = builder.create<mlir::relalg::SortOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), tree, translateSortSpec(stmt->sort_clause_, builder, context));
+               tree = builder.create<mlir::relalg::SortOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), tree, translateSortSpec(stmt->sort_clause_, builder, context, targetInfo));
             }
             // LIMIT
             if (stmt->limit_count_) {

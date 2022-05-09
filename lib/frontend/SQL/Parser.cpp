@@ -128,7 +128,7 @@ mlir::Value frontend::sql::Parser::translateWhenCase(mlir::OpBuilder& builder, T
 
    return ifOp.getResult(0);
 }
-mlir::ArrayAttr frontend::sql::Parser::translateSortSpec(List* sortClause, mlir::OpBuilder& builder, TranslationContext& context) {
+mlir::ArrayAttr frontend::sql::Parser::translateSortSpec(List* sortClause, mlir::OpBuilder& builder, TranslationContext& context, TargetInfo targetInfo) {
    std::vector<mlir::Attribute> mapping;
    for (auto* cell = sortClause->head; cell != nullptr; cell = cell->next) {
       auto* temp = reinterpret_cast<Node*>(cell->data.ptr_value);
@@ -153,10 +153,27 @@ mlir::ArrayAttr frontend::sql::Parser::translateSortSpec(List* sortClause, mlir:
             }
 
             auto* target = sort->node_;
-            if (target->type != T_ColumnRef) {
-               error("can only sort with column refs");
+            const mlir::relalg::Column* attr;
+            switch (target->type) {
+               case T_ColumnRef: {
+                  attr = resolveColRef(target, context);
+                  break;
+               }
+               case T_A_Const: {
+                  auto* constExpr = reinterpret_cast<A_Const*>(target);
+                  auto constVal = constExpr->val_;
+                  switch (constVal.type_) {
+                     case T_Integer: {
+                        attr = targetInfo.namedResults.at(constVal.val_.ival_ - 1).second;
+                        break;
+                     }
+                     default: error("unsupported sort specification");
+                  }
+                  break;
+               }
+               default: error("can only sort with column refs");
             }
-            auto* attr = resolveColRef(target, context);
+
             mapping.push_back(mlir::relalg::SortSpecificationAttr::get(builder.getContext(), attrManager.createRef(attr), spec));
             break;
          }
