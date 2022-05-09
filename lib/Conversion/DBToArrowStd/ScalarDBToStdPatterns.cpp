@@ -374,7 +374,22 @@ class CmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
       return success();
    }
 };
-
+class CastNoneOpLowering : public OpConversionPattern<mlir::db::CastOp> {
+   public:
+   using OpConversionPattern<mlir::db::CastOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::CastOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto scalarSourceType = op.val().getType();
+      auto scalarTargetType = op.getType();
+      auto convertedSourceType = typeConverter->convertType(scalarSourceType);
+      auto convertedTargetType = typeConverter->convertType(scalarTargetType);
+      if (scalarSourceType.isa<mlir::db::StringType>() || scalarTargetType.isa<mlir::db::StringType>()) return failure();
+      if (!convertedSourceType.isa<NoneType>()) {
+         return mlir::failure();
+      }
+      rewriter.replaceOpWithNewOp<mlir::util::UndefOp>(op, convertedTargetType);
+      return mlir::success();
+   }
+};
 class CastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
    public:
    using OpConversionPattern<mlir::db::CastOp>::OpConversionPattern;
@@ -579,7 +594,11 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
    });
 
    typeConverter.addConversion([&](mlir::db::NullableType type) {
-      return (Type) TupleType::get(patterns.getContext(), {IntegerType::get(patterns.getContext(), 1), typeConverter.convertType(type.getType())});
+      mlir::Type payloadType = typeConverter.convertType(type.getType());
+      if (payloadType.isa<mlir::NoneType>()) {
+         payloadType = IntegerType::get(patterns.getContext(), 1);
+      }
+      return (Type) TupleType::get(patterns.getContext(), {IntegerType::get(patterns.getContext(), 1), payloadType});
    });
 
    patterns.insert<CmpOpLowering>(typeConverter, patterns.getContext());
@@ -615,6 +634,7 @@ void mlir::db::populateScalarToStdPatterns(TypeConverter& typeConverter, Rewrite
 
    patterns.insert<ConstantLowering>(typeConverter, patterns.getContext());
    patterns.insert<CastOpLowering>(typeConverter, patterns.getContext());
+   patterns.insert<CastNoneOpLowering>(typeConverter, patterns.getContext());
 
    patterns.insert<HashLowering>(typeConverter, patterns.getContext());
 }

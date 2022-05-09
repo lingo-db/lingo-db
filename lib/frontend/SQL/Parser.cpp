@@ -235,7 +235,11 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                      }
                      break;
                   }
-                  //case T_Null: return builder.create<mlir::db::NullOp>(loc, mlir::db::NullableType::get(builder.getContext(), builder.getNoneType()));
+                  case T_Null: {
+                     t = mlir::db::NullableType::get(builder.getContext(), builder.getNoneType());
+                     value = builder.getUnitAttr();
+                     break;
+                  }
                   default:
                      error("unhandled constant type");
                }

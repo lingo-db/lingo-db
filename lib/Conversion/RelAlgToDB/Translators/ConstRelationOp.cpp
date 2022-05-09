@@ -24,9 +24,15 @@ class ConstRelTranslator : public mlir::relalg::Translator {
          std::vector<Value> values;
          size_t i = 0;
          for (auto entryAttr : row.getValue()) {
-            auto entryVal = builder.create<mlir::db::ConstantOp>(constRelationOp->getLoc(), tupleType.getType(i), entryAttr);
-            values.push_back(entryVal);
-            i++;
+            if (tupleType.getType(i).isa<mlir::db::NullableType>() && entryAttr.isa<mlir::UnitAttr>()) {
+               auto entryVal = builder.create<mlir::db::NullOp>(constRelationOp->getLoc(), tupleType.getType(i));
+               values.push_back(entryVal);
+               i++;
+            } else {
+               auto entryVal = builder.create<mlir::db::ConstantOp>(constRelationOp->getLoc(), tupleType.getType(i), entryAttr);
+               values.push_back(entryVal);
+               i++;
+            }
          }
          mlir::Value packed = builder.create<mlir::util::PackOp>(constRelationOp->getLoc(), values);
          builder.create<mlir::dsa::Append>(constRelationOp->getLoc(), vector, packed);
