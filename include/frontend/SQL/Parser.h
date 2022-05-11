@@ -1136,15 +1136,23 @@ struct Parser {
                error("invalid join expr");
             }
 
-            mlir::Value left = translateFromPart(builder, joinExpr->larg_, context, scope);
+            mlir::Value left;
             mlir::Value right;
             std::vector<std::pair<std::string, const mlir::relalg::Column*>> mapping;
             if (joinExpr->jointype_ == JOIN_LEFT) {
+               left = translateFromPart(builder, joinExpr->larg_, context, scope);
                TranslationContext rightContext;
                auto rightResolverScope = rightContext.createResolverScope();
                right = translateFromPart(builder, joinExpr->rarg_, rightContext, rightResolverScope);
                mapping = rightContext.allAttributes;
+            } else if (joinExpr->jointype_ == JOIN_RIGHT) {
+               right = translateFromPart(builder, joinExpr->rarg_, context, scope);
+               TranslationContext leftContext;
+               auto leftResolverScope = leftContext.createResolverScope();
+               left = translateFromPart(builder, joinExpr->larg_, leftContext, leftResolverScope);
+               mapping = leftContext.allAttributes;
             } else {
+               left = translateFromPart(builder, joinExpr->larg_, context, scope);
                right = translateFromPart(builder, joinExpr->rarg_, context, scope);
             }
 
@@ -1153,7 +1161,10 @@ struct Parser {
             }
             //todo: handle outerjoin
 
-            if (joinExpr->jointype_ == JOIN_LEFT) {
+            if (joinExpr->jointype_ == JOIN_LEFT || joinExpr->jointype_ == JOIN_RIGHT) {
+               if (joinExpr->jointype_ == JOIN_RIGHT) {
+                  std::swap(left, right);
+               }
                mlir::Block* pred;
                {
                   auto predScope = context.createResolverScope();
