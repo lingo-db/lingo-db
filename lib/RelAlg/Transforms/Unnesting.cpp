@@ -133,7 +133,15 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
                Value valLeft = builder.create<relalg::GetColumnOp>(loc, attr->type, attributeManager.createRef(attr), tuple);
                Value valRight = builder.create<relalg::GetColumnOp>(loc, attr->type, attrefDependent, tuple);
                Value cmpEq = builder.create<db::CmpOp>(loc, db::DBCmpPredicate::eq, valLeft, valRight);
-               return cmpEq;
+               if (valLeft.getType().isa<mlir::db::NullableType>() && valRight.getType().isa<mlir::db::NullableType>()) {
+                  Value nullLeft = builder.create<db::IsNullOp>(loc, valLeft);
+                  Value nullRight = builder.create<db::IsNullOp>(loc, valRight);
+                  Value bothNull = builder.create<db::AndOp>(loc, ValueRange{nullLeft, nullRight});
+                  Value eqOrBothNull = builder.create<db::OrOp>(loc, ValueRange{cmpEq, bothNull});
+                  return eqOrBothNull;
+               } else {
+                  return cmpEq;
+               }
             });
          }
 
