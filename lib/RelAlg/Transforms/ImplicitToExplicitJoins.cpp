@@ -97,13 +97,6 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             singleJoin.initPredicate();
             builder.setInsertionPoint(getscalarop);
             mlir::Value replacement = builder.create<relalg::GetColumnOp>(getscalarop->getLoc(), newAttrType, attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
-            if (replacement.getType() != getscalarop.getType()) {
-               mlir::Value isNull = builder.create<db::IsNullOp>(builder.getUnknownLoc(), replacement);
-
-               mlir::Value nonNullValue = builder.create<db::NullableGetVal>(builder.getUnknownLoc(), replacement);
-               mlir::Value defaultValue = builder.create<db::ConstantOp>(builder.getUnknownLoc(), getscalarop.getType(), builder.getIntegerAttr(getscalarop.getType(), 0));
-               replacement = builder.create<arith::SelectOp>(builder.getUnknownLoc(), isNull, defaultValue, nonNullValue);
-            }
             getscalarop.replaceAllUsesWith(replacement);
             getscalarop->erase();
             treeVal = singleJoin;

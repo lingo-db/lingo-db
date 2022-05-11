@@ -212,6 +212,7 @@ struct Parser {
    };
    struct TranslationContext {
       std::stack<mlir::Value> currTuple;
+      std::unordered_set<const mlir::relalg::Column*> useZeroInsteadNull;
       std::vector<std::pair<std::string, const mlir::relalg::Column*>> allAttributes;
       llvm::ScopedHashTable<std::string, const mlir::relalg::Column*, StringInfo> resolver;
       using ResolverScope = llvm::ScopedHashTable<std::string, const mlir::relalg::Column*, StringInfo>::ScopeTy;
@@ -964,8 +965,19 @@ struct Parser {
                case EXPR_SUBLINK: {
                   assert(!targetInfo.namedResults.empty());
                   const auto* attr = targetInfo.namedResults[0].second;
-                  //todo: make nullable
-                  return builder.create<mlir::relalg::GetScalarOp>(loc, attr->type, attrManager.createRef(attr), subQueryTree);
+                  mlir::Type resType = attr->type;
+                  if (!resType.isa<mlir::db::NullableType>()) {
+                     resType = mlir::db::NullableType::get(builder.getContext(), attr->type);
+                  }
+                  mlir::Value scalarValue = builder.create<mlir::relalg::GetScalarOp>(loc, resType, attrManager.createRef(attr), subQueryTree);
+                  if (context.useZeroInsteadNull.contains(attr)) {
+                     mlir::Value isNull = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), scalarValue);
+                     mlir::Value nonNullValue = builder.create<mlir::db::NullableGetVal>(builder.getUnknownLoc(), scalarValue);
+                     mlir::Value defaultValue = builder.create<mlir::db::ConstantOp>(builder.getUnknownLoc(), getBaseType(scalarValue.getType()), builder.getIntegerAttr(getBaseType(scalarValue.getType()), 0));
+                     return builder.create<mlir::arith::SelectOp>(builder.getUnknownLoc(), isNull, defaultValue, nonNullValue);
+                  } else {
+                     return scalarValue;
+                  }
                }
                case EXISTS_SUBLINK:
                   return builder.create<mlir::relalg::ExistsOp>(loc, builder.getI1Type(), subQueryTree);
@@ -1279,9 +1291,11 @@ struct Parser {
             auto aggrFuncName = std::get<0>(toAggr.second);
             auto* attrNode = std::get<1>(toAggr.second);
             auto distinct = std::get<2>(toAggr.second);
+            auto attrDef = attrManager.createDef(groupByName, toAggr.first->colId);
 
             if (aggrFuncName == "count*") {
                expr = aggrBuilder.create<mlir::relalg::CountRowsOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
+               context.useZeroInsteadNull.insert(&attrDef.getColumn());
             } else {
                auto aggrFunc = llvm::StringSwitch<mlir::relalg::AggrFunc>(aggrFuncName)
                                   .Case("sum", mlir::relalg::AggrFunc::sum)
@@ -1290,6 +1304,9 @@ struct Parser {
                                   .Case("max", mlir::relalg::AggrFunc::max)
                                   .Case("count", mlir::relalg::AggrFunc::count)
                                   .Default(mlir::relalg::AggrFunc::count);
+               if (aggrFunc == mlir::relalg::AggrFunc::count) {
+                  context.useZeroInsteadNull.insert(&attrDef.getColumn());
+               }
                mlir::relalg::ColumnRefAttr refAttr;
                switch (attrNode->type) {
                   case T_ColumnRef: refAttr = attrManager.createRef(resolveColRef(attrNode, context)); break;
@@ -1311,7 +1328,6 @@ struct Parser {
                }
                expr = aggrBuilder.create<mlir::relalg::AggrFuncOp>(builder.getUnknownLoc(), aggrResultType, aggrFunc, currRel, refAttr);
             }
-            auto attrDef = attrManager.createDef(groupByName, toAggr.first->colId);
             attrDef.getColumn().type = expr.getType();
             context.mapAttribute(scope, toAggr.first->colId, &attrDef.getColumn());
             createdCols.push_back(attrDef);
