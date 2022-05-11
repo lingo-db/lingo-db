@@ -99,6 +99,7 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
          return false;
       }
    };
+   bool tsv = parts.size()>1&&parts[1]=="tsv";
    std::vector<std::function<bool(const std::string&)>> parsers = {parseSort};
    unsigned matched = 0;
    for (unsigned i = 2; i < parts.size(); i++) {
@@ -129,7 +130,7 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
    size_t numValues = 0;
    std::string hash;
    std::string resultLines;
-   runner.runJit(&context, runs, runner::Runner::hashResult(sort, numValues, hash, resultLines));
+   runner.runJit(&context, runs, runner::Runner::hashResult(sort, numValues, hash, resultLines, tsv));
    std::string result = std::to_string(numValues) + " values hashing to " + hash + "\n";
    if (result != expectedResult && expectedResult != resultLines) {
       std::cout << "executing query:" << query << std::endl;
@@ -137,6 +138,7 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
       std::cerr << "ERROR: result did not match" << std::endl;
       std::cerr << "EXPECTED: \"" << expectedResult << "\"" << std::endl;
       std::cerr << "RESULT: \"" << result << "\"" << std::endl;
+      std::cerr << "LINES: \"" << resultLines << "\"" << std::endl;
       exit(1);
    }
 }
@@ -153,6 +155,10 @@ int main(int argc, char** argv) {
    size_t line = 0;
    while (line < lines.size()) {
       auto parts = split(lines[line]);
+      if (parts.empty()) {
+         line++;
+         continue;
+      }
       if (parts[0] == "statement") {
          runStatement(context, lines, line);
       }

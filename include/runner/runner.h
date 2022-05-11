@@ -33,7 +33,7 @@ class Runner {
       SORT,
       SORTROWS
    };
-   static std::function<void(uint8_t*)> hashResult(SortMode sortMode, size_t& numValues, std::string& result, std::string& lines);
+   static std::function<void(uint8_t*)> hashResult(SortMode sortMode, size_t& numValues, std::string& result, std::string& lines,bool tsv);
    static RunMode getRunMode();
 
    private:

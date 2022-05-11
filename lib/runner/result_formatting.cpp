@@ -18,8 +18,8 @@ unsigned char hexval(unsigned char c) {
    else
       abort();
 }
-std::function<void(uint8_t*)> runner::Runner::hashResult(runner::Runner::SortMode sortMode, size_t& numValues, std::string& hash, std::string& lines) {
-   return [sortMode = sortMode, &hash, &numValues, &lines](uint8_t* ptr) {
+std::function<void(uint8_t*)> runner::Runner::hashResult(runner::Runner::SortMode sortMode, size_t& numValues, std::string& hash, std::string& lines, bool tsv) {
+   return [sortMode = sortMode, tsv, &hash, &numValues, &lines](uint8_t* ptr) {
       auto table = *(std::shared_ptr<arrow::Table>*) ptr;
       std::vector<std::string> toHash;
       std::vector<std::string> columnReps;
@@ -86,14 +86,20 @@ std::function<void(uint8_t*)> runner::Runner::hashResult(runner::Runner::SortMod
          if (toHash[i] == "null") {
             toHash[i] = "NULL";
          }
+         if(toHash[i]=="true"){
+            toHash[i]="t";
+         }
+         if(toHash[i]=="false"){
+            toHash[i]="f";
+         }
          if (toHash[i].starts_with("\"") && toHash[i].ends_with("\"")) {
             toHash[i] = toHash[i].substr(1, toHash[i].size() - 2);
          }
       }
+      size_t numColumns = table->num_columns();
       if (sortMode == SORTROWS) {
          std::vector<std::vector<std::string>> rows;
          std::vector<std::string> row;
-         size_t numColumns = table->num_columns();
          for (auto& s : toHash) {
             row.push_back(s);
             if (row.size() == numColumns) {
@@ -113,8 +119,16 @@ std::function<void(uint8_t*)> runner::Runner::hashResult(runner::Runner::SortMod
       numValues = toHash.size();
       std::string linesRes;
       if (toHash.size() < 1000) {
-         for (auto x : toHash) {
-            linesRes += x + "\n";
+         if (tsv) {
+            size_t i = 0;
+            for (auto x : toHash) {
+               linesRes += x + ((((i + 1) % numColumns) == 0) ? "\n" : "\t");
+               i++;
+            }
+         } else {
+            for (auto x : toHash) {
+               linesRes += x + "\n";
+            }
          }
       }
       lines = linesRes;
