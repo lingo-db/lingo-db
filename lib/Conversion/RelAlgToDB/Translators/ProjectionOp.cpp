@@ -120,7 +120,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       context.pipelineManager.setCurrentPipeline(parentPipeline);
 
       {
-         auto forOp2 = builder.create<mlir::dsa::ForOp>(projectionOp->getLoc(), mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+         auto forOp2 = builder.create<mlir::dsa::ForOp>(projectionOp->getLoc(), mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]), mlir::Value(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(entryType, projectionOp->getLoc());
          forOp2.getBodyRegion().push_back(block2);

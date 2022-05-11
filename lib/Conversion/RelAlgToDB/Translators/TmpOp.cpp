@@ -64,7 +64,7 @@ class TmpTranslator : public mlir::relalg::Translator {
       auto [vector, attributes_] = context.materializedTmp[tmpOp.getOperation()];
       auto attributes=mlir::relalg::OrderedAttributes::fromVec(attributes_);
       auto tupleType = attributes.getTupleType(builder.getContext());
-      auto forOp2 = builder.create<mlir::dsa::ForOp>(tmpOp->getLoc(), mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(vector), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+      auto forOp2 = builder.create<mlir::dsa::ForOp>(tmpOp->getLoc(), mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(vector), mlir::Value(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(tupleType, tmpOp->getLoc());
       forOp2.getBodyRegion().push_back(block2);

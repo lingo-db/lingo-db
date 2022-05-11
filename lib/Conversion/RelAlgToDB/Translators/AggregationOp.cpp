@@ -363,7 +363,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
       context.pipelineManager.setCurrentPipeline(parentPipeline);
       auto hashtable = context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]);
       {
-         auto forOp2 = builder.create<mlir::dsa::ForOp>(aggregationOp->getLoc(), mlir::TypeRange{}, hashtable, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+         auto forOp2 = builder.create<mlir::dsa::ForOp>(aggregationOp->getLoc(), mlir::TypeRange{}, hashtable, mlir::Value(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(iterEntryType, aggregationOp->getLoc());
          forOp2.getBodyRegion().push_back(block2);

@@ -17,7 +17,7 @@ void NLJoinTranslator::build(mlir::OpBuilder& builder, mlir::relalg::TranslatorC
 void NLJoinTranslator::scanHT(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) {
    auto scope = context.createScope();
    {
-      auto forOp2 = builder.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, vector, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+      auto forOp2 = builder.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, vector, mlir::Value(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(tupleType, loc);
       forOp2.getBodyRegion().push_back(block2);

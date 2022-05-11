@@ -29,7 +29,10 @@ class ConstRelTranslator : public mlir::relalg::Translator {
                values.push_back(entryVal);
                i++;
             } else {
-               auto entryVal = builder.create<mlir::db::ConstantOp>(constRelationOp->getLoc(), tupleType.getType(i), entryAttr);
+               mlir::Value entryVal = builder.create<mlir::db::ConstantOp>(constRelationOp->getLoc(), getBaseType(tupleType.getType(i)), entryAttr);
+               if (tupleType.getType(i).isa<mlir::db::NullableType>()) {
+                  entryVal = builder.create<mlir::db::AsNullableOp>(constRelationOp->getLoc(), tupleType.getType(i), entryVal);
+               }
                values.push_back(entryVal);
                i++;
             }
@@ -38,7 +41,7 @@ class ConstRelTranslator : public mlir::relalg::Translator {
          builder.create<mlir::dsa::Append>(constRelationOp->getLoc(), vector, packed);
       }
       {
-         auto forOp2 = builder.create<mlir::dsa::ForOp>(constRelationOp->getLoc(), mlir::TypeRange{}, vector, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+         auto forOp2 = builder.create<mlir::dsa::ForOp>(constRelationOp->getLoc(), mlir::TypeRange{}, vector, mlir::Value(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType, constRelationOp->getLoc());
          forOp2.getBodyRegion().push_back(block2);

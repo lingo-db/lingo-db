@@ -84,7 +84,7 @@ class SortTranslator : public mlir::relalg::Translator {
       vector = parentPipeline->addDependency(sortedRes[0]);
       context.pipelineManager.setCurrentPipeline(parentPipeline);
       {
-         auto forOp2 = builder.create<mlir::dsa::ForOp>(sortOp->getLoc(), mlir::TypeRange{}, vector, context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+         auto forOp2 = builder.create<mlir::dsa::ForOp>(sortOp->getLoc(), mlir::TypeRange{}, vector, mlir::Value(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(tupleType, sortOp->getLoc());
          forOp2.getBodyRegion().push_back(block2);

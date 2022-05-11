@@ -30,7 +30,7 @@ void HashJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relal
 }
 void HashJoinTranslator::produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) {
    auto parentPipeline = context.pipelineManager.getCurrentPipeline();
-   auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(),context.getNextPipelineId());
+   auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(), context.getNextPipelineId());
    context.pipelineManager.setCurrentPipeline(p);
    context.pipelineManager.addPipeline(p);
    auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
@@ -69,7 +69,7 @@ void HashJoinTranslator::unpackKeys(TranslatorContext::AttributeResolverScope& s
 void HashJoinTranslator::scanHT(TranslatorContext& context, mlir::OpBuilder& builder) {
    auto scope = context.createScope();
    {
-      auto forOp2 = builder.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(joinHt), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+      auto forOp2 = builder.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(joinHt), mlir::Value(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(entryType, loc);
       forOp2.getBodyRegion().push_back(block2);

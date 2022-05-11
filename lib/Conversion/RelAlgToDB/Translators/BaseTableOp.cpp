@@ -51,12 +51,12 @@ class BaseTableTranslator : public mlir::relalg::Translator {
 
          return std::vector<Value>({chunkIterator});
       });
-      auto forOp = builder.create<mlir::dsa::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, currPipeline->addDependency(initRes[0]), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+      auto forOp = builder.create<mlir::dsa::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, currPipeline->addDependency(initRes[0]), mlir::Value(), mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
       block->addArgument(recordBatch, baseTableOp->getLoc());
       forOp.getBodyRegion().push_back(block);
       mlir::OpBuilder builder1(forOp.getBodyRegion());
-      auto forOp2 = builder1.create<mlir::dsa::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, forOp.getInductionVar(), context.pipelineManager.getCurrentPipeline()->getFlag(), mlir::ValueRange{});
+      auto forOp2 = builder1.create<mlir::dsa::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, forOp.getInductionVar(), mlir::Value(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(recordBatch.getElementType(), baseTableOp->getLoc());
       forOp2.getBodyRegion().push_back(block2);

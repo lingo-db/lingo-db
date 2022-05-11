@@ -64,7 +64,6 @@ class Pipeline {
    std::vector<FuncOp> deinitFns;
    mlir::FuncOp finalizeFn;
    FuncOp mainFn;
-   mlir::Value flag;
    std::vector<Type> mainArgTypes;
    std::vector<PipelineDependency> dependencies;
    llvm::SmallBitVector dependsOn;
@@ -102,12 +101,6 @@ class Pipeline {
    }
    size_t getPipelineId() const {
       return pipelineId;
-   }
-   const Value& getFlag() const {
-      return flag;
-   }
-   void setFlag(const Value& flag) {
-      Pipeline::flag = flag;
    }
    const llvm::SmallBitVector& getDependsOn() const {
       return dependsOn;
