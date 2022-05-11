@@ -53,7 +53,6 @@ class MethodPrinter : public MatchFinder::MatchCallback {
                   if (!translated.has_value()) return {};
                   funcType += translated.value();
                }
-               bool x;
                auto translated = translateType(funcProtoType->getReturnType());
                if (!translated.has_value()) return {};
                funcType += "}, {" + translated.value() + "})";
@@ -119,9 +118,9 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             if (isa<CXXDestructorDecl>(method)) continue;
             if (method->getAccess() == clang::AS_protected || method->getAccess() == clang::AS_private) continue;
             bool noSideEffects=false;
-            for(auto attr:method->attrs()){
+            for(auto *attr:method->attrs()){
                if(attr->getKind()==clang::attr::Annotate){
-                  if(auto annotateAttr=llvm::dyn_cast<clang::AnnotateAttr>(attr)){
+                  if(auto *annotateAttr=llvm::dyn_cast<clang::AnnotateAttr>(attr)){
                      if(annotateAttr->getAnnotation()=="rt-no-sideffect"){
                         noSideEffects=true;
                      }
