@@ -182,7 +182,7 @@ def DSA_Append : DSA_Op<"ds_append"> {
 }
 
 
-def DSA_ScanSource : DSA_Op<"scan_source", [NoSideEffect]> {
+def DSA_ScanSource : DSA_Op<"scan_source"> {
     let arguments = (ins StrAttr:$descr);
     let results = (outs DSA_GenericIterable:$iterable);
     let assemblyFormat = "$descr `:` type($iterable) attr-dict";

@@ -32,13 +32,12 @@ class MethodPrinter : public MatchFinder::MatchCallback {
    std::string translatePointer() {
       return "mlir::util::RefType::get(context,mlir::IntegerType::get(context,8))";
    }
-   std::optional<std::string> translateType(QualType type, bool& hasSideEffect) {
+   std::optional<std::string> translateType(QualType type) {
       //type.dump();
       if (const auto* tdType = type->getAs<TypedefType>()) {
-         return translateType(tdType->desugar(), hasSideEffect);
+         return translateType(tdType->desugar());
       }
       if (const auto* pointerType = type->getAs<PointerType>()) {
-         hasSideEffect = true;
          auto pointeeType = pointerType->desugar()->getPointeeType();
          if (const auto* parenType = pointeeType->getAs<ParenType>()) {
             if (const auto* funcProtoType = parenType->getInnerType()->getAs<FunctionProtoType>()) {
@@ -50,13 +49,12 @@ class MethodPrinter : public MatchFinder::MatchCallback {
                   } else {
                      funcType += ",";
                   }
-                  bool x;
-                  auto translated = translateType(paramType, x);
+                  auto translated = translateType(paramType);
                   if (!translated.has_value()) return {};
                   funcType += translated.value();
                }
                bool x;
-               auto translated = translateType(funcProtoType->getReturnType(), x);
+               auto translated = translateType(funcProtoType->getReturnType());
                if (!translated.has_value()) return {};
                funcType += "}, {" + translated.value() + "})";
                return funcType;
@@ -120,14 +118,21 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             if (isa<CXXConstructorDecl>(method)) continue;
             if (isa<CXXDestructorDecl>(method)) continue;
             if (method->getAccess() == clang::AS_protected || method->getAccess() == clang::AS_private) continue;
-            bool hasSideEffect = false;
-            //method->dump();
+            bool noSideEffects=false;
+            for(auto attr:method->attrs()){
+               if(attr->getKind()==clang::attr::Annotate){
+                  if(auto annotateAttr=llvm::dyn_cast<clang::AnnotateAttr>(attr)){
+                     if(annotateAttr->getAnnotation()=="rt-no-sideffect"){
+                        noSideEffects=true;
+                     }
+                  }
+               }
+            }
             std::string methodName = method->getNameAsString();
             std::vector<std::string> types;
             std::vector<std::string> resTypes;
             if (!method->isStatic()) {
                types.push_back(translatePointer());
-               hasSideEffect = true;
             }
             std::string mangled;
             llvm::raw_string_ostream mangleStream(mangled);
@@ -135,7 +140,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             mangleStream.flush();
             bool unknownTypes = false;
             for (const auto& p : method->parameters()) {
-               auto translatedType = translateType(p->getType(), hasSideEffect);
+               auto translatedType = translateType(p->getType());
                if (!translatedType.has_value()) {
                   unknownTypes = true;
                   break;
@@ -144,15 +149,12 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             }
             auto resType = method->getReturnType();
             if (!resType->isVoidType()) {
-               bool x;
-               auto translatedType = translateType(resType, x);
+               auto translatedType = translateType(resType);
                if (!translatedType.has_value()) {
                   unknownTypes = true;
                   break;
                }
                resTypes.push_back(translatedType.value());
-            } else {
-               hasSideEffect = true;
             }
             if (unknownTypes) {
                std::cerr << "ignoring func " << methodName << std::endl;
@@ -165,7 +167,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             emitTypeCreateFn(hStream, types);
             hStream << ",";
             emitTypeCreateFn(hStream, resTypes);
-            hStream << "," << (hasSideEffect ? "false" : "true") << ");\n";
+            hStream << "," << (noSideEffects ? "true" : "false") << ");\n";
          }
          hStream << "};\n";
       }

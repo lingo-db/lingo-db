@@ -8,6 +8,7 @@
 #include <vector>
 #define EXPORT extern "C" __attribute__((visibility("default")))
 #define INLINE __attribute__((always_inline))
+#define NO_SIDE_EFFECTS __attribute__((annotate("rt-no-sideffect")))
 namespace runtime {
 
 struct MemoryHelper {
