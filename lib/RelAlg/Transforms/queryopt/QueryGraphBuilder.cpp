@@ -44,6 +44,9 @@ void mlir::relalg::QueryGraphBuilder::populateQueryGraph(Operator op) {
       //do not construct crossproducts in the querygraph
    } else if (mlir::isa<mlir::relalg::SelectionOp>(op.getOperation()) || mlir::isa<mlir::relalg::InnerJoinOp>(op.getOperation())) {
       NodeSet ses = calcSES(op);
+      if (!ses.any() && mlir::isa<mlir::relalg::SelectionOp>(op.getOperation())) {
+         ses = calcT(op);
+      }
       if (ses.count() == 1) {
          //if selection is only based on one node -> add selection to node
          auto nodeId = ses.findFirst();
