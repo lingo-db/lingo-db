@@ -213,7 +213,8 @@ struct Parser {
    struct TranslationContext {
       std::stack<mlir::Value> currTuple;
       std::unordered_set<const mlir::relalg::Column*> useZeroInsteadNull;
-      std::vector<std::pair<std::string, const mlir::relalg::Column*>> allAttributes;
+      std::stack<std::vector<std::pair<std::string, const mlir::relalg::Column*>>> definedAttributes;
+
       llvm::ScopedHashTable<std::string, const mlir::relalg::Column*, StringInfo> resolver;
       using ResolverScope = llvm::ScopedHashTable<std::string, const mlir::relalg::Column*, StringInfo>::ScopeTy;
       struct TupleScope {
@@ -230,6 +231,7 @@ struct Parser {
 
       TranslationContext() : currTuple(), resolver() {
          currTuple.push(mlir::Value());
+         definedAttributes.push({});
       }
       mlir::Value getCurrentTuple() {
          return currTuple.top();
@@ -238,7 +240,7 @@ struct Parser {
          currTuple.top() = v;
       }
       void mapAttribute(ResolverScope& scope, std::string name, const mlir::relalg::Column* attr) {
-         allAttributes.push_back({name, attr});
+         definedAttributes.top().push_back({name, attr});
          resolver.insertIntoScope(&scope, name, attr);
       }
       const mlir::relalg::Column* getAttribute(std::string name) {
@@ -250,6 +252,21 @@ struct Parser {
       }
       ResolverScope createResolverScope() {
          return ResolverScope(resolver);
+      }
+      struct DefineScope {
+         TranslationContext& context;
+         DefineScope(TranslationContext& context) : context(context) {
+            context.definedAttributes.push({});
+         }
+         ~DefineScope() {
+            context.definedAttributes.pop();
+         }
+      };
+      DefineScope createDefineScope() {
+         return DefineScope(*this);
+      }
+      const std::vector<std::pair<std::string, const mlir::relalg::Column*>>& getAllDefinedColumns() {
+         return definedAttributes.top();
       }
    };
    std::string sql;
@@ -750,6 +767,60 @@ struct Parser {
     * translate function call
     */
    mlir::Value translateFuncCall(Node* node, mlir::OpBuilder& builder, mlir::Location loc, TranslationContext& context);
+
+   mlir::Value translateBinaryExpression(mlir::OpBuilder& builder, ExpressionType opType, mlir::Value left, mlir::Value right) {
+      auto loc = builder.getUnknownLoc();
+      switch (opType) {
+         case ExpressionType::OPERATOR_PLUS:
+            if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
+               return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateAdd", mlir::ValueRange({left, right})).res();
+            }
+            return builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
+         case ExpressionType::OPERATOR_MINUS:
+            if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
+               return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateSubtract", mlir::ValueRange({left, right})).res();
+            }
+            return builder.create<mlir::db::SubOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
+         case ExpressionType::OPERATOR_MULTIPLY:
+            return builder.create<mlir::db::MulOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes2(builder, {left, right}));
+         case ExpressionType::OPERATOR_DIVIDE:
+            return builder.create<mlir::db::DivOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
+         case ExpressionType::OPERATOR_MOD:
+            return builder.create<mlir::db::ModOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
+         case ExpressionType::COMPARE_EQUAL:
+         case ExpressionType::COMPARE_NOT_EQUAL:
+         case ExpressionType::COMPARE_LESS_THAN:
+         case ExpressionType::COMPARE_GREATER_THAN:
+         case ExpressionType::COMPARE_LESS_THAN_OR_EQUAL_TO:
+         case ExpressionType::COMPARE_GREATER_THAN_OR_EQUAL_TO: {
+            mlir::db::DBCmpPredicate pred;
+            switch (opType) {
+               case ExpressionType::COMPARE_EQUAL: pred = mlir::db::DBCmpPredicate::eq; break;
+               case ExpressionType::COMPARE_NOT_EQUAL: pred = mlir::db::DBCmpPredicate::neq; break;
+               case ExpressionType::COMPARE_LESS_THAN: pred = mlir::db::DBCmpPredicate::lt; break;
+               case ExpressionType::COMPARE_GREATER_THAN: pred = mlir::db::DBCmpPredicate::gt; break;
+               case ExpressionType::COMPARE_LESS_THAN_OR_EQUAL_TO: pred = mlir::db::DBCmpPredicate::lte; break;
+               case ExpressionType::COMPARE_GREATER_THAN_OR_EQUAL_TO: pred = mlir::db::DBCmpPredicate::gte; break;
+               default: error("should not happen");
+            }
+            auto ct = SQLTypeInference::toCommonBaseTypes(builder, {left, right});
+            return builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), pred, ct[0], ct[1]);
+         }
+         case ExpressionType::COMPARE_LIKE:
+         case ExpressionType::COMPARE_NOT_LIKE: {
+            auto ct = SQLTypeInference::toCommonBaseTypes(builder, {left, right});
+            auto isNullable = left.getType().isa<mlir::db::NullableType>() || right.getType().isa<mlir::db::NullableType>();
+            mlir::Type resType = isNullable ? (mlir::Type) mlir::db::NullableType::get(builder.getContext(), builder.getI1Type()) : (mlir::Type) builder.getI1Type();
+            auto like = builder.create<mlir::db::RuntimeCall>(loc, resType, "Like", mlir::ValueRange({ct[0], ct[1]})).res();
+            return opType == ExpressionType::COMPARE_NOT_LIKE ? builder.create<mlir::db::NotOp>(loc, like) : like;
+         }
+
+         default:
+            error("unsupported expression type");
+      }
+      return mlir::Value();
+   }
+
    mlir::Value translateExpression(mlir::OpBuilder& builder, Node* node, TranslationContext& context, bool ignoreNull = false) {
       auto loc = builder.getUnknownLoc();
       if (!node) {
@@ -834,76 +905,30 @@ struct Parser {
                   left = expr->lexpr_ ? translateExpression(builder, expr->lexpr_, context) : left;
                   right = expr->rexpr_ ? translateExpression(builder, expr->rexpr_, context) : right;
                }
+               if (opType == ExpressionType::OPERATOR_CAST) {
+                  auto* castNode = reinterpret_cast<TypeCast*>(node);
+                  auto* typeName = reinterpret_cast<value*>(castNode->type_name_->names_->tail->data.ptr_value)->val_.str_;
+                  int typeMods = typemod(castNode->type_name_->typmods_);
 
-               switch (opType) {
-                  case ExpressionType::OPERATOR_PLUS:
-                     if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
-                        return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateAdd", mlir::ValueRange({left, right})).res();
-                     }
-                     return builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
-                  case ExpressionType::OPERATOR_MINUS:
-                     if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
-                        return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateSubtract", mlir::ValueRange({left, right})).res();
-                     }
-                     return builder.create<mlir::db::SubOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
-                  case ExpressionType::OPERATOR_MULTIPLY:
-                     return builder.create<mlir::db::MulOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes2(builder, {left, right}));
-                  case ExpressionType::OPERATOR_DIVIDE:
-                     return builder.create<mlir::db::DivOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
-                  case ExpressionType::OPERATOR_MOD:
-                     return builder.create<mlir::db::ModOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
-                  case ExpressionType::COMPARE_EQUAL:
-                  case ExpressionType::COMPARE_NOT_EQUAL:
-                  case ExpressionType::COMPARE_LESS_THAN:
-                  case ExpressionType::COMPARE_GREATER_THAN:
-                  case ExpressionType::COMPARE_LESS_THAN_OR_EQUAL_TO:
-                  case ExpressionType::COMPARE_GREATER_THAN_OR_EQUAL_TO: {
-                     mlir::db::DBCmpPredicate pred;
-                     switch (opType) {
-                        case ExpressionType::COMPARE_EQUAL: pred = mlir::db::DBCmpPredicate::eq; break;
-                        case ExpressionType::COMPARE_NOT_EQUAL: pred = mlir::db::DBCmpPredicate::neq; break;
-                        case ExpressionType::COMPARE_LESS_THAN: pred = mlir::db::DBCmpPredicate::lt; break;
-                        case ExpressionType::COMPARE_GREATER_THAN: pred = mlir::db::DBCmpPredicate::gt; break;
-                        case ExpressionType::COMPARE_LESS_THAN_OR_EQUAL_TO: pred = mlir::db::DBCmpPredicate::lte; break;
-                        case ExpressionType::COMPARE_GREATER_THAN_OR_EQUAL_TO: pred = mlir::db::DBCmpPredicate::gte; break;
-                        default: error("should not happen");
-                     }
-                     auto ct = SQLTypeInference::toCommonBaseTypes(builder, {left, right});
-                     return builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), pred, ct[0], ct[1]);
-                  }
-                  case ExpressionType::COMPARE_LIKE:
-                  case ExpressionType::COMPARE_NOT_LIKE: {
-                     auto ct = SQLTypeInference::toCommonBaseTypes(builder, {left, right});
-                     auto isNullable = left.getType().isa<mlir::db::NullableType>() || right.getType().isa<mlir::db::NullableType>();
-                     mlir::Type resType = isNullable ? (mlir::Type) mlir::db::NullableType::get(builder.getContext(), builder.getI1Type()) : (mlir::Type) builder.getI1Type();
-                     auto like = builder.create<mlir::db::RuntimeCall>(loc, resType, "Like", mlir::ValueRange({ct[0], ct[1]})).res();
-                     return opType == ExpressionType::COMPARE_NOT_LIKE ? builder.create<mlir::db::NotOp>(loc, like) : like;
-                  }
-                  case ExpressionType::OPERATOR_CAST: {
-                     auto* castNode = reinterpret_cast<TypeCast*>(node);
-                     auto* typeName = reinterpret_cast<value*>(castNode->type_name_->names_->tail->data.ptr_value)->val_.str_;
-                     int typeMods = typemod(castNode->type_name_->typmods_);
-
-                     auto toCast = translateExpression(builder, castNode->arg_, context);
-                     auto resType = strToType(typeName, typeMods, builder.getContext());
-                     if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(toCast.getDefiningOp())) {
-                        if (resType.isa<mlir::db::IntervalType>()) {
-                           std::string unit = "";
-                           if (typeMods & 8) {
-                              unit = "days";
-                           }
-                           constOp->setAttr("value", builder.getStringAttr(constOp.getValue().cast<mlir::StringAttr>().str() + unit));
+                  auto toCast = translateExpression(builder, castNode->arg_, context);
+                  auto resType = strToType(typeName, typeMods, builder.getContext());
+                  if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(toCast.getDefiningOp())) {
+                     if (resType.isa<mlir::db::IntervalType>()) {
+                        std::string unit = "";
+                        if (typeMods & 8) {
+                           unit = "days";
                         }
-                        constOp.getResult().setType(resType);
-                        return constOp;
-                     } else {
-                        return builder.create<mlir::db::CastOp>(loc, resType, toCast);
+                        constOp->setAttr("value", builder.getStringAttr(constOp.getValue().cast<mlir::StringAttr>().str() + unit));
                      }
-                     return mlir::Value();
+                     constOp.getResult().setType(resType);
+                     return constOp;
+                  } else {
+                     return builder.create<mlir::db::CastOp>(loc, resType, toCast);
                   }
-                  default:
-                     error("unsupported expression type");
+                  return mlir::Value();
                }
+               return translateBinaryExpression(builder, opType, left, right);
+
             } else {
                error("unsupported op");
             }
@@ -960,6 +985,7 @@ struct Parser {
             auto* subLink = reinterpret_cast<SubLink*>(node);
             //expr = FuncCallTransform(parse_result,,context);
             auto subQueryScope = context.createResolverScope();
+            auto subQueryDefineScope = context.createDefineScope();
             auto [subQueryTree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(subLink->subselect_), context, subQueryScope);
             switch (subLink->sub_link_type_) {
                case EXPR_SUBLINK: {
@@ -988,6 +1014,31 @@ struct Parser {
                   subQueryTree = builder.create<mlir::relalg::ProjectionOp>(loc, mlir::relalg::SetSemantic::all, subQueryTree, builder.getArrayAttr({attribute}));
                   mlir::Value val = translateExpression(builder, subLink->testexpr_, context);
                   return builder.create<mlir::relalg::InOp>(loc, builder.getI1Type(), val, subQueryTree);
+               }
+               case ALL_SUBLINK: {
+                  assert(targetInfo.namedResults.size() == 1);
+                  mlir::relalg::ColumnRefAttr attribute = attrManager.createRef(targetInfo.namedResults[0].second);
+                  auto operatorName = listToStringVec(subLink->oper_name_).at(0);
+                  auto operatorType = stringToExpressionType(operatorName);
+                  auto* block = new mlir::Block;
+                  mlir::OpBuilder predBuilder(builder.getContext());
+                  block->addArgument(mlir::relalg::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+                  auto tupleScope = context.createTupleScope();
+                  context.setCurrentTuple(block->getArgument(0));
+
+                  predBuilder.setInsertionPointToStart(block);
+                  mlir::Value expr = translateExpression(predBuilder, subLink->testexpr_, context);
+                  mlir::Value colVal = predBuilder.create<mlir::relalg::GetColumnOp>(loc, attribute.getColumn().type, attribute, block->getArgument(0));
+                  mlir::Value pred = translateBinaryExpression(predBuilder, operatorType, expr, colVal);
+                  pred = predBuilder.create<mlir::db::NotOp>(loc, pred);
+                  predBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), pred);
+
+                  auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), subQueryTree);
+                  sel.predicate().push_back(block);
+                  subQueryTree = sel.result();
+
+                  mlir::Value exists = builder.create<mlir::relalg::ExistsOp>(loc, builder.getI1Type(), subQueryTree);
+                  return builder.create<mlir::db::NotOp>(loc, exists);
                }
                default:
                   error("unsupported sublink type");
@@ -1074,6 +1125,7 @@ struct Parser {
       TargetInfo targetInfo;
       {
          auto subQueryScope = context.createResolverScope();
+         auto subQueryDefineScope = context.createDefineScope();
          auto [subQuery_, targetInfo_] = translateSelectStmt(builder, stmt, context, subQueryScope);
          subQuery = subQuery_;
          targetInfo = targetInfo_;
@@ -1144,13 +1196,13 @@ struct Parser {
                TranslationContext rightContext;
                auto rightResolverScope = rightContext.createResolverScope();
                right = translateFromPart(builder, joinExpr->rarg_, rightContext, rightResolverScope);
-               mapping = rightContext.allAttributes;
+               mapping = rightContext.getAllDefinedColumns();
             } else if (joinExpr->jointype_ == JOIN_RIGHT) {
                right = translateFromPart(builder, joinExpr->rarg_, context, scope);
                TranslationContext leftContext;
                auto leftResolverScope = leftContext.createResolverScope();
                left = translateFromPart(builder, joinExpr->larg_, leftContext, leftResolverScope);
-               mapping = leftContext.allAttributes;
+               mapping = leftContext.getAllDefinedColumns();
             } else {
                left = translateFromPart(builder, joinExpr->larg_, context, scope);
                right = translateFromPart(builder, joinExpr->rarg_, context, scope);
@@ -1384,7 +1436,7 @@ struct Parser {
                      }
                      case T_A_Star: {
                         std::unordered_set<const mlir::relalg::Column*> handledAttrs;
-                        for (auto p : context.allAttributes) {
+                        for (auto p : context.getAllDefinedColumns()) {
                            if (!handledAttrs.contains(p.second)) {
                               targetInfo.namedResults.push_back({p.first, p.second});
                               handledAttrs.insert(p.second);
@@ -1457,6 +1509,7 @@ struct Parser {
                   TargetInfo targetInfo;
                   {
                      auto subQueryScope = context.createResolverScope();
+                     auto subQueryDefineScope = context.createDefineScope();
                      auto [subQuery_, targetInfo_] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(cte->ctequery_), context, subQueryScope);
                      subQuery = subQuery_;
                      targetInfo = targetInfo_;
