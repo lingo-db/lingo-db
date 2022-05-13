@@ -147,11 +147,11 @@ class AggregationTranslator : public mlir::relalg::Translator {
       key = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_colsAttr());
 
       auto counterType = builder.getI64Type();
-      mlir::relalg::ReturnOp terminator=mlir::cast<mlir::relalg::ReturnOp>(aggregationOp.aggr_func().front().getTerminator());
+      mlir::relalg::ReturnOp terminator = mlir::cast<mlir::relalg::ReturnOp>(aggregationOp.aggr_func().front().getTerminator());
 
       for (size_t i = 0; i < aggregationOp.computed_cols().size(); i++) {
          auto* destAttr = &aggregationOp.computed_cols()[i].cast<mlir::relalg::ColumnDefAttr>().getColumn();
-         mlir::Value computedVal=terminator.results()[i];
+         mlir::Value computedVal = terminator.results()[i];
          if (auto aggrFn = mlir::dyn_cast_or_null<mlir::relalg::AggrFuncOp>(computedVal.getDefiningOp())) {
             auto loc = aggrFn->getLoc();
             auto* attr = &aggrFn.attr().getColumn();
@@ -178,15 +178,15 @@ class AggregationTranslator : public mlir::relalg::Translator {
                   mlir::Value updatedVal = added;
                   if (attrIsNullable) {
                      mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), newVal);
-                     updatedVal = builder.create<mlir::arith::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
+                     updatedVal = builder.create<mlir::arith::SelectOp>(loc, isNull1, currVal, added);
                   }
                   if (resultingType.isa<mlir::db::NullableType>()) {
                      mlir::Value casted = newVal;
                      if (currVal.getType() != newVal.getType()) {
                         casted = builder.create<mlir::db::AsNullableOp>(loc, currVal.getType(), newVal);
                      }
-                     mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), aggr[currDestIdx]);
-                     res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, added));
+                     mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), currVal);
+                     res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, updatedVal));
                   } else {
                      res.push_back(updatedVal);
                   }
@@ -206,24 +206,19 @@ class AggregationTranslator : public mlir::relalg::Translator {
                   std::vector<mlir::Value> res;
                   mlir::Value currVal = aggr[currDestIdx];
                   mlir::Value newVal = val[currValIdx];
-                  mlir::Value currLtNew = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, currVal, newVal);
+                  mlir::Value newLtCurr = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, newVal,currVal);
                   mlir::Value casted = newVal;
                   if (newVal.getType() != currVal.getType()) {
                      casted = builder.create<mlir::db::AsNullableOp>(loc, currVal.getType(), newVal);
                   }
-                  mlir::Value currLtNewT = builder.create<mlir::db::DeriveTruth>(loc, currLtNew);
+                  mlir::Value newLtCurrT = builder.create<mlir::db::DeriveTruth>(loc, newLtCurr);
 
-                  mlir::Value added = builder.create<mlir::arith::SelectOp>(loc, currLtNewT, currVal, casted);
-                  mlir::Value updatedVal = added;
-                  if (attrIsNullable) {
-                     mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), newVal);
-                     updatedVal = builder.create<mlir::arith::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
-                  }
+                  mlir::Value added = builder.create<mlir::arith::SelectOp>(loc, newLtCurrT, casted,currVal);
                   if (resultingType.isa<mlir::db::NullableType>()) {
-                     mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), aggr[currDestIdx]);
+                     mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), currVal);
                      res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, added));
                   } else {
-                     res.push_back(updatedVal);
+                     res.push_back(added);
                   }
                   return res;
                });
@@ -255,7 +250,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
                   }
                   if (resultingType.isa<mlir::db::NullableType>()) {
                      mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), aggr[currDestIdx]);
-                     res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, added));
+                     res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, updatedVal));
                   } else {
                      res.push_back(updatedVal);
                   }
@@ -317,7 +312,6 @@ class AggregationTranslator : public mlir::relalg::Translator {
          if (auto countOp = mlir::dyn_cast_or_null<mlir::relalg::CountRowsOp>(computedVal.getDefiningOp())) {
             auto loc = countOp->getLoc();
 
-
             size_t currDestIdx = aggrTypes.size();
             aggrTypes.push_back(counterType);
             auto initCounterVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), counterType, builder.getI64IntegerAttr(0));
@@ -337,7 +331,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
       auto parentPipeline = context.pipelineManager.getCurrentPipeline();
-      auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(),context.getNextPipelineId());
+      auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(), context.getNextPipelineId());
       context.pipelineManager.setCurrentPipeline(p);
       context.pipelineManager.addPipeline(p);
       auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
