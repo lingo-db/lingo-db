@@ -162,14 +162,18 @@ struct SQLTypeInference {
       if (v.getType() == t) { return v; }
       if (auto* defOp = v.getDefiningOp()) {
          if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(defOp)) {
-            assert(!t.isa<mlir::db::NullableType>());
-            constOp.getResult().setType(t);
-            return constOp;
+            if(!t.isa<mlir::db::NullableType>()) {
+               constOp.getResult().setType(t);
+               return constOp;
+            }
          }
          if (auto nullOp = mlir::dyn_cast_or_null<mlir::db::NullOp>(defOp)) {
             nullOp.getResult().setType(t);
             return nullOp;
          }
+      }
+      if(v.getType()==getBaseType(t)){
+         return builder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(),t,v);
       }
       return builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), t, v);
    }
