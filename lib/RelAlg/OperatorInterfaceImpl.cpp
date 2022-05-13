@@ -40,9 +40,9 @@ ColumnSet mlir::relalg::detail::getAvailableColumns(mlir::Operation* op) {
    return collected;
 }
 ColumnSet mlir::relalg::detail::getFreeColumns(mlir::Operation* op) {
-   auto available = getAvailableColumns(op);
+   auto available = collectColumns(getChildOperators(op), [](Operator op) { return op.getAvailableColumns(); });
    auto collectedFree = collectColumns(getChildOperators(op), [](Operator op) { return op.getFreeColumns(); });
-   auto used = getUsedColumns(op);
+   auto used = mlir::cast<Operator>(op).getUsedColumns();
    collectedFree.insert(used);
    collectedFree.remove(available);
    return collectedFree;
