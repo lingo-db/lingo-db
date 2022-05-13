@@ -202,7 +202,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
                   initVal = builder.create<mlir::db::ConstantOp>(aggregationOp.getLoc(), getBaseType(resultingType), getMaxValueAttr(resultingType));
                }
                defaultValues.push_back(initVal);
-               aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, attrIsNullable, resultingType = resultingType, currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
+               aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, resultingType = resultingType, currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
                   std::vector<mlir::Value> res;
                   mlir::Value currVal = aggr[currDestIdx];
                   mlir::Value newVal = val[currValIdx];
