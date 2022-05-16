@@ -57,8 +57,11 @@ void mlir::relalg::QueryGraphBuilder::populateQueryGraph(Operator op) {
    } else if (mlir::relalg::detail::isJoin(op.getOperation())) {
       //add join edges into the query graph
       NodeSet tes = calcTES(op);
-      NodeSet leftTes = calcT(children[0]) & tes;
-      NodeSet rightTes = calcT(children[1]) & tes;
+      NodeSet leftT = calcT(children[0]);
+      NodeSet rightT = calcT(children[1]);
+      NodeSet leftTes = (leftT & tes).any() ? (leftT & tes) : leftT;
+      NodeSet rightTes = (rightT & tes).any() ? (rightT & tes) : rightT;
+
       llvm::Optional<size_t> createdNode;
       if (!created.empty()) {
          size_t newNode = qg.addPseudoNode();
