@@ -29,7 +29,7 @@ class ColumnSet {
    void insert(const mlir::relalg::Column* attr) {
       attributes.insert(attr);
    }
-   bool contains(mlir::relalg::Column* attr) {
+   bool contains(mlir::relalg::Column* attr) const {
       return attributes.contains(attr);
    }
    ColumnSet& insert(const ColumnSet& other) {

@@ -5,6 +5,7 @@
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/OpImplementation.h"
 #include <functional>
+#include <unordered_set>
 using namespace mlir::relalg;
 using operator_list = llvm::SmallVector<Operator, 4>;
 static operator_list getChildOperators(mlir::Operation* parent) {
@@ -38,6 +39,13 @@ ColumnSet mlir::relalg::detail::getAvailableColumns(mlir::Operation* op) {
    auto selfCreated = asOperator.getCreatedColumns();
    collected.insert(selfCreated);
    return collected;
+}
+FunctionalDependencies mlir::relalg::detail::getFDs(mlir::Operation* op) {
+   FunctionalDependencies dependencies;
+   for (auto child : getChildOperators(op)) {
+      dependencies.insert(child.getFDs());
+   }
+   return dependencies;
 }
 ColumnSet mlir::relalg::detail::getFreeColumns(mlir::Operation* op) {
    auto available = collectColumns(getChildOperators(op), [](Operator op) { return op.getAvailableColumns(); });
@@ -230,6 +238,25 @@ ColumnSet BaseTableOp::getCreatedColumns() {
       creations.insert(&relationDefAttr.getColumn());
    }
    return creations;
+}
+mlir::relalg::FunctionalDependencies BaseTableOp::getFDs() {
+   FunctionalDependencies dependencies;
+   auto metaData = meta().getMeta();
+   if (!metaData->isPresent()) return dependencies;
+   if (metaData->getPrimaryKey().empty()) return dependencies;
+   auto right = getAvailableColumns();
+   std::unordered_set<std::string> pks(metaData->getPrimaryKey().begin(), metaData->getPrimaryKey().end());
+   ColumnSet pk;
+   for (auto mapping : columns()) {
+      auto attr = mapping.getValue();
+      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      if (pks.contains(mapping.getName().str())) {
+         pk.insert(&relationDefAttr.getColumn());
+      }
+   }
+   right.remove(pk);
+   dependencies.insert(pk,right);
+   return dependencies;
 }
 ColumnSet mlir::relalg::AggregationOp::getAvailableColumns() {
    ColumnSet available = getCreatedColumns();

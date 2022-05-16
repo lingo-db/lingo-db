@@ -12,6 +12,7 @@ class ColumnManager {
    std::shared_ptr<Column> get(StringRef scope, StringRef attribute);
    ColumnDefAttr createDef(SymbolRefAttr name, Attribute fromExisting = Attribute());
    ColumnDefAttr createDef(StringRef scope, StringRef name, Attribute fromExisting = Attribute());
+   ColumnDefAttr createDef(const Column* attr);
 
    ColumnRefAttr createRef(SymbolRefAttr name);
    ColumnRefAttr createRef(const Column* attr);

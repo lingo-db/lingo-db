@@ -38,6 +38,10 @@ ColumnRefAttr ColumnManager::createRef(const Column* attr) {
    auto [scope, name] = attributesRev[attr];
    return createRef(scope, name);
 }
+ColumnDefAttr ColumnManager::createDef(const Column* attr) {
+   auto [scope, name] = attributesRev[attr];
+   return createDef(scope, name);
+}
 
 std::pair<std::string, std::string> ColumnManager::getName(const Column* attr) {
    return attributesRev.at(attr);

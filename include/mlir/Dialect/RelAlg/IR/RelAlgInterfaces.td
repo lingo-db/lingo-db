@@ -50,6 +50,13 @@ return mlir::relalg::detail::getAvailableColumns(this->getOperation());
 }]
 >,
 InterfaceMethod<
+        "get all functional dependencies that hold after this operator",
+        "mlir::relalg::FunctionalDependencies", "getFDs",(ins ),"", /*defaultImplementation=*/[{
+return mlir::relalg::detail::getFDs(this->getOperation());
+}]
+>,
+
+InterfaceMethod<
         "",
         "void", "moveSubTreeBefore",(ins "Operator":$before),"", /*defaultImplementation=*/[{
 mlir::relalg::detail::moveSubTreeBefore(this->getOperation(),before);

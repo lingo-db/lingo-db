@@ -9,6 +9,7 @@ add_mlir_dialect_library(MLIRRelAlg
         Transforms/DecomposeLambdas.cpp
         Transforms/CombinePredicates.cpp
         Transforms/OptimizeImplementations.cpp
+        Transforms/PropagateConstrains.cpp
         Transforms/IntroduceTmp.cpp
         ColumnManager.cpp
         Transforms/Unnesting.cpp

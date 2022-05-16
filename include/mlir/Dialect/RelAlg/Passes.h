@@ -17,6 +17,7 @@ std::unique_ptr<Pass> createOptimizeJoinOrderPass();
 std::unique_ptr<Pass> createCombinePredicatesPass();
 std::unique_ptr<Pass> createOptimizeImplementationsPass();
 std::unique_ptr<Pass> createIntroduceTmpPass();
+std::unique_ptr<Pass> createPropagateConstraintsPass();
 std::unique_ptr<Pass> createSimplifyAggregationsPass();
 std::unique_ptr<Pass> createAttachMetaDataPass(runtime::Database& db);
 std::unique_ptr<Pass> createDetachMetaDataPass();

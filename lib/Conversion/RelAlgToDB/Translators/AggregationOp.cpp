@@ -307,6 +307,18 @@ class AggregationTranslator : public mlir::relalg::Translator {
                   res.push_back(value);
                   return res;
                });
+            } else if (aggrFn.fn() == mlir::relalg::AggrFunc::any) {
+               size_t currDestIdx = aggrTypes.size();
+               auto initVal = builder.create<mlir::util::UndefOp>(aggregationOp.getLoc(), resultingType);
+               defaultValues.push_back(initVal);
+               aggrTypes.push_back(resultingType);
+               finalizeFunctions.push_back([currDestIdx = currDestIdx, destAttr = destAttr](mlir::ValueRange range, mlir::OpBuilder& builder) { return std::make_pair(destAttr, range[currDestIdx]); });
+
+               aggregationFunctions.push_back([currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
+                  std::vector<mlir::Value> res;
+                  res.push_back(val[currValIdx]);
+                  return res;
+               });
             }
          }
          if (auto countOp = mlir::dyn_cast_or_null<mlir::relalg::CountRowsOp>(computedVal.getDefiningOp())) {

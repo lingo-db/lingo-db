@@ -21,6 +21,7 @@ void mlir::relalg::createQueryOptPipeline(mlir::OpPassManager& pm, runtime::Data
    if (db) {
       pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createAttachMetaDataPass(*db));
    }
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createPropagateConstraintsPass());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createOptimizeJoinOrderPass());
    if (db) {
       pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createDetachMetaDataPass());

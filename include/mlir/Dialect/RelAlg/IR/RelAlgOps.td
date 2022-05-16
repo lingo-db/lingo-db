@@ -95,10 +95,11 @@ def RelAlg_AggrFunc_Min   : I64EnumAttrCase<"min", 1>;
 def RelAlg_AggrFunc_Max   : I64EnumAttrCase<"max", 2>;
 def RelAlg_AggrFunc_Avg   : I64EnumAttrCase<"avg", 3>;
 def RelAlg_AggrFunc_Count : I64EnumAttrCase<"count", 4>;
+def RelAlg_AggrFunc_Any : I64EnumAttrCase<"any", 5>;
 
 def RelAlg_AggrFunc : I64EnumAttr<"AggrFunc", "aggregation function",
         [RelAlg_AggrFunc_Sum, RelAlg_AggrFunc_Min, RelAlg_AggrFunc_Max,
-         RelAlg_AggrFunc_Avg, RelAlg_AggrFunc_Count]> {
+         RelAlg_AggrFunc_Avg, RelAlg_AggrFunc_Count, RelAlg_AggrFunc_Any]> {
     let cppNamespace = "::mlir::relalg";
 }
 
@@ -145,6 +146,7 @@ def BaseTableOp : RelAlg_Op<"basetable",
 
     let extraClassDeclaration = [{
         ColumnSet getCreatedColumns();
+        mlir::relalg::FunctionalDependencies getFDs();
     }];
 }
 
