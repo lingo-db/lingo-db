@@ -1,4 +1,5 @@
 #include "runtime/Vector.h"
+#include <algorithm>
 runtime::Vector* runtime::Vector::create(size_t sizeOfType, size_t initialCapacity) {
    return new Vector(initialCapacity, sizeOfType);
 }
