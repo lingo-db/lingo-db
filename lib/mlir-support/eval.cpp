@@ -23,8 +23,18 @@ std::optional<size_t> countResults(std::shared_ptr<arrow::RecordBatch> batch, st
    if (!filter) return {};
    auto filterExpression = unpack(filter);
    auto boundCond = filterExpression.Bind(*batch->schema()).ValueOrDie();
-   auto res2 = arrow::compute::ExecuteScalarExpression(boundCond, arrow::compute::MakeExecBatch(*batch->schema(), batch).ValueOrDie()).ValueOrDie();
-   size_t res = arrow::compute::internal::GetFilterOutputSize(*res2.array(), arrow::compute::FilterOptions::NullSelectionBehavior::DROP);
+   auto execBatch = arrow::compute::MakeExecBatch(*batch->schema(), batch);
+   if (!execBatch.ok()) {
+      throw std::runtime_error("Apache Arrow:" + execBatch->ToString());
+   }
+   arrow::Result<arrow::Datum> mask = arrow::compute::ExecuteScalarExpression(boundCond, execBatch.ValueUnsafe());
+   if (!mask.ok()) {
+      throw std::runtime_error("Apache Arrow:" + execBatch->ToString());
+   }
+   if (mask->is_scalar()) {
+      return mask->scalar_as<arrow::BooleanScalar>().is_valid ? batch->num_rows() : 0;
+   }
+   size_t res = arrow::compute::internal::GetFilterOutputSize(*mask.ValueUnsafe().array(), arrow::compute::FilterOptions::NullSelectionBehavior::DROP);
    return res;
 }
 std::unique_ptr<expr> createAnd(const std::vector<std::unique_ptr<expr>>& expressions) {
