@@ -21,7 +21,8 @@ void mlir::relalg::createQueryOptPipeline(mlir::OpPassManager& pm, runtime::Data
    if (db) {
       pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createAttachMetaDataPass(*db));
    }
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createPropagateConstraintsPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createReduceGroupByKeysPass());
+   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createExpandTransitiveEqualities());
    pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createOptimizeJoinOrderPass());
    if (db) {
       pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createDetachMetaDataPass());
@@ -61,6 +62,12 @@ void mlir::relalg::registerQueryOptimizationPasses() {
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createSimplifyAggregationsPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::relalg::createReduceGroupByKeysPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::relalg::createExpandTransitiveEqualities();
    });
 
    mlir::PassPipelineRegistration<EmptyPipelineOptions>(

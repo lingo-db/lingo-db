@@ -52,6 +52,9 @@ class NodeSet {
    [[nodiscard]] size_t findFirst() const {
       return storage.find_first();
    }
+   [[nodiscard]] size_t findLast() const {
+      return storage.find_last();
+   }
    bool operator==(const NodeSet& rhs) const { return storage == rhs.storage; }
    bool operator!=(const NodeSet& rhs) const { return storage != rhs.storage; }
    bool operator<(const NodeSet& rhs) const {

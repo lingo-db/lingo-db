@@ -15,16 +15,32 @@ void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
    Operator specialJoin{};
    double totalSelectivity = 1;
 
+   llvm::EquivalenceClasses<const mlir::relalg::Column*> equivalentColumns;
+   for (auto& edge : queryGraph.joins) {
+      if (!edge.connects(s1, s2) && edge.left.isSubsetOf(s) && edge.right.isSubsetOf(s) && edge.equality) {
+         equivalentColumns.unionSets(edge.equality->first, edge.equality->second);
+      }
+   }
    for (auto& edge : queryGraph.joins) {
       if (edge.connects(s1, s2)) {
-         totalSelectivity *= edge.selectivity;
          if (!edge.op) {
             //special case: forced cross product
             //do nothing
          } else if (!mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation()) && !mlir::isa<mlir::relalg::InnerJoinOp>(edge.op.getOperation())) {
             specialJoin = edge.op;
+            totalSelectivity *= edge.selectivity;
          } else {
-            predicates.insert(edge.op);
+            bool useSelection = true;
+            if (edge.equality && equivalentColumns.isEquivalent(edge.equality->first, edge.equality->second)) {
+               useSelection = false;
+            }
+            if (useSelection) {
+               totalSelectivity *= edge.selectivity;
+               predicates.insert(edge.op);
+            }
+         }
+         if (edge.equality) {
+            equivalentColumns.unionSets(edge.equality->first, edge.equality->second);
          }
          if (edge.createdNode) {
             s |= NodeSet::single(queryGraph.numNodes, edge.createdNode.getValue());
@@ -42,7 +58,7 @@ void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
    if (specialJoin) {
       double estimatedResultSize;
       switch (mlir::relalg::detail::getBinaryOperatorType(specialJoin)) {
-         case detail::BinaryOperatorType::AntiSemiJoin: estimatedResultSize = p1->getRows()-std::min(p1->getRows(), p1->getRows() * p2->getRows() * totalSelectivity); break;
+         case detail::BinaryOperatorType::AntiSemiJoin: estimatedResultSize = p1->getRows() - std::min(p1->getRows(), p1->getRows() * p2->getRows() * totalSelectivity); break;
          case detail::BinaryOperatorType::SemiJoin: estimatedResultSize = std::min(p1->getRows(), p1->getRows() * p2->getRows() * totalSelectivity); break;
          case detail::BinaryOperatorType::CollectionJoin:
          case detail::BinaryOperatorType::OuterJoin: //todo: not really correct, but we would need to split singlejoin/outerjoin

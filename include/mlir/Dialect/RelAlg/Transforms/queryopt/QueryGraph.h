@@ -13,14 +13,14 @@ class QueryGraph {
 
    struct SelectionEdge {
       size_t id;
-      std::unordered_map<NodeSet,double,HashNodeSet> cachedSel;
+      std::unordered_map<NodeSet, double, HashNodeSet> cachedSel;
       NodeSet required;
       Operator op;
       double selectivity = 1;
       [[nodiscard]] bool connects(const NodeSet& s1, const NodeSet& s2) const {
          return required.isSubsetOf(s1 | s2) && !required.isSubsetOf(s1) && !required.isSubsetOf(s2);
       }
-      [[nodiscard]] bool connects2(const NodeSet& complete,const NodeSet& s1, const NodeSet& s2) const {
+      [[nodiscard]] bool connects2(const NodeSet& complete, const NodeSet& s1, const NodeSet& s2) const {
          return required.isSubsetOf(complete) && !required.isSubsetOf(s1) && !required.isSubsetOf(s2);
       }
       std::pair<bool, size_t> findNeighbor(const NodeSet& s, const NodeSet& x) {
@@ -37,6 +37,8 @@ class QueryGraph {
       NodeSet left;
       double selectivity = 1;
       llvm::Optional<size_t> createdNode;
+      std::optional<std::pair<const mlir::relalg::Column*, const mlir::relalg::Column*>> equality;
+
       [[nodiscard]] bool connects(const NodeSet& s1, const NodeSet& s2) const {
          if (!(left.any() && right.any())) {
             return false;
@@ -103,6 +105,20 @@ class QueryGraph {
       pseudoNodes++;
       return numNodes - pseudoNodes;
    }
+   static std::optional<std::pair<const mlir::relalg::Column*, const mlir::relalg::Column*>> analyzePredicate(PredicateOperator selection) {
+      auto returnOp = mlir::cast<mlir::relalg::ReturnOp>(selection.getPredicateBlock().getTerminator());
+      if (returnOp.results().empty()) return {};
+      mlir::Value v = returnOp.results()[0];
+      if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(v.getDefiningOp())) {
+         if (!cmpOp.isEqualityPred()) return {};
+         if (auto leftColref = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(cmpOp.left().getDefiningOp())) {
+            if (auto rightColref = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(cmpOp.right().getDefiningOp())) {
+               return std::make_pair<const mlir::relalg::Column*, const mlir::relalg::Column*>(&leftColref.attr().getColumn(), &rightColref.attr().getColumn());
+            }
+         }
+      }
+      return {};
+   }
    void addJoinEdge(NodeSet left, NodeSet right, Operator op, llvm::Optional<size_t> createdNode) {
       assert(left.valid());
       assert(right.valid());
@@ -112,6 +128,9 @@ class QueryGraph {
       JoinEdge& e = joins.back();
       if (op) {
          e.op = op;
+         if (mlir::isa<mlir::relalg::SelectionOp, mlir::relalg::InnerJoinOp>(op)) {
+            e.equality = analyzePredicate(mlir::cast<PredicateOperator>(e.op.getOperation()));
+         }
       }
       e.left = left;
       e.right = right;
@@ -135,6 +154,18 @@ class QueryGraph {
       }
    }
    void addSelectionEdge(NodeSet required, Operator op) {
+      if (required.count() == 2) {
+         NodeSet left(numNodes);
+         NodeSet right(numNodes);
+         auto leftIdx = required.findFirst();
+         auto rightIdx = required.findLast();
+         if (leftIdx < nodes.size() && rightIdx < nodes.size()) {
+            left.set(leftIdx);
+            right.set(rightIdx);
+            addJoinEdge(left, right, op, {});
+            return;
+         }
+      }
       size_t edgeid = selections.size();
       selections.emplace_back();
       SelectionEdge& e = selections.back();
@@ -142,7 +173,7 @@ class QueryGraph {
          e.op = op;
       }
       e.required = required;
-      e.id=edgeid;
+      e.id = edgeid;
       for (auto n : required) {
          if (n >= nodes.size()) {
             //pseudo node
@@ -311,9 +342,9 @@ class QueryGraph {
       }
    }
    ColumnSet getPKey(mlir::relalg::QueryGraph::Node& n);
-   double estimateSelectivity(Operator op,NodeSet left,NodeSet right);
+   double estimateSelectivity(Operator op, NodeSet left, NodeSet right);
    void estimate();
-   double calculateSelectivity(SelectionEdge& edge,NodeSet left,NodeSet right);
+   double calculateSelectivity(SelectionEdge& edge, NodeSet left, NodeSet right);
 };
 } // namespace mlir::relalg
 #endif // MLIR_DIALECT_RELALG_TRANSFORMS_QUERYOPT_QUERYGRAPH_H
