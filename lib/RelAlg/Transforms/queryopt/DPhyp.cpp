@@ -4,79 +4,8 @@
 void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
    auto p1 = dpTable[s1];
    auto p2 = dpTable[s2];
-   auto s = s1 | s2;
-   struct HashOp {
-      size_t operator()(const Operator& op) const {
-         return (size_t) op.operator mlir::Operation*();
-      }
-   };
-   std::unordered_set<Operator, HashOp> predicates;
-
-   Operator specialJoin{};
-   double totalSelectivity = 1;
-
-   llvm::EquivalenceClasses<const mlir::relalg::Column*> equivalentColumns;
-   for (auto& edge : queryGraph.joins) {
-      if (!edge.connects(s1, s2) && edge.left.isSubsetOf(s) && edge.right.isSubsetOf(s) && edge.equality) {
-         equivalentColumns.unionSets(edge.equality->first, edge.equality->second);
-      }
-   }
-   for (auto& edge : queryGraph.joins) {
-      if (edge.connects(s1, s2)) {
-         if (!edge.op) {
-            //special case: forced cross product
-            //do nothing
-         } else if (!mlir::isa<mlir::relalg::SelectionOp>(edge.op.getOperation()) && !mlir::isa<mlir::relalg::InnerJoinOp>(edge.op.getOperation())) {
-            specialJoin = edge.op;
-            totalSelectivity *= edge.selectivity;
-         } else {
-            bool useSelection = true;
-            if (edge.equality && equivalentColumns.isEquivalent(edge.equality->first, edge.equality->second)) {
-               useSelection = false;
-            }
-            if (useSelection) {
-               totalSelectivity *= edge.selectivity;
-               predicates.insert(edge.op);
-            }
-         }
-         if (edge.equality) {
-            equivalentColumns.unionSets(edge.equality->first, edge.equality->second);
-         }
-         if (edge.createdNode) {
-            s |= NodeSet::single(queryGraph.numNodes, edge.createdNode.getValue());
-         }
-      }
-   }
-   for (auto& edge : queryGraph.selections) {
-      if (edge.connects2(s, s1, s2)) {
-         totalSelectivity *= queryGraph.calculateSelectivity(edge, s1, s2);
-         predicates.insert(edge.op);
-      }
-   }
-   std::shared_ptr<Plan> currPlan;
-
-   if (specialJoin) {
-      double estimatedResultSize;
-      switch (mlir::relalg::detail::getBinaryOperatorType(specialJoin)) {
-         case detail::BinaryOperatorType::AntiSemiJoin: estimatedResultSize = p1->getRows() - std::min(p1->getRows(), p1->getRows() * p2->getRows() * totalSelectivity); break;
-         case detail::BinaryOperatorType::SemiJoin: estimatedResultSize = std::min(p1->getRows(), p1->getRows() * p2->getRows() * totalSelectivity); break;
-         case detail::BinaryOperatorType::CollectionJoin:
-         case detail::BinaryOperatorType::OuterJoin: //todo: not really correct, but we would need to split singlejoin/outerjoin
-         case detail::BinaryOperatorType::MarkJoin: estimatedResultSize = p1->getRows(); break;
-         default: estimatedResultSize = p1->getRows() * p2->getRows() * totalSelectivity;
-      }
-      currPlan = std::make_shared<Plan>(specialJoin, std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>(predicates.begin(), predicates.end()), estimatedResultSize);
-   } else if (!predicates.empty()) {
-      auto estimatedResultSize = p1->getRows() * p2->getRows() * totalSelectivity;
-      if (p1->getRows() > p2->getRows()) {
-         std::swap(p1, p2);
-      }
-      currPlan = std::make_shared<Plan>(*predicates.begin(), std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>(++predicates.begin(), predicates.end()), estimatedResultSize);
-   } else {
-      auto estimatedResultSize = p1->getRows() * p2->getRows() * totalSelectivity;
-      currPlan = std::make_shared<Plan>(Operator(), std::vector<std::shared_ptr<Plan>>({p1, p2}), std::vector<Operator>({}), estimatedResultSize);
-   }
-   currPlan->setDescription("(" + p1->getDescription() + ") join (" + p2->getDescription() + ")");
+   NodeSet s;
+   auto currPlan = Plan::joinPlans(s1, s2, p1, p2, queryGraph,s);
    if (!dpTable.count(s) || currPlan->getCost() < dpTable[s]->getCost()) {
       dpTable[s] = currPlan;
    }
@@ -139,4 +68,22 @@ std::shared_ptr<mlir::relalg::Plan> mlir::relalg::DPHyp::solve() {
       enumerateCsgRec(onlyV, bv);
    });
    return dpTable[NodeSet::ones(queryGraph.numNodes)];
+}
+void mlir::relalg::DPHyp::countSubGraphsRec(NodeSet s1, NodeSet x, size_t& count, size_t maxCount) {
+   auto neighbors = queryGraph.getNeighbors(s1, x);
+   neighbors.iterateSubsets([&](const NodeSet& n) {
+      if ((++count) >= maxCount) return;
+      countSubGraphsRec(s1 | n, x | neighbors, count, maxCount);
+   });
+}
+
+size_t mlir::relalg::DPHyp::countSubGraphs(size_t maxCount) {
+   size_t count = 0;
+   queryGraph.iterateNodesDesc([&](QueryGraph::Node& v) {
+      auto onlyV = NodeSet::single(queryGraph.numNodes, v.id);
+      if ((++count) >= maxCount) return;
+      auto bv = NodeSet::fillUntil(queryGraph.numNodes, v.id);
+      countSubGraphsRec(onlyV, bv, count, maxCount);
+   });
+   return count;
 }

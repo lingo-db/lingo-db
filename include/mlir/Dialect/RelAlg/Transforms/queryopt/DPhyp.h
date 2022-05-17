@@ -25,6 +25,8 @@ class DPHyp {
    void enumerateCmpRec(NodeSet s1, NodeSet s2, NodeSet x);
 
    std::shared_ptr<Plan> solve();
+   void countSubGraphsRec(NodeSet s1, NodeSet x, size_t& count, size_t maxCount);
+   size_t countSubGraphs(size_t maxCount);
 };
 } // namespace mlir::relalg
 

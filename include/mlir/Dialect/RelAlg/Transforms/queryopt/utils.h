@@ -9,6 +9,7 @@
 #include <mlir/Dialect/RelAlg/IR/RelAlgOps.h>
 
 namespace mlir::relalg {
+class QueryGraph;
 class NodeSet {
    public:
    llvm::SmallBitVector storage;
@@ -40,7 +41,7 @@ class NodeSet {
       return (storage & rhs.storage).any();
    }
    void set(size_t pos) {
-      assert(pos<storage.size());
+      assert(pos < storage.size());
       storage.set(pos);
    }
    [[nodiscard]] auto begin() const {
@@ -136,6 +137,8 @@ class Plan {
    }
    void setDescription(const std::string& descr);
    const std::string& getDescription() const;
+
+   static std::shared_ptr<Plan> joinPlans(NodeSet leftProblem, NodeSet rightProblem, std::shared_ptr<Plan> leftPlan, std::shared_ptr<Plan> rightPlan, QueryGraph& queryPlan,NodeSet& combinedProblem);
 };
 } // namespace mlir::relalg
 #endif // MLIR_DIALECT_RELALG_TRANSFORMS_QUERYOPT_UTILS_H

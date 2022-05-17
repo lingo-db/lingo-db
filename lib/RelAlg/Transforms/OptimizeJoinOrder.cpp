@@ -4,6 +4,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/Dialect/RelAlg/Transforms/queryopt/DPhyp.h"
+#include "mlir/Dialect/RelAlg/Transforms/queryopt/GOO.h"
 #include "mlir/Dialect/RelAlg/Transforms/queryopt/QueryGraphBuilder.h"
 
 namespace {
@@ -70,8 +71,14 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
          queryGraph.estimate();
          //queryGraph.dump();
          //enumerates possible plans and find best one
+         std::shared_ptr<mlir::relalg::Plan> solution;
          mlir::relalg::DPHyp solver(queryGraph);
-         auto solution = solver.solve();
+         if (solver.countSubGraphs(1000) < 1000) {
+            solution = solver.solve();
+         } else {
+            mlir::relalg::GOO fallBackSolver(queryGraph);
+            solution = fallBackSolver.solve();
+         }
          if (!solution) {
             //no solution was found
             llvm::dbgs() << "no valid join order found\n";
