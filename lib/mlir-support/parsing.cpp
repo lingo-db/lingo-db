@@ -149,7 +149,7 @@ std::variant<int64_t, double, std::string> support::parse(std::variant<int64_t, 
       case arrow::Type::type::DOUBLE: return parseDouble(val);
       case arrow::Type::type::FIXED_SIZE_BINARY: return toI64(parseString(val));
       case arrow::Type::type::DECIMAL128: return parseString(val, true);
-      case arrow::Type::type::STRING: return parseString(val);
+      case arrow::Type::type::STRING: return parseString(val,true);
       case arrow::Type::type::DATE32: return parseDate(val, false);
       case arrow::Type::type::DATE64: return parseDate(val, true);
       case arrow::Type::type::TIMESTAMP: return parseTimestamp(val, static_cast<TimeUnit>(param1));
