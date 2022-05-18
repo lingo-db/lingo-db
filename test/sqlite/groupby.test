@@ -1,0 +1,54 @@
+query tsv rowsort
+select a,b,count(*) from (values(1),(2)) s(x) left outer join (values(1,2,2)) t(y,a,b) on x=y group by a,b
+----
+2	2	1
+NULL	NULL	1
+
+# Setup tables for groupjoins
+statement ok
+CREATE TABLE ints(i INTEGER);
+
+statement ok
+INSERT INTO ints VALUES (1), (2), (3), (4);
+
+statement ok
+CREATE TABLE dups(i INTEGER);
+
+statement ok
+INSERT INTO dups VALUES (1), (1), (2), (2), (3), (3);
+
+
+query tsv
+WITH set AS (SELECT DISTINCT i FROM ints),
+     groupjoin AS (SELECT count(*) c FROM set s, dups d WHERE s.i = d.i GROUP BY s.i)
+SELECT sum(c) FROM groupjoin;
+----
+6
+
+statement ok
+
+query tsv
+WITH set AS (SELECT DISTINCT i FROM ints),
+     groupjoin AS (SELECT count(*) c FROM set s, dups d WHERE s.i = d.i GROUP BY s.i)
+SELECT sum(c) FROM groupjoin;
+----
+6
+
+
+query tsv
+WITH set AS (SELECT DISTINCT i FROM ints),
+     groupjoin AS (SELECT count(*) c FROM set s, dups d WHERE s.i = d.i GROUP BY s.i)
+SELECT sum(c) FROM groupjoin;
+----
+6
+
+
+# Outer join semantics above a groupby is different from our groupjoin
+query tsv rowsort
+WITH lower_groupby AS (SELECT i, count(*) FROM dups GROUP BY i)
+SELECT * FROM ints i LEFT JOIN lower_groupby l ON i.i = l.i;
+----
+1	1	2
+2	2	2
+3	3	2
+4	NULL	NULL

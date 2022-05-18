@@ -1,0 +1,170 @@
+# basic join
+query tsv rowsort
+select x from (values(1),(2),(3)) s(x), (values(2),(3),(4)) t(y) where x=y;
+----
+2
+3
+
+# join with mixed types
+query tsv rowsort
+select x from (values(1),(2),(3)) s(x), (values(2),(3.5),(4)) t(y) where x=y;
+----
+2
+
+# join with NULL types
+query tsv rowsort
+select x from (values(1),(2),(NULL)) s(x), (values(2),(3),(4),(5)) t(y) where x=y;
+----
+2
+
+# outer joins
+query tsv rowsort
+select x,y from (values(1),(2)) s(x) left outer join (values(2),(3),(4)) t(y) on x=y;
+----
+1	NULL
+2	2
+
+query tsv rowsort
+select x,y from (values(1),(2)) s(x) right outer join (values(2),(3),(4)) t(y) on x=y;
+----
+2	2
+NULL	3
+NULL	4
+
+#todo: implement full outer join
+#query tsv rowsort
+#select x,y from (values(1),(2)) s(x) full outer join (values(2),(3),(4)) t(y) on x=y;
+#----
+#1	NULL
+#2	2
+#NULL	3
+#NULL	4
+
+query tsv rowsort
+select x,y from (values(1),(2.5)) s(x) left outer join (values(1),(2),(3)) t(y) on x=y;
+----
+1.0	1
+2.5	NULL
+
+query tsv rowsort
+select x,y from (values(1),(NULL)) s(x) left outer join (values(1),(2),(3)) t(y) on x=y;
+----
+1	1
+NULL	NULL
+
+query tsv rowsort
+select x,y from (values(1),(2)) s(x) right outer join (values(1),(2.5),(3)) t(y) on x=y;
+----
+1	1.0
+NULL	2.5
+NULL	3.0
+
+# semi joins
+query tsv rowsort
+select x from (values(1),(2),(3)) s(x) where exists(select * from (values(2),(3),(4),(5)) t(y) where x=y);
+----
+2
+3
+
+query tsv rowsort
+select x from (values(1),(2),(3.5)) s(x) where exists(select * from (values(2),(3),(4),(5)) t(y) where x=y);
+----
+2.0
+
+query tsv rowsort
+select x from (values(1),(2),(3)) s(x) where exists(select * from (values(2),(3)) t(y) where x=y);
+----
+2
+3
+
+query tsv rowsort
+select x from (values(1),(2),(3)) s(x) where exists(select * from (values(2),(3.5)) t(y) where x=y);
+----
+2
+
+query tsv rowsort
+select x from (values(1),(2),(3)) s(x) where exists(select * from (values(2),(3),(4),(5)) t(y) where x=y);
+----
+2
+3
+
+# anti joins
+query tsv rowsort
+select x from (values(1),(2),(3)) s(x) where not exists(select * from (values(2),(3),(4),(5)) t(y) where x=y);
+----
+1
+
+query tsv rowsort
+select x from (values(1),(2),(3.5)) s(x) where not exists(select * from (values(2),(3),(4),(5)) t(y) where x=y);
+----
+1.0
+3.5
+
+query tsv rowsort
+select x from (values(1),(2),(3)) s(x) where not exists(select * from (values(2),(3)) t(y) where x=y);
+----
+1
+
+query tsv rowsort
+select x from (values(1),(2),(3)) s(x) where not exists(select * from (values(2),(3.5)) t(y) where x=y);
+----
+1
+3
+
+query tsv rowsort
+select x from (values(1),(2),(3)) s(x) where not exists(select * from (values(2),(3),(4),(5)) t(y) where x=y);
+----
+1
+
+# mark joins
+query tsv rowsort
+select x, x=some(select * from (values(2),(3),(4),(5)) t(y)) from (values(1),(2),(3)) s(x);
+----
+1	f
+2	t
+3	t
+
+query tsv rowsort
+select x, x=some(select * from (values(2),(3)) t(y)) from (values(1),(2),(3)) s(x);
+----
+1	f
+2	t
+3	t
+
+query tsv rowsort
+select x, x=all(select * from (values(2),(3),(4),(5)) t(y) where y<=x) from (values(1),(2),(3)) s(x);
+----
+1	t
+2	t
+3	f
+
+# todo: correct null-behavior not implemented
+#query tsv rowsort
+#select x, x=some(select y from (values (2),(3),(4)) t(y)) from (values(1),(2),(NULL)) s(x);
+#----
+#1	f
+#2	t
+#NULL	NULL
+
+# todo: correct null-behavior not implemented
+#query tsv rowsort
+#select x, x=some(select y from (values (2),(3),(NULL)) t(y)) from (values(1),(2),(NULL)) s(x);
+#----
+#1	NULL
+#2	t
+#NULL	NULL
+
+query tsv rowsort
+select x, x=some(select y from (values (2),(3),(4)) t(y) where y>5) from (values(1),(2),(NULL)) s(x);
+----
+1	f
+2	f
+NULL	f
+
+# todo: correct null-behavior not implemented
+#query tsv rowsort
+#select x, x2, x=some(select y from (values(2,20),(3,30),(4,40),(NULL,50)) t(y,y2) where x2=y2) from (values(1,10),(1,50),(2,20)) s(x,x2);
+#----
+#1	10	f
+#1	50	NULL
+#2	20	t

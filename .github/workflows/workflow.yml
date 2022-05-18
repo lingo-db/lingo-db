@@ -64,6 +64,11 @@ jobs:
           /build/mlirdb/sqlite-tester test/sqlite/select1.test
           /build/mlirdb/sqlite-tester test/sqlite/select2.test
           /build/mlirdb/sqlite-tester test/sqlite/select3.test
+          /build/mlirdb/sqlite-tester test/sqlite/select5.test
+          /build/mlirdb/sqlite-tester test/sqlite/groupby.test
+          /build/mlirdb/sqlite-tester test/sqlite/join.test
+          /build/mlirdb/sqlite-tester test/sqlite/unnesting.test
+
   lint:
     needs: build
     runs-on: ubuntu-latest

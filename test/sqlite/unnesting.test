@@ -1,0 +1,1641 @@
+# test cases derived from https://github.com/cwida/duckdb/blob/master/test/sql/subquery/test_correlated_subquery.cpp
+
+## test correlated subqueries
+
+statement ok
+CREATE TABLE integers(i INTEGER);
+
+statement ok
+INSERT INTO integers VALUES (1), (2), (3), (NULL);
+
+# scalar select with correlation
+query tsv
+SELECT i, (SELECT 42+i1.i) AS j FROM integers i1 ORDER BY i;
+----
+1	43
+2	44
+3	45
+NULL	NULL
+
+#disabled: unsupported
+# ORDER BY correlated subquery
+#query tsv
+#SELECT i FROM integers i1 ORDER BY (SELECT 100-i1.i);
+#----
+#3
+#2
+#1
+#NULL
+
+# subquery returning multiple results
+#statement error 21000
+#SELECT i, (SELECT 42+i1.i FROM integers) AS j FROM integers i1 ORDER BY i;
+
+#todo: implement "grouped limit"
+# subquery with LIMIT
+#query tsv
+#SELECT i, (SELECT 42+i1.i FROM integers LIMIT 1) AS j FROM integers i1 ORDER BY i;
+#----
+#1	43
+#2	44
+#3	45
+#NULL	NULL
+
+# subquery with LIMIT 0
+query tsv
+SELECT i, (SELECT 42+i1.i FROM integers LIMIT 0) AS j FROM integers i1 ORDER BY i;
+----
+1	NULL
+2	NULL
+3	NULL
+NULL	NULL
+
+# subquery with WHERE clause that is always FALSE
+query tsv
+SELECT i, (SELECT i FROM integers WHERE 1=0 AND i1.i=i) AS j FROM integers i1 ORDER BY i;
+----
+1	NULL
+2	NULL
+3	NULL
+NULL	NULL
+
+# correlated EXISTS with WHERE clause that is always FALSE
+query tsv
+SELECT i, EXISTS(SELECT i FROM integers WHERE 1=0 AND i1.i=i) AS j FROM integers i1 ORDER BY i;
+----
+1	f
+2	f
+3	f
+NULL	f
+
+# correlated ANY with WHERE clause that is always FALSE
+query tsv
+SELECT i, i=ANY(SELECT i FROM integers WHERE 1=0 AND i1.i=i) AS j FROM integers i1 ORDER BY i;
+----
+1	f
+2	f
+3	f
+NULL	f
+
+# disabled: this test case is inherently non-deterministic, as the inner query has no order by clause
+## subquery with OFFSET
+#query tsv
+#SELECT i, (SELECT i+i1.i FROM integers LIMIT 1 OFFSET 1) AS j FROM integers i1 ORDER BY i;
+#----
+#1	3
+#2	4
+#3	5
+#NULL	NULL
+
+#todo: implement "grouped sort&limit"
+## subquery with ORDER BY
+#query tsv
+#SELECT i, (SELECT i+i1.i FROM integers ORDER BY 1 LIMIT 1 OFFSET 1) AS j FROM integers i1 ORDER BY i;
+#----
+#1	3
+#2	4
+#3	5
+#NULL	NULL
+
+# correlated filter without FROM clause
+query tsv
+SELECT i, (SELECT 42 WHERE i1.i>2) AS j FROM integers i1 ORDER BY i;
+----
+1	NULL
+2	NULL
+3	42
+NULL	NULL
+
+## correlated filter with matching entry on NULL
+query tsv
+SELECT i, (SELECT 42 WHERE i1.i IS NULL) AS j FROM integers i1 ORDER BY i;
+----
+1	NULL
+2	NULL
+3	NULL
+NULL	42
+
+# scalar select with correlation in projection
+query tsv
+SELECT i, (SELECT i+i1.i FROM integers WHERE i=1) AS j FROM integers i1 ORDER BY i;
+----
+1	2
+2	3
+3	4
+NULL	NULL
+
+# scalar select with correlation in filter
+query tsv
+SELECT i, (SELECT i FROM integers WHERE i=i1.i) AS j FROM integers i1 ORDER BY i;
+----
+1	1
+2	2
+3	3
+NULL	NULL
+
+# scalar select with operation in projection
+query tsv
+SELECT i, (SELECT i+1 FROM integers WHERE i=i1.i) AS j FROM integers i1 ORDER BY i;
+----
+1	2
+2	3
+3	4
+NULL	NULL
+
+# correlated scalar select with constant in projection
+query tsv
+SELECT i, (SELECT 42 FROM integers WHERE i=i1.i) AS j FROM integers i1 ORDER BY i;
+----
+1	42
+2	42
+3	42
+NULL	NULL
+
+## Test correlated aggregate subqueries
+
+#todo: implement correctly
+## aggregate with correlation in final projection
+#query tsv
+#SELECT i, (SELECT MIN(i)+i1.i FROM integers) FROM integers i1 ORDER BY i;
+#----
+#1	2
+#2	3
+#3	4
+#NULL	NULL
+
+#todo: implement correctly
+# aggregate with correlation inside aggregation
+#query tsv
+#SELECT i, (SELECT MIN(i+2*i1.i) FROM integers) FROM integers i1 ORDER BY i;
+#----
+#1	3
+#2	5
+#3	7
+#NULL	NULL
+
+#todo: implement correctly
+#query tsv
+#SELECT i, SUM(i), (SELECT SUM(i)+SUM(i1.i) FROM integers) FROM integers i1 GROUP BY i ORDER BY i;
+#----
+#1	1	10
+#2	2	14
+#3	3	18
+#NULL	NULL	NULL
+
+#todo: implement correctly
+#query tsv
+#SELECT i, SUM(i), (SELECT SUM(i)+COUNT(i1.i) FROM integers) FROM integers i1 GROUP BY i ORDER BY i;
+#----
+#1	1	10
+#2	2	10
+#3	3	10
+#NULL	NULL	6
+
+# correlated COUNT(*)
+query tsv
+SELECT i, (SELECT COUNT(*) FROM integers i2 WHERE i2.i>i1.i) FROM integers i1 ORDER BY i;
+----
+1	2
+2	1
+3	0
+NULL	0
+
+# aggregate with correlation inside aggregation
+query tsv
+SELECT i, (SELECT MIN(i+2*i1.i) FROM integers) FROM integers i1 ORDER BY i;
+----
+1	3
+2	5
+3	7
+NULL	NULL
+
+# aggregate ONLY inside subquery
+query tsv rowsort
+SELECT (SELECT SUM(i1.i)) FROM integers i1;
+----
+1
+2
+3
+NULL
+
+# aggregate ONLY inside subquery, with column reference outside of subquery
+# TODO first unsupported
+#query tsv
+#SELECT FIRST(i), (SELECT SUM(i1.i)) FROM integers i1;
+#----
+#1	6
+
+# original comment:
+# this will fail, because "i" is not an aggregate but the SUM(i1.i) turns this query into an aggregate
+# we interpret the nesting differently
+
+query tsv rowsort
+SELECT i, (SELECT SUM(i1.i)) FROM integers i1;
+----
+1	1
+2	2
+3	3
+NULL	NULL
+
+query tsv
+SELECT i+1, (SELECT SUM(i1.i)) FROM integers i1 order by i;
+----
+2	1
+3	2
+4	3
+NULL	NULL
+
+#todo: implement proper error handling
+#statement error
+#SELECT MIN(i), (SELECT SUM(i1.i)) FROM integers i1;
+
+#todo: fix query?
+#query tsv
+#SELECT (SELECT SUM(i1.i)), (SELECT SUM(i1.i)) FROM integers i1 order by i;
+#----
+#1	1
+#2	2
+#3	3
+#NULL	NULL
+
+# subquery inside aggregation
+query tsv
+SELECT SUM(i), SUM((SELECT i FROM integers WHERE i=i1.i)) FROM integers i1;
+----
+6	6
+
+# we (correctly) report an error here
+#query tsv
+#SELECT SUM(i), (SELECT SUM(i) FROM integers WHERE i>SUM(i1.i)) FROM integers i1;
+#----
+#6	NULL
+
+# subquery with aggregation inside aggregation should fail
+# we accept that due to our different handling of innter queries
+query tsv
+SELECT SUM((SELECT SUM(i))) FROM integers;
+----
+6
+
+# aggregate with correlation in filter
+query tsv
+SELECT i, (SELECT MIN(i) FROM integers WHERE i>i1.i) FROM integers i1 ORDER BY i;
+----
+1	2
+2	3
+3	NULL
+NULL	NULL
+
+# aggregate with correlation in both filter and projection
+query tsv
+SELECT i, (SELECT MIN(i)+i1.i FROM integers WHERE i>i1.i) FROM integers i1 ORDER BY i;
+----
+1	3
+2	5
+3	NULL
+NULL	NULL
+
+# aggregate with correlation in GROUP BY
+query tsv
+SELECT i, (SELECT MIN(i) FROM integers GROUP BY i1.i) AS j FROM integers i1 ORDER BY i;
+----
+1	1
+2	1
+3	1
+NULL	1
+
+# aggregate with correlation in HAVING clause
+query tsv
+SELECT i, (SELECT i FROM integers GROUP BY i HAVING i=i1.i) AS j FROM integers i1 ORDER BY i;
+----
+1	1
+2	2
+3	3
+NULL	NULL
+
+# correlated subquery in HAVING
+query tsv
+SELECT i1.i, SUM(i) FROM integers i1 GROUP BY i1.i HAVING SUM(i)=(SELECT MIN(i) FROM integers WHERE i<>i1.i+1) ORDER BY 1;
+----
+1	1
+
+# query error, we cannot access j here
+#query tsv
+#SELECT i % 2 AS j, SUM(i) FROM integers i1 GROUP BY j HAVING SUM(i)=(SELECT SUM(i) FROM integers WHERE i<>j+1) ORDER BY 1;
+#----
+#1	4
+
+# query error, we do not allow that construct
+# aggregate query with non-aggregate subquery without group by
+#query tsv
+#SELECT (SELECT i+SUM(i1.i) FROM integers WHERE i=1 LIMIT 1) FROM integers i1;
+#----
+#7
+
+query tsv
+SELECT (SELECT SUM(i)+SUM(i1.i) FROM integers) FROM integers i1 ORDER BY 1;
+----
+10
+14
+18
+NULL
+
+query tsv
+SELECT (SELECT SUM(i)+SUM((CASE WHEN i IS NOT NULL THEN i*0 ELSE 0 END)+i1.i) FROM integers) FROM integers i1 ORDER BY 1;
+----
+10
+14
+18
+NULL
+
+# aggregate query with non-aggregate subquery with group by
+#query tsv
+#SELECT i, (SELECT i+SUM(i1.i) FROM integers WHERE i=1) FROM integers i1 GROUP BY i ORDER BY i;
+#----
+#1	2
+#2	3
+#3	4
+#NULL	NULL
+
+# subquery inside aggregate
+query tsv
+SELECT SUM((SELECT i+i1.i FROM integers WHERE i=1)) FROM integers i1;
+----
+9
+
+query tsv
+SELECT i, SUM(i1.i), (SELECT SUM(i1.i) FROM integers) AS k FROM integers i1 GROUP BY i ORDER BY i;
+----
+1	1	4
+2	2	8
+3	3	12
+NULL	NULL	NULL
+
+# aggregation of both entries inside subquery
+# aggregate on group inside subquery
+#query tsv
+#SELECT i1.i AS j, (SELECT SUM(j+i) FROM integers) AS k FROM integers i1 GROUP BY j ORDER BY j;
+#----
+#1	9
+#2	12
+#3	15
+#NULL	NULL
+
+query tsv
+SELECT (SELECT SUM(i1.i*i) FROM integers) FROM integers i1 ORDER BY i;
+----
+6
+12
+18
+NULL
+
+query tsv
+SELECT i, (SELECT SUM(i1.i)) AS k, (SELECT SUM(i1.i)) AS l FROM integers i1 GROUP BY i ORDER BY i;
+----
+1	1	1
+2	2	2
+3	3	3
+NULL	NULL	NULL
+
+# refer aggregation inside subquery
+query tsv
+SELECT i, (SELECT SUM(i1.i)*SUM(i) FROM integers) AS k FROM integers i1 GROUP BY i ORDER BY i;
+----
+1	24
+2	48
+3	72
+NULL	NULL
+
+# refer to GROUP BY inside subquery
+#query tsv
+#SELECT i AS j, (SELECT j*SUM(i) FROM integers) AS k FROM integers i1 GROUP BY j ORDER BY j;
+#----
+#1	24
+#2	48
+#3	72
+#NULL	NULL
+
+# refer to GROUP BY without alias but with full name
+#query tsv
+#SELECT i AS j, (SELECT i1.i*SUM(i) FROM integers) AS k FROM integers i1 GROUP BY j ORDER BY j;
+#----
+#1	24
+#2	48
+#3	72
+#NULL	NULL
+
+# perform SUM on subquery
+query tsv
+SELECT i, SUM((SELECT SUM(i)*i1.i FROM integers)) AS k FROM integers i1 GROUP BY i ORDER BY i;
+----
+1	6
+2	12
+3	18
+NULL	NULL
+
+# aggregate subqueries cannot be nested
+#statement error
+#SELECT i, SUM((SELECT SUM(i)*SUM(i1.i) FROM integers)) AS k FROM integers i1 GROUP BY i ORDER BY i;
+
+# aggregation but ONLY inside subquery results in implicit aggregation
+#query tsv
+#SELECT (SELECT SUM(i1.i)) FROM integers i1;
+#----
+#6
+
+#query tsv
+#SELECT FIRST(i), (SELECT SUM(i1.i)) FROM integers i1;
+#----
+#1	6
+
+# aggregate that uses correlated column in aggregation
+query tsv
+SELECT i AS j, (SELECT MIN(i1.i) FROM integers GROUP BY i HAVING i=i1.i) FROM integers i1 GROUP BY i ORDER BY j;
+----
+1	1
+2	2
+3	3
+NULL	NULL
+
+# unsupported ordering by subquery
+# ORDER BY correlated subquery
+#query tsv
+#SELECT i, SUM(i1.i) FROM integers i1 GROUP BY i ORDER BY (SELECT SUM(i1.i) FROM integers);
+#----
+#1	1
+#2	2
+#3	3
+#NULL	NULL
+
+# LIMIT 0 on correlated subquery
+query tsv
+SELECT i, SUM((SELECT SUM(i)*i1.i FROM integers LIMIT 0)) AS k FROM integers i1 GROUP BY i ORDER BY i;
+----
+1	NULL
+2	NULL
+3	NULL
+NULL	NULL
+
+# unsupported for now
+# GROUP BY correlated subquery
+#query tsv
+#SELECT (SELECT i+i1.i FROM integers WHERE i=1) AS k, SUM(i) AS j FROM integers i1 GROUP BY (SELECT i+i1.i FROM integers WHERE i=1) ORDER BY 1;
+#----
+#2	1
+#3	2
+#4	3
+#NULL	NULL
+
+# correlated subquery in WHERE
+query tsv
+SELECT SUM(i) FROM integers i1 WHERE i>(SELECT (i+i1.i)/2 FROM integers WHERE i=1);
+----
+5
+
+# correlated aggregate in WHERE
+query tsv
+SELECT SUM(i) FROM integers i1 WHERE i>(SELECT (SUM(i)+i1.i)/2 FROM integers WHERE i=1);
+----
+5
+
+# todo: fixme
+# use scalar subquery as argument to ALL/ANY
+#query tsv
+#SELECT i, (SELECT MIN(i) FROM integers WHERE i=i1.i) >= ALL(SELECT i FROM integers WHERE i IS NOT NULL) FROM integers i1 ORDER BY i;
+#----
+#1	f
+#2	f
+#3	t
+#NULL	NULL
+
+# todo: fixme
+#query tsv
+#SELECT i, (SELECT MIN(i) FROM integers WHERE i<>i1.i) > ANY(SELECT i FROM integers WHERE i IS NOT NULL) FROM integers i1 ORDER BY i;
+#----
+#1	t
+#2	f
+#3	f
+#NULL	NULL
+
+#todo:fixme
+#query tsv
+#SELECT i, NOT((SELECT MIN(i) FROM integers WHERE i<>i1.i) > ANY(SELECT i FROM integers WHERE i IS NOT NULL)) FROM integers i1 ORDER BY i;
+#----
+#1	f
+#2	t
+#3	t
+#NULL	NULL
+
+## Test correlated EXISTS subqueries
+
+# correlated EXISTS
+query tsv
+SELECT i, EXISTS(SELECT i FROM integers WHERE i1.i>2) FROM integers i1 ORDER BY i;
+----
+1	f
+2	f
+3	t
+NULL	f
+
+query tsv
+SELECT i, EXISTS(SELECT i FROM integers WHERE i=i1.i) FROM integers i1 ORDER BY i;
+----
+1	t
+2	t
+3	t
+NULL	f
+
+query tsv
+SELECT i, EXISTS(SELECT i FROM integers WHERE i IS NULL OR i>i1.i*10) FROM integers i1 ORDER BY i;
+----
+1	t
+2	t
+3	t
+NULL	t
+
+query tsv
+SELECT i, EXISTS(SELECT i FROM integers WHERE i1.i>i OR i1.i IS NULL) FROM integers i1 ORDER BY i;
+----
+1	f
+2	t
+3	t
+NULL	t
+
+query tsv
+SELECT i FROM integers i1 WHERE EXISTS(SELECT i FROM integers WHERE i=i1.i) ORDER BY i;
+----
+1
+2
+3
+
+# correlated EXISTS with aggregations
+query tsv
+SELECT EXISTS(SELECT i FROM integers WHERE i>i1.i) FROM integers i1;
+----
+t
+t
+f
+f
+
+query tsv
+SELECT i, SUM(i) FROM integers i1 GROUP BY i HAVING EXISTS(SELECT i FROM integers WHERE i>i1.i) ORDER BY i;
+----
+1	1
+2	2
+
+query tsv
+SELECT EXISTS(SELECT i+i1.i FROM integers WHERE i=3) FROM integers i1;
+----
+t
+t
+t
+t
+
+query tsv
+SELECT EXISTS(SELECT i+i1.i FROM integers WHERE i=5) FROM integers i1;
+----
+f
+f
+f
+f
+
+# unsupported
+# GROUP BY correlated exists
+#query tsv
+#SELECT EXISTS(SELECT i FROM integers WHERE i=i1.i) AS g, COUNT(*) FROM integers i1 GROUP BY  EXISTS(SELECT i FROM integers WHERE i=i1.i) ORDER BY g;
+#----
+#f	1
+#t	3
+
+# SUM on exists
+query tsv
+SELECT SUM(CASE WHEN EXISTS(SELECT i FROM integers WHERE i=i1.i) THEN 1 ELSE 0 END) FROM integers i1;
+----
+3
+
+## Test correlated ANY/ALL subqueries
+
+# correlated ANY/ALL
+query tsv
+SELECT i=ANY(SELECT i FROM integers WHERE i=i1.i) FROM integers i1 ORDER BY i;
+----
+t
+t
+t
+f
+
+# todo: fixme
+#query tsv
+#SELECT i>ALL(SELECT (i+i1.i-1)/2 FROM integers WHERE i IS NOT NULL) FROM integers i1 ORDER BY i;
+#----
+#f
+#f
+#t
+#NULL
+
+# todo: fixme
+#query tsv
+#SELECT i=ALL(SELECT i FROM integers WHERE i<>i1.i) FROM integers i1 ORDER BY i;
+#----
+#f
+#f
+#f
+#t
+
+# correlated ANY/ALL
+query tsv
+SELECT i FROM integers i1 WHERE i=ANY(SELECT i FROM integers WHERE i=i1.i) ORDER BY i;
+----
+1
+2
+3
+
+#todo: fixme
+#query tsv
+#SELECT i FROM integers i1 WHERE i<>ANY(SELECT i FROM integers WHERE i=i1.i) ORDER BY i;
+#----
+
+query tsv
+SELECT i FROM integers i1 WHERE i=ANY(SELECT i FROM integers WHERE i<>i1.i) ORDER BY i;
+----
+
+query tsv
+SELECT i FROM integers i1 WHERE i>ANY(SELECT i FROM integers WHERE i<>i1.i) ORDER BY i;
+----
+2
+3
+
+#todo:fixme
+#query tsv
+#SELECT i FROM integers i1 WHERE i>ALL(SELECT (i+i1.i-1)/2 FROM integers WHERE i IS NOT NULL) ORDER BY i;
+#----
+#3
+
+# if there is i=ANY() where the subquery returns an EMPTY result set and i=NULL, the result becomes FALSE instead
+# of NULL
+query tsv
+SELECT i=ALL(SELECT i FROM integers WHERE i=i1.i) FROM integers i1 ORDER BY i;
+----
+t
+t
+t
+t
+
+query tsv
+SELECT i=ANY(SELECT i FROM integers WHERE i=i1.i) FROM integers i1 ORDER BY i;
+----
+t
+t
+t
+f
+
+query tsv
+SELECT i<>ALL(SELECT i FROM integers WHERE i=i1.i) FROM integers i1 ORDER BY i;
+----
+f
+f
+f
+t
+
+query tsv
+SELECT i<>ANY(SELECT i FROM integers WHERE i=i1.i) FROM integers i1 ORDER BY i;
+----
+f
+f
+f
+f
+
+query tsv
+SELECT i=ALL(SELECT i FROM integers WHERE i<>i1.i) FROM integers i1 ORDER BY i;
+----
+f
+f
+f
+t
+
+query tsv
+SELECT i=ANY(SELECT i FROM integers WHERE i<>i1.i) FROM integers i1 ORDER BY i;
+----
+f
+f
+f
+f
+
+query tsv
+SELECT i>ANY(SELECT i FROM integers WHERE i<>i1.i) FROM integers i1 ORDER BY i;
+----
+f
+t
+t
+f
+
+#todo:fixme (null semantic during unnesting)
+#query tsv
+#SELECT i>ALL(SELECT (i+i1.i-1)/2 FROM integers) FROM integers i1 ORDER BY i;
+#----
+#f
+#f
+#NULL
+#NULL
+
+#todo:fixme (null semantic during unnesting)
+#query tsv
+#SELECT i>ALL(SELECT (i+i1.i-1)/2 FROM integers WHERE i IS NOT NULL) FROM integers i1 ORDER BY i;
+#----
+#f
+#f
+#t
+#NULL
+
+#todo:fixme (null semantic during unnesting)
+#query tsv
+#SELECT i=ANY(SELECT i FROM integers WHERE i=i1.i OR i IS NULL) FROM integers i1 ORDER BY i;
+#----
+#t
+#t
+#t
+#NULL
+
+#todo:fixme (null semantic during unnesting)
+#query tsv
+#SELECT i=ALL(SELECT i FROM integers WHERE i=i1.i OR i IS NULL) FROM integers i1 ORDER BY i;
+#----
+#NULL
+#NULL
+#NULL
+#NULL
+
+# correlated ANY/ALL with aggregations
+#query tsv
+#SELECT MIN(i)>ANY(SELECT i FROM integers WHERE i>MIN(i1.i)) FROM integers i1;
+#----
+#f
+
+#query tsv
+#SELECT SUM(i)>ANY(SELECT i FROM integers WHERE i>MIN(i1.i)) FROM integers i1;
+#----
+#t
+
+# correlated subquery with correlated any
+#query tsv
+#SELECT (SELECT SUM(i)+SUM(i1.i) FROM integers)>ANY(SELECT i FROM integers WHERE i>MIN(i1.i)) FROM integers i1;
+#----
+#t
+
+# zero results for all
+query tsv
+SELECT i=ANY(SELECT i FROM integers WHERE i=i1.i AND i>10) FROM integers i1 ORDER BY i;
+----
+f
+f
+f
+f
+
+## Test for COUNT(*) and SUM(i) IS NULL in subqueries
+
+# COUNT(*) and SUM(i) IS NULL aggregates
+query tsv
+SELECT i, (SELECT i FROM integers i2 WHERE i=(SELECT SUM(i) FROM integers i2 WHERE i2.i>i1.i)) FROM integers i1 ORDER BY 1;
+----
+1	NULL
+2	3
+3	NULL
+NULL	NULL
+
+#todo:fixme
+#query tsv
+#SELECT i, (SELECT SUM(i) IS NULL FROM integers i2 WHERE i2.i>i1.i) FROM integers i1 ORDER BY i;
+#----
+#1	f
+#2	f
+#3	t
+#NULL	t
+
+query tsv
+SELECT i, (SELECT COUNT(*) FROM integers i2 WHERE i2.i>i1.i) FROM integers i1 ORDER BY i;
+----
+1	2
+2	1
+3	0
+NULL	0
+
+query tsv
+SELECT i, (SELECT COUNT(i) FROM integers i2 WHERE i2.i>i1.i OR i2.i IS NULL) FROM integers i1 ORDER BY i;
+----
+1	2
+2	1
+3	0
+NULL	0
+
+query tsv
+SELECT i, (SELECT COUNT(i) FROM integers i2 WHERE i2.i>i1.i) FROM integers i1 ORDER BY i;
+----
+1	2
+2	1
+3	0
+NULL	0
+
+
+#query tsv
+#SELECT i, (SELECT AVG(i) FROM integers i2 WHERE i2.i>i1.i) FROM integers i1 ORDER BY i;
+#----
+#1	2.5
+#2	3
+#3	NULL
+#NULL	NULL
+
+query tsv
+SELECT i, (SELECT COUNT(*) FROM integers i2 WHERE i2.i>i1.i OR i2.i IS NULL) FROM integers i1 ORDER BY i;
+----
+1	3
+2	2
+3	1
+NULL	1
+
+
+query tsv
+SELECT i, (SELECT COUNT(*) FROM integers i2 WHERE i2.i>i1.i OR (i1.i IS NULL AND i2.i IS NULL)) FROM integers i1 ORDER BY i;
+----
+1	2
+2	1
+3	0
+NULL	1
+
+query tsv
+SELECT i FROM integers i1 WHERE (SELECT COUNT(*) FROM integers i2 WHERE i2.i>i1.i)=0 ORDER BY i;
+----
+3
+NULL
+
+query tsv
+SELECT i, (SELECT i FROM integers i2 WHERE i-2=(SELECT COUNT(*) FROM integers i2 WHERE i2.i>i1.i)) FROM integers i1 ORDER BY 1;
+----
+1	NULL
+2	3
+3	2
+NULL	2
+
+query tsv
+SELECT i, (SELECT COUNT(*) FROM integers i2 WHERE i2.i>i1.i GROUP BY i1.i) FROM integers i1 ORDER BY i;
+----
+1	2
+2	1
+3	NULL
+NULL	NULL
+
+query tsv
+SELECT i, (SELECT CASE WHEN (SELECT COUNT(*) FROM integers i2 WHERE i2.i>i1.i)=0 THEN 1 ELSE 0 END) FROM integers i1 ORDER BY i;
+----
+1	0
+2	0
+3	1
+NULL	1
+
+query tsv
+SELECT i, (SELECT COUNT(*) FROM integers i2 WHERE i2.i>i1.i) FROM integers i1 ORDER BY i;
+----
+1	2
+2	1
+3	0
+NULL	0
+
+## Test multiple correlated columns and strings
+
+# multiple correlated columns and strings
+statement ok
+CREATE TABLE test (a INTEGER, b INTEGER, str VARCHAR);
+
+statement ok
+INSERT INTO test VALUES (11, 1, 'a'), (12, 2, 'b'), (13, 3, 'c');
+
+statement ok
+CREATE TABLE test2 (a INTEGER, c INTEGER, str2 VARCHAR);
+
+statement ok
+INSERT INTO test2 VALUES (11, 1, 'a'), (12, 1, 'b'), (13, 4, 'b');
+
+#query tsv
+#SELECT a, SUM(a), (SELECT SUM(a)+SUM(t1.b) FROM test) FROM test t1 GROUP BY a ORDER BY a;
+#----
+#11	11	37
+#12	12	38
+#13	13	39
+
+# scalar query with multiple correlated columns
+query tsv
+SELECT (SELECT test.a+test.b+SUM(test2.a) FROM test2 WHERE str=str2) FROM test ORDER BY 1;
+----
+23
+39
+NULL
+
+# exists with multiple correlated columns
+query tsv
+SELECT * FROM test WHERE EXISTS(SELECT * FROM test2 WHERE test.a=test2.a AND test.b<>test2.c);
+----
+12	2	b
+13	3	c
+
+# ANY with multiple correlated columns
+query tsv
+SELECT a, a>=ANY(SELECT test2.a+c-b FROM test2 WHERE c>=b AND str=str2) FROM test ORDER BY 1;
+----
+11	t
+12	f
+13	f
+
+# string comparison
+query tsv rowsort
+SELECT str, str=ANY(SELECT str2 FROM test2) FROM test
+----
+a	t
+b	t
+c	f
+
+query tsv rowsort
+SELECT str, str=ANY(SELECT str2 FROM test2 WHERE test.a<>test2.a) FROM test;
+----
+a	f
+b	t
+c	f
+
+## Test complex correlated subqueries
+
+# correlated expression in subquery
+query tsv
+SELECT i, (SELECT s1.i FROM (SELECT * FROM integers WHERE i=i1.i) s1) AS j FROM integers i1 ORDER BY i;
+----
+1	1
+2	2
+3	3
+NULL	NULL
+
+#todo:fixme
+# join on two subqueries that both have a correlated expression in them
+#query tsv
+#SELECT i, (SELECT s1.i FROM (SELECT i FROM integers WHERE i=i1.i) s1 INNER JOIN (SELECT i FROM integers WHERE i=4-i1.i) s2 ON s1.i>s2.i) AS j FROM integers i1 ORDER BY i;
+#----
+#1	NULL
+#2	NULL
+#3	3
+#NULL	NULL
+
+# implicit join with correlated expression in filter
+query tsv
+SELECT i, (SELECT s1.i FROM integers s1, integers s2 WHERE s1.i=s2.i AND s1.i=4-i1.i) AS j FROM integers i1 ORDER BY i;
+----
+1	3
+2	2
+3	1
+NULL	NULL
+
+# join with a correlated expression in the join condition
+query tsv
+SELECT i, (SELECT s1.i FROM integers s1 INNER JOIN integers s2 ON s1.i=s2.i AND s1.i=4-i1.i) AS j FROM integers i1 ORDER BY i;
+----
+1	3
+2	2
+3	1
+NULL	NULL
+
+# inner join on correlated subquery
+query tsv
+SELECT * FROM integers s1 INNER JOIN integers s2 ON (SELECT 2*SUM(i)*s1.i FROM integers)=(SELECT SUM(i)*s2.i FROM integers) ORDER BY s1.i;
+----
+1	2
+
+# inner join on non-equality subquery
+query tsv
+SELECT * FROM integers s1 INNER JOIN integers s2 ON (SELECT s1.i=s2.i) ORDER BY s1.i;
+----
+1	1
+2	2
+3	3
+
+query tsv
+SELECT * FROM integers s1 INNER JOIN integers s2 ON (SELECT s1.i=i FROM integers WHERE s2.i=i) ORDER BY s1.i;
+----
+1	1
+2	2
+3	3
+
+#todo:fixme
+# left outer join on correlated subquery
+#query tsv
+#SELECT * FROM integers s1 LEFT OUTER JOIN integers s2 ON (SELECT 2*SUM(i)*s1.i FROM integers)=(SELECT SUM(i)*s2.i FROM integers) ORDER BY s1.i;
+#----
+#1	2
+#2	NULL
+#3	NULL
+#NULL	NULL
+
+#todo:fixme
+# left outer join in correlated expression
+#query tsv
+#SELECT i, (SELECT SUM(s1.i) FROM integers s1 LEFT OUTER JOIN integers s2 ON s1.i=s2.i OR s1.i=i1.i-1) AS j FROM integers i1 ORDER BY i;
+#----
+#1	6
+#2	9
+#3	12
+#NULL	6
+
+#todo:fixme
+# full outer join: both sqlite and postgres actually cannot run this one
+#query tsv
+#SELECT i, (SELECT SUM(s1.i) FROM integers s1 FULL OUTER JOIN integers s2 ON s1.i=s2.i OR s1.i=i1.i-1) AS j FROM integers i1 ORDER BY i;
+#----
+#1	6
+#2	9
+#3	12
+#NULL	6
+
+#todo: window support
+# correlated expression inside window function not supported
+#query tsv
+#SELECT i, (SELECT row_number() OVER (ORDER BY i)) FROM integers i1 ORDER BY i;
+#----
+#1	1
+#2	1
+#3	1
+#NULL	1
+
+#todo: implement set operations
+# union with correlated expression
+#query tsv
+#SELECT i, (SELECT i FROM integers WHERE i=i1.i UNION SELECT i FROM integers WHERE i=i1.i) AS j FROM integers i1 ORDER BY i;
+#----
+#1	1
+#2	2
+#3	3
+#NULL	NULL
+
+#todo: implement set operations
+# except with correlated expression
+#query tsv
+#SELECT i, (SELECT i FROM integers WHERE i IS NOT NULL EXCEPT SELECT i FROM integers WHERE i<>i1.i) AS j FROM integers i1 WHERE i IS NOT NULL ORDER BY i;
+#----
+#1	1
+#2	2
+#3	3
+
+#todo: implement set operations
+# intersect with correlated expression
+#query tsv
+#SELECT i, (SELECT i FROM integers WHERE i=i1.i INTERSECT SELECT i FROM integers WHERE i=i1.i) AS j FROM integers i1 ORDER BY i;
+#----
+#1	1
+#2	2
+#3	3
+#NULL	NULL
+
+#todo: implement set operations
+# multiple setops
+#query tsv
+#SELECT i, (SELECT i FROM integers WHERE i=i1.i UNION SELECT i FROM integers WHERE i<>i1.i EXCEPT SELECT i FROM integers WHERE i<>i1.i) AS j FROM integers i1 ORDER BY i;
+#----
+#1	1
+#2	2
+#3	3
+#NULL	NULL
+
+# uncorrelated query inside correlated query
+query tsv
+SELECT i, (SELECT (SELECT SUM(i) FROM integers)+42+i1.i) AS j FROM integers i1 ORDER BY i;
+----
+1	49
+2	50
+3	51
+NULL	NULL
+
+## Test window functions in correlated subqueries
+
+# TODO window support
+## window functions in correlated subquery
+#query tsv
+#SELECT i, (SELECT row_number() OVER (ORDER BY i) FROM integers WHERE i1.i=i) FROM integers i1 ORDER BY i;
+#----
+#1	1
+#2	1
+#3	1
+#NULL	NULL
+#
+#query tsv
+#SELECT i1.i, (SELECT rank() OVER (ORDER BY i) FROM integers WHERE i1.i=i) FROM integers i1, integers i2 ORDER BY i1.i;
+#----
+#1	1
+#1	1
+#1	1
+#1	1
+#2	1
+#2	1
+#2	1
+#2	1
+#3	1
+#3	1
+#3	1
+#3	1
+#NULL	NULL
+#NULL	NULL
+#NULL	NULL
+#NULL	NULL
+#
+#query tsv
+#SELECT i1.i, (SELECT row_number() OVER (ORDER BY i) FROM integers WHERE i1.i=i) FROM integers i1, integers i2 ORDER BY i1.i;
+#----
+#1	1
+#1	1
+#1	1
+#1	1
+#2	1
+#2	1
+#2	1
+#2	1
+#3	1
+#3	1
+#3	1
+#3	1
+#NULL	NULL
+#NULL	NULL
+#NULL	NULL
+#NULL	NULL
+#
+#query tsv
+#SELECT i, (SELECT SUM(i) OVER (ORDER BY i) FROM integers WHERE i1.i=i) FROM integers i1 ORDER BY i;
+#----
+#1	1
+#2	2
+#3	3
+#NULL	NULL
+#
+#query tsv
+#SELECT i, (SELECT SUM(s1.i) OVER (ORDER BY s1.i) FROM integers s1, integers s2 WHERE i1.i=s1.i LIMIT 1) FROM integers i1 ORDER BY i;
+#----
+#1	4
+#2	8
+#3	12
+
+## Test nested correlated subqueries
+
+# nested correlated queries
+query tsv
+SELECT i, (SELECT (SELECT 42+i1.i)+42+i1.i) AS j FROM integers i1 ORDER BY i;
+----
+1	86
+2	88
+3	90
+NULL	NULL
+
+query tsv
+SELECT i, (SELECT (SELECT (SELECT (SELECT 42+i1.i)+i1.i)+42+i1.i)+42+i1.i) AS j FROM integers i1 ORDER BY i;
+----
+1	130
+2	134
+3	138
+NULL	NULL
+
+
+# more than one row in scalar subquery due to the different binding of sum
+#query tsv
+#SELECT i, (SELECT (SELECT i1.i+SUM(i2.i)) FROM integers i2) AS j FROM integers i1 ORDER BY i;
+#----
+#1	7
+#2	8
+#3	9
+
+# correlated query inside uncorrelated query
+query tsv
+SELECT i, (SELECT (SELECT (SELECT (SELECT i1.i+i1.i+i1.i+i1.i+i1.i)))) AS j FROM integers i1 ORDER BY i;
+----
+1	5
+2	10
+3	15
+NULL	NULL
+
+query tsv
+SELECT i, (SELECT SUM(i)+(SELECT 42+i1.i) FROM integers) AS j FROM integers i1 ORDER BY i;
+----
+1	49
+2	50
+3	51
+NULL	NULL
+
+# more than one row in scalar subquery due to different binding of sum
+#query tsv
+#SELECT i, (SELECT ((SELECT ((SELECT ((SELECT SUM(i)+SUM(i4.i)+SUM(i3.i)+SUM(i2.i)+SUM(i1.i) FROM integers i5)) FROM integers i4)) FROM integers i3)) FROM integers i2) AS j FROM integers i1 GROUP BY i ORDER BY i;
+#----
+#1	25
+#2	26
+#3	27
+#NULL	NULL
+
+#todo:fixme
+#query tsv
+#SELECT i, (SELECT (SELECT (SELECT (SELECT i1.i+i1.i+i1.i+i1.i+i1.i+i2.i) FROM integers i2 WHERE i2.i=i1.i))) AS j FROM integers i1 ORDER BY i;
+#----
+#1	6
+#2	12
+#3	18
+#NULL	NULL
+
+# explicit join on subquery
+query tsv
+SELECT i, (SELECT SUM(s1.i) FROM integers s1 INNER JOIN integers s2 ON (SELECT i1.i+s1.i)=(SELECT i1.i+s2.i)) AS j FROM integers i1 ORDER BY i;
+----
+1	6
+2	6
+3	6
+NULL	NULL
+
+# more then one row in scalar subquery due to different binding of sum
+## nested aggregate queries
+#query tsv
+#SELECT i, SUM(i), (SELECT (SELECT SUM(i)+SUM(i1.i)+SUM(i2.i) FROM integers) FROM integers i2) FROM integers i1 GROUP BY i ORDER BY i;
+#----
+#1	1	13
+#2	2	14
+#3	3	15
+#NULL	NULL	NULL
+
+# correlated ANY inside subquery
+query tsv
+SELECT i, (SELECT SUM(ss1.i) FROM (SELECT i FROM integers s1 WHERE i>ANY(SELECT i FROM integers WHERE i<>s1.i)) ss1) AS j FROM integers i1 ORDER BY i;
+----
+1	5
+2	5
+3	5
+NULL	5
+
+query tsv
+SELECT i, (SELECT SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE i=i1.i AND i=ANY(SELECT i FROM integers WHERE i=s1.i)) ss2) AS j FROM integers i1 ORDER BY i;
+----
+1	1
+2	2
+3	3
+NULL	NULL
+
+#todo: fix
+## left outer join on correlated subquery within subquery
+## not supported yet: left outer join on JoinSide::BOTH
+#query tsv
+#SELECT i, (SELECT SUM(s1.i) FROM integers s1 LEFT OUTER JOIN integers s2 ON (SELECT i1.i+s1.i)=(SELECT i1.i+s2.i)) AS j FROM integers i1 ORDER BY i;
+#----
+#1	6
+#2	6
+#3	6
+#NULL	6
+
+#todo: fix
+#query tsv
+#SELECT i, (SELECT SUM(ss1.i)+SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE i>ANY(SELECT i FROM integers WHERE i<>s1.i)) ss1 LEFT OUTER JOIN (SELECT i FROM integers s1 WHERE i=ANY(SELECT i FROM integers WHERE i=s1.i)) ss2 ON ss1.i=ss2.i) AS j FROM integers i1 ORDER BY i;
+#----
+#1	10
+#2	10
+#3	10
+#NULL	10
+
+# left outer join with correlation on LHS
+query tsv
+SELECT i, (SELECT SUM(s1.i) FROM (SELECT i FROM integers WHERE i=i1.i) s1 LEFT OUTER JOIN integers s2 ON s1.i=s2.i) AS j FROM integers i1 ORDER BY i;
+----
+1	1
+2	2
+3	3
+NULL	NULL
+
+query tsv
+SELECT i, (SELECT SUM(s1.i) FROM (SELECT i FROM integers WHERE i<>i1.i) s1 LEFT OUTER JOIN integers s2 ON s1.i=s2.i) AS j FROM integers i1 ORDER BY i;
+----
+1	5
+2	4
+3	3
+NULL	NULL
+
+#todo:fixme
+## left outer join with correlation on RHS
+#query tsv
+#SELECT i, (SELECT SUM(s2.i) FROM integers s1 LEFT OUTER JOIN (SELECT i FROM integers WHERE i=i1.i) s2 ON s1.i=s2.i) AS j FROM integers i1 ORDER BY i;
+#----
+#1	1
+#2	2
+#3	3
+#NULL	NULL
+
+#todo:test
+#query tsv
+#SELECT i, (SELECT SUM(s2.i) FROM integers s1 LEFT OUTER JOIN (SELECT i FROM integers WHERE i<>i1.i) s2 ON s1.i=s2.i) AS j FROM integers i1 ORDER BY i;
+#----
+#1	5
+#2	4
+#3	3
+#NULL	NULL
+
+query tsv
+SELECT i, (SELECT SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE CASE WHEN (i=i1.i AND i=ANY(SELECT i FROM integers WHERE i=s1.i)) THEN true ELSE false END) ss2) AS j FROM integers i1 ORDER BY i;
+----
+1	1
+2	2
+3	3
+NULL	NULL
+
+query tsv
+SELECT i, (SELECT SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE i=i1.i AND i=ANY(SELECT i FROM integers WHERE i=s1.i)) ss2) AS j FROM integers i1 ORDER BY i;
+----
+1	1
+2	2
+3	3
+NULL	NULL
+
+query tsv
+SELECT i, (SELECT SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE i=i1.i) ss2) AS j FROM integers i1 ORDER BY i;
+----
+1	1
+2	2
+3	3
+NULL	NULL
+
+query tsv
+SELECT i, (SELECT SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE i=ANY(SELECT i FROM integers WHERE i=s1.i)) ss2) AS j FROM integers i1 ORDER BY i;
+----
+1	6
+2	6
+3	6
+NULL	6
+
+query tsv
+SELECT i, (SELECT i=ANY(SELECT i FROM integers WHERE i=s1.i) FROM integers s1 WHERE i=i1.i) AS j FROM integers i1 ORDER BY i;
+----
+1	t
+2	t
+3	t
+NULL	NULL
+
+query tsv
+SELECT i, (SELECT SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE i=i1.i OR i=ANY(SELECT i FROM integers WHERE i=s1.i)) ss2) AS j FROM integers i1 ORDER BY i;
+----
+1	6
+2	6
+3	6
+NULL	6
+
+query tsv
+SELECT i, (SELECT SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE CASE WHEN (i=i1.i AND i=ANY(SELECT i FROM integers WHERE i=s1.i)) THEN true ELSE false END) ss2) AS j FROM integers i1 ORDER BY i;
+----
+1	1
+2	2
+3	3
+NULL	NULL
+
+query tsv
+SELECT i, (SELECT SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE i=i1.i AND EXISTS(SELECT i FROM integers WHERE i=s1.i)) ss2) AS j FROM integers i1 ORDER BY i;
+----
+1	1
+2	2
+3	3
+NULL	NULL
+
+# complex left outer join with correlation on RHS
+query tsv
+SELECT i, (SELECT SUM(ss1.i) FROM (SELECT i FROM integers s1 WHERE i>ANY(SELECT i FROM integers WHERE i<>s1.i)) ss1) AS j FROM integers i1 ORDER BY i;
+----
+1	5
+2	5
+3	5
+NULL	5
+
+#todo:fixme
+#query tsv
+#SELECT i, (SELECT SUM(ss1.i) FROM (SELECT i FROM integers s1 WHERE i>ANY(SELECT i FROM integers WHERE i<>s1.i)) ss1 LEFT OUTER JOIN (SELECT i FROM integers s1 WHERE i=i1.i AND i=ANY(SELECT i FROM integers WHERE i=s1.i)) ss2 ON ss1.i=ss2.i) AS j FROM integers i1 ORDER BY i;
+#----
+#1	5
+#2	5
+#3	5
+#NULL	5
+
+#todo: fixme
+#query tsv
+#SELECT i, (SELECT SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE i>ANY(SELECT i FROM integers WHERE i<>s1.i)) ss1 LEFT OUTER JOIN (SELECT i FROM integers s1 WHERE i=i1.i AND i=ANY(SELECT i FROM integers WHERE i=s1.i)) ss2 ON ss1.i=ss2.i) AS j FROM integers i1 ORDER BY i;
+#----
+#1	NULL
+#2	2
+#3	3
+#NULL	NULL
+
+#todo:fixme
+#query tsv
+#SELECT i, (SELECT SUM(ss1.i)+SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE i>ANY(SELECT i FROM integers WHERE i<>s1.i)) ss1 LEFT OUTER JOIN (SELECT i FROM integers s1 WHERE i=i1.i AND i=ANY(SELECT i FROM integers WHERE i=s1.i)) ss2 ON ss1.i=ss2.i) AS j FROM integers i1 ORDER BY i;
+#----
+#1	NULL
+#2	7
+#3	8
+#NULL	NULL
+
+#todo:fixme
+## complex left outer join with correlation on LHS
+#query tsv
+#SELECT i, (SELECT SUM(ss1.i)+SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE i=i1.i AND i>ANY(SELECT i FROM integers WHERE i<>s1.i)) ss1 LEFT OUTER JOIN (SELECT i FROM integers s1 WHERE i=ANY(SELECT i FROM integers WHERE i=s1.i)) ss2 ON ss1.i=ss2.i) AS j FROM integers i1 ORDER BY i;
+#----
+#1	NULL
+#2	4
+#3	6
+#NULL	NULL
+
+#todo:fixme
+# complex left outer join with correlation on both sides
+#query tsv
+#SELECT i, (SELECT SUM(ss1.i)+SUM(ss2.i) FROM (SELECT i FROM integers s1 WHERE i=i1.i AND i>ANY(SELECT i FROM integers WHERE i<>s1.i)) ss1 LEFT OUTER JOIN (SELECT i FROM integers s1 WHERE i<>i1.i OR i=ANY(SELECT i FROM integers WHERE i=s1.i)) ss2 ON ss1.i=ss2.i) AS j FROM integers i1 ORDER BY i;
+#----
+#1	NULL
+#2	4
+#3	6
+#NULL	NULL
+
+#todo:fixme
+## test correlated queries with correlated expressions inside FROM clause
+## subquery
+#query tsv
+#SELECT i, (SELECT * FROM (SELECT (SELECT 42+i1.i)) s1) AS j FROM integers i1 ORDER BY i;
+#----
+#1	43
+#2	44
+#3	45
+#NULL	NULL
+#
+## cross product
+#query tsv
+#SELECT i, (SELECT s1.k+s2.k FROM (SELECT (SELECT 42+i1.i) AS k) s1, (SELECT (SELECT 42+i1.i) AS k) s2) AS j FROM integers i1 ORDER BY i;
+#----
+#1	86
+#2	88
+#3	90
+#NULL	NULL
+#
+## join
+#query tsv
+#SELECT i, (SELECT s1.k+s2.k FROM (SELECT (SELECT 42+i1.i) AS k) s1 LEFT OUTER JOIN (SELECT (SELECT 42+i1.i) AS k) s2 ON s1.k=s2.k) AS j FROM integers i1 ORDER BY i;
+#----
+#1	86
+#2	88
+#3	90
+#NULL	NULL
+#
+## IN list inside correlated subquery
+#query tsv
+#SELECT i, (SELECT i1.i IN (1, 2, 3, 4, 5, 6, 7, 8)) AS j FROM integers i1 ORDER BY i;
+#----
+#1	t
+#2	t
+#3	t
+#NULL	NULL
+
+## Test varchar correlated subqueries
+
+# varchar tests
+statement ok
+CREATE TABLE strings(v VARCHAR);
+
+statement ok
+INSERT INTO strings VALUES ('hello'), ('world'), (NULL);
+
+
+## ANY
+#todo:fixme
+#query tsv
+#SELECT NULL IN (SELECT * FROM strings WHERE v=s1.v) FROM strings s1 ORDER BY v;
+#----
+#NULL
+#NULL
+#f
+
+query tsv
+SELECT 3::text IN (SELECT * FROM strings WHERE v=s1.v) FROM strings s1 ORDER BY v;
+----
+f
+f
+f
+
+query tsv
+SELECT 'hello' IN (SELECT * FROM strings WHERE v=s1.v) FROM strings s1 ORDER BY v;
+----
+t
+f
+f
+
+query tsv
+SELECT 'bla' IN (SELECT * FROM strings WHERE v=s1.v) FROM strings s1 ORDER BY v;
+----
+f
+f
+f
+
+#todo:fixme
+#query tsv
+#SELECT 'hello' IN (SELECT * FROM strings WHERE v=s1.v or v IS NULL) FROM strings s1 ORDER BY v;
+#----
+#t
+#NULL
+#NULL
+
+#todo:fixme
+#query tsv
+#SELECT 'bla' IN (SELECT * FROM strings WHERE v=s1.v or v IS NULL) FROM strings s1 ORDER BY v;
+#----
+#NULL
+#NULL
+#NULL
+
+# EXISTS
+query tsv
+SELECT * FROM strings WHERE EXISTS(SELECT NULL, v) ORDER BY v;
+----
+hello
+world
+NULL
+
+query tsv
+SELECT * FROM strings s1 WHERE EXISTS(SELECT v FROM strings WHERE v=s1.v OR v IS NULL) ORDER BY v;
+----
+hello
+world
+NULL
+
+query tsv
+SELECT * FROM strings s1 WHERE EXISTS(SELECT v FROM strings WHERE v=s1.v) ORDER BY v;
+----
+hello
+world
+
+# scalar query
+query tsv
+SELECT (SELECT v FROM strings WHERE v=s1.v) FROM strings s1 ORDER BY v;
+----
+hello
+world
+NULL
+
+query tsv
+SELECT (SELECT v FROM strings WHERE v=s1.v OR (v='hello' AND s1.v IS NULL)) FROM strings s1 ORDER BY v;
+----
+hello
+world
+hello
+
+## Test correlated subqueries based on TPC-DS
+
+statement ok
+CREATE TABLE item(i_manufact INTEGER);
+
+statement ok
+SELECT * FROM item i1 WHERE (SELECT count(*) AS item_cnt FROM item WHERE (i_manufact = i1.i_manufact AND i_manufact=3) OR (i_manufact = i1.i_manufact AND i_manufact=3)) > 0 ORDER BY 1 LIMIT 100;
+
+#todo: we also have an error here, handle it
+# where predicate must be a boolean
+#statement error 42804
+#SELECT * FROM item i1 WHERE (SELECT count(*) AS item_cnt FROM item WHERE (i_manufact = i1.i_manufact AND i_manufact=3) OR (i_manufact = i1.i_manufact AND i_manufact=3)) ORDER BY 1 LIMIT 100;
+
+## Test case from GDB
+statement ok
+SELECT * FROM (VALUES (1),(2),(3)) s(matrnr) WHERE NOT EXISTS (SELECT * FROM (VALUES (1),(2),(3)) v(vorlnr) WHERE NOT EXISTS (SELECT * FROM (VALUES (1,1), (2,2), (3,3)) h(matrnr, vorlnr) WHERE h.matrnr = s.matrnr AND h.vorlnr = v.vorlnr));
+
+statement ok
+create table professoren (persnr integer primary key, name varchar(30) not null,rang varchar(3) not null, raum integer not null);
+
+statement ok
+create table studenten (matrnr integer primary key, name varchar(30) not null, semester integer not null);
+
+statement ok
+create table vorlesungen (vorlnr integer primary key, titel varchar(30) not null, sws integer not null, gelesenvon integer not null);
+
+statement ok
+create table voraussetzen (vorgaenger integer not null, nachfolger integer not null);
+
+statement ok
+create table hoeren (matrnr integer not null, vorlnr integer not null);
+
+statement ok
+create table assistenten (persnr integer primary key, name varchar(30) not null, fachgebiet varchar(30) not null, boss integer not null);
+
+statement ok
+create table pruefen (matrnr integer not null, vorlnr integer not null, persnr integer not null, note decimal(2,1) not null);
+
+statement ok
+create table studentengf (matrnr integer not null primary key, name varchar(30) not null, semester integer not null, geschlecht char not null, fakultaet varchar(30) not null);
+
+statement ok
+create table professorenf (persnr integer not null primary key, name varchar(30) not null, rang char(2) not null, raum integer not null, fakultaet varchar(30) not null);
+
+## Test case from GDB
+#todo:fixme
+#statement ok
+#SELECT name FROM hoeren, Studenten WHERE Studenten.MatrNr = hoeren.MatrNr AND hoeren.VorlNr = (SELECT VorlNr FROM hoeren, Studenten WHERE Studenten.MatrNr = hoeren.MatrNr AND Studenten.name ='Feuerbach' AND hoeren.VorlNr = '5022');
+
+statement ok
+SELECT * from StudentenGF s where not exists(select * from Professorenf p, Vorlesungen v where v.gelesenVon = p.PersNr and p.fakultaet = s.Fakultaet or not exists(select * from hoeren h where h.VorlNr = v.VorlNr and h.MatrNr = s.MatrNr));
+
+## Test case for anti/mark joins
+
+#todo:fixme
+#query tsv
+#select t1.gv, t3.v from (values (4), (0)) t1(gv), (select * from (values (4), (0)) t2(v) where not exists (select gv where gv = t2.v)) t3 order by gv;
+#----
+#0	4
+#4	0
