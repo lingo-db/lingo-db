@@ -79,6 +79,9 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
                auto freeRight = right.getFreeColumns();
                auto pushDownLeft = left.getFreeColumns().intersects(availableD);
                auto pushDownRight = right.getFreeColumns().intersects(availableD);
+               if (!pushDownLeft && !pushDownRight && mlir::cast<Operator>(join.getOperation()).getFreeColumns().intersects(availableD)) {
+                  pushDownLeft = true;
+               }
                bool renameRight = true;
                if (!mlir::isa<InnerJoinOp>(join.getOperation()) && !mlir::isa<FullOuterJoinOp>(join.getOperation())) {
                   if (pushDownRight) {
@@ -249,7 +252,9 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          if (!dependentLeft.empty() && !dependentRight.empty()) {
             return;
          }
-         if (trySimpleUnnesting(binaryOperator.getOperation())) return;
+         if (trySimpleUnnesting(binaryOperator.getOperation())) {
+            if (!mlir::relalg::detail::isDependentJoin(binaryOperator.getOperation())) return;
+         }
          mlir::relalg::ColumnSet dependentAttributes = dependentLeft;
          dependentAttributes.insert(dependentRight);
          bool leftProvides = dependentLeft.empty();
