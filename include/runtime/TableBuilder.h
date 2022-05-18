@@ -54,6 +54,9 @@ class TableBuilder {
       throw std::runtime_error("unknown type");
    }
    static std::shared_ptr<arrow::Schema> parseSchema(std::string str) {
+      if (str.empty()) {
+         return std::make_shared<arrow::Schema>(std::vector<std::shared_ptr<arrow::Field>>{});
+      }
       std::vector<std::shared_ptr<arrow::Field>> fields;
 
       str.erase(std::remove_if(str.begin(), str.end(), [](char c) { return c == ' '; }), str.end());

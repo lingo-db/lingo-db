@@ -61,6 +61,9 @@ uint64_t get_column_id(std::shared_ptr<arrow::Table> table, std::string columnNa
 runtime::DataSourceIteration* runtime::DataSourceIteration::start(ExecutionContext* executionContext, runtime::VarLen32 description) {
    nlohmann::json descr = nlohmann::json::parse(description.str());
    std::string tableName = descr["table"];
+   if (!executionContext->db) {
+      throw std::runtime_error("no database attached");
+   }
    auto table = (executionContext)->db->getTable(tableName);
    if (!table) {
       throw std::runtime_error("could not find table");
