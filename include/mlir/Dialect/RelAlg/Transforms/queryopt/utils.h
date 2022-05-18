@@ -35,7 +35,7 @@ class NodeSet {
       return res;
    }
    [[nodiscard]] bool isSubsetOf(const NodeSet& s) const {
-      return (storage & s.storage) == storage;
+      return !storage.test(s.storage);
    }
    [[nodiscard]] bool intersects(const NodeSet& rhs) const {
       return (storage & rhs.storage).any();
@@ -89,6 +89,9 @@ class NodeSet {
       result |= rhs;
       return result;
    }
+   [[nodiscard]] bool test(size_t pos) const {
+      return storage.test(pos);
+   }
    [[nodiscard]] bool valid() const {
       return !storage.empty();
    }
@@ -138,7 +141,7 @@ class Plan {
    void setDescription(const std::string& descr);
    const std::string& getDescription() const;
 
-   static std::shared_ptr<Plan> joinPlans(NodeSet leftProblem, NodeSet rightProblem, std::shared_ptr<Plan> leftPlan, std::shared_ptr<Plan> rightPlan, QueryGraph& queryPlan,NodeSet& combinedProblem);
+   static std::shared_ptr<Plan> joinPlans(NodeSet leftProblem, NodeSet rightProblem, std::shared_ptr<Plan> leftPlan, std::shared_ptr<Plan> rightPlan, QueryGraph& queryPlan, NodeSet& combinedProblem);
 };
 } // namespace mlir::relalg
 #endif // MLIR_DIALECT_RELALG_TRANSFORMS_QUERYOPT_UTILS_H

@@ -10,6 +10,7 @@ class QueryGraph {
    public:
    size_t numNodes;
    size_t pseudoNodes = 0;
+   NodeSet normalNodesMask;
 
    struct SelectionEdge {
       size_t id;
@@ -103,6 +104,7 @@ class QueryGraph {
    }
    size_t addPseudoNode() {
       pseudoNodes++;
+      normalNodesMask = NodeSet::fillUntil(numNodes, numNodes - 1 - pseudoNodes);
       return numNodes - pseudoNodes;
    }
    static std::optional<std::pair<const mlir::relalg::Column*, const mlir::relalg::Column*>> analyzePredicate(PredicateOperator selection) {
@@ -199,12 +201,11 @@ class QueryGraph {
       }
    }
    bool containsLonelyPseudo(const NodeSet& s1) {
-      auto mask = NodeSet::fillUntil(numNodes, numNodes - 1 - pseudoNodes);
-      if ((s1 & mask) == s1) { //fast lane: no pseudo nodes present
+      if (s1.isSubsetOf(normalNodesMask)) { //fast lane: no pseudo nodes present
          return false;
       }
-      for (auto pseudo : (s1 & ~mask)) {
-         if ((s1 & NodeSet::single(numNodes, pseudoNodeOwner[pseudo])).any()) {
+      for (auto pseudo : (s1 & ~normalNodesMask)) {
+         if (s1.test(pseudoNodeOwner[pseudo])){
             //pseudo but is not lonley
          } else {
             return true;
@@ -213,7 +214,6 @@ class QueryGraph {
       return false;
    }
    bool isConnected(const NodeSet& s1, const NodeSet& s2) {
-      bool found = false;
       if (containsLonelyPseudo(s1) || containsLonelyPseudo(s2)) {
          return false;
       }
@@ -225,14 +225,14 @@ class QueryGraph {
          Node& n = nodes[v];
          for (auto edgeid : n.edges) {
             auto& edge = joins[edgeid];
-            found |= edge.connects(s1, s2);
+            if (edge.connects(s1, s2)) return true;
          }
          for (auto edgeid : n.selections) {
             auto& edge = selections[edgeid];
-            found |= edge.connects(s1, s2);
+            if (edge.connects(s1, s2)) return true;
          }
       }
-      return found;
+      return false;
    }
    [[nodiscard]] const std::vector<Node>& getNodes() const {
       return nodes;
