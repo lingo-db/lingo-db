@@ -50,7 +50,11 @@ void mlir::relalg::QueryGraphBuilder::populateQueryGraph(Operator op) {
       if (ses.count() == 1) {
          //if selection is only based on one node -> add selection to node
          auto nodeId = ses.findFirst();
-         qg.nodes[nodeId].additionalPredicates.push_back(op);
+         if (nodeId < qg.nodes.size()) {
+            qg.nodes[nodeId].additionalPredicates.push_back(op);
+         } else {
+            qg.addSelectionEdge(ses, op);
+         }
       } else {
          qg.addSelectionEdge(ses, op);
       }
