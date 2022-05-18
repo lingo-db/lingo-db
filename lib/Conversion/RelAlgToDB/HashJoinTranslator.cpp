@@ -86,7 +86,7 @@ void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilde
    auto* ctxt = builder.getContext();
    auto scope = context.createScope();
    if (child == builderChild) {
-      auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp->getRegion(0).front(), leftKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context);
+      auto inlinedKeys = mlir::relalg::HashJoinUtils::inlineKeys(&joinOp->getRegion(0).front(), leftKeys, rightKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context);
       mlir::Value packedKey = builder.create<mlir::util::PackOp>(loc, inlinedKeys);
       auto const0 = builder.create<mlir::arith::ConstantOp>(loc, builder.getIntegerType(64), builder.getI64IntegerAttr(0));
       mlir::Value packedValues = orderedValues.pack(context, builder, loc, impl->markable ? std::vector<Value>{const0} : std::vector<Value>());
@@ -103,7 +103,7 @@ void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilde
    } else if (child == this->children[1].get()) {
       mlir::TupleType entryAndValuePtrType = mlir::TupleType::get(ctxt, TypeRange{entryType, util::RefType::get(ctxt, valTupleType)});
       Type iteratorType = impl->markable ? entryAndValuePtrType : entryType;
-      auto packedKey = builder.create<mlir::util::PackOp>(loc, mlir::relalg::HashJoinUtils::inlineKeys(&joinOp->getRegion(0).front(), rightKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context));
+      auto packedKey = builder.create<mlir::util::PackOp>(loc, mlir::relalg::HashJoinUtils::inlineKeys(&joinOp->getRegion(0).front(), rightKeys, leftKeys, builder.getInsertionBlock(), builder.getInsertionPoint(), context));
       mlir::Type htIterable = mlir::dsa::GenericIterableType::get(ctxt, iteratorType, impl->markable ? "join_ht_mod_iterator" : "join_ht_iterator");
       impl->beforeLookup(context, builder);
       mlir::Value hash = builder.create<mlir::db::Hash>(loc, builder.getIndexType(), packedKey);

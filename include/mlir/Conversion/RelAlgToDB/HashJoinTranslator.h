@@ -73,7 +73,7 @@ class HashJoinUtils {
          return false;
       }
    }
-   static std::vector<mlir::Value> inlineKeys(mlir::Block* block, mlir::relalg::ColumnSet keyAttributes, mlir::Block* newBlock, mlir::Block::iterator insertionPoint, mlir::relalg::TranslatorContext& context) {
+   static std::vector<mlir::Value> inlineKeys(mlir::Block* block, mlir::relalg::ColumnSet keyAttributes,mlir::relalg::ColumnSet otherAttributes, mlir::Block* newBlock, mlir::Block::iterator insertionPoint, mlir::relalg::TranslatorContext& context) {
       llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> required;
       mlir::BlockAndValueMapping mapping;
       std::vector<mlir::Value> keys;
@@ -88,9 +88,9 @@ class HashJoinUtils {
                auto leftAttributes = required[cmpOp.getLeft()];
                auto rightAttributes = required[cmpOp.getRight()];
                mlir::Value keyVal;
-               if (leftAttributes.isSubsetOf(keyAttributes)) {
+               if (leftAttributes.isSubsetOf(keyAttributes)&&rightAttributes.isSubsetOf(otherAttributes)) {
                   keyVal = cmpOp.getLeft();
-               } else if (rightAttributes.isSubsetOf(keyAttributes)) {
+               } else if (rightAttributes.isSubsetOf(keyAttributes)&&leftAttributes.isSubsetOf(otherAttributes)) {
                   keyVal = cmpOp.getRight();
                }
                if (keyVal) {
