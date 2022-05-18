@@ -159,10 +159,11 @@ struct SQLTypeInference {
       if (isNullable && !t.isa<mlir::db::NullableType>()) {
          t = mlir::db::NullableType::get(builder.getContext(), t);
       }
+      bool onlyTargetIsNullable = !isNullable && t.isa<mlir::db::NullableType>();
       if (v.getType() == t) { return v; }
       if (auto* defOp = v.getDefiningOp()) {
          if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(defOp)) {
-            if(!t.isa<mlir::db::NullableType>()) {
+            if (!t.isa<mlir::db::NullableType>()) {
                constOp.getResult().setType(t);
                return constOp;
             }
@@ -172,10 +173,15 @@ struct SQLTypeInference {
             return nullOp;
          }
       }
-      if(v.getType()==getBaseType(t)){
-         return builder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(),t,v);
+      if (v.getType() == getBaseType(t)) {
+         return builder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(), t, v);
       }
-      return builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), t, v);
+      if (onlyTargetIsNullable) {
+         mlir::Value casted = builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), getBaseType(t), v);
+         return builder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(), t, casted);
+      } else {
+         return builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), t, v);
+      }
    }
    static std::vector<mlir::Value> toCommonBaseTypes(mlir::OpBuilder& builder, mlir::ValueRange values) {
       auto commonType = getCommonBaseType(values.getTypes());
@@ -271,6 +277,12 @@ struct Parser {
       }
       const std::vector<std::pair<std::string, const mlir::relalg::Column*>>& getAllDefinedColumns() {
          return definedAttributes.top();
+      }
+      void removeFromDefinedColumns(const mlir::relalg::Column* col) {
+         auto& currDefinedColumns = definedAttributes.top();
+         auto position = std::find_if(currDefinedColumns.begin(), currDefinedColumns.end(), [&](auto el) { return el.second == col; });
+         if (position != currDefinedColumns.end()) // == myVector.end() means the element was not found
+            currDefinedColumns.erase(position);
       }
    };
    std::string sql;
@@ -491,13 +503,7 @@ struct Parser {
             attrDef.getColumn().type = tableType;
 
             createdCols.push_back(attrDef);
-            mlir::Value casted;
-            if (getBaseType(currentType) == getBaseType(tableType)) {
-               assert(!currentType.isa<mlir::db::NullableType>() && tableType.isa<mlir::db::NullableType>());
-               casted = mapBuilder.create<mlir::db::AsNullableOp>(mapBuilder.getUnknownLoc(), tableType, expr);
-            } else {
-               casted = mapBuilder.create<mlir::db::CastOp>(mapBuilder.getUnknownLoc(), tableType, expr);
-            }
+            mlir::Value casted = SQLTypeInference::toType(mapBuilder, expr, tableType);
 
             createdValues.push_back(casted);
             insertedCols[insertColNames[i]] = attrManager.createRef(&attrDef.getColumn());
@@ -636,6 +642,8 @@ struct Parser {
       mlir::Type res = llvm::StringSwitch<mlir::Type>(str)
                           .Case("date", mlir::db::DateType::get(context, mlir::db::DateUnitAttr::day))
                           .Case("interval", mlir::db::IntervalType::get(context, (typeMod & 8) ? mlir::db::IntervalUnitAttr::daytime : mlir::db::IntervalUnitAttr::months))
+                          .Case("bool", mlir::IntegerType::get(context,1))
+                          .Case("text",mlir::db::StringType::get(context))
                           .Default(mlir::Type());
       assert(res);
       return res;
@@ -728,6 +736,11 @@ struct Parser {
             }
             return node;
             break;
+         }
+         case T_NullTest: {
+            auto* nullTest = reinterpret_cast<NullTest*>(node);
+            nullTest->arg_ = (Expr*) replaceWithFakeNodes((Node*) nullTest->arg_, replaceState);
+            return node;
          }
 
          default: return node;
@@ -988,9 +1001,13 @@ struct Parser {
          case T_SubLink: {
             auto* subLink = reinterpret_cast<SubLink*>(node);
             //expr = FuncCallTransform(parse_result,,context);
-            auto subQueryScope = context.createResolverScope();
-            auto subQueryDefineScope = context.createDefineScope();
-            auto [subQueryTree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(subLink->subselect_), context, subQueryScope);
+            std::pair<mlir::Value, TargetInfo> subQueryRes;
+            {
+               auto subQueryScope = context.createResolverScope();
+               auto subQueryDefineScope = context.createDefineScope();
+               subQueryRes = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(subLink->subselect_), context, subQueryScope);
+            }
+            auto [subQueryTree, targetInfo] = subQueryRes;
             switch (subLink->sub_link_type_) {
                case EXPR_SUBLINK: {
                   assert(!targetInfo.namedResults.empty());
@@ -1013,11 +1030,26 @@ struct Parser {
                   return builder.create<mlir::relalg::ExistsOp>(loc, builder.getI1Type(), subQueryTree);
                case ANY_SUBLINK: {
                   assert(targetInfo.namedResults.size() == 1);
-                  //:mlir::relalg::SetSemanticAttr set_semantic, ::mlir::Value rel, ::mlir::ArrayAttr attrs
-                  mlir::Attribute attribute = attrManager.createRef(targetInfo.namedResults[0].second);
-                  subQueryTree = builder.create<mlir::relalg::ProjectionOp>(loc, mlir::relalg::SetSemantic::all, subQueryTree, builder.getArrayAttr({attribute}));
-                  mlir::Value val = translateExpression(builder, subLink->testexpr_, context);
-                  return builder.create<mlir::relalg::InOp>(loc, builder.getI1Type(), val, subQueryTree);
+                  mlir::relalg::ColumnRefAttr attribute = attrManager.createRef(targetInfo.namedResults[0].second);
+                  auto operatorName = subLink->oper_name_ ? listToStringVec(subLink->oper_name_).at(0) : "=";
+                  auto operatorType = stringToExpressionType(operatorName);
+                  auto* block = new mlir::Block;
+                  mlir::OpBuilder predBuilder(builder.getContext());
+                  block->addArgument(mlir::relalg::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+                  auto tupleScope = context.createTupleScope();
+                  context.setCurrentTuple(block->getArgument(0));
+
+                  predBuilder.setInsertionPointToStart(block);
+                  mlir::Value expr = translateExpression(predBuilder, subLink->testexpr_, context);
+                  mlir::Value colVal = predBuilder.create<mlir::relalg::GetColumnOp>(loc, attribute.getColumn().type, attribute, block->getArgument(0));
+                  mlir::Value pred = translateBinaryExpression(predBuilder, operatorType, expr, colVal);
+                  predBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), pred);
+
+                  auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), subQueryTree);
+                  sel.predicate().push_back(block);
+                  subQueryTree = sel.result();
+
+                  return builder.create<mlir::relalg::ExistsOp>(loc, builder.getI1Type(), subQueryTree);
                }
                case ALL_SUBLINK: {
                   assert(targetInfo.namedResults.size() == 1);
@@ -1240,12 +1272,12 @@ struct Parser {
                         auto [scopename, name] = attrManager.getName(x.second);
 
                         auto attrDef = attrManager.createDef(outerjoinName, name, builder.getArrayAttr({attrManager.createRef(x.second)}));
-                        attrDef.getColumn().type = mlir::db::NullableType::get(builder.getContext(), x.second->type);
+                        attrDef.getColumn().type = x.second->type.isa<mlir::db::NullableType>() ? x.second->type : mlir::db::NullableType::get(builder.getContext(), x.second->type);
                         outerJoinMapping.push_back(attrDef);
-                        attrDef.dump();
                         remapped.insert({x.second, &attrDef.getColumn()});
                      }
                      context.mapAttribute(scope, x.first, remapped[x.second]);
+                     context.removeFromDefinedColumns(x.second);
                   }
                }
                mlir::ArrayAttr mapping = builder.getArrayAttr(outerJoinMapping);
@@ -1362,7 +1394,9 @@ struct Parser {
 
             if (aggrFuncName == "count*") {
                expr = aggrBuilder.create<mlir::relalg::CountRowsOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
-               context.useZeroInsteadNull.insert(&attrDef.getColumn());
+               if (groupByAttrs.empty()) {
+                  context.useZeroInsteadNull.insert(&attrDef.getColumn());
+               }
             } else {
                auto aggrFunc = llvm::StringSwitch<mlir::relalg::AggrFunc>(aggrFuncName)
                                   .Case("sum", mlir::relalg::AggrFunc::sum)
@@ -1372,7 +1406,9 @@ struct Parser {
                                   .Case("count", mlir::relalg::AggrFunc::count)
                                   .Default(mlir::relalg::AggrFunc::count);
                if (aggrFunc == mlir::relalg::AggrFunc::count) {
-                  context.useZeroInsteadNull.insert(&attrDef.getColumn());
+                  if (groupByAttrs.empty()) {
+                     context.useZeroInsteadNull.insert(&attrDef.getColumn());
+                  }
                }
                mlir::relalg::ColumnRefAttr refAttr;
                switch (attrNode->type) {
@@ -1524,7 +1560,7 @@ struct Parser {
             // FROM
             mlir::Value tree = translateFrom(builder, stmt, context, scope);
             if (!tree) {
-               auto dummyAttr = attrManager.createDef("dummyScope", "dummyName");
+               auto dummyAttr = attrManager.createDef(attrManager.getUniqueScope("dummyScope"), "dummyName");
                dummyAttr.getColumn().type = builder.getI32Type();
                std::vector<mlir::Attribute> columns{dummyAttr};
                std::vector<mlir::Attribute> rows{builder.getArrayAttr({builder.getI64IntegerAttr(0)})};
