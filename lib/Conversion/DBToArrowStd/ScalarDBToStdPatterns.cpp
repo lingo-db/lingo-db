@@ -13,8 +13,8 @@ class NotOpLowering : public OpConversionPattern<mlir::db::NotOp> {
    public:
    using OpConversionPattern<mlir::db::NotOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::db::NotOp notOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      Value trueValue = rewriter.create<arith::ConstantOp>(notOp->getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-      rewriter.replaceOpWithNewOp<arith::XOrIOp>(notOp, adaptor.val(), trueValue);
+      Value falseValue = rewriter.create<arith::ConstantOp>(notOp->getLoc(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+      rewriter.replaceOpWithNewOp<arith::CmpIOp>(notOp,mlir::arith::CmpIPredicate::eq, adaptor.val(), falseValue);
       return success();
    }
 };

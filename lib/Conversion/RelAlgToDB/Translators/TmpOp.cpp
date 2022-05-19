@@ -42,29 +42,17 @@ class TmpTranslator : public mlir::relalg::Translator {
       materialize = !context.materializedTmp.count(tmpOp.getOperation());
       producedCount++;
       if (materialize) {
-         auto parentPipeline = context.pipelineManager.getCurrentPipeline();
-         auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(),context.getNextPipelineId());
-         context.pipelineManager.setCurrentPipeline(p);
-         context.pipelineManager.addPipeline(p);
          auto tupleType = attributes.getTupleType(builder.getContext());
          std::unordered_map<const mlir::relalg::Column*, size_t> attributePos;
-         auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
-            return std::vector<mlir::Value>({builder.create<mlir::dsa::CreateDS>(tmpOp.getLoc(), mlir::dsa::VectorType::get(builder.getContext(), tupleType))});
-         });
-         vector = p->addDependency(res[0]);
+         vector=builder.create<mlir::dsa::CreateDS>(tmpOp.getLoc(), mlir::dsa::VectorType::get(builder.getContext(), tupleType));
 
-         children[0]->produce(context, p->getBuilder());
-         p->finishMainFunction({vector});
-         auto vectorRes = p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
-            return std::vector<mlir::Value>{args[0]};
-         });
-         context.materializedTmp[tmpOp.getOperation()] = {vectorRes[0], attributes.getAttrs()};
-         context.pipelineManager.setCurrentPipeline(parentPipeline);
+         children[0]->produce(context, builder);
+         context.materializedTmp[tmpOp.getOperation()] = {vector, attributes.getAttrs()};
       }
       auto [vector, attributes_] = context.materializedTmp[tmpOp.getOperation()];
       auto attributes=mlir::relalg::OrderedAttributes::fromVec(attributes_);
       auto tupleType = attributes.getTupleType(builder.getContext());
-      auto forOp2 = builder.create<mlir::dsa::ForOp>(tmpOp->getLoc(), mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(vector), mlir::Value(), mlir::ValueRange{});
+      auto forOp2 = builder.create<mlir::dsa::ForOp>(tmpOp->getLoc(), mlir::TypeRange{}, vector, mlir::Value(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(tupleType, tmpOp->getLoc());
       forOp2.getBodyRegion().push_back(block2);

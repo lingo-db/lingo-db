@@ -279,8 +279,8 @@ class WhileIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
       Value condition = iterator->iteratorValid(builder, arg1);
       if (flag) {
          Value flagValue = builder.create<mlir::dsa::GetFlag>(loc, builder.getI1Type(), flag);
-         Value trueValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 1));
-         Value shouldContinue = builder.create<arith::XOrIOp>(loc, flagValue, trueValue);
+         Value falseValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 0));
+         Value shouldContinue = builder.create<arith::CmpIOp>(loc,mlir::arith::CmpIPredicate::eq, flagValue, falseValue);
          Value anded = builder.create<mlir::arith::AndIOp>(loc, builder.getI1Type(), ValueRange({condition, shouldContinue}));
          condition = anded;
       }
@@ -374,8 +374,8 @@ class ForIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
       Value condition = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, arg1, upper);
       if (flag) {
          Value flagValue = builder.create<mlir::dsa::GetFlag>(loc, builder.getI1Type(), flag);
-         Value trueValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 1));
-         Value shouldContinue = builder.create<arith::XOrIOp>(loc, flagValue, trueValue);
+         Value falseValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 0));
+         Value shouldContinue = builder.create<arith::CmpIOp>(loc,mlir::arith::CmpIPredicate::eq, flagValue, falseValue);
          Value anded = builder.create<mlir::arith::AndIOp>(loc, builder.getI1Type(), ValueRange({condition, shouldContinue}));
          condition = anded;
       }

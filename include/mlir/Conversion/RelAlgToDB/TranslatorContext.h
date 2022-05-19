@@ -30,12 +30,8 @@ class TranslatorContext {
       return AttributeResolverScope(symbolTable);
    }
    std::unordered_map<size_t, mlir::Value> builders;
-   PipelineManager pipelineManager;
-   size_t pipelineId=0;
-   size_t getNextPipelineId(){
-      return pipelineId++;
-   }
-   std::unordered_map<mlir::Operation*, std::pair<PipelineDependency, std::vector<const mlir::relalg::Column*>>> materializedTmp;
+
+   std::unordered_map<mlir::Operation*, std::pair<mlir::Value, std::vector<const mlir::relalg::Column*>>> materializedTmp;
 };
 } // end namespace relalg
 } // end namespace mlir

@@ -101,37 +101,24 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
       key = mlir::relalg::OrderedAttributes::fromRefArr(projectionOp.cols());
       valTupleType = mlir::TupleType::get(builder.getContext(), {});
       auto keyTupleType = key.getTupleType(builder.getContext());
-      auto parentPipeline = context.pipelineManager.getCurrentPipeline();
-      auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(),context.getNextPipelineId());
-      context.pipelineManager.setCurrentPipeline(p);
-      context.pipelineManager.addPipeline(p);
-      auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
-         mlir::Value emptyTuple = builder.create<mlir::util::UndefOp>(projectionOp.getLoc(), mlir::TupleType::get(builder.getContext()));
-         auto aggrBuilder = builder.create<mlir::dsa::CreateDS>(projectionOp.getLoc(), mlir::dsa::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), emptyTuple);
-         return std::vector<mlir::Value>({aggrBuilder});
-      });
-      aggrHt = p->addDependency(res[0]);
-      entryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, valTupleType});
-      children[0]->produce(context, p->getBuilder());
-      p->finishMainFunction({aggrHt});
-      auto hashtableRes = p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
-         return std::vector<mlir::Value>{args[0]};
-      });
-      context.pipelineManager.setCurrentPipeline(parentPipeline);
+      mlir::Value emptyTuple = builder.create<mlir::util::UndefOp>(projectionOp.getLoc(), mlir::TupleType::get(builder.getContext()));
+      aggrHt = builder.create<mlir::dsa::CreateDS>(projectionOp.getLoc(), mlir::dsa::AggregationHashtableType::get(builder.getContext(), keyTupleType, valTupleType), emptyTuple);
 
-      {
-         auto forOp2 = builder.create<mlir::dsa::ForOp>(projectionOp->getLoc(), mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]), mlir::Value(), mlir::ValueRange{});
-         mlir::Block* block2 = new mlir::Block;
-         block2->addArgument(entryType, projectionOp->getLoc());
-         forOp2.getBodyRegion().push_back(block2);
-         mlir::OpBuilder builder2(forOp2.getBodyRegion());
-         auto unpacked = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), forOp2.getInductionVar()).getResults();
-         auto unpackedKey = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), unpacked[0]).getResults();
-         key.setValuesForColumns(context, scope, unpackedKey);
-         consumer->consume(this, builder2, context);
-         builder2.create<mlir::dsa::YieldOp>(projectionOp->getLoc(), mlir::ValueRange{});
-      }
-      builder.create<mlir::dsa::FreeOp>(projectionOp->getLoc(), context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]));
+      entryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, valTupleType});
+      children[0]->produce(context, builder);
+
+      auto forOp2 = builder.create<mlir::dsa::ForOp>(projectionOp->getLoc(), mlir::TypeRange{}, aggrHt, mlir::Value(), mlir::ValueRange{});
+      mlir::Block* block2 = new mlir::Block;
+      block2->addArgument(entryType, projectionOp->getLoc());
+      forOp2.getBodyRegion().push_back(block2);
+      mlir::OpBuilder builder2(forOp2.getBodyRegion());
+      auto unpacked = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), forOp2.getInductionVar()).getResults();
+      auto unpackedKey = builder2.create<mlir::util::UnPackOp>(projectionOp->getLoc(), unpacked[0]).getResults();
+      key.setValuesForColumns(context, scope, unpackedKey);
+      consumer->consume(this, builder2, context);
+      builder2.create<mlir::dsa::YieldOp>(projectionOp->getLoc(), mlir::ValueRange{});
+
+      builder.create<mlir::dsa::FreeOp>(projectionOp->getLoc(), aggrHt);
    }
    virtual void done() override {
    }

@@ -342,34 +342,18 @@ class AggregationTranslator : public mlir::relalg::Translator {
    }
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-      auto parentPipeline = context.pipelineManager.getCurrentPipeline();
-      auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(), context.getNextPipelineId());
-      context.pipelineManager.setCurrentPipeline(p);
-      context.pipelineManager.addPipeline(p);
-      auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
          analyze(builder);
          auto aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
          auto initTuple = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), aggrTupleType, defaultValues);
          keyTupleType = key.getTupleType(builder.getContext());
          valTupleType = val.getTupleType(builder.getContext());
-         auto aggrBuilder = builder.create<mlir::dsa::CreateDS>(aggregationOp.getLoc(), mlir::dsa::AggregationHashtableType::get(builder.getContext(), keyTupleType, aggrTupleType), initTuple);
-         return std::vector<mlir::Value>({aggrBuilder});
-      });
-      auto aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
-
-      aggrHt = p->addDependency(res[0]);
+         aggrHt = builder.create<mlir::dsa::CreateDS>(aggregationOp.getLoc(), mlir::dsa::AggregationHashtableType::get(builder.getContext(), keyTupleType, aggrTupleType), initTuple);
 
       auto iterEntryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, aggrTupleType});
-      children[0]->produce(context, p->getBuilder());
-      p->finishMainFunction({aggrHt});
-      auto hashtableRes = p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
-         return std::vector<mlir::Value>{args[0]};
-      });
+      children[0]->produce(context, builder);
 
-      context.pipelineManager.setCurrentPipeline(parentPipeline);
-      auto hashtable = context.pipelineManager.getCurrentPipeline()->addDependency(hashtableRes[0]);
       {
-         auto forOp2 = builder.create<mlir::dsa::ForOp>(aggregationOp->getLoc(), mlir::TypeRange{}, hashtable, mlir::Value(), mlir::ValueRange{});
+         auto forOp2 = builder.create<mlir::dsa::ForOp>(aggregationOp->getLoc(), mlir::TypeRange{}, aggrHt, mlir::Value(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(iterEntryType, aggregationOp->getLoc());
          forOp2.getBodyRegion().push_back(block2);
@@ -389,7 +373,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
          consumer->consume(this, builder2, context);
          builder2.create<mlir::dsa::YieldOp>(aggregationOp->getLoc(), mlir::ValueRange{});
       }
-      builder.create<mlir::dsa::FreeOp>(aggregationOp->getLoc(), hashtable);
+      builder.create<mlir::dsa::FreeOp>(aggregationOp->getLoc(), aggrHt);
    }
    virtual void done() override {
    }

@@ -71,30 +71,18 @@ class MaterializeTranslator : public mlir::relalg::Translator {
       }
       builder.create<mlir::dsa::NextRow>(materializeOp->getLoc(), tableBuilder);
    }
-   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& bX) override {
-      auto p = std::make_shared<mlir::relalg::Pipeline>(bX.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(),context.getNextPipelineId());
-      context.pipelineManager.setCurrentPipeline(p);
-      context.pipelineManager.addPipeline(p);
-      auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
-         std::string descr = "";
-         auto tupleType = orderedAttributes.getTupleType(builder.getContext());
-         for (size_t i = 0; i < materializeOp.columns().size(); i++) {
-            if (!descr.empty()) {
-               descr += ";";
-            }
-            descr += materializeOp.columns()[i].cast<mlir::StringAttr>().str() + ":" + arrowDescrFromType(getBaseType(tupleType.getType(i)));
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
+      std::string descr = "";
+      auto tupleType = orderedAttributes.getTupleType(builder.getContext());
+      for (size_t i = 0; i < materializeOp.columns().size(); i++) {
+         if (!descr.empty()) {
+            descr += ";";
          }
-         return std::vector<mlir::Value>({builder.create<mlir::dsa::CreateDS>(materializeOp.getLoc(), mlir::dsa::TableBuilderType::get(builder.getContext(), orderedAttributes.getTupleType(builder.getContext())), builder.getStringAttr(descr))});
-      });
-      tableBuilder = p->addDependency(res[0]);
-      children[0]->produce(context, p->getBuilder());
-      p->finishMainFunction({tableBuilder});
-      p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
-         mlir::Value table = builder.create<mlir::dsa::Finalize>(materializeOp.getLoc(), mlir::dsa::TableType::get(builder.getContext()), args[0]).res();
-         return std::vector<mlir::Value>{table};
-      });
-      context.pipelineManager.execute(bX);
-      table = context.pipelineManager.getResultsFromPipeline(p)[0];
+         descr += materializeOp.columns()[i].cast<mlir::StringAttr>().str() + ":" + arrowDescrFromType(getBaseType(tupleType.getType(i)));
+      }
+      tableBuilder = builder.create<mlir::dsa::CreateDS>(materializeOp.getLoc(), mlir::dsa::TableBuilderType::get(builder.getContext(), orderedAttributes.getTupleType(builder.getContext())), builder.getStringAttr(descr));
+      children[0]->produce(context, builder);
+      table = builder.create<mlir::dsa::Finalize>(materializeOp.getLoc(), mlir::dsa::TableType::get(builder.getContext()), tableBuilder).res();
    }
    virtual void done() override {
       materializeOp.replaceAllUsesWith(table);

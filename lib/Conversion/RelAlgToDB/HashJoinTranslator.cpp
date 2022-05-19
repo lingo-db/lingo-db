@@ -29,26 +29,12 @@ void HashJoinTranslator::setInfo(mlir::relalg::Translator* consumer, mlir::relal
    entryType = mlir::TupleType::get(op.getContext(), {keyTupleType, valTupleType});
 }
 void HashJoinTranslator::produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) {
-   auto parentPipeline = context.pipelineManager.getCurrentPipeline();
-   auto p = std::make_shared<mlir::relalg::Pipeline>(builder.getBlock()->getParentOp()->getParentOfType<mlir::ModuleOp>(), context.getNextPipelineId());
-   context.pipelineManager.setCurrentPipeline(p);
-   context.pipelineManager.addPipeline(p);
-   auto res = p->addInitFn([&](mlir::OpBuilder& builder) {
-      auto joinHtBuilder = builder.create<mlir::dsa::CreateDS>(loc, mlir::dsa::JoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType));
-      return std::vector<mlir::Value>({joinHtBuilder});
-   });
-   joinHashtable = p->addDependency(res[0]);
-   children[0]->produce(context, p->getBuilder());
-   p->finishMainFunction({joinHashtable});
-   auto hashtableRes = p->addFinalizeFn([&](mlir::OpBuilder& builder, mlir::ValueRange args) {
-      builder.create<mlir::dsa::Finalize>(loc, args[0]);
-      return std::vector<mlir::Value>{args[0]};
-   });
-   context.pipelineManager.setCurrentPipeline(parentPipeline);
-   joinHt = hashtableRes[0];
+   joinHashtable = builder.create<mlir::dsa::CreateDS>(loc, mlir::dsa::JoinHashtableType::get(builder.getContext(), keyTupleType, valTupleType));
+   children[0]->produce(context, builder);
+   builder.create<mlir::dsa::Finalize>(loc, joinHashtable);
    children[1]->produce(context, builder);
    impl->after(context, builder);
-   builder.create<mlir::dsa::FreeOp>(loc, context.pipelineManager.getCurrentPipeline()->addDependency(joinHt));
+   builder.create<mlir::dsa::FreeOp>(loc, joinHashtable);
 }
 
 void HashJoinTranslator::unpackValues(TranslatorContext::AttributeResolverScope& scope, OpBuilder& builder, Value packed, TranslatorContext& context, Value& marker) {
@@ -69,7 +55,7 @@ void HashJoinTranslator::unpackKeys(TranslatorContext::AttributeResolverScope& s
 void HashJoinTranslator::scanHT(TranslatorContext& context, mlir::OpBuilder& builder) {
    auto scope = context.createScope();
    {
-      auto forOp2 = builder.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, context.pipelineManager.getCurrentPipeline()->addDependency(joinHt), mlir::Value(), mlir::ValueRange{});
+      auto forOp2 = builder.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{},joinHashtable, mlir::Value(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
       block2->addArgument(entryType, loc);
       forOp2.getBodyRegion().push_back(block2);
@@ -107,7 +93,7 @@ void HashJoinTranslator::consume(mlir::relalg::Translator* child, mlir::OpBuilde
       mlir::Type htIterable = mlir::dsa::GenericIterableType::get(ctxt, iteratorType, impl->markable ? "join_ht_mod_iterator" : "join_ht_iterator");
       impl->beforeLookup(context, builder);
       mlir::Value hash = builder.create<mlir::db::Hash>(loc, builder.getIndexType(), packedKey);
-      auto matches = builder.create<mlir::dsa::Lookup>(loc, htIterable, context.pipelineManager.getCurrentPipeline()->addDependency(joinHt), hash);
+      auto matches = builder.create<mlir::dsa::Lookup>(loc, htIterable, joinHashtable, hash);
       {
          auto forOp2 = builder.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, matches, impl->getFlag(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;

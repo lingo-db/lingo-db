@@ -44,14 +44,10 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       auto tupleType = mlir::TupleType::get(builder.getContext(), types);
       auto recordBatch = mlir::dsa::RecordBatchType::get(builder.getContext(), tupleType);
       mlir::Type chunkIterable = mlir::dsa::GenericIterableType::get(builder.getContext(), recordBatch, "table_chunk_iterator");
-      auto currPipeline = context.pipelineManager.getCurrentPipeline();
 
-      auto initRes = currPipeline->addInitFn([&](mlir::OpBuilder& builder) {
-         auto chunkIterator = builder.create<mlir::dsa::ScanSource>(baseTableOp->getLoc(), chunkIterable, builder.getStringAttr(scanDescription));
+      auto chunkIterator = builder.create<mlir::dsa::ScanSource>(baseTableOp->getLoc(), chunkIterable, builder.getStringAttr(scanDescription));
 
-         return std::vector<Value>({chunkIterator});
-      });
-      auto forOp = builder.create<mlir::dsa::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, currPipeline->addDependency(initRes[0]), mlir::Value(), mlir::ValueRange{});
+      auto forOp = builder.create<mlir::dsa::ForOp>(baseTableOp->getLoc(), mlir::TypeRange{}, chunkIterator, mlir::Value(), mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
       block->addArgument(recordBatch, baseTableOp->getLoc());
       forOp.getBodyRegion().push_back(block);
@@ -71,7 +67,7 @@ class BaseTableTranslator : public mlir::relalg::Translator {
          auto atOp = builder2.create<mlir::dsa::At>(baseTableOp->getLoc(), types, forOp2.getInductionVar(), i++);
          if (attr->type.isa<mlir::db::NullableType>()) {
             mlir::Value isNull = builder2.create<mlir::db::NotOp>(baseTableOp->getLoc(), atOp.valid());
-            mlir::Value val=builder2.create<mlir::db::AsNullableOp>(baseTableOp->getLoc(), attr->type, atOp.val(), isNull);
+            mlir::Value val = builder2.create<mlir::db::AsNullableOp>(baseTableOp->getLoc(), attr->type, atOp.val(), isNull);
             context.setValueForAttribute(scope, attr, val);
          } else {
             context.setValueForAttribute(scope, attr, atOp.val());
