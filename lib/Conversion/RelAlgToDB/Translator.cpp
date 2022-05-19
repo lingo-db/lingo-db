@@ -53,7 +53,6 @@ mlir::relalg::Translator::Translator(mlir::ValueRange potentialChildren) : op() 
    }
 }
 
-
 void Translator::setInfo(mlir::relalg::Translator* consumer, mlir::relalg::ColumnSet requiredAttributes) {
    this->consumer = consumer;
    this->requiredAttributes = requiredAttributes;
@@ -80,5 +79,6 @@ std::unique_ptr<mlir::relalg::Translator> Translator::createTranslator(mlir::Ope
       .Case<ProjectionOp>([&](auto x) { return createProjectionTranslator(x); })
       .Case<LimitOp>([&](auto x) { return createLimitTranslator(x); })
       .Case<TmpOp>([&](auto x) { return createTmpTranslator(x); })
+      .Case<UnionOp, IntersectOp, ExceptOp>([&](auto x) { return createSetOpTranslator(x); })
       .Default([](auto x) { assert(false&&"should not happen"); return std::unique_ptr<Translator>(); });
 }

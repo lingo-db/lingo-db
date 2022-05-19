@@ -158,6 +158,23 @@ ColumnSet RenamingOp::getAvailableColumns() {
    availablePreviously.insert(created);
    return availablePreviously;
 }
+ColumnSet mlir::relalg::detail::getSetOpCreatedColumns(mlir::Operation* op) {
+   ColumnSet created;
+   for (mlir::Attribute attr : op->getAttr("mapping").cast<mlir::ArrayAttr>()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      created.insert(&relationDefAttr.getColumn());
+   }
+   return created;
+}
+ColumnSet mlir::relalg::detail::getSetOpUsedColumns(mlir::Operation* op) {
+   ColumnSet used;
+   for (Attribute attr : op->getAttr("mapping").cast<mlir::ArrayAttr>()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      used.insert(ColumnSet::fromArrayAttr(fromExisting));
+   }
+   return used;
+}
 ColumnSet OuterJoinOp::getCreatedColumns() {
    ColumnSet created;
 
@@ -255,7 +272,7 @@ mlir::relalg::FunctionalDependencies BaseTableOp::getFDs() {
       }
    }
    right.remove(pk);
-   dependencies.insert(pk,right);
+   dependencies.insert(pk, right);
    return dependencies;
 }
 ColumnSet mlir::relalg::AggregationOp::getAvailableColumns() {

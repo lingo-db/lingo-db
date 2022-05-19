@@ -642,8 +642,8 @@ struct Parser {
       mlir::Type res = llvm::StringSwitch<mlir::Type>(str)
                           .Case("date", mlir::db::DateType::get(context, mlir::db::DateUnitAttr::day))
                           .Case("interval", mlir::db::IntervalType::get(context, (typeMod & 8) ? mlir::db::IntervalUnitAttr::daytime : mlir::db::IntervalUnitAttr::months))
-                          .Case("bool", mlir::IntegerType::get(context,1))
-                          .Case("text",mlir::db::StringType::get(context))
+                          .Case("bool", mlir::IntegerType::get(context, 1))
+                          .Case("text", mlir::db::StringType::get(context))
                           .Default(mlir::Type());
       assert(res);
       return res;
@@ -1144,8 +1144,9 @@ struct Parser {
          }
       }
       auto tableMetaData = database.getTableMetaData(relation);
-      static size_t id = 0;
-      std::string scopeName = alias + (id != 0 ? std::to_string(id) : "");
+      char lastCharacter = alias.back();
+      std::string scopeName = attrManager.getUniqueScope(alias + (isdigit(lastCharacter) ? "_" : ""));
+
       std::vector<mlir::NamedAttribute> columns;
       for (auto c : tableMetaData->getOrderedColumns()) {
          auto attrDef = attrManager.createDef(scopeName, c);
@@ -1588,6 +1589,65 @@ struct Parser {
             if (stmt->limit_count_) {
                size_t limit = reinterpret_cast<A_Const*>(stmt->limit_count_)->val_.val_.ival_;
                tree = builder.create<mlir::relalg::LimitOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), limit, tree);
+            }
+            return std::make_pair(tree, targetInfo);
+         }
+         case SETOP_EXCEPT:
+         case SETOP_INTERSECT:
+         case SETOP_UNION: {
+            auto setSemantic = stmt->all_ ? mlir::relalg::SetSemantic::all : mlir::relalg::SetSemantic::distinct;
+            std::pair<mlir::Value, TargetInfo> leftSubQueryRes;
+            std::pair<mlir::Value, TargetInfo> rightSubQueryRes;
+            {
+               auto subQueryScope = context.createResolverScope();
+               auto subQueryDefineScope = context.createDefineScope();
+               leftSubQueryRes = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(stmt->larg_), context, subQueryScope);
+            }
+            {
+               auto subQueryScope = context.createResolverScope();
+               auto subQueryDefineScope = context.createDefineScope();
+               rightSubQueryRes = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(stmt->rarg_), context, subQueryScope);
+            }
+            auto [lTree, lTargetInfo] = leftSubQueryRes;
+            auto [rTree, rTargetInfo] = rightSubQueryRes;
+            if (lTargetInfo.namedResults.size() != rTargetInfo.namedResults.size()) {
+               error("SET Operation expects both sides to have same number of columns");
+            }
+            std::vector<mlir::Attribute> attributes;
+            auto scopeName = attrManager.getUniqueScope("setop");
+            TargetInfo targetInfo;
+            for (size_t i = 0; i < lTargetInfo.namedResults.size(); i++) {
+               auto newName = lTargetInfo.namedResults[i].first;
+               const auto* leftColumn = lTargetInfo.namedResults[i].second;
+               const auto* rightColumn = rTargetInfo.namedResults[i].second;
+               auto leftType = leftColumn->type;
+               auto rightType = rightColumn->type;
+               if (getBaseType(leftType) != getBaseType(rightColumn->type)) {
+                  error("SET operation expacts same types (column:" + std::to_string(i) + ")");
+               }
+               auto newType = SQLTypeInference::getCommonType(leftType, rightType);
+               auto newColName = attrManager.getName(leftColumn).second;
+               auto newColDef = attrManager.createDef(scopeName, newColName, builder.getArrayAttr({attrManager.createRef(leftColumn), attrManager.createRef(rightColumn)}));
+               auto* newCol = &newColDef.getColumn();
+               newCol->type = newType;
+               attributes.push_back(newColDef);
+               targetInfo.map(newName, newCol);
+            }
+            mlir::Value tree;
+            switch (stmt->op_) {
+               case SETOP_UNION: {
+                  tree = builder.create<mlir::relalg::UnionOp>(builder.getUnknownLoc(), ::mlir::relalg::SetSemanticAttr::get(builder.getContext(), setSemantic), lTree, rTree, builder.getArrayAttr(attributes));
+                  break;
+               }
+               case SETOP_INTERSECT: {
+                  tree = builder.create<mlir::relalg::IntersectOp>(builder.getUnknownLoc(), ::mlir::relalg::SetSemanticAttr::get(builder.getContext(), setSemantic), lTree, rTree, builder.getArrayAttr(attributes));
+                  break;
+               }
+               case SETOP_EXCEPT: {
+                  tree = builder.create<mlir::relalg::ExceptOp>(builder.getUnknownLoc(), ::mlir::relalg::SetSemanticAttr::get(builder.getContext(), setSemantic), lTree, rTree, builder.getArrayAttr(attributes));
+                  break;
+               }
+               default: error("unsupported SET operation");
             }
             return std::make_pair(tree, targetInfo);
          }

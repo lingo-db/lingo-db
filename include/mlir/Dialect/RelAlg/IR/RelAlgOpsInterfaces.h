@@ -17,6 +17,8 @@ void replaceUsages(mlir::Operation* op,std::function<mlir::relalg::ColumnRefAttr
 ColumnSet getUsedColumns(mlir::Operation* op);
 ColumnSet getAvailableColumns(mlir::Operation* op);
 ColumnSet getFreeColumns(mlir::Operation* op);
+ColumnSet getSetOpCreatedColumns(mlir::Operation* op);
+ColumnSet getSetOpUsedColumns(mlir::Operation* op);
 FunctionalDependencies getFDs(mlir::Operation* op);
 bool isDependentJoin(mlir::Operation* op);
 void moveSubTreeBefore(mlir::Operation* tree, mlir::Operation* before);

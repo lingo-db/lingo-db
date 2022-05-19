@@ -12,6 +12,7 @@ add_mlir_conversion_library(MLIRRelAlgToDB
         Translators/SelectionOp.cpp
         Translators/SortOp.cpp
         Translators/Joins.cpp
+        Translators/SetOps.cpp
         Translators/RenamingOp.cpp
         Translators/ProjectionOp.cpp
         Translators/LimitOp.cpp

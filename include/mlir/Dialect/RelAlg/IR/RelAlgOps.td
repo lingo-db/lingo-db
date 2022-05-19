@@ -357,6 +357,16 @@ class RelAlg_BinarySetOp<string mnemonic> : RelAlg_Op<mnemonic,
     let arguments = (ins RelAlg_SetSemantic:$set_semantic,RelAlg_TupleStream:$left,RelAlg_TupleStream:$right,ArrayAttr:$mapping);
     let results = (outs RelAlg_TupleStream:$result);
     let assemblyFormat = [{ $set_semantic $left `,` $right custom<CustAttrMapping>($mapping) attr-dict }];
+    let extraClassDeclaration = [{
+        ColumnSet getCreatedColumns();
+        ColumnSet getUsedColumns();
+        ColumnSet getAvailableColumns();
+    }];
+    let extraClassDefinition =[{
+        ColumnSet $cppClass::getCreatedColumns(){ return mlir::relalg::detail::getSetOpCreatedColumns(this->getOperation()); }
+        ColumnSet $cppClass::getUsedColumns(){ return mlir::relalg::detail::getSetOpUsedColumns(this->getOperation()); }
+        ColumnSet $cppClass::getAvailableColumns(){ return mlir::relalg::detail::getSetOpCreatedColumns(this->getOperation()); }
+    }];
 }
 
 def UnionOp : RelAlg_BinarySetOp<"union"> {
