@@ -180,6 +180,7 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
          mlir::OpBuilder builder(&getContext());
          builder.setInsertionPointAfter(op.getOperation());
          auto& colManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager();
+         auto availableColumns = op.getAvailableColumns();
          for (auto pred : additionalPredicates) {
             auto loc = builder.getUnknownLoc();
             auto* block = new mlir::Block;
@@ -187,16 +188,17 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
             block->addArgument(mlir::relalg::TupleType::get(&getContext()), loc);
 
             predBuilder.setInsertionPointToStart(block);
+            if (availableColumns.contains(pred.first) && availableColumns.contains(pred.second)) {
+               mlir::Value left = predBuilder.create<mlir::relalg::GetColumnOp>(loc, pred.first->type, colManager.createRef(pred.first), block->getArgument(0));
+               mlir::Value right = predBuilder.create<mlir::relalg::GetColumnOp>(loc, pred.second->type, colManager.createRef(pred.second), block->getArgument(0));
+               mlir::Value compared = predBuilder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, left, right);
+               predBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), compared);
 
-            mlir::Value left = predBuilder.create<mlir::relalg::GetColumnOp>(loc, pred.first->type, colManager.createRef(pred.first), block->getArgument(0));
-            mlir::Value right = predBuilder.create<mlir::relalg::GetColumnOp>(loc, pred.second->type, colManager.createRef(pred.second), block->getArgument(0));
-            mlir::Value compared = predBuilder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, left, right);
-            predBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), compared);
-
-            auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), current);
-            sel.predicate().push_back(block);
-            current.replaceAllUsesExcept(sel.asRelation(), sel.getOperation());
-            current = sel.asRelation();
+               auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), current);
+               sel.predicate().push_back(block);
+               current.replaceAllUsesExcept(sel.asRelation(), sel.getOperation());
+               current = sel.asRelation();
+            }
          }
 
          equalities[op] = localEqualities;
