@@ -166,6 +166,7 @@ class UnionDistinctTranslator : public SetOpTranslator {
 
       mlir::Type entryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, mlir::TupleType::get(builder.getContext())});
       children[0]->produce(context, builder);
+      children[1]->produce(context, builder);
 
       auto forOp2 = builder.create<mlir::dsa::ForOp>(unionOp->getLoc(), mlir::TypeRange{}, aggrHt, mlir::Value(), mlir::ValueRange{});
       mlir::Block* block2 = new mlir::Block;
@@ -184,6 +185,136 @@ class UnionDistinctTranslator : public SetOpTranslator {
    virtual ~UnionDistinctTranslator() {}
 };
 
+class CountingSetTranslator : public SetOpTranslator {
+   mlir::Location loc;
+   mlir::Value aggrHt;
+   bool distinct;
+   bool except;
+   mlir::TupleType aggrTupleType;
+
+   public:
+   CountingSetTranslator(mlir::relalg::IntersectOp intersectOp) : SetOpTranslator(intersectOp), loc(intersectOp->getLoc()), distinct(intersectOp.set_semantic() == mlir::relalg::SetSemantic::distinct), except(false) {}
+   CountingSetTranslator(mlir::relalg::ExceptOp exceptOp) : SetOpTranslator(exceptOp), loc(exceptOp->getLoc()), distinct(exceptOp.set_semantic() == mlir::relalg::SetSemantic::distinct), except(true) {}
+
+   virtual void consume(mlir::relalg::Translator* child, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) override {
+      size_t updateWhich = child == children[0].get() ? 0 : 1;
+      mlir::Value emptyVals = builder.create<mlir::util::UndefOp>(loc, mlir::TupleType::get(builder.getContext()));
+      mlir::Value packedKey = pack(child, builder, context);
+      auto reduceOp = builder.create<mlir::dsa::HashtableInsert>(loc, aggrHt, packedKey, emptyVals);
+      mlir::Block* aggrBuilderBlock = new mlir::Block;
+      reduceOp.equal().push_back(aggrBuilderBlock);
+      aggrBuilderBlock->addArguments({packedKey.getType(), packedKey.getType()}, {loc, loc});
+      {
+         mlir::OpBuilder::InsertionGuard guard(builder);
+         builder.setInsertionPointToStart(aggrBuilderBlock);
+         auto yieldOp = builder.create<mlir::dsa::YieldOp>(loc);
+         builder.setInsertionPointToStart(aggrBuilderBlock);
+         mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1));
+         builder.create<mlir::dsa::YieldOp>(loc, matches);
+         yieldOp.erase();
+      }
+      {
+         mlir::Block* aggrBuilderBlock = new mlir::Block;
+         reduceOp.hash().push_back(aggrBuilderBlock);
+         aggrBuilderBlock->addArguments({packedKey.getType()}, {loc});
+         mlir::OpBuilder::InsertionGuard guard(builder);
+         builder.setInsertionPointToStart(aggrBuilderBlock);
+         mlir::Value hashed = builder.create<mlir::db::Hash>(loc, builder.getIndexType(), aggrBuilderBlock->getArgument(0));
+         builder.create<mlir::dsa::YieldOp>(loc, hashed);
+      }
+      {
+         mlir::Block* aggrBuilderBlock = new mlir::Block;
+         reduceOp.reduce().push_back(aggrBuilderBlock);
+         aggrBuilderBlock->addArguments({aggrTupleType, emptyVals.getType()}, {loc, loc});
+         mlir::OpBuilder::InsertionGuard guard(builder);
+         builder.setInsertionPointToStart(aggrBuilderBlock);
+         mlir::ValueRange unpacked = builder.create<mlir::util::UnPackOp>(loc, aggrBuilderBlock->getArgument(0)).getResults();
+         std::vector<mlir::Value> updatedVals = {unpacked[0], unpacked[1]};
+         auto oneI64 = builder.create<mlir::arith::ConstantOp>(loc, builder.getI64Type(), builder.getI64IntegerAttr(1));
+
+         updatedVals[updateWhich] = builder.create<mlir::arith::AddIOp>(loc, updatedVals[updateWhich], oneI64);
+         mlir::Value packed = builder.create<mlir::util::PackOp>(loc, updatedVals);
+         builder.create<mlir::dsa::YieldOp>(loc, packed);
+      }
+   }
+
+   virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
+      auto scope = context.createScope();
+      auto keyTupleType = orderedAttributes.getTupleType(builder.getContext());
+      aggrTupleType = mlir::TupleType::get(builder.getContext(), {builder.getI64Type(), builder.getI64Type()});
+      auto zeroI64 = builder.create<mlir::arith::ConstantOp>(loc, builder.getI64Type(), builder.getI64IntegerAttr(0));
+      mlir::Value emptyTuple = builder.create<mlir::util::PackOp>(loc, mlir::ValueRange{zeroI64, zeroI64});
+      aggrHt = builder.create<mlir::dsa::CreateDS>(loc, mlir::dsa::AggregationHashtableType::get(builder.getContext(), keyTupleType, aggrTupleType), emptyTuple);
+
+      mlir::Type entryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, aggrTupleType});
+      children[0]->produce(context, builder);
+      children[1]->produce(context, builder);
+
+      auto forOp2 = builder.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, aggrHt, mlir::Value(), mlir::ValueRange{});
+      mlir::Block* block2 = new mlir::Block;
+      block2->addArgument(entryType, loc);
+      forOp2.getBodyRegion().push_back(block2);
+      mlir::OpBuilder builder2(forOp2.getBodyRegion());
+      auto unpacked = builder2.create<mlir::util::UnPackOp>(loc, forOp2.getInductionVar()).getResults();
+      auto unpackedKey = builder2.create<mlir::util::UnPackOp>(loc, unpacked[0]).getResults();
+      orderedAttributes.setValuesForColumns(context, scope, unpackedKey);
+
+      auto unpackedVal = builder2.create<mlir::util::UnPackOp>(loc, unpacked[1]).getResults();
+      if (except) {
+         if (distinct) {
+            mlir::Value leftNonZero = builder2.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::sgt, unpackedVal[0], zeroI64);
+            mlir::Value rightZero = builder2.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, unpackedVal[1], zeroI64);
+            mlir::Value outputTuple = builder2.create<mlir::arith::AndIOp>(loc, leftNonZero, rightZero);
+            builder2.create<mlir::scf::IfOp>(
+               loc, mlir::TypeRange{}, outputTuple, [&](mlir::OpBuilder& b, mlir::Location) {
+               consumer->consume(this, b, context);
+               b.create<mlir::scf::YieldOp>(loc); });
+         } else {
+            mlir::Value remaining = builder2.create<mlir::arith::SubIOp>(loc, unpackedVal[0], unpackedVal[1]);
+            mlir::Value ltZ = builder2.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::slt, remaining, zeroI64);
+            remaining = builder2.create<mlir::arith::SelectOp>(loc, ltZ, zeroI64, remaining);
+            mlir::Value remainingAsIdx = builder2.create<mlir::arith::IndexCastOp>(loc, builder.getIndexType(), remaining);
+            mlir::Value zeroIdx = builder2.create<mlir::arith::ConstantIndexOp>(loc, 0);
+            mlir::Value oneIdx = builder2.create<mlir::arith::ConstantIndexOp>(loc, 1);
+            builder2.create<mlir::scf::ForOp>(loc, zeroIdx, remainingAsIdx, oneIdx, mlir::ValueRange{}, [&](mlir::OpBuilder& b, mlir::Location loc, mlir::Value idx, mlir::ValueRange vr) {
+               consumer->consume(this, b, context);
+               b.create<mlir::scf::YieldOp>(loc);
+            });
+         }
+      } else {
+         //intersect
+         if (distinct) {
+            mlir::Value leftNonZero = builder2.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::sgt, unpackedVal[0], zeroI64);
+            mlir::Value rightNonZero = builder2.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::sgt, unpackedVal[1], zeroI64);
+            mlir::Value outputTuple = builder2.create<mlir::arith::AndIOp>(loc, leftNonZero, rightNonZero);
+            builder2.create<mlir::scf::IfOp>(
+               loc, mlir::TypeRange{}, outputTuple, [&](mlir::OpBuilder& b, mlir::Location) {
+                  consumer->consume(this, b, context);
+                  b.create<mlir::scf::YieldOp>(loc); });
+         } else {
+
+            mlir::Value lGtR = builder2.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::sgt, unpackedVal[0], unpackedVal[1]);
+
+            mlir::Value remaining = builder2.create<mlir::arith::SelectOp>(loc, lGtR, unpackedVal[1], unpackedVal[0]);
+
+            mlir::Value remainingAsIdx = builder2.create<mlir::arith::IndexCastOp>(loc, builder.getIndexType(), remaining);
+            mlir::Value zeroIdx = builder2.create<mlir::arith::ConstantIndexOp>(loc, 0);
+            mlir::Value oneIdx = builder2.create<mlir::arith::ConstantIndexOp>(loc, 1);
+            builder2.create<mlir::scf::ForOp>(loc, zeroIdx, remainingAsIdx, oneIdx, mlir::ValueRange{}, [&](mlir::OpBuilder& b, mlir::Location loc, mlir::Value idx, mlir::ValueRange vr) {
+               consumer->consume(this, b, context);
+               b.create<mlir::scf::YieldOp>(loc);
+            });
+         }
+      }
+
+      builder2.create<mlir::dsa::YieldOp>(loc, mlir::ValueRange{});
+
+      builder.create<mlir::dsa::FreeOp>(loc, aggrHt);
+   }
+
+   virtual ~CountingSetTranslator() {}
+};
+
 std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createSetOpTranslator(mlir::Operation* setOp) {
    if (auto unionOp = mlir::dyn_cast<mlir::relalg::UnionOp>(setOp)) {
       if (unionOp.set_semantic() == SetSemantic::all) {
@@ -191,7 +322,11 @@ std::unique_ptr<mlir::relalg::Translator> mlir::relalg::Translator::createSetOpT
       } else {
          return std::make_unique<UnionDistinctTranslator>(unionOp);
       }
-   }else{
-      assert(false&&"should not happen");
+   } else if (auto intersectOp = mlir::dyn_cast<mlir::relalg::IntersectOp>(setOp)) {
+      return std::make_unique<CountingSetTranslator>(intersectOp);
+   }  else if (auto exceptOp = mlir::dyn_cast<mlir::relalg::ExceptOp>(setOp)) {
+      return std::make_unique<CountingSetTranslator>(exceptOp);
+   }else {
+      assert(false && "should not happen");
    }
 }

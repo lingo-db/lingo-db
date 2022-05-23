@@ -26,7 +26,7 @@ std::function<void(uint8_t*)> runner::Runner::hashResult(runner::Runner::SortMod
       std::vector<size_t> positions;
       arrow::PrettyPrintOptions options;
       options.indent_size = 0;
-      options.window = 100;
+      options.window = 1000000;
       std::vector<bool> convertHex;
       for (auto c : table->columns()) {
          convertHex.push_back(table->schema()->field(positions.size())->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
