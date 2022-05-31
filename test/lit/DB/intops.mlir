@@ -2,7 +2,7 @@
 
 
  module {
- 	func @main () {
+ 	func.func @main () {
  	 	%constm10 = db.constant ( -10 ) : i32
  	  	%constm1 = db.constant ( -1 ) : i32
   	 	%const0 = db.constant ( 0 ) : i32

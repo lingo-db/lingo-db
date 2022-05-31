@@ -13,7 +13,7 @@
 
 namespace {
 
-class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::FuncOp>> {
+class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-unnesting"; }
 
    Operator getFirstOfTree(Operator tree) {

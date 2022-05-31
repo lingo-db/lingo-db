@@ -2,7 +2,7 @@
 
 
  module {
- 	func @main () {
+ 	func.func @main () {
  	 	%constm10 = db.constant ( "-10.00000001" ) : !db.decimal<12,8>
  	  	%constm1 = db.constant ( "-1.00000002" ) : !db.decimal<12,8>
   	 	%const0 = db.constant ( "0.00000003" ) : !db.decimal<12,8>

@@ -3,7 +3,7 @@
 
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
   	%0 = relalg.const_relation columns: [ @constrel ::@attr1({type = i32})] values: [1, 2]
   	%1 = relalg.const_relation columns: [ @constrel2 ::@attr1({type = i32})] values: [1]
 	%10 = relalg.const_relation columns: [ @constrel3 ::@attr1({type = i32})] values: [1, 2]
@@ -37,7 +37,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
   	%0 = relalg.const_relation columns: [ @constrel ::@attr1({type = i32})] values: [1, 2]
   	%1 = relalg.const_relation columns: [ @constrel2 ::@attr1({type = i32})] values: [1]
   	//CHECK: %{{.*}} = relalg.projection distinct [@constrel::@attr1] %0
@@ -69,7 +69,7 @@ module @querymodule  {
 // -----
 
 module @querymodule  {
-  func @query() {
+  func.func @query() {
   	%0 = relalg.const_relation columns: [ @constrel ::@attr1({type = i32})] values: [1, 2]
   	%1 = relalg.const_relation columns: [ @constrel2 ::@attr1({type = i32})] values: [1]
   	//CHECK: %{{.*}} = relalg.projection distinct [@constrel::@attr1] %0
@@ -97,7 +97,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
   	%0 = relalg.const_relation columns: [ @constrel ::@attr1({type = i32})] values: [1, 2]
   	%1 = relalg.const_relation columns: [ @constrel2 ::@attr1({type = i32})] values: [1]
 	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !relalg.tuple)
@@ -118,7 +118,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
   	%0 = relalg.const_relation columns: [ @constrel ::@attr1({type = i32})] values: [1, 2]
   	%1 = relalg.const_relation columns: [ @constrel2 ::@attr1({type = i32})] values: [1]
 	//CHECK: %{{.*}} = relalg.join %{{.*}}, %0 (%arg0: !relalg.tuple)
@@ -139,7 +139,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
   	%0 = relalg.const_relation columns: [ @constrel ::@attr1({type = i32})] values: [1, 2]
   	%1 = relalg.const_relation columns: [ @constrel2 ::@attr1({type = i32})] values: [1]
 	%10 = relalg.const_relation columns: [ @constrel3 ::@attr1({type = i32})] values: [1, 2]
@@ -173,7 +173,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
   	%0 = relalg.const_relation columns: [ @constrel ::@attr1({type = i32})] values: [1, 2]
   	%1 = relalg.const_relation columns: [ @constrel2 ::@attr1({type = i32})] values: [1]
 	%10 = relalg.const_relation columns: [ @constrel3 ::@attr1({type = i32})] values: [1, 2]
@@ -198,7 +198,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
   	%0 = relalg.const_relation columns: [ @constrel ::@attr1({type = i32})] values: [1, 2]
   	%1 = relalg.const_relation columns: [ @constrel2 ::@attr1({type = i32})] values: [1]
 	%10 = relalg.const_relation columns: [ @constrel3 ::@attr1({type = i32})] values: [1, 2]
@@ -226,7 +226,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
   	%0 = relalg.const_relation columns: [ @constrel ::@attr1({type = i32})] values: [1, 2]
   	%1 = relalg.const_relation columns: [ @constrel2 ::@attr1({type = i32})] values: [1]
 	%10 = relalg.const_relation columns: [ @constrel3 ::@attr1({type = i32})] values: [1, 2]

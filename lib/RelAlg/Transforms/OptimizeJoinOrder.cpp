@@ -9,7 +9,7 @@
 
 namespace {
 
-class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::OperationPass<mlir::FuncOp>> {
+class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-optimize-join-order"; }
 
    llvm::SmallPtrSet<mlir::Operation*, 12> alreadyOptimized;

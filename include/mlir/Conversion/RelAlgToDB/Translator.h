@@ -4,6 +4,7 @@
 #include "TranslatorContext.h"
 #include "llvm/ADT/TypeSwitch.h"
 
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/Builders.h"

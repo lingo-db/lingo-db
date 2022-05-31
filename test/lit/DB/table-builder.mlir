@@ -6,7 +6,7 @@
     //CHECK: ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
     //CHECK: |                         "str"  |                           1.1  |                           1.1  |                          1.10  |                             1  |                             1  |                          true  |                    1996-01-02  |                    1996-01-02  |
     //CHECK: |                          null  |                          null  |                          null  |                          null  |                          null  |                          null  |                          null  |                          null  |                          null  |
-	func @main () -> !dsa.table {
+	func.func @main () -> !dsa.table {
 	    %str_const = db.constant ( "---------------" ) :!db.string
         %table_builder=dsa.create_ds ("str!:string; float32!:float[32]; float64!:float[64]; decimal!:decimal[5,2]; int32!:int[32]; int64!:int[64]; bool:bool; date32!:date[32]; date64!:date[64]") -> !dsa.table_builder<!test_table_tuple>
         %0 = dsa.scan_source "{ \"table\": \"test\", \"columns\": [\"str\",\"float32\",\"float64\",\"decimal\",\"int32\",\"int64\",\"bool\",\"date32\",\"date64\"] }" : !dsa.iterable<!dsa.record_batch<!test_table_tuple>,table_chunk_iterator>

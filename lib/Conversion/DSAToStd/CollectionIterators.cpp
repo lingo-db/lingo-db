@@ -1,6 +1,7 @@
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/DSA/IR/DSATypes.h"
 
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/SCF/SCF.h"
 
 #include "mlir/Dialect/util/UtilOps.h"
@@ -87,10 +88,10 @@ class TableIterator2 : public WhileIterator {
       mlir::Value recordBatchInfoPtr;
       {
          mlir::OpBuilder::InsertionGuard guard(builder);
-         builder.setInsertionPointToStart(&iterator.getParentRegion()->getParentOfType<mlir::FuncOp>().body().front());
+         builder.setInsertionPointToStart(&iterator.getParentRegion()->getParentOfType<mlir::func::FuncOp>().getBody().front());
          recordBatchInfoPtr = builder.create<mlir::util::AllocaOp>(loc, mlir::util::RefType::get(builder.getContext(), typeConverter->convertType(recordBatchType)), mlir::Value());
       }
-      rt::DataSourceIteration::access(builder,loc)({iterator,recordBatchInfoPtr});
+      rt::DataSourceIteration::access(builder, loc)({iterator, recordBatchInfoPtr});
       return builder.create<mlir::util::LoadOp>(loc, recordBatchInfoPtr, mlir::Value());
    }
    virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
@@ -127,7 +128,7 @@ class JoinHtLookupIterator : public WhileIterator {
    virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
       auto i8PtrType = mlir::util::RefType::get(builder.getContext(), builder.getI8Type());
       Value nextPtr = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), i8PtrType), iterator, 0);
-      mlir::Value next = builder.create<mlir::util::LoadOp>(loc, nextPtr,mlir::Value());
+      mlir::Value next = builder.create<mlir::util::LoadOp>(loc, nextPtr, mlir::Value());
       next = builder.create<util::GenericMemrefCastOp>(loc, ptrType, next);
       return builder.create<mlir::util::FilterTaggedPtr>(loc, next.getType(), next, hash);
    }
@@ -280,7 +281,7 @@ class WhileIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
       if (flag) {
          Value flagValue = builder.create<mlir::dsa::GetFlag>(loc, builder.getI1Type(), flag);
          Value falseValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 0));
-         Value shouldContinue = builder.create<arith::CmpIOp>(loc,mlir::arith::CmpIPredicate::eq, flagValue, falseValue);
+         Value shouldContinue = builder.create<arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, flagValue, falseValue);
          Value anded = builder.create<mlir::arith::AndIOp>(loc, builder.getI1Type(), ValueRange({condition, shouldContinue}));
          condition = anded;
       }
@@ -375,7 +376,7 @@ class ForIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
       if (flag) {
          Value flagValue = builder.create<mlir::dsa::GetFlag>(loc, builder.getI1Type(), flag);
          Value falseValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 0));
-         Value shouldContinue = builder.create<arith::CmpIOp>(loc,mlir::arith::CmpIPredicate::eq, flagValue, falseValue);
+         Value shouldContinue = builder.create<arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, flagValue, falseValue);
          Value anded = builder.create<mlir::arith::AndIOp>(loc, builder.getI1Type(), ValueRange({condition, shouldContinue}));
          condition = anded;
       }

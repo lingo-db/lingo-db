@@ -2,6 +2,8 @@
 #define OPS
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/EnumAttr.td"
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
@@ -25,8 +27,8 @@ def DSA_Dialect : Dialect {
 }
 
 class DSA_Op<string mnemonic, list<Trait> traits = []> : Op<DSA_Dialect, mnemonic, traits> {
-    let printer = [{ return ::print(p, *this); }];
-    let parser = [{ return ::parse$cppClass(parser, result); }];
+  let hasCustomAssemblyFormat = 1;
+
 }
 
 class DSA_Type<string name, string typeMnemonic> : TypeDef<DSA_Dialect, name> {
@@ -42,6 +44,7 @@ def DSA_Collection : Type<CPred<"$_self.isa<::mlir::dsa::CollectionType>()">,"DS
 def DSA_GenericIterable : DSA_Collection<"GenericIterable","iterable"> {
     let summary = "generic iterable";
     let parameters = (ins "Type":$elementType,"std::string":$iteratorName);
+    let hasCustomAssemblyFormat=1;
 }
 
 def DSA_Flag : DSA_Type<"Flag", "flag"> {

@@ -122,7 +122,7 @@ void EnforceCPPABIPass::runOnOperation() {
          funcOp.setArgAttr(memId, "llvm.byval", mlir::UnitAttr::get(&getContext()));
       }
 
-      funcOp.setType(mlir::LLVM::LLVMFunctionType::get(funcOp.getType().getReturnType(), paramTypes));
+      funcOp.setType(mlir::LLVM::LLVMFunctionType::get(funcOp.getFunctionType().getReturnType(), paramTypes));
       auto uses = mlir::SymbolTable::getSymbolUses(funcOp, moduleOp.getOperation());
       for (auto use : *uses) {
          auto callOp = mlir::cast<mlir::LLVM::CallOp>(use.getUser());
@@ -349,8 +349,8 @@ bool Runner::loadSQL(std::string sql, runtime::Database& database) {
          builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
       }
    }
-   mlir::FuncOp funcOp = builder.create<mlir::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, returnTypes));
-   funcOp.body().push_back(queryBlock);
+   mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, returnTypes));
+   funcOp.getBody().push_back(queryBlock);
    ctxt->module = moduleOp;
    return true;
 }
@@ -451,14 +451,14 @@ bool Runner::lower() {
    if (mlir::failed(pm2.run(ctxt->module.get()))) {
       return false;
    }
-   mlir::PassManager pmFunc(&ctxt->context, mlir::FuncOp::getOperationName());
+   mlir::PassManager pmFunc(&ctxt->context, mlir::func::FuncOp::getOperationName());
    pmFunc.enableVerifier(runMode != RunMode::SPEED);
    pmFunc.addPass(mlir::createCanonicalizerPass());
    pmFunc.addPass(mlir::createLoopInvariantCodeMotionPass());
    pmFunc.addPass(mlir::createSinkOpPass());
    pmFunc.addPass(mlir::createCSEPass());
 
-   ctxt->module.get().walk([&](mlir::FuncOp f) {
+   ctxt->module.get().walk([&](mlir::func::FuncOp f) {
       if (!f->hasAttr("passthrough")) {
          if (mlir::failed(pmFunc.run(f))) {
             return; //todo:fixed
@@ -475,12 +475,12 @@ bool Runner::lowerToLLVM() {
    auto start = std::chrono::high_resolution_clock::now();
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::ModuleOp moduleOp = ctxt->module.get();
-   if (auto mainFunc = moduleOp.lookupSymbol<mlir::FuncOp>("main")) {
+   if (auto mainFunc = moduleOp.lookupSymbol<mlir::func::FuncOp>("main")) {
       ctxt->numArgs = mainFunc.getNumArguments();
       ctxt->numResults = mainFunc.getNumResults();
       mlir::OpBuilder builder(moduleOp->getContext());
       builder.setInsertionPointToStart(moduleOp.getBody());
-      builder.create<mlir::FuncOp>(moduleOp.getLoc(), "rt_set_execution_context", builder.getFunctionType(mlir::TypeRange({mlir::util::RefType::get(moduleOp->getContext(), mlir::IntegerType::get(moduleOp->getContext(), 8))}), mlir::TypeRange()), builder.getStringAttr("private"));
+      builder.create<mlir::func::FuncOp>(moduleOp.getLoc(), "rt_set_execution_context", builder.getFunctionType(mlir::TypeRange({mlir::util::RefType::get(moduleOp->getContext(), mlir::IntegerType::get(moduleOp->getContext(), 8))}), mlir::TypeRange()), builder.getStringAttr("private"));
    }
    mlir::PassManager pm2(&ctxt->context);
    pm2.enableVerifier(runMode != RunMode::SPEED);

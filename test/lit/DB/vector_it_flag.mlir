@@ -16,7 +16,7 @@
 
 module {
 
-    func @main () {
+    func.func @main () {
           %str_const = db.constant ( "---------------" ) :!db.string
 
           %str1=db.constant ( "stra" ) :!db.string

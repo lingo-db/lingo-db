@@ -2,6 +2,8 @@
 #define OPS
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/EnumAttr.td"
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
@@ -35,8 +37,6 @@ def DB_Dialect : Dialect {
 }
 
 class DB_Op<string mnemonic, list<Trait> traits = []> : Op<DB_Dialect, mnemonic, traits>{
-    let printer = [{ return ::print(p, *this); }];
-    let parser = [{ return ::parse$cppClass(parser, result); }];
 }
 
 
@@ -195,7 +195,7 @@ def DB_RuntimeCall : DB_Op<"runtime_call", [DB_MayNeedNullWrap,DB_MaySupportInva
     let results = (outs Optional<AnyType>:$res);
     let assemblyFormat = "$fn  `(` $args `)` `:`  functional-type($args,$res)  attr-dict";
 
-    let verifier = [{ return ::verify(*this); }];
+    let hasVerifier=1;
 }
 
 def DB_Hash : DB_Op<"hash", [NoSideEffect]> {

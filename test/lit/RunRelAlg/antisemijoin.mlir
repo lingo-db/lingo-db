@@ -7,7 +7,7 @@
 
 
 module @querymodule{
-    func @main ()  -> !dsa.table{
+    func.func @main ()  -> !dsa.table{
         %1 = relalg.basetable { table_identifier="hoeren" } columns: {matrnr => @hoeren::@matrnr({type=i64}),
             vorlnr => @hoeren::@vorlnr({type=i64})
         }

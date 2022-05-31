@@ -91,7 +91,7 @@ void ToLLVMLoweringPass::runOnOperation() {
    // We want to completely lower to LLVM, so we use a `FullConversion`. This
    // ensures that only legal operations will remain after the conversion.
    auto module = getOperation();
-   if (auto mainFunc = module.lookupSymbol<mlir::FuncOp>("main")) {
+   if (auto mainFunc = module.lookupSymbol<mlir::func::FuncOp>("main")) {
       mainFunc->setAttr("llvm.emit_c_interface", mlir::UnitAttr::get(&getContext()));
    }
    if (failed(applyFullConversion(module, target, std::move(patterns))))

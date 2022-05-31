@@ -101,11 +101,9 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
    };
    bool tsv = parts.size()>1&&parts[1]=="tsv";
    std::vector<std::function<bool(const std::string&)>> parsers = {parseSort};
-   unsigned matched = 0;
    for (unsigned i = 2; i < parts.size(); i++) {
       for (const auto& parser : parsers) {
          if (parser(parts[i])) {
-            matched++;
             break;
          }
       }

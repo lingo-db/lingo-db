@@ -43,8 +43,8 @@ int main(int argc, char** argv) {
          builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
       }
    }
-   mlir::FuncOp funcOp = builder.create<mlir::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, returnTypes));
-   funcOp.body().push_back(queryBlock);
+   mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, returnTypes));
+   funcOp.getBody().push_back(queryBlock);
 
    mlir::OpPrintingFlags flags;
    flags.assumeVerified();

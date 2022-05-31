@@ -5,7 +5,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace {
-class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::OperationPass<mlir::FuncOp>> {
+class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-combine-predicates"; }
 
    public:

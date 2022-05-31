@@ -1,27 +1,27 @@
 // RUN: run-mlir %s | FileCheck %s
 
  module {
-	func @test_or (%arg0: i1,%arg1: i1,%arg2: i1) {
+	func.func @test_or (%arg0: i1,%arg1: i1,%arg2: i1) {
 		%1 = db.or %arg0, %arg1, %arg2 : i1,i1,i1
 		db.runtime_call "DumpValue" (%1) : (i1) -> ()
 		return
 	}
-	func @test_or_nullable (%arg0: !db.nullable<i1>,%arg1: !db.nullable<i1>,%arg2: !db.nullable<i1>) {
+	func.func @test_or_nullable (%arg0: !db.nullable<i1>,%arg1: !db.nullable<i1>,%arg2: !db.nullable<i1>) {
 		%1 = db.or %arg0, %arg1, %arg2 : !db.nullable<i1>, !db.nullable<i1>, !db.nullable<i1>
 		db.runtime_call "DumpValue" (%1) : (!db.nullable<i1>) -> ()
 		return
 	}
-	func @test_and (%arg0: i1,%arg1: i1,%arg2: i1) {
+	func.func @test_and (%arg0: i1,%arg1: i1,%arg2: i1) {
 		%1 = db.and %arg0, %arg1, %arg2 : i1, i1, i1
 		db.runtime_call "DumpValue" (%1) : (i1) -> ()
 		return
 	}
-	func @test_and_nullable (%arg0: !db.nullable<i1>,%arg1: !db.nullable<i1>,%arg2: !db.nullable<i1>) {
+	func.func @test_and_nullable (%arg0: !db.nullable<i1>,%arg1: !db.nullable<i1>,%arg2: !db.nullable<i1>) {
 		%1 = db.and %arg0, %arg1, %arg2 : !db.nullable<i1>, !db.nullable<i1>, !db.nullable<i1>
 		db.runtime_call "DumpValue" (%1) : (!db.nullable<i1>) -> ()
 		return
 	}	
-	func @test_ands () {
+	func.func @test_ands () {
  		%false = db.constant ( 0 ) : i1
  		%true = db.constant ( 1 ) : i1
  		//CHECK: bool(false)
@@ -101,7 +101,7 @@
 		call @test_and_nullable (%null_nullable,%null_nullable,%null_nullable) : (!db.nullable<i1>,!db.nullable<i1>,!db.nullable<i1>) -> ()
  		return
 	}
-	func @test_ors () {
+	func.func @test_ors () {
  		%false = db.constant ( 0 ) : i1
  		%true = db.constant ( 1 ) : i1
  		//CHECK: bool(false)
@@ -181,7 +181,7 @@
 		call @test_or_nullable (%null_nullable,%null_nullable,%null_nullable) : (!db.nullable<i1>,!db.nullable<i1>,!db.nullable<i1>) -> ()
  		return
 	}
-	func @test_not () {
+	func.func @test_not () {
  		%false = db.constant ( 0 ) : i1
  		%true = db.constant ( 1 ) : i1
 		%false_nullable = db.as_nullable %false : i1 -> !db.nullable<i1>
@@ -204,7 +204,7 @@
 		db.runtime_call "DumpValue" (%not_null_nullable) : (!db.nullable<i1>) -> ()
  		return
  	}
-	func @main () {
+	func.func @main () {
 		call @test_ands () : () -> ()
 		call @test_ors () : () -> ()
 		call @test_not () : () -> ()

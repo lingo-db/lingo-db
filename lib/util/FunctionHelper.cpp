@@ -26,21 +26,21 @@ static mlir::Value convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::T
 }
 mlir::ResultRange mlir::util::FunctionHelper::call(OpBuilder& builder, mlir::Location loc, const FunctionSpec& function, ValueRange values) {
    auto fnHelper = builder.getContext()->getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper();
-   FuncOp funcOp = fnHelper.parentModule.lookupSymbol<mlir::FuncOp>(function.getMangledName());
+   mlir::func::FuncOp funcOp = fnHelper.parentModule.lookupSymbol<mlir::func::FuncOp>(function.getMangledName());
    if (!funcOp) {
       OpBuilder::InsertionGuard insertionGuard(builder);
       builder.setInsertionPointToStart(fnHelper.parentModule.getBody());
-      funcOp = builder.create<FuncOp>(fnHelper.parentModule.getLoc(), function.getMangledName(), builder.getFunctionType(function.getParameterTypes()(builder.getContext()), function.getResultTypes()(builder.getContext())), builder.getStringAttr("private"));
+      funcOp = builder.create<mlir::func::FuncOp>(fnHelper.parentModule.getLoc(), function.getMangledName(), builder.getFunctionType(function.getParameterTypes()(builder.getContext()), function.getResultTypes()(builder.getContext())), builder.getStringAttr("private"));
       if (function.isNoSideEffects()) {
          funcOp->setAttr("const", builder.getUnitAttr());
       }
    }
-   assert(values.size() == funcOp.getType().getNumInputs());
+   assert(values.size() == funcOp.getFunctionType().getNumInputs());
    std::vector<mlir::Value> convertedValues;
-   for (size_t i = 0; i < funcOp.getType().getNumInputs(); i++) {
-      mlir::Value converted = convertValue(builder, values[i], funcOp.getType().getInput(i));
+   for (size_t i = 0; i < funcOp.getFunctionType().getNumInputs(); i++) {
+      mlir::Value converted = convertValue(builder, values[i], funcOp.getFunctionType().getInput(i));
       convertedValues.push_back(converted);
-      assert(converted.getType() == funcOp.getType().getInput(i));
+      assert(converted.getType() == funcOp.getFunctionType().getInput(i));
    }
    auto funcCall = builder.create<func::CallOp>(loc, funcOp, convertedValues);
    return funcCall.getResults();

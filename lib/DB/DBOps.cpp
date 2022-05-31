@@ -80,7 +80,8 @@ LogicalResult inferDivReturnType(MLIRContext* context, Optional<Location> locati
    return success();
 }
 
-::mlir::LogicalResult verify(mlir::db::RuntimeCall runtimeCall) {
+::mlir::LogicalResult mlir::db::RuntimeCall::verify() {
+   mlir::db::RuntimeCall& runtimeCall=*this;
    auto reg = runtimeCall.getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
    if (!reg->verify(runtimeCall.fn().str(), runtimeCall.args().getTypes(), runtimeCall.getNumResults() == 1 ? runtimeCall.getResultTypes()[0] : mlir::Type())) {
       runtimeCall->emitError("could not find matching runtime function");

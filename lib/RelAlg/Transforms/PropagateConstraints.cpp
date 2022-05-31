@@ -92,7 +92,7 @@ class ReduceAggrKeyPattern : public mlir::RewritePattern {
    }
 };
 
-class ReduceAggrKeys : public mlir::PassWrapper<ReduceAggrKeys, mlir::OperationPass<mlir::FuncOp>> {
+class ReduceAggrKeys : public mlir::PassWrapper<ReduceAggrKeys, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-reduce-aggr-keys"; }
 
    public:
@@ -123,7 +123,7 @@ static std::optional<std::pair<const mlir::relalg::Column*, const mlir::relalg::
    return {};
 }
 
-class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqualities, mlir::OperationPass<mlir::FuncOp>> {
+class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqualities, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-expand-transitive-eq"; }
 
    void merge(llvm::EquivalenceClasses<const mlir::relalg::Column*>& mergeInto, const llvm::EquivalenceClasses<const mlir::relalg::Column*>& mergeFrom, std::vector<std::pair<const mlir::relalg::Column*, const mlir::relalg::Column*>>& additionalConstrains) {

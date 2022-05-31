@@ -2,8 +2,8 @@
 #define OPS
 
 include "mlir/IR/OpBase.td"
-include "mlir/IR/OpBase.td"
-
+include "mlir/IR/EnumAttr.td"
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 
@@ -23,8 +23,7 @@ FunctionHelper& getFunctionHelper(){
 
 class Util_Op<string mnemonic, list<Trait> traits = []> :
 Op<Util_Dialect, mnemonic, traits>{
-let printer = [{ return ::print(p, *this); }];
-let parser = [{ return ::parse$cppClass(parser, result); }];
+
 }
 
 class Util_Type<string name, string typeMnemonic> : TypeDef<Util_Dialect, name> {
@@ -44,6 +43,7 @@ def RefType : Util_Type<"Ref","ref"> {
         }]>,
     ];
     let builderCall = "$_builder.getType<" # dialect.cppNamespace # "::" # cppClassName # ">()";
+    let hasCustomAssemblyFormat = 1;
 }
 
 
@@ -153,7 +153,7 @@ def TupleElementPtrOp  : Util_Op<"tupleelementptr",[NoSideEffect]> {
     let arguments = (ins RefType:$ref,I32Attr:$idx);
     let results=(outs RefType:$res);
     let assemblyFormat = "$ref `[` $idx `]` `:`type($ref) `->` type($res) attr-dict";
-    let verifier = [{ return ::verify(*this); }];
+    let hasVerifier=1;
 }
 def SizeOfOp  : Util_Op<"sizeof",[NoSideEffect]> {
 let arguments = (ins TypeAttr:$type);
@@ -165,7 +165,7 @@ let summary = "string constant";
 let arguments = (ins Variadic<AnyType>:$vals);
 let results =(outs TupleOf<[AnyType]>:$tuple);
 let assemblyFormat = "$vals `:` type($vals) attr-dict `->` type($tuple) ";
-let verifier = [{ return ::verify(*this); }];
+    let hasVerifier=1;
 let builders = [
         OpBuilder<(ins "ValueRange":$vals), [{
     std::vector<Type> types;
@@ -180,7 +180,7 @@ let summary = "unpack tuple";
 let arguments = (ins TupleOf<[AnyType]>:$tuple);
 let results =(outs Variadic<AnyType>:$vals);
 let assemblyFormat = "$tuple `:` type($tuple) attr-dict `->` type($vals)";
-let verifier = [{ return ::verify(*this); }];
+    let hasVerifier=1;
 let hasCanonicalizeMethod = 1;
 let builders = [
         OpBuilder<(ins "Value":$tuple), [{

@@ -1,6 +1,6 @@
  // RUN: run-mlir %s | FileCheck %s
  module {
-	func @main () {
+	func.func @main () {
 		%false = db.constant ( 0 ) : i1
 		%true = db.constant ( 1 ) : i1
 

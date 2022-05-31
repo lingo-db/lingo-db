@@ -1,7 +1,7 @@
  // RUN: run-mlir %s | FileCheck %s
  module {
 
-	func @main () {
+	func.func @main () {
         %c1 = arith.constant 1 : index
         %c2 = arith.constant 2 : index
         %c10 = arith.constant 10 : index

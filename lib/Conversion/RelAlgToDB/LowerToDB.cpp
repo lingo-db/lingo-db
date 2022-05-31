@@ -14,7 +14,7 @@
 #include "mlir/Transforms/Passes.h"
 namespace {
 
-class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::OperationPass<mlir::FuncOp>> {
+class LowerToDBPass : public mlir::PassWrapper<LowerToDBPass, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-to-db"; }
 
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
@@ -62,7 +62,7 @@ void registerRelAlgConversionPasses(){
       createLowerRelAlgPipeline);
 }
 void createLowerRelAlgPipeline(mlir::OpPassManager& pm){
-   pm.addNestedPass<mlir::FuncOp>(mlir::relalg::createLowerToDBPass());
+   pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createLowerToDBPass());
    pm.addPass(mlir::createCanonicalizerPass());
 }
 

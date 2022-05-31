@@ -10,7 +10,7 @@ df = pd.DataFrame(data={'col1': [1, 2,3,4]})
 
 pymlirdbext.load({"df":pa.Table.from_pandas(df)})
 simpleMLIRQuery="""module {
-  func @main() -> !dsa.table {
+  func.func @main() -> !dsa.table {
     %0 = relalg.basetable {table_identifier = "df"} columns: { col1 => @df::@col1({type = i64})}
     %1 = relalg.selection %0 (%arg0 : !relalg.tuple){
         %4 = db.constant(2) : i64

@@ -1,5 +1,6 @@
 include "mlir/Dialect/Arithmetic/IR/ArithmeticOps.td"
 //include "mlir/Dialect/DB/IR/DBOps.td"
+include "mlir/IR/PatternBase.td"
 
 def ConstAddCmpFold :
     Pat<(Arith_CmpFOp $pred,

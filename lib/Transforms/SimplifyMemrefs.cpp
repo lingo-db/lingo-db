@@ -1,4 +1,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
+
 #include <iostream>
 
 #include "mlir/Dialect/RelAlg/Passes.h"
@@ -74,7 +77,7 @@ class FoldLocalLoadStores : public mlir::RewritePattern {
       return mlir::failure();
    }
 };
-class SimplifyMemrefs : public mlir::PassWrapper<SimplifyMemrefs, mlir::OperationPass<mlir::FuncOp>> {
+class SimplifyMemrefs : public mlir::PassWrapper<SimplifyMemrefs, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "simplify-memrefs"; }
 
    public:

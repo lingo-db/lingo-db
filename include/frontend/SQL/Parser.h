@@ -398,11 +398,11 @@ struct Parser {
       return {name, columnMetaData};
    }
    mlir::Value getExecutionContext(mlir::OpBuilder& builder) {
-      mlir::FuncOp funcOp = moduleOp.lookupSymbol<mlir::FuncOp>("rt_get_execution_context");
+      mlir::func::FuncOp funcOp = moduleOp.lookupSymbol<mlir::func::FuncOp>("rt_get_execution_context");
       if (!funcOp) {
          mlir::OpBuilder::InsertionGuard guard(builder);
          builder.setInsertionPointToStart(moduleOp.getBody());
-         funcOp = builder.create<mlir::FuncOp>(builder.getUnknownLoc(), "rt_get_execution_context", builder.getFunctionType({}, {mlir::util::RefType::get(builder.getContext(), builder.getI8Type())}), builder.getStringAttr("private"));
+         funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "rt_get_execution_context", builder.getFunctionType({}, {mlir::util::RefType::get(builder.getContext(), builder.getI8Type())}), builder.getStringAttr("private"));
       }
 
       return builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), funcOp, mlir::ValueRange{}).getResult(0);
@@ -1346,8 +1346,6 @@ struct Parser {
    }
 
    std::pair<mlir::Value, TargetInfo> translateSelGroupHaving(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, mlir::Value tree, TranslationContext& context, TranslationContext::ResolverScope& scope) {
-      static size_t id = 0;
-      id++;
       ReplaceState replaceState;
       for (auto* cell = targetList->head; cell != nullptr; cell = cell->next) {
          auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);

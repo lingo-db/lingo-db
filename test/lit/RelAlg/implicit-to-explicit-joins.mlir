@@ -1,6 +1,6 @@
 // RUN: mlir-db-opt %s -split-input-file -mlir-print-debuginfo -mlir-print-local-scope  --relalg-implicit-to-explicit-joins | FileCheck %s
 module @querymodule  {
-  func @query() {
+  func.func @query() {
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
   	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
@@ -15,7 +15,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
   	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
@@ -31,7 +31,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
   	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
@@ -49,7 +49,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
   	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
@@ -67,7 +67,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
   	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
@@ -86,7 +86,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
   	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
@@ -106,7 +106,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
   	%0 = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]

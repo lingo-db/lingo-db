@@ -1,5 +1,7 @@
 include "mlir/Dialect/DB/IR/DBOps.td"
 include "mlir/Dialect/Arithmetic/IR/ArithmeticOps.td"
+include "mlir/IR/PatternBase.td"
+
 def ToCmpIP : NativeCodeCall<"convertToCmpIPred($_builder,$0)">;
 def ToCmpFP : NativeCodeCall<"convertToCmpFPred($_builder,$0)">;
 def ConvertConst : NativeCodeCall<"convertConst($0,$1)">;

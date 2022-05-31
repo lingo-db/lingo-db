@@ -1,12 +1,15 @@
 #include "mlir/Dialect/util/UtilOps.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/util/UtilDialect.h"
+
 #include "mlir/IR/OpImplementation.h"
 #include "mlir/IR/PatternMatch.h"
 #include <unordered_set>
 
 using namespace mlir;
 
-::mlir::LogicalResult verify(mlir::util::UnPackOp unPackOp) {
+::mlir::LogicalResult mlir::util::UnPackOp::verify() {
+   mlir::util::UnPackOp& unPackOp = *this;
    if (auto tupleType = unPackOp.tuple().getType().dyn_cast_or_null<mlir::TupleType>()) {
       if (tupleType.getTypes().size() != unPackOp.vals().size()) {
          unPackOp.emitOpError("must unpack exactly as much as entries in tuple");
@@ -26,7 +29,8 @@ using namespace mlir;
    }
    return success();
 }
-::mlir::LogicalResult verify(mlir::util::PackOp packOp) {
+::mlir::LogicalResult mlir::util::PackOp::verify() {
+   mlir::util::PackOp& packOp = *this;
    if (auto tupleType = packOp.tuple().getType().dyn_cast_or_null<mlir::TupleType>()) {
       if (tupleType.getTypes().size() != packOp.vals().size()) {
          packOp.emitOpError("must unpack exactly as much as entries in tuple");
@@ -119,7 +123,8 @@ void mlir::util::LoadOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects:
       effects.emplace_back(MemoryEffects::Read::get());
    }
 }
-::mlir::LogicalResult verify(mlir::util::TupleElementPtrOp op) {
+::mlir::LogicalResult mlir::util::TupleElementPtrOp::verify() {
+   mlir::util::TupleElementPtrOp& op = *this;
    auto resElementType = op.getType().getElementType();
    auto ptrTupleType = op.ref().getType().cast<mlir::util::RefType>().getElementType().cast<mlir::TupleType>();
    auto ptrElementType = ptrTupleType.getTypes()[op.idx()];

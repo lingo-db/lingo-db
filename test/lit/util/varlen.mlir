@@ -1,11 +1,11 @@
 // RUN: run-mlir %s | FileCheck %s
 
 module  {
-  func private @_ZN7runtime11DumpRuntime10dumpStringEbNS_8VarLen32E(i1, !util.varlen32)
-  func private @_ZN7runtime11DumpRuntime9dumpIndexEm(index)
+  func.func private @_ZN7runtime11DumpRuntime10dumpStringEbNS_8VarLen32E(i1, !util.varlen32)
+  func.func private @_ZN7runtime11DumpRuntime9dumpIndexEm(index)
 
   memref.global "private" constant @db_constant_string0 : memref<16xi8> = dense<[115, 116, 114, 49,115, 116, 114, 49,115, 116, 114, 49,115, 116, 114, 49]> {alignment = 1 : i64}
-  func @main() {
+  func.func @main() {
     //prepare
     %0 = memref.get_global @db_constant_string0 : memref<16xi8>
     %1 = memref.cast %0 : memref<16xi8> to memref<?xi8>

@@ -1,6 +1,6 @@
 // RUN: run-mlir %s | FileCheck %s
 module {
-    func @main ()  {
+    func.func @main ()  {
         %conststr1 = db.constant ( "str1" ) : !db.string
         %conststr2 = db.constant ( "str2" ) : !db.string
         %conststr3 = db.constant ( "nostr" ) : !db.string

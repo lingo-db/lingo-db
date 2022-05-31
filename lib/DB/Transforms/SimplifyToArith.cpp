@@ -1,3 +1,4 @@
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 
@@ -61,7 +62,7 @@ mlir::Attribute convertConst(mlir::Attribute attr, mlir::Value v) {
 #include "SimplifyToArith.inc"
 
 //Pattern that optimizes the join order
-class SimplifyToArith : public mlir::PassWrapper<SimplifyToArith, mlir::OperationPass<mlir::FuncOp>> {
+class SimplifyToArith : public mlir::PassWrapper<SimplifyToArith, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "db-simplify-to-arith"; }
 
    public:

@@ -1,5 +1,6 @@
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 
 #include <iostream>
 
@@ -11,7 +12,7 @@ namespace {
 #include "CustomCanonicalization.inc"
 
 //Pattern that optimizes the join order
-class SimplifyArithmetics : public mlir::PassWrapper<SimplifyArithmetics, mlir::OperationPass<mlir::FuncOp>> {
+class SimplifyArithmetics : public mlir::PassWrapper<SimplifyArithmetics, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "simplify-arithmetics"; }
 
    public:

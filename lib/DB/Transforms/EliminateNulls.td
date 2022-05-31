@@ -1,5 +1,6 @@
 include "mlir/Dialect/DB/IR/DBOps.td"
 include "mlir/Dialect/Arithmetic/IR/ArithmeticOps.td"
+include "mlir/IR/PatternBase.td"
 
 
 def CreateTrueAttr : NativeCodeCall<"$_builder.getIntegerAttr($_builder.getI1Type(),1)">;

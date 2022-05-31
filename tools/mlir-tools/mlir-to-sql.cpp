@@ -261,12 +261,12 @@ class ToSQL {
    public:
    ToSQL(mlir::MLIRContext* context, mlir::ModuleOp moduleOp) : context(context), moduleOp(moduleOp) {}
    std::string run() {
-      mlir::FuncOp func = mlir::dyn_cast_or_null<mlir::FuncOp>(&moduleOp.getRegion().front().front());
+      mlir::func::FuncOp func = mlir::dyn_cast_or_null<mlir::func::FuncOp>(&moduleOp.getRegion().front().front());
       std::stringstream totalOutput;
       totalOutput << "with ";
       bool addComma = false;
       func->walk([&](mlir::Operation* operation) {
-         if (mlir::isa<mlir::FuncOp>(operation))
+         if (mlir::isa<mlir::func::FuncOp>(operation))
             return;
          if (auto op = mlir::dyn_cast_or_null<Operator>(operation)) {
             if (!addComma) {

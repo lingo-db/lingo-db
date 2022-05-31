@@ -1,6 +1,6 @@
 // RUN: mlir-db-opt %s -split-input-file -mlir-print-debuginfo -mlir-print-local-scope  --relalg-extract-nested-operators | FileCheck %s
 module  {
-  func @query() {
+  func.func @query() {
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel::@attr1({type = i32})] values : [1, 2]
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel2::@attr1({type = i32})] values : [1, 2]
     //CHECK: %{{.*}} = relalg.const_relation columns : [@constrel3::@attr1({type = i32})] values : [1, 2]

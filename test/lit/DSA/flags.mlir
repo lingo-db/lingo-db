@@ -2,7 +2,7 @@
 
 
  module {
- 	func @main () {
+ 	func.func @main () {
  	 	 %true = db.constant ( 1 ) : i1
  		 %flag1 = dsa.createflag
  		 %flag2 = dsa.createflag

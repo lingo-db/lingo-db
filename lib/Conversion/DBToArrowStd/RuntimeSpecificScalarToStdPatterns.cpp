@@ -1,5 +1,6 @@
 #include "mlir-support/parsing.h"
 #include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/DB/IR/RuntimeFunctions.h"

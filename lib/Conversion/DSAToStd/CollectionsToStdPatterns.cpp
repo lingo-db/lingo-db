@@ -1,5 +1,6 @@
 #include "mlir/Conversion/DSAToStd/CollectionIteration.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
@@ -23,14 +24,14 @@ class SortOpLowering : public OpConversionPattern<mlir::dsa::SortOp> {
 
       ModuleOp parentModule = sortOp->getParentOfType<ModuleOp>();
       Type elementType = sortOp.toSort().getType().cast<mlir::dsa::VectorType>().getElementType();
-      FuncOp funcOp;
+      mlir::func::FuncOp funcOp;
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(parentModule.getBody());
-         funcOp = rewriter.create<FuncOp>(parentModule.getLoc(), "dsa_sort_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange(rewriter.getI1Type())));
+         funcOp = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "dsa_sort_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange(rewriter.getI1Type())));
          auto* funcBody = new Block;
          funcBody->addArguments(TypeRange({ptrType, ptrType}), {parentModule->getLoc(), parentModule->getLoc()});
-         funcOp.body().push_back(funcBody);
+         funcOp.getBody().push_back(funcBody);
          rewriter.setInsertionPointToStart(funcBody);
          Value left = funcBody->getArgument(0);
          Value right = funcBody->getArgument(1);
@@ -51,7 +52,7 @@ class SortOpLowering : public OpConversionPattern<mlir::dsa::SortOp> {
       }
 
 
-      Value functionPointer = rewriter.create<mlir::func::ConstantOp>(sortOp->getLoc(), funcOp.type(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.sym_name())));
+      Value functionPointer = rewriter.create<mlir::func::ConstantOp>(sortOp->getLoc(), funcOp.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.getSymName())));
       rt::Vector::sort(rewriter, sortOp->getLoc())({adaptor.toSort(), functionPointer});
       rewriter.eraseOp(sortOp);
       return success();

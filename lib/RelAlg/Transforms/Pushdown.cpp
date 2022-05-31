@@ -8,7 +8,7 @@
 
 namespace {
 
-class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::FuncOp>> {
+class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-pushdown"; }
 
    Operator pushdown(Operator topush, Operator curr) {

@@ -40,32 +40,33 @@ static ParseResult parseCustRef(OpAsmParser& parser, mlir::relalg::ColumnRefAttr
    attr = getColumnManager(parser).createRef(parsedSymbolRefAttr);
    return success();
 }
+
 void printCustRef(OpAsmPrinter& p, mlir::Operation* op, mlir::relalg::ColumnRefAttr attr) {
    p << attr.getName();
 }
 static ParseResult parseCustRegion(OpAsmParser& parser, Region& result) {
-   OpAsmParser::OperandType predArgument;
-   Type predArgType;
-   SmallVector<OpAsmParser::OperandType, 4> regionArgs;
+   OpAsmParser::Argument predArgument;
+   SmallVector<OpAsmParser::Argument, 4> regionArgs;
    SmallVector<Type, 4> argTypes;
    if (parser.parseLParen()) {
       return failure();
    }
    while (true) {
+      Type predArgType;
       if (!parser.parseOptionalRParen()) {
          break;
       }
-      if (parser.parseRegionArgument(predArgument) || parser.parseColonType(predArgType)) {
+      if (parser.parseArgument(predArgument) || parser.parseColonType(predArgType)) {
          return failure();
       }
+      predArgument.type=predArgType;
       regionArgs.push_back(predArgument);
-      argTypes.push_back(predArgType);
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRParen()) { return failure(); }
       break;
    }
 
-   if (parser.parseRegion(result, regionArgs, argTypes)) return failure();
+   if (parser.parseRegion(result, regionArgs)) return failure();
    return success();
 }
 static void printCustRegion(OpAsmPrinter& p, Operation* op, Region& r) {
@@ -250,7 +251,7 @@ static void printCustAttrMapping(OpAsmPrinter& p, mlir::Operation* op, Attribute
 ///////////////////////////////////////////////////////////////////////////////////
 // BaseTableOp
 ///////////////////////////////////////////////////////////////////////////////////
-static ParseResult parseBaseTableOp(OpAsmParser& parser, OperationState& result) {
+ParseResult mlir::relalg::BaseTableOp::parse(OpAsmParser& parser, OperationState& result) {
    if (parser.parseOptionalAttrDict(result.attributes)) return failure();
    if (parser.parseKeyword("columns") || parser.parseColon() || parser.parseLBrace()) return failure();
    std::vector<mlir::NamedAttribute> columns;
@@ -281,14 +282,14 @@ static ParseResult parseBaseTableOp(OpAsmParser& parser, OperationState& result)
    result.addAttribute("columns", mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns));
    return parser.addTypeToList(mlir::relalg::TupleStreamType::get(parser.getBuilder().getContext()), result.types);
 }
-static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
+void mlir::relalg::BaseTableOp::print(OpAsmPrinter& p) {
    p << " ";
    std::vector<mlir::NamedAttribute> colsToPrint;
-   for (auto attr : op->getAttrs()) {
+   for (auto attr : this->getOperation()->getAttrs()) {
       if (attr.getName().str() == "meta") {
          if (auto metaAttr = attr.getValue().dyn_cast_or_null<mlir::relalg::TableMetaDataAttr>()) {
             if (metaAttr.getMeta()->isPresent()) {
-               colsToPrint.push_back(mlir::NamedAttribute(mlir::StringAttr::get(op->getContext(), "meta"), mlir::StringAttr::get(op->getContext(), metaAttr.getMeta()->serialize())));
+               colsToPrint.push_back(mlir::NamedAttribute(mlir::StringAttr::get(getContext(), "meta"), mlir::StringAttr::get(getContext(), metaAttr.getMeta()->serialize())));
             }
          }
       } else {
@@ -298,7 +299,7 @@ static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
    p.printOptionalAttrDict(colsToPrint, /*elidedAttrs=*/{"sym_name", "columns"});
    p << " columns: {";
    auto first = true;
-   for (auto mapping : op.columns()) {
+   for (auto mapping : columns()) {
       auto columnName = mapping.getName();
       auto attr = mapping.getValue();
       auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::ColumnDefAttr>();
@@ -308,7 +309,7 @@ static void print(OpAsmPrinter& p, relalg::BaseTableOp& op) {
          p << ", ";
       }
       p << columnName.getValue() << " => ";
-      printCustDef(p, op, relationDefAttr);
+      printCustDef(p, *this, relationDefAttr);
    }
    p << "}";
 }

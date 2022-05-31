@@ -1,7 +1,7 @@
 // RUN: run-mlir %s | FileCheck %s
 
  module {
-	func @main () {
+	func.func @main () {
  		%date_const = db.constant ( "2020-06-13") : !db.date<day>
  		%interval_1_month_const = db.constant ( 1 ) :!db.interval<months>
  		%interval_1_year_const = db.constant ( 12 ) :!db.interval<months>

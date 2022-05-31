@@ -1,8 +1,10 @@
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include <mlir/Dialect/SCF/SCF.h>
+
 
 using namespace mlir;
 namespace {
@@ -16,7 +18,7 @@ class CreateFlagLowering : public OpConversionPattern<mlir::dsa::CreateFlag> {
       Value alloca;
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
-         auto func = op->getParentOfType<mlir::FuncOp>();
+         auto func = op->getParentOfType<mlir::func::FuncOp>();
          rewriter.setInsertionPointToStart(&func.getBody().front());
          alloca = rewriter.create<mlir::util::AllocaOp>(op->getLoc(), memrefType, Value());
       }

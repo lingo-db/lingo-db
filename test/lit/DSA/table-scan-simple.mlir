@@ -21,7 +21,7 @@
     //CHECK: date(NULL)
     //CHECK: date(NULL)
     //CHECK: string("---------------")
-	func @main () {
+	func.func @main () {
 			%str_const = db.constant ( "---------------" ) :!db.string
             %0 = dsa.scan_source "{ \"table\": \"test\", \"columns\": [\"str\",\"float32\",\"float64\",\"decimal\",\"int32\",\"int64\",\"bool\",\"date32\",\"date64\"] }" : !dsa.iterable<!dsa.record_batch<!test_table_tuple>,table_chunk_iterator>
             dsa.for %record_batch in %0 : !dsa.iterable<!dsa.record_batch<!test_table_tuple>,table_chunk_iterator>{

@@ -1,7 +1,7 @@
 // RUN: run-mlir %s | FileCheck %s
 
  module {
-	func @main () {
+	func.func @main () {
  		%const_int32_1 = db.constant ( 1 ) : i32
  		%const_float32_1 = db.constant ( 1.101 ) : f32
  		%const_decimal_10_3 = db.constant ( "1.101" ) : !db.decimal<10,3>

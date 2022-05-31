@@ -2,6 +2,8 @@
 #define LINGODB_DIALECT_RELALG_IR_OPS
 
 include "mlir/IR/OpBase.td"
+include "mlir/IR/EnumAttr.td"
+include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
@@ -56,6 +58,7 @@ class RelAlg_Attr<string name> : AttrDef<RelAlg_Dialect, name>;
 def TableMetaDataAttr : RelAlg_Attr<"TableMetaData"> {
     let mnemonic = "table_metadata";
     let parameters = (ins "std::shared_ptr<runtime::TableMetaData>":$meta);
+    let hasCustomAssemblyFormat = 1;
 }
 
 def ColumnDefAttr : RelAlg_Attr<"ColumnDef"> {
@@ -64,6 +67,7 @@ def ColumnDefAttr : RelAlg_Attr<"ColumnDef"> {
     let extraClassDeclaration = [{
         Column &getColumn() const { return *getColumnPtr();  }
     }];
+    let hasCustomAssemblyFormat=1;
 }
 def ColumnRefAttr : RelAlg_Attr<"ColumnRef"> {
     let mnemonic = "columnref";
@@ -71,11 +75,14 @@ def ColumnRefAttr : RelAlg_Attr<"ColumnRef"> {
     let extraClassDeclaration = [{
         Column &getColumn() const { return *getColumnPtr();  }
     }];
+        let hasCustomAssemblyFormat=1;
 }
 
 def SortSpecificationAttr : RelAlg_Attr<"SortSpecification"> {
     let mnemonic = "sortspec";
     let parameters = (ins "ColumnRefAttr":$attr,"SortSpec":$sortSpec);
+        let hasCustomAssemblyFormat=1;
+
 }
 
 //===----------------------------------------------------------------------===//
@@ -116,8 +123,8 @@ def RelAlg_SetSemantic : I64EnumAttr<"SetSemantic", "",
 //===----------------------------------------------------------------------===//
 
 class RelAlg_Op<string mnemonic, list<Trait> traits = []> : Op<RelAlg_Dialect, mnemonic, traits> {
-    let printer = [{ return ::print(p, *this); }];
-    let parser = [{ return ::parse$cppClass(parser, result); }];
+  let hasCustomAssemblyFormat = 1;
+
 }
 
 //===----------------------------------------------------------------------===//

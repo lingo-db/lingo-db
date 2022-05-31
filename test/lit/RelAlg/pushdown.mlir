@@ -1,6 +1,6 @@
 // RUN: mlir-db-opt %s -split-input-file -mlir-print-debuginfo -mlir-print-local-scope  --relalg-pushdown| FileCheck %s
 module @querymodule  {
-  func @query() {
+  func.func @query() {
     //CHECK: %0 =  relalg.const_relation columns : [@constrel::@attr1({type = i32}),@constrel::@attr2({type = i32})]
     //CHECK: %1 =  relalg.const_relation columns : [@constrel2::@attr1({type = i32}),@constrel2::@attr2({type = i32})]
     //CHECK: %2 = relalg.selection %0
@@ -26,7 +26,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
     //CHECK: %0 =  relalg.const_relation columns : [@constrel::@attr1({type = i32}),@constrel::@attr2({type = i32})]
     //CHECK: %1 =  relalg.const_relation columns : [@constrel2::@attr1({type = i32}),@constrel2::@attr2({type = i32})]
     //CHECK: %2 = relalg.selection %0
@@ -59,7 +59,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
     //CHECK: %0 =  relalg.const_relation columns : [@constrel::@attr1({type = i32}),@constrel::@attr2({type = i32})]
     //CHECK: %1 =  relalg.const_relation columns : [@constrel2::@attr1({type = i32}),@constrel2::@attr2({type = i32})]
     //CHECK: %2 = relalg.selection %0
@@ -87,7 +87,7 @@ module @querymodule  {
 }
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
     //CHECK: %0 =  relalg.const_relation columns : [@constrel::@attr1({type = i32}),@constrel::@attr2({type = i32})]
     //CHECK: %1 =  relalg.const_relation columns : [@constrel2::@attr1({type = i32}),@constrel2::@attr2({type = i32})]
     //CHECK: %2 = relalg.selection %0
@@ -116,7 +116,7 @@ module @querymodule  {
 
 // -----
 module @querymodule  {
-  func @query() {
+  func.func @query() {
     //CHECK: %0 =  relalg.const_relation columns : [@constrel::@attr1({type = i32}),@constrel::@attr2({type = i32})]
     //CHECK: %1 =  relalg.const_relation columns : [@constrel2::@attr1({type = i32}),@constrel2::@attr2({type = i32})]
     //CHECK: %2 = relalg.fullouterjoin %0, %1

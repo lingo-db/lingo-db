@@ -34,7 +34,7 @@
 //CHECK: float(1)
 //CHECK: decimal(1.00)
  module {
- 	func @main () {
+ 	func.func @main () {
  	     %char_const = db.constant ( "AB" ) : !db.char<2>
  		 %int32_const = db.constant ( 10 ) : i32
  		 %int64_const = db.constant ( 10 ) : i64

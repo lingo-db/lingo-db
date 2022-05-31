@@ -4,6 +4,8 @@
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/DB/Passes.h"
@@ -233,9 +235,9 @@ void DBToStdLoweringPass::runOnOperation() {
    target.addLegalOp<mlir::dsa::CondSkipOp>();
 
    target.addDynamicallyLegalOp<mlir::dsa::CondSkipOp>(opIsWithoutDBTypes);
-   target.addDynamicallyLegalOp<FuncOp>([&](FuncOp op) {
-      auto isLegal = !hasDBType(typeConverter, op.getType().getInputs()) &&
-         !hasDBType(typeConverter, op.getType().getResults());
+   target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
+      auto isLegal = !hasDBType(typeConverter, op.getFunctionType().getInputs()) &&
+         !hasDBType(typeConverter, op.getFunctionType().getResults());
       return isLegal;
    });
    target.addDynamicallyLegalOp<mlir::func::ConstantOp>([&](mlir::func::ConstantOp op) {
@@ -286,7 +288,7 @@ void DBToStdLoweringPass::runOnOperation() {
 
    RewritePatternSet patterns(&getContext());
 
-   mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::FuncOp>(patterns, typeConverter);
+   mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(patterns, typeConverter);
    mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
    mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
    mlir::db::populateScalarToStdPatterns(typeConverter, patterns);

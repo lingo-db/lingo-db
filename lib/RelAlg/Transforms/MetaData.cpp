@@ -5,7 +5,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "runtime/Database.h"
 namespace {
-class AttachMetaData : public mlir::PassWrapper<AttachMetaData, mlir::OperationPass<mlir::FuncOp>> {
+class AttachMetaData : public mlir::PassWrapper<AttachMetaData, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-attach-meta-data"; }
    runtime::Database& db;
    public:
@@ -16,7 +16,7 @@ class AttachMetaData : public mlir::PassWrapper<AttachMetaData, mlir::OperationP
       });
    }
 };
-class DetachMetaData : public mlir::PassWrapper<DetachMetaData, mlir::OperationPass<mlir::FuncOp>> {
+class DetachMetaData : public mlir::PassWrapper<DetachMetaData, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-detach-meta-data"; }
 
    public:

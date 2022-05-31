@@ -8,7 +8,7 @@
 
 namespace {
 
-class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins, mlir::OperationPass<mlir::FuncOp>> {
+class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-implicit-to-explicit-joins"; }
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::db::DBDialect>();

@@ -1,7 +1,8 @@
 #include "mlir/Transforms/CustomPasses.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 #include <queue>
 namespace {
-class SinkOp : public mlir::PassWrapper<SinkOp, mlir::OperationPass<mlir::FuncOp>> {
+class SinkOp : public mlir::PassWrapper<SinkOp, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "sinkop"; }
    static bool isSideEffectFree(mlir::Operation* op) {
       if (auto memInterface = dyn_cast<mlir::MemoryEffectOpInterface>(op)) {

@@ -11,7 +11,7 @@
 //CHECK: |                         29555  |                   "Feuerbach"  |
 
 module @querymodule{
-    func @main ()  -> !dsa.table{
+    func.func @main ()  -> !dsa.table{
         %1 = relalg.basetable { table_identifier="studenten" } columns: {matrnr => @studenten::@matrnr({type=i64}),
             name => @studenten::@name({type=!db.string}),
             semester => @studenten::@semester({type=i64})

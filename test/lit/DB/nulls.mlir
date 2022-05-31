@@ -1,13 +1,13 @@
 // RUN: run-mlir %s | FileCheck %s
 
  module {
-	func @test (%arg0: !db.nullable<i1>) {
+	func.func @test (%arg0: !db.nullable<i1>) {
 	 	db.runtime_call "DumpValue" (%arg0) : (!db.nullable<i1>) -> ()
 		%1 = db.isnull %arg0 : !db.nullable<i1>
 		db.runtime_call "DumpValue" (%1) : (i1) -> ()
 		return
 	}
-	func @main () {
+	func.func @main () {
  		%const = db.constant ( 1 ) : i1
  		%null = db.null : !db.nullable<i1>
  		%not_null = db.as_nullable %const  : i1 -> !db.nullable<i1>
