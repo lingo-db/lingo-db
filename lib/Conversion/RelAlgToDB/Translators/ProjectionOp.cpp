@@ -49,7 +49,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
          builder.setInsertionPointToStart(aggrBuilderBlock);
          auto yieldOp = builder.create<mlir::dsa::YieldOp>(projectionOp->getLoc());
          builder.setInsertionPointToStart(aggrBuilderBlock);
-         mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1));
+         mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1),projectionOp->getLoc());
          builder.create<mlir::dsa::YieldOp>(projectionOp->getLoc(), matches);
          yieldOp.erase();
       }
@@ -63,8 +63,7 @@ class DistinctProjectionTranslator : public mlir::relalg::Translator {
          builder.create<mlir::dsa::YieldOp>(projectionOp->getLoc(), hashed);
       }
    }
-   mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::Value left, mlir::Value right) {
-      auto loc = rewriter.getUnknownLoc();
+   mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::Value left, mlir::Value right,mlir::Location loc) {
       mlir::Value equal = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
       auto leftUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, left);
       auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, right);

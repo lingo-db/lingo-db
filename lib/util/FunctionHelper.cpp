@@ -4,23 +4,23 @@
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Dialect/util/UtilTypes.h"
-static mlir::Value convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t) {
+static mlir::Value convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t,mlir::Location loc) {
    if (v.getType() == t) return v;
    mlir::Type currentType = v.getType();
    if (currentType.isIndex() || t.isIndex()) {
-      return builder.create<mlir::arith::IndexCastOp>(builder.getUnknownLoc(), t, v);
+      return builder.create<mlir::arith::IndexCastOp>(loc, t, v);
    }
    if (currentType.isa<mlir::IntegerType>() && t.isa<mlir::IntegerType>()) {
       auto targetWidth = t.cast<mlir::IntegerType>().getWidth();
       auto sourceWidth = currentType.cast<mlir::IntegerType>().getWidth();
       if (targetWidth > sourceWidth) {
-         return builder.create<mlir::arith::ExtSIOp>(builder.getUnknownLoc(), t, v);
+         return builder.create<mlir::arith::ExtSIOp>(loc, t, v);
       } else {
-         return builder.create<mlir::arith::TruncIOp>(builder.getUnknownLoc(), t, v);
+         return builder.create<mlir::arith::TruncIOp>(loc, t, v);
       }
    }
    if (t.isa<mlir::util::RefType>() && currentType.isa<mlir::util::RefType>()) {
-      return builder.create<mlir::util::GenericMemrefCastOp>(builder.getUnknownLoc(), t, v);
+      return builder.create<mlir::util::GenericMemrefCastOp>(loc, t, v);
    }
    return v; //todo
 }
@@ -38,7 +38,7 @@ mlir::ResultRange mlir::util::FunctionHelper::call(OpBuilder& builder, mlir::Loc
    assert(values.size() == funcOp.getFunctionType().getNumInputs());
    std::vector<mlir::Value> convertedValues;
    for (size_t i = 0; i < funcOp.getFunctionType().getNumInputs(); i++) {
-      mlir::Value converted = convertValue(builder, values[i], funcOp.getFunctionType().getInput(i));
+      mlir::Value converted = convertValue(builder, values[i], funcOp.getFunctionType().getInput(i),loc);
       convertedValues.push_back(converted);
       assert(converted.getType() == funcOp.getFunctionType().getInput(i));
    }

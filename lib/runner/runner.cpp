@@ -352,6 +352,7 @@ bool Runner::loadSQL(std::string sql, runtime::Database& database) {
    mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, returnTypes));
    funcOp.getBody().push_back(queryBlock);
    ctxt->module = moduleOp;
+   snapshot("sql-input.mlir");
    return true;
 }
 bool Runner::load(std::string file) {
@@ -502,7 +503,7 @@ void Runner::dump() {
    ctxt->module->print(llvm::dbgs(), flags);
 }
 
-void Runner::snapshot() {
+void Runner::snapshot(std::string fileName) {
    if (runMode == RunMode::DEBUGGING || runMode == RunMode::PERF) {
       static size_t cntr = 0;
       RunnerContext* ctxt = (RunnerContext*) this->context;
@@ -510,7 +511,10 @@ void Runner::snapshot() {
       pm.enableVerifier(runMode == RunMode::DEBUGGING);
       mlir::OpPrintingFlags flags;
       flags.enableDebugInfo(false);
-      pm.addPass(mlir::createLocationSnapshotPass(flags, "snapshot-" + std::to_string(cntr++) + ".mlir"));
+      if(fileName.empty()){
+         fileName="snapshot-" + std::to_string(cntr++) + ".mlir";
+      }
+      pm.addPass(mlir::createLocationSnapshotPass(flags, fileName));
       assert(pm.run(*ctxt->module).succeeded());
    }
 }
@@ -552,6 +556,7 @@ static pid_t runPerfRecord() {
    const char* argV[] = {"perf", "record", "-R", "-e", "ibs_op//p", "-c", "5000", "--intr-regs=r15", "-C", "0", nullptr};
    auto status = posix_spawn(&childPid, "/usr/bin/perf", nullptr, nullptr, const_cast<char**>(argV), environ);
    sleep(5);
+   assignToThisCore(0);
    if (status != 0)
       std::cerr << "Launching application Failed: " << status << std::endl;
    return childPid;

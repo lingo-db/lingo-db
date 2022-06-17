@@ -194,7 +194,7 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
                mlir::Value compared = predBuilder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, left, right);
                predBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), compared);
 
-               auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), current);
+               auto sel = builder.create<mlir::relalg::SelectionOp>(loc, mlir::relalg::TupleStreamType::get(builder.getContext()), current);
                sel.predicate().push_back(block);
                current.replaceAllUsesExcept(sel.asRelation(), sel.getOperation());
                current = sel.asRelation();

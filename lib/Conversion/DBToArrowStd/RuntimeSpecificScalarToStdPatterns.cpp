@@ -124,7 +124,7 @@ class RuntimeCallLowering : public OpConversionPattern<mlir::db::RuntimeCall> {
          result = resRange.size() == 1 ? resRange[0] : mlir::Value();
       } else if (std::holds_alternative<mlir::db::RuntimeFunction::loweringFnT>(fn->implementation)) {
          auto& implFn = std::get<mlir::db::RuntimeFunction::loweringFnT>(fn->implementation);
-         result = implFn(rewriter, adaptor.args(), runtimeCallOp.args().getTypes(), runtimeCallOp->getNumResults() == 1 ? runtimeCallOp->getResultTypes()[0] : mlir::Type(), typeConverter);
+         result = implFn(rewriter, adaptor.args(), runtimeCallOp.args().getTypes(), runtimeCallOp->getNumResults() == 1 ? runtimeCallOp->getResultTypes()[0] : mlir::Type(), typeConverter,runtimeCallOp->getLoc());
       }
 
       if (runtimeCallOp->getNumResults() == 0) {

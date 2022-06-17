@@ -36,7 +36,7 @@ struct RuntimeFunction {
       };
    }
    std::function<bool(mlir::TypeRange types, mlir::Type resType)> verifyFn;
-   using loweringFnT = std::function<mlir::Value(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter*)>;
+   using loweringFnT = std::function<mlir::Value(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter*,mlir::Location)>;
    std::variant<loweringFnT, mlir::util::FunctionSpec> implementation;
 
    //builder functions

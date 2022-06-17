@@ -52,8 +52,7 @@ class SetOpTranslator : public mlir::relalg::Translator {
       }
       return tuple;
    }
-   mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::Value left, mlir::Value right) {
-      auto loc = rewriter.getUnknownLoc();
+   mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::Value left, mlir::Value right,mlir::Location loc) {
       mlir::Value equal = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
       auto leftUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, left);
       auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, right);
@@ -143,7 +142,7 @@ class UnionDistinctTranslator : public SetOpTranslator {
          builder.setInsertionPointToStart(aggrBuilderBlock);
          auto yieldOp = builder.create<mlir::dsa::YieldOp>(unionOp->getLoc());
          builder.setInsertionPointToStart(aggrBuilderBlock);
-         mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1));
+         mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1),unionOp->getLoc());
          builder.create<mlir::dsa::YieldOp>(unionOp->getLoc(), matches);
          yieldOp.erase();
       }
@@ -209,7 +208,7 @@ class CountingSetTranslator : public SetOpTranslator {
          builder.setInsertionPointToStart(aggrBuilderBlock);
          auto yieldOp = builder.create<mlir::dsa::YieldOp>(loc);
          builder.setInsertionPointToStart(aggrBuilderBlock);
-         mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1));
+         mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1),loc);
          builder.create<mlir::dsa::YieldOp>(loc, matches);
          yieldOp.erase();
       }

@@ -8,28 +8,28 @@
 mlir::db::RuntimeFunction* mlir::db::RuntimeFunctionRegistry::lookup(std::string name) {
    return registeredFunctions[name].get();
 }
-static mlir::Value dateAddImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter) {
+static mlir::Value dateAddImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter,mlir::Location loc) {
    using namespace mlir;
    if (originalArgumentTypes[1].cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
-      return rewriter.create<mlir::arith::AddIOp>(rewriter.getUnknownLoc(), loweredArguments);
+      return rewriter.create<mlir::arith::AddIOp>(loc, loweredArguments);
    } else {
-      return rt::DateRuntime::addMonths(rewriter, rewriter.getUnknownLoc())(loweredArguments)[0];
+      return rt::DateRuntime::addMonths(rewriter, loc)(loweredArguments)[0];
    }
 }
-static mlir::Value absIntImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter) {
+static mlir::Value absIntImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter,mlir::Location loc) {
    using namespace mlir;
    mlir::Value val = loweredArguments[0];
-   mlir::Value zero = rewriter.create<mlir::arith::ConstantOp>(rewriter.getUnknownLoc(), resType, rewriter.getIntegerAttr(resType, 0));
-   mlir::Value negated = rewriter.create<mlir::arith::SubIOp>(rewriter.getUnknownLoc(), zero, val);
-   mlir::Value ltZero = rewriter.create<mlir::arith::CmpIOp>(rewriter.getUnknownLoc(), mlir::arith::CmpIPredicate::slt, val, zero);
-   return rewriter.create<mlir::arith::SelectOp>(rewriter.getUnknownLoc(), ltZero, negated, val);
+   mlir::Value zero = rewriter.create<mlir::arith::ConstantOp>(loc, resType, rewriter.getIntegerAttr(resType, 0));
+   mlir::Value negated = rewriter.create<mlir::arith::SubIOp>(loc, zero, val);
+   mlir::Value ltZero = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::slt, val, zero);
+   return rewriter.create<mlir::arith::SelectOp>(loc, ltZero, negated, val);
 }
-static mlir::Value dateSubImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter) {
+static mlir::Value dateSubImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter,mlir::Location loc) {
    using namespace mlir;
    if (originalArgumentTypes[1].cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
-      return rewriter.create<mlir::arith::SubIOp>(rewriter.getUnknownLoc(), loweredArguments);
+      return rewriter.create<mlir::arith::SubIOp>(loc, loweredArguments);
    } else {
-      return rt::DateRuntime::subtractMonths(rewriter, rewriter.getUnknownLoc())(loweredArguments)[0];
+      return rt::DateRuntime::subtractMonths(rewriter, loc)(loweredArguments)[0];
    }
 }
 static mlir::Value matchPart(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value lastMatchEnd, std::string pattern, mlir::Value str, mlir::Value end) {
@@ -53,14 +53,13 @@ static mlir::Value matchPart(mlir::OpBuilder& builder, mlir::Location loc, mlir:
       return matchEnd;
    }
 }
-static mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter) {
+static mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter,mlir::Location loc) {
    using namespace mlir;
    mlir::Value str = loweredArguments[0];
    mlir::Value patternValue = loweredArguments[1];
    if (auto constStrOp = mlir::dyn_cast_or_null<mlir::util::CreateConstVarLen>(patternValue.getDefiningOp())) {
       auto pattern = constStrOp.str().str();
       size_t pos = 0;
-      auto loc = rewriter.getUnknownLoc();
       std::string currentSubPattern;
       mlir::Value lastMatchEnd;
       mlir::Value end = rewriter.create<util::VarLenGetLen>(loc, rewriter.getIndexType(), str);
@@ -107,9 +106,8 @@ static mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange low
 
    return Value();
 }
-static mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter) {
+static mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter,mlir::Location loc) {
    using namespace mlir;
-   auto loc = rewriter.getUnknownLoc();
    auto i128Type = IntegerType::get(rewriter.getContext(), 128);
    auto i64Type = IntegerType::get(rewriter.getContext(), 64);
    auto nullableType = originalArgumentTypes[0].dyn_cast_or_null<mlir::db::NullableType>();

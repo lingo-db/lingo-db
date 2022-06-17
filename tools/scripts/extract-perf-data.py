@@ -86,10 +86,8 @@ class IBSData(ctypes.Structure):
 sys.path.append(os.environ['PERF_EXEC_PATH'] + \
                 '/scripts/python/Perf-Trace-Util/lib/Perf/Trace')
 
-from EventClass import *
 import pyarrow as pa
 import pyarrow.parquet as pq
-import pandas as pd
 
 
 events = {
@@ -129,7 +127,7 @@ def called_from_generated(callchain):
 
 
 def process_event(param_dict):
-    if param_dict["comm"] != "db-run-query":
+    if param_dict["comm"] != "run-sql":
         return
     b = bytearray(param_dict["raw_buf"])
     ibs_data = IBSData.from_buffer_copy(b[4:])

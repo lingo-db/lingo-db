@@ -61,7 +61,7 @@ class SimpleTypeConversionPattern : public ConversionPattern {
             source.push_back(new Block);
             std::vector<mlir::Location> locs;
             for (size_t i = 0; i < target.front().getArgumentTypes().size(); i++) {
-               locs.push_back(rewriter.getUnknownLoc());
+               locs.push_back(target.front().getArgument(i).getLoc());
             }
             source.front().addArguments(target.front().getArgumentTypes(), locs);
             mlir::OpBuilder::InsertionGuard guard(rewriter);
