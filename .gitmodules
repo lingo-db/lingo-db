@@ -5,7 +5,7 @@
 	path = arrow
 	url = https://github.com/apache/arrow.git
 [submodule "pybind11"]
-	path = pybind11
+	path = tools/python/pybind11
 	url = https://github.com/pybind/pybind11
 [submodule "torch-mlir"]
 	path = torch-mlir
