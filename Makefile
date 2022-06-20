@@ -87,11 +87,11 @@ run-benchmark: build/lingodb-release/.stamp resources/data/tpch-1/.stamp
 	env QUERY_RUNS=5 env LINGO_DEBUG_MODE=SPEED python3 tools/scripts/benchmark-tpch.py $(dir $<) tpch-1
 
 docker-buildimg:
-	DOCKER_BUILDKIT=1 docker build -f "docker/Dockerfile" -t mlirdb-buildimg:$(shell echo "$$(git submodule status)" | cut -c 2-9 | tr '\n' '-') --target buildimg "."
+	DOCKER_BUILDKIT=1 docker build -f "tools/docker/Dockerfile" -t mlirdb-buildimg:$(shell echo "$$(git submodule status)" | cut -c 2-9 | tr '\n' '-') --target buildimg "."
 build-docker:
-	DOCKER_BUILDKIT=1 docker build -f "docker/Dockerfile" -t mlirdb:latest --target mlirdb  "."
+	DOCKER_BUILDKIT=1 docker build -f "tools/docker/Dockerfile" -t mlirdb:latest --target mlirdb  "."
 build-repr-docker:
-	DOCKER_BUILDKIT=1 docker build -f "docker/Dockerfile" -t mlirdb-repr:latest --target reproduce "."
+	DOCKER_BUILDKIT=1 docker build -f "tools/docker/Dockerfile" -t mlirdb-repr:latest --target reproduce "."
 
 .repr-docker-built:
 	$(MAKE) build-repr-docker

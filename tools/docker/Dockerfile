@@ -91,14 +91,14 @@ FROM ${buildImage} AS mlirdb
 COPY . /repo
 WORKDIR /repo
 Run git submodule init
-Run git submodule update pybind11
+Run git submodule update tools/pybind11
 RUN rm -r arrow torch-mlir
 RUN cp -r /arrow-src/arrow arrow
 #RUN cp -r /llvm-src/llvm-project llvm-project
 RUN cp -r /llvm-src/torch-mlir torch-mlir
 #RUN find /llvm-src | grep "llvm-config" && exit 1
 RUN mkdir /build/mlirdb
-RUN git submodule update pybind11
+RUN git submodule update tools/pybind11
 RUN cmake -G Ninja . -B /build/mlirdb\
            -DMLIR_DIR=/build/llvm/lib/cmake/mlir\
            -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit\
