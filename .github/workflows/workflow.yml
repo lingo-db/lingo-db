@@ -28,7 +28,7 @@ jobs:
         name: Build and export
         uses: docker/build-push-action@v2
         with:
-          file: docker/Dockerfile
+          file: tools/docker/Dockerfile
           context: .
           target: mlirdb
           build-args: |
