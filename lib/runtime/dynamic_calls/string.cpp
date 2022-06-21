@@ -86,11 +86,11 @@ bool runtime::StringRuntime::like(runtime::VarLen32 str1, runtime::VarLen32 str2
 }
 bool runtime::StringRuntime::endsWith(runtime::VarLen32 str1, runtime::VarLen32 str2) {
    if (str1.getLen() < str2.getLen()) return false;
-   return memcmp(str1.data() + str1.getLen() - str2.getLen(), str2.data(), str2.getLen()) == 0;
+   return std::string_view(str1.data(), str1.getLen()).ends_with(std::string_view(str2.data(), str2.getLen()));
 }
 bool runtime::StringRuntime::startsWith(runtime::VarLen32 str1, runtime::VarLen32 str2) {
    if (str1.getLen() < str2.getLen()) return false;
-   return memcmp(str1.data(), str2.data(), str2.getLen()) == 0;
+   return std::string_view(str1.data(), str1.getLen()).starts_with(std::string_view(str2.data(), str2.getLen()));
 }
 
 //taken from gandiva
@@ -173,27 +173,10 @@ runtime::VarLen32 runtime::StringRuntime::fromChar(uint64_t val, size_t bytes) {
    memcpy(data, &val, bytes);
    return runtime::VarLen32((uint8_t*) data, bytes);
 }
-//taken from apache gandiva
-//source: https://github.com/apache/arrow/blob/master/cpp/src/gandiva/precompiled/string_ops.cc
-//Apache-2.0 License
-__attribute__((always_inline)) inline int64_t mem_compare(const char* left, int64_t left_len, const char* right,
-                                                          int64_t right_len) {
-   int min = left_len;
-   if (right_len < min) {
-      min = right_len;
-   }
 
-   int cmp_ret = memcmp(left, right, min);
-   if (cmp_ret != 0) {
-      return cmp_ret;
-   } else {
-      return left_len - right_len;
-   }
-}
-//end taken from apache gandiva
-#define STR_CMP(NAME, OP)                                                                       \
-   bool runtime::StringRuntime::compare##NAME(runtime::VarLen32 str1, runtime::VarLen32 str2) { \
-      return mem_compare((str1).data(), (str1).getLen(), (str2).data(), (str2).getLen()) OP 0;  \
+#define STR_CMP(NAME, OP)                                                                                  \
+   bool runtime::StringRuntime::compare##NAME(runtime::VarLen32 str1, runtime::VarLen32 str2) {            \
+      return std::string_view(str1.data(), str1.getLen()) OP std::string_view(str2.data(), str2.getLen()); \
    }
 
 STR_CMP(Lt, <)
@@ -203,11 +186,11 @@ STR_CMP(Gte, >=)
 
 bool runtime::StringRuntime::compareEq(runtime::VarLen32 str1, runtime::VarLen32 str2) {
    if (str1.getLen() != str2.getLen()) return false;
-   return memcmp(str1.data(), str2.data(), str1.getLen()) == 0;
+   return std::string_view(str1.data(), str1.getLen()) == std::string_view(str2.data(), str2.getLen());
 }
 bool runtime::StringRuntime::compareNEq(runtime::VarLen32 str1, runtime::VarLen32 str2) {
    if (str1.getLen() != str2.getLen()) return true;
-   return memcmp(str1.data(), str2.data(), str1.getLen()) != 0;
+   return std::string_view(str1.data(), str1.getLen()) != std::string_view(str2.data(), str2.getLen());
 }
 EXPORT runtime::VarLen32 rt_varlen_from_ptr(uint8_t* ptr, uint32_t len) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return runtime::VarLen32(ptr, len);
