@@ -13,16 +13,6 @@ RUN pip3 install requests moz_sql_parser numpy pandas pyarrow
 RUN apt-get install -y git cmake  ninja-build wget unzip
 RUN mkdir /dbgen
 
-FROM baseimg AS tpchgen
-RUN cd /dbgen
-RUN wget -q https://github.com/electrum/tpch-dbgen/archive/32f1c1b92d1664dba542e927d23d86ffa57aa253.zip -O /dbgen/tpch-dbgen.zip
-RUN cd /dbgen; unzip -q /dbgen/tpch-dbgen.zip && mv /dbgen/tpch-dbgen-32f1c1b92d1664dba542e927d23d86ffa57aa253/* . && rm /dbgen/tpch-dbgen.zip
-RUN cd /dbgen; make
-RUN cd /dbgen; ./dbgen -f -s 1
-RUN cd /dbgen; for table in ./*.tbl; do sed 's/|$//' "$table" >"$table.2"; rm "$table";  mv "$table.2" "$table"; done
-RUN mkdir /tpch-1
-COPY ./tools /opt/tools
-RUN python3 /opt/tools/generate/generate.py /dbgen /tpch-1
 
 FROM baseimg AS buildarrow
 RUN apt-get -y install autoconf flex bison libjemalloc-dev libboost-dev \
@@ -110,4 +100,5 @@ RUN cmake --build /build/mlirdb -j$(nproc)
 
 FROM ${builtImage} as reproduce
 WORKDIR /repo
-COPY --from=tpchgen /tpch-1 ./resources/data/tpch-1
+RUN mkdir -p resources/data/tpch-1
+RUN bash tools/generate/tpch.sh /build/mlirdb /repo/resources/data/tpch-1 1
