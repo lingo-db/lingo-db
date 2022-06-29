@@ -19,7 +19,7 @@
 #include "frontend/SQL/Parser.h"
 
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
-#include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
+#include "mlir/Conversion/DBToStd/DBToStd.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
