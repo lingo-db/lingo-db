@@ -18,7 +18,7 @@
 #include "mlir/Dialect/util/UtilDialect.h"
 
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
-#include "mlir/Conversion/DBToArrowStd/DBToArrowStd.h"
+#include "mlir/Conversion/DBToStd/DBToStd.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"

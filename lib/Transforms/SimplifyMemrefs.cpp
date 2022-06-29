@@ -9,7 +9,6 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace {
-//Pattern that optimizes the join order
 class FoldLoadGlobal : public mlir::RewritePattern {
    public:
    FoldLoadGlobal(mlir::MLIRContext* context)

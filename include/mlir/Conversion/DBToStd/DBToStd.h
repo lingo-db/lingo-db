@@ -1,5 +1,5 @@
-#ifndef MLIR_CONVERSION_DBTOARROWSTD_DBTOARROWSTD_H
-#define MLIR_CONVERSION_DBTOARROWSTD_DBTOARROWSTD_H
+#ifndef MLIR_CONVERSION_DBTOSTD_DBTOSTD_H
+#define MLIR_CONVERSION_DBTOSTD_DBTOSTD_H
 
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -18,4 +18,4 @@ void createLowerDBPipeline(mlir::OpPassManager& pm);
 } // end namespace db
 } // end namespace mlir
 
-#endif // MLIR_CONVERSION_DBTOARROWSTD_DBTOARROWSTD_H
+#endif // MLIR_CONVERSION_DBTOSTD_DBTOSTD_H
