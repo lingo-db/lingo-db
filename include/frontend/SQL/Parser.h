@@ -147,51 +147,16 @@ struct SQLTypeInference {
       }
       return commonType;
    }
-   static mlir::Type getCommonType(mlir::TypeRange types) {
-      mlir::Type commonType = types.front();
-      for (auto t : types) {
-         commonType = getCommonType(commonType, t);
-      }
-      return commonType;
-   }
-   static mlir::Value toType(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t) {
-      bool isNullable = v.getType().isa<mlir::db::NullableType>();
-      if (isNullable && !t.isa<mlir::db::NullableType>()) {
-         t = mlir::db::NullableType::get(builder.getContext(), t);
-      }
-      bool onlyTargetIsNullable = !isNullable && t.isa<mlir::db::NullableType>();
-      if (v.getType() == t) { return v; }
-      if (auto* defOp = v.getDefiningOp()) {
-         if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(defOp)) {
-            if (!t.isa<mlir::db::NullableType>()) {
-               constOp.getResult().setType(t);
-               return constOp;
-            }
-         }
-         if (auto nullOp = mlir::dyn_cast_or_null<mlir::db::NullOp>(defOp)) {
-            nullOp.getResult().setType(t);
-            return nullOp;
-         }
-      }
-      if (v.getType() == getBaseType(t)) {
-         return builder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(), t, v);
-      }
-      if (onlyTargetIsNullable) {
-         mlir::Value casted = builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), getBaseType(t), v);
-         return builder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(), t, casted);
-      } else {
-         return builder.create<mlir::db::CastOp>(builder.getUnknownLoc(), t, v);
-      }
-   }
+   static mlir::Value castValueToType(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t);
    static std::vector<mlir::Value> toCommonBaseTypes(mlir::OpBuilder& builder, mlir::ValueRange values) {
       auto commonType = getCommonBaseType(values.getTypes());
       std::vector<mlir::Value> res;
       for (auto val : values) {
-         res.push_back(toType(builder, val, commonType));
+         res.push_back(castValueToType(builder, val, commonType));
       }
       return res;
    }
-   static std::vector<mlir::Value> toCommonBaseTypes2(mlir::OpBuilder& builder, mlir::ValueRange values) {
+   static std::vector<mlir::Value> toCommonBaseTypesExceptDecimals(mlir::OpBuilder& builder, mlir::ValueRange values) {
       std::vector<mlir::Value> res;
       for (auto val : values) {
          if (!getBaseType(val.getType()).isa<mlir::db::DecimalType>()) {
@@ -210,6 +175,10 @@ struct FakeNode : Node {
    FakeNode(std::string colId, std::string name, Node* original) : colId(colId), name(name), original(original) {
       type = T_FakeNode;
    }
+};
+struct ReplaceState {
+   std::unordered_map<FakeNode*, Node*> evalBeforeAggr;
+   std::unordered_map<FakeNode*, std::tuple<std::string, Node*, bool>> aggrs;
 };
 ExpressionType stringToExpressionType(const std::string& parserStr);
 struct Parser {
@@ -310,94 +279,13 @@ struct Parser {
       pg_query_parse_init();
       result = pg_query_parse(sql.c_str());
    }
-   void error(std::string str) {
+
+   void error(std::string str) { //todo: improve error handling
       std::cerr << str << std::endl;
       abort();
    }
-   std::pair<std::string, std::shared_ptr<runtime::ColumnMetaData>> translateColumnDef(ColumnDef* columnDef) {
-      auto* typeName = columnDef->type_name_;
 
-      std::vector<std::variant<size_t, std::string>> typeModifiers;
-      if (typeName->typmods_ != nullptr) {
-         for (auto* cell = typeName->typmods_->head; cell != nullptr; cell = cell->next) {
-            auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
-            switch (node->type) {
-               case T_A_Const: {
-                  auto nodeType = reinterpret_cast<A_Const*>(node)->val_.type_;
-                  switch (nodeType) {
-                     case T_Integer: {
-                        typeModifiers.push_back(static_cast<size_t>(reinterpret_cast<A_Const*>(node)->val_.val_.ival_));
-                        break;
-                     }
-                     default: {
-                        error("unsupported type mod");
-                     }
-                  }
-                  break;
-               }
-               default: {
-                  error("unsupported type mod");
-               }
-            }
-         }
-      }
-
-      std::string datatypeName = reinterpret_cast<value*>(typeName->names_->tail->data.ptr_value)->val_.str_;
-
-      //bool isPrimary = false;
-      bool isNotNull = false;
-      //bool isUnique = false;
-
-      if (columnDef->constraints_ != nullptr) {
-         for (auto* cell = columnDef->constraints_->head; cell != nullptr; cell = cell->next) {
-            auto* constraint = reinterpret_cast<Constraint*>(cell->data.ptr_value);
-            switch (constraint->contype_) {
-               case CONSTR_PRIMARY: {
-                  //isPrimary = true;
-                  break;
-               }
-               case CONSTR_NOTNULL: {
-                  isNotNull = true;
-                  break;
-               }
-               case CONSTR_UNIQUE: {
-                  //isUnique = true;
-                  break;
-               }
-               default: {
-                  error("unsupported column constraint");
-               }
-            }
-         }
-      }
-      datatypeName = llvm::StringSwitch<std::string>(datatypeName)
-                        .Case("bpchar", "char")
-                        .Case("varchar", "string")
-                        .Case("numeric", "decimal")
-                        .Case("text", "string")
-                        .Default(datatypeName);
-      if (datatypeName == "int4") {
-         datatypeName = "int";
-         typeModifiers.push_back(32ull);
-      }
-      if (datatypeName == "char" && std::get<size_t>(typeModifiers[0]) > 8) {
-         typeModifiers.clear();
-         datatypeName = "string";
-      }
-      if (datatypeName == "date") {
-         typeModifiers.clear();
-         typeModifiers.push_back("day");
-      }
-      std::string name = columnDef->colname_;
-      runtime::ColumnType columnType;
-      columnType.base = datatypeName;
-      columnType.nullable = !isNotNull;
-      columnType.modifiers = typeModifiers;
-      auto columnMetaData = std::make_shared<runtime::ColumnMetaData>();
-      columnMetaData->setColumnType(columnType);
-      return {name, columnMetaData};
-   }
-   mlir::Value getExecutionContext(mlir::OpBuilder& builder) {
+   mlir::Value getExecutionContextValue(mlir::OpBuilder& builder) {
       mlir::func::FuncOp funcOp = moduleOp.lookupSymbol<mlir::func::FuncOp>("rt_get_execution_context");
       if (!funcOp) {
          mlir::OpBuilder::InsertionGuard guard(builder);
@@ -407,208 +295,13 @@ struct Parser {
 
       return builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), funcOp, mlir::ValueRange{}).getResult(0);
    }
-   void translateCreate(mlir::OpBuilder& builder, CreateStmt* statement) {
-      RangeVar* relation = statement->relation_;
-      std::string tableName = relation->relname_ != nullptr ? relation->relname_ : "";
-      auto tableMetaData = std::make_shared<runtime::TableMetaData>();
-      for (auto* cell = statement->table_elts_->head; cell != nullptr; cell = cell->next) {
-         auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
-         switch (node->type) {
-            case T_ColumnDef: {
-               auto columnDef = translateColumnDef(reinterpret_cast<ColumnDef*>(node));
-               tableMetaData->addColumn(columnDef.first, columnDef.second);
-               break;
-            }
-            case T_Constraint: {
-               auto* constraint = reinterpret_cast<Constraint*>(node);
-               switch (constraint->contype_) {
-                  case CONSTR_PRIMARY: {
-                     std::vector<std::string> primaryKey;
-                     for (auto* keyCell = constraint->keys_->head; keyCell != nullptr; keyCell = keyCell->next) {
-                        primaryKey.push_back(reinterpret_cast<value*>(keyCell->data.ptr_value)->val_.str_);
-                     }
-                     tableMetaData->setPrimaryKey(primaryKey);
-                     break;
-                  }
-                  default: {
-                     error("unsupported constraint type");
-                  }
-               }
-               break;
-            }
-            default: {
-               error("unsupported construct in create statement");
-            }
-         }
-      }
-      tableMetaData->setNumRows(0);
-      auto executionContext = getExecutionContext(builder);
-      auto tableNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(tableName));
-      auto descrValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(tableMetaData->serialize()));
-
-      auto database = rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(executionContext)[0];
-      rt::Database::createTable(builder, builder.getUnknownLoc())(mlir::ValueRange({database, tableNameValue, descrValue}));
+   mlir::Value getCurrentDatabaseValue(mlir::OpBuilder& builder) {
+      return rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(getExecutionContextValue(builder))[0];
    }
-   void translateInsertStmt(mlir::OpBuilder& builder, InsertStmt* stmt) {
-      assert(stmt->with_clause_ == nullptr);
-      assert(stmt->on_conflict_clause_ == nullptr);
-      RangeVar* relation = stmt->relation_;
-      std::string tableName = relation->relname_ != nullptr ? relation->relname_ : "";
-      std::cout << "inserting into " << tableName << std::endl;
-      TranslationContext context;
-      auto scope = context.createResolverScope();
-      auto [tree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(stmt->select_stmt_), context, scope);
-
-      auto tableMetaData = database.getTableMetaData(tableName);
-      std::unordered_map<std::string, mlir::Type> tableColumnTypes;
-      for (auto c : tableMetaData->getOrderedColumns()) {
-         auto type = translateColType(builder.getContext(), tableMetaData->getColumnMetaData(c)->getColumnType());
-         tableColumnTypes[c] = type;
-      }
-      std::vector<std::string> insertColNames;
-      if (stmt->cols_) {
-         for (auto* cell = stmt->cols_->head; cell != nullptr; cell = cell->next) {
-            auto* target = reinterpret_cast<ResTarget*>(cell->data.ptr_value);
-            insertColNames.emplace_back(target->name_);
-         }
-      } else {
-         insertColNames = tableMetaData->getOrderedColumns();
-      }
-      assert(insertColNames.size() == tableColumnTypes.size());
-      assert(insertColNames.size() == targetInfo.namedResults.size());
-      std::vector<mlir::Attribute> attrs;
-
-      std::vector<mlir::Value> createdValues;
-      std::vector<mlir::Attribute> createdCols;
-
-      mlir::Block* block = new mlir::Block;
-      mlir::OpBuilder mapBuilder(builder.getContext());
-      block->addArgument(mlir::relalg::TupleType::get(builder.getContext()), builder.getUnknownLoc());
-      auto tupleScope = context.createTupleScope();
-      mlir::Value tuple = block->getArgument(0);
-      context.setCurrentTuple(tuple);
-
-      mapBuilder.setInsertionPointToStart(block);
-
-      std::unordered_map<std::string, mlir::Attribute> insertedCols;
-
-      auto mapName = attrManager.getUniqueScope("map");
-      for (size_t i = 0; i < insertColNames.size(); i++) {
-         auto attrRef = attrManager.createRef(targetInfo.namedResults[i].second);
-         auto currentType = attrRef.getColumn().type;
-         auto tableType = tableColumnTypes.at(insertColNames[i]);
-         if (currentType != tableType) {
-            mlir::Value expr = mapBuilder.create<mlir::relalg::GetColumnOp>(mapBuilder.getUnknownLoc(), attrRef.getColumn().type, attrRef, tuple);
-            auto attrDef = attrManager.createDef(mapName, std::string("inserted") + std::to_string(i));
-            attrDef.getColumn().type = tableType;
-
-            createdCols.push_back(attrDef);
-            mlir::Value casted = SQLTypeInference::toType(mapBuilder, expr, tableType);
-
-            createdValues.push_back(casted);
-            insertedCols[insertColNames[i]] = attrManager.createRef(&attrDef.getColumn());
-         } else {
-            insertedCols[insertColNames[i]] = attrRef;
-         }
-      }
-      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
-      mapOp.predicate().push_back(block);
-      mapBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), createdValues);
-
-      std::vector<mlir::Attribute> orderedColNamesAttrs;
-      std::vector<mlir::Attribute> orderedColAttrs;
-      for (auto x : tableMetaData->getOrderedColumns()) {
-         orderedColNamesAttrs.push_back(builder.getStringAttr(x));
-         orderedColAttrs.push_back(insertedCols.at(x));
-      }
-      mlir::Value newRows = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), mlir::dsa::TableType::get(builder.getContext()), mapOp.result(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
-      auto executionContext = getExecutionContext(builder);
-      auto database = rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(executionContext)[0];
-      auto tableNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(tableName));
-      rt::Database::appendTable(builder, builder.getUnknownLoc())(mlir::ValueRange{database, tableNameValue, newRows});
+   mlir::Value createStringValue(mlir::OpBuilder& builder, std::string str) {
+      return builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(str));
    }
-   mlir::Value translate(mlir::OpBuilder& builder) {
-      if (result.tree && result.tree->length == 1) {
-         auto* statement = static_cast<Node*>(result.tree->head->data.ptr_value);
-         switch (statement->type) {
-            case T_VariableSetStmt: {
-               auto* variableSetStatement = reinterpret_cast<VariableSetStmt*>(statement);
-               std::string varName = variableSetStatement->name_;
-               auto* args = variableSetStatement->args_;
-               if (varName == "persist") {
-                  assert(args->head != nullptr);
-                  assert(args->head == args->tail);
-                  auto* paramNode = reinterpret_cast<Node*>(args->head->data.ptr_value);
-                  assert(paramNode->type == T_A_Const);
-                  auto* constNode = reinterpret_cast<A_Const*>(paramNode);
-                  assert(constNode->val_.type_ == T_Integer);
-                  auto persistValue = builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), constNode->val_.val_.ival_, 1);
-                  auto executionContext = getExecutionContext(builder);
-                  auto database = rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(executionContext)[0];
-                  rt::Database::setPersist(builder, builder.getUnknownLoc())({database, persistValue});
-               }
-               break;
-            }
-            case T_CreateStmt: {
-               translateCreate(builder, reinterpret_cast<CreateStmt*>(statement));
-               break;
-            }
-            case T_CopyStmt: {
-               auto* copyStatement = reinterpret_cast<CopyStmt*>(statement);
-               std::string fileName = copyStatement->filename_;
-               std::string tableName = copyStatement->relation_->relname_;
-               std::string delimiter = ",";
-               std::string escape = "";
-               for (auto* optionCell = copyStatement->options_->head; optionCell != nullptr; optionCell = optionCell->next) {
-                  auto* defElem = reinterpret_cast<DefElem*>(optionCell->data.ptr_value);
-                  std::string optionName = defElem->defname_;
-                  if (optionName == "delimiter") {
-                     delimiter = reinterpret_cast<value*>(defElem->arg_)->val_.str_;
-                  } else if (optionName == "escape") {
-                     escape = reinterpret_cast<value*>(defElem->arg_)->val_.str_;
-                  } else if (optionName == "format") {
-                     std::string format = reinterpret_cast<value*>(defElem->arg_)->val_.str_;
-                     if (format != "csv") {
-                        error("copy only supports csv");
-                     }
 
-                  } else {
-                     error("unsupported copy option");
-                  }
-               }
-               auto executionContext = getExecutionContext(builder);
-               auto database = rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(executionContext)[0];
-               auto tableNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(tableName));
-               auto fileNameValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(fileName));
-               auto delimiterValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(delimiter));
-               auto escapeValue = builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(escape));
-
-               rt::Database::copyFromIntoTable(builder, builder.getUnknownLoc())(mlir::ValueRange{database, tableNameValue, fileNameValue, delimiterValue, escapeValue});
-               break;
-            }
-            case T_SelectStmt: {
-               TranslationContext context;
-               auto scope = context.createResolverScope();
-               auto [tree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(statement), context, scope);
-               //::mlir::Type result, ::mlir::Value rel, ::mlir::ArrayAttr attrs, ::mlir::ArrayAttr columns
-               std::vector<mlir::Attribute> attrs;
-               std::vector<mlir::Attribute> names;
-               for (auto x : targetInfo.namedResults) {
-                  names.push_back(builder.getStringAttr(x.first));
-                  attrs.push_back(attrManager.createRef(x.second));
-               }
-               return builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), mlir::dsa::TableType::get(builder.getContext()), tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
-            }
-            case T_InsertStmt: {
-               translateInsertStmt(builder, reinterpret_cast<InsertStmt*>(statement));
-               break;
-            }
-            default:
-               error("unsupported statement type");
-         }
-      }
-      return mlir::Value();
-   }
    std::string fieldsToString(List* fields) {
       auto* node = reinterpret_cast<Node*>(fields->head->data.ptr_value);
       std::string colName;
@@ -638,1026 +331,95 @@ struct Parser {
       assert(attr);
       return attr;
    }
-   mlir::Type strToType(std::string str, int typeMod, mlir::MLIRContext* context) {
-      mlir::Type res = llvm::StringSwitch<mlir::Type>(str)
-                          .Case("date", mlir::db::DateType::get(context, mlir::db::DateUnitAttr::day))
-                          .Case("interval", mlir::db::IntervalType::get(context, (typeMod & 8) ? mlir::db::IntervalUnitAttr::daytime : mlir::db::IntervalUnitAttr::months))
-                          .Case("bool", mlir::IntegerType::get(context, 1))
-                          .Case("text", mlir::db::StringType::get(context))
-                          .Default(mlir::Type());
-      assert(res);
-      return res;
-   }
-   int typemod(List* typemods) {
-      int res = 0;
-      if (typemods != nullptr) {
-         auto* node = reinterpret_cast<Node*>(typemods->head->data.ptr_value);
-         switch (node->type) {
-            case T_A_Const: {
-               auto nodeType = reinterpret_cast<A_Const*>(node)->val_.type_;
-               switch (nodeType) {
-                  case T_Integer: {
-                     res = static_cast<int32_t>(reinterpret_cast<A_Const*>(node)->val_.val_.ival_);
-                     break;
-                  }
-                  default: {
-                     error("unsupported typemod");
-                  }
-               }
-               break;
-            }
-            default: {
-               error("unsupported typemod");
-            }
-         }
-      }
-      return res;
-   }
-   struct ReplaceState {
-      std::unordered_map<FakeNode*, Node*> evalBeforeAggr;
-      std::unordered_map<FakeNode*, std::tuple<std::string, Node*, bool>> aggrs;
-   };
 
-   Node* replaceWithFakeNodes(Node* node, ReplaceState& replaceState) {
-      if (!node) return node;
-      switch (node->type) {
-         case T_FakeNode: {
-            auto* fakeNode = reinterpret_cast<FakeNode*>(node);
-            return replaceWithFakeNodes(fakeNode->original, replaceState);
-         }
-         case T_FuncCall: {
-            auto* funcNode = reinterpret_cast<FuncCall*>(node);
+   //helper function: convert pg list to vector of int/string for type modifiers
+   std::vector<std::variant<size_t, std::string>> getTypeModList(List* typeMods);
 
-            std::string funcName = reinterpret_cast<value*>(funcNode->funcname_->head->data.ptr_value)->val_.str_;
-            if (funcName == "sum" || funcName == "avg" || funcName == "min" || funcName == "max" || funcName == "count") {
-               Node* aggrExpr = nullptr;
-               auto* fakeNode = createFakeNode(funcName, node);
-               if (funcNode->agg_star_) {
-                  funcName += "*";
-               } else {
-                  auto* exprNode = reinterpret_cast<Node*>(funcNode->args_->head->data.ptr_value);
-                  if (exprNode->type != T_ColumnRef) {
-                     auto* beforeFakeNode = createFakeNode("", exprNode);
-                     replaceState.evalBeforeAggr.insert({beforeFakeNode, exprNode});
-                     aggrExpr = beforeFakeNode;
-                  } else {
-                     aggrExpr = exprNode;
-                  }
-               }
-               replaceState.aggrs.insert({fakeNode, {funcName, aggrExpr, funcNode->agg_distinct_}});
-               return fakeNode;
-            }
-            return node;
-         }
-         case T_TypeCast: {
-            auto* castNode = reinterpret_cast<TypeCast*>(node);
-            castNode->arg_ = replaceWithFakeNodes(node, replaceState);
-            return node;
-         }
-         case T_A_Expr: {
-            auto* expr = reinterpret_cast<A_Expr*>(node);
-            //expr = AExprTransform(parse_result, ,context);
-            if (expr->kind_ == AEXPR_OP) {
-               if (node->type == T_TypeCast) {
-               } else {
-                  expr->lexpr_ = replaceWithFakeNodes(expr->lexpr_, replaceState);
-                  expr->rexpr_ = replaceWithFakeNodes(expr->rexpr_, replaceState);
-               }
-               return node;
-            }
-            break;
-         }
-         case T_BoolExpr: {
-            auto* boolExpr = reinterpret_cast<BoolExpr*>(node);
-            std::vector<mlir::Value> values;
-            for (auto* cell = boolExpr->args_->head; cell != nullptr; cell = cell->next) {
-               auto* nodePtr = reinterpret_cast<Node**>(&cell->data.ptr_value);
-               *nodePtr = replaceWithFakeNodes(*nodePtr, replaceState);
-            }
-            return node;
-            break;
-         }
-         case T_NullTest: {
-            auto* nullTest = reinterpret_cast<NullTest*>(node);
-            nullTest->arg_ = (Expr*) replaceWithFakeNodes((Node*) nullTest->arg_, replaceState);
-            return node;
-         }
+   //analyze expression from target list to e.g. first compute expressions required for computing aggregates
+   Node* analyzeTargetExpression(Node* node, ReplaceState& replaceState);
 
-         default: return node;
-      }
-      return node;
-   }
-   mlir::Value translateCoalesce(mlir::OpBuilder& builder, TranslationContext& context, ListCell* values) {
-      auto loc = builder.getUnknownLoc();
-      if (!values) {
-         return builder.create<mlir::db::NullOp>(loc, mlir::db::NullableType::get(builder.getContext(), builder.getNoneType()));
-      }
-      mlir::Value value = translateExpression(builder, reinterpret_cast<Node*>(values->data.ptr_value), context);
-      mlir::Value isNull = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), value);
-      mlir::Value isNotNull = builder.create<mlir::db::NotOp>(loc, isNull);
-      auto* whenBlock = new mlir::Block;
-      auto* elseBlock = new mlir::Block;
-      mlir::OpBuilder whenBuilder(builder.getContext());
-      whenBuilder.setInsertionPointToStart(whenBlock);
-      mlir::OpBuilder elseBuilder(builder.getContext());
-      elseBuilder.setInsertionPointToStart(elseBlock);
-      auto elseRes = translateCoalesce(elseBuilder, context, values->next);
-      auto commonType = SQLTypeInference::getCommonType(value.getType(), elseRes.getType());
-      value = SQLTypeInference::toType(whenBuilder, value, commonType);
-      elseRes = SQLTypeInference::toType(elseBuilder, elseRes, commonType);
-      whenBuilder.create<mlir::scf::YieldOp>(loc, value);
-      elseBuilder.create<mlir::scf::YieldOp>(loc, elseRes);
-      auto ifOp = builder.create<mlir::scf::IfOp>(loc, commonType, isNotNull, true);
-      ifOp.getThenRegion().getBlocks().clear();
-      ifOp.getElseRegion().getBlocks().clear();
-      ifOp.getThenRegion().push_back(whenBlock);
-      ifOp.getElseRegion().push_back(elseBlock);
+   //create mlir base type from runtime column type (w.o. nullability)
+   mlir::Type createBaseTypeFromColumnType(mlir::MLIRContext* context, const runtime::ColumnType& colType);
 
-      return ifOp.getResult(0);
-   }
+   //create mlir type from runtime column type
+   mlir::Type createTypeFromColumnType(mlir::MLIRContext* context, const runtime::ColumnType& colType);
 
-   /*
-    * translate case when SQL expression
-    */
-   mlir::Value translateWhenCase(mlir::OpBuilder& builder, TranslationContext& context, mlir::Value compareValue, ListCell* whenCell, Node* defaultNode);
-   /*
-    * translate function call
-    */
-   mlir::Value translateFuncCall(Node* node, mlir::OpBuilder& builder, mlir::Location loc, TranslationContext& context);
+   //helper function: convert pg linked list into vector of strings (if possible)
+   std::vector<std::string> listToStringVec(List* l);
 
-   mlir::Value translateBinaryExpression(mlir::OpBuilder& builder, ExpressionType opType, mlir::Value left, mlir::Value right) {
-      auto loc = builder.getUnknownLoc();
-      switch (opType) {
-         case ExpressionType::OPERATOR_PLUS:
-            if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
-               return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateAdd", mlir::ValueRange({left, right})).res();
-            }
-            return builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
-         case ExpressionType::OPERATOR_MINUS:
-            if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
-               return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateSubtract", mlir::ValueRange({left, right})).res();
-            }
-            return builder.create<mlir::db::SubOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
-         case ExpressionType::OPERATOR_MULTIPLY:
-            return builder.create<mlir::db::MulOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes2(builder, {left, right}));
-         case ExpressionType::OPERATOR_DIVIDE:
-            return builder.create<mlir::db::DivOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
-         case ExpressionType::OPERATOR_MOD:
-            return builder.create<mlir::db::ModOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
-         case ExpressionType::COMPARE_EQUAL:
-         case ExpressionType::COMPARE_NOT_EQUAL:
-         case ExpressionType::COMPARE_LESS_THAN:
-         case ExpressionType::COMPARE_GREATER_THAN:
-         case ExpressionType::COMPARE_LESS_THAN_OR_EQUAL_TO:
-         case ExpressionType::COMPARE_GREATER_THAN_OR_EQUAL_TO: {
-            mlir::db::DBCmpPredicate pred;
-            switch (opType) {
-               case ExpressionType::COMPARE_EQUAL: pred = mlir::db::DBCmpPredicate::eq; break;
-               case ExpressionType::COMPARE_NOT_EQUAL: pred = mlir::db::DBCmpPredicate::neq; break;
-               case ExpressionType::COMPARE_LESS_THAN: pred = mlir::db::DBCmpPredicate::lt; break;
-               case ExpressionType::COMPARE_GREATER_THAN: pred = mlir::db::DBCmpPredicate::gt; break;
-               case ExpressionType::COMPARE_LESS_THAN_OR_EQUAL_TO: pred = mlir::db::DBCmpPredicate::lte; break;
-               case ExpressionType::COMPARE_GREATER_THAN_OR_EQUAL_TO: pred = mlir::db::DBCmpPredicate::gte; break;
-               default: error("should not happen");
-            }
-            auto ct = SQLTypeInference::toCommonBaseTypes(builder, {left, right});
-            return builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), pred, ct[0], ct[1]);
-         }
-         case ExpressionType::COMPARE_LIKE:
-         case ExpressionType::COMPARE_NOT_LIKE: {
-            auto ct = SQLTypeInference::toCommonBaseTypes(builder, {left, right});
-            auto isNullable = left.getType().isa<mlir::db::NullableType>() || right.getType().isa<mlir::db::NullableType>();
-            mlir::Type resType = isNullable ? (mlir::Type) mlir::db::NullableType::get(builder.getContext(), builder.getI1Type()) : (mlir::Type) builder.getI1Type();
-            auto like = builder.create<mlir::db::RuntimeCall>(loc, resType, "Like", mlir::ValueRange({ct[0], ct[1]})).res();
-            return opType == ExpressionType::COMPARE_NOT_LIKE ? builder.create<mlir::db::NotOp>(loc, like) : like;
-         }
+   //translate target list in selection and also consider aggregation and groupby
+   std::pair<mlir::Value, TargetInfo> translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, mlir::Value tree, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
-         default:
-            error("unsupported expression type");
-      }
-      return mlir::Value();
-   }
+   //translate insert statement
+   void translateInsertStmt(mlir::OpBuilder& builder, InsertStmt* stmt);
 
-   mlir::Value translateExpression(mlir::OpBuilder& builder, Node* node, TranslationContext& context, bool ignoreNull = false) {
-      auto loc = builder.getUnknownLoc();
-      if (!node) {
-         if (ignoreNull) {
-            return mlir::Value();
-         }
-         error("empty expression");
-      }
-      switch (node->type) {
-         case T_A_Const: {
-            auto constVal = reinterpret_cast<A_Const*>(node)->val_;
-            switch (constVal.type_) {
-               case T_Integer: return builder.create<mlir::db::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(constVal.val_.ival_));
-               case T_String: {
-                  std::string stringVal = constVal.val_.str_;
-                  mlir::Type stringType = mlir::db::StringType::get(builder.getContext());
-                  if (stringVal.size() <= 8) {
-                     stringType = mlir::db::CharType::get(builder.getContext(), stringVal.size());
-                  }
-                  return builder.create<mlir::db::ConstantOp>(loc, stringType, builder.getStringAttr(stringVal));
-               }
-               case T_Float: {
-                  std::string value(constVal.val_.str_);
-                  auto decimalPos = value.find('.');
-                  if (decimalPos == std::string::npos) {
-                     return builder.create<mlir::db::ConstantOp>(loc, builder.getI64Type(), builder.getI64IntegerAttr(std::stoll(constVal.val_.str_)));
-                  } else {
-                     auto s = value.size() - decimalPos - 1;
-                     auto p = value.size() - 1;
-                     return builder.create<mlir::db::ConstantOp>(loc, mlir::db::DecimalType::get(builder.getContext(), p, s), builder.getStringAttr(constVal.val_.str_));
-                  }
-                  break;
-               }
-               case T_Null: return builder.create<mlir::db::NullOp>(loc, mlir::db::NullableType::get(builder.getContext(), builder.getNoneType()));
-               default: error("unsupported value type");
-            }
-            //expr = ConstTransform(parse_result, reinterpret_cast<A_Const*>(node),context);
-            break;
-         }
-         case T_TypeCast:
-         case T_A_Expr: {
-            auto* expr = reinterpret_cast<A_Expr*>(node);
-            //expr = AExprTransform(parse_result, ,context);
-            //todo:implement AEXPR_IN (q12)
-            if (expr->kind_ == AEXPR_IN) {
-               auto* list = reinterpret_cast<List*>(expr->rexpr_);
-               std::vector<mlir::Value> values;
-               for (auto* cell = list->head; cell != nullptr; cell = cell->next) {
-                  auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
-                  values.push_back(translateExpression(builder, node, context));
-               }
-               auto val = translateExpression(builder, expr->lexpr_, context);
-               values.insert(values.begin(), val);
-               return builder.create<mlir::db::OneOfOp>(loc, SQLTypeInference::toCommonBaseTypes(builder, values));
-            }
-            if (expr->kind_ == AEXPR_BETWEEN || expr->kind_ == AEXPR_NOT_BETWEEN) {
-               mlir::Value val = translateExpression(builder, expr->lexpr_, context);
-               auto* list = reinterpret_cast<List*>(expr->rexpr_);
-               assert(list->length == 2);
-               auto* lowerNode = reinterpret_cast<Node*>(list->head->data.ptr_value);
-               auto* upperNode = reinterpret_cast<Node*>(list->tail->data.ptr_value);
-               mlir::Value lower = translateExpression(builder, lowerNode, context);
-               mlir::Value upper = translateExpression(builder, upperNode, context);
-               auto ct = SQLTypeInference::toCommonBaseTypes(builder, {val, lower, upper});
-               mlir::Value between = builder.create<mlir::db::BetweenOp>(loc, ct[0], ct[1], ct[2], true, true);
-               if (expr->kind_ == AEXPR_NOT_BETWEEN) {
-                  between = builder.create<mlir::db::NotOp>(loc, between);
-               }
-               return between;
-            }
-            if (expr->kind_ == AEXPR_LIKE) {
-               expr->kind_ = AEXPR_OP;
-            }
-            if (expr->kind_ == AEXPR_OP) {
-               ExpressionType opType;
-               mlir::Value left, right;
-               if (node->type == T_TypeCast) {
-                  opType = ExpressionType::OPERATOR_CAST;
-               } else {
-                  auto* name = (reinterpret_cast<value*>(expr->name_->head->data.ptr_value))->val_.str_;
-                  opType = stringToExpressionType(name);
-                  left = expr->lexpr_ ? translateExpression(builder, expr->lexpr_, context) : left;
-                  right = expr->rexpr_ ? translateExpression(builder, expr->rexpr_, context) : right;
-               }
-               if (opType == ExpressionType::OPERATOR_CAST) {
-                  auto* castNode = reinterpret_cast<TypeCast*>(node);
-                  auto* typeName = reinterpret_cast<value*>(castNode->type_name_->names_->tail->data.ptr_value)->val_.str_;
-                  int typeMods = typemod(castNode->type_name_->typmods_);
+   //creates a column type from the given information
+   runtime::ColumnType createColumnType(std::string datatypeName, bool isNull, std::vector<std::variant<size_t, std::string>> typeModifiers);
 
-                  auto toCast = translateExpression(builder, castNode->arg_, context);
-                  auto resType = strToType(typeName, typeMods, builder.getContext());
-                  if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(toCast.getDefiningOp())) {
-                     if (resType.isa<mlir::db::IntervalType>()) {
-                        std::string unit = "";
-                        if (typeMods & 8) {
-                           unit = "days";
-                        }
-                        constOp->setAttr("value", builder.getStringAttr(constOp.getValue().cast<mlir::StringAttr>().str() + unit));
-                     }
-                     constOp.getResult().setType(resType);
-                     return constOp;
-                  } else {
-                     return builder.create<mlir::db::CastOp>(loc, resType, toCast);
-                  }
-                  return mlir::Value();
-               }
-               return translateBinaryExpression(builder, opType, left, right);
+   //translate a column definition in a create statment
+   std::pair<std::string, std::shared_ptr<runtime::ColumnMetaData>> translateColumnDef(ColumnDef* columnDef);
 
-            } else {
-               error("unsupported op");
-            }
-            break;
-         }
-         case T_BoolExpr: {
-            auto* boolExpr = reinterpret_cast<BoolExpr*>(node);
-            std::vector<mlir::Value> values;
-            for (auto* cell = boolExpr->args_->head; cell != nullptr; cell = cell->next) {
-               auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
-               values.push_back(translateExpression(builder, node, context));
-            }
-            switch (boolExpr->boolop_) {
-               case AND_EXPR: return builder.create<mlir::db::AndOp>(builder.getUnknownLoc(), values);
-               case OR_EXPR: return builder.create<mlir::db::OrOp>(builder.getUnknownLoc(), values);
-               case NOT_EXPR: return builder.create<mlir::db::NotOp>(builder.getUnknownLoc(), values[0]);
-               default: {
-                  error("unsupported boolean expression");
-               }
-            }
-            break;
-         }
-         case T_ColumnRef: {
-            const auto* attr = resolveColRef(node, context);
-            return builder.create<mlir::relalg::GetColumnOp>(builder.getUnknownLoc(), attr->type, attrManager.createRef(attr), context.getCurrentTuple());
-            break;
-         }
-         case T_FakeNode: { //
-            const auto* attr = context.getAttribute(reinterpret_cast<FakeNode*>(node)->colId);
-            return builder.create<mlir::relalg::GetColumnOp>(builder.getUnknownLoc(), attr->type, attrManager.createRef(attr), context.getCurrentTuple());
-            break;
-         }
-         case T_FuncCall: return translateFuncCall(node, builder, loc, context);
-         case T_NullTest: {
-            auto* nullTest = reinterpret_cast<NullTest*>(node);
-            auto expr = translateExpression(builder, reinterpret_cast<Node*>(nullTest->arg_), context);
-            if (expr.getType().isa<mlir::db::NullableType>()) {
-               mlir::Value isNull = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), expr);
-               if (nullTest->nulltesttype_ == IS_NOT_NULL) {
-                  return builder.create<mlir::db::NotOp>(builder.getUnknownLoc(), isNull);
-               } else {
-                  return isNull;
-               }
-            } else {
-               return builder.create<mlir::db::ConstantOp>(builder.getUnknownLoc(), builder.getI1Type(), builder.getIntegerAttr(builder.getI1Type(), nullTest->nulltesttype_ == IS_NOT_NULL));
-            }
-            break;
-         }
-         case T_ParamRef: {
-            //expr = ParamRefTransform(parse_result, reinterpret_cast<ParamRef*>(node),context);
-            break;
-         }
-         case T_SubLink: {
-            auto* subLink = reinterpret_cast<SubLink*>(node);
-            //expr = FuncCallTransform(parse_result,,context);
-            std::pair<mlir::Value, TargetInfo> subQueryRes;
-            {
-               auto subQueryScope = context.createResolverScope();
-               auto subQueryDefineScope = context.createDefineScope();
-               subQueryRes = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(subLink->subselect_), context, subQueryScope);
-            }
-            auto [subQueryTree, targetInfo] = subQueryRes;
-            switch (subLink->sub_link_type_) {
-               case EXPR_SUBLINK: {
-                  assert(!targetInfo.namedResults.empty());
-                  const auto* attr = targetInfo.namedResults[0].second;
-                  mlir::Type resType = attr->type;
-                  if (!resType.isa<mlir::db::NullableType>()) {
-                     resType = mlir::db::NullableType::get(builder.getContext(), attr->type);
-                  }
-                  mlir::Value scalarValue = builder.create<mlir::relalg::GetScalarOp>(loc, resType, attrManager.createRef(attr), subQueryTree);
-                  if (context.useZeroInsteadNull.contains(attr)) {
-                     mlir::Value isNull = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), scalarValue);
-                     mlir::Value nonNullValue = builder.create<mlir::db::NullableGetVal>(builder.getUnknownLoc(), scalarValue);
-                     mlir::Value defaultValue = builder.create<mlir::db::ConstantOp>(builder.getUnknownLoc(), getBaseType(scalarValue.getType()), builder.getIntegerAttr(getBaseType(scalarValue.getType()), 0));
-                     return builder.create<mlir::arith::SelectOp>(builder.getUnknownLoc(), isNull, defaultValue, nonNullValue);
-                  } else {
-                     return scalarValue;
-                  }
-               }
-               case EXISTS_SUBLINK:
-                  return builder.create<mlir::relalg::ExistsOp>(loc, builder.getI1Type(), subQueryTree);
-               case ANY_SUBLINK: {
-                  assert(targetInfo.namedResults.size() == 1);
-                  mlir::relalg::ColumnRefAttr attribute = attrManager.createRef(targetInfo.namedResults[0].second);
-                  auto operatorName = subLink->oper_name_ ? listToStringVec(subLink->oper_name_).at(0) : "=";
-                  auto operatorType = stringToExpressionType(operatorName);
-                  auto* block = new mlir::Block;
-                  mlir::OpBuilder predBuilder(builder.getContext());
-                  block->addArgument(mlir::relalg::TupleType::get(builder.getContext()), builder.getUnknownLoc());
-                  auto tupleScope = context.createTupleScope();
-                  context.setCurrentTuple(block->getArgument(0));
+   //translates table metadata (column definitions + primary keys)
+   std::shared_ptr<runtime::TableMetaData> translateTableMetaData(List* metaData);
 
-                  predBuilder.setInsertionPointToStart(block);
-                  mlir::Value expr = translateExpression(predBuilder, subLink->testexpr_, context);
-                  mlir::Value colVal = predBuilder.create<mlir::relalg::GetColumnOp>(loc, attribute.getColumn().type, attribute, block->getArgument(0));
-                  mlir::Value pred = translateBinaryExpression(predBuilder, operatorType, expr, colVal);
-                  predBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), pred);
+   //translate a CREATE statement
+   void translateCreateStatement(mlir::OpBuilder& builder, CreateStmt* statement);
 
-                  auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), subQueryTree);
-                  sel.predicate().push_back(block);
-                  subQueryTree = sel.result();
+   //translate the provided SQL statement
+   std::optional<mlir::Value> translate(mlir::OpBuilder& builder);
 
-                  return builder.create<mlir::relalg::ExistsOp>(loc, builder.getI1Type(), subQueryTree);
-               }
-               case ALL_SUBLINK: {
-                  assert(targetInfo.namedResults.size() == 1);
-                  mlir::relalg::ColumnRefAttr attribute = attrManager.createRef(targetInfo.namedResults[0].second);
-                  auto operatorName = listToStringVec(subLink->oper_name_).at(0);
-                  auto operatorType = stringToExpressionType(operatorName);
-                  auto* block = new mlir::Block;
-                  mlir::OpBuilder predBuilder(builder.getContext());
-                  block->addArgument(mlir::relalg::TupleType::get(builder.getContext()), builder.getUnknownLoc());
-                  auto tupleScope = context.createTupleScope();
-                  context.setCurrentTuple(block->getArgument(0));
+   //translate a variable set statement (e.g. SET var = 1; )
+   void translateVariableSetStatement(mlir::OpBuilder& builder, VariableSetStmt* variableSetStatement);
 
-                  predBuilder.setInsertionPointToStart(block);
-                  mlir::Value expr = translateExpression(predBuilder, subLink->testexpr_, context);
-                  mlir::Value colVal = predBuilder.create<mlir::relalg::GetColumnOp>(loc, attribute.getColumn().type, attribute, block->getArgument(0));
-                  mlir::Value pred = translateBinaryExpression(predBuilder, operatorType, expr, colVal);
-                  pred = predBuilder.create<mlir::db::NotOp>(loc, pred);
-                  predBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), pred);
+   //translate a COPY FROM statement
+   void translateCopyStatement(mlir::OpBuilder& builder, CopyStmt* copyStatement);
 
-                  auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), subQueryTree);
-                  sel.predicate().push_back(block);
-                  subQueryTree = sel.result();
+   //translate a coalesce expression recursively into (nested) scf.if operations
+   mlir::Value translateCoalesceExpression(mlir::OpBuilder& builder, TranslationContext& context, ListCell* expressions);
 
-                  mlir::Value exists = builder.create<mlir::relalg::ExistsOp>(loc, builder.getI1Type(), subQueryTree);
-                  return builder.create<mlir::db::NotOp>(loc, exists);
-               }
-               default:
-                  error("unsupported sublink type");
-            }
-            break;
-         }
-         case T_Integer: {
-            auto intVal = reinterpret_cast<Value*>(node)->val_.ival_;
-            return builder.create<mlir::db::ConstantOp>(loc, builder.getI32Type(), builder.getI32IntegerAttr(intVal));
-         }
-         case T_CaseExpr: {
-            auto* caseExpr = reinterpret_cast<CaseExpr*>(node);
-            mlir::Value arg = translateExpression(builder, reinterpret_cast<Node*>(caseExpr->arg_), context, true);
-            Node* defaultNode = reinterpret_cast<Node*>(caseExpr->defresult_);
-            auto* startWhen = caseExpr->args_->head;
-            return translateWhenCase(builder, context, arg, startWhen, defaultNode);
-         }
-         case T_CoalesceExpr: {
-            auto* coalesceExpr = reinterpret_cast<AExpr*>(node);
-            return translateCoalesce(builder, context, reinterpret_cast<List*>(coalesceExpr->lexpr_)->head);
-         }
-         default: {
-            error("unsupported expression type");
-         }
-      }
-      error("should never happen");
-      return mlir::Value();
-   }
-   size_t asInt(std::variant<size_t, std::string> intOrStr) {
-      if (std::holds_alternative<size_t>(intOrStr)) {
-         return std::get<size_t>(intOrStr);
-      } else {
-         return std::stoll(std::get<std::string>(intOrStr));
-      }
-   }
-   mlir::Type translateColBaseType(mlir::MLIRContext* context, const runtime::ColumnType& colType) {
-      if (colType.base == "bool") return mlir::IntegerType::get(context, 1);
-      if (colType.base == "int") return mlir::IntegerType::get(context, asInt(colType.modifiers.at(0)));
-      if (colType.base == "float") return asInt(colType.modifiers.at(0)) == 32 ? mlir::FloatType::getF32(context) : mlir::FloatType::getF64(context);
-      if (colType.base == "date") return mlir::db::DateType::get(context, mlir::db::symbolizeDateUnitAttr(std::get<std::string>(colType.modifiers.at(0))).getValue());
-      if (colType.base == "string") return mlir::db::StringType::get(context);
-      if (colType.base == "char") return mlir::db::CharType::get(context, asInt(colType.modifiers.at(0)));
-      if (colType.base == "decimal") return mlir::db::DecimalType::get(context, asInt(colType.modifiers.at(0)), asInt(colType.modifiers.at(1)));
-      assert(false);
-      return mlir::Type();
-   }
-   mlir::Type translateColType(mlir::MLIRContext* context, const runtime::ColumnType& colType) {
-      mlir::Type baseType = translateColBaseType(context, colType);
-      return colType.nullable ? mlir::db::NullableType::get(context, baseType) : baseType;
-   }
-   mlir::Value translateRangeVar(mlir::OpBuilder& builder, RangeVar* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
-      std::string relation = stmt->relname_;
-      std::string alias = relation;
-      if (stmt->alias_ && stmt->alias_->type_ == T_Alias && stmt->alias_->aliasname_) {
-         alias = stmt->alias_->aliasname_;
-      }
-      if (!database.hasTable(relation)) {
-         if (ctes.contains(relation)) {
-            auto [tree, targetInfo] = ctes.at(relation);
-            for (auto x : targetInfo.namedResults) {
-               context.mapAttribute(scope, x.first, x.second);
-               context.mapAttribute(scope, alias + "." + x.first, x.second);
-            }
-            return tree;
-         } else {
-            error("unknown relation " + relation);
-         }
-      }
-      auto tableMetaData = database.getTableMetaData(relation);
-      char lastCharacter = alias.back();
-      std::string scopeName = attrManager.getUniqueScope(alias + (isdigit(lastCharacter) ? "_" : ""));
+   //translate a when-case expression into (nested) scf.if operations
+   mlir::Value translateWhenCaseExpression(mlir::OpBuilder& builder, TranslationContext& context, mlir::Value compareValue, ListCell* whenCell, Node* defaultNode);
 
-      std::vector<mlir::NamedAttribute> columns;
-      for (auto c : tableMetaData->getOrderedColumns()) {
-         auto attrDef = attrManager.createDef(scopeName, c);
-         attrDef.getColumn().type = translateColType(builder.getContext(), tableMetaData->getColumnMetaData(c)->getColumnType());
-         columns.push_back(builder.getNamedAttr(c, attrDef));
-         context.mapAttribute(scope, c, &attrDef.getColumn()); //todo check for existing and overwrite...
-         context.mapAttribute(scope, alias + "." + c, &attrDef.getColumn());
-      }
-      return builder.create<mlir::relalg::BaseTableOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), relation, mlir::relalg::TableMetaDataAttr::get(builder.getContext(), std::make_shared<runtime::TableMetaData>()), builder.getDictionaryAttr(columns));
-   }
-   mlir::Value translateSubSelect(mlir::OpBuilder& builder, SelectStmt* stmt, std::string alias, std::vector<std::string> colAlias, TranslationContext& context, TranslationContext::ResolverScope& scope) {
-      mlir::Value subQuery;
-      TargetInfo targetInfo;
-      {
-         auto subQueryScope = context.createResolverScope();
-         auto subQueryDefineScope = context.createDefineScope();
-         auto [subQuery_, targetInfo_] = translateSelectStmt(builder, stmt, context, subQueryScope);
-         subQuery = subQuery_;
-         targetInfo = targetInfo_;
-      }
-      if (colAlias.empty()) {
-         for (auto x : targetInfo.namedResults) {
-            context.mapAttribute(scope, x.first, x.second);
-            context.mapAttribute(scope, alias + "." + x.first, x.second);
-         }
-      } else {
-         for (size_t i = 0; i < colAlias.size(); i++) {
-            context.mapAttribute(scope, colAlias[i], targetInfo.namedResults.at(i).second);
-            context.mapAttribute(scope, alias + "." + colAlias[i], targetInfo.namedResults.at(i).second);
-         }
-      }
+   //translate a function call
+   mlir::Value translateFuncCallExpression(Node* node, mlir::OpBuilder& builder, mlir::Location loc, TranslationContext& context);
 
-      return subQuery;
-   }
-   mlir::Block* translatePredicate(mlir::OpBuilder& builder, Node* node, TranslationContext& context) {
-      auto* block = new mlir::Block;
-      mlir::OpBuilder predBuilder(builder.getContext());
-      block->addArgument(mlir::relalg::TupleType::get(builder.getContext()), builder.getUnknownLoc());
-      auto tupleScope = context.createTupleScope();
-      context.setCurrentTuple(block->getArgument(0));
+   //translate binary expression
+   mlir::Value translateBinaryExpression(mlir::OpBuilder& builder, ExpressionType opType, mlir::Value left, mlir::Value right);
 
-      predBuilder.setInsertionPointToStart(block);
-      mlir::Value expr = translateExpression(predBuilder, node, context);
-      predBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), expr);
-      return block;
-   }
-   std::vector<std::string> listToStringVec(List* l) {
-      std::vector<std::string> res;
-      if (l != nullptr) {
-         for (auto* cell = l->head; cell != nullptr; cell = cell->next) {
-            auto* const target = reinterpret_cast<Value*>(cell->data.ptr_value);
-            auto* const column = target->val_.str_;
-            res.push_back(column);
-         }
-      }
-      return res;
-   }
-   mlir::Value translateFromPart(mlir::OpBuilder& builder, Node* node, TranslationContext& context, TranslationContext::ResolverScope& scope) {
-      switch (node->type) {
-         case T_RangeVar: return translateRangeVar(builder, reinterpret_cast<RangeVar*>(node), context, scope);
-         case T_RangeSubselect: {
-            std::string alias;
-            auto* stmt = reinterpret_cast<RangeSubselect*>(node);
-            if (stmt->alias_ && stmt->alias_->type_ == T_Alias && stmt->alias_->aliasname_) {
-               alias = stmt->alias_->aliasname_;
-            } else {
-               error("no alias for subquery");
-            }
-            std::vector<std::string> colAlias = listToStringVec(stmt->alias_->colnames_);
-            return translateSubSelect(builder, reinterpret_cast<SelectStmt*>(stmt->subquery_), alias, colAlias, context, scope);
-         }
+   //translate expression into mlir operations that yield a single mlir::Value
+   mlir::Value translateExpression(mlir::OpBuilder& builder, Node* node, TranslationContext& context, bool ignoreNull = false);
 
-         case T_JoinExpr: {
-            JoinExpr* joinExpr = reinterpret_cast<JoinExpr*>(node);
-            if ((joinExpr->jointype_ > 4) || (joinExpr->is_natural_)) {
-               error("invalid join expr");
-            }
+   //translates a rangevar expression inside a from clause, i.e. a table scan
+   mlir::Value translateRangeVar(mlir::OpBuilder& builder, RangeVar* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
-            mlir::Value left;
-            mlir::Value right;
-            std::vector<std::pair<std::string, const mlir::relalg::Column*>> mapping;
-            if (joinExpr->jointype_ == JOIN_LEFT) {
-               left = translateFromPart(builder, joinExpr->larg_, context, scope);
-               TranslationContext rightContext;
-               auto rightResolverScope = rightContext.createResolverScope();
-               right = translateFromPart(builder, joinExpr->rarg_, rightContext, rightResolverScope);
-               mapping = rightContext.getAllDefinedColumns();
-            } else if (joinExpr->jointype_ == JOIN_RIGHT) {
-               right = translateFromPart(builder, joinExpr->rarg_, context, scope);
-               TranslationContext leftContext;
-               auto leftResolverScope = leftContext.createResolverScope();
-               left = translateFromPart(builder, joinExpr->larg_, leftContext, leftResolverScope);
-               mapping = leftContext.getAllDefinedColumns();
-            } else {
-               left = translateFromPart(builder, joinExpr->larg_, context, scope);
-               right = translateFromPart(builder, joinExpr->rarg_, context, scope);
-            }
+   //translate sub-query in from clause
+   mlir::Value translateSubSelect(mlir::OpBuilder& builder, SelectStmt* stmt, std::string alias, std::vector<std::string> colAlias, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
-            if (!joinExpr->quals_) {
-               error("join must contain predicate");
-            }
-            //todo: handle outerjoin
+   //translate boolean expression into an mlir block (tuple) -> bool
+   mlir::Block* translatePredicate(mlir::OpBuilder& builder, Node* node, TranslationContext& context);
 
-            if (joinExpr->jointype_ == JOIN_LEFT || joinExpr->jointype_ == JOIN_RIGHT) {
-               if (joinExpr->jointype_ == JOIN_RIGHT) {
-                  std::swap(left, right);
-               }
-               mlir::Block* pred;
-               {
-                  auto predScope = context.createResolverScope();
-                  for (auto x : mapping) {
-                     context.mapAttribute(scope, x.first, x.second);
-                  }
-                  pred = translatePredicate(builder, joinExpr->quals_, context);
-               }
-               static size_t id = 0;
-               std::vector<mlir::Attribute> outerJoinMapping;
-               std::string outerjoinName;
-               if (!mapping.empty()) {
-                  outerjoinName = "oj" + std::to_string(id++);
-                  std::unordered_map<const mlir::relalg::Column*, const mlir::relalg::Column*> remapped;
-                  for (auto x : mapping) {
-                     if (!remapped.contains(x.second)) {
-                        auto [scopename, name] = attrManager.getName(x.second);
+   //translate a single item of a from clause (e.g. RangeVar, SubSelect, explicit Joins,...)
+   mlir::Value translateFromClausePart(mlir::OpBuilder& builder, Node* node, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
-                        auto attrDef = attrManager.createDef(outerjoinName, name, builder.getArrayAttr({attrManager.createRef(x.second)}));
-                        attrDef.getColumn().type = x.second->type.isa<mlir::db::NullableType>() ? x.second->type : mlir::db::NullableType::get(builder.getContext(), x.second->type);
-                        outerJoinMapping.push_back(attrDef);
-                        remapped.insert({x.second, &attrDef.getColumn()});
-                     }
-                     context.mapAttribute(scope, x.first, remapped[x.second]);
-                     context.removeFromDefinedColumns(x.second);
-                  }
-               }
-               mlir::ArrayAttr mapping = builder.getArrayAttr(outerJoinMapping);
-               auto join = builder.create<mlir::relalg::OuterJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), left, right, mapping);
-               join.predicate().push_back(pred);
-               return join;
-            } else if (joinExpr->jointype_ == JOIN_INNER) {
-               mlir::Block* pred = translatePredicate(builder, joinExpr->quals_, context);
+   //translate a complete from clause into a single value of type tuple stream (connect single items with cross-products)
+   mlir::Value translateFromClause(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
-               auto join = builder.create<mlir::relalg::InnerJoinOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), left, right);
-               join.predicate().push_back(pred);
-               return join;
-            }
-            break;
-         }
-         default: {
-            error("unknown type in from clause");
-         }
-      }
-      return mlir::Value();
-   }
-   mlir::Value createMap(mlir::OpBuilder& builder, std::unordered_map<FakeNode*, Node*>& toMap, TranslationContext& context, mlir::Value tree, TranslationContext::ResolverScope& scope) {
-      if (toMap.empty()) return tree;
-      auto* block = new mlir::Block;
-      static size_t mapId = 0;
-      std::string mapName = "map" + std::to_string(mapId++);
-
-      mlir::OpBuilder mapBuilder(builder.getContext());
-      block->addArgument(mlir::relalg::TupleType::get(builder.getContext()), builder.getUnknownLoc());
-      auto tupleScope = context.createTupleScope();
-      mlir::Value tuple = block->getArgument(0);
-      context.setCurrentTuple(tuple);
-
-      mapBuilder.setInsertionPointToStart(block);
-      std::vector<mlir::Value> createdValues;
-      std::vector<mlir::Attribute> createdCols;
-      for (auto p : toMap) {
-         mlir::Value expr = translateExpression(mapBuilder, p.second, context);
-         auto attrDef = attrManager.createDef(mapName, p.first->colId);
-         attrDef.getColumn().type = expr.getType();
-         context.mapAttribute(scope, p.first->colId, &attrDef.getColumn());
-         createdCols.push_back(attrDef);
-         createdValues.push_back(expr);
-      }
-      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
-      mapOp.predicate().push_back(block);
-      mapBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), createdValues);
-      return mapOp.result();
-   }
-   mlir::Value translateFrom(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
-      List* fromClause = stmt->from_clause_;
-      if (!fromClause) { return mlir::Value(); };
-      mlir::Value last;
-      for (auto* cell = fromClause->head; cell != nullptr; cell = cell->next) {
-         auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
-         auto translated = translateFromPart(builder, node, context, scope);
-
-         if (last) {
-            last = builder.create<mlir::relalg::CrossProductOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), last, translated);
-         } else {
-            last = translated;
-         }
-      }
-      return last;
-   }
-
-   std::pair<mlir::Value, TargetInfo> translateSelGroupHaving(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, mlir::Value tree, TranslationContext& context, TranslationContext::ResolverScope& scope) {
-      ReplaceState replaceState;
-      for (auto* cell = targetList->head; cell != nullptr; cell = cell->next) {
-         auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
-         if (node->type == T_ResTarget) {
-            auto* resTarget = reinterpret_cast<ResTarget*>(node);
-            resTarget->val_ = replaceWithFakeNodes(resTarget->val_, replaceState);
-         } else {
-            error("expected res target");
-         }
-      }
-      having = replaceWithFakeNodes(having, replaceState);
-      tree = createMap(builder, replaceState.evalBeforeAggr, context, tree, scope);
-      std::vector<mlir::Attribute> groupByAttrs;
-      if (groupBy) {
-         for (auto* cell = groupBy->head; cell != nullptr; cell = cell->next) {
-            auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
-            if (node->type == T_ColumnRef) {
-               groupByAttrs.push_back(attrManager.createRef(resolveColRef(node, context)));
-            } else {
-               error("expected column ref");
-            }
-         }
-      }
-      static size_t groupById = 0;
-      if (!groupByAttrs.empty() || !replaceState.aggrs.empty()) {
-         auto tupleStreamType = mlir::relalg::TupleStreamType::get(builder.getContext());
-         auto tupleType = mlir::relalg::TupleType::get(builder.getContext());
-
-         std::string groupByName = "aggr" + std::to_string(groupById++);
-         auto tupleScope = context.createTupleScope();
-         auto* block = new mlir::Block;
-         block->addArgument(tupleStreamType, builder.getUnknownLoc());
-         block->addArgument(tupleType, builder.getUnknownLoc());
-         mlir::Value relation = block->getArgument(0);
-         mlir::OpBuilder aggrBuilder(builder.getContext());
-         aggrBuilder.setInsertionPointToStart(block);
-         std::vector<mlir::Value> createdValues;
-         std::vector<mlir::Attribute> createdCols;
-         for (auto toAggr : replaceState.aggrs) {
-            mlir::Value expr; //todo
-            auto aggrFuncName = std::get<0>(toAggr.second);
-            auto* attrNode = std::get<1>(toAggr.second);
-            auto distinct = std::get<2>(toAggr.second);
-            auto attrDef = attrManager.createDef(groupByName, toAggr.first->colId);
-
-            if (aggrFuncName == "count*") {
-               expr = aggrBuilder.create<mlir::relalg::CountRowsOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
-               if (groupByAttrs.empty()) {
-                  context.useZeroInsteadNull.insert(&attrDef.getColumn());
-               }
-            } else {
-               auto aggrFunc = llvm::StringSwitch<mlir::relalg::AggrFunc>(aggrFuncName)
-                                  .Case("sum", mlir::relalg::AggrFunc::sum)
-                                  .Case("avg", mlir::relalg::AggrFunc::avg)
-                                  .Case("min", mlir::relalg::AggrFunc::min)
-                                  .Case("max", mlir::relalg::AggrFunc::max)
-                                  .Case("count", mlir::relalg::AggrFunc::count)
-                                  .Default(mlir::relalg::AggrFunc::count);
-               if (aggrFunc == mlir::relalg::AggrFunc::count) {
-                  if (groupByAttrs.empty()) {
-                     context.useZeroInsteadNull.insert(&attrDef.getColumn());
-                  }
-               }
-               mlir::relalg::ColumnRefAttr refAttr;
-               switch (attrNode->type) {
-                  case T_ColumnRef: refAttr = attrManager.createRef(resolveColRef(attrNode, context)); break;
-                  case T_FakeNode: refAttr = attrManager.createRef(context.getAttribute(reinterpret_cast<FakeNode*>(attrNode)->colId)); break;
-                  default: error("could not resolve aggr attribute");
-               }
-               mlir::Value currRel = relation;
-               if (distinct) {
-                  currRel = aggrBuilder.create<mlir::relalg::ProjectionOp>(builder.getUnknownLoc(), mlir::relalg::SetSemantic::distinct, currRel, builder.getArrayAttr({refAttr}));
-               }
-               mlir::Type aggrResultType;
-               if (aggrFunc == mlir::relalg::AggrFunc::count) {
-                  aggrResultType = builder.getI64Type();
-               } else {
-                  aggrResultType = refAttr.getColumn().type;
-                  if (!aggrResultType.isa<mlir::db::NullableType>() && groupByAttrs.empty()) {
-                     aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
-                  }
-               }
-               expr = aggrBuilder.create<mlir::relalg::AggrFuncOp>(builder.getUnknownLoc(), aggrResultType, aggrFunc, currRel, refAttr);
-            }
-            attrDef.getColumn().type = expr.getType();
-            context.mapAttribute(scope, toAggr.first->colId, &attrDef.getColumn());
-            createdCols.push_back(attrDef);
-            createdValues.push_back(expr);
-         }
-         aggrBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), createdValues);
-         auto groupByOp = builder.create<mlir::relalg::AggregationOp>(builder.getUnknownLoc(), tupleStreamType, tree, builder.getArrayAttr(groupByAttrs), builder.getArrayAttr(createdCols));
-         groupByOp.aggr_func().push_back(block);
-
-         tree = groupByOp.result();
-      }
-
-      if (having) {
-         mlir::Block* pred = translatePredicate(builder, having, context);
-         auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), tree);
-         sel.predicate().push_back(pred);
-         tree = sel.result();
-      }
-
-      TargetInfo targetInfo;
-      std::unordered_map<FakeNode*, Node*> mapForTargetList;
-      std::vector<std::pair<std::string, std::variant<const mlir::relalg::Column*, FakeNode*>>> targets;
-      for (auto* cell = targetList->head; cell != nullptr; cell = cell->next) {
-         auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
-         if (node->type == T_ResTarget) {
-            auto* resTarget = reinterpret_cast<ResTarget*>(node);
-            auto* targetExpr = resTarget->val_;
-            std::string name;
-            const mlir::relalg::Column* attribute;
-            FakeNode* fakeNode = nullptr;
-            //todo: handle T_A_STAR
-            switch (targetExpr->type) {
-               case T_ColumnRef: {
-                  auto* colRef = reinterpret_cast<ColumnRef*>(targetExpr);
-                  auto* colRefFirst = reinterpret_cast<Node*>(colRef->fields_->head->data.ptr_value);
-
-                  switch (colRefFirst->type) {
-                     case T_String: {
-                        //todo: handle a.*
-                        name = fieldsToString(colRef->fields_);
-                        attribute = resolveColRef(targetExpr, context);
-                        break;
-                     }
-                     case T_A_Star: {
-                        std::unordered_set<const mlir::relalg::Column*> handledAttrs;
-                        for (auto p : context.getAllDefinedColumns()) {
-                           if (!handledAttrs.contains(p.second)) {
-                              targetInfo.namedResults.push_back({p.first, p.second});
-                              handledAttrs.insert(p.second);
-                           }
-                        }
-                        continue;
-                     }
-                     default: error("unexpected colref type in target list");
-                  }
-
-                  break;
-               }
-               case T_FakeNode: {
-                  auto* fakeNode = reinterpret_cast<FakeNode*>(targetExpr);
-                  name = fakeNode->name;
-                  attribute = context.getAttribute(fakeNode->colId);
-                  break;
-               }
-               default: {
-                  fakeNode = createFakeNode("", nullptr);
-                  mapForTargetList.insert({fakeNode, targetExpr});
-                  name = "";
-               }
-            }
-            if (resTarget->name_) {
-               name = resTarget->name_;
-            }
-            if (!fakeNode) {
-               assert(attribute);
-               targets.push_back({name, attribute});
-            } else {
-               targets.push_back({name, fakeNode});
-            }
-         } else {
-            error("expected res target");
-         }
-      }
-      tree = createMap(builder, mapForTargetList, context, tree, scope);
-      for (auto target : targets) {
-         if (std::holds_alternative<const mlir::relalg::Column*>(target.second)) {
-            targetInfo.namedResults.push_back({target.first, std::get<const mlir::relalg::Column*>(target.second)});
-         } else {
-            auto* fakeNode = std::get<FakeNode*>(target.second);
-            targetInfo.namedResults.push_back({target.first, context.getAttribute(fakeNode->colId)});
-         }
-      }
-      return std::make_pair(tree, targetInfo);
-   }
-   /*
-    * translate sort specification into array attribute for relalg::SortOp
-    */
+   //translate sort specification into array attribute for relalg::SortOp
    mlir::ArrayAttr translateSortSpec(List* sortClause, mlir::OpBuilder& builder, TranslationContext& context, TargetInfo);
-   /*
-    * translate values -> const relation
-    */
+
+   //translate list of constant values into relalg::ConstRelationOp
    std::pair<mlir::Value, TargetInfo> translateConstRelation(List* valuesLists, mlir::OpBuilder& builder);
-   std::pair<mlir::Value, TargetInfo> translateSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
-      switch (stmt->op_) {
-         case SETOP_NONE: {
-            // VALUES (...)
-            if (stmt->values_lists_) {
-               return translateConstRelation(stmt->values_lists_, builder);
-            }
-            // WITH ...
-            if (stmt->with_clause_) {
-               for (auto* cell = stmt->with_clause_->ctes_->head; cell != nullptr; cell = cell->next) {
-                  auto* cte = reinterpret_cast<CommonTableExpr*>(cell->data.ptr_value);
-                  assert(cte->ctequery_->type == T_SelectStmt);
-                  mlir::Value subQuery;
-                  TargetInfo targetInfo;
-                  {
-                     auto subQueryScope = context.createResolverScope();
-                     auto subQueryDefineScope = context.createDefineScope();
-                     auto [subQuery_, targetInfo_] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(cte->ctequery_), context, subQueryScope);
-                     subQuery = subQuery_;
-                     targetInfo = targetInfo_;
-                  }
-                  ctes.insert({cte->ctename_, {subQuery, targetInfo}});
-               }
-            }
-            // FROM
-            mlir::Value tree = translateFrom(builder, stmt, context, scope);
-            if (!tree) {
-               auto dummyAttr = attrManager.createDef(attrManager.getUniqueScope("dummyScope"), "dummyName");
-               dummyAttr.getColumn().type = builder.getI32Type();
-               std::vector<mlir::Attribute> columns{dummyAttr};
-               std::vector<mlir::Attribute> rows{builder.getArrayAttr({builder.getI64IntegerAttr(0)})};
-               tree = builder.create<mlir::relalg::ConstRelationOp>(builder.getUnknownLoc(), builder.getArrayAttr(columns), builder.getArrayAttr(rows));
-            }
-            // WHERE
-            if (stmt->where_clause_) {
-               mlir::Block* pred = translatePredicate(builder, stmt->where_clause_, context);
-               auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), tree);
-               sel.predicate().push_back(pred);
-               tree = sel.result();
-            }
-            auto [tree_, targetInfo] = translateSelGroupHaving(builder, stmt->group_clause_, stmt->having_clause_, stmt->target_list_, tree, context, scope);
-            tree = tree_;
-            for (auto x : targetInfo.namedResults) {
-               if (!x.first.empty()) {
-                  context.mapAttribute(scope, x.first, x.second);
-               }
-            }
-            // ORDER BY
-            if (stmt->sort_clause_) {
-               tree = builder.create<mlir::relalg::SortOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), tree, translateSortSpec(stmt->sort_clause_, builder, context, targetInfo));
-            }
-            // LIMIT
-            if (stmt->limit_count_) {
-               size_t limit = reinterpret_cast<A_Const*>(stmt->limit_count_)->val_.val_.ival_;
-               tree = builder.create<mlir::relalg::LimitOp>(builder.getUnknownLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), limit, tree);
-            }
-            return std::make_pair(tree, targetInfo);
-         }
-         case SETOP_EXCEPT:
-         case SETOP_INTERSECT:
-         case SETOP_UNION: {
-            auto setSemantic = stmt->all_ ? mlir::relalg::SetSemantic::all : mlir::relalg::SetSemantic::distinct;
-            std::pair<mlir::Value, TargetInfo> leftSubQueryRes;
-            std::pair<mlir::Value, TargetInfo> rightSubQueryRes;
-            {
-               auto subQueryScope = context.createResolverScope();
-               auto subQueryDefineScope = context.createDefineScope();
-               leftSubQueryRes = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(stmt->larg_), context, subQueryScope);
-            }
-            {
-               auto subQueryScope = context.createResolverScope();
-               auto subQueryDefineScope = context.createDefineScope();
-               rightSubQueryRes = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(stmt->rarg_), context, subQueryScope);
-            }
-            auto [lTree, lTargetInfo] = leftSubQueryRes;
-            auto [rTree, rTargetInfo] = rightSubQueryRes;
-            if (lTargetInfo.namedResults.size() != rTargetInfo.namedResults.size()) {
-               error("SET Operation expects both sides to have same number of columns");
-            }
-            std::vector<mlir::Attribute> attributes;
-            auto scopeName = attrManager.getUniqueScope("setop");
-            TargetInfo targetInfo;
-            for (size_t i = 0; i < lTargetInfo.namedResults.size(); i++) {
-               auto newName = lTargetInfo.namedResults[i].first;
-               const auto* leftColumn = lTargetInfo.namedResults[i].second;
-               const auto* rightColumn = rTargetInfo.namedResults[i].second;
-               auto leftType = leftColumn->type;
-               auto rightType = rightColumn->type;
-               if (getBaseType(leftType) != getBaseType(rightColumn->type)) {
-                  error("SET operation expacts same types (column:" + std::to_string(i) + ")");
-               }
-               auto newType = SQLTypeInference::getCommonType(leftType, rightType);
-               auto newColName = attrManager.getName(leftColumn).second;
-               auto newColDef = attrManager.createDef(scopeName, newColName, builder.getArrayAttr({attrManager.createRef(leftColumn), attrManager.createRef(rightColumn)}));
-               auto* newCol = &newColDef.getColumn();
-               newCol->type = newType;
-               attributes.push_back(newColDef);
-               targetInfo.map(newName, newCol);
-            }
-            mlir::Value tree;
-            switch (stmt->op_) {
-               case SETOP_UNION: {
-                  tree = builder.create<mlir::relalg::UnionOp>(builder.getUnknownLoc(), ::mlir::relalg::SetSemanticAttr::get(builder.getContext(), setSemantic), lTree, rTree, builder.getArrayAttr(attributes));
-                  break;
-               }
-               case SETOP_INTERSECT: {
-                  tree = builder.create<mlir::relalg::IntersectOp>(builder.getUnknownLoc(), ::mlir::relalg::SetSemanticAttr::get(builder.getContext(), setSemantic), lTree, rTree, builder.getArrayAttr(attributes));
-                  break;
-               }
-               case SETOP_EXCEPT: {
-                  tree = builder.create<mlir::relalg::ExceptOp>(builder.getUnknownLoc(), ::mlir::relalg::SetSemanticAttr::get(builder.getContext(), setSemantic), lTree, rTree, builder.getArrayAttr(attributes));
-                  break;
-               }
-               default: error("unsupported SET operation");
-            }
-            return std::make_pair(tree, targetInfo);
-         }
-         default: {
-            error("could not translate select statement type");
-         }
-      }
-      return std::make_pair(mlir::Value(), TargetInfo());
-   }
-   ~Parser() {
-      pg_query_free_parse_result(result);
-   }
+
+   //translate set operations (union, intersect, except)
+   std::pair<mlir::Value, TargetInfo> translateSetOperation(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
+
+   //translate a 'classic' select statement e.g. SELECT ...
+   std::pair<mlir::Value, TargetInfo> translateClassicSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
+
+   //translate a select statement which is either a 'classic select statement or a set operation
+   std::pair<mlir::Value, TargetInfo> translateSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
+
+   ~Parser();
 };
 } // end namespace frontend::sql
 #endif // FRONTEND_SQL_PARSER_H

@@ -341,10 +341,10 @@ bool Runner::loadSQL(std::string sql, runtime::Database& database) {
    {
       mlir::OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointToStart(queryBlock);
-      mlir::Value val = translator.translate(builder);
-      if (val) {
-         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), val);
-         returnTypes.push_back(val.getType());
+      auto val = translator.translate(builder);
+      if (val.has_value()) {
+         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), val.value());
+         returnTypes.push_back(val.value().getType());
       } else {
          builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
       }
@@ -454,7 +454,6 @@ bool Runner::lower() {
    }
    mlir::PassManager pmFunc(&ctxt->context, mlir::func::FuncOp::getOperationName());
    pmFunc.enableVerifier(runMode != RunMode::SPEED);
-   pmFunc.addPass(mlir::createCanonicalizerPass());
    pmFunc.addPass(mlir::createLoopInvariantCodeMotionPass());
    pmFunc.addPass(mlir::createSinkOpPass());
    pmFunc.addPass(mlir::createCSEPass());
@@ -519,17 +518,11 @@ void Runner::snapshot(std::string fileName) {
    }
 }
 static llvm::Error optimizeModule(llvm::Module* module) {
-   // Create a function pass manager
-   //llvm::legacy::PassManager modulePMInline;
-   //modulePMInline.add(llvm::createAlwaysInlinerLegacyPass());
-   //modulePMInline.run(*module);
    llvm::legacy::FunctionPassManager funcPM(module);
    funcPM.add(llvm::createInstructionCombiningPass());
    funcPM.add(llvm::createReassociatePass());
    funcPM.add(llvm::createGVNPass());
    funcPM.add(llvm::createCFGSimplificationPass());
-   //funcPM.add(llvm::createAggressiveDCEPass());
-   //funcPM.add(llvm::createCFGSimplificationPass());
 
    funcPM.doInitialization();
    for (auto& func : *module) {
@@ -538,7 +531,6 @@ static llvm::Error optimizeModule(llvm::Module* module) {
       }
    }
    funcPM.doFinalization();
-   //module->dump();
    return llvm::Error::success();
 }
 cpu_set_t mask;

@@ -35,7 +35,7 @@ int main(int argc, char** argv) {
    {
       mlir::OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointToStart(queryBlock);
-      mlir::Value val = translator.translate(builder);
+      mlir::Value val = translator.translate(builder).value();
       if (val) {
          builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), val);
          returnTypes.push_back(val.getType());
