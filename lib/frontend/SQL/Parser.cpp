@@ -1157,6 +1157,7 @@ std::pair<std::string, std::shared_ptr<runtime::ColumnMetaData>> frontend::sql::
                break;
             }
             case CONSTR_UNIQUE: break; // do something useful
+            case CONSTR_PRIMARY: break; // do something useful
             default: {
                error("unsupported column constraint");
             }
