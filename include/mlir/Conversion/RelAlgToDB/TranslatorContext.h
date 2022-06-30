@@ -2,7 +2,6 @@
 #define MLIR_CONVERSION_RELALGTODB_TRANSLATORCONTEXT_H
 #include "llvm/ADT/ScopedHashTable.h"
 
-#include "mlir/Conversion/RelAlgToDB/Pipeline.h"
 #include "mlir/Dialect/RelAlg/IR/Column.h"
 #include "mlir/IR/Value.h"
 namespace mlir {

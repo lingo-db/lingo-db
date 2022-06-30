@@ -1,4 +1,3 @@
-#include "mlir/Conversion/RelAlgToDB/Pipeline.h"
 #include "mlir/Conversion/RelAlgToDB/Translator.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/DSA/IR/DSAOps.h"

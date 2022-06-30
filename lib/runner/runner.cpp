@@ -202,8 +202,6 @@ void InsertPerfAsmPass::runOnOperation() {
 }
 
 namespace runner {
-extern const unsigned char kPrecompiledBitcode[];
-extern const size_t kPrecompiledBitcodeSize;
 std::unique_ptr<mlir::Pass> createLowerToLLVMPass() {
    return std::make_unique<ToLLVMLoweringPass>();
 }
@@ -236,33 +234,9 @@ int loadMLIRFromString(const std::string& input, mlir::MLIRContext& context, mli
 static std::unique_ptr<llvm::Module>
 convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context, mlir::LLVM::detail::DebuggingLevel debugLevel) {
    auto startConv = std::chrono::high_resolution_clock::now();
-   //////////////////////////////////////////////////////////////////////////////////////
-   auto bitcode = llvm::StringRef(reinterpret_cast<const char*>(kPrecompiledBitcode),
-                                  kPrecompiledBitcodeSize);
 
-   /// Read from file into memory buffer.
-   llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> bufferOrError =
-      llvm::MemoryBuffer::getMemBuffer(bitcode, "precompiled", false);
-
-   std::unique_ptr<llvm::MemoryBuffer> buffer = std::move(bufferOrError.get());
-
-   /// Parse the IR module.
-   llvm::Expected<std::unique_ptr<llvm::Module>> moduleOrError =
-      llvm::getOwningLazyBitcodeModule(std::move(buffer), context);
-   if (!moduleOrError) {
-      // NOTE: llvm::handleAllErrors() fails linking with RTTI-disabled LLVM builds
-      // (ARROW-5148)
-      std::string str;
-      llvm::raw_string_ostream stream(str);
-      stream << moduleOrError.takeError();
-      llvm::dbgs() << stream.str() << "\n";
-   }
-   std::unique_ptr<llvm::Module> irModule = std::move(moduleOrError.get());
-
-   //////////////////////////////////////////////////////////////////////////////////////
    std::unique_ptr<llvm::Module> mainModule =
       translateModuleToLLVMIR(module, context, "LLVMDialectModule", debugLevel);
-   llvm::Linker::linkModules(*mainModule, std::move(irModule), llvm::Linker::LinkOnlyNeeded);
    auto endConv = std::chrono::high_resolution_clock::now();
    std::cout << "conversion: " << std::chrono::duration_cast<std::chrono::microseconds>(endConv - startConv).count() / 1000.0 << " ms" << std::endl;
    return mainModule;
@@ -478,9 +452,6 @@ bool Runner::lowerToLLVM() {
    if (auto mainFunc = moduleOp.lookupSymbol<mlir::func::FuncOp>("main")) {
       ctxt->numArgs = mainFunc.getNumArguments();
       ctxt->numResults = mainFunc.getNumResults();
-      mlir::OpBuilder builder(moduleOp->getContext());
-      builder.setInsertionPointToStart(moduleOp.getBody());
-      builder.create<mlir::func::FuncOp>(moduleOp.getLoc(), "rt_set_execution_context", builder.getFunctionType(mlir::TypeRange({mlir::util::RefType::get(moduleOp->getContext(), mlir::IntegerType::get(moduleOp->getContext(), 8))}), mlir::TypeRange()), builder.getStringAttr("private"));
    }
    mlir::PassManager pm2(&ctxt->context);
    pm2.enableVerifier(runMode != RunMode::SPEED);
@@ -490,6 +461,29 @@ bool Runner::lowerToLLVM() {
    pm2.addPass(mlir::createCSEPass());
    if (mlir::failed(pm2.run(ctxt->module.get()))) {
       return false;
+   }
+   mlir::OpBuilder builder(moduleOp->getContext());
+   builder.setInsertionPointToStart(moduleOp.getBody());
+   auto pointerType = mlir::LLVM::LLVMPointerType::get(builder.getI8Type());
+   auto globalOp = builder.create<mlir::LLVM::GlobalOp>(builder.getUnknownLoc(), builder.getI64Type(), false, mlir::LLVM::Linkage::Private, "execution_context", builder.getI64IntegerAttr(0));
+   auto setExecContextFn = builder.create<mlir::LLVM::LLVMFuncOp>(moduleOp.getLoc(), "rt_set_execution_context", mlir::LLVM::LLVMFunctionType::get(mlir::LLVM::LLVMVoidType::get(builder.getContext()), builder.getI64Type()), mlir::LLVM::Linkage::External);
+   {
+      mlir::OpBuilder::InsertionGuard guard(builder);
+      auto block = setExecContextFn.addEntryBlock();
+      auto execContext = block->getArgument(0);
+      builder.setInsertionPointToStart(block);
+      auto ptr = builder.create<mlir::LLVM::AddressOfOp>(builder.getUnknownLoc(), globalOp);
+      builder.create<mlir::LLVM::StoreOp>(builder.getUnknownLoc(), execContext, ptr);
+      builder.create<mlir::LLVM::ReturnOp>(builder.getUnknownLoc(), mlir::ValueRange{});
+   }
+   if (auto getExecContextFn = mlir::dyn_cast_or_null<mlir::LLVM::LLVMFuncOp>(moduleOp.lookupSymbol("rt_get_execution_context"))) {
+      mlir::OpBuilder::InsertionGuard guard(builder);
+      auto block = getExecContextFn.addEntryBlock();
+      builder.setInsertionPointToStart(block);
+      auto ptr = builder.create<mlir::LLVM::AddressOfOp>(builder.getUnknownLoc(), globalOp);
+      auto execContext = builder.create<mlir::LLVM::LoadOp>(builder.getUnknownLoc(), ptr);
+      auto execContextAsPtr = builder.create<mlir::LLVM::IntToPtrOp>(builder.getUnknownLoc(), pointerType, execContext);
+      builder.create<mlir::LLVM::ReturnOp>(builder.getUnknownLoc(), mlir::ValueRange{execContextAsPtr});
    }
    auto end = std::chrono::high_resolution_clock::now();
    std::cout << "lowering to llvm took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
@@ -510,8 +504,8 @@ void Runner::snapshot(std::string fileName) {
       pm.enableVerifier(runMode == RunMode::DEBUGGING);
       mlir::OpPrintingFlags flags;
       flags.enableDebugInfo(false);
-      if(fileName.empty()){
-         fileName="snapshot-" + std::to_string(cntr++) + ".mlir";
+      if (fileName.empty()) {
+         fileName = "snapshot-" + std::to_string(cntr++) + ".mlir";
       }
       pm.addPass(mlir::createLocationSnapshotPass(flags, fileName));
       assert(pm.run(*ctxt->module).succeeded());

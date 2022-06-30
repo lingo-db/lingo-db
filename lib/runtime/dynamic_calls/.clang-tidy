@@ -1,3 +1,0 @@
-# Almost identical to the top-level .clang-tidy, except that {Member,Parameter,Variable}Case use camelBack.
-Checks: '-*,clang-diagnostic-*,llvm-*,misc-*,-misc-unused-parameters,-misc-non-private-member-variables-in-classes,readability-identifier-naming,-misc-no-recursion,-llvm-else-after-return,-clang-diagnostic-ambiguous-reversed-operator'
-WarningsAsErrors: '*'
