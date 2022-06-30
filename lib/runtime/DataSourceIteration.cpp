@@ -22,7 +22,7 @@ bool runtime::DataSourceIteration::isValid() {
 void runtime::DataSourceIteration::next() {
    currChunk = dataSource->getNext();
 }
-uint8_t* get_buffer(arrow::RecordBatch* batch, size_t columnId, size_t bufferId) {
+uint8_t* getBuffer(arrow::RecordBatch* batch, size_t columnId, size_t bufferId) {
    static uint8_t alternative = 0b11111111;
    if (batch->column_data(columnId)->buffers.size() > bufferId && batch->column_data(columnId)->buffers[bufferId]) {
       auto* buffer = batch->column_data(columnId)->buffers[bufferId].get();
@@ -38,23 +38,23 @@ void runtime::DataSourceIteration::access(RecordBatchInfo* info) {
       size_t off = currChunk->column_data(colId)->offset;
       colInfo.offset = off;
       colInfo.validMultiplier = currChunk->column_data(colId)->buffers[0] ? 1 : 0;
-      colInfo.validBuffer = get_buffer(currChunk.get(), colId, 0);
-      colInfo.dataBuffer = get_buffer(currChunk.get(), colId, 1);
-      colInfo.varLenBuffer = get_buffer(currChunk.get(), colId, 2);
+      colInfo.validBuffer = getBuffer(currChunk.get(), colId, 0);
+      colInfo.dataBuffer = getBuffer(currChunk.get(), colId, 1);
+      colInfo.varLenBuffer = getBuffer(currChunk.get(), colId, 2);
    }
    info->numRows = currChunk->num_rows();
 }
 void runtime::DataSourceIteration::end(DataSourceIteration* iteration) {
    delete iteration;
 }
-uint64_t get_column_id(std::shared_ptr<arrow::Table> table, std::string columnName) {
-   auto column_names = table->ColumnNames();
-   size_t column_id = 0;
-   for (auto column : column_names) {
+uint64_t getColumnId(std::shared_ptr<arrow::Table> table, std::string columnName) {
+   auto columnNames = table->ColumnNames();
+   size_t columnId = 0;
+   for (auto column : columnNames) {
       if (column == columnName) {
-         return column_id;
+         return columnId;
       }
-      column_id++;
+      columnId++;
    }
    throw std::runtime_error("column not found: " + columnName);
 }
@@ -70,7 +70,7 @@ runtime::DataSourceIteration* runtime::DataSourceIteration::start(ExecutionConte
    }
    std::vector<size_t> colIds;
    for (std::string c : descr["columns"]) {
-      colIds.push_back(get_column_id(table, c));
+      colIds.push_back(getColumnId(table, c));
    }
    return new DataSourceIteration(std::make_shared<ArrowTableSource>(*table.get()), colIds);
 }

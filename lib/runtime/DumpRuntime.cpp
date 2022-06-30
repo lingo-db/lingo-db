@@ -46,7 +46,7 @@ void runtime::DumpRuntime::dumpDate(bool null, int64_t date) {
    }
 }
 template <class Unit>
-void dump_timestamp(bool null, uint64_t date) {
+void dumpTimestamp(bool null, uint64_t date) {
    if (null) {
       std::cout << "timestamp(NULL)" << std::endl;
    } else {
@@ -54,16 +54,16 @@ void dump_timestamp(bool null, uint64_t date) {
    }
 }
 void runtime::DumpRuntime::dumpTimestampSecond(bool null, uint64_t date) {
-   dump_timestamp<std::chrono::seconds>(null, date);
+   dumpTimestamp<std::chrono::seconds>(null, date);
 }
 void runtime::DumpRuntime::dumpTimestampMilliSecond(bool null, uint64_t date) {
-   dump_timestamp<std::chrono::milliseconds>(null, date);
+   dumpTimestamp<std::chrono::milliseconds>(null, date);
 }
 void runtime::DumpRuntime::dumpTimestampMicroSecond(bool null, uint64_t date) {
-   dump_timestamp<std::chrono::microseconds>(null, date);
+   dumpTimestamp<std::chrono::microseconds>(null, date);
 }
 void runtime::DumpRuntime::dumpTimestampNanoSecond(bool null, uint64_t date) {
-   dump_timestamp<std::chrono::nanoseconds>(null, date);
+   dumpTimestamp<std::chrono::nanoseconds>(null, date);
 }
 
 void runtime::DumpRuntime::dumpIntervalMonths(bool null, uint32_t interval) {

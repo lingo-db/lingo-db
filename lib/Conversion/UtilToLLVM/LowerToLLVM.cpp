@@ -352,7 +352,7 @@ class HashVarLenLowering : public OpConversionPattern<mlir::util::HashVarLen> {
    public:
    using OpConversionPattern<mlir::util::HashVarLen>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::HashVarLen op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto fn = LLVM::lookupOrCreateFn(op->getParentOfType<ModuleOp>(), "rt_hash_varlen", {rewriter.getIntegerType(128)}, rewriter.getI64Type());
+      auto fn = LLVM::lookupOrCreateFn(op->getParentOfType<ModuleOp>(), "hashVarLenData", {rewriter.getIntegerType(128)}, rewriter.getI64Type());
       auto result = createLLVMCall(rewriter, op->getLoc(), fn, adaptor.val(), rewriter.getI64Type())[0];
       rewriter.replaceOp(op, result);
       return success();

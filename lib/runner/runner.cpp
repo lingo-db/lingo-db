@@ -469,7 +469,7 @@ bool Runner::lowerToLLVM() {
    auto setExecContextFn = builder.create<mlir::LLVM::LLVMFuncOp>(moduleOp.getLoc(), "rt_set_execution_context", mlir::LLVM::LLVMFunctionType::get(mlir::LLVM::LLVMVoidType::get(builder.getContext()), builder.getI64Type()), mlir::LLVM::Linkage::External);
    {
       mlir::OpBuilder::InsertionGuard guard(builder);
-      auto block = setExecContextFn.addEntryBlock();
+      auto *block = setExecContextFn.addEntryBlock();
       auto execContext = block->getArgument(0);
       builder.setInsertionPointToStart(block);
       auto ptr = builder.create<mlir::LLVM::AddressOfOp>(builder.getUnknownLoc(), globalOp);
@@ -478,7 +478,7 @@ bool Runner::lowerToLLVM() {
    }
    if (auto getExecContextFn = mlir::dyn_cast_or_null<mlir::LLVM::LLVMFuncOp>(moduleOp.lookupSymbol("rt_get_execution_context"))) {
       mlir::OpBuilder::InsertionGuard guard(builder);
-      auto block = getExecContextFn.addEntryBlock();
+      auto *block = getExecContextFn.addEntryBlock();
       builder.setInsertionPointToStart(block);
       auto ptr = builder.create<mlir::LLVM::AddressOfOp>(builder.getUnknownLoc(), globalOp);
       auto execContext = builder.create<mlir::LLVM::LoadOp>(builder.getUnknownLoc(), ptr);

@@ -1,16 +1,18 @@
-#ifndef DB_DIALECTS_TABLEBUILDER_H
-#define DB_DIALECTS_TABLEBUILDER_H
+#ifndef RUNTIME_TABLEBUILDER_H
+#define RUNTIME_TABLEBUILDER_H
 #include "runtime/helpers.h"
+
 #include <cassert>
+
 #include <arrow/table.h>
 #include <arrow/table_builder.h>
 namespace runtime {
 class TableBuilder {
-   static constexpr size_t max_batch_size = 100000;
+   static constexpr size_t maxBatchSize = 100000;
    std::shared_ptr<arrow::Schema> schema;
    std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
    std::unique_ptr<arrow::RecordBatchBuilder> batchBuilder;
-   size_t current_batch_size = 0;
+   size_t currentBatchSize = 0;
    size_t currColumn = 0;
 
    static std::shared_ptr<arrow::DataType> createType(std::string name, uint32_t p1, uint32_t p2) {
@@ -98,7 +100,7 @@ class TableBuilder {
       for (auto f : schema->fields()) {
          auto t = GetPhysicalType(f->type());
          if (arrow::is_fixed_size_binary(t->id())) {
-            auto fbt = dynamic_cast<arrow::FixedSizeBinaryType*>(t.get());
+            auto *fbt = dynamic_cast<arrow::FixedSizeBinaryType*>(t.get());
             switch (fbt->byte_width()) {
                case 1: t = arrow::int8(); break;
                case 2: t = arrow::int16(); break;
@@ -117,24 +119,29 @@ class TableBuilder {
    }
    std::shared_ptr<arrow::RecordBatch> convertBatch(std::shared_ptr<arrow::RecordBatch> recordBatch) {
       std::vector<std::shared_ptr<arrow::ArrayData>> columnData;
-      for (size_t i = 0; i < recordBatch->num_columns(); i++) {
+      for (int i = 0; i < recordBatch->num_columns(); i++) {
          columnData.push_back(arrow::ArrayData::Make(schema->field(i)->type(), recordBatch->column_data(i)->length, recordBatch->column_data(i)->buffers, recordBatch->column_data(i)->null_count, recordBatch->column_data(i)->offset));
       }
       return arrow::RecordBatch::Make(schema, recordBatch->num_rows(), columnData);
    }
    void flushBatch() {
-      if (current_batch_size > 0) {
+      if (currentBatchSize > 0) {
          std::shared_ptr<arrow::RecordBatch> recordBatch;
          batchBuilder->Flush(&recordBatch); //NOLINT (clang-diagnostic-unused-result)
-         current_batch_size = 0;
+         currentBatchSize = 0;
          batches.push_back(convertBatch(recordBatch));
       }
    }
    template <typename T>
-   T* GetBuilder() {
+   T* getBuilder() {
       auto ptr = batchBuilder->GetFieldAs<T>(currColumn++);
       assert(ptr != nullptr);
       return ptr;
+   }
+   void handleStatus(arrow::Status status){
+      if(!status.ok()){
+         throw std::runtime_error(status.ToString());
+      }
    }
 
    public:
@@ -154,5 +161,5 @@ class TableBuilder {
    void addBinary(bool isValid, runtime::VarLen32);
    void nextRow();
 };
-}
-#endif //DB_DIALECTS_TABLEBUILDER_H
+} // end namespace runtime
+#endif //RUNTIME_TABLEBUILDER_H

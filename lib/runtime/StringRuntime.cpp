@@ -10,9 +10,9 @@
 // src: https://github.com/cmu-db/noisepage/blob/c2635d3360dd24a9f7a094b4b8bcd131d99f2d4b/src/execution/sql/operators/like_operators.cpp
 // (MIT License, Copyright (c) 2018 CMU Database Group)
 #define NextByte(p, plen) ((p)++, (plen)--)
-bool like_(const char* str, size_t str_len, const char* pattern, size_t pattern_len, char escape) {
+bool iterativeLike(const char* str, size_t strLen, const char* pattern, size_t patternLen, char escape) {
    const char *s = str, *p = pattern;
-   std::size_t slen = str_len, plen = pattern_len;
+   std::size_t slen = strLen, plen = patternLen;
 
    for (; plen > 0 && slen > 0; NextByte(p, plen)) {
       if (*p == escape) {
@@ -56,7 +56,7 @@ bool like_(const char* str, size_t str_len, const char* pattern, size_t pattern_
          }
 
          while (slen > 0) {
-            if (like_(s, slen, p, plen, escape)) {
+            if (iterativeLike(s, slen, p, plen, escape)) {
                return true;
             }
             NextByte(s, slen);
@@ -82,7 +82,7 @@ bool like_(const char* str, size_t str_len, const char* pattern, size_t pattern_
 //end taken from noisepage
 
 bool runtime::StringRuntime::like(runtime::VarLen32 str1, runtime::VarLen32 str2) {
-   return like_((str1).data(), (str1).getLen(), (str2).data(), (str2).getLen(), '\\');
+   return iterativeLike((str1).data(), (str1).getLen(), (str2).data(), (str2).getLen(), '\\');
 }
 bool runtime::StringRuntime::endsWith(runtime::VarLen32 str1, runtime::VarLen32 str2) {
    if (str1.getLen() < str2.getLen()) return false;
