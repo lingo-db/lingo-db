@@ -1,5 +1,5 @@
 ARG buildImage="buildimg"
-ARG builtImage="mlirdb"
+ARG builtImage="lingodb"
 FROM ubuntu:impish AS baseimg
 RUN apt-get update
 RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
@@ -77,7 +77,7 @@ COPY --from=buildllvm /build/llvm/tools/clang/include /build/llvm/tools/clang/in
 
 
 
-FROM ${buildImage} AS mlirdb
+FROM ${buildImage} AS lingodb
 COPY . /repo
 WORKDIR /repo
 Run git submodule init
@@ -87,18 +87,18 @@ RUN cp -r /arrow-src/arrow arrow
 #RUN cp -r /llvm-src/llvm-project llvm-project
 RUN cp -r /llvm-src/torch-mlir torch-mlir
 #RUN find /llvm-src | grep "llvm-config" && exit 1
-RUN mkdir /build/mlirdb
+RUN mkdir /build/lingodb
 RUN git submodule update tools/python/pybind11
-RUN cmake -G Ninja . -B /build/mlirdb\
+RUN cmake -G Ninja . -B /build/lingodb\
            -DMLIR_DIR=/build/llvm/lib/cmake/mlir\
            -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit\
            -DArrow_DIR="/build/arrow/install/lib/cmake/arrow"\
            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Release 
         
-RUN cmake --build /build/mlirdb -j$(nproc)
+RUN cmake --build /build/lingodb -j$(nproc)
 
 
 FROM ${builtImage} as reproduce
 WORKDIR /repo
 RUN mkdir -p resources/data/tpch-1
-RUN bash tools/generate/tpch.sh /build/mlirdb /repo/resources/data/tpch-1 1
+RUN bash tools/generate/tpch.sh /build/lingodb /repo/resources/data/tpch-1 1

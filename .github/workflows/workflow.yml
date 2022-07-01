@@ -30,52 +30,52 @@ jobs:
         with:
           file: tools/docker/Dockerfile
           context: .
-          target: mlirdb
+          target: lingodb
           build-args: |
-            buildImage=ghcr.io/jungmair/mlirdb-buildimg:${{ steps.smid.outputs.id }}
+            buildImage=ghcr.io/lingo-db/lingodb-buildimg:${{ steps.smid.outputs.id }}
           push: true
-          tags: ghcr.io/jungmair/mlirdb:${{ github.sha }}
+          tags: ghcr.io/lingo-db/lingo-db:${{ github.sha }}
   filecheck-tests:
     needs: build
     runs-on: ubuntu-latest
-    container: ghcr.io/jungmair/mlirdb:${{ github.sha }}
+    container: ghcr.io/lingo-db/lingo-db:${{ github.sha }}
     steps:
       - name: Run Test
         run: |
           cd /repo
-          export LD_LIBRARY_PATH=/build/arrow/install/lib && /build/llvm/bin/llvm-lit -v /build/mlirdb/test/lit
+          export LD_LIBRARY_PATH=/build/arrow/install/lib && /build/llvm/bin/llvm-lit -v /build/lingodb/test/lit
   sql-tests:
     needs: build
     runs-on: ubuntu-latest
-    container: ghcr.io/jungmair/mlirdb:${{ github.sha }}
+    container: ghcr.io/lingo-db/lingo-db:${{ github.sha }}
     steps:
       - name: Run Test
         run: |
           cd /repo
-          python3 /repo/tools/scripts/sql-roundtrip-test.py /build/mlirdb
+          python3 /repo/tools/scripts/sql-roundtrip-test.py /build/lingodb
   sqlite-tests:
     needs: build
     runs-on: ubuntu-latest
-    container: ghcr.io/jungmair/mlirdb:${{ github.sha }}
+    container: ghcr.io/lingo-db/lingo-db:${{ github.sha }}
     steps:
       - name: Run Test
         run: |
           cd /repo
-          /build/mlirdb/sqlite-tester test/sqlite/select1.test
-          /build/mlirdb/sqlite-tester test/sqlite/select2.test
-          /build/mlirdb/sqlite-tester test/sqlite/select3.test
-          /build/mlirdb/sqlite-tester test/sqlite/select4.test
-          /build/mlirdb/sqlite-tester test/sqlite/select5.test
-          /build/mlirdb/sqlite-tester test/sqlite/groupby.test
-          /build/mlirdb/sqlite-tester test/sqlite/join.test
-          /build/mlirdb/sqlite-tester test/sqlite/unnesting.test
+          /build/lingodb/sqlite-tester test/sqlite/select1.test
+          /build/lingodb/sqlite-tester test/sqlite/select2.test
+          /build/lingodb/sqlite-tester test/sqlite/select3.test
+          /build/lingodb/sqlite-tester test/sqlite/select4.test
+          /build/lingodb/sqlite-tester test/sqlite/select5.test
+          /build/lingodb/sqlite-tester test/sqlite/groupby.test
+          /build/lingodb/sqlite-tester test/sqlite/join.test
+          /build/lingodb/sqlite-tester test/sqlite/unnesting.test
 
   lint:
     needs: build
     runs-on: ubuntu-latest
-    container: ghcr.io/jungmair/mlirdb:${{ github.sha }}
+    container: ghcr.io/lingo-db/lingo-db:${{ github.sha }}
     steps:
       - name: Run Test
         run: |
           cd /repo
-          python3 /repo/tools/scripts/run-clang-tidy.py -p /build/mlirdb -quiet  -exclude="arrow|vendored" -header-filter="$PWD/include/.*"  -clang-tidy-binary=/build/llvm/bin/clang-tidy
+          python3 /repo/tools/scripts/run-clang-tidy.py -p /build/lingodb -quiet  -exclude="arrow|vendored" -header-filter="$PWD/include/.*"  -clang-tidy-binary=/build/llvm/bin/clang-tidy
