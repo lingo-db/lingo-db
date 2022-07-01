@@ -1,10 +1,21 @@
-## To reproduce results with docker
+# LingoDB
+LingoDB is a new analytical database system that blurs the lines between databases and compilers.
+
+# Usage
+
+## Docker
+We provide a [Dockerfile](tools/docker/Dockerfile) that can be used to build and experiment with LingoDB.
+For a simple build, just execute this command in the repository. Note that no submodules need to be checked out.
+```shell
+make build-docker
+```
+If you just want to see results for the TPC-H queries just run this command. Note that docker comes with a slight runtime overhead (passing `--privileged` helps a bit).
+
 ```
 make reproduce
 ```
-Note that docker comes with a slight runtime overhead (passing `--privileged` helps a bit). Measurements in the paper were conducted using native builds.
 
-## For developers
+## Build from source
 
 1. Ensure you have a machine with sufficient compute power and space (16 GiB RAM, >16 GiB disk space, preferably many cores).
 1. Initialize submodules: `git submodule update --init --recursive`
