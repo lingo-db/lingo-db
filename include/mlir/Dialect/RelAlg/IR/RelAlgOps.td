@@ -356,6 +356,7 @@ def ProjectionOp : RelAlg_Op<"projection",[NoSideEffect,Operator,UnaryOperator]>
 
     let extraClassDeclaration = [{
         ColumnSet getAvailableColumns();
+        ColumnSet getUsedColumns();
     }];
 }
 

@@ -283,7 +283,9 @@ ColumnSet mlir::relalg::AggregationOp::getAvailableColumns() {
 ColumnSet mlir::relalg::ProjectionOp::getAvailableColumns() {
    return ColumnSet::fromArrayAttr(cols());
 }
-
+ColumnSet mlir::relalg::ProjectionOp::getUsedColumns() {
+   return set_semantic() == SetSemantic::distinct ? ColumnSet::fromArrayAttr(cols()) : ColumnSet();
+}
 bool mlir::relalg::detail::isJoin(Operation* op) {
    auto opType = getBinaryOperatorType(op);
    return BinaryOperatorType::InnerJoin <= opType && opType <= BinaryOperatorType::CollectionJoin;
