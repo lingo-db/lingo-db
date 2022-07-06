@@ -1,0 +1,10 @@
+
+set(LLVM_TARGET_DEFINITIONS SubOperatorOps.td)
+mlir_tablegen(SubOperatorOpsDialect.h.inc -gen-dialect-decls  --dialect=subop)
+mlir_tablegen(SubOperatorOpsDialect.cpp.inc -gen-dialect-defs  --dialect=subop)
+mlir_tablegen(SubOperatorOpsTypes.h.inc --gen-typedef-decls  --typedefs-dialect=subop)
+mlir_tablegen(SubOperatorOpsTypes.cpp.inc --gen-typedef-defs  --typedefs-dialect=subop)
+mlir_tablegen(SubOperatorOps.h.inc -gen-op-decls)
+mlir_tablegen(SubOperatorOps.cpp.inc -gen-op-defs)
+add_public_tablegen_target(MLIRSubOperatorOpsIncGen)
+add_mlir_doc(SubOperatorOps SubOperatorDialect SubOperator/ -gen-dialect-doc)
