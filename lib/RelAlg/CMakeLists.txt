@@ -28,7 +28,7 @@ add_mlir_dialect_library(MLIRRelAlg
         DEPENDS
         MLIRRelAlgOpsIncGen
         MLIRDBOpsIncGen
-
+        MLIRTupleStreamOpsIncGen
         LINK_LIBS mlir-support PUBLIC
         MLIRIR
         )

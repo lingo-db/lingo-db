@@ -15,6 +15,7 @@
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
+#include "mlir/Dialect/TupleStream/TupleStreamDialect.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 
 #include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
@@ -108,8 +109,8 @@ int main(int argc, char** argv) {
          for (int i = 3; i < argc; i++) {
             argvReduced[i - 2] = argv[i];
          }
-         argc-=2;
-         argv=argvReduced;
+         argc -= 2;
+         argv = argvReduced;
       }
    }
    mlir::torch::registerAllPasses();
@@ -143,6 +144,7 @@ int main(int argc, char** argv) {
 
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
+   registry.insert<mlir::tuples::TupleStreamDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::dsa::DSADialect>();
    registry.insert<mlir::func::FuncDialect>();

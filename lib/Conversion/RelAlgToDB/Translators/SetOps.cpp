@@ -5,8 +5,8 @@
 #include "mlir/Dialect/SCF/SCF.h"
 class SetOpTranslator : public mlir::relalg::Translator {
    Operator unionOp;
-   std::unordered_map<const mlir::relalg::Column*, const mlir::relalg::Column*> leftMapping;
-   std::unordered_map<const mlir::relalg::Column*, const mlir::relalg::Column*> rightMapping;
+   std::unordered_map<const mlir::tuples::Column*, const mlir::tuples::Column*> leftMapping;
+   std::unordered_map<const mlir::tuples::Column*, const mlir::tuples::Column*> rightMapping;
 
    protected:
    mlir::relalg::OrderedAttributes orderedAttributes;
@@ -23,15 +23,15 @@ class SetOpTranslator : public mlir::relalg::Translator {
       propagateInfo();
 
       for (auto x : unionOp->getAttr("mapping").cast<mlir::ArrayAttr>()) {
-         auto columnDef = x.cast<mlir::relalg::ColumnDefAttr>();
-         auto leftRef = columnDef.getFromExisting().cast<mlir::ArrayAttr>()[0].cast<mlir::relalg::ColumnRefAttr>();
-         auto rightRef = columnDef.getFromExisting().cast<mlir::ArrayAttr>()[1].cast<mlir::relalg::ColumnRefAttr>();
+         auto columnDef = x.cast<mlir::tuples::ColumnDefAttr>();
+         auto leftRef = columnDef.getFromExisting().cast<mlir::ArrayAttr>()[0].cast<mlir::tuples::ColumnRefAttr>();
+         auto rightRef = columnDef.getFromExisting().cast<mlir::ArrayAttr>()[1].cast<mlir::tuples::ColumnRefAttr>();
          leftMapping[&columnDef.getColumn()] = &leftRef.getColumn();
          rightMapping[&columnDef.getColumn()] = &rightRef.getColumn();
       }
       tupleType = orderedAttributes.getTupleType(unionOp.getContext());
    }
-   mlir::Value pack(std::unordered_map<const mlir::relalg::Column*, const mlir::relalg::Column*>& mapping, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) {
+   mlir::Value pack(std::unordered_map<const mlir::tuples::Column*, const mlir::tuples::Column*>& mapping, mlir::OpBuilder& builder, mlir::relalg::TranslatorContext& context) {
       std::vector<mlir::Value> values;
       for (const auto* x : orderedAttributes.getAttrs()) {
          const auto* colBefore = mapping.at(x);

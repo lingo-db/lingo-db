@@ -2,10 +2,12 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/OpImplementation.h"
 #include <functional>
 #include <unordered_set>
+using namespace mlir::tuples;
 using namespace mlir::relalg;
 using operator_list = llvm::SmallVector<Operator, 4>;
 static operator_list getChildOperators(mlir::Operation* parent) {
@@ -304,21 +306,21 @@ void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir:
          restype = mlir::db::NullableType::get(builder.getContext(), restype);
       }
       mlir::Value anded = builder.create<mlir::db::AndOp>(op->getLoc(), restype, mlir::ValueRange({oldValue, additionalPred}));
-      builder.create<mlir::relalg::ReturnOp>(op->getLoc(), anded);
+      builder.create<mlir::tuples::ReturnOp>(op->getLoc(), anded);
    } else {
-      builder.create<mlir::relalg::ReturnOp>(op->getLoc(), additionalPred);
+      builder.create<mlir::tuples::ReturnOp>(op->getLoc(), additionalPred);
    }
    terminator->erase();
 }
 void mlir::relalg::detail::initPredicate(mlir::Operation* op) {
    auto* context = op->getContext();
-   mlir::Type tupleType = mlir::relalg::TupleType::get(context);
+   mlir::Type tupleType = mlir::tuples::TupleType::get(context);
    auto* block = new mlir::Block;
    op->getRegion(0).push_back(block);
    block->addArgument(tupleType, op->getLoc());
    mlir::OpBuilder builder(context);
    builder.setInsertionPointToStart(block);
-   builder.create<mlir::relalg::ReturnOp>(op->getLoc());
+   builder.create<mlir::tuples::ReturnOp>(op->getLoc());
 }
 
 static void addRequirements(mlir::Operation* op, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, llvm::SmallVector<mlir::Operation*, 8>& extracted, llvm::SmallPtrSet<mlir::Operation*, 8>& alreadyPresent, mlir::BlockAndValueMapping& mapping) {

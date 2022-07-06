@@ -7,6 +7,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/ColumnSet.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include <tuple>
@@ -23,7 +24,7 @@ class HashJoinUtils {
       std::vector<bool> canSave;
       std::vector<mlir::Type> types;
       block->walk([&](mlir::Operation* op) {
-         if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(op)) {
+         if (auto getAttr = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
             required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.attr())});
             pureAttribute.insert(getAttr.getResult());
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
@@ -61,7 +62,7 @@ class HashJoinUtils {
    }
 
    static bool isAndedResult(mlir::Operation* op, bool first = true) {
-      if (mlir::isa<mlir::relalg::ReturnOp>(op)) {
+      if (mlir::isa<mlir::tuples::ReturnOp>(op)) {
          return true;
       }
       if (mlir::isa<mlir::db::AndOp>(op) || first) {
@@ -73,12 +74,12 @@ class HashJoinUtils {
          return false;
       }
    }
-   static std::vector<mlir::Value> inlineKeys(mlir::Block* block, mlir::relalg::ColumnSet keyAttributes,mlir::relalg::ColumnSet otherAttributes, mlir::Block* newBlock, mlir::Block::iterator insertionPoint, mlir::relalg::TranslatorContext& context) {
+   static std::vector<mlir::Value> inlineKeys(mlir::Block* block, mlir::relalg::ColumnSet keyAttributes, mlir::relalg::ColumnSet otherAttributes, mlir::Block* newBlock, mlir::Block::iterator insertionPoint, mlir::relalg::TranslatorContext& context) {
       llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> required;
       mlir::BlockAndValueMapping mapping;
       std::vector<mlir::Value> keys;
       block->walk([&](mlir::Operation* op) {
-         if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(op)) {
+         if (auto getAttr = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
             required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.attr())});
             if (keyAttributes.intersects(mlir::relalg::ColumnSet::from(getAttr.attr()))) {
                mapping.map(getAttr.getResult(), context.getValueForAttribute(&getAttr.attr().getColumn()));
@@ -88,9 +89,9 @@ class HashJoinUtils {
                auto leftAttributes = required[cmpOp.getLeft()];
                auto rightAttributes = required[cmpOp.getRight()];
                mlir::Value keyVal;
-               if (leftAttributes.isSubsetOf(keyAttributes)&&rightAttributes.isSubsetOf(otherAttributes)) {
+               if (leftAttributes.isSubsetOf(keyAttributes) && rightAttributes.isSubsetOf(otherAttributes)) {
                   keyVal = cmpOp.getLeft();
-               } else if (rightAttributes.isSubsetOf(keyAttributes)&&leftAttributes.isSubsetOf(otherAttributes)) {
+               } else if (rightAttributes.isSubsetOf(keyAttributes) && leftAttributes.isSubsetOf(otherAttributes)) {
                   keyVal = cmpOp.getRight();
                }
                if (keyVal) {

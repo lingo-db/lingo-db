@@ -1,11 +1,11 @@
-#ifndef MLIR_DIALECT_RELALG_IR_COLUMNMANAGER_H
-#define MLIR_DIALECT_RELALG_IR_COLUMNMANAGER_H
+#ifndef MLIR_DIALECT_TUPLESTREAM_COLUMNMANAGER_H
+#define MLIR_DIALECT_TUPLESTREAM_COLUMNMANAGER_H
 
-#include "mlir/Dialect/RelAlg/IR/Column.h"
+#include "mlir/Dialect/TupleStream/Column.h"
 
-#include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOpsAttributes.h"
 
-namespace mlir::relalg {
+namespace mlir::tuples {
 class ColumnManager {
    public:
    void setContext(MLIRContext* context);
@@ -45,6 +45,6 @@ class ColumnManager {
 
    std::unordered_map<std::string, size_t> scopeUnifier;
 };
-} // namespace mlir::relalg
+} // namespace mlir::tuples
 
-#endif // MLIR_DIALECT_RELALG_IR_COLUMNMANAGER_H
+#endif // MLIR_DIALECT_TUPLESTREAM_COLUMNMANAGER_H

@@ -2,7 +2,7 @@
 
 // CHECK-DAG:    %[[C1:.*]] = arith.constant 2.14476395 : f32
 
-// CHECK-DAG:    %[[A:.*]] = relalg.getcol %arg0 @R::@a : f32
+// CHECK-DAG:    %[[A:.*]] = tuples.getcol %arg0 @R::@a : f32
 // CHECK-DAG:    %[[CMP:.*]] = arith.cmpf olt, %[[A]], %[[C1]] : f32
 module {
   func.func @forward(%arg0: !torch.vtensor<[1,1],f32>) -> !torch.vtensor<[1,1],f32> {
@@ -24,12 +24,12 @@ module {
 
   func.func @main () -> !dsa.table attributes { torch.ignore = unit }  {
     %1 = relalg.basetable {table_identifier="R"} columns: {a=>@R::@a({type=f32})}
-    %3 = relalg.selection %1 (%4: !relalg.tuple) {
-      %5 = relalg.getcol %4 @R::@a : f32
+    %3 = relalg.selection %1 (%4: !tuples.tuple) {
+      %5 = tuples.getcol %4 @R::@a : f32
       %7 = func.call @user(%5) : (f32) -> f32
       %8 = db.constant (5.0) : f32
       %9 = db.compare lt %7 : f32 , %8 : f32
-      relalg.return %9 : i1
+      tuples.return %9 : i1
     }
     %8 = relalg.materialize %3 [@S::@a ] => ["a"] : !dsa.table
     return %8 : !dsa.table

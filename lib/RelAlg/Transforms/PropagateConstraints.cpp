@@ -1,5 +1,7 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include <mlir/Dialect/TupleStream/TupleStreamOps.h>
+
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -10,13 +12,13 @@
 #include "llvm/ADT/EquivalenceClasses.h"
 
 namespace {
-using ReplaceFnT = std::function<mlir::relalg::ColumnRefAttr(mlir::relalg::ColumnRefAttr)>;
+using ReplaceFnT = std::function<mlir::tuples::ColumnRefAttr(mlir::tuples::ColumnRefAttr)>;
 mlir::Attribute updateAttribute(mlir::Attribute attr, ReplaceFnT replaceFn) {
-   if (auto colRefAttr = attr.dyn_cast<mlir::relalg::ColumnRefAttr>()) {
+   if (auto colRefAttr = attr.dyn_cast<mlir::tuples::ColumnRefAttr>()) {
       return replaceFn(colRefAttr);
    }
-   if (auto colDefAttr = attr.dyn_cast<mlir::relalg::ColumnDefAttr>()) {
-      return mlir::relalg::ColumnDefAttr::get(attr.getContext(), colDefAttr.getName(), colDefAttr.getColumnPtr(), updateAttribute(colDefAttr.getFromExisting(), replaceFn));
+   if (auto colDefAttr = attr.dyn_cast<mlir::tuples::ColumnDefAttr>()) {
+      return mlir::tuples::ColumnDefAttr::get(attr.getContext(), colDefAttr.getName(), colDefAttr.getColumnPtr(), updateAttribute(colDefAttr.getFromExisting(), replaceFn));
    }
    if (auto sortSpec = attr.dyn_cast<mlir::relalg::SortSpecificationAttr>()) {
       return mlir::relalg::SortSpecificationAttr::get(attr.getContext(), replaceFn(sortSpec.getAttr()), sortSpec.getSortSpec());
@@ -61,13 +63,13 @@ class ReduceAggrKeyPattern : public mlir::RewritePattern {
          auto toMap = keys;
          toMap.remove(reducedKeys);
          aggr.group_by_colsAttr(reducedKeys.asRefArrayAttr(aggr->getContext()));
-         auto& colManager = getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager();
+         auto& colManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
          auto scope = colManager.getUniqueScope("aggr");
-         std::unordered_map<const mlir::relalg::Column*, const mlir::relalg::Column*> mapping;
+         std::unordered_map<const mlir::tuples::Column*, const mlir::tuples::Column*> mapping;
          std::vector<mlir::Attribute> computedCols(aggr.computed_cols().begin(), aggr.computed_cols().end());
          auto* terminator = aggr.aggr_func().begin()->getTerminator();
          rewriter.setInsertionPoint(terminator);
-         auto returnArgs = mlir::cast<mlir::relalg::ReturnOp>(terminator)->getOperands();
+         auto returnArgs = mlir::cast<mlir::tuples::ReturnOp>(terminator)->getOperands();
          std::vector<mlir::Value> values(returnArgs.begin(), returnArgs.end());
          for (auto* x : toMap) {
             auto* newCol = colManager.get(scope, colManager.getName(x).second).get();
@@ -76,10 +78,10 @@ class ReduceAggrKeyPattern : public mlir::RewritePattern {
             computedCols.push_back(colManager.createDef(newCol));
             values.push_back(rewriter.create<mlir::relalg::AggrFuncOp>(aggr->getLoc(), x->type, mlir::relalg::AggrFunc::any, aggr.aggr_func().getArgument(0), colManager.createRef(x)));
          }
-         rewriter.create<mlir::relalg::ReturnOp>(aggr->getLoc(), values);
+         rewriter.create<mlir::tuples::ReturnOp>(aggr->getLoc(), values);
          rewriter.eraseOp(terminator);
          aggr.computed_colsAttr(mlir::ArrayAttr::get(aggr.getContext(), computedCols));
-         replaceUsagesAfter(aggr.getOperation(), [&](mlir::relalg::ColumnRefAttr attr) {
+         replaceUsagesAfter(aggr.getOperation(), [&](mlir::tuples::ColumnRefAttr attr) {
             if (mapping.count(&attr.getColumn())) {
                return colManager.createRef(mapping.at(&attr.getColumn()));
             }
@@ -108,15 +110,15 @@ class ReduceAggrKeys : public mlir::PassWrapper<ReduceAggrKeys, mlir::OperationP
       }
    }
 };
-static std::optional<std::pair<const mlir::relalg::Column*, const mlir::relalg::Column*>> analyzePredicate(PredicateOperator selection) {
-   auto returnOp = mlir::cast<mlir::relalg::ReturnOp>(selection.getPredicateBlock().getTerminator());
+static std::optional<std::pair<const mlir::tuples::Column*, const mlir::tuples::Column*>> analyzePredicate(PredicateOperator selection) {
+   auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(selection.getPredicateBlock().getTerminator());
    if (returnOp.results().empty()) return {};
    mlir::Value v = returnOp.results()[0];
    if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(v.getDefiningOp())) {
       if (!cmpOp.isEqualityPred()) return {};
-      if (auto leftColref = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(cmpOp.left().getDefiningOp())) {
-         if (auto rightColref = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(cmpOp.right().getDefiningOp())) {
-            return std::make_pair<const mlir::relalg::Column*, const mlir::relalg::Column*>(&leftColref.attr().getColumn(), &rightColref.attr().getColumn());
+      if (auto leftColref = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.left().getDefiningOp())) {
+         if (auto rightColref = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.right().getDefiningOp())) {
+            return std::make_pair<const mlir::tuples::Column*, const mlir::tuples::Column*>(&leftColref.attr().getColumn(), &rightColref.attr().getColumn());
          }
       }
    }
@@ -126,17 +128,17 @@ static std::optional<std::pair<const mlir::relalg::Column*, const mlir::relalg::
 class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqualities, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-expand-transitive-eq"; }
 
-   void merge(llvm::EquivalenceClasses<const mlir::relalg::Column*>& mergeInto, const llvm::EquivalenceClasses<const mlir::relalg::Column*>& mergeFrom, std::vector<std::pair<const mlir::relalg::Column*, const mlir::relalg::Column*>>& additionalConstrains) {
-      llvm::EquivalenceClasses<const mlir::relalg::Column*> before = mergeInto;
+   void merge(llvm::EquivalenceClasses<const mlir::tuples::Column*>& mergeInto, const llvm::EquivalenceClasses<const mlir::tuples::Column*>& mergeFrom, std::vector<std::pair<const mlir::tuples::Column*, const mlir::tuples::Column*>>& additionalConstrains) {
+      llvm::EquivalenceClasses<const mlir::tuples::Column*> before = mergeInto;
       for (auto& x : mergeFrom) {
          mergeInto.unionSets(x.getData(), mergeFrom.getLeaderValue(x.getData()));
       }
       for (auto& x : mergeInto) {
-         const mlir::relalg::Column* xData = x.getData();
+         const mlir::tuples::Column* xData = x.getData();
          for (auto& y : mergeInto) {
-            const mlir::relalg::Column* yData = y.getData();
+            const mlir::tuples::Column* yData = y.getData();
             if (yData < xData && mergeInto.isEquivalent(xData, yData) && !before.isEquivalent(xData, yData) && !mergeFrom.isEquivalent(xData, yData)) {
-               auto& colManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager();
+               auto& colManager = getContext().getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
                auto xName = colManager.getName(xData);
                auto yName = colManager.getName(yData);
                additionalConstrains.push_back(std::make_pair(xData, yData));
@@ -149,11 +151,11 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
 
    public:
    void runOnOperation() override {
-      std::unordered_map<mlir::Operation*, llvm::EquivalenceClasses<const mlir::relalg::Column*>> equalities;
+      std::unordered_map<mlir::Operation*, llvm::EquivalenceClasses<const mlir::tuples::Column*>> equalities;
 
       getOperation().walk([&](Operator op) {
-         llvm::EquivalenceClasses<const mlir::relalg::Column*> localEqualities;
-         std::vector<std::pair<const mlir::relalg::Column*, const mlir::relalg::Column*>> additionalPredicates;
+         llvm::EquivalenceClasses<const mlir::tuples::Column*> localEqualities;
+         std::vector<std::pair<const mlir::tuples::Column*, const mlir::tuples::Column*>> additionalPredicates;
          if (auto unary = mlir::dyn_cast<UnaryOperator>(op.getOperation())) {
             auto previous = equalities[unary.child()];
             merge(localEqualities, previous, additionalPredicates);
@@ -171,7 +173,7 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
          if (auto sel = mlir::dyn_cast<mlir::relalg::SelectionOp>(op.getOperation())) {
             auto res = analyzePredicate(sel);
             if (res) {
-               llvm::EquivalenceClasses<const mlir::relalg::Column*> selPred;
+               llvm::EquivalenceClasses<const mlir::tuples::Column*> selPred;
                selPred.unionSets(res.value().first, res.value().second);
                merge(localEqualities, selPred, additionalPredicates);
             }
@@ -179,22 +181,22 @@ class ExpandTransitiveEqualities : public mlir::PassWrapper<ExpandTransitiveEqua
          mlir::Value current = op.asRelation();
          mlir::OpBuilder builder(&getContext());
          builder.setInsertionPointAfter(op.getOperation());
-         auto& colManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager();
+         auto& colManager = getContext().getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
          auto availableColumns = op.getAvailableColumns();
          for (auto pred : additionalPredicates) {
             auto loc = builder.getUnknownLoc();
             auto* block = new mlir::Block;
             mlir::OpBuilder predBuilder(&getContext());
-            block->addArgument(mlir::relalg::TupleType::get(&getContext()), loc);
+            block->addArgument(mlir::tuples::TupleType::get(&getContext()), loc);
 
             predBuilder.setInsertionPointToStart(block);
             if (availableColumns.contains(pred.first) && availableColumns.contains(pred.second)) {
-               mlir::Value left = predBuilder.create<mlir::relalg::GetColumnOp>(loc, pred.first->type, colManager.createRef(pred.first), block->getArgument(0));
-               mlir::Value right = predBuilder.create<mlir::relalg::GetColumnOp>(loc, pred.second->type, colManager.createRef(pred.second), block->getArgument(0));
+               mlir::Value left = predBuilder.create<mlir::tuples::GetColumnOp>(loc, pred.first->type, colManager.createRef(pred.first), block->getArgument(0));
+               mlir::Value right = predBuilder.create<mlir::tuples::GetColumnOp>(loc, pred.second->type, colManager.createRef(pred.second), block->getArgument(0));
                mlir::Value compared = predBuilder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, left, right);
-               predBuilder.create<mlir::relalg::ReturnOp>(builder.getUnknownLoc(), compared);
+               predBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), compared);
 
-               auto sel = builder.create<mlir::relalg::SelectionOp>(loc, mlir::relalg::TupleStreamType::get(builder.getContext()), current);
+               auto sel = builder.create<mlir::relalg::SelectionOp>(loc, mlir::tuples::TupleStreamType::get(builder.getContext()), current);
                sel.predicate().push_back(block);
                current.replaceAllUsesExcept(sel.asRelation(), sel.getOperation());
                current = sel.asRelation();

@@ -291,6 +291,7 @@ bool Runner::loadSQL(std::string sql, runtime::Database& database) {
    mlir::DialectRegistry registry;
    registry.insert<mlir::BuiltinDialect>();
    registry.insert<mlir::relalg::RelAlgDialect>();
+   registry.insert<mlir::tuples::TupleStreamDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::arith::ArithmeticDialect>();
@@ -334,6 +335,7 @@ bool Runner::load(std::string file) {
 
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
+   registry.insert<mlir::tuples::TupleStreamDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::dsa::DSADialect>();
    registry.insert<mlir::func::FuncDialect>();
@@ -361,6 +363,7 @@ bool Runner::loadString(std::string input) {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
+   registry.insert<mlir::tuples::TupleStreamDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::dsa::DSADialect>();
    registry.insert<mlir::func::FuncDialect>();

@@ -24,22 +24,22 @@ module @querymodule{
             name => @studenten::@name({type=!db.string}),
             semester => @studenten::@semester({type=i64})
         }
-        %3 = relalg.join %1, %2 (%6: !relalg.tuple) {
-                                                 %8 = relalg.getcol %6 @hoeren::@matrnr : i64
-                                                 %9 = relalg.getcol %6 @studenten::@matrnr : i64
+        %3 = relalg.join %1, %2 (%6: !tuples.tuple) {
+                                                 %8 = tuples.getcol %6 @hoeren::@matrnr : i64
+                                                 %9 = tuples.getcol %6 @studenten::@matrnr : i64
                                                  %10 = db.compare eq %8 : i64,%9 : i64
-                                                 relalg.return %10 : i1
+                                                 tuples.return %10 : i1
                                              } attributes { impl="hash" }
         %4 = relalg.basetable { table_identifier="vorlesungen" } columns: {vorlnr => @vorlesungen::@vorlnr({type=i64}),
             titel => @vorlesungen::@titel({type=!db.string}),
             sws => @vorlesungen::@sws({type=i64}),
             gelesenvon => @vorlesungen::@gelesenvon({type=i64})
         }
-        %5 = relalg.join %3, %4 (%6: !relalg.tuple) {
-            %11 = relalg.getcol %6 @hoeren::@vorlnr : i64
-            %12 = relalg.getcol %6 @vorlesungen::@vorlnr : i64
+        %5 = relalg.join %3, %4 (%6: !tuples.tuple) {
+            %11 = tuples.getcol %6 @hoeren::@vorlnr : i64
+            %12 = tuples.getcol %6 @vorlesungen::@vorlnr : i64
             %13 = db.compare eq %11 : i64,%12 : i64
-            relalg.return %13 : i1
+            tuples.return %13 : i1
         } attributes { impl="hash" }
         %15 = relalg.materialize %5 [@studenten::@name,@vorlesungen::@titel] => ["s.name","v.titel"] : !dsa.table
         return %15 : !dsa.table

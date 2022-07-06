@@ -1,6 +1,8 @@
 
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOps.h"
+
 
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
@@ -38,7 +40,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
       auto availableD = d.getAvailableColumns();
 
       using namespace mlir::relalg;
-      auto relType = TupleStreamType::get(&getContext());
+      auto relType = mlir::tuples::TupleStreamType::get(&getContext());
       mlir::OpBuilder builder(&getContext());
       builder.setInsertionPointAfter(op.getOperation());
       return ::llvm::TypeSwitch<mlir::Operation*, Operator>(op.getOperation())
@@ -113,13 +115,13 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
    }
    void handleJoin(mlir::Location loc,BinaryOperator join, Operator newLeft, Operator newRight, bool joinDependent, bool renameRight, mlir::relalg::ColumnSet& dependentAttributes) {
       using namespace mlir;
-      auto relType = relalg::TupleStreamType::get(&getContext());
-      auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager();
+      auto relType = tuples::TupleStreamType::get(&getContext());
+      auto& attributeManager = getContext().getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       Operator joinAsOperator = mlir::dyn_cast_or_null<Operator>(join.getOperation());
       mlir::OpBuilder builder(join.getOperation());
       if (joinDependent) {
          Operator toRename = renameRight ? newRight : newLeft;
-         std::unordered_map<const relalg::Column*, const relalg::Column*> renamed;
+         std::unordered_map<const tuples::Column*, const tuples::Column*> renamed;
          std::string scope = attributeManager.getUniqueScope("renaming");
          std::vector<Attribute> renamingDefsAsAttr;
          size_t i = 0;
@@ -133,8 +135,8 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          for (const auto* attr : dependentAttributes) {
             mlir::dyn_cast_or_null<PredicateOperator>(join.getOperation()).addPredicate([&](Value tuple, OpBuilder& builder) {
                auto attrefDependent = attributeManager.createRef(renamed[attr]);
-               Value valLeft = builder.create<relalg::GetColumnOp>(loc, attr->type, attributeManager.createRef(attr), tuple);
-               Value valRight = builder.create<relalg::GetColumnOp>(loc, attr->type, attrefDependent, tuple);
+               Value valLeft = builder.create<tuples::GetColumnOp>(loc, attr->type, attributeManager.createRef(attr), tuple);
+               Value valRight = builder.create<tuples::GetColumnOp>(loc, attr->type, attrefDependent, tuple);
                Value cmpEq = builder.create<db::CmpOp>(loc, db::DBCmpPredicate::eq, valLeft, valRight);
                if (valLeft.getType().isa<mlir::db::NullableType>() && valRight.getType().isa<mlir::db::NullableType>()) {
                   Value nullLeft = builder.create<db::IsNullOp>(loc, valLeft);
@@ -185,7 +187,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
    }
    void combine(mlir::Location loc,std::vector<mlir::relalg::SelectionOp> selectionOps, PredicateOperator lower) {
       using namespace mlir;
-      auto lowerTerminator = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(lower.getPredicateBlock().getTerminator());
+      auto lowerTerminator = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(lower.getPredicateBlock().getTerminator());
 
 
       OpBuilder builder(lower);
@@ -199,7 +201,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          values.push_back(lowerPredVal);
       }
       for (auto selOp : selectionOps) {
-         auto higherTerminator = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(selOp.getPredicateBlock().getTerminator());
+         auto higherTerminator = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator());
          Value higherPredVal = higherTerminator.results()[0];
          mlir::BlockAndValueMapping mapping;
          mapping.map(selOp.getPredicateArgument(), lower.getPredicateArgument());
@@ -212,7 +214,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          resType=mlir::db::NullableType::get(builder.getContext(),resType);
       }
       mlir::Value combined = builder.create<mlir::db::AndOp>(loc, resType, values);
-      builder.create<mlir::relalg::ReturnOp>(loc, combined);
+      builder.create<mlir::tuples::ReturnOp>(loc, combined);
       lowerTerminator->erase();
    }
    bool trySimpleUnnesting(BinaryOperator binaryOperator) {
@@ -263,7 +265,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          OpBuilder builder(binaryOperator.getOperation());
          providerChild.moveSubTreeBefore(getFirstOfTree(dependentChild));
          builder.setInsertionPointAfter(providerChild);
-         auto proj = builder.create<relalg::ProjectionOp>(binaryOperator->getLoc(), relalg::TupleStreamType::get(&getContext()), relalg::SetSemantic::distinct, providerChild.asRelation(), dependentAttributes.asRefArrayAttr(&getContext()));
+         auto proj = builder.create<relalg::ProjectionOp>(binaryOperator->getLoc(), tuples::TupleStreamType::get(&getContext()), relalg::SetSemantic::distinct, providerChild.asRelation(), dependentAttributes.asRefArrayAttr(&getContext()));
          Operator d = mlir::dyn_cast_or_null<Operator>(proj.getOperation());
          Operator unnestedChild = pushDependJoinDown(binaryOperator->getLoc(),d, dependentChild);
          Operator newLeft = leftProvides ? providerChild : unnestedChild;

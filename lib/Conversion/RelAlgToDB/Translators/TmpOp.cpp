@@ -43,7 +43,7 @@ class TmpTranslator : public mlir::relalg::Translator {
       producedCount++;
       if (materialize) {
          auto tupleType = attributes.getTupleType(builder.getContext());
-         std::unordered_map<const mlir::relalg::Column*, size_t> attributePos;
+         std::unordered_map<const mlir::tuples::Column*, size_t> attributePos;
          vector=builder.create<mlir::dsa::CreateDS>(tmpOp.getLoc(), mlir::dsa::VectorType::get(builder.getContext(), tupleType));
 
          children[0]->produce(context, builder);

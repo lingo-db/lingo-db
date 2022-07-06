@@ -1,5 +1,4 @@
 #include "mlir/Dialect/TupleStream/ColumnManager.h"
-#include "mlir/Dialect/TupleStream/TupleStreamOpsAttributes.h"
 namespace mlir::tuples {
 void ColumnManager::setContext(MLIRContext* context) {
    this->context = context;

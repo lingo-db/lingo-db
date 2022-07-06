@@ -114,9 +114,9 @@ Operator Plan::realizePlanRec() {
          if (mlir::isa<mlir::relalg::SelectionOp>(currop.getOperation()) && children.size() == 2) {
             auto selop = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(currop.getOperation());
             mlir::OpBuilder builder(currop.getOperation());
-            auto x = builder.create<mlir::relalg::InnerJoinOp>(selop.getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
+            auto x = builder.create<mlir::relalg::InnerJoinOp>(selop.getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
             x.predicate().push_back(new mlir::Block);
-            x.getLambdaBlock().addArgument(mlir::relalg::TupleType::get(builder.getContext()), selop->getLoc());
+            x.getLambdaBlock().addArgument(mlir::tuples::TupleType::get(builder.getContext()), selop->getLoc());
             selop.getLambdaArgument().replaceAllUsesWith(x.getLambdaArgument());
             x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), selop.getLambdaBlock().getOperations());
             //selop.replaceAllUsesWith(x.getOperation());
@@ -128,7 +128,7 @@ Operator Plan::realizePlanRec() {
          currop->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), rows));
       } else if (!currop && children.size() == 2) {
          mlir::OpBuilder builder(children[0].getOperation());
-         currop = builder.create<mlir::relalg::CrossProductOp>(children[0].getOperation()->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
+         currop = builder.create<mlir::relalg::CrossProductOp>(children[0].getOperation()->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
          //currop->setAttr("cost",mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()),cost));
          //currop->setAttr("rows",mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()),rows));
       } else if (!currop && children.size() == 1) {
@@ -177,7 +177,7 @@ std::shared_ptr<Plan> Plan::joinPlans(NodeSet s1, NodeSet s2, std::shared_ptr<Pl
    Operator specialJoin{};
    double totalSelectivity = 1;
 
-   llvm::EquivalenceClasses<const mlir::relalg::Column*> equivalentColumns;
+   llvm::EquivalenceClasses<const mlir::tuples::Column*> equivalentColumns;
    for (auto& edge : queryGraph.joins) {
       if (!edge.connects(s1, s2) && edge.left.isSubsetOf(s) && edge.right.isSubsetOf(s) && edge.equality) {
          equivalentColumns.unionSets(edge.equality->first, edge.equality->second);

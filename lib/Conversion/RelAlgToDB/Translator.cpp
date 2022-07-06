@@ -12,7 +12,7 @@ std::vector<mlir::Value> mlir::relalg::Translator::mergeRelationalBlock(mlir::Bl
    mlir::Block* source = getBlockFn(cloned);
    auto* terminator = source->getTerminator();
 
-   source->walk([&](mlir::relalg::GetColumnOp getColumnOp) {
+   source->walk([&](mlir::tuples::GetColumnOp getColumnOp) {
       getColumnOp.replaceAllUsesWith(context.getValueForAttribute(&getColumnOp.attr().getColumn()));
       toErase.push_back(getColumnOp.getOperation());
    });
@@ -26,7 +26,7 @@ std::vector<mlir::Value> mlir::relalg::Translator::mergeRelationalBlock(mlir::Bl
       op->dropAllUses();
       op->erase();
    }
-   auto returnOp = mlir::cast<mlir::relalg::ReturnOp>(terminator);
+   auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(terminator);
    std::vector<Value> res(returnOp.results().begin(), returnOp.results().end());
    terminator->erase();
    return res;
@@ -47,7 +47,7 @@ mlir::relalg::Translator::Translator(Operator op) : op(op) {
 
 mlir::relalg::Translator::Translator(mlir::ValueRange potentialChildren) : op() {
    for (auto child : potentialChildren) {
-      if (child.getType().isa<mlir::relalg::TupleStreamType>()) {
+      if (child.getType().isa<mlir::tuples::TupleStreamType>()) {
          children.push_back(mlir::relalg::Translator::createTranslator(child.getDefiningOp()));
       }
    }

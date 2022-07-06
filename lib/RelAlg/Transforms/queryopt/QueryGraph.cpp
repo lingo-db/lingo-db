@@ -55,7 +55,7 @@ void mlir::relalg::QueryGraph::print(llvm::raw_ostream& out) {
    out << "}\n";
 }
 
-std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unordered_map<const mlir::relalg::Column*, std::string>& mapping) {
+std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unordered_map<const mlir::tuples::Column*, std::string>& mapping) {
    auto* op = val.getDefiningOp();
    if (!op) return std::move(support::eval::createInvalid());
    if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(op)) {
@@ -123,7 +123,7 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
 
       auto parseResult = support::parse(parseArg, typeConstant, param1);
       return support::eval::createLiteral(parseResult, std::make_tuple(typeConstant, param1, param2));
-   } else if (auto attrRefOp = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(op)) {
+   } else if (auto attrRefOp = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
       return support::eval::createAttrRef(mapping.at(&attrRefOp.attr().getColumn()));
    } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
       auto left = cmpOp.getLeft();
@@ -175,9 +175,9 @@ std::optional<double> estimateUsingSample(mlir::relalg::QueryGraph::Node& n) {
    if (!n.op) return {};
    if (n.additionalPredicates.empty()) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
-      std::unordered_map<const mlir::relalg::Column*, std::string> mapping;
+      std::unordered_map<const mlir::tuples::Column*, std::string> mapping;
       for (auto c : baseTableOp.columns()) {
-         mapping[&c.getValue().cast<mlir::relalg::ColumnDefAttr>().getColumn()] = c.getName().str();
+         mapping[&c.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn()] = c.getName().str();
       }
       auto meta = baseTableOp.meta().getMeta();
       auto sample = meta->getSample();
@@ -185,7 +185,7 @@ std::optional<double> estimateUsingSample(mlir::relalg::QueryGraph::Node& n) {
       std::vector<std::unique_ptr<support::eval::expr>> expressions;
       for (auto pred : n.additionalPredicates) {
          if (auto selOp = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(pred.getOperation())) {
-            auto v = mlir::cast<mlir::relalg::ReturnOp>(selOp.getPredicateBlock().getTerminator()).results()[0];
+            auto v = mlir::cast<mlir::tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).results()[0];
             expressions.push_back(buildEvalExpr(v, mapping)); //todo: ignore failing ones?
          }
       }
@@ -203,9 +203,9 @@ mlir::relalg::ColumnSet mlir::relalg::QueryGraph::getPKey(mlir::relalg::QueryGra
    if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
       auto meta = baseTableOp.meta().getMeta();
       mlir::relalg::ColumnSet attributes;
-      std::unordered_map<std::string, const mlir::relalg::Column*> mapping;
+      std::unordered_map<std::string, const mlir::tuples::Column*> mapping;
       for (auto c : baseTableOp.columns()) {
-         mapping[c.getName().str()] = &c.getValue().cast<mlir::relalg::ColumnDefAttr>().getColumn();
+         mapping[c.getName().str()] = &c.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn();
       }
       for (auto c : meta->getPrimaryKey()) {
          attributes.insert(mapping.at(c));

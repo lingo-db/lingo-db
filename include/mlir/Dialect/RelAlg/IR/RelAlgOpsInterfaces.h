@@ -6,6 +6,8 @@
 #include "mlir/Dialect/RelAlg/ColumnSet.h"
 #include "mlir/Dialect/RelAlg/FunctionalDependencies.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgTypes.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOpsTypes.h"
+
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/Dialect.h"
@@ -13,7 +15,7 @@
 #include "mlir/IR/SymbolTable.h"
 
 namespace mlir::relalg::detail {
-void replaceUsages(mlir::Operation* op,std::function<mlir::relalg::ColumnRefAttr(mlir::relalg::ColumnRefAttr)> fn);
+void replaceUsages(mlir::Operation* op,std::function<mlir::tuples::ColumnRefAttr(mlir::tuples::ColumnRefAttr)> fn);
 ColumnSet getUsedColumns(mlir::Operation* op);
 ColumnSet getAvailableColumns(mlir::Operation* op);
 ColumnSet getFreeColumns(mlir::Operation* op);

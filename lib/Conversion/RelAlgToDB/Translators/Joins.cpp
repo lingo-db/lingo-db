@@ -200,8 +200,8 @@ std::shared_ptr<mlir::relalg::JoinImpl> createAntiSemiJoinImpl(mlir::relalg::Ant
 
 class ConstantSingleJoinTranslator : public mlir::relalg::Translator {
    mlir::relalg::SingleJoinOp joinOp;
-   std::vector<const mlir::relalg::Column*> cols;
-   std::vector<const mlir::relalg::Column*> origAttrs;
+   std::vector<const mlir::tuples::Column*> cols;
+   std::vector<const mlir::tuples::Column*> origAttrs;
    std::vector<mlir::Type> types;
    mlir::Value singleValPtr;
 
@@ -213,7 +213,7 @@ class ConstantSingleJoinTranslator : public mlir::relalg::Translator {
       this->requiredAttributes = requiredAttributes;
       this->requiredAttributes.insert(joinOp.getUsedColumns());
       for (mlir::Attribute attr : joinOp.mapping()) {
-         auto relationDefAttr = attr.dyn_cast_or_null<mlir::relalg::ColumnDefAttr>();
+         auto relationDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
          auto* defAttr = &relationDefAttr.getColumn();
          if (this->requiredAttributes.contains(defAttr)) {
             auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>();

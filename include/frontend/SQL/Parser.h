@@ -7,6 +7,7 @@
 #include "llvm/ADT/SmallString.h"
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
@@ -182,7 +183,7 @@ struct ReplaceState {
 };
 ExpressionType stringToExpressionType(const std::string& parserStr);
 struct Parser {
-   mlir::relalg::ColumnManager& attrManager;
+   mlir::tuples::ColumnManager& attrManager;
    struct StringInfo {
       static bool isEqual(std::string a, std::string b) { return a == b; }
       static std::string getEmptyKey() { return ""; }
@@ -191,11 +192,11 @@ struct Parser {
    };
    struct TranslationContext {
       std::stack<mlir::Value> currTuple;
-      std::unordered_set<const mlir::relalg::Column*> useZeroInsteadNull;
-      std::stack<std::vector<std::pair<std::string, const mlir::relalg::Column*>>> definedAttributes;
+      std::unordered_set<const mlir::tuples::Column*> useZeroInsteadNull;
+      std::stack<std::vector<std::pair<std::string, const mlir::tuples::Column*>>> definedAttributes;
 
-      llvm::ScopedHashTable<std::string, const mlir::relalg::Column*, StringInfo> resolver;
-      using ResolverScope = llvm::ScopedHashTable<std::string, const mlir::relalg::Column*, StringInfo>::ScopeTy;
+      llvm::ScopedHashTable<std::string, const mlir::tuples::Column*, StringInfo> resolver;
+      using ResolverScope = llvm::ScopedHashTable<std::string, const mlir::tuples::Column*, StringInfo>::ScopeTy;
       struct TupleScope {
          TranslationContext* context;
          bool active;
@@ -218,11 +219,11 @@ struct Parser {
       void setCurrentTuple(mlir::Value v) {
          currTuple.top() = v;
       }
-      void mapAttribute(ResolverScope& scope, std::string name, const mlir::relalg::Column* attr) {
+      void mapAttribute(ResolverScope& scope, std::string name, const mlir::tuples::Column* attr) {
          definedAttributes.top().push_back({name, attr});
          resolver.insertIntoScope(&scope, name, attr);
       }
-      const mlir::relalg::Column* getAttribute(std::string name) {
+      const mlir::tuples::Column* getAttribute(std::string name) {
          assert(resolver.lookup(name));
          return resolver.lookup(name);
       }
@@ -244,10 +245,10 @@ struct Parser {
       DefineScope createDefineScope() {
          return DefineScope(*this);
       }
-      const std::vector<std::pair<std::string, const mlir::relalg::Column*>>& getAllDefinedColumns() {
+      const std::vector<std::pair<std::string, const mlir::tuples::Column*>>& getAllDefinedColumns() {
          return definedAttributes.top();
       }
-      void removeFromDefinedColumns(const mlir::relalg::Column* col) {
+      void removeFromDefinedColumns(const mlir::tuples::Column* col) {
          auto& currDefinedColumns = definedAttributes.top();
          auto position = std::find_if(currDefinedColumns.begin(), currDefinedColumns.end(), [&](auto el) { return el.second == col; });
          if (position != currDefinedColumns.end()) // == myVector.end() means the element was not found
@@ -259,8 +260,8 @@ struct Parser {
    runtime::Database& database;
    std::vector<std::unique_ptr<FakeNode>> fakeNodes;
    struct TargetInfo {
-      std::vector<std::pair<std::string, const mlir::relalg::Column*>> namedResults;
-      void map(std::string name, const mlir::relalg::Column* attr) {
+      std::vector<std::pair<std::string, const mlir::tuples::Column*>> namedResults;
+      void map(std::string name, const mlir::tuples::Column* attr) {
          namedResults.push_back({name, attr});
       }
    };
@@ -274,7 +275,7 @@ struct Parser {
       return ptr;
    }
    mlir::ModuleOp moduleOp;
-   Parser(std::string sql, runtime::Database& database, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager()), sql(sql), database(database), moduleOp(moduleOp) {
+   Parser(std::string sql, runtime::Database& database, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager()), sql(sql), database(database), moduleOp(moduleOp) {
       moduleOp.getContext()->getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
       pg_query_parse_init();
       result = pg_query_parse(sql.c_str());

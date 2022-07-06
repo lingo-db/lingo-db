@@ -3,6 +3,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -16,7 +17,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
    llvm::SmallVector<mlir::Operation*> toDestroy;
    void handleScalarBoolOp(mlir::Location loc, TupleLamdaOperator surroundingOperator, mlir::Operation* op, Operator relOperator, std::function<void(PredicateOperator)> apply) {
       using namespace mlir;
-      auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager();
+      auto& attributeManager = getContext().getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       bool negated = false;
       bool directSelection = false;
       if (mlir::isa<mlir::relalg::SelectionOp>(op->getParentOp())) {
@@ -30,7 +31,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
                   user = *negationUsers.begin();
                }
             }
-            if (mlir::isa<mlir::relalg::ReturnOp>(user)) {
+            if (mlir::isa<mlir::tuples::ReturnOp>(user)) {
                directSelection = true;
             }
          }
@@ -39,7 +40,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
 
       //get attribute f relation to search in
       OpBuilder builder(surroundingOperator);
-      auto relType = mlir::relalg::TupleStreamType::get(&getContext());
+      auto relType = mlir::tuples::TupleStreamType::get(&getContext());
       if (directSelection) {
          PredicateOperator semijoin;
          if (negated) {
@@ -55,22 +56,22 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
       } else {
          std::string scopeName = attributeManager.getUniqueScope("markjoin");
          std::string attributeName = "markattr";
-         relalg::ColumnDefAttr markAttrDef = attributeManager.createDef(scopeName, attributeName);
+         tuples::ColumnDefAttr markAttrDef = attributeManager.createDef(scopeName, attributeName);
          auto& ra = markAttrDef.getColumn();
          ra.type = builder.getI1Type();
          PredicateOperator markJoin = builder.create<relalg::MarkJoinOp>(loc, relType, markAttrDef, treeVal, relOperator.asRelation());
          markJoin.initPredicate();
          apply(markJoin);
-         relalg::ColumnRefAttr markAttrRef = attributeManager.createRef(scopeName, attributeName);
+         tuples::ColumnRefAttr markAttrRef = attributeManager.createRef(scopeName, attributeName);
          builder.setInsertionPoint(op);
-         auto replacement = builder.create<relalg::GetColumnOp>(loc, builder.getI1Type(), markAttrRef, surroundingOperator.getLambdaRegion().getArgument(0));
+         auto replacement = builder.create<tuples::GetColumnOp>(loc, builder.getI1Type(), markAttrRef, surroundingOperator.getLambdaRegion().getArgument(0));
          op->replaceAllUsesWith(replacement);
          op->erase();
          surroundingOperator->setOperand(0, markJoin->getResult(0));
       }
    }
    void runOnOperation() override {
-      auto& attributeManager = getContext().getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager();
+      auto& attributeManager = getContext().getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       using namespace mlir;
       getOperation().walk([&](mlir::Operation* op) {
          TupleLamdaOperator surroundingOperator = op->getParentOfType<TupleLamdaOperator>();
@@ -93,10 +94,10 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             newDef.getColumn().type = newAttrType;
 
             auto mapping = ArrayAttr::get(&getContext(), {newDef});
-            auto singleJoin = builder.create<relalg::SingleJoinOp>(getscalarop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), treeVal, getscalarop.rel(), mapping);
+            auto singleJoin = builder.create<relalg::SingleJoinOp>(getscalarop->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), treeVal, getscalarop.rel(), mapping);
             singleJoin.initPredicate();
             builder.setInsertionPoint(getscalarop);
-            mlir::Value replacement = builder.create<relalg::GetColumnOp>(getscalarop->getLoc(), newAttrType, attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
+            mlir::Value replacement = builder.create<tuples::GetColumnOp>(getscalarop->getLoc(), newAttrType, attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
             getscalarop.replaceAllUsesWith(replacement);
             getscalarop->erase();
             treeVal = singleJoin;
@@ -109,10 +110,10 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
 
             auto newDef = attributeManager.createDef(scopeName, attributeName);
             newDef.getColumn().type = getlistop.getType();
-            auto collectionJoin = builder.create<relalg::CollectionJoinOp>(getlistop->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), fromAttrs, newDef, treeVal, getlistop.rel());
+            auto collectionJoin = builder.create<relalg::CollectionJoinOp>(getlistop->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), fromAttrs, newDef, treeVal, getlistop.rel());
             collectionJoin.initPredicate();
             builder.setInsertionPoint(getlistop);
-            Operation* replacement = builder.create<relalg::GetColumnOp>(getlistop->getLoc(), getlistop.getType(), attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
+            Operation* replacement = builder.create<tuples::GetColumnOp>(getlistop->getLoc(), getlistop.getType(), attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
             getlistop.replaceAllUsesWith(replacement);
             getlistop->erase();
             treeVal = collectionJoin;
@@ -130,7 +131,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
                   mapping.map(surroundingOperator.getLambdaArgument(), predicateOperator.getPredicateArgument());
                   mlir::relalg::detail::inlineOpIntoBlock(inop.val().getDefiningOp(), surroundingOperator.getOperation(), predicateOperator.getOperation(), &predicateOperator.getPredicateBlock(), mapping);
                   auto val = mapping.lookup(inop.val());
-                  auto otherVal = builder.create<relalg::GetColumnOp>(inop->getLoc(), searchInAttr.getColumn().type, searchInAttr, tuple);
+                  auto otherVal = builder.create<tuples::GetColumnOp>(inop->getLoc(), searchInAttr.getColumn().type, searchInAttr, tuple);
                   Value predicate = builder.create<mlir::db::CmpOp>(inop->getLoc(), mlir::db::DBCmpPredicate::eq, val, otherVal);
                   return predicate;
                });

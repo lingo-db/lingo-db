@@ -17,7 +17,7 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       auto scope = context.createScope();
       using namespace mlir;
       std::vector<mlir::Type> types;
-      std::vector<const mlir::relalg::Column*> cols;
+      std::vector<const mlir::tuples::Column*> cols;
       std::vector<mlir::Attribute> columnNames;
       std::string tableName = baseTableOp->getAttr("table_identifier").cast<mlir::StringAttr>().str();
       std::string scanDescription = R"({ "table": ")" + tableName + R"(", "columns": [ )";
@@ -25,7 +25,7 @@ class BaseTableTranslator : public mlir::relalg::Translator {
       for (auto namedAttr : baseTableOp.columnsAttr().getValue()) {
          auto identifier = namedAttr.getName();
          auto attr = namedAttr.getValue();
-         auto attrDef = attr.dyn_cast_or_null<mlir::relalg::ColumnDefAttr>();
+         auto attrDef = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
          if (requiredAttributes.contains(&attrDef.getColumn())) {
             if (!first) {
                scanDescription += ",";

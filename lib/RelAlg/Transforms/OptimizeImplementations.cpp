@@ -17,7 +17,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       std::vector<mlir::Type> types;
       bool res = false;
       block->walk([&](mlir::Operation* op) {
-         if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(op)) {
+         if (auto getAttr = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
             required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.attr())});
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
             if (cmpOp.isEqualityPred() && mlir::relalg::HashJoinUtils::isAndedResult(op)) {
@@ -83,7 +83,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                }
             })
             .Case<mlir::relalg::SingleJoinOp>([&](mlir::relalg::SingleJoinOp op) {
-               if (auto returnOp = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(op.getPredicateBlock().getTerminator())) {
+               if (auto returnOp = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.getPredicateBlock().getTerminator())) {
                   if (returnOp.results().empty()) {
                      op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "constant"));
                   }

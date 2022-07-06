@@ -10,16 +10,16 @@ namespace mlir {
 namespace relalg {
 class OrderedAttributes {
    std::vector<Type> types;
-   std::vector<const mlir::relalg::Column*> attrs;
+   std::vector<const mlir::tuples::Column*> attrs;
 
    public:
    static OrderedAttributes fromRefArr(ArrayAttr arrayAttr) {
       OrderedAttributes res;
       for (auto attr : arrayAttr) {
-         if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::ColumnRefAttr>()) {
+         if (auto attrRef = attr.dyn_cast_or_null<mlir::tuples::ColumnRefAttr>()) {
             res.insert(&attrRef.getColumn());
          }
-         if (auto attrDef = attr.dyn_cast_or_null<mlir::relalg::ColumnDefAttr>()) {
+         if (auto attrDef = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>()) {
             res.insert(&attrDef.getColumn());
          }
       }
@@ -32,7 +32,7 @@ class OrderedAttributes {
       }
       return res;
    }
-   static OrderedAttributes fromVec(std::vector<const mlir::relalg::Column*> vec) {
+   static OrderedAttributes fromVec(std::vector<const mlir::tuples::Column*> vec) {
       OrderedAttributes res;
       for (auto* attr : vec) {
          res.insert(attr);
@@ -53,7 +53,7 @@ class OrderedAttributes {
       return builder.create<mlir::util::PackOp>(loc, values);
    }
 
-   size_t insert(const mlir::relalg::Column* attr, Type alternativeType = {}) {
+   size_t insert(const mlir::tuples::Column* attr, Type alternativeType = {}) {
       attrs.push_back(attr);
       if (attr) {
          types.push_back(attr->type);
@@ -74,10 +74,10 @@ class OrderedAttributes {
          }
       }
    }
-   const std::vector<const mlir::relalg::Column*>& getAttrs() const {
+   const std::vector<const mlir::tuples::Column*>& getAttrs() const {
       return attrs;
    }
-   size_t getPos(const mlir::relalg::Column* attr) {
+   size_t getPos(const mlir::tuples::Column* attr) {
       return std::find(attrs.begin(), attrs.end(), attr) - attrs.begin();
    }
 };

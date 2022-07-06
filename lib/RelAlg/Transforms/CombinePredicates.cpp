@@ -1,6 +1,7 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -11,8 +12,8 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Oper
    public:
    void combine(PredicateOperator higher, PredicateOperator lower) {
       using namespace mlir;
-      auto higherTerminator = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(higher.getPredicateBlock().getTerminator());
-      auto lowerTerminator = mlir::dyn_cast_or_null<mlir::relalg::ReturnOp>(lower.getPredicateBlock().getTerminator());
+      auto higherTerminator = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(higher.getPredicateBlock().getTerminator());
+      auto lowerTerminator = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(lower.getPredicateBlock().getTerminator());
 
       Value higherPredVal = higherTerminator.results()[0];
       Value lowerPredVal = lowerTerminator.results()[0];
@@ -28,7 +29,7 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Oper
          restype = mlir::db::NullableType::get(builder.getContext(), restype);
       }
       mlir::Value combined = builder.create<mlir::db::AndOp>(higher->getLoc(), restype, ValueRange{lowerPredVal, mapping.lookup(higherPredVal)});
-      builder.create<mlir::relalg::ReturnOp>(higher->getLoc(), combined);
+      builder.create<mlir::tuples::ReturnOp>(higher->getLoc(), combined);
       lowerTerminator->erase();
    }
 

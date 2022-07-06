@@ -63,6 +63,7 @@ add_subdirectory(include)
 add_subdirectory(tools/build-tools)
 add_subdirectory(lib/mlir-support)
 add_subdirectory(lib/RelAlg)
+add_subdirectory(lib/TupleStream)
 add_subdirectory(lib/DB)
 add_subdirectory(lib/DSA)
 add_subdirectory(lib/util)
@@ -82,6 +83,7 @@ set(LIBS
         ${translation_libs}
         MLIROptLib
         MLIRRelAlg
+        MLIRTupleStream
         MLIRUtil
         MLIRDB
         MLIRDSA

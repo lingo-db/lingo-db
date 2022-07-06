@@ -3,6 +3,7 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/SCF/SCF.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include <llvm/ADT/TypeSwitch.h>
 #include <mlir/Dialect/DSA/IR/DSAOps.h>
@@ -17,7 +18,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
    mlir::relalg::OrderedAttributes key;
    mlir::relalg::OrderedAttributes val;
 
-   std::vector<std::function<std::pair<const mlir::relalg::Column*, mlir::Value>(mlir::ValueRange, mlir::OpBuilder& builder)>> finalizeFunctions;
+   std::vector<std::function<std::pair<const mlir::tuples::Column*, mlir::Value>(mlir::ValueRange, mlir::OpBuilder& builder)>> finalizeFunctions;
    std::vector<std::function<std::vector<mlir::Value>(mlir::ValueRange, mlir::ValueRange, mlir::OpBuilder& builder)>> aggregationFunctions;
    std::vector<mlir::Value> defaultValues;
    std::vector<mlir::Type> aggrTypes;
@@ -26,7 +27,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
    AggregationTranslator(mlir::relalg::AggregationOp aggregationOp) : mlir::relalg::Translator(aggregationOp), aggregationOp(aggregationOp) {
    }
 
-   mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::Value left, mlir::Value right,mlir::Location loc) {
+   mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::Value left, mlir::Value right, mlir::Location loc) {
       mlir::Value equal = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
       auto leftUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, left);
       auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, right);
@@ -79,7 +80,7 @@ class AggregationTranslator : public mlir::relalg::Translator {
             builder.setInsertionPointToStart(aggrBuilderBlock);
             auto yieldOp = builder.create<mlir::dsa::YieldOp>(aggregationOp->getLoc());
             builder.setInsertionPointToStart(aggrBuilderBlock);
-            mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1),aggregationOp->getLoc());
+            mlir::Value matches = compareKeys(builder, aggrBuilderBlock->getArgument(0), aggrBuilderBlock->getArgument(1), aggregationOp->getLoc());
             builder.create<mlir::dsa::YieldOp>(aggregationOp->getLoc(), matches);
             yieldOp.erase();
          }
@@ -146,10 +147,10 @@ class AggregationTranslator : public mlir::relalg::Translator {
       key = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_colsAttr());
 
       auto counterType = builder.getI64Type();
-      mlir::relalg::ReturnOp terminator = mlir::cast<mlir::relalg::ReturnOp>(aggregationOp.aggr_func().front().getTerminator());
+      mlir::tuples::ReturnOp terminator = mlir::cast<mlir::tuples::ReturnOp>(aggregationOp.aggr_func().front().getTerminator());
 
       for (size_t i = 0; i < aggregationOp.computed_cols().size(); i++) {
-         auto* destAttr = &aggregationOp.computed_cols()[i].cast<mlir::relalg::ColumnDefAttr>().getColumn();
+         auto* destAttr = &aggregationOp.computed_cols()[i].cast<mlir::tuples::ColumnDefAttr>().getColumn();
          mlir::Value computedVal = terminator.results()[i];
          if (auto aggrFn = mlir::dyn_cast_or_null<mlir::relalg::AggrFuncOp>(computedVal.getDefiningOp())) {
             auto loc = aggrFn->getLoc();
@@ -205,14 +206,14 @@ class AggregationTranslator : public mlir::relalg::Translator {
                   std::vector<mlir::Value> res;
                   mlir::Value currVal = aggr[currDestIdx];
                   mlir::Value newVal = val[currValIdx];
-                  mlir::Value newLtCurr = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, newVal,currVal);
+                  mlir::Value newLtCurr = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, newVal, currVal);
                   mlir::Value casted = newVal;
                   if (newVal.getType() != currVal.getType()) {
                      casted = builder.create<mlir::db::AsNullableOp>(loc, currVal.getType(), newVal);
                   }
                   mlir::Value newLtCurrT = builder.create<mlir::db::DeriveTruth>(loc, newLtCurr);
 
-                  mlir::Value added = builder.create<mlir::arith::SelectOp>(loc, newLtCurrT, casted,currVal);
+                  mlir::Value added = builder.create<mlir::arith::SelectOp>(loc, newLtCurrT, casted, currVal);
                   if (resultingType.isa<mlir::db::NullableType>()) {
                      mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), currVal);
                      res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, added));
@@ -341,12 +342,12 @@ class AggregationTranslator : public mlir::relalg::Translator {
    }
    virtual void produce(mlir::relalg::TranslatorContext& context, mlir::OpBuilder& builder) override {
       auto scope = context.createScope();
-         analyze(builder);
-         auto aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
-         auto initTuple = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), aggrTupleType, defaultValues);
-         keyTupleType = key.getTupleType(builder.getContext());
-         valTupleType = val.getTupleType(builder.getContext());
-         aggrHt = builder.create<mlir::dsa::CreateDS>(aggregationOp.getLoc(), mlir::dsa::AggregationHashtableType::get(builder.getContext(), keyTupleType, aggrTupleType), initTuple);
+      analyze(builder);
+      auto aggrTupleType = mlir::TupleType::get(builder.getContext(), aggrTypes);
+      auto initTuple = builder.create<mlir::util::PackOp>(aggregationOp->getLoc(), aggrTupleType, defaultValues);
+      keyTupleType = key.getTupleType(builder.getContext());
+      valTupleType = val.getTupleType(builder.getContext());
+      aggrHt = builder.create<mlir::dsa::CreateDS>(aggregationOp.getLoc(), mlir::dsa::AggregationHashtableType::get(builder.getContext(), keyTupleType, aggrTupleType), initTuple);
 
       auto iterEntryType = mlir::TupleType::get(builder.getContext(), {keyTupleType, aggrTupleType});
       children[0]->produce(context, builder);
