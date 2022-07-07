@@ -88,11 +88,18 @@ def FilterOp : SubOperator_Op<"filter", [NoSideEffect]> {
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream custom<CustRefArr>($conditions)  attr-dict }];
 }
-def MaterializeOp : SubOperator_Op<"materialize", [NoSideEffect]> {
+def MaterializeOp : SubOperator_Op<"materialize"> {
     let summary = "materialize state (sequentially)";
 
-    let arguments = (ins TupleStream : $stream, AnyType : $state, ArrayAttr : $columns );
+    let arguments = (ins TupleStream : $stream, AnyType : $state, DictionaryAttr : $mapping );
     let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $stream custom<CustRefArr>($columns) `,` $state `:` type($state)  attr-dict }];
+    let assemblyFormat = [{  $stream custom<ColumnStateMapping>($mapping) `,` $state `:` type($state)  attr-dict }];
+}
+def ConvertToExplicit : SubOperator_Op<"convert_to_explicit"> {
+    let summary = "converts a declarative state to an explicit state";
+
+    let arguments = (ins AnyType : $state);
+    let results = (outs AnyType : $explicit_state);
+    let assemblyFormat = [{  $state `:` type($state) `->` type($explicit_state)  attr-dict }];
 }
 #endif // LINGODB_DIALECT_SubOperator_IR_OPS

@@ -28,6 +28,7 @@
 #include "mlir/Dialect/SCF/SCF.h"
 
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
+#include "mlir/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 
@@ -119,6 +120,7 @@ int main(int argc, char** argv) {
    mlir::registerAllPasses();
 
    mlir::relalg::registerRelAlgConversionPasses();
+   mlir::relalg::registerRelAlgToSubOpConversionPasses();
    mlir::relalg::registerQueryOptimizationPasses();
    mlir::db::registerDBConversionPasses();
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {

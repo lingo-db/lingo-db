@@ -15,7 +15,16 @@ using namespace mlir;
 static mlir::tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser) {
    return parser.getBuilder().getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
 }
+static ParseResult parseCustRef(OpAsmParser& parser, mlir::tuples::ColumnRefAttr& attr) {
+   ::mlir::SymbolRefAttr parsedSymbolRefAttr;
+   if (parser.parseAttribute(parsedSymbolRefAttr, parser.getBuilder().getType<::mlir::NoneType>())) { return failure(); }
+   attr = getColumnManager(parser).createRef(parsedSymbolRefAttr);
+   return success();
+}
 
+static void printCustRef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::ColumnRefAttr attr) {
+   p << attr.getName();
+}
 static ParseResult parseCustRefArr(OpAsmParser& parser, ArrayAttr& attr) {
    ArrayAttr parsedAttr;
    std::vector<Attribute> attributes;
@@ -100,6 +109,28 @@ static ParseResult parseStateColumnMapping(OpAsmParser& parser, DictionaryAttr& 
    attr = mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns);
    return success();
 }
+static ParseResult parseColumnStateMapping(OpAsmParser& parser, DictionaryAttr& attr) {
+   if (parser.parseLBrace()) return failure();
+   std::vector<mlir::NamedAttribute> columns;
+   while (true) {
+      if (!parser.parseOptionalRBrace()) { break; }
+      mlir::tuples::ColumnRefAttr columnRefAttr;
+
+      if (parseCustRef(parser, columnRefAttr)) {
+         return failure();
+      }
+      if (parser.parseEqual() || parser.parseGreater()) { return failure(); }
+      StringRef colName;
+      if (parser.parseKeyword(&colName)) { return failure(); }
+
+      columns.push_back({StringAttr::get(parser.getBuilder().getContext(), colName), columnRefAttr});
+      if (!parser.parseOptionalComma()) { continue; }
+      if (parser.parseRBrace()) { return failure(); }
+      break;
+   }
+   attr = mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns);
+   return success();
+}
 static void printStateColumnMapping(OpAsmPrinter& p, mlir::Operation* op, DictionaryAttr attr) {
    p << "{";
    auto first = true;
@@ -114,6 +145,23 @@ static void printStateColumnMapping(OpAsmPrinter& p, mlir::Operation* op, Dictio
       }
       p << columnName.getValue() << " => ";
       printCustDef(p, op, relationDefAttr);
+   }
+   p << "}";
+}
+static void printColumnStateMapping(OpAsmPrinter& p, mlir::Operation* op, DictionaryAttr attr) {
+   p << "{";
+   auto first = true;
+   for (auto mapping : attr) {
+      auto columnName = mapping.getName();
+      auto attr = mapping.getValue();
+      auto relationRefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnRefAttr>();
+      if (first) {
+         first = false;
+      } else {
+         p << ", ";
+      }
+      printCustRef(p, op, relationRefAttr);
+      p << " => "<<columnName.getValue();
    }
    p << "}";
 }
