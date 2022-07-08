@@ -31,6 +31,7 @@ void SubOperatorDialect::initialize() {
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"
       >();
    registerTypes();
+   registerAttrs();
    addInterfaces<SubOperatorInlinerInterface>();
    getContext()->loadDialect<mlir::db::DBDialect>();
    getContext()->loadDialect<mlir::dsa::DSADialect>();

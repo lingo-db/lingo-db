@@ -43,9 +43,8 @@ class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> 
    using OpConversionPattern<mlir::relalg::BaseTableOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::relalg::BaseTableOp baseTableOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       std::vector<mlir::Type> types;
-      std::vector<const mlir::tuples::Column*> cols;
-      std::vector<mlir::Attribute> columnNames;
-      std::vector<NamedAttribute> columns;
+      std::vector<Attribute> colNames;
+      std::vector<Attribute> colTypes;
       std::vector<NamedAttribute> mapping;
       std::string tableName = baseTableOp->getAttr("table_identifier").cast<mlir::StringAttr>().str();
       std::string scanDescription = R"({ "table": ")" + tableName + R"(", "columns": [ )";
@@ -60,12 +59,12 @@ class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> 
             first = false;
          }
          scanDescription += "\"" + identifier.str() + "\"";
-         cols.push_back(&attrDef.getColumn());
-         columns.push_back(rewriter.getNamedAttr(identifier.strref(), mlir::TypeAttr::get(attrDef.getColumn().type)));
+         colNames.push_back(rewriter.getStringAttr(identifier.strref()));
+         colTypes.push_back(mlir::TypeAttr::get(attrDef.getColumn().type));
          mapping.push_back(rewriter.getNamedAttr(identifier.strref(), attrDef));
       }
       scanDescription += "] }";
-      auto tableRefType = mlir::subop::TableRefType::get(rewriter.getContext(), rewriter.getDictionaryAttr(columns));
+      auto tableRefType = mlir::subop::TableRefType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(),rewriter.getArrayAttr(colNames),rewriter.getArrayAttr(colTypes)));
       mlir::Value tableRef = rewriter.create<mlir::subop::GetReferenceOp>(baseTableOp->getLoc(), tableRefType, rewriter.getStringAttr(scanDescription));
       rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(baseTableOp, tableRef, rewriter.getDictionaryAttr(mapping));
       return success();
@@ -121,16 +120,18 @@ class MaterializeLowering : public OpConversionPattern<mlir::relalg::Materialize
    using OpConversionPattern<mlir::relalg::MaterializeOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::relalg::MaterializeOp materializeOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      std::vector<NamedAttribute> tableColumns;
+      std::vector<Attribute> colNames;
+      std::vector<Attribute> colTypes;
       std::vector<NamedAttribute> mapping;
       for (size_t i = 0; i < materializeOp.columns().size(); i++) {
          auto columnName = materializeOp.columns()[i].cast<mlir::StringAttr>().str();
          auto columnAttr = materializeOp.cols()[i].cast<mlir::tuples::ColumnRefAttr>();
          auto columnType = columnAttr.getColumn().type;
-         tableColumns.push_back(rewriter.getNamedAttr(columnName, mlir::TypeAttr::get(columnType)));
+         colNames.push_back(rewriter.getStringAttr(columnName));
+         colTypes.push_back(mlir::TypeAttr::get(columnType));
          mapping.push_back(rewriter.getNamedAttr(columnName, columnAttr));
       }
-      auto tableRefType = mlir::subop::TableType::get(rewriter.getContext(), rewriter.getDictionaryAttr(tableColumns));
+      auto tableRefType = mlir::subop::TableType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(),rewriter.getArrayAttr(colNames),rewriter.getArrayAttr(colTypes)));
       auto table = rewriter.create<mlir::subop::CreateOp>(materializeOp->getLoc(), tableRefType, "");
       rewriter.create<mlir::subop::MaterializeOp>(materializeOp->getLoc(), adaptor.rel(), table, rewriter.getDictionaryAttr(mapping));
       rewriter.replaceOpWithNewOp<mlir::subop::ConvertToExplicit>(materializeOp, mlir::dsa::TableType::get(rewriter.getContext()), table);

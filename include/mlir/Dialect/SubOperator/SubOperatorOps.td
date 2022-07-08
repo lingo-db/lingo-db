@@ -22,8 +22,21 @@ def SubOperator_Dialect : Dialect {
         let extraClassDeclaration = [{
             private:
             void registerTypes();
+            void registerAttrs();
             public:
         }];
+}
+
+//===----------------------------------------------------------------------===//
+// Attributes
+//===----------------------------------------------------------------------===//
+
+class SubOperator_Attr<string name> : AttrDef<SubOperator_Dialect, name>;
+
+def StateMembers : SubOperator_Attr<"StateMembers"> {
+    let mnemonic = "state_members";
+    let parameters = (ins "ArrayAttr":$names,"ArrayAttr":$types);
+    let assemblyFormat ="`<` $names `:` $types `>`";
 }
 
 //===----------------------------------------------------------------------===//
@@ -35,13 +48,13 @@ class SubOperator_Type<string name, string typeMnemonic> : TypeDef<SubOperator_D
 }
 def TableRef : SubOperator_Type<"TableRef", "table_ref"> {
     let summary = "reference to table";
-    let parameters = (ins "DictionaryAttr":$columns);
-    let assemblyFormat = "`<` $columns `>`";
+    let parameters = (ins "StateMembersAttr":$columns);
+    let assemblyFormat = "`<` custom<StateMembers>($columns) `>`";
 }
 def Table : SubOperator_Type<"Table", "table"> {
     let summary = "reference to table";
-    let parameters = (ins "DictionaryAttr":$columns);
-    let assemblyFormat = "`<` $columns `>`";
+    let parameters = (ins "StateMembersAttr":$columns);
+    let assemblyFormat = "`<` custom<StateMembers>($columns) `>`";
 }
 
 //===----------------------------------------------------------------------===//

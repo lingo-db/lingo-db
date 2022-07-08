@@ -9,6 +9,7 @@
 #include "mlir/Dialect/DB/IR/DBTypes.h"
 #include "mlir/Dialect/DSA/IR/DSATypes.h"
 
+#include "mlir/Dialect/SubOperator/SubOperatorOpsAttributes.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOpsTypes.h"
 
 #include "mlir/Dialect/TupleStream/Column.h"

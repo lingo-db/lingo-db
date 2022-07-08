@@ -1,6 +1,7 @@
 #ifndef MLIR_DIALECT_SUBOPERATOR_SUBOPERATOROPSTYPES_H
 #define MLIR_DIALECT_SUBOPERATOR_SUBOPERATOROPSTYPES_H
 
+#include "mlir/Dialect/SubOperator/SubOperatorOpsAttributes.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
 
