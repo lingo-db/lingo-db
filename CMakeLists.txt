@@ -73,6 +73,7 @@ add_subdirectory(lib/Conversion/DBToStd)
 add_subdirectory(lib/Conversion/DSAToStd)
 add_subdirectory(lib/Conversion/RelAlgToDB)
 add_subdirectory(lib/Conversion/RelAlgToSubOp)
+add_subdirectory(lib/Conversion/SubOpToControlFlow)
 
 add_subdirectory(lib/Conversion/UtilToLLVM)
 add_subdirectory(lib/Transforms)

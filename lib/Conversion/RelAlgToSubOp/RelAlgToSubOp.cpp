@@ -132,7 +132,12 @@ class MaterializeLowering : public OpConversionPattern<mlir::relalg::Materialize
          mapping.push_back(rewriter.getNamedAttr(columnName, columnAttr));
       }
       auto tableRefType = mlir::subop::TableType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(),rewriter.getArrayAttr(colNames),rewriter.getArrayAttr(colTypes)));
-      auto table = rewriter.create<mlir::subop::CreateOp>(materializeOp->getLoc(), tableRefType, "");
+      mlir::Value table;
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
+         table = rewriter.create<mlir::subop::CreateOp>(materializeOp->getLoc(), tableRefType, "");
+      }
       rewriter.create<mlir::subop::MaterializeOp>(materializeOp->getLoc(), adaptor.rel(), table, rewriter.getDictionaryAttr(mapping));
       rewriter.replaceOpWithNewOp<mlir::subop::ConvertToExplicit>(materializeOp, mlir::dsa::TableType::get(rewriter.getContext()), table);
 

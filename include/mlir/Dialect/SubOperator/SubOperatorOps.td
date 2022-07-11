@@ -85,6 +85,15 @@ def ScanOp : SubOperator_Op<"scan", [NoSideEffect]> {
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $state `:` type($state) custom<StateColumnMapping>($mapping) attr-dict }];
 }
+
+def InFlightOp : SubOperator_Op<"in_flight", [NoSideEffect]> {
+    let summary = "operation symbolizes 'in flight' tuple stream -> values => columns";
+
+    let arguments = (ins Variadic<AnyType> : $values, ArrayAttr : $columns );
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{  $values `:` type($values) `=` `>` custom<CustDefArr>($columns) attr-dict }];
+}
+
 def MapOp : SubOperator_Op<"map", [NoSideEffect]> {
     let summary = "map operation";
 

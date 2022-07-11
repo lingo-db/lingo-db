@@ -29,6 +29,7 @@
 
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
 #include "mlir/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
+#include "mlir/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 
@@ -123,6 +124,7 @@ int main(int argc, char** argv) {
    mlir::relalg::registerRelAlgToSubOpConversionPasses();
    mlir::relalg::registerQueryOptimizationPasses();
    mlir::db::registerDBConversionPasses();
+   mlir::subop::registerSubOpToControlFlowConversionPasses();
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::dsa::createLowerToStdPass();
    });

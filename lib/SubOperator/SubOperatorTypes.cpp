@@ -21,7 +21,7 @@ static mlir::LogicalResult parseStateMembers(mlir::AsmParser& parser, mlir::Fail
       if (parser.parseRSquare()) { return mlir::failure(); }
       break;
    }
-   *stateMembersAttr=mlir::subop::StateMembersAttr::get(parser.getContext(),parser.getBuilder().getArrayAttr(names),parser.getBuilder().getArrayAttr(types));
+   stateMembersAttr.emplace(mlir::subop::StateMembersAttr::get(parser.getContext(),parser.getBuilder().getArrayAttr(names),parser.getBuilder().getArrayAttr(types)));
    return mlir::success();
 }
 static void printStateMembers(mlir::AsmPrinter& p, mlir::subop::StateMembersAttr stateMembersAttr) {
