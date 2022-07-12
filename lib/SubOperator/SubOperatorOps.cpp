@@ -161,7 +161,7 @@ static void printColumnStateMapping(OpAsmPrinter& p, mlir::Operation* op, Dictio
          p << ", ";
       }
       printCustRef(p, op, relationRefAttr);
-      p << " => "<<columnName.getValue();
+      p << " => " << columnName.getValue();
    }
    p << "}";
 }
@@ -234,6 +234,85 @@ static void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arra
       printCustDef(p, op, parsedSymbolRefAttr);
    }
    p << "]";
+}
+
+ParseResult mlir::subop::SortOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   OpAsmParser::UnresolvedOperand toSort;
+   subop::VectorType vecType;
+   if (parser.parseOperand(toSort) || parser.parseColonType(vecType)) {
+      return failure();
+   }
+   parser.resolveOperand(toSort, vecType, result.operands);
+
+   mlir::ArrayAttr sortBy;
+   parser.parseAttribute(sortBy);
+   result.addAttribute("sortBy", sortBy);
+   std::vector<OpAsmParser::Argument> leftArgs(sortBy.size());
+   std::vector<OpAsmParser::Argument> rightArgs(sortBy.size());
+   if (parser.parseLParen() || parser.parseLSquare()) {
+      return failure();
+   }
+   for (size_t i = 0; i < sortBy.size(); i++) {
+      size_t j = 0;
+      for (; j < vecType.getColumns().getNames().size(); j++) {
+         if(sortBy[i]==vecType.getColumns().getNames()[j]){
+            break;
+         }
+      }
+      leftArgs[i].type = vecType.getColumns().getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      if (i > 0 && parser.parseComma().failed()) return failure();
+      if (parser.parseArgument(leftArgs[i])) return failure();
+   }
+   if (parser.parseRSquare() || parser.parseComma() || parser.parseLSquare()) {
+      return failure();
+   }
+   for (size_t i = 0; i < sortBy.size(); i++) {
+      size_t j = 0;
+      for (; j < vecType.getColumns().getNames().size(); j++) {
+         if (sortBy[i] == vecType.getColumns().getNames()[j]) {
+            break;
+         }
+      }
+      rightArgs[i].type = vecType.getColumns().getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      if (i > 0 && parser.parseComma().failed()) return failure();
+      if (parser.parseArgument(rightArgs[i])) return failure();
+   }
+   if (parser.parseRSquare() || parser.parseRParen()) {
+      return failure();
+   }
+   std::vector<OpAsmParser::Argument> args;
+   args.insert(args.end(), leftArgs.begin(), leftArgs.end());
+   args.insert(args.end(), rightArgs.begin(), rightArgs.end());
+   Region* body = result.addRegion();
+   if (parser.parseRegion(*body, args)) return failure();
+   return success();
+}
+
+void subop::SortOp::print(OpAsmPrinter& p) {
+   subop::SortOp& op = *this;
+   p << " " << op.toSort() << " : " << op.toSort().getType() << " " << op.sortBy() << " ";
+   p << "([";
+   bool first = true;
+   for (size_t i = 0; i < op.sortBy().size(); i++) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      p << op.region().front().getArgument(i);
+   }
+   p << "],[";
+   first = true;
+   for (size_t i = 0; i < op.sortBy().size(); i++) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      p << op.region().front().getArgument(op.sortBy().size() + i);
+   }
+   p << "])";
+   p.printRegion(op.region(), false, true);
 }
 
 #define GET_OP_CLASSES

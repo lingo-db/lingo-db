@@ -3,6 +3,7 @@
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
+#include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -64,7 +65,7 @@ class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> 
          mapping.push_back(rewriter.getNamedAttr(identifier.strref(), attrDef));
       }
       scanDescription += "] }";
-      auto tableRefType = mlir::subop::TableRefType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(),rewriter.getArrayAttr(colNames),rewriter.getArrayAttr(colTypes)));
+      auto tableRefType = mlir::subop::TableRefType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr(colNames), rewriter.getArrayAttr(colTypes)));
       mlir::Value tableRef = rewriter.create<mlir::subop::GetReferenceOp>(baseTableOp->getLoc(), tableRefType, rewriter.getStringAttr(scanDescription));
       rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(baseTableOp, tableRef, rewriter.getDictionaryAttr(mapping));
       return success();
@@ -115,6 +116,87 @@ class MapLowering : public OpConversionPattern<mlir::relalg::MapOp> {
       return success();
    }
 };
+class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
+   public:
+   using OpConversionPattern<mlir::relalg::SortOp>::OpConversionPattern;
+   mlir::Value createSortPredicate(mlir::OpBuilder& builder, std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria, mlir::Value trueVal, mlir::Value falseVal, size_t pos, mlir::Location loc) const {
+      if (pos < sortCriteria.size()) {
+         mlir::Value lt = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, sortCriteria[pos].first, sortCriteria[pos].second);
+         lt = builder.create<mlir::db::DeriveTruth>(loc, lt);
+         auto ifOp = builder.create<mlir::scf::IfOp>(
+            loc, builder.getI1Type(), lt, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, trueVal); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+               mlir::Value eq = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, sortCriteria[pos].first, sortCriteria[pos].second);
+               eq=builder.create<mlir::db::DeriveTruth>(loc,eq);
+               auto ifOp2 = builder.create<mlir::scf::IfOp>(loc, builder.getI1Type(), eq,[&](mlir::OpBuilder& builder, mlir::Location loc) {
+                     builder.create<mlir::scf::YieldOp>(loc, createSortPredicate(builder, sortCriteria, trueVal, falseVal, pos + 1,loc));
+                  },[&](mlir::OpBuilder& builder, mlir::Location loc) {
+                     builder.create<mlir::scf::YieldOp>(loc, falseVal);
+                  });
+               builder.create<mlir::scf::YieldOp>(loc, ifOp2.getResult(0)); });
+         return ifOp.getResult(0);
+      } else {
+         return falseVal;
+      }
+   }
+   LogicalResult matchAndRewrite(mlir::relalg::SortOp sortOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      std::vector<NamedAttribute> defMapping;
+      std::vector<NamedAttribute> refMapping;
+      std::vector<Attribute> types;
+      std::vector<Attribute> names;
+      size_t i = 0;
+      std::unordered_map<const mlir::tuples::Column*, size_t> colToMemberPos;
+      for (auto x : sortOp.getAvailableColumns()) {
+         types.push_back(mlir::TypeAttr::get(x->type));
+         colToMemberPos[x] = i;
+         std::string name = "col" + std::to_string(i++);
+         names.push_back(rewriter.getStringAttr(name));
+         defMapping.push_back(rewriter.getNamedAttr(name, rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager().createDef(x)));
+         refMapping.push_back(rewriter.getNamedAttr(name, rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager().createRef(x)));
+      }
+      auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr(names), rewriter.getArrayAttr(types)));
+      mlir::Value vector;
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
+         vector = rewriter.create<mlir::subop::CreateOp>(sortOp->getLoc(), vectorType, "");
+      }
+      rewriter.create<mlir::subop::MaterializeOp>(sortOp->getLoc(), adaptor.rel(), vector, rewriter.getDictionaryAttr(refMapping));
+      auto block = new Block;
+      std::vector<Attribute> sortByMembers;
+      std::vector<Type> argumentTypes;
+      std::vector<Location> locs;
+      for (auto attr : sortOp.sortspecs()) {
+         auto sortspecAttr = attr.cast<mlir::relalg::SortSpecificationAttr>();
+         argumentTypes.push_back(sortspecAttr.getAttr().getColumn().type);
+         locs.push_back(sortOp->getLoc());
+         sortByMembers.push_back(names.at(colToMemberPos.at(&sortspecAttr.getAttr().getColumn())));
+      }
+      block->addArguments(argumentTypes, locs);
+      block->addArguments(argumentTypes, locs);
+      std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria;
+      for (auto attr : sortOp.sortspecs()) {
+         auto sortspecAttr = attr.cast<mlir::relalg::SortSpecificationAttr>();
+         mlir::Value left = block->getArgument(sortCriteria.size());
+         mlir::Value right = block->getArgument(sortCriteria.size() + sortOp.sortspecs().size());
+         if (sortspecAttr.getSortSpec() == mlir::relalg::SortSpec::desc) {
+            std::swap(left, right);
+         }
+         sortCriteria.push_back({left, right});
+      }
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(block);
+         auto trueVal = rewriter.create<mlir::db::ConstantOp>(sortOp->getLoc(), rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+         auto falseVal = rewriter.create<mlir::db::ConstantOp>(sortOp->getLoc(), rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+         rewriter.create<mlir::tuples::ReturnOp>(sortOp->getLoc(), createSortPredicate(rewriter, sortCriteria, trueVal, falseVal, 0, sortOp->getLoc()));
+      }
+      auto subOpSort = rewriter.create<mlir::subop::SortOp>(sortOp->getLoc(), vector, rewriter.getArrayAttr(sortByMembers));
+      subOpSort.region().getBlocks().push_back(block);
+      rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(sortOp, vector, rewriter.getDictionaryAttr(defMapping));
+
+      return success();
+   }
+};
 class MaterializeLowering : public OpConversionPattern<mlir::relalg::MaterializeOp> {
    public:
    using OpConversionPattern<mlir::relalg::MaterializeOp>::OpConversionPattern;
@@ -131,7 +213,7 @@ class MaterializeLowering : public OpConversionPattern<mlir::relalg::Materialize
          colTypes.push_back(mlir::TypeAttr::get(columnType));
          mapping.push_back(rewriter.getNamedAttr(columnName, columnAttr));
       }
-      auto tableRefType = mlir::subop::TableType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(),rewriter.getArrayAttr(colNames),rewriter.getArrayAttr(colTypes)));
+      auto tableRefType = mlir::subop::TableType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr(colNames), rewriter.getArrayAttr(colTypes)));
       mlir::Value table;
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
@@ -162,6 +244,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    target.addLegalDialect<memref::MemRefDialect>();
    target.addLegalDialect<arith::ArithmeticDialect>();
    target.addLegalDialect<cf::ControlFlowDialect>();
+   target.addLegalDialect<scf::SCFDialect>();
    target.addLegalDialect<util::UtilDialect>();
 
    TypeConverter typeConverter;
@@ -173,6 +256,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<BaseTableLowering>(typeConverter, ctxt);
    patterns.insert<SelectionLowering>(typeConverter, ctxt);
    patterns.insert<MapLowering>(typeConverter, ctxt);
+   patterns.insert<SortLowering>(typeConverter, ctxt);
    patterns.insert<MaterializeLowering>(typeConverter, ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))

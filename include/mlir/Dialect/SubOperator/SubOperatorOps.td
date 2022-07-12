@@ -56,6 +56,16 @@ def Table : SubOperator_Type<"Table", "table"> {
     let parameters = (ins "StateMembersAttr":$columns);
     let assemblyFormat = "`<` custom<StateMembers>($columns) `>`";
 }
+def SimpleState : SubOperator_Type<"SimpleState", "simple_state"> {
+    let summary = "simple state with multiple members";
+    let parameters = (ins "StateMembersAttr":$columns);
+    let assemblyFormat = "`<` custom<StateMembers>($columns) `>`";
+}
+def Vector : SubOperator_Type<"Vector", "vector"> {
+    let summary = "vector type";
+    let parameters = (ins "StateMembersAttr":$columns);
+    let assemblyFormat = "`<` custom<StateMembers>($columns) `>`";
+}
 
 //===----------------------------------------------------------------------===//
 // Operations
@@ -101,6 +111,16 @@ def MapOp : SubOperator_Op<"map", [NoSideEffect]> {
     let results = (outs TupleStream:$result);
     let regions = (region SizedRegion<1>:$fn);
     let assemblyFormat = [{  $rel `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($fn) attr-dict-with-keyword }];
+}
+def SortOp : SubOperator_Op<"sort", [IsolatedFromAbove]> {
+    let summary = "sort vector";
+    let description = [{
+        Sort a records in a vector. The region yields the order of two arguments as in C++ `std::sort`.
+    }];
+
+    let arguments = (ins Vector:$toSort,ArrayAttr: $sortBy);
+    let regions = (region SizedRegion<1>:$region);
+  let hasCustomAssemblyFormat = 1;
 }
 
 
