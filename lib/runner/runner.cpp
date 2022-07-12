@@ -25,7 +25,9 @@
 #include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
+#include "mlir/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
+#include "mlir/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 
 #include "mlir/Transforms/CustomPasses.h"
 
@@ -403,7 +405,8 @@ bool Runner::optimize(runtime::Database& db) {
 
       mlir::PassManager pm2(&ctxt->context);
       pm2.enableVerifier(runMode != RunMode::SPEED);
-      mlir::relalg::createLowerRelAlgPipeline(pm2);
+      mlir::relalg::createLowerRelAlgToSubOpPipeline(pm2);
+      mlir::subop::createLowerSubOpPipeline(pm2);
       if (mlir::failed(pm2.run(ctxt->module.get()))) {
          return false;
       }
@@ -472,7 +475,7 @@ bool Runner::lowerToLLVM() {
    auto setExecContextFn = builder.create<mlir::LLVM::LLVMFuncOp>(moduleOp.getLoc(), "rt_set_execution_context", mlir::LLVM::LLVMFunctionType::get(mlir::LLVM::LLVMVoidType::get(builder.getContext()), builder.getI64Type()), mlir::LLVM::Linkage::External);
    {
       mlir::OpBuilder::InsertionGuard guard(builder);
-      auto *block = setExecContextFn.addEntryBlock();
+      auto* block = setExecContextFn.addEntryBlock();
       auto execContext = block->getArgument(0);
       builder.setInsertionPointToStart(block);
       auto ptr = builder.create<mlir::LLVM::AddressOfOp>(builder.getUnknownLoc(), globalOp);
@@ -481,7 +484,7 @@ bool Runner::lowerToLLVM() {
    }
    if (auto getExecContextFn = mlir::dyn_cast_or_null<mlir::LLVM::LLVMFuncOp>(moduleOp.lookupSymbol("rt_get_execution_context"))) {
       mlir::OpBuilder::InsertionGuard guard(builder);
-      auto *block = getExecContextFn.addEntryBlock();
+      auto* block = getExecContextFn.addEntryBlock();
       builder.setInsertionPointToStart(block);
       auto ptr = builder.create<mlir::LLVM::AddressOfOp>(builder.getUnknownLoc(), globalOp);
       auto execContext = builder.create<mlir::LLVM::LoadOp>(builder.getUnknownLoc(), ptr);
