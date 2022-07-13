@@ -24,6 +24,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include <mlir/Dialect/util/FunctionHelper.h>
+#include "mlir/IR/BlockAndValueMapping.h"
 
 using namespace mlir;
 
@@ -56,6 +57,14 @@ class ColumnMapping {
    public:
    ColumnMapping() : mapping() {}
    ColumnMapping(mlir::subop::InFlightOp inFlightOp) {
+      assert(inFlightOp.columns().size() == inFlightOp.values().size());
+      for (auto i = 0ul; i < inFlightOp.columns().size(); i++) {
+         const auto* col = &inFlightOp.columns()[i].cast<mlir::tuples::ColumnDefAttr>().getColumn();
+         auto val = inFlightOp.values()[i];
+         mapping.insert(std::make_pair(col, val));
+      }
+   }
+   void merge(mlir::subop::InFlightOp inFlightOp) {
       assert(inFlightOp.columns().size() == inFlightOp.values().size());
       for (auto i = 0ul; i < inFlightOp.columns().size(); i++) {
          const auto* col = &inFlightOp.columns()[i].cast<mlir::tuples::ColumnDefAttr>().getColumn();
@@ -114,6 +123,70 @@ class FilterLowering : public OpConversionPattern<mlir::subop::FilterOp> {
       return failure();
    }
 };
+class NestedMapLowering : public OpConversionPattern<mlir::subop::NestedMapOp> {
+   public:
+   using OpConversionPattern<mlir::subop::NestedMapOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::NestedMapOp nestedMapOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (auto inFlightOp = mlir::dyn_cast_or_null<mlir::subop::InFlightOp>(adaptor.stream().getDefiningOp())) {
+         rewriter.setInsertionPointAfter(inFlightOp);
+         ColumnMapping mapping(inFlightOp);
+         auto* terminator = nestedMapOp.region().front().getTerminator();
+         auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(terminator);
+         mlir::BlockAndValueMapping mapper;
+         for (auto& x : nestedMapOp.region().front().getOperations()) {
+            if (&x!=terminator) {
+               rewriter.clone(x, mapper);
+            }
+         }
+         auto x = mapper.lookup(returnOp.results()[0]);
+         auto combined = rewriter.create<mlir::subop::CombineInFlightOp>(nestedMapOp->getLoc(), x, adaptor.stream());
+         rewriter.replaceOp(nestedMapOp, combined.res());
+
+         return success();
+      }
+      return failure();
+   }
+};
+class CombineInFlightLowering : public OpConversionPattern<mlir::subop::CombineInFlightOp> {
+   public:
+   using OpConversionPattern<mlir::subop::CombineInFlightOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::CombineInFlightOp combineInFlightOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (auto inFlightOpLeft = mlir::dyn_cast_or_null<mlir::subop::InFlightOp>(adaptor.left().getDefiningOp())) {
+         if (auto inFlightOpRight = mlir::dyn_cast_or_null<mlir::subop::InFlightOp>(adaptor.right().getDefiningOp())) {
+            rewriter.setInsertionPointAfter(inFlightOpLeft);
+            ColumnMapping mapping(inFlightOpLeft);
+            mapping.merge(inFlightOpRight);
+            rewriter.replaceOp(combineInFlightOp, mapping.createInFlight(rewriter));
+            return success();
+         }
+      }
+      combineInFlightOp->getParentOp()->dump();
+      return failure();
+   }
+};
+class RenameLowering : public OpConversionPattern<mlir::subop::RenamingOp> {
+   public:
+   using OpConversionPattern<mlir::subop::RenamingOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::RenamingOp renamingOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (auto inFlightOp = mlir::dyn_cast_or_null<mlir::subop::InFlightOp>(adaptor.stream().getDefiningOp())) {
+         rewriter.setInsertionPointAfter(inFlightOp);
+         ColumnMapping mapping(inFlightOp);
+         for (mlir::Attribute attr : renamingOp.columns()) {
+            auto relationDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
+            mlir::Attribute from = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[0];
+            auto relationRefAttr = from.dyn_cast_or_null<mlir::tuples::ColumnRefAttr>();
+            mapping.define(relationDefAttr, mapping.resolve(relationRefAttr));
+         }
+         rewriter.replaceOp(renamingOp, mapping.createInFlight(rewriter));
+
+         return success();
+      }
+      return failure();
+   }
+};
 class MapLowering : public OpConversionPattern<mlir::subop::MapOp> {
    public:
    using OpConversionPattern<mlir::subop::MapOp>::OpConversionPattern;
@@ -138,15 +211,11 @@ class MapLowering : public OpConversionPattern<mlir::subop::MapOp> {
                op->dropAllUses();
                op->erase();
             }
-            source->dump();
             auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(terminator);
             std::vector<Value> res(returnOp.results().begin(), returnOp.results().end());
             std::vector<mlir::Operation*> toInsert;
             for (auto& x : source->getOperations()) {
-               llvm::dbgs() << "start...\n";
-               x.dump();
                toInsert.push_back(&x);
-               llvm::dbgs() << "next...\n";
             }
             for (auto* x : toInsert) {
                x->remove();
@@ -484,7 +553,9 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
 
    RewritePatternSet patterns(&getContext());
    patterns.insert<FilterLowering>(typeConverter, ctxt);
+   patterns.insert<RenameLowering>(typeConverter, ctxt);
    patterns.insert<MapLowering>(typeConverter, ctxt);
+   patterns.insert<NestedMapLowering>(typeConverter, ctxt);
    patterns.insert<GetTableRefLowering>(typeConverter, ctxt);
    patterns.insert<ScanTableRefLowering>(typeConverter, ctxt);
    patterns.insert<ScanVectorLowering>(typeConverter, ctxt);
@@ -494,6 +565,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<MaterializeVectorLowering>(typeConverter, ctxt);
    patterns.insert<ConvertToExplicitTableLowering>(typeConverter, ctxt);
    patterns.insert<SortLowering>(typeConverter, ctxt);
+   patterns.insert<CombineInFlightLowering>(typeConverter, ctxt);
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }

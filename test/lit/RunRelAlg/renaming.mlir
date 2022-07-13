@@ -1,4 +1,4 @@
-//RUN: mlir-db-opt -lower-relalg %s | run-mlir "-" %S/../../../resources/data/uni | FileCheck %s
+//RUN: run-mlir %s %S/../../../resources/data/uni | FileCheck %s
 //CHECK: |                        matrnr  |                          name  |
 //CHECK: -------------------------------------------------------------------
 //CHECK: |                         24002  |                  "Xenokrates"  |

@@ -315,5 +315,44 @@ void subop::SortOp::print(OpAsmPrinter& p) {
    p.printRegion(op.region(), false, true);
 }
 
+ParseResult mlir::subop::NestedMapOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   OpAsmParser::UnresolvedOperand stream;
+   subop::VectorType vecType;
+   if (parser.parseOperand(stream)) {
+      return failure();
+   }
+   parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands);
+
+   mlir::ArrayAttr parameters;
+   parseCustRefArr(parser,parameters);
+   result.addAttribute("parameters", parameters);
+   std::vector<OpAsmParser::Argument> args(parameters.size());
+   if (parser.parseLParen() ) {
+      return failure();
+   }
+   for (size_t i = 0; i < parameters.size(); i++) {
+      args[i].type = parameters[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+      if (i > 0 && parser.parseComma().failed()) return failure();
+      if (parser.parseArgument(args[i])) return failure();
+   }
+   if (parser.parseRParen()) {
+      return failure();
+   }
+   Region* body = result.addRegion();
+   if (parser.parseRegion(*body, args)) return failure();
+   result.addTypes(mlir::tuples::TupleStreamType::get(parser.getContext()));
+   return success();
+}
+
+void subop::NestedMapOp::print(OpAsmPrinter& p) {
+   subop::NestedMapOp& op = *this;
+   p << " " << op.stream() << " ";
+   printCustRefArr(p,this->getOperation(),op.parameters());
+   p << " (";
+   p.printOperands(op.region().front().getArguments());
+   p<<") ";
+   p.printRegion(op.region(), false, true);
+}
+
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"

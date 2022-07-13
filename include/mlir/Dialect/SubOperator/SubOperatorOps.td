@@ -67,12 +67,80 @@ def Vector : SubOperator_Type<"Vector", "vector"> {
     let assemblyFormat = "`<` custom<StateMembers>($columns) `>`";
 }
 
+def Entry : SubOperator_Type<"Entry", "entry"> {
+    let summary = "entry of some state";
+    let parameters = (ins "Type":$t);
+    let assemblyFormat = "`<` $t `>`";
+}
+def EntryRef : SubOperator_Type<"EntryRef", "entry_ref"> {
+    let summary = "reference to entry of some state";
+    let parameters = (ins "Type":$t);
+    let assemblyFormat = "`<` $t `>`";
+}
+def List : SubOperator_Type<"List", "list"> {
+    let summary = "list type";
+    let parameters = (ins "Type":$t);
+    let assemblyFormat = "`<` $t `>`";
+}
+
 //===----------------------------------------------------------------------===//
 // Operations
 //===----------------------------------------------------------------------===//
 class SubOperator_Op<string mnemonic, list<Trait> traits = []> : Op<SubOperator_Dialect, mnemonic, traits> {}
 
+def ScatterByEntryRef : SubOperator_Op<"scatter_ref"> {
+    let summary = "writes to the entry of a state (randomly) using a supplied entry reference";
+}
 
+def GatherOp : SubOperator_Op<"gather"> {
+  let summary = "reads member values  using a given value";
+}
+def FlattenOp : SubOperator_Op<"flatten"> {
+  let summary = "flattens an list column";
+  let description = [{#
+   Example:
+   ```mlir
+   %stream2 = subop.flatten %stream @a::@list => @scope::@list_entry({})
+   ```
+  }];
+}
+
+def ReduceOp : SubOperator_Op<"reduce"> {
+  let summary = "reduce";
+  let description =[{
+  ```mlir
+    %5 = subop.reduce %2 %0 [@studenten::@semester] with ["ctr","sum"] ([%v1], [%curr_ctr, %curr_sum]){
+      %c1 = db.constant %c1
+      %updated_ctr = db.add %curr_ctr, %c1
+      tuples.return %updated_ctr, %updated_sum
+    } eq: (){} combine: (){} initial: (){}
+  ```
+  }];
+}
+
+def NestedMapOp : SubOperator_Op<"nested_map"> {
+   let summary = "compute nested map";
+  let description = [{#
+     Example:
+     ```mlir
+     %stream2 = subop.nested_map %stream [@x::@a, @y::@b] (%a, %b){
+        %stream3 = subop.scan %some_table ...
+        %stream4 = subop.filter ... {
+            ... %a
+            ... %b
+            tuples.return %pred
+        }
+        tuples.return %stream5
+     }
+     ```
+    Semantics of the produced stream: each tuple is combined with the tuples returned by the nested_map
+    If no tuple is returned -> the original tuple is ommited (-> "inner-join semantic")
+  }];
+    let arguments= (ins TupleStream : $stream,ArrayAttr : $parameters);
+    let results = (outs TupleStream : $res);
+    let regions = (region SizedRegion<1>:$region);
+    let hasCustomAssemblyFormat = 1;
+}
 def GetReferenceOp : SubOperator_Op<"get_reference", [NoSideEffect]> {
     let summary = "get reference to an externally defined object";
 
@@ -103,6 +171,13 @@ def InFlightOp : SubOperator_Op<"in_flight", [NoSideEffect]> {
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $values `:` type($values) `=` `>` custom<CustDefArr>($columns) attr-dict }];
 }
+def CombineInFlightOp : SubOperator_Op<"combine_in_flight", [NoSideEffect]> {
+    let summary = "combines in flight tuple streams";
+
+    let arguments = (ins TupleStream :$left, TupleStream:$right);
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{  $left `,` $right attr-dict }];
+}
 
 def MapOp : SubOperator_Op<"map", [NoSideEffect]> {
     let summary = "map operation";
@@ -129,6 +204,13 @@ def FilterOp : SubOperator_Op<"filter", [NoSideEffect]> {
     let arguments = (ins TupleStream : $stream, ArrayAttr : $conditions );
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream custom<CustRefArr>($conditions)  attr-dict }];
+}
+def RenamingOp : SubOperator_Op<"rename", [NoSideEffect]> {
+    let summary = "rename columns";
+
+    let arguments = (ins TupleStream:$stream,ArrayAttr:$columns);
+    let results = (outs TupleStream:$result);
+    let assemblyFormat = [{ $stream `renamed` `:` custom<CustDefArr>($columns) attr-dict-with-keyword }];
 }
 def MaterializeOp : SubOperator_Op<"materialize"> {
     let summary = "materialize state (sequentially)";
