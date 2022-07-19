@@ -16,6 +16,7 @@
 #include "mlir/Dialect/TupleStream/TupleStreamOpsTypes.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/SubOperator/SubOperatorInterfaces.h"
 #include "mlir/IR/Builders.h"
 
 #define GET_OP_CLASSES

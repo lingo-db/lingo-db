@@ -15,16 +15,17 @@
 #include "mlir/Dialect/SCF/Transforms.h"
 #include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
+#include "mlir/Dialect/SubOperator/Transforms/Passes.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
+#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include <mlir/Dialect/util/FunctionHelper.h>
-#include "mlir/IR/BlockAndValueMapping.h"
 
 using namespace mlir;
 
@@ -296,7 +297,6 @@ class MaterializeVectorLowering : public OpConversionPattern<mlir::subop::Materi
          rewriter.setInsertionPointAfter(inFlightOp);
          ColumnMapping mapping(inFlightOp);
          auto stateType = materializeOp.state().getType().cast<mlir::subop::VectorType>();
-         auto state = adaptor.state();
          std::vector<mlir::Value> values;
          for (size_t i = 0; i < stateType.getColumns().getTypes().size(); i++) {
             auto memberName = stateType.getColumns().getNames()[i].cast<mlir::StringAttr>().str();
@@ -394,11 +394,12 @@ class CreateTableLowering : public OpConversionPattern<mlir::subop::CreateOp> {
       if (!createOp.getType().isa<mlir::subop::TableType>()) return failure();
       auto tableType = createOp.getType().cast<mlir::subop::TableType>();
       std::string descr;
+      auto columnNames=createOp.descrAttr().cast<mlir::ArrayAttr>();
       for (size_t i = 0; i < tableType.getColumns().getTypes().size(); i++) {
          if (!descr.empty()) {
             descr += ";";
          }
-         descr += tableType.getColumns().getNames()[i].cast<mlir::StringAttr>().str() + ":" + arrowDescrFromType(getBaseType(tableType.getColumns().getTypes()[i].cast<mlir::TypeAttr>().getValue()));
+         descr += columnNames[i].cast<mlir::StringAttr>().str() + ":" + arrowDescrFromType(getBaseType(tableType.getColumns().getTypes()[i].cast<mlir::TypeAttr>().getValue()));
       }
       rewriter.replaceOpWithNewOp<mlir::dsa::CreateDS>(createOp, typeConverter->convertType(tableType), rewriter.getStringAttr(descr));
       return mlir::success();
@@ -491,7 +492,6 @@ class ScanVectorLowering : public OpConversionPattern<mlir::subop::ScanOp> {
          auto unpackedValues = rewriter.create<mlir::util::UnPackOp>(scanOp->getLoc(), forOp.getInductionVar()).getResults();
 
          for (auto i = 0ul; i < columns.getTypes().size(); i++) {
-            auto type = columns.getTypes()[i].cast<mlir::TypeAttr>().getValue();
             auto name = columns.getNames()[i].cast<mlir::StringAttr>().str();
             if (scanOp.mapping().contains(name)) {
                auto columnDefAttr = scanOp.mapping().get(name).cast<mlir::tuples::ColumnDefAttr>();
@@ -575,6 +575,7 @@ mlir::subop::createLowerSubOpPass() {
    return std::make_unique<SubOpToControlFlowLoweringPass>();
 }
 void mlir::subop::createLowerSubOpPipeline(mlir::OpPassManager& pm) {
+   pm.addPass(mlir::subop::createEnforceOrderPass());
    pm.addPass(mlir::subop::createLowerSubOpPass());
    pm.addPass(mlir::createCanonicalizerPass());
 }

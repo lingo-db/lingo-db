@@ -255,7 +255,7 @@ ParseResult mlir::subop::SortOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
    for (size_t i = 0; i < sortBy.size(); i++) {
       size_t j = 0;
       for (; j < vecType.getColumns().getNames().size(); j++) {
-         if(sortBy[i]==vecType.getColumns().getNames()[j]){
+         if (sortBy[i] == vecType.getColumns().getNames()[j]) {
             break;
          }
       }
@@ -317,17 +317,16 @@ void subop::SortOp::print(OpAsmPrinter& p) {
 
 ParseResult mlir::subop::NestedMapOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    OpAsmParser::UnresolvedOperand stream;
-   subop::VectorType vecType;
    if (parser.parseOperand(stream)) {
       return failure();
    }
    parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands);
 
    mlir::ArrayAttr parameters;
-   parseCustRefArr(parser,parameters);
+   parseCustRefArr(parser, parameters);
    result.addAttribute("parameters", parameters);
    std::vector<OpAsmParser::Argument> args(parameters.size());
-   if (parser.parseLParen() ) {
+   if (parser.parseLParen()) {
       return failure();
    }
    for (size_t i = 0; i < parameters.size(); i++) {
@@ -347,11 +346,63 @@ ParseResult mlir::subop::NestedMapOp::parse(::mlir::OpAsmParser& parser, ::mlir:
 void subop::NestedMapOp::print(OpAsmPrinter& p) {
    subop::NestedMapOp& op = *this;
    p << " " << op.stream() << " ";
-   printCustRefArr(p,this->getOperation(),op.parameters());
+   printCustRefArr(p, this->getOperation(), op.parameters());
    p << " (";
    p.printOperands(op.region().front().getArguments());
-   p<<") ";
+   p << ") ";
    p.printRegion(op.region(), false, true);
+}
+
+std::vector<std::string> subop::ScanOp::getReadMembers() {
+   std::vector<std::string> res;
+   for (auto x : mapping()) {
+      res.push_back(x.getName().str());
+   }
+   return res;
+}
+std::vector<std::string> subop::MaterializeOp::getWrittenMembers() {
+   std::vector<std::string> res;
+   for (auto x : mapping()) {
+      res.push_back(x.getName().str());
+   }
+   return res;
+}
+std::vector<std::string> subop::NestedMapOp::getReadMembers() {
+   std::vector<std::string> res;
+   this->region().walk([&](mlir::subop::SubOperator subop) {
+      auto read = subop.getReadMembers();
+      res.insert(res.end(), read.begin(), read.end());
+   });
+   return res;
+}
+std::vector<std::string> subop::NestedMapOp::getWrittenMembers() {
+   std::vector<std::string> res;
+   this->region().walk([&](mlir::subop::SubOperator subop) {
+      auto written = subop.getWrittenMembers();
+      res.insert(res.end(), written.begin(), written.end());
+   });
+   return res;
+}
+std::vector<std::string> subop::SortOp::getWrittenMembers() {
+   std::vector<std::string> res;
+   for (auto x : toSort().getType().cast<mlir::subop::VectorType>().getColumns().getNames()) {
+      res.push_back(x.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
+std::vector<std::string> subop::SortOp::getReadMembers() {
+   std::vector<std::string> res;
+   for (auto x : sortBy()) {
+      res.push_back(x.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
+std::vector<std::string> subop::ConvertToExplicit::getReadMembers() {
+   std::vector<std::string> res;
+   for (auto x : state().getType().cast<mlir::subop::TableType>().getColumns().getNames()) {
+      res.push_back(x.cast<mlir::StringAttr>().str());
+   }
+   return res;
 }
 
 #define GET_OP_CLASSES

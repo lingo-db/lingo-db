@@ -38,6 +38,10 @@ struct RelalgToSubOpLoweringPass
    }
    void runOnOperation() final;
 };
+static std::string getUniqueMember(std::string name) {
+   static std::unordered_map<std::string, size_t> counts;
+   return name + std::to_string(counts[name]++);
+}
 
 class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> {
    public:
@@ -60,9 +64,10 @@ class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> 
             first = false;
          }
          scanDescription += "\"" + identifier.str() + "\"";
-         colNames.push_back(rewriter.getStringAttr(identifier.strref()));
+         auto memberName = getUniqueMember(identifier.str());
+         colNames.push_back(rewriter.getStringAttr(memberName));
          colTypes.push_back(mlir::TypeAttr::get(attrDef.getColumn().type));
-         mapping.push_back(rewriter.getNamedAttr(identifier.strref(), attrDef));
+         mapping.push_back(rewriter.getNamedAttr(memberName, attrDef));
       }
       scanDescription += "] }";
       auto tableRefType = mlir::subop::TableRefType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr(colNames), rewriter.getArrayAttr(colTypes)));
@@ -88,7 +93,7 @@ static mlir::LogicalResult safelyMoveRegion(ConversionPatternRewriter& rewriter,
    }
    return success();
 }
-static mlir::Value translateSelection(mlir::Value stream,mlir::Region& predicate, mlir::ConversionPatternRewriter& rewriter,mlir::Location loc){
+static mlir::Value translateSelection(mlir::Value stream, mlir::Region& predicate, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc) {
    auto& columnManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    std::string scopeName = columnManager.getUniqueScope("map");
    std::string attributeName = "predicate";
@@ -104,7 +109,7 @@ class SelectionLowering : public OpConversionPattern<mlir::relalg::SelectionOp> 
    using OpConversionPattern<mlir::relalg::SelectionOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::relalg::SelectionOp selectionOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOp(selectionOp, translateSelection(adaptor.rel(),selectionOp.predicate(),rewriter,selectionOp->getLoc()));
+      rewriter.replaceOp(selectionOp, translateSelection(adaptor.rel(), selectionOp.predicate(), rewriter, selectionOp->getLoc()));
       return success();
    }
 };
@@ -124,7 +129,7 @@ class RenamingLowering : public OpConversionPattern<mlir::relalg::RenamingOp> {
    using OpConversionPattern<mlir::relalg::RenamingOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::relalg::RenamingOp renamingOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto mapOp2 = rewriter.replaceOpWithNewOp<mlir::subop::RenamingOp>(renamingOp, mlir::tuples::TupleStreamType::get(rewriter.getContext()), adaptor.rel(), renamingOp.columns());
+      rewriter.replaceOpWithNewOp<mlir::subop::RenamingOp>(renamingOp, mlir::tuples::TupleStreamType::get(rewriter.getContext()), adaptor.rel(), renamingOp.columns());
       return success();
    }
 };
@@ -149,10 +154,10 @@ class MaterializationHelper {
    public:
    MaterializationHelper(const mlir::relalg::ColumnSet& columns, mlir::MLIRContext* context) : context(context) {
       size_t i = 0;
-      for (auto x : columns) {
+      for (auto *x : columns) {
          types.push_back(mlir::TypeAttr::get(x->type));
-         colToMemberPos[x] = i;
-         std::string name = "col" + std::to_string(i++);
+         colToMemberPos[x] = i++;
+         std::string name = getUniqueMember("member");
          auto nameAttr = mlir::StringAttr::get(context, name);
          names.push_back(nameAttr);
          defMapping.push_back(mlir::NamedAttribute(nameAttr, context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager().createDef(x)));
@@ -180,11 +185,11 @@ static mlir::Value translateNLJoin(mlir::Value left, mlir::Value right, mlir::re
    {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-      vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, "");
+      vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute());
    }
    rewriter.create<mlir::subop::MaterializeOp>(loc, left, vector, helper.createColumnstateMapping());
    auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), right, rewriter.getArrayAttr({}));
-   auto b = new Block;
+   auto *b = new Block;
    nestedMapOp.region().push_back(b);
    {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
@@ -209,8 +214,8 @@ class InnerJoinNLLowering : public OpConversionPattern<mlir::relalg::InnerJoinOp
    using OpConversionPattern<mlir::relalg::InnerJoinOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::relalg::InnerJoinOp innerJoinOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto cp=translateNLJoin(adaptor.left(), adaptor.right(), mlir::cast<Operator>(innerJoinOp.left().getDefiningOp()).getAvailableColumns(), rewriter, innerJoinOp->getLoc());
-      rewriter.replaceOp(innerJoinOp, translateSelection(cp,innerJoinOp.predicate(),rewriter,innerJoinOp->getLoc()));
+      auto cp = translateNLJoin(adaptor.left(), adaptor.right(), mlir::cast<Operator>(innerJoinOp.left().getDefiningOp()).getAvailableColumns(), rewriter, innerJoinOp->getLoc());
+      rewriter.replaceOp(innerJoinOp, translateSelection(cp, innerJoinOp.predicate(), rewriter, innerJoinOp->getLoc()));
       return success();
    }
 };
@@ -244,10 +249,10 @@ class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-         vector = rewriter.create<mlir::subop::CreateOp>(sortOp->getLoc(), vectorType, "");
+         vector = rewriter.create<mlir::subop::CreateOp>(sortOp->getLoc(), vectorType, mlir::Attribute{});
       }
       rewriter.create<mlir::subop::MaterializeOp>(sortOp->getLoc(), adaptor.rel(), vector, helper.createColumnstateMapping());
-      auto block = new Block;
+      auto *block = new Block;
       std::vector<Attribute> sortByMembers;
       std::vector<Type> argumentTypes;
       std::vector<Location> locs;
@@ -288,22 +293,25 @@ class MaterializeLowering : public OpConversionPattern<mlir::relalg::Materialize
 
    LogicalResult matchAndRewrite(mlir::relalg::MaterializeOp materializeOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       std::vector<Attribute> colNames;
+      std::vector<Attribute> colMemberNames;
       std::vector<Attribute> colTypes;
       std::vector<NamedAttribute> mapping;
       for (size_t i = 0; i < materializeOp.columns().size(); i++) {
          auto columnName = materializeOp.columns()[i].cast<mlir::StringAttr>().str();
+         auto colMemberName = getUniqueMember(columnName);
          auto columnAttr = materializeOp.cols()[i].cast<mlir::tuples::ColumnRefAttr>();
          auto columnType = columnAttr.getColumn().type;
          colNames.push_back(rewriter.getStringAttr(columnName));
+         colMemberNames.push_back(rewriter.getStringAttr(colMemberName));
          colTypes.push_back(mlir::TypeAttr::get(columnType));
-         mapping.push_back(rewriter.getNamedAttr(columnName, columnAttr));
+         mapping.push_back(rewriter.getNamedAttr(colMemberName, columnAttr));
       }
-      auto tableRefType = mlir::subop::TableType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr(colNames), rewriter.getArrayAttr(colTypes)));
+      auto tableRefType = mlir::subop::TableType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr(colMemberNames), rewriter.getArrayAttr(colTypes)));
       mlir::Value table;
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-         table = rewriter.create<mlir::subop::CreateOp>(materializeOp->getLoc(), tableRefType, "");
+         table = rewriter.create<mlir::subop::CreateOp>(materializeOp->getLoc(), tableRefType, rewriter.getArrayAttr(colNames));
       }
       rewriter.create<mlir::subop::MaterializeOp>(materializeOp->getLoc(), adaptor.rel(), table, rewriter.getDictionaryAttr(mapping));
       rewriter.replaceOpWithNewOp<mlir::subop::ConvertToExplicit>(materializeOp, mlir::dsa::TableType::get(rewriter.getContext()), table);

@@ -40,8 +40,8 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
-#include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
 #include "mlir/Dialect/SCF/SCF.h"
+#include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
 
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/util/UtilDialect.h"

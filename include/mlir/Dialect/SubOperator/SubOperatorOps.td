@@ -9,6 +9,7 @@ include "mlir/Interfaces/ControlFlowInterfaces.td"
 include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/IR/SymbolInterfaces.td"
 include "mlir/Dialect/TupleStream/TupleStreamBase.td"
+include "SubOpInterfaces.td"
 
 
 //===----------------------------------------------------------------------===//
@@ -88,14 +89,14 @@ def List : SubOperator_Type<"List", "list"> {
 //===----------------------------------------------------------------------===//
 class SubOperator_Op<string mnemonic, list<Trait> traits = []> : Op<SubOperator_Dialect, mnemonic, traits> {}
 
-def ScatterByEntryRef : SubOperator_Op<"scatter_ref"> {
+def ScatterByEntryRef : SubOperator_Op<"scatter_ref",[SubOperator]> {
     let summary = "writes to the entry of a state (randomly) using a supplied entry reference";
 }
 
-def GatherOp : SubOperator_Op<"gather"> {
+def GatherOp : SubOperator_Op<"gather",[SubOperator]> {
   let summary = "reads member values  using a given value";
 }
-def FlattenOp : SubOperator_Op<"flatten"> {
+def FlattenOp : SubOperator_Op<"flatten",[SubOperator]> {
   let summary = "flattens an list column";
   let description = [{#
    Example:
@@ -105,7 +106,7 @@ def FlattenOp : SubOperator_Op<"flatten"> {
   }];
 }
 
-def ReduceOp : SubOperator_Op<"reduce"> {
+def ReduceOp : SubOperator_Op<"reduce",[SubOperator]> {
   let summary = "reduce";
   let description =[{
   ```mlir
@@ -118,7 +119,7 @@ def ReduceOp : SubOperator_Op<"reduce"> {
   }];
 }
 
-def NestedMapOp : SubOperator_Op<"nested_map"> {
+def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator]> {
    let summary = "compute nested map";
   let description = [{#
      Example:
@@ -140,6 +141,10 @@ def NestedMapOp : SubOperator_Op<"nested_map"> {
     let results = (outs TupleStream : $res);
     let regions = (region SizedRegion<1>:$region);
     let hasCustomAssemblyFormat = 1;
+    let extraClassDeclaration = [{
+        std::vector<std::string> getWrittenMembers();
+        std::vector<std::string> getReadMembers();
+    }];
 }
 def GetReferenceOp : SubOperator_Op<"get_reference", [NoSideEffect]> {
     let summary = "get reference to an externally defined object";
@@ -151,27 +156,30 @@ def GetReferenceOp : SubOperator_Op<"get_reference", [NoSideEffect]> {
 def CreateOp : SubOperator_Op<"create", [NoSideEffect]> {
     let summary = "create new state";
 
-    let arguments = (ins StrAttr: $descr);
+    let arguments = (ins OptionalAttr<AnyAttr>: $descr);
     let results = (outs AnyType : $res);
-    let assemblyFormat = [{  $descr `:` type($res) attr-dict }];
+    let assemblyFormat = [{  ($descr^)? `->` type($res) attr-dict }];
 }
 
-def ScanOp : SubOperator_Op<"scan", [NoSideEffect]> {
+def ScanOp : SubOperator_Op<"scan", [NoSideEffect,SubOperator]> {
     let summary = "scan state (sequentially)";
 
     let arguments = (ins AnyType : $state, DictionaryAttr : $mapping );
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $state `:` type($state) custom<StateColumnMapping>($mapping) attr-dict }];
+    let extraClassDeclaration = [{
+        std::vector<std::string> getReadMembers();
+    }];
 }
 
-def InFlightOp : SubOperator_Op<"in_flight", [NoSideEffect]> {
+def InFlightOp : SubOperator_Op<"in_flight", [NoSideEffect,SubOperator]> {
     let summary = "operation symbolizes 'in flight' tuple stream -> values => columns";
 
     let arguments = (ins Variadic<AnyType> : $values, ArrayAttr : $columns );
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $values `:` type($values) `=` `>` custom<CustDefArr>($columns) attr-dict }];
 }
-def CombineInFlightOp : SubOperator_Op<"combine_in_flight", [NoSideEffect]> {
+def CombineInFlightOp : SubOperator_Op<"combine_in_flight", [NoSideEffect,SubOperator]> {
     let summary = "combines in flight tuple streams";
 
     let arguments = (ins TupleStream :$left, TupleStream:$right);
@@ -179,7 +187,7 @@ def CombineInFlightOp : SubOperator_Op<"combine_in_flight", [NoSideEffect]> {
     let assemblyFormat = [{  $left `,` $right attr-dict }];
 }
 
-def MapOp : SubOperator_Op<"map", [NoSideEffect]> {
+def MapOp : SubOperator_Op<"map", [NoSideEffect,SubOperator]> {
     let summary = "map operation";
 
     let arguments = (ins TupleStream:$rel,ArrayAttr:$computed_cols);
@@ -187,7 +195,7 @@ def MapOp : SubOperator_Op<"map", [NoSideEffect]> {
     let regions = (region SizedRegion<1>:$fn);
     let assemblyFormat = [{  $rel `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($fn) attr-dict-with-keyword }];
 }
-def SortOp : SubOperator_Op<"sort", [IsolatedFromAbove]> {
+def SortOp : SubOperator_Op<"sort", [IsolatedFromAbove,SubOperator]> {
     let summary = "sort vector";
     let description = [{
         Sort a records in a vector. The region yields the order of two arguments as in C++ `std::sort`.
@@ -196,34 +204,44 @@ def SortOp : SubOperator_Op<"sort", [IsolatedFromAbove]> {
     let arguments = (ins Vector:$toSort,ArrayAttr: $sortBy);
     let regions = (region SizedRegion<1>:$region);
   let hasCustomAssemblyFormat = 1;
+      let extraClassDeclaration = [{
+          std::vector<std::string> getWrittenMembers();
+          std::vector<std::string> getReadMembers();
+      }];
 }
 
 
-def FilterOp : SubOperator_Op<"filter", [NoSideEffect]> {
+def FilterOp : SubOperator_Op<"filter", [NoSideEffect,SubOperator]> {
     let summary = "filter stream of tuples according to one or more boolean columns (all 1 => keep tuple, otherwise discard) ";
     let arguments = (ins TupleStream : $stream, ArrayAttr : $conditions );
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream custom<CustRefArr>($conditions)  attr-dict }];
 }
-def RenamingOp : SubOperator_Op<"rename", [NoSideEffect]> {
+def RenamingOp : SubOperator_Op<"rename", [NoSideEffect,SubOperator]> {
     let summary = "rename columns";
 
     let arguments = (ins TupleStream:$stream,ArrayAttr:$columns);
     let results = (outs TupleStream:$result);
     let assemblyFormat = [{ $stream `renamed` `:` custom<CustDefArr>($columns) attr-dict-with-keyword }];
 }
-def MaterializeOp : SubOperator_Op<"materialize"> {
+def MaterializeOp : SubOperator_Op<"materialize",[SubOperator]> {
     let summary = "materialize state (sequentially)";
 
     let arguments = (ins TupleStream : $stream, AnyType : $state, DictionaryAttr : $mapping );
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream custom<ColumnStateMapping>($mapping) `,` $state `:` type($state)  attr-dict }];
+    let extraClassDeclaration = [{
+        std::vector<std::string> getWrittenMembers();
+    }];
 }
-def ConvertToExplicit : SubOperator_Op<"convert_to_explicit"> {
+def ConvertToExplicit : SubOperator_Op<"convert_to_explicit",[SubOperator]> {
     let summary = "converts a declarative state to an explicit state";
 
     let arguments = (ins AnyType : $state);
     let results = (outs AnyType : $explicit_state);
     let assemblyFormat = [{  $state `:` type($state) `->` type($explicit_state)  attr-dict }];
+    let extraClassDeclaration = [{
+        std::vector<std::string> getReadMembers();
+    }];
 }
 #endif // LINGODB_DIALECT_SubOperator_IR_OPS

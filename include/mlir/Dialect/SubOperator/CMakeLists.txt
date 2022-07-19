@@ -8,5 +8,8 @@ mlir_tablegen(SubOperatorOpsAttributes.h.inc -gen-attrdef-decls --attrdefs-diale
 mlir_tablegen(SubOperatorOpsAttributes.cpp.inc -gen-attrdef-defs --attrdefs-dialect=subop)
 mlir_tablegen(SubOperatorOps.h.inc -gen-op-decls)
 mlir_tablegen(SubOperatorOps.cpp.inc -gen-op-defs)
+set(LLVM_TARGET_DEFINITIONS SubOpInterfaces.td)
+mlir_tablegen(SubOperatorOpsInterfaces.h.inc -gen-op-interface-decls)
+mlir_tablegen(SubOperatorOpsInterfaces.cpp.inc -gen-op-interface-defs)
 add_public_tablegen_target(MLIRSubOperatorOpsIncGen)
 add_mlir_doc(SubOperatorOps SubOperatorDialect SubOperator/ -gen-dialect-doc)

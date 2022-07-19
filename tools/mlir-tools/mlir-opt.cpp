@@ -11,6 +11,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
+#include "mlir/Dialect/SubOperator/Transforms/Passes.h"
 
 #include "mlir/Dialect/RelAlg/Passes.h"
 
@@ -125,6 +126,7 @@ int main(int argc, char** argv) {
    mlir::relalg::registerQueryOptimizationPasses();
    mlir::db::registerDBConversionPasses();
    mlir::subop::registerSubOpToControlFlowConversionPasses();
+   mlir::subop::registerSubOpTransformations();
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::dsa::createLowerToStdPass();
    });
