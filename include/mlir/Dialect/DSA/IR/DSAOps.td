@@ -162,6 +162,13 @@ def DSA_HashtableInsert : DSA_Op<"ht_insert"> {
     let arguments = (ins AnyType:$ht, AnyType:$key, Optional<AnyType>: $val);
     let regions = (region AnyRegion:$hash, AnyRegion:$equal, AnyRegion:$reduce);
 }
+def DSA_HashtableGetRefOrInsert : DSA_Op<"ht_get_ref_or_insert",[IsolatedFromAbove]> {
+    let summary = "returns the reference to a hashtable entry matching the key (if none is found, a new one is created)";
+
+    let arguments = (ins AnyType:$ht, Index:$hash, AnyType:$key);
+    let results = (outs AnyType:$ref);
+    let regions = (region SizedRegion<1>:$equal, SizedRegion<1>:$initial);
+}
 
 def DSA_Finalize : DSA_Op<"finalize"> {
     let summary = "finalize TableBuilder or JoinHashtable";
@@ -248,7 +255,7 @@ def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
 }
 
 def YieldOp : DSA_Op<"yield", [NoSideEffect, Terminator,
-                               ParentOneOf<["ForOp","SortOp","HashtableInsert"]>]> {
+                               ParentOneOf<["ForOp","SortOp","HashtableInsert","HashtableGetRefOrInsert"]>]> {
     let arguments = (ins Variadic<AnyType>:$results);
     let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
     let assemblyFormat = [{  attr-dict ($results^ `:` type($results))? }];

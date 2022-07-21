@@ -1,5 +1,6 @@
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
+#include "mlir/Dialect/util/UtilOps.h"
 
 #include "mlir/IR/OpImplementation.h"
 #include <unordered_set>
@@ -258,6 +259,58 @@ void dsa::HashtableInsert::print(OpAsmPrinter& p) {
    }
 }
 
+ParseResult mlir::dsa::HashtableGetRefOrInsert::parse(OpAsmParser& parser, OperationState& result) {
+   OpAsmParser::UnresolvedOperand ht, key, hash;
+   Type htType;
+   Type keyType;
+   if (parser.parseOperand(ht) || parser.parseColonType(htType) || parser.parseComma() || parser.parseOperand(hash) || parser.parseComma() || parser.parseOperand(key) || parser.parseColonType(keyType)) {
+      return failure();
+   }
+   parser.resolveOperand(ht, htType, result.operands);
+   parser.resolveOperand(hash, parser.getBuilder().getIndexType(), result.operands);
+   parser.resolveOperand(key, keyType, result.operands);
+
+   Region* equal = result.addRegion();
+   Region* initial = result.addRegion();
+   if (parser.parseKeyword("eq") || parser.parseColon()) {
+      return failure();
+   }
+   OpAsmParser::Argument left, right;
+   Type leftArgType;
+   Type rightArgType;
+   if (parser.parseLParen() || parser.parseArgument(left) || parser.parseColonType(leftArgType) || parser.parseComma() || parser.parseArgument(right), parser.parseColonType(rightArgType) || parser.parseRParen()) {
+      return failure();
+   }
+   left.type = leftArgType;
+   right.type = rightArgType;
+   if (parser.parseRegion(*equal, {left, right})) return failure();
+   if (parser.parseKeyword("initial") || parser.parseColon()) {
+      return failure();
+   }
+   if (parser.parseRegion(*initial, {})) return failure();
+   result.addTypes(mlir::util::RefType::get(parser.getContext(),htType.cast<mlir::dsa::AggregationHashtableType>().getElementType()));
+   return success();
+}
+
+void dsa::HashtableGetRefOrInsert::print(OpAsmPrinter& p) {
+   dsa::HashtableGetRefOrInsert& op = *this;
+   p << " " << op.ht() << " : " << op.ht().getType() << ", " << op.hash() << ", " << op.key() << " : " << op.key().getType();
+   p << " eq: (";
+   bool first = true;
+   for (auto arg : op.equal().front().getArguments()) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      p << arg << ":" << arg.getType();
+   }
+   p << ")";
+   p.printRegion(op.equal(), false, true);
+
+   p << " initial:";
+   p.printRegion(op.initial(), false, true);
+}
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DSA/IR/DSAOps.cpp.inc"
 #include "mlir/Dialect/DSA/IR/DSAOpsInterfaces.cpp.inc"
