@@ -48,5 +48,7 @@ void SubOperatorDialect::registerTypes() {
 #include "mlir/Dialect/SubOperator/SubOperatorOpsTypes.cpp.inc"
       >();
 }
+#include "mlir/Dialect/SubOperator/SubOperatorOpsTypeInterfaces.cpp.inc"
 
 } // namespace mlir::subop
+

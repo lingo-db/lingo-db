@@ -13,6 +13,7 @@
 #include "mlir/Dialect/SubOperator/SubOperatorOpsTypes.h"
 
 #include "mlir/Dialect/TupleStream/Column.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOpsAttributes.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOpsTypes.h"
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"

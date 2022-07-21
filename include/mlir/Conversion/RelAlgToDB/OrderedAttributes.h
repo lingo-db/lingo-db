@@ -77,6 +77,14 @@ class OrderedAttributes {
    const std::vector<const mlir::tuples::Column*>& getAttrs() const {
       return attrs;
    }
+   mlir::ArrayAttr getArrayAttr(mlir::MLIRContext* context) const {
+      std::vector<mlir::Attribute> attrVec;
+      auto& colManager=context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+      for(const auto *a:attrs){
+         attrVec.push_back(colManager.createRef(a));
+      }
+      return mlir::ArrayAttr::get(context,attrVec);
+   }
    size_t getPos(const mlir::tuples::Column* attr) {
       return std::find(attrs.begin(), attrs.end(), attr) - attrs.begin();
    }

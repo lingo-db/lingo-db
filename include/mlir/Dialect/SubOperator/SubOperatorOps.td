@@ -44,28 +44,28 @@ def StateMembers : SubOperator_Attr<"StateMembers"> {
 // Types
 //===----------------------------------------------------------------------===//
 
-class SubOperator_Type<string name, string typeMnemonic> : TypeDef<SubOperator_Dialect, name> {
+class SubOperator_Type<string name, string typeMnemonic, list<Trait> traits = []> : TypeDef<SubOperator_Dialect, name,traits> {
     let mnemonic = typeMnemonic;
 }
 def TableRef : SubOperator_Type<"TableRef", "table_ref"> {
     let summary = "reference to table";
-    let parameters = (ins "StateMembersAttr":$columns);
-    let assemblyFormat = "`<` custom<StateMembers>($columns) `>`";
+    let parameters = (ins "StateMembersAttr":$members);
+    let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
 }
 def Table : SubOperator_Type<"Table", "table"> {
     let summary = "reference to table";
-    let parameters = (ins "StateMembersAttr":$columns);
-    let assemblyFormat = "`<` custom<StateMembers>($columns) `>`";
+    let parameters = (ins "StateMembersAttr":$members);
+    let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
 }
-def SimpleState : SubOperator_Type<"SimpleState", "simple_state"> {
+def SimpleState : SubOperator_Type<"SimpleState", "simple_state",[State]> {
     let summary = "simple state with multiple members";
-    let parameters = (ins "StateMembersAttr":$columns);
-    let assemblyFormat = "`<` custom<StateMembers>($columns) `>`";
+    let parameters = (ins "StateMembersAttr":$members);
+    let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
 }
 def Vector : SubOperator_Type<"Vector", "vector"> {
     let summary = "vector type";
-    let parameters = (ins "StateMembersAttr":$columns);
-    let assemblyFormat = "`<` custom<StateMembers>($columns) `>`";
+    let parameters = (ins "StateMembersAttr":$members);
+    let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
 }
 
 def Entry : SubOperator_Type<"Entry", "entry"> {
@@ -89,8 +89,12 @@ def List : SubOperator_Type<"List", "list"> {
 //===----------------------------------------------------------------------===//
 class SubOperator_Op<string mnemonic, list<Trait> traits = []> : Op<SubOperator_Dialect, mnemonic, traits> {}
 
-def ScatterByEntryRef : SubOperator_Op<"scatter_ref",[SubOperator]> {
-    let summary = "writes to the entry of a state (randomly) using a supplied entry reference";
+def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
+    let summary = "performs a lookup in a state and annotates the result as attribute ";
+    let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
+    let results = (outs TupleStream: $res);
+    let assemblyFormat = [{  $stream $state `:` type($state) custom<CustRefArr>($keys) custom<CustDef>($ref) attr-dict }];
+
 }
 
 def GatherOp : SubOperator_Op<"gather",[SubOperator]> {
@@ -117,6 +121,13 @@ def ReduceOp : SubOperator_Op<"reduce",[SubOperator]> {
     } eq: (){} combine: (){} initial: (){}
   ```
   }];
+  let regions = (region SizedRegion<1>:$region);
+  let arguments = (ins TupleStream: $stream, ColumnRefAttr: $ref, ArrayAttr: $columns, ArrayAttr: $members);
+  let hasCustomAssemblyFormat = 1;
+        let extraClassDeclaration = [{
+            std::vector<std::string> getWrittenMembers();
+            std::vector<std::string> getReadMembers();
+        }];
 }
 
 def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator]> {
@@ -158,7 +169,9 @@ def CreateOp : SubOperator_Op<"create", [NoSideEffect]> {
 
     let arguments = (ins OptionalAttr<AnyAttr>: $descr);
     let results = (outs AnyType : $res);
-    let assemblyFormat = [{  ($descr^)? `->` type($res) attr-dict }];
+    let regions = (region AnyRegion:$initFn);
+    let assemblyFormat = [{  ($descr^)? `->` type($res) (`initial` `:` $initFn^)? attr-dict }];
+
 }
 
 def ScanOp : SubOperator_Op<"scan", [NoSideEffect,SubOperator]> {

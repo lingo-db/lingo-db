@@ -254,12 +254,12 @@ ParseResult mlir::subop::SortOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
    }
    for (size_t i = 0; i < sortBy.size(); i++) {
       size_t j = 0;
-      for (; j < vecType.getColumns().getNames().size(); j++) {
-         if (sortBy[i] == vecType.getColumns().getNames()[j]) {
+      for (; j < vecType.getMembers().getNames().size(); j++) {
+         if (sortBy[i] == vecType.getMembers().getNames()[j]) {
             break;
          }
       }
-      leftArgs[i].type = vecType.getColumns().getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      leftArgs[i].type = vecType.getMembers().getTypes()[j].cast<mlir::TypeAttr>().getValue();
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(leftArgs[i])) return failure();
    }
@@ -268,12 +268,12 @@ ParseResult mlir::subop::SortOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
    }
    for (size_t i = 0; i < sortBy.size(); i++) {
       size_t j = 0;
-      for (; j < vecType.getColumns().getNames().size(); j++) {
-         if (sortBy[i] == vecType.getColumns().getNames()[j]) {
+      for (; j < vecType.getMembers().getNames().size(); j++) {
+         if (sortBy[i] == vecType.getMembers().getNames()[j]) {
             break;
          }
       }
-      rightArgs[i].type = vecType.getColumns().getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      rightArgs[i].type = vecType.getMembers().getTypes()[j].cast<mlir::TypeAttr>().getValue();
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(rightArgs[i])) return failure();
    }
@@ -310,6 +310,90 @@ void subop::SortOp::print(OpAsmPrinter& p) {
          p << ",";
       }
       p << op.region().front().getArgument(op.sortBy().size() + i);
+   }
+   p << "])";
+   p.printRegion(op.region(), false, true);
+}
+
+ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   OpAsmParser::UnresolvedOperand stream;
+   if (parser.parseOperand(stream)) {
+      return failure();
+   }
+   parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands);
+   mlir::tuples::ColumnRefAttr reference;
+   parseCustRef(parser, reference);
+   result.addAttribute("ref", reference);
+
+   mlir::ArrayAttr columns;
+   parseCustRefArr(parser, columns);
+   result.addAttribute("columns", columns);
+   mlir::ArrayAttr members;
+   parser.parseAttribute(members);
+   result.addAttribute("members", members);
+   std::vector<OpAsmParser::Argument> leftArgs(columns.size());
+   std::vector<OpAsmParser::Argument> rightArgs(members.size());
+   if (parser.parseLParen() || parser.parseLSquare()) {
+      return failure();
+   }
+   auto referenceType = reference.getColumn().type.cast<mlir::subop::EntryRefType>();
+   auto stateMembers = referenceType.getT().cast<mlir::subop::State>().getMembers();
+   for (size_t i = 0; i < columns.size(); i++) {
+      leftArgs[i].type = columns[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+      if (i > 0 && parser.parseComma().failed()) return failure();
+      if (parser.parseArgument(leftArgs[i])) return failure();
+   }
+   if (parser.parseRSquare() || parser.parseComma() || parser.parseLSquare()) {
+      return failure();
+   }
+   for (size_t i = 0; i < members.size(); i++) {
+      size_t j = 0;
+      for (; j < stateMembers.getNames().size(); j++) {
+         if (members[i] == stateMembers.getNames()[j]) {
+            break;
+         }
+      }
+      rightArgs[i].type = stateMembers.getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      if (i > 0 && parser.parseComma().failed()) return failure();
+      if (parser.parseArgument(rightArgs[i])) return failure();
+   }
+
+   if (parser.parseRSquare() || parser.parseRParen()) {
+      return failure();
+   }
+   std::vector<OpAsmParser::Argument> args;
+   args.insert(args.end(), leftArgs.begin(), leftArgs.end());
+   args.insert(args.end(), rightArgs.begin(), rightArgs.end());
+   Region* body = result.addRegion();
+   if (parser.parseRegion(*body, args)) return failure();
+   return success();
+}
+
+void subop::ReduceOp::print(OpAsmPrinter& p) {
+   subop::ReduceOp& op = *this;
+   p << " " << op.stream();
+   printCustRef(p, op, op.ref());
+   printCustRefArr(p, op, op.columns());
+   p << " " << op.members() << " ";
+   p << "([";
+   bool first = true;
+   for (size_t i = 0; i < op.columns().size(); i++) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      p << op.region().front().getArgument(i);
+   }
+   p << "],[";
+   first = true;
+   for (size_t i = 0; i < op.members().size(); i++) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      p << op.region().front().getArgument(op.columns().size() + i);
    }
    p << "])";
    p.printRegion(op.region(), false, true);
@@ -385,7 +469,7 @@ std::vector<std::string> subop::NestedMapOp::getWrittenMembers() {
 }
 std::vector<std::string> subop::SortOp::getWrittenMembers() {
    std::vector<std::string> res;
-   for (auto x : toSort().getType().cast<mlir::subop::VectorType>().getColumns().getNames()) {
+   for (auto x : toSort().getType().cast<mlir::subop::VectorType>().getMembers().getNames()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
@@ -399,9 +483,23 @@ std::vector<std::string> subop::SortOp::getReadMembers() {
 }
 std::vector<std::string> subop::ConvertToExplicit::getReadMembers() {
    std::vector<std::string> res;
-   for (auto x : state().getType().cast<mlir::subop::TableType>().getColumns().getNames()) {
+   for (auto x : state().getType().cast<mlir::subop::TableType>().getMembers().getNames()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
+   return res;
+}
+std::vector<std::string> subop::ReduceOp::getWrittenMembers() {
+   std::vector<std::string> res;
+   for (auto x : members()) {
+      res.push_back(x.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
+std::vector<std::string> subop::ReduceOp::getReadMembers() {
+   std::vector<std::string> res;
+   for (auto x : members()) {
+         res.push_back(x.cast<mlir::StringAttr>().str());
+      }
    return res;
 }
 

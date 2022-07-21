@@ -5,6 +5,8 @@
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
 
+#include "mlir/Dialect/SubOperator/SubOperatorOpsTypeInterfaces.h.inc"
+
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOpsTypes.h.inc"
 

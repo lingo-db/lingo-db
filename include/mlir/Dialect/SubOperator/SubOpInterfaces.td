@@ -25,5 +25,15 @@ def SubOperator : OpInterface<"SubOperator"> {
 
 }
 
+def State : TypeInterface<"State"> {
+  let cppNamespace = "::mlir::subop";
+  let methods = [
+     InterfaceMethod<
+       /*description=*/"",
+       /*retTy=*/"StateMembersAttr",
+       /*methodName=*/"getMembers">
+   ];
+}
+
 
 #endif// Interfaces
