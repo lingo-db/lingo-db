@@ -65,8 +65,10 @@ class CreateDsLowering : public OpConversionPattern<mlir::dsa::CreateDS> {
             Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(loc, 4);
             auto ptr = rt::Hashtable::create(rewriter, loc)({typeSize, initialCapacity})[0];
             mlir::Value casted = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, getHashtableType(rewriter.getContext(), keyType, aggrType), ptr);
-            Value initValAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), adaptor.init_val().getType()), casted, 5);
-            rewriter.create<mlir::util::StoreOp>(loc, adaptor.init_val(), initValAddress, Value());
+            if(adaptor.init_val()) {
+               Value initValAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), adaptor.init_val().getType()), casted, 5);
+               rewriter.create<mlir::util::StoreOp>(loc, adaptor.init_val(), initValAddress, Value());
+            }
             rewriter.replaceOp(createOp, casted);
             return success();
          }

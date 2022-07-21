@@ -53,7 +53,7 @@
 
         %initial = util.pack %zero, %one : i32,i32 -> tuple<i32,i32>
 
-        %ht = dsa.create_ds %initial : tuple<i32,i32> -> !dsa.aggr_ht<tuple<!db.nullable<!db.string>,i32>,tuple<i32,i32>>
+        %ht = dsa.create_ds !dsa.aggr_ht<tuple<!db.nullable<!db.string>,i32>,tuple<i32,i32>>
         %ref1 = dsa.ht_get_ref_or_insert %ht : !dsa.aggr_ht<tuple<!db.nullable<!db.string>,i32>,tuple<i32,i32>>, %hash1, %key1 : tuple<!db.nullable<!db.string>,i32>
          eq: (%left : tuple<!db.nullable<!db.string>,i32>,%right : tuple<!db.nullable<!db.string>,i32>){
             %l1,%l2 = util.unpack %left : tuple<!db.nullable<!db.string>,i32> -> !db.nullable<!db.string>,i32

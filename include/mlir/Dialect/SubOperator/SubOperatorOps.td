@@ -57,10 +57,21 @@ def Table : SubOperator_Type<"Table", "table"> {
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
 }
-def SimpleState : SubOperator_Type<"SimpleState", "simple_state",[State]> {
+def SimpleState : SubOperator_Type<"SimpleState", "simple_state",[State,StateSupportingLookup]> {
     let summary = "simple state with multiple members";
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
+        let extraClassDeclaration = [{
+            StateMembersAttr getValueMembers();
+        }];
+}
+def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,StateSupportingLookup]> {
+    let summary = "simple state with multiple members";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let extraClassDeclaration = [{
+        StateMembersAttr getMembers();
+    }];
 }
 def Vector : SubOperator_Type<"Vector", "vector"> {
     let summary = "vector type";
@@ -93,8 +104,8 @@ def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
     let summary = "performs a lookup in a state and annotates the result as attribute ";
     let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
     let results = (outs TupleStream: $res);
-    let assemblyFormat = [{  $stream $state `:` type($state) custom<CustRefArr>($keys) custom<CustDef>($ref) attr-dict }];
-
+    let regions = (region AnyRegion:$eqFn, AnyRegion:$initFn);
+      let hasCustomAssemblyFormat = 1;
 }
 
 def GatherOp : SubOperator_Op<"gather",[SubOperator]> {

@@ -32,7 +32,16 @@ def State : TypeInterface<"State"> {
        /*description=*/"",
        /*retTy=*/"StateMembersAttr",
        /*methodName=*/"getMembers">
-   ];
+      ];
+}
+def StateSupportingLookup : TypeInterface<"StateSupportingLookup"> {
+  let cppNamespace = "::mlir::subop";
+  let methods = [
+     InterfaceMethod<
+       /*description=*/"",
+       /*retTy=*/"StateMembersAttr",
+       /*methodName=*/"getValueMembers">
+      ];
 }
 
 

@@ -315,6 +315,101 @@ void subop::SortOp::print(OpAsmPrinter& p) {
    p.printRegion(op.region(), false, true);
 }
 
+ParseResult mlir::subop::LookupOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   OpAsmParser::UnresolvedOperand stream;
+   if (parser.parseOperand(stream)) {
+      return failure();
+   }
+   parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands);
+   OpAsmParser::UnresolvedOperand state;
+   if (parser.parseOperand(state)) {
+      return failure();
+   }
+
+   mlir::ArrayAttr keys;
+   parseCustRefArr(parser, keys);
+   result.addAttribute("keys", keys);
+   mlir::Type stateType;
+   parser.parseColonType(stateType);
+   parser.resolveOperand(state, stateType, result.operands);
+   mlir::tuples::ColumnDefAttr reference;
+   parseCustDef(parser, reference);
+   result.addAttribute("ref", reference);
+   std::vector<OpAsmParser::Argument> leftArgs(keys.size());
+   std::vector<OpAsmParser::Argument> rightArgs(keys.size());
+   Region* eqFn = result.addRegion();
+
+   if (parser.parseOptionalKeyword("eq").succeeded()) {
+      if (parser.parseColon() || parser.parseLParen() || parser.parseLSquare()) {
+         return failure();
+      }
+      for (size_t i = 0; i < keys.size(); i++) {
+         leftArgs[i].type = keys[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+         if (i > 0 && parser.parseComma().failed()) return failure();
+         if (parser.parseArgument(leftArgs[i])) return failure();
+      }
+      if (parser.parseRSquare() || parser.parseComma() || parser.parseLSquare()) {
+         return failure();
+      }
+      for (size_t i = 0; i < keys.size(); i++) {
+         rightArgs[i].type = keys[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+         if (i > 0 && parser.parseComma().failed()) return failure();
+         if (parser.parseArgument(rightArgs[i])) return failure();
+      }
+      if (parser.parseRSquare() || parser.parseRParen()) {
+         return failure();
+      }
+      std::vector<OpAsmParser::Argument> args;
+      args.insert(args.end(), leftArgs.begin(), leftArgs.end());
+      args.insert(args.end(), rightArgs.begin(), rightArgs.end());
+      if (parser.parseRegion(*eqFn, args)) return failure();
+   }
+   Region* initialFn = result.addRegion();
+
+   if (parser.parseOptionalKeyword("initial").succeeded()) {
+      if (parser.parseColon()) return failure();
+      if (parser.parseRegion(*initialFn, {})) return failure();
+   }
+   result.addTypes(mlir::tuples::TupleStreamType::get(parser.getContext()));
+   return success();
+}
+
+void subop::LookupOp::print(OpAsmPrinter& p) {
+   subop::LookupOp& op = *this;
+   p << " " << op.stream() << op.state() << " ";
+   printCustRefArr(p, op, op.keys());
+   p << " : " << op.state().getType() << " ";
+   printCustDef(p, op, op.ref());
+   if (!op.eqFn().empty()) {
+      p << "eq: ([";
+      bool first = true;
+      for (size_t i = 0; i < op.keys().size(); i++) {
+         if (first) {
+            first = false;
+         } else {
+            p << ",";
+         }
+         p << op.eqFn().front().getArgument(i);
+      }
+      p << "],[";
+      first = true;
+      for (size_t i = 0; i < op.keys().size(); i++) {
+         if (first) {
+            first = false;
+         } else {
+            p << ",";
+         }
+         p << op.eqFn().front().getArgument(op.keys().size() + i);
+      }
+      p << "]) ";
+      p.printRegion(op.eqFn(), false, true);
+   }
+   if (!op.initFn().empty()) {
+      p << "initial: ";
+      p.printRegion(op.initFn(), false, true);
+   }
+}
+
 ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    OpAsmParser::UnresolvedOperand stream;
    if (parser.parseOperand(stream)) {
@@ -371,7 +466,7 @@ ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
 
 void subop::ReduceOp::print(OpAsmPrinter& p) {
    subop::ReduceOp& op = *this;
-   p << " " << op.stream();
+   p << " " << op.stream()<<" ";
    printCustRef(p, op, op.ref());
    printCustRefArr(p, op, op.columns());
    p << " " << op.members() << " ";
@@ -498,8 +593,8 @@ std::vector<std::string> subop::ReduceOp::getWrittenMembers() {
 std::vector<std::string> subop::ReduceOp::getReadMembers() {
    std::vector<std::string> res;
    for (auto x : members()) {
-         res.push_back(x.cast<mlir::StringAttr>().str());
-      }
+      res.push_back(x.cast<mlir::StringAttr>().str());
+   }
    return res;
 }
 

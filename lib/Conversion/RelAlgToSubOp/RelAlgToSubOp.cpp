@@ -365,32 +365,30 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       std::vector<mlir::Value> defaultValues;
       std::vector<mlir::Type> aggrTypes;
    };
-   mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::Value left, mlir::Value right, mlir::Location loc) {
+   mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::ValueRange leftUnpacked, mlir::ValueRange rightUnpacked, mlir::Location loc) const {
       mlir::Value equal = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-      auto leftUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, left);
-      auto rightUnpacked = rewriter.create<mlir::util::UnPackOp>(loc, right);
-      for (size_t i = 0; i < leftUnpacked.getNumResults(); i++) {
+      for (size_t i = 0; i < leftUnpacked.size(); i++) {
          mlir::Value compared;
-         auto currLeftType = leftUnpacked->getResult(i).getType();
-         auto currRightType = rightUnpacked.getResult(i).getType();
+         auto currLeftType = leftUnpacked[i].getType();
+         auto currRightType = rightUnpacked[i].getType();
          auto currLeftNullableType = currLeftType.dyn_cast_or_null<mlir::db::NullableType>();
          auto currRightNullableType = currRightType.dyn_cast_or_null<mlir::db::NullableType>();
          if (currLeftNullableType || currRightNullableType) {
-            mlir::Value isNull1 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), leftUnpacked->getResult(i));
-            mlir::Value isNull2 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), rightUnpacked->getResult(i));
+            mlir::Value isNull1 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), leftUnpacked[i]);
+            mlir::Value isNull2 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), rightUnpacked[i]);
             mlir::Value anyNull = rewriter.create<mlir::arith::OrIOp>(loc, isNull1, isNull2);
             mlir::Value bothNull = rewriter.create<mlir::arith::AndIOp>(loc, isNull1, isNull2);
             compared = rewriter.create<mlir::scf::IfOp>(
                                   loc, rewriter.getI1Type(), anyNull, [&](mlir::OpBuilder& b, mlir::Location loc) { b.create<mlir::scf::YieldOp>(loc, bothNull); },
                                   [&](mlir::OpBuilder& b, mlir::Location loc) {
-                                     mlir::Value left = rewriter.create<mlir::db::NullableGetVal>(loc, leftUnpacked->getResult(i));
-                                     mlir::Value right = rewriter.create<mlir::db::NullableGetVal>(loc, rightUnpacked->getResult(i));
+                                     mlir::Value left = rewriter.create<mlir::db::NullableGetVal>(loc, leftUnpacked[i]);
+                                     mlir::Value right = rewriter.create<mlir::db::NullableGetVal>(loc, rightUnpacked[i]);
                                      mlir::Value cmpRes = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, left, right);
                                      b.create<mlir::scf::YieldOp>(loc, cmpRes);
                                   })
                           .getResult(0);
          } else {
-            compared = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, leftUnpacked->getResult(i), rightUnpacked.getResult(i));
+            compared = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, leftUnpacked[i], rightUnpacked[i]);
          }
          mlir::Value localEqual = rewriter.create<mlir::arith::AndIOp>(loc, rewriter.getI1Type(), mlir::ValueRange({equal, compared}));
          equal = localEqual;
@@ -627,24 +625,64 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          defMapping.push_back(rewriter.getNamedAttr(memberName, def));
       }
       auto stateMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, names), mlir::ArrayAttr::get(context, types));
-      mlir::subop::SimpleStateType stateType = mlir::subop::SimpleStateType::get(rewriter.getContext(), stateMembers);
+      mlir::Type stateType;
 
-      {
-         mlir::OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-         auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{});
-         createOp.initFn().push_back(initialValueBlock);
-         state = createOp.res();
-      }
+      mlir::Value afterLookup;
       auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("lookup"), "ref");
-      referenceDefAttr.getColumn().type = mlir::subop::EntryRefType::get(context, stateType);
-      mlir::Value afterLookup = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), adaptor.rel(), state, rewriter.getArrayAttr({}), referenceDefAttr);
 
+      if (aggregationOp.group_by_cols().empty()) {
+         stateType = mlir::subop::SimpleStateType::get(rewriter.getContext(), stateMembers);
+         {
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
+            auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{});
+            createOp.initFn().push_back(initialValueBlock);
+            state = createOp.res();
+         }
+         afterLookup = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), adaptor.rel(), state, rewriter.getArrayAttr({}), referenceDefAttr);
+
+      } else {
+         std::vector<mlir::Attribute> keyNames;
+         std::vector<mlir::Attribute> keyTypesAttr;
+         std::vector<mlir::Type> keyTypes;
+         std::vector<mlir::Location> locations;
+         for (auto x : aggregationOp.group_by_cols()) {
+            auto ref = x.cast<mlir::tuples::ColumnRefAttr>();
+            auto memberName = getUniqueMember("keyval");
+            keyNames.push_back(rewriter.getStringAttr(memberName));
+            keyTypesAttr.push_back(mlir::TypeAttr::get(ref.getColumn().type));
+            keyTypes.push_back((ref.getColumn().type));
+            defMapping.push_back(rewriter.getNamedAttr(memberName, colManager.createDef(&ref.getColumn())));
+            locations.push_back(aggregationOp->getLoc());
+         }
+         auto keyMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
+         stateType = mlir::subop::HashMapType::get(rewriter.getContext(), keyMembers, stateMembers);
+         {
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
+            auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{});
+            state = createOp.res();
+         }
+         auto lookupOp = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), adaptor.rel(), state, aggregationOp.group_by_cols(), referenceDefAttr);
+         afterLookup = lookupOp;
+         lookupOp.initFn().push_back(initialValueBlock);
+         mlir::Block* equalBlock = new Block;
+         lookupOp.eqFn().push_back(equalBlock);
+         equalBlock->addArguments(keyTypes, locations);
+         equalBlock->addArguments(keyTypes, locations);
+         {
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(equalBlock);
+            mlir::Value compared = compareKeys(rewriter, equalBlock->getArguments().drop_back(keyTypes.size()), equalBlock->getArguments().drop_front(keyTypes.size()), aggregationOp->getLoc());
+            rewriter.create<mlir::tuples::ReturnOp>(rewriter.getUnknownLoc(), compared);
+         }
+      }
+      referenceDefAttr.getColumn().type = mlir::subop::EntryRefType::get(context, stateType);
       auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(rewriter.getUnknownLoc(), afterLookup, colManager.createRef(&referenceDefAttr.getColumn()), analyzedAggregation.val.getArrayAttr(context), rewriter.getArrayAttr(names));
       mlir::Block* reduceBlock = new Block;
       size_t numColumns = analyzedAggregation.val.getAttrs().size();
       size_t numMembers = types.size();
-      for (auto *c : analyzedAggregation.val.getAttrs()) {
+      for (auto* c : analyzedAggregation.val.getAttrs()) {
          reduceBlock->addArgument(c->type, loc);
       }
       for (auto t : analyzedAggregation.aggrTypes) {
