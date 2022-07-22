@@ -302,7 +302,7 @@ class MaterializeTableLowering : public OpConversionPattern<mlir::subop::Materia
          for (size_t i = 0; i < stateType.getMembers().getTypes().size(); i++) {
             auto memberName = stateType.getMembers().getNames()[i].cast<mlir::StringAttr>().str();
             auto attribute = materializeOp.mapping().get(memberName).cast<mlir::tuples::ColumnRefAttr>();
-            auto val = mapping.resolve(attribute);
+         auto val = mapping.resolve(attribute);
             mlir::Value valid;
             if (val.getType().isa<mlir::db::NullableType>()) {
                valid = rewriter.create<mlir::db::IsNullOp>(materializeOp->getLoc(), val);
@@ -614,6 +614,32 @@ class ScanSimpleStateLowering : public OpConversionPattern<mlir::subop::ScanOp> 
       return success();
    }
 };
+class GatherOpLowering : public OpConversionPattern<mlir::subop::GatherOp> {
+   public:
+   using OpConversionPattern<mlir::subop::GatherOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::GatherOp gatherOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto columns = gatherOp.ref().getColumn().type.cast<mlir::subop::EntryRefType>().getT().cast<mlir::subop::StateSupportingLookup>().getValueMembers();
+      if (auto inFlightOp = mlir::dyn_cast_or_null<mlir::subop::InFlightOp>(adaptor.stream().getDefiningOp())) {
+         rewriter.setInsertionPointAfter(inFlightOp);
+         ColumnMapping mapping(inFlightOp);
+         auto loaded = rewriter.create<mlir::util::LoadOp>(gatherOp->getLoc(), mapping.resolve(gatherOp.ref()));
+         auto unpackedValues = rewriter.create<mlir::util::UnPackOp>(gatherOp->getLoc(), loaded).getResults();
+         std::unordered_map<std::string, mlir::Value> values;
+         for (auto i = 0ul; i < columns.getTypes().size(); i++) {
+            auto name = columns.getNames()[i].cast<mlir::StringAttr>().str();
+            values[name] = unpackedValues[i];
+         }
+         for (auto x : gatherOp.mapping()) {
+            mapping.define(x.getValue().cast<mlir::tuples::ColumnDefAttr>(), values[x.getName().str()]);
+         }
+         mlir::Value newInFlight = mapping.createInFlight(rewriter);
+         rewriter.replaceOp(gatherOp, newInFlight);
+         return success();
+      }
+      return failure();
+   }
+};
 class ScatterOpLowering : public OpConversionPattern<mlir::subop::ScatterOp> {
    public:
    using OpConversionPattern<mlir::subop::ScatterOp>::OpConversionPattern;
@@ -796,8 +822,13 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       for (auto x : arr) { res.push_back(x.cast<mlir::TypeAttr>().getValue()); }
       return res;
    };
+   auto baseTypes = [](mlir::TypeRange arr) {
+      std::vector<Type> res;
+      for (auto x : arr) { res.push_back(getBaseType(x)); }
+      return res;
+   };
    typeConverter.addConversion([&](mlir::subop::TableRefType t) -> Type {
-      auto tupleType = mlir::TupleType::get(ctxt, unpackTypes(t.getMembers().getTypes()));
+      auto tupleType = mlir::TupleType::get(ctxt, baseTypes(unpackTypes(t.getMembers().getTypes())));
       auto recordBatch = mlir::dsa::RecordBatchType::get(ctxt, tupleType);
       mlir::Type chunkIterable = mlir::dsa::GenericIterableType::get(ctxt, recordBatch, "table_chunk_iterator");
       return chunkIterable;
@@ -842,6 +873,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<ScanHashMapLowering>(typeConverter, ctxt);
    patterns.insert<ReduceOpLowering>(typeConverter, ctxt);
    patterns.insert<ScatterOpLowering>(typeConverter, ctxt);
+   patterns.insert<GatherOpLowering>(typeConverter, ctxt);
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }

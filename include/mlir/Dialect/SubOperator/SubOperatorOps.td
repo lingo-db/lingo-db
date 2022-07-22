@@ -109,7 +109,14 @@ def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
 }
 
 def GatherOp : SubOperator_Op<"gather",[SubOperator]> {
-  let summary = "reads member values  using a given value";
+    let summary = "scatter";
+
+    let arguments = (ins TupleStream : $stream, ColumnRefAttr: $ref, DictionaryAttr : $mapping );
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<StateColumnMapping>($mapping)  attr-dict }];
+    let extraClassDeclaration = [{
+        std::vector<std::string> getReadMembers();
+    }];
 }
 def ScatterOp : SubOperator_Op<"scatter",[SubOperator]> {
     let summary = "scatter";

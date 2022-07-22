@@ -597,6 +597,13 @@ std::vector<std::string> subop::ScatterOp::getWrittenMembers() {
    }
    return res;
 }
+std::vector<std::string> subop::GatherOp::getReadMembers() {
+   std::vector<std::string> res;
+   for (auto x : mapping()) {
+      res.push_back(x.getName().str());
+   }
+   return res;
+}
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"
 
