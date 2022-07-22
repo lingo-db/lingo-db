@@ -18,8 +18,8 @@
 
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SubOperator/SubOperatorInterfaces.h"
+#include "mlir/Dialect/SubOperator/SubOperatorOpsEnums.h.inc"
 #include "mlir/IR/Builders.h"
-
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h.inc"
 

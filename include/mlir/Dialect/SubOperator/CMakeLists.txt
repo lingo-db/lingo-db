@@ -6,6 +6,8 @@ mlir_tablegen(SubOperatorOpsTypes.h.inc --gen-typedef-decls  --typedefs-dialect=
 mlir_tablegen(SubOperatorOpsTypes.cpp.inc --gen-typedef-defs  --typedefs-dialect=subop)
 mlir_tablegen(SubOperatorOpsAttributes.h.inc -gen-attrdef-decls --attrdefs-dialect=subop)
 mlir_tablegen(SubOperatorOpsAttributes.cpp.inc -gen-attrdef-defs --attrdefs-dialect=subop)
+mlir_tablegen(SubOperatorOpsEnums.h.inc -gen-enum-decls)
+mlir_tablegen(SubOperatorOpsEnums.cpp.inc -gen-enum-defs)
 mlir_tablegen(SubOperatorOps.h.inc -gen-op-decls)
 mlir_tablegen(SubOperatorOps.cpp.inc -gen-op-defs)
 set(LLVM_TARGET_DEFINITIONS SubOpInterfaces.td)

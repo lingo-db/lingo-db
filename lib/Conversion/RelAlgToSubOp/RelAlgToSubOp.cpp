@@ -103,7 +103,7 @@ static mlir::Value translateSelection(mlir::Value stream, mlir::Region& predicat
    ra.type = rewriter.getI1Type(); //todo: make sure it is really i1 (otherwise: nullable<i1> -> i1)
    auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), stream, rewriter.getArrayAttr(markAttrDef));
    assert(safelyMoveRegion(rewriter, predicate, mapOp.fn()).succeeded());
-   return rewriter.create<mlir::subop::FilterOp>(loc, mapOp.result(), rewriter.getArrayAttr(columnManager.createRef(&ra)));
+   return rewriter.create<mlir::subop::FilterOp>(loc, mapOp.result(), mlir::subop::FilterSemantic::all_true, rewriter.getArrayAttr(columnManager.createRef(&ra)));
 }
 class SelectionLowering : public OpConversionPattern<mlir::relalg::SelectionOp> {
    public:
@@ -235,7 +235,7 @@ static std::pair<mlir::Value, std::string> createMarkerState(mlir::OpBuilder& re
 
    return {createOp.res(), memberName};
 }
-static mlir::Value translateSemiJoin(mlir::Region& predicate, mlir::Value left, mlir::Value right, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc) {
+static mlir::Value translateSemiJoin(mlir::Region& predicate, mlir::Value left, mlir::Value right, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, bool anti = false) {
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    MaterializationHelper helper(columns, rewriter.getContext());
    auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), helper.createStateMembersAttr());
@@ -265,7 +265,7 @@ static mlir::Value translateSemiJoin(mlir::Region& predicate, mlir::Value left, 
       auto markerDefAttr = colManager.createDef(colManager.getUniqueScope("marker"), "marker");
       markerDefAttr.getColumn().type = rewriter.getI1Type();
       Value scanState = rewriter.create<mlir::subop::ScanOp>(loc, markerState, rewriter.getDictionaryAttr(rewriter.getNamedAttr(markerName, markerDefAttr)));
-      Value filtered2 = rewriter.create<mlir::subop::FilterOp>(loc, scanState, rewriter.getArrayAttr({colManager.createRef(&markerDefAttr.getColumn())}));
+      Value filtered2 = rewriter.create<mlir::subop::FilterOp>(loc, scanState, anti ? mlir::subop::FilterSemantic::none_true : mlir::subop::FilterSemantic::all_true, rewriter.getArrayAttr({colManager.createRef(&markerDefAttr.getColumn())}));
       rewriter.create<mlir::tuples::ReturnOp>(loc, filtered2);
    }
    return nestedMapOp.res();
@@ -285,6 +285,15 @@ class SemiJoinLowering : public OpConversionPattern<mlir::relalg::SemiJoinOp> {
 
    LogicalResult matchAndRewrite(mlir::relalg::SemiJoinOp crossProductOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       rewriter.replaceOp(crossProductOp, translateSemiJoin(crossProductOp.predicate(), adaptor.left(), adaptor.right(), mlir::cast<Operator>(crossProductOp.right().getDefiningOp()).getAvailableColumns(), rewriter, crossProductOp->getLoc()));
+      return success();
+   }
+};
+class AntiSemiJoinLowering : public OpConversionPattern<mlir::relalg::AntiSemiJoinOp> {
+   public:
+   using OpConversionPattern<mlir::relalg::AntiSemiJoinOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::relalg::AntiSemiJoinOp crossProductOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOp(crossProductOp, translateSemiJoin(crossProductOp.predicate(), adaptor.left(), adaptor.right(), mlir::cast<Operator>(crossProductOp.right().getDefiningOp()).getAvailableColumns(), rewriter, crossProductOp->getLoc(), true));
       return success();
    }
 };
@@ -840,6 +849,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<InnerJoinNLLowering>(typeConverter, ctxt);
    patterns.insert<AggregationLowering>(typeConverter, ctxt);
    patterns.insert<SemiJoinLowering>(typeConverter, ctxt);
+   patterns.insert<AntiSemiJoinLowering>(typeConverter, ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();

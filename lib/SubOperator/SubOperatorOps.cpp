@@ -599,3 +599,6 @@ std::vector<std::string> subop::ScatterOp::getWrittenMembers() {
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"
+
+
+#include "mlir/Dialect/SubOperator/SubOperatorOpsEnums.cpp.inc"

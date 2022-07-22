@@ -252,12 +252,19 @@ def SortOp : SubOperator_Op<"sort", [IsolatedFromAbove,SubOperator]> {
       }];
 }
 
+def FilterSemantic_AllTrue : I64EnumAttrCase<"all_true", 0>;
+def FilterSemantic_NoneTrue      : I64EnumAttrCase<"none_true", 1>;
+
+def FilterSemantic : I64EnumAttr<"FilterSemantic", "",
+        [FilterSemantic_AllTrue,FilterSemantic_NoneTrue]> {
+    let cppNamespace = "::mlir::subop";
+}
 
 def FilterOp : SubOperator_Op<"filter", [NoSideEffect,SubOperator]> {
     let summary = "filter stream of tuples according to one or more boolean columns (all 1 => keep tuple, otherwise discard) ";
-    let arguments = (ins TupleStream : $stream, ArrayAttr : $conditions );
+    let arguments = (ins TupleStream : $stream, FilterSemantic:$filterSemantic,ArrayAttr : $conditions );
     let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $stream custom<CustRefArr>($conditions)  attr-dict }];
+    let assemblyFormat = [{  $stream $filterSemantic custom<CustRefArr>($conditions)  attr-dict }];
 }
 def RenamingOp : SubOperator_Op<"rename", [NoSideEffect,SubOperator]> {
     let summary = "rename columns";

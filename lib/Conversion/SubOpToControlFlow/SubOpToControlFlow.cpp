@@ -128,6 +128,9 @@ class FilterLowering : public OpConversionPattern<mlir::subop::FilterOp> {
          ColumnMapping mapping(inFlightOp);
          mlir::Value cond = rewriter.create<mlir::db::AndOp>(filterOp.getLoc(), mapping.resolve(filterOp.conditions()));
          cond = rewriter.create<mlir::db::DeriveTruth>(filterOp.getLoc(), cond);
+         if (filterOp.filterSemantic() == mlir::subop::FilterSemantic::none_true) {
+            cond = rewriter.create<mlir::db::NotOp>(filterOp->getLoc(), cond);
+         }
          mlir::Value newInFlight;
          rewriter.create<mlir::scf::IfOp>(
             filterOp->getLoc(), mlir::TypeRange{}, cond, [&](mlir::OpBuilder& builder1, mlir::Location) {
