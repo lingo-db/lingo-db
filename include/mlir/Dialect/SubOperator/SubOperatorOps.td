@@ -111,6 +111,16 @@ def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
 def GatherOp : SubOperator_Op<"gather",[SubOperator]> {
   let summary = "reads member values  using a given value";
 }
+def ScatterOp : SubOperator_Op<"scatter",[SubOperator]> {
+    let summary = "scatter";
+
+    let arguments = (ins TupleStream : $stream, ColumnRefAttr: $ref, DictionaryAttr : $mapping );
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<ColumnStateMapping>($mapping)  attr-dict }];
+    let extraClassDeclaration = [{
+        std::vector<std::string> getWrittenMembers();
+    }];
+}
 def FlattenOp : SubOperator_Op<"flatten",[SubOperator]> {
   let summary = "flattens an list column";
   let description = [{#
@@ -159,7 +169,7 @@ def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator]> {
     Semantics of the produced stream: each tuple is combined with the tuples returned by the nested_map
     If no tuple is returned -> the original tuple is ommited (-> "inner-join semantic")
   }];
-    let arguments= (ins TupleStream : $stream,ArrayAttr : $parameters);
+    let arguments= (ins TupleStream : $stream);
     let results = (outs TupleStream : $res);
     let regions = (region SizedRegion<1>:$region);
     let hasCustomAssemblyFormat = 1;
@@ -203,10 +213,18 @@ def InFlightOp : SubOperator_Op<"in_flight", [NoSideEffect,SubOperator]> {
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $values `:` type($values) `=` `>` custom<CustDefArr>($columns) attr-dict }];
 }
-def CombineInFlightOp : SubOperator_Op<"combine_in_flight", [NoSideEffect,SubOperator]> {
-    let summary = "combines in flight tuple streams";
+def InFlightTupleOp : SubOperator_Op<"in_flight_tuple", [NoSideEffect,SubOperator]> {
+    let summary = "operation symbolizes 'in flight' tuple -> values => columns";
 
-    let arguments = (ins TupleStream :$left, TupleStream:$right);
+    let arguments = (ins Variadic<AnyType> : $values, ArrayAttr : $columns );
+    let results = (outs TupleStream_Tuple : $res);
+    let assemblyFormat = [{  $values `:` type($values) `=` `>` custom<CustDefArr>($columns) attr-dict }];
+}
+
+def CombineTupleOp : SubOperator_Op<"combine_tuple", [NoSideEffect,SubOperator]> {
+    let summary = "combines stream with tuple";
+
+    let arguments = (ins TupleStream :$left, TupleStream_Tuple:$right);
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $left `,` $right attr-dict }];
 }

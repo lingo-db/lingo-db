@@ -466,7 +466,7 @@ ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
 
 void subop::ReduceOp::print(OpAsmPrinter& p) {
    subop::ReduceOp& op = *this;
-   p << " " << op.stream()<<" ";
+   p << " " << op.stream() << " ";
    printCustRef(p, op, op.ref());
    printCustRefArr(p, op, op.columns());
    p << " " << op.members() << " ";
@@ -501,23 +501,17 @@ ParseResult mlir::subop::NestedMapOp::parse(::mlir::OpAsmParser& parser, ::mlir:
    }
    parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands);
 
-   mlir::ArrayAttr parameters;
-   parseCustRefArr(parser, parameters);
-   result.addAttribute("parameters", parameters);
-   std::vector<OpAsmParser::Argument> args(parameters.size());
+   OpAsmParser::Argument streamArg;
    if (parser.parseLParen()) {
       return failure();
    }
-   for (size_t i = 0; i < parameters.size(); i++) {
-      args[i].type = parameters[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
-      if (i > 0 && parser.parseComma().failed()) return failure();
-      if (parser.parseArgument(args[i])) return failure();
-   }
+   streamArg.type = mlir::tuples::TupleType::get(parser.getContext());
+   parser.parseArgument(streamArg);
    if (parser.parseRParen()) {
       return failure();
    }
    Region* body = result.addRegion();
-   if (parser.parseRegion(*body, args)) return failure();
+   if (parser.parseRegion(*body, {streamArg})) return failure();
    result.addTypes(mlir::tuples::TupleStreamType::get(parser.getContext()));
    return success();
 }
@@ -525,7 +519,6 @@ ParseResult mlir::subop::NestedMapOp::parse(::mlir::OpAsmParser& parser, ::mlir:
 void subop::NestedMapOp::print(OpAsmPrinter& p) {
    subop::NestedMapOp& op = *this;
    p << " " << op.stream() << " ";
-   printCustRefArr(p, this->getOperation(), op.parameters());
    p << " (";
    p.printOperands(op.region().front().getArguments());
    p << ") ";
@@ -597,6 +590,12 @@ std::vector<std::string> subop::ReduceOp::getReadMembers() {
    }
    return res;
 }
-
+std::vector<std::string> subop::ScatterOp::getWrittenMembers() {
+   std::vector<std::string> res;
+   for (auto x : mapping()) {
+      res.push_back(x.getName().str());
+   }
+   return res;
+}
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"

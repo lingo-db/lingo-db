@@ -65,7 +65,23 @@ class ColumnMapping {
          mapping.insert(std::make_pair(col, val));
       }
    }
+   ColumnMapping(mlir::subop::InFlightTupleOp inFlightOp) {
+      assert(inFlightOp.columns().size() == inFlightOp.values().size());
+      for (auto i = 0ul; i < inFlightOp.columns().size(); i++) {
+         const auto* col = &inFlightOp.columns()[i].cast<mlir::tuples::ColumnDefAttr>().getColumn();
+         auto val = inFlightOp.values()[i];
+         mapping.insert(std::make_pair(col, val));
+      }
+   }
    void merge(mlir::subop::InFlightOp inFlightOp) {
+      assert(inFlightOp.columns().size() == inFlightOp.values().size());
+      for (auto i = 0ul; i < inFlightOp.columns().size(); i++) {
+         const auto* col = &inFlightOp.columns()[i].cast<mlir::tuples::ColumnDefAttr>().getColumn();
+         auto val = inFlightOp.values()[i];
+         mapping.insert(std::make_pair(col, val));
+      }
+   }
+   void merge(mlir::subop::InFlightTupleOp inFlightOp) {
       assert(inFlightOp.columns().size() == inFlightOp.values().size());
       for (auto i = 0ul; i < inFlightOp.columns().size(); i++) {
          const auto* col = &inFlightOp.columns()[i].cast<mlir::tuples::ColumnDefAttr>().getColumn();
@@ -151,16 +167,9 @@ class NestedMapLowering : public OpConversionPattern<mlir::subop::NestedMapOp> {
       if (auto inFlightOp = mlir::dyn_cast_or_null<mlir::subop::InFlightOp>(adaptor.stream().getDefiningOp())) {
          rewriter.setInsertionPointAfter(inFlightOp);
          ColumnMapping mapping(inFlightOp);
-         auto* terminator = nestedMapOp.region().front().getTerminator();
-         auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(terminator);
-         mlir::BlockAndValueMapping mapper;
-         for (auto& x : nestedMapOp.region().front().getOperations()) {
-            if (&x != terminator) {
-               rewriter.clone(x, mapper);
-            }
-         }
-         auto x = mapper.lookup(returnOp.results()[0]);
-         auto combined = rewriter.create<mlir::subop::CombineInFlightOp>(nestedMapOp->getLoc(), x, adaptor.stream());
+         mlir::Value inFlightTuple = rewriter.create<mlir::subop::InFlightTupleOp>(nestedMapOp->getLoc(), inFlightOp.values(), inFlightOp.columns());
+         auto x = inlineBlock(&nestedMapOp.region().front(), rewriter, inFlightTuple)[0];
+         auto combined = rewriter.create<mlir::subop::CombineTupleOp>(nestedMapOp->getLoc(), x, inFlightTuple);
          rewriter.replaceOp(nestedMapOp, combined.res());
 
          return success();
@@ -168,13 +177,13 @@ class NestedMapLowering : public OpConversionPattern<mlir::subop::NestedMapOp> {
       return failure();
    }
 };
-class CombineInFlightLowering : public OpConversionPattern<mlir::subop::CombineInFlightOp> {
+class CombineInFlightLowering : public OpConversionPattern<mlir::subop::CombineTupleOp> {
    public:
-   using OpConversionPattern<mlir::subop::CombineInFlightOp>::OpConversionPattern;
+   using OpConversionPattern<mlir::subop::CombineTupleOp>::OpConversionPattern;
 
-   LogicalResult matchAndRewrite(mlir::subop::CombineInFlightOp combineInFlightOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+   LogicalResult matchAndRewrite(mlir::subop::CombineTupleOp combineInFlightOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (auto inFlightOpLeft = mlir::dyn_cast_or_null<mlir::subop::InFlightOp>(adaptor.left().getDefiningOp())) {
-         if (auto inFlightOpRight = mlir::dyn_cast_or_null<mlir::subop::InFlightOp>(adaptor.right().getDefiningOp())) {
+         if (auto inFlightOpRight = mlir::dyn_cast_or_null<mlir::subop::InFlightTupleOp>(adaptor.right().getDefiningOp())) {
             rewriter.setInsertionPointAfter(inFlightOpLeft);
             ColumnMapping mapping(inFlightOpLeft);
             mapping.merge(inFlightOpRight);
@@ -511,7 +520,7 @@ class LookupHashMapLowering : public OpConversionPattern<mlir::subop::LookupOp> 
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(initFnBlock);
             auto res = inlineBlock(&lookupOp.initFn().front(), rewriter, {});
-            rewriter.create<mlir::dsa::YieldOp>(lookupOp->getLoc(), ValueRange{rewriter.create<mlir::util::PackOp>(lookupOp->getLoc(),res)});
+            rewriter.create<mlir::dsa::YieldOp>(lookupOp->getLoc(), ValueRange{rewriter.create<mlir::util::PackOp>(lookupOp->getLoc(), res)});
          }
          getRefOp.initial().push_back(initFnBlock);
          mapping.define(lookupOp.ref(), rewriter.create<mlir::util::TupleElementPtrOp>(lookupOp->getLoc(), mlir::util::RefType::get(htType.getValType()), getRefOp.ref(), 1));
@@ -600,6 +609,38 @@ class ScanSimpleStateLowering : public OpConversionPattern<mlir::subop::ScanOp> 
       rewriter.replaceOp(scanOp, newInFlight);
 
       return success();
+   }
+};
+class ScatterOpLowering : public OpConversionPattern<mlir::subop::ScatterOp> {
+   public:
+   using OpConversionPattern<mlir::subop::ScatterOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::ScatterOp scatterOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto columns = scatterOp.ref().getColumn().type.cast<mlir::subop::EntryRefType>().getT().cast<mlir::subop::StateSupportingLookup>().getValueMembers();
+      if (auto inFlightOp = mlir::dyn_cast_or_null<mlir::subop::InFlightOp>(adaptor.stream().getDefiningOp())) {
+         rewriter.setInsertionPointAfter(inFlightOp);
+         ColumnMapping mapping(inFlightOp);
+         auto loaded = rewriter.create<mlir::util::LoadOp>(scatterOp->getLoc(), mapping.resolve(scatterOp.ref()));
+         auto unpackedValues = rewriter.create<mlir::util::UnPackOp>(scatterOp->getLoc(), loaded).getResults();
+         std::unordered_map<std::string, mlir::Value> values;
+         for (auto i = 0ul; i < columns.getTypes().size(); i++) {
+            auto name = columns.getNames()[i].cast<mlir::StringAttr>().str();
+            values[name] = unpackedValues[i];
+         }
+         for (auto x : scatterOp.mapping()) {
+            values[x.getName().str()] = mapping.resolve(x.getValue().cast<mlir::tuples::ColumnRefAttr>());
+         }
+         std::vector<mlir::Value> toStore;
+         for (auto i = 0ul; i < columns.getTypes().size(); i++) {
+            auto name = columns.getNames()[i].cast<mlir::StringAttr>().str();
+            toStore.push_back(values[name]);
+         }
+         mlir::Value packed = rewriter.create<mlir::util::PackOp>(scatterOp->getLoc(), toStore);
+         rewriter.create<mlir::util::StoreOp>(scatterOp->getLoc(), packed, mapping.resolve(scatterOp.ref()), mlir::Value());
+         rewriter.eraseOp(scatterOp);
+         return success();
+      }
+      return failure();
    }
 };
 class ReduceOpLowering : public OpConversionPattern<mlir::subop::ReduceOp> {
@@ -742,6 +783,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    target.addLegalDialect<scf::SCFDialect>();
    target.addLegalDialect<util::UtilDialect>();
    target.addLegalOp<subop::InFlightOp>();
+   target.addLegalOp<subop::InFlightTupleOp>();
    auto* ctxt = &getContext();
 
    TypeConverter typeConverter;
@@ -796,6 +838,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<LookupHashMapLowering>(typeConverter, ctxt);
    patterns.insert<ScanHashMapLowering>(typeConverter, ctxt);
    patterns.insert<ReduceOpLowering>(typeConverter, ctxt);
+   patterns.insert<ScatterOpLowering>(typeConverter, ctxt);
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();
 }
