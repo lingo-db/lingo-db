@@ -218,7 +218,7 @@ class VectorIterator : public ForIterator {
       len = unpacked.getResult(0);
    }
    virtual Value getElement(OpBuilder& builder, Value index) override {
-      return builder.create<util::LoadOp>(loc, values, index);
+      return builder.create<util::ArrayElementPtrOp>(loc, mlir::util::RefType::get(vector.getContext(),values.getType().cast<mlir::util::RefType>().getElementType()) ,values, index);
    }
 };
 class ValueOnlyAggrHTIterator : public ForIterator {
@@ -411,6 +411,7 @@ std::unique_ptr<mlir::dsa::CollectionIterationImpl> mlir::dsa::CollectionIterati
          return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(loweredCollection, generic.getElementType(), true));
       }
    } else if (auto vector = collectionType.dyn_cast_or_null<mlir::dsa::VectorType>()) {
+
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<VectorIterator>(loweredCollection));
    } else if (auto aggrHt = collectionType.dyn_cast_or_null<mlir::dsa::AggregationHashtableType>()) {
       if (aggrHt.getKeyType().getTypes().empty()) {

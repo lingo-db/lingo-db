@@ -1,4 +1,4 @@
-//RUN: mlir-db-opt -lower-relalg %s | run-mlir "-" %S/../../../resources/data/uni | FileCheck %s
+//RUN: mlir-db-opt -lower-relalg-to-subop %s | run-mlir "-" %S/../../../resources/data/uni | FileCheck %s
 //CHECK: |                        s.name  |
 //CHECK: ----------------------------------
 //CHECK: |                  "Xenokrates"  |

@@ -165,6 +165,21 @@ class MaterializationHelper {
          refMapping.push_back(mlir::NamedAttribute(nameAttr, context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager().createRef(x)));
       }
    }
+   std::pair<const mlir::tuples::Column*, std::string> addFlag() {
+      auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+      auto colDef = colManager.createDef(colManager.getUniqueScope("flag"), "flag");
+      auto i1Type = mlir::IntegerType::get(context, 1);
+      colDef.getColumn().type = i1Type;
+      auto *x = &colDef.getColumn();
+      types.push_back(mlir::TypeAttr::get(i1Type));
+      colToMemberPos[x] = names.size();
+      std::string name = getUniqueMember("flag");
+      auto nameAttr = mlir::StringAttr::get(context, name);
+      names.push_back(nameAttr);
+      defMapping.push_back(mlir::NamedAttribute(nameAttr, context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager().createDef(x)));
+      refMapping.push_back(mlir::NamedAttribute(nameAttr, context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager().createRef(x)));
+      return {&colDef.getColumn(), name};
+   }
    mlir::subop::StateMembersAttr createStateMembersAttr() {
       return mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, names), mlir::ArrayAttr::get(context, types));
    }
@@ -200,6 +215,21 @@ static mlir::Value translateNLJoin(mlir::Value left, mlir::Value right, mlir::re
       rewriter.create<mlir::tuples::ReturnOp>(loc, scan.res());
    }
    return nestedMapOp.res();
+}
+static mlir::Value mapBool(mlir::Value stream, mlir::OpBuilder& rewriter, mlir::Location loc, bool value, const mlir::tuples::Column* column) {
+   Block* mapBlock = new Block;
+   {
+      mlir::OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(mapBlock);
+      mlir::Value val = rewriter.create<mlir::db::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), value));
+      rewriter.create<mlir::tuples::ReturnOp>(loc, val);
+   }
+
+   auto& columnManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+   tuples::ColumnDefAttr markAttrDef = columnManager.createDef(column);
+   auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), stream, rewriter.getArrayAttr(markAttrDef));
+   mapOp.fn().push_back(mapBlock);
+   return mapOp.result();
 }
 static std::pair<mlir::Value, const mlir::tuples::Column*> mapBool(mlir::Value stream, mlir::OpBuilder& rewriter, mlir::Location loc, bool value) {
    Block* mapBlock = new Block;
@@ -285,6 +315,44 @@ static mlir::Value translateSemiJoin(mlir::Region& predicate, mlir::Value left, 
    }
    return nestedMapOp.res();
 }
+static mlir::Value translateReverseSemiJoin(mlir::Region& predicate, mlir::Value left, mlir::Value right, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, bool anti = false) {
+   auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+   MaterializationHelper helper(columns, rewriter.getContext());
+   auto [flagColumn, flagMember] = helper.addFlag();
+   auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), helper.createStateMembersAttr());
+   mlir::Value vector;
+   {
+      mlir::OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
+      vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute());
+   }
+   left = mapBool(left, rewriter, loc, false, flagColumn);
+   rewriter.create<mlir::subop::MaterializeOp>(loc, left, vector, helper.createColumnstateMapping());
+   auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), right);
+   auto* b = new Block;
+   mlir::Value tuple = b->addArgument(mlir::tuples::TupleType::get(rewriter.getContext()), loc);
+   nestedMapOp.region().push_back(b);
+   {
+      mlir::OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(b);
+      auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("scan"), "ref");
+      referenceDefAttr.getColumn().type = mlir::subop::EntryRefType::get(rewriter.getContext(), vectorType);
+      mlir::Value scan = rewriter.create<mlir::subop::ScanRefsOp>(loc, vector, referenceDefAttr);
+
+      mlir::Value gathered = rewriter.create<mlir::subop::GatherOp>(loc, scan, colManager.createRef(&referenceDefAttr.getColumn()), helper.createStateColumnMapping());
+      mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, gathered, tuple);
+      auto filtered = translateSelection(combined, predicate, rewriter, loc);
+      auto markerDefAttr = colManager.createDef(colManager.getUniqueScope("marker"), "marker");
+      markerDefAttr.getColumn().type = rewriter.getI1Type();
+      auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
+      rewriter.create<mlir::subop::ScatterOp>(rewriter.getUnknownLoc(), afterBool, colManager.createRef(&referenceDefAttr.getColumn()), rewriter.getDictionaryAttr(rewriter.getNamedAttr(flagMember, colManager.createRef(&markerDefAttr.getColumn()))));
+      rewriter.create<mlir::tuples::ReturnOp>(loc);
+   }
+   mlir::Value scan = rewriter.create<mlir::subop::ScanOp>(loc, vector, helper.createStateColumnMapping());
+   auto filtered = rewriter.create<mlir::subop::FilterOp>(loc, scan,  anti ? mlir::subop::FilterSemantic::none_true : mlir::subop::FilterSemantic::all_true, rewriter.getArrayAttr({colManager.createRef(flagColumn)}));
+
+   return filtered.res();
+}
 class CrossProductLowering : public OpConversionPattern<mlir::relalg::CrossProductOp> {
    public:
    using OpConversionPattern<mlir::relalg::CrossProductOp>::OpConversionPattern;
@@ -299,7 +367,7 @@ class SemiJoinLowering : public OpConversionPattern<mlir::relalg::SemiJoinOp> {
    using OpConversionPattern<mlir::relalg::SemiJoinOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::relalg::SemiJoinOp crossProductOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOp(crossProductOp, translateSemiJoin(crossProductOp.predicate(), adaptor.left(), adaptor.right(), mlir::cast<Operator>(crossProductOp.right().getDefiningOp()).getAvailableColumns(), rewriter, crossProductOp->getLoc()));
+      rewriter.replaceOp(crossProductOp, translateReverseSemiJoin(crossProductOp.predicate(), adaptor.left(), adaptor.right(), mlir::cast<Operator>(crossProductOp.left().getDefiningOp()).getAvailableColumns(), rewriter, crossProductOp->getLoc()));
       return success();
    }
 };
@@ -308,7 +376,7 @@ class AntiSemiJoinLowering : public OpConversionPattern<mlir::relalg::AntiSemiJo
    using OpConversionPattern<mlir::relalg::AntiSemiJoinOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::relalg::AntiSemiJoinOp crossProductOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOp(crossProductOp, translateSemiJoin(crossProductOp.predicate(), adaptor.left(), adaptor.right(), mlir::cast<Operator>(crossProductOp.right().getDefiningOp()).getAvailableColumns(), rewriter, crossProductOp->getLoc(), true));
+      rewriter.replaceOp(crossProductOp, translateReverseSemiJoin(crossProductOp.predicate(), adaptor.left(), adaptor.right(), mlir::cast<Operator>(crossProductOp.left().getDefiningOp()).getAvailableColumns(), rewriter, crossProductOp->getLoc(), true));
       return success();
    }
 };
@@ -331,7 +399,7 @@ class LimitLowering : public OpConversionPattern<mlir::relalg::LimitOp> {
       tuples::ColumnDefAttr updatedCounterDef = colManager.createDef(colManager.getUniqueScope("map"), "counter");
       updatedCounterDef.getColumn().type = rewriter.getI64Type();
       auto mapOp = rewriter.create<mlir::subop::MapOp>(limitOp->getLoc(), mlir::tuples::TupleStreamType::get(rewriter.getContext()), gathered, rewriter.getArrayAttr({markAttrDef, updatedCounterDef}));
-      auto *mapBlock = new mlir::Block;
+      auto* mapBlock = new mlir::Block;
       mlir::Value tuple = mapBlock->addArgument(mlir::tuples::TupleType::get(rewriter.getContext()), limitOp->getLoc());
       mapOp.fn().push_back(mapBlock);
       {

@@ -171,9 +171,13 @@ class NestedMapLowering : public OpConversionPattern<mlir::subop::NestedMapOp> {
          rewriter.setInsertionPointAfter(inFlightOp);
          ColumnMapping mapping(inFlightOp);
          mlir::Value inFlightTuple = rewriter.create<mlir::subop::InFlightTupleOp>(nestedMapOp->getLoc(), inFlightOp.values(), inFlightOp.columns());
-         auto x = inlineBlock(&nestedMapOp.region().front(), rewriter, inFlightTuple)[0];
-         auto combined = rewriter.create<mlir::subop::CombineTupleOp>(nestedMapOp->getLoc(), x, inFlightTuple);
-         rewriter.replaceOp(nestedMapOp, combined.res());
+         auto results= inlineBlock(&nestedMapOp.region().front(), rewriter, inFlightTuple);
+         if(results.empty()){
+            rewriter.eraseOp(nestedMapOp);
+         }else{
+            auto combined = rewriter.create<mlir::subop::CombineTupleOp>(nestedMapOp->getLoc(), results[0], inFlightTuple);
+            rewriter.replaceOp(nestedMapOp, combined.res());
+         }
 
          return success();
       }
@@ -302,7 +306,7 @@ class MaterializeTableLowering : public OpConversionPattern<mlir::subop::Materia
          for (size_t i = 0; i < stateType.getMembers().getTypes().size(); i++) {
             auto memberName = stateType.getMembers().getNames()[i].cast<mlir::StringAttr>().str();
             auto attribute = materializeOp.mapping().get(memberName).cast<mlir::tuples::ColumnRefAttr>();
-         auto val = mapping.resolve(attribute);
+            auto val = mapping.resolve(attribute);
             mlir::Value valid;
             if (val.getType().isa<mlir::db::NullableType>()) {
                valid = rewriter.create<mlir::db::IsNullOp>(materializeOp->getLoc(), val);
@@ -721,7 +725,7 @@ class ScanVectorLowering : public OpConversionPattern<mlir::subop::ScanOp> {
       auto columns = scanOp.state().getType().cast<mlir::subop::VectorType>().getMembers();
       ColumnMapping mapping;
       auto state = adaptor.state();
-      auto vectorType = state.getType().cast<mlir::dsa::VectorType>().getElementType();
+      auto vectorType = mlir::util::RefType::get(getContext(), state.getType().cast<mlir::dsa::VectorType>().getElementType());
       auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::Value(), mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
       block->addArgument(vectorType, scanOp->getLoc());
@@ -729,7 +733,8 @@ class ScanVectorLowering : public OpConversionPattern<mlir::subop::ScanOp> {
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(block);
-         auto unpackedValues = rewriter.create<mlir::util::UnPackOp>(scanOp->getLoc(), forOp.getInductionVar()).getResults();
+         auto loaded = rewriter.create<mlir::util::LoadOp>(scanOp->getLoc(), forOp.getInductionVar());
+         auto unpackedValues = rewriter.create<mlir::util::UnPackOp>(scanOp->getLoc(), loaded).getResults();
 
          for (auto i = 0ul; i < columns.getTypes().size(); i++) {
             auto name = columns.getNames()[i].cast<mlir::StringAttr>().str();
@@ -738,6 +743,32 @@ class ScanVectorLowering : public OpConversionPattern<mlir::subop::ScanOp> {
                mapping.define(columnDefAttr, unpackedValues[i]);
             }
          }
+
+         mlir::Value newInFlight = mapping.createInFlight(rewriter);
+         rewriter.replaceOp(scanOp, newInFlight);
+         rewriter.create<mlir::dsa::YieldOp>(scanOp->getLoc());
+      }
+
+      return success();
+   }
+};
+class ScanRefsVectorLowering : public OpConversionPattern<mlir::subop::ScanRefsOp> {
+   public:
+   using OpConversionPattern<mlir::subop::ScanRefsOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::ScanRefsOp scanOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (!scanOp.state().getType().isa<mlir::subop::VectorType>()) return failure();
+      ColumnMapping mapping;
+      auto state = adaptor.state();
+      auto vectorType = mlir::util::RefType::get(getContext(), state.getType().cast<mlir::dsa::VectorType>().getElementType());
+      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::Value(), mlir::ValueRange{});
+      mlir::Block* block = new mlir::Block;
+      block->addArgument(vectorType, scanOp->getLoc());
+      forOp.getBodyRegion().push_back(block);
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(block);
+         mapping.define(scanOp.ref(),forOp.getInductionVar());
 
          mlir::Value newInFlight = mapping.createInFlight(rewriter);
          rewriter.replaceOp(scanOp, newInFlight);
@@ -858,6 +889,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<GetTableRefLowering>(typeConverter, ctxt);
    patterns.insert<ScanTableRefLowering>(typeConverter, ctxt);
    patterns.insert<ScanVectorLowering>(typeConverter, ctxt);
+   patterns.insert<ScanRefsVectorLowering>(typeConverter, ctxt);
    patterns.insert<CreateTableLowering>(typeConverter, ctxt);
    patterns.insert<CreateVectorLowering>(typeConverter, ctxt);
    patterns.insert<CreateHashMapLowering>(typeConverter, ctxt);

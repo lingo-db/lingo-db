@@ -73,10 +73,13 @@ def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,StateSupportingLookup
         StateMembersAttr getMembers();
     }];
 }
-def Vector : SubOperator_Type<"Vector", "vector"> {
+def Vector : SubOperator_Type<"Vector", "vector", [State,StateSupportingLookup]> {
     let summary = "vector type";
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
+            let extraClassDeclaration = [{
+                StateMembersAttr getValueMembers();
+            }];
 }
 
 def Entry : SubOperator_Type<"Entry", "entry"> {
@@ -211,6 +214,14 @@ def ScanOp : SubOperator_Op<"scan", [NoSideEffect,SubOperator]> {
     let extraClassDeclaration = [{
         std::vector<std::string> getReadMembers();
     }];
+}
+
+def ScanRefsOp : SubOperator_Op<"scan_refs", [NoSideEffect,SubOperator]> {
+    let summary = "scan state (sequentially) and emits references to its elements";
+
+    let arguments = (ins AnyType : $state, ColumnDefAttr:$ref);
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{  $state `:` type($state) custom<CustDef>($ref) attr-dict }];
 }
 
 def InFlightOp : SubOperator_Op<"in_flight", [NoSideEffect,SubOperator]> {
