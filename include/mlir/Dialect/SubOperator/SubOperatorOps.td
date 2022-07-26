@@ -109,6 +109,9 @@ def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
     let results = (outs TupleStream: $res);
     let regions = (region AnyRegion:$eqFn, AnyRegion:$initFn);
       let hasCustomAssemblyFormat = 1;
+      let extraClassDeclaration = [{
+          std::vector<std::string> getWrittenMembers();
+      }];
 }
 
 def GatherOp : SubOperator_Op<"gather",[SubOperator]> {

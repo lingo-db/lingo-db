@@ -597,6 +597,13 @@ std::vector<std::string> subop::ScatterOp::getWrittenMembers() {
    }
    return res;
 }
+std::vector<std::string> subop::LookupOp::getWrittenMembers() {
+   std::vector<std::string> res;
+   for (auto x : state().getType().cast<mlir::subop::State>().getMembers().getNames()) {
+      res.push_back(x.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
 std::vector<std::string> subop::GatherOp::getReadMembers() {
    std::vector<std::string> res;
    for (auto x : mapping()) {

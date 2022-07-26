@@ -22,6 +22,7 @@ struct SubOpDependencyAnalysis {
    std::unordered_map<mlir::Block*, std::vector<mlir::Operation*>> validOrder;
    SubOpDependencyAnalysis(mlir::Operation* op, AnalysisManager& am);
    void addDependency(mlir::Operation* a, mlir::Operation* b) {
+      if (a == b) return;
       dependencies[a].insert(b);
       inverseDependencies[b].insert(a);
    }
