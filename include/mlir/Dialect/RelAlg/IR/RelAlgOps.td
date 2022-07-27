@@ -387,8 +387,8 @@ def TmpOp : RelAlg_Op<"tmp", [NoSideEffect,Operator]> {
     let summary = "temporary materialization";
 
     let arguments = (ins TupleStream:$rel,ArrayAttr:$cols);
-    let results = (outs TupleStream:$res_rel);
-    let assemblyFormat = [{  $rel custom<CustRefArr>($cols) attr-dict }];
+    let results = (outs Variadic<TupleStream>:$resulting);
+    let assemblyFormat = [{  $rel custom<CustRefArr>($cols) `->` type($resulting) attr-dict }];
 }
 
 def GetScalarOp : RelAlg_Op<"getscalar", [NoSideEffect]> {

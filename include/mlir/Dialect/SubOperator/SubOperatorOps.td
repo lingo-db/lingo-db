@@ -245,7 +245,14 @@ def InFlightTupleOp : SubOperator_Op<"in_flight_tuple", [NoSideEffect,SubOperato
 def CombineTupleOp : SubOperator_Op<"combine_tuple", [NoSideEffect,SubOperator]> {
     let summary = "combines stream with tuple";
 
-    let arguments = (ins TupleStream :$left, TupleStream_Tuple:$right);
+    let arguments = (ins TupleStream :$stream, TupleStream_Tuple:$right);
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{  $stream `,` $right attr-dict }];
+}
+def UnionOp : SubOperator_Op<"union", [NoSideEffect,SubOperator]> {
+    let summary = "union of two stream";
+
+    let arguments = (ins TupleStream :$left, TupleStream:$right);
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $left `,` $right attr-dict }];
 }
@@ -253,10 +260,10 @@ def CombineTupleOp : SubOperator_Op<"combine_tuple", [NoSideEffect,SubOperator]>
 def MapOp : SubOperator_Op<"map", [NoSideEffect,SubOperator]> {
     let summary = "map operation";
 
-    let arguments = (ins TupleStream:$rel,ArrayAttr:$computed_cols);
+    let arguments = (ins TupleStream:$stream,ArrayAttr:$computed_cols);
     let results = (outs TupleStream:$result);
     let regions = (region SizedRegion<1>:$fn);
-    let assemblyFormat = [{  $rel `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($fn) attr-dict-with-keyword }];
+    let assemblyFormat = [{  $stream `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($fn) attr-dict-with-keyword }];
 }
 def SortOp : SubOperator_Op<"sort", [IsolatedFromAbove,SubOperator]> {
     let summary = "sort vector";

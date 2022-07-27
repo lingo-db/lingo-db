@@ -400,7 +400,7 @@ bool Runner::optimize(runtime::Database& db) {
    }
    snapshot();
    auto end = std::chrono::high_resolution_clock::now();
-   //ctxt->module->dump();
+   ctxt->module->dump();
    std::cout << "optimization took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
    {
       auto start = std::chrono::high_resolution_clock::now();
