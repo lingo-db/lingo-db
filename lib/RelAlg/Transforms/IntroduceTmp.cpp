@@ -28,7 +28,6 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<
             builder.setInsertionPointAfter(op.getOperation());
             mlir::relalg::ColumnSet usedAttributes;
             for (auto& use : op->getUses()) {
-               use.getOwner()->dump();
                usedAttributes.insert(getUsed(use.getOwner()));
             }
             usedAttributes = usedAttributes.intersect(op.getAvailableColumns());

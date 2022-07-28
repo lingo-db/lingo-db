@@ -203,7 +203,7 @@ def CreateOp : SubOperator_Op<"create", [NoSideEffect]> {
 
     let arguments = (ins OptionalAttr<AnyAttr>: $descr);
     let results = (outs AnyType : $res);
-    let regions = (region AnyRegion:$initFn);
+    let regions = (region VariadicRegion<AnyRegion>:$initFn);
     let assemblyFormat = [{  ($descr^)? `->` type($res) (`initial` `:` $initFn^)? attr-dict }];
 
 }
@@ -252,9 +252,9 @@ def CombineTupleOp : SubOperator_Op<"combine_tuple", [NoSideEffect,SubOperator]>
 def UnionOp : SubOperator_Op<"union", [NoSideEffect,SubOperator]> {
     let summary = "union of two stream";
 
-    let arguments = (ins TupleStream :$left, TupleStream:$right);
+    let arguments = (ins Variadic<TupleStream> :$streams);
     let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $left `,` $right attr-dict }];
+    let assemblyFormat = [{  $streams attr-dict }];
 }
 
 def MapOp : SubOperator_Op<"map", [NoSideEffect,SubOperator]> {

@@ -41,7 +41,7 @@ struct RelalgToSubOpLoweringPass
 };
 static std::string getUniqueMember(std::string name) {
    static std::unordered_map<std::string, size_t> counts;
-   return name + std::to_string(counts[name]++);
+   return name + "n" + std::to_string(counts[name]++);
 }
 
 class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> {
@@ -77,6 +77,7 @@ class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> 
       return success();
    }
 };
+
 static mlir::LogicalResult safelyMoveRegion(ConversionPatternRewriter& rewriter, mlir::Region& source, mlir::Region& target) {
    rewriter.inlineRegionBefore(source, target, target.end());
    {
@@ -105,14 +106,13 @@ static mlir::Value translateSelection(mlir::Value stream, mlir::Region& predicat
    auto terminator = mlir::cast<mlir::tuples::ReturnOp>(predicate.front().getTerminator());
    if (terminator.results().empty()) {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
-      auto constTrueBlock=new Block;
+      auto constTrueBlock = new Block;
       mapOp.fn().push_back(constTrueBlock);
       rewriter.setInsertionPointToStart(constTrueBlock);
       mlir::Value constTrue = rewriter.create<mlir::db::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
       rewriter.create<mlir::tuples::ReturnOp>(loc, constTrue);
-   }else{
+   } else {
       assert(safelyMoveRegion(rewriter, predicate, mapOp.fn()).succeeded());
-
    }
    return rewriter.create<mlir::subop::FilterOp>(loc, mapOp.result(), mlir::subop::FilterSemantic::all_true, rewriter.getArrayAttr(columnManager.createRef(&ra)));
 }
@@ -216,7 +216,7 @@ class ProjectionDistinctLowering : public OpConversionPattern<mlir::relalg::Proj
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-         auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{});
+         auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{}, 0);
          state = createOp.res();
       }
       auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("lookup"), "ref");
@@ -266,6 +266,23 @@ class MaterializationHelper {
          refMapping.push_back(mlir::NamedAttribute(nameAttr, context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager().createRef(x)));
       }
    }
+   MaterializationHelper(mlir::ArrayAttr columnAttrs, mlir::MLIRContext* context) : context(context) {
+      size_t i = 0;
+      for (auto columnAttr : columnAttrs) {
+         auto columnDef = columnAttr.cast<mlir::tuples::ColumnDefAttr>();
+         auto x = &columnDef.getColumn();
+         types.push_back(mlir::TypeAttr::get(x->type));
+         colToMemberPos[x] = i++;
+         std::string name = getUniqueMember("member");
+         auto nameAttr = mlir::StringAttr::get(context, name);
+         names.push_back(nameAttr);
+         defMapping.push_back(mlir::NamedAttribute(nameAttr, columnDef));
+         refMapping.push_back(mlir::NamedAttribute(nameAttr, context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager().createRef(x)));
+      }
+   }
+   mlir::Type getType(size_t i) {
+      return types.at(i).cast<mlir::TypeAttr>().getValue();
+   }
    std::pair<const mlir::tuples::Column*, std::string> addFlag() {
       auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       auto colDef = colManager.createDef(colManager.getUniqueScope("flag"), "flag");
@@ -295,6 +312,49 @@ class MaterializationHelper {
       return names.at(colToMemberPos.at(column)).cast<mlir::StringAttr>();
    }
 };
+class ConstRelationLowering : public OpConversionPattern<mlir::relalg::ConstRelationOp> {
+   public:
+   using OpConversionPattern<mlir::relalg::ConstRelationOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::relalg::ConstRelationOp constRelationOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      MaterializationHelper helper(constRelationOp.columns(), getContext());
+      auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), helper.createStateMembersAttr());
+      mlir::Value vector;
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
+         auto creationOp = rewriter.create<mlir::subop::CreateOp>(constRelationOp->getLoc(), vectorType, mlir::Attribute{}, constRelationOp.values().size());
+         vector = creationOp.res();
+         size_t rowId = 0;
+         for (auto rowAttr : constRelationOp.valuesAttr()) {
+            auto* currBlock = new Block;
+            creationOp.initFn()[rowId++].push_back(currBlock);
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(currBlock);
+            auto row = rowAttr.cast<ArrayAttr>();
+            std::vector<Value> values;
+            size_t i = 0;
+            for (auto entryAttr : row.getValue()) {
+               if (helper.getType(i).isa<mlir::db::NullableType>() && entryAttr.isa<mlir::UnitAttr>()) {
+                  auto entryVal = rewriter.create<mlir::db::NullOp>(constRelationOp->getLoc(), helper.getType(i));
+                  values.push_back(entryVal);
+                  i++;
+               } else {
+                  mlir::Value entryVal = rewriter.create<mlir::db::ConstantOp>(constRelationOp->getLoc(), getBaseType(helper.getType(i)), entryAttr);
+                  if (helper.getType(i).isa<mlir::db::NullableType>()) {
+                     entryVal = rewriter.create<mlir::db::AsNullableOp>(constRelationOp->getLoc(), helper.getType(i), entryVal);
+                  }
+                  values.push_back(entryVal);
+                  i++;
+               }
+            }
+
+            rewriter.create<mlir::tuples::ReturnOp>(constRelationOp->getLoc(), values);
+         }
+      }
+      rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(constRelationOp, vector, helper.createStateColumnMapping());
+      return success();
+   }
+};
 static mlir::Value translateNLJoin(mlir::Value left, mlir::Value right, mlir::relalg::ColumnSet columns, mlir::OpBuilder& rewriter, mlir::Location loc) {
    MaterializationHelper helper(columns, rewriter.getContext());
    auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), helper.createStateMembersAttr());
@@ -302,7 +362,7 @@ static mlir::Value translateNLJoin(mlir::Value left, mlir::Value right, mlir::re
    {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-      vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute());
+      vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute(), 0);
    }
    rewriter.create<mlir::subop::MaterializeOp>(loc, left, vector, helper.createColumnstateMapping());
    auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), right);
@@ -411,8 +471,8 @@ static std::pair<mlir::Value, std::string> createMarkerState(mlir::OpBuilder& re
       mlir::Value val = rewriter.create<mlir::db::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
       rewriter.create<mlir::tuples::ReturnOp>(loc, val);
    }
-   auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute());
-   createOp.initFn().push_back(initialValueBlock);
+   auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute(), 1);
+   createOp.initFn().front().push_back(initialValueBlock);
 
    return {createOp.res(), memberName};
 }
@@ -426,8 +486,8 @@ static std::pair<mlir::Value, std::string> createCounterState(mlir::OpBuilder& r
       mlir::Value val = rewriter.create<mlir::db::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0));
       rewriter.create<mlir::tuples::ReturnOp>(loc, val);
    }
-   auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute());
-   createOp.initFn().push_back(initialValueBlock);
+   auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute(), 1);
+   createOp.initFn().front().push_back(initialValueBlock);
 
    return {createOp.res(), memberName};
 }
@@ -439,7 +499,7 @@ static mlir::Value translateSemiJoin(mlir::Region& predicate, mlir::Value left, 
    {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-      vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute());
+      vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute(), 0);
    }
    rewriter.create<mlir::subop::MaterializeOp>(loc, right, vector, helper.createColumnstateMapping());
    auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), left);
@@ -466,6 +526,40 @@ static mlir::Value translateSemiJoin(mlir::Region& predicate, mlir::Value left, 
    }
    return nestedMapOp.res();
 }
+static mlir::Value translateMarkJoin(mlir::Region& predicate, mlir::Value left, mlir::Value right, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, const mlir::tuples::Column* markColumn) {
+   auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+   MaterializationHelper helper(columns, rewriter.getContext());
+   auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), helper.createStateMembersAttr());
+   mlir::Value vector;
+   {
+      mlir::OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
+      vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute(), 0);
+   }
+   rewriter.create<mlir::subop::MaterializeOp>(loc, right, vector, helper.createColumnstateMapping());
+   auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), left);
+   auto* b = new Block;
+   mlir::Value tuple = b->addArgument(mlir::tuples::TupleType::get(rewriter.getContext()), loc);
+   nestedMapOp.region().push_back(b);
+   auto markerDefAttr = colManager.createDef(markColumn);
+   {
+      mlir::OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(b);
+      auto [markerState, markerName] = createMarkerState(rewriter, loc);
+      mlir::Value scan = rewriter.create<mlir::subop::ScanOp>(loc, vector, helper.createStateColumnMapping());
+      mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, scan, tuple);
+      auto filtered = translateSelection(combined, predicate, rewriter, loc);
+      auto [mapped, boolColumn] = mapBool(filtered, rewriter, loc, true);
+      auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("lookup"), "ref");
+      referenceDefAttr.getColumn().type = mlir::subop::EntryRefType::get(rewriter.getContext(), markerState.getType());
+      auto afterLookup = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(rewriter.getContext()), mapped, markerState, rewriter.getArrayAttr({}), referenceDefAttr);
+      rewriter.create<mlir::subop::ScatterOp>(rewriter.getUnknownLoc(), afterLookup, colManager.createRef(&referenceDefAttr.getColumn()), rewriter.getDictionaryAttr(rewriter.getNamedAttr(markerName, colManager.createRef(boolColumn))));
+
+      Value scanState = rewriter.create<mlir::subop::ScanOp>(loc, markerState, rewriter.getDictionaryAttr(rewriter.getNamedAttr(markerName, markerDefAttr)));
+      rewriter.create<mlir::tuples::ReturnOp>(loc, scanState);
+   }
+   return nestedMapOp.res();
+}
 static mlir::Value translateOuterJoin(mlir::ArrayAttr mapping, mlir::Region& predicate, mlir::Value left, mlir::Value right, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc) {
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    MaterializationHelper helper(columns, rewriter.getContext());
@@ -474,7 +568,7 @@ static mlir::Value translateOuterJoin(mlir::ArrayAttr mapping, mlir::Region& pre
    {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-      vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute());
+      vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute(), 0);
    }
    rewriter.create<mlir::subop::MaterializeOp>(loc, right, vector, helper.createColumnstateMapping());
    auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), left);
@@ -499,7 +593,7 @@ static mlir::Value translateOuterJoin(mlir::ArrayAttr mapping, mlir::Region& pre
       Value filteredNoMatch = rewriter.create<mlir::subop::FilterOp>(loc, scanState, mlir::subop::FilterSemantic::none_true, rewriter.getArrayAttr({colManager.createRef(&markerDefAttr.getColumn())}));
       auto mappedNull = mapColsToNull(filteredNoMatch, rewriter, loc, mapping);
       auto mappedNullable = mapColsToNullable(filtered, rewriter, loc, mapping);
-      Value unioned = rewriter.create<mlir::subop::UnionOp>(loc, mappedNullable, mappedNull);
+      Value unioned = rewriter.create<mlir::subop::UnionOp>(loc, mlir::ValueRange{mappedNullable, mappedNull});
       rewriter.create<mlir::tuples::ReturnOp>(loc, unioned);
    }
    return nestedMapOp.res();
@@ -513,7 +607,7 @@ static mlir::Value translateReverseSemiJoin(mlir::Region& predicate, mlir::Value
    {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-      vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute());
+      vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute(), 0);
    }
    left = mapBool(left, rewriter, loc, false, flagColumn);
    rewriter.create<mlir::subop::MaterializeOp>(loc, left, vector, helper.createColumnstateMapping());
@@ -584,6 +678,15 @@ class SingleJoinLowering : public OpConversionPattern<mlir::relalg::SingleJoinOp
 
    LogicalResult matchAndRewrite(mlir::relalg::SingleJoinOp crossProductOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       rewriter.replaceOp(crossProductOp, translateOuterJoin(crossProductOp.mapping(), crossProductOp.predicate(), adaptor.left(), adaptor.right(), mlir::cast<Operator>(crossProductOp.right().getDefiningOp()).getAvailableColumns(), rewriter, crossProductOp->getLoc()));
+      return success();
+   }
+};
+class MarkJoinLowering : public OpConversionPattern<mlir::relalg::MarkJoinOp> {
+   public:
+   using OpConversionPattern<mlir::relalg::MarkJoinOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::relalg::MarkJoinOp crossProductOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOp(crossProductOp, translateMarkJoin(crossProductOp.predicate(), adaptor.left(), adaptor.right(), mlir::cast<Operator>(crossProductOp.right().getDefiningOp()).getAvailableColumns(), rewriter, crossProductOp->getLoc(), &crossProductOp.markattr().getColumn()));
       return success();
    }
 };
@@ -664,7 +767,7 @@ class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-         vector = rewriter.create<mlir::subop::CreateOp>(sortOp->getLoc(), vectorType, mlir::Attribute{});
+         vector = rewriter.create<mlir::subop::CreateOp>(sortOp->getLoc(), vectorType, mlir::Attribute{}, 0);
       }
       rewriter.create<mlir::subop::MaterializeOp>(sortOp->getLoc(), adaptor.rel(), vector, helper.createColumnstateMapping());
       auto* block = new Block;
@@ -713,7 +816,7 @@ class TmpLowering : public OpConversionPattern<mlir::relalg::TmpOp> {
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-         vector = rewriter.create<mlir::subop::CreateOp>(tmpOp->getLoc(), vectorType, mlir::Attribute{});
+         vector = rewriter.create<mlir::subop::CreateOp>(tmpOp->getLoc(), vectorType, mlir::Attribute{}, 0);
       }
       rewriter.create<mlir::subop::MaterializeOp>(tmpOp->getLoc(), adaptor.rel(), vector, helper.createColumnstateMapping());
       std::vector<mlir::Value> results;
@@ -748,7 +851,7 @@ class MaterializeLowering : public OpConversionPattern<mlir::relalg::Materialize
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-         table = rewriter.create<mlir::subop::CreateOp>(materializeOp->getLoc(), tableRefType, rewriter.getArrayAttr(colNames));
+         table = rewriter.create<mlir::subop::CreateOp>(materializeOp->getLoc(), tableRefType, rewriter.getArrayAttr(colNames), 0);
       }
       rewriter.create<mlir::subop::MaterializeOp>(materializeOp->getLoc(), adaptor.rel(), table, rewriter.getDictionaryAttr(mapping));
       rewriter.replaceOpWithNewOp<mlir::subop::ConvertToExplicit>(materializeOp, mlir::dsa::TableType::get(rewriter.getContext()), table);
@@ -1071,8 +1174,8 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-            auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{});
-            createOp.initFn().push_back(initialValueBlock);
+            auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{}, 1);
+            createOp.initFn().front().push_back(initialValueBlock);
             state = createOp.res();
          }
          afterLookup = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), adaptor.rel(), state, rewriter.getArrayAttr({}), referenceDefAttr);
@@ -1096,7 +1199,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(rewriter.getInsertionBlock());
-            auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{});
+            auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{}, 0);
             state = createOp.res();
          }
          auto lookupOp = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), adaptor.rel(), state, aggregationOp.group_by_cols(), referenceDefAttr);
@@ -1196,6 +1299,8 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<ProjectionAllLowering>(typeConverter, ctxt);
    patterns.insert<ProjectionDistinctLowering>(typeConverter, ctxt);
    patterns.insert<TmpLowering>(typeConverter, ctxt);
+   patterns.insert<ConstRelationLowering>(typeConverter, ctxt);
+   patterns.insert<MarkJoinLowering>(typeConverter, ctxt);
    patterns.insert<CrossProductLowering>(typeConverter, ctxt);
    patterns.insert<InnerJoinNLLowering>(typeConverter, ctxt);
    patterns.insert<AggregationLowering>(typeConverter, ctxt);
