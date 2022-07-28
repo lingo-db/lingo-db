@@ -197,8 +197,7 @@ ColumnSet OuterJoinOp::getAvailableColumns() {
       auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
       renamed.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
-   auto availablePreviously = collectColumns(getChildOperators(*this), [](Operator op) { return op.getAvailableColumns(); });
-   availablePreviously.remove(renamed);
+   auto availablePreviously = mlir::cast<Operator>(left().getDefiningOp()).getAvailableColumns();
    auto created = getCreatedColumns();
    availablePreviously.insert(created);
    return availablePreviously;
@@ -223,8 +222,7 @@ ColumnSet SingleJoinOp::getAvailableColumns() {
       auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
       renamed.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
-   auto availablePreviously = collectColumns(getChildOperators(*this), [](Operator op) { return op.getAvailableColumns(); });
-   availablePreviously.remove(renamed);
+   auto availablePreviously = mlir::cast<Operator>(left().getDefiningOp()).getAvailableColumns();
    auto created = getCreatedColumns();
    availablePreviously.insert(created);
    return availablePreviously;

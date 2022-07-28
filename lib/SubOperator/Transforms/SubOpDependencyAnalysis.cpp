@@ -1,4 +1,5 @@
 #include "mlir/Dialect/SubOperator/Transforms/SubOpDependencyAnalysis.h"
+#include "llvm/Support/Debug.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 
 #include <queue>
@@ -35,7 +36,7 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
             addDependency(subopRoot, conflict);
          }
       }
-      for (auto writtenMember : subop.getReadMembers()) {
+      for (auto writtenMember : subop.getWrittenMembers()) {
          for (auto* conflict : writtenMembers[writtenMember]) {
             addDependency(subopRoot, conflict);
          }
@@ -79,5 +80,10 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
          }
       }
       localOrdering.insert(localOrdering.end(), pipelines[currRoot].begin(), pipelines[currRoot].end());
+   }
+   for (auto [root, c] : dependCount) {
+      if (c != 0) {
+         assert(false&& "could not find suitable order of sub-operators");
+      }
    }
 }
