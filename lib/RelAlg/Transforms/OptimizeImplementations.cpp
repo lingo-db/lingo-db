@@ -7,6 +7,89 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace {
+class HashJoinUtils {
+   public:
+
+   static bool isAndedResult(mlir::Operation* op, bool first = true) {
+      if (mlir::isa<mlir::tuples::ReturnOp>(op)) {
+         return true;
+      }
+      if (mlir::isa<mlir::db::AndOp>(op) || first) {
+         for (auto* user : op->getUsers()) {
+            if (!isAndedResult(user, false)) return false;
+         }
+         return true;
+      } else {
+         return false;
+      }
+   }
+   struct MapBlockInfo {
+      std::vector<mlir::Value> results;
+      mlir::Block* block;
+      std::vector<mlir::Attribute> createdColumns;
+   };
+   static std::vector<mlir::Attribute> extractKeys(mlir::Block* block, mlir::relalg::ColumnSet keyAttributes, mlir::relalg::ColumnSet otherAttributes, MapBlockInfo& mapBlockInfo) {
+      std::vector<mlir::Attribute> toHash;
+      llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> required;
+      mlir::BlockAndValueMapping mapping;
+      mapping.map(block->getArgument(0), mapBlockInfo.block->getArgument(0));
+      size_t i = 0;
+      block->walk([&](mlir::Operation* op) {
+         if (auto getAttr = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
+            required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.attr())});
+         } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
+            if (cmpOp.isEqualityPred() && isAndedResult(op)) {
+               auto leftAttributes = required[cmpOp.getLeft()];
+               auto rightAttributes = required[cmpOp.getRight()];
+               mlir::Value keyVal;
+               if (leftAttributes.isSubsetOf(keyAttributes) && rightAttributes.isSubsetOf(otherAttributes)) {
+                  keyVal = cmpOp.getLeft();
+               } else if (rightAttributes.isSubsetOf(keyAttributes) && leftAttributes.isSubsetOf(otherAttributes)) {
+                  keyVal = cmpOp.getRight();
+               }
+               if (keyVal) {
+                  if (auto getColOp = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(keyVal.getDefiningOp())) {
+                     toHash.push_back(getColOp.attr());
+                  } else {
+                     //todo: remove nasty hack:
+                     mlir::OpBuilder builder(cmpOp->getContext());
+                     builder.setInsertionPointToEnd(mapBlockInfo.block);
+                     auto helperOp = builder.create<mlir::arith::ConstantOp>(cmpOp.getLoc(), builder.getIndexAttr(0));
+
+                     mlir::relalg::detail::inlineOpIntoBlock(keyVal.getDefiningOp(), keyVal.getDefiningOp()->getParentOp(), mapBlockInfo.block, mapping, helperOp);
+                     helperOp->remove();
+                     helperOp->destroy();
+
+                     auto& colManager = builder.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+                     auto def = colManager.createDef(colManager.getUniqueScope("join"), "key" + std::to_string(i++));
+                     def.getColumn().type = keyVal.getType();
+                     auto ref = colManager.createRef(&def.getColumn());
+                     mapBlockInfo.createdColumns.push_back(def);
+                     mapBlockInfo.results.push_back(mapping.lookupOrNull(keyVal));
+                     toHash.push_back(ref);
+                     {
+                        mlir::OpBuilder builder2(cmpOp->getContext());
+                        builder2.setInsertionPointToStart(block);
+                        keyVal.replaceAllUsesWith(builder2.create<mlir::tuples::GetColumnOp>(builder2.getUnknownLoc(), keyVal.getType(), ref, block->getArgument(0)));
+                     }
+                  }
+               }
+            }
+         } else {
+            mlir::relalg::ColumnSet attributes;
+            for (auto operand : op->getOperands()) {
+               if (required.count(operand)) {
+                  attributes.insert(required[operand]);
+               }
+            }
+            for (auto result : op->getResults()) {
+               required.insert({result, attributes});
+            }
+         }
+      });
+      return toHash;
+   }
+};
 class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-optimize-implementations"; }
 
@@ -20,7 +103,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          if (auto getAttr = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
             required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.attr())});
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
-            if (cmpOp.isEqualityPred() && mlir::relalg::HashJoinUtils::isAndedResult(op)) {
+            if (cmpOp.isEqualityPred() && HashJoinUtils::isAndedResult(op)) {
                auto leftAttributes = required[cmpOp.getLeft()];
                auto rightAttributes = required[cmpOp.getRight()];
                if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {
@@ -43,15 +126,59 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       });
       return res;
    }
+
+   void prepareForHash(PredicateOperator predicateOperator) {
+      auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
+      auto left = mlir::cast<Operator>(binOp.leftChild());
+      auto right = mlir::cast<Operator>(binOp.rightChild());
+      //left
+      {
+         mlir::OpBuilder builder(&this->getContext());
+         HashJoinUtils::MapBlockInfo mapBlockInfo;
+         mapBlockInfo.block = new mlir::Block;
+         mapBlockInfo.block->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+         auto keys = HashJoinUtils::extractKeys(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns(), mapBlockInfo);
+         if (!mapBlockInfo.createdColumns.empty()) {
+            builder.setInsertionPoint(predicateOperator);
+            auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), left.asRelation(), builder.getArrayAttr(mapBlockInfo.createdColumns));
+            mapOp.predicate().push_back(mapBlockInfo.block);
+            mlir::OpBuilder builder2(builder.getContext());
+            builder2.setInsertionPointToEnd(mapBlockInfo.block);
+            builder2.create<mlir::tuples::ReturnOp>(builder2.getUnknownLoc(), mapBlockInfo.results);
+            left = mapOp;
+         }
+         predicateOperator->setAttr("leftHash", builder.getArrayAttr(keys));
+      }
+      //right
+      {
+         mlir::OpBuilder builder(&this->getContext());
+         HashJoinUtils::MapBlockInfo mapBlockInfo;
+         mapBlockInfo.block = new mlir::Block;
+         mapBlockInfo.block->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+         auto keys = HashJoinUtils::extractKeys(&predicateOperator.getPredicateBlock(), right.getAvailableColumns(), left.getAvailableColumns(), mapBlockInfo);
+         if (!mapBlockInfo.createdColumns.empty()) {
+            builder.setInsertionPoint(predicateOperator);
+            auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), right.asRelation(), builder.getArrayAttr(mapBlockInfo.createdColumns));
+            mapOp.predicate().push_back(mapBlockInfo.block);
+            mlir::OpBuilder builder2(builder.getContext());
+            builder2.setInsertionPointToEnd(mapBlockInfo.block);
+            builder2.create<mlir::tuples::ReturnOp>(builder2.getUnknownLoc(), mapBlockInfo.results);
+            right = mapOp;
+         }
+         predicateOperator->setAttr("rightHash", builder.getArrayAttr(keys));
+      }
+      mlir::cast<Operator>(predicateOperator.getOperation()).setChildren({left, right});
+   }
    void runOnOperation() override {
       getOperation().walk([&](Operator op) {
          ::llvm::TypeSwitch<mlir::Operation*, void>(op.getOperation())
-            .Case<mlir::relalg::InnerJoinOp, mlir::relalg::MarkJoinOp,mlir::relalg::CollectionJoinOp>([&](PredicateOperator predicateOperator) {
+            .Case<mlir::relalg::InnerJoinOp, mlir::relalg::MarkJoinOp, mlir::relalg::CollectionJoinOp>([&](PredicateOperator predicateOperator) {
                auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
                auto left = mlir::cast<Operator>(binOp.leftChild());
                auto right = mlir::cast<Operator>(binOp.rightChild());
                if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
                   op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
+                  prepareForHash(predicateOperator);
                }
             })
             .Case<mlir::relalg::SemiJoinOp, mlir::relalg::AntiSemiJoinOp, mlir::relalg::OuterJoinOp>([&](PredicateOperator predicateOperator) {
@@ -59,6 +186,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                auto left = mlir::cast<Operator>(binOp.leftChild());
                auto right = mlir::cast<Operator>(binOp.rightChild());
                if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
+                  prepareForHash(predicateOperator);
                   if (left->hasAttr("rows") && right->hasAttr("rows")) {
                      double rowsLeft = 0;
                      double rowsRight = 0;
@@ -91,6 +219,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                auto left = mlir::cast<Operator>(op.leftChild());
                auto right = mlir::cast<Operator>(op.rightChild());
                if (hashImplPossible(&op.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
+                  prepareForHash(op);
                   op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
                }
             })

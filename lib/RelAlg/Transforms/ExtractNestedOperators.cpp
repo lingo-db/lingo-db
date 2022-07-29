@@ -31,7 +31,7 @@ class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, 
             }
             innerOperator->walk([&](mlir::Operation* op) {
                if (!mlir::isa<Operator>(op)) {
-                  mlir::relalg::detail::inlineOpIntoBlock(op, toMoveBefore, innerOperator, op->getBlock(), mapping);
+                  mlir::relalg::detail::inlineOpIntoBlock(op, toMoveBefore, op->getBlock(), mapping);
                   sanitizeOp(mapping, op);
                }
             });

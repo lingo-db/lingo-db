@@ -205,7 +205,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          Value higherPredVal = higherTerminator.results()[0];
          mlir::BlockAndValueMapping mapping;
          mapping.map(selOp.getPredicateArgument(), lower.getPredicateArgument());
-         mlir::relalg::detail::inlineOpIntoBlock(higherPredVal.getDefiningOp(), higherPredVal.getDefiningOp()->getParentOp(), lower.getOperation(), &lower.getPredicateBlock(), mapping);
+         mlir::relalg::detail::inlineOpIntoBlock(higherPredVal.getDefiningOp(), higherPredVal.getDefiningOp()->getParentOp(), &lower.getPredicateBlock(), mapping);
          nullable |= higherPredVal.getType().isa<mlir::db::NullableType>();
          values.push_back(mapping.lookup(higherPredVal));
       }

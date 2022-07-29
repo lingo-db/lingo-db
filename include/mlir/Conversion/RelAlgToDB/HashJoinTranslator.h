@@ -101,7 +101,7 @@ class HashJoinUtils {
                      builder.setInsertionPoint(newBlock, insertionPoint);
                      auto helperOp = builder.create<arith::ConstantOp>(cmpOp.getLoc(), builder.getIndexAttr(0));
 
-                     mlir::relalg::detail::inlineOpIntoBlock(keyVal.getDefiningOp(), keyVal.getDefiningOp()->getParentOp(), newBlock->getParentOp(), newBlock, mapping, helperOp);
+                     mlir::relalg::detail::inlineOpIntoBlock(keyVal.getDefiningOp(), keyVal.getDefiningOp()->getParentOp(), newBlock, mapping, helperOp);
                      helperOp->remove();
                      helperOp->destroy();
                   }

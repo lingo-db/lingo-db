@@ -321,7 +321,7 @@ void mlir::relalg::detail::initPredicate(mlir::Operation* op) {
    builder.create<mlir::tuples::ReturnOp>(op->getLoc());
 }
 
-static void addRequirements(mlir::Operation* op, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, llvm::SmallVector<mlir::Operation*, 8>& extracted, llvm::SmallPtrSet<mlir::Operation*, 8>& alreadyPresent, mlir::BlockAndValueMapping& mapping) {
+static void addRequirements(mlir::Operation* op, mlir::Operation* includeChildren, mlir::Block* excludeChildren, llvm::SmallVector<mlir::Operation*, 8>& extracted, llvm::SmallPtrSet<mlir::Operation*, 8>& alreadyPresent, mlir::BlockAndValueMapping& mapping) {
    if (!op)
       return;
    if (alreadyPresent.contains(op))
@@ -344,14 +344,15 @@ static void addRequirements(mlir::Operation* op, mlir::Operation* includeChildre
       }
    });
    alreadyPresent.insert(op);
-   if (!excludeChildren->isAncestor(op)) {
+   mlir::Block* b=op->getBlock();
+   if (!excludeChildren->findAncestorOpInBlock(*op)) {
       extracted.push_back(op);
    }
 }
-void mlir::relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Operation* excludeChildren, mlir::Block* newBlock, mlir::BlockAndValueMapping& mapping, mlir::Operation* first) {
+void mlir::relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Block* newBlock, mlir::BlockAndValueMapping& mapping, mlir::Operation* first) {
    llvm::SmallVector<mlir::Operation*, 8> extracted;
    llvm::SmallPtrSet<mlir::Operation*, 8> alreadyPresent;
-   addRequirements(vop, includeChildren, excludeChildren, extracted, alreadyPresent, mapping);
+   addRequirements(vop, includeChildren, newBlock, extracted, alreadyPresent, mapping);
    mlir::OpBuilder builder(vop->getContext());
    builder.setInsertionPointToStart(newBlock);
    first = first ? first : (newBlock->empty() ? nullptr : &newBlock->front());
