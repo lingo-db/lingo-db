@@ -5,13 +5,14 @@
 #include <queue>
 mlir::subop::SubOpRootAnalysis::SubOpRootAnalysis(mlir::Operation* op) {
    op->walk([&](mlir::subop::SubOperator subop) {
-      mlir::Operation* root = subop.getOperation();
       for (auto x : subop->getOperands()) {
          if (auto pred = mlir::dyn_cast_or_null<mlir::subop::SubOperator>(x.getDefiningOp())) {
-            root = this->root[pred];
+            this->roots[subop].insert(this->roots[subop].end(), this->roots[pred].begin(), this->roots[pred].end());
          }
       }
-      this->root[subop] = root;
+      if (this->roots[subop].empty()) {
+         this->roots[subop].push_back(subop.getOperation());
+      }
    });
 }
 mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* op, AnalysisManager& am) {
@@ -21,37 +22,39 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
    std::unordered_map<mlir::Operation*, size_t> dependCount;
    std::queue<mlir::Operation*> queue;
    op->walk([&](mlir::subop::SubOperator subop) {
-      auto* subopRoot = rootAnalysis.getRoot(subop);
-      for (auto x : subop->getOperands()) {
-         if (!x.getType().isa<mlir::tuples::TupleStreamType>()) {
-            if (auto* definingOp = x.getDefiningOp()) {
-               if (subopRoot->getBlock() == definingOp->getBlock()) {
-                  pipelineRequirements[subopRoot].push_back(definingOp);
+      auto roots=rootAnalysis.getRoots(subop);
+      for (auto* subopRoot : roots) {
+         for (auto x : subop->getOperands()) {
+            if (!x.getType().isa<mlir::tuples::TupleStreamType>()) {
+               if (auto* definingOp = x.getDefiningOp()) {
+                  if (subopRoot->getBlock() == definingOp->getBlock()) {
+                     pipelineRequirements[subopRoot].push_back(definingOp);
+                  }
                }
             }
          }
-      }
-      for (auto readMember : subop.getReadMembers()) {
-         for (auto* conflict : writtenMembers[readMember]) {
-            addDependency(subopRoot, conflict);
+         for (auto readMember : subop.getReadMembers()) {
+            for (auto* conflict : writtenMembers[readMember]) {
+               addDependency(subopRoot, conflict,roots);
+            }
          }
-      }
-      for (auto writtenMember : subop.getWrittenMembers()) {
-         for (auto* conflict : writtenMembers[writtenMember]) {
-            addDependency(subopRoot, conflict);
+         for (auto writtenMember : subop.getWrittenMembers()) {
+            for (auto* conflict : writtenMembers[writtenMember]) {
+               addDependency(subopRoot, conflict,roots);
+            }
+            for (auto* conflict : readMembers[writtenMember]) {
+               addDependency(subopRoot, conflict,roots);
+            }
          }
-         for (auto* conflict : readMembers[writtenMember]) {
-            addDependency(subopRoot, conflict);
+         for (auto readMember : subop.getReadMembers()) {
+            readMembers[readMember].insert(subopRoot);
          }
-      }
-      for (auto readMember : subop.getReadMembers()) {
-         readMembers[readMember].insert(subopRoot);
-      }
-      for (auto writtenMember : subop.getWrittenMembers()) {
-         writtenMembers[writtenMember].insert(subopRoot);
-      }
+         for (auto writtenMember : subop.getWrittenMembers()) {
+            writtenMembers[writtenMember].insert(subopRoot);
+         }
 
-      pipelines[subopRoot].push_back(subop);
+         pipelines[subopRoot].push_back(subop);
+      }
    });
    for (auto x : pipelines) {
       dependCount[x.first] = dependencies[x.first].size();
@@ -83,7 +86,19 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
    }
    for (auto [root, c] : dependCount) {
       if (c != 0) {
-         assert(false&& "could not find suitable order of sub-operators");
+         root->dump();
+         llvm::dbgs()<<"dependencies:\n";
+         for(auto dep:dependencies[root]){
+            if(dependCount[dep]>0){
+               dep->dump();
+            }
+         }
+         llvm::dbgs()<<"-----------------------------------------------\n";
+      }
+   }
+   for (auto [root, c] : dependCount) {
+      if (c != 0) {
+         assert(false && "could not find suitable order of sub-operators");
       }
    }
 }

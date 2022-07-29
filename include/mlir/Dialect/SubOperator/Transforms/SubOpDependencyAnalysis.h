@@ -8,10 +8,10 @@
 namespace mlir::subop {
 
 struct SubOpRootAnalysis {
-   std::unordered_map<mlir::Operation*, mlir::Operation*> root;
+   std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>> roots;
    SubOpRootAnalysis(mlir::Operation* op);
-   mlir::Operation* getRoot(mlir::Operation* op) {
-      return root[op];
+   const std::vector<mlir::Operation*>& getRoots(mlir::Operation* op) {
+      return roots[op];
    }
 };
 struct SubOpDependencyAnalysis {
@@ -21,8 +21,9 @@ struct SubOpDependencyAnalysis {
    std::unordered_map<std::string, std::unordered_set<mlir::Operation*>> writtenMembers;
    std::unordered_map<mlir::Block*, std::vector<mlir::Operation*>> validOrder;
    SubOpDependencyAnalysis(mlir::Operation* op, AnalysisManager& am);
-   void addDependency(mlir::Operation* a, mlir::Operation* b) {
+   void addDependency(mlir::Operation* a, mlir::Operation* b,std::vector<mlir::Operation*> exclude) {
       if (a == b) return;
+      if(std::find(exclude.begin(),exclude.end(),b)!=exclude.end())return;
       dependencies[a].insert(b);
       inverseDependencies[b].insert(a);
    }
