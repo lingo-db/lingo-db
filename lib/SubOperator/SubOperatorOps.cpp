@@ -314,7 +314,100 @@ void subop::SortOp::print(OpAsmPrinter& p) {
    p << "])";
    p.printRegion(op.region(), false, true);
 }
+ParseResult mlir::subop::LookupOrInsertOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   OpAsmParser::UnresolvedOperand stream;
+   if (parser.parseOperand(stream)) {
+      return failure();
+   }
+   parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands);
+   OpAsmParser::UnresolvedOperand state;
+   if (parser.parseOperand(state)) {
+      return failure();
+   }
 
+   mlir::ArrayAttr keys;
+   parseCustRefArr(parser, keys);
+   result.addAttribute("keys", keys);
+   mlir::Type stateType;
+   parser.parseColonType(stateType);
+   parser.resolveOperand(state, stateType, result.operands);
+   mlir::tuples::ColumnDefAttr reference;
+   parseCustDef(parser, reference);
+   result.addAttribute("ref", reference);
+   std::vector<OpAsmParser::Argument> leftArgs(keys.size());
+   std::vector<OpAsmParser::Argument> rightArgs(keys.size());
+   Region* eqFn = result.addRegion();
+
+   if (parser.parseOptionalKeyword("eq").succeeded()) {
+      if (parser.parseColon() || parser.parseLParen() || parser.parseLSquare()) {
+         return failure();
+      }
+      for (size_t i = 0; i < keys.size(); i++) {
+         leftArgs[i].type = keys[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+         if (i > 0 && parser.parseComma().failed()) return failure();
+         if (parser.parseArgument(leftArgs[i])) return failure();
+      }
+      if (parser.parseRSquare() || parser.parseComma() || parser.parseLSquare()) {
+         return failure();
+      }
+      for (size_t i = 0; i < keys.size(); i++) {
+         rightArgs[i].type = keys[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+         if (i > 0 && parser.parseComma().failed()) return failure();
+         if (parser.parseArgument(rightArgs[i])) return failure();
+      }
+      if (parser.parseRSquare() || parser.parseRParen()) {
+         return failure();
+      }
+      std::vector<OpAsmParser::Argument> args;
+      args.insert(args.end(), leftArgs.begin(), leftArgs.end());
+      args.insert(args.end(), rightArgs.begin(), rightArgs.end());
+      if (parser.parseRegion(*eqFn, args)) return failure();
+   }
+   Region* initialFn = result.addRegion();
+
+   if (parser.parseOptionalKeyword("initial").succeeded()) {
+      if (parser.parseColon()) return failure();
+      if (parser.parseRegion(*initialFn, {})) return failure();
+   }
+   result.addTypes(mlir::tuples::TupleStreamType::get(parser.getContext()));
+   return success();
+}
+
+void subop::LookupOrInsertOp::print(OpAsmPrinter& p) {
+   subop::LookupOrInsertOp& op = *this;
+   p << " " << op.stream() << op.state() << " ";
+   printCustRefArr(p, op, op.keys());
+   p << " : " << op.state().getType() << " ";
+   printCustDef(p, op, op.ref());
+   if (!op.eqFn().empty()) {
+      p << "eq: ([";
+      bool first = true;
+      for (size_t i = 0; i < op.keys().size(); i++) {
+         if (first) {
+            first = false;
+         } else {
+            p << ",";
+         }
+         p << op.eqFn().front().getArgument(i);
+      }
+      p << "],[";
+      first = true;
+      for (size_t i = 0; i < op.keys().size(); i++) {
+         if (first) {
+            first = false;
+         } else {
+            p << ",";
+         }
+         p << op.eqFn().front().getArgument(op.keys().size() + i);
+      }
+      p << "]) ";
+      p.printRegion(op.eqFn(), false, true);
+   }
+   if (!op.initFn().empty()) {
+      p << "initial: ";
+      p.printRegion(op.initFn(), false, true);
+   }
+}
 ParseResult mlir::subop::LookupOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    OpAsmParser::UnresolvedOperand stream;
    if (parser.parseOperand(stream)) {
@@ -502,16 +595,29 @@ ParseResult mlir::subop::NestedMapOp::parse(::mlir::OpAsmParser& parser, ::mlir:
    parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands);
 
    OpAsmParser::Argument streamArg;
+   std::vector<OpAsmParser::Argument> parameterArgs;
+   mlir::ArrayAttr parameters;
+   parseCustRefArr(parser, parameters);
+   result.addAttribute("parameters",parameters);
    if (parser.parseLParen()) {
       return failure();
    }
    streamArg.type = mlir::tuples::TupleType::get(parser.getContext());
    parser.parseArgument(streamArg);
+   for (auto x : parameters) {
+      OpAsmParser::Argument arg;
+      arg.type=x.cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+      if(parser.parseComma()||parser.parseArgument(arg))return failure();
+      parameterArgs.push_back(arg);
+   }
    if (parser.parseRParen()) {
       return failure();
    }
    Region* body = result.addRegion();
-   if (parser.parseRegion(*body, {streamArg})) return failure();
+   std::vector<OpAsmParser::Argument> args;
+   args.push_back(streamArg);
+   args.insert(args.end(), parameterArgs.begin(), parameterArgs.end());
+   if (parser.parseRegion(*body, args)) return failure();
    result.addTypes(mlir::tuples::TupleStreamType::get(parser.getContext()));
    return success();
 }
@@ -519,6 +625,7 @@ ParseResult mlir::subop::NestedMapOp::parse(::mlir::OpAsmParser& parser, ::mlir:
 void subop::NestedMapOp::print(OpAsmPrinter& p) {
    subop::NestedMapOp& op = *this;
    p << " " << op.stream() << " ";
+   printCustRefArr(p, this->getOperation(), parameters());
    p << " (";
    p.printOperands(op.region().front().getArguments());
    p << ") ";
@@ -562,6 +669,20 @@ std::vector<std::string> subop::SortOp::getWrittenMembers() {
    }
    return res;
 }
+std::vector<std::string> subop::MaintainOp::getWrittenMembers() {
+   std::vector<std::string> res;
+   for (auto x : state().getType().cast<mlir::subop::State>().getMembers().getNames()) {
+      res.push_back(x.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
+std::vector<std::string> subop::MaintainOp::getReadMembers() {
+   std::vector<std::string> res;
+   for (auto x : state().getType().cast<mlir::subop::State>().getMembers().getNames()) {
+      res.push_back(x.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
 std::vector<std::string> subop::SortOp::getReadMembers() {
    std::vector<std::string> res;
    for (auto x : sortBy()) {
@@ -597,7 +718,14 @@ std::vector<std::string> subop::ScatterOp::getWrittenMembers() {
    }
    return res;
 }
-std::vector<std::string> subop::LookupOp::getWrittenMembers() {
+std::vector<std::string> subop::LookupOrInsertOp::getWrittenMembers() {
+   std::vector<std::string> res;
+   for (auto x : state().getType().cast<mlir::subop::State>().getMembers().getNames()) {
+      res.push_back(x.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
+std::vector<std::string> subop::LookupOp::getReadMembers() {
    std::vector<std::string> res;
    for (auto x : state().getType().cast<mlir::subop::State>().getMembers().getNames()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
@@ -613,6 +741,5 @@ std::vector<std::string> subop::GatherOp::getReadMembers() {
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"
-
 
 #include "mlir/Dialect/SubOperator/SubOperatorOpsEnums.cpp.inc"

@@ -156,6 +156,12 @@ def DSA_NextRow : DSA_Op<"next_row"> {
     let assemblyFormat = "$builder `:` type($builder) attr-dict";
 }
 
+def DSA_JoinHashtableInsert : DSA_Op<"joinht_insert"> {
+    let summary = "insert into a JoinHashtable or AggregationHashTable";
+
+    let arguments = (ins AnyType:$ht, Index:$hash, AnyType: $val);
+    let assemblyFormat = "$ht `:` type($ht) `,` $hash `,` $val `:` type($val) attr-dict";
+}
 def DSA_HashtableInsert : DSA_Op<"ht_insert"> {
     let summary = "insert into a JoinHashtable or AggregationHashTable";
 

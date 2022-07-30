@@ -117,6 +117,16 @@ class CreateHashMapLowering : public OpConversionPattern<mlir::subop::CreateOp> 
       return mlir::success();
    }
 };
+class CreateLazyMultiMapLowering : public OpConversionPattern<mlir::subop::CreateOp> {
+   public:
+   using OpConversionPattern<mlir::subop::CreateOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::CreateOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (!createOp.getType().isa<mlir::subop::LazyMultiMapType>()) return failure();
+      mlir::Value hashmap = rewriter.create<mlir::dsa::CreateDS>(createOp->getLoc(), typeConverter->convertType(createOp.getType()));
+      rewriter.replaceOp(createOp, hashmap);
+      return mlir::success();
+   }
+};
 class CreateTableLowering : public OpConversionPattern<mlir::subop::CreateOp> {
    public:
    using OpConversionPattern<mlir::subop::CreateOp>::OpConversionPattern;
@@ -181,6 +191,14 @@ class CreateVectorLowering : public OpConversionPattern<mlir::subop::CreateOp> {
          auto packed = rewriter.create<mlir::util::PackOp>(createOp->getLoc(), res);
          rewriter.create<mlir::dsa::Append>(createOp->getLoc(), vector, packed);
       }
+      return mlir::success();
+   }
+};
+class MaintainOpLowering : public OpConversionPattern<mlir::subop::MaintainOp> {
+   public:
+   using OpConversionPattern<mlir::subop::MaintainOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::MaintainOp maintainOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOpWithNewOp<mlir::dsa::Finalize>(maintainOp,adaptor.state());
       return mlir::success();
    }
 };
@@ -426,6 +444,42 @@ class ScanVectorLowering : public OpConversionPattern<mlir::subop::ScanOp> {
       return success();
    }
 };
+class ScanLazyMultiMapLowering : public OpConversionPattern<mlir::subop::ScanOp> {
+   public:
+   using OpConversionPattern<mlir::subop::ScanOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::ScanOp scanOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (!scanOp.state().getType().isa<mlir::subop::LazyMultiMapType>()) return failure();
+      auto columns = scanOp.state().getType().cast<mlir::subop::LazyMultiMapType>().getValueMembers();
+      ColumnMapping mapping;
+      auto state = adaptor.state();
+      auto vectorType = state.getType().cast<mlir::dsa::JoinHashtableType>().getElementType();
+      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::Value(), mlir::ValueRange{});
+      mlir::Block* block = new mlir::Block;
+      block->addArgument(vectorType, scanOp->getLoc());
+      forOp.getBodyRegion().push_back(block);
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(block);
+         auto loaded = rewriter.create<mlir::util::UnPackOp>(scanOp->getLoc(), forOp.getInductionVar());
+         auto unpackedValues = rewriter.create<mlir::util::UnPackOp>(scanOp->getLoc(), loaded.getResult(1)).getResults();
+
+         for (auto i = 0ul; i < columns.getTypes().size(); i++) {
+            auto name = columns.getNames()[i].cast<mlir::StringAttr>().str();
+            if (scanOp.mapping().contains(name)) {
+               auto columnDefAttr = scanOp.mapping().get(name).cast<mlir::tuples::ColumnDefAttr>();
+               mapping.define(columnDefAttr, unpackedValues[i]);
+            }
+         }
+
+         mlir::Value newInFlight = mapping.createInFlight(rewriter);
+         rewriter.replaceOp(scanOp, newInFlight);
+         rewriter.create<mlir::dsa::YieldOp>(scanOp->getLoc());
+      }
+
+      return success();
+   }
+};
 class ScanRefsVectorLowering : public OpConversionPattern<mlir::subop::ScanRefsOp> {
    public:
    using OpConversionPattern<mlir::subop::ScanRefsOp>::OpConversionPattern;
@@ -497,6 +551,36 @@ class ScanHashMapLowering : public OpConversionPattern<mlir::subop::ScanOp> {
       return success();
    }
 };
+class ScanListLowering : public OpConversionPattern<mlir::subop::ScanListOp> {
+   public:
+   using OpConversionPattern<mlir::subop::ScanListOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::ScanListOp scanOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      //if (!scanOp.list().getType().isa<mlir::subop::ListType>()) return failure();
+      ColumnMapping mapping;
+
+      auto loc = scanOp->getLoc();
+      {
+         auto forOp2 = rewriter.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, adaptor.list(), mlir::Value(), mlir::ValueRange{});
+         mlir::Block* block2 = new mlir::Block;
+         block2->addArgument(adaptor.list().getType().cast<mlir::dsa::GenericIterableType>().getElementType(), loc);
+         forOp2.getBodyRegion().push_back(block2);
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(block2);
+         Value entry = forOp2.getInductionVar();
+         Value valuePtr;
+         auto separated = rewriter.create<mlir::util::UnPackOp>(loc, forOp2.getInductionVar()).getResults();
+         entry = separated[0];
+         valuePtr = separated[1];
+         mapping.define(scanOp.elem(), valuePtr);
+         mlir::Value newInFlight = mapping.createInFlight(rewriter);
+         rewriter.replaceOp(scanOp, newInFlight);
+         rewriter.create<mlir::dsa::YieldOp>(loc);
+      }
+
+      return success();
+   }
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////// Consuming a TupleStream//////////////////////////////////////////////////
@@ -506,10 +590,10 @@ class UnionLowering : public OpConversionPattern<mlir::subop::UnionOp> {
    using OpConversionPattern<mlir::subop::UnionOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::subop::UnionOp unionOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       std::vector<mlir::Value> newStreams;
-      for(auto x:adaptor.streams()){
-         if(auto nestedUnion=mlir::dyn_cast_or_null<mlir::subop::UnionOp>(x.getDefiningOp())){
-            newStreams.insert(newStreams.end(),nestedUnion.streams().begin(),nestedUnion.streams().end());
-         }else{
+      for (auto x : adaptor.streams()) {
+         if (auto nestedUnion = mlir::dyn_cast_or_null<mlir::subop::UnionOp>(x.getDefiningOp())) {
+            newStreams.insert(newStreams.end(), nestedUnion.streams().begin(), nestedUnion.streams().end());
+         } else {
             newStreams.push_back(x);
          }
       }
@@ -596,7 +680,11 @@ class NestedMapLowering : public TupleStreamConsumerLowering<mlir::subop::Nested
 
    LogicalResult matchAndRewrite(mlir::subop::NestedMapOp nestedMapOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
       mlir::Value inFlightTuple = mapping.createInFlightTuple(rewriter);
-      auto results = inlineBlock(&nestedMapOp.region().front(), rewriter, inFlightTuple);
+      std::vector<mlir::Value> args;
+      args.push_back(inFlightTuple);
+      auto parameters = mapping.resolve(nestedMapOp.parameters());
+      args.insert(args.end(), parameters.begin(), parameters.end());
+      auto results = inlineBlock(&nestedMapOp.region().front(), rewriter, args);
       if (!results.empty()) {
          newStream = rewriter.create<mlir::subop::CombineTupleOp>(nestedMapOp->getLoc(), results[0], inFlightTuple);
       }
@@ -714,6 +802,32 @@ class MaterializeVectorLowering : public TupleStreamConsumerLowering<mlir::subop
       return mlir::success();
    }
 };
+class MaterializeLazyMultiMapLowering : public TupleStreamConsumerLowering<mlir::subop::MaterializeOp> {
+   public:
+   using TupleStreamConsumerLowering<mlir::subop::MaterializeOp>::TupleStreamConsumerLowering;
+
+   LogicalResult matchAndRewrite(mlir::subop::MaterializeOp materializeOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
+      if (!materializeOp.state().getType().isa<mlir::subop::LazyMultiMapType>()) return failure();
+      auto stateType = materializeOp.state().getType().cast<mlir::subop::LazyMultiMapType>();
+      std::vector<mlir::Value> keys;
+      std::vector<mlir::Value> values;
+      for (size_t i = 0; i < stateType.getKeyMembers().getTypes().size(); i++) {
+         auto memberName = stateType.getKeyMembers().getNames()[i].cast<mlir::StringAttr>().str();
+         auto attribute = materializeOp.mapping().get(memberName).cast<mlir::tuples::ColumnRefAttr>();
+         auto val = mapping.resolve(attribute);
+         keys.push_back(val);
+      }
+      for (size_t i = 0; i < stateType.getValueMembers().getTypes().size(); i++) {
+         auto memberName = stateType.getValueMembers().getNames()[i].cast<mlir::StringAttr>().str();
+         auto attribute = materializeOp.mapping().get(memberName).cast<mlir::tuples::ColumnRefAttr>();
+         auto val = mapping.resolve(attribute);
+         values.push_back(val);
+      }
+      mlir::Value packedValues = rewriter.create<mlir::util::PackOp>(materializeOp->getLoc(), values);
+      rewriter.create<mlir::dsa::JoinHashtableInsert>(materializeOp->getLoc(), adaptor.state(), keys[0], packedValues);
+      return mlir::success();
+   }
+};
 
 class LookupSimpleStateLowering : public TupleStreamConsumerLowering<mlir::subop::LookupOp> {
    public:
@@ -725,11 +839,36 @@ class LookupSimpleStateLowering : public TupleStreamConsumerLowering<mlir::subop
       return mlir::success();
    }
 };
-
-class LookupHashMapLowering : public TupleStreamConsumerLowering<mlir::subop::LookupOp> {
+class LookupLazyMultiMapLowering : public TupleStreamConsumerLowering<mlir::subop::LookupOp> {
    public:
    using TupleStreamConsumerLowering<mlir::subop::LookupOp>::TupleStreamConsumerLowering;
    LogicalResult matchAndRewrite(mlir::subop::LookupOp lookupOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
+      if (!lookupOp.state().getType().isa<mlir::subop::LazyMultiMapType>()) return failure();
+      auto lazyMultiMapType = lookupOp.state().getType().cast<mlir::subop::LazyMultiMapType>();
+      auto loc = lookupOp->getLoc();
+      auto unpackTypes = [](mlir::ArrayAttr arr) {
+         std::vector<Type> res;
+         for (auto x : arr) { res.push_back(x.cast<mlir::TypeAttr>().getValue()); }
+         return res;
+      };
+      mlir::TupleType keyTupleType = mlir::TupleType::get(rewriter.getContext(), {});
+      mlir::TupleType valTupleType = mlir::TupleType::get(rewriter.getContext(), unpackTypes(lazyMultiMapType.getValueMembers().getTypes()));
+      mlir::TupleType entryType = mlir::TupleType::get(rewriter.getContext(), {keyTupleType, valTupleType});
+      mlir::TupleType entryAndValuePtrType = mlir::TupleType::get(rewriter.getContext(), TypeRange{entryType, util::RefType::get(rewriter.getContext(), valTupleType)});
+      mlir::Type htIterable = mlir::dsa::GenericIterableType::get(rewriter.getContext(), entryAndValuePtrType, "join_ht_mod_iterator");
+
+      auto matches = rewriter.create<mlir::dsa::Lookup>(loc, htIterable, adaptor.state(), mapping.resolve(lookupOp.keys())[0]);
+
+      mapping.define(lookupOp.ref(), matches);
+      newStream = mapping.createInFlight(rewriter);
+      return mlir::success();
+   }
+};
+
+class LookupHashMapLowering : public TupleStreamConsumerLowering<mlir::subop::LookupOrInsertOp> {
+   public:
+   using TupleStreamConsumerLowering<mlir::subop::LookupOrInsertOp>::TupleStreamConsumerLowering;
+   LogicalResult matchAndRewrite(mlir::subop::LookupOrInsertOp lookupOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
       if (!lookupOp.state().getType().isa<mlir::subop::HashMapType>()) return failure();
       mlir::dsa::AggregationHashtableType htType = adaptor.state().getType().cast<mlir::dsa::AggregationHashtableType>();
       auto packed = rewriter.create<mlir::util::PackOp>(lookupOp->getLoc(), mapping.resolve(lookupOp.keys()));
@@ -910,6 +1049,11 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       auto valTupleType = mlir::TupleType::get(ctxt, unpackTypes(t.getValueMembers().getTypes()));
       return mlir::dsa::AggregationHashtableType::get(t.getContext(), keyTupleType, valTupleType);
    });
+   typeConverter.addConversion([&](mlir::subop::LazyMultiMapType t) -> Type {
+      auto keyTupleType = mlir::TupleType::get(ctxt, {});
+      auto valTupleType = mlir::TupleType::get(ctxt, unpackTypes(t.getValueMembers().getTypes()));
+      return mlir::dsa::JoinHashtableType::get(t.getContext(), keyTupleType, valTupleType);
+   });
    RewritePatternSet patterns(&getContext());
    patterns.insert<FilterLowering>(typeConverter, ctxt);
    patterns.insert<RenameLowering>(typeConverter, ctxt);
@@ -918,19 +1062,27 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<GetTableRefLowering>(typeConverter, ctxt);
    patterns.insert<ScanTableRefLowering>(typeConverter, ctxt);
    patterns.insert<ScanVectorLowering>(typeConverter, ctxt);
+   patterns.insert<ScanLazyMultiMapLowering>(typeConverter, ctxt);
+
    patterns.insert<ScanRefsVectorLowering>(typeConverter, ctxt);
    patterns.insert<CreateTableLowering>(typeConverter, ctxt);
    patterns.insert<CreateVectorLowering>(typeConverter, ctxt);
    patterns.insert<CreateHashMapLowering>(typeConverter, ctxt);
+   patterns.insert<CreateLazyMultiMapLowering>(typeConverter, ctxt);
    patterns.insert<CreateSimpleStateLowering>(typeConverter, ctxt);
    patterns.insert<ScanSimpleStateLowering>(typeConverter, ctxt);
+   patterns.insert<ScanListLowering>(typeConverter, ctxt);
    patterns.insert<MaterializeTableLowering>(typeConverter, ctxt);
    patterns.insert<MaterializeVectorLowering>(typeConverter, ctxt);
+   patterns.insert<MaterializeLazyMultiMapLowering>(typeConverter, ctxt);
+   patterns.insert<MaintainOpLowering>(typeConverter, ctxt);
+
    patterns.insert<ConvertToExplicitTableLowering>(typeConverter, ctxt);
    patterns.insert<SortLowering>(typeConverter, ctxt);
    patterns.insert<CombineInFlightLowering>(typeConverter, ctxt);
    patterns.insert<LookupSimpleStateLowering>(typeConverter, ctxt);
    patterns.insert<LookupHashMapLowering>(typeConverter, ctxt);
+   patterns.insert<LookupLazyMultiMapLowering>(typeConverter, ctxt);
    patterns.insert<ScanHashMapLowering>(typeConverter, ctxt);
    patterns.insert<ReduceOpLowering>(typeConverter, ctxt);
    patterns.insert<ScatterOpLowering>(typeConverter, ctxt);

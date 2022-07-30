@@ -23,6 +23,7 @@ struct SubOpDependencyAnalysis {
    SubOpDependencyAnalysis(mlir::Operation* op, AnalysisManager& am);
    void addDependency(mlir::Operation* a, mlir::Operation* b,std::vector<mlir::Operation*> exclude) {
       if (a == b) return;
+      if(a->getBlock()!=b->getBlock())return;//todo: recheck
       if(std::find(exclude.begin(),exclude.end(),b)!=exclude.end())return;
       dependencies[a].insert(b);
       inverseDependencies[b].insert(a);

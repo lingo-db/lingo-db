@@ -172,20 +172,39 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
    void runOnOperation() override {
       getOperation().walk([&](Operator op) {
          ::llvm::TypeSwitch<mlir::Operation*, void>(op.getOperation())
-            .Case<mlir::relalg::InnerJoinOp, mlir::relalg::MarkJoinOp, mlir::relalg::CollectionJoinOp>([&](PredicateOperator predicateOperator) {
+            .Case<mlir::relalg::InnerJoinOp,mlir::relalg::CollectionJoinOp>([&](PredicateOperator predicateOperator) {
                auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
                auto left = mlir::cast<Operator>(binOp.leftChild());
                auto right = mlir::cast<Operator>(binOp.rightChild());
                if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
                   op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
+                  op->setAttr("useHashJoin",mlir::UnitAttr::get(op.getContext()));
                   prepareForHash(predicateOperator);
                }
             })
-            .Case<mlir::relalg::SemiJoinOp, mlir::relalg::AntiSemiJoinOp, mlir::relalg::OuterJoinOp>([&](PredicateOperator predicateOperator) {
+            .Case<mlir::relalg::SemiJoinOp, mlir::relalg::AntiSemiJoinOp, mlir::relalg::OuterJoinOp, mlir::relalg::MarkJoinOp>([&](PredicateOperator predicateOperator) {
                auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
                auto left = mlir::cast<Operator>(binOp.leftChild());
                auto right = mlir::cast<Operator>(binOp.rightChild());
+               if (left->hasAttr("rows") && right->hasAttr("rows")) {
+                  double rowsLeft = 0;
+                  double rowsRight = 0;
+                  if (auto lDAttr = left->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()) {
+                     rowsLeft = lDAttr.getValueAsDouble();
+                  } else if (auto lIAttr = left->getAttr("rows").dyn_cast_or_null<mlir::IntegerAttr>()) {
+                     rowsLeft = lIAttr.getInt();
+                  }
+                  if (auto rDAttr = right->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()) {
+                     rowsRight = rDAttr.getValueAsDouble();
+                  } else if (auto rIAttr = right->getAttr("rows").dyn_cast_or_null<mlir::IntegerAttr>()) {
+                     rowsRight = rIAttr.getInt();
+                  }
+                  if (rowsLeft < rowsRight) {
+                     op->setAttr("reverseSides", mlir::UnitAttr::get(op.getContext()));
+                  }
+               }
                if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
+                  op->setAttr("useHashJoin",mlir::UnitAttr::get(op.getContext()));
                   prepareForHash(predicateOperator);
                   if (left->hasAttr("rows") && right->hasAttr("rows")) {
                      double rowsLeft = 0;
@@ -220,6 +239,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                auto right = mlir::cast<Operator>(op.rightChild());
                if (hashImplPossible(&op.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
                   prepareForHash(op);
+                  op->setAttr("useHashJoin",mlir::UnitAttr::get(op.getContext()));
                   op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
                }
             })

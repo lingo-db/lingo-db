@@ -73,6 +73,14 @@ def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,StateSupportingLookup
         StateMembersAttr getMembers();
     }];
 }
+def LazyMultiMap : SubOperator_Type<"LazyMultiMap", "lazy_multi_map",[State,StateSupportingLookup]> {
+    let summary = "simple state with multiple members";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let extraClassDeclaration = [{
+        StateMembersAttr getMembers();
+    }];
+}
 def Vector : SubOperator_Type<"Vector", "vector", [State,StateSupportingLookup]> {
     let summary = "vector type";
     let parameters = (ins "StateMembersAttr":$members);
@@ -103,7 +111,7 @@ def List : SubOperator_Type<"List", "list"> {
 //===----------------------------------------------------------------------===//
 class SubOperator_Op<string mnemonic, list<Trait> traits = []> : Op<SubOperator_Dialect, mnemonic, traits> {}
 
-def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
+def LookupOrInsertOp : SubOperator_Op<"lookup_or_insert",[SubOperator]> {
     let summary = "performs a lookup in a state and annotates the result as attribute ";
     let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
     let results = (outs TupleStream: $res);
@@ -113,6 +121,27 @@ def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
           std::vector<std::string> getWrittenMembers();
       }];
 }
+def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
+    let summary = "performs a lookup in a state and annotates the result as attribute ";
+    let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
+    let results = (outs TupleStream: $res);
+    let regions = (region AnyRegion:$eqFn, AnyRegion:$initFn);
+      let hasCustomAssemblyFormat = 1;
+      let extraClassDeclaration = [{
+          std::vector<std::string> getReadMembers();
+      }];
+}
+
+def MaintainOp : SubOperator_Op<"maintain",[SubOperator]> {
+      let summary = "maintain";
+
+      let arguments = (ins AnyType : $state, StrAttr: $description );
+      let assemblyFormat = [{  $description $state `:` type($state)  attr-dict }];
+      let extraClassDeclaration = [{
+          std::vector<std::string> getReadMembers();
+          std::vector<std::string> getWrittenMembers();
+      }];
+  }
 
 def GatherOp : SubOperator_Op<"gather",[SubOperator]> {
     let summary = "scatter";
@@ -182,7 +211,7 @@ def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator]> {
     Semantics of the produced stream: each tuple is combined with the tuples returned by the nested_map
     If no tuple is returned -> the original tuple is ommited (-> "inner-join semantic")
   }];
-    let arguments= (ins TupleStream : $stream);
+    let arguments= (ins TupleStream : $stream, ArrayAttr: $parameters);
     let results = (outs TupleStream : $res);
     let regions = (region SizedRegion<1>:$region);
     let hasCustomAssemblyFormat = 1;
@@ -217,6 +246,13 @@ def ScanOp : SubOperator_Op<"scan", [NoSideEffect,SubOperator]> {
     let extraClassDeclaration = [{
         std::vector<std::string> getReadMembers();
     }];
+}
+def ScanListOp : SubOperator_Op<"scan_list", [NoSideEffect,SubOperator]> {
+    let summary = "scan state (sequentially)";
+
+    let arguments = (ins AnyType : $list, ColumnDefAttr: $elem);
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{  $list `:` type($list) custom<CustDef>($elem) attr-dict }];
 }
 
 def ScanRefsOp : SubOperator_Op<"scan_refs", [NoSideEffect,SubOperator]> {
