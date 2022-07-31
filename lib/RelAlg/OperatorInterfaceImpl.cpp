@@ -187,7 +187,13 @@ ColumnSet OuterJoinOp::getCreatedColumns() {
    return created;
 }
 ColumnSet OuterJoinOp::getUsedColumns() {
-   return mlir::relalg::detail::getUsedColumns(getOperation());
+   auto used= mlir::relalg::detail::getUsedColumns(getOperation());
+   for (Attribute attr : this->getOperation()->getAttr("mapping").cast<mlir::ArrayAttr>()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      used.insert(ColumnSet::fromArrayAttr(fromExisting));
+   }
+   return used;
 }
 ColumnSet OuterJoinOp::getAvailableColumns() {
    ColumnSet renamed;
@@ -212,7 +218,13 @@ ColumnSet SingleJoinOp::getCreatedColumns() {
    return created;
 }
 ColumnSet SingleJoinOp::getUsedColumns() {
-   return mlir::relalg::detail::getUsedColumns(getOperation());
+   auto used= mlir::relalg::detail::getUsedColumns(getOperation());
+   for (Attribute attr : this->getOperation()->getAttr("mapping").cast<mlir::ArrayAttr>()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      used.insert(ColumnSet::fromArrayAttr(fromExisting));
+   }
+   return used;
 }
 ColumnSet SingleJoinOp::getAvailableColumns() {
    ColumnSet renamed;
