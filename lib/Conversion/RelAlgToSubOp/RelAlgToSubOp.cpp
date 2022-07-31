@@ -26,6 +26,8 @@
 #include "mlir/Transforms/Passes.h"
 #include <llvm/ADT/TypeSwitch.h>
 #include <mlir/Dialect/util/FunctionHelper.h>
+#include "mlir/IR/BlockAndValueMapping.h"
+
 using namespace mlir;
 
 namespace {
@@ -62,7 +64,7 @@ class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> 
    public:
    using OpConversionPattern<mlir::relalg::BaseTableOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::relalg::BaseTableOp baseTableOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto required= getRequired(baseTableOp);
+      auto required = getRequired(baseTableOp);
       std::vector<mlir::Type> types;
       std::vector<Attribute> colNames;
       std::vector<Attribute> colTypes;
@@ -74,7 +76,7 @@ class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> 
          auto identifier = namedAttr.getName();
          auto attr = namedAttr.getValue();
          auto attrDef = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
-         if(required.contains(&attrDef.getColumn())) {
+         if (required.contains(&attrDef.getColumn())) {
             if (!first) {
                scanDescription += ",";
             } else {
@@ -151,22 +153,101 @@ static std::pair<mlir::tuples::ColumnDefAttr, mlir::tuples::ColumnRefAttr> creat
    ra.type = type;
    return {markAttrDef, columnManager.createRef(&ra)};
 }
+static std::vector<mlir::Value> inlineBlock(mlir::Block* b, ConversionPatternRewriter& rewriter, mlir::ValueRange arguments) {
+   auto* terminator = b->getTerminator();
+   auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(terminator);
+   mlir::BlockAndValueMapping mapper;
+   assert(b->getNumArguments() == arguments.size());
+   for (auto i = 0ull; i < b->getNumArguments(); i++) {
+      mapper.map(b->getArgument(i), arguments[i]);
+   }
+   for (auto& x : b->getOperations()) {
+      if (&x != terminator) {
+         rewriter.clone(x, mapper);
+      }
+   }
+   std::vector<mlir::Value> res;
+   for (auto val : returnOp.results()) {
+      res.push_back(mapper.lookup(val));
+   }
+   return res;
+}
 static mlir::Value translateSelection(mlir::Value stream, mlir::Region& predicate, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc) {
-   auto [markAttrDef, markAttrRef] = createColumn(rewriter.getI1Type(), "map", "predicate"); //todo: make sure it is really i1 (otherwise: nullable<i1> -> i1)
-
-   auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), stream, rewriter.getArrayAttr(markAttrDef));
    auto terminator = mlir::cast<mlir::tuples::ReturnOp>(predicate.front().getTerminator());
    if (terminator.results().empty()) {
-      mlir::OpBuilder::InsertionGuard guard(rewriter);
+      auto [markAttrDef, markAttrRef] = createColumn(rewriter.getI1Type(), "map", "predicate"); //todo: make sure it is really i1 (otherwise: nullable<i1> -> i1)
       auto constTrueBlock = new Block;
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(constTrueBlock);
+         mlir::Value constTrue = rewriter.create<mlir::db::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+         rewriter.create<mlir::tuples::ReturnOp>(loc, constTrue);
+      }
+      auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), stream, rewriter.getArrayAttr(markAttrDef));
       mapOp.fn().push_back(constTrueBlock);
-      rewriter.setInsertionPointToStart(constTrueBlock);
-      mlir::Value constTrue = rewriter.create<mlir::db::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-      rewriter.create<mlir::tuples::ReturnOp>(loc, constTrue);
+
+      return rewriter.create<mlir::subop::FilterOp>(loc, mapOp.result(), mlir::subop::FilterSemantic::all_true, rewriter.getArrayAttr(markAttrRef));
+
    } else {
-      assert(safelyMoveRegion(rewriter, predicate, mapOp.fn()).succeeded());
+      std::vector<mlir::Attribute> predicatesDefs;
+      std::vector<std::pair<size_t,mlir::Attribute>> predicates;
+      auto block = new Block;
+
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         auto tuple = block->addArgument(mlir::tuples::TupleType::get(rewriter.getContext()), loc);
+         rewriter.setInsertionPointToStart(block);
+         std::vector<mlir::Value> results;
+         auto res = inlineBlock(&predicate.front(), rewriter, tuple)[0];
+         if (auto andOp = mlir::dyn_cast_or_null<mlir::db::AndOp>(res.getDefiningOp())) {
+            for (auto c : andOp.vals()) {
+               auto [markAttrDef, markAttrRef] = createColumn(rewriter.getI1Type(), "map", "predicate"); //todo: make sure it is really i1 (otherwise: nullable<i1> -> i1)
+
+               int p = 1000;
+               if (auto* defOp = c.getDefiningOp()) {
+                  if (auto betweenOp = mlir::dyn_cast_or_null<mlir::db::BetweenOp>(defOp)) {
+                     auto t = betweenOp.val().getType();
+                     p = ::llvm::TypeSwitch<mlir::Type, int>(t)
+                            .Case<::mlir::IntegerType>([&](::mlir::IntegerType t) { return 1; })
+                            .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) { return 2; })
+                            .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) { return 3; })
+                            .Case<::mlir::db::CharType, ::mlir::db::TimestampType, ::mlir::db::IntervalType, ::mlir::FloatType>([&](mlir::Type t) { return 2; })
+                            .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) { return 10; })
+                            .Default([](::mlir::Type) { return 100; });
+                     p -= 1;
+                  } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(defOp)) {
+                     auto t = cmpOp.getLeft().getType();
+                     p = ::llvm::TypeSwitch<mlir::Type, int>(t)
+                            .Case<::mlir::IntegerType>([&](::mlir::IntegerType t) { return 1; })
+                            .Case<::mlir::db::DateType>([&](::mlir::db::DateType t) { return 2; })
+                            .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) { return 3; })
+                            .Case<::mlir::db::CharType, ::mlir::db::TimestampType, ::mlir::db::IntervalType, ::mlir::FloatType>([&](mlir::Type t) { return 2; })
+                            .Case<::mlir::db::StringType>([&](::mlir::db::StringType t) { return 10; })
+                            .Default([](::mlir::Type) { return 100; });
+                  }
+                  predicates.push_back({p,markAttrRef});
+               }
+               predicatesDefs.push_back(markAttrDef);
+               results.push_back(c);
+            }
+         } else {
+            auto [markAttrDef, markAttrRef] = createColumn(rewriter.getI1Type(), "map", "predicate"); //todo: make sure it is really i1 (otherwise: nullable<i1> -> i1)
+            predicates.push_back({0,markAttrRef});
+            predicatesDefs.push_back(markAttrDef);
+            results.push_back(res);
+         }
+         rewriter.create<mlir::tuples::ReturnOp>(loc, results);
+      }
+      auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), stream, rewriter.getArrayAttr(predicatesDefs));
+      mapOp.fn().push_back(block);
+      stream = mapOp.result();
+      std::sort(predicates.begin(), predicates.end(), [](auto a, auto b) { return a.first < b.first; });
+
+      for (auto predicate : predicates) {
+         stream = rewriter.create<mlir::subop::FilterOp>(loc, stream, mlir::subop::FilterSemantic::all_true, rewriter.getArrayAttr(predicate.second));
+      }
+      return stream;
    }
-   return rewriter.create<mlir::subop::FilterOp>(loc, mapOp.result(), mlir::subop::FilterSemantic::all_true, rewriter.getArrayAttr(markAttrRef));
 }
 class SelectionLowering : public OpConversionPattern<mlir::relalg::SelectionOp> {
    public:

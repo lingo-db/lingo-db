@@ -665,11 +665,19 @@ class FilterLowering : public TupleStreamConsumerLowering<mlir::subop::FilterOp>
       if (filterOp.filterSemantic() == mlir::subop::FilterSemantic::none_true) {
          cond = rewriter.create<mlir::db::NotOp>(filterOp->getLoc(), cond);
       }
-      rewriter.create<mlir::scf::IfOp>(
-         filterOp->getLoc(), mlir::TypeRange{}, cond, [&](mlir::OpBuilder& builder1, mlir::Location) {
+      auto* parentOp = rewriter.getBlock()->getParentOp();
+      if (mlir::isa_and_nonnull<mlir::dsa::ForOp>(parentOp)) {
+         auto truth = rewriter.create<mlir::db::DeriveTruth>(filterOp.getLoc(), cond);
+         auto negated = rewriter.create<mlir::db::NotOp>(filterOp.getLoc(), truth);
+         rewriter.create<mlir::dsa::CondSkipOp>(filterOp->getLoc(), negated, mlir::ValueRange{});
+         newStream=mapping.createInFlight(rewriter);
+
+      }else {
+         rewriter.create<mlir::scf::IfOp>(
+            filterOp->getLoc(), mlir::TypeRange{}, cond, [&](mlir::OpBuilder& builder1, mlir::Location) {
                newStream=mapping.createInFlight(builder1);
                builder1.create<mlir::scf::YieldOp>(filterOp->getLoc()); });
-
+      }
       return success();
    }
 };
