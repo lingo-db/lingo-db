@@ -330,6 +330,12 @@ def FilterOp : SubOperator_Op<"filter", [NoSideEffect,SubOperator]> {
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream $filterSemantic custom<CustRefArr>($conditions)  attr-dict }];
 }
+def RepeatOp : SubOperator_Op<"repeat", [NoSideEffect,SubOperator]> {
+    let summary = "repeat the current tuple x times";
+    let arguments = (ins TupleStream : $stream, ColumnRefAttr:$times);
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{  $stream custom<CustRef>($times)  attr-dict }];
+}
 def RenamingOp : SubOperator_Op<"rename", [NoSideEffect,SubOperator]> {
     let summary = "rename columns";
 

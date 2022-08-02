@@ -666,7 +666,7 @@ class FilterLowering : public TupleStreamConsumerLowering<mlir::subop::FilterOp>
          cond = rewriter.create<mlir::db::NotOp>(filterOp->getLoc(), cond);
       }
       auto* parentOp = rewriter.getBlock()->getParentOp();
-      if (mlir::isa_and_nonnull<mlir::dsa::ForOp>(parentOp)) {
+      if (mlir::isa_and_nonnull<mlir::dsa::ForOp>(parentOp) && false) {
          auto truth = rewriter.create<mlir::db::DeriveTruth>(filterOp.getLoc(), cond);
          auto negated = rewriter.create<mlir::db::NotOp>(filterOp.getLoc(), truth);
          rewriter.create<mlir::dsa::CondSkipOp>(filterOp->getLoc(), negated, mlir::ValueRange{});
@@ -681,7 +681,21 @@ class FilterLowering : public TupleStreamConsumerLowering<mlir::subop::FilterOp>
       return success();
    }
 };
+class RepeatLowering : public TupleStreamConsumerLowering<mlir::subop::RepeatOp> {
+   public:
+   using TupleStreamConsumerLowering<mlir::subop::RepeatOp>::TupleStreamConsumerLowering;
+   LogicalResult matchAndRewrite(mlir::subop::RepeatOp repeatOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
+      auto loc=repeatOp->getLoc();
+      mlir::Value zeroIdx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+      mlir::Value oneIdx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+      auto forOp=rewriter.create<mlir::scf::ForOp>(loc, zeroIdx, mapping.resolve(repeatOp.times()), oneIdx, mlir::ValueRange{},[&](mlir::OpBuilder& b, mlir::Location loc, mlir::Value idx, mlir::ValueRange vr) {
+         newStream=mapping.createInFlight(b);
+         b.create<mlir::scf::YieldOp>(loc);
+      });
 
+      return success();
+   }
+};
 class NestedMapLowering : public TupleStreamConsumerLowering<mlir::subop::NestedMapOp> {
    public:
    using TupleStreamConsumerLowering<mlir::subop::NestedMapOp>::TupleStreamConsumerLowering;
@@ -1096,6 +1110,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<ScatterOpLowering>(typeConverter, ctxt);
    patterns.insert<GatherOpLowering>(typeConverter, ctxt);
    patterns.insert<UnionLowering>(typeConverter, ctxt);
+   patterns.insert<RepeatLowering>(typeConverter, ctxt);
    if (failed(applyFullConversion(module, target, std::move(patterns)))) {
       signalPassFailure();
    }
