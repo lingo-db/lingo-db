@@ -198,7 +198,7 @@ class MaintainOpLowering : public OpConversionPattern<mlir::subop::MaintainOp> {
    public:
    using OpConversionPattern<mlir::subop::MaintainOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::subop::MaintainOp maintainOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOpWithNewOp<mlir::dsa::Finalize>(maintainOp,adaptor.state());
+      rewriter.replaceOpWithNewOp<mlir::dsa::Finalize>(maintainOp, adaptor.state());
       return mlir::success();
    }
 };
@@ -665,19 +665,11 @@ class FilterLowering : public TupleStreamConsumerLowering<mlir::subop::FilterOp>
       if (filterOp.filterSemantic() == mlir::subop::FilterSemantic::none_true) {
          cond = rewriter.create<mlir::db::NotOp>(filterOp->getLoc(), cond);
       }
-      auto* parentOp = rewriter.getBlock()->getParentOp();
-      if (mlir::isa_and_nonnull<mlir::dsa::ForOp>(parentOp) && false) {
-         auto truth = rewriter.create<mlir::db::DeriveTruth>(filterOp.getLoc(), cond);
-         auto negated = rewriter.create<mlir::db::NotOp>(filterOp.getLoc(), truth);
-         rewriter.create<mlir::dsa::CondSkipOp>(filterOp->getLoc(), negated, mlir::ValueRange{});
-         newStream=mapping.createInFlight(rewriter);
-
-      }else {
-         rewriter.create<mlir::scf::IfOp>(
-            filterOp->getLoc(), mlir::TypeRange{}, cond, [&](mlir::OpBuilder& builder1, mlir::Location) {
+      rewriter.create<mlir::scf::IfOp>(
+         filterOp->getLoc(), mlir::TypeRange{}, cond, [&](mlir::OpBuilder& builder1, mlir::Location) {
                newStream=mapping.createInFlight(builder1);
                builder1.create<mlir::scf::YieldOp>(filterOp->getLoc()); });
-      }
+
       return success();
    }
 };
@@ -685,11 +677,11 @@ class RepeatLowering : public TupleStreamConsumerLowering<mlir::subop::RepeatOp>
    public:
    using TupleStreamConsumerLowering<mlir::subop::RepeatOp>::TupleStreamConsumerLowering;
    LogicalResult matchAndRewrite(mlir::subop::RepeatOp repeatOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
-      auto loc=repeatOp->getLoc();
+      auto loc = repeatOp->getLoc();
       mlir::Value zeroIdx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
       mlir::Value oneIdx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
-      auto forOp=rewriter.create<mlir::scf::ForOp>(loc, zeroIdx, mapping.resolve(repeatOp.times()), oneIdx, mlir::ValueRange{},[&](mlir::OpBuilder& b, mlir::Location loc, mlir::Value idx, mlir::ValueRange vr) {
-         newStream=mapping.createInFlight(b);
+      auto forOp = rewriter.create<mlir::scf::ForOp>(loc, zeroIdx, mapping.resolve(repeatOp.times()), oneIdx, mlir::ValueRange{}, [&](mlir::OpBuilder& b, mlir::Location loc, mlir::Value idx, mlir::ValueRange vr) {
+         newStream = mapping.createInFlight(b);
          b.create<mlir::scf::YieldOp>(loc);
       });
 
