@@ -28,7 +28,6 @@
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Dialect/SCF/SCF.h"
 
-#include "mlir/Conversion/RelAlgToDB/RelAlgToDBPass.h"
 #include "mlir/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 #include "mlir/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 
@@ -121,7 +120,6 @@ int main(int argc, char** argv) {
    mlir::torch::registerAllPasses();
    mlir::registerAllPasses();
 
-   mlir::relalg::registerRelAlgConversionPasses();
    mlir::relalg::registerRelAlgToSubOpConversionPasses();
    mlir::relalg::registerQueryOptimizationPasses();
    mlir::db::registerDBConversionPasses();

@@ -1,15 +1,14 @@
 #include "llvm/ADT/TypeSwitch.h"
-#include "mlir/Conversion/RelAlgToDB/HashJoinTranslator.h"
+#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-
 namespace {
 class HashJoinUtils {
    public:
-
    static bool isAndedResult(mlir::Operation* op, bool first = true) {
       if (mlir::isa<mlir::tuples::ReturnOp>(op)) {
          return true;
@@ -172,13 +171,13 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
    void runOnOperation() override {
       getOperation().walk([&](Operator op) {
          ::llvm::TypeSwitch<mlir::Operation*, void>(op.getOperation())
-            .Case<mlir::relalg::InnerJoinOp,mlir::relalg::CollectionJoinOp>([&](PredicateOperator predicateOperator) {
+            .Case<mlir::relalg::InnerJoinOp, mlir::relalg::CollectionJoinOp>([&](PredicateOperator predicateOperator) {
                auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
                auto left = mlir::cast<Operator>(binOp.leftChild());
                auto right = mlir::cast<Operator>(binOp.rightChild());
                if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
                   op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
-                  op->setAttr("useHashJoin",mlir::UnitAttr::get(op.getContext()));
+                  op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
                   prepareForHash(predicateOperator);
                }
             })
@@ -204,7 +203,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   }
                }
                if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
-                  op->setAttr("useHashJoin",mlir::UnitAttr::get(op.getContext()));
+                  op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
                   prepareForHash(predicateOperator);
                   if (left->hasAttr("rows") && right->hasAttr("rows")) {
                      double rowsLeft = 0;
@@ -239,7 +238,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                auto right = mlir::cast<Operator>(op.rightChild());
                if (hashImplPossible(&op.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
                   prepareForHash(op);
-                  op->setAttr("useHashJoin",mlir::UnitAttr::get(op.getContext()));
+                  op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
                   op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
                }
             })

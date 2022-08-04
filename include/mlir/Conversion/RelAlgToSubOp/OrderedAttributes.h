@@ -1,6 +1,5 @@
-#ifndef MLIR_CONVERSION_RELALGTODB_ORDEREDATTRIBUTES_H
-#define MLIR_CONVERSION_RELALGTODB_ORDEREDATTRIBUTES_H
-#include "mlir/Conversion/RelAlgToDB/TranslatorContext.h"
+#ifndef MLIR_CONVERSION_RELALGTOSUBOP_ORDEREDATTRIBUTES_H
+#define MLIR_CONVERSION_RELALGTOSUBOP_ORDEREDATTRIBUTES_H
 #include "mlir/Dialect/RelAlg/ColumnSet.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.h"
 #include "mlir/Dialect/util/UtilOps.h"
@@ -39,19 +38,7 @@ class OrderedAttributes {
       }
       return res;
    }
-   mlir::Value resolve(TranslatorContext& context, size_t pos) {
-      return context.getValueForAttribute(attrs[pos]);
-   }
-   mlir::Value pack(TranslatorContext& context, OpBuilder& builder, Location loc, std::vector<Value> additional = {}) {
-      std::vector<Value> values(additional);
-      for (size_t i = 0; i < attrs.size(); i++) {
-         values.push_back(resolve(context, i));
-      }
-      if (values.size() == 0) {
-         return builder.create<mlir::util::UndefOp>(loc, mlir::TupleType::get(builder.getContext()));
-      }
-      return builder.create<mlir::util::PackOp>(loc, values);
-   }
+
 
    size_t insert(const mlir::tuples::Column* attr, Type alternativeType = {}) {
       attrs.push_back(attr);
@@ -66,13 +53,6 @@ class OrderedAttributes {
       std::vector<Type> tps(additional);
       tps.insert(tps.end(), types.begin(), types.end());
       return mlir::TupleType::get(ctxt, tps);
-   }
-   void setValuesForColumns(TranslatorContext& context, TranslatorContext::AttributeResolverScope& scope, ValueRange values) {
-      for (size_t i = 0; i < attrs.size(); i++) {
-         if (attrs[i]) {
-            context.setValueForAttribute(scope, attrs[i], values[i]);
-         }
-      }
    }
    const std::vector<const mlir::tuples::Column*>& getAttrs() const {
       return attrs;
@@ -91,4 +71,4 @@ class OrderedAttributes {
 };
 } // end namespace relalg
 } // end namespace mlir
-#endif // MLIR_CONVERSION_RELALGTODB_ORDEREDATTRIBUTES_H
+#endif // MLIR_CONVERSION_RELALGTOSUBOP_ORDEREDATTRIBUTES_H

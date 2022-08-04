@@ -1,5 +1,5 @@
 #include "mlir-support/parsing.h"
-#include "mlir/Conversion/RelAlgToDB/OrderedAttributes.h"
+#include "mlir/Conversion/RelAlgToSubOp/OrderedAttributes.h"
 #include "mlir/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
