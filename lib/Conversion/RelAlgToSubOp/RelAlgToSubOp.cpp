@@ -379,7 +379,7 @@ class MaterializationHelper {
       return name;
    }
    mlir::subop::StateMembersAttr createStateMembersAttr() {
-      assert(!names.empty());
+      //assert(!names.empty());
       return mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, names), mlir::ArrayAttr::get(context, types));
    }
 
@@ -1192,7 +1192,9 @@ class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
       }
    }
    LogicalResult matchAndRewrite(mlir::relalg::SortOp sortOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      MaterializationHelper helper(getRequired(sortOp), rewriter.getContext());
+      mlir::relalg::ColumnSet requiredColumns=getRequired(sortOp);
+      requiredColumns.insert(sortOp.getUsedColumns());
+      MaterializationHelper helper(requiredColumns, rewriter.getContext());
       auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), helper.createStateMembersAttr());
       mlir::Value vector = rewriter.create<mlir::subop::CreateOp>(sortOp->getLoc(), vectorType, mlir::Attribute{}, 0);
       rewriter.create<mlir::subop::MaterializeOp>(sortOp->getLoc(), adaptor.rel(), vector, helper.createColumnstateMapping());
