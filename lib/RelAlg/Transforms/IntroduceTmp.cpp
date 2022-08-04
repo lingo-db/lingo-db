@@ -23,7 +23,7 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<
    }
    void runOnOperation() override {
       getOperation().walk([&](Operator op) {
-         if (!op->use_empty()&&!op->hasOneUse()) {
+         if (!op->use_empty() && !op->hasOneUse()) {
             mlir::OpBuilder builder(&getContext());
             builder.setInsertionPointAfter(op.getOperation());
             mlir::relalg::ColumnSet usedAttributes;
@@ -33,11 +33,12 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<
             usedAttributes = usedAttributes.intersect(op.getAvailableColumns());
             mlir::Type tupleStreamType = op.asRelation().getType();
             std::vector<mlir::Type> resultingTypes;
-            for (auto& x : op->getUses()) resultingTypes.push_back(tupleStreamType);
+            for (auto it = op->getUses().begin(); it != op->getUses().end(); it++)
+               resultingTypes.push_back(tupleStreamType);
             auto tmp = builder.create<mlir::relalg::TmpOp>(op->getLoc(), resultingTypes, op.asRelation(), usedAttributes.asRefArrayAttr(&getContext()));
             size_t i = 0;
-            for (auto &use : llvm::make_early_inc_range(op->getUses()))
-               if (use.getOwner()!=tmp)
+            for (auto& use : llvm::make_early_inc_range(op->getUses()))
+               if (use.getOwner() != tmp)
                   use.set(tmp.getResult(i++));
          }
       });

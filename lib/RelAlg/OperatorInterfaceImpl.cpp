@@ -356,7 +356,6 @@ static void addRequirements(mlir::Operation* op, mlir::Operation* includeChildre
       }
    });
    alreadyPresent.insert(op);
-   mlir::Block* b=op->getBlock();
    if (!excludeChildren->findAncestorOpInBlock(*op)) {
       extracted.push_back(op);
    }

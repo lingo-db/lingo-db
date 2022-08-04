@@ -1,6 +1,7 @@
-#include "mlir/Dialect/SubOperator/Transforms/SubOpDependencyAnalysis.h"
 #include "llvm/Support/Debug.h"
+
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
+#include "mlir/Dialect/SubOperator/Transforms/SubOpDependencyAnalysis.h"
 
 #include <queue>
 mlir::subop::SubOpRootAnalysis::SubOpRootAnalysis(mlir::Operation* op) {
@@ -22,7 +23,7 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
    std::unordered_map<mlir::Operation*, size_t> dependCount;
    std::queue<mlir::Operation*> queue;
    op->walk([&](mlir::subop::SubOperator subop) {
-      auto roots=rootAnalysis.getRoots(subop);
+      auto roots = rootAnalysis.getRoots(subop);
       for (auto* subopRoot : roots) {
          for (auto x : subop->getOperands()) {
             if (!x.getType().isa<mlir::tuples::TupleStreamType>()) {
@@ -35,15 +36,15 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
          }
          for (auto readMember : subop.getReadMembers()) {
             for (auto* conflict : writtenMembers[readMember]) {
-               addDependency(subopRoot, conflict,roots);
+               addDependency(subopRoot, conflict, roots);
             }
          }
          for (auto writtenMember : subop.getWrittenMembers()) {
             for (auto* conflict : writtenMembers[writtenMember]) {
-               addDependency(subopRoot, conflict,roots);
+               addDependency(subopRoot, conflict, roots);
             }
             for (auto* conflict : readMembers[writtenMember]) {
-               addDependency(subopRoot, conflict,roots);
+               addDependency(subopRoot, conflict, roots);
             }
          }
          for (auto readMember : subop.getReadMembers()) {
@@ -87,13 +88,13 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
    for (auto [root, c] : dependCount) {
       if (c != 0) {
          root->dump();
-         llvm::dbgs()<<"dependencies:\n";
-         for(auto dep:dependencies[root]){
-            if(dependCount[dep]>0){
+         llvm::dbgs() << "dependencies:\n";
+         for (auto* dep : dependencies[root]) {
+            if (dependCount[dep] > 0) {
                dep->dump();
             }
          }
-         llvm::dbgs()<<"-----------------------------------------------\n";
+         llvm::dbgs() << "-----------------------------------------------\n";
       }
    }
    for (auto [root, c] : dependCount) {
