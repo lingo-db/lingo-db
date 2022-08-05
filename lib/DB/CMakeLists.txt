@@ -5,6 +5,8 @@ set(LLVM_TARGET_DEFINITIONS Transforms/SimplifyToArith.td)
 mlir_tablegen(SimplifyToArith.inc -gen-rewriters)
 add_public_tablegen_target(MLIRDBSimplifyToArithIncGen)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
+add_dependencies(build_includes MLIRDBEliminateNullsIncGen MLIRDBSimplifyToArithIncGen)
+
 
 gen_rt_def(dump-rt-defs "DumpRuntime.h")
 gen_rt_def(string-rt-defs "StringRuntime.h")

@@ -58,6 +58,7 @@ include(${Arrow_DIR}/FindArrow.cmake)
 include(${Arrow_DIR}/FindArrowPython.cmake)
 include_directories(${ARROW_INCLUDE_DIR})
 
+add_custom_target(build_includes)
 add_subdirectory(include)
 add_subdirectory(tools/build-tools)
 add_subdirectory(lib/mlir-support)

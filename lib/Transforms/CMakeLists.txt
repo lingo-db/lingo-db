@@ -1,6 +1,7 @@
 set(LLVM_TARGET_DEFINITIONS CustomCanonicalization.td)
 mlir_tablegen(CustomCanonicalization.inc -gen-rewriters)
 add_public_tablegen_target(MLIRCustomCanonicalizationIncGen)
+add_dependencies(build_includes MLIRCustomCanonicalizationIncGen)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 add_mlir_library(MLIRCustomTransforms
         SinkOp.cpp

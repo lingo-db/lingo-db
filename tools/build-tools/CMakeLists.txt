@@ -26,5 +26,7 @@ function(gen_rt_def target_name header_file)
             )
 
     add_dependencies(${target_name} runtime-header-tool)
+    add_dependencies(build_includes ${target_name})
+
 endfunction()
 

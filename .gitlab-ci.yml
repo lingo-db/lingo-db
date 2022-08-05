@@ -1,0 +1,136 @@
+default:
+   retry:
+      max: 2 # two retries maximum, three runs in total
+      when:
+         - runner_system_failure
+
+# Remove duplicate work for branches with open merge requests
+# Based on https://docs.gitlab.com/ee/ci/yaml/workflow.html#switch-between-branch-pipelines-and-merge-request-pipelines
+workflow:
+   rules:
+      -  if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      -  if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+         when: never
+      -  if: '$CI_COMMIT_BRANCH'
+
+#---------------------------------------------------------------------------
+# Build Jobs
+#---------------------------------------------------------------------------
+.build:
+   before_script:
+      - rm -rf /build/lingodb
+   tags:
+      - "lingodb-builder"
+
+build_debug:
+   extends: .build
+   script:
+      - export VIRTUAL_ENV=/opt/venv
+      - export PATH="$VIRTUAL_ENV/bin:$PATH"
+      - git submodule init
+      - git submodule update tools/python/pybind11
+      - rm -r arrow torch-mlir
+      - cp -r /arrow-src/arrow arrow
+      - cp -r /llvm-src/torch-mlir torch-mlir
+      - mkdir /build/lingodb
+      - git submodule update tools/python/pybind11
+      - cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DArrow_DIR="/build/arrow/install/lib/cmake/arrow"  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug
+      - cmake --build /build/lingodb -j$(nproc)
+      - tar -cvzf lingodb_debug.tar.gz /build/lingodb/mlir-db-opt /build/lingodb/run-sql /build/lingodb/run-mlir /build/lingodb/sql /build/lingodb/sqlite-tester /build/lingodb/pymlirdbext.*.so /build/lingodb/test/ /build/lingodb/sql-to-mlir
+   artifacts:
+      paths:
+         - lingodb_debug.tar.gz
+      expire_in: 1 hrs
+
+build_release:
+   extends: .build
+   script:
+      - export VIRTUAL_ENV=/opt/venv
+      - export PATH="$VIRTUAL_ENV/bin:$PATH"
+      - git submodule init
+      - git submodule update tools/python/pybind11
+      - rm -r arrow torch-mlir
+      - cp -r /arrow-src/arrow arrow
+      - cp -r /llvm-src/torch-mlir torch-mlir
+      - mkdir /build/lingodb
+      - git submodule update tools/python/pybind11
+      - cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DArrow_DIR="/build/arrow/install/lib/cmake/arrow" -DCMAKE_BUILD_TYPE=Release
+      - cmake --build /build/lingodb -j$(nproc)
+      - tar -cvzf lingodb_release.tar.gz /build/lingodb/mlir-db-opt /build/lingodb/run-sql /build/lingodb/run-mlir /build/lingodb/sql /build/lingodb/sqlite-tester /build/lingodb/pymlirdbext.*.so /build/lingodb/test/ /build/lingodb/sql-to-mlir
+   artifacts:
+      paths:
+         - lingodb_release.tar.gz
+      expire_in: 1 hrs
+
+lint:
+   extends: .build
+   script:
+      - export VIRTUAL_ENV=/opt/venv
+      - export PATH="$VIRTUAL_ENV/bin:$PATH"
+      - git submodule init
+      - git submodule update tools/python/pybind11
+      - rm -r arrow torch-mlir
+      - cp -r /arrow-src/arrow arrow
+      - cp -r /llvm-src/torch-mlir torch-mlir
+      - mkdir /build/lingodb
+      - git submodule update tools/python/pybind11
+      - cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DArrow_DIR="/build/arrow/install/lib/cmake/arrow"  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - cmake --build /build/lingodb -j$(nproc) --target build_includes
+      - python3 tools/scripts/run-clang-tidy.py -p /build/lingodb -quiet  -exclude="arrow|vendored" -header-filter="$PWD/include/.*"  -clang-tidy-binary=/build/llvm/bin/clang-tidy
+
+.debug_build:
+   needs:
+      - build_debug
+   before_script:
+      - rm -rf build
+      - tar -xvzf lingodb_debug.tar.gz
+      - mv build/lingodb /build/lingodb
+   tags:
+      - "lingodb-tester"
+
+.release_build:
+   needs:
+      - build_release
+   before_script:
+      - rm -rf build
+      - tar -xvzf lingodb_release.tar.gz
+      - mv build/lingodb /build/lingodb
+   tags:
+      - "lingodb-tester"
+
+.file_tests:
+   script:
+      - export LD_LIBRARY_PATH=/build/arrow/install/lib
+      - export PYTHONPATH=/build/lingodb:/arrow-src/arrow/python:$PYTHONPATH
+      - pip3 uninstall -y pyarrow
+      - rm -r arrow
+      - cp -r /arrow-src/arrow arrow
+      - python3 /builds/lingo-db/lingo-db/test/lit/python/integration.py
+      - /build/llvm/bin/llvm-lit -v /build/lingodb/test/lit
+
+.sqlite_tests:
+   script:
+      - /build/lingodb/sqlite-tester test/sqlite/select1.test &> /dev/null
+      - /build/lingodb/sqlite-tester test/sqlite/select2.test &> /dev/null
+      - /build/lingodb/sqlite-tester test/sqlite/select3.test &> /dev/null
+      - /build/lingodb/sqlite-tester test/sqlite/select4.test &> /dev/null
+      - /build/lingodb/sqlite-tester test/sqlite/select5.test &> /dev/null
+      - /build/lingodb/sqlite-tester test/sqlite/groupby.test &> /dev/null
+      - /build/lingodb/sqlite-tester test/sqlite/join.test &> /dev/null
+      - /build/lingodb/sqlite-tester test/sqlite/unnesting.test &> /dev/null
+
+file_tests_debug:
+   extends:
+      - .debug_build
+      - .file_tests
+
+sqlite_tests_release:
+   extends:
+      - .release_build
+      - .sqlite_tests
+
+
+
+
+
+
