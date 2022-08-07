@@ -27,6 +27,7 @@ class LazyJoinHashtable {
    public:
    static LazyJoinHashtable* create(size_t typeSize);
    void finalize();
+   Buffer getBuffer() const;
    uint8_t* insert(size_t hash);
    void resize();
    static void destroy(LazyJoinHashtable*);

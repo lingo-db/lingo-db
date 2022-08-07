@@ -150,25 +150,6 @@ class JoinHtLookupIterator : public WhileIterator {
    }
 };
 
-class JoinHtIterator : public ForIterator {
-   Value hashTable;
-   Value values;
-
-   public:
-   JoinHtIterator(Value hashTable) : ForIterator(hashTable.getContext()), hashTable(hashTable) {
-   }
-   virtual void init(OpBuilder& builder) override {
-      auto loaded = builder.create<util::LoadOp>(loc, hashTable);
-      auto unpacked = builder.create<mlir::util::UnPackOp>(loc, loaded);
-      values = unpacked.getResult(4);
-      len = unpacked.getResult(2);
-   }
-   virtual Value getElement(OpBuilder& builder, Value index) override {
-      Value loaded = builder.create<util::LoadOp>(loc, values, index);
-      auto unpacked = builder.create<mlir::util::UnPackOp>(loc, loaded);
-      return unpacked.getResult(1);
-   }
-};
 class AggrHtIterator : public ForIterator {
    Value hashTable;
    Value values;
@@ -349,8 +330,6 @@ std::unique_ptr<mlir::dsa::CollectionIterationImpl> mlir::dsa::CollectionIterati
       } else {
          return std::make_unique<ForIteratorIterationImpl>(std::make_unique<AggrHtIterator>(loweredCollection));
       }
-   } else if (auto joinHt = collectionType.dyn_cast_or_null<mlir::dsa::JoinHashtableType>()) {
-      return std::make_unique<ForIteratorIterationImpl>(std::make_unique<JoinHtIterator>(loweredCollection));
    } else if (auto recordBatch = collectionType.dyn_cast_or_null<mlir::dsa::RecordBatchType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<RecordBatchIterator>(loweredCollection, recordBatch));
    }

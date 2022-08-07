@@ -17,13 +17,17 @@ void runtime::LazyJoinHashtable::finalize() {
    }
 }
 uint8_t* runtime::LazyJoinHashtable::insert(size_t hash) {
-   auto* entryPtr=values.insert();
-   reinterpret_cast<Entry*>(entryPtr)->next=reinterpret_cast<Entry*>(hash);
-   return entryPtr+sizeof(Entry::next);
+   auto* entryPtr = values.insert();
+   reinterpret_cast<Entry*>(entryPtr)->next = reinterpret_cast<Entry*>(hash);
+   return entryPtr + sizeof(Entry::next);
 }
 runtime::LazyJoinHashtable* runtime::LazyJoinHashtable::create(size_t typeSize) {
    return new LazyJoinHashtable(1024, typeSize);
 }
 void runtime::LazyJoinHashtable::destroy(LazyJoinHashtable* ht) {
    delete ht;
+}
+
+runtime::Buffer runtime::LazyJoinHashtable::getBuffer() const {
+   return {values.getLen() * values.getTypeSize(), values.getPtr()};
 }

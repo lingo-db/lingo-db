@@ -85,14 +85,7 @@ def DSA_AggregationHashtable : DSA_Type<"AggregationHashtable","aggr_ht",[Collec
         mlir::Type getElementType();
     }];
 }
-def DSA_JoinHashtable : DSA_Type<"JoinHashtable","join_ht",[CollectionType]> {
-    let summary = "join hashtable";
-    let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
-    let assemblyFormat = "`<` $keyType `,` $valType `>`";
-    let extraClassDeclaration = [{
-        mlir::Type getElementType();
-    }];
-}
+
 
 
 def DSA_CreateDS : DSA_Op<"create_ds"> {
@@ -132,18 +125,6 @@ def DSA_NextRow : DSA_Op<"next_row"> {
     let assemblyFormat = "$builder `:` type($builder) attr-dict";
 }
 
-def DSA_JoinHashtableInsert : DSA_Op<"joinht_insert"> {
-    let summary = "insert into a JoinHashtable or AggregationHashTable";
-
-    let arguments = (ins AnyType:$ht, Index:$hash, AnyType: $val);
-    let assemblyFormat = "$ht `:` type($ht) `,` $hash `,` $val `:` type($val) attr-dict";
-}
-def DSA_HashtableInsert : DSA_Op<"ht_insert"> {
-    let summary = "insert into a JoinHashtable or AggregationHashTable";
-
-    let arguments = (ins AnyType:$ht, AnyType:$key, Optional<AnyType>: $val);
-    let regions = (region AnyRegion:$hash, AnyRegion:$equal, AnyRegion:$reduce);
-}
 def DSA_HashtableGetRefOrInsert : DSA_Op<"ht_get_ref_or_insert",[IsolatedFromAbove]> {
     let summary = "returns the reference to a hashtable entry matching the key (if none is found, a new one is created)";
 
@@ -180,13 +161,6 @@ def DSA_ScanSource : DSA_Op<"scan_source"> {
     let assemblyFormat = "$descr `:` type($iterable) attr-dict";
 }
 
-def DSA_Lookup : DSA_Op<"lookup", [NoSideEffect]> {
-    let summary = "lookup in a hash table";
-
-    let arguments = (ins AnyType:$collection,AnyType:$key);
-    let results = (outs DSA_GenericIterable:$iterable);
-    let assemblyFormat = "$collection `:` type($collection) `,` $key `:` type($key) `->` type($iterable) attr-dict";
-}
 
 
 def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
@@ -227,16 +201,11 @@ def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
 }
 
 def YieldOp : DSA_Op<"yield", [NoSideEffect, Terminator,
-                               ParentOneOf<["ForOp","HashtableInsert","HashtableGetRefOrInsert"]>]> {
+                               ParentOneOf<["ForOp","HashtableGetRefOrInsert"]>]> {
     let arguments = (ins Variadic<AnyType>:$results);
     let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
     let assemblyFormat = [{  attr-dict ($results^ `:` type($results))? }];
 }
 
-
-def FreeOp : DSA_Op<"free"> {
-    let arguments = (ins AnyType: $val);
-    let assemblyFormat = "$val `:` type($val) attr-dict";
-}
 
 #endif// OPS

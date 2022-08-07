@@ -113,8 +113,7 @@ class VarLen32 {
    std::string str() { return std::string((char*) getPtr(), getLen()); }
 };
 
-
-struct Buffer{
+struct Buffer {
    size_t numElements;
    uint8_t* ptr;
 };
@@ -132,7 +131,7 @@ struct FixedSizedBuffer {
    T& at(size_t i) {
       return ptr[i];
    }
-   ~FixedSizedBuffer(){
+   ~FixedSizedBuffer() {
       free(ptr);
    }
 };

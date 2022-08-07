@@ -10,9 +10,7 @@
 mlir::Type mlir::dsa::AggregationHashtableType::getElementType() {
    return  TupleType::get(getContext(), {getKeyType(), getValType()});
 }
-mlir::Type mlir::dsa::JoinHashtableType::getElementType() {
-   return TupleType::get(getContext(), {getKeyType(), getValType()});
-}
+
 mlir::Type mlir::dsa::RecordBatchType::getElementType() {
    return mlir::dsa::RecordType::get(getContext(), getRowType());
 }
