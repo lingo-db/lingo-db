@@ -13,7 +13,7 @@ include "mlir/Dialect/TupleStream/TupleStreamBase.td"
 include "RelAlgInterfaces.td"
 
 def DSA_Table : Type<CPred<"$_self.isa<::mlir::dsa::TableType>()">,"DB table type">;
-def DSA_Collection : Type<CPred<"$_self.isa<::mlir::dsa::CollectionType>()">,"DB collection type">;
+def DSA_Collection : Type<CPred<"$_self.isa<::mlir::util::CollectionType>()">,"DB collection type">;
 
 
 //===----------------------------------------------------------------------===//

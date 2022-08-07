@@ -17,6 +17,7 @@
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 #include "mlir/Dialect/SubOperator/Transforms/Passes.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
+#include "mlir/Dialect/util/FunctionHelper.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
@@ -26,7 +27,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "mlir/Transforms/Passes.h"
-#include <mlir/Dialect/util/FunctionHelper.h>
+#include "runtime-defs/Vector.h"
 
 using namespace mlir;
 
@@ -179,18 +180,32 @@ class CreateTableLowering : public OpConversionPattern<mlir::subop::CreateOp> {
       return mlir::success();
    }
 };
+static std::vector<Type> unpackTypes(mlir::ArrayAttr arr) {
+   std::vector<Type> res;
+   for (auto x : arr) { res.push_back(x.cast<mlir::TypeAttr>().getValue()); }
+   return res;
+};
+static mlir::TupleType getTupleType(mlir::subop::State state) {
+   return mlir::TupleType::get(state.getContext(), unpackTypes(state.getMembers().getTypes()));
+}
 class CreateVectorLowering : public OpConversionPattern<mlir::subop::CreateOp> {
    public:
    using OpConversionPattern<mlir::subop::CreateOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::subop::CreateOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (!createOp.getType().isa<mlir::subop::VectorType>()) return failure();
-      auto vectorType = createOp.getType().cast<mlir::subop::VectorType>();
-      mlir::Value vector = rewriter.replaceOpWithNewOp<mlir::dsa::CreateDS>(createOp, typeConverter->convertType(vectorType), rewriter.getStringAttr(""));
+      auto loc = createOp->getLoc();
+      Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(loc, 1024);
+      auto elementType = typeConverter->convertType(getTupleType(createOp.getType()));
+      auto typeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), elementType);
+      mlir::Value vector = rt::Vector::create(rewriter, loc)({typeSize, initialCapacity})[0];
       for (auto& b : createOp.initFn()) {
          auto res = inlineBlock(&b.front(), rewriter, {});
          auto packed = rewriter.create<mlir::util::PackOp>(createOp->getLoc(), res);
-         rewriter.create<mlir::dsa::Append>(createOp->getLoc(), vector, packed);
+         mlir::Value pointer = rt::Vector::insert(rewriter, loc)({vector})[0];
+         Value castedPointer = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), elementType), pointer);
+         rewriter.create<util::StoreOp>(loc, packed, castedPointer, mlir::Value());
       }
+      rewriter.replaceOp(createOp, vector);
       return mlir::success();
    }
 };
@@ -207,23 +222,35 @@ class SortLowering : public OpConversionPattern<mlir::subop::SortOp> {
    using OpConversionPattern<mlir::subop::SortOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::SortOp sortOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto dbSortOp = rewriter.create<mlir::dsa::SortOp>(sortOp->getLoc(), adaptor.toSort());
-      mlir::Block* block2 = new mlir::Block;
-      mlir::TupleType tupleType = adaptor.toSort().getType().cast<mlir::dsa::VectorType>().getElementType().cast<mlir::TupleType>();
-      block2->addArgument(tupleType, sortOp->getLoc());
-      block2->addArguments(tupleType, sortOp->getLoc());
-      dbSortOp.region().push_back(block2);
+      static size_t id = 0;
       auto vectorType = sortOp.toSort().getType().cast<mlir::subop::VectorType>();
       std::unordered_map<std::string, size_t> memberPositions;
       for (auto i = 0ull; i < vectorType.getMembers().getTypes().size(); i++) {
          memberPositions.insert({vectorType.getMembers().getNames()[i].cast<mlir::StringAttr>().str(), i});
       }
+      auto ptrType = mlir::util::RefType::get(getContext(), IntegerType::get(getContext(), 8));
 
+      ModuleOp parentModule = sortOp->getParentOfType<ModuleOp>();
+      mlir::TupleType elementType = getTupleType(sortOp.toSort().getType());
+
+      mlir::func::FuncOp funcOp;
       {
-         mlir::OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(block2);
-         auto unpackedLeft = rewriter.create<mlir::util::UnPackOp>(sortOp->getLoc(), block2->getArgument(0));
-         auto unpackedRight = rewriter.create<mlir::util::UnPackOp>(sortOp->getLoc(), block2->getArgument(1));
+         OpBuilder::InsertionGuard insertionGuard(rewriter);
+         rewriter.setInsertionPointToStart(parentModule.getBody());
+         funcOp = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "dsa_sort_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange(rewriter.getI1Type())));
+         auto* funcBody = new Block;
+         funcBody->addArguments(TypeRange({ptrType, ptrType}), {parentModule->getLoc(), parentModule->getLoc()});
+         funcOp.getBody().push_back(funcBody);
+         rewriter.setInsertionPointToStart(funcBody);
+         Value left = funcBody->getArgument(0);
+         Value right = funcBody->getArgument(1);
+
+         Value genericMemrefLeft = rewriter.create<util::GenericMemrefCastOp>(sortOp.getLoc(), util::RefType::get(rewriter.getContext(), elementType), left);
+         Value genericMemrefRight = rewriter.create<util::GenericMemrefCastOp>(sortOp.getLoc(), util::RefType::get(rewriter.getContext(), elementType), right);
+         Value tupleLeft = rewriter.create<util::LoadOp>(sortOp.getLoc(), elementType, genericMemrefLeft, Value());
+         Value tupleRight = rewriter.create<util::LoadOp>(sortOp.getLoc(), elementType, genericMemrefRight, Value());
+         auto unpackedLeft = rewriter.create<mlir::util::UnPackOp>(sortOp->getLoc(), tupleLeft);
+         auto unpackedRight = rewriter.create<mlir::util::UnPackOp>(sortOp->getLoc(), tupleRight);
          std::vector<mlir::Value> args;
          for (auto sortByMember : sortOp.sortBy()) {
             args.push_back(unpackedLeft.getResult(memberPositions[sortByMember.cast<mlir::StringAttr>().str()]));
@@ -231,14 +258,20 @@ class SortLowering : public OpConversionPattern<mlir::subop::SortOp> {
          for (auto sortByMember : sortOp.sortBy()) {
             args.push_back(unpackedRight.getResult(memberPositions[sortByMember.cast<mlir::StringAttr>().str()]));
          }
-         auto x = rewriter.create<mlir::dsa::YieldOp>(sortOp->getLoc());
-         rewriter.mergeBlockBefore(&sortOp.region().front(), x, args);
-         auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(x->getPrevNode());
-         rewriter.create<mlir::dsa::YieldOp>(sortOp->getLoc(), returnOp.results());
-         rewriter.eraseOp(x);
-         rewriter.eraseOp(returnOp);
-         rewriter.eraseOp(sortOp);
+         auto terminator = rewriter.create<mlir::func::ReturnOp>(sortOp.getLoc());
+         Block* sortLambda = &sortOp.region().front();
+         auto* sortLambdaTerminator = sortLambda->getTerminator();
+         rewriter.mergeBlockBefore(sortLambda, terminator, args);
+         mlir::dsa::YieldOp yieldOp = mlir::cast<mlir::dsa::YieldOp>(terminator->getPrevNode());
+         Value x = yieldOp.results()[0];
+         rewriter.create<mlir::func::ReturnOp>(sortOp.getLoc(), x);
+         rewriter.eraseOp(sortLambdaTerminator);
+         rewriter.eraseOp(terminator);
       }
+
+      Value functionPointer = rewriter.create<mlir::func::ConstantOp>(sortOp->getLoc(), funcOp.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.getSymName())));
+      rt::Vector::sort(rewriter, sortOp->getLoc())({adaptor.toSort(), functionPointer});
+      rewriter.eraseOp(sortOp);
       return mlir::success();
    }
 };
@@ -416,11 +449,12 @@ class ScanVectorLowering : public OpConversionPattern<mlir::subop::ScanOp> {
       if (!scanOp.state().getType().isa<mlir::subop::VectorType>()) return failure();
       auto columns = scanOp.state().getType().cast<mlir::subop::VectorType>().getMembers();
       ColumnMapping mapping;
-      auto state = adaptor.state();
-      auto vectorType = mlir::util::RefType::get(getContext(), state.getType().cast<mlir::dsa::VectorType>().getElementType());
-      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::ValueRange{});
+      auto elementType = mlir::util::RefType::get(getContext(), getTupleType(scanOp.state().getType()));
+      auto buffer = rt::Vector::getBuffer(rewriter, scanOp->getLoc())(adaptor.state())[0];
+      auto castedBuffer = rewriter.create<mlir::util::BufferCastOp>(scanOp->getLoc(), mlir::util::BufferType::get(getContext(), getTupleType(scanOp.state().getType())), buffer);
+      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, castedBuffer, mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
-      block->addArgument(vectorType, scanOp->getLoc());
+      block->addArgument(elementType, scanOp->getLoc());
       forOp.getBodyRegion().push_back(block);
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
@@ -487,11 +521,12 @@ class ScanRefsVectorLowering : public OpConversionPattern<mlir::subop::ScanRefsO
    LogicalResult matchAndRewrite(mlir::subop::ScanRefsOp scanOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (!scanOp.state().getType().isa<mlir::subop::VectorType>()) return failure();
       ColumnMapping mapping;
-      auto state = adaptor.state();
-      auto vectorType = mlir::util::RefType::get(getContext(), state.getType().cast<mlir::dsa::VectorType>().getElementType());
-      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::ValueRange{});
+      auto elementType = mlir::util::RefType::get(getContext(), getTupleType(scanOp.state().getType()));
+      auto buffer = rt::Vector::getBuffer(rewriter, scanOp->getLoc())(adaptor.state())[0];
+      auto castedBuffer = rewriter.create<mlir::util::BufferCastOp>(scanOp->getLoc(), mlir::util::BufferType::get(getContext(), getTupleType(scanOp.state().getType())), buffer);
+      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, castedBuffer, mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
-      block->addArgument(vectorType, scanOp->getLoc());
+      block->addArgument(elementType, scanOp->getLoc());
       forOp.getBodyRegion().push_back(block);
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
@@ -811,8 +846,9 @@ class MaterializeVectorLowering : public TupleStreamConsumerLowering<mlir::subop
          values.push_back(val);
       }
       mlir::Value packed = rewriter.create<mlir::util::PackOp>(materializeOp->getLoc(), values);
-
-      rewriter.create<mlir::dsa::Append>(materializeOp->getLoc(), adaptor.state(), packed);
+      mlir::Value pointer = rt::Vector::insert(rewriter, materializeOp->getLoc())({adaptor.state()})[0];
+      Value castedPointer = rewriter.create<mlir::util::GenericMemrefCastOp>(materializeOp->getLoc(), mlir::util::RefType::get(getContext(), packed.getType()), pointer);
+      rewriter.create<util::StoreOp>(materializeOp->getLoc(), packed, castedPointer, mlir::Value());
       return mlir::success();
    }
 };
@@ -1030,11 +1066,6 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
 
    TypeConverter typeConverter;
    typeConverter.addConversion([](mlir::Type t) { return t; });
-   auto unpackTypes = [](mlir::ArrayAttr arr) {
-      std::vector<Type> res;
-      for (auto x : arr) { res.push_back(x.cast<mlir::TypeAttr>().getValue()); }
-      return res;
-   };
    auto baseTypes = [](mlir::TypeRange arr) {
       std::vector<Type> res;
       for (auto x : arr) { res.push_back(getBaseType(x)); }
@@ -1051,8 +1082,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       return mlir::dsa::TableBuilderType::get(ctxt, tupleType);
    });
    typeConverter.addConversion([&](mlir::subop::VectorType t) -> Type {
-      auto tupleType = mlir::TupleType::get(ctxt, unpackTypes(t.getMembers().getTypes()));
-      return mlir::dsa::VectorType::get(ctxt, tupleType);
+      return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
    });
    typeConverter.addConversion([&](mlir::subop::SimpleStateType t) -> Type {
       auto tupleType = mlir::TupleType::get(ctxt, unpackTypes(t.getMembers().getTypes()));

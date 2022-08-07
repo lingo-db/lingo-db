@@ -14,6 +14,7 @@
 using namespace mlir;
 namespace {
 
+/*
 class SortOpLowering : public OpConversionPattern<mlir::dsa::SortOp> {
    public:
    using OpConversionPattern<mlir::dsa::SortOp>::OpConversionPattern;
@@ -58,6 +59,7 @@ class SortOpLowering : public OpConversionPattern<mlir::dsa::SortOp> {
       return success();
    }
 };
+ */
 class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
    public:
    using OpConversionPattern<mlir::dsa::ForOp>::OpConversionPattern;
@@ -75,7 +77,7 @@ class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
          argumentTypes.push_back(t);
          argumentLocs.push_back(forOp->getLoc());
       }
-      auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::dsa::CollectionType>();
+      auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::util::CollectionType>();
       auto iterator = mlir::dsa::CollectionIterationImpl::getImpl(collectionType, adaptor.collection());
 
       ModuleOp parentModule = forOp->getParentOfType<ModuleOp>();
@@ -235,7 +237,7 @@ class AtLowering  : public OpConversionPattern<mlir::dsa::At> {
 void mlir::dsa::populateCollectionsToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    auto* context = patterns.getContext();
 
-   patterns.insert<SortOpLowering>(typeConverter, context);
+   //patterns.insert<SortOpLowering>(typeConverter, context);
 
    patterns.insert<ForOpLowering>(typeConverter, context);
    patterns.insert<LookupOpLowering>(typeConverter, context);

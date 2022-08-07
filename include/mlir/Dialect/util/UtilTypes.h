@@ -1,6 +1,7 @@
 #ifndef MLIR_DIALECT_UTIL_UTILTYPES_H
 #define MLIR_DIALECT_UTIL_UTILTYPES_H
 
+#include "mlir/Dialect/util/UtilOpsTypeInterfaces.h.inc"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/OpDefinition.h"
 

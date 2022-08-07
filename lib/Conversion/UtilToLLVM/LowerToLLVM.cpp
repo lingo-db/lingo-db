@@ -234,6 +234,14 @@ class CastOpLowering : public OpConversionPattern<mlir::util::GenericMemrefCastO
       return success();
    }
 };
+class BufferCastOpLowering : public OpConversionPattern<mlir::util::BufferCastOp> {
+   public:
+   using OpConversionPattern<mlir::util::BufferCastOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::util::BufferCastOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOp(op, adaptor.val());
+      return success();
+   }
+};
 class TupleElementPtrOpLowering : public OpConversionPattern<mlir::util::TupleElementPtrOp> {
    public:
    using OpConversionPattern<mlir::util::TupleElementPtrOp>::OpConversionPattern;
@@ -326,6 +334,28 @@ class VarLenGetLenLowering : public OpConversionPattern<mlir::util::VarLenGetLen
       return success();
    }
 };
+class BufferGetLenLowering : public OpConversionPattern<mlir::util::BufferGetLen> {
+   public:
+   using OpConversionPattern<mlir::util::BufferGetLen>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::util::BufferGetLen op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      Value len = rewriter.create<LLVM::TruncOp>(op->getLoc(), rewriter.getI64Type(), adaptor.buffer());
+      auto bytesPerEntry = rewriter.create<mlir::util::SizeOfOp>(op->getLoc(), rewriter.getI64Type(), op.buffer().getType().cast<mlir::util::BufferType>().getT());
+      len =rewriter.create<mlir::arith::DivUIOp>(op->getLoc(),len,bytesPerEntry);
+      rewriter.replaceOp(op, len);
+      return success();
+   }
+};
+class BufferGetRefLowering : public OpConversionPattern<mlir::util::BufferGetRef> {
+   public:
+   using OpConversionPattern<mlir::util::BufferGetRef>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::util::BufferGetRef op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto const64 = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getIntegerType(128), rewriter.getIntegerAttr(rewriter.getIntegerType(128), 64));
+      auto shiftedLeft = rewriter.create<mlir::LLVM::LShrOp>(op->getLoc(), adaptor.buffer(), const64);
+      Value refInt = rewriter.create<LLVM::TruncOp>(op->getLoc(), rewriter.getI64Type(), shiftedLeft);
+      rewriter.replaceOpWithNewOp<LLVM::IntToPtrOp>(op,mlir::LLVM::LLVMPointerType::get(typeConverter->convertType(op.buffer().getType().cast<mlir::util::BufferType>().getT())),refInt);
+      return success();
+   }
+};
 class Hash64Lowering : public OpConversionPattern<mlir::util::Hash64> {
    public:
    using OpConversionPattern<mlir::util::Hash64>::OpConversionPattern;
@@ -407,7 +437,12 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
       MLIRContext* context = &typeConverter.getContext();
       return IntegerType::get(context, 128);
    });
+   typeConverter.addConversion([&](mlir::util::BufferType bufferType) {
+      MLIRContext* context = &typeConverter.getContext();
+      return IntegerType::get(context, 128);
+   });
    patterns.add<CastOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<BufferCastOpLowering>(typeConverter, patterns.getContext());
    patterns.add<SizeOfOpLowering>(typeConverter, patterns.getContext());
    patterns.add<GetTupleOpLowering>(typeConverter, patterns.getContext());
    patterns.add<UndefOpLowering>(typeConverter, patterns.getContext());
@@ -417,6 +452,8 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<DeAllocOpLowering>(typeConverter, patterns.getContext());
    patterns.add<ArrayElementPtrOpLowering>(typeConverter, patterns.getContext());
    patterns.add<TupleElementPtrOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<BufferGetRefLowering>(typeConverter, patterns.getContext());
+   patterns.add<BufferGetLenLowering>(typeConverter, patterns.getContext());
 
    patterns.add<ToGenericMemrefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<ToMemrefOpLowering>(typeConverter, patterns.getContext());

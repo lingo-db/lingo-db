@@ -7,43 +7,15 @@
 
 #include <llvm/ADT/TypeSwitch.h>
 
-mlir::Type mlir::dsa::CollectionType::getElementType() const {
-   return ::llvm::TypeSwitch<::mlir::dsa::CollectionType, Type>(*this)
-      .Case<::mlir::dsa::GenericIterableType>([&](::mlir::dsa::GenericIterableType t) {
-         return t.getElementType();
-      })
-      .Case<::mlir::dsa::VectorType>([&](::mlir::dsa::VectorType t) {
-         return t.getElementType();
-      })
-      .Case<::mlir::dsa::JoinHashtableType>([&](::mlir::dsa::JoinHashtableType t) {
-         return TupleType::get(getContext(), {t.getKeyType(), t.getValType()});
-      })
-      .Case<::mlir::dsa::AggregationHashtableType>([&](::mlir::dsa::AggregationHashtableType t) {
-         return TupleType::get(t.getContext(), {t.getKeyType(), t.getValType()});
-      })
-      .Case<mlir::dsa::RecordBatchType>([&](mlir::dsa::RecordBatchType t) {
-         return mlir::dsa::RecordType::get(t.getContext(), t.getRowType());
-      })
-      .Default([](::mlir::Type) { return Type(); });
+mlir::Type mlir::dsa::AggregationHashtableType::getElementType() {
+   return  TupleType::get(getContext(), {getKeyType(), getValType()});
 }
-bool mlir::dsa::CollectionType::classof(Type t) {
-   return ::llvm::TypeSwitch<Type, bool>(t)
-      .Case<::mlir::dsa::GenericIterableType>([&](::mlir::dsa::GenericIterableType t) { return true; })
-      .Case<::mlir::dsa::VectorType>([&](::mlir::dsa::VectorType t) {
-         return true;
-      })
-      .Case<::mlir::dsa::JoinHashtableType>([&](::mlir::dsa::JoinHashtableType t) {
-         return true;
-      })
-      .Case<::mlir::dsa::AggregationHashtableType>([&](::mlir::dsa::AggregationHashtableType t) {
-         return true;
-      })
-      .Case<::mlir::dsa::RecordBatchType>([&](::mlir::dsa::RecordBatchType t) {
-         return true;
-      })
-      .Default([](::mlir::Type) { return false; });
+mlir::Type mlir::dsa::JoinHashtableType::getElementType() {
+   return TupleType::get(getContext(), {getKeyType(), getValType()});
 }
-
+mlir::Type mlir::dsa::RecordBatchType::getElementType() {
+   return mlir::dsa::RecordType::get(getContext(), getRowType());
+}
 ::mlir::Type mlir::dsa::GenericIterableType::parse(mlir::AsmParser& parser) {
    Type type;
    StringRef parserName;

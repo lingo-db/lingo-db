@@ -112,6 +112,12 @@ class VarLen32 {
    operator std::string() { return std::string((char*) getPtr(), getLen()); }
    std::string str() { return std::string((char*) getPtr(), getLen()); }
 };
+
+
+struct Buffer{
+   size_t numElements;
+   uint8_t* ptr;
+};
 template <class T>
 struct FixedSizedBuffer {
    FixedSizedBuffer(size_t size) : ptr((T*) malloc(size * sizeof(T))) {

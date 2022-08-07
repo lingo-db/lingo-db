@@ -22,6 +22,7 @@ class Vector {
    size_t getCap() const;
    uint8_t* getPtr() const;
    size_t getTypeSize() const;
+   Buffer getBuffer() const;
    void sort(bool (*compareFn)(uint8_t*, uint8_t*));
    static void destroy(Vector* vec);
    ~Vector(){

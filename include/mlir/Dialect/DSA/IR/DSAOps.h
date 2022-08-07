@@ -5,7 +5,6 @@
 #include "mlir/IR/OpDefinition.h"
 #include "mlir/Interfaces/SideEffectInterfaces.h"
 
-#include "mlir/Dialect/DSA/IR/DSACollectionType.h"
 #include "mlir/Dialect/DSA/IR/DSAOpsEnums.h"
 #include "mlir/Dialect/DSA/IR/DSAOpsInterfaces.h"
 #include "mlir/Dialect/DSA/IR/DSATypes.h"

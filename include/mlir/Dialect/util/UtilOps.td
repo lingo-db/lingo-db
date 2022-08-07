@@ -6,50 +6,15 @@ include "mlir/IR/EnumAttr.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
+include "mlir/Dialect/util/UtilBase.td"
 
-def Util_Dialect : Dialect {
-let name = "util";
-let cppNamespace = "::mlir::util";
-let extraClassDeclaration = [{
-private:
-void registerTypes();
-std::shared_ptr<FunctionHelper> functionHelper;
-public:
-FunctionHelper& getFunctionHelper(){
-    return *functionHelper;
-}
-}];
-}
 
 class Util_Op<string mnemonic, list<Trait> traits = []> :
 Op<Util_Dialect, mnemonic, traits>{
 
 }
 
-class Util_Type<string name, string typeMnemonic> : TypeDef<Util_Dialect, name> {
-    let mnemonic = typeMnemonic;
-}
 
-
-def RefType : Util_Type<"Ref","ref"> {
-    let summary = "ref type";
-    let parameters = (ins "Type":$elementType);
-    let builders = [
-        TypeBuilder<(ins), [{
-            return $_get($_ctxt, mlir::IntegerType::get($_ctxt,8));
-        }]>,
-        TypeBuilderWithInferredContext<(ins "Type":$type), [{
-            return $_get(type.getContext(), type);
-        }]>,
-    ];
-    let builderCall = "$_builder.getType<" # dialect.cppNamespace # "::" # cppClassName # ">()";
-    let hasCustomAssemblyFormat = 1;
-}
-
-
-def VarLen32Type : Util_Type<"VarLen32","varlen32"> {
-    let summary = "type representing variable-length data up to 2^31 bytes";
-}
 
 def CreateVarLen  : Util_Op<"varlen32_create",[NoSideEffect]> {//todo: technically not currect
     let arguments = (ins RefType:$ref, I32: $len);
@@ -60,6 +25,16 @@ def CreateConstVarLen  : Util_Op<"varlen32_create_const",[NoSideEffect]> {
     let arguments = (ins StrAttr: $str);
     let results = (outs VarLen32Type:$varlen);
     let assemblyFormat = " $str attr-dict";
+}
+def BufferGetLen : Util_Op<"buffer_getlen"> {
+    let arguments = (ins BufferType:$buffer);
+    let results = (outs Index: $len);
+    let assemblyFormat = " $buffer `:` type($buffer)  attr-dict";
+}
+def BufferGetRef : Util_Op<"buffer_getref"> {
+    let arguments = (ins BufferType:$buffer);
+    let results = (outs RefType: $ref);
+    let assemblyFormat = " $buffer `:` type($buffer) `->` type($ref) attr-dict";
 }
 def VarLenGetLen : Util_Op<"varlen32_getlen"> {
     let arguments = (ins VarLen32Type:$varlen);
@@ -125,6 +100,12 @@ def GenericMemrefCastOp : Util_Op<"generic_memref_cast",[NoSideEffect]> {
 let summary = "generic memref cast function";
 let arguments = (ins RefType:$val);
 let results=(outs RefType:$res);
+let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
+}
+def BufferCastOp : Util_Op<"buffer_cast",[NoSideEffect]> {
+let summary = "generic memref cast function";
+let arguments = (ins BufferType:$val);
+let results=(outs BufferType:$res);
 let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
 }
 def StoreOp  : Util_Op<"store"> {

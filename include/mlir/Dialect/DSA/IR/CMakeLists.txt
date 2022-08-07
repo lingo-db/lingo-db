@@ -1,14 +1,13 @@
 
 set(LLVM_TARGET_DEFINITIONS DSAOps.td)
-mlir_tablegen(DSAOpsDialect.h.inc -gen-dialect-decls)
-mlir_tablegen(DSAOpsDialect.cpp.inc -gen-dialect-defs)
+mlir_tablegen(DSAOpsDialect.h.inc -gen-dialect-decls --dialect=dsa)
+mlir_tablegen(DSAOpsDialect.cpp.inc -gen-dialect-defs --dialect=dsa)
 mlir_tablegen(DSAOps.h.inc -gen-op-decls)
 mlir_tablegen(DSAOps.cpp.inc -gen-op-defs)
 mlir_tablegen(DSAOpsEnums.h.inc -gen-enum-decls)
 mlir_tablegen(DSAOpsEnums.cpp.inc -gen-enum-defs)
-mlir_tablegen(DSAOpsTypes.h.inc --gen-typedef-decls)
-mlir_tablegen(DSAOpsTypes.cpp.inc --gen-typedef-defs)
-
+mlir_tablegen(DSAOpsTypes.h.inc --gen-typedef-decls  --typedefs-dialect=dsa)
+mlir_tablegen(DSAOpsTypes.cpp.inc --gen-typedef-defs  --typedefs-dialect=dsa)
 set(LLVM_TARGET_DEFINITIONS DSAInterfaces.td)
 mlir_tablegen(DSAOpsInterfaces.h.inc -gen-op-interface-decls)
 mlir_tablegen(DSAOpsInterfaces.cpp.inc -gen-op-interface-defs)

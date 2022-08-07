@@ -203,22 +203,19 @@ class RecordBatchIterator : public ForIterator {
    }
 };
 
-class VectorIterator : public ForIterator {
-   Value vector;
+class BufferIterator : public ForIterator {
+   Value buffer;
    Value values;
 
    public:
-   VectorIterator(Value vector) : ForIterator(vector.getContext()), vector(vector) {
+   BufferIterator(Value buffer) : ForIterator(buffer.getContext()), buffer(buffer) {
    }
    virtual void init(OpBuilder& builder) override {
-      auto loaded = builder.create<util::LoadOp>(loc, vector, Value());
-      auto unpacked = builder.create<util::UnPackOp>(loc, loaded);
-
-      values = unpacked.getResult(2);
-      len = unpacked.getResult(0);
+      values = builder.create<util::BufferGetRef>(loc, buffer.getType().cast<mlir::util::BufferType>().getElementType(), buffer);
+      len = builder.create<util::BufferGetLen>(loc, mlir::IndexType::get(context), buffer);
    }
    virtual Value getElement(OpBuilder& builder, Value index) override {
-      return builder.create<util::ArrayElementPtrOp>(loc, mlir::util::RefType::get(vector.getContext(),values.getType().cast<mlir::util::RefType>().getElementType()) ,values, index);
+      return builder.create<util::ArrayElementPtrOp>(loc, mlir::util::RefType::get(buffer.getContext(), values.getType().cast<mlir::util::RefType>().getElementType()), values, index);
    }
 };
 class ValueOnlyAggrHTIterator : public ForIterator {
@@ -306,8 +303,7 @@ class ForIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
    ForIteratorIterationImpl(std::unique_ptr<ForIterator> iterator) : iterator(std::move(iterator)) {
    }
    virtual std::vector<Value> implementLoop(mlir::Location loc, mlir::ValueRange iterArgs, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) override {
-         return implementLoopSimple(loc, iterArgs, typeConverter, builder, bodyBuilder);
-
+      return implementLoopSimple(loc, iterArgs, typeConverter, builder, bodyBuilder);
    }
    std::vector<Value> implementLoopSimple(mlir::Location loc, const ValueRange& iterArgs, TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) {
       auto insertionPoint = builder.saveInsertionPoint();
@@ -345,9 +341,8 @@ std::unique_ptr<mlir::dsa::CollectionIterationImpl> mlir::dsa::CollectionIterati
       } else if (generic.getIteratorName() == "join_ht_mod_iterator") {
          return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(loweredCollection, generic.getElementType(), true));
       }
-   } else if (auto vector = collectionType.dyn_cast_or_null<mlir::dsa::VectorType>()) {
-
-      return std::make_unique<ForIteratorIterationImpl>(std::make_unique<VectorIterator>(loweredCollection));
+   } else if (auto vector = collectionType.dyn_cast_or_null<mlir::util::BufferType>()) {
+      return std::make_unique<ForIteratorIterationImpl>(std::make_unique<BufferIterator>(loweredCollection));
    } else if (auto aggrHt = collectionType.dyn_cast_or_null<mlir::dsa::AggregationHashtableType>()) {
       if (aggrHt.getKeyType().getTypes().empty()) {
          return std::make_unique<ForIteratorIterationImpl>(std::make_unique<ValueOnlyAggrHTIterator>(loweredCollection, aggrHt.getValType()));

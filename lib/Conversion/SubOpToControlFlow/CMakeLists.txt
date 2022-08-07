@@ -5,6 +5,7 @@ add_mlir_conversion_library(MLIRSubOpToControlFlow
         ../../../mlir/Conversion/SubOpToControlFlow
 
         DEPENDS
+        vec-rt-defs
         LINK_COMPONENTS
         Core
 

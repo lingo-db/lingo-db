@@ -11,10 +11,7 @@
 #include "runtime-defs/Vector.h"
 using namespace mlir;
 namespace {
-static mlir::util::RefType getLoweredVectorType(MLIRContext* context, Type elementType) {
-   auto sType = mlir::TupleType::get(context, {IndexType::get(context), IndexType::get(context), mlir::util::RefType::get(context, elementType)});
-   return mlir::util::RefType::get(context, sType);
-}
+
 static Type getHashtableKVType(MLIRContext* context, Type keyType, Type aggrType) {
    return mlir::TupleType::get(context, {keyType, aggrType});
 }
@@ -43,14 +40,6 @@ class CreateDsLowering : public OpConversionPattern<mlir::dsa::CreateDS> {
          Value typesize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), typeConverter->convertType(tupleType));
          Value ptr = rt::LazyJoinHashtable::create(rewriter, loc)(typesize)[0];
          rewriter.replaceOpWithNewOp<util::GenericMemrefCastOp>(createOp, typeConverter->convertType(joinHtType), ptr);
-         return success();
-      } else if (auto vecType = createOp.ds().getType().dyn_cast<mlir::dsa::VectorType>()) {
-         Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(loc, 1024);
-         auto elementType = typeConverter->convertType(vecType.getElementType());
-         auto typeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), elementType);
-         auto ptr = rt::Vector::create(rewriter, loc)({typeSize, initialCapacity})[0];
-         mlir::Value createdVector = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, getLoweredVectorType(rewriter.getContext(), elementType), ptr);
-         rewriter.replaceOp(createOp, createdVector);
          return success();
       } else if (auto aggrHtType = createOp.ds().getType().dyn_cast<mlir::dsa::AggregationHashtableType>()) {
          TupleType keyType = aggrHtType.getKeyType();
@@ -346,6 +335,7 @@ class FinalizeTBLowering : public OpConversionPattern<mlir::dsa::Finalize> {
       return success();
    }
 };
+/*
 class DSAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
    public:
    using OpConversionPattern<mlir::dsa::Append>::OpConversionPattern;
@@ -365,7 +355,7 @@ class DSAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
       return success();
    }
 };
-
+*/
 class TBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
    public:
    using OpConversionPattern<mlir::dsa::Append>::OpConversionPattern;
@@ -444,9 +434,9 @@ class FreeLowering : public OpConversionPattern<mlir::dsa::FreeOp> {
       if (op.val().getType().isa<mlir::dsa::JoinHashtableType>()) {
          rt::LazyJoinHashtable::destroy(rewriter, op->getLoc())(ValueRange{adaptor.val()});
       }
-      if (op.val().getType().isa<mlir::dsa::VectorType>()) {
+      /*if (op.val().getType().isa<mlir::dsa::VectorType>()) {
          rt::Vector::destroy(rewriter, op->getLoc())(ValueRange{adaptor.val()});
-      }
+      }*/
       rewriter.eraseOp(op);
       return success();
    }
@@ -455,11 +445,11 @@ class FreeLowering : public OpConversionPattern<mlir::dsa::FreeOp> {
 } // end namespace
 namespace mlir::dsa {
 void populateDSAToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
-   patterns.insert<CreateDsLowering, HtGetRefOrInsertLowering, FinalizeLowering, DSAppendLowering, LazyJHtInsertLowering,JoinHtInsertLowering, FreeLowering>(typeConverter, patterns.getContext());
+   patterns.insert<CreateDsLowering, HtGetRefOrInsertLowering, FinalizeLowering, LazyJHtInsertLowering,JoinHtInsertLowering, FreeLowering>(typeConverter, patterns.getContext());
    patterns.insert<CreateTableBuilderLowering, TBAppendLowering, FinalizeTBLowering, NextRowLowering>(typeConverter, patterns.getContext());
-   typeConverter.addConversion([&typeConverter](mlir::dsa::VectorType vectorType) {
+   /*typeConverter.addConversion([&typeConverter](mlir::dsa::VectorType vectorType) {
       return getLoweredVectorType(vectorType.getContext(), typeConverter.convertType(vectorType.getElementType()));
-   });
+   });*/
    typeConverter.addConversion([&typeConverter](mlir::dsa::AggregationHashtableType aggregationHashtableType) {
       if (aggregationHashtableType.getKeyType().getTypes().empty()) {
          return (Type) mlir::util::RefType::get(aggregationHashtableType.getContext(), typeConverter.convertType(aggregationHashtableType.getValType()));

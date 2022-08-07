@@ -10,7 +10,7 @@ void runtime::Vector::resize() {
 }
 
 uint8_t* runtime::Vector::insert() {
-   if(len==cap){
+   if (len == cap) {
       resize();
    }
    return ptrAt<uint8_t>(len++);
@@ -26,6 +26,9 @@ uint8_t* runtime::Vector::getPtr() const {
 }
 size_t runtime::Vector::getTypeSize() const {
    return typeSize;
+}
+runtime::Buffer runtime::Vector::getBuffer() const {
+   return {len * typeSize, getPtr()};
 }
 void runtime::Vector::sort(bool (*compareFn)(uint8_t*, uint8_t*)) {
    std::vector<uint8_t*> toSort;

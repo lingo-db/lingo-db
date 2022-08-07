@@ -46,7 +46,7 @@ ParseResult dsa::ForOp::parse(OpAsmParser& parser, OperationState& result) {
    OpAsmParser::UnresolvedOperand collection;
    OpAsmParser::Argument inductionVariable;
    Type collType;
-   mlir::dsa::CollectionType collectionType;
+   mlir::util::CollectionType collectionType;
    // Parse the induction variable followed by '='.
    if (parser.parseArgument(inductionVariable) || parser.parseKeyword("in"))
       return failure();
@@ -56,7 +56,7 @@ ParseResult dsa::ForOp::parse(OpAsmParser& parser, OperationState& result) {
        parser.parseColonType(collType))
       return failure();
 
-   if (!(collectionType = collType.dyn_cast_or_null<mlir::dsa::CollectionType>())) {
+   if (!(collectionType = collType.dyn_cast_or_null<mlir::util::CollectionType>())) {
       return failure();
    }
    parser.resolveOperand(collection, collectionType, result.operands);
@@ -106,40 +106,6 @@ ParseResult dsa::ForOp::parse(OpAsmParser& parser, OperationState& result) {
    return success();
 }
 
-ParseResult mlir::dsa::SortOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
-   OpAsmParser::UnresolvedOperand toSort;
-   dsa::VectorType vecType;
-   if (parser.parseOperand(toSort) || parser.parseColonType(vecType)) {
-      return failure();
-   }
-   parser.resolveOperand(toSort, vecType, result.operands);
-   OpAsmParser::Argument left, right;
-   left.type = vecType.getElementType();
-   right.type = vecType.getElementType();
-   if (parser.parseLParen() || parser.parseArgument(left) || parser.parseComma() || parser.parseArgument(right) || parser.parseRParen()) {
-      return failure();
-   }
-   Region* body = result.addRegion();
-   if (parser.parseRegion(*body, {left, right})) return failure();
-   return success();
-}
-
-void dsa::SortOp::print(OpAsmPrinter& p) {
-   dsa::SortOp& op = *this;
-   p << " " << op.toSort() << ":" << op.toSort().getType() << " ";
-   p << "(";
-   bool first = true;
-   for (auto arg : op.region().front().getArguments()) {
-      if (first) {
-         first = false;
-      } else {
-         p << ",";
-      }
-      p << arg;
-   }
-   p << ")";
-   p.printRegion(op.region(), false, true);
-}
 
 ParseResult mlir::dsa::HashtableInsert::parse(OpAsmParser& parser, OperationState& result) {
    OpAsmParser::UnresolvedOperand ht, key, val;

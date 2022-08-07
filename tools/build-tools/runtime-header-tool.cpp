@@ -87,6 +87,10 @@ class MethodPrinter : public MatchFinder::MatchCallback {
       if (asString.ends_with("runtime::VarLen32")) {
          return "mlir::util::VarLen32Type::get(context)";
       }
+      if (asString.ends_with("runtime::Buffer")) {
+         return "mlir::util::BufferType::get(context,"+ translateIntegerType(8)+")";
+      }
+
       return std::optional<std::string>();
    }
    void emitTypeCreateFn(llvm::raw_ostream& os, std::vector<std::string> types) {
