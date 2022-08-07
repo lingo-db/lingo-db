@@ -7,7 +7,6 @@ gen_rt_def(ht-rt-defs "Hashtable.h")
 add_mlir_conversion_library(MLIRDSAToStd
         CollectionIterators.cpp
         LowerToStd.cpp
-        ScalarDSAToStdPatterns.cpp
         DSAToStdPatterns.cpp
         CollectionsToStdPatterns.cpp
 

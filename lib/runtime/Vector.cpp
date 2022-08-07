@@ -8,6 +8,13 @@ void runtime::Vector::resize() {
    ptr = runtime::MemoryHelper::resize(ptr, len * typeSize, newCapacity * typeSize);
    cap = newCapacity;
 }
+
+uint8_t* runtime::Vector::insert() {
+   if(len==cap){
+      resize();
+   }
+   return ptrAt<uint8_t>(len++);
+}
 size_t runtime::Vector::getLen() const {
    return len;
 }

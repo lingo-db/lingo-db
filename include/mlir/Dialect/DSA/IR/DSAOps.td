@@ -47,16 +47,6 @@ def DSA_GenericIterable : DSA_Collection<"GenericIterable","iterable"> {
     let hasCustomAssemblyFormat=1;
 }
 
-def DSA_Flag : DSA_Type<"Flag", "flag"> {
-    let summary = "binary flag";
-    let description = [{
-        Flag which can be used to terminate a `for` loop.  Flag types are lowered to local variables allocated using `alloca`.
-
-        For example, a flag is used to terminate iteration over records when reaching the output limit or to indicate whether a matching join row has been found.
-    }];
-
-    let assemblyFormat = "";
-}
 
 def DSA_Table : DSA_Type<"Table", "table"> {
     let summary = "materialized table";
@@ -102,22 +92,6 @@ def DSA_JoinHashtable : DSA_Collection<"JoinHashtable","join_ht"> {
     let assemblyFormat = "`<` $keyType `,` $valType `>`";
 }
 
-def DSA_CreateFlag : DSA_Op<"createflag"> {
-    let summary = "Create flag";
-    let results = (outs DSA_Flag:$flag);
-    let assemblyFormat = "attr-dict";
-}
-def DSA_SetFlag : DSA_Op<"setflag"> {
-    let summary = "Set flag to a value";
-    let arguments = (ins DSA_Flag:$flag, I1:$val);
-    let assemblyFormat = "$flag `,` $val attr-dict";
-}
-def DSA_GetFlag : DSA_Op<"getflag"> {
-    let summary = "Get flag value";
-    let arguments = (ins DSA_Flag:$flag);
-    let results = (outs I1:$res);
-    let assemblyFormat = "$flag attr-dict";
-}
 
 def DSA_CreateDS : DSA_Op<"create_ds"> {
     let summary = "create data structure";
@@ -224,13 +198,13 @@ def DSA_SortOp : DSA_Op<"sort", [IsolatedFromAbove]> {
 }
 
 def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
-                           RecursiveSideEffects, AttrSizedOperandSegments]> {
+                           RecursiveSideEffects]> {
     let summary = "iterate over collection";
     let description = [{
         Iterate over all elements of a collection. The iteration can be interrupted when the optionally specified flag becomes set.
     }];
 
-    let arguments = (ins DSA_Collection:$collection,Optional<DSA_Flag>:$until,Variadic<AnyType>:$initArgs);
+    let arguments = (ins DSA_Collection:$collection,Variadic<AnyType>:$initArgs);
     let results = (outs Variadic<AnyType>:$results);
     let regions = (region SizedRegion<1>:$region);
 
@@ -248,7 +222,7 @@ def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
             return getBody()->getNumArguments() - 1;
         }
         /// Number of operands controlling the loop: lb, ub, step
-        unsigned getNumControlOperands() { return until()?2:1; }
+        unsigned getNumControlOperands() { return 1; }
         /// Does the operation hold operands for loop-carried values
         bool hasIterOperands() {
             return getOperation()->getNumOperands() > getNumControlOperands();
@@ -267,12 +241,6 @@ def YieldOp : DSA_Op<"yield", [NoSideEffect, Terminator,
     let assemblyFormat = [{  attr-dict ($results^ `:` type($results))? }];
 }
 
-def CondSkipOp : DSA_Op<"cond_skip", [ParentOneOf<["ForOp"]>]> {
-    let summary = "conditional skip in for loop (continue)";
-
-    let arguments = (ins AnyType:$condition, Variadic<AnyType>:$args);
-    let assemblyFormat = [{ `(` $condition `:` type($condition) `)` attr-dict ( `(` $args^ `:` type($args)`)`)? }];
-}
 
 def FreeOp : DSA_Op<"free"> {
     let arguments = (ins AnyType: $val);

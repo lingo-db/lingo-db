@@ -337,14 +337,14 @@ class ScanTableRefLowering : public OpConversionPattern<mlir::subop::ScanOp> {
       ColumnMapping mapping;
       auto state = adaptor.state();
       auto recordBatchType = state.getType().cast<mlir::dsa::GenericIterableType>().getElementType().cast<mlir::dsa::RecordBatchType>();
-      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::Value(), mlir::ValueRange{});
+      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
       block->addArgument(recordBatchType, scanOp->getLoc());
       forOp.getBodyRegion().push_back(block);
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(block);
-         auto forOp2 = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, forOp.getInductionVar(), mlir::Value(), mlir::ValueRange{});
+         auto forOp2 = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, forOp.getInductionVar(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(recordBatchType.getElementType(), scanOp->getLoc());
          forOp2.getBodyRegion().push_back(block2);
@@ -418,7 +418,7 @@ class ScanVectorLowering : public OpConversionPattern<mlir::subop::ScanOp> {
       ColumnMapping mapping;
       auto state = adaptor.state();
       auto vectorType = mlir::util::RefType::get(getContext(), state.getType().cast<mlir::dsa::VectorType>().getElementType());
-      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::Value(), mlir::ValueRange{});
+      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
       block->addArgument(vectorType, scanOp->getLoc());
       forOp.getBodyRegion().push_back(block);
@@ -454,7 +454,7 @@ class ScanLazyMultiMapLowering : public OpConversionPattern<mlir::subop::ScanOp>
       ColumnMapping mapping;
       auto state = adaptor.state();
       auto vectorType = state.getType().cast<mlir::dsa::JoinHashtableType>().getElementType();
-      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::Value(), mlir::ValueRange{});
+      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
       block->addArgument(vectorType, scanOp->getLoc());
       forOp.getBodyRegion().push_back(block);
@@ -489,7 +489,7 @@ class ScanRefsVectorLowering : public OpConversionPattern<mlir::subop::ScanRefsO
       ColumnMapping mapping;
       auto state = adaptor.state();
       auto vectorType = mlir::util::RefType::get(getContext(), state.getType().cast<mlir::dsa::VectorType>().getElementType());
-      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::Value(), mlir::ValueRange{});
+      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
       block->addArgument(vectorType, scanOp->getLoc());
       forOp.getBodyRegion().push_back(block);
@@ -517,7 +517,7 @@ class ScanHashMapLowering : public OpConversionPattern<mlir::subop::ScanOp> {
       ColumnMapping mapping;
       auto state = adaptor.state();
       auto hashmapType = state.getType().cast<mlir::dsa::AggregationHashtableType>().getElementType();
-      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::Value(), mlir::ValueRange{});
+      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, state, mlir::ValueRange{});
       mlir::Block* block = new mlir::Block;
       block->addArgument(hashmapType, scanOp->getLoc());
       forOp.getBodyRegion().push_back(block);
@@ -561,7 +561,7 @@ class ScanListLowering : public OpConversionPattern<mlir::subop::ScanListOp> {
 
       auto loc = scanOp->getLoc();
       {
-         auto forOp2 = rewriter.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, adaptor.list(), mlir::Value(), mlir::ValueRange{});
+         auto forOp2 = rewriter.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, adaptor.list(), mlir::ValueRange{});
          mlir::Block* block2 = new mlir::Block;
          block2->addArgument(adaptor.list().getType().cast<mlir::dsa::GenericIterableType>().getElementType(), loc);
          forOp2.getBodyRegion().push_back(block2);

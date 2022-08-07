@@ -16,6 +16,7 @@ class Vector {
       return (T*) &ptr[i * typeSize];
    }
    void resize();
+   uint8_t* insert();
    static Vector* create(size_t sizeOfType, size_t initialCapacity);
    size_t getLen() const;
    size_t getCap() const;

@@ -79,73 +79,7 @@ class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
       auto iterator = mlir::dsa::CollectionIterationImpl::getImpl(collectionType, adaptor.collection());
 
       ModuleOp parentModule = forOp->getParentOfType<ModuleOp>();
-      bool containsCondSkip = false;
-      for (auto& op : forOp.region().front().getOperations()) {
-         containsCondSkip |= mlir::isa<mlir::dsa::CondSkipOp>(&op);
-      }
-
-      using fn_t = std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)>;
-      fn_t fn1 = [&](std::function<Value(OpBuilder & b)> getElem, ValueRange iterargs, OpBuilder builder) {
-         auto yieldOp = cast<mlir::dsa::YieldOp>(forOp.getBody()->getTerminator());
-         std::vector<Type> resTypes;
-         std::vector<Location> locs;
-         for (auto t : yieldOp.results()) {
-            resTypes.push_back(typeConverter->convertType(t.getType()));
-            locs.push_back(forOp->getLoc());
-         }
-         std::vector<Value> values;
-         values.push_back(getElem(builder));
-         values.insert(values.end(), iterargs.begin(), iterargs.end());
-         auto execRegion = builder.create<mlir::scf::ExecuteRegionOp>(forOp->getLoc(), resTypes);
-         auto* execRegionBlock = new Block();
-         execRegion.getRegion().push_back(execRegionBlock);
-         {
-            OpBuilder::InsertionGuard guard(builder);
-            OpBuilder::InsertionGuard guard2(rewriter);
-
-            builder.setInsertionPointToStart(execRegionBlock);
-
-            auto term = builder.create<mlir::scf::YieldOp>(forOp->getLoc());
-            builder.setInsertionPoint(term);
-            rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
-
-            std::vector<Value> results(yieldOp.results().begin(), yieldOp.results().end());
-            rewriter.eraseOp(yieldOp);
-            auto term2 = builder.create<mlir::scf::YieldOp>(forOp->getLoc(), remap(results, rewriter));
-
-            Block* end = rewriter.splitBlock(builder.getBlock(), builder.getInsertionPoint());
-            builder.setInsertionPoint(term2);
-            builder.create<mlir::cf::BranchOp>(forOp->getLoc(), end, remap(results, rewriter));
-            rewriter.eraseOp(term2);
-
-            end->addArguments(resTypes, locs);
-            builder.setInsertionPointToEnd(end);
-            builder.create<mlir::scf::YieldOp>(forOp->getLoc(), end->getArguments());
-            std::vector<Operation*> toErase;
-            for (auto it = execRegionBlock->getOperations().rbegin(); it != execRegionBlock->getOperations().rend(); it++) {
-               if (auto op = mlir::dyn_cast_or_null<mlir::dsa::CondSkipOp>(&*it)) {
-                  toErase.push_back(op.getOperation());
-                  builder.setInsertionPointAfter(op);
-                  llvm::SmallVector<mlir::Value> remappedArgs;
-                  assert(rewriter.getRemappedValues(op.args(), remappedArgs).succeeded());
-                  Block* after = rewriter.splitBlock(builder.getBlock(), builder.getInsertionPoint());
-                  builder.setInsertionPointAfter(op);
-                  auto cond = rewriter.getRemappedValue(op.condition());
-                  builder.create<mlir::cf::CondBranchOp>(op->getLoc(), cond, end, remappedArgs, after, ValueRange());
-               }
-            }
-            for (auto* x : toErase) {
-               rewriter.eraseOp(x);
-            }
-            rewriter.eraseOp(term);
-         }
-         //yieldOp->erase();
-         assert(execRegion.getNumResults() == resTypes.size());
-         std::vector<Value> results(execRegion.getResults().begin(), execRegion.getResults().end());
-
-         return results;
-      };
-      fn_t fn2 = [&](std::function<Value(OpBuilder & b)> getElem, ValueRange iterargs, OpBuilder builder) {
+      std::vector<Value> results = iterator->implementLoop(forOp->getLoc(), adaptor.initArgs(), *typeConverter, rewriter, parentModule,  [&](std::function<Value(OpBuilder & b)> getElem, ValueRange iterargs, OpBuilder builder) {
          auto yieldOp = cast<mlir::dsa::YieldOp>(forOp.getBody()->getTerminator());
          std::vector<Type> resTypes;
          std::vector<Location> locs;
@@ -165,9 +99,7 @@ class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
          rewriter.eraseOp(term);
 
          return results;
-      };
-
-      std::vector<Value> results = iterator->implementLoop(forOp->getLoc(), adaptor.initArgs(), forOp.until(), *typeConverter, rewriter, parentModule, containsCondSkip ? fn1 : fn2);
+      });
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
 

@@ -30,9 +30,6 @@ void mlir::dsa::ForOp::print(OpAsmPrinter& p) {
    mlir::dsa::ForOp& op = *this;
    p << " " << op.getInductionVar() << " in "
      << op.collection() << " : " << op.collection().getType() << " ";
-   if (op.until()) {
-      p << "until " << op.until() << " ";
-   }
    printInitializationList(p, op.getRegionIterArgs(), op.getIterOperands(),
                            " iter_args");
    if (!op.getIterOperands().empty())
@@ -69,15 +66,7 @@ ParseResult dsa::ForOp::parse(OpAsmParser& parser, OperationState& result) {
    SmallVector<OpAsmParser::UnresolvedOperand, 4> operands;
    SmallVector<Type, 4> argTypes;
    regionArgs.push_back(inductionVariable);
-   bool hasUntil = false;
-   if (succeeded(parser.parseOptionalKeyword("until"))) {
-      OpAsmParser::UnresolvedOperand until;
-      if (parser.parseOperand(until) || parser.resolveOperand(until, mlir::dsa::FlagType::get(parser.getBuilder().getContext()), result.operands)) {
-         return failure();
-      }
-      hasUntil = true;
-   }
-   size_t iterArgs = 0;
+
    if (succeeded(parser.parseOptionalKeyword("iter_args"))) {
       // Parse assignment list and results type list.
       if (parser.parseAssignmentList(regionArgs, operands) ||
@@ -89,7 +78,6 @@ ParseResult dsa::ForOp::parse(OpAsmParser& parser, OperationState& result) {
                                    std::get<1>(unresolvedOperand), result.operands)) {
             return failure();
          }
-         iterArgs++;
       }
    }
    // Induction variable.
@@ -110,7 +98,6 @@ ParseResult dsa::ForOp::parse(OpAsmParser& parser, OperationState& result) {
       return failure();
 
    mlir::dsa::ForOp::ensureTerminator(*body, builder, result.location);
-   result.addAttribute("operand_segment_sizes", builder.getI32VectorAttr({1, (hasUntil ? 1 : 0), static_cast<int32_t>(iterArgs)}));
 
    // Parse the optional attribute list.
    if (parser.parseOptionalAttrDict(result.attributes))

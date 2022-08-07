@@ -251,7 +251,7 @@ class WhileIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
    public:
    WhileIteratorIterationImpl(std::unique_ptr<WhileIterator> iterator) : iterator(std::move(iterator)) {
    }
-   virtual std::vector<Value> implementLoop(mlir::Location loc, mlir::ValueRange iterArgs, Value flag, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) override {
+   virtual std::vector<Value> implementLoop(mlir::Location loc, mlir::ValueRange iterArgs, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) override {
       auto insertionPoint = builder.saveInsertionPoint();
 
       iterator->setTypeConverter(&typeConverter);
@@ -278,13 +278,6 @@ class WhileIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
       builder.setInsertionPointToStart(&whileOp.getBefore().front());
       auto arg1 = whileOp.getBefore().front().getArgument(0);
       Value condition = iterator->iteratorValid(builder, arg1);
-      if (flag) {
-         Value flagValue = builder.create<mlir::dsa::GetFlag>(loc, builder.getI1Type(), flag);
-         Value falseValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 0));
-         Value shouldContinue = builder.create<arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, flagValue, falseValue);
-         Value anded = builder.create<mlir::arith::AndIOp>(loc, builder.getI1Type(), ValueRange({condition, shouldContinue}));
-         condition = anded;
-      }
       builder.create<mlir::scf::ConditionOp>(loc, builder.getRemappedValue(condition), whileOp.getBefore().front().getArguments());
       builder.setInsertionPointToStart(&whileOp.getAfter().front());
       auto arg2 = whileOp.getAfter().front().getArgument(0);
@@ -312,12 +305,9 @@ class ForIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
    public:
    ForIteratorIterationImpl(std::unique_ptr<ForIterator> iterator) : iterator(std::move(iterator)) {
    }
-   virtual std::vector<Value> implementLoop(mlir::Location loc, mlir::ValueRange iterArgs, Value flag, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) override {
-      if (flag) {
-         return implementLoopCondition(loc, iterArgs, flag, typeConverter, builder, bodyBuilder);
-      } else {
+   virtual std::vector<Value> implementLoop(mlir::Location loc, mlir::ValueRange iterArgs, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) override {
          return implementLoopSimple(loc, iterArgs, typeConverter, builder, bodyBuilder);
-      }
+
    }
    std::vector<Value> implementLoopSimple(mlir::Location loc, const ValueRange& iterArgs, TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) {
       auto insertionPoint = builder.saveInsertionPoint();
@@ -342,61 +332,6 @@ class ForIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
       }
       builder.restoreInsertionPoint(insertionPoint);
       return std::vector<Value>(forOp.getResults().begin(), forOp.getResults().end());
-   }
-   std::vector<Value> implementLoopCondition(mlir::Location loc, const ValueRange& iterArgs, Value flag, TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) {
-      auto insertionPoint = builder.saveInsertionPoint();
-
-      iterator->setTypeConverter(&typeConverter);
-      iterator->init(builder);
-      iterator->setLoc(loc);
-      Type iteratorType = builder.getIndexType();
-      Value initialIterator = iterator->lower(builder);
-      std::vector<Type> results = {typeConverter.convertType(iteratorType)};
-      std::vector<Value> iterValues = {builder.getRemappedValue(initialIterator)};
-      for (auto iterArg : iterArgs) {
-         results.push_back(typeConverter.convertType(iterArg.getType()));
-         iterValues.push_back(builder.getRemappedValue(iterArg));
-      }
-      Value upper = iterator->upper(builder);
-      Value step = iterator->step(builder);
-      auto whileOp = builder.create<mlir::scf::WhileOp>(loc, results, iterValues);
-      Block* before = new Block;
-      Block* after = new Block;
-
-      whileOp.getBefore().push_back(before);
-      whileOp.getAfter().push_back(after);
-      for (auto t : results) {
-         before->addArgument(t, loc);
-         after->addArgument(t, loc);
-      }
-
-      builder.setInsertionPointToStart(&whileOp.getBefore().front());
-      auto arg1 = whileOp.getBefore().front().getArgument(0);
-      Value condition = builder.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, arg1, upper);
-      if (flag) {
-         Value flagValue = builder.create<mlir::dsa::GetFlag>(loc, builder.getI1Type(), flag);
-         Value falseValue = builder.create<arith::ConstantOp>(loc, builder.getIntegerAttr(builder.getI1Type(), 0));
-         Value shouldContinue = builder.create<arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, flagValue, falseValue);
-         Value anded = builder.create<mlir::arith::AndIOp>(loc, builder.getI1Type(), ValueRange({condition, shouldContinue}));
-         condition = anded;
-      }
-      builder.create<mlir::scf::ConditionOp>(loc, builder.getRemappedValue(condition), whileOp.getBefore().front().getArguments());
-      builder.setInsertionPointToStart(&whileOp.getAfter().front());
-      auto arg2 = whileOp.getAfter().front().getArgument(0);
-      Value nextIterator = builder.create<arith::AddIOp>(loc, builder.getIndexType(), arg2, step);
-      auto terminator = builder.create<mlir::dsa::YieldOp>(loc);
-      builder.setInsertionPoint(nextIterator.getDefiningOp());
-      std::vector<Value> bodyParams = {};
-      auto additionalArgs = whileOp.getAfter().front().getArguments().drop_front();
-      bodyParams.insert(bodyParams.end(), additionalArgs.begin(), additionalArgs.end());
-      auto returnValues = bodyBuilder([&](mlir::OpBuilder& b) { return iterator->getElement(b, arg2); }, bodyParams, builder);
-      returnValues.insert(returnValues.begin(), nextIterator);
-      builder.setInsertionPoint(terminator);
-      builder.create<mlir::scf::YieldOp>(loc, remap(returnValues, builder));
-      builder.eraseOp(terminator);
-      builder.restoreInsertionPoint(insertionPoint);
-      auto loopResultValues = whileOp.getResults().drop_front();
-      return std::vector<Value>(loopResultValues.begin(), loopResultValues.end());
    }
 };
 std::unique_ptr<mlir::dsa::CollectionIterationImpl> mlir::dsa::CollectionIterationImpl::getImpl(Type collectionType, Value loweredCollection) {
