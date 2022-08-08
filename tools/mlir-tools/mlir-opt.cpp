@@ -37,7 +37,6 @@
 #include "mlir/Transforms/CustomPasses.h"
 
 #include "mlir/InitAllDialects.h"
-#include "torch-mlir/InitAll.h"
 
 #include "runtime/Database.h"
 
@@ -117,7 +116,6 @@ int main(int argc, char** argv) {
          argv = argvReduced;
       }
    }
-   mlir::torch::registerAllPasses();
    mlir::registerAllPasses();
 
    mlir::relalg::registerRelAlgToSubOpConversionPasses();
@@ -161,7 +159,6 @@ int main(int argc, char** argv) {
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::scf::SCFDialect>();
    registry.insert<mlir::LLVM::LLVMDialect>();
-   mlir::torch::registerAllDialects(registry);
    mlir::registerAllDialects(registry);
 
    support::eval::init();

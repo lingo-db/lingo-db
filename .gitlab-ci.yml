@@ -29,9 +29,8 @@ build_debug:
       - export PATH="$VIRTUAL_ENV/bin:$PATH"
       - git submodule init
       - git submodule update tools/python/pybind11
-      - rm -r arrow torch-mlir
+      - rm -r arrow
       - cp -r /arrow-src/arrow arrow
-      - cp -r /llvm-src/torch-mlir torch-mlir
       - mkdir /build/lingodb
       - git submodule update tools/python/pybind11
       - cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DArrow_DIR="/build/arrow/install/lib/cmake/arrow"  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug
@@ -49,9 +48,8 @@ build_release:
       - export PATH="$VIRTUAL_ENV/bin:$PATH"
       - git submodule init
       - git submodule update tools/python/pybind11
-      - rm -r arrow torch-mlir
+      - rm -r arrow
       - cp -r /arrow-src/arrow arrow
-      - cp -r /llvm-src/torch-mlir torch-mlir
       - mkdir /build/lingodb
       - git submodule update tools/python/pybind11
       - cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DArrow_DIR="/build/arrow/install/lib/cmake/arrow" -DCMAKE_BUILD_TYPE=Release
@@ -69,9 +67,8 @@ lint:
       - export PATH="$VIRTUAL_ENV/bin:$PATH"
       - git submodule init
       - git submodule update tools/python/pybind11
-      - rm -r arrow torch-mlir
+      - rm -r arrow
       - cp -r /arrow-src/arrow arrow
-      - cp -r /llvm-src/torch-mlir torch-mlir
       - mkdir /build/lingodb
       - git submodule update tools/python/pybind11
       - cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DArrow_DIR="/build/arrow/install/lib/cmake/arrow"  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON

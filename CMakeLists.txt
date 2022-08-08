@@ -36,7 +36,6 @@ set("CLANG_VERSION" ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_P
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
 include_directories(${CLANG_INCLUDE_DIRS})
-include_directories(${PROJECT_SOURCE_DIR}/torch-mlir/include)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/vendored)
@@ -107,24 +106,6 @@ set(LIBS
         MLIRTransforms
         MLIRCustomTransforms
         MLIRMathTransforms
-        TorchMLIRInitAll
-        TorchMLIRConversionPasses
-        TorchMLIRRefBackend
-        TorchMLIRTMTensorDialect
-        TorchMLIRTMTensorPasses
-        TorchMLIRTorchConversionDialect
-        TorchMLIRTorchConversionPasses
-        TorchMLIRTorchDialect
-        TorchMLIRTorchPasses
-        TorchMLIRTorchToLinalg
-        TorchMLIRTorchToSCF
-        TorchMLIRTorchToStd
-        TorchMLIRTorchToTosa
-        TorchMLIRTorchUtils
-        MLIRMathTransforms
-        TorchMLIRTMTensorDialect
-        TorchMLIRConversionUtils
-        TorchMLIRTorchToTMTensor
         )
 set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
 
