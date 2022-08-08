@@ -8,6 +8,7 @@ add_mlir_conversion_library(MLIRSubOpToControlFlow
         vec-rt-defs
         join-ht-rt-defs
         ht-rt-defs
+        ds-it-rt-defs
 
         LINK_COMPONENTS
         Core

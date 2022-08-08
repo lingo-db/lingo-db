@@ -338,8 +338,16 @@ class BufferGetLenLowering : public OpConversionPattern<mlir::util::BufferGetLen
    public:
    using OpConversionPattern<mlir::util::BufferGetLen>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::BufferGetLen op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      Type t = typeConverter->convertType(op.buffer().getType().cast<mlir::util::BufferType>().getT());
+      DataLayout defaultLayout;
+      const DataLayout* layout = &defaultLayout;
+      auto &llvmTypeConverter=*reinterpret_cast<LLVMTypeConverter*>(getTypeConverter());
+      if (const DataLayoutAnalysis* analysis = llvmTypeConverter.getDataLayoutAnalysis()) {
+         layout = &analysis->getAbove(op);
+      }
+      size_t typeSize = layout->getTypeSize(t);
+      auto bytesPerEntry = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(),rewriter.getI64Type(),rewriter.getI64IntegerAttr(std::max(1ul,typeSize)));
       Value len = rewriter.create<LLVM::TruncOp>(op->getLoc(), rewriter.getI64Type(), adaptor.buffer());
-      auto bytesPerEntry = rewriter.create<mlir::util::SizeOfOp>(op->getLoc(), rewriter.getI64Type(), op.buffer().getType().cast<mlir::util::BufferType>().getT());
       len =rewriter.create<mlir::arith::DivUIOp>(op->getLoc(),len,bytesPerEntry);
       rewriter.replaceOp(op, len);
       return success();

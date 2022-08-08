@@ -28,7 +28,7 @@ size_t runtime::Vector::getTypeSize() const {
    return typeSize;
 }
 runtime::Buffer runtime::Vector::getBuffer() const {
-   return {len * typeSize, getPtr()};
+   return {len * std::max(1ul, typeSize), getPtr()};
 }
 void runtime::Vector::sort(bool (*compareFn)(uint8_t*, uint8_t*)) {
    std::vector<uint8_t*> toSort;

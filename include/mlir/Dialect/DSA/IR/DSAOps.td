@@ -77,15 +77,6 @@ def DSA_RecordBatch: DSA_Type<"RecordBatch","record_batch",[CollectionType]> {
         mlir::Type getElementType();
     }];
 }
-def DSA_AggregationHashtable : DSA_Type<"AggregationHashtable","aggr_ht",[CollectionType]> {
-    let summary = "aggregation hashtable";
-    let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
-    let assemblyFormat = "`<` $keyType `,` $valType `>`";
-    let extraClassDeclaration = [{
-        mlir::Type getElementType();
-    }];
-}
-
 
 
 def DSA_CreateDS : DSA_Op<"create_ds"> {
@@ -125,13 +116,6 @@ def DSA_NextRow : DSA_Op<"next_row"> {
     let assemblyFormat = "$builder `:` type($builder) attr-dict";
 }
 
-def DSA_HashtableGetRefOrInsert : DSA_Op<"ht_get_ref_or_insert",[IsolatedFromAbove]> {
-    let summary = "returns the reference to a hashtable entry matching the key (if none is found, a new one is created)";
-
-    let arguments = (ins AnyType:$ht, Index:$hash, AnyType:$key);
-    let results = (outs AnyType:$ref);
-    let regions = (region SizedRegion<1>:$equal, SizedRegion<1>:$initial);
-}
 
 def DSA_Finalize : DSA_Op<"finalize"> {
     let summary = "finalize TableBuilder or JoinHashtable";
@@ -201,7 +185,7 @@ def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
 }
 
 def YieldOp : DSA_Op<"yield", [NoSideEffect, Terminator,
-                               ParentOneOf<["ForOp","HashtableGetRefOrInsert"]>]> {
+                               ParentOneOf<["ForOp"]>]> {
     let arguments = (ins Variadic<AnyType>:$results);
     let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
     let assemblyFormat = [{  attr-dict ($results^ `:` type($results))? }];
