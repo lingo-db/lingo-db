@@ -102,53 +102,6 @@ class TableIterator2 : public WhileIterator {
    }
 };
 
-class JoinHtLookupIterator : public WhileIterator {
-   Value iteratorInfo;
-   Type ptrType;
-   Value hash;
-   Value ptr;
-   TupleType tupleType;
-   bool modifiable;
-
-   public:
-   JoinHtLookupIterator(Value tableInfo, Type elementType, bool modifiable = false) : WhileIterator(tableInfo.getContext()), iteratorInfo(tableInfo), modifiable(modifiable) {
-   }
-   virtual Type iteratorType(OpBuilder& builder) override {
-      tupleType = iteratorInfo.getType().cast<mlir::TupleType>();
-      ptrType = tupleType.getType(0);
-      return ptrType;
-   }
-
-   virtual Value iterator(OpBuilder& builder) override {
-      auto unpacked = builder.create<mlir::util::UnPackOp>(loc, iteratorInfo);
-      ptr = unpacked.getResult(0);
-      hash = unpacked.getResult(1);
-      return ptr;
-   }
-   virtual Value iteratorNext(OpBuilder& builder, Value iterator) override {
-      auto i8PtrType = mlir::util::RefType::get(builder.getContext(), builder.getI8Type());
-      Value nextPtr = builder.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(builder.getContext(), i8PtrType), iterator, 0);
-      mlir::Value next = builder.create<mlir::util::LoadOp>(loc, nextPtr, mlir::Value());
-      next = builder.create<util::GenericMemrefCastOp>(loc, ptrType, next);
-      return builder.create<mlir::util::FilterTaggedPtr>(loc, next.getType(), next, hash);
-   }
-   virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) override {
-      auto bucketType = iterator.getType().cast<mlir::util::RefType>().getElementType();
-      auto elemType = bucketType.cast<TupleType>().getTypes()[1];
-      auto valType = elemType.cast<TupleType>().getTypes()[1];
-      Value elemAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), elemType), iterator, 1);
-      Value loadedValue = builder.create<util::LoadOp>(loc, elemType, elemAddress);
-      if (modifiable) {
-         Value valAddress = builder.create<util::TupleElementPtrOp>(loc, util::RefType::get(builder.getContext(), valType), elemAddress, 1);
-         return builder.create<mlir::util::PackOp>(loc, mlir::ValueRange{loadedValue, valAddress});
-      } else {
-         return loadedValue;
-      }
-   }
-   virtual Value iteratorValid(OpBuilder& builder, Value iterator) override {
-      return builder.create<mlir::util::IsRefValidOp>(loc, builder.getI1Type(), iterator);
-   }
-};
 
 class AggrHtIterator : public ForIterator {
    Value hashTable;
@@ -199,22 +152,7 @@ class BufferIterator : public ForIterator {
       return builder.create<util::ArrayElementPtrOp>(loc, mlir::util::RefType::get(buffer.getContext(), values.getType().cast<mlir::util::RefType>().getElementType()), values, index);
    }
 };
-class ValueOnlyAggrHTIterator : public ForIterator {
-   Value ht;
-   Type valType;
 
-   public:
-   ValueOnlyAggrHTIterator(Value ht, Type valType) : ForIterator(ht.getContext()), ht(ht), valType(valType) {
-   }
-   virtual Value upper(OpBuilder& builder) override {
-      return builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(1));
-   }
-   virtual Value getElement(OpBuilder& builder, Value index) override {
-      Value undefTuple = builder.create<mlir::util::UndefOp>(loc, TupleType::get(builder.getContext()));
-      Value val = builder.create<mlir::util::LoadOp>(loc, ht);
-      return builder.create<mlir::util::PackOp>(loc, ValueRange({undefTuple, val}));
-   }
-};
 
 static std::vector<Value> remap(std::vector<Value> values, ConversionPatternRewriter& builder) {
    for (size_t i = 0; i < values.size(); i++) {
@@ -317,19 +255,12 @@ std::unique_ptr<mlir::dsa::CollectionIterationImpl> mlir::dsa::CollectionIterati
          if (auto recordBatchType = generic.getElementType().dyn_cast_or_null<mlir::dsa::RecordBatchType>()) {
             return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<TableIterator2>(loweredCollection, recordBatchType));
          }
-      } else if (generic.getIteratorName() == "join_ht_iterator") {
-         return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(loweredCollection, generic.getElementType(), false));
-      } else if (generic.getIteratorName() == "join_ht_mod_iterator") {
-         return std::make_unique<WhileIteratorIterationImpl>(std::make_unique<JoinHtLookupIterator>(loweredCollection, generic.getElementType(), true));
       }
    } else if (auto vector = collectionType.dyn_cast_or_null<mlir::util::BufferType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<BufferIterator>(loweredCollection));
    } else if (auto aggrHt = collectionType.dyn_cast_or_null<mlir::dsa::AggregationHashtableType>()) {
-      if (aggrHt.getKeyType().getTypes().empty()) {
-         return std::make_unique<ForIteratorIterationImpl>(std::make_unique<ValueOnlyAggrHTIterator>(loweredCollection, aggrHt.getValType()));
-      } else {
+
          return std::make_unique<ForIteratorIterationImpl>(std::make_unique<AggrHtIterator>(loweredCollection));
-      }
    } else if (auto recordBatch = collectionType.dyn_cast_or_null<mlir::dsa::RecordBatchType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<RecordBatchIterator>(loweredCollection, recordBatch));
    }

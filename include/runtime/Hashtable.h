@@ -7,17 +7,30 @@ class Hashtable {
    struct Entry {
       Entry* next;
       size_t hashValue;
+      uint8_t content[];
       //kv follows
    };
    runtime::FixedSizedBuffer<Entry*> ht;
-   runtime::Vector values;
+   size_t hashMask;
+   runtime::FlexibleBuffer values;
    //initial value follows...
-   Hashtable(size_t initialCapacity, size_t typeSize) : ht(initialCapacity * 2), values(initialCapacity, typeSize) {}
+   Hashtable(size_t initialCapacity, size_t typeSize) : ht(initialCapacity * 2), hashMask(initialCapacity * 2 - 1), values(initialCapacity, typeSize) {}
 
    public:
    void resize();
+   Entry* insert(size_t hash);
    static Hashtable* create(size_t typeSize, size_t initialCapacity);
    static void destroy(Hashtable*);
+
+   struct Iterator {
+      size_t currBuffer;
+      Iterator() : currBuffer(0) {}
+   };
+   Iterator* startIteration();
+   bool isIteratorValid(Iterator*);
+   void nextIterator(Iterator*);
+   void endIteration(Iterator*);
+   Buffer getCurrentBuffer(Iterator* it);
 };
 
 } // end namespace runtime
