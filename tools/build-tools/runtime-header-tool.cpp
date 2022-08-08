@@ -33,7 +33,6 @@ class MethodPrinter : public MatchFinder::MatchCallback {
       return "mlir::util::RefType::get(context,mlir::IntegerType::get(context,8))";
    }
    std::optional<std::string> translateType(QualType type) {
-      //type.dump();
       if (const auto* tdType = type->getAs<TypedefType>()) {
          return translateType(tdType->desugar());
       }
@@ -60,7 +59,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             }
          }
          auto asString = pointeeType.getAsString();
-         if (asString == "struct runtime::ArrowTable") {
+         if (asString == "std::shared_ptr<arrow::Table>") {
             return "mlir::dsa::TableType::get(context)";
          }
          return translatePointer();
@@ -112,10 +111,11 @@ class MethodPrinter : public MatchFinder::MatchCallback {
    virtual void run(const MatchFinder::MatchResult& result) override {
       //std::cout << "match" << std::endl;
       if (const CXXRecordDecl* md = result.Nodes.getNodeAs<clang::CXXRecordDecl>("class")) {
+         auto* mangleContext = md->getASTContext().createMangleContext();
+
          std::string className = md->getNameAsString();
          hStream << "struct " << className << " {\n";
-         auto* mangleContext = md->getASTContext().createMangleContext();
-         for (const auto& method : md->methods()) {
+         for (const auto& method : md->getDefinition()->methods()) {
             if (method->isVirtual()) continue;
             if (method->isImplicit()) continue;
             if (isa<CXXConstructorDecl>(method)) continue;
@@ -150,12 +150,12 @@ class MethodPrinter : public MatchFinder::MatchCallback {
                }
                types.push_back(translatedType.value());
             }
-            auto resType = method->getReturnType();
+            const auto& resType = method->getReturnType();
             if (!resType->isVoidType()) {
                auto translatedType = translateType(resType);
                if (!translatedType.has_value()) {
                   unknownTypes = true;
-                  break;
+                  continue;
                }
                resTypes.push_back(translatedType.value());
             }

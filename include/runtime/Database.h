@@ -21,7 +21,7 @@ class Database {
    virtual void createTable(std::string tableName, std::shared_ptr<TableMetaData>);
    virtual void appendTable(std::string tableName, std::shared_ptr<arrow::Table> newRows);
    void createTable(runtime::VarLen32 name, runtime::VarLen32 meta);
-   void appendTable(runtime::VarLen32 tableName, ArrowTable* newRows);
+   void appendTable(runtime::VarLen32 tableName, std::shared_ptr<arrow::Table>* newRows);
 
    virtual void setPersistMode(bool persist);
    void setPersist(bool persist);
