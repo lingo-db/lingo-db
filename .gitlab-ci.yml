@@ -37,6 +37,7 @@ build_debug:
       - git submodule update tools/python/pybind11
       - cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DArrow_DIR="/build/arrow/install/lib/cmake/arrow"  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug
       - cmake --build /build/lingodb -j$(nproc)
+      - strip /build/lingodb/mlir-db-opt /build/lingodb/run-sql /build/lingodb/run-mlir /build/lingodb/sql /build/lingodb/sqlite-tester /build/lingodb/pymlirdbext.*.so /build/lingodb/sql-to-mlir
       - tar -cvzf lingodb_debug.tar.gz /build/lingodb/mlir-db-opt /build/lingodb/run-sql /build/lingodb/run-mlir /build/lingodb/sql /build/lingodb/sqlite-tester /build/lingodb/pymlirdbext.*.so /build/lingodb/test/ /build/lingodb/sql-to-mlir
    artifacts:
       paths:
@@ -58,6 +59,7 @@ build_release:
       - git submodule update tools/python/pybind11
       - cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DArrow_DIR="/build/arrow/install/lib/cmake/arrow" -DCMAKE_BUILD_TYPE=Release
       - cmake --build /build/lingodb -j$(nproc)
+      - strip /build/lingodb/mlir-db-opt /build/lingodb/run-sql /build/lingodb/run-mlir /build/lingodb/sql /build/lingodb/sqlite-tester /build/lingodb/pymlirdbext.*.so /build/lingodb/sql-to-mlir
       - tar -cvzf lingodb_release.tar.gz /build/lingodb/mlir-db-opt /build/lingodb/run-sql /build/lingodb/run-mlir /build/lingodb/sql /build/lingodb/sqlite-tester /build/lingodb/pymlirdbext.*.so /build/lingodb/test/ /build/lingodb/sql-to-mlir
    artifacts:
       paths:
