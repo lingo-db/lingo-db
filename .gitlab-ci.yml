@@ -25,6 +25,8 @@ workflow:
 build_debug:
    extends: .build
    script:
+      - export CXX="ccache g++"
+      - export C="ccache gcc"
       - export VIRTUAL_ENV=/opt/venv
       - export PATH="$VIRTUAL_ENV/bin:$PATH"
       - git submodule init
@@ -44,6 +46,8 @@ build_debug:
 build_release:
    extends: .build
    script:
+      - export CXX="ccache g++"
+      - export C="ccache gcc"
       - export VIRTUAL_ENV=/opt/venv
       - export PATH="$VIRTUAL_ENV/bin:$PATH"
       - git submodule init
