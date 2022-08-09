@@ -64,8 +64,8 @@ void runStatement(runtime::ExecutionContext& context, const std::vector<std::str
    if(statement.starts_with("CREATE INDEX")){
       return;
    }
-   std::cout << "executing statement:" << statement << std::endl;
    runner::Runner runner(runner::RunMode::DEFAULT);
+   runner.setReportTimes(false);
    runner.loadSQL(statement, *context.db);
    runner.optimize(*context.db);
    runner.lower();
@@ -120,6 +120,7 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
    }
 
    runner::Runner runner(runner::RunMode::DEFAULT);
+   runner.setReportTimes(false);
    runner.loadSQL(query, *context.db);
    runner.optimize(*context.db);
    runner.lower();
