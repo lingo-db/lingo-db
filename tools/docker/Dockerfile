@@ -1,6 +1,7 @@
 ARG buildImage="buildimg"
 ARG builtImage="lingodb"
 FROM ubuntu:impish AS baseimg
+RUN sed -i -re 's/([a-z]{2}\.)?archive.ubuntu.com|security.ubuntu.com/old-releases.ubuntu.com/g' /etc/apt/sources.list
 RUN apt-get update
 RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
 RUN apt-get -y install python3-pip python3-venv
@@ -37,6 +38,8 @@ WORKDIR /llvm-src
 RUN git submodule init
 RUN git submodule update llvm-project
 RUN git submodule update torch-mlir
+RUN wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220518%2Bcpu-cp39-cp39-linux_x86_64.whl
+RUN pip3 install torch-1.12.0.dev20220518+cpu-cp39-cp39-linux_x86_64.whl
 RUN python -m pip install -r torch-mlir/requirements.txt
 
 RUN mkdir -p /build/llvm
