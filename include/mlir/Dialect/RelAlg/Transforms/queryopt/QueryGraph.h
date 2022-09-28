@@ -206,7 +206,8 @@ class QueryGraph {
          return false;
       }
       for (auto pseudo : (s1 & ~normalNodesMask)) {
-         if (s1.test(pseudoNodeOwner[pseudo])) {
+         auto join=joins[pseudoNodeOwner[pseudo]];
+         if (join.left.isSubsetOf(s1)&&join.right.isSubsetOf(s1)) {
             //pseudo but is not lonley
          } else {
             return true;
