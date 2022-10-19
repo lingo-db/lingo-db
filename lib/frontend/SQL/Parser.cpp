@@ -226,7 +226,7 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
       auto arg2 = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
       return builder.create<mlir::db::RuntimeCall>(loc, builder.getI64Type(), "ExtractFromDate", mlir::ValueRange({part, arg2})).res();
    }
-   if (funcName == "substring") {
+   if (funcName == "substring"||funcName=="substr") {
       auto str = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       auto from = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->next->data.ptr_value), context);
       auto to = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
@@ -1005,6 +1005,7 @@ void frontend::sql::Parser::translateCopyStatement(mlir::OpBuilder& builder, Cop
          if (format != "csv") {
             error("copy only supports csv");
          }
+      }else if(optionName=="null"){
 
       } else {
          error("unsupported copy option");
@@ -1122,6 +1123,10 @@ runtime::ColumnType frontend::sql::Parser::createColumnType(std::string datatype
       datatypeName = "int";
       typeModifiers.push_back(32ull);
    }
+   if (datatypeName == "int8") {
+      datatypeName = "int";
+      typeModifiers.push_back(64ull);
+   }
    if (datatypeName == "char" && std::get<size_t>(typeModifiers[0]) > 8) {
       typeModifiers.clear();
       datatypeName = "string";
@@ -1135,6 +1140,9 @@ runtime::ColumnType frontend::sql::Parser::createColumnType(std::string datatype
          std::string unit = (std::get<size_t>(typeModifiers[0]) & 8) ? "daytime" : "months";
          typeModifiers.clear();
          typeModifiers.push_back(unit);
+      }else{
+         typeModifiers.clear();
+         typeModifiers.push_back("daytime");
       }
    }
    runtime::ColumnType columnType;
@@ -1307,7 +1315,7 @@ Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::
       }
       case T_TypeCast: {
          auto* castNode = reinterpret_cast<TypeCast*>(node);
-         castNode->arg_ = analyzeTargetExpression(node, replaceState);
+         castNode->arg_ = analyzeTargetExpression(castNode->arg_, replaceState);
          return node;
       }
       case T_A_Expr: {

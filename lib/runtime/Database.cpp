@@ -72,7 +72,9 @@ void Database::copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 
    }
    parseOptions.newlines_in_values = true;
    auto convertOptions = arrow::csv::ConvertOptions::Defaults();
-   auto schema = getTable(tableName)->schema();
+   auto tableMeta = getTable(tableName);
+   assert(tableMeta);
+   auto schema = tableMeta->schema();
    convertOptions.null_values.push_back("");
    convertOptions.strings_can_be_null = true;
    for (auto f : schema->fields()) {

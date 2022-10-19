@@ -49,6 +49,11 @@ resources/data/tpch-1/.stamp: tools/generate/tpch.sh
 	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
 	touch $@
 
+resources/data/tpcds-1/.stamp: tools/generate/tpcds.sh
+	mkdir -p resources/data/tpcds-1
+	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
+	touch $@
+
 LDB_ARGS=-DMLIR_DIR=${ROOT_DIR}build/llvm-build/lib/cmake/mlir \
 		 -DArrow_DIR=${ROOT_DIR}build/arrow/install/lib/cmake/arrow \
 		 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
