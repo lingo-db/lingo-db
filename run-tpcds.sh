@@ -14,21 +14,21 @@ set -x
 #./build/lingodb-debug/run-sql resources/sql/tpcds/19.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/1.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/20.sql resources/data/tpcds-1 window functions
-#./build/lingodb-debug/run-sql resources/sql/tpcds/21.sql resources/data/tpcds-1 error: failed to legalize operation 'db.cast'
+#./build/lingodb-debug/run-sql resources/sql/tpcds/21.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/22.sql resources/data/tpcds-1 rollup
 #./build/lingodb-debug/run-sql resources/sql/tpcds/23a.sql resources/data/tpcds-1   group by substr(i_item_desc,1,30),i_item_sk,d_date
 #./build/lingodb-debug/run-sql resources/sql/tpcds/23b.sql resources/data/tpcds-1  group by substr(i_item_desc,1,30),i_item_sk,d_date
-#./build/lingodb-debug/run-sql resources/sql/tpcds/24a.sql resources/data/tpcds-1 upper
-#./build/lingodb-debug/run-sql resources/sql/tpcds/24b.sql resources/data/tpcds-1 upper
+#./build/lingodb-debug/run-sql resources/sql/tpcds/24a.sql resources/data/tpcds-1
+#./build/lingodb-debug/run-sql resources/sql/tpcds/24b.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/25.sql resources/data/tpcds-1 stddev_samp
-#./build/lingodb-debug/run-sql resources/sql/tpcds/26.sql resources/data/tpcds-1 floating point exception
+#./build/lingodb-debug/run-sql resources/sql/tpcds/26.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/27.sql resources/data/tpcds-1 rollup
 #./build/lingodb-debug/run-sql resources/sql/tpcds/28.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/29.sql resources/data/tpcds-1 stddev_samp
 #./build/lingodb-debug/run-sql resources/sql/tpcds/2.sql resources/data/tpcds-1 round
 #./build/lingodb-debug/run-sql resources/sql/tpcds/30.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/31.sql resources/data/tpcds-1
-#./build/lingodb-debug/run-sql resources/sql/tpcds/32.sql resources/data/tpcds-1 error: failed to legalize operation 'db.cast'
+#./build/lingodb-debug/run-sql resources/sql/tpcds/32.sql resources/data/tpcds-1 cast from string to date
 #./build/lingodb-debug/run-sql resources/sql/tpcds/33.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/34.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/35.sql resources/data/tpcds-1 stddev_samp
@@ -53,20 +53,20 @@ set -x
 #./build/lingodb-debug/run-sql resources/sql/tpcds/51.sql resources/data/tpcds-1 window functions
 #./build/lingodb-debug/run-sql resources/sql/tpcds/52.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/53.sql resources/data/tpcds-1 window functions
-#./build/lingodb-debug/run-sql resources/sql/tpcds/54.sql resources/data/tpcds-1 error: failed to legalize operation 'db.cast'
+#./build/lingodb-debug/run-sql resources/sql/tpcds/54.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/55.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/56.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/57.sql resources/data/tpcds-1 window functions
-#./build/lingodb-debug/run-sql resources/sql/tpcds/58.sql resources/data/tpcds-1 error: failed to legalize operation 'db.cast'
+#./build/lingodb-debug/run-sql resources/sql/tpcds/58.sql resources/data/tpcds-1 cast string -> date
 #./build/lingodb-debug/run-sql resources/sql/tpcds/59.sql resources/data/tpcds-1
-#./build/lingodb-debug/run-sql resources/sql/tpcds/5.sql resources/data/tpcds-1  concat strings operator missing
+#./build/lingodb-debug/run-sql resources/sql/tpcds/5.sql resources/data/tpcds-1  rollup
 #./build/lingodb-debug/run-sql resources/sql/tpcds/60.sql resources/data/tpcds-1
-#./build/lingodb-debug/run-sql resources/sql/tpcds/61.sql resources/data/tpcds-1 error: failed to legalize operation 'db.cast'
+#./build/lingodb-debug/run-sql resources/sql/tpcds/61.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/62.sql resources/data/tpcds-1 order by substr(w_warehouse_name,1,20)
 #./build/lingodb-debug/run-sql resources/sql/tpcds/63.sql resources/data/tpcds-1 window functions
 #./build/lingodb-debug/run-sql resources/sql/tpcds/64.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/65.sql resources/data/tpcds-1
-#./build/lingodb-debug/run-sql resources/sql/tpcds/66.sql resources/data/tpcds-1 concat strings operator missing
+#./build/lingodb-debug/run-sql resources/sql/tpcds/66.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/67.sql resources/data/tpcds-1 rollup
 #./build/lingodb-debug/run-sql resources/sql/tpcds/68.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/69.sql resources/data/tpcds-1
@@ -81,18 +81,18 @@ set -x
 #./build/lingodb-debug/run-sql resources/sql/tpcds/77.sql resources/data/tpcds-1 rollup
 #./build/lingodb-debug/run-sql resources/sql/tpcds/78.sql resources/data/tpcds-1 round function call
 #./build/lingodb-debug/run-sql resources/sql/tpcds/79.sql resources/data/tpcds-1 Assertion `resolver.lookup(name)' failed.
-#./build/lingodb-debug/run-sql resources/sql/tpcds/7.sql resources/data/tpcds-1 floating point exception
-#./build/lingodb-debug/run-sql resources/sql/tpcds/80.sql resources/data/tpcds-1 concat string operator
+#./build/lingodb-debug/run-sql resources/sql/tpcds/7.sql resources/data/tpcds-1
+#./build/lingodb-debug/run-sql resources/sql/tpcds/80.sql resources/data/tpcds-1 rollup
 #./build/lingodb-debug/run-sql resources/sql/tpcds/81.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/82.sql resources/data/tpcds-1
-#./build/lingodb-debug/run-sql resources/sql/tpcds/83.sql resources/data/tpcds-1 error: failed to legalize operation 'db.cast'
-#./build/lingodb-debug/run-sql resources/sql/tpcds/84.sql resources/data/tpcds-1 string concat operator
+#./build/lingodb-debug/run-sql resources/sql/tpcds/83.sql resources/data/tpcds-1 cast string/date
+#./build/lingodb-debug/run-sql resources/sql/tpcds/84.sql resources/data/tpcds-1 error: 'db.isnull' op operand #0 must be nullable, but got '!db.char<0>'
 #./build/lingodb-debug/run-sql resources/sql/tpcds/85.sql resources/data/tpcds-1 order by substr(r_reason_desc,1,20)
 #./build/lingodb-debug/run-sql resources/sql/tpcds/86.sql resources/data/tpcds-1 rollup
 #./build/lingodb-debug/run-sql resources/sql/tpcds/87.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/88.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/89.sql resources/data/tpcds-1 window functions
-#./build/lingodb-debug/run-sql resources/sql/tpcds/8.sql resources/data/tpcds-1 segmentation fault :(
+#./build/lingodb-debug/run-sql resources/sql/tpcds/8.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/90.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/91.sql resources/data/tpcds-1 order by sum(cr_net_loss) desc
 #./build/lingodb-debug/run-sql resources/sql/tpcds/92.sql resources/data/tpcds-1 order by sum(ws_ext_discount_amt)
@@ -103,5 +103,5 @@ set -x
 #./build/lingodb-debug/run-sql resources/sql/tpcds/97.sql resources/data/tpcds-1 resolver failure in frontend
 #./build/lingodb-debug/run-sql resources/sql/tpcds/98.sql resources/data/tpcds-1 window functions
 #./build/lingodb-debug/run-sql resources/sql/tpcds/99.sql resources/data/tpcds-1 order by substr(w_warehouse_name,1,20)
-#./build/lingodb-debug/run-sql resources/sql/tpcds/9.sql resources/data/tpcds-1 error: operand #1 does not dominate this use
+#./build/lingodb-debug/run-sql resources/sql/tpcds/9.sql resources/data/tpcds-1 (fix by solving #24)
 

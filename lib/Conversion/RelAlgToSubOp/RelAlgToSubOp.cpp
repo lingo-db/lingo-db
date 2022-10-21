@@ -1444,12 +1444,20 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
                mlir::Value defaultVal = resultingType.isa<mlir::db::NullableType>() ? builder.create<mlir::db::AsNullableOp>(loc, resultingType, initVal) : initVal;
                analyzedAggregation.defaultValues.push_back(defaultVal);
                analyzedAggregation.defaultValues.push_back(initCounterVal);
-               analyzedAggregation.finalizeFunctions.push_back([loc, currDestIdx = currDestIdx, destAttr = destAttr, resultingType = resultingType](mlir::ValueRange range, mlir::OpBuilder builder) {
+               analyzedAggregation.finalizeFunctions.push_back([loc, currDestIdx = currDestIdx, destAttr = destAttr, resultingType = resultingType,counterType](mlir::ValueRange range, mlir::OpBuilder builder) {
                   mlir::Value casted=builder.create<mlir::db::CastOp>(loc, getBaseType(resultingType), range[currDestIdx+1]);
                   if(resultingType.isa<mlir::db::NullableType>()&&casted.getType()!=resultingType){
                      casted=builder.create<mlir::db::AsNullableOp>(loc, resultingType, casted);
                   }
-                  mlir::Value average=builder.create<mlir::db::DivOp>(loc, resultingType, range[currDestIdx], casted);
+                  //TypeRange resultTypes, Value cond, function_ref<void(OpBuilder &, Location)> thenBuilder = buildTerminatedBody, function_ref<void(OpBuilder &, Location)> elseBuilder = nullptr
+                  mlir::Value initCounterVal = builder.create<mlir::db::ConstantOp>(loc, counterType, builder.getI64IntegerAttr(0));
+                  mlir::Value isZero=builder.create<mlir::arith::CmpIOp>(loc,mlir::arith::CmpIPredicate::eq,initCounterVal,range[currDestIdx+1]);
+                  mlir::Value average=builder.create<mlir::scf::IfOp>(loc,resultingType,isZero,[&](mlir::OpBuilder& builder,mlir::Location loc){
+                        builder.create<mlir::scf::YieldOp>(loc,range[currDestIdx]);
+                     },[&](mlir::OpBuilder& builder,mlir::Location loc){
+                        mlir::Value average=builder.create<mlir::db::DivOp>(loc, resultingType, range[currDestIdx], casted);
+                        builder.create<mlir::scf::YieldOp>(loc,average);
+                     }).getResult(0);
                   return std::make_pair(destAttr, average); });
                analyzedAggregation.aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, currValIdx = currValIdx, attrIsNullable, resultingType = resultingType, counterType = counterType](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
                   std::vector<mlir::Value> res;

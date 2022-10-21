@@ -208,7 +208,7 @@ def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
 
 class DB_BinaryOp<string mnemonic, list<Trait> traits = []> :
         Op<DB_Dialect, mnemonic,
-            !listconcat(traits, [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>,DB_NeedsNullWrap,DB_SupportsInvalidValues])>,Arguments<(ins NullableDBType:$left, NullableDBType:$right)> {
+            !listconcat(traits, [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>,DB_NeedsNullWrap])>,Arguments<(ins NullableDBType:$left, NullableDBType:$right)> {
     let results = (outs AnyType:$result);
     let extraClassDefinition = [{
         LogicalResult $cppClass::inferReturnTypes(
@@ -221,13 +221,13 @@ class DB_BinaryOp<string mnemonic, list<Trait> traits = []> :
     let assemblyFormat = "$left `:` type($left) `,` $right `:` type($right) attr-dict";
 }
 
-def DB_AddOp : DB_BinaryOp<"add"> {
+def DB_AddOp : DB_BinaryOp<"add",[DB_SupportsInvalidValues]> {
     let summary = "Add int/float/decimal";
 }
-def DB_SubOp : DB_BinaryOp<"sub"> {
+def DB_SubOp : DB_BinaryOp<"sub",[DB_SupportsInvalidValues]> {
     let summary = "Subtract int/float/decimal";
 }
-def DB_MulOp : DB_BinaryOp<"mul"> {
+def DB_MulOp : DB_BinaryOp<"mul",[DB_SupportsInvalidValues]> {
     let summary = "Multiply int/float/decimal";
 
   let extraClassDefinition = [{
