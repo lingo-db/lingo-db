@@ -1,6 +1,6 @@
+#include "runtime/StringRuntime.h"
 #include "arrow/util/formatting.h"
 #include "arrow/util/value_parsing.h"
-#include "runtime/StringRuntime.h"
 #include "runtime/helpers.h"
 
 #include <arrow/type.h>
@@ -213,4 +213,34 @@ size_t runtime::StringRuntime::findMatch(VarLen32 str, VarLen32 needle, size_t s
 
    if (found == std::string::npos || found + needle.getLen() > end) return invalidPos;
    return found + needle.getLen();
+}
+void toUpper(char* str, size_t len) {
+   for (auto i = 0ul; i < len; i++) {
+      str[i] = std::toupper(str[i]);
+   }
+}
+runtime::VarLen32 runtime::StringRuntime::toUpper(runtime::VarLen32 str) {
+   if (str.isShort()) {
+      ::toUpper(str.data(), str.getLen());
+      return str;
+   } else {
+      char* copied = new char[str.getLen()];
+      memcpy(copied, str.data(), str.getLen());
+      ::toUpper(copied, str.getLen());
+      return runtime::VarLen32((uint8_t*) copied, str.getLen());
+   }
+}
+runtime::VarLen32 runtime::StringRuntime::concat(runtime::VarLen32 a, runtime::VarLen32 b) {
+   auto totalLength = a.getLen() + b.getLen();
+   if (totalLength <= runtime::VarLen32::shortLen) {
+      uint8_t data[runtime::VarLen32::shortLen];
+      memcpy(data, a.data(), a.getLen());
+      memcpy(&data[a.getLen()], b.data(), b.getLen());
+      return runtime::VarLen32(data, totalLength);
+   } else {
+      char* copied = new char[totalLength];
+      memcpy(copied, a.data(), a.getLen());
+      memcpy(&copied[a.getLen()], b.data(), b.getLen());
+      return runtime::VarLen32((uint8_t*) copied, totalLength);
+   }
 }

@@ -186,6 +186,9 @@ std::shared_ptr<mlir::db::RuntimeFunctionRegistry> mlir::db::RuntimeFunctionRegi
    auto resTypeIsI64 = [](mlir::Type t, mlir::TypeRange) { return t.isInteger(64); };
    auto resTypeIsBool = [](mlir::Type t, mlir::TypeRange) { return t.isInteger(1); };
    builtinRegistry->add("Substring").implementedAs(rt::StringRuntime::substr).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("ToUpper").implementedAs(rt::StringRuntime::toUpper).matchesTypes({RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("Concatenate").implementedAs(rt::StringRuntime::concat).matchesTypes({RuntimeFunction::stringLike,RuntimeFunction::stringLike}, RuntimeFunction::matchesArgument());
+
    builtinRegistry->add("Like").implementedAs(rt::StringRuntime::like).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool);
    builtinRegistry->add("ConstLike").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool).implementedAs(constLikeImpl).needsWrapping();
 

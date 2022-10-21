@@ -98,6 +98,9 @@ class VarLen32 {
    char* data() {
       return (char*) getPtr();
    }
+   bool isShort(){
+      return len<=shortLen;
+   }
    uint32_t getLen() {
       return len & ~lazyMask;
    }

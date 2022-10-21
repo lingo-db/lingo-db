@@ -236,6 +236,10 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), "AbsInt", val).res();
    }
+   if (funcName == "upper") {
+      auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
+      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), "ToUpper", val).res();
+   }
    error("could not translate func call");
    return mlir::Value();
 }
@@ -376,7 +380,13 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
          auto like = builder.create<mlir::db::RuntimeCall>(loc, resType, "Like", mlir::ValueRange({ct[0], ct[1]})).res();
          return opType == ExpressionType::COMPARE_NOT_LIKE ? builder.create<mlir::db::NotOp>(loc, like) : like;
       }
-
+      case ExpressionType::OPERATOR_CONCAT:{
+         auto leftString=SQLTypeInference::castValueToType(builder, left,mlir::db::StringType::get(builder.getContext()));
+         auto rightString=SQLTypeInference::castValueToType(builder, left,mlir::db::StringType::get(builder.getContext()));
+         auto isNullable = left.getType().isa<mlir::db::NullableType>() || right.getType().isa<mlir::db::NullableType>();
+         mlir::Type resType = right.getType().isa<mlir::db::NullableType>() ? rightString.getType() : leftString.getType();
+         return builder.create<mlir::db::RuntimeCall>(loc, resType, "Concatenate", mlir::ValueRange({leftString,rightString})).res();
+      }
       default:
          error("unsupported expression type");
    }
