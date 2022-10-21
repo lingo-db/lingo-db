@@ -862,11 +862,19 @@ class HashLowering : public ConversionPattern {
             return totalHash;
          } else if (originalType.isa<mlir::db::NullableType>()) {
             auto unpacked = builder.create<util::UnPackOp>(loc, v);
-            mlir::Value hashedIfNotNull = hashImpl(builder, loc, unpacked.getResult(1), totalHash, getBaseType(originalType));
-            if (!totalHash) {
-               totalHash = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(0));
-            }
-            return builder.create<mlir::arith::SelectOp>(loc, unpacked.getResult(0), totalHash, hashedIfNotNull);
+
+            mlir::Value totalHashUpdated = builder.create<mlir::scf::IfOp>(
+                                                     loc, builder.getIndexType(), unpacked.getResult(0), [totalHashBefore=totalHash](mlir::OpBuilder& builder, mlir::Location loc) {
+                                                         mlir::Value totalHash=totalHashBefore;
+                                                        if (!totalHash) {
+                                                           totalHash = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(0));
+                                                        }
+                                               builder.create<mlir::scf::YieldOp>(loc,totalHash); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+                                               mlir::Value hashedIfNotNull = hashImpl(builder, loc, unpacked.getResult(1), totalHash, getBaseType(originalType));
+
+                                               builder.create<mlir::scf::YieldOp>(loc,hashedIfNotNull); })
+                                              .getResult(0);
+            return totalHashUpdated;
          }
          assert(false && "should not happen");
          return Value();
