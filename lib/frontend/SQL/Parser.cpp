@@ -762,7 +762,7 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                   constOp.getResult().setType(resType);
                   return constOp;
                } else {
-                  return builder.create<mlir::db::CastOp>(loc, resType, toCast);
+                  return SQLTypeInference::castValueToType(builder,toCast,resType);
                }
                return mlir::Value();
             }
