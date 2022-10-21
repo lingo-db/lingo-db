@@ -1,6 +1,6 @@
 --//RUN: run-sql %s %S/../../../resources/data/uni | FileCheck %s
 
---//CHECK: |                      s.matrnr  |                       nextsem  |                        const4  |
+--//CHECK: |                      matrnr  |                       nextsem  |                        const4  |
 --//CHECK: ----------------------------------------------------------------------------------------------------
 --//CHECK: |                         24002  |                            19  |                             4  |
 --//CHECK: |                         25403  |                            13  |                             4  |

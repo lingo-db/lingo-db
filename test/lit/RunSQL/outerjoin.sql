@@ -1,6 +1,6 @@
 --//RUN: run-sql %s %S/../../../resources/data/uni | FileCheck %s
 
---//CHECK: |                        s.name  |                      h.vorlnr  |
+--//CHECK: |                        name  |                      vorlnr  |
 --//CHECK: -------------------------------------------------------------------
 --//CHECK: |                 "Aristoxenos"  |                          null  |
 --//CHECK: |                      "Carnap"  |                          5041  |

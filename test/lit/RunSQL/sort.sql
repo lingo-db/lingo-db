@@ -1,6 +1,6 @@
 --//RUN: run-sql %s %S/../../../resources/data/uni | FileCheck %s
 
---//CHECK: |                        s.name  |                       v.titel  |
+--//CHECK: |                        name  |                       titel  |
 --//CHECK: -------------------------------------------------------------------
 --//CHECK: |                      "Carnap"  |        "Wissenschaftstheorie"  |
 --//CHECK: |                      "Carnap"  |                       "Ethik"  |

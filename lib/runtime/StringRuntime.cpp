@@ -201,6 +201,7 @@ EXPORT char* rt_varlen_to_ref(runtime::VarLen32* varlen) { // NOLINT (clang-diag
 }
 runtime::VarLen32 runtime::StringRuntime::substr(runtime::VarLen32 str, size_t from, size_t to) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    from -= 1;
+   to = std::min((size_t) str.getLen(), to);
    if (from > to || str.getLen() < to) throw std::runtime_error("can not perform substring operation");
    return runtime::VarLen32(&str.getPtr()[from], to - from);
 }

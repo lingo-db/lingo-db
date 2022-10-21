@@ -226,7 +226,7 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
       auto arg2 = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
       return builder.create<mlir::db::RuntimeCall>(loc, builder.getI64Type(), "ExtractFromDate", mlir::ValueRange({part, arg2})).res();
    }
-   if (funcName == "substring"||funcName=="substr") {
+   if (funcName == "substring" || funcName == "substr") {
       auto str = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       auto from = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->next->data.ptr_value), context);
       auto to = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
@@ -270,7 +270,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                   case T_String: {
                      std::string stringVal = constVal.val_.str_;
                      t = mlir::db::StringType::get(builder.getContext());
-                     if (stringVal.size() <= 8) {
+                     if (stringVal.size() <= 8 && stringVal.size()>0) {
                         t = mlir::db::CharType::get(builder.getContext(), stringVal.size());
                      }
                      value = builder.getStringAttr(stringVal);
@@ -380,12 +380,12 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
          auto like = builder.create<mlir::db::RuntimeCall>(loc, resType, "Like", mlir::ValueRange({ct[0], ct[1]})).res();
          return opType == ExpressionType::COMPARE_NOT_LIKE ? builder.create<mlir::db::NotOp>(loc, like) : like;
       }
-      case ExpressionType::OPERATOR_CONCAT:{
-         auto leftString=SQLTypeInference::castValueToType(builder, left,mlir::db::StringType::get(builder.getContext()));
-         auto rightString=SQLTypeInference::castValueToType(builder, left,mlir::db::StringType::get(builder.getContext()));
+      case ExpressionType::OPERATOR_CONCAT: {
+         auto leftString = SQLTypeInference::castValueToType(builder, left, mlir::db::StringType::get(builder.getContext()));
+         auto rightString = SQLTypeInference::castValueToType(builder, left, mlir::db::StringType::get(builder.getContext()));
          auto isNullable = left.getType().isa<mlir::db::NullableType>() || right.getType().isa<mlir::db::NullableType>();
          mlir::Type resType = right.getType().isa<mlir::db::NullableType>() ? rightString.getType() : leftString.getType();
-         return builder.create<mlir::db::RuntimeCall>(loc, resType, "Concatenate", mlir::ValueRange({leftString,rightString})).res();
+         return builder.create<mlir::db::RuntimeCall>(loc, resType, "Concatenate", mlir::ValueRange({leftString, rightString})).res();
       }
       default:
          error("unsupported expression type");
@@ -653,7 +653,7 @@ mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& buil
             join.predicate().push_back(pred);
             return join;
          }
-         break;
+         error("unsupported join type");
       }
       default: {
          error("unknown type in from clause");
@@ -677,7 +677,7 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
             case T_String: {
                std::string stringVal = constVal.val_.str_;
                mlir::Type stringType = mlir::db::StringType::get(builder.getContext());
-               if (stringVal.size() <= 8) {
+               if (stringVal.size() <= 8 && stringVal.size()>0) {
                   stringType = mlir::db::CharType::get(builder.getContext(), stringVal.size());
                }
                return builder.create<mlir::db::ConstantOp>(loc, stringType, builder.getStringAttr(stringVal));
@@ -762,7 +762,7 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                   constOp.getResult().setType(resType);
                   return constOp;
                } else {
-                  return SQLTypeInference::castValueToType(builder,toCast,resType);
+                  return SQLTypeInference::castValueToType(builder, toCast, resType);
                }
                return mlir::Value();
             }
@@ -965,7 +965,7 @@ mlir::Value frontend::sql::Parser::translateCoalesceExpression(mlir::OpBuilder& 
       return builder.create<mlir::db::NullOp>(loc, mlir::db::NullableType::get(builder.getContext(), builder.getNoneType()));
    }
    mlir::Value value = translateExpression(builder, reinterpret_cast<Node*>(expressions->data.ptr_value), context);
-   mlir::Value isNull = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), value);
+   mlir::Value isNull = value.getType().isa<mlir::db::NullableType>() ? (mlir::Value) builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), value) : (mlir::Value)builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 0, builder.getI1Type());
    mlir::Value isNotNull = builder.create<mlir::db::NotOp>(loc, isNull);
    auto* whenBlock = new mlir::Block;
    auto* elseBlock = new mlir::Block;
@@ -1015,8 +1015,7 @@ void frontend::sql::Parser::translateCopyStatement(mlir::OpBuilder& builder, Cop
          if (format != "csv") {
             error("copy only supports csv");
          }
-      }else if(optionName=="null"){
-
+      } else if (optionName == "null") {
       } else {
          error("unsupported copy option");
       }
@@ -1150,7 +1149,7 @@ runtime::ColumnType frontend::sql::Parser::createColumnType(std::string datatype
          std::string unit = (std::get<size_t>(typeModifiers[0]) & 8) ? "daytime" : "months";
          typeModifiers.clear();
          typeModifiers.push_back(unit);
-      }else{
+      } else {
          typeModifiers.clear();
          typeModifiers.push_back("daytime");
       }
@@ -1514,7 +1513,12 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                switch (colRefFirst->type) {
                   case T_String: {
                      //todo: handle a.*
+
                      name = fieldsToString(colRef->fields_);
+                     auto p=name.find(".");
+                     if(p!=std::string::npos){
+                        name=name.substr(p+1,name.size()-p-1);
+                     }
                      attribute = resolveColRef(targetExpr, context);
                      break;
                   }
