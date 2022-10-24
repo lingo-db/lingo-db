@@ -107,13 +107,15 @@ class CreateSimpleStateLowering : public OpConversionPattern<mlir::subop::Create
    LogicalResult matchAndRewrite(mlir::subop::CreateOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (!createOp.getType().isa<mlir::subop::SimpleStateType>()) return failure();
       mlir::Value ref = rewriter.create<mlir::util::AllocOp>(createOp->getLoc(), typeConverter->convertType(createOp.getType()), mlir::Value());
-      auto x = rewriter.create<mlir::tuples::ReturnOp>(createOp->getLoc());
-      rewriter.mergeBlockBefore(&createOp.initFn().front().front(), x);
-      auto terminator = mlir::cast<mlir::tuples::ReturnOp>(x->getPrevNode());
-      auto packed = rewriter.create<mlir::util::PackOp>(createOp->getLoc(), terminator.results());
-      rewriter.eraseOp(x);
-      rewriter.eraseOp(terminator);
-      rewriter.create<mlir::util::StoreOp>(createOp->getLoc(), packed, ref, mlir::Value());
+      if (!createOp.initFn().empty()) {
+         auto x = rewriter.create<mlir::tuples::ReturnOp>(createOp->getLoc());
+         rewriter.mergeBlockBefore(&createOp.initFn().front().front(), x);
+         auto terminator = mlir::cast<mlir::tuples::ReturnOp>(x->getPrevNode());
+         auto packed = rewriter.create<mlir::util::PackOp>(createOp->getLoc(), terminator.results());
+         rewriter.eraseOp(x);
+         rewriter.eraseOp(terminator);
+         rewriter.create<mlir::util::StoreOp>(createOp->getLoc(), packed, ref, mlir::Value());
+      }
       rewriter.replaceOp(createOp, ref);
       return mlir::success();
    }

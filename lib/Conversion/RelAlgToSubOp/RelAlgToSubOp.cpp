@@ -271,7 +271,7 @@ class ProjectionAllLowering : public OpConversionPattern<mlir::relalg::Projectio
 
 static mlir::Block* createCompareBlock(std::vector<mlir::Type> keyTypes, ConversionPatternRewriter& rewriter, mlir::Location loc) {
    mlir::Block* equalBlock = new Block;
-   std::vector<mlir::Location> locations(keyTypes.size(),loc);
+   std::vector<mlir::Location> locations(keyTypes.size(), loc);
    equalBlock->addArguments(keyTypes, locations);
    equalBlock->addArguments(keyTypes, locations);
    {
@@ -690,7 +690,7 @@ class CountingSetOperationLowering : public ConversionPattern {
       if (distinct) {
          auto [predicateDef, predicateRef] = createColumn(rewriter.getI64Type(), "set", "predicate");
 
-         scan = map(scan, rewriter, loc, rewriter.getArrayAttr(predicateDef), [&,counter1Ref=counter1Ref,counter2Ref=counter2Ref](mlir::OpBuilder& rewriter, mlir::Value tuple, mlir::Location loc) {
+         scan = map(scan, rewriter, loc, rewriter.getArrayAttr(predicateDef), [&, counter1Ref = counter1Ref, counter2Ref = counter2Ref](mlir::OpBuilder& rewriter, mlir::Value tuple, mlir::Location loc) {
             mlir::Value leftVal = rewriter.create<mlir::tuples::GetColumnOp>(loc, rewriter.getI64Type(), counter1Ref, tuple);
             mlir::Value rightVal = rewriter.create<mlir::tuples::GetColumnOp>(loc, rewriter.getI64Type(), counter2Ref, tuple);
             mlir::Value zeroI64 = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0));
@@ -709,7 +709,7 @@ class CountingSetOperationLowering : public ConversionPattern {
       } else {
          auto [repeatDef, repeatRef] = createColumn(rewriter.getIndexType(), "set", "repeat");
 
-         scan = map(scan, rewriter, loc, rewriter.getArrayAttr(repeatDef), [&,counter1Ref=counter1Ref,counter2Ref=counter2Ref](mlir::OpBuilder& rewriter, mlir::Value tuple, mlir::Location loc) {
+         scan = map(scan, rewriter, loc, rewriter.getArrayAttr(repeatDef), [&, counter1Ref = counter1Ref, counter2Ref = counter2Ref](mlir::OpBuilder& rewriter, mlir::Value tuple, mlir::Location loc) {
             mlir::Value leftVal = rewriter.create<mlir::tuples::GetColumnOp>(loc, rewriter.getI64Type(), counter1Ref, tuple);
             mlir::Value rightVal = rewriter.create<mlir::tuples::GetColumnOp>(loc, rewriter.getI64Type(), counter2Ref, tuple);
             mlir::Value zeroI64 = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0));
@@ -1100,9 +1100,25 @@ class SingleJoinLowering : public OpConversionPattern<mlir::relalg::SingleJoinOp
       auto loc = semiJoinOp->getLoc();
       bool reverse = semiJoinOp->hasAttr("reverseSides");
       bool useHash = semiJoinOp->hasAttr("useHashJoin");
+      bool isConstantJoin = semiJoinOp->hasAttr("constantJoin");
       auto rightHash = semiJoinOp->getAttrOfType<mlir::ArrayAttr>("rightHash");
       auto leftHash = semiJoinOp->getAttrOfType<mlir::ArrayAttr>("leftHash");
-      if (!reverse) {
+      if (isConstantJoin) {
+         auto columnsToMaterialize = getRequired(mlir::cast<Operator>(semiJoinOp.right().getDefiningOp()));
+         MaterializationHelper helper(columnsToMaterialize, rewriter.getContext());
+         auto constantStateType = mlir::subop::SimpleStateType::get(rewriter.getContext(), helper.createStateMembersAttr());
+         mlir::Value constantState = rewriter.create<mlir::subop::CreateOp>(loc, constantStateType, mlir::Attribute(), 0);
+         auto entryRefType = mlir::subop::EntryRefType::get(rewriter.getContext(), constantStateType);
+         auto [entryDef, entryRef] = createColumn(entryRefType, "lookup", "entryref");
+         auto afterLookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), adaptor.right(), constantState, rewriter.getArrayAttr({}), entryDef);
+         rewriter.create<mlir::subop::ScatterOp>(loc, afterLookup, entryRef, helper.createColumnstateMapping());
+         auto [entryDefLeft, entryRefLeft] = createColumn(entryRefType, "lookup", "entryref");
+
+         auto afterLookupLeft = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), adaptor.left(), constantState, rewriter.getArrayAttr({}), entryDefLeft);
+         auto gathered= rewriter.create<mlir::subop::GatherOp>(loc,afterLookupLeft,entryRefLeft,helper.createStateColumnMapping());
+         auto mappedNullable = mapColsToNullable(gathered.res(), rewriter, loc, semiJoinOp.mapping());
+         rewriter.replaceOp(semiJoinOp, mappedNullable);
+      } else if (!reverse) {
          rewriter.replaceOp(semiJoinOp, translateNL(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.right().getDefiningOp())), rewriter, loc, [loc, &semiJoinOp](mlir::Value v, mlir::ConversionPatternRewriter& rewriter) -> mlir::Value {
                                auto filtered = translateSelection(v, semiJoinOp.predicate(), rewriter, loc);
                                auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
@@ -1192,7 +1208,7 @@ class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
       }
    }
    LogicalResult matchAndRewrite(mlir::relalg::SortOp sortOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      mlir::relalg::ColumnSet requiredColumns=getRequired(sortOp);
+      mlir::relalg::ColumnSet requiredColumns = getRequired(sortOp);
       requiredColumns.insert(sortOp.getUsedColumns());
       MaterializationHelper helper(requiredColumns, rewriter.getContext());
       auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), helper.createStateMembersAttr());
@@ -1444,7 +1460,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
                mlir::Value defaultVal = resultingType.isa<mlir::db::NullableType>() ? builder.create<mlir::db::AsNullableOp>(loc, resultingType, initVal) : initVal;
                analyzedAggregation.defaultValues.push_back(defaultVal);
                analyzedAggregation.defaultValues.push_back(initCounterVal);
-               analyzedAggregation.finalizeFunctions.push_back([loc, currDestIdx = currDestIdx, destAttr = destAttr, resultingType = resultingType,counterType](mlir::ValueRange range, mlir::OpBuilder builder) {
+               analyzedAggregation.finalizeFunctions.push_back([loc, currDestIdx = currDestIdx, destAttr = destAttr, resultingType = resultingType, counterType](mlir::ValueRange range, mlir::OpBuilder builder) {
                   mlir::Value casted=builder.create<mlir::db::CastOp>(loc, getBaseType(resultingType), range[currDestIdx+1]);
                   if(resultingType.isa<mlir::db::NullableType>()&&casted.getType()!=resultingType){
                      casted=builder.create<mlir::db::AsNullableOp>(loc, resultingType, casted);

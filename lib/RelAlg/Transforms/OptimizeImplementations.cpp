@@ -232,6 +232,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                if (auto returnOp = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.getPredicateBlock().getTerminator())) {
                   if (returnOp.results().empty()) {
                      op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "constant"));
+                     op->setAttr("constantJoin", mlir::UnitAttr::get(op.getContext()));
                   }
                }
                auto left = mlir::cast<Operator>(op.leftChild());

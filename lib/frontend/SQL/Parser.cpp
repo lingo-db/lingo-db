@@ -383,7 +383,6 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
       case ExpressionType::OPERATOR_CONCAT: {
          auto leftString = SQLTypeInference::castValueToType(builder, left, mlir::db::StringType::get(builder.getContext()));
          auto rightString = SQLTypeInference::castValueToType(builder, left, mlir::db::StringType::get(builder.getContext()));
-         auto isNullable = left.getType().isa<mlir::db::NullableType>() || right.getType().isa<mlir::db::NullableType>();
          mlir::Type resType = right.getType().isa<mlir::db::NullableType>() ? rightString.getType() : leftString.getType();
          return builder.create<mlir::db::RuntimeCall>(loc, resType, "Concatenate", mlir::ValueRange({leftString, rightString})).res();
       }
@@ -654,6 +653,7 @@ mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& buil
             return join;
          }
          error("unsupported join type");
+         break;
       }
       default: {
          error("unknown type in from clause");
