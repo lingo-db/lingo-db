@@ -93,6 +93,16 @@ Operator Plan::realizePlanRec() {
    Operator firstNode{};
    Operator lastNode{};
    for (auto op : additionalOps) {
+      if(auto innerJoin=mlir::dyn_cast_or_null<mlir::relalg::InnerJoinOp>(op.getOperation())){
+         mlir::OpBuilder builder(innerJoin.getOperation());
+         mlir::Value v=innerJoin.result();//hack;
+         auto x = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), v);
+         x.predicate().push_back(new mlir::Block);
+         x.getLambdaBlock().addArgument(mlir::tuples::TupleType::get(builder.getContext()), innerJoin->getLoc());
+         innerJoin.getLambdaArgument().replaceAllUsesWith(x.getLambdaArgument());
+         x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), innerJoin.getLambdaBlock().getOperations());
+         op=x;
+      }
       op->setAttr("cost", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), cost));
       op->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), rows));
       if (lastNode) {

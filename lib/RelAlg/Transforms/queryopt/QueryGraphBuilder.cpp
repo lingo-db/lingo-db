@@ -83,7 +83,7 @@ void mlir::relalg::QueryGraphBuilder::populateQueryGraph(Operator op) {
 }
 void QueryGraphBuilder::ensureConnected() {
    llvm::EquivalenceClasses<size_t> alreadyConnected;
-   for (size_t i = 0; i < qg.getNodes().size(); i++) {
+   for (size_t i = 0; i < qg.numNodes; i++) {
       alreadyConnected.insert(i);
    }
    size_t last = 0;

@@ -140,6 +140,7 @@ class QueryGraph {
       e.createdNode = createdNode;
       if (createdNode) {
          pseudoNodeOwner[createdNode.getValue()] = edgeid;
+         addJoinEdge(left|right,NodeSet::single(numNodes,createdNode.getValue()),{},{});
       }
       for (auto n : left) {
          if (n >= nodes.size()) {
