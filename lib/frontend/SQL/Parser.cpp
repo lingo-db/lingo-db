@@ -240,6 +240,11 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), "ToUpper", val).res();
    }
+   if (funcName == "round") {
+      auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
+      auto scale = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
+      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), getBaseType(val.getType()).isIntOrIndex() ? "RoundInt"+std::to_string(getBaseType(val.getType()).getIntOrFloatBitWidth()): "RoundDecimal", mlir::ValueRange{val, scale}).res();
+   }
    error("could not translate func call");
    return mlir::Value();
 }
@@ -270,7 +275,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                   case T_String: {
                      std::string stringVal = constVal.val_.str_;
                      t = mlir::db::StringType::get(builder.getContext());
-                     if (stringVal.size() <= 8 && stringVal.size()>0) {
+                     if (stringVal.size() <= 8 && stringVal.size() > 0) {
                         t = mlir::db::CharType::get(builder.getContext(), stringVal.size());
                      }
                      value = builder.getStringAttr(stringVal);
@@ -677,7 +682,7 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
             case T_String: {
                std::string stringVal = constVal.val_.str_;
                mlir::Type stringType = mlir::db::StringType::get(builder.getContext());
-               if (stringVal.size() <= 8 && stringVal.size()>0) {
+               if (stringVal.size() <= 8 && stringVal.size() > 0) {
                   stringType = mlir::db::CharType::get(builder.getContext(), stringVal.size());
                }
                return builder.create<mlir::db::ConstantOp>(loc, stringType, builder.getStringAttr(stringVal));
@@ -965,7 +970,7 @@ mlir::Value frontend::sql::Parser::translateCoalesceExpression(mlir::OpBuilder& 
       return builder.create<mlir::db::NullOp>(loc, mlir::db::NullableType::get(builder.getContext(), builder.getNoneType()));
    }
    mlir::Value value = translateExpression(builder, reinterpret_cast<Node*>(expressions->data.ptr_value), context);
-   mlir::Value isNull = value.getType().isa<mlir::db::NullableType>() ? (mlir::Value) builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), value) : (mlir::Value)builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 0, builder.getI1Type());
+   mlir::Value isNull = value.getType().isa<mlir::db::NullableType>() ? (mlir::Value) builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), value) : (mlir::Value) builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 0, builder.getI1Type());
    mlir::Value isNotNull = builder.create<mlir::db::NotOp>(loc, isNull);
    auto* whenBlock = new mlir::Block;
    auto* elseBlock = new mlir::Block;
@@ -1515,9 +1520,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                      //todo: handle a.*
 
                      name = fieldsToString(colRef->fields_);
-                     auto p=name.find(".");
-                     if(p!=std::string::npos){
-                        name=name.substr(p+1,name.size()-p-1);
+                     auto p = name.find(".");
+                     if (p != std::string::npos) {
+                        name = name.substr(p + 1, name.size() - p - 1);
                      }
                      attribute = resolveColRef(targetExpr, context);
                      break;

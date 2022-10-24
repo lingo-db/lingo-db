@@ -6,6 +6,8 @@ add_library(runtime OBJECT
         LazyJoinHashtable.cpp
         Hashtable.cpp
         StringRuntime.cpp
+        DecimalRuntime.cpp
+        IntegerRuntime.cpp
         Hash.cpp
         DateRuntime.cpp
         ExecutionContext.cpp

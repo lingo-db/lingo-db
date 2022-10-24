@@ -11,6 +11,8 @@ add_dependencies(build_includes MLIRDBEliminateNullsIncGen MLIRDBSimplifyToArith
 gen_rt_def(dump-rt-defs "DumpRuntime.h")
 gen_rt_def(string-rt-defs "StringRuntime.h")
 gen_rt_def(date-rt-defs "DateRuntime.h")
+gen_rt_def(decimal-rt-defs "DecimalRuntime.h")
+gen_rt_def(integer-rt-defs "IntegerRuntime.h")
 
 add_mlir_dialect_library(MLIRDB
         DBDialect.cpp
@@ -29,6 +31,8 @@ add_mlir_dialect_library(MLIRDB
         dump-rt-defs
         string-rt-defs
         date-rt-defs
+        integer-rt-defs
+        decimal-rt-defs
         MLIRDBOpsIncGen
         MLIRDBEliminateNullsIncGen
         MLIRDBSimplifyToArithIncGen
