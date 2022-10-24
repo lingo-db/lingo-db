@@ -343,7 +343,7 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
    auto loc = builder.getUnknownLoc();
    switch (opType) {
       case ExpressionType::OPERATOR_PLUS:
-         if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
+         if (getBaseType(left.getType()).isa<mlir::db::DateType>() && getBaseType(right.getType()).isa<mlir::db::IntervalType>()) {
             return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateAdd", mlir::ValueRange({left, right})).res();
          }
          return builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
@@ -759,10 +759,11 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(toCast.getDefiningOp())) {
                   if (auto intervalType = resType.dyn_cast<mlir::db::IntervalType>()) {
                      std::string unit = "";
-                     if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime) {
-                        unit = "days";
+                     auto stringRepresentation=constOp.getValue().cast<mlir::StringAttr>().str();
+                     if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime&&!stringRepresentation.ends_with("days")) {
+                        stringRepresentation+= "days";
                      }
-                     constOp->setAttr("value", builder.getStringAttr(constOp.getValue().cast<mlir::StringAttr>().str() + unit));
+                     constOp->setAttr("value", builder.getStringAttr( stringRepresentation));
                   }
                   constOp.getResult().setType(resType);
                   return constOp;
