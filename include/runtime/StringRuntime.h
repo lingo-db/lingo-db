@@ -16,6 +16,8 @@ struct StringRuntime {
    static NO_SIDE_EFFECTS float toFloat32(VarLen32 str);
    static NO_SIDE_EFFECTS double toFloat64(VarLen32 str);
    static NO_SIDE_EFFECTS __int128 toDecimal(VarLen32 str, int32_t reqScale);
+   static NO_SIDE_EFFECTS int64_t toDate(VarLen32 str);
+   static VarLen32 fromDate(int64_t);
    static VarLen32 fromInt(int64_t);
    static VarLen32 fromFloat32(float);
    static VarLen32 fromFloat64(double);

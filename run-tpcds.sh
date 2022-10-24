@@ -28,7 +28,7 @@ set -x
 #./build/lingodb-debug/run-sql resources/sql/tpcds/2.sql resources/data/tpcds-1 (fix by solving #31)
 #./build/lingodb-debug/run-sql resources/sql/tpcds/30.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/31.sql resources/data/tpcds-1
-#./build/lingodb-debug/run-sql resources/sql/tpcds/32.sql resources/data/tpcds-1 (fix by solving #33)
+#./build/lingodb-debug/run-sql resources/sql/tpcds/32.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/33.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/34.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/35.sql resources/data/tpcds-1 (fix by solving #27)
@@ -57,7 +57,7 @@ set -x
 #./build/lingodb-debug/run-sql resources/sql/tpcds/55.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/56.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/57.sql resources/data/tpcds-1 (fix by solving #30)
-#./build/lingodb-debug/run-sql resources/sql/tpcds/58.sql resources/data/tpcds-1 (fix by solving #33)
+#./build/lingodb-debug/run-sql resources/sql/tpcds/58.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/59.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/5.sql resources/data/tpcds-1  (fix by solving #29)
 #./build/lingodb-debug/run-sql resources/sql/tpcds/60.sql resources/data/tpcds-1
@@ -85,7 +85,7 @@ set -x
 #./build/lingodb-debug/run-sql resources/sql/tpcds/80.sql resources/data/tpcds-1 (fix by solving #29)
 #./build/lingodb-debug/run-sql resources/sql/tpcds/81.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/82.sql resources/data/tpcds-1
-#./build/lingodb-debug/run-sql resources/sql/tpcds/83.sql resources/data/tpcds-1 (fix by solving #33)
+#./build/lingodb-debug/run-sql resources/sql/tpcds/83.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/84.sql resources/data/tpcds-1
 #./build/lingodb-debug/run-sql resources/sql/tpcds/85.sql resources/data/tpcds-1 (fix by solving #26)
 #./build/lingodb-debug/run-sql resources/sql/tpcds/86.sql resources/data/tpcds-1 (fix by solving #29)
@@ -103,5 +103,5 @@ set -x
 #./build/lingodb-debug/run-sql resources/sql/tpcds/97.sql resources/data/tpcds-1 (fix by solving #3)
 #./build/lingodb-debug/run-sql resources/sql/tpcds/98.sql resources/data/tpcds-1 (fix by solving #30)
 #./build/lingodb-debug/run-sql resources/sql/tpcds/99.sql resources/data/tpcds-1 (fix by solving #26)
-#./build/lingodb-debug/run-sql resources/sql/tpcds/9.sql resources/data/tpcds-1 (fix by solving #24)
+#./build/lingodb-debug/run-sql resources/sql/tpcds/9.sql resources/data/tpcds-1
 

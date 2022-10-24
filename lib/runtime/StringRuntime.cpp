@@ -245,3 +245,14 @@ runtime::VarLen32 runtime::StringRuntime::concat(runtime::VarLen32 a, runtime::V
       return runtime::VarLen32((uint8_t*) copied, totalLength);
    }
 }
+int64_t runtime::StringRuntime::toDate(runtime::VarLen32 str) {
+   int32_t res;
+   arrow::internal::ParseValue<arrow::Date32Type>(str.data(), str.getLen(), &res);
+   int64_t date64 = static_cast<int64_t>(res) * 24 * 60 * 60 * 1000000000ll;
+   return date64;
+}
+static arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
+runtime::VarLen32 runtime::StringRuntime::fromDate(int64_t date) {
+   auto asString=arrow_vendored::date::format("%F", epoch + std::chrono::nanoseconds{date});
+   return runtime::VarLen32(reinterpret_cast<uint8_t*>(asString.data()), asString.length());
+}

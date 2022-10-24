@@ -243,6 +243,8 @@ class StringCastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
                auto converted = rewriter.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType), result);
                result = converted;
             }
+         }else if(scalarTargetType.isa<mlir::db::DateType>()){
+            result = rt::StringRuntime::toDate(rewriter, loc)({valueToCast})[0];
          }
       } else if (auto intWidth = getIntegerWidth(scalarSourceType, false)) {
          result = rt::StringRuntime::fromInt(rewriter, loc)({valueToCast})[0];
@@ -254,6 +256,8 @@ class StringCastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
       } else if (auto charType = scalarSourceType.dyn_cast_or_null<db::CharType>()) {
          auto bytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(charType.getBytes()));
          result = rt::StringRuntime::fromChar(rewriter, loc)({valueToCast, bytes})[0];
+      }else if (scalarSourceType.isa<mlir::db::DateType>()){
+         result = rt::StringRuntime::fromDate(rewriter, loc)({valueToCast})[0];
       }
       if (result) {
          rewriter.replaceOp(castOp, result);
