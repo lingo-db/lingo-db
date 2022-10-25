@@ -267,6 +267,14 @@ def OuterJoinOp : RelAlg_JoinOp<"outerjoin"> {
 
 def FullOuterJoinOp : RelAlg_JoinOp<"fullouterjoin"> {
     let summary = "full outer join operation";
+    let arguments = (ins TupleStream:$left,TupleStream:$right,ArrayAttr:$mapping);
+    let assemblyFormat = [{ $left `,` $right custom<CustRegion>($predicate)  custom<CustAttrMapping>($mapping) attr-dict-with-keyword }];
+
+    let extraClassDeclaration = [{
+        ColumnSet getCreatedColumns();
+        ColumnSet getUsedColumns();
+        ColumnSet getAvailableColumns();
+    }];
 }
 
 def SingleJoinOp : RelAlg_JoinOp<"singlejoin"> {

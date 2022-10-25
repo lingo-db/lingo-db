@@ -15,7 +15,7 @@ module @querymodule  {
 	}
 	%110 = relalg.fullouterjoin %2, %10 (%arg0: !tuples.tuple) {
     	tuples.return
-    }
+    }  mapping: {@outerjoin::@attr1({type = i32})=[@constrel2::@attr1]}
   	//CHECK: %{{.*}} = relalg.projection distinct [@constrel::@attr1] %0
   	//CHECK: %{{.*}} = relalg.crossproduct %{{.*}}, %1
   	//CHECK: %{{.*}} = relalg.crossproduct %{{.*}}, %1

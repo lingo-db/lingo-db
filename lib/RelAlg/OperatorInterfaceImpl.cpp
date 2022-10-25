@@ -208,6 +208,27 @@ ColumnSet OuterJoinOp::getAvailableColumns() {
    availablePreviously.insert(created);
    return availablePreviously;
 }
+ColumnSet FullOuterJoinOp::getCreatedColumns() {
+   ColumnSet created;
+
+   for (Attribute attr : mapping()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      created.insert(&relationDefAttr.getColumn());
+   }
+   return created;
+}
+ColumnSet FullOuterJoinOp::getUsedColumns() {
+   auto used= mlir::relalg::detail::getUsedColumns(getOperation());
+   for (Attribute attr : this->getOperation()->getAttr("mapping").cast<mlir::ArrayAttr>()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      used.insert(ColumnSet::fromArrayAttr(fromExisting));
+   }
+   return used;
+}
+ColumnSet FullOuterJoinOp::getAvailableColumns() {
+   return getCreatedColumns();
+}
 ColumnSet SingleJoinOp::getCreatedColumns() {
    ColumnSet created;
 

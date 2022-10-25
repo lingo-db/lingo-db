@@ -125,7 +125,7 @@ module{
 	%3 = db.constant("true") : i1
 	//CHECK:    tuples.return %3 : i1
 	tuples.return %3 : i1
-}
+} mapping: {@outerjoin::@attr1({type = !db.string})=[@constrel2::@attr1]}
 }
 // -----
 module{

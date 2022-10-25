@@ -243,7 +243,7 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
    if (funcName == "round") {
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       auto scale = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
-      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), getBaseType(val.getType()).isIntOrIndex() ? "RoundInt"+std::to_string(getBaseType(val.getType()).getIntOrFloatBitWidth()): "RoundDecimal", mlir::ValueRange{val, scale}).res();
+      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), getBaseType(val.getType()).isIntOrIndex() ? "RoundInt" + std::to_string(getBaseType(val.getType()).getIntOrFloatBitWidth()) : "RoundDecimal", mlir::ValueRange{val, scale}).res();
    }
    error("could not translate func call");
    return mlir::Value();
@@ -404,17 +404,16 @@ mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, R
    }
    if (!database.hasTable(relation)) {
       if (ctes.contains(relation)) {
-         auto renamedScope=attrManager.getUniqueScope(relation);
+         auto renamedScope = attrManager.getUniqueScope(relation);
          auto [tree, targetInfo] = ctes.at(relation);
          std::vector<mlir::Attribute> renamingDefsAsAttr;
          for (auto x : targetInfo.namedResults) {
-            auto def = attrManager.createDef(renamedScope,x.first,builder.getArrayAttr({attrManager.createRef(x.second)}));
-            auto *newRef=&def.getColumn();
+            auto def = attrManager.createDef(renamedScope, x.first, builder.getArrayAttr({attrManager.createRef(x.second)}));
+            auto* newRef = &def.getColumn();
             renamingDefsAsAttr.push_back(def);
             def.getColumn().type = x.second->type;
             context.mapAttribute(scope, x.first, newRef);
             context.mapAttribute(scope, alias + "." + x.first, newRef);
-
          }
          return builder.create<mlir::relalg::RenamingOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(renamingDefsAsAttr));
       } else {
@@ -600,7 +599,22 @@ mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& buil
          mlir::Value left;
          mlir::Value right;
          std::vector<std::pair<std::string, const mlir::tuples::Column*>> mapping;
-         if (joinExpr->jointype_ == JOIN_LEFT) {
+         if (joinExpr->jointype_ == JOIN_FULL) {
+            {
+               TranslationContext rightContext;
+               auto rightResolverScope = rightContext.createResolverScope();
+               right = translateFromClausePart(builder, joinExpr->rarg_, rightContext, rightResolverScope);
+               auto localMapping = rightContext.getAllDefinedColumns();
+               mapping.insert(mapping.end(),localMapping.begin(),localMapping.end());
+            }
+            {
+               TranslationContext leftContext;
+               auto leftResolverScope = leftContext.createResolverScope();
+               left = translateFromClausePart(builder, joinExpr->larg_, leftContext, leftResolverScope);
+               auto localMapping = leftContext.getAllDefinedColumns();
+               mapping.insert(mapping.end(),localMapping.begin(),localMapping.end());
+            }
+         } else if (joinExpr->jointype_ == JOIN_LEFT) {
             left = translateFromClausePart(builder, joinExpr->larg_, context, scope);
             TranslationContext rightContext;
             auto rightResolverScope = rightContext.createResolverScope();
@@ -620,9 +634,39 @@ mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& buil
          if (!joinExpr->quals_) {
             error("join must contain predicate");
          }
-         //todo: handle outerjoin
+         if (joinExpr->jointype_ == JOIN_FULL) {
+            mlir::Block* pred;
+            {
+               auto predScope = context.createResolverScope();
+               for (auto x : mapping) {
+                  context.mapAttribute(scope, x.first, x.second);
+               }
+               pred = translatePredicate(builder, joinExpr->quals_, context);
+            }
+            static size_t id = 0;
+            std::vector<mlir::Attribute> outerJoinMapping;
+            std::string outerjoinName;
+            if (!mapping.empty()) {
+               outerjoinName = "foj" + std::to_string(id++);
+               std::unordered_map<const mlir::tuples::Column*, const mlir::tuples::Column*> remapped;
+               for (auto x : mapping) {
+                  if (!remapped.contains(x.second)) {
+                     auto [scopename, name] = attrManager.getName(x.second);
 
-         if (joinExpr->jointype_ == JOIN_LEFT || joinExpr->jointype_ == JOIN_RIGHT) {
+                     auto attrDef = attrManager.createDef(outerjoinName, scopename+"_"+name, builder.getArrayAttr({attrManager.createRef(x.second)}));
+                     attrDef.getColumn().type = x.second->type.isa<mlir::db::NullableType>() ? x.second->type : mlir::db::NullableType::get(builder.getContext(), x.second->type);
+                     outerJoinMapping.push_back(attrDef);
+                     remapped.insert({x.second, &attrDef.getColumn()});
+                  }
+                  context.mapAttribute(scope, x.first, remapped[x.second]);
+                  context.removeFromDefinedColumns(x.second);
+               }
+            }
+            mlir::ArrayAttr mapping = builder.getArrayAttr(outerJoinMapping);
+            auto join = builder.create<mlir::relalg::FullOuterJoinOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), left, right, mapping);
+            join.predicate().push_back(pred);
+            return join;
+         } else if (joinExpr->jointype_ == JOIN_LEFT || joinExpr->jointype_ == JOIN_RIGHT) {
             if (joinExpr->jointype_ == JOIN_RIGHT) {
                std::swap(left, right);
             }
@@ -766,11 +810,11 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(toCast.getDefiningOp())) {
                   if (auto intervalType = resType.dyn_cast<mlir::db::IntervalType>()) {
                      std::string unit = "";
-                     auto stringRepresentation=constOp.getValue().cast<mlir::StringAttr>().str();
-                     if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime&&!stringRepresentation.ends_with("days")) {
-                        stringRepresentation+= "days";
+                     auto stringRepresentation = constOp.getValue().cast<mlir::StringAttr>().str();
+                     if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime && !stringRepresentation.ends_with("days")) {
+                        stringRepresentation += "days";
                      }
-                     constOp->setAttr("value", builder.getStringAttr( stringRepresentation));
+                     constOp->setAttr("value", builder.getStringAttr(stringRepresentation));
                   }
                   constOp.getResult().setType(resType);
                   return constOp;

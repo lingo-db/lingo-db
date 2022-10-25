@@ -473,7 +473,7 @@ static std::pair<mlir::Value, const mlir::tuples::Column*> mapBool(mlir::Value s
    mapOp.fn().push_back(mapBlock);
    return {mapOp.result(), &markAttrDef.getColumn()};
 }
-static mlir::Value mapColsToNull(mlir::Value stream, mlir::OpBuilder& rewriter, mlir::Location loc, mlir::ArrayAttr mapping) {
+static mlir::Value mapColsToNull(mlir::Value stream, mlir::OpBuilder& rewriter, mlir::Location loc, mlir::ArrayAttr mapping,mlir::relalg::ColumnSet excluded={}) {
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    std::vector<mlir::Attribute> defAttrs;
    Block* mapBlock = new Block;
@@ -485,6 +485,8 @@ static mlir::Value mapColsToNull(mlir::Value stream, mlir::OpBuilder& rewriter, 
       for (mlir::Attribute attr : mapping) {
          auto relationDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
          auto* defAttr = &relationDefAttr.getColumn();
+         auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[0].cast<mlir::tuples::ColumnRefAttr>();
+         if(excluded.contains(&fromExisting.getColumn())) continue;
          mlir::Value nullValue = rewriter.create<mlir::db::NullOp>(loc, defAttr->type);
          res.push_back(nullValue);
          defAttrs.push_back(colManager.createDef(defAttr));
@@ -495,7 +497,7 @@ static mlir::Value mapColsToNull(mlir::Value stream, mlir::OpBuilder& rewriter, 
    mapOp.fn().push_back(mapBlock);
    return mapOp.result();
 }
-static mlir::Value mapColsToNullable(mlir::Value stream, mlir::OpBuilder& rewriter, mlir::Location loc, mlir::ArrayAttr mapping, size_t exisingOffset = 0) {
+static mlir::Value mapColsToNullable(mlir::Value stream, mlir::OpBuilder& rewriter, mlir::Location loc, mlir::ArrayAttr mapping, size_t exisingOffset = 0,mlir::relalg::ColumnSet excluded={}) {
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    std::vector<mlir::Attribute> defAttrs;
    Block* mapBlock = new Block;
@@ -508,6 +510,7 @@ static mlir::Value mapColsToNullable(mlir::Value stream, mlir::OpBuilder& rewrit
          auto relationDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
          auto* defAttr = &relationDefAttr.getColumn();
          auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[exisingOffset].cast<mlir::tuples::ColumnRefAttr>();
+         if(excluded.contains(&fromExisting.getColumn())) continue;
          mlir::Value value = rewriter.create<mlir::tuples::GetColumnOp>(loc, rewriter.getI64Type(), fromExisting, tupleArg);
          if (fromExisting.getColumn().type != defAttr->type) {
             mlir::Value tmp = rewriter.create<mlir::db::AsNullableOp>(loc, defAttr->type, value);
@@ -837,7 +840,7 @@ static mlir::Value translateNL(mlir::Value left, mlir::Value right, bool useHash
    }
 }
 
-static std::pair<mlir::Value, mlir::Value> translateNLJWithMarker(mlir::Value left, mlir::Value right, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::tuples::ColumnDefAttr markerDefAttr, std::function<mlir::Value(mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr, std::string markerName)> fn) {
+static std::pair<mlir::Value, mlir::Value> translateNLJWithMarker(mlir::Value left, mlir::Value right, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::tuples::ColumnDefAttr markerDefAttr, std::function<mlir::Value(mlir::Value,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr, std::string markerName)> fn) {
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    MaterializationHelper helper(columns, rewriter.getContext());
    auto flagMember = helper.addFlag(markerDefAttr);
@@ -858,7 +861,7 @@ static std::pair<mlir::Value, mlir::Value> translateNLJWithMarker(mlir::Value le
 
       mlir::Value gathered = rewriter.create<mlir::subop::GatherOp>(loc, scan, colManager.createRef(&referenceDefAttr.getColumn()), helper.createStateColumnMapping());
       mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, gathered, tuple);
-      auto res = fn(combined, rewriter, colManager.createRef(&referenceDefAttr.getColumn()), flagMember);
+      auto res = fn(combined,tuple, rewriter, colManager.createRef(&referenceDefAttr.getColumn()), flagMember);
       if (res) {
          rewriter.create<mlir::tuples::ReturnOp>(loc, res);
       } else {
@@ -867,7 +870,7 @@ static std::pair<mlir::Value, mlir::Value> translateNLJWithMarker(mlir::Value le
    }
    return {nestedMapOp.res(), rewriter.create<mlir::subop::ScanOp>(loc, vector, helper.createStateColumnMapping())};
 }
-static std::pair<mlir::Value, mlir::Value> translateHJWithMarker(mlir::Value left, mlir::Value right, mlir::ArrayAttr hashLeft, mlir::ArrayAttr hashRight, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::tuples::ColumnDefAttr markerDefAttr, std::function<mlir::Value(mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr, std::string markerName)> fn) {
+static std::pair<mlir::Value, mlir::Value> translateHJWithMarker(mlir::Value left, mlir::Value right, mlir::ArrayAttr hashLeft, mlir::ArrayAttr hashRight, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::tuples::ColumnDefAttr markerDefAttr, std::function<mlir::Value(mlir::Value,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr, std::string markerName)> fn) {
    MaterializationHelper helper(columns, rewriter.getContext());
    auto flagMember = helper.addFlag(markerDefAttr);
    auto hashMember = getUniqueMember("hash");
@@ -913,7 +916,7 @@ static std::pair<mlir::Value, mlir::Value> translateHJWithMarker(mlir::Value lef
       mlir::Value scan = rewriter.create<mlir::subop::ScanListOp>(loc, list, entryDef);
       mlir::Value gathered = rewriter.create<mlir::subop::GatherOp>(loc, scan, entryRef, helper.createStateColumnMapping());
       mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, gathered, tuple);
-      auto res = fn(combined, rewriter, entryRef, flagMember);
+      auto res = fn(combined, tuple,rewriter, entryRef, flagMember);
       if (res) {
          rewriter.create<mlir::tuples::ReturnOp>(loc, res);
       } else {
@@ -922,7 +925,7 @@ static std::pair<mlir::Value, mlir::Value> translateHJWithMarker(mlir::Value lef
    }
    return {nestedMapOp.res(), rewriter.create<mlir::subop::ScanOp>(loc, lmm, helper.createStateColumnMapping())};
 }
-static std::pair<mlir::Value, mlir::Value> translateNLWithMarker(mlir::Value left, mlir::Value right, bool useHash, mlir::ArrayAttr hashLeft, mlir::ArrayAttr hashRight, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::tuples::ColumnDefAttr markerDefAttr, std::function<mlir::Value(mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr, std::string markerName)> fn) {
+static std::pair<mlir::Value, mlir::Value> translateNLWithMarker(mlir::Value left, mlir::Value right, bool useHash, mlir::ArrayAttr hashLeft, mlir::ArrayAttr hashRight, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::tuples::ColumnDefAttr markerDefAttr, std::function<mlir::Value(mlir::Value,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr, std::string markerName)> fn) {
    if (useHash) {
       return translateHJWithMarker(left, right, hashLeft, hashRight, columns, rewriter, loc, markerDefAttr, fn);
    } else {
@@ -985,7 +988,7 @@ class SemiJoinLowering : public OpConversionPattern<mlir::relalg::SemiJoinOp> {
                             }));
       } else {
          auto [flagAttrDef, flagAttrRef] = createColumn(rewriter.getI1Type(), "materialized", "marker");
-         auto [_, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp](mlir::Value v, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
+         auto [_, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp](mlir::Value v,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
             auto filtered = translateSelection(v, semiJoinOp.predicate(), rewriter, loc);
             auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
             auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
@@ -1013,7 +1016,7 @@ class MarkJoinLowering : public OpConversionPattern<mlir::relalg::MarkJoinOp> {
                                return anyTuple(filtered, markJoinOp.markattr(), rewriter, loc);
                             }));
       } else {
-         auto [_, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(markJoinOp.left().getDefiningOp())), rewriter, loc, markJoinOp.markattr(), [loc, &markJoinOp](mlir::Value v, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
+         auto [_, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(markJoinOp.left().getDefiningOp())), rewriter, loc, markJoinOp.markattr(), [loc, &markJoinOp](mlir::Value v,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
             auto filtered = translateSelection(v, markJoinOp.predicate(), rewriter, loc);
             auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
             auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
@@ -1043,7 +1046,7 @@ class AntiSemiJoinLowering : public OpConversionPattern<mlir::relalg::AntiSemiJo
                             }));
       } else {
          auto [flagAttrDef, flagAttrRef] = createColumn(rewriter.getI1Type(), "materialized", "marker");
-         auto [_, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(antiSemiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &antiSemiJoinOp](mlir::Value v, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
+         auto [_, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(antiSemiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &antiSemiJoinOp](mlir::Value v,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
             auto filtered = translateSelection(v, antiSemiJoinOp.predicate(), rewriter, loc);
             auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
             auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
@@ -1052,6 +1055,41 @@ class AntiSemiJoinLowering : public OpConversionPattern<mlir::relalg::AntiSemiJo
          });
          rewriter.replaceOpWithNewOp<mlir::subop::FilterOp>(antiSemiJoinOp, scan, mlir::subop::FilterSemantic::none_true, rewriter.getArrayAttr({flagAttrRef}));
       }
+      return success();
+   }
+};
+class FullOuterJoinLowering : public OpConversionPattern<mlir::relalg::FullOuterJoinOp> {
+   public:
+   using OpConversionPattern<mlir::relalg::FullOuterJoinOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::relalg::FullOuterJoinOp semiJoinOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = semiJoinOp->getLoc();
+      bool useHash = semiJoinOp->hasAttr("useHashJoin");
+      auto rightHash = semiJoinOp->getAttrOfType<mlir::ArrayAttr>("rightHash");
+      auto leftHash = semiJoinOp->getAttrOfType<mlir::ArrayAttr>("leftHash");
+      auto leftColumns=getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp()));
+      auto rightColumns=getRequired(mlir::cast<Operator>(semiJoinOp.right().getDefiningOp()));
+      auto [flagAttrDef, flagAttrRef] = createColumn(rewriter.getI1Type(), "materialized", "marker");
+      auto [stream, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp,leftColumns,rightColumns](mlir::Value v,mlir::Value tuple, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
+         auto filtered = translateSelection(v, semiJoinOp.predicate(), rewriter, loc);
+         auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
+         auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
+         rewriter.create<mlir::subop::ScatterOp>(rewriter.getUnknownLoc(), afterBool, ref, rewriter.getDictionaryAttr(rewriter.getNamedAttr(flagMember, markerRefAttr)));
+         auto mappedNullable = mapColsToNullable(filtered, rewriter, loc, semiJoinOp.mapping());
+         auto [markerDefAttr2, markerRefAttr2] = createColumn(rewriter.getI1Type(), "marker", "marker");
+         Value filteredNoMatch = rewriter.create<mlir::subop::FilterOp>(loc, anyTuple(filtered, markerDefAttr2, rewriter, loc), mlir::subop::FilterSemantic::none_true, rewriter.getArrayAttr({markerRefAttr2}));
+         mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, filteredNoMatch, tuple);
+
+         auto mappedNullable2 = mapColsToNullable(combined,rewriter,loc,semiJoinOp.mapping(),0,leftColumns);
+
+         auto mappedNull = mapColsToNull(mappedNullable2, rewriter, loc, semiJoinOp.mapping(),rightColumns);
+         return rewriter.create<mlir::subop::UnionOp>(loc, mlir::ValueRange{mappedNullable, mappedNull});
+      });
+      auto noMatches = rewriter.create<mlir::subop::FilterOp>(loc, scan, mlir::subop::FilterSemantic::none_true, rewriter.getArrayAttr({flagAttrRef}));
+      auto mappedNullable = mapColsToNullable(noMatches,rewriter,loc,semiJoinOp.mapping(),0,rightColumns);
+      auto mappedNull = mapColsToNull(mappedNullable, rewriter, loc, semiJoinOp.mapping(),leftColumns);
+      rewriter.replaceOpWithNewOp<mlir::subop::UnionOp>(semiJoinOp, mlir::ValueRange{stream, mappedNull});
+
       return success();
    }
 };
@@ -1076,7 +1114,7 @@ class OuterJoinLowering : public OpConversionPattern<mlir::relalg::OuterJoinOp> 
                             }));
       } else {
          auto [flagAttrDef, flagAttrRef] = createColumn(rewriter.getI1Type(), "materialized", "marker");
-         auto [stream, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp](mlir::Value v, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
+         auto [stream, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp](mlir::Value v,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
             auto filtered = translateSelection(v, semiJoinOp.predicate(), rewriter, loc);
             auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
             auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
@@ -1115,7 +1153,7 @@ class SingleJoinLowering : public OpConversionPattern<mlir::relalg::SingleJoinOp
          auto [entryDefLeft, entryRefLeft] = createColumn(entryRefType, "lookup", "entryref");
 
          auto afterLookupLeft = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), adaptor.left(), constantState, rewriter.getArrayAttr({}), entryDefLeft);
-         auto gathered= rewriter.create<mlir::subop::GatherOp>(loc,afterLookupLeft,entryRefLeft,helper.createStateColumnMapping());
+         auto gathered = rewriter.create<mlir::subop::GatherOp>(loc, afterLookupLeft, entryRefLeft, helper.createStateColumnMapping());
          auto mappedNullable = mapColsToNullable(gathered.res(), rewriter, loc, semiJoinOp.mapping());
          rewriter.replaceOp(semiJoinOp, mappedNullable);
       } else if (!reverse) {
@@ -1129,7 +1167,7 @@ class SingleJoinLowering : public OpConversionPattern<mlir::relalg::SingleJoinOp
                             }));
       } else {
          auto [flagAttrDef, flagAttrRef] = createColumn(rewriter.getI1Type(), "materialized", "marker");
-         auto [stream, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp](mlir::Value v, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
+         auto [stream, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp](mlir::Value v,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
             auto filtered = translateSelection(v, semiJoinOp.predicate(), rewriter, loc);
             auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
             auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
@@ -1713,6 +1751,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<SemiJoinLowering>(typeConverter, ctxt);
    patterns.insert<AntiSemiJoinLowering>(typeConverter, ctxt);
    patterns.insert<OuterJoinLowering>(typeConverter, ctxt);
+   patterns.insert<FullOuterJoinLowering>(typeConverter, ctxt);
    patterns.insert<SingleJoinLowering>(typeConverter, ctxt);
    patterns.insert<LimitLowering>(typeConverter, ctxt);
    patterns.insert<UnionAllLowering>(typeConverter, ctxt);

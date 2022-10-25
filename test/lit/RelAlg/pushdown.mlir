@@ -126,7 +126,7 @@ module @querymodule  {
   	%1 = relalg.const_relation  columns : [@constrel2::@attr1({type = i32}),@constrel2::@attr2({type = i32})] values: [[1, 1], [2, 2]]
   	%2 = relalg.fullouterjoin %0, %1 (%arg0: !tuples.tuple) {
   		tuples.return
-  	}
+  	} mapping: {@outerjoin::@attr1({type = i32})=[@constrel2::@attr1]}
   	%3 = relalg.selection %2 (%arg0: !tuples.tuple) {
 		%4 = tuples.getcol %arg0 @constrel::@attr1 : i32
 		%5 = tuples.getcol %arg0 @constrel::@attr2 : i32
