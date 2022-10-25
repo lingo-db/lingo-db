@@ -404,12 +404,19 @@ mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, R
    }
    if (!database.hasTable(relation)) {
       if (ctes.contains(relation)) {
+         auto renamedScope=attrManager.getUniqueScope(relation);
          auto [tree, targetInfo] = ctes.at(relation);
+         std::vector<mlir::Attribute> renamingDefsAsAttr;
          for (auto x : targetInfo.namedResults) {
-            context.mapAttribute(scope, x.first, x.second);
-            context.mapAttribute(scope, alias + "." + x.first, x.second);
+            auto def = attrManager.createDef(renamedScope,x.first,builder.getArrayAttr({attrManager.createRef(x.second)}));
+            auto *newRef=&def.getColumn();
+            renamingDefsAsAttr.push_back(def);
+            def.getColumn().type = x.second->type;
+            context.mapAttribute(scope, x.first, newRef);
+            context.mapAttribute(scope, alias + "." + x.first, newRef);
+
          }
-         return tree;
+         return builder.create<mlir::relalg::RenamingOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(renamingDefsAsAttr));
       } else {
          error("unknown relation " + relation);
       }
