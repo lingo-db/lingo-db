@@ -193,7 +193,15 @@ std::shared_ptr<mlir::db::RuntimeFunctionRegistry> mlir::db::RuntimeFunctionRegi
 
    builtinRegistry->add("Like").implementedAs(rt::StringRuntime::like).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool);
    builtinRegistry->add("ConstLike").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool).implementedAs(constLikeImpl).needsWrapping();
-   builtinRegistry->add("RoundDecimal").implementedAs(rt::DecimalRuntime::round).matchesTypes({RuntimeFunction::anyDecimal, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("RoundDecimal").matchesTypes({RuntimeFunction::anyDecimal, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument()).needsWrapping().implementedAs([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc)->mlir::Value{
+      mlir::Value s=rewriter.create<mlir::arith::ConstantIndexOp>(loc,originalArgumentTypes[0].cast<mlir::db::DecimalType>().getS());
+      mlir::Value res=rt::DecimalRuntime::round(rewriter,loc)(mlir::ValueRange({loweredArguments[0],loweredArguments[1],s}))[0];
+      auto loweredResType=typeConverter->convertType(resType);
+      if(!loweredResType.isInteger(128)) {
+         res = rewriter.create<mlir::arith::TruncIOp>(loc, loweredResType, res);
+      }
+      return res;
+   });
    builtinRegistry->add("RoundInt64").implementedAs(rt::IntegerRuntime::round64).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("RoundInt32").implementedAs(rt::IntegerRuntime::round32).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("RoundInt16").implementedAs(rt::IntegerRuntime::round16).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
