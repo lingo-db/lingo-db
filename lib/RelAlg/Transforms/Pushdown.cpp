@@ -10,8 +10,16 @@ namespace {
 
 class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-pushdown"; }
-
+   size_t countUses(Operator o){
+      size_t uses=0;
+      for(auto& u:o->getUses())uses++;// NOLINT(clang-diagnostic-unused-variable)
+      return uses;
+   }
    Operator pushdown(Operator topush, Operator curr) {
+      if(countUses(curr)>1){
+         topush.setChildren({curr});
+         return topush;
+      }
       UnaryOperator topushUnary = mlir::dyn_cast_or_null<UnaryOperator>(topush.getOperation());
       mlir::relalg::ColumnSet usedAttributes = topush.getUsedColumns();
       auto res = ::llvm::TypeSwitch<mlir::Operation*, Operator>(curr.getOperation())

@@ -77,8 +77,12 @@ void Plan::dump() {
 
 static void fix(Operator tree) {
    for (auto child : tree.getChildren()) {
-      if (!child->isBeforeInBlock(tree)) {
-         child.moveSubTreeBefore(tree);
+      mlir::Operation* moveBefore=tree.getOperation();
+      for(auto *u:child->getUsers()){
+         moveBefore=u->isBeforeInBlock(moveBefore)?u: moveBefore;
+      }
+      if (!child->isBeforeInBlock(moveBefore)) {
+         child.moveSubTreeBefore(moveBefore);
       }
       fix(child);
    }
@@ -137,7 +141,7 @@ Operator Plan::realizePlanRec() {
          currop->setAttr("cost", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), cost));
          currop->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), rows));
       } else if (!currop && children.size() == 2) {
-         mlir::OpBuilder builder(children[0].getOperation());
+         mlir::OpBuilder builder(children[0]->isBeforeInBlock(children[1])?children[1].getOperation():children[0].getOperation());
          currop = builder.create<mlir::relalg::CrossProductOp>(children[0].getOperation()->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
          //currop->setAttr("cost",mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()),cost));
          //currop->setAttr("rows",mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()),rows));
