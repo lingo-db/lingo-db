@@ -36,11 +36,23 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
       }
       others.setChildren(newChildren);
    }
-   Operator pushDependJoinDown(mlir::Location loc,Operator d, Operator op) {
-      auto availableD = d.getAvailableColumns();
+   size_t countUses(Operator o){
+      size_t uses=0;
+      for(auto& u:o->getUses())uses++;// NOLINT(clang-diagnostic-unused-variable)
+      return uses;
+   }
 
+   Operator pushDependJoinDown(mlir::Location loc,Operator d, Operator op) {
       using namespace mlir::relalg;
+      auto availableD = d.getAvailableColumns();
       auto relType = mlir::tuples::TupleStreamType::get(&getContext());
+      if(!op.getFreeColumns().intersects(availableD)){
+         mlir::OpBuilder builder(&getContext());
+         builder.setInsertionPointAfter(op.getOperation());
+         return builder.create<CrossProductOp>(loc, relType, op.asRelation(), d.asRelation()).getOperation();
+      }
+      assert(countUses(op)<=1);
+
       mlir::OpBuilder builder(&getContext());
       builder.setInsertionPointAfter(op.getOperation());
       return ::llvm::TypeSwitch<mlir::Operation*, Operator>(op.getOperation())
