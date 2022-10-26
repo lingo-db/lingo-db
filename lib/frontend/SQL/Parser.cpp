@@ -512,14 +512,47 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    std::vector<mlir::Attribute> attributes;
    auto scopeName = attrManager.getUniqueScope("setop");
    TargetInfo targetInfo;
+   mlir::Block* leftMapBlock = new mlir::Block;
+   mlir::Block* rightMapBlock = new mlir::Block;
+   mlir::OpBuilder leftMapBuilder(builder.getContext());
+   mlir::OpBuilder rightMapBuilder(builder.getContext());
+   leftMapBuilder.setInsertionPointToStart(leftMapBlock);
+   rightMapBuilder.setInsertionPointToStart(rightMapBlock);
+   leftMapBlock->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+   rightMapBlock->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+   auto leftMapScope=attrManager.getUniqueScope("map");
+   auto rightMapScope=attrManager.getUniqueScope("map");
+   std::vector<mlir::Attribute> createdColsLeft;
+   std::vector<mlir::Attribute> createdColsRight;
+   mlir::Value leftTuple = leftMapBlock->getArgument(0);
+   mlir::Value rightTuple = rightMapBlock->getArgument(0);
+   std::vector<mlir::Value> leftMapResults;
+   std::vector<mlir::Value> rightMapResults;
+
    for (size_t i = 0; i < lTargetInfo.namedResults.size(); i++) {
       auto newName = lTargetInfo.namedResults[i].first;
       const auto* leftColumn = lTargetInfo.namedResults[i].second;
       const auto* rightColumn = rTargetInfo.namedResults[i].second;
       auto leftType = leftColumn->type;
       auto rightType = rightColumn->type;
-      if (getBaseType(leftType) != getBaseType(rightColumn->type)) {
-         error("SET operation expacts same types (column:" + std::to_string(i) + ")");
+      auto commonType=SQLTypeInference::getCommonType(leftType,rightType);
+      if(leftType!=commonType){
+         auto attrDef = attrManager.createDef(leftMapScope, std::string("set_op") + std::to_string(i));
+         attrDef.getColumn().type=commonType;
+         auto attrRef =attrManager.createRef(leftColumn);
+         createdColsLeft.push_back(attrDef);
+         mlir::Value expr = leftMapBuilder.create<mlir::tuples::GetColumnOp>(leftMapBuilder.getUnknownLoc(), attrRef.getColumn().type, attrRef, leftTuple);
+         leftColumn=&attrDef.getColumn();
+         leftMapResults.push_back(SQLTypeInference::castValueToType(leftMapBuilder,expr,commonType));
+      }
+      if(rightType!=commonType){
+         auto attrDef = attrManager.createDef(rightMapScope, std::string("set_op") + std::to_string(i));
+         auto attrRef =attrManager.createRef(rightColumn);
+         attrDef.getColumn().type=commonType;
+         createdColsRight.push_back(attrDef);
+         mlir::Value expr = rightMapBuilder.create<mlir::tuples::GetColumnOp>(rightMapBuilder.getUnknownLoc(), attrRef.getColumn().type, attrRef, rightTuple);
+         rightColumn=&attrDef.getColumn();
+         rightMapResults.push_back(SQLTypeInference::castValueToType(rightMapBuilder,expr,commonType));
       }
       auto newType = SQLTypeInference::getCommonType(leftType, rightType);
       auto newColName = attrManager.getName(leftColumn).second;
@@ -528,6 +561,18 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       newCol->type = newType;
       attributes.push_back(newColDef);
       targetInfo.map(newName, newCol);
+   }
+   if(!leftMapResults.empty()){
+      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), lTree, builder.getArrayAttr(createdColsLeft));
+      mapOp.predicate().push_back(leftMapBlock);
+      leftMapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), leftMapResults);
+      lTree=mapOp.result();
+   }
+   if(!rightMapResults.empty()){
+      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), rTree, builder.getArrayAttr(createdColsRight));
+      mapOp.predicate().push_back(rightMapBlock);
+      rightMapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), rightMapResults);
+      rTree=mapOp.result();
    }
    mlir::Value tree;
    switch (stmt->op_) {

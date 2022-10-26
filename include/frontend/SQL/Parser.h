@@ -124,9 +124,11 @@ struct SQLTypeInference {
       right = getBaseType(right);
       bool stringPresent = left.isa<mlir::db::StringType>() || right.isa<mlir::db::StringType>();
       bool intPresent = left.isa<mlir::IntegerType>() || right.isa<mlir::IntegerType>();
+      bool charPresent = left.isa<mlir::db::CharType>() || right.isa<mlir::db::CharType>();
       bool floatPresent = left.isa<mlir::FloatType>() || right.isa<mlir::FloatType>();
       bool decimalPresent = left.isa<mlir::db::DecimalType>() || right.isa<mlir::db::DecimalType>();
       if (stringPresent) return mlir::db::StringType::get(left.getContext());
+      if (charPresent) return left == right ? left : mlir::db::StringType::get(left.getContext());
       if (decimalPresent) return getHigherDecimalType(left, right);
       if (floatPresent) return getHigherFloatType(left, right);
       if (intPresent) return getHigherIntType(left, right);
