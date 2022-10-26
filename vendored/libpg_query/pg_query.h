@@ -57,7 +57,7 @@ void pg_query_free_normalize_result(PgQueryNormalizeResult result);
 void pg_query_free_parse_result(PgQueryInternalParsetreeAndError result);
 void pg_query_free_plpgsql_parse_result(PgQueryPlpgsqlParseResult result);
 void pg_query_free_fingerprint_result(PgQueryFingerprintResult result);
-
+char* pg_query_nodes_to_json(const void* obj);
 
 // Deprecated APIs below
 void pg_query_init(void); // Deprecated as of 9.5-1.4.1, this is now run automatically as needed

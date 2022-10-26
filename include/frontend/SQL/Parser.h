@@ -351,7 +351,7 @@ struct Parser {
    std::vector<std::string> listToStringVec(List* l);
 
    //translate target list in selection and also consider aggregation and groupby
-   std::pair<mlir::Value, TargetInfo> translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, mlir::Value tree, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   std::pair<mlir::Value, TargetInfo> translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, mlir::Value tree, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
    //translate insert statement
    void translateInsertStmt(mlir::OpBuilder& builder, InsertStmt* stmt);
@@ -421,6 +421,8 @@ struct Parser {
 
    //translate a select statement which is either a 'classic select statement or a set operation
    std::pair<mlir::Value, TargetInfo> translateSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
+
+   std::pair<mlir::Value, mlir::tuples::ColumnRefAttr> mapExpressionToAttribute(mlir::Value tree,TranslationContext& context,mlir::OpBuilder& builder,TranslationContext::ResolverScope& scope,Node* expression);
 
    ~Parser();
 };
