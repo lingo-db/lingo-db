@@ -209,6 +209,19 @@ def AggregationOp : RelAlg_Op<"aggregation", [NoSideEffect,Operator,UnaryOperato
         ColumnSet getCreatedColumns();
     }];
 }
+def WindowOp : RelAlg_Op<"window", [NoSideEffect,Operator,UnaryOperator]> {
+    let summary = "window operation";
+
+    let arguments = (ins TupleStream:$rel, ArrayAttr:$partition_by,ArrayAttr:$order_by, ArrayAttr:$computed_cols,I64Attr:$from,I64Attr:$to);
+    let results = (outs TupleStream:$result);
+    let regions = (region SizedRegion<1>:$aggr_func);
+    let assemblyFormat = [{ $rel `partitionBy` `:` custom<CustRefArr>($partition_by) `orderBy` `:` custom<SortSpecs>($order_by) `rows_between` `:` $from `and` $to `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($aggr_func)  attr-dict-with-keyword }];
+
+    let extraClassDeclaration = [{
+        ColumnSet getUsedColumns();
+        ColumnSet getCreatedColumns();
+    }];
+}
 
 def SortOp : RelAlg_Op<"sort", [NoSideEffect,Operator,UnaryOperator]> {
     let summary = "sort operation";

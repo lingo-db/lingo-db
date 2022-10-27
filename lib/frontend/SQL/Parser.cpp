@@ -1,5 +1,5 @@
 #include "frontend/SQL/Parser.h"
-#include<regex>
+#include <regex>
 frontend::sql::ExpressionType frontend::sql::stringToExpressionType(const std::string& parserStr) {
    std::string str = parserStr;
    std::transform(str.begin(), str.end(), str.begin(), ::toupper);
@@ -1403,27 +1403,116 @@ Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::
       }
       case T_FuncCall: {
          auto* funcNode = reinterpret_cast<FuncCall*>(node);
-
          std::string funcName = reinterpret_cast<value*>(funcNode->funcname_->head->data.ptr_value)->val_.str_;
-         if (funcName == "sum" || funcName == "avg" || funcName == "min" || funcName == "max" || funcName == "count") {
-            Node* aggrExpr = nullptr;
+         if (auto* window = reinterpret_cast<WindowDef*>(funcNode->over_)) {
+            auto* exprNode = reinterpret_cast<Node*>(funcNode->args_->head->data.ptr_value);
+            exprNode = analyzeTargetExpression(exprNode, replaceState);
             auto* fakeNode = createFakeNode(funcName, node);
-            if (funcNode->agg_star_) {
-               funcName += "*";
-            } else {
-               auto* exprNode = reinterpret_cast<Node*>(funcNode->args_->head->data.ptr_value);
-               if (exprNode->type != T_ColumnRef) {
-                  auto* beforeFakeNode = createFakeNode("", exprNode);
-                  replaceState.evalBeforeAggr.insert({beforeFakeNode, exprNode});
-                  aggrExpr = beforeFakeNode;
-               } else {
-                  aggrExpr = exprNode;
+            if (exprNode->type != T_ColumnRef) {
+               auto* beforeFakeNode = createFakeNode("", exprNode);
+               replaceState.evalBeforeWindowFunc.insert({beforeFakeNode, exprNode});
+               exprNode = beforeFakeNode;
+            }
+            WindowProperties properties;
+            if (window->partition_clause_) {
+               for (auto* cell = window->partition_clause_->head; cell != nullptr; cell = cell->next) {
+                  auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
+                  if (node->type == T_ColumnRef) {
+                     properties.partitionBy.push_back(node);
+                  } else {
+                     auto* beforeFakeNode = createFakeNode("", node);
+                     replaceState.evalBeforeWindowFunc.insert({beforeFakeNode, node});
+                     node = beforeFakeNode;
+                     properties.partitionBy.push_back(analyzeTargetExpression(node, replaceState));
+                  }
                }
             }
-            replaceState.aggrs.insert({fakeNode, {funcName, aggrExpr, funcNode->agg_distinct_}});
+            if (window->order_clause_) {
+               for (auto* cell = window->order_clause_->head; cell != nullptr; cell = cell->next) {
+                  auto* temp = reinterpret_cast<Node*>(cell->data.ptr_value);
+                  switch (temp->type) {
+                     case T_SortBy: {
+                        auto* sort = reinterpret_cast<SortBy*>(temp);
+                        auto *expr = analyzeTargetExpression(sort->node_, replaceState);
+                        if (expr->type != T_ColumnRef) {
+                           auto* beforeFakeNode = createFakeNode("", expr);
+                           replaceState.evalBeforeWindowFunc.insert({beforeFakeNode, expr});
+                           expr = beforeFakeNode;
+                        }
+                        properties.orderBy.push_back({sort->sortby_dir_, expr});
+                        break;
+                     }
+                     default: {
+                        error("unknown orderby type");
+                     }
+                  }
+               }
+            }
+            size_t startOffset = 0;
+            size_t endOffset = 0;
+            if (auto* constExpr = reinterpret_cast<A_Const*>(window->start_offset_)) {
+               assert(constExpr->type_ == T_A_Const);
+               auto constVal = constExpr->val_;
+               switch (constVal.type_) {
+                  case T_Integer: {
+                     startOffset = constVal.val_.ival_;
+                     break;
+                  }
+                  default: error("unsupported window start specification");
+               }
+            }
+            if (auto* constExpr = reinterpret_cast<A_Const*>(window->end_offset_)) {
+               assert(constExpr->type_ == T_A_Const);
+               auto constVal = constExpr->val_;
+               switch (constVal.type_) {
+                  case T_Integer: {
+                     endOffset = constVal.val_.ival_;
+                     break;
+                  }
+                  default: error("unsupported window start specification");
+               }
+            }
+            if (window->frame_options_ & FRAMEOPTION_START_CURRENT_ROW) {
+               properties.start = 0;
+            }
+            if (window->frame_options_ & FRAMEOPTION_END_CURRENT_ROW) {
+               properties.end = 0;
+            }
+            if (window->frame_options_ & FRAMEOPTION_START_VALUE_FOLLOWING) {
+               properties.start = startOffset;
+            }
+            if (window->frame_options_ & FRAMEOPTION_START_VALUE_PRECEDING) {
+               properties.start = -startOffset;
+            }
+            if (window->frame_options_ & FRAMEOPTION_END_VALUE_FOLLOWING) {
+               properties.end = endOffset;
+            }
+            if (window->frame_options_ & FRAMEOPTION_END_VALUE_PRECEDING) {
+               properties.end = -endOffset;
+            }
+            replaceState.windowFunctions.insert({fakeNode, {funcName, exprNode, properties}});
             return fakeNode;
+         } else {
+            if (funcName == "sum" || funcName == "avg" || funcName == "min" || funcName == "max" || funcName == "count") {
+               Node* aggrExpr = nullptr;
+               auto* fakeNode = createFakeNode(funcName, node);
+               if (funcNode->agg_star_) {
+                  funcName += "*";
+               } else {
+                  auto* exprNode = reinterpret_cast<Node*>(funcNode->args_->head->data.ptr_value);
+                  if (exprNode->type != T_ColumnRef) {
+                     auto* beforeFakeNode = createFakeNode("", exprNode);
+                     replaceState.evalBeforeAggr.insert({beforeFakeNode, exprNode});
+                     aggrExpr = beforeFakeNode;
+                  } else {
+                     aggrExpr = exprNode;
+                  }
+               }
+               replaceState.aggrs.insert({fakeNode, {funcName, aggrExpr, funcNode->agg_distinct_}});
+               return fakeNode;
+            }
+            return node;
          }
-         return node;
       }
       case T_TypeCast: {
          auto* castNode = reinterpret_cast<TypeCast*>(node);
@@ -1485,10 +1574,10 @@ std::pair<mlir::Value, mlir::tuples::ColumnRefAttr> frontend::sql::Parser::mapEx
    mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValue);
    return {mapOp.result(), attrManager.createRef(&attrDef.getColumn())};
 }
-std::string fingerprint(Node* n){
+std::string fingerprint(Node* n) {
    std::regex r(",\\s*\"location\":\\s*\\d+");
-   std::string json=pg_query_nodes_to_json(n);
-   return std::regex_replace(json,r,"");
+   std::string json = pg_query_nodes_to_json(n);
+   return std::regex_replace(json, r, "");
 }
 std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, mlir::Value tree, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
    auto createMap = [this](mlir::OpBuilder& builder, std::unordered_map<FakeNode*, Node*>& toMap, TranslationContext& context, mlir::Value tree, TranslationContext::ResolverScope& scope) -> mlir::Value {
@@ -1557,7 +1646,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             groupByAttrs.push_back(attrManager.createRef(resolveColRef(node, context)));
          } else {
             auto [tree2, attr] = mapExpressionToAttribute(tree, context, builder, scope, node);
-            std::string printed=fingerprint(node);
+            std::string printed = fingerprint(node);
             groupedExpressions[printed] = attr;
             groupByAttrs.push_back(attr);
             tree = tree2;
@@ -1643,6 +1732,87 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       sel.predicate().push_back(pred);
       tree = sel.result();
    }
+   tree = createMap(builder, replaceState.evalBeforeWindowFunc, context, tree, scope);
+
+   if (!replaceState.windowFunctions.empty()) {
+      for (auto [fakeNode, info] : replaceState.windowFunctions) {
+         auto [funcName, node, window] = info;
+         auto tupleStreamType = mlir::tuples::TupleStreamType::get(builder.getContext());
+         auto tupleType = mlir::tuples::TupleType::get(builder.getContext());
+
+         std::string groupByName = "window" + std::to_string(groupById++);
+         auto tupleScope = context.createTupleScope();
+         auto* block = new mlir::Block;
+         block->addArgument(tupleStreamType, builder.getUnknownLoc());
+         block->addArgument(tupleType, builder.getUnknownLoc());
+         mlir::Value relation = block->getArgument(0);
+         mlir::OpBuilder windowBuilder(builder.getContext());
+         windowBuilder.setInsertionPointToStart(block);
+         std::vector<mlir::Value> createdValues;
+         std::vector<mlir::Attribute> createdCols;
+         mlir::Value expr; //todo
+         auto attrDef = attrManager.createDef(groupByName, fakeNode->colId);
+
+         if (funcName == "count*") {
+            expr = windowBuilder.create<mlir::relalg::CountRowsOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
+            if (groupByAttrs.empty()) {
+               context.useZeroInsteadNull.insert(&attrDef.getColumn());
+            }
+         } else {
+            auto aggrFunc = llvm::StringSwitch<mlir::relalg::AggrFunc>(funcName)
+                               .Case("sum", mlir::relalg::AggrFunc::sum)
+                               .Case("avg", mlir::relalg::AggrFunc::avg)
+                               .Case("min", mlir::relalg::AggrFunc::min)
+                               .Case("max", mlir::relalg::AggrFunc::max)
+                               .Case("count", mlir::relalg::AggrFunc::count)
+                               .Default(mlir::relalg::AggrFunc::count);
+            if (aggrFunc == mlir::relalg::AggrFunc::count) {
+               if (groupByAttrs.empty()) {
+                  context.useZeroInsteadNull.insert(&attrDef.getColumn());
+               }
+            }
+            mlir::tuples::ColumnRefAttr refAttr;
+            switch (node->type) {
+               case T_ColumnRef: refAttr = attrManager.createRef(resolveColRef(node, context)); break;
+               case T_FakeNode: refAttr = attrManager.createRef(context.getAttribute(reinterpret_cast<FakeNode*>(node)->colId)); break;
+               default: error("could not resolve window attribute");
+            }
+            mlir::Value currRel = relation;
+            mlir::Type aggrResultType;
+            if (aggrFunc == mlir::relalg::AggrFunc::count) {
+               aggrResultType = builder.getI64Type();
+            } else {
+               aggrResultType = refAttr.getColumn().type;
+               if (!aggrResultType.isa<mlir::db::NullableType>() && groupByAttrs.empty()) {
+                  aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
+               }
+            }
+            expr = windowBuilder.create<mlir::relalg::AggrFuncOp>(builder.getUnknownLoc(), aggrResultType, aggrFunc, currRel, refAttr);
+         }
+         attrDef.getColumn().type = expr.getType();
+         context.mapAttribute(scope, fakeNode->colId, &attrDef.getColumn());
+         createdCols.push_back(attrDef);
+         createdValues.push_back(expr);
+
+         windowBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
+         std::vector<mlir::Attribute> partitionByAttrs;
+         std::vector<mlir::Attribute> orderBySpecs;
+
+         for (auto* node : window.partitionBy) {
+            assert(node->type == T_ColumnRef);
+            partitionByAttrs.push_back(attrManager.createRef(resolveColRef(node, context)));
+         }
+         for (auto [dir, node] : window.orderBy) {
+            assert(node->type == T_ColumnRef);
+
+            orderBySpecs.push_back(mlir::relalg::SortSpecificationAttr::get(builder.getContext(), attrManager.createRef(resolveColRef(node, context)), dir == SORTBY_DESC ? mlir::relalg::SortSpec::desc : mlir::relalg::SortSpec::asc));
+         }
+         auto windowOp = builder.create<mlir::relalg::WindowOp>(builder.getUnknownLoc(), tupleStreamType, tree, builder.getArrayAttr(partitionByAttrs), builder.getArrayAttr(orderBySpecs), builder.getArrayAttr(createdCols), window.start, window.end);
+         windowOp.aggr_func().push_back(block);
+
+         tree = windowOp.result();
+      }
+   }
 
    TargetInfo targetInfo;
    std::unordered_map<FakeNode*, Node*> mapForTargetList;
@@ -1698,7 +1868,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                auto printed = std::string(fingerprint(targetExpr));
                if (groupedExpressions.contains(printed)) {
                   attribute = &groupedExpressions[printed].cast<mlir::tuples::ColumnRefAttr>().getColumn();
-                  name="";
+                  name = "";
                } else {
                   fakeNode = createFakeNode("", nullptr);
                   mapForTargetList.insert({fakeNode, targetExpr});

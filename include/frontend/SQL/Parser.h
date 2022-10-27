@@ -35,6 +35,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <stack>
 #include <unordered_set>
 namespace frontend::sql {
@@ -179,9 +180,17 @@ struct FakeNode : Node {
       type = T_FakeNode;
    }
 };
+struct WindowProperties {
+   std::vector<Node*> partitionBy;
+   std::vector<std::pair<SortByDir, Node*>> orderBy;
+   int64_t start = std::numeric_limits<int64_t>::min();
+   int64_t end = std::numeric_limits<int64_t>::max();
+};
 struct ReplaceState {
    std::unordered_map<FakeNode*, Node*> evalBeforeAggr;
    std::unordered_map<FakeNode*, std::tuple<std::string, Node*, bool>> aggrs;
+   std::unordered_map<FakeNode*, Node*> evalBeforeWindowFunc;
+   std::unordered_map<FakeNode*, std::tuple<std::string, Node*, WindowProperties>> windowFunctions;
 };
 ExpressionType stringToExpressionType(const std::string& parserStr);
 struct Parser {
@@ -281,6 +290,7 @@ struct Parser {
       moduleOp.getContext()->getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
       pg_query_parse_init();
       result = pg_query_parse(sql.c_str());
+      print_pg_parse_tree(result.tree);
    }
 
    void error(std::string str) { //todo: improve error handling
@@ -422,7 +432,7 @@ struct Parser {
    //translate a select statement which is either a 'classic select statement or a set operation
    std::pair<mlir::Value, TargetInfo> translateSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
-   std::pair<mlir::Value, mlir::tuples::ColumnRefAttr> mapExpressionToAttribute(mlir::Value tree,TranslationContext& context,mlir::OpBuilder& builder,TranslationContext::ResolverScope& scope,Node* expression);
+   std::pair<mlir::Value, mlir::tuples::ColumnRefAttr> mapExpressionToAttribute(mlir::Value tree, TranslationContext& context, mlir::OpBuilder& builder, TranslationContext::ResolverScope& scope, Node* expression);
 
    ~Parser();
 };

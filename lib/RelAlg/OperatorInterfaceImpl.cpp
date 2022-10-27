@@ -112,6 +112,20 @@ ColumnSet AggregationOp::getUsedColumns() {
    });
    return used;
 }
+ColumnSet WindowOp::getCreatedColumns() {
+   return ColumnSet::fromArrayAttr(computed_cols());
+}
+ColumnSet WindowOp::getUsedColumns() {
+   auto used = mlir::relalg::detail::getUsedColumns(getOperation());
+   used.insert(ColumnSet::fromArrayAttr(partition_by()));
+   getOperation()->walk([&](mlir::relalg::AggrFuncOp aggrFn) {
+      used.insert(&aggrFn.attr().getColumn());
+   });
+   for (Attribute a : order_by()) {
+      used.insert(&a.dyn_cast_or_null<mlir::relalg::SortSpecificationAttr>().getAttr().getColumn());
+   }
+   return used;
+}
 ColumnSet SortOp::getUsedColumns() {
    ColumnSet used;
    for (Attribute a : sortspecs()) {

@@ -850,3 +850,11 @@ using FunctionParameter = struct FunctionParameter {
    FunctionParameterMode mode_; /* IN/OUT/etc */
    Node *defexpr_;              /* raw default expr, or NULL if not given */
 };
+
+#define FRAMEOPTION_START_CURRENT_ROW 0x00100 /* start is C. R. */
+#define FRAMEOPTION_END_CURRENT_ROW 0x00200   /* end is C. R. */
+
+#define FRAMEOPTION_START_VALUE_PRECEDING 0x00400 /* start is V. P. */
+#define FRAMEOPTION_END_VALUE_PRECEDING 0x00800   /* end is V. P. */
+#define FRAMEOPTION_START_VALUE_FOLLOWING 0x01000 /* start is V. F. */
+#define FRAMEOPTION_END_VALUE_FOLLOWING 0x02000   /* end is V. F. */
