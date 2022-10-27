@@ -1433,7 +1433,7 @@ Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::
                   switch (temp->type) {
                      case T_SortBy: {
                         auto* sort = reinterpret_cast<SortBy*>(temp);
-                        auto *expr = analyzeTargetExpression(sort->node_, replaceState);
+                        auto* expr = analyzeTargetExpression(sort->node_, replaceState);
                         if (expr->type != T_ColumnRef) {
                            auto* beforeFakeNode = createFakeNode("", expr);
                            replaceState.evalBeforeWindowFunc.insert({beforeFakeNode, expr});
@@ -1579,6 +1579,78 @@ std::string fingerprint(Node* n) {
    std::string json = pg_query_nodes_to_json(n);
    return std::regex_replace(json, r, "");
 }
+std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> frontend::sql::Parser::performAggregation(mlir::OpBuilder& builder, std::vector<mlir::Attribute> groupByAttrs, const ReplaceState& replaceState, TranslationContext& context, mlir::Value tree) {
+   static size_t groupById = 0;
+   auto tupleStreamType = mlir::tuples::TupleStreamType::get(builder.getContext());
+   auto tupleType = mlir::tuples::TupleType::get(builder.getContext());
+
+   std::string groupByName = "aggr" + std::to_string(groupById++);
+   auto tupleScope = context.createTupleScope();
+   auto* block = new mlir::Block;
+   block->addArgument(tupleStreamType, builder.getUnknownLoc());
+   block->addArgument(tupleType, builder.getUnknownLoc());
+   mlir::Value relation = block->getArgument(0);
+   mlir::OpBuilder aggrBuilder(builder.getContext());
+   aggrBuilder.setInsertionPointToStart(block);
+   std::vector<mlir::Value> createdValues;
+   std::vector<mlir::Attribute> createdCols;
+   std::unordered_map<std::string, mlir::tuples::Column*> mapping;
+   for (auto toAggr : replaceState.aggrs) {
+      mlir::Value expr; //todo
+      auto aggrFuncName = std::get<0>(toAggr.second);
+      auto* attrNode = std::get<1>(toAggr.second);
+      auto distinct = std::get<2>(toAggr.second);
+      auto attrDef = attrManager.createDef(groupByName, toAggr.first->colId);
+      if (aggrFuncName == "count*") {
+         expr = aggrBuilder.create<mlir::relalg::CountRowsOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
+         if (groupByAttrs.empty()) {
+            context.useZeroInsteadNull.insert(&attrDef.getColumn());
+         }
+      } else {
+         auto aggrFunc = llvm::StringSwitch<mlir::relalg::AggrFunc>(aggrFuncName)
+                            .Case("sum", mlir::relalg::AggrFunc::sum)
+                            .Case("avg", mlir::relalg::AggrFunc::avg)
+                            .Case("min", mlir::relalg::AggrFunc::min)
+                            .Case("max", mlir::relalg::AggrFunc::max)
+                            .Case("count", mlir::relalg::AggrFunc::count)
+                            .Default(mlir::relalg::AggrFunc::count);
+         if (aggrFunc == mlir::relalg::AggrFunc::count) {
+            if (groupByAttrs.empty()) {
+               context.useZeroInsteadNull.insert(&attrDef.getColumn());
+            }
+         }
+         mlir::tuples::ColumnRefAttr refAttr;
+         switch (attrNode->type) {
+            case T_ColumnRef: refAttr = attrManager.createRef(resolveColRef(attrNode, context)); break;
+            case T_FakeNode: refAttr = attrManager.createRef(context.getAttribute(reinterpret_cast<FakeNode*>(attrNode)->colId)); break;
+            default: error("could not resolve aggr attribute");
+         }
+         mlir::Value currRel = relation;
+         if (distinct) {
+            currRel = aggrBuilder.create<mlir::relalg::ProjectionOp>(builder.getUnknownLoc(), mlir::relalg::SetSemantic::distinct, currRel, builder.getArrayAttr({refAttr}));
+         }
+         mlir::Type aggrResultType;
+         if (aggrFunc == mlir::relalg::AggrFunc::count) {
+            aggrResultType = builder.getI64Type();
+         } else {
+            aggrResultType = refAttr.getColumn().type;
+            if (!aggrResultType.isa<mlir::db::NullableType>() && groupByAttrs.empty()) {
+               aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
+            }
+         }
+         expr = aggrBuilder.create<mlir::relalg::AggrFuncOp>(builder.getUnknownLoc(), aggrResultType, aggrFunc, currRel, refAttr);
+      }
+      attrDef.getColumn().type = expr.getType();
+      mapping.insert({toAggr.first->colId, &attrDef.getColumn()});
+      createdCols.push_back(attrDef);
+      createdValues.push_back(expr);
+   }
+   aggrBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
+   auto groupByOp = builder.create<mlir::relalg::AggregationOp>(builder.getUnknownLoc(), tupleStreamType, tree, builder.getArrayAttr(groupByAttrs), builder.getArrayAttr(createdCols));
+   groupByOp.aggr_func().push_back(block);
+
+   return {groupByOp.result(), mapping};
+}
 std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, mlir::Value tree, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
    auto createMap = [this](mlir::OpBuilder& builder, std::unordered_map<FakeNode*, Node*>& toMap, TranslationContext& context, mlir::Value tree, TranslationContext::ResolverScope& scope) -> mlir::Value {
       if (toMap.empty()) return tree;
@@ -1600,6 +1672,64 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          auto attrDef = attrManager.createDef(mapName, p.first->colId);
          attrDef.getColumn().type = expr.getType();
          context.mapAttribute(scope, p.first->colId, &attrDef.getColumn());
+         createdCols.push_back(attrDef);
+         createdValues.push_back(expr);
+      }
+      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
+      mapOp.predicate().push_back(block);
+      mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
+      return mapOp.result();
+   };
+   auto mapToNull = [this](mlir::OpBuilder& builder, std::vector<mlir::Attribute> toMap, TranslationContext& context, mlir::Value tree) {
+      if (toMap.empty()) return tree;
+      auto* block = new mlir::Block;
+      static size_t mapId = 0;
+      std::string mapName = "map" + std::to_string(mapId++);
+
+      mlir::OpBuilder mapBuilder(builder.getContext());
+      block->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+      auto tupleScope = context.createTupleScope();
+      mlir::Value tuple = block->getArgument(0);
+      context.setCurrentTuple(tuple);
+
+      mapBuilder.setInsertionPointToStart(block);
+      std::vector<mlir::Value> createdValues;
+      std::vector<mlir::Attribute> createdCols;
+      for (auto p : toMap) {
+         auto colRef = mlir::cast<mlir::tuples::ColumnRefAttr>(p);
+         mlir::Value expr = mapBuilder.create<mlir::db::NullOp>(builder.getUnknownLoc(), colRef.getColumn().type);
+         auto attrDef = attrManager.createDef(&colRef.getColumn());
+         createdCols.push_back(attrDef);
+         createdValues.push_back(expr);
+      }
+      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
+      mapOp.predicate().push_back(block);
+      mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
+      return mapOp.result();
+   };
+   auto mapToNullable = [this](mlir::OpBuilder& builder, std::vector<mlir::Attribute> toMap,std::vector<mlir::Attribute> mapTo, TranslationContext& context, mlir::Value tree) {
+      if (toMap.empty()) return tree;
+      auto* block = new mlir::Block;
+      static size_t mapId = 0;
+      std::string mapName = "map" + std::to_string(mapId++);
+
+      mlir::OpBuilder mapBuilder(builder.getContext());
+      block->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+      auto tupleScope = context.createTupleScope();
+      mlir::Value tuple = block->getArgument(0);
+      context.setCurrentTuple(tuple);
+
+      mapBuilder.setInsertionPointToStart(block);
+      std::vector<mlir::Value> createdValues;
+      std::vector<mlir::Attribute> createdCols;
+      for (size_t i=0;i<toMap.size();i++) {
+         auto colRef = mlir::cast<mlir::tuples::ColumnRefAttr>(toMap[i]);
+         auto newColRef = mlir::cast<mlir::tuples::ColumnRefAttr>(mapTo[i]);
+         mlir::Value expr = mapBuilder.create<mlir::tuples::GetColumnOp>(builder.getUnknownLoc(), colRef.getColumn().type,colRef,tuple);
+         if(colRef.getColumn().type!=newColRef.getColumn().type){
+            expr=mapBuilder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(),newColRef.getColumn().type,expr);
+         }
+         auto attrDef = attrManager.createDef(&newColRef.getColumn());
          createdCols.push_back(attrDef);
          createdValues.push_back(expr);
       }
@@ -1639,8 +1769,17 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    tree = createMap(builder, replaceState.evalBeforeAggr, context, tree, scope);
    std::vector<mlir::Attribute> groupByAttrs;
    std::unordered_map<std::string, mlir::Attribute> groupedExpressions;
-   if (groupBy) {
-      for (auto* cell = groupBy->head; cell != nullptr; cell = cell->next) {
+   bool rollup = false;
+   if (groupBy && groupBy->head != 0) {
+      auto *attributes = groupBy->head;
+      if (reinterpret_cast<Node*>(attributes->data.ptr_value)->type == T_GroupingSet) {
+         auto* node = reinterpret_cast<GroupingSet*>(attributes->data.ptr_value);
+         assert(node->kind == GROUPING_SET_ROLLUP);
+         assert(attributes->next == nullptr);
+         attributes = node->content->head;
+         rollup = true;
+      }
+      for (auto* cell = attributes; cell != nullptr; cell = cell->next) {
          auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
          if (node->type == T_ColumnRef) {
             groupByAttrs.push_back(attrManager.createRef(resolveColRef(node, context)));
@@ -1653,77 +1792,96 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          }
       }
    }
-   static size_t groupById = 0;
+   auto asNullable = [](mlir::Type t) { return t.isa<mlir::db::NullableType>() ? t : mlir::db::NullableType::get(t.getContext(), t); };
    if (!groupByAttrs.empty() || !replaceState.aggrs.empty()) {
-      auto tupleStreamType = mlir::tuples::TupleStreamType::get(builder.getContext());
-      auto tupleType = mlir::tuples::TupleType::get(builder.getContext());
+      if (rollup) {
+         struct Part {
+            size_t n;
+            mlir::Value tree;
+            std::vector<mlir::Attribute> computed;
+            std::vector<mlir::Attribute> groupByCols;
+            std::vector<mlir::Attribute> groupByCols2;
+         };
+         std::vector<Part> parts;
+         std::vector<std::string> orderedAggregates;
+         auto scopeName = attrManager.getUniqueScope("rollup");
+         static size_t rollupId = 0;
+         for (size_t i = 0; i <= groupByAttrs.size(); i++) {
+            size_t n = groupByAttrs.size() - i;
+            std::vector<mlir::Attribute> localGroupByAttrs;
+            std::vector<mlir::Attribute> localGroupByAttrsNullable;
+            std::vector<mlir::Attribute> notAvailable;
+            for (size_t j = 1; j <= n; j++) {
+               localGroupByAttrs.push_back(groupByAttrs.at(j - 1));
+               auto attrDef = attrManager.createDef(scopeName, "tmp" + std::to_string(rollupId++));
+               auto currentType = groupByAttrs.at(j - 1).cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+               attrDef.getColumn().type = asNullable(currentType);
 
-      std::string groupByName = "aggr" + std::to_string(groupById++);
-      auto tupleScope = context.createTupleScope();
-      auto* block = new mlir::Block;
-      block->addArgument(tupleStreamType, builder.getUnknownLoc());
-      block->addArgument(tupleType, builder.getUnknownLoc());
-      mlir::Value relation = block->getArgument(0);
-      mlir::OpBuilder aggrBuilder(builder.getContext());
-      aggrBuilder.setInsertionPointToStart(block);
-      std::vector<mlir::Value> createdValues;
-      std::vector<mlir::Attribute> createdCols;
-      for (auto toAggr : replaceState.aggrs) {
-         mlir::Value expr; //todo
-         auto aggrFuncName = std::get<0>(toAggr.second);
-         auto* attrNode = std::get<1>(toAggr.second);
-         auto distinct = std::get<2>(toAggr.second);
-         auto attrDef = attrManager.createDef(groupByName, toAggr.first->colId);
+               localGroupByAttrsNullable.push_back(attrDef);
+            }
+            for (size_t j = n + 1; j <= groupByAttrs.size(); j++) {
+               auto currentAttr=groupByAttrs.at(j - 1);
+               auto attrDef = attrManager.createDef(scopeName, "tmp" + std::to_string(rollupId++));
+               auto currentType = currentAttr.cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+               attrDef.getColumn().type = asNullable(currentType);
+               notAvailable.push_back(attrDef);
+            }
 
-         if (aggrFuncName == "count*") {
-            expr = aggrBuilder.create<mlir::relalg::CountRowsOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
-            if (groupByAttrs.empty()) {
-               context.useZeroInsteadNull.insert(&attrDef.getColumn());
+            auto [tree2, mapping] = performAggregation(builder, localGroupByAttrs, replaceState, context, tree);
+
+            tree2 = mapToNull(builder, notAvailable, context, tree2);
+            tree2 = mapToNullable(builder, localGroupByAttrs,localGroupByAttrsNullable, context, tree2);
+
+            if (orderedAggregates.empty()) {
+               for (auto [s, c] : mapping)
+                  orderedAggregates.push_back(s);
             }
-         } else {
-            auto aggrFunc = llvm::StringSwitch<mlir::relalg::AggrFunc>(aggrFuncName)
-                               .Case("sum", mlir::relalg::AggrFunc::sum)
-                               .Case("avg", mlir::relalg::AggrFunc::avg)
-                               .Case("min", mlir::relalg::AggrFunc::min)
-                               .Case("max", mlir::relalg::AggrFunc::max)
-                               .Case("count", mlir::relalg::AggrFunc::count)
-                               .Default(mlir::relalg::AggrFunc::count);
-            if (aggrFunc == mlir::relalg::AggrFunc::count) {
-               if (groupByAttrs.empty()) {
-                  context.useZeroInsteadNull.insert(&attrDef.getColumn());
-               }
+            std::vector<mlir::Attribute> computed;
+            for (auto s : orderedAggregates) {
+               computed.push_back(attrManager.createDef(mapping[s]));
             }
-            mlir::tuples::ColumnRefAttr refAttr;
-            switch (attrNode->type) {
-               case T_ColumnRef: refAttr = attrManager.createRef(resolveColRef(attrNode, context)); break;
-               case T_FakeNode: refAttr = attrManager.createRef(context.getAttribute(reinterpret_cast<FakeNode*>(attrNode)->colId)); break;
-               default: error("could not resolve aggr attribute");
-            }
-            mlir::Value currRel = relation;
-            if (distinct) {
-               currRel = aggrBuilder.create<mlir::relalg::ProjectionOp>(builder.getUnknownLoc(), mlir::relalg::SetSemantic::distinct, currRel, builder.getArrayAttr({refAttr}));
-            }
-            mlir::Type aggrResultType;
-            if (aggrFunc == mlir::relalg::AggrFunc::count) {
-               aggrResultType = builder.getI64Type();
-            } else {
-               aggrResultType = refAttr.getColumn().type;
-               if (!aggrResultType.isa<mlir::db::NullableType>() && groupByAttrs.empty()) {
-                  aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
-               }
-            }
-            expr = aggrBuilder.create<mlir::relalg::AggrFuncOp>(builder.getUnknownLoc(), aggrResultType, aggrFunc, currRel, refAttr);
+
+
+            parts.push_back({n, tree2, computed,localGroupByAttrsNullable,notAvailable});
          }
-         attrDef.getColumn().type = expr.getType();
-         context.mapAttribute(scope, toAggr.first->colId, &attrDef.getColumn());
-         createdCols.push_back(attrDef);
-         createdValues.push_back(expr);
-      }
-      aggrBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
-      auto groupByOp = builder.create<mlir::relalg::AggregationOp>(builder.getUnknownLoc(), tupleStreamType, tree, builder.getArrayAttr(groupByAttrs), builder.getArrayAttr(createdCols));
-      groupByOp.aggr_func().push_back(block);
 
-      tree = groupByOp.result();
+         mlir::Value currTree=parts[0].tree;
+         std::vector<mlir::Attribute> currentAttributes(parts[0].groupByCols.begin(),parts[0].groupByCols.end());
+         currentAttributes.insert(currentAttributes.end(),parts[0].groupByCols2.begin(),parts[0].groupByCols2.end());
+         currentAttributes.insert(currentAttributes.end(),parts[0].computed.begin(),parts[0].computed.end());
+         for(size_t i=1;i<parts.size();i++){
+            auto rollupUnionName = attrManager.getUniqueScope("rollupUnion");
+            std::vector<mlir::Attribute> currentLocalAttributes(parts[i].groupByCols.begin(),parts[i].groupByCols.end());
+            currentLocalAttributes.insert(currentLocalAttributes.end(),parts[i].groupByCols2.begin(),parts[i].groupByCols2.end());
+            currentLocalAttributes.insert(currentLocalAttributes.end(),parts[i].computed.begin(),parts[i].computed.end());
+            std::vector<mlir::Attribute> unionAttributes;
+            size_t id=0;
+            for(size_t j=0;j<currentLocalAttributes.size();j++){
+               auto left=attrManager.createRef(&currentAttributes[j].cast<mlir::tuples::ColumnDefAttr>().getColumn());
+               auto right=attrManager.createRef(&currentLocalAttributes[j].cast<mlir::tuples::ColumnDefAttr>().getColumn());
+
+               auto unionAttribute=attrManager.createDef(rollupUnionName,"tmp"+std::to_string(id++),builder.getArrayAttr({left,right}));
+               unionAttribute.getColumn().type=currentLocalAttributes[j].cast<mlir::tuples::ColumnDefAttr>().getColumn().type;
+               unionAttributes.push_back(unionAttribute);
+            }
+            currTree=builder.create<mlir::relalg::UnionOp>(builder.getUnknownLoc(), ::mlir::relalg::SetSemanticAttr::get(builder.getContext(), mlir::relalg::SetSemantic::all), currTree,parts[i].tree, builder.getArrayAttr(unionAttributes));
+            currentAttributes=unionAttributes;
+         }
+         for(size_t i=0;i<groupByAttrs.size();i++){
+            context.replace(scope,&groupByAttrs[i].cast<mlir::tuples::ColumnRefAttr>().getColumn(),&currentAttributes[i].cast<mlir::tuples::ColumnDefAttr>().getColumn());
+         }
+         size_t i=0;
+         for (auto s:orderedAggregates) {
+            context.mapAttribute(scope, s, &currentAttributes[groupByAttrs.size()+i++].cast<mlir::tuples::ColumnDefAttr>().getColumn());
+         }
+         tree=currTree;
+      } else {
+         auto [tree2, mapping] = performAggregation(builder, groupByAttrs, replaceState, context, tree);
+         tree = tree2;
+         for (auto [s, c] : mapping) {
+            context.mapAttribute(scope, s, c);
+         }
+      }
    }
 
    if (having) {
@@ -1735,12 +1893,13 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    tree = createMap(builder, replaceState.evalBeforeWindowFunc, context, tree, scope);
 
    if (!replaceState.windowFunctions.empty()) {
+      static size_t windowId = 0;
       for (auto [fakeNode, info] : replaceState.windowFunctions) {
          auto [funcName, node, window] = info;
          auto tupleStreamType = mlir::tuples::TupleStreamType::get(builder.getContext());
          auto tupleType = mlir::tuples::TupleType::get(builder.getContext());
 
-         std::string groupByName = "window" + std::to_string(groupById++);
+         std::string groupByName = "window" + std::to_string(windowId++);
          auto tupleScope = context.createTupleScope();
          auto* block = new mlir::Block;
          block->addArgument(tupleStreamType, builder.getUnknownLoc());

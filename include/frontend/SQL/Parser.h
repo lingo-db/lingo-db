@@ -261,9 +261,31 @@ struct Parser {
       }
       void removeFromDefinedColumns(const mlir::tuples::Column* col) {
          auto& currDefinedColumns = definedAttributes.top();
-         auto position = std::find_if(currDefinedColumns.begin(), currDefinedColumns.end(), [&](auto el) { return el.second == col; });
-         if (position != currDefinedColumns.end()) // == myVector.end() means the element was not found
+         auto start = currDefinedColumns.begin();
+         auto end = currDefinedColumns.end();
+         auto position = std::find_if(start, end, [&](auto el) { return el.second == col; });
+         if (position != currDefinedColumns.end()) {
             currDefinedColumns.erase(position);
+         }
+      }
+
+      void replace(ResolverScope& scope, const mlir::tuples::Column* col, const mlir::tuples::Column* col2) {
+         auto& currDefinedColumns = definedAttributes.top();
+         auto start = currDefinedColumns.begin();
+         auto end = currDefinedColumns.end();
+         std::vector<std::string> toReplace;
+         while (start != end) {
+            auto position = std::find_if(start, end, [&](auto el) { return el.second == col; });
+            if (position != currDefinedColumns.end()) {
+               start = position + 1;
+               toReplace.push_back(position->first);
+            } else {
+               start = end;
+            }
+         }
+         for (auto s : toReplace) {
+            mapAttribute(scope, s, col2);
+         }
       }
    };
    std::string sql;
@@ -290,7 +312,6 @@ struct Parser {
       moduleOp.getContext()->getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
       pg_query_parse_init();
       result = pg_query_parse(sql.c_str());
-      print_pg_parse_tree(result.tree);
    }
 
    void error(std::string str) { //todo: improve error handling
@@ -433,7 +454,7 @@ struct Parser {
    std::pair<mlir::Value, TargetInfo> translateSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
    std::pair<mlir::Value, mlir::tuples::ColumnRefAttr> mapExpressionToAttribute(mlir::Value tree, TranslationContext& context, mlir::OpBuilder& builder, TranslationContext::ResolverScope& scope, Node* expression);
-
+   std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> performAggregation(mlir::OpBuilder& builder, std::vector<mlir::Attribute> groupByAttrs, const ReplaceState& replaceState, TranslationContext& context, mlir::Value tree);
    ~Parser();
 };
 } // end namespace frontend::sql
