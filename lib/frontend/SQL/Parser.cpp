@@ -392,7 +392,7 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
       }
       case ExpressionType::OPERATOR_CONCAT: {
          auto leftString = SQLTypeInference::castValueToType(builder, left, mlir::db::StringType::get(builder.getContext()));
-         auto rightString = SQLTypeInference::castValueToType(builder, left, mlir::db::StringType::get(builder.getContext()));
+         auto rightString = SQLTypeInference::castValueToType(builder, right, mlir::db::StringType::get(builder.getContext()));
          mlir::Type resType = right.getType().isa<mlir::db::NullableType>() ? rightString.getType() : leftString.getType();
          return builder.create<mlir::db::RuntimeCall>(loc, resType, "Concatenate", mlir::ValueRange({leftString, rightString})).res();
       }
