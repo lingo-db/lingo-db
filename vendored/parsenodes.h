@@ -884,3 +884,15 @@ struct GroupingSet {
    List* content;
    int location;
 };
+typedef unsigned int Index;
+
+struct GroupingFunc
+{
+   Expr		xpr;
+   List	   *args;			/* arguments, not evaluated but kept for
+								 * benefit of EXPLAIN etc. */
+   List	   *refs;			/* ressortgrouprefs of arguments */
+   List	   *cols;			/* actual column positions set by planner */
+   Index		agglevelsup;	/* same as Aggref.agglevelsup */
+   int			location;		/* token location */
+};

@@ -187,6 +187,7 @@ struct WindowProperties {
    int64_t end = std::numeric_limits<int64_t>::max();
 };
 struct ReplaceState {
+   std::unordered_map<FakeNode*, std::string> groupingFuncs;
    std::unordered_map<FakeNode*, Node*> evalBeforeAggr;
    std::unordered_map<FakeNode*, std::tuple<std::string, Node*, bool>> aggrs;
    std::unordered_map<FakeNode*, Node*> evalBeforeWindowFunc;

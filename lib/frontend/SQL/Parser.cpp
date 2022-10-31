@@ -1401,6 +1401,18 @@ Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::
          auto* fakeNode = reinterpret_cast<FakeNode*>(node);
          return analyzeTargetExpression(fakeNode->original, replaceState);
       }
+      case T_GroupingFunc: {
+         auto *groupingFunc = reinterpret_cast<GroupingFunc*>(node);
+         assert(groupingFunc->args);
+         assert(groupingFunc->args->head);
+         auto *exprNode = reinterpret_cast<Node*>(groupingFunc->args->head->data.ptr_value);
+         assert(exprNode->type == T_ColumnRef);
+         auto* columnRef = reinterpret_cast<ColumnRef*>(exprNode);
+         auto attrName = fieldsToString(columnRef->fields_);
+         auto* fakeNode = createFakeNode("grouping(" + attrName + ")", node);
+         replaceState.groupingFuncs.insert({fakeNode, attrName});
+         return fakeNode;
+      }
       case T_FuncCall: {
          auto* funcNode = reinterpret_cast<FuncCall*>(node);
          std::string funcName = reinterpret_cast<value*>(funcNode->funcname_->head->data.ptr_value)->val_.str_;
@@ -1598,6 +1610,7 @@ std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> 
    for (auto toAggr : replaceState.aggrs) {
       mlir::Value expr; //todo
       auto aggrFuncName = std::get<0>(toAggr.second);
+      if (aggrFuncName == "grouping") continue;
       auto* attrNode = std::get<1>(toAggr.second);
       auto distinct = std::get<2>(toAggr.second);
       auto attrDef = attrManager.createDef(groupByName, toAggr.first->colId);
@@ -1707,7 +1720,63 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
       return mapOp.result();
    };
-   auto mapToNullable = [this](mlir::OpBuilder& builder, std::vector<mlir::Attribute> toMap,std::vector<mlir::Attribute> mapTo, TranslationContext& context, mlir::Value tree) {
+   auto mapInt = [this](mlir::OpBuilder& builder, size_t intVal, TranslationContext& context, mlir::Value tree) -> std::pair<mlir::Value, mlir::Attribute> {
+      auto* block = new mlir::Block;
+      static size_t mapId = 0;
+      std::string mapName = "map" + std::to_string(mapId++);
+
+      mlir::OpBuilder mapBuilder(builder.getContext());
+      block->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+      auto tupleScope = context.createTupleScope();
+      mlir::Value tuple = block->getArgument(0);
+      context.setCurrentTuple(tuple);
+
+      mapBuilder.setInsertionPointToStart(block);
+      std::vector<mlir::Value> createdValues;
+      std::vector<mlir::Attribute> createdCols;
+      mlir::Value expr = mapBuilder.create<mlir::arith::ConstantIndexOp>(builder.getUnknownLoc(), intVal);
+      auto attrDef = attrManager.createDef(mapName, "intval");
+      attrDef.getColumn().type = mapBuilder.getIndexType();
+      createdCols.push_back(attrDef);
+      createdValues.push_back(expr);
+
+      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
+      mapOp.predicate().push_back(block);
+      mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
+      return {mapOp.result(), attrDef};
+   };
+   auto mapCheckBit = [this](mlir::OpBuilder& builder, mlir::Attribute val, size_t shift, TranslationContext& context, mlir::Value tree) -> std::pair<mlir::Value, mlir::Attribute> {
+      auto* block = new mlir::Block;
+      static size_t mapId = 0;
+      std::string mapName = "map" + std::to_string(mapId++);
+
+      mlir::OpBuilder mapBuilder(builder.getContext());
+      block->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+      auto tupleScope = context.createTupleScope();
+      mlir::Value tuple = block->getArgument(0);
+      context.setCurrentTuple(tuple);
+
+      mapBuilder.setInsertionPointToStart(block);
+      std::vector<mlir::Value> createdValues;
+      std::vector<mlir::Attribute> createdCols;
+      auto colDef = mlir::cast<mlir::tuples::ColumnDefAttr>(val);
+      auto colRef = attrManager.createRef(&colDef.getColumn());
+      mlir::Value shiftVal = mapBuilder.create<mlir::arith::ConstantIndexOp>(builder.getUnknownLoc(), shift);
+      mlir::Value colVal = mapBuilder.create<mlir::tuples::GetColumnOp>(builder.getUnknownLoc(), colRef.getColumn().type, colRef, tuple);
+      mlir::Value shifted = mapBuilder.create<mlir::arith::ShRUIOp>(builder.getUnknownLoc(),colVal,shiftVal);
+      mlir::Value one = mapBuilder.create<mlir::arith::ConstantIndexOp>(builder.getUnknownLoc(), shift);
+      mlir::Value expr=mapBuilder.create<mlir::arith::AndIOp>(builder.getUnknownLoc(),shifted,one);
+      auto attrDef = attrManager.createDef(mapName, "intval");
+      attrDef.getColumn().type = mapBuilder.getIndexType();
+      createdCols.push_back(attrDef);
+      createdValues.push_back(expr);
+
+      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
+      mapOp.predicate().push_back(block);
+      mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
+      return {mapOp.result(), attrDef};
+   };
+   auto mapToNullable = [this](mlir::OpBuilder& builder, std::vector<mlir::Attribute> toMap, std::vector<mlir::Attribute> mapTo, TranslationContext& context, mlir::Value tree) {
       if (toMap.empty()) return tree;
       auto* block = new mlir::Block;
       static size_t mapId = 0;
@@ -1722,12 +1791,12 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       mapBuilder.setInsertionPointToStart(block);
       std::vector<mlir::Value> createdValues;
       std::vector<mlir::Attribute> createdCols;
-      for (size_t i=0;i<toMap.size();i++) {
+      for (size_t i = 0; i < toMap.size(); i++) {
          auto colRef = mlir::cast<mlir::tuples::ColumnRefAttr>(toMap[i]);
          auto newColRef = mlir::cast<mlir::tuples::ColumnRefAttr>(mapTo[i]);
-         mlir::Value expr = mapBuilder.create<mlir::tuples::GetColumnOp>(builder.getUnknownLoc(), colRef.getColumn().type,colRef,tuple);
-         if(colRef.getColumn().type!=newColRef.getColumn().type){
-            expr=mapBuilder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(),newColRef.getColumn().type,expr);
+         mlir::Value expr = mapBuilder.create<mlir::tuples::GetColumnOp>(builder.getUnknownLoc(), colRef.getColumn().type, colRef, tuple);
+         if (colRef.getColumn().type != newColRef.getColumn().type) {
+            expr = mapBuilder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(), newColRef.getColumn().type, expr);
          }
          auto attrDef = attrManager.createDef(&newColRef.getColumn());
          createdCols.push_back(attrDef);
@@ -1770,8 +1839,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    std::vector<mlir::Attribute> groupByAttrs;
    std::unordered_map<std::string, mlir::Attribute> groupedExpressions;
    bool rollup = false;
+   std::unordered_map<std::string, size_t> groupByAttrToPos;
    if (groupBy && groupBy->head != 0) {
-      auto *attributes = groupBy->head;
+      auto* attributes = groupBy->head;
       if (reinterpret_cast<Node*>(attributes->data.ptr_value)->type == T_GroupingSet) {
          auto* node = reinterpret_cast<GroupingSet*>(attributes->data.ptr_value);
          assert(node->kind == GROUPING_SET_ROLLUP);
@@ -1779,10 +1849,16 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          attributes = node->content->head;
          rollup = true;
       }
+      size_t i = 0;
       for (auto* cell = attributes; cell != nullptr; cell = cell->next) {
          auto* node = reinterpret_cast<Node*>(cell->data.ptr_value);
          if (node->type == T_ColumnRef) {
-            groupByAttrs.push_back(attrManager.createRef(resolveColRef(node, context)));
+            assert(node->type == T_ColumnRef);
+            auto* columnRef = reinterpret_cast<ColumnRef*>(node);
+            auto attrName = fieldsToString(columnRef->fields_);
+            groupByAttrToPos[attrName]=i;
+            const auto* attr = context.getAttribute(attrName);
+            groupByAttrs.push_back(attrManager.createRef(attr));
          } else {
             auto [tree2, attr] = mapExpressionToAttribute(tree, context, builder, scope, node);
             std::string printed = fingerprint(node);
@@ -1790,6 +1866,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             groupByAttrs.push_back(attr);
             tree = tree2;
          }
+         i++;
       }
    }
    auto asNullable = [](mlir::Type t) { return t.isa<mlir::db::NullableType>() ? t : mlir::db::NullableType::get(t.getContext(), t); };
@@ -1801,6 +1878,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             std::vector<mlir::Attribute> computed;
             std::vector<mlir::Attribute> groupByCols;
             std::vector<mlir::Attribute> groupByCols2;
+            mlir::Attribute grouping;
          };
          std::vector<Part> parts;
          std::vector<std::string> orderedAggregates;
@@ -1811,6 +1889,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             std::vector<mlir::Attribute> localGroupByAttrs;
             std::vector<mlir::Attribute> localGroupByAttrsNullable;
             std::vector<mlir::Attribute> notAvailable;
+            size_t present = 0;
             for (size_t j = 1; j <= n; j++) {
                localGroupByAttrs.push_back(groupByAttrs.at(j - 1));
                auto attrDef = attrManager.createDef(scopeName, "tmp" + std::to_string(rollupId++));
@@ -1820,7 +1899,8 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                localGroupByAttrsNullable.push_back(attrDef);
             }
             for (size_t j = n + 1; j <= groupByAttrs.size(); j++) {
-               auto currentAttr=groupByAttrs.at(j - 1);
+               present |= (1 << (j - 1));
+               auto currentAttr = groupByAttrs.at(j - 1);
                auto attrDef = attrManager.createDef(scopeName, "tmp" + std::to_string(rollupId++));
                auto currentType = currentAttr.cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
                attrDef.getColumn().type = asNullable(currentType);
@@ -1830,8 +1910,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             auto [tree2, mapping] = performAggregation(builder, localGroupByAttrs, replaceState, context, tree);
 
             tree2 = mapToNull(builder, notAvailable, context, tree2);
-            tree2 = mapToNullable(builder, localGroupByAttrs,localGroupByAttrsNullable, context, tree2);
-
+            tree2 = mapToNullable(builder, localGroupByAttrs, localGroupByAttrsNullable, context, tree2);
+            auto [tree3, groupingAttr] = mapInt(builder, present, context, tree2);
+            tree2 = tree3;
             if (orderedAggregates.empty()) {
                for (auto [s, c] : mapping)
                   orderedAggregates.push_back(s);
@@ -1841,40 +1922,48 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                computed.push_back(attrManager.createDef(mapping[s]));
             }
 
-
-            parts.push_back({n, tree2, computed,localGroupByAttrsNullable,notAvailable});
+            parts.push_back({n, tree2, computed, localGroupByAttrsNullable, notAvailable, groupingAttr});
          }
 
-         mlir::Value currTree=parts[0].tree;
-         std::vector<mlir::Attribute> currentAttributes(parts[0].groupByCols.begin(),parts[0].groupByCols.end());
-         currentAttributes.insert(currentAttributes.end(),parts[0].groupByCols2.begin(),parts[0].groupByCols2.end());
-         currentAttributes.insert(currentAttributes.end(),parts[0].computed.begin(),parts[0].computed.end());
-         for(size_t i=1;i<parts.size();i++){
+         mlir::Value currTree = parts[0].tree;
+         std::vector<mlir::Attribute> currentAttributes(parts[0].groupByCols.begin(), parts[0].groupByCols.end());
+         currentAttributes.insert(currentAttributes.end(), parts[0].groupByCols2.begin(), parts[0].groupByCols2.end());
+         currentAttributes.insert(currentAttributes.end(), parts[0].computed.begin(), parts[0].computed.end());
+         currentAttributes.push_back(parts[0].grouping);
+         for (size_t i = 1; i < parts.size(); i++) {
             auto rollupUnionName = attrManager.getUniqueScope("rollupUnion");
-            std::vector<mlir::Attribute> currentLocalAttributes(parts[i].groupByCols.begin(),parts[i].groupByCols.end());
-            currentLocalAttributes.insert(currentLocalAttributes.end(),parts[i].groupByCols2.begin(),parts[i].groupByCols2.end());
-            currentLocalAttributes.insert(currentLocalAttributes.end(),parts[i].computed.begin(),parts[i].computed.end());
+            std::vector<mlir::Attribute> currentLocalAttributes(parts[i].groupByCols.begin(), parts[i].groupByCols.end());
+            currentLocalAttributes.insert(currentLocalAttributes.end(), parts[i].groupByCols2.begin(), parts[i].groupByCols2.end());
+            currentLocalAttributes.insert(currentLocalAttributes.end(), parts[i].computed.begin(), parts[i].computed.end());
+            currentLocalAttributes.push_back(parts[i].grouping);
             std::vector<mlir::Attribute> unionAttributes;
-            size_t id=0;
-            for(size_t j=0;j<currentLocalAttributes.size();j++){
-               auto left=attrManager.createRef(&currentAttributes[j].cast<mlir::tuples::ColumnDefAttr>().getColumn());
-               auto right=attrManager.createRef(&currentLocalAttributes[j].cast<mlir::tuples::ColumnDefAttr>().getColumn());
+            size_t id = 0;
+            for (size_t j = 0; j < currentLocalAttributes.size(); j++) {
+               auto left = attrManager.createRef(&currentAttributes[j].cast<mlir::tuples::ColumnDefAttr>().getColumn());
+               auto right = attrManager.createRef(&currentLocalAttributes[j].cast<mlir::tuples::ColumnDefAttr>().getColumn());
 
-               auto unionAttribute=attrManager.createDef(rollupUnionName,"tmp"+std::to_string(id++),builder.getArrayAttr({left,right}));
-               unionAttribute.getColumn().type=currentLocalAttributes[j].cast<mlir::tuples::ColumnDefAttr>().getColumn().type;
+               auto unionAttribute = attrManager.createDef(rollupUnionName, "tmp" + std::to_string(id++), builder.getArrayAttr({left, right}));
+               unionAttribute.getColumn().type = currentLocalAttributes[j].cast<mlir::tuples::ColumnDefAttr>().getColumn().type;
                unionAttributes.push_back(unionAttribute);
             }
-            currTree=builder.create<mlir::relalg::UnionOp>(builder.getUnknownLoc(), ::mlir::relalg::SetSemanticAttr::get(builder.getContext(), mlir::relalg::SetSemantic::all), currTree,parts[i].tree, builder.getArrayAttr(unionAttributes));
-            currentAttributes=unionAttributes;
+            currTree = builder.create<mlir::relalg::UnionOp>(builder.getUnknownLoc(), ::mlir::relalg::SetSemanticAttr::get(builder.getContext(), mlir::relalg::SetSemantic::all), currTree, parts[i].tree, builder.getArrayAttr(unionAttributes));
+            currentAttributes = unionAttributes;
          }
-         for(size_t i=0;i<groupByAttrs.size();i++){
-            context.replace(scope,&groupByAttrs[i].cast<mlir::tuples::ColumnRefAttr>().getColumn(),&currentAttributes[i].cast<mlir::tuples::ColumnDefAttr>().getColumn());
+         for (size_t i = 0; i < groupByAttrs.size(); i++) {
+            context.replace(scope, &groupByAttrs[i].cast<mlir::tuples::ColumnRefAttr>().getColumn(), &currentAttributes[i].cast<mlir::tuples::ColumnDefAttr>().getColumn());
          }
-         size_t i=0;
-         for (auto s:orderedAggregates) {
-            context.mapAttribute(scope, s, &currentAttributes[groupByAttrs.size()+i++].cast<mlir::tuples::ColumnDefAttr>().getColumn());
+         size_t i = 0;
+         for (auto s : orderedAggregates) {
+            context.mapAttribute(scope, s, &currentAttributes[groupByAttrs.size() + i++].cast<mlir::tuples::ColumnDefAttr>().getColumn());
          }
-         tree=currTree;
+         tree = currTree;
+         for (auto aggr : replaceState.groupingFuncs) {
+            auto [fakeNode, name] = aggr;
+            auto shiftAmount=groupByAttrToPos.at(name);
+            auto [tree2,attr]=mapCheckBit(builder,currentAttributes.back(),shiftAmount,context,tree);
+            tree=tree2;
+            context.mapAttribute(scope,fakeNode->colId,&attr.cast<mlir::tuples::ColumnDefAttr>().getColumn());
+         }
       } else {
          auto [tree2, mapping] = performAggregation(builder, groupByAttrs, replaceState, context, tree);
          tree = tree2;
