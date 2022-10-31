@@ -6,9 +6,9 @@
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
+#include "mlir/Transforms/FoldUtils.h"
 
 #include "llvm/ADT/TypeSwitch.h"
-#include "mlir/Transforms/FoldUtils.h"
 
 using namespace mlir;
 using namespace mlir::relalg;
