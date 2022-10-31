@@ -8,6 +8,7 @@
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
 
 #include "llvm/ADT/TypeSwitch.h"
+#include "mlir/Transforms/FoldUtils.h"
 
 using namespace mlir;
 using namespace mlir::relalg;
@@ -19,6 +20,13 @@ struct RelalgInlinerInterface : public DialectInlinerInterface {
    }
    virtual bool isLegalToInline(Region* dest, Region* src, bool wouldBeCloned,
                                 BlockAndValueMapping& valueMapping) const override {
+      return true;
+   }
+};
+struct RelAlgFoldInterface : public DialectFoldInterface {
+   using DialectFoldInterface::DialectFoldInterface;
+
+   bool shouldMaterializeInto(Region* region) const final {
       return true;
    }
 };
@@ -120,6 +128,7 @@ void RelAlgDialect::initialize() {
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.cpp.inc"
       >();
    addInterfaces<RelalgInlinerInterface>();
+   addInterfaces<RelAlgFoldInterface>();
    getContext()->loadDialect<mlir::db::DBDialect>();
    getContext()->loadDialect<mlir::dsa::DSADialect>();
    getContext()->loadDialect<mlir::arith::ArithmeticDialect>();
