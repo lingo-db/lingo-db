@@ -162,7 +162,9 @@ class CreateTableLowering : public OpConversionPattern<mlir::subop::CreateOp> {
    public:
    using OpConversionPattern<mlir::subop::CreateOp>::OpConversionPattern;
    std::string arrowDescrFromType(mlir::Type type) const {
-      if (isIntegerType(type, 1)) {
+      if (type.isIndex()) {
+         return "int[64]";
+      } else if (isIntegerType(type, 1)) {
          return "bool";
       } else if (auto intWidth = getIntegerWidth(type, false)) {
          return "int[" + std::to_string(intWidth) + "]";

@@ -40,7 +40,9 @@ class TBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
          isValid = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
       }
       mlir::Type type = getBaseType(val.getType());
-      if (isIntegerType(type, 1)) {
+      if (type.isIndex()) {
+         rt::TableBuilder::addInt64(rewriter, loc)({builderVal, isValid, val});
+      } else if (isIntegerType(type, 1)) {
          rt::TableBuilder::addBool(rewriter, loc)({builderVal, isValid, val});
       } else if (auto intWidth = getIntegerWidth(type, false)) {
          switch (intWidth) {
