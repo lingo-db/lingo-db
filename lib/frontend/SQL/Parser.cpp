@@ -130,6 +130,9 @@ mlir::Value frontend::sql::SQLTypeInference::castValueToType(mlir::OpBuilder& bu
 mlir::Value frontend::sql::Parser::translateWhenCaseExpression(mlir::OpBuilder& builder, TranslationContext& context, mlir::Value compareValue, ListCell* whenCell, Node* defaultNode) {
    auto loc = builder.getUnknownLoc();
    if (!whenCell) {
+      if (!defaultNode) {
+         return builder.create<mlir::db::NullOp>(builder.getUnknownLoc(), mlir::db::NullableType::get(builder.getContext(), builder.getNoneType()));
+      }
       return translateExpression(builder, defaultNode, context);
    }
    auto* w = reinterpret_cast<CaseWhen*>(whenCell->data.ptr_value);
@@ -1402,10 +1405,10 @@ Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::
          return analyzeTargetExpression(fakeNode->original, replaceState);
       }
       case T_GroupingFunc: {
-         auto *groupingFunc = reinterpret_cast<GroupingFunc*>(node);
+         auto* groupingFunc = reinterpret_cast<GroupingFunc*>(node);
          assert(groupingFunc->args);
          assert(groupingFunc->args->head);
-         auto *exprNode = reinterpret_cast<Node*>(groupingFunc->args->head->data.ptr_value);
+         auto* exprNode = reinterpret_cast<Node*>(groupingFunc->args->head->data.ptr_value);
          assert(exprNode->type == T_ColumnRef);
          auto* columnRef = reinterpret_cast<ColumnRef*>(exprNode);
          auto attrName = fieldsToString(columnRef->fields_);
@@ -1413,17 +1416,32 @@ Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::
          replaceState.groupingFuncs.insert({fakeNode, attrName});
          return fakeNode;
       }
+      case T_CaseExpr: {
+         auto* caseExpr = reinterpret_cast<CaseExpr*>(node);
+         //mlir::Value arg = translateExpression(builder, reinterpret_cast<Node*>(caseExpr->arg_), context, true);
+         caseExpr->defresult_ = (Expr*) analyzeTargetExpression(reinterpret_cast<Node*>(caseExpr->defresult_), replaceState);
+         caseExpr->arg_ = (Expr*) analyzeTargetExpression(reinterpret_cast<Node*>(caseExpr->arg_), replaceState);
+         for (auto* whenCell = caseExpr->args_->head; whenCell != nullptr; whenCell = whenCell->next) {
+            auto* w = reinterpret_cast<CaseWhen*>(whenCell->data.ptr_value);
+            w->expr_ = (Expr*) analyzeTargetExpression((Node*) w->expr_, replaceState);
+            w->result_ = (Expr*) analyzeTargetExpression((Node*) w->result_, replaceState);
+         }
+         return node;
+      }
       case T_FuncCall: {
          auto* funcNode = reinterpret_cast<FuncCall*>(node);
          std::string funcName = reinterpret_cast<value*>(funcNode->funcname_->head->data.ptr_value)->val_.str_;
          if (auto* window = reinterpret_cast<WindowDef*>(funcNode->over_)) {
-            auto* exprNode = reinterpret_cast<Node*>(funcNode->args_->head->data.ptr_value);
-            exprNode = analyzeTargetExpression(exprNode, replaceState);
+            Node* exprNode = nullptr;
             auto* fakeNode = createFakeNode(funcName, node);
-            if (exprNode->type != T_ColumnRef) {
-               auto* beforeFakeNode = createFakeNode("", exprNode);
-               replaceState.evalBeforeWindowFunc.insert({beforeFakeNode, exprNode});
-               exprNode = beforeFakeNode;
+            if (funcNode->args_ && funcNode->args_->head) {
+               exprNode = reinterpret_cast<Node*>(funcNode->args_->head->data.ptr_value);
+               exprNode = analyzeTargetExpression(exprNode, replaceState);
+               if (exprNode->type != T_ColumnRef) {
+                  auto* beforeFakeNode = createFakeNode("", exprNode);
+                  replaceState.evalBeforeWindowFunc.insert({beforeFakeNode, exprNode});
+                  exprNode = beforeFakeNode;
+               }
             }
             WindowProperties properties;
             if (window->partition_clause_) {
@@ -1432,10 +1450,10 @@ Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::
                   if (node->type == T_ColumnRef) {
                      properties.partitionBy.push_back(node);
                   } else {
+                     node = analyzeTargetExpression(node, replaceState);
                      auto* beforeFakeNode = createFakeNode("", node);
                      replaceState.evalBeforeWindowFunc.insert({beforeFakeNode, node});
-                     node = beforeFakeNode;
-                     properties.partitionBy.push_back(analyzeTargetExpression(node, replaceState));
+                     properties.partitionBy.push_back(beforeFakeNode);
                   }
                }
             }
@@ -1763,9 +1781,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       auto colRef = attrManager.createRef(&colDef.getColumn());
       mlir::Value shiftVal = mapBuilder.create<mlir::arith::ConstantIndexOp>(builder.getUnknownLoc(), shift);
       mlir::Value colVal = mapBuilder.create<mlir::tuples::GetColumnOp>(builder.getUnknownLoc(), colRef.getColumn().type, colRef, tuple);
-      mlir::Value shifted = mapBuilder.create<mlir::arith::ShRUIOp>(builder.getUnknownLoc(),colVal,shiftVal);
+      mlir::Value shifted = mapBuilder.create<mlir::arith::ShRUIOp>(builder.getUnknownLoc(), colVal, shiftVal);
       mlir::Value one = mapBuilder.create<mlir::arith::ConstantIndexOp>(builder.getUnknownLoc(), shift);
-      mlir::Value expr=mapBuilder.create<mlir::arith::AndIOp>(builder.getUnknownLoc(),shifted,one);
+      mlir::Value expr = mapBuilder.create<mlir::arith::AndIOp>(builder.getUnknownLoc(), shifted, one);
       auto attrDef = attrManager.createDef(mapName, "intval");
       attrDef.getColumn().type = mapBuilder.getIndexType();
       createdCols.push_back(attrDef);
@@ -1856,7 +1874,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             assert(node->type == T_ColumnRef);
             auto* columnRef = reinterpret_cast<ColumnRef*>(node);
             auto attrName = fieldsToString(columnRef->fields_);
-            groupByAttrToPos[attrName]=i;
+            groupByAttrToPos[attrName] = i;
             const auto* attr = context.getAttribute(attrName);
             groupByAttrs.push_back(attrManager.createRef(attr));
          } else {
@@ -1959,10 +1977,10 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          tree = currTree;
          for (auto aggr : replaceState.groupingFuncs) {
             auto [fakeNode, name] = aggr;
-            auto shiftAmount=groupByAttrToPos.at(name);
-            auto [tree2,attr]=mapCheckBit(builder,currentAttributes.back(),shiftAmount,context,tree);
-            tree=tree2;
-            context.mapAttribute(scope,fakeNode->colId,&attr.cast<mlir::tuples::ColumnDefAttr>().getColumn());
+            auto shiftAmount = groupByAttrToPos.at(name);
+            auto [tree2, attr] = mapCheckBit(builder, currentAttributes.back(), shiftAmount, context, tree);
+            tree = tree2;
+            context.mapAttribute(scope, fakeNode->colId, &attr.cast<mlir::tuples::ColumnDefAttr>().getColumn());
          }
       } else {
          auto [tree2, mapping] = performAggregation(builder, groupByAttrs, replaceState, context, tree);
@@ -2000,8 +2018,10 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          std::vector<mlir::Attribute> createdCols;
          mlir::Value expr; //todo
          auto attrDef = attrManager.createDef(groupByName, fakeNode->colId);
+         if (funcName == "rank") {
+            expr = windowBuilder.create<mlir::relalg::RankOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
 
-         if (funcName == "count*") {
+         } else if (funcName == "count*") {
             expr = windowBuilder.create<mlir::relalg::CountRowsOp>(builder.getUnknownLoc(), builder.getI64Type(), relation);
             if (groupByAttrs.empty()) {
                context.useZeroInsteadNull.insert(&attrDef.getColumn());
@@ -2047,13 +2067,22 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          std::vector<mlir::Attribute> orderBySpecs;
 
          for (auto* node : window.partitionBy) {
-            assert(node->type == T_ColumnRef);
-            partitionByAttrs.push_back(attrManager.createRef(resolveColRef(node, context)));
+            if (node->type == T_ColumnRef) {
+               partitionByAttrs.push_back(attrManager.createRef(resolveColRef(node, context)));
+            } else {
+               assert(node->type == T_FakeNode);
+               partitionByAttrs.push_back(attrManager.createRef(context.getAttribute(reinterpret_cast<FakeNode*>(node)->colId)));
+            }
          }
          for (auto [dir, node] : window.orderBy) {
-            assert(node->type == T_ColumnRef);
-
-            orderBySpecs.push_back(mlir::relalg::SortSpecificationAttr::get(builder.getContext(), attrManager.createRef(resolveColRef(node, context)), dir == SORTBY_DESC ? mlir::relalg::SortSpec::desc : mlir::relalg::SortSpec::asc));
+            mlir::tuples::ColumnRefAttr attr;
+            if (node->type == T_ColumnRef) {
+               attr=attrManager.createRef(resolveColRef(node, context));
+            } else {
+               assert(node->type == T_FakeNode);
+               attr=attrManager.createRef(context.getAttribute(reinterpret_cast<FakeNode*>(node)->colId));
+            }
+            orderBySpecs.push_back(mlir::relalg::SortSpecificationAttr::get(builder.getContext(), attr, dir == SORTBY_DESC ? mlir::relalg::SortSpec::desc : mlir::relalg::SortSpec::asc));
          }
          auto windowOp = builder.create<mlir::relalg::WindowOp>(builder.getUnknownLoc(), tupleStreamType, tree, builder.getArrayAttr(partitionByAttrs), builder.getArrayAttr(orderBySpecs), builder.getArrayAttr(createdCols), window.start, window.end);
          windowOp.aggr_func().push_back(block);

@@ -52,23 +52,24 @@ def SortSpecificationAttr : RelAlg_Attr<"SortSpecification"> {
 //===----------------------------------------------------------------------===//
 
 def RelAlg_SortSpec_DESC  : I64EnumAttrCase<"desc", 0>;
-def RelAlg_AggrFunc_ASC  : I64EnumAttrCase<"asc", 1>;
+def RelAlg_SortSpec_ASC  : I64EnumAttrCase<"asc", 1>;
 
 def RelAlg_SortSpec : I64EnumAttr<"SortSpec", "sort order",
-        [RelAlg_SortSpec_DESC,RelAlg_AggrFunc_ASC]> {
+        [RelAlg_SortSpec_DESC,RelAlg_SortSpec_ASC]> {
     let cppNamespace = "::mlir::relalg";
 }
 
-def RelAlg_AggrFunc_Sum   : I64EnumAttrCase<"sum", 0>;
-def RelAlg_AggrFunc_Min   : I64EnumAttrCase<"min", 1>;
-def RelAlg_AggrFunc_Max   : I64EnumAttrCase<"max", 2>;
-def RelAlg_AggrFunc_Avg   : I64EnumAttrCase<"avg", 3>;
-def RelAlg_AggrFunc_Count : I64EnumAttrCase<"count", 4>;
-def RelAlg_AggrFunc_Any : I64EnumAttrCase<"any", 5>;
+def RelAlg_Func_Sum   : I64EnumAttrCase<"sum", 0>;
+def RelAlg_Func_Min   : I64EnumAttrCase<"min", 1>;
+def RelAlg_Func_Max   : I64EnumAttrCase<"max", 2>;
+def RelAlg_Func_Avg   : I64EnumAttrCase<"avg", 3>;
+def RelAlg_Func_Count : I64EnumAttrCase<"count", 4>;
+def RelAlg_Func_Any : I64EnumAttrCase<"any", 5>;
+
 
 def RelAlg_AggrFunc : I64EnumAttr<"AggrFunc", "aggregation function",
-        [RelAlg_AggrFunc_Sum, RelAlg_AggrFunc_Min, RelAlg_AggrFunc_Max,
-         RelAlg_AggrFunc_Avg, RelAlg_AggrFunc_Count, RelAlg_AggrFunc_Any]> {
+        [RelAlg_Func_Sum, RelAlg_Func_Min, RelAlg_Func_Max,
+         RelAlg_Func_Avg, RelAlg_Func_Count, RelAlg_Func_Any]> {
     let cppNamespace = "::mlir::relalg";
 }
 
@@ -386,6 +387,13 @@ def AggrFuncOp : RelAlg_Op<"aggrfn", [NoSideEffect]> {
 
 def CountRowsOp : RelAlg_Op<"count", [NoSideEffect]> {
     let summary = "count rows";
+
+    let arguments = (ins TupleStream:$rel);
+    let results = (outs I64:$res);
+    let assemblyFormat = [{  $rel attr-dict }];
+}
+def RankOp : RelAlg_Op<"rank", [NoSideEffect]> {
+    let summary = "rank inside window";
 
     let arguments = (ins TupleStream:$rel);
     let results = (outs I64:$res);
