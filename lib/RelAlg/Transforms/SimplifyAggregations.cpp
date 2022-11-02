@@ -206,21 +206,23 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
          .walk([&](mlir::relalg::AggregationOp aggregationOp) {
             mlir::Value arg = aggregationOp.aggr_func().front().getArgument(0);
             std::vector<mlir::Operation*> users(arg.getUsers().begin(), arg.getUsers().end());
-            if (auto projectionOp = mlir::dyn_cast_or_null<mlir::relalg::ProjectionOp>(users[0])) {
-               if (projectionOp.set_semantic() == mlir::relalg::SetSemantic::distinct) {
-                  if (users.size() == 1) {
-                     mlir::OpBuilder builder(aggregationOp);
-                     auto cols = mlir::relalg::ColumnSet::fromArrayAttr(aggregationOp.group_by_cols());
-                     cols.insert(mlir::relalg::ColumnSet::fromArrayAttr(projectionOp.cols()));
-                     auto newProj = builder.create<mlir::relalg::ProjectionOp>(projectionOp->getLoc(), mlir::tuples::TupleStreamType::get(&getContext()), mlir::relalg::SetSemantic::distinct, aggregationOp.rel(), cols.asRefArrayAttr(&getContext()));
-                     aggregationOp.setOperand(newProj);
-                     projectionOp.replaceAllUsesWith(arg);
-                     projectionOp->remove();
-                     projectionOp->dropAllUses();
-                     projectionOp->dropAllReferences();
-                     projectionOp->destroy();
-                  } else {
-                     assert(false && "should not happen");
+            if(!users.empty()) {
+               if (auto projectionOp = mlir::dyn_cast_or_null<mlir::relalg::ProjectionOp>(users[0])) {
+                  if (projectionOp.set_semantic() == mlir::relalg::SetSemantic::distinct) {
+                     if (users.size() == 1) {
+                        mlir::OpBuilder builder(aggregationOp);
+                        auto cols = mlir::relalg::ColumnSet::fromArrayAttr(aggregationOp.group_by_cols());
+                        cols.insert(mlir::relalg::ColumnSet::fromArrayAttr(projectionOp.cols()));
+                        auto newProj = builder.create<mlir::relalg::ProjectionOp>(projectionOp->getLoc(), mlir::tuples::TupleStreamType::get(&getContext()), mlir::relalg::SetSemantic::distinct, aggregationOp.rel(), cols.asRefArrayAttr(&getContext()));
+                        aggregationOp.setOperand(newProj);
+                        projectionOp.replaceAllUsesWith(arg);
+                        projectionOp->remove();
+                        projectionOp->dropAllUses();
+                        projectionOp->dropAllReferences();
+                        projectionOp->destroy();
+                     } else {
+                        assert(false && "should not happen");
+                     }
                   }
                }
             }
