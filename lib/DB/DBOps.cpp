@@ -42,8 +42,8 @@ LogicalResult inferReturnType(MLIRContext* context, Optional<Location> location,
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType=baseTypeLeft;
    if(baseTypeLeft.isa<mlir::db::DecimalType>()){
-      auto a = baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
-      auto b = baseTypeRight.dyn_cast<mlir::db::DecimalType>();
+      auto a = baseTypeLeft.cast<mlir::db::DecimalType>();
+      auto b = baseTypeRight.cast<mlir::db::DecimalType>();
       auto hidig = std::max(a.getP() - a.getS(), b.getP() - b.getS());
       auto maxs = std::max(a.getS(), b.getS());
       // Addition is super-type of both, with larger precision for carry.
@@ -58,8 +58,8 @@ LogicalResult inferMulReturnType(MLIRContext* context, Optional<Location> locati
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType=baseTypeLeft;
    if(baseTypeLeft.isa<mlir::db::DecimalType>()){
-      auto a = baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
-      auto b = baseTypeRight.dyn_cast<mlir::db::DecimalType>();
+      auto a = baseTypeLeft.cast<mlir::db::DecimalType>();
+      auto b = baseTypeRight.cast<mlir::db::DecimalType>();
       auto sump = a.getP() + b.getP();
       auto sums = a.getS() + b.getS();
       baseType = mlir::db::DecimalType::get(a.getContext(), sump, sums);

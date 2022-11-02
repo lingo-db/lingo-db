@@ -2,9 +2,13 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 
+#include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+
+#include "llvm/ADT/DenseMap.h"
 
 namespace {
 //Pattern that optimizes the join order
@@ -88,6 +92,27 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
       return mlir::success(true);
    }
 };
+
+class RewriteComplexAggrFuncs : public mlir::RewritePattern {
+   public:
+   RewriteComplexAggrFuncs(mlir::MLIRContext* context)
+      : RewritePattern(mlir::relalg::AggrFuncOp::getOperationName(), 1, context) {}
+   mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto* parentOp = op->getParentOp();
+      if (!(mlir::isa<mlir::relalg::WindowOp>(parentOp) || mlir::isa<mlir::relalg::AggregationOp>(parentOp))) return mlir::failure();
+      auto aggrFuncOp = mlir::cast<mlir::relalg::AggrFuncOp>(op);
+      //todo: implement simplifications for stddev_samp and var_samp
+      if (aggrFuncOp.fn() == mlir::relalg::AggrFunc::avg) {
+         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(aggrFuncOp->getLoc(), aggrFuncOp.result().getType(), mlir::relalg::AggrFunc::sum, aggrFuncOp.rel(), aggrFuncOp.attr());
+         mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(aggrFuncOp->getLoc(), rewriter.getI64Type(), mlir::relalg::AggrFunc::count, aggrFuncOp.rel(), aggrFuncOp.attr());
+         mlir::Value casted = rewriter.create<mlir::db::CastOp>(aggrFuncOp->getLoc(), getBaseType(sum.getType()), count);
+         rewriter.replaceOpWithNewOp<mlir::db::DivOp>(aggrFuncOp, sum, casted);
+         return mlir::success();
+      }
+      return mlir::failure();
+   }
+};
+
 class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-simplify-aggrs"; }
 
@@ -98,20 +123,92 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
          mlir::RewritePatternSet patterns(&getContext());
          patterns.insert<WrapAggrFuncPattern>(&getContext());
          patterns.insert<WrapCountRowsPattern>(&getContext());
+         patterns.insert<RewriteComplexAggrFuncs>(&getContext());
 
          if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");
          }
       }
+      //todo: move other operators out of aggregation (map -> no problem), (projection -> problematic, using join)
+      auto& attrManager = getOperation().getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+      getOperation()
+         .walk([&](mlir::relalg::AggregationOp aggregationOp) {
+            auto scope = attrManager.getUniqueScope("aggr_rw");
+            auto computedCols = aggregationOp.computed_cols();
+            std::vector<mlir::Value> computedValues;
+            std::vector<mlir::Attribute> computedColsAfter;
+            llvm::DenseMap<mlir::Value, mlir::tuples::ColumnRefAttr> aggrMapping;
+            std::vector<mlir::Attribute> colsForMap;
+            std::vector<mlir::Value> valsForMap;
+            auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(aggregationOp.aggr_func().front().getTerminator());
+            for (size_t i = 0; i < returnOp->getNumOperands(); i++) {
+               auto returnValue = returnOp.getOperand(i);
+               auto isDirectAggregate = mlir::isa_and_nonnull<mlir::relalg::AggrFuncOp, mlir::relalg::CountRowsOp>(returnValue.getDefiningOp());
+               if (isDirectAggregate) {
+                  computedValues.push_back(returnValue);
+                  computedColsAfter.push_back(computedCols[i]);
+               } else {
+                  colsForMap.push_back(computedCols[i]);
+                  valsForMap.push_back(returnValue);
+               }
+            }
+            size_t id = 0;
+            for (auto& op : aggregationOp.aggr_func().front()) {
+               if (mlir::isa<mlir::relalg::AggrFuncOp, mlir::relalg::CountRowsOp>(&op)) {
+                  bool otherUser = false;
+                  for (auto* user : op.getUsers()) {
+                     otherUser |= !mlir::isa<mlir::tuples::ReturnOp>(user);
+                  }
+                  if (otherUser) {
+                     auto attr = attrManager.createDef(scope, "rw" + std::to_string(id++));
+                     attr.getColumn().type = op.getResult(0).getType();
+                     computedValues.push_back(op.getResult(0));
+                     computedColsAfter.push_back(attr);
+                     aggrMapping.insert({op.getResult(0), attrManager.createRef(&attr.getColumn())});
+                  }
+               }
+            }
+            mlir::OpBuilder builder(aggregationOp);
+            aggregationOp.computed_colsAttr(builder.getArrayAttr(computedColsAfter));
+            returnOp->setOperands(computedValues);
 
+            if (!colsForMap.empty()) {
+               auto* block = new mlir::Block;
+               builder.setInsertionPointAfter(aggregationOp);
+               mlir::BlockAndValueMapping mapping;
+               auto loc = aggregationOp->getLoc();
+               auto newmap = builder.create<mlir::relalg::MapOp>(aggregationOp->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), aggregationOp, builder.getArrayAttr(colsForMap));
+               newmap.predicate().push_back(block);
+               auto tuple = newmap.predicate().addArgument(mlir::tuples::TupleType::get(builder.getContext()), loc);
+               builder.setInsertionPointToStart(&newmap.predicate().front());
+               std::vector<mlir::Operation*> getOps;
+               for (auto [v, c] : aggrMapping) {
+                  auto newVal = builder.create<mlir::tuples::GetColumnOp>(loc, v.getType(), c, tuple);
+                  mapping.map(v, newVal);
+                  getOps.push_back(newVal);
+               }
+               for (auto v : valsForMap) {
+                  mlir::relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), &newmap.getLambdaBlock(), mapping);
+               }
+               for (auto* op : getOps) {
+                  op->moveBefore(block, block->begin());
+               }
+               std::vector<mlir::Value> returnValues;
+               for (auto v : valsForMap) {
+                  returnValues.push_back(mapping.lookup(v));
+               }
+               builder.create<mlir::tuples::ReturnOp>(loc, returnValues);
+               aggregationOp.result().replaceAllUsesExcept(newmap.result(), newmap);
+            }
+         });
       //handle distinct ones
       getOperation()
          .walk([&](mlir::relalg::AggregationOp aggregationOp) {
             mlir::Value arg = aggregationOp.aggr_func().front().getArgument(0);
             std::vector<mlir::Operation*> users(arg.getUsers().begin(), arg.getUsers().end());
-            if (users.size() == 1) {
-               if (auto projectionOp = mlir::dyn_cast_or_null<mlir::relalg::ProjectionOp>(users[0])) {
-                  if (projectionOp.set_semantic() == mlir::relalg::SetSemantic::distinct) {
+            if (auto projectionOp = mlir::dyn_cast_or_null<mlir::relalg::ProjectionOp>(users[0])) {
+               if (projectionOp.set_semantic() == mlir::relalg::SetSemantic::distinct) {
+                  if (users.size() == 1) {
                      mlir::OpBuilder builder(aggregationOp);
                      auto cols = mlir::relalg::ColumnSet::fromArrayAttr(aggregationOp.group_by_cols());
                      cols.insert(mlir::relalg::ColumnSet::fromArrayAttr(projectionOp.cols()));
@@ -122,6 +219,8 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
                      projectionOp->dropAllUses();
                      projectionOp->dropAllReferences();
                      projectionOp->destroy();
+                  } else {
+                     assert(false && "should not happen");
                   }
                }
             }

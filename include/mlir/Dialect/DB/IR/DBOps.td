@@ -341,7 +341,7 @@ def NotOp : DB_Op<"not", [NoSideEffect,SameOperandsAndResultType,DB_NeedsNullWra
     let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
-def CastOp : DB_Op<"cast",[DB_NeedsNullWrap,DB_MaySupportInvalidValues]> {
+def CastOp : DB_Op<"cast",[DB_NeedsNullWrap,DB_MaySupportInvalidValues,NoSideEffect]> {
     let summary = "Cast value to different type";
 
     let arguments = (ins NullableDBType:$val);
