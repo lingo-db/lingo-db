@@ -18,7 +18,11 @@ mlir::Attribute updateAttribute(mlir::Attribute attr, ReplaceFnT replaceFn) {
       return replaceFn(colRefAttr);
    }
    if (auto colDefAttr = attr.dyn_cast<mlir::tuples::ColumnDefAttr>()) {
-      return mlir::tuples::ColumnDefAttr::get(attr.getContext(), colDefAttr.getName(), colDefAttr.getColumnPtr(), updateAttribute(colDefAttr.getFromExisting(), replaceFn));
+      if(colDefAttr.getFromExisting()){
+         return mlir::tuples::ColumnDefAttr::get(attr.getContext(), colDefAttr.getName(), colDefAttr.getColumnPtr(), updateAttribute(colDefAttr.getFromExisting(), replaceFn));
+      }else{
+         return attr;
+      }
    }
    if (auto sortSpec = attr.dyn_cast<mlir::relalg::SortSpecificationAttr>()) {
       return mlir::relalg::SortSpecificationAttr::get(attr.getContext(), replaceFn(sortSpec.getAttr()), sortSpec.getSortSpec());

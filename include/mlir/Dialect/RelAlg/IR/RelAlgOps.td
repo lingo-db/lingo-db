@@ -65,11 +65,13 @@ def RelAlg_Func_Max   : I64EnumAttrCase<"max", 2>;
 def RelAlg_Func_Avg   : I64EnumAttrCase<"avg", 3>;
 def RelAlg_Func_Count : I64EnumAttrCase<"count", 4>;
 def RelAlg_Func_Any : I64EnumAttrCase<"any", 5>;
+def RelAlg_Func_StdDevSamp : I64EnumAttrCase<"stddev_samp", 6>;
+def RelAlg_Func_VarSamp : I64EnumAttrCase<"var_samp", 7>;
 
 
 def RelAlg_AggrFunc : I64EnumAttr<"AggrFunc", "aggregation function",
         [RelAlg_Func_Sum, RelAlg_Func_Min, RelAlg_Func_Max,
-         RelAlg_Func_Avg, RelAlg_Func_Count, RelAlg_Func_Any]> {
+         RelAlg_Func_Avg, RelAlg_Func_Count, RelAlg_Func_Any,RelAlg_Func_StdDevSamp,RelAlg_Func_VarSamp]> {
     let cppNamespace = "::mlir::relalg";
 }
 

@@ -1523,7 +1523,7 @@ Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::
             replaceState.windowFunctions.insert({fakeNode, {funcName, exprNode, properties}});
             return fakeNode;
          } else {
-            if (funcName == "sum" || funcName == "avg" || funcName == "min" || funcName == "max" || funcName == "count") {
+            if (funcName == "sum" || funcName == "avg" || funcName == "min" || funcName == "max" || funcName == "count" || funcName == "stddev_samp") {
                Node* aggrExpr = nullptr;
                auto* fakeNode = createFakeNode(funcName, node);
                if (funcNode->agg_star_) {
@@ -1644,6 +1644,7 @@ std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> 
                             .Case("min", mlir::relalg::AggrFunc::min)
                             .Case("max", mlir::relalg::AggrFunc::max)
                             .Case("count", mlir::relalg::AggrFunc::count)
+                            .Case("stddev_samp", mlir::relalg::AggrFunc::stddev_samp)
                             .Default(mlir::relalg::AggrFunc::count);
          if (aggrFunc == mlir::relalg::AggrFunc::count) {
             if (groupByAttrs.empty()) {
@@ -1665,7 +1666,15 @@ std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> 
             aggrResultType = builder.getI64Type();
          } else {
             aggrResultType = refAttr.getColumn().type;
-            if (!aggrResultType.isa<mlir::db::NullableType>() && groupByAttrs.empty()) {
+            if (aggrFunc == mlir::relalg::AggrFunc::stddev_samp || aggrFunc == mlir::relalg::AggrFunc::var_samp){
+               mlir::OpBuilder b(builder.getContext());
+               mlir::Value x=b.create<mlir::db::ConstantOp>(b.getUnknownLoc(),refAttr.getColumn().type,b.getUnitAttr());
+               mlir::Value x2=b.create<mlir::db::MulOp>(b.getUnknownLoc(),x,x);
+               aggrResultType=x2.getType();
+               x2.getDefiningOp()->destroy();
+               x.getDefiningOp()->destroy();
+            }
+            if (!aggrResultType.isa<mlir::db::NullableType>()&&(aggrFunc == mlir::relalg::AggrFunc::stddev_samp || aggrFunc == mlir::relalg::AggrFunc::var_samp || groupByAttrs.empty())) {
                aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
             }
          }
@@ -2077,10 +2086,10 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          for (auto [dir, node] : window.orderBy) {
             mlir::tuples::ColumnRefAttr attr;
             if (node->type == T_ColumnRef) {
-               attr=attrManager.createRef(resolveColRef(node, context));
+               attr = attrManager.createRef(resolveColRef(node, context));
             } else {
                assert(node->type == T_FakeNode);
-               attr=attrManager.createRef(context.getAttribute(reinterpret_cast<FakeNode*>(node)->colId));
+               attr = attrManager.createRef(context.getAttribute(reinterpret_cast<FakeNode*>(node)->colId));
             }
             orderBySpecs.push_back(mlir::relalg::SortSpecificationAttr::get(builder.getContext(), attr, dir == SORTBY_DESC ? mlir::relalg::SortSpec::desc : mlir::relalg::SortSpec::asc));
          }

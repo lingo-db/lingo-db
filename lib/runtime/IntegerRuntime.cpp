@@ -1,5 +1,6 @@
 #include "runtime/IntegerRuntime.h"
 #include <cassert>
+#include <cmath>
 int64_t runtime::IntegerRuntime::round64(int64_t value, int64_t roundByScale) {
    assert(roundByScale>=0);
    return value;
@@ -16,3 +17,9 @@ int8_t runtime::IntegerRuntime::round8(int8_t value, int64_t roundByScale) {
    assert(roundByScale>=0);
    return value;
 }
+
+
+int64_t runtime::IntegerRuntime::sqrt(int64_t value) {
+   return std::sqrt(value);
+}
+

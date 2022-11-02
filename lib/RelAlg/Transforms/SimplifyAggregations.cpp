@@ -4,6 +4,7 @@
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
+#include "mlir/Dialect/SCF/SCF.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -98,14 +99,60 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
    RewriteComplexAggrFuncs(mlir::MLIRContext* context)
       : RewritePattern(mlir::relalg::AggrFuncOp::getOperationName(), 1, context) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto& attrManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+      auto loc = op->getLoc();
       auto* parentOp = op->getParentOp();
       if (!(mlir::isa<mlir::relalg::WindowOp>(parentOp) || mlir::isa<mlir::relalg::AggregationOp>(parentOp))) return mlir::failure();
       auto aggrFuncOp = mlir::cast<mlir::relalg::AggrFuncOp>(op);
-      //todo: implement simplifications for stddev_samp and var_samp
+      if (aggrFuncOp.fn() == mlir::relalg::AggrFunc::stddev_samp) {
+         mlir::Value varSamp = rewriter.create<mlir::relalg::AggrFuncOp>(loc, aggrFuncOp.result().getType(), mlir::relalg::AggrFunc::var_samp, aggrFuncOp.rel(), aggrFuncOp.attr());
+         rewriter.replaceOpWithNewOp<mlir::db::RuntimeCall>(aggrFuncOp, aggrFuncOp.result().getType(), "Sqrt", varSamp);
+         return mlir::success();
+      }
+      if (aggrFuncOp.fn() == mlir::relalg::AggrFunc::var_samp) {
+         auto rel = aggrFuncOp.rel();
+         auto xType = aggrFuncOp.result().getType();
+         auto squaredAttr = attrManager.createDef(attrManager.getUniqueScope("var_samp"), "x2");
+         squaredAttr.getColumn().type = xType;
+         auto mapOp = rewriter.create<mlir::relalg::MapOp>(op->getLoc(), mlir::tuples::TupleStreamType::get(getContext()), rel, rewriter.getArrayAttr({squaredAttr}));
+         auto* block = new mlir::Block;
+         auto tuple = block->addArgument(mlir::tuples::TupleType::get(getContext()), loc);
+         {
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(block);
+            auto x = rewriter.create<mlir::tuples::GetColumnOp>(loc, aggrFuncOp.attr().getColumn().type, aggrFuncOp.attr(), tuple);
+            mlir::Value squared = rewriter.create<mlir::db::MulOp>(loc, x, x);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, squared);
+         }
+         mapOp.predicate().push_back(block);
+         mlir::Value sumSquared = rewriter.create<mlir::relalg::AggrFuncOp>(loc, xType, mlir::relalg::AggrFunc::sum, mapOp.result(), attrManager.createRef(&squaredAttr.getColumn()));
+         auto originalType = aggrFuncOp.attr().getColumn().type;
+         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, originalType.isa<mlir::db::NullableType>() ? originalType : mlir::db::NullableType::get(originalType), mlir::relalg::AggrFunc::sum, rel, aggrFuncOp.attr());
+         mlir::Value squareSum = rewriter.create<mlir::db::MulOp>(loc, sum, sum);
+
+         mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(loc, rewriter.getI64Type(), mlir::relalg::AggrFunc::count, rel, aggrFuncOp.attr());
+         mlir::Value castedCount = rewriter.create<mlir::db::CastOp>(loc, getBaseType(sumSquared.getType()), count);
+
+         mlir::Value one = rewriter.create<mlir::db::ConstantOp>(loc, castedCount.getType(), rewriter.getI64IntegerAttr(1));
+         mlir::Value countM1 = rewriter.create<mlir::db::SubOp>(loc, castedCount, one);
+         mlir::Value div1 = rewriter.create<mlir::db::DivOp>(loc, squareSum, castedCount);
+         mlir::Value sub1 = rewriter.create<mlir::db::SubOp>(loc, sumSquared, div1);
+         auto zero = rewriter.create<mlir::db::ConstantOp>(loc, castedCount.getType(), rewriter.getI64IntegerAttr(0));
+         mlir::Value isZero = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, countM1, zero);
+         mlir::Value result = rewriter.create<mlir::scf::IfOp>(
+                                         loc, sub1.getType(), isZero, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+                                             mlir::Value null=builder.create<mlir::db::NullOp>(loc,sub1.getType());
+                                            builder.create<mlir::scf::YieldOp>(loc,null); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+                                            mlir::Value average=builder.create<mlir::db::DivOp>(loc, sub1,countM1);
+                                            builder.create<mlir::scf::YieldOp>(loc,average); })
+                                 .getResult(0);
+         rewriter.replaceOp(aggrFuncOp, result);
+         return mlir::success();
+      }
       if (aggrFuncOp.fn() == mlir::relalg::AggrFunc::avg) {
-         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(aggrFuncOp->getLoc(), aggrFuncOp.result().getType(), mlir::relalg::AggrFunc::sum, aggrFuncOp.rel(), aggrFuncOp.attr());
-         mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(aggrFuncOp->getLoc(), rewriter.getI64Type(), mlir::relalg::AggrFunc::count, aggrFuncOp.rel(), aggrFuncOp.attr());
-         mlir::Value casted = rewriter.create<mlir::db::CastOp>(aggrFuncOp->getLoc(), getBaseType(sum.getType()), count);
+         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, aggrFuncOp.result().getType(), mlir::relalg::AggrFunc::sum, aggrFuncOp.rel(), aggrFuncOp.attr());
+         mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(loc, rewriter.getI64Type(), mlir::relalg::AggrFunc::count, aggrFuncOp.rel(), aggrFuncOp.attr());
+         mlir::Value casted = rewriter.create<mlir::db::CastOp>(loc, getBaseType(sum.getType()), count);
          rewriter.replaceOpWithNewOp<mlir::db::DivOp>(aggrFuncOp, sum, casted);
          return mlir::success();
       }
@@ -115,6 +162,9 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
 
 class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-simplify-aggrs"; }
+   void getDependentDialects(mlir::DialectRegistry& registry) const override {
+      registry.insert<mlir::scf::SCFDialect>();
+   }
 
    public:
    void runOnOperation() override {
@@ -129,7 +179,19 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
             assert(false && "should not happen");
          }
       }
-      //todo: move other operators out of aggregation (map -> no problem), (projection -> problematic, using join)
+      getOperation()
+         .walk([&](mlir::relalg::AggregationOp aggregationOp) {
+            mlir::Value arg = aggregationOp.aggr_func().front().getArgument(0);
+            std::vector<mlir::Operation*> users(arg.getUsers().begin(), arg.getUsers().end());
+            for (auto *user : users) {
+               if (auto mapOp = mlir::dyn_cast_or_null<mlir::relalg::MapOp>(user)) {
+                  mapOp->moveBefore(aggregationOp);
+                  mapOp.replaceAllUsesWith(aggregationOp.aggr_func().front().getArgument(0));
+                  mapOp->setOperand(0, aggregationOp.rel());
+                  aggregationOp->setOperand(0, mapOp.result());
+               }
+            }
+         });
       auto& attrManager = getOperation().getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       getOperation()
          .walk([&](mlir::relalg::AggregationOp aggregationOp) {
@@ -206,7 +268,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
          .walk([&](mlir::relalg::AggregationOp aggregationOp) {
             mlir::Value arg = aggregationOp.aggr_func().front().getArgument(0);
             std::vector<mlir::Operation*> users(arg.getUsers().begin(), arg.getUsers().end());
-            if(!users.empty()) {
+            if (!users.empty()) {
                if (auto projectionOp = mlir::dyn_cast_or_null<mlir::relalg::ProjectionOp>(users[0])) {
                   if (projectionOp.set_semantic() == mlir::relalg::SetSemantic::distinct) {
                      if (users.size() == 1) {

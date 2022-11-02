@@ -26,6 +26,15 @@ static mlir::Value absIntImpl(mlir::OpBuilder& rewriter, mlir::ValueRange lowere
    mlir::Value ltZero = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::slt, val, zero);
    return rewriter.create<mlir::arith::SelectOp>(loc, ltZero, negated, val);
 }
+static mlir::Value sqrtImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
+   using namespace mlir;
+   mlir::Value val = loweredArguments[0];
+   mlir::Value res = rt::IntegerRuntime::sqrt(rewriter, loc)(val)[0];//todo: for decimals
+   if (res.getType() != val.getType()) {
+      res = rewriter.create<mlir::arith::TruncIOp>(loc, val.getType(), res);
+   }
+   return res;
+}
 static mlir::Value dateSubImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;
    if (originalArgumentTypes[1].cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
@@ -193,11 +202,11 @@ std::shared_ptr<mlir::db::RuntimeFunctionRegistry> mlir::db::RuntimeFunctionRegi
 
    builtinRegistry->add("Like").implementedAs(rt::StringRuntime::like).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool);
    builtinRegistry->add("ConstLike").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool).implementedAs(constLikeImpl).needsWrapping();
-   builtinRegistry->add("RoundDecimal").matchesTypes({RuntimeFunction::anyDecimal, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument()).needsWrapping().implementedAs([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc)->mlir::Value{
-      mlir::Value s=rewriter.create<mlir::arith::ConstantIndexOp>(loc,originalArgumentTypes[0].cast<mlir::db::DecimalType>().getS());
-      mlir::Value res=rt::DecimalRuntime::round(rewriter,loc)(mlir::ValueRange({loweredArguments[0],loweredArguments[1],s}))[0];
-      auto loweredResType=typeConverter->convertType(resType);
-      if(!loweredResType.isInteger(128)) {
+   builtinRegistry->add("RoundDecimal").matchesTypes({RuntimeFunction::anyDecimal, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument()).needsWrapping().implementedAs([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) -> mlir::Value {
+      mlir::Value s = rewriter.create<mlir::arith::ConstantIndexOp>(loc, originalArgumentTypes[0].cast<mlir::db::DecimalType>().getS());
+      mlir::Value res = rt::DecimalRuntime::round(rewriter, loc)(mlir::ValueRange({loweredArguments[0], loweredArguments[1], s}))[0];
+      auto loweredResType = typeConverter->convertType(resType);
+      if (!loweredResType.isInteger(128)) {
          res = rewriter.create<mlir::arith::TruncIOp>(loc, loweredResType, res);
       }
       return res;
@@ -213,6 +222,7 @@ std::shared_ptr<mlir::db::RuntimeFunctionRegistry> mlir::db::RuntimeFunctionRegi
    builtinRegistry->add("ExtractDayFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(rt::DateRuntime::extractDay);
    builtinRegistry->add("DateAdd").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateAddImpl);
    builtinRegistry->add("AbsInt").handlesInvalid().matchesTypes({RuntimeFunction::intLike}, RuntimeFunction::matchesArgument()).implementedAs(absIntImpl);
+   builtinRegistry->add("Sqrt").needsWrapping().matchesTypes({RuntimeFunction::anyNumber}, RuntimeFunction::matchesArgument()).implementedAs(sqrtImpl);
    builtinRegistry->add("DateSubtract").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateSubImpl);
    return builtinRegistry;
 }
