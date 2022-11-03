@@ -140,7 +140,7 @@ class QueryGraph {
       e.createdNode = createdNode;
       if (createdNode) {
          pseudoNodeOwner[createdNode.getValue()] = edgeid;
-         addJoinEdge(left|right,NodeSet::single(numNodes,createdNode.getValue()),{},{});
+         addJoinEdge(left | right, NodeSet::single(numNodes, createdNode.getValue()), {}, {});
       }
       for (auto n : left) {
          if (n >= nodes.size()) {
@@ -207,8 +207,8 @@ class QueryGraph {
          return false;
       }
       for (auto pseudo : (s1 & ~normalNodesMask)) {
-         auto join=joins[pseudoNodeOwner[pseudo]];
-         if (join.left.isSubsetOf(s1)&&join.right.isSubsetOf(s1)) {
+         auto join = joins[pseudoNodeOwner[pseudo]];
+         if (join.left.isSubsetOf(s1) && join.right.isSubsetOf(s1)) {
             //pseudo but is not lonley
          } else {
             return true;
@@ -303,6 +303,7 @@ class QueryGraph {
             if (cmpOp.isEqualityPred()) {
                auto leftAttributes = required[cmpOp.getLeft()];
                auto rightAttributes = required[cmpOp.getRight()];
+               if (leftAttributes.empty() || rightAttributes.empty()) return;
                if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {
                   predicates.push_back(Predicate(leftAttributes, rightAttributes, true));
                } else if (leftAttributes.isSubsetOf(availableRight) && rightAttributes.isSubsetOf(availableLeft)) {
