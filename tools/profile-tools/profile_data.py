@@ -2,7 +2,7 @@ import duckdb
 import seaborn
 import plotly
 import random
-
+import re
 
 def gen_colors(n):
     
@@ -20,11 +20,11 @@ def gen_colors(num_colors):
     return colors
 
 def createOpNameFromRepr(repr):
+    basetableIdPattern = re.compile("table_identifier\s+=\s+\"(.*?)\"")
+    result = basetableIdPattern.search(repr)
+    basetable="" if not result else "["+result.group(1)+"]"
     splitted=repr.split(" ")
-    if len(splitted)>1 and splitted[1].startswith("@"):
-        return splitted[0]+splitted[1]
-    else:
-        return splitted[0]
+    return splitted[0]+basetable
 
 class OpColorMap:
     def __init__(self, op_ids):
