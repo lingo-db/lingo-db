@@ -460,6 +460,14 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             auto [subQuery_, targetInfo_] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(cte->ctequery_), context, subQueryScope);
             subQuery = subQuery_;
             targetInfo = targetInfo_;
+            if(cte->aliascolnames_){
+               size_t i=0;
+               std::cout<<pg_query_nodes_to_json(cte->aliascolnames_)<<std::endl;
+               for(auto *el=cte->aliascolnames_->head;el!= nullptr;el=el->next){
+                  auto* val = reinterpret_cast<value*>(el->data.ptr_value);
+                  targetInfo.namedResults.at(i++).first=val->val_.str_;
+               }
+            }
          }
          ctes.insert({cte->ctename_, {subQuery, targetInfo}});
       }
