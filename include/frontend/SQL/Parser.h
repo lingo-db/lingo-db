@@ -120,6 +120,7 @@ struct SQLTypeInference {
    static mlir::FloatType getHigherFloatType(mlir::Type left, mlir::Type right);
    static mlir::IntegerType getHigherIntType(mlir::Type left, mlir::Type right);
    static mlir::db::DecimalType getHigherDecimalType(mlir::Type left, mlir::Type right);
+   static mlir::db::DateType getHigherDateType(mlir::Type left, mlir::Type right);
    static mlir::Type getCommonBaseType(mlir::Type left, mlir::Type right) {
       left = getBaseType(left);
       right = getBaseType(right);
@@ -128,6 +129,8 @@ struct SQLTypeInference {
       bool charPresent = left.isa<mlir::db::CharType>() || right.isa<mlir::db::CharType>();
       bool floatPresent = left.isa<mlir::FloatType>() || right.isa<mlir::FloatType>();
       bool decimalPresent = left.isa<mlir::db::DecimalType>() || right.isa<mlir::db::DecimalType>();
+      bool datePresent = left.isa<mlir::db::DateType>() || right.isa<mlir::db::DateType>();
+      if (datePresent) return getHigherDateType(left, right);
       if (stringPresent) return mlir::db::StringType::get(left.getContext());
       if (charPresent) return left == right ? left : mlir::db::StringType::get(left.getContext());
       if (decimalPresent) return getHigherDecimalType(left, right);

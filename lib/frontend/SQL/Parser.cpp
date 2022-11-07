@@ -98,6 +98,13 @@ mlir::db::DecimalType frontend::sql::SQLTypeInference::getHigherDecimalType(mlir
    }
    return a;
 }
+mlir::db::DateType frontend::sql::SQLTypeInference::getHigherDateType(mlir::Type left, mlir::Type right) {
+   auto a = left.dyn_cast_or_null<mlir::db::DateType>();
+   if (auto b = right.dyn_cast_or_null<mlir::db::DateType>()) {
+      if (!a) return b;
+   }
+   return a;
+}
 mlir::Value frontend::sql::SQLTypeInference::castValueToType(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t) {
    bool isNullable = v.getType().isa<mlir::db::NullableType>();
    if (isNullable && !t.isa<mlir::db::NullableType>()) {
