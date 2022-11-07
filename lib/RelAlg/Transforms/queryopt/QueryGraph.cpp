@@ -148,6 +148,9 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
          expressions.push_back(support::eval::createEq(buildEvalExpr(oneOfOp.val(), mapping), buildEvalExpr(v, mapping)));
       }
       return support::eval::createOr(expressions);
+   } else if (auto notOp = mlir::dyn_cast_or_null<mlir::db::NotOp>(op)) {
+      std::vector<std::unique_ptr<support::eval::expr>> expressions;
+      return support::eval::createNot(buildEvalExpr(notOp.val(), mapping));
    } else if (auto andOp = mlir::dyn_cast_or_null<mlir::db::AndOp>(op)) {
       std::vector<std::unique_ptr<support::eval::expr>> expressions;
       for (auto v : andOp.vals()) {
