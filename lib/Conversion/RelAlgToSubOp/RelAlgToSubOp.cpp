@@ -473,7 +473,7 @@ static std::pair<mlir::Value, const mlir::tuples::Column*> mapBool(mlir::Value s
    mapOp.fn().push_back(mapBlock);
    return {mapOp.result(), &markAttrDef.getColumn()};
 }
-static mlir::Value mapColsToNull(mlir::Value stream, mlir::OpBuilder& rewriter, mlir::Location loc, mlir::ArrayAttr mapping,mlir::relalg::ColumnSet excluded={}) {
+static mlir::Value mapColsToNull(mlir::Value stream, mlir::OpBuilder& rewriter, mlir::Location loc, mlir::ArrayAttr mapping, mlir::relalg::ColumnSet excluded = {}) {
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    std::vector<mlir::Attribute> defAttrs;
    Block* mapBlock = new Block;
@@ -486,7 +486,7 @@ static mlir::Value mapColsToNull(mlir::Value stream, mlir::OpBuilder& rewriter, 
          auto relationDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
          auto* defAttr = &relationDefAttr.getColumn();
          auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[0].cast<mlir::tuples::ColumnRefAttr>();
-         if(excluded.contains(&fromExisting.getColumn())) continue;
+         if (excluded.contains(&fromExisting.getColumn())) continue;
          mlir::Value nullValue = rewriter.create<mlir::db::NullOp>(loc, defAttr->type);
          res.push_back(nullValue);
          defAttrs.push_back(colManager.createDef(defAttr));
@@ -497,7 +497,7 @@ static mlir::Value mapColsToNull(mlir::Value stream, mlir::OpBuilder& rewriter, 
    mapOp.fn().push_back(mapBlock);
    return mapOp.result();
 }
-static mlir::Value mapColsToNullable(mlir::Value stream, mlir::OpBuilder& rewriter, mlir::Location loc, mlir::ArrayAttr mapping, size_t exisingOffset = 0,mlir::relalg::ColumnSet excluded={}) {
+static mlir::Value mapColsToNullable(mlir::Value stream, mlir::OpBuilder& rewriter, mlir::Location loc, mlir::ArrayAttr mapping, size_t exisingOffset = 0, mlir::relalg::ColumnSet excluded = {}) {
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    std::vector<mlir::Attribute> defAttrs;
    Block* mapBlock = new Block;
@@ -510,7 +510,7 @@ static mlir::Value mapColsToNullable(mlir::Value stream, mlir::OpBuilder& rewrit
          auto relationDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
          auto* defAttr = &relationDefAttr.getColumn();
          auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[exisingOffset].cast<mlir::tuples::ColumnRefAttr>();
-         if(excluded.contains(&fromExisting.getColumn())) continue;
+         if (excluded.contains(&fromExisting.getColumn())) continue;
          mlir::Value value = rewriter.create<mlir::tuples::GetColumnOp>(loc, rewriter.getI64Type(), fromExisting, tupleArg);
          if (fromExisting.getColumn().type != defAttr->type) {
             mlir::Value tmp = rewriter.create<mlir::db::AsNullableOp>(loc, defAttr->type, value);
@@ -840,7 +840,7 @@ static mlir::Value translateNL(mlir::Value left, mlir::Value right, bool useHash
    }
 }
 
-static std::pair<mlir::Value, mlir::Value> translateNLJWithMarker(mlir::Value left, mlir::Value right, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::tuples::ColumnDefAttr markerDefAttr, std::function<mlir::Value(mlir::Value,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr, std::string markerName)> fn) {
+static std::pair<mlir::Value, mlir::Value> translateNLJWithMarker(mlir::Value left, mlir::Value right, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::tuples::ColumnDefAttr markerDefAttr, std::function<mlir::Value(mlir::Value, mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr, std::string markerName)> fn) {
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    MaterializationHelper helper(columns, rewriter.getContext());
    auto flagMember = helper.addFlag(markerDefAttr);
@@ -861,7 +861,7 @@ static std::pair<mlir::Value, mlir::Value> translateNLJWithMarker(mlir::Value le
 
       mlir::Value gathered = rewriter.create<mlir::subop::GatherOp>(loc, scan, colManager.createRef(&referenceDefAttr.getColumn()), helper.createStateColumnMapping());
       mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, gathered, tuple);
-      auto res = fn(combined,tuple, rewriter, colManager.createRef(&referenceDefAttr.getColumn()), flagMember);
+      auto res = fn(combined, tuple, rewriter, colManager.createRef(&referenceDefAttr.getColumn()), flagMember);
       if (res) {
          rewriter.create<mlir::tuples::ReturnOp>(loc, res);
       } else {
@@ -870,7 +870,7 @@ static std::pair<mlir::Value, mlir::Value> translateNLJWithMarker(mlir::Value le
    }
    return {nestedMapOp.res(), rewriter.create<mlir::subop::ScanOp>(loc, vector, helper.createStateColumnMapping())};
 }
-static std::pair<mlir::Value, mlir::Value> translateHJWithMarker(mlir::Value left, mlir::Value right, mlir::ArrayAttr hashLeft, mlir::ArrayAttr hashRight, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::tuples::ColumnDefAttr markerDefAttr, std::function<mlir::Value(mlir::Value,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr, std::string markerName)> fn) {
+static std::pair<mlir::Value, mlir::Value> translateHJWithMarker(mlir::Value left, mlir::Value right, mlir::ArrayAttr hashLeft, mlir::ArrayAttr hashRight, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::tuples::ColumnDefAttr markerDefAttr, std::function<mlir::Value(mlir::Value, mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr, std::string markerName)> fn) {
    MaterializationHelper helper(columns, rewriter.getContext());
    auto flagMember = helper.addFlag(markerDefAttr);
    auto hashMember = getUniqueMember("hash");
@@ -916,7 +916,7 @@ static std::pair<mlir::Value, mlir::Value> translateHJWithMarker(mlir::Value lef
       mlir::Value scan = rewriter.create<mlir::subop::ScanListOp>(loc, list, entryDef);
       mlir::Value gathered = rewriter.create<mlir::subop::GatherOp>(loc, scan, entryRef, helper.createStateColumnMapping());
       mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, gathered, tuple);
-      auto res = fn(combined, tuple,rewriter, entryRef, flagMember);
+      auto res = fn(combined, tuple, rewriter, entryRef, flagMember);
       if (res) {
          rewriter.create<mlir::tuples::ReturnOp>(loc, res);
       } else {
@@ -925,7 +925,7 @@ static std::pair<mlir::Value, mlir::Value> translateHJWithMarker(mlir::Value lef
    }
    return {nestedMapOp.res(), rewriter.create<mlir::subop::ScanOp>(loc, lmm, helper.createStateColumnMapping())};
 }
-static std::pair<mlir::Value, mlir::Value> translateNLWithMarker(mlir::Value left, mlir::Value right, bool useHash, mlir::ArrayAttr hashLeft, mlir::ArrayAttr hashRight, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::tuples::ColumnDefAttr markerDefAttr, std::function<mlir::Value(mlir::Value,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr, std::string markerName)> fn) {
+static std::pair<mlir::Value, mlir::Value> translateNLWithMarker(mlir::Value left, mlir::Value right, bool useHash, mlir::ArrayAttr hashLeft, mlir::ArrayAttr hashRight, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, mlir::tuples::ColumnDefAttr markerDefAttr, std::function<mlir::Value(mlir::Value, mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr, std::string markerName)> fn) {
    if (useHash) {
       return translateHJWithMarker(left, right, hashLeft, hashRight, columns, rewriter, loc, markerDefAttr, fn);
    } else {
@@ -988,7 +988,7 @@ class SemiJoinLowering : public OpConversionPattern<mlir::relalg::SemiJoinOp> {
                             }));
       } else {
          auto [flagAttrDef, flagAttrRef] = createColumn(rewriter.getI1Type(), "materialized", "marker");
-         auto [_, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp](mlir::Value v,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
+         auto [_, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp](mlir::Value v, mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
             auto filtered = translateSelection(v, semiJoinOp.predicate(), rewriter, loc);
             auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
             auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
@@ -1016,7 +1016,7 @@ class MarkJoinLowering : public OpConversionPattern<mlir::relalg::MarkJoinOp> {
                                return anyTuple(filtered, markJoinOp.markattr(), rewriter, loc);
                             }));
       } else {
-         auto [_, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(markJoinOp.left().getDefiningOp())), rewriter, loc, markJoinOp.markattr(), [loc, &markJoinOp](mlir::Value v,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
+         auto [_, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(markJoinOp.left().getDefiningOp())), rewriter, loc, markJoinOp.markattr(), [loc, &markJoinOp](mlir::Value v, mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
             auto filtered = translateSelection(v, markJoinOp.predicate(), rewriter, loc);
             auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
             auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
@@ -1046,7 +1046,7 @@ class AntiSemiJoinLowering : public OpConversionPattern<mlir::relalg::AntiSemiJo
                             }));
       } else {
          auto [flagAttrDef, flagAttrRef] = createColumn(rewriter.getI1Type(), "materialized", "marker");
-         auto [_, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(antiSemiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &antiSemiJoinOp](mlir::Value v,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
+         auto [_, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(antiSemiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &antiSemiJoinOp](mlir::Value v, mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
             auto filtered = translateSelection(v, antiSemiJoinOp.predicate(), rewriter, loc);
             auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
             auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
@@ -1067,10 +1067,10 @@ class FullOuterJoinLowering : public OpConversionPattern<mlir::relalg::FullOuter
       bool useHash = semiJoinOp->hasAttr("useHashJoin");
       auto rightHash = semiJoinOp->getAttrOfType<mlir::ArrayAttr>("rightHash");
       auto leftHash = semiJoinOp->getAttrOfType<mlir::ArrayAttr>("leftHash");
-      auto leftColumns=getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp()));
-      auto rightColumns=getRequired(mlir::cast<Operator>(semiJoinOp.right().getDefiningOp()));
+      auto leftColumns = getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp()));
+      auto rightColumns = getRequired(mlir::cast<Operator>(semiJoinOp.right().getDefiningOp()));
       auto [flagAttrDef, flagAttrRef] = createColumn(rewriter.getI1Type(), "materialized", "marker");
-      auto [stream, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp,leftColumns,rightColumns](mlir::Value v,mlir::Value tuple, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
+      auto [stream, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp, leftColumns, rightColumns](mlir::Value v, mlir::Value tuple, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
          auto filtered = translateSelection(v, semiJoinOp.predicate(), rewriter, loc);
          auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
          auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
@@ -1080,14 +1080,14 @@ class FullOuterJoinLowering : public OpConversionPattern<mlir::relalg::FullOuter
          Value filteredNoMatch = rewriter.create<mlir::subop::FilterOp>(loc, anyTuple(filtered, markerDefAttr2, rewriter, loc), mlir::subop::FilterSemantic::none_true, rewriter.getArrayAttr({markerRefAttr2}));
          mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, filteredNoMatch, tuple);
 
-         auto mappedNullable2 = mapColsToNullable(combined,rewriter,loc,semiJoinOp.mapping(),0,leftColumns);
+         auto mappedNullable2 = mapColsToNullable(combined, rewriter, loc, semiJoinOp.mapping(), 0, leftColumns);
 
-         auto mappedNull = mapColsToNull(mappedNullable2, rewriter, loc, semiJoinOp.mapping(),rightColumns);
+         auto mappedNull = mapColsToNull(mappedNullable2, rewriter, loc, semiJoinOp.mapping(), rightColumns);
          return rewriter.create<mlir::subop::UnionOp>(loc, mlir::ValueRange{mappedNullable, mappedNull});
       });
       auto noMatches = rewriter.create<mlir::subop::FilterOp>(loc, scan, mlir::subop::FilterSemantic::none_true, rewriter.getArrayAttr({flagAttrRef}));
-      auto mappedNullable = mapColsToNullable(noMatches,rewriter,loc,semiJoinOp.mapping(),0,rightColumns);
-      auto mappedNull = mapColsToNull(mappedNullable, rewriter, loc, semiJoinOp.mapping(),leftColumns);
+      auto mappedNullable = mapColsToNullable(noMatches, rewriter, loc, semiJoinOp.mapping(), 0, rightColumns);
+      auto mappedNull = mapColsToNull(mappedNullable, rewriter, loc, semiJoinOp.mapping(), leftColumns);
       rewriter.replaceOpWithNewOp<mlir::subop::UnionOp>(semiJoinOp, mlir::ValueRange{stream, mappedNull});
 
       return success();
@@ -1114,7 +1114,7 @@ class OuterJoinLowering : public OpConversionPattern<mlir::relalg::OuterJoinOp> 
                             }));
       } else {
          auto [flagAttrDef, flagAttrRef] = createColumn(rewriter.getI1Type(), "materialized", "marker");
-         auto [stream, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp](mlir::Value v,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
+         auto [stream, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp](mlir::Value v, mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
             auto filtered = translateSelection(v, semiJoinOp.predicate(), rewriter, loc);
             auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
             auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
@@ -1167,7 +1167,7 @@ class SingleJoinLowering : public OpConversionPattern<mlir::relalg::SingleJoinOp
                             }));
       } else {
          auto [flagAttrDef, flagAttrRef] = createColumn(rewriter.getI1Type(), "materialized", "marker");
-         auto [stream, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp](mlir::Value v,mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
+         auto [stream, scan] = translateNLWithMarker(adaptor.left(), adaptor.right(), useHash, leftHash, rightHash, getRequired(mlir::cast<Operator>(semiJoinOp.left().getDefiningOp())), rewriter, loc, flagAttrDef, [loc, &semiJoinOp](mlir::Value v, mlir::Value, mlir::ConversionPatternRewriter& rewriter, mlir::tuples::ColumnRefAttr ref, std::string flagMember) -> mlir::Value {
             auto filtered = translateSelection(v, semiJoinOp.predicate(), rewriter, loc);
             auto [markerDefAttr, markerRefAttr] = createColumn(rewriter.getI1Type(), "marker", "marker");
             auto afterBool = mapBool(filtered, rewriter, loc, true, &markerDefAttr.getColumn());
@@ -1332,232 +1332,237 @@ class MaterializeLowering : public OpConversionPattern<mlir::relalg::Materialize
    }
 };
 class AggregationLowering : public OpConversionPattern<mlir::relalg::AggregationOp> {
-   public:
-   using OpConversionPattern<mlir::relalg::AggregationOp>::OpConversionPattern;
-   mlir::Attribute getMaxValueAttr(mlir::Type type) const {
-      auto* context = type.getContext();
-      mlir::OpBuilder builder(context);
-      mlir::Attribute maxValAttr = ::llvm::TypeSwitch<::mlir::Type, mlir::Attribute>(type)
+   class DistAggrFunc {
+      protected:
+      Type stateType;
+      mlir::tuples::ColumnDefAttr destAttribute;
+      mlir::tuples::ColumnRefAttr sourceAttribute;
 
-                                      .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
-                                         if (t.getP() < 19) {
-                                            return (mlir::Attribute) builder.getI64IntegerAttr(std::numeric_limits<int64_t>::max());
-                                         }
-                                         std::vector<uint64_t> parts = {0xFFFFFFFFFFFFFFFF, 0x7FFFFFFFFFFFFFFF};
-                                         return (mlir::Attribute) builder.getIntegerAttr(mlir::IntegerType::get(context, 128), mlir::APInt(128, parts));
-                                      })
-                                      .Case<::mlir::IntegerType>([&](::mlir::IntegerType) {
-                                         return builder.getI64IntegerAttr(std::numeric_limits<int64_t>::max());
-                                      })
-                                      .Case<::mlir::FloatType>([&](::mlir::FloatType t) {
-                                         if (t.getWidth() == 32) {
-                                            return (mlir::Attribute) builder.getF32FloatAttr(std::numeric_limits<float>::max());
-                                         } else if (t.getWidth() == 64) {
-                                            return (mlir::Attribute) builder.getF64FloatAttr(std::numeric_limits<double>::max());
-                                         } else {
-                                            assert(false && "should not happen");
-                                            return mlir::Attribute();
-                                         }
-                                      })
-                                      .Default([&](::mlir::Type) { return builder.getI64IntegerAttr(std::numeric_limits<int64_t>::max()); });
-      return maxValAttr;
-   }
-   using finalizeFnT = std::function<std::pair<const mlir::tuples::Column*, mlir::Value>(mlir::ValueRange, mlir::OpBuilder& builder)>;
-   using aggregationFnT = std::function<std::vector<mlir::Value>(mlir::ValueRange, mlir::ValueRange, mlir::OpBuilder& builder)>;
-   struct AnalyzedAggregation {
-      mlir::TupleType keyTupleType;
-      mlir::TupleType valTupleType;
+      public:
+      DistAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute,const mlir::tuples::ColumnRefAttr& sourceAttribute) : stateType(destAttribute.cast<mlir::tuples::ColumnDefAttr>().getColumn().type), destAttribute(destAttribute),sourceAttribute(sourceAttribute) {}
+      virtual mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) = 0;
+      virtual mlir::Value aggregate(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value state, mlir::ValueRange args) = 0;
+      const mlir::tuples::ColumnDefAttr& getDestAttribute() const {
+         return destAttribute;
+      }
+      const mlir::tuples::ColumnRefAttr& getSourceAttribute() const {
+         return sourceAttribute;
+      }
+      const Type& getStateType() const {
+         return stateType;
+      }
+      virtual ~DistAggrFunc() {}
+   };
+   class CountStarAggrFunc : public DistAggrFunc {
+      public:
+      explicit CountStarAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute) : DistAggrFunc(destAttribute,mlir::tuples::ColumnRefAttr()) {}
+      mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) override {
+         return builder.create<mlir::db::ConstantOp>(loc, stateType, builder.getI64IntegerAttr(0));
+      }
+      mlir::Value aggregate(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value state, mlir::ValueRange args) override {
+         auto one = builder.create<mlir::db::ConstantOp>(loc, stateType, builder.getI64IntegerAttr(1));
+         return builder.create<mlir::db::AddOp>(loc, stateType, state, one);
+      }
+   };
+   class CountAggrFunc : public DistAggrFunc {
+      public:
+      explicit CountAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute, const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute,sourceColumn) {}
+      mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) override {
+         return builder.create<mlir::db::ConstantOp>(loc, stateType, builder.getI64IntegerAttr(0));
+      }
+      mlir::Value aggregate(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value state, mlir::ValueRange args) override {
+         auto one = builder.create<mlir::db::ConstantOp>(loc, stateType, builder.getI64IntegerAttr(1));
+         auto added = builder.create<mlir::db::AddOp>(loc, stateType, state, one);
+         if (args[0].getType().isa<mlir::db::NullableType>()) {
+            auto isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), args[0]);
+            return builder.create<mlir::arith::SelectOp>(loc, isNull, state, added);
+         } else {
+            return added;
+         }
+      }
+   };
+   class AnyAggrFunc : public DistAggrFunc {
+      public:
+      explicit AnyAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute,  const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute,sourceColumn){}
+      mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) override {
+         return builder.create<mlir::util::UndefOp>(loc, stateType);
+      }
+      mlir::Value aggregate(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value state, mlir::ValueRange args) override {
+         return args[0];
+      }
+   };
+   class MaxAggrFunc : public DistAggrFunc {
 
-      mlir::relalg::OrderedAttributes key;
-      mlir::relalg::OrderedAttributes val;
+      public:
+      explicit MaxAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute,  const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute,sourceColumn) {}
+      mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) override {
+         if (stateType.isa<mlir::db::NullableType>()) {
+            return builder.create<mlir::db::NullOp>(loc, stateType);
+         } else {
+            return builder.create<mlir::db::ConstantOp>(loc, stateType, builder.getI64IntegerAttr(0));
+         }
+      }
+      mlir::Value aggregate(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value state, mlir::ValueRange args) override {
+         mlir::Value stateLtArg = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, state, args[0]);
+         mlir::Value stateLtArgTruth = builder.create<mlir::db::DeriveTruth>(loc, stateLtArg);
+         if (stateType.isa<mlir::db::NullableType>() && args[0].getType().isa<mlir::db::NullableType>()) {
+            // state nullable, arg nullable
+            mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), state);
+            mlir::Value overwriteState = builder.create<mlir::arith::OrIOp>(loc, stateLtArgTruth, isNull);
+            return builder.create<mlir::arith::SelectOp>(loc, overwriteState, args[0], state);
+         } else if (stateType.isa<mlir::db::NullableType>()) {
+            // state nullable, arg not nullable
+            mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), state);
+            mlir::Value overwriteState = builder.create<mlir::arith::OrIOp>(loc, stateLtArgTruth, isNull);
+            mlir::Value casted = builder.create<mlir::db::AsNullableOp>(loc, stateType, args[0]);
+            return builder.create<mlir::arith::SelectOp>(loc, overwriteState, casted, state);
+         } else {
+            //state non-nullable, arg not nullable
+            return builder.create<mlir::arith::SelectOp>(loc, stateLtArg, args[0], state);
+         }
+      }
+   };
+   class MinAggrFunc : public DistAggrFunc {
+      mlir::Attribute getMaxValueAttr(mlir::Type type) const {
+         auto* context = type.getContext();
+         mlir::OpBuilder builder(context);
+         mlir::Attribute maxValAttr = ::llvm::TypeSwitch<::mlir::Type, mlir::Attribute>(type)
+                                         .Case<::mlir::db::DecimalType>([&](::mlir::db::DecimalType t) {
+                                            if (t.getP() < 19) {
+                                               return (mlir::Attribute) builder.getI64IntegerAttr(std::numeric_limits<int64_t>::max());
+                                            }
+                                            std::vector<uint64_t> parts = {0xFFFFFFFFFFFFFFFF, 0x7FFFFFFFFFFFFFFF};
+                                            return (mlir::Attribute) builder.getIntegerAttr(mlir::IntegerType::get(context, 128), mlir::APInt(128, parts));
+                                         })
+                                         .Case<::mlir::IntegerType>([&](::mlir::IntegerType) {
+                                            return builder.getI64IntegerAttr(std::numeric_limits<int64_t>::max());
+                                         })
+                                         .Case<::mlir::FloatType>([&](::mlir::FloatType t) {
+                                            if (t.getWidth() == 32) {
+                                               return (mlir::Attribute) builder.getF32FloatAttr(std::numeric_limits<float>::max());
+                                            } else if (t.getWidth() == 64) {
+                                               return (mlir::Attribute) builder.getF64FloatAttr(std::numeric_limits<double>::max());
+                                            } else {
+                                               assert(false && "should not happen");
+                                               return mlir::Attribute();
+                                            }
+                                         })
+                                         .Default([&](::mlir::Type) { return builder.getI64IntegerAttr(std::numeric_limits<int64_t>::max()); });
+         return maxValAttr;
+      }
 
-      std::vector<std::function<std::pair<const mlir::tuples::Column*, mlir::Value>(mlir::ValueRange, mlir::OpBuilder& builder)>> finalizeFunctions;
-      std::vector<std::function<std::vector<mlir::Value>(mlir::ValueRange, mlir::ValueRange, mlir::OpBuilder& builder)>> aggregationFunctions;
-      std::vector<mlir::Value> defaultValues;
-      std::vector<mlir::Type> aggrTypes;
+
+      public:
+      explicit MinAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute,  const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute,sourceColumn) {}
+      mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) override {
+         if (stateType.isa<mlir::db::NullableType>()) {
+            return builder.create<mlir::db::NullOp>(loc, stateType);
+         } else {
+            return builder.create<mlir::db::ConstantOp>(loc, stateType, getMaxValueAttr(stateType));
+         }
+      }
+      mlir::Value aggregate(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value state, mlir::ValueRange args) override {
+         mlir::Value stateGtArg = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::gt, state, args[0]);
+         mlir::Value stateGtArgTruth = builder.create<mlir::db::DeriveTruth>(loc, stateGtArg);
+         if (stateType.isa<mlir::db::NullableType>() && args[0].getType().isa<mlir::db::NullableType>()) {
+            // state nullable, arg nullable
+            mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), state);
+            mlir::Value overwriteState = builder.create<mlir::arith::OrIOp>(loc, stateGtArgTruth, isNull);
+            return builder.create<mlir::arith::SelectOp>(loc, overwriteState, args[0], state);
+         } else if (stateType.isa<mlir::db::NullableType>()) {
+            // state nullable, arg not nullable
+            mlir::Value casted = builder.create<mlir::db::AsNullableOp>(loc, stateType, args[0]);
+            mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), state);
+            mlir::Value overwriteState = builder.create<mlir::arith::OrIOp>(loc, stateGtArgTruth, isNull);
+            return builder.create<mlir::arith::SelectOp>(loc, overwriteState, casted, state);
+         } else {
+            //state non-nullable, arg not nullable
+            return builder.create<mlir::arith::SelectOp>(loc, stateGtArg, args[0], state);
+         }
+      }
+   };
+   class SumAggrFunc : public DistAggrFunc {
+      public:
+      explicit SumAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute,  const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute,sourceColumn) {}
+      mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) override {
+         if (stateType.isa<mlir::db::NullableType>()) {
+            return builder.create<mlir::db::NullOp>(loc, stateType);
+         } else {
+            return builder.create<mlir::db::ConstantOp>(loc, stateType, builder.getI64IntegerAttr(0));
+         }
+      }
+      mlir::Value aggregate(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value state, mlir::ValueRange args) override {
+         if (stateType.isa<mlir::db::NullableType>() && args[0].getType().isa<mlir::db::NullableType>()) {
+            // state nullable, arg nullable
+            mlir::Value isStateNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), state);
+            mlir::Value zero = builder.create<mlir::db::ConstantOp>(loc, getBaseType(stateType), builder.getI64IntegerAttr(0));
+            zero = builder.create<mlir::db::AsNullableOp>(loc, stateType, zero);
+            state= builder.create<mlir::arith::SelectOp>(loc,isStateNull,zero,state);
+            mlir::Value isArgNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), args[0]);
+            mlir::Value sum = builder.create<mlir::db::AddOp>(loc, state, args[0]);
+            return builder.create<mlir::arith::SelectOp>(loc, isArgNull, state, sum);
+         } else if (stateType.isa<mlir::db::NullableType>()) {
+            // state nullable, arg not nullable
+            mlir::Value isStateNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), state);
+            mlir::Value zero = builder.create<mlir::db::ConstantOp>(loc, getBaseType(stateType), builder.getI64IntegerAttr(0));
+            zero = builder.create<mlir::db::AsNullableOp>(loc, stateType, zero);
+            state= builder.create<mlir::arith::SelectOp>(loc,isStateNull,zero,state);
+            return builder.create<mlir::db::AddOp>(loc, state, args[0]);
+         } else {
+            //state non-nullable, arg not nullable
+            return builder.create<mlir::db::AddOp>(loc, state, args[0]);
+         }
+      }
    };
 
-   void analyze(mlir::relalg::AggregationOp aggregationOp, mlir::OpBuilder& builder, AnalyzedAggregation& analyzedAggregation) const {
-      analyzedAggregation.key = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_colsAttr());
+   public:
+   using OpConversionPattern<mlir::relalg::AggregationOp>::OpConversionPattern;
+   struct AnalyzedAggregation {
+      std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs;
+   };
 
-      auto counterType = builder.getI64Type();
+   void analyze(mlir::relalg::AggregationOp aggregationOp, AnalyzedAggregation& analyzedAggregation) const {
+
       mlir::tuples::ReturnOp terminator = mlir::cast<mlir::tuples::ReturnOp>(aggregationOp.aggr_func().front().getTerminator());
-
       for (size_t i = 0; i < aggregationOp.computed_cols().size(); i++) {
-         auto* destAttr = &aggregationOp.computed_cols()[i].cast<mlir::tuples::ColumnDefAttr>().getColumn();
+         auto destColumnAttr = aggregationOp.computed_cols()[i].cast<mlir::tuples::ColumnDefAttr>();
          mlir::Value computedVal = terminator.results()[i];
          if (auto aggrFn = mlir::dyn_cast_or_null<mlir::relalg::AggrFuncOp>(computedVal.getDefiningOp())) {
-            auto loc = aggrFn->getLoc();
-            auto* attr = &aggrFn.attr().getColumn();
-            auto attrIsNullable = attr->type.isa<mlir::db::NullableType>();
-            size_t currValIdx = analyzedAggregation.val.insert(attr);
-            mlir::Type resultingType = destAttr->type;
-            size_t currDestIdx = analyzedAggregation.aggrTypes.size();
-
+            auto sourceColumnAttr = aggrFn.attr();
             if (aggrFn.fn() == mlir::relalg::AggrFunc::sum) {
-               analyzedAggregation.finalizeFunctions.push_back([currDestIdx = currDestIdx, destAttr = destAttr](mlir::ValueRange range, mlir::OpBuilder& builder) { return std::make_pair(destAttr, range[currDestIdx]); });
-               analyzedAggregation.aggrTypes.push_back(resultingType);
-               mlir::Value initVal;
-               if (resultingType.isa<mlir::db::NullableType>()) {
-                  initVal = builder.create<mlir::db::NullOp>(loc, resultingType);
-               } else {
-                  initVal = builder.create<mlir::db::ConstantOp>(loc, getBaseType(resultingType), builder.getI64IntegerAttr(0));
-               }
-               analyzedAggregation.defaultValues.push_back(initVal);
-               analyzedAggregation.aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, currValIdx = currValIdx, attrIsNullable, resultingType = resultingType](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
-                  std::vector<mlir::Value> res;
-                  mlir::Value currVal = aggr[currDestIdx];
-                  mlir::Value newVal = val[currValIdx];
-                  mlir::Value added = builder.create<mlir::db::AddOp>(loc, resultingType, currVal, newVal);
-                  mlir::Value updatedVal = added;
-                  if (attrIsNullable) {
-                     mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), newVal);
-                     updatedVal = builder.create<mlir::arith::SelectOp>(loc, isNull1, currVal, added);
-                  }
-                  if (resultingType.isa<mlir::db::NullableType>()) {
-                     mlir::Value casted = newVal;
-                     if (currVal.getType() != newVal.getType()) {
-                        casted = builder.create<mlir::db::AsNullableOp>(loc, currVal.getType(), newVal);
-                     }
-                     mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), currVal);
-                     res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, updatedVal));
-                  } else {
-                     res.push_back(updatedVal);
-                  }
-                  return res;
-               });
+               analyzedAggregation.distAggrFuncs.push_back(std::make_shared<SumAggrFunc>(destColumnAttr, sourceColumnAttr));
             } else if (aggrFn.fn() == mlir::relalg::AggrFunc::min) {
-               analyzedAggregation.finalizeFunctions.push_back([currDestIdx = currDestIdx, destAttr = destAttr](mlir::ValueRange range, mlir::OpBuilder& builder) { return std::make_pair(destAttr, range[currDestIdx]); });
-               analyzedAggregation.aggrTypes.push_back(resultingType);
-               mlir::Value initVal;
-               if (resultingType.isa<mlir::db::NullableType>()) {
-                  initVal = builder.create<mlir::db::NullOp>(loc, resultingType);
-               } else {
-                  initVal = builder.create<mlir::db::ConstantOp>(loc, getBaseType(resultingType), getMaxValueAttr(resultingType));
-               }
-               analyzedAggregation.defaultValues.push_back(initVal);
-               analyzedAggregation.aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, resultingType = resultingType, currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
-                  std::vector<mlir::Value> res;
-                  mlir::Value currVal = aggr[currDestIdx];
-                  mlir::Value newVal = val[currValIdx];
-                  mlir::Value newLtCurr = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, newVal, currVal);
-                  mlir::Value casted = newVal;
-                  if (newVal.getType() != currVal.getType()) {
-                     casted = builder.create<mlir::db::AsNullableOp>(loc, currVal.getType(), newVal);
-                  }
-                  mlir::Value newLtCurrT = builder.create<mlir::db::DeriveTruth>(loc, newLtCurr);
-
-                  mlir::Value added = builder.create<mlir::arith::SelectOp>(loc, newLtCurrT, casted, currVal);
-                  if (resultingType.isa<mlir::db::NullableType>()) {
-                     mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), currVal);
-                     res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, added));
-                  } else {
-                     res.push_back(added);
-                  }
-                  return res;
-               });
+               analyzedAggregation.distAggrFuncs.push_back(std::make_shared<MinAggrFunc>(destColumnAttr, sourceColumnAttr));
             } else if (aggrFn.fn() == mlir::relalg::AggrFunc::max) {
-               analyzedAggregation.finalizeFunctions.push_back([currDestIdx = currDestIdx, destAttr = destAttr](mlir::ValueRange range, mlir::OpBuilder& builder) { return std::make_pair(destAttr, range[currDestIdx]); });
-               analyzedAggregation.aggrTypes.push_back(resultingType);
-               mlir::Value initVal;
-               if (resultingType.isa<mlir::db::NullableType>()) {
-                  initVal = builder.create<mlir::db::NullOp>(loc, resultingType);
-               } else {
-                  initVal = builder.create<mlir::db::ConstantOp>(loc, getBaseType(resultingType), builder.getI64IntegerAttr(0));
-               }
-               analyzedAggregation.defaultValues.push_back(initVal);
-               analyzedAggregation.aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, attrIsNullable, resultingType = resultingType, currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
-                  std::vector<mlir::Value> res;
-                  mlir::Value currVal = aggr[currDestIdx];
-                  mlir::Value newVal = val[currValIdx];
-                  mlir::Value currGtNew = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::gt, currVal, newVal);
-                  mlir::Value casted = newVal;
-                  if (newVal.getType() != currVal.getType()) {
-                     casted = builder.create<mlir::db::AsNullableOp>(loc, currVal.getType(), newVal);
-                  }
-                  mlir::Value currGTNewT = builder.create<mlir::db::DeriveTruth>(loc, currGtNew);
-                  mlir::Value added = builder.create<mlir::arith::SelectOp>(loc, currGTNewT, currVal, casted);
-                  mlir::Value updatedVal = added;
-                  if (attrIsNullable) {
-                     mlir::Value isNull1 = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), newVal);
-                     updatedVal = builder.create<mlir::arith::SelectOp>(loc, isNull1, aggr[currDestIdx], added);
-                  }
-                  if (resultingType.isa<mlir::db::NullableType>()) {
-                     mlir::Value isNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), aggr[currDestIdx]);
-                     res.push_back(builder.create<mlir::arith::SelectOp>(loc, isNull, casted, updatedVal));
-                  } else {
-                     res.push_back(updatedVal);
-                  }
-                  return res;
-               });
-            } else if (aggrFn.fn() == mlir::relalg::AggrFunc::count) {
-               size_t currDestIdx = analyzedAggregation.aggrTypes.size();
-               auto initCounterVal = builder.create<mlir::db::ConstantOp>(loc, counterType, builder.getI64IntegerAttr(0));
-               analyzedAggregation.defaultValues.push_back(initCounterVal);
-               analyzedAggregation.aggrTypes.push_back(resultingType);
-               analyzedAggregation.finalizeFunctions.push_back([currDestIdx = currDestIdx, destAttr = destAttr](mlir::ValueRange range, mlir::OpBuilder& builder) { return std::make_pair(destAttr, range[currDestIdx]); });
-
-               analyzedAggregation.aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, attrIsNullable, currValIdx = currValIdx, counterType = counterType, resultingType = resultingType](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
-                  std::vector<mlir::Value> res;
-                  auto one = builder.create<mlir::db::ConstantOp>(loc, counterType, builder.getI64IntegerAttr(1));
-                  mlir::Value value = builder.create<mlir::db::AddOp>(loc, resultingType, aggr[currDestIdx], one);
-                  if (attrIsNullable) {
-                     mlir::Value isNull2 = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), val[currValIdx]);
-                     mlir::Value tmp = builder.create<mlir::arith::SelectOp>(loc, isNull2, aggr[currDestIdx], value);
-                     value = tmp;
-                  }
-
-                  res.push_back(value);
-                  return res;
-               });
+               analyzedAggregation.distAggrFuncs.push_back(std::make_shared<MaxAggrFunc>(destColumnAttr, sourceColumnAttr));
             } else if (aggrFn.fn() == mlir::relalg::AggrFunc::any) {
-               size_t currDestIdx = analyzedAggregation.aggrTypes.size();
-               auto initVal = builder.create<mlir::util::UndefOp>(loc, resultingType);
-               analyzedAggregation.defaultValues.push_back(initVal);
-               analyzedAggregation.aggrTypes.push_back(resultingType);
-               analyzedAggregation.finalizeFunctions.push_back([currDestIdx = currDestIdx, destAttr = destAttr](mlir::ValueRange range, mlir::OpBuilder& builder) { return std::make_pair(destAttr, range[currDestIdx]); });
-
-               analyzedAggregation.aggregationFunctions.push_back([currValIdx = currValIdx](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
-                  std::vector<mlir::Value> res;
-                  res.push_back(val[currValIdx]);
-                  return res;
-               });
+               analyzedAggregation.distAggrFuncs.push_back(std::make_shared<AnyAggrFunc>(destColumnAttr, sourceColumnAttr));
+            } else if (aggrFn.fn() == mlir::relalg::AggrFunc::count) {
+               analyzedAggregation.distAggrFuncs.push_back(std::make_shared<CountAggrFunc>(destColumnAttr, sourceColumnAttr));
             }
          }
          if (auto countOp = mlir::dyn_cast_or_null<mlir::relalg::CountRowsOp>(computedVal.getDefiningOp())) {
-            auto loc = countOp->getLoc();
-
-            size_t currDestIdx = analyzedAggregation.aggrTypes.size();
-            analyzedAggregation.aggrTypes.push_back(counterType);
-            auto initCounterVal = builder.create<mlir::db::ConstantOp>(loc, counterType, builder.getI64IntegerAttr(0));
-            analyzedAggregation.defaultValues.push_back(initCounterVal);
-            analyzedAggregation.finalizeFunctions.push_back([currDestIdx = currDestIdx, destAttr = destAttr](mlir::ValueRange range, mlir::OpBuilder& builder) { return std::make_pair(destAttr, range[currDestIdx]); });
-
-            analyzedAggregation.aggregationFunctions.push_back([loc, currDestIdx = currDestIdx, counterType = counterType](mlir::ValueRange aggr, mlir::ValueRange val, mlir::OpBuilder& builder) {
-               std::vector<mlir::Value> res;
-               auto one = builder.create<mlir::db::ConstantOp>(loc, counterType, builder.getI64IntegerAttr(1));
-               mlir::Value added2 = builder.create<mlir::db::AddOp>(loc, counterType, aggr[currDestIdx], one);
-               res.push_back(added2);
-               return res;
-            });
+            analyzedAggregation.distAggrFuncs.push_back(std::make_shared<CountStarAggrFunc>(destColumnAttr));
          }
       };
-      analyzedAggregation.keyTupleType = analyzedAggregation.key.getTupleType(builder.getContext());
-      analyzedAggregation.valTupleType = analyzedAggregation.val.getTupleType(builder.getContext());
    }
    LogicalResult matchAndRewrite(mlir::relalg::AggregationOp aggregationOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = aggregationOp->getLoc();
       auto* context = rewriter.getContext();
       auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
-
+      auto keyAttributes=mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_colsAttr());
       mlir::Value state;
       AnalyzedAggregation analyzedAggregation;
+      analyze(aggregationOp, analyzedAggregation);
       Block* initialValueBlock = new Block;
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(initialValueBlock);
-         analyze(aggregationOp, rewriter, analyzedAggregation);
-         rewriter.create<mlir::tuples::ReturnOp>(loc, analyzedAggregation.defaultValues);
+         std::vector<mlir::Value> defaultValues;
+         for(auto aggrFn:analyzedAggregation.distAggrFuncs){
+            defaultValues.push_back(aggrFn->createDefaultValue(rewriter,loc));
+         }
+         rewriter.create<mlir::tuples::ReturnOp>(loc, defaultValues);
       }
       std::vector<mlir::Attribute> names;
       std::vector<mlir::Attribute> types;
@@ -1565,12 +1570,11 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       std::vector<mlir::Attribute> stateColumnsDef;
       std::vector<NamedAttribute> defMapping;
 
-      for (auto t : analyzedAggregation.aggrTypes) {
+      for (auto aggrFn : analyzedAggregation.distAggrFuncs) {
          auto memberName = getUniqueMember("aggrval");
          names.push_back(rewriter.getStringAttr(memberName));
-         types.push_back(mlir::TypeAttr::get(t));
-         auto def = colManager.createDef(colManager.getUniqueScope("aggrval"), "aggrval");
-         def.getColumn().type = t;
+         types.push_back(mlir::TypeAttr::get(aggrFn->getStateType()));
+         auto def = aggrFn->getDestAttribute();
          stateColumnsRef.push_back(colManager.createRef(&def.getColumn()));
          stateColumnsDef.push_back(def);
          defMapping.push_back(rewriter.getNamedAttr(memberName, def));
@@ -1622,47 +1626,40 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          }
       }
       referenceDefAttr.getColumn().type = mlir::subop::EntryRefType::get(context, stateType);
-      auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(rewriter.getUnknownLoc(), afterLookup, colManager.createRef(&referenceDefAttr.getColumn()), analyzedAggregation.val.getArrayAttr(context), rewriter.getArrayAttr(names));
       mlir::Block* reduceBlock = new Block;
-      size_t numColumns = analyzedAggregation.val.getAttrs().size();
-      size_t numMembers = types.size();
-      for (auto* c : analyzedAggregation.val.getAttrs()) {
-         reduceBlock->addArgument(c->type, loc);
+      std::vector<mlir::Attribute> relevantColumns;
+      std::unordered_map<mlir::tuples::Column*,mlir::Value> stateMap;
+      std::unordered_map<mlir::tuples::Column*,mlir::Value> argMap;
+         for(auto aggrFn:analyzedAggregation.distAggrFuncs){
+         auto sourceColumn=aggrFn->getSourceAttribute();
+         if(sourceColumn) {
+            relevantColumns.push_back(sourceColumn);
+            mlir::Value arg=reduceBlock->addArgument(sourceColumn.getColumn().type, loc);
+            argMap.insert({&sourceColumn.getColumn(),arg});
+         }
       }
-      for (auto t : analyzedAggregation.aggrTypes) {
-         reduceBlock->addArgument(t, loc);
+      for(auto aggrFn:analyzedAggregation.distAggrFuncs){
+         mlir::Value state=reduceBlock->addArgument(aggrFn->getStateType(), loc);
+         stateMap.insert({&aggrFn->getDestAttribute().getColumn(),state});
       }
+      auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(rewriter.getUnknownLoc(), afterLookup, colManager.createRef(&referenceDefAttr.getColumn()), rewriter.getArrayAttr(relevantColumns), rewriter.getArrayAttr(names));
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(reduceBlock);
-         std::vector<mlir::Value> valuesx;
-         for (auto aggrFn : analyzedAggregation.aggregationFunctions) {
-            auto vec = aggrFn(reduceBlock->getArguments().drop_front(numColumns), reduceBlock->getArguments().drop_back(numMembers), rewriter);
-            valuesx.insert(valuesx.end(), vec.begin(), vec.end());
+         std::vector<mlir::Value> newStateValues;
+         for (auto aggrFn : analyzedAggregation.distAggrFuncs) {
+            std::vector<mlir::Value> arguments;
+            if(aggrFn->getSourceAttribute()){
+               arguments.push_back(argMap.at(&aggrFn->getSourceAttribute().getColumn()));
+            }
+            mlir::Value result=aggrFn->aggregate(rewriter,loc,stateMap.at(&aggrFn->getDestAttribute().getColumn()),arguments);
+            newStateValues.push_back(result);
          }
-         rewriter.create<mlir::tuples::ReturnOp>(loc, valuesx);
+         rewriter.create<mlir::tuples::ReturnOp>(loc, newStateValues);
       }
       reduceOp.region().push_back(reduceBlock);
 
-      mlir::Value scan = rewriter.create<mlir::subop::ScanOp>(loc, state, rewriter.getDictionaryAttr(defMapping));
-      auto mapOp = rewriter.replaceOpWithNewOp<mlir::subop::MapOp>(aggregationOp, mlir::tuples::TupleStreamType::get(context), scan, aggregationOp.computed_cols());
-      mlir::Block* mapBlock = new Block;
-      mapBlock->addArgument(mlir::tuples::TupleType::get(context), loc);
-      mapOp.fn().push_back(mapBlock);
-      {
-         mlir::OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(mapBlock);
-         std::vector<mlir::Value> unpackedAggr;
-         for (auto ref : stateColumnsRef) {
-            unpackedAggr.push_back(rewriter.create<mlir::tuples::GetColumnOp>(loc, ref.getColumn().type, ref, mapBlock->getArgument(0)));
-         }
-         std::vector<mlir::Value> res;
-         for (auto fn : analyzedAggregation.finalizeFunctions) {
-            auto [attr, val] = fn(unpackedAggr, rewriter);
-            res.push_back(val);
-         }
-         rewriter.create<mlir::tuples::ReturnOp>(loc, res);
-      }
+      rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(aggregationOp, state, rewriter.getDictionaryAttr(defMapping));
 
       return success();
    }
