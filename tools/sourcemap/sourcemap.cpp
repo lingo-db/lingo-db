@@ -73,37 +73,37 @@ int main(int argc, char** argv) {
       block.walk<mlir::WalkOrder::PreOrder>([&](mlir::Operation* op) {
          const auto* opDef = state.getOpDef(op);
          if (opDef) {
-            if (auto fileLineLoc = dropNames(op->getLoc()).dyn_cast<mlir::FileLineColLoc>()) {
-               auto loc1 = sourceMgr.getLineAndColumn(opDef->scopeLoc.Start);
-               nlohmann::json operation;
-               operation["id"] = opId++;
-               opIds[op] = operation["id"];
-               operation["representation"] = std::string(opDef->scopeLoc.Start.getPointer(), opDef->scopeLoc.End.getPointer());
-               operation["loc"] = inputFilename + ":" + std::to_string(loc1.first);
-               analyzedOps[operation["loc"]] = operation["id"];
-               auto* parentOp = op->getParentOp();
-               if (opIds.count(parentOp)) {
-                  operation["parent"] = opIds[parentOp];
-               }
-               std::vector<size_t> dependencies;
-               for (auto operand : op->getOperands()) {
-                  if (auto* defOp = operand.getDefiningOp()) {
-                     if (opIds.count(defOp)) {
-                        dependencies.push_back(opIds[defOp]);
-                     }
+            auto loc1 = sourceMgr.getLineAndColumn(opDef->scopeLoc.Start);
+            nlohmann::json operation;
+            operation["id"] = opId++;
+            opIds[op] = operation["id"];
+            operation["representation"] = std::string(opDef->scopeLoc.Start.getPointer(), opDef->scopeLoc.End.getPointer());
+            operation["loc"] = inputFilename + ":" + std::to_string(loc1.first);
+            analyzedOps[operation["loc"]] = operation["id"];
+            auto* parentOp = op->getParentOp();
+            if (opIds.count(parentOp)) {
+               operation["parent"] = opIds[parentOp];
+            }
+            std::vector<size_t> dependencies;
+            for (auto operand : op->getOperands()) {
+               if (auto* defOp = operand.getDefiningOp()) {
+                  if (opIds.count(defOp)) {
+                     dependencies.push_back(opIds[defOp]);
                   }
                }
-               if (dependencies.size()) {
-                  operation["dependencies"] = dependencies;
-               }
+            }
+            if (dependencies.size()) {
+               operation["dependencies"] = dependencies;
+            }
+            if (auto fileLineLoc = dropNames(op->getLoc()).dyn_cast<mlir::FileLineColLoc>()) {
                auto mappedFile = fileLineLoc.getFilename().str();
                auto mappedLine = fileLineLoc.getLine();
                auto p = mappedFile + ":" + std::to_string(mappedLine);
                if (analyzedOps.count(p)) {
                   operation["mapping"] = analyzedOps[p];
                }
-               j.push_back(operation);
             }
+            j.push_back(operation);
          }
       });
    }
