@@ -1514,58 +1514,111 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
    public:
    using OpConversionPattern<mlir::relalg::AggregationOp>::OpConversionPattern;
    struct AnalyzedAggregation {
-      std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs;
+      std::vector<std::pair<mlir::relalg::OrderedAttributes, std::vector<std::shared_ptr<DistAggrFunc>>>> distAggrFuncs;
    };
 
    void analyze(mlir::relalg::AggregationOp aggregationOp, AnalyzedAggregation& analyzedAggregation) const {
       mlir::tuples::ReturnOp terminator = mlir::cast<mlir::tuples::ReturnOp>(aggregationOp.aggr_func().front().getTerminator());
+      std::unordered_map<mlir::Operation*, std::pair<mlir::relalg::OrderedAttributes, std::vector<std::shared_ptr<DistAggrFunc>>>> distinct;
+      distinct.insert({nullptr, {mlir::relalg::OrderedAttributes::fromVec({}), {}}});
       for (size_t i = 0; i < aggregationOp.computed_cols().size(); i++) {
          auto destColumnAttr = aggregationOp.computed_cols()[i].cast<mlir::tuples::ColumnDefAttr>();
          mlir::Value computedVal = terminator.results()[i];
+         mlir::Value tupleStream;
+         std::shared_ptr<DistAggrFunc> distAggrFunc;
          if (auto aggrFn = mlir::dyn_cast_or_null<mlir::relalg::AggrFuncOp>(computedVal.getDefiningOp())) {
+            tupleStream = aggrFn.rel();
             auto sourceColumnAttr = aggrFn.attr();
             if (aggrFn.fn() == mlir::relalg::AggrFunc::sum) {
-               analyzedAggregation.distAggrFuncs.push_back(std::make_shared<SumAggrFunc>(destColumnAttr, sourceColumnAttr));
+               distAggrFunc = std::make_shared<SumAggrFunc>(destColumnAttr, sourceColumnAttr);
             } else if (aggrFn.fn() == mlir::relalg::AggrFunc::min) {
-               analyzedAggregation.distAggrFuncs.push_back(std::make_shared<MinAggrFunc>(destColumnAttr, sourceColumnAttr));
+               distAggrFunc = std::make_shared<MinAggrFunc>(destColumnAttr, sourceColumnAttr);
             } else if (aggrFn.fn() == mlir::relalg::AggrFunc::max) {
-               analyzedAggregation.distAggrFuncs.push_back(std::make_shared<MaxAggrFunc>(destColumnAttr, sourceColumnAttr));
+               distAggrFunc = std::make_shared<MaxAggrFunc>(destColumnAttr, sourceColumnAttr);
             } else if (aggrFn.fn() == mlir::relalg::AggrFunc::any) {
-               analyzedAggregation.distAggrFuncs.push_back(std::make_shared<AnyAggrFunc>(destColumnAttr, sourceColumnAttr));
+               distAggrFunc = std::make_shared<AnyAggrFunc>(destColumnAttr, sourceColumnAttr);
             } else if (aggrFn.fn() == mlir::relalg::AggrFunc::count) {
-               analyzedAggregation.distAggrFuncs.push_back(std::make_shared<CountAggrFunc>(destColumnAttr, sourceColumnAttr));
+               distAggrFunc = std::make_shared<CountAggrFunc>(destColumnAttr, sourceColumnAttr);
             }
          }
          if (auto countOp = mlir::dyn_cast_or_null<mlir::relalg::CountRowsOp>(computedVal.getDefiningOp())) {
-            analyzedAggregation.distAggrFuncs.push_back(std::make_shared<CountStarAggrFunc>(destColumnAttr));
+            tupleStream = countOp.rel();
+            distAggrFunc = std::make_shared<CountStarAggrFunc>(destColumnAttr);
          }
+
+         if (!distinct.count(tupleStream.getDefiningOp())) {
+            if (auto projectionOp = mlir::dyn_cast_or_null<mlir::relalg::ProjectionOp>(tupleStream.getDefiningOp())) {
+               distinct[tupleStream.getDefiningOp()] = {mlir::relalg::OrderedAttributes::fromRefArr(projectionOp.cols()), {}};
+            }
+         }
+         distinct.at(tupleStream.getDefiningOp()).second.push_back(distAggrFunc);
       };
+      for (auto d : distinct) {
+         analyzedAggregation.distAggrFuncs.push_back({d.second.first, d.second.second});
+      }
    }
-   LogicalResult matchAndRewrite(mlir::relalg::AggregationOp aggregationOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto loc = aggregationOp->getLoc();
-      auto* context = rewriter.getContext();
-      auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
-      auto keyAttributes = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_colsAttr());
-      mlir::Value state;
-      AnalyzedAggregation analyzedAggregation;
-      analyze(aggregationOp, analyzedAggregation);
+   Block* createInitialValueBlock(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs) const {
       Block* initialValueBlock = new Block;
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(initialValueBlock);
          std::vector<mlir::Value> defaultValues;
-         for (auto aggrFn : analyzedAggregation.distAggrFuncs) {
+         for (auto aggrFn : distAggrFuncs) {
             defaultValues.push_back(aggrFn->createDefaultValue(rewriter, loc));
          }
          rewriter.create<mlir::tuples::ReturnOp>(loc, defaultValues);
       }
+      return initialValueBlock;
+   }
+
+   mlir::Value performReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, mlir::tuples::ColumnRefAttr reference, mlir::Value stream, mlir::Value state, std::vector<mlir::Attribute> names, std::vector<NamedAttribute> defMapping) const {
+      mlir::Block* reduceBlock = new Block;
+      std::vector<mlir::Attribute> relevantColumns;
+      std::unordered_map<mlir::tuples::Column*, mlir::Value> stateMap;
+      std::unordered_map<mlir::tuples::Column*, mlir::Value> argMap;
+      for (auto aggrFn : distAggrFuncs) {
+         auto sourceColumn = aggrFn->getSourceAttribute();
+         if (sourceColumn) {
+            relevantColumns.push_back(sourceColumn);
+            mlir::Value arg = reduceBlock->addArgument(sourceColumn.getColumn().type, loc);
+            argMap.insert({&sourceColumn.getColumn(), arg});
+         }
+      }
+      for (auto aggrFn : distAggrFuncs) {
+         mlir::Value state = reduceBlock->addArgument(aggrFn->getStateType(), loc);
+         stateMap.insert({&aggrFn->getDestAttribute().getColumn(), state});
+      }
+      auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(rewriter.getUnknownLoc(), stream, reference, rewriter.getArrayAttr(relevantColumns), rewriter.getArrayAttr(names));
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(reduceBlock);
+         std::vector<mlir::Value> newStateValues;
+         for (auto aggrFn : distAggrFuncs) {
+            std::vector<mlir::Value> arguments;
+            if (aggrFn->getSourceAttribute()) {
+               arguments.push_back(argMap.at(&aggrFn->getSourceAttribute().getColumn()));
+            }
+            mlir::Value result = aggrFn->aggregate(rewriter, loc, stateMap.at(&aggrFn->getDestAttribute().getColumn()), arguments);
+            newStateValues.push_back(result);
+         }
+         rewriter.create<mlir::tuples::ReturnOp>(loc, newStateValues);
+      }
+      reduceOp.region().push_back(reduceBlock);
+
+      return rewriter.create<mlir::subop::ScanOp>(loc, state, rewriter.getDictionaryAttr(defMapping));
+   }
+   mlir::Value hashBasedAggr(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, mlir::relalg::OrderedAttributes keyAttributes, mlir::Value stream) const {
+      auto* context = rewriter.getContext();
+      auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+      mlir::Value state;
+      auto *initialValueBlock = createInitialValueBlock(loc, rewriter, distAggrFuncs);
       std::vector<mlir::Attribute> names;
       std::vector<mlir::Attribute> types;
       std::vector<mlir::tuples::ColumnRefAttr> stateColumnsRef;
       std::vector<mlir::Attribute> stateColumnsDef;
       std::vector<NamedAttribute> defMapping;
 
-      for (auto aggrFn : analyzedAggregation.distAggrFuncs) {
+      for (auto aggrFn : distAggrFuncs) {
          auto memberName = getUniqueMember("aggrval");
          names.push_back(rewriter.getStringAttr(memberName));
          types.push_back(mlir::TypeAttr::get(aggrFn->getStateType()));
@@ -1580,33 +1633,32 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       mlir::Value afterLookup;
       auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("lookup"), "ref");
 
-      if (aggregationOp.group_by_cols().empty()) {
+      if (keyAttributes.getAttrs().empty()) {
          stateType = mlir::subop::SimpleStateType::get(rewriter.getContext(), stateMembers);
          auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{}, 1);
          createOp.initFn().front().push_back(initialValueBlock);
          state = createOp.res();
-         afterLookup = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), adaptor.rel(), state, rewriter.getArrayAttr({}), referenceDefAttr);
+         afterLookup = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), stream, state, rewriter.getArrayAttr({}), referenceDefAttr);
 
       } else {
          std::vector<mlir::Attribute> keyNames;
          std::vector<mlir::Attribute> keyTypesAttr;
          std::vector<mlir::Type> keyTypes;
          std::vector<mlir::Location> locations;
-         for (auto x : aggregationOp.group_by_cols()) {
-            auto ref = x.cast<mlir::tuples::ColumnRefAttr>();
+         for (auto *x : keyAttributes.getAttrs()) {
             auto memberName = getUniqueMember("keyval");
             keyNames.push_back(rewriter.getStringAttr(memberName));
-            keyTypesAttr.push_back(mlir::TypeAttr::get(ref.getColumn().type));
-            keyTypes.push_back((ref.getColumn().type));
-            defMapping.push_back(rewriter.getNamedAttr(memberName, colManager.createDef(&ref.getColumn())));
-            locations.push_back(aggregationOp->getLoc());
+            keyTypesAttr.push_back(mlir::TypeAttr::get(x->type));
+            keyTypes.push_back((x->type));
+            defMapping.push_back(rewriter.getNamedAttr(memberName, colManager.createDef(x)));
+            locations.push_back(loc);
          }
          auto keyMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
          stateType = mlir::subop::HashMapType::get(rewriter.getContext(), keyMembers, stateMembers);
 
          auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{}, 0);
          state = createOp.res();
-         auto lookupOp = rewriter.create<mlir::subop::LookupOrInsertOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), adaptor.rel(), state, aggregationOp.group_by_cols(), referenceDefAttr);
+         auto lookupOp = rewriter.create<mlir::subop::LookupOrInsertOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), stream, state, keyAttributes.getArrayAttr(rewriter.getContext()), referenceDefAttr);
          afterLookup = lookupOp;
          lookupOp.initFn().push_back(initialValueBlock);
          mlir::Block* equalBlock = new Block;
@@ -1616,45 +1668,36 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(equalBlock);
-            mlir::Value compared = compareKeys(rewriter, equalBlock->getArguments().drop_back(keyTypes.size()), equalBlock->getArguments().drop_front(keyTypes.size()), aggregationOp->getLoc());
+            mlir::Value compared = compareKeys(rewriter, equalBlock->getArguments().drop_back(keyTypes.size()), equalBlock->getArguments().drop_front(keyTypes.size()), loc);
             rewriter.create<mlir::tuples::ReturnOp>(rewriter.getUnknownLoc(), compared);
          }
       }
       referenceDefAttr.getColumn().type = mlir::subop::EntryRefType::get(context, stateType);
-      mlir::Block* reduceBlock = new Block;
-      std::vector<mlir::Attribute> relevantColumns;
-      std::unordered_map<mlir::tuples::Column*, mlir::Value> stateMap;
-      std::unordered_map<mlir::tuples::Column*, mlir::Value> argMap;
-      for (auto aggrFn : analyzedAggregation.distAggrFuncs) {
-         auto sourceColumn = aggrFn->getSourceAttribute();
-         if (sourceColumn) {
-            relevantColumns.push_back(sourceColumn);
-            mlir::Value arg = reduceBlock->addArgument(sourceColumn.getColumn().type, loc);
-            argMap.insert({&sourceColumn.getColumn(), arg});
-         }
-      }
-      for (auto aggrFn : analyzedAggregation.distAggrFuncs) {
-         mlir::Value state = reduceBlock->addArgument(aggrFn->getStateType(), loc);
-         stateMap.insert({&aggrFn->getDestAttribute().getColumn(), state});
-      }
-      auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(rewriter.getUnknownLoc(), afterLookup, colManager.createRef(&referenceDefAttr.getColumn()), rewriter.getArrayAttr(relevantColumns), rewriter.getArrayAttr(names));
-      {
-         mlir::OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(reduceBlock);
-         std::vector<mlir::Value> newStateValues;
-         for (auto aggrFn : analyzedAggregation.distAggrFuncs) {
-            std::vector<mlir::Value> arguments;
-            if (aggrFn->getSourceAttribute()) {
-               arguments.push_back(argMap.at(&aggrFn->getSourceAttribute().getColumn()));
-            }
-            mlir::Value result = aggrFn->aggregate(rewriter, loc, stateMap.at(&aggrFn->getDestAttribute().getColumn()), arguments);
-            newStateValues.push_back(result);
-         }
-         rewriter.create<mlir::tuples::ReturnOp>(loc, newStateValues);
-      }
-      reduceOp.region().push_back(reduceBlock);
 
-      rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(aggregationOp, state, rewriter.getDictionaryAttr(defMapping));
+      auto referenceRefAttr = colManager.createRef(&referenceDefAttr.getColumn());
+      return performReduce(loc, rewriter, distAggrFuncs, referenceRefAttr, afterLookup, state, names, defMapping);
+   }
+   LogicalResult matchAndRewrite(mlir::relalg::AggregationOp aggregationOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      AnalyzedAggregation analyzedAggregation;
+      analyze(aggregationOp, analyzedAggregation);
+      auto keyAttributes = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_colsAttr());
+      std::vector<std::tuple<mlir::Value>> subResults;
+      for (auto x : analyzedAggregation.distAggrFuncs) {
+         auto distinctBy = x.first;
+         auto& aggrFuncs = x.second;
+         if (aggrFuncs.empty()) continue;
+         mlir::Value tree = adaptor.rel();
+         if (distinctBy.getAttrs().size() != 0) {
+            auto projectionAttrs = keyAttributes.getAttrs();
+            auto distinctAttrs = distinctBy.getAttrs();
+            projectionAttrs.insert(projectionAttrs.end(), distinctAttrs.begin(), distinctAttrs.end());
+            tree = rewriter.create<mlir::relalg::ProjectionOp>(aggregationOp->getLoc(), mlir::relalg::SetSemantic::distinct, tree, mlir::relalg::OrderedAttributes::fromVec(projectionAttrs).getArrayAttr(rewriter.getContext()));
+         }
+         tree = hashBasedAggr(aggregationOp->getLoc(), rewriter, x.second, keyAttributes, tree);
+         subResults.push_back(tree);
+      }
+      assert(subResults.size() == 1);
+      rewriter.replaceOp(aggregationOp, std::get<0>(subResults.at(0)));
 
       return success();
    }
