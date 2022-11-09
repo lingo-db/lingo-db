@@ -495,7 +495,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       sel.predicate().push_back(pred);
       tree = sel.result();
    }
-   auto [tree_, targetInfo] = translateSelectionTargetList(builder, stmt->group_clause_, stmt->having_clause_, stmt->target_list_, stmt->sort_clause_, tree, context, scope);
+   auto [tree_, targetInfo] = translateSelectionTargetList(builder, stmt->group_clause_, stmt->having_clause_, stmt->target_list_, stmt->sort_clause_,stmt->distinct_clause_, tree, context, scope);
    tree = tree_;
    for (auto x : targetInfo.namedResults) {
       if (!x.first.empty()) {
@@ -1706,7 +1706,7 @@ std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> 
 
    return {groupByOp.result(), mapping};
 }
-std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, mlir::Value tree, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
+std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause,List* distinctClause, mlir::Value tree, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
    auto createMap = [this](mlir::OpBuilder& builder, std::unordered_map<FakeNode*, Node*>& toMap, TranslationContext& context, mlir::Value tree, TranslationContext::ResolverScope& scope) -> mlir::Value {
       if (toMap.empty()) return tree;
       auto* block = new mlir::Block;
@@ -2198,6 +2198,14 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          auto* fakeNode = std::get<FakeNode*>(target.second);
          targetInfo.namedResults.push_back({target.first, context.getAttribute(fakeNode->colId)});
       }
+   }
+   if(distinctClause){
+      assert(distinctClause->length==1);
+      std::vector<mlir::Attribute> columns;
+      for (auto x : targetInfo.namedResults) {
+         columns.push_back(attrManager.createRef(x.second));
+      }
+      tree = builder.create<mlir::relalg::ProjectionOp>(builder.getUnknownLoc(),mlir::relalg::SetSemantic::distinct,tree,builder.getArrayAttr(columns));
    }
 
    // ORDER BY

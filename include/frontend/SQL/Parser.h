@@ -386,7 +386,7 @@ struct Parser {
    std::vector<std::string> listToStringVec(List* l);
 
    //translate target list in selection and also consider aggregation and groupby
-   std::pair<mlir::Value, TargetInfo> translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, mlir::Value tree, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   std::pair<mlir::Value, TargetInfo> translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause,List* distinctClause, mlir::Value tree, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
    //translate insert statement
    void translateInsertStmt(mlir::OpBuilder& builder, InsertStmt* stmt);
