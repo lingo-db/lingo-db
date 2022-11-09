@@ -1339,7 +1339,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       mlir::tuples::ColumnRefAttr sourceAttribute;
 
       public:
-      DistAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute,const mlir::tuples::ColumnRefAttr& sourceAttribute) : stateType(destAttribute.cast<mlir::tuples::ColumnDefAttr>().getColumn().type), destAttribute(destAttribute),sourceAttribute(sourceAttribute) {}
+      DistAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute, const mlir::tuples::ColumnRefAttr& sourceAttribute) : stateType(destAttribute.cast<mlir::tuples::ColumnDefAttr>().getColumn().type), destAttribute(destAttribute), sourceAttribute(sourceAttribute) {}
       virtual mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) = 0;
       virtual mlir::Value aggregate(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value state, mlir::ValueRange args) = 0;
       const mlir::tuples::ColumnDefAttr& getDestAttribute() const {
@@ -1355,7 +1355,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
    };
    class CountStarAggrFunc : public DistAggrFunc {
       public:
-      explicit CountStarAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute) : DistAggrFunc(destAttribute,mlir::tuples::ColumnRefAttr()) {}
+      explicit CountStarAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute) : DistAggrFunc(destAttribute, mlir::tuples::ColumnRefAttr()) {}
       mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) override {
          return builder.create<mlir::db::ConstantOp>(loc, stateType, builder.getI64IntegerAttr(0));
       }
@@ -1366,7 +1366,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
    };
    class CountAggrFunc : public DistAggrFunc {
       public:
-      explicit CountAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute, const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute,sourceColumn) {}
+      explicit CountAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute, const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute, sourceColumn) {}
       mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) override {
          return builder.create<mlir::db::ConstantOp>(loc, stateType, builder.getI64IntegerAttr(0));
       }
@@ -1383,7 +1383,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
    };
    class AnyAggrFunc : public DistAggrFunc {
       public:
-      explicit AnyAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute,  const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute,sourceColumn){}
+      explicit AnyAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute, const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute, sourceColumn) {}
       mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) override {
          return builder.create<mlir::util::UndefOp>(loc, stateType);
       }
@@ -1392,9 +1392,8 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       }
    };
    class MaxAggrFunc : public DistAggrFunc {
-
       public:
-      explicit MaxAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute,  const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute,sourceColumn) {}
+      explicit MaxAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute, const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute, sourceColumn) {}
       mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) override {
          if (stateType.isa<mlir::db::NullableType>()) {
             return builder.create<mlir::db::NullOp>(loc, stateType);
@@ -1451,9 +1450,8 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          return maxValAttr;
       }
 
-
       public:
-      explicit MinAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute,  const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute,sourceColumn) {}
+      explicit MinAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute, const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute, sourceColumn) {}
       mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) override {
          if (stateType.isa<mlir::db::NullableType>()) {
             return builder.create<mlir::db::NullOp>(loc, stateType);
@@ -1483,7 +1481,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
    };
    class SumAggrFunc : public DistAggrFunc {
       public:
-      explicit SumAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute,  const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute,sourceColumn) {}
+      explicit SumAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute, const mlir::tuples::ColumnRefAttr& sourceColumn) : DistAggrFunc(destAttribute, sourceColumn) {}
       mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) override {
          if (stateType.isa<mlir::db::NullableType>()) {
             return builder.create<mlir::db::NullOp>(loc, stateType);
@@ -1495,18 +1493,16 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          if (stateType.isa<mlir::db::NullableType>() && args[0].getType().isa<mlir::db::NullableType>()) {
             // state nullable, arg nullable
             mlir::Value isStateNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), state);
-            mlir::Value zero = builder.create<mlir::db::ConstantOp>(loc, getBaseType(stateType), builder.getI64IntegerAttr(0));
-            zero = builder.create<mlir::db::AsNullableOp>(loc, stateType, zero);
-            state= builder.create<mlir::arith::SelectOp>(loc,isStateNull,zero,state);
             mlir::Value isArgNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), args[0]);
             mlir::Value sum = builder.create<mlir::db::AddOp>(loc, state, args[0]);
-            return builder.create<mlir::arith::SelectOp>(loc, isArgNull, state, sum);
+            sum = builder.create<mlir::arith::SelectOp>(loc, isArgNull, state, sum);
+            return builder.create<mlir::arith::SelectOp>(loc, isStateNull, args[0], sum);
          } else if (stateType.isa<mlir::db::NullableType>()) {
             // state nullable, arg not nullable
             mlir::Value isStateNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), state);
             mlir::Value zero = builder.create<mlir::db::ConstantOp>(loc, getBaseType(stateType), builder.getI64IntegerAttr(0));
             zero = builder.create<mlir::db::AsNullableOp>(loc, stateType, zero);
-            state= builder.create<mlir::arith::SelectOp>(loc,isStateNull,zero,state);
+            state = builder.create<mlir::arith::SelectOp>(loc, isStateNull, zero, state);
             return builder.create<mlir::db::AddOp>(loc, state, args[0]);
          } else {
             //state non-nullable, arg not nullable
@@ -1522,7 +1518,6 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
    };
 
    void analyze(mlir::relalg::AggregationOp aggregationOp, AnalyzedAggregation& analyzedAggregation) const {
-
       mlir::tuples::ReturnOp terminator = mlir::cast<mlir::tuples::ReturnOp>(aggregationOp.aggr_func().front().getTerminator());
       for (size_t i = 0; i < aggregationOp.computed_cols().size(); i++) {
          auto destColumnAttr = aggregationOp.computed_cols()[i].cast<mlir::tuples::ColumnDefAttr>();
@@ -1550,7 +1545,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       auto loc = aggregationOp->getLoc();
       auto* context = rewriter.getContext();
       auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
-      auto keyAttributes=mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_colsAttr());
+      auto keyAttributes = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_colsAttr());
       mlir::Value state;
       AnalyzedAggregation analyzedAggregation;
       analyze(aggregationOp, analyzedAggregation);
@@ -1559,8 +1554,8 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(initialValueBlock);
          std::vector<mlir::Value> defaultValues;
-         for(auto aggrFn:analyzedAggregation.distAggrFuncs){
-            defaultValues.push_back(aggrFn->createDefaultValue(rewriter,loc));
+         for (auto aggrFn : analyzedAggregation.distAggrFuncs) {
+            defaultValues.push_back(aggrFn->createDefaultValue(rewriter, loc));
          }
          rewriter.create<mlir::tuples::ReturnOp>(loc, defaultValues);
       }
@@ -1628,19 +1623,19 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       referenceDefAttr.getColumn().type = mlir::subop::EntryRefType::get(context, stateType);
       mlir::Block* reduceBlock = new Block;
       std::vector<mlir::Attribute> relevantColumns;
-      std::unordered_map<mlir::tuples::Column*,mlir::Value> stateMap;
-      std::unordered_map<mlir::tuples::Column*,mlir::Value> argMap;
-         for(auto aggrFn:analyzedAggregation.distAggrFuncs){
-         auto sourceColumn=aggrFn->getSourceAttribute();
-         if(sourceColumn) {
+      std::unordered_map<mlir::tuples::Column*, mlir::Value> stateMap;
+      std::unordered_map<mlir::tuples::Column*, mlir::Value> argMap;
+      for (auto aggrFn : analyzedAggregation.distAggrFuncs) {
+         auto sourceColumn = aggrFn->getSourceAttribute();
+         if (sourceColumn) {
             relevantColumns.push_back(sourceColumn);
-            mlir::Value arg=reduceBlock->addArgument(sourceColumn.getColumn().type, loc);
-            argMap.insert({&sourceColumn.getColumn(),arg});
+            mlir::Value arg = reduceBlock->addArgument(sourceColumn.getColumn().type, loc);
+            argMap.insert({&sourceColumn.getColumn(), arg});
          }
       }
-      for(auto aggrFn:analyzedAggregation.distAggrFuncs){
-         mlir::Value state=reduceBlock->addArgument(aggrFn->getStateType(), loc);
-         stateMap.insert({&aggrFn->getDestAttribute().getColumn(),state});
+      for (auto aggrFn : analyzedAggregation.distAggrFuncs) {
+         mlir::Value state = reduceBlock->addArgument(aggrFn->getStateType(), loc);
+         stateMap.insert({&aggrFn->getDestAttribute().getColumn(), state});
       }
       auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(rewriter.getUnknownLoc(), afterLookup, colManager.createRef(&referenceDefAttr.getColumn()), rewriter.getArrayAttr(relevantColumns), rewriter.getArrayAttr(names));
       {
@@ -1649,10 +1644,10 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          std::vector<mlir::Value> newStateValues;
          for (auto aggrFn : analyzedAggregation.distAggrFuncs) {
             std::vector<mlir::Value> arguments;
-            if(aggrFn->getSourceAttribute()){
+            if (aggrFn->getSourceAttribute()) {
                arguments.push_back(argMap.at(&aggrFn->getSourceAttribute().getColumn()));
             }
-            mlir::Value result=aggrFn->aggregate(rewriter,loc,stateMap.at(&aggrFn->getDestAttribute().getColumn()),arguments);
+            mlir::Value result = aggrFn->aggregate(rewriter, loc, stateMap.at(&aggrFn->getDestAttribute().getColumn()), arguments);
             newStateValues.push_back(result);
          }
          rewriter.create<mlir::tuples::ReturnOp>(loc, newStateValues);
