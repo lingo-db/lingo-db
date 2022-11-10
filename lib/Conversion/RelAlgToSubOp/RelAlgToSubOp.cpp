@@ -1571,7 +1571,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       return initialValueBlock;
    }
 
-   mlir::Value performReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, mlir::tuples::ColumnRefAttr reference, mlir::Value stream, mlir::Value state, std::vector<mlir::Attribute> names, std::vector<NamedAttribute> defMapping) const {
+   void performReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, mlir::tuples::ColumnRefAttr reference, mlir::Value stream, mlir::Value state, std::vector<mlir::Attribute> names, std::vector<NamedAttribute> defMapping) const {
       mlir::Block* reduceBlock = new Block;
       std::vector<mlir::Attribute> relevantColumns;
       std::unordered_map<mlir::tuples::Column*, mlir::Value> stateMap;
@@ -1605,9 +1605,8 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       }
       reduceOp.region().push_back(reduceBlock);
 
-      return rewriter.create<mlir::subop::ScanOp>(loc, state, rewriter.getDictionaryAttr(defMapping));
    }
-   mlir::Value hashBasedAggr(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, mlir::relalg::OrderedAttributes keyAttributes, mlir::Value stream) const {
+   std::tuple<mlir::Value,mlir::DictionaryAttr,mlir::DictionaryAttr> hashBasedAggr(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, mlir::relalg::OrderedAttributes keyAttributes, mlir::Value stream) const {
       auto* context = rewriter.getContext();
       auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       mlir::Value state;
@@ -1617,6 +1616,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       std::vector<mlir::tuples::ColumnRefAttr> stateColumnsRef;
       std::vector<mlir::Attribute> stateColumnsDef;
       std::vector<NamedAttribute> defMapping;
+      std::vector<NamedAttribute> computedDefMapping;
 
       for (auto aggrFn : distAggrFuncs) {
          auto memberName = getUniqueMember("aggrval");
@@ -1626,6 +1626,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          stateColumnsRef.push_back(colManager.createRef(&def.getColumn()));
          stateColumnsDef.push_back(def);
          defMapping.push_back(rewriter.getNamedAttr(memberName, def));
+         computedDefMapping.push_back(rewriter.getNamedAttr(memberName, def));
       }
       auto stateMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, names), mlir::ArrayAttr::get(context, types));
       mlir::Type stateType;
@@ -1675,13 +1676,14 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       referenceDefAttr.getColumn().type = mlir::subop::EntryRefType::get(context, stateType);
 
       auto referenceRefAttr = colManager.createRef(&referenceDefAttr.getColumn());
-      return performReduce(loc, rewriter, distAggrFuncs, referenceRefAttr, afterLookup, state, names, defMapping);
+      performReduce(loc, rewriter, distAggrFuncs, referenceRefAttr, afterLookup, state, names, defMapping);
+      return {state, rewriter.getDictionaryAttr(defMapping),rewriter.getDictionaryAttr(computedDefMapping)};
    }
    LogicalResult matchAndRewrite(mlir::relalg::AggregationOp aggregationOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       AnalyzedAggregation analyzedAggregation;
       analyze(aggregationOp, analyzedAggregation);
       auto keyAttributes = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_colsAttr());
-      std::vector<std::tuple<mlir::Value>> subResults;
+      std::vector<std::tuple<mlir::Value,mlir::DictionaryAttr,mlir::DictionaryAttr>> subResults;
       for (auto x : analyzedAggregation.distAggrFuncs) {
          auto distinctBy = x.first;
          auto& aggrFuncs = x.second;
@@ -1693,16 +1695,25 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
             projectionAttrs.insert(projectionAttrs.end(), distinctAttrs.begin(), distinctAttrs.end());
             tree = rewriter.create<mlir::relalg::ProjectionOp>(aggregationOp->getLoc(), mlir::relalg::SetSemantic::distinct, tree, mlir::relalg::OrderedAttributes::fromVec(projectionAttrs).getArrayAttr(rewriter.getContext()));
          }
-         tree = hashBasedAggr(aggregationOp->getLoc(), rewriter, x.second, keyAttributes, tree);
-         subResults.push_back(tree);
+         auto partialResult=hashBasedAggr(aggregationOp->getLoc(), rewriter, x.second, keyAttributes, tree);
+         subResults.push_back(partialResult);
       }
       if(subResults.empty()){
          //handle the case that aggregation is only used for distinct projection
          rewriter.replaceOpWithNewOp<mlir::relalg::ProjectionOp>(aggregationOp,mlir::relalg::SetSemantic::distinct,adaptor.rel(),aggregationOp.group_by_cols());
          return success();
       }
-      assert(subResults.size() == 1);
-      rewriter.replaceOp(aggregationOp, std::get<0>(subResults.at(0)));
+
+      mlir::Value newStream=rewriter.create<mlir::subop::ScanOp>(aggregationOp->getLoc(), std::get<0>(subResults.at(0)), std::get<1>(subResults.at(0)));;//= scan %state of subresult 0
+      for(size_t i=1;i<subResults.size();i++){
+         mlir::Value state=std::get<0>(subResults.at(i));
+         mlir::DictionaryAttr stateColumnMapping=std::get<2>(subResults.at(i));
+         auto [referenceDef, referenceRef] = createColumn(mlir::subop::EntryRefType::get(getContext(), state.getType()), "lookup", "ref");
+         mlir::Value afterLookup = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), newStream, state, aggregationOp.group_by_cols(), referenceDef);
+         newStream = rewriter.create<mlir::subop::GatherOp>(aggregationOp->getLoc(), afterLookup, referenceRef, stateColumnMapping);
+      }
+
+      rewriter.replaceOp(aggregationOp, newStream);
 
       return success();
    }
