@@ -1696,6 +1696,11 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          tree = hashBasedAggr(aggregationOp->getLoc(), rewriter, x.second, keyAttributes, tree);
          subResults.push_back(tree);
       }
+      if(subResults.empty()){
+         //handle the case that aggregation is only used for distinct projection
+         rewriter.replaceOpWithNewOp<mlir::relalg::ProjectionOp>(aggregationOp,mlir::relalg::SetSemantic::distinct,adaptor.rel(),aggregationOp.group_by_cols());
+         return success();
+      }
       assert(subResults.size() == 1);
       rewriter.replaceOp(aggregationOp, std::get<0>(subResults.at(0)));
 
