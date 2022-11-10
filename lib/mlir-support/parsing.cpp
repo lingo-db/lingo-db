@@ -1,9 +1,16 @@
 #include "mlir-support/parsing.h"
 #include "arrow/util/decimal.h"
 #include "arrow/util/value_parsing.h"
+
+#include <regex>
+
 int32_t parseDate32(std::string str) {
+   std::regex r("(\\d\\d\\d\\d)-(\\d)-(\\d\\d)");
+   str = std::regex_replace(str, r, "$1-0$2-$3");
    int32_t res;
-   arrow::internal::ParseValue<arrow::Date32Type>(str.data(), str.length(), &res);
+   if (!arrow::internal::ParseValue<arrow::Date32Type>(str.data(), str.length(), &res)) {
+      throw std::runtime_error("could not parse date");
+   }
    return res;
 }
 arrow::TimeUnit::type convertTimeUnit(support::TimeUnit unit) {
@@ -149,7 +156,7 @@ std::variant<int64_t, double, std::string> support::parse(std::variant<int64_t, 
       case arrow::Type::type::DOUBLE: return parseDouble(val);
       case arrow::Type::type::FIXED_SIZE_BINARY: return toI64(parseString(val));
       case arrow::Type::type::DECIMAL128: return parseString(val, true);
-      case arrow::Type::type::STRING: return parseString(val,true);
+      case arrow::Type::type::STRING: return parseString(val, true);
       case arrow::Type::type::DATE32: return parseDate(val, false);
       case arrow::Type::type::DATE64: return parseDate(val, true);
       case arrow::Type::type::TIMESTAMP: return parseTimestamp(val, static_cast<TimeUnit>(param1));
