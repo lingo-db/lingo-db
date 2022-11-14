@@ -155,6 +155,15 @@ def DB_DeriveTruth : DB_Op<"derive_truth", [NoSideEffect]> {
     let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
+def DB_SortCompare : DB_Op<"sort_compare", [NoSideEffect]> {
+    let summary = "Get whether a value is true-ish";
+
+    let arguments  = (ins AnyType:$left, AnyType: $right);
+    let results = (outs I8:$res);
+    let assemblyFormat = "$left `:` type($left) `,` $right `:` type($right) attr-dict";
+}
+
+
 def DB_AsNullableOp : DB_Op<"as_nullable", [NoSideEffect]> {
     let summary = "Convert to nullable type";
 

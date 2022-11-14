@@ -821,6 +821,25 @@ class OneOfLowering : public OpConversionPattern<mlir::db::OneOfOp> {
       return success();
    }
 };
+class SortCompareLowering : public OpConversionPattern<mlir::db::SortCompare> {
+   public:
+   using OpConversionPattern<mlir::db::SortCompare>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::SortCompare sortCompareOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = sortCompareOp->getLoc();
+      if (sortCompareOp.left().getType() != sortCompareOp.right().getType()|| sortCompareOp.left().getType().isa<mlir::db::NullableType>()) {
+         return failure();
+      }
+      mlir::Value zero = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, 8);
+      mlir::Value minus1 = rewriter.create<mlir::arith::ConstantIntOp>(loc, -1, 8);
+      mlir::Value one = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 8);
+      mlir::Value lt = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, sortCompareOp.left(), sortCompareOp.right());
+      mlir::Value eq = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, sortCompareOp.left(), sortCompareOp.right());
+      mlir::Value res = rewriter.create<mlir::arith::SelectOp>(loc, eq, zero, one);
+      res = rewriter.create<mlir::arith::SelectOp>(loc, lt, minus1, res);
+      rewriter.replaceOp(sortCompareOp, res);
+      return success();
+   }
+};
 class HashLowering : public ConversionPattern {
    Value combineHashes(OpBuilder& builder, Location loc, Value hash1, Value totalHash) const {
       if (!totalHash) {
@@ -1028,6 +1047,7 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<CmpOpLowering>(typeConverter, ctxt);
    patterns.insert<BetweenLowering>(typeConverter, ctxt);
    patterns.insert<OneOfLowering>(typeConverter, ctxt);
+   patterns.insert<SortCompareLowering>(typeConverter, ctxt);
 
    patterns.insert<NotOpLowering>(typeConverter, ctxt);
 

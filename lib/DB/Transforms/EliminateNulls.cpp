@@ -86,7 +86,34 @@ class WrapWithNullCheck : public mlir::RewritePattern {
       }
    }
 };
-
+class SimplifySortComparePattern : public mlir::RewritePattern {
+   public:
+   SimplifySortComparePattern(mlir::MLIRContext* context)
+      : RewritePattern(mlir::db::SortCompare::getOperationName(), 1, context) {}
+   mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto sortCompareOp = mlir::cast<mlir::db::SortCompare>(op);
+      auto loc = op->getLoc();
+      if (!sortCompareOp.left().getType().isa<mlir::db::NullableType>()) return mlir::failure();
+      mlir::Value isLeftNull = rewriter.create<mlir::db::IsNullOp>(loc, sortCompareOp.left());
+      mlir::Value isRightNull = rewriter.create<mlir::db::IsNullOp>(loc, sortCompareOp.right());
+      mlir::Value isAnyNull = rewriter.create<mlir::arith::OrIOp>(loc, isLeftNull, isRightNull);
+      mlir::Value bothNullable = rewriter.create<mlir::arith::AndIOp>(loc, isLeftNull, isRightNull);
+      mlir::Value zero = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, 8);
+      mlir::Value minus1 = rewriter.create<mlir::arith::ConstantIntOp>(loc, -1, 8);
+      mlir::Value one = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 8);
+      rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
+         op, op->getResultTypes(), isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
+            mlir::Value res = b.create<mlir::arith::SelectOp>(loc, isRightNull, minus1, one);
+            res = b.create<mlir::arith::SelectOp>(loc, bothNullable, zero, res);
+            b.create<mlir::scf::YieldOp>(loc, res);
+            }, [&](mlir::OpBuilder& b, mlir::Location loc) {
+            mlir::Value left = b.create<mlir::db::NullableGetVal>(loc, sortCompareOp.left());
+            mlir::Value right = b.create<mlir::db::NullableGetVal>(loc, sortCompareOp.right());
+            mlir::Value res=b.create<mlir::db::SortCompare>(loc,left,right);
+            b.create<mlir::scf::YieldOp>(loc,res);});
+      return mlir::success(true);
+   }
+};
 //Pattern that optimizes the join order
 class EliminateNulls : public mlir::PassWrapper<EliminateNulls, mlir::OperationPass<mlir::ModuleOp>> {
    virtual llvm::StringRef getArgument() const override { return "eliminate-nulls"; }
@@ -102,6 +129,7 @@ class EliminateNulls : public mlir::PassWrapper<EliminateNulls, mlir::OperationP
          //patterns.insert<EliminateNullCmp>(&getContext());
          patterns.insert<EliminateDeriveTruthNonNullable>(&getContext());
          patterns.insert<EliminateDeriveTruthNullable>(&getContext());
+         patterns.insert<SimplifySortComparePattern>(&getContext());
          //patterns.insert<SimplifyNullableCondSkip>(&getContext());
          patterns.insert<WrapWithNullCheck>(&getContext());
          if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {

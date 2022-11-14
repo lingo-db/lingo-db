@@ -1226,26 +1226,20 @@ class LimitLowering : public OpConversionPattern<mlir::relalg::LimitOp> {
 class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
    public:
    using OpConversionPattern<mlir::relalg::SortOp>::OpConversionPattern;
-   mlir::Value createSortPredicate(mlir::OpBuilder& builder, std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria, mlir::Value trueVal, mlir::Value falseVal, size_t pos, mlir::Location loc) const {
-      if (pos < sortCriteria.size()) {
-         mlir::Value lt = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, sortCriteria[pos].first, sortCriteria[pos].second);
-         lt = builder.create<mlir::db::DeriveTruth>(loc, lt);
+   mlir::Value spaceShipCompare(mlir::OpBuilder& builder, std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria, size_t pos, mlir::Location loc) const {
+      mlir::Value compareRes = builder.create<mlir::db::SortCompare>(loc, sortCriteria.at(pos).first, sortCriteria.at(pos).second);
+      auto zero = builder.create<mlir::db::ConstantOp>(loc, builder.getI8Type(), builder.getIntegerAttr(builder.getI8Type(), 0));
+      auto isZero = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, compareRes, zero);
+      if (pos + 1 < sortCriteria.size()) {
          auto ifOp = builder.create<mlir::scf::IfOp>(
-            loc, builder.getI1Type(), lt, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, trueVal); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
-               mlir::Value eq = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, sortCriteria[pos].first, sortCriteria[pos].second);
-               eq=builder.create<mlir::db::DeriveTruth>(loc,eq);
-               auto ifOp2 = builder.create<mlir::scf::IfOp>(loc, builder.getI1Type(), eq,[&](mlir::OpBuilder& builder, mlir::Location loc) {
-                     builder.create<mlir::scf::YieldOp>(loc, createSortPredicate(builder, sortCriteria, trueVal, falseVal, pos + 1,loc));
-                  },[&](mlir::OpBuilder& builder, mlir::Location loc) {
-                     builder.create<mlir::scf::YieldOp>(loc, falseVal);
-                  });
-               builder.create<mlir::scf::YieldOp>(loc, ifOp2.getResult(0)); });
+            loc, builder.getI8Type(), isZero, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, spaceShipCompare(builder, sortCriteria, pos + 1, loc)); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, compareRes); });
          return ifOp.getResult(0);
-      } else {
-         return falseVal;
+      }else{
+         return compareRes;
       }
    }
    LogicalResult matchAndRewrite(mlir::relalg::SortOp sortOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc=sortOp->getLoc();
       mlir::relalg::ColumnSet requiredColumns = getRequired(sortOp);
       requiredColumns.insert(sortOp.getUsedColumns());
       MaterializationHelper helper(requiredColumns, rewriter.getContext());
@@ -1277,9 +1271,10 @@ class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(block);
-         auto trueVal = rewriter.create<mlir::db::ConstantOp>(sortOp->getLoc(), rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
-         auto falseVal = rewriter.create<mlir::db::ConstantOp>(sortOp->getLoc(), rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
-         rewriter.create<mlir::tuples::ReturnOp>(sortOp->getLoc(), createSortPredicate(rewriter, sortCriteria, trueVal, falseVal, 0, sortOp->getLoc()));
+         auto zero = rewriter.create<mlir::db::ConstantOp>(loc, rewriter.getI8Type(), rewriter.getIntegerAttr(rewriter.getI8Type(), 0));
+         auto spaceShipResult=spaceShipCompare(rewriter, sortCriteria, 0, sortOp->getLoc());
+         mlir::Value isLt = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, spaceShipResult, zero);
+         rewriter.create<mlir::tuples::ReturnOp>(sortOp->getLoc(), isLt);
       }
       auto subOpSort = rewriter.create<mlir::subop::SortOp>(sortOp->getLoc(), vector, rewriter.getArrayAttr(sortByMembers));
       subOpSort.region().getBlocks().push_back(block);
@@ -1604,13 +1599,12 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          rewriter.create<mlir::tuples::ReturnOp>(loc, newStateValues);
       }
       reduceOp.region().push_back(reduceBlock);
-
    }
-   std::tuple<mlir::Value,mlir::DictionaryAttr,mlir::DictionaryAttr> hashBasedAggr(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, mlir::relalg::OrderedAttributes keyAttributes, mlir::Value stream) const {
+   std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr> hashBasedAggr(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, mlir::relalg::OrderedAttributes keyAttributes, mlir::Value stream) const {
       auto* context = rewriter.getContext();
       auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       mlir::Value state;
-      auto *initialValueBlock = createInitialValueBlock(loc, rewriter, distAggrFuncs);
+      auto* initialValueBlock = createInitialValueBlock(loc, rewriter, distAggrFuncs);
       std::vector<mlir::Attribute> names;
       std::vector<mlir::Attribute> types;
       std::vector<mlir::tuples::ColumnRefAttr> stateColumnsRef;
@@ -1646,7 +1640,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
          std::vector<mlir::Attribute> keyTypesAttr;
          std::vector<mlir::Type> keyTypes;
          std::vector<mlir::Location> locations;
-         for (auto *x : keyAttributes.getAttrs()) {
+         for (auto* x : keyAttributes.getAttrs()) {
             auto memberName = getUniqueMember("keyval");
             keyNames.push_back(rewriter.getStringAttr(memberName));
             keyTypesAttr.push_back(mlir::TypeAttr::get(x->type));
@@ -1677,13 +1671,13 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
 
       auto referenceRefAttr = colManager.createRef(&referenceDefAttr.getColumn());
       performReduce(loc, rewriter, distAggrFuncs, referenceRefAttr, afterLookup, state, names, defMapping);
-      return {state, rewriter.getDictionaryAttr(defMapping),rewriter.getDictionaryAttr(computedDefMapping)};
+      return {state, rewriter.getDictionaryAttr(defMapping), rewriter.getDictionaryAttr(computedDefMapping)};
    }
    LogicalResult matchAndRewrite(mlir::relalg::AggregationOp aggregationOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       AnalyzedAggregation analyzedAggregation;
       analyze(aggregationOp, analyzedAggregation);
       auto keyAttributes = mlir::relalg::OrderedAttributes::fromRefArr(aggregationOp.group_by_colsAttr());
-      std::vector<std::tuple<mlir::Value,mlir::DictionaryAttr,mlir::DictionaryAttr>> subResults;
+      std::vector<std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr>> subResults;
       for (auto x : analyzedAggregation.distAggrFuncs) {
          auto distinctBy = x.first;
          auto& aggrFuncs = x.second;
@@ -1695,19 +1689,20 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
             projectionAttrs.insert(projectionAttrs.end(), distinctAttrs.begin(), distinctAttrs.end());
             tree = rewriter.create<mlir::relalg::ProjectionOp>(aggregationOp->getLoc(), mlir::relalg::SetSemantic::distinct, tree, mlir::relalg::OrderedAttributes::fromVec(projectionAttrs).getArrayAttr(rewriter.getContext()));
          }
-         auto partialResult=hashBasedAggr(aggregationOp->getLoc(), rewriter, x.second, keyAttributes, tree);
+         auto partialResult = hashBasedAggr(aggregationOp->getLoc(), rewriter, x.second, keyAttributes, tree);
          subResults.push_back(partialResult);
       }
-      if(subResults.empty()){
+      if (subResults.empty()) {
          //handle the case that aggregation is only used for distinct projection
-         rewriter.replaceOpWithNewOp<mlir::relalg::ProjectionOp>(aggregationOp,mlir::relalg::SetSemantic::distinct,adaptor.rel(),aggregationOp.group_by_cols());
+         rewriter.replaceOpWithNewOp<mlir::relalg::ProjectionOp>(aggregationOp, mlir::relalg::SetSemantic::distinct, adaptor.rel(), aggregationOp.group_by_cols());
          return success();
       }
 
-      mlir::Value newStream=rewriter.create<mlir::subop::ScanOp>(aggregationOp->getLoc(), std::get<0>(subResults.at(0)), std::get<1>(subResults.at(0)));;//= scan %state of subresult 0
-      for(size_t i=1;i<subResults.size();i++){
-         mlir::Value state=std::get<0>(subResults.at(i));
-         mlir::DictionaryAttr stateColumnMapping=std::get<2>(subResults.at(i));
+      mlir::Value newStream = rewriter.create<mlir::subop::ScanOp>(aggregationOp->getLoc(), std::get<0>(subResults.at(0)), std::get<1>(subResults.at(0)));
+      ; //= scan %state of subresult 0
+      for (size_t i = 1; i < subResults.size(); i++) {
+         mlir::Value state = std::get<0>(subResults.at(i));
+         mlir::DictionaryAttr stateColumnMapping = std::get<2>(subResults.at(i));
          auto [referenceDef, referenceRef] = createColumn(mlir::subop::EntryRefType::get(getContext(), state.getType()), "lookup", "ref");
          mlir::Value afterLookup = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), newStream, state, aggregationOp.group_by_cols(), referenceDef);
          newStream = rewriter.create<mlir::subop::GatherOp>(aggregationOp->getLoc(), afterLookup, referenceRef, stateColumnMapping);
