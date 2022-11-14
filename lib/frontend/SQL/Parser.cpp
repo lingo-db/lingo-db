@@ -467,12 +467,12 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             auto [subQuery_, targetInfo_] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(cte->ctequery_), context, subQueryScope);
             subQuery = subQuery_;
             targetInfo = targetInfo_;
-            if(cte->aliascolnames_){
-               size_t i=0;
-               std::cout<<pg_query_nodes_to_json(cte->aliascolnames_)<<std::endl;
-               for(auto *el=cte->aliascolnames_->head;el!= nullptr;el=el->next){
+            if (cte->aliascolnames_) {
+               size_t i = 0;
+               std::cout << pg_query_nodes_to_json(cte->aliascolnames_) << std::endl;
+               for (auto* el = cte->aliascolnames_->head; el != nullptr; el = el->next) {
                   auto* val = reinterpret_cast<value*>(el->data.ptr_value);
-                  targetInfo.namedResults.at(i++).first=val->val_.str_;
+                  targetInfo.namedResults.at(i++).first = val->val_.str_;
                }
             }
          }
@@ -495,7 +495,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       sel.predicate().push_back(pred);
       tree = sel.result();
    }
-   auto [tree_, targetInfo] = translateSelectionTargetList(builder, stmt->group_clause_, stmt->having_clause_, stmt->target_list_, stmt->sort_clause_,stmt->distinct_clause_, tree, context, scope);
+   auto [tree_, targetInfo] = translateSelectionTargetList(builder, stmt->group_clause_, stmt->having_clause_, stmt->target_list_, stmt->sort_clause_, stmt->distinct_clause_, tree, context, scope);
    tree = tree_;
    for (auto x : targetInfo.namedResults) {
       if (!x.first.empty()) {
@@ -1681,15 +1681,15 @@ std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> 
             aggrResultType = builder.getI64Type();
          } else {
             aggrResultType = refAttr.getColumn().type;
-            if (aggrFunc == mlir::relalg::AggrFunc::stddev_samp || aggrFunc == mlir::relalg::AggrFunc::var_samp){
+            if (aggrFunc == mlir::relalg::AggrFunc::stddev_samp || aggrFunc == mlir::relalg::AggrFunc::var_samp) {
                mlir::OpBuilder b(builder.getContext());
-               mlir::Value x=b.create<mlir::db::ConstantOp>(b.getUnknownLoc(),refAttr.getColumn().type,b.getUnitAttr());
-               mlir::Value x2=b.create<mlir::db::MulOp>(b.getUnknownLoc(),x,x);
-               aggrResultType=x2.getType();
+               mlir::Value x = b.create<mlir::db::ConstantOp>(b.getUnknownLoc(), refAttr.getColumn().type, b.getUnitAttr());
+               mlir::Value x2 = b.create<mlir::db::MulOp>(b.getUnknownLoc(), x, x);
+               aggrResultType = x2.getType();
                x2.getDefiningOp()->destroy();
                x.getDefiningOp()->destroy();
             }
-            if (!aggrResultType.isa<mlir::db::NullableType>()&&(aggrFunc == mlir::relalg::AggrFunc::stddev_samp || aggrFunc == mlir::relalg::AggrFunc::var_samp || groupByAttrs.empty())) {
+            if (!aggrResultType.isa<mlir::db::NullableType>() && (aggrFunc == mlir::relalg::AggrFunc::stddev_samp || aggrFunc == mlir::relalg::AggrFunc::var_samp || groupByAttrs.empty())) {
                aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
             }
          }
@@ -1706,7 +1706,7 @@ std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> 
 
    return {groupByOp.result(), mapping};
 }
-std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause,List* distinctClause, mlir::Value tree, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
+std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, List* distinctClause, mlir::Value tree, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
    auto createMap = [this](mlir::OpBuilder& builder, std::unordered_map<FakeNode*, Node*>& toMap, TranslationContext& context, mlir::Value tree, TranslationContext::ResolverScope& scope) -> mlir::Value {
       if (toMap.empty()) return tree;
       auto* block = new mlir::Block;
@@ -2199,13 +2199,13 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          targetInfo.namedResults.push_back({target.first, context.getAttribute(fakeNode->colId)});
       }
    }
-   if(distinctClause){
-      assert(distinctClause->length==1);
+   if (distinctClause) {
+      assert(distinctClause->length == 1);
       std::vector<mlir::Attribute> columns;
       for (auto x : targetInfo.namedResults) {
          columns.push_back(attrManager.createRef(x.second));
       }
-      tree = builder.create<mlir::relalg::ProjectionOp>(builder.getUnknownLoc(),mlir::relalg::SetSemantic::distinct,tree,builder.getArrayAttr(columns));
+      tree = builder.create<mlir::relalg::ProjectionOp>(builder.getUnknownLoc(), mlir::relalg::SetSemantic::distinct, tree, builder.getArrayAttr(columns));
    }
 
    // ORDER BY

@@ -24,7 +24,7 @@ class Runner {
    bool lower();
    bool lowerToLLVM();
    void dump();
-   void snapshot(std::string fileName="");
+   void snapshot(std::string fileName = "");
    bool runJit(runtime::ExecutionContext* context, size_t repeats, std::function<void(uint8_t*)> callback);
    ~Runner();
    static void printTable(uint8_t* ptr);
@@ -33,7 +33,7 @@ class Runner {
       SORT,
       SORTROWS
    };
-   static std::function<void(uint8_t*)> hashResult(SortMode sortMode, size_t& numValues, std::string& result, std::string& lines,bool tsv);
+   static std::function<void(uint8_t*)> hashResult(SortMode sortMode, size_t& numValues, std::string& result, std::string& lines, bool tsv);
    static RunMode getRunMode();
    bool isReportTimes() const {
       return reportTimes;
@@ -45,7 +45,7 @@ class Runner {
    private:
    void* context;
    RunMode runMode;
-   bool reportTimes=true;
+   bool reportTimes = true;
 };
 } // namespace runner
 #endif // RUNNER_RUNNER_H

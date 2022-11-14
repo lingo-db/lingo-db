@@ -183,7 +183,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
          .walk([&](mlir::relalg::AggregationOp aggregationOp) {
             mlir::Value arg = aggregationOp.aggr_func().front().getArgument(0);
             std::vector<mlir::Operation*> users(arg.getUsers().begin(), arg.getUsers().end());
-            for (auto *user : users) {
+            for (auto* user : users) {
                if (auto mapOp = mlir::dyn_cast_or_null<mlir::relalg::MapOp>(user)) {
                   mapOp->moveBefore(aggregationOp);
                   mapOp.replaceAllUsesWith(aggregationOp.aggr_func().front().getArgument(0));

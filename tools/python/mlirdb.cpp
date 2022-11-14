@@ -35,8 +35,7 @@ pybind11::handle run(pybind11::str module) {
    return result;
 }
 
-
-PYBIND11_MODULE(pymlirdbext,m) {
+PYBIND11_MODULE(pymlirdbext, m) {
    m.def("load", &load);
    m.def("run", run);
 }

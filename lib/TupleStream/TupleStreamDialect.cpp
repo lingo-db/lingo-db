@@ -45,7 +45,7 @@ void TupleStreamDialect::initialize() {
    getContext()->loadDialect<mlir::arith::ArithmeticDialect>();
 }
 void mlir::tuples::ColumnDefAttr::print(::mlir::AsmPrinter& printer) const {
-   printer << "<" << getName()<<","<<getColumn().type;
+   printer << "<" << getName() << "," << getColumn().type;
    if (auto fromexisting = getFromExisting()) {
       printer << "," << fromexisting;
    }
@@ -55,15 +55,15 @@ void mlir::tuples::ColumnDefAttr::print(::mlir::AsmPrinter& printer) const {
    mlir::SymbolRefAttr sym;
    mlir::Type t;
    mlir::ArrayAttr fromExisting;
-   if (parser.parseLess() || parser.parseAttribute(sym)||parser.parseComma()||parser.parseType(t)) return Attribute();
+   if (parser.parseLess() || parser.parseAttribute(sym) || parser.parseComma() || parser.parseType(t)) return Attribute();
    if (parser.parseOptionalComma().succeeded()) {
       if (parser.parseAttribute(fromExisting)) {
          return Attribute();
       }
    }
    if (parser.parseGreater()) return Attribute();
-   auto columnDef= parser.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager().createDef(sym, fromExisting);
-   columnDef.getColumn().type=t;
+   auto columnDef = parser.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager().createDef(sym, fromExisting);
+   columnDef.getColumn().type = t;
    return columnDef;
 }
 void mlir::tuples::ColumnRefAttr::print(::mlir::AsmPrinter& printer) const {

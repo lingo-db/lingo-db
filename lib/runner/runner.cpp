@@ -105,7 +105,7 @@ void EnforceCPPABIPass::runOnOperation() {
       std::vector<size_t> passByMem;
       std::vector<size_t> boolParams;
       for (size_t i = 0; i < funcOp.getNumArguments(); i++) {
-         if(funcOp.getArgumentTypes()[i].isInteger(1)){
+         if (funcOp.getArgumentTypes()[i].isInteger(1)) {
             boolParams.push_back(i);
          }
          auto dataLayout = dataLayoutAnalysis.getAbove(funcOp.getOperation());
@@ -121,14 +121,14 @@ void EnforceCPPABIPass::runOnOperation() {
             passByMem.push_back(i);
          }
       }
-      if (passByMem.empty()&&boolParams.empty()) return;
+      if (passByMem.empty() && boolParams.empty()) return;
       std::vector<mlir::Type> paramTypes(funcOp.getArgumentTypes().begin(), funcOp.getArgumentTypes().end());
       for (size_t memId : passByMem) {
          paramTypes[memId] = mlir::LLVM::LLVMPointerType::get(paramTypes[memId]);
          funcOp.setArgAttr(memId, "llvm.byval", mlir::UnitAttr::get(&getContext()));
       }
       for (size_t paramId : boolParams) {
-         paramTypes[paramId] = mlir::IntegerType::get(&getContext(),8);
+         paramTypes[paramId] = mlir::IntegerType::get(&getContext(), 8);
       }
       funcOp.setType(mlir::LLVM::LLVMFunctionType::get(funcOp.getFunctionType().getReturnType(), paramTypes));
       auto uses = mlir::SymbolTable::getSymbolUses(funcOp, moduleOp.getOperation());
@@ -150,8 +150,8 @@ void EnforceCPPABIPass::runOnOperation() {
             mlir::OpBuilder builder(userFunc->getContext());
             builder.setInsertionPoint(callOp);
             auto const1 = builder.create<mlir::LLVM::ConstantOp>(callOp.getLoc(), builder.getI8Type(), builder.getI64IntegerAttr(1));
-            auto x=builder.create<mlir::LLVM::ZExtOp>(callOp.getLoc(),builder.getI8Type(),callOp.getOperand(paramId));
-            auto anded=builder.create<mlir::LLVM::AndOp>(callOp.getLoc(),const1,x);
+            auto x = builder.create<mlir::LLVM::ZExtOp>(callOp.getLoc(), builder.getI8Type(), callOp.getOperand(paramId));
+            auto anded = builder.create<mlir::LLVM::AndOp>(callOp.getLoc(), const1, x);
             callOp.setOperand(paramId, anded);
          }
       }

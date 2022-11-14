@@ -3,6 +3,7 @@ build/
 test*.mlir
 test.sql
 resources/data/tpch-*
+resources/data/tpcds-*
 resources/data/job
 resources/data/ssb-*
 __pycache__
@@ -10,6 +11,7 @@ llvm-jit-static.*
 perf-result.json
 sourcemap*
 snapshot-*
+sql-input.mlir
 perf.*
 events.parquet
 operations.parquet

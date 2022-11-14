@@ -253,6 +253,6 @@ int64_t runtime::StringRuntime::toDate(runtime::VarLen32 str) {
 }
 static arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
 runtime::VarLen32 runtime::StringRuntime::fromDate(int64_t date) {
-   auto asString=arrow_vendored::date::format("%F", epoch + std::chrono::nanoseconds{date});
+   auto asString = arrow_vendored::date::format("%F", epoch + std::chrono::nanoseconds{date});
    return runtime::VarLen32(reinterpret_cast<uint8_t*>(asString.data()), asString.length());
 }

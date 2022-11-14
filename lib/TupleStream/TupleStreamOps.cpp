@@ -27,16 +27,6 @@ static void printCustRef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::Col
    p << attr.getName();
 }
 
-
-
-
-
-
-
-
-
-
-
 #define GET_OP_CLASSES
 #include "mlir/Dialect/TupleStream/TupleStreamOps.cpp.inc"
 #define GET_TYPEDEF_CLASSES

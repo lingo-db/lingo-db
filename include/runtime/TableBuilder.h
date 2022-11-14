@@ -100,7 +100,7 @@ class TableBuilder {
       for (auto f : schema->fields()) {
          auto t = GetPhysicalType(f->type());
          if (arrow::is_fixed_size_binary(t->id())) {
-            auto *fbt = dynamic_cast<arrow::FixedSizeBinaryType*>(t.get());
+            auto* fbt = dynamic_cast<arrow::FixedSizeBinaryType*>(t.get());
             switch (fbt->byte_width()) {
                case 1: t = arrow::int8(); break;
                case 2: t = arrow::int16(); break;
@@ -138,8 +138,8 @@ class TableBuilder {
       assert(ptr != nullptr);
       return ptr;
    }
-   void handleStatus(arrow::Status status){
-      if(!status.ok()){
+   void handleStatus(arrow::Status status) {
+      if (!status.ok()) {
          throw std::runtime_error(status.ToString());
       }
    }

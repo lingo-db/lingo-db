@@ -86,11 +86,11 @@ std::function<void(uint8_t*)> runner::Runner::hashResult(runner::Runner::SortMod
          if (toHash[i] == "null") {
             toHash[i] = "NULL";
          }
-         if(toHash[i]=="true"){
-            toHash[i]="t";
+         if (toHash[i] == "true") {
+            toHash[i] = "t";
          }
-         if(toHash[i]=="false"){
-            toHash[i]="f";
+         if (toHash[i] == "false") {
+            toHash[i] = "f";
          }
          if (toHash[i].starts_with("\"") && toHash[i].ends_with("\"")) {
             toHash[i] = toHash[i].substr(1, toHash[i].size() - 2);

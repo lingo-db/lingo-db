@@ -8,11 +8,12 @@ namespace {
 class AttachMetaData : public mlir::PassWrapper<AttachMetaData, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-attach-meta-data"; }
    runtime::Database& db;
+
    public:
-   AttachMetaData(runtime::Database& db):db(db){}
+   AttachMetaData(runtime::Database& db) : db(db) {}
    void runOnOperation() override {
       getOperation().walk([&](mlir::relalg::BaseTableOp op) {
-         op.metaAttr(mlir::relalg::TableMetaDataAttr::get(&getContext(),db.getTableMetaData(op.table_identifier().str())));
+         op.metaAttr(mlir::relalg::TableMetaDataAttr::get(&getContext(), db.getTableMetaData(op.table_identifier().str())));
       });
    }
 };
@@ -23,7 +24,7 @@ class DetachMetaData : public mlir::PassWrapper<DetachMetaData, mlir::OperationP
    void runOnOperation() override {
       getOperation().walk([&](mlir::relalg::BaseTableOp op) {
          getOperation().walk([&](mlir::relalg::BaseTableOp op) {
-            op.metaAttr(mlir::relalg::TableMetaDataAttr::get(&getContext(),std::make_shared<runtime::TableMetaData>()));
+            op.metaAttr(mlir::relalg::TableMetaDataAttr::get(&getContext(), std::make_shared<runtime::TableMetaData>()));
          });
       });
    }

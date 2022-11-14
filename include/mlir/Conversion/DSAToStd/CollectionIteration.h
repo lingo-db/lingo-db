@@ -7,10 +7,10 @@
 namespace mlir::dsa {
 class CollectionIterationImpl {
    public:
-   virtual std::vector<Value> implementLoop(mlir::Location loc,mlir::ValueRange iterArgs, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, mlir::ModuleOp parentModule, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>,ValueRange, OpBuilder)> bodyBuilder) = 0;
+   virtual std::vector<Value> implementLoop(mlir::Location loc, mlir::ValueRange iterArgs, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, mlir::ModuleOp parentModule, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) = 0;
    virtual ~CollectionIterationImpl() {
    }
-   static std::unique_ptr<mlir::dsa::CollectionIterationImpl> getImpl(mlir::Type collectionType,mlir::Value loweredCollection);
+   static std::unique_ptr<mlir::dsa::CollectionIterationImpl> getImpl(mlir::Type collectionType, mlir::Value loweredCollection);
 };
 
 } // namespace mlir::dsa

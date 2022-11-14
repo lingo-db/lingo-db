@@ -1,6 +1,6 @@
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 
 #include <iostream>
 
@@ -17,7 +17,7 @@ class FoldLoadGlobal : public mlir::RewritePattern {
       mlir::memref::LoadOp loadOp = mlir::cast<mlir::memref::LoadOp>(op);
       std::vector<size_t> indices;
       for (auto i : loadOp.getIndices()) {
-         if (auto *idxDefiningOp = i.getDefiningOp()) {
+         if (auto* idxDefiningOp = i.getDefiningOp()) {
             if (auto constantOp = mlir::dyn_cast_or_null<mlir::arith::ConstantOp>(idxDefiningOp)) {
                if (auto integerAttr = constantOp.getValue().dyn_cast_or_null<mlir::IntegerAttr>()) {
                   indices.push_back(integerAttr.getInt());
@@ -27,10 +27,10 @@ class FoldLoadGlobal : public mlir::RewritePattern {
          }
          return mlir::failure();
       }
-      if (auto *memrefDefiningOp = loadOp.memref().getDefiningOp()) {
+      if (auto* memrefDefiningOp = loadOp.memref().getDefiningOp()) {
          if (auto getGlobalOp = mlir::dyn_cast_or_null<mlir::memref::GetGlobalOp>(memrefDefiningOp)) {
-            if (auto *symbolTableOp = mlir::SymbolTable::getNearestSymbolTable(op)) {
-               auto *resolvedOp = mlir::SymbolTable::lookupSymbolIn(symbolTableOp, getGlobalOp.name());
+            if (auto* symbolTableOp = mlir::SymbolTable::getNearestSymbolTable(op)) {
+               auto* resolvedOp = mlir::SymbolTable::lookupSymbolIn(symbolTableOp, getGlobalOp.name());
                if (auto globalOp = mlir::dyn_cast_or_null<mlir::memref::GlobalOp>(resolvedOp)) {
                   if (!globalOp.constant()) return mlir::failure();
                   if (globalOp.isExternal()) return mlir::failure();
@@ -57,15 +57,15 @@ class FoldLocalLoadStores : public mlir::RewritePattern {
       : RewritePattern(mlir::memref::LoadOp::getOperationName(), 1, context) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       mlir::memref::LoadOp loadOp = mlir::cast<mlir::memref::LoadOp>(op);
-      if (auto *memrefDefiningOp = loadOp.memref().getDefiningOp()) {
+      if (auto* memrefDefiningOp = loadOp.memref().getDefiningOp()) {
          std::vector<mlir::Operation*> sameBlockUsers;
-         for (auto *u : memrefDefiningOp->getUsers()) {
+         for (auto* u : memrefDefiningOp->getUsers()) {
             if (u->getBlock() == loadOp->getBlock() && u->isBeforeInBlock(loadOp) && !mlir::isa<mlir::memref::LoadOp>(u)) {
                sameBlockUsers.push_back(u);
             }
          }
          std::sort(sameBlockUsers.begin(), sameBlockUsers.end(), [](mlir::Operation* a, mlir::Operation* b) { return a->isBeforeInBlock(b); });
-         auto *lastUser = sameBlockUsers.back();
+         auto* lastUser = sameBlockUsers.back();
          if (auto storeOp = mlir::dyn_cast_or_null<mlir::memref::StoreOp>(lastUser)) {
             if (storeOp.indices() == loadOp.indices()) {
                rewriter.replaceOp(op, storeOp.value());

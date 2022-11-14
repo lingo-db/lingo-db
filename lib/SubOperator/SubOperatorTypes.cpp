@@ -21,13 +21,13 @@ static mlir::LogicalResult parseStateMembers(mlir::AsmParser& parser, mlir::Fail
       if (parser.parseRSquare()) { return mlir::failure(); }
       break;
    }
-   stateMembersAttr.emplace(mlir::subop::StateMembersAttr::get(parser.getContext(),parser.getBuilder().getArrayAttr(names),parser.getBuilder().getArrayAttr(types)));
+   stateMembersAttr.emplace(mlir::subop::StateMembersAttr::get(parser.getContext(), parser.getBuilder().getArrayAttr(names), parser.getBuilder().getArrayAttr(types)));
    return mlir::success();
 }
 static void printStateMembers(mlir::AsmPrinter& p, mlir::subop::StateMembersAttr stateMembersAttr) {
    p << "[";
    auto first = true;
-   for (size_t i=0;i<stateMembersAttr.getNames().size();i++) {
+   for (size_t i = 0; i < stateMembersAttr.getNames().size(); i++) {
       auto name = stateMembersAttr.getNames()[i].cast<mlir::StringAttr>().str();
       auto type = stateMembersAttr.getTypes()[i].cast<mlir::TypeAttr>().getValue();
       if (first) {
@@ -35,7 +35,7 @@ static void printStateMembers(mlir::AsmPrinter& p, mlir::subop::StateMembersAttr
       } else {
          p << ", ";
       }
-      p << name << " : " << type ;
+      p << name << " : " << type;
    }
    p << "]";
 }
@@ -75,4 +75,3 @@ void SubOperatorDialect::registerTypes() {
 #include "mlir/Dialect/SubOperator/SubOperatorOpsTypeInterfaces.cpp.inc"
 
 } // namespace mlir::subop
-

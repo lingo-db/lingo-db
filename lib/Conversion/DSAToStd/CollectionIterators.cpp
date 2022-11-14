@@ -133,7 +133,6 @@ class BufferIterator : public ForIterator {
    }
 };
 
-
 static std::vector<Value> remap(std::vector<Value> values, ConversionPatternRewriter& builder) {
    for (size_t i = 0; i < values.size(); i++) {
       values[i] = builder.getRemappedValue(values[i]);
@@ -238,7 +237,7 @@ std::unique_ptr<mlir::dsa::CollectionIterationImpl> mlir::dsa::CollectionIterati
       }
    } else if (auto vector = collectionType.dyn_cast_or_null<mlir::util::BufferType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<BufferIterator>(loweredCollection));
-   }else if (auto recordBatch = collectionType.dyn_cast_or_null<mlir::dsa::RecordBatchType>()) {
+   } else if (auto recordBatch = collectionType.dyn_cast_or_null<mlir::dsa::RecordBatchType>()) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<RecordBatchIterator>(loweredCollection, recordBatch));
    }
    return std::unique_ptr<mlir::dsa::CollectionIterationImpl>();

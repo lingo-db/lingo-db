@@ -341,14 +341,14 @@ class BufferGetLenLowering : public OpConversionPattern<mlir::util::BufferGetLen
       Type t = typeConverter->convertType(op.buffer().getType().cast<mlir::util::BufferType>().getT());
       DataLayout defaultLayout;
       const DataLayout* layout = &defaultLayout;
-      auto &llvmTypeConverter=*reinterpret_cast<LLVMTypeConverter*>(getTypeConverter());
+      auto& llvmTypeConverter = *reinterpret_cast<LLVMTypeConverter*>(getTypeConverter());
       if (const DataLayoutAnalysis* analysis = llvmTypeConverter.getDataLayoutAnalysis()) {
          layout = &analysis->getAbove(op);
       }
       size_t typeSize = layout->getTypeSize(t);
-      auto bytesPerEntry = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(),rewriter.getI64Type(),rewriter.getI64IntegerAttr(std::max(1ul,typeSize)));
+      auto bytesPerEntry = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(std::max(1ul, typeSize)));
       Value len = rewriter.create<LLVM::TruncOp>(op->getLoc(), rewriter.getI64Type(), adaptor.buffer());
-      len =rewriter.create<mlir::arith::DivUIOp>(op->getLoc(),len,bytesPerEntry);
+      len = rewriter.create<mlir::arith::DivUIOp>(op->getLoc(), len, bytesPerEntry);
       rewriter.replaceOp(op, len);
       return success();
    }
@@ -360,7 +360,7 @@ class BufferGetRefLowering : public OpConversionPattern<mlir::util::BufferGetRef
       auto const64 = rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), rewriter.getIntegerType(128), rewriter.getIntegerAttr(rewriter.getIntegerType(128), 64));
       auto shiftedLeft = rewriter.create<mlir::LLVM::LShrOp>(op->getLoc(), adaptor.buffer(), const64);
       Value refInt = rewriter.create<LLVM::TruncOp>(op->getLoc(), rewriter.getI64Type(), shiftedLeft);
-      rewriter.replaceOpWithNewOp<LLVM::IntToPtrOp>(op,mlir::LLVM::LLVMPointerType::get(typeConverter->convertType(op.buffer().getType().cast<mlir::util::BufferType>().getT())),refInt);
+      rewriter.replaceOpWithNewOp<LLVM::IntToPtrOp>(op, mlir::LLVM::LLVMPointerType::get(typeConverter->convertType(op.buffer().getType().cast<mlir::util::BufferType>().getT())), refInt);
       return success();
    }
 };
@@ -376,7 +376,7 @@ class Hash64Lowering : public OpConversionPattern<mlir::util::Hash64> {
       return success();
    }
 };
-class HashCombineLowering: public OpConversionPattern<mlir::util::HashCombine> {
+class HashCombineLowering : public OpConversionPattern<mlir::util::HashCombine> {
    public:
    using OpConversionPattern<mlir::util::HashCombine>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::HashCombine op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {

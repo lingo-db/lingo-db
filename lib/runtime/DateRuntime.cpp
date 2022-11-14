@@ -1,5 +1,5 @@
-#include "arrow/vendored/datetime/date.h"
 #include "runtime/DateRuntime.h"
+#include "arrow/vendored/datetime/date.h"
 #include "runtime/helpers.h"
 //adapted from apache gandiva
 //source: https://github.com/apache/arrow/blob/3da66003ab2543c231fdf6551c2eb886f9a7e68f/cpp/src/gandiva/precompiled/epoch_time_point.h

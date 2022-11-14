@@ -3,7 +3,7 @@
 #define RUNTIME_EXTERNALARROWDATABASE_H
 #include "runtime/Database.h"
 namespace runtime {
-class ExternalArrowDatabase : public Database{
+class ExternalArrowDatabase : public Database {
    std::unordered_map<std::string, std::shared_ptr<arrow::Table>> tables;
 
    public:
@@ -15,5 +15,3 @@ class ExternalArrowDatabase : public Database{
 };
 } // end namespace runtime
 #endif // RUNTIME_EXTERNALARROWDATABASE_H
-
-

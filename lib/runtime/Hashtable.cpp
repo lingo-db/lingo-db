@@ -3,13 +3,13 @@ runtime::Hashtable* runtime::Hashtable::create(size_t typeSize, size_t initialCa
    return new (malloc(sizeof(Hashtable) + typeSize)) Hashtable(initialCapacity, typeSize);
 }
 void runtime::Hashtable::resize() {
-   size_t oldHtSize = hashMask+1;
+   size_t oldHtSize = hashMask + 1;
    size_t newHtSize = oldHtSize * 2;
    ht.setNewSize(newHtSize);
    hashMask = newHtSize - 1;
-   for(auto buffer:values.buffers){
-      for(size_t i=0;i<buffer.numElements;i++){
-         auto* entry = (Entry*) &buffer.ptr[i*values.typeSize];
+   for (auto buffer : values.buffers) {
+      for (size_t i = 0; i < buffer.numElements; i++) {
+         auto* entry = (Entry*) &buffer.ptr[i * values.typeSize];
          auto pos = entry->hashValue & hashMask;
          auto* previousPtr = ht.at(pos);
          ht.at(pos) = entry;
@@ -28,8 +28,8 @@ runtime::Hashtable::Entry* runtime::Hashtable::insert(size_t hash) {
    Entry* res = (Entry*) values.insert();
    auto pos = hash & hashMask;
    auto* previousPtr = ht.at(pos);
-   res->next=previousPtr;
-   res->hashValue=hash;
+   res->next = previousPtr;
+   res->hashValue = hash;
    ht.at(pos) = res;
    return res;
 }

@@ -2,7 +2,7 @@
 #define RUNTIME_METADATA_H
 #include <optional>
 #include <unordered_map>
-#include<variant>
+#include <variant>
 
 #include <arrow/record_batch.h>
 namespace runtime {
@@ -37,8 +37,8 @@ class TableMetaData {
    void setNumRows(size_t numRows) {
       TableMetaData::numRows = numRows;
    }
-   void addColumn(std::string name,std::shared_ptr<ColumnMetaData> columnMetaData){
-      columns[name]=columnMetaData;
+   void addColumn(std::string name, std::shared_ptr<ColumnMetaData> columnMetaData) {
+      columns[name] = columnMetaData;
       orderedColumns.push_back(name);
    }
    void setPrimaryKey(const std::vector<std::string>& primaryKey) {
@@ -55,7 +55,7 @@ class TableMetaData {
    }
    const std::vector<std::string>& getOrderedColumns() const;
    static std::shared_ptr<TableMetaData> deserialize(std::string);
-   std::string serialize(bool serializeSample=true) const;
+   std::string serialize(bool serializeSample = true) const;
    static std::shared_ptr<TableMetaData> create(const std::string& json, const std::string& name, std::shared_ptr<arrow::RecordBatch> sample);
    bool isPresent() const;
 };

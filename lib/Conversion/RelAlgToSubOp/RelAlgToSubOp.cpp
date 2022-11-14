@@ -1233,12 +1233,12 @@ class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
          auto ifOp = builder.create<mlir::scf::IfOp>(
             loc, builder.getI8Type(), isZero, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, spaceShipCompare(builder, sortCriteria, pos + 1, loc)); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, compareRes); });
          return ifOp.getResult(0);
-      }else{
+      } else {
          return compareRes;
       }
    }
    LogicalResult matchAndRewrite(mlir::relalg::SortOp sortOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto loc=sortOp->getLoc();
+      auto loc = sortOp->getLoc();
       mlir::relalg::ColumnSet requiredColumns = getRequired(sortOp);
       requiredColumns.insert(sortOp.getUsedColumns());
       MaterializationHelper helper(requiredColumns, rewriter.getContext());
@@ -1271,7 +1271,7 @@ class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(block);
          auto zero = rewriter.create<mlir::db::ConstantOp>(loc, rewriter.getI8Type(), rewriter.getIntegerAttr(rewriter.getI8Type(), 0));
-         auto spaceShipResult=spaceShipCompare(rewriter, sortCriteria, 0, sortOp->getLoc());
+         auto spaceShipResult = spaceShipCompare(rewriter, sortCriteria, 0, sortOp->getLoc());
          mlir::Value isLt = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, spaceShipResult, zero);
          rewriter.create<mlir::tuples::ReturnOp>(sortOp->getLoc(), isLt);
       }

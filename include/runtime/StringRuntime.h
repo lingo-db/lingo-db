@@ -23,10 +23,10 @@ struct StringRuntime {
    static VarLen32 fromFloat64(double);
    static VarLen32 fromChar(uint64_t, size_t bytes);
    static VarLen32 fromDecimal(__int128, int32_t scale);
-   static VarLen32 substr(VarLen32 str, size_t from,size_t to);
+   static VarLen32 substr(VarLen32 str, size_t from, size_t to);
    static VarLen32 toUpper(VarLen32 str);
-   static VarLen32 concat(VarLen32 a,VarLen32 b);
-   static NO_SIDE_EFFECTS size_t findMatch(VarLen32 str,VarLen32 needle, size_t start, size_t end);
+   static VarLen32 concat(VarLen32 a, VarLen32 b);
+   static NO_SIDE_EFFECTS size_t findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end);
 };
 } // namespace runtime
 #endif // RUNTIME_STRINGRUNTIME_H

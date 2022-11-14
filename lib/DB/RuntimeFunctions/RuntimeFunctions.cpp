@@ -29,7 +29,7 @@ static mlir::Value absIntImpl(mlir::OpBuilder& rewriter, mlir::ValueRange lowere
 static mlir::Value sqrtImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;
    mlir::Value val = loweredArguments[0];
-   mlir::Value res = rt::IntegerRuntime::sqrt(rewriter, loc)(val)[0];//todo: for decimals
+   mlir::Value res = rt::IntegerRuntime::sqrt(rewriter, loc)(val)[0]; //todo: for decimals
    if (res.getType() != val.getType()) {
       res = rewriter.create<mlir::arith::TruncIOp>(loc, val.getType(), res);
    }

@@ -23,7 +23,7 @@ class SimpleTypeConversionPattern : public ConversionPattern {
    }
 };
 
-class SizeOfLowering :  public OpConversionPattern<mlir::util::SizeOfOp> {
+class SizeOfLowering : public OpConversionPattern<mlir::util::SizeOfOp> {
    public:
    using OpConversionPattern<mlir::util::SizeOfOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::SizeOfOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {

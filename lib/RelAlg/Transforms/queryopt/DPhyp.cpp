@@ -5,7 +5,7 @@ void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
    auto p1 = dpTable[s1];
    auto p2 = dpTable[s2];
    NodeSet s;
-   auto currPlan = Plan::joinPlans(s1, s2, p1, p2, queryGraph,s);
+   auto currPlan = Plan::joinPlans(s1, s2, p1, p2, queryGraph, s);
    if (!dpTable.count(s) || currPlan->getCost() < dpTable[s]->getCost()) {
       dpTable[s] = currPlan;
    }

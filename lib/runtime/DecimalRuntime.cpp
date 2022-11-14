@@ -6,8 +6,8 @@ const int64_t powersOfTen[19] = {
    100000000000000000ll, 1000000000000000000ll};
 
 __int128 runtime::DecimalRuntime::round(__int128 value, int64_t digits, int64_t scale) {
-   auto roundBy=scale-digits;
-   if (digits>=scale) {
+   auto roundBy = scale - digits;
+   if (digits >= scale) {
       return value; //no rounding necessary
    }
    auto shift = powersOfTen[roundBy];

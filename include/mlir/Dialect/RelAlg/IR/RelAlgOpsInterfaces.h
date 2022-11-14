@@ -15,7 +15,7 @@
 #include "mlir/IR/SymbolTable.h"
 
 namespace mlir::relalg::detail {
-void replaceUsages(mlir::Operation* op,std::function<mlir::tuples::ColumnRefAttr(mlir::tuples::ColumnRefAttr)> fn);
+void replaceUsages(mlir::Operation* op, std::function<mlir::tuples::ColumnRefAttr(mlir::tuples::ColumnRefAttr)> fn);
 ColumnSet getUsedColumns(mlir::Operation* op);
 ColumnSet getAvailableColumns(mlir::Operation* op);
 ColumnSet getFreeColumns(mlir::Operation* op);

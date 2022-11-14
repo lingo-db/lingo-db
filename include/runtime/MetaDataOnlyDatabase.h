@@ -6,7 +6,6 @@ namespace runtime {
 class MetaDataOnlyDatabase : public runtime::Database {
    std::unordered_map<std::string, std::shared_ptr<TableMetaData>> metaData;
 
-
    public:
    static std::unique_ptr<runtime::Database> loadMetaData(std::string file);
    static std::unique_ptr<runtime::Database> emptyMetaData();

@@ -6,7 +6,7 @@ namespace mlir {
 namespace subop {
 std::unique_ptr<Pass> createEnforceOrderPass();
 void registerSubOpTransformations();
-}// end namespace subop
-}// end namespace mlir
+} // end namespace subop
+} // end namespace mlir
 
 #endif //MLIR_DIALECT_SUBOPERATOR_TRANSFORMS_PASSES_H

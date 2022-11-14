@@ -87,7 +87,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
          return "mlir::util::VarLen32Type::get(context)";
       }
       if (asString.ends_with("runtime::Buffer")) {
-         return "mlir::util::BufferType::get(context,"+ translateIntegerType(8)+")";
+         return "mlir::util::BufferType::get(context," + translateIntegerType(8) + ")";
       }
 
       return std::optional<std::string>();
@@ -121,12 +121,12 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             if (isa<CXXConstructorDecl>(method)) continue;
             if (isa<CXXDestructorDecl>(method)) continue;
             if (method->getAccess() == clang::AS_protected || method->getAccess() == clang::AS_private) continue;
-            bool noSideEffects=false;
-            for(auto *attr:method->attrs()){
-               if(attr->getKind()==clang::attr::Annotate){
-                  if(auto *annotateAttr=llvm::dyn_cast<clang::AnnotateAttr>(attr)){
-                     if(annotateAttr->getAnnotation()=="rt-no-sideffect"){
-                        noSideEffects=true;
+            bool noSideEffects = false;
+            for (auto* attr : method->attrs()) {
+               if (attr->getKind() == clang::attr::Annotate) {
+                  if (auto* annotateAttr = llvm::dyn_cast<clang::AnnotateAttr>(attr)) {
+                     if (annotateAttr->getAnnotation() == "rt-no-sideffect") {
+                        noSideEffects = true;
                      }
                   }
                }

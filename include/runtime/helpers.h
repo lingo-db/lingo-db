@@ -98,8 +98,8 @@ class VarLen32 {
    char* data() {
       return (char*) getPtr();
    }
-   bool isShort(){
-      return len<=shortLen;
+   bool isShort() {
+      return len <= shortLen;
    }
    uint32_t getLen() {
       return len & ~lazyMask;
@@ -156,7 +156,7 @@ struct FlexibleBuffer {
          nextBuffer();
       }
       totalLen++;
-      auto *res= &buffers.back().ptr[typeSize * (buffers.back().numElements)];
+      auto* res = &buffers.back().ptr[typeSize * (buffers.back().numElements)];
       buffers.back().numElements++;
       return res;
    }

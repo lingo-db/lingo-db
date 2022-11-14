@@ -243,7 +243,7 @@ class StringCastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
                auto converted = rewriter.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType), result);
                result = converted;
             }
-         }else if(scalarTargetType.isa<mlir::db::DateType>()){
+         } else if (scalarTargetType.isa<mlir::db::DateType>()) {
             result = rt::StringRuntime::toDate(rewriter, loc)({valueToCast})[0];
          }
       } else if (auto intWidth = getIntegerWidth(scalarSourceType, false)) {
@@ -256,7 +256,7 @@ class StringCastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
       } else if (auto charType = scalarSourceType.dyn_cast_or_null<db::CharType>()) {
          auto bytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(charType.getBytes()));
          result = rt::StringRuntime::fromChar(rewriter, loc)({valueToCast, bytes})[0];
-      }else if (scalarSourceType.isa<mlir::db::DateType>()){
+      } else if (scalarSourceType.isa<mlir::db::DateType>()) {
          result = rt::StringRuntime::fromDate(rewriter, loc)({valueToCast})[0];
       }
       if (result) {
@@ -826,7 +826,7 @@ class SortCompareLowering : public OpConversionPattern<mlir::db::SortCompare> {
    using OpConversionPattern<mlir::db::SortCompare>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::db::SortCompare sortCompareOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = sortCompareOp->getLoc();
-      if (sortCompareOp.left().getType() != sortCompareOp.right().getType()|| sortCompareOp.left().getType().isa<mlir::db::NullableType>()) {
+      if (sortCompareOp.left().getType() != sortCompareOp.right().getType() || sortCompareOp.left().getType().isa<mlir::db::NullableType>()) {
          return failure();
       }
       mlir::Value zero = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, 8);
@@ -887,7 +887,7 @@ class HashLowering : public ConversionPattern {
             auto unpacked = builder.create<util::UnPackOp>(loc, v);
 
             mlir::Value totalHashUpdated = builder.create<mlir::scf::IfOp>(
-                                                     loc, builder.getIndexType(), unpacked.getResult(0), [totalHashBefore=totalHash](mlir::OpBuilder& builder, mlir::Location loc) {
+                                                     loc, builder.getIndexType(), unpacked.getResult(0), [totalHashBefore = totalHash](mlir::OpBuilder& builder, mlir::Location loc) {
                                                          mlir::Value totalHash=totalHashBefore;
                                                         if (!totalHash) {
                                                            totalHash = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(0));
@@ -929,7 +929,7 @@ void DBToStdLoweringPass::runOnOperation() {
    target.addLegalDialect<func::FuncDialect>();
    target.addLegalDialect<memref::MemRefDialect>();
    TypeConverter typeConverter;
-   auto *ctxt = &getContext();
+   auto* ctxt = &getContext();
    typeConverter.addConversion([&](mlir::Type type) { return type; });
    typeConverter.addConversion([&](::mlir::db::DateType t) {
       return mlir::IntegerType::get(ctxt, 64);

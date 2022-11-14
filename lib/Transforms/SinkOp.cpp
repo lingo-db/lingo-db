@@ -1,5 +1,5 @@
-#include "mlir/Transforms/CustomPasses.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Transforms/CustomPasses.h"
 #include <queue>
 namespace {
 class SinkOp : public mlir::PassWrapper<SinkOp, mlir::OperationPass<mlir::func::FuncOp>> {
@@ -29,12 +29,12 @@ class SinkOp : public mlir::PassWrapper<SinkOp, mlir::OperationPass<mlir::func::
    mlir::Block* canSink(mlir::Operation* op) {
       auto users = op->getUsers();
       if (users.empty()) return nullptr;
-      auto *firstUser = *users.begin();
+      auto* firstUser = *users.begin();
       if (firstUser->getParentRegion() != op->getParentRegion()) return nullptr;
 
-      if (op->getBlock()==firstUser->getBlock()) return nullptr;
-      for(auto *user:users){
-         if(user->getBlock()!=firstUser->getBlock()){
+      if (op->getBlock() == firstUser->getBlock()) return nullptr;
+      for (auto* user : users) {
+         if (user->getBlock() != firstUser->getBlock()) {
             return nullptr;
          }
       }
@@ -53,11 +53,11 @@ class SinkOp : public mlir::PassWrapper<SinkOp, mlir::OperationPass<mlir::func::
       while (!q.empty()) {
          mlir::Operation* curr = q.front();
          q.pop();
-         auto *sinkBefore = canSink(curr);
+         auto* sinkBefore = canSink(curr);
          if (!sinkBefore) continue;
-         curr->moveBefore(sinkBefore,sinkBefore->begin());
+         curr->moveBefore(sinkBefore, sinkBefore->begin());
          for (auto operand : curr->getOperands()) {
-            if (auto *definingOp = operand.getDefiningOp()) {
+            if (auto* definingOp = operand.getDefiningOp()) {
                if (canSink(definingOp)) {
                   q.push(definingOp);
                }

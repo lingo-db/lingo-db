@@ -61,7 +61,7 @@ void runStatement(runtime::ExecutionContext& context, const std::vector<std::str
       statement += lines[line] + "\n";
       line++;
    }
-   if(statement.starts_with("CREATE INDEX")){
+   if (statement.starts_with("CREATE INDEX")) {
       return;
    }
    runner::Runner runner(runner::RunMode::DEFAULT);
@@ -99,7 +99,7 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
          return false;
       }
    };
-   bool tsv = parts.size()>1&&parts[1]=="tsv";
+   bool tsv = parts.size() > 1 && parts[1] == "tsv";
    std::vector<std::function<bool(const std::string&)>> parsers = {parseSort};
    for (unsigned i = 2; i < parts.size(); i++) {
       for (const auto& parser : parsers) {
@@ -164,11 +164,10 @@ int main(int argc, char** argv) {
       if (parts[0] == "query") {
          runQuery(context, lines, line);
       }
-      if (parts[0] =="hash-threshold"){
-         line+=2;
+      if (parts[0] == "hash-threshold") {
+         line += 2;
       }
    }
 
    return 0;
 }
-

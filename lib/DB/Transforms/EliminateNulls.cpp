@@ -65,8 +65,7 @@ class WrapWithNullCheck : public mlir::RewritePattern {
                   b.create<mlir::scf::YieldOp>(loc,nullResult);
                }else{
                   b.create<mlir::scf::YieldOp>(loc);
-               }
-            }, [&](mlir::OpBuilder& b, mlir::Location loc) {
+               } }, [&](mlir::OpBuilder& b, mlir::Location loc) {
                mlir::BlockAndValueMapping mapping;
                for (auto operand : op->getOperands()) {
                   if (operand.getType().isa<mlir::db::NullableType>()) {
@@ -80,9 +79,7 @@ class WrapWithNullCheck : public mlir::RewritePattern {
                   b.create<mlir::scf::YieldOp>(loc,nullResult);
                }else{
                   b.create<mlir::scf::YieldOp>(loc);
-               }
-            }
-         );
+               } });
       }
    }
 };
@@ -105,12 +102,11 @@ class SimplifySortComparePattern : public mlir::RewritePattern {
          op, op->getResultTypes(), isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
             mlir::Value res = b.create<mlir::arith::SelectOp>(loc, isRightNull, minus1, one);
             res = b.create<mlir::arith::SelectOp>(loc, bothNullable, zero, res);
-            b.create<mlir::scf::YieldOp>(loc, res);
-            }, [&](mlir::OpBuilder& b, mlir::Location loc) {
+            b.create<mlir::scf::YieldOp>(loc, res); }, [&](mlir::OpBuilder& b, mlir::Location loc) {
             mlir::Value left = b.create<mlir::db::NullableGetVal>(loc, sortCompareOp.left());
             mlir::Value right = b.create<mlir::db::NullableGetVal>(loc, sortCompareOp.right());
             mlir::Value res=b.create<mlir::db::SortCompare>(loc,left,right);
-            b.create<mlir::scf::YieldOp>(loc,res);});
+            b.create<mlir::scf::YieldOp>(loc,res); });
       return mlir::success(true);
    }
 };

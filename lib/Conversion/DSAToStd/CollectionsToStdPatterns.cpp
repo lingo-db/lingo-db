@@ -35,7 +35,7 @@ class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
       auto iterator = mlir::dsa::CollectionIterationImpl::getImpl(collectionType, adaptor.collection());
 
       ModuleOp parentModule = forOp->getParentOfType<ModuleOp>();
-      std::vector<Value> results = iterator->implementLoop(forOp->getLoc(), adaptor.initArgs(), *typeConverter, rewriter, parentModule,  [&](std::function<Value(OpBuilder & b)> getElem, ValueRange iterargs, OpBuilder builder) {
+      std::vector<Value> results = iterator->implementLoop(forOp->getLoc(), adaptor.initArgs(), *typeConverter, rewriter, parentModule, [&](std::function<Value(OpBuilder & b)> getElem, ValueRange iterargs, OpBuilder builder) {
          auto yieldOp = cast<mlir::dsa::YieldOp>(forOp.getBody()->getTerminator());
          std::vector<Type> resTypes;
          std::vector<Location> locs;
@@ -70,7 +70,7 @@ class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
    }
 };
 
-class AtLowering  : public OpConversionPattern<mlir::dsa::At> {
+class AtLowering : public OpConversionPattern<mlir::dsa::At> {
    public:
    using OpConversionPattern<mlir::dsa::At>::OpConversionPattern;
    static Value getBit(OpBuilder builder, Location loc, Value bits, Value pos) {
@@ -173,15 +173,11 @@ class AtLowering  : public OpConversionPattern<mlir::dsa::At> {
 void mlir::dsa::populateCollectionsToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    auto* context = patterns.getContext();
 
-
    patterns.insert<ForOpLowering>(typeConverter, context);
    patterns.insert<AtLowering>(typeConverter, context);
 
    auto indexType = IndexType::get(context);
    auto i8ptrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
-
-
-
 
    typeConverter.addConversion([context, i8ptrType, indexType](mlir::dsa::RecordBatchType recordBatchType) {
       std::vector<Type> types;

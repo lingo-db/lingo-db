@@ -59,7 +59,7 @@ ParseResult dsa::ForOp::parse(OpAsmParser& parser, OperationState& result) {
    if (!(collectionType = collType.dyn_cast_or_null<mlir::util::CollectionType>())) {
       return failure();
    }
-   if(parser.resolveOperand(collection, collectionType, result.operands).failed()){
+   if (parser.resolveOperand(collection, collectionType, result.operands).failed()) {
       return failure();
    }
 

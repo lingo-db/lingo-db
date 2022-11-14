@@ -77,9 +77,9 @@ void Plan::dump() {
 
 static void fix(Operator tree) {
    for (auto child : tree.getChildren()) {
-      mlir::Operation* moveBefore=tree.getOperation();
-      for(auto *u:child->getUsers()){
-         moveBefore=u->isBeforeInBlock(moveBefore)?u: moveBefore;
+      mlir::Operation* moveBefore = tree.getOperation();
+      for (auto* u : child->getUsers()) {
+         moveBefore = u->isBeforeInBlock(moveBefore) ? u : moveBefore;
       }
       if (!child->isBeforeInBlock(moveBefore)) {
          child.moveSubTreeBefore(moveBefore);
@@ -97,15 +97,15 @@ Operator Plan::realizePlanRec() {
    Operator firstNode{};
    Operator lastNode{};
    for (auto op : additionalOps) {
-      if(auto innerJoin=mlir::dyn_cast_or_null<mlir::relalg::InnerJoinOp>(op.getOperation())){
+      if (auto innerJoin = mlir::dyn_cast_or_null<mlir::relalg::InnerJoinOp>(op.getOperation())) {
          mlir::OpBuilder builder(innerJoin.getOperation());
-         mlir::Value v=innerJoin.result();//hack;
+         mlir::Value v = innerJoin.result(); //hack;
          auto x = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), v);
          x.predicate().push_back(new mlir::Block);
          x.getLambdaBlock().addArgument(mlir::tuples::TupleType::get(builder.getContext()), innerJoin->getLoc());
          innerJoin.getLambdaArgument().replaceAllUsesWith(x.getLambdaArgument());
          x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), innerJoin.getLambdaBlock().getOperations());
-         op=x;
+         op = x;
       }
       op->setAttr("cost", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), cost));
       op->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), rows));
@@ -141,7 +141,7 @@ Operator Plan::realizePlanRec() {
          currop->setAttr("cost", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), cost));
          currop->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), rows));
       } else if (!currop && children.size() == 2) {
-         mlir::OpBuilder builder(children[0]->isBeforeInBlock(children[1])?children[1].getOperation():children[0].getOperation());
+         mlir::OpBuilder builder(children[0]->isBeforeInBlock(children[1]) ? children[1].getOperation() : children[0].getOperation());
          currop = builder.create<mlir::relalg::CrossProductOp>(children[0].getOperation()->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
          //currop->setAttr("cost",mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()),cost));
          //currop->setAttr("rows",mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()),rows));

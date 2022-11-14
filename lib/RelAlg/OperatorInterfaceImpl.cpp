@@ -201,7 +201,7 @@ ColumnSet OuterJoinOp::getCreatedColumns() {
    return created;
 }
 ColumnSet OuterJoinOp::getUsedColumns() {
-   auto used= mlir::relalg::detail::getUsedColumns(getOperation());
+   auto used = mlir::relalg::detail::getUsedColumns(getOperation());
    for (Attribute attr : this->getOperation()->getAttr("mapping").cast<mlir::ArrayAttr>()) {
       auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
       auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
@@ -232,7 +232,7 @@ ColumnSet FullOuterJoinOp::getCreatedColumns() {
    return created;
 }
 ColumnSet FullOuterJoinOp::getUsedColumns() {
-   auto used= mlir::relalg::detail::getUsedColumns(getOperation());
+   auto used = mlir::relalg::detail::getUsedColumns(getOperation());
    for (Attribute attr : this->getOperation()->getAttr("mapping").cast<mlir::ArrayAttr>()) {
       auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
       auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
@@ -253,7 +253,7 @@ ColumnSet SingleJoinOp::getCreatedColumns() {
    return created;
 }
 ColumnSet SingleJoinOp::getUsedColumns() {
-   auto used= mlir::relalg::detail::getUsedColumns(getOperation());
+   auto used = mlir::relalg::detail::getUsedColumns(getOperation());
    for (Attribute attr : this->getOperation()->getAttr("mapping").cast<mlir::ArrayAttr>()) {
       auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
       auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();

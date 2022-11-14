@@ -59,7 +59,7 @@ static ParseResult parseCustRegion(OpAsmParser& parser, Region& result) {
       if (parser.parseArgument(predArgument) || parser.parseColonType(predArgType)) {
          return failure();
       }
-      predArgument.type=predArgType;
+      predArgument.type = predArgType;
       regionArgs.push_back(predArgument);
       if (!parser.parseOptionalComma()) { continue; }
       if (parser.parseRParen()) { return failure(); }
@@ -170,7 +170,7 @@ static ParseResult parseCustDef(OpAsmParser& parser, mlir::tuples::ColumnDefAttr
    return success();
 }
 static void printCustDef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::ColumnDefAttr attr) {
-   p<<attr.getName();
+   p << attr.getName();
    std::vector<mlir::NamedAttribute> relAttrDefProps;
    MLIRContext* context = attr.getContext();
    const mlir::tuples::Column& relationalAttribute = attr.getColumn();
@@ -313,12 +313,6 @@ void mlir::relalg::BaseTableOp::print(OpAsmPrinter& p) {
    }
    p << "}";
 }
-
-
-
-
-
-
 
 #define GET_OP_CLASSES
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.cpp.inc"

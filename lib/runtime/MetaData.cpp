@@ -93,7 +93,7 @@ std::string runtime::TableMetaData::serialize(bool serializeSample) const {
    nlohmann::json json;
    json["num_rows"] = numRows;
    json["pkey"] = primaryKey;
-   if (sample&&serializeSample) {
+   if (sample && serializeSample) {
       json["sample"] = Database::serializeRecordBatch(sample);
    }
    json["columns"] = nlohmann::json::array_t();

@@ -8,7 +8,6 @@
 
 using namespace mlir;
 
-
 void mlir::util::RefType::print(::mlir::AsmPrinter& printer) const {
    printer << "<";
    printer << getElementType() << ">";

@@ -209,7 +209,7 @@ class QueryGraph {
       for (auto pseudo : (s1 & ~normalNodesMask)) {
          auto join = joins[pseudoNodeOwner[pseudo]];
          if (join.left.isSubsetOf(s1) && join.right.isSubsetOf(s1)) {
-          //pseudo but is not lonely
+            //pseudo but is not lonely
          } else {
             return true;
          }

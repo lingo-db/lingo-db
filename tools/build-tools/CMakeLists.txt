@@ -14,7 +14,7 @@ target_link_libraries(runtime-header-tool
 function(gen_rt_def target_name header_file)
     add_custom_command(
             COMMAND ${CMAKE_BINARY_DIR}/bin/runtime-header-tool --oh=${CMAKE_BINARY_DIR}/include/runtime-defs/${header_file} ${CMAKE_SOURCE_DIR}/include/runtime/${header_file} -- -x c++ --std=c++17 -I ${MLIR_DIR}/../../clang/${CLANG_VERSION}/include/ -I ${CMAKE_SOURCE_DIR}/include -I ${ARROW_INCLUDE_DIR}
-            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}            OUTPUT  ${CMAKE_BINARY_DIR}/include/runtime-defs/${header_file}
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} OUTPUT ${CMAKE_BINARY_DIR}/include/runtime-defs/${header_file}
             DEPENDS ${CMAKE_BINARY_DIR}/bin/runtime-header-tool
             DEPENDS ${CMAKE_SOURCE_DIR}/include/runtime/${header_file}
             COMMENT "Generate runtime definitions... ${header_file}"

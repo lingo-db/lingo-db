@@ -6,7 +6,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 add_mlir_library(MLIRCustomTransforms
         SinkOp.cpp
         SimplifyMemrefs.cpp
-SimplifyArithmetics.cpp
+        SimplifyArithmetics.cpp
         DEPENDS
         MLIRCustomCanonicalizationIncGen
 

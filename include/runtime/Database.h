@@ -8,7 +8,7 @@
 #include "metadata.h"
 #include <arrow/type_fwd.h>
 namespace runtime {
-struct ArrowTable{};
+struct ArrowTable {};
 class Database {
    public:
    //void addTable(std::string name, std::shared_ptr<arrow::Table> table);
@@ -25,7 +25,7 @@ class Database {
 
    virtual void setPersistMode(bool persist);
    void setPersist(bool persist);
-   void copyFromIntoTable(runtime::VarLen32 tableName,runtime::VarLen32 fileName,runtime::VarLen32 delimiter,runtime::VarLen32 escape);
+   void copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 fileName, runtime::VarLen32 delimiter, runtime::VarLen32 escape);
    static std::string serializeRecordBatch(std::shared_ptr<arrow::RecordBatch> batch);
    static std::shared_ptr<arrow::RecordBatch> deserializeRecordBatch(std::string str);
    virtual ~Database() {}

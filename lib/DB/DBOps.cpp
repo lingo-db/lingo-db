@@ -40,8 +40,8 @@ int getIntegerWidth(mlir::Type type, bool isUnSigned) {
 LogicalResult inferReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
-   Type baseType=baseTypeLeft;
-   if(baseTypeLeft.isa<mlir::db::DecimalType>()){
+   Type baseType = baseTypeLeft;
+   if (baseTypeLeft.isa<mlir::db::DecimalType>()) {
       auto a = baseTypeLeft.cast<mlir::db::DecimalType>();
       auto b = baseTypeRight.cast<mlir::db::DecimalType>();
       auto hidig = std::max(a.getP() - a.getS(), b.getP() - b.getS());
@@ -56,8 +56,8 @@ LogicalResult inferReturnType(MLIRContext* context, Optional<Location> location,
 LogicalResult inferMulReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
-   Type baseType=baseTypeLeft;
-   if(baseTypeLeft.isa<mlir::db::DecimalType>()){
+   Type baseType = baseTypeLeft;
+   if (baseTypeLeft.isa<mlir::db::DecimalType>()) {
       auto a = baseTypeLeft.cast<mlir::db::DecimalType>();
       auto b = baseTypeRight.cast<mlir::db::DecimalType>();
       auto sump = a.getP() + b.getP();
@@ -70,18 +70,18 @@ LogicalResult inferMulReturnType(MLIRContext* context, Optional<Location> locati
 LogicalResult inferDivReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
-   Type baseType=baseTypeLeft;
-   if(baseTypeLeft.isa<mlir::db::DecimalType>()){
-      auto leftDecType=baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
-      auto rightDecType=baseTypeRight.dyn_cast<mlir::db::DecimalType>();
-      baseType=mlir::db::DecimalType::get(baseType.getContext(),std::max(leftDecType.getP(),rightDecType.getP()),std::max(leftDecType.getS(),rightDecType.getS()));
+   Type baseType = baseTypeLeft;
+   if (baseTypeLeft.isa<mlir::db::DecimalType>()) {
+      auto leftDecType = baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
+      auto rightDecType = baseTypeRight.dyn_cast<mlir::db::DecimalType>();
+      baseType = mlir::db::DecimalType::get(baseType.getContext(), std::max(leftDecType.getP(), rightDecType.getP()), std::max(leftDecType.getS(), rightDecType.getS()));
    }
    inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
    return success();
 }
 
 ::mlir::LogicalResult mlir::db::RuntimeCall::verify() {
-   mlir::db::RuntimeCall& runtimeCall=*this;
+   mlir::db::RuntimeCall& runtimeCall = *this;
    auto reg = runtimeCall.getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
    if (!reg->verify(runtimeCall.fn().str(), runtimeCall.args().getTypes(), runtimeCall.getNumResults() == 1 ? runtimeCall.getResultTypes()[0] : mlir::Type())) {
       runtimeCall->emitError("could not find matching runtime function");
@@ -117,7 +117,6 @@ bool mlir::db::CastOp::supportsInvalidValues() {
    }
    return true;
 }
-
 
 LogicalResult mlir::db::OrOp::canonicalize(mlir::db::OrOp orOp, mlir::PatternRewriter& rewriter) {
    llvm::SmallDenseMap<mlir::Value, size_t> usage;
@@ -241,8 +240,8 @@ LogicalResult mlir::db::AndOp::canonicalize(mlir::db::AndOp andOp, mlir::Pattern
          rawValues.insert(between);
       }
    }
-   if(rawValues.size()==1){
-      rewriter.replaceOp(andOp,*rawValues.begin());
+   if (rawValues.size() == 1) {
+      rewriter.replaceOp(andOp, *rawValues.begin());
       return success();
    }
    if (rawValues.size() != andOp.vals().size()) {

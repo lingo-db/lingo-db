@@ -25,7 +25,7 @@ class Vector {
    Buffer getBuffer() const;
    void sort(bool (*compareFn)(uint8_t*, uint8_t*));
    static void destroy(Vector* vec);
-   ~Vector(){
+   ~Vector() {
       free(ptr);
    }
 };

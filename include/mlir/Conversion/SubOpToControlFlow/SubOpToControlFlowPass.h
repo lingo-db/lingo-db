@@ -8,6 +8,6 @@ namespace subop {
 std::unique_ptr<Pass> createLowerSubOpPass();
 void registerSubOpToControlFlowConversionPasses();
 void createLowerSubOpPipeline(mlir::OpPassManager& pm);
-}// end namespace subop
-}// end namespace mlir
+} // end namespace subop
+} // end namespace mlir
 #endif //MLIR_CONVERSION_SUBOPTOCONTROLFLOW_SUBOPTOCONTROLFLOWPASS_H

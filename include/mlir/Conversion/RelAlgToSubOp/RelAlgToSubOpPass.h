@@ -8,6 +8,6 @@ namespace relalg {
 std::unique_ptr<Pass> createLowerToSubOpPass();
 void registerRelAlgToSubOpConversionPasses();
 void createLowerRelAlgToSubOpPipeline(mlir::OpPassManager& pm);
-}// end namespace relalg
-}// end namespace mlir
+} // end namespace relalg
+} // end namespace mlir
 #endif //MLIR_CONVERSION_RELALGTOSUBOP_RELALGTOSUBOPPASS_H
