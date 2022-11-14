@@ -113,14 +113,7 @@ lint:
 
 .sqlite_tests:
    script:
-      - /build/lingodb/sqlite-tester test/sqlite/select1.test &> /dev/null
-      - /build/lingodb/sqlite-tester test/sqlite/select2.test &> /dev/null
-      - /build/lingodb/sqlite-tester test/sqlite/select3.test &> /dev/null
-      - /build/lingodb/sqlite-tester test/sqlite/select4.test &> /dev/null
-      - /build/lingodb/sqlite-tester test/sqlite/select5.test &> /dev/null
-      - /build/lingodb/sqlite-tester test/sqlite/groupby.test &> /dev/null
-      - /build/lingodb/sqlite-tester test/sqlite/join.test &> /dev/null
-      - /build/lingodb/sqlite-tester test/sqlite/unnesting.test &> /dev/null
+      - time find ./test/sqlite/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P $(nproc) /build/lingodb/sqlite-tester
 
 file_tests_debug:
    extends:

@@ -35,10 +35,17 @@ class Runner {
    };
    static std::function<void(uint8_t*)> hashResult(SortMode sortMode, size_t& numValues, std::string& result, std::string& lines,bool tsv);
    static RunMode getRunMode();
+   bool isReportTimes() const {
+      return reportTimes;
+   }
+   void setReportTimes(bool reportTimes) {
+      Runner::reportTimes = reportTimes;
+   }
 
    private:
    void* context;
    RunMode runMode;
+   bool reportTimes=true;
 };
 } // namespace runner
 #endif // RUNNER_RUNNER_H

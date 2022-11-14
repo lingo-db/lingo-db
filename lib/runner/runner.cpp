@@ -248,18 +248,27 @@ int loadMLIRFromString(const std::string& input, mlir::MLIRContext& context, mli
    }
    return 0;
 }
-static std::unique_ptr<llvm::Module>
-convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context, mlir::LLVM::detail::DebuggingLevel debugLevel) {
-   auto startConv = std::chrono::high_resolution_clock::now();
-
-   std::unique_ptr<llvm::Module> mainModule =
-      translateModuleToLLVMIR(module, context, "LLVMDialectModule", debugLevel);
-   auto endConv = std::chrono::high_resolution_clock::now();
-   std::cout << "conversion: " << std::chrono::duration_cast<std::chrono::microseconds>(endConv - startConv).count() / 1000.0 << " ms" << std::endl;
-   return mainModule;
-}
 
 struct RunnerContext {
+   struct Statistics {
+      size_t queryOptTime;
+      size_t lowerRelAlgTime;
+      size_t lowerToStdTime;
+      size_t lowerToLLVMTime;
+      size_t convertToLLVMIR;
+      size_t compileTime;
+      size_t executionTime;
+
+      void print(std::ostream& out) {
+         out << "optimization took: " << queryOptTime / 1000.0 << " ms" << std::endl;
+         out << "lowering to db took: " << lowerRelAlgTime / 1000.0 << " ms" << std::endl;
+         out << "lowering to std took: " << lowerToStdTime / 1000.0 << " ms" << std::endl;
+         out << "lowering to llvm took: " << lowerToLLVMTime / 1000.0 << " ms" << std::endl;
+         out << "conversion: " << convertToLLVMIR / 1000.0 << " ms" << std::endl;
+         out << "jit: " << compileTime / 1000.0 << " ms" << std::endl;
+         out << "runtime: " << executionTime / 1000.0 << " ms" << std::endl;
+      }
+   } stats;
    mlir::MLIRContext context;
    mlir::OwningOpRef<mlir::ModuleOp> module;
    size_t numArgs;
@@ -292,7 +301,7 @@ RunMode Runner::getRunMode() {
    return runMode;
 }
 Runner::Runner(RunMode mode) : context(nullptr), runMode(mode) {
-   llvm::DebugFlag = true;
+   llvm::DebugFlag = false;
    LLVMInitializeX86AsmParser();
    if (mode == RunMode::DEBUGGING || mode == RunMode::PERF) {
       mlir::Operation::setTagLocationHook(tagLocHook);
@@ -414,7 +423,7 @@ bool Runner::optimize(runtime::Database& db) {
    }
    snapshot();
    auto end = std::chrono::high_resolution_clock::now();
-   std::cout << "optimization took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
+   ctxt->stats.queryOptTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
    {
       auto start = std::chrono::high_resolution_clock::now();
 
@@ -426,7 +435,7 @@ bool Runner::optimize(runtime::Database& db) {
          return false;
       }
       auto end = std::chrono::high_resolution_clock::now();
-      std::cout << "lowering to db took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
+      ctxt->stats.lowerRelAlgTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
    }
    snapshot();
    return true;
@@ -441,7 +450,7 @@ bool Runner::lower() {
       return false;
    }
    mlir::PassManager pm2(&ctxt->context);
-
+   pm2.enableVerifier(runMode != RunMode::SPEED);
    pm2.addPass(mlir::dsa::createLowerToStdPass());
    pm2.addPass(mlir::createCanonicalizerPass());
    if (mlir::failed(pm2.run(ctxt->module.get()))) {
@@ -462,7 +471,7 @@ bool Runner::lower() {
    });
 
    auto end = std::chrono::high_resolution_clock::now();
-   std::cout << "lowering to std took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
+   ctxt->stats.lowerToStdTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
    snapshot();
    return true;
 }
@@ -507,7 +516,7 @@ bool Runner::lowerToLLVM() {
       builder.create<mlir::LLVM::ReturnOp>(builder.getUnknownLoc(), mlir::ValueRange{execContextAsPtr});
    }
    auto end = std::chrono::high_resolution_clock::now();
-   std::cout << "lowering to llvm took: " << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0 << " ms" << std::endl;
+   ctxt->stats.lowerToLLVMTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
    snapshot();
    return true;
 }
@@ -572,8 +581,19 @@ static pid_t runPerfRecord() {
 class WrappedExecutionEngine {
    std::unique_ptr<mlir::ExecutionEngine> engine;
    size_t jitTime;
+   size_t conversionTime;
    void* mainFuncPtr;
    void* setContextPtr;
+   std::unique_ptr<llvm::Module> convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context, mlir::LLVM::detail::DebuggingLevel debugLevel) {
+      auto startConv = std::chrono::high_resolution_clock::now();
+
+      std::unique_ptr<llvm::Module> mainModule =
+         translateModuleToLLVMIR(module, context, "LLVMDialectModule", debugLevel);
+      auto endConv = std::chrono::high_resolution_clock::now();
+
+      conversionTime = std::chrono::duration_cast<std::chrono::microseconds>(endConv - startConv).count();
+      return mainModule;
+   }
 
    public:
    WrappedExecutionEngine(mlir::ModuleOp module, RunMode runMode) : mainFuncPtr(nullptr), setContextPtr(nullptr) {
@@ -643,6 +663,9 @@ class WrappedExecutionEngine {
       }
       return true;
    }
+   size_t getConversionTime() {
+      return conversionTime;
+   }
    size_t getJitTime() {
       return jitTime;
    }
@@ -690,7 +713,8 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
    auto fn = (myfunc) engine.getSetContextPtr();
    fn(context);
    uint8_t* res;
-   std::cout << "jit: " << engine.getJitTime() / 1000.0 << " ms" << std::endl;
+   ctxt->stats.convertToLLVMIR = engine.getConversionTime();
+   ctxt->stats.compileTime = engine.getJitTime();
    pid_t pid;
    if (runMode == RunMode::PERF) {
       pid = runPerfRecord();
@@ -720,8 +744,10 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
       kill(pid, SIGINT);
       sleep(2);
    }
-   std::cout << "runtime: " << (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]) / 1000.0 << " ms" << std::endl;
-
+   ctxt->stats.executionTime = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
+   if (reportTimes) {
+      ctxt->stats.print(std::cout);
+   }
    if (ctxt->numResults == 1) {
       callback(res);
    }
