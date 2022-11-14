@@ -16,12 +16,13 @@
 //CHECK: |                         29555  |
 
 module @querymodule{
-    func.func @main ()  -> !dsa.table{
+    func.func @main () {
         %1 = relalg.basetable { table_identifier="hoeren" } columns: {matrnr => @hoeren::@matrnr({type=i64}),
             vorlnr => @hoeren::@vorlnr({type=i64})
         }
         %2 = relalg.projection all  [@hoeren::@matrnr] %1
-        %3 = relalg.materialize %2 [@hoeren::@matrnr] => ["matrnr"] : !dsa.table
-        return %3 : !dsa.table
+        %3 = relalg.materialize %2 [@hoeren::@matrnr] => ["matrnr"]  : !subop.result_table<[hmatrnr : i64]>
+        subop.set_result 0 %3 : !subop.result_table<[hmatrnr : i64]>
+        return
     }
 }

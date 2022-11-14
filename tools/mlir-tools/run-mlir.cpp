@@ -37,6 +37,7 @@ int main(int argc, char** argv) {
       runs = std::atoi(numRuns);
       std::cout << "using " << runs << " runs" << std::endl;
    }
-   runner.runJit(&context, runs, runner::Runner::printTable);
+   runner.runJit(&context, runs);
+   runner::Runner::printTable(&context);
    return 0;
 }

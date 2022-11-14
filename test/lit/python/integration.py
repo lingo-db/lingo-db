@@ -10,7 +10,7 @@ df = pd.DataFrame(data={'col1': [1, 2,3,4]})
 
 pymlirdbext.load({"df":pa.Table.from_pandas(df)})
 simpleMLIRQuery="""module {
-  func.func @main() -> !dsa.table {
+  func.func @main() {
     %0 = relalg.basetable {table_identifier = "df"} columns: { col1 => @df::@col1({type = i64})}
     %1 = relalg.selection %0 (%arg0 : !tuples.tuple){
         %4 = db.constant(2) : i64
@@ -22,8 +22,9 @@ simpleMLIRQuery="""module {
       %4 = relalg.count %arg0
       tuples.return %4 : i64
     }
-    %3 = relalg.materialize %2 [@aggr0::@tmp_attr0] => ["count"] : !dsa.table
-    return %3 : !dsa.table
+    %3 = relalg.materialize %2 [@aggr0::@tmp_attr0] => ["count"] : !subop.result_table<[count: i64]>
+    subop.set_result 0 %3 :  !subop.result_table<[count: i64]>
+    return
   }
 }
 """

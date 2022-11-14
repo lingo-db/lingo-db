@@ -70,5 +70,6 @@ void handleQuery(runtime::ExecutionContext* context, std::string sqlQuery) {
    check(runner.lower(), "could not lower DSA/DB dialects");
    check(runner.lowerToLLVM(), "lowering to llvm failed");
    size_t runs = 1;
-   runner.runJit(context, runs, runner::Runner::printTable);
+   runner.runJit(context, runs);
+   runner::Runner::printTable(context);
 }

@@ -39,6 +39,7 @@
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
+#include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/util/UtilDialect.h"
@@ -317,6 +318,7 @@ bool Runner::loadSQL(std::string sql, runtime::Database& database) {
    registry.insert<mlir::BuiltinDialect>();
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::tuples::TupleStreamDialect>();
+   registry.insert<mlir::subop::SubOperatorDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::arith::ArithDialect>();
@@ -343,13 +345,11 @@ bool Runner::loadSQL(std::string sql, runtime::Database& database) {
       builder.setInsertionPointToStart(queryBlock);
       auto val = translator.translate(builder);
       if (val.has_value()) {
-         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), val.value());
-         returnTypes.push_back(val.value().getType());
-      } else {
-         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
+         builder.create<mlir::subop::SetResultOp>(builder.getUnknownLoc(), 0, val.value());
       }
+      builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
    }
-   mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, returnTypes));
+   mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
    funcOp.getBody().push_back(queryBlock);
    ctxt->module = moduleOp;
    snapshot("sql-input.mlir");
@@ -389,6 +389,7 @@ bool Runner::loadString(std::string input) {
    RunnerContext* ctxt = (RunnerContext*) this->context;
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
+   registry.insert<mlir::subop::SubOperatorDialect>();
    registry.insert<mlir::tuples::TupleStreamDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::dsa::DSADialect>();
@@ -481,6 +482,7 @@ bool Runner::lowerToLLVM() {
       ctxt->numArgs = mainFunc.getNumArguments();
       ctxt->numResults = mainFunc.getNumResults();
    }
+   assert(ctxt->numResults == 0);
    mlir::PassManager pm2(&ctxt->context);
    pm2.enableVerifier(runMode != RunMode::SPEED);
    pm2.addPass(mlir::createConvertSCFToCFPass());
@@ -674,7 +676,7 @@ class WrappedExecutionEngine {
       return setContextPtr;
    }
 };
-bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::function<void(uint8_t*)> callback) {
+bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats) {
    if (runMode == RunMode::PERF) {
       repeats = 1;
       reserveLastRegister = true;
@@ -710,7 +712,6 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
    typedef uint8_t* (*myfunc)(void*);
    auto fn = (myfunc) engine.getSetContextPtr();
    fn(context);
-   uint8_t* res;
    ctxt->stats.convertToLLVMIR = engine.getConversionTime();
    ctxt->stats.compileTime = engine.getJitTime();
    pid_t pid;
@@ -725,15 +726,9 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
    std::vector<size_t> measuredTimes;
    for (size_t i = 0; i < repeats; i++) {
       auto executionStart = std::chrono::high_resolution_clock::now();
-      if (ctxt->numResults == 1) {
-         typedef uint8_t* (*myfunc)();
-         auto fn = (myfunc) engine.getMainFuncPtr();
-         res = fn();
-      } else {
-         typedef void (*myfunc)();
-         auto fn = (myfunc) engine.getMainFuncPtr();
-         fn();
-      }
+      typedef void (*myfunc)();
+      auto fn = (myfunc) engine.getMainFuncPtr();
+      fn();
       auto executionEnd = std::chrono::high_resolution_clock::now();
       measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count());
    }
@@ -745,9 +740,6 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats, std::fun
    ctxt->stats.executionTime = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
    if (reportTimes) {
       ctxt->stats.print(std::cout);
-   }
-   if (ctxt->numResults == 1) {
-      callback(res);
    }
 
    return true;

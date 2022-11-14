@@ -16,7 +16,7 @@
 //CHECK: |                   "Feuerbach"  |           "Glaube und Wissen"  |
 
 module @querymodule{
-    func.func @main ()  -> !dsa.table{
+    func.func @main () {
         %1 = relalg.basetable { table_identifier="hoeren" } columns: {matrnr => @hoeren::@matrnr({type=i64}),
             vorlnr => @hoeren::@vorlnr({type=i64})
         }
@@ -41,7 +41,8 @@ module @querymodule{
             %13 = db.compare eq %11 : i64,%12 : i64
             tuples.return %13 : i1
         }
-        %15 = relalg.materialize %5 [@studenten::@name,@vorlesungen::@titel] => ["s.name","v.titel"] : !dsa.table
-        return %15 : !dsa.table
+        %15 = relalg.materialize %5 [@studenten::@name,@vorlesungen::@titel] => ["s.name","v.titel"] :  !subop.result_table<[name:!db.string, titel:!db.string]>
+        subop.set_result 0 %15 : !subop.result_table<[name:!db.string, titel:!db.string]>
+        return
     }
 }

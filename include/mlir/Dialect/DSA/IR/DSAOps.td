@@ -51,13 +51,12 @@ def DSA_Table : DSA_Type<"Table", "table"> {
     let assemblyFormat = "";
 }
 
-def DSA_TableBuilder : DSA_Type<"TableBuilder", "table_builder"> {
-    let summary = "table builder";
+def DSA_ResultTable : DSA_Type<"ResultTable", "result_table"> {
+    let summary = "result_table";
     let description = [{
-        Stateful table builder with a fixed schema. Values to the last row can
+        Stateful result_table with a fixed schema. Values to the last row can
         be added using `ds_append` and once all columns are filled, the row can
-        be finalized using `next_row`. The final table can be created using
-        `finalize`.
+        be finalized using `next_row`.
     }];
 
     let parameters = (ins "TupleType":$rowType);
@@ -113,20 +112,15 @@ def DSA_At : DSA_Op<"at", [Pure]> {
 def DSA_NextRow : DSA_Op<"next_row"> {
     let summary = "start next row in a table builder";
 
-    let arguments = (ins DSA_TableBuilder:$builder);
+    let arguments = (ins DSA_ResultTable:$builder);
     let assemblyFormat = "$builder `:` type($builder) attr-dict";
 }
 
 
-def DSA_Finalize : DSA_Op<"finalize"> {
-    let summary = "finalize TableBuilder or JoinHashtable";
-
-    let arguments = (ins AnyType:$ht);
-    let results = (outs Optional<AnyType>:$res);
-    let assemblyFormat = "$ht `:` type($ht)  (`->` type($res)^)? attr-dict";
-    let builders = [OpBuilder<(ins "mlir::Value":$v), [{
-        build($_builder, $_state, mlir::TypeRange(),v);
-    }]>];
+def DSA_SetResultOp : DSA_Op<"set_result"> {
+    let summary = "set result";
+    let arguments = (ins I32Attr:$result_id, AnyType : $state);
+    let assemblyFormat = [{ $result_id $state `:` type($state)  attr-dict }];
 }
 
 def DSA_Append : DSA_Op<"ds_append"> {

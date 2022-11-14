@@ -2,6 +2,8 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.h"
 
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/SubOperator/SubOperatorOps.h"
+
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/OpImplementation.h"

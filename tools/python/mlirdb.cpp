@@ -26,13 +26,10 @@ pybind11::handle run(pybind11::str module) {
    //runner.dump();
    runner.lowerToLLVM();
    //runner.dumpLLVM();
-   pybind11::handle result;
-   runner.runJit(executionContext, 1, [&](uint8_t* ptr) {
-      auto table = *(std::shared_ptr<arrow::Table>*) ptr;
-      //arrow::PrettyPrint(*table,arrow::PrettyPrintOptions(),&std::cout);
-      result = arrow::py::wrap_table(table);
-   });
-   return result;
+   runner.runJit(executionContext, 1);
+   auto table = runner::Runner::getTable(executionContext);
+   if (table) return arrow::py::wrap_table(table);
+   return pybind11::handle();
 }
 
 PYBIND11_MODULE(pymlirdbext, m) {

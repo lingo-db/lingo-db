@@ -70,7 +70,7 @@ void runStatement(runtime::ExecutionContext& context, const std::vector<std::str
    runner.optimize(*context.db);
    runner.lower();
    runner.lowerToLLVM();
-   runner.runJit(&context, 1, [](uint8_t*) {});
+   runner.runJit(&context, 1);
 }
 void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>& lines, size_t& line) {
    auto parts = split(lines[line]);
@@ -129,7 +129,8 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
    size_t numValues = 0;
    std::string hash;
    std::string resultLines;
-   runner.runJit(&context, runs, runner::Runner::hashResult(sort, numValues, hash, resultLines, tsv));
+   runner.runJit(&context, runs);
+   runner::Runner::hashResult(sort, numValues, hash, resultLines, tsv)(&context);
    std::string result = std::to_string(numValues) + " values hashing to " + hash + "\n";
    if (result != expectedResult && expectedResult != resultLines) {
       std::cout << "executing query:" << query << std::endl;

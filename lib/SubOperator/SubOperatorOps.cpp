@@ -728,13 +728,6 @@ std::vector<std::string> subop::SortOp::getReadMembers() {
    }
    return res;
 }
-std::vector<std::string> subop::ConvertToExplicit::getReadMembers() {
-   std::vector<std::string> res;
-   for (auto x : getState().getType().cast<mlir::subop::TableType>().getMembers().getNames()) {
-      res.push_back(x.cast<mlir::StringAttr>().str());
-   }
-   return res;
-}
 std::vector<std::string> subop::ReduceOp::getWrittenMembers() {
    std::vector<std::string> res;
    for (auto x : getMembers()) {

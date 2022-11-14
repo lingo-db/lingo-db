@@ -42,7 +42,7 @@ module{
 // -----
 module{
 %0 = relalg.const_relation columns : [@constrel::@attr1({type = !db.string})] values : ["A", "B"]
-%1 = relalg.materialize %0 [@constrel::@attr1] => ["col1"] : !dsa.table
+%1 = relalg.materialize %0 [@constrel::@attr1] => ["col1"] : !subop.result_table<[col1: !db.string]>
 }
 
 //renaming:

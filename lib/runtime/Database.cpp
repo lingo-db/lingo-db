@@ -10,6 +10,8 @@
 
 #include "runtime/ArrowDirDatabase.h"
 #include "runtime/Database.h"
+#include "runtime/ExecutionContext.h"
+#include "runtime/TableBuilder.h"
 
 namespace runtime {
 void Database::createTable(std::string tableName, std::shared_ptr<TableMetaData>) {
@@ -110,7 +112,13 @@ void Database::setPersistMode(bool persist) {
 void Database::setPersist(bool persist) {
    setPersistMode(persist);
 }
-void Database::appendTable(runtime::VarLen32 tableName, std::shared_ptr<arrow::Table>* newRows) {
-   appendTable(tableName.str(), *newRows);
+void Database::appendTableFromResult(runtime::VarLen32 tableName, runtime::ExecutionContext* context, size_t resultId) {
+   {
+      auto resultTable = context->getResultOfType<runtime::ResultTable>(resultId);
+      if (!resultTable) {
+         throw std::runtime_error("appending result table failed: no result table");
+      }
+      appendTable(tableName, resultTable.value()->get());
+   }
 }
 } //end namespace runtime

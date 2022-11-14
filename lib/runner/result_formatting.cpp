@@ -6,6 +6,7 @@
 
 #include "md5.h"
 #include "runner/runner.h"
+#include "runtime/TableBuilder.h"
 #include <functional>
 
 unsigned char hexval(unsigned char c) {
@@ -18,9 +19,13 @@ unsigned char hexval(unsigned char c) {
    else
       abort();
 }
-std::function<void(uint8_t*)> runner::Runner::hashResult(runner::Runner::SortMode sortMode, size_t& numValues, std::string& hash, std::string& lines, bool tsv) {
-   return [sortMode = sortMode, tsv, &hash, &numValues, &lines](uint8_t* ptr) {
-      auto table = *(std::shared_ptr<arrow::Table>*) ptr;
+std::function<void(runtime::ExecutionContext*)> runner::Runner::hashResult(runner::Runner::SortMode sortMode, size_t& numValues, std::string& hash, std::string& lines, bool tsv) {
+   return [sortMode = sortMode, tsv, &hash, &numValues, &lines](runtime::ExecutionContext* context) {
+      auto resultTable = context->getResultOfType<runtime::ResultTable>(0);
+      if (!resultTable) {
+         return; //todo: proper error handling
+      }
+      auto table = resultTable.value()->get();
       std::vector<std::string> toHash;
       std::vector<std::string> columnReps;
       std::vector<size_t> positions;
@@ -135,8 +140,16 @@ std::function<void(uint8_t*)> runner::Runner::hashResult(runner::Runner::SortMod
       //std::cout << toHash.size() << " values hashing to " <<  << std::endl;
    };
 }
-void runner::Runner::printTable(uint8_t* ptr) {
-   auto table = *(std::shared_ptr<arrow::Table>*) ptr;
+std::shared_ptr<arrow::Table> runner::Runner::getTable(runtime::ExecutionContext* context) {
+   auto resultTable = context->getResultOfType<runtime::ResultTable>(0);
+   if (!resultTable) return {};
+   auto table = resultTable.value()->get();
+   return table;
+}
+void runner::Runner::printTable(runtime::ExecutionContext* context) {
+   auto resultTable = context->getResultOfType<runtime::ResultTable>(0);
+   if (!resultTable) return;
+   auto table = resultTable.value()->get();
    std::vector<std::string> columnReps;
    std::vector<size_t> positions;
    arrow::PrettyPrintOptions options;

@@ -12,24 +12,11 @@
 using namespace mlir;
 namespace {
 
-class FinalizeTBLowering : public OpConversionPattern<mlir::dsa::Finalize> {
-   public:
-   using OpConversionPattern<mlir::dsa::Finalize>::OpConversionPattern;
-   LogicalResult matchAndRewrite(mlir::dsa::Finalize finalizeOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!finalizeOp.getHt().getType().isa<mlir::dsa::TableBuilderType>()) {
-         return failure();
-      }
-      mlir::Value res = rt::TableBuilder::build(rewriter, finalizeOp->getLoc())(adaptor.getHt())[0];
-      rewriter.replaceOp(finalizeOp, res);
-      return success();
-   }
-};
-
 class TBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
    public:
    using OpConversionPattern<mlir::dsa::Append>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::Append appendOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!appendOp.getDs().getType().isa<mlir::dsa::TableBuilderType>()) {
+      if (!appendOp.getDs().getType().isa<mlir::dsa::ResultTableType>()) {
          return failure();
       }
       Value builderVal = adaptor.getDs();
@@ -41,29 +28,29 @@ class TBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
       }
       mlir::Type type = getBaseType(val.getType());
       if (type.isIndex()) {
-         rt::TableBuilder::addInt64(rewriter, loc)({builderVal, isValid, val});
+         rt::ResultTable::addInt64(rewriter, loc)({builderVal, isValid, val});
       } else if (isIntegerType(type, 1)) {
-         rt::TableBuilder::addBool(rewriter, loc)({builderVal, isValid, val});
+         rt::ResultTable::addBool(rewriter, loc)({builderVal, isValid, val});
       } else if (auto intWidth = getIntegerWidth(type, false)) {
          switch (intWidth) {
-            case 8: rt::TableBuilder::addInt8(rewriter, loc)({builderVal, isValid, val}); break;
-            case 16: rt::TableBuilder::addInt16(rewriter, loc)({builderVal, isValid, val}); break;
-            case 32: rt::TableBuilder::addInt32(rewriter, loc)({builderVal, isValid, val}); break;
-            case 64: rt::TableBuilder::addInt64(rewriter, loc)({builderVal, isValid, val}); break;
-            case 128: rt::TableBuilder::addDecimal(rewriter, loc)({builderVal, isValid, val}); break;
+            case 8: rt::ResultTable::addInt8(rewriter, loc)({builderVal, isValid, val}); break;
+            case 16: rt::ResultTable::addInt16(rewriter, loc)({builderVal, isValid, val}); break;
+            case 32: rt::ResultTable::addInt32(rewriter, loc)({builderVal, isValid, val}); break;
+            case 64: rt::ResultTable::addInt64(rewriter, loc)({builderVal, isValid, val}); break;
+            case 128: rt::ResultTable::addDecimal(rewriter, loc)({builderVal, isValid, val}); break;
             default: {
                val = rewriter.create<arith::ExtUIOp>(loc, rewriter.getI64Type(), val);
-               rt::TableBuilder::addFixedSized(rewriter, loc)({builderVal, isValid, val});
+               rt::ResultTable::addFixedSized(rewriter, loc)({builderVal, isValid, val});
                break;
             }
          }
       } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
          switch (floatType.getWidth()) {
-            case 32: rt::TableBuilder::addFloat32(rewriter, loc)({builderVal, isValid, val}); break;
-            case 64: rt::TableBuilder::addFloat64(rewriter, loc)({builderVal, isValid, val}); break;
+            case 32: rt::ResultTable::addFloat32(rewriter, loc)({builderVal, isValid, val}); break;
+            case 64: rt::ResultTable::addFloat64(rewriter, loc)({builderVal, isValid, val}); break;
          }
       } else if (auto stringType = type.dyn_cast_or_null<mlir::util::VarLen32Type>()) {
-         rt::TableBuilder::addBinary(rewriter, loc)({builderVal, isValid, val});
+         rt::ResultTable::addBinary(rewriter, loc)({builderVal, isValid, val});
       }
       rewriter.eraseOp(appendOp);
       return success();
@@ -73,7 +60,7 @@ class NextRowLowering : public OpConversionPattern<mlir::dsa::NextRow> {
    public:
    using OpConversionPattern<mlir::dsa::NextRow>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::NextRow op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rt::TableBuilder::nextRow(rewriter, op->getLoc())({adaptor.getBuilder()});
+      rt::ResultTable::nextRow(rewriter, op->getLoc())({adaptor.getBuilder()});
       rewriter.eraseOp(op);
       return success();
    }
@@ -82,12 +69,12 @@ class CreateTableBuilderLowering : public OpConversionPattern<mlir::dsa::CreateD
    public:
    using OpConversionPattern<mlir::dsa::CreateDS>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::CreateDS createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!createOp.getDs().getType().isa<mlir::dsa::TableBuilderType>()) {
+      if (!createOp.getDs().getType().isa<mlir::dsa::ResultTableType>()) {
          return failure();
       }
       auto loc = createOp->getLoc();
       mlir::Value schema = rewriter.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(getContext()), createOp.getInitAttr().value().cast<StringAttr>().str());
-      Value tableBuilder = rt::TableBuilder::create(rewriter, loc)({schema})[0];
+      Value tableBuilder = rt::ResultTable::create(rewriter, loc)({schema})[0];
       rewriter.replaceOp(createOp, tableBuilder);
       return success();
    }
@@ -96,6 +83,6 @@ class CreateTableBuilderLowering : public OpConversionPattern<mlir::dsa::CreateD
 } // end namespace
 namespace mlir::dsa {
 void populateDSAToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
-   patterns.insert<CreateTableBuilderLowering, TBAppendLowering, FinalizeTBLowering, NextRowLowering>(typeConverter, patterns.getContext());
+   patterns.insert<CreateTableBuilderLowering, TBAppendLowering, NextRowLowering>(typeConverter, patterns.getContext());
 }
 } // end namespace mlir::dsa

@@ -16,7 +16,7 @@
 //CHECK: |                       "Jonas"  |           "Glaube und Wissen"  |
 
 module @querymodule {
-  func.func @main() -> !dsa.table {
+  func.func @main() {
     %0 = relalg.basetable  {rows = 0.000000e+00 : f64, table_identifier = "hoeren"} columns: {matrnr => @hoeren::@matrnr({type = i64}), vorlnr => @hoeren::@vorlnr({type = i64})}
     %1 = relalg.basetable  {rows = 0.000000e+00 : f64, table_identifier = "studenten"} columns: {matrnr => @studenten::@matrnr({type = i64}), name => @studenten::@name({type = !db.string}), semester => @studenten::@semester({type = i64})}
     %2 = relalg.join %0, %1 (%arg0: !tuples.tuple){
@@ -32,7 +32,8 @@ module @querymodule {
       %8 = db.compare eq %6 : i64, %7 : i64
       tuples.return %8 : i1
     } attributes {cost = 3.110000e+00 : f64, impl = "hash", leftHash = [#tuples.columnref<@hoeren::@vorlnr>], rightHash = [#tuples.columnref<@vorlesungen::@vorlnr>], rows = 0.010000000000000002 : f64, useHashJoin}
-    %5 = relalg.materialize %4 [@studenten::@name,@vorlesungen::@titel] => ["s.name", "v.titel"] : !dsa.table
-    return %5 : !dsa.table
+    %15 = relalg.materialize %4 [@studenten::@name,@vorlesungen::@titel] => ["s.name","v.titel"] :  !subop.result_table<[name:!db.string, titel:!db.string]>
+    subop.set_result 0 %15 : !subop.result_table<[name:!db.string, titel:!db.string]>
+    return
   }
 }

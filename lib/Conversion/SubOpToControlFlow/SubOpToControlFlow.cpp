@@ -78,20 +78,6 @@ class GetTableRefLowering : public OpConversionPattern<mlir::subop::GetReference
       return mlir::success();
    }
 };
-class ConvertToExplicitTableLowering : public OpConversionPattern<mlir::subop::ConvertToExplicit> {
-   public:
-   using OpConversionPattern<mlir::subop::ConvertToExplicit>::OpConversionPattern;
-
-   LogicalResult matchAndRewrite(mlir::subop::ConvertToExplicit convertToExplicitOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto sourceType = convertToExplicitOp.getState().getType().dyn_cast<mlir::subop::TableType>();
-      auto targetType = convertToExplicitOp.getType().dyn_cast<mlir::dsa::TableType>();
-      if (sourceType && targetType) {
-         rewriter.replaceOpWithNewOp<mlir::dsa::Finalize>(convertToExplicitOp, targetType, adaptor.getState());
-         return mlir::success();
-      }
-      return mlir::failure();
-   }
-};
 static std::vector<Type> unpackTypes(mlir::ArrayAttr arr) {
    std::vector<Type> res;
    for (auto x : arr) { res.push_back(x.cast<mlir::TypeAttr>().getValue()); }
@@ -204,8 +190,8 @@ class CreateTableLowering : public OpConversionPattern<mlir::subop::CreateOp> {
       return "";
    }
    LogicalResult matchAndRewrite(mlir::subop::CreateOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!createOp.getType().isa<mlir::subop::TableType>()) return failure();
-      auto tableType = createOp.getType().cast<mlir::subop::TableType>();
+      if (!createOp.getType().isa<mlir::subop::ResultTableType>()) return failure();
+      auto tableType = createOp.getType().cast<mlir::subop::ResultTableType>();
       std::string descr;
       auto columnNames = createOp.getDescrAttr().cast<mlir::ArrayAttr>();
       for (size_t i = 0; i < tableType.getMembers().getTypes().size(); i++) {
@@ -246,6 +232,14 @@ class MaintainOpLowering : public OpConversionPattern<mlir::subop::MaintainOp> {
    LogicalResult matchAndRewrite(mlir::subop::MaintainOp maintainOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       rt::LazyJoinHashtable::finalize(rewriter, maintainOp->getLoc())(adaptor.getState());
       rewriter.eraseOp(maintainOp);
+      return mlir::success();
+   }
+};
+class SetResultOpLowering : public OpConversionPattern<mlir::subop::SetResultOp> {
+   public:
+   using OpConversionPattern<mlir::subop::SetResultOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::SetResultOp setResultOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOpWithNewOp<mlir::dsa::SetResultOp>(setResultOp, setResultOp.getResultId(), adaptor.getState());
       return mlir::success();
    }
 };
@@ -902,8 +896,8 @@ class MaterializeTableLowering : public TupleStreamConsumerLowering<mlir::subop:
    using TupleStreamConsumerLowering<mlir::subop::MaterializeOp>::TupleStreamConsumerLowering;
 
    LogicalResult matchAndRewriteConsumer(mlir::subop::MaterializeOp materializeOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
-      if (!materializeOp.getState().getType().isa<mlir::subop::TableType>()) return failure();
-      auto stateType = materializeOp.getState().getType().cast<mlir::subop::TableType>();
+      if (!materializeOp.getState().getType().isa<mlir::subop::ResultTableType>()) return failure();
+      auto stateType = materializeOp.getState().getType().cast<mlir::subop::ResultTableType>();
       auto state = adaptor.getState();
       for (size_t i = 0; i < stateType.getMembers().getTypes().size(); i++) {
          auto memberName = stateType.getMembers().getNames()[i].cast<mlir::StringAttr>().str();
@@ -1272,9 +1266,9 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       mlir::Type chunkIterable = mlir::dsa::GenericIterableType::get(ctxt, recordBatch, "table_chunk_iterator");
       return chunkIterable;
    });
-   typeConverter.addConversion([&](mlir::subop::TableType t) -> Type {
+   typeConverter.addConversion([&](mlir::subop::ResultTableType t) -> Type {
       auto tupleType = mlir::TupleType::get(ctxt, unpackTypes(t.getMembers().getTypes()));
-      return mlir::dsa::TableBuilderType::get(ctxt, tupleType);
+      return mlir::dsa::ResultTableType::get(ctxt, tupleType);
    });
    typeConverter.addConversion([&](mlir::subop::VectorType t) -> Type {
       return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
@@ -1314,8 +1308,8 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<MaterializeVectorLowering>(typeConverter, ctxt);
    patterns.insert<MaterializeLazyMultiMapLowering>(typeConverter, ctxt);
    patterns.insert<MaintainOpLowering>(typeConverter, ctxt);
+   patterns.insert<SetResultOpLowering>(typeConverter, ctxt);
 
-   patterns.insert<ConvertToExplicitTableLowering>(typeConverter, ctxt);
    patterns.insert<SortLowering>(typeConverter, ctxt);
    patterns.insert<CombineInFlightLowering>(typeConverter, ctxt);
    patterns.insert<LookupSimpleStateLowering>(typeConverter, ctxt);

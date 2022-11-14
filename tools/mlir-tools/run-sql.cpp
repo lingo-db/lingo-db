@@ -43,6 +43,7 @@ int main(int argc, char** argv) {
       runs = std::atoi(numRuns);
       std::cout << "using " << runs << " runs" << std::endl;
    }
-   check(runner.runJit(&context, runs, runner::Runner::printTable), "JIT execution failed");
+   check(runner.runJit(&context, runs), "JIT execution failed");
+   runner::Runner::printTable(&context);
    return 0;
 }

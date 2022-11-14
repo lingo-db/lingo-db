@@ -11,13 +11,14 @@
 //CHECK: |                         29555  |                   "Feuerbach"  |
 
 module @querymodule{
-    func.func @main ()  -> !dsa.table{
+    func.func @main () {
         %1 = relalg.basetable { table_identifier="studenten" } columns: {matrnr => @studenten::@matrnr({type=i64}),
             name => @studenten::@name({type=!db.string}),
             semester => @studenten::@semester({type=i64})
         }
         %2 = relalg.renaming %1  renamed: [@renamed::@matrnr({type = i64})=[@studenten::@matrnr]]
-        %3 = relalg.materialize %2 [@renamed::@matrnr,@studenten::@name] => ["matrnr","name"] : !dsa.table
-        return %3 : !dsa.table
+        %3 = relalg.materialize %2 [@renamed::@matrnr,@studenten::@name] => ["matrnr","name"] : !subop.result_table<[hmatrnr : i64,sname: !db.string]>
+        subop.set_result 0 %3 : !subop.result_table<[hmatrnr : i64,sname: !db.string]>
+        return
     }
 }

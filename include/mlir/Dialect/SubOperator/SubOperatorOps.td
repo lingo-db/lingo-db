@@ -53,7 +53,7 @@ def TableRef : SubOperator_Type<"TableRef", "table_ref"> {
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
 }
-def Table : SubOperator_Type<"Table", "table"> {
+def ResultTable : SubOperator_Type<"ResultTable", "result_table"> {
     let summary = "reference to table";
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
@@ -354,14 +354,9 @@ def MaterializeOp : SubOperator_Op<"materialize",[SubOperator]> {
         std::vector<std::string> getWrittenMembers();
     }];
 }
-def ConvertToExplicit : SubOperator_Op<"convert_to_explicit",[SubOperator]> {
-    let summary = "converts a declarative state to an explicit state";
-
-    let arguments = (ins AnyType : $state);
-    let results = (outs AnyType : $explicit_state);
-    let assemblyFormat = [{  $state `:` type($state) `->` type($explicit_state)  attr-dict }];
-    let extraClassDeclaration = [{
-        std::vector<std::string> getReadMembers();
-    }];
+def SetResultOp : SubOperator_Op<"set_result"> {
+    let summary = "set result";
+    let arguments = (ins I32Attr:$result_id, AnyType : $state);
+    let assemblyFormat = [{ $result_id $state `:` type($state)  attr-dict }];
 }
 #endif // LINGODB_DIALECT_SubOperator_IR_OPS

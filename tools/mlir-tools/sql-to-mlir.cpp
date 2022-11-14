@@ -1,10 +1,13 @@
 #include "frontend/SQL/Parser.h"
+#include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
+#include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 #include "runtime/MetaDataOnlyDatabase.h"
 int main(int argc, char** argv) {
    mlir::MLIRContext context;
    mlir::DialectRegistry registry;
    registry.insert<mlir::BuiltinDialect>();
    registry.insert<mlir::relalg::RelAlgDialect>();
+   registry.insert<mlir::subop::SubOperatorDialect>();
    registry.insert<mlir::tuples::TupleStreamDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::func::FuncDialect>();
@@ -32,19 +35,16 @@ int main(int argc, char** argv) {
 
    builder.setInsertionPointToStart(moduleOp.getBody());
    auto* queryBlock = new mlir::Block;
-   std::vector<mlir::Type> returnTypes;
    {
       mlir::OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointToStart(queryBlock);
-      mlir::Value val = translator.translate(builder).value();
-      if (val) {
-         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc(), val);
-         returnTypes.push_back(val.getType());
-      } else {
-         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
+      auto val = translator.translate(builder);
+      if (val.has_value()) {
+         builder.create<mlir::subop::SetResultOp>(builder.getUnknownLoc(), 0, val.value());
       }
+      builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
    }
-   mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, returnTypes));
+   mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
    funcOp.getBody().push_back(queryBlock);
 
    mlir::OpPrintingFlags flags;

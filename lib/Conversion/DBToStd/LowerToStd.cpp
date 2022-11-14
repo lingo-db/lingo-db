@@ -166,7 +166,7 @@ class AppendTBLowering : public ConversionPattern {
       auto loc = op->getLoc();
       mlir::dsa::AppendAdaptor adaptor(operands);
       auto appendOp = mlir::cast<mlir::dsa::Append>(op);
-      if (!appendOp.getDs().getType().isa<mlir::dsa::TableBuilderType>()) {
+      if (!appendOp.getDs().getType().isa<mlir::dsa::ResultTableType>()) {
          return mlir::failure();
       }
       auto t = appendOp.getVal().getType();
@@ -1022,7 +1022,7 @@ void DBToStdLoweringPass::runOnOperation() {
       return mlir::dsa::RecordBatchType::get(r.getContext(), convertPhysical(r.getRowType()));
    });
    typeConverter.addConversion([&](mlir::dsa::GenericIterableType r) { return mlir::dsa::GenericIterableType::get(r.getContext(), typeConverter.convertType(r.getElementType()), r.getIteratorName()); });
-   typeConverter.addConversion([&](mlir::dsa::TableBuilderType r) { return mlir::dsa::TableBuilderType::get(r.getContext(), typeConverter.convertType(r.getRowType()).cast<mlir::TupleType>()); });
+   typeConverter.addConversion([&](mlir::dsa::ResultTableType r) { return mlir::dsa::ResultTableType::get(r.getContext(), typeConverter.convertType(r.getRowType()).cast<mlir::TupleType>()); });
 
    RewritePatternSet patterns(&getContext());
 
@@ -1036,9 +1036,9 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::ScanSource>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::Append>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::CreateDS>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::Finalize>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::YieldOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::NextRow>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::SetResultOp>>(typeConverter, &getContext());
    patterns.insert<AtLowering>(typeConverter, &getContext());
    patterns.insert<AppendTBLowering>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::ForOp>>(typeConverter, &getContext());

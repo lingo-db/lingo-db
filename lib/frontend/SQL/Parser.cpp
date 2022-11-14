@@ -1,5 +1,11 @@
 #include "frontend/SQL/Parser.h"
+#include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 #include <regex>
+
+static std::string getUniqueSubOpMember(std::string name) {
+   static std::unordered_map<std::string, size_t> counts;
+   return name + "p" + std::to_string(counts[name]++); //todo: very hacky
+}
 frontend::sql::ExpressionType frontend::sql::stringToExpressionType(const std::string& parserStr) {
    std::string str = parserStr;
    std::transform(str.begin(), str.end(), str.begin(), ::toupper);
@@ -1188,11 +1194,19 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
             //::mlir::Type result, ::mlir::Value rel, ::mlir::ArrayAttr attrs, ::mlir::ArrayAttr columns
             std::vector<mlir::Attribute> attrs;
             std::vector<mlir::Attribute> names;
+            std::vector<mlir::Attribute> colMemberNames;
+            std::vector<mlir::Attribute> colTypes;
+
             for (auto x : targetInfo.namedResults) {
                names.push_back(builder.getStringAttr(x.first));
+               auto colMemberName = getUniqueSubOpMember(x.first);
+               auto columnType = x.second->type;
                attrs.push_back(attrManager.createRef(x.second));
+               colTypes.push_back(mlir::TypeAttr::get(columnType));
+               colMemberNames.push_back(builder.getStringAttr(colMemberName));
             }
-            return builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), mlir::dsa::TableType::get(builder.getContext()), tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
+            auto resultTableType = mlir::subop::ResultTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)));
+            return builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), resultTableType, tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
          }
          case T_InsertStmt: {
             translateInsertStmt(builder, reinterpret_cast<InsertStmt*>(statement));
@@ -1400,17 +1414,25 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
    auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
    mapOp.getPredicate().push_back(block);
    mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
-
+   std::vector<mlir::Attribute> colMemberNames;
    std::vector<mlir::Attribute> orderedColNamesAttrs;
    std::vector<mlir::Attribute> orderedColAttrs;
+   std::vector<mlir::Attribute> colTypes;
    for (auto x : tableMetaData->getOrderedColumns()) {
+      colMemberNames.push_back(builder.getStringAttr(getUniqueSubOpMember(x)));
       orderedColNamesAttrs.push_back(builder.getStringAttr(x));
       orderedColAttrs.push_back(insertedCols.at(x));
+      colTypes.push_back(mlir::TypeAttr::get(insertedCols.at(x).cast<mlir::tuples::ColumnRefAttr>().getColumn().type));
    }
-   mlir::Value newRows = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), mlir::dsa::TableType::get(builder.getContext()), mapOp.getResult(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
+   auto resultTableType = mlir::subop::ResultTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)));
+   mlir::Value newRows = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), resultTableType, mapOp.getResult(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
+
    auto databaseValue = getCurrentDatabaseValue(builder);
+   auto executionContextValue = getExecutionContextValue(builder);
    auto tableNameValue = createStringValue(builder, tableName);
-   rt::Database::appendTable(builder, builder.getUnknownLoc())(mlir::ValueRange{databaseValue, tableNameValue, newRows});
+   auto resultIdValue = builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 0, builder.getI32Type());
+   builder.create<mlir::subop::SetResultOp>(builder.getUnknownLoc(), 0, newRows);
+   rt::Database::appendTableFromResult(builder, builder.getUnknownLoc())(mlir::ValueRange{databaseValue, tableNameValue, executionContextValue, resultIdValue});
 }
 Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::ReplaceState& replaceState) {
    if (!node) return node;

@@ -7,7 +7,7 @@
 
 
 module @querymodule{
-    func.func @main ()  -> !dsa.table{
+    func.func @main () {
         %1 = relalg.basetable { table_identifier="hoeren" } columns: {matrnr => @hoeren::@matrnr({type=i64}),
             vorlnr => @hoeren::@vorlnr({type=i64})
         }
@@ -22,7 +22,8 @@ module @querymodule{
                                                  tuples.return %10 : i1
                                              } attributes { impl="hash" }
 
-        %15 = relalg.materialize %3 [@studenten::@name] => ["s.name"] : !dsa.table
-        return %15 : !dsa.table
+        %15 = relalg.materialize %3 [@studenten::@name] => ["s.name"]  : !subop.result_table<[sname : !db.string]>
+          subop.set_result 0 %15 : !subop.result_table<[sname : !db.string]>
+          return
     }
 }

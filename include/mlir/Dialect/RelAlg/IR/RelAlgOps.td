@@ -12,7 +12,7 @@ include "mlir/Dialect/TupleStream/TupleStreamBase.td"
 
 include "RelAlgInterfaces.td"
 
-def DSA_Table : Type<CPred<"$_self.isa<::mlir::dsa::TableType>()">,"DB table type">;
+def SubOp_ResultTable : Type<CPred<"$_self.isa<::mlir::subop::ResultTableType>()">,"result table type">;
 def DSA_Collection : Type<CPred<"$_self.isa<::mlir::util::CollectionType>()">,"DB collection type">;
 
 
@@ -409,7 +409,7 @@ def ExistsOp : RelAlg_Op<"exists", [Pure]> {
 
 def MaterializeOp : RelAlg_Op<"materialize", [Pure]> {
     let arguments = (ins TupleStream:$rel,ArrayAttr:$cols,ArrayAttr:$columns);
-    let results = (outs DSA_Table:$result);
+    let results = (outs SubOp_ResultTable:$result);
     let assemblyFormat = [{  $rel custom<CustRefArr>($cols) `=` `>` $columns `:` type($result) attr-dict }];
 }
 

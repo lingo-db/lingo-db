@@ -1304,24 +1304,19 @@ class MaterializeLowering : public OpConversionPattern<mlir::relalg::Materialize
    using OpConversionPattern<mlir::relalg::MaterializeOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::relalg::MaterializeOp materializeOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto resultTableType = materializeOp.getResult().getType().cast<mlir::subop::ResultTableType>();
       std::vector<Attribute> colNames;
-      std::vector<Attribute> colMemberNames;
-      std::vector<Attribute> colTypes;
       std::vector<NamedAttribute> mapping;
       for (size_t i = 0; i < materializeOp.getColumns().size(); i++) {
-         auto columnName = materializeOp.getColumns()[i].cast<mlir::StringAttr>().str();
-         auto colMemberName = getUniqueMember(columnName);
+         auto columnName = materializeOp.getColumns()[i].cast<mlir::StringAttr>();
+         auto colMemberName = resultTableType.getMembers().getNames()[i].cast<mlir::StringAttr>().str();
          auto columnAttr = materializeOp.getCols()[i].cast<mlir::tuples::ColumnRefAttr>();
-         auto columnType = columnAttr.getColumn().type;
-         colNames.push_back(rewriter.getStringAttr(columnName));
-         colMemberNames.push_back(rewriter.getStringAttr(colMemberName));
-         colTypes.push_back(mlir::TypeAttr::get(columnType));
          mapping.push_back(rewriter.getNamedAttr(colMemberName, columnAttr));
+         colNames.push_back(columnName);
       }
-      auto tableRefType = mlir::subop::TableType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr(colMemberNames), rewriter.getArrayAttr(colTypes)));
-      mlir::Value table = rewriter.create<mlir::subop::CreateOp>(materializeOp->getLoc(), tableRefType, rewriter.getArrayAttr(colNames), 0);
+      mlir::Value table = rewriter.create<mlir::subop::CreateOp>(materializeOp->getLoc(), resultTableType, rewriter.getArrayAttr(colNames), 0);
       rewriter.create<mlir::subop::MaterializeOp>(materializeOp->getLoc(), adaptor.getRel(), table, rewriter.getDictionaryAttr(mapping));
-      rewriter.replaceOpWithNewOp<mlir::subop::ConvertToExplicit>(materializeOp, mlir::dsa::TableType::get(rewriter.getContext()), table);
+      rewriter.replaceOp(materializeOp, table);
 
       return success();
    }
