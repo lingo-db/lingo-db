@@ -15,4 +15,4 @@ mlir_tablegen(RelAlgOpsInterfaces.h.inc -gen-op-interface-decls --typedefs-diale
 mlir_tablegen(RelAlgOpsInterfaces.cpp.inc -gen-op-interface-defs --typedefs-dialect=relalg)
 add_public_tablegen_target(MLIRRelAlgOpsIncGen)
 add_dependencies(build_includes MLIRRelAlgOpsIncGen)
-add_mlir_doc(RelAlgOps RelAlgDialect RelAlg/ -gen-dialect-doc)
+add_mlir_doc(RelAlgOps RelAlgDialect RelAlg/ -gen-dialect-doc --dialect=relalg)

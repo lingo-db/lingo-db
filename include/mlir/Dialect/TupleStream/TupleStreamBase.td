@@ -27,6 +27,8 @@ def TupleStream_Dialect : Dialect {
                 return columnManager;
             }
     }];
+    let useDefaultTypePrinterParser=1;
+    let useDefaultAttributePrinterParser=1;
 }
 
 //===----------------------------------------------------------------------===//

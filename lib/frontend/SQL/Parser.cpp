@@ -1751,7 +1751,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       std::vector<mlir::Value> createdValues;
       std::vector<mlir::Attribute> createdCols;
       for (auto p : toMap) {
-         auto colRef = mlir::cast<mlir::tuples::ColumnRefAttr>(p);
+         auto colRef = p.cast<mlir::tuples::ColumnRefAttr>();
          mlir::Value expr = mapBuilder.create<mlir::db::NullOp>(builder.getUnknownLoc(), colRef.getColumn().type);
          auto attrDef = attrManager.createDef(&colRef.getColumn());
          createdCols.push_back(attrDef);
@@ -1801,7 +1801,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       mapBuilder.setInsertionPointToStart(block);
       std::vector<mlir::Value> createdValues;
       std::vector<mlir::Attribute> createdCols;
-      auto colDef = mlir::cast<mlir::tuples::ColumnDefAttr>(val);
+      auto colDef = val.cast<mlir::tuples::ColumnDefAttr>();
       auto colRef = attrManager.createRef(&colDef.getColumn());
       mlir::Value shiftVal = mapBuilder.create<mlir::arith::ConstantIndexOp>(builder.getUnknownLoc(), shift);
       mlir::Value colVal = mapBuilder.create<mlir::tuples::GetColumnOp>(builder.getUnknownLoc(), colRef.getColumn().type, colRef, tuple);
@@ -1834,8 +1834,8 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       std::vector<mlir::Value> createdValues;
       std::vector<mlir::Attribute> createdCols;
       for (size_t i = 0; i < toMap.size(); i++) {
-         auto colRef = mlir::cast<mlir::tuples::ColumnRefAttr>(toMap[i]);
-         auto newColRef = mlir::cast<mlir::tuples::ColumnRefAttr>(mapTo[i]);
+         auto colRef = toMap[i].cast<mlir::tuples::ColumnRefAttr>();
+         auto newColRef = mapTo[i].cast<mlir::tuples::ColumnRefAttr>();
          mlir::Value expr = mapBuilder.create<mlir::tuples::GetColumnOp>(builder.getUnknownLoc(), colRef.getColumn().type, colRef, tuple);
          if (colRef.getColumn().type != newColRef.getColumn().type) {
             expr = mapBuilder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(), newColRef.getColumn().type, expr);

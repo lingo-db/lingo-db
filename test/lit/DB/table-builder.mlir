@@ -1,5 +1,5 @@
  // RUN: run-mlir %s %S/../../../resources/data/test | FileCheck %s
- !test_table_tuple=type tuple<!db.string,f32,f64,!db.decimal<5,2>,i32,i64,i1,!db.date<day>,!db.date<millisecond>>
+ !test_table_tuple=tuple<!db.string,f32,f64,!db.decimal<5,2>,i32,i64,i1,!db.date<day>,!db.date<millisecond>>
 
  module {
     //CHECK: |                          str!  |                      float32!  |                      float64!  |                      decimal!  |                        int32!  |                        int64! |                          bool  |                       date32!  |                       date64!  |

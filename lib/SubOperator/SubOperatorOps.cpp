@@ -242,10 +242,14 @@ ParseResult mlir::subop::SortOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
    if (parser.parseOperand(toSort) || parser.parseColonType(vecType)) {
       return failure();
    }
-   parser.resolveOperand(toSort, vecType, result.operands);
+   if(parser.resolveOperand(toSort, vecType, result.operands).failed()){
+      return failure();
+   }
 
    mlir::ArrayAttr sortBy;
-   parser.parseAttribute(sortBy);
+   if(parser.parseAttribute(sortBy).failed()){
+      return failure();
+   }
    result.addAttribute("sortBy", sortBy);
    std::vector<OpAsmParser::Argument> leftArgs(sortBy.size());
    std::vector<OpAsmParser::Argument> rightArgs(sortBy.size());
@@ -319,20 +323,30 @@ ParseResult mlir::subop::LookupOrInsertOp::parse(::mlir::OpAsmParser& parser, ::
    if (parser.parseOperand(stream)) {
       return failure();
    }
-   parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands);
+   if(parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands).failed()){
+      return failure();
+   }
    OpAsmParser::UnresolvedOperand state;
    if (parser.parseOperand(state)) {
       return failure();
    }
 
    mlir::ArrayAttr keys;
-   parseCustRefArr(parser, keys);
+   if(parseCustRefArr(parser, keys).failed()){
+      return failure();
+   }
    result.addAttribute("keys", keys);
    mlir::Type stateType;
-   parser.parseColonType(stateType);
-   parser.resolveOperand(state, stateType, result.operands);
+   if(parser.parseColonType(stateType).failed()){
+      return failure();
+   }
+   if(parser.resolveOperand(state, stateType, result.operands).failed()){
+      return failure();
+   }
    mlir::tuples::ColumnDefAttr reference;
-   parseCustDef(parser, reference);
+   if(parseCustDef(parser, reference).failed()){
+      return failure();
+   }
    result.addAttribute("ref", reference);
    std::vector<OpAsmParser::Argument> leftArgs(keys.size());
    std::vector<OpAsmParser::Argument> rightArgs(keys.size());
@@ -413,20 +427,30 @@ ParseResult mlir::subop::LookupOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
    if (parser.parseOperand(stream)) {
       return failure();
    }
-   parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands);
+   if(parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands).failed()){
+      return failure();
+   }
    OpAsmParser::UnresolvedOperand state;
    if (parser.parseOperand(state)) {
       return failure();
    }
 
    mlir::ArrayAttr keys;
-   parseCustRefArr(parser, keys);
+   if(parseCustRefArr(parser, keys).failed()){
+      return failure();
+   }
    result.addAttribute("keys", keys);
    mlir::Type stateType;
-   parser.parseColonType(stateType);
-   parser.resolveOperand(state, stateType, result.operands);
+   if(parser.parseColonType(stateType).failed()){
+      return failure();
+   }
+   if(parser.resolveOperand(state, stateType, result.operands).failed()){
+      return failure();
+   }
    mlir::tuples::ColumnDefAttr reference;
-   parseCustDef(parser, reference);
+   if(parseCustDef(parser, reference).failed()){
+      return failure();
+   }
    result.addAttribute("ref", reference);
    std::vector<OpAsmParser::Argument> leftArgs(keys.size());
    std::vector<OpAsmParser::Argument> rightArgs(keys.size());
@@ -508,16 +532,24 @@ ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
    if (parser.parseOperand(stream)) {
       return failure();
    }
-   parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands);
+   if(parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands).failed()){
+      return failure();
+   }
    mlir::tuples::ColumnRefAttr reference;
-   parseCustRef(parser, reference);
+   if(parseCustRef(parser, reference).failed()){
+      return failure();
+   }
    result.addAttribute("ref", reference);
 
    mlir::ArrayAttr columns;
-   parseCustRefArr(parser, columns);
+   if(parseCustRefArr(parser, columns).failed()){
+      return failure();
+   }
    result.addAttribute("columns", columns);
    mlir::ArrayAttr members;
-   parser.parseAttribute(members);
+   if(parser.parseAttribute(members).failed()){
+      return failure();
+   }
    result.addAttribute("members", members);
    std::vector<OpAsmParser::Argument> leftArgs(columns.size());
    std::vector<OpAsmParser::Argument> rightArgs(members.size());
@@ -592,18 +624,24 @@ ParseResult mlir::subop::NestedMapOp::parse(::mlir::OpAsmParser& parser, ::mlir:
    if (parser.parseOperand(stream)) {
       return failure();
    }
-   parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands);
+   if(parser.resolveOperand(stream, mlir::tuples::TupleStreamType::get(parser.getContext()), result.operands).failed()){
+      return failure();
+   }
 
    OpAsmParser::Argument streamArg;
    std::vector<OpAsmParser::Argument> parameterArgs;
    mlir::ArrayAttr parameters;
-   parseCustRefArr(parser, parameters);
+   if(parseCustRefArr(parser, parameters).failed()){
+      return failure();
+   }
    result.addAttribute("parameters",parameters);
    if (parser.parseLParen()) {
       return failure();
    }
    streamArg.type = mlir::tuples::TupleType::get(parser.getContext());
-   parser.parseArgument(streamArg);
+   if(parser.parseArgument(streamArg).failed()){
+      return failure();
+   }
    for (auto x : parameters) {
       OpAsmParser::Argument arg;
       arg.type=x.cast<mlir::tuples::ColumnRefAttr>().getColumn().type;

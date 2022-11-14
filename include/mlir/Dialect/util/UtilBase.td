@@ -19,6 +19,7 @@ FunctionHelper& getFunctionHelper(){
     return *functionHelper;
 }
 }];
+    let useDefaultTypePrinterParser=1;
 }
 
 

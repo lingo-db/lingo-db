@@ -34,6 +34,7 @@ def DB_Dialect : Dialect {
                 return runtimeFunctionRegistry;
             }
     }];
+    let useDefaultTypePrinterParser=1;
 }
 
 class DB_Op<string mnemonic, list<Trait> traits = []> : Op<DB_Dialect, mnemonic, traits>{

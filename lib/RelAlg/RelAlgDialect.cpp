@@ -134,7 +134,7 @@ void RelAlgDialect::initialize() {
    getContext()->loadDialect<mlir::arith::ArithmeticDialect>();
    getContext()->loadDialect<mlir::tuples::TupleStreamDialect>();
 
-   mlir::arith::CmpIOp::attachInterface<ArithCmpFCmpInterface>(*getContext());
+   mlir::arith::CmpIOp::attachInterface<ArithCmpICmpInterface>(*getContext());
 }
 
 ::mlir::Attribute mlir::relalg::TableMetaDataAttr::parse(::mlir::AsmParser& parser, ::mlir::Type type) {

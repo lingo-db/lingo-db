@@ -25,6 +25,7 @@ def DSA_Dialect : Dialect {
         public:
 
     }];
+        let useDefaultTypePrinterParser=1;
 }
 
 class DSA_Op<string mnemonic, list<Trait> traits = []> : Op<DSA_Dialect, mnemonic, traits> {

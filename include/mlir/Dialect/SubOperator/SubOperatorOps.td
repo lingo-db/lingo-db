@@ -26,6 +26,7 @@ def SubOperator_Dialect : Dialect {
             void registerAttrs();
             public:
         }];
+    let useDefaultTypePrinterParser=1;
 }
 
 //===----------------------------------------------------------------------===//
