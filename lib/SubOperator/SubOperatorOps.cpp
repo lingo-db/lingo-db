@@ -669,6 +669,24 @@ void subop::NestedMapOp::print(OpAsmPrinter& p) {
    p << ") ";
    p.printRegion(op.getRegion(), false, true);
 }
+ParseResult mlir::subop::GenerateOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   mlir::ArrayAttr createdColumns;
+   if (parseCustDefArr(parser, createdColumns).failed()) {
+      return failure();
+   }
+   result.addAttribute("generated_columns", createdColumns);
+
+   Region* body = result.addRegion();
+   if (parser.parseRegion(*body, {})) return failure();
+   result.addTypes(mlir::tuples::TupleStreamType::get(parser.getContext()));
+   return success();
+}
+
+void subop::GenerateOp::print(OpAsmPrinter& p) {
+   subop::GenerateOp& op = *this;
+   printCustDefArr(p, this->getOperation(), getGeneratedColumns());
+   p.printRegion(op.getRegion(), false, true);
+}
 
 std::vector<std::string> subop::ScanOp::getReadMembers() {
    std::vector<std::string> res;

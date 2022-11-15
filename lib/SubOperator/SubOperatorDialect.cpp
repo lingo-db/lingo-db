@@ -9,6 +9,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
+#include "mlir/Transforms/FoldUtils.h"
 
 #include "llvm/ADT/TypeSwitch.h"
 
@@ -24,7 +25,13 @@ struct SubOperatorInlinerInterface : public mlir::DialectInlinerInterface {
       return true;
    }
 };
+struct SubOpFoldInterface : public mlir::DialectFoldInterface {
+   using DialectFoldInterface::DialectFoldInterface;
 
+   bool shouldMaterializeInto(mlir::Region* region) const final {
+      return true;
+   }
+};
 void SubOperatorDialect::initialize() {
    addOperations<
 #define GET_OP_LIST
@@ -33,6 +40,7 @@ void SubOperatorDialect::initialize() {
    registerTypes();
    registerAttrs();
    addInterfaces<SubOperatorInlinerInterface>();
+   addInterfaces<SubOpFoldInterface>();
    getContext()->loadDialect<mlir::db::DBDialect>();
    getContext()->loadDialect<mlir::dsa::DSADialect>();
    getContext()->loadDialect<mlir::arith::ArithDialect>();

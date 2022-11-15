@@ -729,7 +729,31 @@ class CountingSetOperationLowering : public ConversionPattern {
             }
             return std::vector<mlir::Value>({repeatNum});
          });
-         scan = rewriter.create<mlir::subop::RepeatOp>(loc, scan, repeatRef);
+         auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), scan, rewriter.getArrayAttr({repeatRef}));
+         auto* b = new Block;
+         b->addArgument(mlir::tuples::TupleType::get(rewriter.getContext()), loc);
+         mlir::Value repeatNumber = b->addArgument(rewriter.getIndexType(), loc);
+         nestedMapOp.getRegion().push_back(b);
+         {
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(b);
+            auto generateOp = rewriter.create<mlir::subop::GenerateOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), rewriter.getArrayAttr({}));
+            {
+               auto* generateBlock = new Block;
+               mlir::OpBuilder::InsertionGuard guard2(rewriter);
+               rewriter.setInsertionPointToStart(generateBlock);
+               generateOp.getRegion().push_back(generateBlock);
+               mlir::Value zeroIdx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+               mlir::Value oneIdx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+               rewriter.create<mlir::scf::ForOp>(loc, zeroIdx, repeatNumber, oneIdx, mlir::ValueRange{}, [&](mlir::OpBuilder& b, mlir::Location loc, mlir::Value idx, mlir::ValueRange vr) {
+                  b.create<mlir::subop::GenerateEmitOp>(loc, mlir::ValueRange{});
+                  b.create<mlir::scf::YieldOp>(loc);
+               });
+               rewriter.create<mlir::tuples::ReturnOp>(loc);
+            }
+            rewriter.create<mlir::tuples::ReturnOp>(loc, generateOp.getRes());
+         }
+         scan = nestedMapOp.getRes();
       }
       rewriter.replaceOp(op, scan);
    }

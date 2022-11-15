@@ -695,6 +695,53 @@ class ScanListLowering : public OpConversionPattern<mlir::subop::ScanListOp> {
       return success();
    }
 };
+class GenerateEmitLowering : public OpConversionPattern<mlir::subop::GenerateEmitOp> {
+   public:
+   using OpConversionPattern<mlir::subop::GenerateEmitOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::GenerateEmitOp generateOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.eraseOp(generateOp);
+      return success();
+   }
+};
+
+class GenerateLowering : public OpConversionPattern<mlir::subop::GenerateOp> {
+   public:
+   using OpConversionPattern<mlir::subop::GenerateOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::GenerateOp generateOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      ColumnMapping mapping;
+      std::vector<mlir::subop::GenerateEmitOp> emitOps;
+      generateOp.getRegion().walk([&](mlir::subop::GenerateEmitOp emitOp) {
+         emitOps.push_back(emitOp);
+      });
+      std::vector<mlir::Value> streams;
+      for (auto emitOp : emitOps) {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointAfter(emitOp);
+         ColumnMapping mapping;
+         mapping.define(generateOp.getGeneratedColumns(), emitOp.getValues());
+         mlir::Value newInFlight = mapping.createInFlight(rewriter);
+         streams.push_back(newInFlight);
+      }
+      {
+         auto *b = &generateOp.getRegion().front();
+         auto* terminator = b->getTerminator();
+         mlir::BlockAndValueMapping mapper;
+         for (auto& x : b->getOperations()) {
+            if (&x != terminator) {
+               rewriter.clone(x, mapper);
+            }
+         }
+         std::vector<mlir::Value> res;
+         for (auto& s : streams) {
+            s = mapper.lookup(s);
+         }
+      }
+      rewriter.replaceOpWithNewOp<mlir::subop::UnionOp>(generateOp, streams);
+      return success();
+   }
+};
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////// Consuming a TupleStream//////////////////////////////////////////////////
@@ -787,21 +834,7 @@ class FilterLowering : public TupleStreamConsumerLowering<mlir::subop::FilterOp>
       return success();
    }
 };
-class RepeatLowering : public TupleStreamConsumerLowering<mlir::subop::RepeatOp> {
-   public:
-   using TupleStreamConsumerLowering<mlir::subop::RepeatOp>::TupleStreamConsumerLowering;
-   LogicalResult matchAndRewriteConsumer(mlir::subop::RepeatOp repeatOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
-      auto loc = repeatOp->getLoc();
-      mlir::Value zeroIdx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
-      mlir::Value oneIdx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
-      rewriter.create<mlir::scf::ForOp>(loc, zeroIdx, mapping.resolve(repeatOp.getTimes()), oneIdx, mlir::ValueRange{}, [&](mlir::OpBuilder& b, mlir::Location loc, mlir::Value idx, mlir::ValueRange vr) {
-         newStream = mapping.createInFlight(b);
-         b.create<mlir::scf::YieldOp>(loc);
-      });
 
-      return success();
-   }
-};
 class NestedMapLowering : public TupleStreamConsumerLowering<mlir::subop::NestedMapOp> {
    public:
    using TupleStreamConsumerLowering<mlir::subop::NestedMapOp>::TupleStreamConsumerLowering;
@@ -1247,6 +1280,9 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    target.addLegalDialect<util::UtilDialect>();
    target.addLegalOp<subop::InFlightOp>();
    target.addLegalOp<subop::InFlightTupleOp>();
+   target.addDynamicallyLegalOp<subop::GenerateEmitOp>([](mlir::subop::GenerateEmitOp generateEmitOp) -> bool {
+      return generateEmitOp->getParentOfType<mlir::subop::GenerateOp>() != nullptr;
+   });
    target.addDynamicallyLegalOp<subop::UnionOp>([](mlir::subop::UnionOp unionOp) -> bool {
       bool res = llvm::all_of(unionOp.getStreams(), [](mlir::Value v) { return mlir::isa_and_nonnull<mlir::subop::InFlightOp>(v.getDefiningOp()); });
       return res;
@@ -1320,7 +1356,8 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<ScatterOpLowering>(typeConverter, ctxt);
    patterns.insert<GatherOpLowering>(typeConverter, ctxt);
    patterns.insert<UnionLowering>(typeConverter, ctxt);
-   patterns.insert<RepeatLowering>(typeConverter, ctxt);
+   patterns.insert<GenerateLowering>(typeConverter, ctxt);
+   patterns.insert<GenerateEmitLowering>(typeConverter, ctxt);
    if (failed(applyFullConversion(module, target, std::move(patterns)))) {
       signalPassFailure();
    }

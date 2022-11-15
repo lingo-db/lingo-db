@@ -331,12 +331,6 @@ def FilterOp : SubOperator_Op<"filter", [Pure,SubOperator]> {
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream $filterSemantic custom<CustRefArr>($conditions)  attr-dict }];
 }
-def RepeatOp : SubOperator_Op<"repeat", [Pure,SubOperator]> {
-    let summary = "repeat the current tuple x times";
-    let arguments = (ins TupleStream : $stream, ColumnRefAttr:$times);
-    let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $stream custom<CustRef>($times)  attr-dict }];
-}
 def RenamingOp : SubOperator_Op<"rename", [Pure,SubOperator]> {
     let summary = "rename columns";
 
@@ -359,4 +353,19 @@ def SetResultOp : SubOperator_Op<"set_result"> {
     let arguments = (ins I32Attr:$result_id, AnyType : $state);
     let assemblyFormat = [{ $result_id $state `:` type($state)  attr-dict }];
 }
+
+def GenerateOp : SubOperator_Op<"generate",[Pure,SubOperator]> {
+    let summary = "generate tuples using imperative code";
+    let arguments = (ins ArrayAttr:$generated_columns);
+    let results = (outs TupleStream : $res);
+    let regions = (region SizedRegion<1>:$region);
+    let hasCustomAssemblyFormat = 1;
+}
+
+def GenerateEmitOp : SubOperator_Op<"generate_emit"> {
+    let summary = "set result";
+    let arguments = (ins Variadic<AnyType>:$values);
+    let assemblyFormat = [{ ($values^ `:` type($values))?  attr-dict }];
+}
+
 #endif // LINGODB_DIALECT_SubOperator_IR_OPS
