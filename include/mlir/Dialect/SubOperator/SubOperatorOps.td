@@ -221,14 +221,14 @@ def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator]> {
         std::vector<std::string> getReadMembers();
     }];
 }
-def GetReferenceOp : SubOperator_Op<"get_reference", [NoSideEffect]> {
+def GetReferenceOp : SubOperator_Op<"get_reference", [Pure]> {
     let summary = "get reference to an externally defined object";
 
     let arguments = (ins StrAttr: $descr);
     let results = (outs AnyType : $res);
     let assemblyFormat = [{  $descr `:` type($res) attr-dict }];
 }
-def CreateOp : SubOperator_Op<"create", [NoSideEffect]> {
+def CreateOp : SubOperator_Op<"create", [Pure]> {
     let summary = "create new state";
 
     let arguments = (ins OptionalAttr<AnyAttr>: $descr);
@@ -238,7 +238,7 @@ def CreateOp : SubOperator_Op<"create", [NoSideEffect]> {
 
 }
 
-def ScanOp : SubOperator_Op<"scan", [NoSideEffect,SubOperator]> {
+def ScanOp : SubOperator_Op<"scan", [Pure,SubOperator]> {
     let summary = "scan state (sequentially)";
 
     let arguments = (ins AnyType : $state, DictionaryAttr : $mapping );
@@ -248,7 +248,7 @@ def ScanOp : SubOperator_Op<"scan", [NoSideEffect,SubOperator]> {
         std::vector<std::string> getReadMembers();
     }];
 }
-def ScanListOp : SubOperator_Op<"scan_list", [NoSideEffect,SubOperator]> {
+def ScanListOp : SubOperator_Op<"scan_list", [Pure,SubOperator]> {
     let summary = "scan state (sequentially)";
 
     let arguments = (ins AnyType : $list, ColumnDefAttr: $elem);
@@ -256,7 +256,7 @@ def ScanListOp : SubOperator_Op<"scan_list", [NoSideEffect,SubOperator]> {
     let assemblyFormat = [{  $list `:` type($list) custom<CustDef>($elem) attr-dict }];
 }
 
-def ScanRefsOp : SubOperator_Op<"scan_refs", [NoSideEffect,SubOperator]> {
+def ScanRefsOp : SubOperator_Op<"scan_refs", [Pure,SubOperator]> {
     let summary = "scan state (sequentially) and emits references to its elements";
 
     let arguments = (ins AnyType : $state, ColumnDefAttr:$ref);
@@ -264,14 +264,14 @@ def ScanRefsOp : SubOperator_Op<"scan_refs", [NoSideEffect,SubOperator]> {
     let assemblyFormat = [{  $state `:` type($state) custom<CustDef>($ref) attr-dict }];
 }
 
-def InFlightOp : SubOperator_Op<"in_flight", [NoSideEffect,SubOperator]> {
+def InFlightOp : SubOperator_Op<"in_flight", [Pure,SubOperator]> {
     let summary = "operation symbolizes 'in flight' tuple stream -> values => columns";
 
     let arguments = (ins Variadic<AnyType> : $values, ArrayAttr : $columns );
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $values `:` type($values) `=` `>` custom<CustDefArr>($columns) attr-dict }];
 }
-def InFlightTupleOp : SubOperator_Op<"in_flight_tuple", [NoSideEffect,SubOperator]> {
+def InFlightTupleOp : SubOperator_Op<"in_flight_tuple", [Pure,SubOperator]> {
     let summary = "operation symbolizes 'in flight' tuple -> values => columns";
 
     let arguments = (ins Variadic<AnyType> : $values, ArrayAttr : $columns );
@@ -279,14 +279,14 @@ def InFlightTupleOp : SubOperator_Op<"in_flight_tuple", [NoSideEffect,SubOperato
     let assemblyFormat = [{  $values `:` type($values) `=` `>` custom<CustDefArr>($columns) attr-dict }];
 }
 
-def CombineTupleOp : SubOperator_Op<"combine_tuple", [NoSideEffect,SubOperator]> {
+def CombineTupleOp : SubOperator_Op<"combine_tuple", [Pure,SubOperator]> {
     let summary = "combines stream with tuple";
 
     let arguments = (ins TupleStream :$stream, TupleStream_Tuple:$right);
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream `,` $right attr-dict }];
 }
-def UnionOp : SubOperator_Op<"union", [NoSideEffect,SubOperator]> {
+def UnionOp : SubOperator_Op<"union", [Pure,SubOperator]> {
     let summary = "union of two stream";
 
     let arguments = (ins Variadic<TupleStream> :$streams);
@@ -294,7 +294,7 @@ def UnionOp : SubOperator_Op<"union", [NoSideEffect,SubOperator]> {
     let assemblyFormat = [{  $streams attr-dict }];
 }
 
-def MapOp : SubOperator_Op<"map", [NoSideEffect,SubOperator]> {
+def MapOp : SubOperator_Op<"map", [Pure,SubOperator]> {
     let summary = "map operation";
 
     let arguments = (ins TupleStream:$stream,ArrayAttr:$computed_cols);
@@ -325,19 +325,19 @@ def FilterSemantic : I64EnumAttr<"FilterSemantic", "",
     let cppNamespace = "::mlir::subop";
 }
 
-def FilterOp : SubOperator_Op<"filter", [NoSideEffect,SubOperator]> {
+def FilterOp : SubOperator_Op<"filter", [Pure,SubOperator]> {
     let summary = "filter stream of tuples according to one or more boolean columns (all 1 => keep tuple, otherwise discard) ";
     let arguments = (ins TupleStream : $stream, FilterSemantic:$filterSemantic,ArrayAttr : $conditions );
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream $filterSemantic custom<CustRefArr>($conditions)  attr-dict }];
 }
-def RepeatOp : SubOperator_Op<"repeat", [NoSideEffect,SubOperator]> {
+def RepeatOp : SubOperator_Op<"repeat", [Pure,SubOperator]> {
     let summary = "repeat the current tuple x times";
     let arguments = (ins TupleStream : $stream, ColumnRefAttr:$times);
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream custom<CustRef>($times)  attr-dict }];
 }
-def RenamingOp : SubOperator_Op<"rename", [NoSideEffect,SubOperator]> {
+def RenamingOp : SubOperator_Op<"rename", [Pure,SubOperator]> {
     let summary = "rename columns";
 
     let arguments = (ins TupleStream:$stream,ArrayAttr:$columns);

@@ -83,10 +83,10 @@ class MethodPrinter : public MatchFinder::MatchCallback {
          }
       }
       std::string asString = type.getAsString();
-      if (asString.ends_with("runtime::VarLen32")) {
+      if (asString.ends_with("VarLen32")) {
          return "mlir::util::VarLen32Type::get(context)";
       }
-      if (asString.ends_with("runtime::Buffer")) {
+      if (asString.ends_with("Buffer")) {
          return "mlir::util::BufferType::get(context," + translateIntegerType(8) + ")";
       }
 

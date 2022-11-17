@@ -3,7 +3,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Transforms/InliningUtils.h"
 
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
@@ -35,7 +35,7 @@ void SubOperatorDialect::initialize() {
    addInterfaces<SubOperatorInlinerInterface>();
    getContext()->loadDialect<mlir::db::DBDialect>();
    getContext()->loadDialect<mlir::dsa::DSADialect>();
-   getContext()->loadDialect<mlir::arith::ArithmeticDialect>();
+   getContext()->loadDialect<mlir::arith::ArithDialect>();
    getContext()->loadDialect<mlir::tuples::TupleStreamDialect>();
 }
 

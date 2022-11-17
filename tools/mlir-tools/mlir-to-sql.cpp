@@ -121,25 +121,25 @@ class ToSQL {
             }
          })
          .Case<tuples::GetColumnOp>([&](tuples::GetColumnOp op) {
-            output << attributeName(op.attr().getColumn());
+            output << attributeName(op.getAttr().getColumn());
          })
          .Case<mlir::db::AndOp>([&](mlir::db::AndOp op) {
             output << "(";
-            joinstr(output, "and", op.vals());
+            joinstr(output, "and", op.getVals());
             output << ")";
          })
          .Case<mlir::db::OrOp>([&](mlir::db::OrOp op) {
             output << "(";
-            joinstr(output, "or", op.vals());
+            joinstr(output, "or", op.getVals());
             output << ")";
          })
          .Case<mlir::db::BetweenOp>([&](mlir::db::BetweenOp op) {
-            output << resolveVal(op.val()) << " between " << resolveVal(op.lower()) << " and " << resolveVal(op.upper()) << " ";
+            output << resolveVal(op.getVal()) << " between " << resolveVal(op.getLower()) << " and " << resolveVal(op.getUpper()) << " ";
          })
          .Case<mlir::db::OneOfOp>([&](mlir::db::OneOfOp op) {
-            output << resolveVal(op.val()) << " in (";
+            output << resolveVal(op.getVal()) << " in (";
             bool first = true;
-            for (auto v : op.vals()) {
+            for (auto v : op.getVals()) {
                if (first) {
                   first = false;
                } else {
@@ -150,24 +150,24 @@ class ToSQL {
             output << ") ";
          })
          .Case<mlir::db::DeriveTruth>([&](mlir::db::DeriveTruth op) {
-            output << resolveVal(op.val());
+            output << resolveVal(op.getVal());
          })
 
          .Case<AddOp>([&](AddOp op) {
-            handleBinOp(output, "+", op.left(), op.right());
+            handleBinOp(output, "+", op.getLeft(), op.getRight());
          })
          .Case<SubOp>([&](SubOp op) {
-            handleBinOp(output, "-", op.left(), op.right());
+            handleBinOp(output, "-", op.getLeft(), op.getRight());
          })
          .Case<MulOp>([&](MulOp op) {
-            handleBinOp(output, "*", op.left(), op.right());
+            handleBinOp(output, "*", op.getLeft(), op.getRight());
          })
          .Case<DivOp>([&](DivOp op) {
-            handleBinOp(output, "/", op.left(), op.right());
+            handleBinOp(output, "/", op.getLeft(), op.getRight());
          })
          .Case<CmpOp>([&](CmpOp op) {
             std::string pred = "<unknown pred>";
-            switch (op.predicate()) {
+            switch (op.getPredicate()) {
                case DBCmpPredicate::eq:
                   pred = "=";
                   break;
@@ -187,27 +187,27 @@ class ToSQL {
                   pred = ">=";
                   break;
             }
-            handleBinOp(output, pred, op.left(), op.right());
+            handleBinOp(output, pred, op.getLeft(), op.getRight());
          })
          .Case<AggrFuncOp>([&](AggrFuncOp op) {
-            std::string fnname(mlir::relalg::stringifyAggrFunc(op.fn()));
-            auto attr = attributeName(op.attr().getColumn());
+            std::string getFnname(mlir::relalg::stringifyAggrFunc(op.getFn()));
+            auto attr = attributeName(op.getAttr().getColumn());
             std::string distinct = "";
-            if (auto projop = mlir::dyn_cast_or_null<ProjectionOp>(op.rel().getDefiningOp())) {
-               if (projop.set_semantic() == SetSemantic::distinct) {
+            if (auto projop = mlir::dyn_cast_or_null<ProjectionOp>(op.getRel().getDefiningOp())) {
+               if (projop.getSetSemantic() == SetSemantic::distinct) {
                   distinct = "distinct ";
                }
             }
-            output << fnname << "(" << distinct << attr << ")";
+            output << getFnname << "(" << distinct << attr << ")";
          })
          .Case<CountRowsOp>([&](CountRowsOp op) {
             output << "count(*)";
          })
          .Case<CastOp>([&](CastOp op) {
-            output << resolveVal(op.val());
+            output << resolveVal(op.getVal());
          })
          .Case<NotOp>([&](NotOp op) {
-            output << "not " << resolveVal(op.val());
+            output << "not " << resolveVal(op.getVal());
          })
          .Case<mlir::scf::IfOp>([&](mlir::scf::IfOp op) {
             output << " case \n";
@@ -219,22 +219,22 @@ class ToSQL {
             output << "\n end";
          })
          .Case<mlir::db::RuntimeCall>([&](mlir::db::RuntimeCall op) {
-            if (op.fn() == "ExtractFromDate") {
-               output << "extract(" << resolveVal(op.args()[0]) << " from " << resolveVal(op.args()[1]) << " )";
+            if (op.getFn() == "ExtractFromDate") {
+               output << "extract(" << resolveVal(op.getArgs()[0]) << " from " << resolveVal(op.getArgs()[1]) << " )";
             }
-            if (op.fn().startswith("DateAdd")) {
-               handleBinOp(output, "+", op.args()[0], op.args()[1]);
+            if (op.getFn().startswith("DateAdd")) {
+               handleBinOp(output, "+", op.getArgs()[0], op.getArgs()[1]);
             }
-            if (op.fn().startswith("DateSubtract")) {
-               handleBinOp(output, "-", op.args()[0], op.args()[1]);
+            if (op.getFn().startswith("DateSubtract")) {
+               handleBinOp(output, "-", op.getArgs()[0], op.getArgs()[1]);
             }
-            if (op.fn().endswith("Like")) {
-               handleBinOp(output, "like", op.args()[0], op.args()[1]);
+            if (op.getFn().endswith("Like")) {
+               handleBinOp(output, "like", op.getArgs()[0], op.getArgs()[1]);
             }
          })
          .Case<MaterializeOp>([&](MaterializeOp op) {
             std::vector<std::string> attrs;
-            for (auto attr : op.cols()) {
+            for (auto attr : op.getCols()) {
                attrs.push_back(attributeName(attr.dyn_cast_or_null<mlir::tuples::ColumnRefAttr>().getColumn()));
             }
             output << "select ";
@@ -247,7 +247,7 @@ class ToSQL {
                }
                output << attr;
             }
-            output << "\n from " << operatorName(op.rel().getDefiningOp());
+            output << "\n from " << operatorName(op.getRel().getDefiningOp());
          })
          .Case<mlir::tuples::ReturnOp, mlir::func::ReturnOp, mlir::scf::YieldOp>([&](mlir::Operation* others) {
 
@@ -280,10 +280,10 @@ class ToSQL {
 
             auto opName = operatorName(op.getOperation());
             if (auto constRelOp = mlir::dyn_cast_or_null<mlir::relalg::ConstRelationOp>(op.getOperation())) {
-               output << opName << "(" << attributeName(constRelOp.columns()[0].dyn_cast_or_null<mlir::tuples::ColumnDefAttr>().getColumn()) << ")";
+               output << opName << "(" << attributeName(constRelOp.getColumns()[0].dyn_cast_or_null<mlir::tuples::ColumnDefAttr>().getColumn()) << ")";
                output << " as ( values ";
                auto first = true;
-               for (auto val : constRelOp.values()) {
+               for (auto val : constRelOp.getValues()) {
                   if (first) {
                      first = false;
                   } else {
@@ -313,7 +313,7 @@ class ToSQL {
                   .Case<mlir::relalg::BaseTableOp>([&](mlir::relalg::BaseTableOp op) {
                      output << "select ";
                      auto first = true;
-                     for (auto mapping : op.columns()) {
+                     for (auto mapping : op.getColumns()) {
                         auto columnName = mapping.getName();
                         auto attr = mapping.getValue();
                         auto relationDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
@@ -324,12 +324,12 @@ class ToSQL {
                         }
                         output << columnName.str() << " as " << attributeName(relationDefAttr.getColumn());
                      }
-                     output << "\nfrom " << std::string(op.table_identifier());
+                     output << "\nfrom " << std::string(op.getTableIdentifier());
                   })
                   .Case<mlir::relalg::SelectionOp>([&](mlir::relalg::SelectionOp op) {
-                     output << "select * \nfrom " << operatorName(op.rel().getDefiningOp()) << "\n";
+                     output << "select * \nfrom " << operatorName(op.getRel().getDefiningOp()) << "\n";
                      output << "where ";
-                     output << resolveVal(mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.predicate().front().getTerminator()).getOperand(0));
+                     output << resolveVal(mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.getPredicate().front().getTerminator()).getOperand(0));
                   })
                   .Case<mlir::relalg::SingleJoinOp>([&](mlir::relalg::SingleJoinOp op) {
                      output << " select ";
@@ -337,7 +337,7 @@ class ToSQL {
                      std::vector<std::string> attrs;
                      auto first = true;
 
-                     for (auto attr : op.mapping()) {
+                     for (auto attr : op.getMapping()) {
                         if (first) {
                            first = false;
                         } else {
@@ -358,8 +358,8 @@ class ToSQL {
                            output << attributeName(*attr);
                         }
                      }
-                     output << " from " << operatorName(op.left().getDefiningOp()) << " left outer join " << operatorName(op.right().getDefiningOp()) << " ";
-                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.predicate().front().getTerminator());
+                     output << " from " << operatorName(op.getLeft().getDefiningOp()) << " left outer join " << operatorName(op.getRight().getDefiningOp()) << " ";
+                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.getPredicate().front().getTerminator());
                      if (returnop->getNumOperands() > 0) {
                         output << " on " << resolveVal(returnop.getOperand(0));
                      } else {
@@ -367,8 +367,8 @@ class ToSQL {
                      }
                   })
                   .Case<mlir::relalg::InnerJoinOp>([&](mlir::relalg::InnerJoinOp op) {
-                     output << " select * from " << operatorName(op.left().getDefiningOp()) << " inner join " << operatorName(op.right().getDefiningOp()) << " ";
-                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.predicate().front().getTerminator());
+                     output << " select * from " << operatorName(op.getLeft().getDefiningOp()) << " inner join " << operatorName(op.getRight().getDefiningOp()) << " ";
+                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.getPredicate().front().getTerminator());
                      if (returnop->getNumOperands() > 0) {
                         output << " on " << resolveVal(returnop.getOperand(0));
                      } else {
@@ -381,7 +381,7 @@ class ToSQL {
                      std::vector<std::string> attrs;
                      auto first = true;
 
-                     for (auto attr : op.mapping()) {
+                     for (auto attr : op.getMapping()) {
                         if (first) {
                            first = false;
                         } else {
@@ -402,8 +402,8 @@ class ToSQL {
                            output << attributeName(*attr);
                         }
                      }
-                     output << " from " << operatorName(op.left().getDefiningOp()) << " left outer join " << operatorName(op.right().getDefiningOp()) << " ";
-                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.predicate().front().getTerminator());
+                     output << " from " << operatorName(op.getLeft().getDefiningOp()) << " left outer join " << operatorName(op.getRight().getDefiningOp()) << " ";
+                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.getPredicate().front().getTerminator());
                      if (returnop->getNumOperands() > 0) {
                         output << " on " << resolveVal(returnop.getOperand(0));
                      } else {
@@ -411,8 +411,8 @@ class ToSQL {
                      }
                   })
                   .Case<mlir::relalg::FullOuterJoinOp>([&](mlir::relalg::FullOuterJoinOp op) {
-                     output << " select * from " << operatorName(op.left().getDefiningOp()) << " full outer join " << operatorName(op.right().getDefiningOp()) << " ";
-                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.predicate().front().getTerminator());
+                     output << " select * from " << operatorName(op.getLeft().getDefiningOp()) << " full outer join " << operatorName(op.getRight().getDefiningOp()) << " ";
+                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.getPredicate().front().getTerminator());
                      if (returnop->getNumOperands() > 0) {
                         output << " on " << resolveVal(returnop.getOperand(0));
                      } else {
@@ -420,39 +420,39 @@ class ToSQL {
                      }
                   })
                   .Case<mlir::relalg::SemiJoinOp>([&](mlir::relalg::SemiJoinOp op) {
-                     output << " select * from " << operatorName(op.left().getDefiningOp()) << " where exists(select * from " << operatorName(op.right().getDefiningOp()) << " ";
-                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.predicate().front().getTerminator());
+                     output << " select * from " << operatorName(op.getLeft().getDefiningOp()) << " where exists(select * from " << operatorName(op.getRight().getDefiningOp()) << " ";
+                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.getPredicate().front().getTerminator());
                      if (returnop->getNumOperands() > 0) {
                         output << " where " << resolveVal(returnop.getOperand(0));
                      }
                      output << ")";
                   })
                   .Case<mlir::relalg::MarkJoinOp>([&](mlir::relalg::MarkJoinOp op) {
-                     output << " select *, exists(select * from " << operatorName(op.right().getDefiningOp()) << " ";
-                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.predicate().front().getTerminator());
+                     output << " select *, exists(select * from " << operatorName(op.getRight().getDefiningOp()) << " ";
+                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.getPredicate().front().getTerminator());
                      if (returnop->getNumOperands() > 0) {
                         output << " where " << resolveVal(returnop.getOperand(0));
                      }
-                     output << ") as " << attributeName(op.markattr().getColumn()) << " from " << operatorName(op.left().getDefiningOp());
+                     output << ") as " << attributeName(op.getMarkattr().getColumn()) << " from " << operatorName(op.getLeft().getDefiningOp());
                   })
                   .Case<mlir::relalg::AntiSemiJoinOp>([&](mlir::relalg::AntiSemiJoinOp op) {
-                     output << " select * from " << operatorName(op.left().getDefiningOp()) << " where not exists(select * from " << operatorName(op.right().getDefiningOp()) << " ";
-                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.predicate().front().getTerminator());
+                     output << " select * from " << operatorName(op.getLeft().getDefiningOp()) << " where not exists(select * from " << operatorName(op.getRight().getDefiningOp()) << " ";
+                     auto returnop = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.getPredicate().front().getTerminator());
                      if (returnop->getNumOperands() > 0) {
                         output << " where " << resolveVal(returnop.getOperand(0));
                      }
                      output << ")";
                   })
                   .Case<mlir::relalg::CrossProductOp>([&](mlir::relalg::CrossProductOp op) {
-                     output << "select * \nfrom " << operatorName(op.left().getDefiningOp()) << ", " << operatorName(op.right().getDefiningOp()) << "\n";
+                     output << "select * \nfrom " << operatorName(op.getLeft().getDefiningOp()) << ", " << operatorName(op.getRight().getDefiningOp()) << "\n";
                   })
                   .Case<mlir::relalg::MapOp>([&](mlir::relalg::MapOp op) {
                      std::vector<std::pair<std::string, std::string>> mappings;
                      auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(op.getLambdaBlock().getTerminator());
                      size_t i = 0;
-                     for (auto col : op.computed_cols()) {
+                     for (auto col : op.getComputedCols()) {
                         auto attrName = attributeName(col.cast<mlir::tuples::ColumnDefAttr>().getColumn());
-                        auto attrVal = resolveVal(returnOp.results()[i++]);
+                        auto attrVal = resolveVal(returnOp.getResults()[i++]);
                         mappings.push_back({attrName, attrVal});
                      }
                      output << "select ";
@@ -466,19 +466,19 @@ class ToSQL {
                         }
                         output << val << " as " << name;
                      }
-                     output << ", * \n from " << operatorName(op.rel().getDefiningOp()) << "\n";
+                     output << ", * \n from " << operatorName(op.getRel().getDefiningOp()) << "\n";
                   })
                   .Case<mlir::relalg::AggregationOp>([&](mlir::relalg::AggregationOp op) {
                      std::vector<std::pair<std::string, std::string>> mappings;
                      std::vector<std::string> groupByAttrs;
-                     for (auto attr : op.group_by_cols()) {
+                     for (auto attr : op.getGroupByCols()) {
                         groupByAttrs.push_back(attributeName(attr.dyn_cast_or_null<mlir::tuples::ColumnRefAttr>().getColumn()));
                      }
-                     auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(op.aggr_func().front().getTerminator());
+                     auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(op.getAggrFunc().front().getTerminator());
                      size_t i = 0;
-                     for (auto col : op.computed_cols()) {
+                     for (auto col : op.getComputedCols()) {
                         auto attrName = attributeName(col.cast<mlir::tuples::ColumnDefAttr>().getColumn());
-                        auto attrVal = resolveVal(returnOp.results()[i++]);
+                        auto attrVal = resolveVal(returnOp.getResults()[i++]);
                         mappings.push_back({attrName, attrVal});
                      }
                      output << "select ";
@@ -500,7 +500,7 @@ class ToSQL {
                         }
                         output << val << " as " << name;
                      }
-                     output << "\n from " << operatorName(op.rel().getDefiningOp()) << "\n";
+                     output << "\n from " << operatorName(op.getRel().getDefiningOp()) << "\n";
                      if (!groupByAttrs.empty()) {
                         output << " group by ";
                         first = true;
@@ -515,16 +515,16 @@ class ToSQL {
                      }
                   })
                   .Case<mlir::relalg::ProjectionOp>([&](mlir::relalg::ProjectionOp op) {
-                     if (!op.rel().getDefiningOp()) {
+                     if (!op.getRel().getDefiningOp()) {
                         // do not emit projection if in e.g. aggregation
                         return;
                      }
                      std::vector<std::string> attrs;
-                     for (auto attr : op.cols()) {
+                     for (auto attr : op.getCols()) {
                         attrs.push_back(attributeName(attr.dyn_cast_or_null<mlir::tuples::ColumnRefAttr>().getColumn()));
                      }
                      output << "select ";
-                     if (op.set_semantic() == mlir::relalg::SetSemantic::distinct) {
+                     if (op.getSetSemantic() == mlir::relalg::SetSemantic::distinct) {
                         output << "distinct ";
                      }
                      auto first = true;
@@ -536,7 +536,7 @@ class ToSQL {
                         }
                         output << attr;
                      }
-                     output << "\n from " << operatorName(op.rel().getDefiningOp());
+                     output << "\n from " << operatorName(op.getRel().getDefiningOp());
                   })
                   .Case<mlir::relalg::RenamingOp>([&](mlir::relalg::RenamingOp op) {
                      llvm::SmallPtrSet<mlir::tuples::Column*, 8> alreadyPrinted;
@@ -544,7 +544,7 @@ class ToSQL {
                      output << "select ";
                      auto first = true;
 
-                     for (auto attr : op.columns()) {
+                     for (auto attr : op.getColumns()) {
                         if (first) {
                            first = false;
                         } else {
@@ -565,22 +565,22 @@ class ToSQL {
                            output << attributeName(*attr);
                         }
                      }
-                     output << "\n from " << operatorName(op.rel().getDefiningOp());
+                     output << "\n from " << operatorName(op.getRel().getDefiningOp());
                   })
                   .Case<mlir::relalg::LimitOp>([&](mlir::relalg::LimitOp op) {
                      std::vector<std::string> attrs;
-                     output << operators[op.rel().getDefiningOp()] << " limit " << op.rows();
+                     output << operators[op.getRel().getDefiningOp()] << " limit " << op.getRows();
                   })
 
                   .Case<mlir::relalg::SortOp>([&](mlir::relalg::SortOp op) {
                      std::vector<std::string> orderByAttrs;
-                     for (auto attr : op.sortspecs()) {
+                     for (auto attr : op.getSortspecs()) {
                         auto sortspec = attr.dyn_cast_or_null<mlir::relalg::SortSpecificationAttr>();
                         auto sortspecifier = std::string(mlir::relalg::stringifySortSpec(sortspec.getSortSpec()));
                         orderByAttrs.push_back(attributeName(sortspec.getAttr().getColumn()) + " " + sortspecifier);
                      }
 
-                     output << "select * \n from " << operatorName(op.rel().getDefiningOp()) << "\n order by ";
+                     output << "select * \n from " << operatorName(op.getRel().getDefiningOp()) << "\n order by ";
                      auto first = true;
                      for (auto attr : orderByAttrs) {
                         if (first) {

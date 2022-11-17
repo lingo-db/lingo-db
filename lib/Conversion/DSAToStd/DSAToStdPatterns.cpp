@@ -1,4 +1,4 @@
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
@@ -16,10 +16,10 @@ class FinalizeTBLowering : public OpConversionPattern<mlir::dsa::Finalize> {
    public:
    using OpConversionPattern<mlir::dsa::Finalize>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::Finalize finalizeOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!finalizeOp.ht().getType().isa<mlir::dsa::TableBuilderType>()) {
+      if (!finalizeOp.getHt().getType().isa<mlir::dsa::TableBuilderType>()) {
          return failure();
       }
-      mlir::Value res = rt::TableBuilder::build(rewriter, finalizeOp->getLoc())(adaptor.ht())[0];
+      mlir::Value res = rt::TableBuilder::build(rewriter, finalizeOp->getLoc())(adaptor.getHt())[0];
       rewriter.replaceOp(finalizeOp, res);
       return success();
    }
@@ -29,12 +29,12 @@ class TBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
    public:
    using OpConversionPattern<mlir::dsa::Append>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::Append appendOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!appendOp.ds().getType().isa<mlir::dsa::TableBuilderType>()) {
+      if (!appendOp.getDs().getType().isa<mlir::dsa::TableBuilderType>()) {
          return failure();
       }
-      Value builderVal = adaptor.ds();
-      Value val = adaptor.val();
-      Value isValid = adaptor.valid();
+      Value builderVal = adaptor.getDs();
+      Value val = adaptor.getVal();
+      Value isValid = adaptor.getValid();
       auto loc = appendOp->getLoc();
       if (!isValid) {
          isValid = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
@@ -73,7 +73,7 @@ class NextRowLowering : public OpConversionPattern<mlir::dsa::NextRow> {
    public:
    using OpConversionPattern<mlir::dsa::NextRow>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::NextRow op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rt::TableBuilder::nextRow(rewriter, op->getLoc())({adaptor.builder()});
+      rt::TableBuilder::nextRow(rewriter, op->getLoc())({adaptor.getBuilder()});
       rewriter.eraseOp(op);
       return success();
    }
@@ -82,11 +82,11 @@ class CreateTableBuilderLowering : public OpConversionPattern<mlir::dsa::CreateD
    public:
    using OpConversionPattern<mlir::dsa::CreateDS>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::CreateDS createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!createOp.ds().getType().isa<mlir::dsa::TableBuilderType>()) {
+      if (!createOp.getDs().getType().isa<mlir::dsa::TableBuilderType>()) {
          return failure();
       }
       auto loc = createOp->getLoc();
-      mlir::Value schema = rewriter.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(getContext()), createOp.init_attr().getValue().cast<StringAttr>().str());
+      mlir::Value schema = rewriter.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(getContext()), createOp.getInitAttr().value().cast<StringAttr>().str());
       Value tableBuilder = rt::TableBuilder::create(rewriter, loc)({schema})[0];
       rewriter.replaceOp(createOp, tableBuilder);
       return success();

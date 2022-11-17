@@ -7,8 +7,8 @@
 namespace {
 class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-introduce-tmp"; }
-
    public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(IntroduceTmp)
    mlir::relalg::ColumnSet getUsed(mlir::Operation* op) {
       if (auto asOperator = mlir::dyn_cast_or_null<Operator>(op)) {
          auto cols = asOperator.getUsedColumns();
@@ -17,7 +17,7 @@ class IntroduceTmp : public mlir::PassWrapper<IntroduceTmp, mlir::OperationPass<
          }
          return cols;
       } else if (auto matOp = mlir::dyn_cast_or_null<mlir::relalg::MaterializeOp>(op)) {
-         return mlir::relalg::ColumnSet::fromArrayAttr(matOp.cols());
+         return mlir::relalg::ColumnSet::fromArrayAttr(matOp.getCols());
       }
       return {};
    }

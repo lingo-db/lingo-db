@@ -1,6 +1,6 @@
 #include "mlir/Conversion/DSAToStd/CollectionIteration.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
@@ -27,19 +27,19 @@ class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
    LogicalResult matchAndRewrite(mlir::dsa::ForOp forOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       std::vector<Type> argumentTypes;
       std::vector<Location> argumentLocs;
-      for (auto t : forOp.region().getArgumentTypes()) {
+      for (auto t : forOp.getRegion().getArgumentTypes()) {
          argumentTypes.push_back(t);
          argumentLocs.push_back(forOp->getLoc());
       }
-      auto collectionType = forOp.collection().getType().dyn_cast_or_null<mlir::util::CollectionType>();
-      auto iterator = mlir::dsa::CollectionIterationImpl::getImpl(collectionType, adaptor.collection());
+      auto collectionType = forOp.getCollection().getType().dyn_cast_or_null<mlir::util::CollectionType>();
+      auto iterator = mlir::dsa::CollectionIterationImpl::getImpl(collectionType, adaptor.getCollection());
 
       ModuleOp parentModule = forOp->getParentOfType<ModuleOp>();
-      std::vector<Value> results = iterator->implementLoop(forOp->getLoc(), adaptor.initArgs(), *typeConverter, rewriter, parentModule, [&](std::function<Value(OpBuilder & b)> getElem, ValueRange iterargs, OpBuilder builder) {
+      std::vector<Value> results = iterator->implementLoop(forOp->getLoc(), adaptor.getInitArgs(), *typeConverter, rewriter, parentModule, [&](std::function<Value(OpBuilder & b)> getElem, ValueRange iterargs, OpBuilder builder) {
          auto yieldOp = cast<mlir::dsa::YieldOp>(forOp.getBody()->getTerminator());
          std::vector<Type> resTypes;
          std::vector<Location> locs;
-         for (auto t : yieldOp.results()) {
+         for (auto t : yieldOp.getResults()) {
             resTypes.push_back(typeConverter->convertType(t.getType()));
             locs.push_back(forOp->getLoc());
          }
@@ -50,7 +50,7 @@ class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
          builder.setInsertionPoint(term);
          rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
 
-         std::vector<Value> results(yieldOp.results().begin(), yieldOp.results().end());
+         std::vector<Value> results(yieldOp.getResults().begin(), yieldOp.getResults().end());
          rewriter.eraseOp(yieldOp);
          rewriter.eraseOp(term);
 
@@ -59,9 +59,9 @@ class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
       {
          OpBuilder::InsertionGuard insertionGuard(rewriter);
 
-         forOp.region().push_back(new Block());
-         forOp.region().front().addArguments(argumentTypes, argumentLocs);
-         rewriter.setInsertionPointToStart(&forOp.region().front());
+         forOp.getRegion().push_back(new Block());
+         forOp.getRegion().front().addArguments(argumentTypes, argumentLocs);
+         rewriter.setInsertionPointToStart(&forOp.getRegion().front());
          rewriter.create<mlir::dsa::YieldOp>(forOp.getLoc());
       }
 
@@ -108,13 +108,13 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
       mlir::Value nullMultiplier;
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
-         if (auto* definingOp = adaptor.collection().getDefiningOp()) {
+         if (auto* definingOp = adaptor.getCollection().getDefiningOp()) {
             rewriter.setInsertionPointAfter(definingOp);
          }
-         auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, adaptor.collection());
+         auto unpacked = rewriter.create<mlir::util::UnPackOp>(loc, adaptor.getCollection());
          index = unpacked.getResult(0);
          auto info = unpacked.getResult(1);
-         size_t column = atOp.pos();
+         size_t column = atOp.getPos();
          size_t baseOffset = 1 + column * 5;
          columnOffset = rewriter.create<mlir::util::GetTupleOp>(loc, rewriter.getIndexType(), info, baseOffset);
          validityBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, info.getType().cast<TupleType>().getType(baseOffset + 2), info, baseOffset + 2);

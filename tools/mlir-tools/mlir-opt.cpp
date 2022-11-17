@@ -34,7 +34,6 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 
 #include "mlir-support/eval.h"
-#include "mlir/Transforms/CustomPasses.h"
 
 #include "mlir/InitAllDialects.h"
 
@@ -83,7 +82,7 @@ void ToLLVMLoweringPass::runOnOperation() {
    // patterns must be applied to fully transform an illegal operation into a
    // set of legal ones.
    mlir::RewritePatternSet patterns(&getContext());
-   mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
+   mlir::arith::populateArithToLLVMConversionPatterns(typeConverter, patterns);
    mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
    populateAffineToStdConversionPatterns(patterns);
    mlir::populateSCFToControlFlowConversionPatterns(patterns);
@@ -91,7 +90,7 @@ void ToLLVMLoweringPass::runOnOperation() {
    mlir::populateFuncToLLVMConversionPatterns(typeConverter, patterns);
    mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
    mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
-   mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
+   mlir::arith::populateArithToLLVMConversionPatterns(typeConverter, patterns);
    // We want to completely lower to LLVM, so we use a `FullConversion`. This
    // ensures that only legal operations will remain after the conversion.
    auto module = getOperation();
@@ -132,19 +131,6 @@ int main(int argc, char** argv) {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createDetachMetaDataPass();
    });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::createSinkOpPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::createSimplifyMemrefsPass();
-   });
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::createSimplifyArithmeticsPass();
-   });
-
-   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::db::createSimplifyToArithPass();
-   });
 
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
@@ -153,7 +139,7 @@ int main(int argc, char** argv) {
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::dsa::DSADialect>();
    registry.insert<mlir::func::FuncDialect>();
-   registry.insert<mlir::arith::ArithmeticDialect>();
+   registry.insert<mlir::arith::ArithDialect>();
 
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<mlir::util::UtilDialect>();

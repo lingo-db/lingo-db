@@ -10,6 +10,9 @@ namespace {
 
 class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-pushdown"; }
+   public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(Pushdown)
+   private:
    size_t countUses(Operator o) {
       size_t uses = 0;
       for (auto& u : o->getUses()) uses++; // NOLINT(clang-diagnostic-unused-variable)

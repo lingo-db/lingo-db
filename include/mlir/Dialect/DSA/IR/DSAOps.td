@@ -102,7 +102,7 @@ def DSA_CreateDS : DSA_Op<"create_ds"> {
     ];
 }
 
-def DSA_At : DSA_Op<"at", [NoSideEffect]> {
+def DSA_At : DSA_Op<"at", [Pure]> {
     let summary = "access column in a record";
 
     let arguments = (ins DSA_Record:$collection,I32Attr:$pos);
@@ -149,7 +149,7 @@ def DSA_ScanSource : DSA_Op<"scan_source"> {
 
 
 def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
-                           RecursiveSideEffects]> {
+                           RecursiveMemoryEffects]> {
     let summary = "iterate over collection";
     let description = [{
         Iterate over all elements of a collection. The iteration can be interrupted when the optionally specified flag becomes set.
@@ -185,7 +185,7 @@ def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
     }];
 }
 
-def YieldOp : DSA_Op<"yield", [NoSideEffect, Terminator,
+def YieldOp : DSA_Op<"yield", [Pure, Terminator,
                                ParentOneOf<["ForOp"]>]> {
     let arguments = (ins Variadic<AnyType>:$results);
     let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];

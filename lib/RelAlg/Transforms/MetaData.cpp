@@ -10,10 +10,11 @@ class AttachMetaData : public mlir::PassWrapper<AttachMetaData, mlir::OperationP
    runtime::Database& db;
 
    public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AttachMetaData)
    AttachMetaData(runtime::Database& db) : db(db) {}
    void runOnOperation() override {
       getOperation().walk([&](mlir::relalg::BaseTableOp op) {
-         op.metaAttr(mlir::relalg::TableMetaDataAttr::get(&getContext(), db.getTableMetaData(op.table_identifier().str())));
+         op.setMetaAttr(mlir::relalg::TableMetaDataAttr::get(&getContext(), db.getTableMetaData(op.getTableIdentifier().str())));
       });
    }
 };
@@ -21,10 +22,11 @@ class DetachMetaData : public mlir::PassWrapper<DetachMetaData, mlir::OperationP
    virtual llvm::StringRef getArgument() const override { return "relalg-detach-meta-data"; }
 
    public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(DetachMetaData)
    void runOnOperation() override {
       getOperation().walk([&](mlir::relalg::BaseTableOp op) {
          getOperation().walk([&](mlir::relalg::BaseTableOp op) {
-            op.metaAttr(mlir::relalg::TableMetaDataAttr::get(&getContext(), std::make_shared<runtime::TableMetaData>()));
+            op.setMetaAttr(mlir::relalg::TableMetaDataAttr::get(&getContext(), std::make_shared<runtime::TableMetaData>()));
          });
       });
    }

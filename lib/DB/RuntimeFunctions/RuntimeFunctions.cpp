@@ -1,5 +1,5 @@
 #include "mlir/Dialect/DB/IR/RuntimeFunctions.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/DB/Passes.h"
 #include "runtime-defs/DateRuntime.h"
 #include "runtime-defs/DecimalRuntime.h"
@@ -69,7 +69,7 @@ static mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange low
    mlir::Value str = loweredArguments[0];
    mlir::Value patternValue = loweredArguments[1];
    if (auto constStrOp = mlir::dyn_cast_or_null<mlir::util::CreateConstVarLen>(patternValue.getDefiningOp())) {
-      auto pattern = constStrOp.str().str();
+      auto pattern = constStrOp.getStr();
       size_t pos = 0;
       std::string currentSubPattern;
       mlir::Value lastMatchEnd;
@@ -129,8 +129,8 @@ static mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange lo
    Value val;
    if (nullableType) {
       auto unPackOp = rewriter.create<mlir::util::UnPackOp>(loc, loweredArguments[0]);
-      isNull = unPackOp.vals()[0];
-      val = unPackOp.vals()[1];
+      isNull = unPackOp.getVals()[0];
+      val = unPackOp.getVals()[1];
    } else {
       isNull = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
       val = loweredArguments[0];

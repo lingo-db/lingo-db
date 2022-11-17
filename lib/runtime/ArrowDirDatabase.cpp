@@ -169,7 +169,7 @@ std::shared_ptr<arrow::RecordBatch> createSample(std::shared_ptr<arrow::Table> t
 
    // sample five values without replacement from [1, 100]
    std::sample(
-      BoxedIntegerIterator{0l}, BoxedIntegerIterator{table->num_rows() - 1},
+      BoxedIntegerIterator<long>{0l}, BoxedIntegerIterator<long>{table->num_rows() - 1},
       std::back_inserter(result), std::min(table->num_rows(), 1024l), rng);
    for (auto i : result) {
       assert(numericBuilder.Append(i).ok());

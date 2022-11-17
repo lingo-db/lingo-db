@@ -237,12 +237,12 @@ static void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arra
 }
 
 ParseResult mlir::subop::SortOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
-   OpAsmParser::UnresolvedOperand toSort;
+   OpAsmParser::UnresolvedOperand getToSort;
    subop::VectorType vecType;
-   if (parser.parseOperand(toSort) || parser.parseColonType(vecType)) {
+   if (parser.parseOperand(getToSort) || parser.parseColonType(vecType)) {
       return failure();
    }
-   if (parser.resolveOperand(toSort, vecType, result.operands).failed()) {
+   if (parser.resolveOperand(getToSort, vecType, result.operands).failed()) {
       return failure();
    }
 
@@ -294,29 +294,29 @@ ParseResult mlir::subop::SortOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
 
 void subop::SortOp::print(OpAsmPrinter& p) {
    subop::SortOp& op = *this;
-   p << " " << op.toSort() << " : " << op.toSort().getType() << " " << op.sortBy() << " ";
+   p << " " << op.getToSort() << " : " << op.getToSort().getType() << " " << op.getSortBy() << " ";
    p << "([";
    bool first = true;
-   for (size_t i = 0; i < op.sortBy().size(); i++) {
+   for (size_t i = 0; i < op.getSortBy().size(); i++) {
       if (first) {
          first = false;
       } else {
          p << ",";
       }
-      p << op.region().front().getArgument(i);
+      p << op.getRegion().front().getArgument(i);
    }
    p << "],[";
    first = true;
-   for (size_t i = 0; i < op.sortBy().size(); i++) {
+   for (size_t i = 0; i < op.getSortBy().size(); i++) {
       if (first) {
          first = false;
       } else {
          p << ",";
       }
-      p << op.region().front().getArgument(op.sortBy().size() + i);
+      p << op.getRegion().front().getArgument(op.getSortBy().size() + i);
    }
    p << "])";
-   p.printRegion(op.region(), false, true);
+   p.printRegion(op.getRegion(), false, true);
 }
 ParseResult mlir::subop::LookupOrInsertOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    OpAsmParser::UnresolvedOperand stream;
@@ -389,37 +389,37 @@ ParseResult mlir::subop::LookupOrInsertOp::parse(::mlir::OpAsmParser& parser, ::
 
 void subop::LookupOrInsertOp::print(OpAsmPrinter& p) {
    subop::LookupOrInsertOp& op = *this;
-   p << " " << op.stream() << op.state() << " ";
-   printCustRefArr(p, op, op.keys());
-   p << " : " << op.state().getType() << " ";
-   printCustDef(p, op, op.ref());
-   if (!op.eqFn().empty()) {
+   p << " " << op.getStream() << op.getState() << " ";
+   printCustRefArr(p, op, op.getKeys());
+   p << " : " << op.getState().getType() << " ";
+   printCustDef(p, op, op.getRef());
+   if (!op.getEqFn().empty()) {
       p << "eq: ([";
       bool first = true;
-      for (size_t i = 0; i < op.keys().size(); i++) {
+      for (size_t i = 0; i < op.getKeys().size(); i++) {
          if (first) {
             first = false;
          } else {
             p << ",";
          }
-         p << op.eqFn().front().getArgument(i);
+         p << op.getEqFn().front().getArgument(i);
       }
       p << "],[";
       first = true;
-      for (size_t i = 0; i < op.keys().size(); i++) {
+      for (size_t i = 0; i < op.getKeys().size(); i++) {
          if (first) {
             first = false;
          } else {
             p << ",";
          }
-         p << op.eqFn().front().getArgument(op.keys().size() + i);
+         p << op.getEqFn().front().getArgument(op.getKeys().size() + i);
       }
       p << "]) ";
-      p.printRegion(op.eqFn(), false, true);
+      p.printRegion(op.getEqFn(), false, true);
    }
-   if (!op.initFn().empty()) {
+   if (!op.getInitFn().empty()) {
       p << "initial: ";
-      p.printRegion(op.initFn(), false, true);
+      p.printRegion(op.getInitFn(), false, true);
    }
 }
 ParseResult mlir::subop::LookupOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
@@ -493,37 +493,37 @@ ParseResult mlir::subop::LookupOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
 
 void subop::LookupOp::print(OpAsmPrinter& p) {
    subop::LookupOp& op = *this;
-   p << " " << op.stream() << op.state() << " ";
-   printCustRefArr(p, op, op.keys());
-   p << " : " << op.state().getType() << " ";
-   printCustDef(p, op, op.ref());
-   if (!op.eqFn().empty()) {
+   p << " " << op.getStream() << op.getState() << " ";
+   printCustRefArr(p, op, op.getKeys());
+   p << " : " << op.getState().getType() << " ";
+   printCustDef(p, op, op.getRef());
+   if (!op.getEqFn().empty()) {
       p << "eq: ([";
       bool first = true;
-      for (size_t i = 0; i < op.keys().size(); i++) {
+      for (size_t i = 0; i < op.getKeys().size(); i++) {
          if (first) {
             first = false;
          } else {
             p << ",";
          }
-         p << op.eqFn().front().getArgument(i);
+         p << op.getEqFn().front().getArgument(i);
       }
       p << "],[";
       first = true;
-      for (size_t i = 0; i < op.keys().size(); i++) {
+      for (size_t i = 0; i < op.getKeys().size(); i++) {
          if (first) {
             first = false;
          } else {
             p << ",";
          }
-         p << op.eqFn().front().getArgument(op.keys().size() + i);
+         p << op.getEqFn().front().getArgument(op.getKeys().size() + i);
       }
       p << "]) ";
-      p.printRegion(op.eqFn(), false, true);
+      p.printRegion(op.getEqFn(), false, true);
    }
-   if (!op.initFn().empty()) {
+   if (!op.getInitFn().empty()) {
       p << "initial: ";
-      p.printRegion(op.initFn(), false, true);
+      p.printRegion(op.getInitFn(), false, true);
    }
 }
 
@@ -591,32 +591,32 @@ ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
 
 void subop::ReduceOp::print(OpAsmPrinter& p) {
    subop::ReduceOp& op = *this;
-   p << " " << op.stream() << " ";
-   printCustRef(p, op, op.ref());
-   printCustRefArr(p, op, op.columns());
-   p << " " << op.members() << " ";
+   p << " " << op.getStream() << " ";
+   printCustRef(p, op, op.getRef());
+   printCustRefArr(p, op, op.getColumns());
+   p << " " << op.getMembers() << " ";
    p << "([";
    bool first = true;
-   for (size_t i = 0; i < op.columns().size(); i++) {
+   for (size_t i = 0; i < op.getColumns().size(); i++) {
       if (first) {
          first = false;
       } else {
          p << ",";
       }
-      p << op.region().front().getArgument(i);
+      p << op.getRegion().front().getArgument(i);
    }
    p << "],[";
    first = true;
-   for (size_t i = 0; i < op.members().size(); i++) {
+   for (size_t i = 0; i < op.getMembers().size(); i++) {
       if (first) {
          first = false;
       } else {
          p << ",";
       }
-      p << op.region().front().getArgument(op.columns().size() + i);
+      p << op.getRegion().front().getArgument(op.getColumns().size() + i);
    }
    p << "])";
-   p.printRegion(op.region(), false, true);
+   p.printRegion(op.getRegion(), false, true);
 }
 
 ParseResult mlir::subop::NestedMapOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
@@ -662,31 +662,31 @@ ParseResult mlir::subop::NestedMapOp::parse(::mlir::OpAsmParser& parser, ::mlir:
 
 void subop::NestedMapOp::print(OpAsmPrinter& p) {
    subop::NestedMapOp& op = *this;
-   p << " " << op.stream() << " ";
-   printCustRefArr(p, this->getOperation(), parameters());
+   p << " " << op.getStream() << " ";
+   printCustRefArr(p, this->getOperation(), getParameters());
    p << " (";
-   p.printOperands(op.region().front().getArguments());
+   p.printOperands(op.getRegion().front().getArguments());
    p << ") ";
-   p.printRegion(op.region(), false, true);
+   p.printRegion(op.getRegion(), false, true);
 }
 
 std::vector<std::string> subop::ScanOp::getReadMembers() {
    std::vector<std::string> res;
-   for (auto x : mapping()) {
+   for (auto x : getMapping()) {
       res.push_back(x.getName().str());
    }
    return res;
 }
 std::vector<std::string> subop::MaterializeOp::getWrittenMembers() {
    std::vector<std::string> res;
-   for (auto x : mapping()) {
+   for (auto x : getMapping()) {
       res.push_back(x.getName().str());
    }
    return res;
 }
 std::vector<std::string> subop::NestedMapOp::getReadMembers() {
    std::vector<std::string> res;
-   this->region().walk([&](mlir::subop::SubOperator subop) {
+   this->getRegion().walk([&](mlir::subop::SubOperator subop) {
       auto read = subop.getReadMembers();
       res.insert(res.end(), read.begin(), read.end());
    });
@@ -694,7 +694,7 @@ std::vector<std::string> subop::NestedMapOp::getReadMembers() {
 }
 std::vector<std::string> subop::NestedMapOp::getWrittenMembers() {
    std::vector<std::string> res;
-   this->region().walk([&](mlir::subop::SubOperator subop) {
+   this->getRegion().walk([&](mlir::subop::SubOperator subop) {
       auto written = subop.getWrittenMembers();
       res.insert(res.end(), written.begin(), written.end());
    });
@@ -702,77 +702,77 @@ std::vector<std::string> subop::NestedMapOp::getWrittenMembers() {
 }
 std::vector<std::string> subop::SortOp::getWrittenMembers() {
    std::vector<std::string> res;
-   for (auto x : toSort().getType().cast<mlir::subop::VectorType>().getMembers().getNames()) {
+   for (auto x : getToSort().getType().cast<mlir::subop::VectorType>().getMembers().getNames()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
 }
 std::vector<std::string> subop::MaintainOp::getWrittenMembers() {
    std::vector<std::string> res;
-   for (auto x : state().getType().cast<mlir::subop::State>().getMembers().getNames()) {
+   for (auto x : getState().getType().cast<mlir::subop::State>().getMembers().getNames()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
 }
 std::vector<std::string> subop::MaintainOp::getReadMembers() {
    std::vector<std::string> res;
-   for (auto x : state().getType().cast<mlir::subop::State>().getMembers().getNames()) {
+   for (auto x : getState().getType().cast<mlir::subop::State>().getMembers().getNames()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
 }
 std::vector<std::string> subop::SortOp::getReadMembers() {
    std::vector<std::string> res;
-   for (auto x : sortBy()) {
+   for (auto x : getSortBy()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
 }
 std::vector<std::string> subop::ConvertToExplicit::getReadMembers() {
    std::vector<std::string> res;
-   for (auto x : state().getType().cast<mlir::subop::TableType>().getMembers().getNames()) {
+   for (auto x : getState().getType().cast<mlir::subop::TableType>().getMembers().getNames()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
 }
 std::vector<std::string> subop::ReduceOp::getWrittenMembers() {
    std::vector<std::string> res;
-   for (auto x : members()) {
+   for (auto x : getMembers()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
 }
 std::vector<std::string> subop::ReduceOp::getReadMembers() {
    std::vector<std::string> res;
-   for (auto x : members()) {
+   for (auto x : getMembers()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
 }
 std::vector<std::string> subop::ScatterOp::getWrittenMembers() {
    std::vector<std::string> res;
-   for (auto x : mapping()) {
+   for (auto x : getMapping()) {
       res.push_back(x.getName().str());
    }
    return res;
 }
 std::vector<std::string> subop::LookupOrInsertOp::getWrittenMembers() {
    std::vector<std::string> res;
-   for (auto x : state().getType().cast<mlir::subop::State>().getMembers().getNames()) {
+   for (auto x : getState().getType().cast<mlir::subop::State>().getMembers().getNames()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
 }
 std::vector<std::string> subop::LookupOp::getReadMembers() {
    std::vector<std::string> res;
-   for (auto x : state().getType().cast<mlir::subop::State>().getMembers().getNames()) {
+   for (auto x : getState().getType().cast<mlir::subop::State>().getMembers().getNames()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
 }
 std::vector<std::string> subop::GatherOp::getReadMembers() {
    std::vector<std::string> res;
-   for (auto x : mapping()) {
+   for (auto x : getMapping()) {
       res.push_back(x.getName().str());
    }
    return res;

@@ -96,7 +96,7 @@ class RelAlg_Op<string mnemonic, list<Trait> traits = []> : Op<RelAlg_Dialect, m
 // Operations that "create" relations
 //===----------------------------------------------------------------------===//
 
-def ConstRelationOp : RelAlg_Op<"const_relation", [RecursiveSideEffects,Operator]> {
+def ConstRelationOp : RelAlg_Op<"const_relation", [Pure,Operator]> {
     let summary = "constant relation";
 
     let arguments = (ins ArrayAttr:$columns,ArrayAttr:$values);
@@ -108,8 +108,7 @@ def ConstRelationOp : RelAlg_Op<"const_relation", [RecursiveSideEffects,Operator
     }];
 }
 
-def BaseTableOp : RelAlg_Op<"basetable",[RecursiveSideEffects,
-         Operator]> {
+def BaseTableOp : RelAlg_Op<"basetable",[Pure,Operator]> {
     let summary = "base table operation";
 
     let arguments = (ins StrAttr: $table_identifier, TableMetaDataAttr: $meta, DictionaryAttr: $columns);
@@ -126,7 +125,7 @@ def BaseTableOp : RelAlg_Op<"basetable",[RecursiveSideEffects,
 //===----------------------------------------------------------------------===//
 
 def SelectionOp : RelAlg_Op<"selection",
-        [NoSideEffect,Operator,PredicateOperator,TupleLamdaOperator,
+        [Pure,Operator,PredicateOperator,TupleLamdaOperator,
          UnaryOperator]> {
     let summary = "selection operation";
     let description = [{
@@ -140,7 +139,7 @@ def SelectionOp : RelAlg_Op<"selection",
     let assemblyFormat = [{ $rel custom<CustRegion>($predicate) attr-dict-with-keyword }];
 }
 
-def MapOp : RelAlg_Op<"map", [NoSideEffect,Operator,TupleLamdaOperator,UnaryOperator]> {
+def MapOp : RelAlg_Op<"map", [Pure,Operator,TupleLamdaOperator,UnaryOperator]> {
     let summary = "map operation";
 
     let arguments = (ins TupleStream:$rel,ArrayAttr:$computed_cols);
@@ -153,7 +152,7 @@ def MapOp : RelAlg_Op<"map", [NoSideEffect,Operator,TupleLamdaOperator,UnaryOper
     }];
 }
 
-def LimitOp : RelAlg_Op<"limit", [NoSideEffect,Operator,UnaryOperator]> {
+def LimitOp : RelAlg_Op<"limit", [Pure,Operator,UnaryOperator]> {
     let summary = "limit operation";
 
     let arguments = (ins I32Attr:$rows, TupleStream:$rel);
@@ -161,7 +160,7 @@ def LimitOp : RelAlg_Op<"limit", [NoSideEffect,Operator,UnaryOperator]> {
     let assemblyFormat = [{ $rows $rel attr-dict }];
 }
 
-def TopKOp : RelAlg_Op<"topk", [NoSideEffect,Operator,UnaryOperator]> {
+def TopKOp : RelAlg_Op<"topk", [Pure,Operator,UnaryOperator]> {
     let summary = "top k operation";
     let description = [{
         Return top `rows` elements according to the sorting region. This is
@@ -175,7 +174,7 @@ def TopKOp : RelAlg_Op<"topk", [NoSideEffect,Operator,UnaryOperator]> {
 }
 
 def CrossProductOp : RelAlg_Op<"crossproduct",
-        [RecursiveSideEffects,Operator,BinaryOperator]> {
+        [Pure,Operator,BinaryOperator]> {
     let summary = "crossproduct operation";
 
     let arguments = (ins TupleStream:$left,TupleStream:$right);
@@ -184,7 +183,7 @@ def CrossProductOp : RelAlg_Op<"crossproduct",
 }
 
 def RenamingOp : RelAlg_Op<"renaming",
-        [RecursiveSideEffects,Operator,UnaryOperator]> {
+        [Pure,Operator,UnaryOperator]> {
     let summary = "renaming columns in relation";
 
     let arguments = (ins TupleStream:$rel,ArrayAttr:$columns);
@@ -198,7 +197,7 @@ def RenamingOp : RelAlg_Op<"renaming",
     }];
 }
 
-def AggregationOp : RelAlg_Op<"aggregation", [NoSideEffect,Operator,UnaryOperator]> {
+def AggregationOp : RelAlg_Op<"aggregation", [Pure,Operator,UnaryOperator]> {
     let summary = "aggregation operation";
 
     let arguments = (ins TupleStream:$rel, ArrayAttr:$group_by_cols, ArrayAttr:$computed_cols);
@@ -212,7 +211,7 @@ def AggregationOp : RelAlg_Op<"aggregation", [NoSideEffect,Operator,UnaryOperato
         ColumnSet getCreatedColumns();
     }];
 }
-def WindowOp : RelAlg_Op<"window", [NoSideEffect,Operator,UnaryOperator]> {
+def WindowOp : RelAlg_Op<"window", [Pure,Operator,UnaryOperator]> {
     let summary = "window operation";
 
     let arguments = (ins TupleStream:$rel, ArrayAttr:$partition_by,ArrayAttr:$order_by, ArrayAttr:$computed_cols,I64Attr:$from,I64Attr:$to);
@@ -226,7 +225,7 @@ def WindowOp : RelAlg_Op<"window", [NoSideEffect,Operator,UnaryOperator]> {
     }];
 }
 
-def SortOp : RelAlg_Op<"sort", [NoSideEffect,Operator,UnaryOperator]> {
+def SortOp : RelAlg_Op<"sort", [Pure,Operator,UnaryOperator]> {
     let summary = "sort operation";
 
     let arguments = (ins TupleStream:$rel, ArrayAttr:$sortspecs);
@@ -239,7 +238,7 @@ def SortOp : RelAlg_Op<"sort", [NoSideEffect,Operator,UnaryOperator]> {
 
 // Joins
 class RelAlg_JoinOp<string mnemonic> : RelAlg_Op<mnemonic,
-        [NoSideEffect,Operator,BinaryOperator,PredicateOperator,
+        [Pure,Operator,BinaryOperator,PredicateOperator,
          TupleLamdaOperator]> {
     let arguments = (ins TupleStream:$left,TupleStream:$right);
     let results = (outs TupleStream:$result);
@@ -332,7 +331,7 @@ def MarkJoinOp : RelAlg_JoinOp<"markjoin"> {
 }
 
 // Set Operations
-def ProjectionOp : RelAlg_Op<"projection",[NoSideEffect,Operator,UnaryOperator]> {
+def ProjectionOp : RelAlg_Op<"projection",[Pure,Operator,UnaryOperator]> {
     let summary = "projection operation";
 
     let arguments = (ins RelAlg_SetSemantic:$set_semantic,TupleStream:$rel, ArrayAttr:$cols);
@@ -346,7 +345,7 @@ def ProjectionOp : RelAlg_Op<"projection",[NoSideEffect,Operator,UnaryOperator]>
 }
 
 class RelAlg_BinarySetOp<string mnemonic> : RelAlg_Op<mnemonic,
-        [NoSideEffect,Operator,BinaryOperator]> {
+        [Pure,Operator,BinaryOperator]> {
     let arguments = (ins RelAlg_SetSemantic:$set_semantic,TupleStream:$left,TupleStream:$right,ArrayAttr:$mapping);
     let results = (outs TupleStream:$result);
     let assemblyFormat = [{ $set_semantic $left `,` $right custom<CustAttrMapping>($mapping) attr-dict }];
@@ -379,7 +378,7 @@ def ExceptOp : RelAlg_BinarySetOp<"except"> {
 // Utility
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def AggrFuncOp : RelAlg_Op<"aggrfn", [NoSideEffect]> {
+def AggrFuncOp : RelAlg_Op<"aggrfn", [Pure]> {
     let summary = "aggregation operation";
 
     let arguments = (ins RelAlg_AggrFunc:$fn,TupleStream:$rel,ColumnRefAttr:$attr);
@@ -387,14 +386,14 @@ def AggrFuncOp : RelAlg_Op<"aggrfn", [NoSideEffect]> {
     let assemblyFormat = [{  $fn custom<CustRef>($attr) $rel `:` type($result) attr-dict }];
 }
 
-def CountRowsOp : RelAlg_Op<"count", [NoSideEffect]> {
+def CountRowsOp : RelAlg_Op<"count", [Pure]> {
     let summary = "count rows";
 
     let arguments = (ins TupleStream:$rel);
     let results = (outs I64:$res);
     let assemblyFormat = [{  $rel attr-dict }];
 }
-def RankOp : RelAlg_Op<"rank", [NoSideEffect]> {
+def RankOp : RelAlg_Op<"rank", [Pure]> {
     let summary = "rank inside window";
 
     let arguments = (ins TupleStream:$rel);
@@ -402,19 +401,19 @@ def RankOp : RelAlg_Op<"rank", [NoSideEffect]> {
     let assemblyFormat = [{  $rel attr-dict }];
 }
 
-def ExistsOp : RelAlg_Op<"exists", [NoSideEffect]> {
+def ExistsOp : RelAlg_Op<"exists", [Pure]> {
     let arguments = (ins TupleStream:$rel);
     let results = (outs I1:$result);
     let assemblyFormat = [{  $rel attr-dict }];
 }
 
-def MaterializeOp : RelAlg_Op<"materialize", [NoSideEffect]> {
+def MaterializeOp : RelAlg_Op<"materialize", [Pure]> {
     let arguments = (ins TupleStream:$rel,ArrayAttr:$cols,ArrayAttr:$columns);
     let results = (outs DSA_Table:$result);
     let assemblyFormat = [{  $rel custom<CustRefArr>($cols) `=` `>` $columns `:` type($result) attr-dict }];
 }
 
-def TmpOp : RelAlg_Op<"tmp", [NoSideEffect,Operator]> {
+def TmpOp : RelAlg_Op<"tmp", [Pure,Operator]> {
     let summary = "temporary materialization";
 
     let arguments = (ins TupleStream:$rel,ArrayAttr:$cols);
@@ -422,7 +421,7 @@ def TmpOp : RelAlg_Op<"tmp", [NoSideEffect,Operator]> {
     let assemblyFormat = [{  $rel custom<CustRefArr>($cols) `->` type($resulting) attr-dict }];
 }
 
-def GetScalarOp : RelAlg_Op<"getscalar", [NoSideEffect]> {
+def GetScalarOp : RelAlg_Op<"getscalar", [Pure]> {
     let summary = "get column";
 
     let arguments = (ins ColumnRefAttr:$attr, TupleStream:$rel);
@@ -430,7 +429,7 @@ def GetScalarOp : RelAlg_Op<"getscalar", [NoSideEffect]> {
     let assemblyFormat = [{  custom<CustRef>($attr) $rel `:` type($res) attr-dict }];
 }
 
-def GetListOp : RelAlg_Op<"getlist", [NoSideEffect]> {
+def GetListOp : RelAlg_Op<"getlist", [Pure]> {
     let summary = "get multiple columns";
 
     let arguments = (ins TupleStream:$rel,ArrayAttr:$cols);
@@ -438,7 +437,7 @@ def GetListOp : RelAlg_Op<"getlist", [NoSideEffect]> {
     let assemblyFormat = [{ $rel custom<CustRefArr>($cols) `:` type($res) attr-dict }];
 }
 
-def InOp : RelAlg_Op<"in", [NoSideEffect]> {
+def InOp : RelAlg_Op<"in", [Pure]> {
     let summary = "in operation";
     let arguments = (ins AnyType:$val, TupleStream:$rel);
     let results = (outs I1 : $res);

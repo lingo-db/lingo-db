@@ -37,6 +37,7 @@ class SizeOfLowering : public OpConversionPattern<mlir::util::SizeOfOp> {
 namespace {
 struct UtilToLLVMLoweringPass
    : public PassWrapper<UtilToLLVMLoweringPass, OperationPass<ModuleOp>> {
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(UtilToLLVMLoweringPass)
    void getDependentDialects(DialectRegistry& registry) const override {
       registry.insert<LLVM::LLVMDialect>();
    }

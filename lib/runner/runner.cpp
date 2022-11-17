@@ -28,9 +28,7 @@
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 
-#include "mlir/Transforms/CustomPasses.h"
-
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/Passes.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
@@ -75,20 +73,23 @@
 namespace {
 struct ToLLVMLoweringPass
    : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ToLLVMLoweringPass)
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
-      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::cf::ControlFlowDialect, mlir::arith::ArithmeticDialect>();
+      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::cf::ControlFlowDialect, mlir::arith::ArithDialect>();
    }
    void runOnOperation() final;
 };
 struct InsertPerfAsmPass
    : public mlir::PassWrapper<InsertPerfAsmPass, mlir::OperationPass<mlir::ModuleOp>> {
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InsertPerfAsmPass)
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
-      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::cf::ControlFlowDialect, mlir::arith::ArithmeticDialect>();
+      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::cf::ControlFlowDialect, mlir::arith::ArithDialect>();
    }
    void runOnOperation() final;
 };
 struct EnforceCPPABIPass
    : public mlir::PassWrapper<EnforceCPPABIPass, mlir::OperationPass<mlir::LLVM::LLVMFuncOp>> {
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EnforceCPPABIPass)
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::LLVM::LLVMDialect>();
    }
@@ -186,7 +187,7 @@ void ToLLVMLoweringPass::runOnOperation() {
    mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
 
    mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
-   mlir::arith::populateArithmeticToLLVMConversionPatterns(typeConverter, patterns);
+   mlir::arith::populateArithToLLVMConversionPatterns(typeConverter, patterns);
    // We want to completely lower to LLVM, so we use a `FullConversion`. This
    // ensures that only legal operations will remain after the conversion.
    auto module = getOperation();
@@ -196,8 +197,6 @@ void ToLLVMLoweringPass::runOnOperation() {
 mlir::Location dropNames(mlir::Location l) {
    if (auto namedLoc = l.dyn_cast<mlir::NameLoc>()) {
       return dropNames(namedLoc.getChildLoc());
-   } else if (auto namedResultsLoc = l.dyn_cast<mlir::NamedResultsLoc>()) {
-      return dropNames(namedResultsLoc.getChildLoc());
    }
    return l;
 }
@@ -320,7 +319,7 @@ bool Runner::loadSQL(std::string sql, runtime::Database& database) {
    registry.insert<mlir::tuples::TupleStreamDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::func::FuncDialect>();
-   registry.insert<mlir::arith::ArithmeticDialect>();
+   registry.insert<mlir::arith::ArithDialect>();
 
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<mlir::util::UtilDialect>();
@@ -366,7 +365,7 @@ bool Runner::load(std::string file) {
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::dsa::DSADialect>();
    registry.insert<mlir::func::FuncDialect>();
-   registry.insert<mlir::arith::ArithmeticDialect>();
+   registry.insert<mlir::arith::ArithDialect>();
    registry.insert<mlir::cf::ControlFlowDialect>();
 
    registry.insert<mlir::scf::SCFDialect>();
@@ -459,7 +458,6 @@ bool Runner::lower() {
    mlir::PassManager pmFunc(&ctxt->context, mlir::func::FuncOp::getOperationName());
    pmFunc.enableVerifier(runMode != RunMode::SPEED);
    pmFunc.addPass(mlir::createLoopInvariantCodeMotionPass());
-   pmFunc.addPass(mlir::createSinkOpPass());
    pmFunc.addPass(mlir::createCSEPass());
 
    ctxt->module.get().walk([&](mlir::func::FuncOp f) {
@@ -584,11 +582,11 @@ class WrappedExecutionEngine {
    size_t conversionTime;
    void* mainFuncPtr;
    void* setContextPtr;
-   std::unique_ptr<llvm::Module> convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context, mlir::LLVM::detail::DebuggingLevel debugLevel) {
+   std::unique_ptr<llvm::Module> convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context, bool withDebugInfo) {
       auto startConv = std::chrono::high_resolution_clock::now();
 
       std::unique_ptr<llvm::Module> mainModule =
-         translateModuleToLLVMIR(module, context, "LLVMDialectModule", debugLevel);
+         translateModuleToLLVMIR(module, context, "LLVMDialectModule", withDebugInfo);
       auto endConv = std::chrono::high_resolution_clock::now();
 
       conversionTime = std::chrono::duration_cast<std::chrono::microseconds>(endConv - startConv).count();
@@ -599,10 +597,10 @@ class WrappedExecutionEngine {
    WrappedExecutionEngine(mlir::ModuleOp module, RunMode runMode) : mainFuncPtr(nullptr), setContextPtr(nullptr) {
       auto start = std::chrono::high_resolution_clock::now();
       auto jitCodeGenLevel = runMode == RunMode::DEBUGGING ? llvm::CodeGenOpt::Level::None : llvm::CodeGenOpt::Level::Default;
-      auto debuggingLevel = runMode == RunMode::DEBUGGING ? mlir::LLVM::detail::DebuggingLevel::VARIABLES : (runMode == RunMode::PERF ? mlir::LLVM::detail::DebuggingLevel::LINES : mlir::LLVM::detail::DebuggingLevel::OFF);
-      auto convertFn = [&](mlir::ModuleOp module, llvm::LLVMContext& context) { return convertMLIRModule(module, context, debuggingLevel); };
+      auto withDebugInfo = runMode == RunMode::DEBUGGING || runMode==RunMode::PERF;
+      auto convertFn = [&](mlir::Operation* module, llvm::LLVMContext& context) -> std::unique_ptr<llvm::Module> { return convertMLIRModule(mlir::cast<mlir::ModuleOp>(module), context, withDebugInfo); };
       auto optimizeFn = [&](llvm::Module* module) -> llvm::Error {if (runMode==RunMode::DEBUGGING){return llvm::Error::success();}else{return optimizeModule(module);} };
-      auto maybeEngine = mlir::ExecutionEngine::create(module, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = jitCodeGenLevel, .enableObjectCache = true});
+      auto maybeEngine = mlir::ExecutionEngine::create(module, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = jitCodeGenLevel, .enableObjectDump = true});
       assert(maybeEngine && "failed to construct an execution engine");
       engine = std::move(maybeEngine.get());
 

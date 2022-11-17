@@ -5,6 +5,7 @@
 namespace {
 class EnforceOrderPass : public mlir::PassWrapper<EnforceOrderPass, mlir::OperationPass<mlir::ModuleOp>> {
    public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EnforceOrderPass)
    virtual llvm::StringRef getArgument() const override { return "subop-enforce-order"; }
 
    void runOnOperation() override {

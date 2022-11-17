@@ -1,4 +1,4 @@
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -90,9 +90,9 @@ class SimplifySortComparePattern : public mlir::RewritePattern {
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto sortCompareOp = mlir::cast<mlir::db::SortCompare>(op);
       auto loc = op->getLoc();
-      if (!sortCompareOp.left().getType().isa<mlir::db::NullableType>()) return mlir::failure();
-      mlir::Value isLeftNull = rewriter.create<mlir::db::IsNullOp>(loc, sortCompareOp.left());
-      mlir::Value isRightNull = rewriter.create<mlir::db::IsNullOp>(loc, sortCompareOp.right());
+      if (!sortCompareOp.getLeft().getType().isa<mlir::db::NullableType>()) return mlir::failure();
+      mlir::Value isLeftNull = rewriter.create<mlir::db::IsNullOp>(loc, sortCompareOp.getLeft());
+      mlir::Value isRightNull = rewriter.create<mlir::db::IsNullOp>(loc, sortCompareOp.getRight());
       mlir::Value isAnyNull = rewriter.create<mlir::arith::OrIOp>(loc, isLeftNull, isRightNull);
       mlir::Value bothNullable = rewriter.create<mlir::arith::AndIOp>(loc, isLeftNull, isRightNull);
       mlir::Value zero = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, 8);
@@ -103,8 +103,8 @@ class SimplifySortComparePattern : public mlir::RewritePattern {
             mlir::Value res = b.create<mlir::arith::SelectOp>(loc, isRightNull, minus1, one);
             res = b.create<mlir::arith::SelectOp>(loc, bothNullable, zero, res);
             b.create<mlir::scf::YieldOp>(loc, res); }, [&](mlir::OpBuilder& b, mlir::Location loc) {
-            mlir::Value left = b.create<mlir::db::NullableGetVal>(loc, sortCompareOp.left());
-            mlir::Value right = b.create<mlir::db::NullableGetVal>(loc, sortCompareOp.right());
+            mlir::Value left = b.create<mlir::db::NullableGetVal>(loc, sortCompareOp.getLeft());
+            mlir::Value right = b.create<mlir::db::NullableGetVal>(loc, sortCompareOp.getRight());
             mlir::Value res=b.create<mlir::db::SortCompare>(loc,left,right);
             b.create<mlir::scf::YieldOp>(loc,res); });
       return mlir::success(true);
@@ -118,6 +118,7 @@ class EliminateNulls : public mlir::PassWrapper<EliminateNulls, mlir::OperationP
    }
 
    public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EliminateNulls)
    void runOnOperation() override {
       //transform "standalone" aggregation functions
       {

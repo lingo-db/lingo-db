@@ -29,12 +29,12 @@ static void printInitializationList(OpAsmPrinter& p,
 void mlir::dsa::ForOp::print(OpAsmPrinter& p) {
    mlir::dsa::ForOp& op = *this;
    p << " " << op.getInductionVar() << " in "
-     << op.collection() << " : " << op.collection().getType() << " ";
+     << op.getCollection() << " : " << op.getCollection().getType() << " ";
    printInitializationList(p, op.getRegionIterArgs(), op.getIterOperands(),
                            " iter_args");
    if (!op.getIterOperands().empty())
       p << " -> (" << op.getIterOperands().getTypes() << ')';
-   p.printRegion(op.region(),
+   p.printRegion(op.getRegion(),
                  /*printEntryBlockArgs=*/false,
                  /*printBlockTerminators=*/op.hasIterOperands());
    p.printOptionalAttrDict(op->getAttrs(), {"operand_segment_sizes"});

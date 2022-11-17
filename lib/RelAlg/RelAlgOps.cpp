@@ -30,7 +30,7 @@ static mlir::tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser
       if (!parsedSpec)
          return parser.emitError(loc, "invalid ")
             << "type attribute specification: \"" << attrStr << '"';
-      spec = parsedSpec.getValue();
+      spec = parsedSpec.value();
    }
    return success();
 }
@@ -299,7 +299,7 @@ void mlir::relalg::BaseTableOp::print(OpAsmPrinter& p) {
    p.printOptionalAttrDict(colsToPrint, /*elidedAttrs=*/{"sym_name", "columns"});
    p << " columns: {";
    auto first = true;
-   for (auto mapping : columns()) {
+   for (auto mapping : getColumns()) {
       auto columnName = mapping.getName();
       auto attr = mapping.getValue();
       auto relationDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();

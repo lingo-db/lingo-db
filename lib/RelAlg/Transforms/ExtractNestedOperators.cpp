@@ -6,6 +6,7 @@
 namespace {
 class ExtractNestedOperators : public mlir::PassWrapper<ExtractNestedOperators, mlir::OperationPass<mlir::func::FuncOp>> {
    public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ExtractNestedOperators)
    virtual llvm::StringRef getArgument() const override { return "relalg-extract-nested-operators"; }
 
    void sanitizeOp(mlir::BlockAndValueMapping& mapping, mlir::Operation* op) const {

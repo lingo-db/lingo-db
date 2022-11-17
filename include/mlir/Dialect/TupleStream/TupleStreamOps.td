@@ -19,7 +19,7 @@ class TupleStream_Op<string mnemonic, list<Trait> traits = []> : Op<TupleStream_
 // Terminators
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def TupleStream_ReturnOp : TupleStream_Op<"return", [NoSideEffect,ReturnLike,Terminator]> {
+def TupleStream_ReturnOp : TupleStream_Op<"return", [Pure,ReturnLike,Terminator]> {
     let summary = "loop yield and termination operation";
 
     let arguments = (ins Variadic<AnyType>:$results);
@@ -31,7 +31,7 @@ def TupleStream_ReturnOp : TupleStream_Op<"return", [NoSideEffect,ReturnLike,Ter
 // Utility
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-def GetColumnOp : TupleStream_Op<"getcol", [NoSideEffect]> {
+def GetColumnOp : TupleStream_Op<"getcol", [Pure]> {
     let summary = "get column operation";
 
     let arguments = (ins ColumnRefAttr:$attr,TupleStream_Tuple:$tuple);

@@ -11,6 +11,9 @@ namespace {
 
 class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-implicit-to-explicit-joins"; }
+   public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ImplicitToExplicitJoins)
+   private:
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::db::DBDialect>();
    }
@@ -83,7 +86,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             OpBuilder builder(surroundingOperator);
             std::string scopeName = attributeManager.getUniqueScope("singlejoin");
             std::string attributeName = "sjattr";
-            auto before = getscalarop.attr();
+            auto before = getscalarop.getAttr();
             auto fromExisting = ArrayAttr::get(&getContext(), {before});
 
             auto newAttrType = getscalarop.getType();
@@ -94,7 +97,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             newDef.getColumn().type = newAttrType;
 
             auto mapping = ArrayAttr::get(&getContext(), {newDef});
-            auto singleJoin = builder.create<relalg::SingleJoinOp>(getscalarop->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), treeVal, getscalarop.rel(), mapping);
+            auto singleJoin = builder.create<relalg::SingleJoinOp>(getscalarop->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), treeVal, getscalarop.getRel(), mapping);
             singleJoin.initPredicate();
             builder.setInsertionPoint(getscalarop);
             mlir::Value replacement = builder.create<tuples::GetColumnOp>(getscalarop->getLoc(), newAttrType, attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
@@ -106,11 +109,11 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             OpBuilder builder(surroundingOperator);
             std::string scopeName = attributeManager.getUniqueScope("collectionjoin");
             std::string attributeName = "collattr";
-            auto fromAttrs = getlistop.cols();
+            auto fromAttrs = getlistop.getCols();
 
             auto newDef = attributeManager.createDef(scopeName, attributeName);
             newDef.getColumn().type = getlistop.getType();
-            auto collectionJoin = builder.create<relalg::CollectionJoinOp>(getlistop->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), fromAttrs, newDef, treeVal, getlistop.rel());
+            auto collectionJoin = builder.create<relalg::CollectionJoinOp>(getlistop->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), fromAttrs, newDef, treeVal, getlistop.getRel());
             collectionJoin.initPredicate();
             builder.setInsertionPoint(getlistop);
             Operation* replacement = builder.create<tuples::GetColumnOp>(getlistop->getLoc(), getlistop.getType(), attributeManager.createRef(scopeName, attributeName), surroundingOperator.getLambdaRegion().getArgument(0));
@@ -119,9 +122,9 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             treeVal = collectionJoin;
             surroundingOperator->setOperand(0, treeVal);
          } else if (auto existsop = mlir::dyn_cast_or_null<mlir::relalg::ExistsOp>(op)) {
-            handleScalarBoolOp(existsop->getLoc(), surroundingOperator, op, existsop.rel().getDefiningOp(), [](auto) {});
+            handleScalarBoolOp(existsop->getLoc(), surroundingOperator, op, existsop.getRel().getDefiningOp(), [](auto) {});
          } else if (auto inop = mlir::dyn_cast_or_null<mlir::relalg::InOp>(op)) {
-            Operator relOperator = inop.rel().getDefiningOp();
+            Operator relOperator = inop.getRel().getDefiningOp();
             //get attribute of relation to search in
             const auto* attr = *relOperator.getAvailableColumns().begin();
             auto searchInAttr = attributeManager.createRef(attr);
@@ -129,8 +132,8 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
                predicateOperator.addPredicate([&](Value tuple, OpBuilder& builder) {
                   mlir::BlockAndValueMapping mapping;
                   mapping.map(surroundingOperator.getLambdaArgument(), predicateOperator.getPredicateArgument());
-                  mlir::relalg::detail::inlineOpIntoBlock(inop.val().getDefiningOp(), surroundingOperator.getOperation(), &predicateOperator.getPredicateBlock(), mapping);
-                  auto val = mapping.lookup(inop.val());
+                  mlir::relalg::detail::inlineOpIntoBlock(inop.getVal().getDefiningOp(), surroundingOperator.getOperation(), &predicateOperator.getPredicateBlock(), mapping);
+                  auto val = mapping.lookup(inop.getVal());
                   auto otherVal = builder.create<tuples::GetColumnOp>(inop->getLoc(), searchInAttr.getColumn().type, searchInAttr, tuple);
                   Value predicate = builder.create<mlir::db::CmpOp>(inop->getLoc(), mlir::db::DBCmpPredicate::eq, val, otherVal);
                   return predicate;

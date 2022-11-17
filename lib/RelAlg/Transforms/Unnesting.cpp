@@ -16,7 +16,9 @@ namespace {
 
 class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-unnesting"; }
-
+   public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(Unnesting)
+   private:
    Operator getFirstOfTree(Operator tree) {
       Operator currFirst = tree;
       for (auto child : tree.getChildren()) {
@@ -77,12 +79,12 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          })
          .Case<AggregationOp>([&](AggregationOp projection) {
             handleChildren(loc, d, projection);
-            projection->setAttr("group_by_cols", ColumnSet::fromArrayAttr(projection.group_by_cols()).insert(availableD).asRefArrayAttr(&getContext()));
+            projection.setGroupByColsAttr(ColumnSet::fromArrayAttr(projection.getGroupByCols()).insert(availableD).asRefArrayAttr(&getContext()));
             return projection;
          })
          .Case<ProjectionOp>([&](ProjectionOp projection) {
             handleChildren(loc, d, projection);
-            projection->setAttr("cols", ColumnSet::fromArrayAttr(projection.cols()).insert(availableD).asRefArrayAttr(&getContext()));
+            projection.setColsAttr(ColumnSet::fromArrayAttr(projection.getCols()).insert(availableD).asRefArrayAttr(&getContext()));
             return projection;
          })
          .Case<BinaryOperator>([&](BinaryOperator join) {
@@ -205,14 +207,14 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
       builder.setInsertionPointToEnd(&lower.getPredicateBlock());
       std::vector<mlir::Value> values;
       bool nullable = false;
-      if (!lowerTerminator.results().empty()) {
-         Value lowerPredVal = lowerTerminator.results()[0];
+      if (!lowerTerminator.getResults().empty()) {
+         Value lowerPredVal = lowerTerminator.getResults()[0];
          nullable |= lowerPredVal.getType().isa<mlir::db::NullableType>();
          values.push_back(lowerPredVal);
       }
       for (auto selOp : selectionOps) {
          auto higherTerminator = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator());
-         Value higherPredVal = higherTerminator.results()[0];
+         Value higherPredVal = higherTerminator.getResults()[0];
          mlir::BlockAndValueMapping mapping;
          mapping.map(selOp.getPredicateArgument(), lower.getPredicateArgument());
          mlir::relalg::detail::inlineOpIntoBlock(higherPredVal.getDefiningOp(), higherPredVal.getDefiningOp()->getParentOp(), &lower.getPredicateBlock(), mapping);
@@ -245,7 +247,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          }
          combine(binaryOperator->getLoc(), selectionOps, predicateOperator);
          for (auto selOp : selectionOps) {
-            selOp.replaceAllUsesWith(selOp.rel());
+            selOp.replaceAllUsesWith(selOp.getRel());
             selOp->erase();
          }
          return true;

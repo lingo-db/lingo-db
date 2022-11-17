@@ -1,6 +1,6 @@
 #include "llvm/Support/CommandLine.h"
 
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -12,10 +12,11 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 
+#include "mlir/AsmParser/AsmParser.h"
+#include "mlir/AsmParser/AsmParserState.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/Parser/AsmParserState.h"
 #include "mlir/Parser/Parser.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include <llvm/ADT/TypeSwitch.h>
@@ -32,8 +33,6 @@
 mlir::Location dropNames(mlir::Location l) {
    if (auto namedLoc = l.dyn_cast<mlir::NameLoc>()) {
       return dropNames(namedLoc.getChildLoc());
-   } else if (auto namedResultsLoc = l.dyn_cast<mlir::NamedResultsLoc>()) {
-      return dropNames(namedResultsLoc.getChildLoc());
    }
    return l;
 }
@@ -45,7 +44,7 @@ int main(int argc, char** argv) {
    registry.insert<mlir::dsa::DSADialect>();
    registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::util::UtilDialect>();
-   registry.insert<mlir::arith::ArithmeticDialect>();
+   registry.insert<mlir::arith::ArithDialect>();
 
    registry.insert<mlir::scf::SCFDialect>();
 
@@ -59,13 +58,18 @@ int main(int argc, char** argv) {
    for (int param = 1; param < argc; param++) {
       mlir::MLIRContext context;
       context.appendDialectRegistry(registry);
+      auto inputFilename = std::string(argv[param]);
 
       llvm::SourceMgr sourceMgr;
+      auto fileOrErr = llvm::MemoryBuffer::getFileOrSTDIN(inputFilename);
+      if (std::error_code error = fileOrErr.getError())
+         llvm::errs() << "could not open input file " + inputFilename << "\n";
+
+      // Load the MLIR source file.
+      sourceMgr.AddNewSourceBuffer(std::move(*fileOrErr), llvm::SMLoc());
       mlir::Block block;
-      mlir::LocationAttr fileLoc;
       mlir::AsmParserState state;
-      auto inputFilename = std::string(argv[param]);
-      if (mlir::parseSourceFile(inputFilename, sourceMgr, &block, &context, &fileLoc, &state).failed()) {
+      if (mlir::parseAsmSourceFile(sourceMgr, &block, mlir::ParserConfig(&context), &state).failed()) {
          llvm::errs() << "Error can't load file " << inputFilename << "\n";
          return 3;
       }

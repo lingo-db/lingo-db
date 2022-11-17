@@ -3,7 +3,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Transforms/InliningUtils.h"
 
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Transforms/FoldUtils.h"
@@ -119,6 +119,7 @@ void RelAlgDialect::initialize() {
 #define GET_OP_LIST
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.cpp.inc"
       >();
+
    addTypes<
 #define GET_TYPEDEF_LIST
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsTypes.cpp.inc"
@@ -131,7 +132,7 @@ void RelAlgDialect::initialize() {
    addInterfaces<RelAlgFoldInterface>();
    getContext()->loadDialect<mlir::db::DBDialect>();
    getContext()->loadDialect<mlir::dsa::DSADialect>();
-   getContext()->loadDialect<mlir::arith::ArithmeticDialect>();
+   getContext()->loadDialect<mlir::arith::ArithDialect>();
    getContext()->loadDialect<mlir::tuples::TupleStreamDialect>();
 
    mlir::arith::CmpIOp::attachInterface<ArithCmpICmpInterface>(*getContext());
@@ -157,10 +158,10 @@ void mlir::relalg::SortSpecificationAttr::print(::mlir::AsmPrinter& printer) con
       return mlir::Attribute();
    }
    auto sortSpec = symbolizeSortSpec(sortSpecDescr);
-   if (!sortSpec.hasValue()) {
+   if (!sortSpec.has_value()) {
       return {};
    }
    auto columnRefAttr = parser.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager().createRef(sym);
-   return mlir::relalg::SortSpecificationAttr::get(parser.getContext(), columnRefAttr, sortSpec.getValue());
+   return mlir::relalg::SortSpecificationAttr::get(parser.getContext(), columnRefAttr, sortSpec.value());
 }
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsDialect.cpp.inc"

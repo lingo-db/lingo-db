@@ -8,7 +8,7 @@ int main(int argc, char** argv) {
    registry.insert<mlir::tuples::TupleStreamDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::func::FuncDialect>();
-   registry.insert<mlir::arith::ArithmeticDialect>();
+   registry.insert<mlir::arith::ArithDialect>();
 
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<mlir::util::UtilDialect>();

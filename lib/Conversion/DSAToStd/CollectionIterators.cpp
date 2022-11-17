@@ -1,7 +1,7 @@
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/DSA/IR/DSATypes.h"
 
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 
 #include "mlir/Dialect/util/UtilOps.h"

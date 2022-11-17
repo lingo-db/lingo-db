@@ -11,7 +11,9 @@ namespace {
 
 class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-optimize-join-order"; }
-
+   public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(OptimizeJoinOrder)
+   private:
    llvm::SmallPtrSet<mlir::Operation*, 12> alreadyOptimized;
 
    bool isUnsupportedOp(mlir::Operation* op) {

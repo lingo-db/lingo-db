@@ -29,9 +29,9 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
 
       auto def = attributeManager.createDef(scopeName, attributeName);
       def.getColumn().type = aggrFuncOp.getType();
-      auto aggrOp = rewriter.create<mlir::relalg::AggregationOp>(op->getLoc(), mlir::tuples::TupleStreamType::get(getContext()), aggrFuncOp.rel(), rewriter.getArrayAttr({}), rewriter.getArrayAttr({def}));
+      auto aggrOp = rewriter.create<mlir::relalg::AggregationOp>(op->getLoc(), mlir::tuples::TupleStreamType::get(getContext()), aggrFuncOp.getRel(), rewriter.getArrayAttr({}), rewriter.getArrayAttr({def}));
       auto* block = new mlir::Block;
-      aggrOp.aggr_func().push_back(block);
+      aggrOp.getAggrFunc().push_back(block);
       {
          mlir::OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(block);
@@ -40,7 +40,7 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
          block->addArgument(tplType, op->getLoc());
 
          auto relArgument = block->getArgument(0);
-         auto val = rewriter.create<mlir::relalg::AggrFuncOp>(op->getLoc(), aggrFuncOp.getType(), aggrFuncOp.fn(), relArgument, aggrFuncOp.attr());
+         auto val = rewriter.create<mlir::relalg::AggrFuncOp>(op->getLoc(), aggrFuncOp.getType(), aggrFuncOp.getFn(), relArgument, aggrFuncOp.getAttr());
          rewriter.create<mlir::tuples::ReturnOp>(op->getLoc(), mlir::ValueRange({val}));
       }
       auto nullableType = aggrFuncOp.getType().dyn_cast_or_null<mlir::db::NullableType>();
@@ -69,9 +69,9 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
 
       auto def = attributeManager.createDef(scopeName, attributeName);
       def.getColumn().type = aggrFuncOp.getType();
-      auto aggrOp = rewriter.create<mlir::relalg::AggregationOp>(op->getLoc(), mlir::tuples::TupleStreamType::get(getContext()), aggrFuncOp.rel(), rewriter.getArrayAttr({}), rewriter.getArrayAttr({def}));
+      auto aggrOp = rewriter.create<mlir::relalg::AggregationOp>(op->getLoc(), mlir::tuples::TupleStreamType::get(getContext()), aggrFuncOp.getRel(), rewriter.getArrayAttr({}), rewriter.getArrayAttr({def}));
       auto* block = new mlir::Block;
-      aggrOp.aggr_func().push_back(block);
+      aggrOp.getAggrFunc().push_back(block);
       {
          mlir::OpBuilder::InsertionGuard insertionGuard(rewriter);
          rewriter.setInsertionPointToStart(block);
@@ -104,14 +104,14 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
       auto* parentOp = op->getParentOp();
       if (!(mlir::isa<mlir::relalg::WindowOp>(parentOp) || mlir::isa<mlir::relalg::AggregationOp>(parentOp))) return mlir::failure();
       auto aggrFuncOp = mlir::cast<mlir::relalg::AggrFuncOp>(op);
-      if (aggrFuncOp.fn() == mlir::relalg::AggrFunc::stddev_samp) {
-         mlir::Value varSamp = rewriter.create<mlir::relalg::AggrFuncOp>(loc, aggrFuncOp.result().getType(), mlir::relalg::AggrFunc::var_samp, aggrFuncOp.rel(), aggrFuncOp.attr());
-         rewriter.replaceOpWithNewOp<mlir::db::RuntimeCall>(aggrFuncOp, aggrFuncOp.result().getType(), "Sqrt", varSamp);
+      if (aggrFuncOp.getFn() == mlir::relalg::AggrFunc::stddev_samp) {
+         mlir::Value varSamp = rewriter.create<mlir::relalg::AggrFuncOp>(loc, aggrFuncOp.getResult().getType(), mlir::relalg::AggrFunc::var_samp, aggrFuncOp.getRel(), aggrFuncOp.getAttr());
+         rewriter.replaceOpWithNewOp<mlir::db::RuntimeCall>(aggrFuncOp, aggrFuncOp.getResult().getType(), "Sqrt", varSamp);
          return mlir::success();
       }
-      if (aggrFuncOp.fn() == mlir::relalg::AggrFunc::var_samp) {
-         auto rel = aggrFuncOp.rel();
-         auto xType = aggrFuncOp.result().getType();
+      if (aggrFuncOp.getFn() == mlir::relalg::AggrFunc::var_samp) {
+         auto rel = aggrFuncOp.getRel();
+         auto xType = aggrFuncOp.getResult().getType();
          auto squaredAttr = attrManager.createDef(attrManager.getUniqueScope("var_samp"), "x2");
          squaredAttr.getColumn().type = xType;
          auto mapOp = rewriter.create<mlir::relalg::MapOp>(op->getLoc(), mlir::tuples::TupleStreamType::get(getContext()), rel, rewriter.getArrayAttr({squaredAttr}));
@@ -120,17 +120,17 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
          {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(block);
-            auto x = rewriter.create<mlir::tuples::GetColumnOp>(loc, aggrFuncOp.attr().getColumn().type, aggrFuncOp.attr(), tuple);
+            auto x = rewriter.create<mlir::tuples::GetColumnOp>(loc, aggrFuncOp.getAttr().getColumn().type, aggrFuncOp.getAttr(), tuple);
             mlir::Value squared = rewriter.create<mlir::db::MulOp>(loc, x, x);
             rewriter.create<mlir::tuples::ReturnOp>(loc, squared);
          }
-         mapOp.predicate().push_back(block);
-         mlir::Value sumSquared = rewriter.create<mlir::relalg::AggrFuncOp>(loc, xType, mlir::relalg::AggrFunc::sum, mapOp.result(), attrManager.createRef(&squaredAttr.getColumn()));
-         auto originalType = aggrFuncOp.attr().getColumn().type;
-         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, originalType.isa<mlir::db::NullableType>() ? originalType : mlir::db::NullableType::get(originalType), mlir::relalg::AggrFunc::sum, rel, aggrFuncOp.attr());
+         mapOp.getPredicate().push_back(block);
+         mlir::Value sumSquared = rewriter.create<mlir::relalg::AggrFuncOp>(loc, xType, mlir::relalg::AggrFunc::sum, mapOp.getResult(), attrManager.createRef(&squaredAttr.getColumn()));
+         auto originalType = aggrFuncOp.getAttr().getColumn().type;
+         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, originalType.isa<mlir::db::NullableType>() ? originalType : mlir::db::NullableType::get(originalType), mlir::relalg::AggrFunc::sum, rel, aggrFuncOp.getAttr());
          mlir::Value squareSum = rewriter.create<mlir::db::MulOp>(loc, sum, sum);
 
-         mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(loc, rewriter.getI64Type(), mlir::relalg::AggrFunc::count, rel, aggrFuncOp.attr());
+         mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(loc, rewriter.getI64Type(), mlir::relalg::AggrFunc::count, rel, aggrFuncOp.getAttr());
          mlir::Value castedCount = rewriter.create<mlir::db::CastOp>(loc, getBaseType(sumSquared.getType()), count);
 
          mlir::Value one = rewriter.create<mlir::db::ConstantOp>(loc, castedCount.getType(), rewriter.getI64IntegerAttr(1));
@@ -149,9 +149,9 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
          rewriter.replaceOp(aggrFuncOp, result);
          return mlir::success();
       }
-      if (aggrFuncOp.fn() == mlir::relalg::AggrFunc::avg) {
-         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, aggrFuncOp.result().getType(), mlir::relalg::AggrFunc::sum, aggrFuncOp.rel(), aggrFuncOp.attr());
-         mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(loc, rewriter.getI64Type(), mlir::relalg::AggrFunc::count, aggrFuncOp.rel(), aggrFuncOp.attr());
+      if (aggrFuncOp.getFn() == mlir::relalg::AggrFunc::avg) {
+         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, aggrFuncOp.getResult().getType(), mlir::relalg::AggrFunc::sum, aggrFuncOp.getRel(), aggrFuncOp.getAttr());
+         mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(loc, rewriter.getI64Type(), mlir::relalg::AggrFunc::count, aggrFuncOp.getRel(), aggrFuncOp.getAttr());
          mlir::Value casted = rewriter.create<mlir::db::CastOp>(loc, getBaseType(sum.getType()), count);
          rewriter.replaceOpWithNewOp<mlir::db::DivOp>(aggrFuncOp, sum, casted);
          return mlir::success();
@@ -162,6 +162,9 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
 
 class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-simplify-aggrs"; }
+   public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SimplifyAggregations)
+   private:
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::scf::SCFDialect>();
    }
@@ -181,14 +184,14 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
       }
       getOperation()
          .walk([&](mlir::relalg::AggregationOp aggregationOp) {
-            mlir::Value arg = aggregationOp.aggr_func().front().getArgument(0);
+            mlir::Value arg = aggregationOp.getAggrFunc().front().getArgument(0);
             std::vector<mlir::Operation*> users(arg.getUsers().begin(), arg.getUsers().end());
             for (auto* user : users) {
                if (auto mapOp = mlir::dyn_cast_or_null<mlir::relalg::MapOp>(user)) {
                   mapOp->moveBefore(aggregationOp);
-                  mapOp.replaceAllUsesWith(aggregationOp.aggr_func().front().getArgument(0));
-                  mapOp->setOperand(0, aggregationOp.rel());
-                  aggregationOp->setOperand(0, mapOp.result());
+                  mapOp.replaceAllUsesWith(aggregationOp.getAggrFunc().front().getArgument(0));
+                  mapOp->setOperand(0, aggregationOp.getRel());
+                  aggregationOp->setOperand(0, mapOp.getResult());
                }
             }
          });
@@ -196,13 +199,13 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
       getOperation()
          .walk([&](mlir::relalg::AggregationOp aggregationOp) {
             auto scope = attrManager.getUniqueScope("aggr_rw");
-            auto computedCols = aggregationOp.computed_cols();
+            auto computedCols = aggregationOp.getComputedCols();
             std::vector<mlir::Value> computedValues;
             std::vector<mlir::Attribute> computedColsAfter;
             llvm::DenseMap<mlir::Value, mlir::tuples::ColumnRefAttr> aggrMapping;
             std::vector<mlir::Attribute> colsForMap;
             std::vector<mlir::Value> valsForMap;
-            auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(aggregationOp.aggr_func().front().getTerminator());
+            auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(aggregationOp.getAggrFunc().front().getTerminator());
             for (size_t i = 0; i < returnOp->getNumOperands(); i++) {
                auto returnValue = returnOp.getOperand(i);
                auto isDirectAggregate = mlir::isa_and_nonnull<mlir::relalg::AggrFuncOp, mlir::relalg::CountRowsOp>(returnValue.getDefiningOp());
@@ -215,7 +218,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
                }
             }
             size_t id = 0;
-            for (auto& op : aggregationOp.aggr_func().front()) {
+            for (auto& op : aggregationOp.getAggrFunc().front()) {
                if (mlir::isa<mlir::relalg::AggrFuncOp, mlir::relalg::CountRowsOp>(&op)) {
                   bool otherUser = false;
                   for (auto* user : op.getUsers()) {
@@ -231,7 +234,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
                }
             }
             mlir::OpBuilder builder(aggregationOp);
-            aggregationOp.computed_colsAttr(builder.getArrayAttr(computedColsAfter));
+            aggregationOp.setComputedColsAttr(builder.getArrayAttr(computedColsAfter));
             returnOp->setOperands(computedValues);
 
             if (!colsForMap.empty()) {
@@ -240,9 +243,9 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
                mlir::BlockAndValueMapping mapping;
                auto loc = aggregationOp->getLoc();
                auto newmap = builder.create<mlir::relalg::MapOp>(aggregationOp->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), aggregationOp, builder.getArrayAttr(colsForMap));
-               newmap.predicate().push_back(block);
-               auto tuple = newmap.predicate().addArgument(mlir::tuples::TupleType::get(builder.getContext()), loc);
-               builder.setInsertionPointToStart(&newmap.predicate().front());
+               newmap.getPredicate().push_back(block);
+               auto tuple = newmap.getPredicate().addArgument(mlir::tuples::TupleType::get(builder.getContext()), loc);
+               builder.setInsertionPointToStart(&newmap.getPredicate().front());
                std::vector<mlir::Operation*> getOps;
                for (auto [v, c] : aggrMapping) {
                   auto newVal = builder.create<mlir::tuples::GetColumnOp>(loc, v.getType(), c, tuple);
@@ -260,7 +263,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
                   returnValues.push_back(mapping.lookup(v));
                }
                builder.create<mlir::tuples::ReturnOp>(loc, returnValues);
-               aggregationOp.result().replaceAllUsesExcept(newmap.result(), newmap);
+               aggregationOp.getResult().replaceAllUsesExcept(newmap.getResult(), newmap);
             }
          });
    }

@@ -129,26 +129,23 @@ def DB_StringType : DB_Type<"String","string"> {
 def AnyBool: AnyTypeOf<[I1,NullableType]>;
 def NullableDBType: AnyTypeOf<[AnyType,NullableType]>;
 
-def DB_ConstantOp : DB_Op<"constant", [NoSideEffect]> {
+def DB_ConstantOp : DB_Op<"constant", [Pure]> {
     let summary = "Create constant value";
 
     let arguments = (ins AnyAttr:$value);
     let results = (outs AnyType:$result);
     let assemblyFormat = "`(` $value `)` `:` type($result) attr-dict";
 
-    let extraClassDeclaration = [{
-        Attribute getValue() { return (*this)->getAttr("value"); }
-    }];
 }
 
-def DB_NullOp : DB_Op<"null", [NoSideEffect]> {
+def DB_NullOp : DB_Op<"null", [Pure]> {
     let summary = "Create null value";
 
     let results = (outs NullableType:$res);
     let assemblyFormat = "`:` type($res) attr-dict";
 }
 
-def DB_DeriveTruth : DB_Op<"derive_truth", [NoSideEffect]> {
+def DB_DeriveTruth : DB_Op<"derive_truth", [Pure]> {
     let summary = "Get whether a value is true-ish";
 
     let arguments  = (ins AnyType:$val);
@@ -156,7 +153,7 @@ def DB_DeriveTruth : DB_Op<"derive_truth", [NoSideEffect]> {
     let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
-def DB_SortCompare : DB_Op<"sort_compare", [NoSideEffect]> {
+def DB_SortCompare : DB_Op<"sort_compare", [Pure]> {
     let summary = "Get whether a value is true-ish";
 
     let arguments  = (ins AnyType:$left, AnyType: $right);
@@ -165,7 +162,7 @@ def DB_SortCompare : DB_Op<"sort_compare", [NoSideEffect]> {
 }
 
 
-def DB_AsNullableOp : DB_Op<"as_nullable", [NoSideEffect]> {
+def DB_AsNullableOp : DB_Op<"as_nullable", [Pure]> {
     let summary = "Convert to nullable type";
 
     let arguments = (ins AnyType: $val,Optional<I1>: $null);
@@ -173,7 +170,7 @@ def DB_AsNullableOp : DB_Op<"as_nullable", [NoSideEffect]> {
     let assemblyFormat = "$val `:` type($val) ( `,` $null^ )?  `->` type($res) attr-dict";
 }
 
-def DB_IsNullOp : DB_Op<"isnull", [NoSideEffect]> {
+def DB_IsNullOp : DB_Op<"isnull", [Pure]> {
     let summary = "Indicate whether a nullable value is null";
 
     let arguments = (ins NullableType:$val);
@@ -181,7 +178,7 @@ def DB_IsNullOp : DB_Op<"isnull", [NoSideEffect]> {
     let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
-def DB_NullableGetVal : DB_Op<"nullable_get_val", [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
+def DB_NullableGetVal : DB_Op<"nullable_get_val", [Pure,DeclareOpInterfaceMethods<InferTypeOpInterface>]> {
     let summary = "Get value of nullable type";
 
     let arguments = (ins NullableType: $val);
@@ -208,7 +205,7 @@ def DB_RuntimeCall : DB_Op<"runtime_call", [DB_MayNeedNullWrap,DB_MaySupportInva
     let hasVerifier=1;
 }
 
-def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
+def DB_Hash : DB_Op<"hash", [Pure]> {
     let summary = "Compute hash";
 
     let arguments = (ins AnyType: $val);
@@ -218,7 +215,7 @@ def DB_Hash : DB_Op<"hash", [NoSideEffect]> {
 
 class DB_BinaryOp<string mnemonic, list<Trait> traits = []> :
         Op<DB_Dialect, mnemonic,
-            !listconcat(traits, [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>,DB_NeedsNullWrap])>,Arguments<(ins NullableDBType:$left, NullableDBType:$right)> {
+            !listconcat(traits, [Pure,DeclareOpInterfaceMethods<InferTypeOpInterface>,DB_NeedsNullWrap])>,Arguments<(ins NullableDBType:$left, NullableDBType:$right)> {
     let results = (outs AnyType:$result);
     let extraClassDefinition = [{
         LogicalResult $cppClass::inferReturnTypes(
@@ -276,7 +273,7 @@ def DB_ModOp : DB_BinaryOp<"mod"> {
 
 class DB_LogicalOp<string mnemonic, list<Trait> traits = []> :
         Op<DB_Dialect, mnemonic,
-            !listconcat(traits, [NoSideEffect,DeclareOpInterfaceMethods<InferTypeOpInterface>])> {
+            !listconcat(traits, [Pure,DeclareOpInterfaceMethods<InferTypeOpInterface>])> {
     let results = (outs AnyBool:$res);
     let extraClassDefinition = [{
         LogicalResult $cppClass::inferReturnTypes(MLIRContext* context, Optional<Location>, ValueRange operands,
@@ -343,7 +340,7 @@ def OrOp : DB_LogicalOp<"or"> {
     let assemblyFormat = "$vals `:` type($vals) attr-dict";
 }
 
-def NotOp : DB_Op<"not", [NoSideEffect,SameOperandsAndResultType,DB_NeedsNullWrap,DB_SupportsInvalidValues]> {
+def NotOp : DB_Op<"not", [Pure,SameOperandsAndResultType,DB_NeedsNullWrap,DB_SupportsInvalidValues]> {
     let summary = "Logical Not";
 
     let arguments = (ins AnyBool: $val);
@@ -351,7 +348,7 @@ def NotOp : DB_Op<"not", [NoSideEffect,SameOperandsAndResultType,DB_NeedsNullWra
     let assemblyFormat = "$val `:` type($val) attr-dict";
 }
 
-def CastOp : DB_Op<"cast",[DB_NeedsNullWrap,DB_MaySupportInvalidValues,NoSideEffect]> {
+def CastOp : DB_Op<"cast",[DB_NeedsNullWrap,DB_MaySupportInvalidValues,Pure]> {
     let summary = "Cast value to different type";
 
     let arguments = (ins NullableDBType:$val);

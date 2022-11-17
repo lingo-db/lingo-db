@@ -5,7 +5,7 @@
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/Transforms/InliningUtils.h"
 
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
 
@@ -42,7 +42,7 @@ void TupleStreamDialect::initialize() {
    columnManager.setContext(getContext());
    getContext()->loadDialect<mlir::db::DBDialect>();
    getContext()->loadDialect<mlir::dsa::DSADialect>();
-   getContext()->loadDialect<mlir::arith::ArithmeticDialect>();
+   getContext()->loadDialect<mlir::arith::ArithDialect>();
 }
 void mlir::tuples::ColumnDefAttr::print(::mlir::AsmPrinter& printer) const {
    printer << "<" << getName() << "," << getColumn().type;

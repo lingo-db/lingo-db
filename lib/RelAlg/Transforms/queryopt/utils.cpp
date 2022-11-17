@@ -99,9 +99,9 @@ Operator Plan::realizePlanRec() {
    for (auto op : additionalOps) {
       if (auto innerJoin = mlir::dyn_cast_or_null<mlir::relalg::InnerJoinOp>(op.getOperation())) {
          mlir::OpBuilder builder(innerJoin.getOperation());
-         mlir::Value v = innerJoin.result(); //hack;
+         mlir::Value v = innerJoin.getResult(); //hack;
          auto x = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), v);
-         x.predicate().push_back(new mlir::Block);
+         x.getPredicate().push_back(new mlir::Block);
          x.getLambdaBlock().addArgument(mlir::tuples::TupleType::get(builder.getContext()), innerJoin->getLoc());
          innerJoin.getLambdaArgument().replaceAllUsesWith(x.getLambdaArgument());
          x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), innerJoin.getLambdaBlock().getOperations());
@@ -129,7 +129,7 @@ Operator Plan::realizePlanRec() {
             auto selop = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(currop.getOperation());
             mlir::OpBuilder builder(currop.getOperation());
             auto x = builder.create<mlir::relalg::InnerJoinOp>(selop.getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
-            x.predicate().push_back(new mlir::Block);
+            x.getPredicate().push_back(new mlir::Block);
             x.getLambdaBlock().addArgument(mlir::tuples::TupleType::get(builder.getContext()), selop->getLoc());
             selop.getLambdaArgument().replaceAllUsesWith(x.getLambdaArgument());
             x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), selop.getLambdaBlock().getOperations());
@@ -223,7 +223,7 @@ std::shared_ptr<Plan> Plan::joinPlans(NodeSet s1, NodeSet s2, std::shared_ptr<Pl
             equivalentColumns.unionSets(edge.equality->first, edge.equality->second);
          }
          if (edge.createdNode) {
-            s |= NodeSet::single(queryGraph.numNodes, edge.createdNode.getValue());
+            s |= NodeSet::single(queryGraph.numNodes, edge.createdNode.value());
          }
       }
    }

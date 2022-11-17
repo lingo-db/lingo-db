@@ -1,5 +1,5 @@
 #include "llvm/ADT/TypeSwitch.h"
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
@@ -35,7 +35,7 @@ class HashJoinUtils {
       size_t i = 0;
       block->walk([&](mlir::Operation* op) {
          if (auto getAttr = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
-            required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.attr())});
+            required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.getAttr())});
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
             if (cmpOp.isEqualityPred() && isAndedResult(op)) {
                auto leftAttributes = required[cmpOp.getLeft()];
@@ -48,7 +48,7 @@ class HashJoinUtils {
                }
                if (keyVal) {
                   if (auto getColOp = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(keyVal.getDefiningOp())) {
-                     toHash.push_back(getColOp.attr());
+                     toHash.push_back(getColOp.getAttr());
                   } else {
                      //todo: remove nasty hack:
                      mlir::OpBuilder builder(cmpOp->getContext());
@@ -93,6 +93,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
    virtual llvm::StringRef getArgument() const override { return "relalg-optimize-implementations"; }
 
    public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(OptimizeImplementations)
    bool hashImplPossible(mlir::Block* block, mlir::relalg::ColumnSet availableLeft, mlir::relalg::ColumnSet availableRight) { //todo: does not work always
       llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> required;
       mlir::relalg::ColumnSet leftKeys, rightKeys;
@@ -100,7 +101,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       bool res = false;
       block->walk([&](mlir::Operation* op) {
          if (auto getAttr = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
-            required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.attr())});
+            required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.getAttr())});
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
             if (cmpOp.isEqualityPred() && HashJoinUtils::isAndedResult(op)) {
                auto leftAttributes = required[cmpOp.getLeft()];
@@ -140,7 +141,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          if (!mapBlockInfo.createdColumns.empty()) {
             builder.setInsertionPoint(predicateOperator);
             auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), left.asRelation(), builder.getArrayAttr(mapBlockInfo.createdColumns));
-            mapOp.predicate().push_back(mapBlockInfo.block);
+            mapOp.getPredicate().push_back(mapBlockInfo.block);
             mlir::OpBuilder builder2(builder.getContext());
             builder2.setInsertionPointToEnd(mapBlockInfo.block);
             builder2.create<mlir::tuples::ReturnOp>(builder2.getUnknownLoc(), mapBlockInfo.results);
@@ -158,7 +159,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          if (!mapBlockInfo.createdColumns.empty()) {
             builder.setInsertionPoint(predicateOperator);
             auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), right.asRelation(), builder.getArrayAttr(mapBlockInfo.createdColumns));
-            mapOp.predicate().push_back(mapBlockInfo.block);
+            mapOp.getPredicate().push_back(mapBlockInfo.block);
             mlir::OpBuilder builder2(builder.getContext());
             builder2.setInsertionPointToEnd(mapBlockInfo.block);
             builder2.create<mlir::tuples::ReturnOp>(builder2.getUnknownLoc(), mapBlockInfo.results);
@@ -230,7 +231,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             })
             .Case<mlir::relalg::SingleJoinOp>([&](mlir::relalg::SingleJoinOp op) {
                if (auto returnOp = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(op.getPredicateBlock().getTerminator())) {
-                  if (returnOp.results().empty()) {
+                  if (returnOp.getResults().empty()) {
                      op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "constant"));
                      op->setAttr("constantJoin", mlir::UnitAttr::get(op.getContext()));
                   }

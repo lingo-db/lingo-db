@@ -239,26 +239,26 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
    if (funcName == "date_part") {
       auto part = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       auto arg2 = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
-      return builder.create<mlir::db::RuntimeCall>(loc, builder.getI64Type(), "ExtractFromDate", mlir::ValueRange({part, arg2})).res();
+      return builder.create<mlir::db::RuntimeCall>(loc, builder.getI64Type(), "ExtractFromDate", mlir::ValueRange({part, arg2})).getRes();
    }
    if (funcName == "substring" || funcName == "substr") {
       auto str = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       auto from = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->next->data.ptr_value), context);
       auto to = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
-      return builder.create<mlir::db::RuntimeCall>(loc, str.getType(), "Substring", mlir::ValueRange({str, from, to})).res();
+      return builder.create<mlir::db::RuntimeCall>(loc, str.getType(), "Substring", mlir::ValueRange({str, from, to})).getRes();
    }
    if (funcName == "abs") {
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
-      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), "AbsInt", val).res();
+      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), "AbsInt", val).getRes();
    }
    if (funcName == "upper") {
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
-      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), "ToUpper", val).res();
+      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), "ToUpper", val).getRes();
    }
    if (funcName == "round") {
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       auto scale = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
-      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), getBaseType(val.getType()).isIntOrIndex() ? "RoundInt" + std::to_string(getBaseType(val.getType()).getIntOrFloatBitWidth()) : "RoundDecimal", mlir::ValueRange{val, scale}).res();
+      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), getBaseType(val.getType()).isIntOrIndex() ? "RoundInt" + std::to_string(getBaseType(val.getType()).getIntOrFloatBitWidth()) : "RoundDecimal", mlir::ValueRange{val, scale}).getRes();
    }
    error("could not translate func call");
    return mlir::Value();
@@ -359,12 +359,12 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
    switch (opType) {
       case ExpressionType::OPERATOR_PLUS:
          if (getBaseType(left.getType()).isa<mlir::db::DateType>() && getBaseType(right.getType()).isa<mlir::db::IntervalType>()) {
-            return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateAdd", mlir::ValueRange({left, right})).res();
+            return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateAdd", mlir::ValueRange({left, right})).getRes();
          }
          return builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
       case ExpressionType::OPERATOR_MINUS:
          if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
-            return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateSubtract", mlir::ValueRange({left, right})).res();
+            return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateSubtract", mlir::ValueRange({left, right})).getRes();
          }
          return builder.create<mlir::db::SubOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
       case ExpressionType::OPERATOR_MULTIPLY:
@@ -397,14 +397,14 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
          auto ct = SQLTypeInference::toCommonBaseTypes(builder, {left, right});
          auto isNullable = left.getType().isa<mlir::db::NullableType>() || right.getType().isa<mlir::db::NullableType>();
          mlir::Type resType = isNullable ? (mlir::Type) mlir::db::NullableType::get(builder.getContext(), builder.getI1Type()) : (mlir::Type) builder.getI1Type();
-         auto like = builder.create<mlir::db::RuntimeCall>(loc, resType, "Like", mlir::ValueRange({ct[0], ct[1]})).res();
+         auto like = builder.create<mlir::db::RuntimeCall>(loc, resType, "Like", mlir::ValueRange({ct[0], ct[1]})).getRes();
          return opType == ExpressionType::COMPARE_NOT_LIKE ? builder.create<mlir::db::NotOp>(loc, like) : like;
       }
       case ExpressionType::OPERATOR_CONCAT: {
          auto leftString = SQLTypeInference::castValueToType(builder, left, mlir::db::StringType::get(builder.getContext()));
          auto rightString = SQLTypeInference::castValueToType(builder, right, mlir::db::StringType::get(builder.getContext()));
          mlir::Type resType = right.getType().isa<mlir::db::NullableType>() ? rightString.getType() : leftString.getType();
-         return builder.create<mlir::db::RuntimeCall>(loc, resType, "Concatenate", mlir::ValueRange({leftString, rightString})).res();
+         return builder.create<mlir::db::RuntimeCall>(loc, resType, "Concatenate", mlir::ValueRange({leftString, rightString})).getRes();
       }
       default:
          error("unsupported expression type");
@@ -492,8 +492,8 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    if (stmt->where_clause_) {
       mlir::Block* pred = translatePredicate(builder, stmt->where_clause_, context);
       auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree);
-      sel.predicate().push_back(pred);
-      tree = sel.result();
+      sel.getPredicate().push_back(pred);
+      tree = sel.getResult();
    }
    auto [tree_, targetInfo] = translateSelectionTargetList(builder, stmt->group_clause_, stmt->having_clause_, stmt->target_list_, stmt->sort_clause_, stmt->distinct_clause_, tree, context, scope);
    tree = tree_;
@@ -583,15 +583,15 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    }
    if (!leftMapResults.empty()) {
       auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), lTree, builder.getArrayAttr(createdColsLeft));
-      mapOp.predicate().push_back(leftMapBlock);
+      mapOp.getPredicate().push_back(leftMapBlock);
       leftMapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), leftMapResults);
-      lTree = mapOp.result();
+      lTree = mapOp.getResult();
    }
    if (!rightMapResults.empty()) {
       auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), rTree, builder.getArrayAttr(createdColsRight));
-      mapOp.predicate().push_back(rightMapBlock);
+      mapOp.getPredicate().push_back(rightMapBlock);
       rightMapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), rightMapResults);
-      rTree = mapOp.result();
+      rTree = mapOp.getResult();
    }
    mlir::Value tree;
    switch (stmt->op_) {
@@ -728,7 +728,7 @@ mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& buil
             }
             mlir::ArrayAttr mapping = builder.getArrayAttr(outerJoinMapping);
             auto join = builder.create<mlir::relalg::FullOuterJoinOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), left, right, mapping);
-            join.predicate().push_back(pred);
+            join.getPredicate().push_back(pred);
             return join;
          } else if (joinExpr->jointype_ == JOIN_LEFT || joinExpr->jointype_ == JOIN_RIGHT) {
             if (joinExpr->jointype_ == JOIN_RIGHT) {
@@ -763,13 +763,13 @@ mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& buil
             }
             mlir::ArrayAttr mapping = builder.getArrayAttr(outerJoinMapping);
             auto join = builder.create<mlir::relalg::OuterJoinOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), left, right, mapping);
-            join.predicate().push_back(pred);
+            join.getPredicate().push_back(pred);
             return join;
          } else if (joinExpr->jointype_ == JOIN_INNER) {
             mlir::Block* pred = translatePredicate(builder, joinExpr->quals_, context);
 
             auto join = builder.create<mlir::relalg::InnerJoinOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), left, right);
-            join.predicate().push_back(pred);
+            join.getPredicate().push_back(pred);
             return join;
          }
          error("unsupported join type");
@@ -989,8 +989,8 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                predBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), pred);
 
                auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), subQueryTree);
-               sel.predicate().push_back(block);
-               subQueryTree = sel.result();
+               sel.getPredicate().push_back(block);
+               subQueryTree = sel.getResult();
 
                return builder.create<mlir::relalg::ExistsOp>(loc, builder.getI1Type(), subQueryTree);
             }
@@ -1013,8 +1013,8 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                predBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), pred);
 
                auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), subQueryTree);
-               sel.predicate().push_back(block);
-               subQueryTree = sel.result();
+               sel.getPredicate().push_back(block);
+               subQueryTree = sel.getResult();
 
                mlir::Value exists = builder.create<mlir::relalg::ExistsOp>(loc, builder.getI1Type(), subQueryTree);
                return builder.create<mlir::db::NotOp>(loc, exists);
@@ -1398,7 +1398,7 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
       }
    }
    auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
-   mapOp.predicate().push_back(block);
+   mapOp.getPredicate().push_back(block);
    mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
 
    std::vector<mlir::Attribute> orderedColNamesAttrs;
@@ -1407,7 +1407,7 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
       orderedColNamesAttrs.push_back(builder.getStringAttr(x));
       orderedColAttrs.push_back(insertedCols.at(x));
    }
-   mlir::Value newRows = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), mlir::dsa::TableType::get(builder.getContext()), mapOp.result(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
+   mlir::Value newRows = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), mlir::dsa::TableType::get(builder.getContext()), mapOp.getResult(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
    auto databaseValue = getCurrentDatabaseValue(builder);
    auto tableNameValue = createStringValue(builder, tableName);
    rt::Database::appendTable(builder, builder.getUnknownLoc())(mlir::ValueRange{databaseValue, tableNameValue, newRows});
@@ -1615,9 +1615,9 @@ std::pair<mlir::Value, mlir::tuples::ColumnRefAttr> frontend::sql::Parser::mapEx
 
    mlir::Attribute createdCol = attrDef;
    auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr({createdCol}));
-   mapOp.predicate().push_back(block);
+   mapOp.getPredicate().push_back(block);
    mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValue);
-   return {mapOp.result(), attrManager.createRef(&attrDef.getColumn())};
+   return {mapOp.getResult(), attrManager.createRef(&attrDef.getColumn())};
 }
 std::string fingerprint(Node* n) {
    std::regex r(",\\s*\"location\":\\s*\\d+");
@@ -1702,9 +1702,9 @@ std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> 
    }
    aggrBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
    auto groupByOp = builder.create<mlir::relalg::AggregationOp>(builder.getUnknownLoc(), tupleStreamType, tree, builder.getArrayAttr(groupByAttrs), builder.getArrayAttr(createdCols));
-   groupByOp.aggr_func().push_back(block);
+   groupByOp.getAggrFunc().push_back(block);
 
-   return {groupByOp.result(), mapping};
+   return {groupByOp.getResult(), mapping};
 }
 std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, List* distinctClause, mlir::Value tree, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
    auto createMap = [this](mlir::OpBuilder& builder, std::unordered_map<FakeNode*, Node*>& toMap, TranslationContext& context, mlir::Value tree, TranslationContext::ResolverScope& scope) -> mlir::Value {
@@ -1731,9 +1731,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          createdValues.push_back(expr);
       }
       auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
-      mapOp.predicate().push_back(block);
+      mapOp.getPredicate().push_back(block);
       mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
-      return mapOp.result();
+      return mapOp.getResult();
    };
    auto mapToNull = [this](mlir::OpBuilder& builder, std::vector<mlir::Attribute> toMap, TranslationContext& context, mlir::Value tree) {
       if (toMap.empty()) return tree;
@@ -1758,9 +1758,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          createdValues.push_back(expr);
       }
       auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
-      mapOp.predicate().push_back(block);
+      mapOp.getPredicate().push_back(block);
       mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
-      return mapOp.result();
+      return mapOp.asRelation();
    };
    auto mapInt = [this](mlir::OpBuilder& builder, size_t intVal, TranslationContext& context, mlir::Value tree) -> std::pair<mlir::Value, mlir::Attribute> {
       auto* block = new mlir::Block;
@@ -1783,9 +1783,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       createdValues.push_back(expr);
 
       auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
-      mapOp.predicate().push_back(block);
+      mapOp.getPredicate().push_back(block);
       mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
-      return {mapOp.result(), attrDef};
+      return {mapOp.getResult(), attrDef};
    };
    auto mapCheckBit = [this](mlir::OpBuilder& builder, mlir::Attribute val, size_t shift, TranslationContext& context, mlir::Value tree) -> std::pair<mlir::Value, mlir::Attribute> {
       auto* block = new mlir::Block;
@@ -1814,9 +1814,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       createdValues.push_back(expr);
 
       auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
-      mapOp.predicate().push_back(block);
+      mapOp.getPredicate().push_back(block);
       mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
-      return {mapOp.result(), attrDef};
+      return {mapOp.getResult(), attrDef};
    };
    auto mapToNullable = [this](mlir::OpBuilder& builder, std::vector<mlir::Attribute> toMap, std::vector<mlir::Attribute> mapTo, TranslationContext& context, mlir::Value tree) {
       if (toMap.empty()) return tree;
@@ -1845,9 +1845,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          createdValues.push_back(expr);
       }
       auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
-      mapOp.predicate().push_back(block);
+      mapOp.getPredicate().push_back(block);
       mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
-      return mapOp.result();
+      return mapOp.asRelation();
    };
 
    ReplaceState replaceState;
@@ -2018,8 +2018,8 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    if (having) {
       mlir::Block* pred = translatePredicate(builder, having, context);
       auto sel = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree);
-      sel.predicate().push_back(pred);
-      tree = sel.result();
+      sel.getPredicate().push_back(pred);
+      tree = sel.getResult();
    }
    tree = createMap(builder, replaceState.evalBeforeWindowFunc, context, tree, scope);
 
@@ -2109,9 +2109,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             orderBySpecs.push_back(mlir::relalg::SortSpecificationAttr::get(builder.getContext(), attr, dir == SORTBY_DESC ? mlir::relalg::SortSpec::desc : mlir::relalg::SortSpec::asc));
          }
          auto windowOp = builder.create<mlir::relalg::WindowOp>(builder.getUnknownLoc(), tupleStreamType, tree, builder.getArrayAttr(partitionByAttrs), builder.getArrayAttr(orderBySpecs), builder.getArrayAttr(createdCols), window.start, window.end);
-         windowOp.aggr_func().push_back(block);
+         windowOp.getAggrFunc().push_back(block);
 
-         tree = windowOp.result();
+         tree = windowOp.getResult();
       }
    }
 
@@ -2297,7 +2297,7 @@ mlir::Type frontend::sql::Parser::createBaseTypeFromColumnType(mlir::MLIRContext
    if (colType.base == "bool") return mlir::IntegerType::get(context, 1);
    if (colType.base == "int") return mlir::IntegerType::get(context, asInt(colType.modifiers.at(0)));
    if (colType.base == "float") return asInt(colType.modifiers.at(0)) == 32 ? mlir::FloatType::getF32(context) : mlir::FloatType::getF64(context);
-   if (colType.base == "date") return mlir::db::DateType::get(context, mlir::db::symbolizeDateUnitAttr(std::get<std::string>(colType.modifiers.at(0))).getValue());
+   if (colType.base == "date") return mlir::db::DateType::get(context, mlir::db::symbolizeDateUnitAttr(std::get<std::string>(colType.modifiers.at(0))).value());
    if (colType.base == "string") return mlir::db::StringType::get(context);
    if (colType.base == "char") return mlir::db::CharType::get(context, asInt(colType.modifiers.at(0)));
    if (colType.base == "decimal") return mlir::db::DecimalType::get(context, asInt(colType.modifiers.at(0)), asInt(colType.modifiers.at(1)));

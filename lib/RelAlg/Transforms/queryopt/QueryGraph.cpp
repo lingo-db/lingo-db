@@ -60,11 +60,11 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
    if (!op) return std::move(support::eval::createInvalid());
    if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(op)) {
       std::variant<int64_t, double, std::string> parseArg;
-      if (auto integerAttr = constantOp.value().dyn_cast_or_null<mlir::IntegerAttr>()) {
+      if (auto integerAttr = constantOp.getValue().dyn_cast_or_null<mlir::IntegerAttr>()) {
          parseArg = integerAttr.getInt();
-      } else if (auto floatAttr = constantOp.value().dyn_cast_or_null<mlir::FloatAttr>()) {
+      } else if (auto floatAttr = constantOp.getValue().dyn_cast_or_null<mlir::FloatAttr>()) {
          parseArg = floatAttr.getValueAsDouble();
-      } else if (auto stringAttr = constantOp.value().dyn_cast_or_null<mlir::StringAttr>()) {
+      } else if (auto stringAttr = constantOp.getValue().dyn_cast_or_null<mlir::StringAttr>()) {
          parseArg = stringAttr.str();
       } else {
          return support::eval::createInvalid();
@@ -124,7 +124,7 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
       auto parseResult = support::parse(parseArg, typeConstant, param1);
       return support::eval::createLiteral(parseResult, std::make_tuple(typeConstant, param1, param2));
    } else if (auto attrRefOp = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
-      return support::eval::createAttrRef(mapping.at(&attrRefOp.attr().getColumn()));
+      return support::eval::createAttrRef(mapping.at(&attrRefOp.getAttr().getColumn()));
    } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
       auto left = cmpOp.getLeft();
       auto right = cmpOp.getRight();
@@ -139,34 +139,34 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
       }
    } else if (auto betweenOp = mlir::dyn_cast_or_null<mlir::db::BetweenOp>(op)) {
       std::vector<std::unique_ptr<support::eval::expr>> expressions;
-      expressions.push_back(support::eval::createLt(buildEvalExpr(betweenOp.val(), mapping), buildEvalExpr(betweenOp.upper(), mapping)));
-      expressions.push_back(support::eval::createGt(buildEvalExpr(betweenOp.val(), mapping), buildEvalExpr(betweenOp.lower(), mapping)));
+      expressions.push_back(support::eval::createLt(buildEvalExpr(betweenOp.getVal(), mapping), buildEvalExpr(betweenOp.getUpper(), mapping)));
+      expressions.push_back(support::eval::createGt(buildEvalExpr(betweenOp.getVal(), mapping), buildEvalExpr(betweenOp.getLower(), mapping)));
       return support::eval::createAnd(expressions);
    } else if (auto oneOfOp = mlir::dyn_cast_or_null<mlir::db::OneOfOp>(op)) {
       std::vector<std::unique_ptr<support::eval::expr>> expressions;
-      for (auto v : oneOfOp.vals()) {
-         expressions.push_back(support::eval::createEq(buildEvalExpr(oneOfOp.val(), mapping), buildEvalExpr(v, mapping)));
+      for (auto v : oneOfOp.getVals()) {
+         expressions.push_back(support::eval::createEq(buildEvalExpr(oneOfOp.getVal(), mapping), buildEvalExpr(v, mapping)));
       }
       return support::eval::createOr(expressions);
    } else if (auto notOp = mlir::dyn_cast_or_null<mlir::db::NotOp>(op)) {
       std::vector<std::unique_ptr<support::eval::expr>> expressions;
-      return support::eval::createNot(buildEvalExpr(notOp.val(), mapping));
+      return support::eval::createNot(buildEvalExpr(notOp.getVal(), mapping));
    } else if (auto andOp = mlir::dyn_cast_or_null<mlir::db::AndOp>(op)) {
       std::vector<std::unique_ptr<support::eval::expr>> expressions;
-      for (auto v : andOp.vals()) {
+      for (auto v : andOp.getVals()) {
          expressions.push_back(buildEvalExpr(v, mapping));
       }
       return support::eval::createAnd(expressions);
    } else if (auto orOp = mlir::dyn_cast_or_null<mlir::db::OrOp>(op)) {
       std::vector<std::unique_ptr<support::eval::expr>> expressions;
-      for (auto v : orOp.vals()) {
+      for (auto v : orOp.getVals()) {
          expressions.push_back(buildEvalExpr(v, mapping));
       }
       return support::eval::createOr(expressions);
    } else if (auto runtimeCall = mlir::dyn_cast_or_null<mlir::db::RuntimeCall>(op)) {
-      if (runtimeCall.fn() == "ConstLike" || runtimeCall.fn() == "Like") {
-         if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(runtimeCall.args()[1].getDefiningOp())) {
-            return support::eval::createLike(buildEvalExpr(runtimeCall.args()[0], mapping), constantOp.value().cast<mlir::StringAttr>().str());
+      if (runtimeCall.getFn() == "ConstLike" || runtimeCall.getFn() == "Like") {
+         if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(runtimeCall.getArgs()[1].getDefiningOp())) {
+            return support::eval::createLike(buildEvalExpr(runtimeCall.getArgs()[0], mapping), constantOp.getValue().cast<mlir::StringAttr>().str());
          }
       }
       return support::eval::createInvalid();
@@ -179,16 +179,16 @@ std::optional<double> estimateUsingSample(mlir::relalg::QueryGraph::Node& n) {
    if (n.additionalPredicates.empty()) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
       std::unordered_map<const mlir::tuples::Column*, std::string> mapping;
-      for (auto c : baseTableOp.columns()) {
+      for (auto c : baseTableOp.getColumns()) {
          mapping[&c.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn()] = c.getName().str();
       }
-      auto meta = baseTableOp.meta().getMeta();
+      auto meta = baseTableOp.getMeta().getMeta();
       auto sample = meta->getSample();
       if (!sample) return {};
       std::vector<std::unique_ptr<support::eval::expr>> expressions;
       for (auto pred : n.additionalPredicates) {
          if (auto selOp = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(pred.getOperation())) {
-            auto v = mlir::cast<mlir::tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).results()[0];
+            auto v = mlir::cast<mlir::tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
             expressions.push_back(buildEvalExpr(v, mapping)); //todo: ignore failing ones?
          }
       }
@@ -204,10 +204,10 @@ std::optional<double> estimateUsingSample(mlir::relalg::QueryGraph::Node& n) {
 mlir::relalg::ColumnSet mlir::relalg::QueryGraph::getPKey(mlir::relalg::QueryGraph::Node& n) {
    if (!n.op) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
-      auto meta = baseTableOp.meta().getMeta();
+      auto meta = baseTableOp.getMeta().getMeta();
       mlir::relalg::ColumnSet attributes;
       std::unordered_map<std::string, const mlir::tuples::Column*> mapping;
-      for (auto c : baseTableOp.columns()) {
+      for (auto c : baseTableOp.getColumns()) {
          mapping[c.getName().str()] = &c.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn();
       }
       for (auto c : meta->getPrimaryKey()) {
@@ -220,7 +220,7 @@ mlir::relalg::ColumnSet mlir::relalg::QueryGraph::getPKey(mlir::relalg::QueryGra
 }
 double getRows(mlir::relalg::QueryGraph::Node& n) {
    if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
-      auto numRows = baseTableOp.meta().getMeta()->getNumRows();
+      auto numRows = baseTableOp.getMeta().getMeta()->getNumRows();
       baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(n.op.getContext()), numRows));
       return numRows == 0 ? 1 : numRows;
    }

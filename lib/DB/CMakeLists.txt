@@ -1,11 +1,8 @@
 set(LLVM_TARGET_DEFINITIONS Transforms/EliminateNulls.td)
 mlir_tablegen(EliminateNulls.inc -gen-rewriters)
 add_public_tablegen_target(MLIRDBEliminateNullsIncGen)
-set(LLVM_TARGET_DEFINITIONS Transforms/SimplifyToArith.td)
-mlir_tablegen(SimplifyToArith.inc -gen-rewriters)
-add_public_tablegen_target(MLIRDBSimplifyToArithIncGen)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
-add_dependencies(build_includes MLIRDBEliminateNullsIncGen MLIRDBSimplifyToArithIncGen)
+add_dependencies(build_includes MLIRDBEliminateNullsIncGen)
 
 
 gen_rt_def(dump-rt-defs "DumpRuntime.h")
@@ -21,7 +18,6 @@ add_mlir_dialect_library(MLIRDB
         DBTypes.cpp
         RuntimeFunctions/RuntimeFunctions.cpp
         Transforms/EliminateNulls.cpp
-        Transforms/SimplifyToArith.cpp
         Transforms/OptimizeRuntimeFunctions.cpp
         ADDITIONAL_HEADER_DIRS
         ../../include/mlir/Dialect/DB
@@ -35,7 +31,6 @@ add_mlir_dialect_library(MLIRDB
         decimal-rt-defs
         MLIRDBOpsIncGen
         MLIRDBEliminateNullsIncGen
-        MLIRDBSimplifyToArithIncGen
         LINK_LIBS PUBLIC
         MLIRIR
         MLIRFuncTransforms
