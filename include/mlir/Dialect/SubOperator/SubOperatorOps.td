@@ -48,8 +48,8 @@ def StateMembers : SubOperator_Attr<"StateMembers"> {
 class SubOperator_Type<string name, string typeMnemonic, list<Trait> traits = []> : TypeDef<SubOperator_Dialect, name,traits> {
     let mnemonic = typeMnemonic;
 }
-def TableRef : SubOperator_Type<"TableRef", "table_ref"> {
-    let summary = "reference to table";
+def Table : SubOperator_Type<"Table", "table"> {
+    let summary = "external table";
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
 }
@@ -112,86 +112,110 @@ def List : SubOperator_Type<"List", "list"> {
 //===----------------------------------------------------------------------===//
 class SubOperator_Op<string mnemonic, list<Trait> traits = []> : Op<SubOperator_Dialect, mnemonic, traits> {}
 
-def LookupOrInsertOp : SubOperator_Op<"lookup_or_insert",[SubOperator]> {
-    let summary = "performs a lookup in a state and annotates the result as attribute ";
-    let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
-    let results = (outs TupleStream: $res);
-    let regions = (region AnyRegion:$eqFn, AnyRegion:$initFn);
-      let hasCustomAssemblyFormat = 1;
-      let extraClassDeclaration = [{
-          std::vector<std::string> getWrittenMembers();
-      }];
-}
-def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
-    let summary = "performs a lookup in a state and annotates the result as attribute ";
-    let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
-    let results = (outs TupleStream: $res);
-    let regions = (region AnyRegion:$eqFn, AnyRegion:$initFn);
-      let hasCustomAssemblyFormat = 1;
-      let extraClassDeclaration = [{
-          std::vector<std::string> getReadMembers();
-      }];
+//===----------------------------------------------------------------------===//
+// Management
+//===----------------------------------------------------------------------===//
+
+def GetExternalOp : SubOperator_Op<"get_external", [Pure]> {
+    let summary = "get externally defined object";
+
+    let arguments = (ins StrAttr: $descr);
+    let results = (outs AnyType : $res);
+    let assemblyFormat = [{  $descr `:` type($res) attr-dict }];
 }
 
-def MaintainOp : SubOperator_Op<"maintain",[SubOperator]> {
-      let summary = "maintain";
+def SetResultOp : SubOperator_Op<"set_result"> {
+    let summary = "set result";
+    let arguments = (ins I32Attr:$result_id, AnyType : $state);
+    let assemblyFormat = [{ $result_id $state `:` type($state)  attr-dict }];
+}
 
-      let arguments = (ins AnyType : $state, StrAttr: $description );
-      let assemblyFormat = [{  $description $state `:` type($state)  attr-dict }];
-      let extraClassDeclaration = [{
-          std::vector<std::string> getReadMembers();
-          std::vector<std::string> getWrittenMembers();
-      }];
-  }
+//===----------------------------------------------------------------------===//
+// Creating Tuple Streams
+//===----------------------------------------------------------------------===//
 
-def GatherOp : SubOperator_Op<"gather",[SubOperator]> {
-    let summary = "scatter";
+def ScanOp : SubOperator_Op<"scan", [Pure,SubOperator]> {
+    let summary = "scan state (sequentially)";
 
-    let arguments = (ins TupleStream : $stream, ColumnRefAttr: $ref, DictionaryAttr : $mapping );
+    let arguments = (ins AnyType : $state, DictionaryAttr : $mapping );
     let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<StateColumnMapping>($mapping)  attr-dict }];
+    let assemblyFormat = [{  $state `:` type($state) custom<StateColumnMapping>($mapping) attr-dict }];
     let extraClassDeclaration = [{
         std::vector<std::string> getReadMembers();
     }];
 }
-def ScatterOp : SubOperator_Op<"scatter",[SubOperator]> {
-    let summary = "scatter";
 
-    let arguments = (ins TupleStream : $stream, ColumnRefAttr: $ref, DictionaryAttr : $mapping );
+def ScanListOp : SubOperator_Op<"scan_list", [Pure,SubOperator]> {
+    let summary = "scan state (sequentially)";
+
+    let arguments = (ins AnyType : $list, ColumnDefAttr: $elem);
     let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<ColumnStateMapping>($mapping)  attr-dict }];
-    let extraClassDeclaration = [{
-        std::vector<std::string> getWrittenMembers();
-    }];
-}
-def FlattenOp : SubOperator_Op<"flatten",[SubOperator]> {
-  let summary = "flattens an list column";
-  let description = [{#
-   Example:
-   ```mlir
-   %stream2 = subop.flatten %stream @a::@list => @scope::@list_entry({})
-   ```
-  }];
+    let assemblyFormat = [{  $list `:` type($list) custom<CustDef>($elem) attr-dict }];
 }
 
-def ReduceOp : SubOperator_Op<"reduce",[SubOperator]> {
-  let summary = "reduce";
-  let description =[{
-  ```mlir
-    %5 = subop.reduce %2 %0 [@studenten::@semester] with ["ctr","sum"] ([%v1], [%curr_ctr, %curr_sum]){
-      %c1 = db.constant %c1
-      %updated_ctr = db.add %curr_ctr, %c1
-      tuples.return %updated_ctr, %updated_sum
-    } eq: (){} combine: (){} initial: (){}
-  ```
-  }];
-  let regions = (region SizedRegion<1>:$region);
-  let arguments = (ins TupleStream: $stream, ColumnRefAttr: $ref, ArrayAttr: $columns, ArrayAttr: $members);
-  let hasCustomAssemblyFormat = 1;
-        let extraClassDeclaration = [{
-            std::vector<std::string> getWrittenMembers();
-            std::vector<std::string> getReadMembers();
-        }];
+def ScanRefsOp : SubOperator_Op<"scan_refs", [Pure,SubOperator]> {
+    let summary = "scan state (sequentially) and emits references to its elements";
+
+    let arguments = (ins AnyType : $state, ColumnDefAttr:$ref);
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{  $state `:` type($state) custom<CustDef>($ref) attr-dict }];
+}
+def GenerateOp : SubOperator_Op<"generate",[Pure,SubOperator]> {
+    let summary = "generate tuples using imperative code";
+    let arguments = (ins ArrayAttr:$generated_columns);
+    let results = (outs TupleStream : $res);
+    let regions = (region SizedRegion<1>:$region);
+    let hasCustomAssemblyFormat = 1;
+}
+
+def GenerateEmitOp : SubOperator_Op<"generate_emit"> {
+    let summary = "set result";
+    let arguments = (ins Variadic<AnyType>:$values);
+    let assemblyFormat = [{ ($values^ `:` type($values))?  attr-dict }];
+}
+
+//===----------------------------------------------------------------------===//
+// Stream Manipulation
+//===----------------------------------------------------------------------===//
+
+def UnionOp : SubOperator_Op<"union", [Pure,SubOperator]> {
+    let summary = "union of two stream";
+
+    let arguments = (ins Variadic<TupleStream> :$streams);
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{  $streams attr-dict }];
+}
+
+def MapOp : SubOperator_Op<"map", [Pure,SubOperator]> {
+    let summary = "map operation";
+
+    let arguments = (ins TupleStream:$stream,ArrayAttr:$computed_cols);
+    let results = (outs TupleStream:$result);
+    let regions = (region SizedRegion<1>:$fn);
+    let assemblyFormat = [{  $stream `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($fn) attr-dict-with-keyword }];
+}
+
+def FilterSemantic_AllTrue : I64EnumAttrCase<"all_true", 0>;
+def FilterSemantic_NoneTrue      : I64EnumAttrCase<"none_true", 1>;
+
+def FilterSemantic : I64EnumAttr<"FilterSemantic", "",
+        [FilterSemantic_AllTrue,FilterSemantic_NoneTrue]> {
+    let cppNamespace = "::mlir::subop";
+}
+
+def FilterOp : SubOperator_Op<"filter", [Pure,SubOperator]> {
+    let summary = "filter stream of tuples according to one or more boolean columns (all 1 => keep tuple, otherwise discard) ";
+    let arguments = (ins TupleStream : $stream, FilterSemantic:$filterSemantic,ArrayAttr : $conditions );
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{  $stream $filterSemantic custom<CustRefArr>($conditions)  attr-dict }];
+}
+
+def RenamingOp : SubOperator_Op<"rename", [Pure,SubOperator]> {
+    let summary = "rename columns";
+
+    let arguments = (ins TupleStream:$stream,ArrayAttr:$columns);
+    let results = (outs TupleStream:$result);
+    let assemblyFormat = [{ $stream `renamed` `:` custom<CustDefArr>($columns) attr-dict-with-keyword }];
 }
 
 def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator]> {
@@ -221,13 +245,11 @@ def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator]> {
         std::vector<std::string> getReadMembers();
     }];
 }
-def GetReferenceOp : SubOperator_Op<"get_reference", [Pure]> {
-    let summary = "get reference to an externally defined object";
 
-    let arguments = (ins StrAttr: $descr);
-    let results = (outs AnyType : $res);
-    let assemblyFormat = [{  $descr `:` type($res) attr-dict }];
-}
+//===----------------------------------------------------------------------===//
+// State Creation
+//===----------------------------------------------------------------------===//
+
 def CreateOp : SubOperator_Op<"create", [Pure]> {
     let summary = "create new state";
 
@@ -238,31 +260,96 @@ def CreateOp : SubOperator_Op<"create", [Pure]> {
 
 }
 
-def ScanOp : SubOperator_Op<"scan", [Pure,SubOperator]> {
-    let summary = "scan state (sequentially)";
+//todo: add subop.create_view
 
-    let arguments = (ins AnyType : $state, DictionaryAttr : $mapping );
+//===----------------------------------------------------------------------===//
+// Streams & States
+//===----------------------------------------------------------------------===//
+
+def MaterializeOp : SubOperator_Op<"materialize",[SubOperator]> {
+    let summary = "materialize state (sequentially)";
+
+    let arguments = (ins TupleStream : $stream, AnyType : $state, DictionaryAttr : $mapping );
     let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $state `:` type($state) custom<StateColumnMapping>($mapping) attr-dict }];
+    let assemblyFormat = [{  $stream custom<ColumnStateMapping>($mapping) `,` $state `:` type($state)  attr-dict }];
+    let extraClassDeclaration = [{
+        std::vector<std::string> getWrittenMembers();
+    }];
+}
+
+def LookupOrInsertOp : SubOperator_Op<"lookup_or_insert",[SubOperator]> {
+    let summary = "performs a lookup in a state and annotates the result as attribute ";
+    let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
+    let results = (outs TupleStream: $res);
+    let regions = (region AnyRegion:$eqFn, AnyRegion:$initFn);
+      let hasCustomAssemblyFormat = 1;
+      let extraClassDeclaration = [{
+          std::vector<std::string> getWrittenMembers();
+      }];
+}
+
+def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
+    let summary = "performs a lookup in a state and annotates the result as attribute ";
+    let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
+    let results = (outs TupleStream: $res);
+    let regions = (region AnyRegion:$eqFn, AnyRegion:$initFn);
+      let hasCustomAssemblyFormat = 1;
+      let extraClassDeclaration = [{
+          std::vector<std::string> getReadMembers();
+      }];
+}
+
+//todo: lookup_range?
+
+//===----------------------------------------------------------------------===//
+// Streams & References
+//===----------------------------------------------------------------------===//
+
+
+def GatherOp : SubOperator_Op<"gather",[SubOperator]> {
+    let summary = "scatter";
+
+    let arguments = (ins TupleStream : $stream, ColumnRefAttr: $ref, DictionaryAttr : $mapping );
+    let results = (outs TupleStream : $res);
+    let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<StateColumnMapping>($mapping)  attr-dict }];
     let extraClassDeclaration = [{
         std::vector<std::string> getReadMembers();
     }];
 }
-def ScanListOp : SubOperator_Op<"scan_list", [Pure,SubOperator]> {
-    let summary = "scan state (sequentially)";
+def ScatterOp : SubOperator_Op<"scatter",[SubOperator]> {
+    let summary = "scatter";
 
-    let arguments = (ins AnyType : $list, ColumnDefAttr: $elem);
+    let arguments = (ins TupleStream : $stream, ColumnRefAttr: $ref, DictionaryAttr : $mapping );
     let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $list `:` type($list) custom<CustDef>($elem) attr-dict }];
+    let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<ColumnStateMapping>($mapping)  attr-dict }];
+    let extraClassDeclaration = [{
+        std::vector<std::string> getWrittenMembers();
+    }];
 }
 
-def ScanRefsOp : SubOperator_Op<"scan_refs", [Pure,SubOperator]> {
-    let summary = "scan state (sequentially) and emits references to its elements";
-
-    let arguments = (ins AnyType : $state, ColumnDefAttr:$ref);
-    let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $state `:` type($state) custom<CustDef>($ref) attr-dict }];
+def ReduceOp : SubOperator_Op<"reduce",[SubOperator]> {
+  let summary = "reduce";
+  let description =[{
+  ```mlir
+    %5 = subop.reduce %2 %0 [@studenten::@semester] with ["ctr","sum"] ([%v1], [%curr_ctr, %curr_sum]){
+      %c1 = db.constant %c1
+      %updated_ctr = db.add %curr_ctr, %c1
+      tuples.return %updated_ctr, %updated_sum
+    } eq: (){} combine: (){} initial: (){}
+  ```
+  }];
+  let regions = (region SizedRegion<1>:$region);
+  let arguments = (ins TupleStream: $stream, ColumnRefAttr: $ref, ArrayAttr: $columns, ArrayAttr: $members);
+  let hasCustomAssemblyFormat = 1;
+        let extraClassDeclaration = [{
+            std::vector<std::string> getWrittenMembers();
+            std::vector<std::string> getReadMembers();
+        }];
 }
+
+//===----------------------------------------------------------------------===//
+// Utility Operations
+//===----------------------------------------------------------------------===//
 
 def InFlightOp : SubOperator_Op<"in_flight", [Pure,SubOperator]> {
     let summary = "operation symbolizes 'in flight' tuple stream -> values => columns";
@@ -286,22 +373,22 @@ def CombineTupleOp : SubOperator_Op<"combine_tuple", [Pure,SubOperator]> {
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream `,` $right attr-dict }];
 }
-def UnionOp : SubOperator_Op<"union", [Pure,SubOperator]> {
-    let summary = "union of two stream";
 
-    let arguments = (ins Variadic<TupleStream> :$streams);
-    let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $streams attr-dict }];
+//===----------------------------------------------------------------------===//
+// Not used in the future (replaced by views) //todo: remove
+//===----------------------------------------------------------------------===//
+
+def MaintainOp : SubOperator_Op<"maintain",[SubOperator]> {
+      let summary = "maintain";
+
+      let arguments = (ins AnyType : $state, StrAttr: $description );
+      let assemblyFormat = [{  $description $state `:` type($state)  attr-dict }];
+      let extraClassDeclaration = [{
+          std::vector<std::string> getReadMembers();
+          std::vector<std::string> getWrittenMembers();
+      }];
 }
 
-def MapOp : SubOperator_Op<"map", [Pure,SubOperator]> {
-    let summary = "map operation";
-
-    let arguments = (ins TupleStream:$stream,ArrayAttr:$computed_cols);
-    let results = (outs TupleStream:$result);
-    let regions = (region SizedRegion<1>:$fn);
-    let assemblyFormat = [{  $stream `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($fn) attr-dict-with-keyword }];
-}
 def SortOp : SubOperator_Op<"sort", [IsolatedFromAbove,SubOperator]> {
     let summary = "sort vector";
     let description = [{
@@ -315,57 +402,6 @@ def SortOp : SubOperator_Op<"sort", [IsolatedFromAbove,SubOperator]> {
           std::vector<std::string> getWrittenMembers();
           std::vector<std::string> getReadMembers();
       }];
-}
-
-def FilterSemantic_AllTrue : I64EnumAttrCase<"all_true", 0>;
-def FilterSemantic_NoneTrue      : I64EnumAttrCase<"none_true", 1>;
-
-def FilterSemantic : I64EnumAttr<"FilterSemantic", "",
-        [FilterSemantic_AllTrue,FilterSemantic_NoneTrue]> {
-    let cppNamespace = "::mlir::subop";
-}
-
-def FilterOp : SubOperator_Op<"filter", [Pure,SubOperator]> {
-    let summary = "filter stream of tuples according to one or more boolean columns (all 1 => keep tuple, otherwise discard) ";
-    let arguments = (ins TupleStream : $stream, FilterSemantic:$filterSemantic,ArrayAttr : $conditions );
-    let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $stream $filterSemantic custom<CustRefArr>($conditions)  attr-dict }];
-}
-def RenamingOp : SubOperator_Op<"rename", [Pure,SubOperator]> {
-    let summary = "rename columns";
-
-    let arguments = (ins TupleStream:$stream,ArrayAttr:$columns);
-    let results = (outs TupleStream:$result);
-    let assemblyFormat = [{ $stream `renamed` `:` custom<CustDefArr>($columns) attr-dict-with-keyword }];
-}
-def MaterializeOp : SubOperator_Op<"materialize",[SubOperator]> {
-    let summary = "materialize state (sequentially)";
-
-    let arguments = (ins TupleStream : $stream, AnyType : $state, DictionaryAttr : $mapping );
-    let results = (outs TupleStream : $res);
-    let assemblyFormat = [{  $stream custom<ColumnStateMapping>($mapping) `,` $state `:` type($state)  attr-dict }];
-    let extraClassDeclaration = [{
-        std::vector<std::string> getWrittenMembers();
-    }];
-}
-def SetResultOp : SubOperator_Op<"set_result"> {
-    let summary = "set result";
-    let arguments = (ins I32Attr:$result_id, AnyType : $state);
-    let assemblyFormat = [{ $result_id $state `:` type($state)  attr-dict }];
-}
-
-def GenerateOp : SubOperator_Op<"generate",[Pure,SubOperator]> {
-    let summary = "generate tuples using imperative code";
-    let arguments = (ins ArrayAttr:$generated_columns);
-    let results = (outs TupleStream : $res);
-    let regions = (region SizedRegion<1>:$region);
-    let hasCustomAssemblyFormat = 1;
-}
-
-def GenerateEmitOp : SubOperator_Op<"generate_emit"> {
-    let summary = "set result";
-    let arguments = (ins Variadic<AnyType>:$values);
-    let assemblyFormat = [{ ($values^ `:` type($values))?  attr-dict }];
 }
 
 #endif // LINGODB_DIALECT_SubOperator_IR_OPS

@@ -68,12 +68,12 @@ static std::vector<mlir::Value> inlineBlock(mlir::Block* b, mlir::OpBuilder& rew
 /////////////////////////////////////////////////// State management ///////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-class GetTableRefLowering : public OpConversionPattern<mlir::subop::GetReferenceOp> {
+class GetTableRefLowering : public OpConversionPattern<mlir::subop::GetExternalOp> {
    public:
-   using OpConversionPattern<mlir::subop::GetReferenceOp>::OpConversionPattern;
+   using OpConversionPattern<mlir::subop::GetExternalOp>::OpConversionPattern;
 
-   LogicalResult matchAndRewrite(mlir::subop::GetReferenceOp getReferenceOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!getReferenceOp.getType().isa<mlir::subop::TableRefType>()) return failure();
+   LogicalResult matchAndRewrite(mlir::subop::GetExternalOp getReferenceOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (!getReferenceOp.getType().isa<mlir::subop::TableType>()) return failure();
       rewriter.replaceOpWithNewOp<mlir::dsa::ScanSource>(getReferenceOp, typeConverter->convertType(getReferenceOp.getType()), getReferenceOp.getDescrAttr());
       return mlir::success();
    }
@@ -391,8 +391,8 @@ class ScanTableRefLowering : public OpConversionPattern<mlir::subop::ScanOp> {
    using OpConversionPattern<mlir::subop::ScanOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::ScanOp scanOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!scanOp.getState().getType().isa<mlir::subop::TableRefType>()) return failure();
-      auto columns = scanOp.getState().getType().cast<mlir::subop::TableRefType>().getMembers();
+      if (!scanOp.getState().getType().isa<mlir::subop::TableType>()) return failure();
+      auto columns = scanOp.getState().getType().cast<mlir::subop::TableType>().getMembers();
       ColumnMapping mapping;
       auto state = adaptor.getState();
       auto recordBatchType = state.getType().cast<mlir::dsa::GenericIterableType>().getElementType().cast<mlir::dsa::RecordBatchType>();
@@ -1296,7 +1296,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       for (auto x : arr) { res.push_back(getBaseType(x)); }
       return res;
    };
-   typeConverter.addConversion([&](mlir::subop::TableRefType t) -> Type {
+   typeConverter.addConversion([&](mlir::subop::TableType t) -> Type {
       auto tupleType = mlir::TupleType::get(ctxt, baseTypes(unpackTypes(t.getMembers().getTypes())));
       auto recordBatch = mlir::dsa::RecordBatchType::get(ctxt, tupleType);
       mlir::Type chunkIterable = mlir::dsa::GenericIterableType::get(ctxt, recordBatch, "table_chunk_iterator");
