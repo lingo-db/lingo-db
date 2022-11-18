@@ -1021,7 +1021,6 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::dsa::RecordBatchType r) {
       return mlir::dsa::RecordBatchType::get(r.getContext(), convertPhysical(r.getRowType()));
    });
-   typeConverter.addConversion([&](mlir::dsa::GenericIterableType r) { return mlir::dsa::GenericIterableType::get(r.getContext(), typeConverter.convertType(r.getElementType()), r.getIteratorName()); });
    typeConverter.addConversion([&](mlir::dsa::ResultTableType r) { return mlir::dsa::ResultTableType::get(r.getContext(), typeConverter.convertType(r.getRowType()).cast<mlir::TupleType>()); });
 
    RewritePatternSet patterns(&getContext());
@@ -1033,7 +1032,6 @@ void DBToStdLoweringPass::runOnOperation() {
    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns, target);
    patterns.insert<SimpleTypeConversionPattern<mlir::func::ConstantOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::ScanSource>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::Append>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::CreateDS>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::YieldOp>>(typeConverter, &getContext());

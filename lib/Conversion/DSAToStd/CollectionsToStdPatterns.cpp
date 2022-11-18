@@ -203,15 +203,4 @@ void mlir::dsa::populateCollectionsToStdPatterns(mlir::TypeConverter& typeConver
       return (Type) TupleType::get(context, {indexType, typeConverter.convertType(mlir::dsa::RecordBatchType::get(context, recordType.getRowType()))});
    });
 
-   typeConverter.addConversion([i8ptrType](mlir::dsa::GenericIterableType genericIterableType) {
-      Type elementType = genericIterableType.getElementType();
-      Type nestedElementType = elementType;
-      if (auto nested = elementType.dyn_cast_or_null<mlir::dsa::GenericIterableType>()) {
-         nestedElementType = nested.getElementType();
-      }
-      if (genericIterableType.getIteratorName() == "table_chunk_iterator") {
-         return (Type) i8ptrType;
-      }
-      return Type();
-   });
 }

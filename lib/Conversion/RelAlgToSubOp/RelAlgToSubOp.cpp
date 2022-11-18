@@ -70,26 +70,25 @@ class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> 
       std::vector<Attribute> colTypes;
       std::vector<NamedAttribute> mapping;
       std::string tableName = baseTableOp->getAttr("table_identifier").cast<mlir::StringAttr>().str();
-      std::string scanDescription = R"({ "table": ")" + tableName + R"(", "columns": [ )";
+      std::string scanDescription = R"({ "table": ")" + tableName + R"(", "mapping": { )";
       bool first = true;
       for (auto namedAttr : baseTableOp.getColumns().getValue()) {
          auto identifier = namedAttr.getName();
          auto attr = namedAttr.getValue();
          auto attrDef = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
-         if (required.contains(&attrDef.getColumn())) {
-            if (!first) {
-               scanDescription += ",";
-            } else {
-               first = false;
-            }
-            scanDescription += "\"" + identifier.str() + "\"";
-            auto memberName = getUniqueMember(identifier.str());
-            colNames.push_back(rewriter.getStringAttr(memberName));
-            colTypes.push_back(mlir::TypeAttr::get(attrDef.getColumn().type));
-            mapping.push_back(rewriter.getNamedAttr(memberName, attrDef));
+         if (!first) {
+            scanDescription += ",";
+         } else {
+            first = false;
          }
+         auto memberName = getUniqueMember(identifier.str());
+         scanDescription += "\"" + memberName + "\" :\"" + identifier.str() + "\"";
+
+         colNames.push_back(rewriter.getStringAttr(memberName));
+         colTypes.push_back(mlir::TypeAttr::get(attrDef.getColumn().type));
+         mapping.push_back(rewriter.getNamedAttr(memberName, attrDef));
       }
-      scanDescription += "] }";
+      scanDescription += "} }";
       auto tableRefType = mlir::subop::TableType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr(colNames), rewriter.getArrayAttr(colTypes)));
       mlir::Value tableRef = rewriter.create<mlir::subop::GetExternalOp>(baseTableOp->getLoc(), tableRefType, rewriter.getStringAttr(scanDescription));
       rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(baseTableOp, tableRef, rewriter.getDictionaryAttr(mapping));

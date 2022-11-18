@@ -27,27 +27,6 @@ using namespace mlir;
 
 namespace {
 
-class ScanSourceLowering : public OpConversionPattern<mlir::dsa::ScanSource> {
-   public:
-   using OpConversionPattern<mlir::dsa::ScanSource>::OpConversionPattern;
-   LogicalResult matchAndRewrite(mlir::dsa::ScanSource op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      std::vector<Type> types;
-      auto parentModule = op->getParentOfType<ModuleOp>();
-      mlir::func::FuncOp funcOp = parentModule.lookupSymbol<mlir::func::FuncOp>("rt_get_execution_context");
-      if (!funcOp) {
-         mlir::OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPointToStart(parentModule.getBody());
-         funcOp = rewriter.create<mlir::func::FuncOp>(op->getLoc(), "rt_get_execution_context", rewriter.getFunctionType({}, {mlir::util::RefType::get(getContext(), rewriter.getI8Type())}), rewriter.getStringAttr("private"));
-      }
-
-      mlir::Value executionContext = rewriter.create<mlir::func::CallOp>(op->getLoc(), funcOp, mlir::ValueRange{}).getResult(0);
-      mlir::Value description = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), op.getDescrAttr());
-      auto rawPtr = rt::DataSourceIteration::start(rewriter, op->getLoc())({executionContext, description})[0];
-      rewriter.replaceOp(op, rawPtr);
-      return success();
-   }
-};
-
 class SetResultOpLowering : public OpConversionPattern<mlir::dsa::SetResultOp> {
    public:
    using OpConversionPattern<mlir::dsa::SetResultOp>::OpConversionPattern;
@@ -155,9 +134,6 @@ void DSAToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
-   typeConverter.addConversion([&](mlir::dsa::TableType tableType) {
-      return mlir::util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));
-   });
    typeConverter.addConversion([&](mlir::dsa::ResultTableType tableType) {
       return mlir::util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));
    });
@@ -173,7 +149,6 @@ void DSAToStdLoweringPass::runOnOperation() {
    mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns, target);
    patterns.insert<SimpleTypeConversionPattern<mlir::func::ConstantOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
-   patterns.insert<ScanSourceLowering>(typeConverter, &getContext());
    patterns.insert<SetResultOpLowering>(typeConverter, &getContext());
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))

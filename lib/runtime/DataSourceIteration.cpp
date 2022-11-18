@@ -3,11 +3,11 @@
 #include <arrow/array.h>
 #include <arrow/table.h>
 
-class ArrowTableSource : public runtime::DataSource {
+class ArrowTableSourceIterator : public runtime::DataSourceIterator {
    arrow::TableBatchReader reader;
 
    public:
-   ArrowTableSource(arrow::Table& table) : reader(table) {}
+   ArrowTableSourceIterator(arrow::Table& table) : reader(table) {}
    std::shared_ptr<arrow::RecordBatch> getNext() override {
       std::shared_ptr<arrow::RecordBatch> nextChunk;
       if (reader.ReadNext(&nextChunk) != arrow::Status::OK()) {
@@ -16,11 +16,28 @@ class ArrowTableSource : public runtime::DataSource {
       return nextChunk;
    }
 };
+class ArrowTableSource : public runtime::DataSource {
+   std::unordered_map<std::string, size_t> memberToColumnId;
+   arrow::Table& table;
+
+   public:
+   ArrowTableSource(arrow::Table& table, std::unordered_map<std::string, size_t> memberToColumnId) : memberToColumnId(memberToColumnId), table(table) {}
+   std::shared_ptr<runtime::DataSourceIterator> getIterator() override {
+      return std::make_shared<ArrowTableSourceIterator>(table);
+   }
+   size_t getColumnId(std::string member) override {
+      if (!memberToColumnId.contains(member)) {
+         throw std::runtime_error("data source: invalid member");
+      }
+      return memberToColumnId[member];
+   }
+};
+
 bool runtime::DataSourceIteration::isValid() {
    return !!currChunk;
 }
 void runtime::DataSourceIteration::next() {
-   currChunk = dataSource->getNext();
+   currChunk = iterator->getNext();
 }
 uint8_t* getBuffer(arrow::RecordBatch* batch, size_t columnId, size_t bufferId) {
    static uint8_t alternative = 0b11111111;
@@ -47,7 +64,7 @@ void runtime::DataSourceIteration::access(RecordBatchInfo* info) {
 void runtime::DataSourceIteration::end(DataSourceIteration* iteration) {
    delete iteration;
 }
-uint64_t getColumnId(std::shared_ptr<arrow::Table> table, std::string columnName) {
+uint64_t getTableColumnId(std::shared_ptr<arrow::Table> table, std::string columnName) {
    auto columnNames = table->ColumnNames();
    size_t columnId = 0;
    for (auto column : columnNames) {
@@ -58,7 +75,19 @@ uint64_t getColumnId(std::shared_ptr<arrow::Table> table, std::string columnName
    }
    throw std::runtime_error("column not found: " + columnName);
 }
-runtime::DataSourceIteration* runtime::DataSourceIteration::start(ExecutionContext* executionContext, runtime::VarLen32 description) {
+runtime::DataSourceIteration* runtime::DataSourceIteration::init(DataSource* dataSource, runtime::VarLen32 members) {
+   nlohmann::json descr = nlohmann::json::parse(members.str());
+   std::vector<size_t> colIds;
+   for (std::string c : descr.get<nlohmann::json::array_t>()) {
+      colIds.push_back(dataSource->getColumnId(c));
+   }
+   return new DataSourceIteration(dataSource, colIds);
+}
+runtime::DataSourceIteration::DataSourceIteration(DataSource* dataSource, const std::vector<size_t>& colIds) : dataSource(dataSource), iterator(dataSource->getIterator()), colIds(colIds) {
+   currChunk = iterator->getNext();
+}
+
+runtime::DataSource* runtime::DataSource::get(runtime::ExecutionContext* executionContext, runtime::VarLen32 description) {
    nlohmann::json descr = nlohmann::json::parse(description.str());
    std::string tableName = descr["table"];
    if (!executionContext->db) {
@@ -68,12 +97,9 @@ runtime::DataSourceIteration* runtime::DataSourceIteration::start(ExecutionConte
    if (!table) {
       throw std::runtime_error("could not find table");
    }
-   std::vector<size_t> colIds;
-   for (std::string c : descr["columns"]) {
-      colIds.push_back(getColumnId(table, c));
+   std::unordered_map<std::string, size_t> memberToColumnId;
+   for (auto m : descr["mapping"].get<nlohmann::json::object_t>()) {
+      memberToColumnId[m.first] = getTableColumnId(table, m.second.get<std::string>());
    }
-   return new DataSourceIteration(std::make_shared<ArrowTableSource>(*table.get()), colIds);
-}
-runtime::DataSourceIteration::DataSourceIteration(const std::shared_ptr<DataSource>& dataSource, const std::vector<size_t>& colIds) : dataSource(dataSource), colIds(colIds) {
-   currChunk = dataSource->getNext();
+   return new ArrowTableSource(*table.get(), memberToColumnId);
 }

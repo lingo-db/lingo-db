@@ -3,18 +3,26 @@
 #include "runtime/ExecutionContext.h"
 #include "runtime/helpers.h"
 namespace runtime {
-class DataSource {
+class DataSourceIterator {
    public:
    virtual std::shared_ptr<arrow::RecordBatch> getNext() = 0;
+   virtual ~DataSourceIterator() {}
+};
+class DataSource {
+   public:
+   virtual size_t getColumnId(std::string member)=0;
+   virtual std::shared_ptr<DataSourceIterator> getIterator()=0;
    virtual ~DataSource() {}
+   static DataSource* get(ExecutionContext* executionContext, runtime::VarLen32 description);
 };
 class DataSourceIteration {
    std::shared_ptr<arrow::RecordBatch> currChunk;
-   std::shared_ptr<DataSource> dataSource;
+   DataSource* dataSource;
+   std::shared_ptr<DataSourceIterator> iterator;
    std::vector<size_t> colIds;
 
    public:
-   DataSourceIteration(const std::shared_ptr<DataSource>& dataSource, const std::vector<size_t>& colIds);
+   DataSourceIteration(DataSource* dataSource, const std::vector<size_t>& colIds);
 
    struct ColumnInfo {
       size_t offset;
@@ -27,7 +35,7 @@ class DataSourceIteration {
       size_t numRows;
       ColumnInfo columnInfo[];
    };
-   static DataSourceIteration* start(ExecutionContext* executionContext, runtime::VarLen32 description);
+   static DataSourceIteration* init(DataSource* dataSource, runtime::VarLen32 members);
    bool isValid();
    void next();
    void access(RecordBatchInfo* info);

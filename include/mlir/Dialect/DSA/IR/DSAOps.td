@@ -38,19 +38,6 @@ class DSA_Type<string name, string typeMnemonic, list<Trait> traits = []> : Type
 }
 
 
-
-def DSA_GenericIterable : DSA_Type<"GenericIterable","iterable",[CollectionType]> {
-    let summary = "generic iterable";
-    let parameters = (ins "Type":$elementType,"std::string":$iteratorName);
-    let hasCustomAssemblyFormat=1;
-}
-
-
-def DSA_Table : DSA_Type<"Table", "table"> {
-    let summary = "materialized table";
-    let assemblyFormat = "";
-}
-
 def DSA_ResultTable : DSA_Type<"ResultTable", "result_table"> {
     let summary = "result_table";
     let description = [{
@@ -131,13 +118,6 @@ def DSA_Append : DSA_Op<"ds_append"> {
         let builders = [OpBuilder<(ins "mlir::Value":$v1, "mlir::Value":$v2), [{
         build($_builder, $_state, v1,v2, mlir::Value());
     }]>];
-}
-
-
-def DSA_ScanSource : DSA_Op<"scan_source"> {
-    let arguments = (ins StrAttr:$descr);
-    let results = (outs DSA_GenericIterable:$iterable);
-    let assemblyFormat = "$descr `:` type($iterable) attr-dict";
 }
 
 
