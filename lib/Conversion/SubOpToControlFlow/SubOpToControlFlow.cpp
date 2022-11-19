@@ -108,7 +108,7 @@ class CreateSimpleStateLowering : public OpConversionPattern<mlir::subop::Create
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          //todo: may not be valid in the long term
-         rewriter.setInsertionPointToStart(&createOp->getParentOfType<mlir::func::FuncOp>().getFunctionBody().front());
+         //rewriter.setInsertionPointToStart(&createOp->getParentOfType<mlir::func::FuncOp>().getFunctionBody().front());
          ref = rewriter.create<mlir::util::AllocaOp>(createOp->getLoc(), typeConverter->convertType(createOp.getType()), mlir::Value());
       }
       if (!createOp.getInitFn().empty()) {
@@ -420,7 +420,7 @@ class ScanTableRefLowering : public OpConversionPattern<mlir::subop::ScanOp> {
             if (memberMapping.length() > 1) {
                memberMapping += ",";
             }
-            memberMapping += "\""+name+"\"";
+            memberMapping += "\"" + name + "\"";
             accessOffsetsForMembers[name] = currOffset;
          }
       }
@@ -434,7 +434,7 @@ class ScanTableRefLowering : public OpConversionPattern<mlir::subop::ScanOp> {
          for (auto x : arr) { res.push_back(getBaseType(x)); }
          return res;
       };
-      auto *ctxt = rewriter.getContext();
+      auto* ctxt = rewriter.getContext();
       auto tupleType = mlir::TupleType::get(ctxt, baseTypes(accessedColumnTypes));
       auto recordBatchType = mlir::dsa::RecordBatchType::get(ctxt, tupleType);
 
@@ -911,7 +911,7 @@ class NestedMapLowering : public TupleStreamConsumerLowering<mlir::subop::Nested
       }
       auto results = inlineBlock(&nestedMapOp.getRegion().front(), rewriter, args);
       if (!results.empty()) {
-         newStream = rewriter.create<mlir::subop::CombineTupleOp>(nestedMapOp->getLoc(), results[0], inFlightTuple);
+         newStream = rewriter.create<mlir::subop::CombineTupleOp>(nestedMapOp->getLoc(), rewriter.getRemappedValue(results[0]), inFlightTuple);
       }
       return success();
    }
@@ -1282,6 +1282,39 @@ class ScatterOpLowering : public TupleStreamConsumerLowering<mlir::subop::Scatte
       return success();
    }
 };
+class GetSingleValLowering : public OpConversionPattern<mlir::subop::GetSingleValOp> {
+   using OpConversionPattern<mlir::subop::GetSingleValOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::GetSingleValOp getSingleValOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (auto inFlightOp = mlir::dyn_cast_or_null<mlir::subop::InFlightOp>(adaptor.getStream().getDefiningOp())) {
+         rewriter.setInsertionPointAfter(inFlightOp);
+         ColumnMapping mapping(inFlightOp);
+         rewriter.replaceOp(getSingleValOp, mapping.resolve(getSingleValOp.getColumn()));
+         return success();
+      }
+      return failure();
+   }
+};
+class UnrealizedConversionCastLowering : public OpConversionPattern<mlir::UnrealizedConversionCastOp> {
+   using OpConversionPattern<mlir::UnrealizedConversionCastOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::UnrealizedConversionCastOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      SmallVector<Type> convertedTypes;
+      if (succeeded(typeConverter->convertTypes(op.getOutputs().getTypes(),
+                                                convertedTypes)) &&
+          convertedTypes == adaptor.getInputs().getTypes()) {
+         rewriter.replaceOp(op, adaptor.getInputs());
+         return success();
+      }
+      convertedTypes.clear();
+      if (succeeded(typeConverter->convertTypes(adaptor.getInputs().getTypes(),
+                                                convertedTypes)) &&
+          convertedTypes == op.getOutputs().getType()) {
+         rewriter.replaceOp(op, adaptor.getInputs());
+         return success();
+      }
+      return failure();
+   }
+};
+
 class ReduceOpLowering : public TupleStreamConsumerLowering<mlir::subop::ReduceOp> {
    public:
    using TupleStreamConsumerLowering<mlir::subop::ReduceOp>::TupleStreamConsumerLowering;
@@ -1317,6 +1350,78 @@ class ReduceOpLowering : public TupleStreamConsumerLowering<mlir::subop::ReduceO
       return success();
    }
 };
+template <class T>
+static std::vector<T> repeat(T val, size_t times) {
+   std::vector<T> res{};
+   for (auto i = 0ul; i < times; i++) res.push_back(val);
+   return res;
+}
+
+class LoopLowering : public OpConversionPattern<mlir::subop::LoopOp> {
+   public:
+   using OpConversionPattern<mlir::subop::LoopOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::LoopOp loopOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = loopOp->getLoc();
+      auto* b = &loopOp.getBody().front();
+      auto* terminator = b->getTerminator();
+      auto continueOp = mlir::cast<mlir::subop::LoopContinueOp>(terminator);
+      mlir::Value trueValue = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, rewriter.getI1Type());
+      mlir::Value falseValue = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, rewriter.getI1Type());
+      std::vector<mlir::Type> iterTypes;
+      std::vector<mlir::Value> iterArgs;
+
+      iterTypes.push_back(rewriter.getI1Type());
+      for (auto argumentType : loopOp.getBody().getArgumentTypes()) {
+         iterTypes.push_back(typeConverter->convertType(argumentType));
+      }
+      iterArgs.push_back(trueValue);
+      iterArgs.insert(iterArgs.end(), adaptor.getArgs().begin(), adaptor.getArgs().end());
+      auto whileOp = rewriter.create<mlir::scf::WhileOp>(loc, iterTypes, iterArgs);
+      {
+         auto* before = new Block;
+         before->addArguments(iterTypes, repeat(loc, iterTypes.size()));
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(before);
+         whileOp.getBefore().push_back(before);
+         rewriter.create<mlir::scf::ConditionOp>(loc, before->getArgument(0), before->getArguments());
+      }
+      {
+         auto* after = new Block;
+         after->addArguments(iterTypes, repeat(loc, iterTypes.size()));
+
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(after);
+         whileOp.getAfter().push_back(after);
+         mlir::BlockAndValueMapping mapper;
+         for (size_t i = 0; i < loopOp.getBody().getNumArguments(); i++) {
+            mlir::Value whileArg = after->getArguments()[i + 1];
+            mlir::Value newArg = rewriter.create<mlir::UnrealizedConversionCastOp>(loc, loopOp.getBody().getArgument(i).getType(), whileArg).getResult(0);
+            mapper.map(loopOp.getBody().getArgument(i), newArg);
+            rewriter.replaceUsesOfBlockArgument(loopOp.getBody().getArgument(i), newArg);
+         }
+         for (auto& x : b->getOperations()) {
+            if (&x != terminator) {
+               auto* clonedWithoutRegions = rewriter.cloneWithoutRegions(x, mapper);
+               for (auto i = 0ul; i < x.getNumRegions(); i++) {
+                  rewriter.inlineRegionBefore(x.getRegion(i), clonedWithoutRegions->getRegion(i),
+                                              clonedWithoutRegions->getRegion(i).end());
+               }
+            }
+         }
+         std::vector<mlir::Value> res;
+         res.push_back(falseValue);
+         for (size_t i = 0; i < continueOp.getValues().size(); i++) {
+            res.push_back(rewriter.create<mlir::UnrealizedConversionCastOp>(loc, typeConverter->convertType(continueOp.getValues()[i].getType()), mapper.lookup(continueOp.getValues()[i])).getResult(0));
+         }
+         res[0] = rewriter.create<mlir::subop::GetSingleValOp>(loc, rewriter.getI1Type(), mapper.lookup(continueOp.getCondStream()), continueOp.getCondColumnAttr());
+         rewriter.create<mlir::scf::YieldOp>(loc, res);
+      }
+      rewriter.replaceOp(loopOp, whileOp.getResults().drop_front());
+      rewriter.eraseBlock(b);
+      return success();
+   }
+};
 
 void SubOpToControlFlowLoweringPass::runOnOperation() {
    auto module = getOperation();
@@ -1325,7 +1430,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    // Define Conversion Target
    ConversionTarget target(getContext());
    target.addLegalOp<ModuleOp>();
-   target.addLegalOp<UnrealizedConversionCastOp>();
+   //target.addLegalOp<UnrealizedConversionCastOp>();
    target.addIllegalDialect<subop::SubOperatorDialect>();
    target.addLegalDialect<db::DBDialect>();
    target.addLegalDialect<dsa::DSADialect>();
@@ -1396,6 +1501,9 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<MaterializeLazyMultiMapLowering>(typeConverter, ctxt);
    patterns.insert<MaintainOpLowering>(typeConverter, ctxt);
    patterns.insert<SetResultOpLowering>(typeConverter, ctxt);
+   patterns.insert<LoopLowering>(typeConverter, ctxt);
+   patterns.insert<GetSingleValLowering>(typeConverter, ctxt);
+   patterns.insert<UnrealizedConversionCastLowering>(typeConverter, ctxt);
 
    patterns.insert<SortLowering>(typeConverter, ctxt);
    patterns.insert<CombineInFlightLowering>(typeConverter, ctxt);

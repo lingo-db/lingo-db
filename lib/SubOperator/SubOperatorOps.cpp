@@ -526,7 +526,49 @@ void subop::LookupOp::print(OpAsmPrinter& p) {
       p.printRegion(op.getInitFn(), false, true);
    }
 }
+ParseResult mlir::subop::LoopOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   llvm::SmallVector<OpAsmParser::UnresolvedOperand> args;
+   llvm::SmallVector<Type> argTypes;
+   llvm::SmallVector<OpAsmParser::Argument> arguments;
+   llvm::SmallVector<Type> argumentTypes;
 
+   if (parser.parseOperandList(args) || parser.parseOptionalColonTypeList(argTypes)) {
+      return failure();
+   }
+   if (parser.resolveOperands(args, argTypes, parser.getCurrentLocation(), result.operands).failed()) {
+      return failure();
+   }
+   if (parser.parseLParen() || parser.parseArgumentList(arguments) || parser.parseRParen() || parser.parseOptionalArrowTypeList(argumentTypes)) {
+      return failure();
+   }
+   if (arguments.size() != argumentTypes.size()) {
+      return failure();
+   }
+   for (auto i = 0ul; i < arguments.size(); i++) {
+      arguments[i].type = argumentTypes[i];
+   }
+   result.types.insert(result.types.end(), argumentTypes.begin(), argumentTypes.end());
+   Region* body = result.addRegion();
+   if (parser.parseRegion(*body, arguments)) return failure();
+   return success();
+}
+void mlir::subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
+   if (!getArgs().empty()) {
+      p << getArgs() << " : " << getArgs().getTypes();
+   }
+   p << " (";
+   for (size_t i = 0; i < getRegion().getNumArguments(); i++) {
+      if (i != 0) {
+         p << " ,";
+      }
+      p << getRegion().getArguments()[i];
+   }
+   p << ")";
+   if (!getResultTypes().empty()) {
+      p << "-> " << getResultTypes();
+   }
+   p.printRegion(getRegion(), false, true);
+}
 ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    OpAsmParser::UnresolvedOperand stream;
    if (parser.parseOperand(stream)) {
@@ -711,6 +753,22 @@ std::vector<std::string> subop::NestedMapOp::getReadMembers() {
    return res;
 }
 std::vector<std::string> subop::NestedMapOp::getWrittenMembers() {
+   std::vector<std::string> res;
+   this->getRegion().walk([&](mlir::subop::SubOperator subop) {
+      auto written = subop.getWrittenMembers();
+      res.insert(res.end(), written.begin(), written.end());
+   });
+   return res;
+}
+std::vector<std::string> subop::LoopOp::getReadMembers() {
+   std::vector<std::string> res;
+   this->getRegion().walk([&](mlir::subop::SubOperator subop) {
+      auto read = subop.getReadMembers();
+      res.insert(res.end(), read.begin(), read.end());
+   });
+   return res;
+}
+std::vector<std::string> subop::LoopOp::getWrittenMembers() {
    std::vector<std::string> res;
    this->getRegion().walk([&](mlir::subop::SubOperator subop) {
       auto written = subop.getWrittenMembers();

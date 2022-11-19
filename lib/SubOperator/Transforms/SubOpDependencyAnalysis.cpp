@@ -34,6 +34,17 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
                }
             }
          }
+         for(auto& region: subop->getRegions()){
+            for(auto& op:region.getOps()){
+               for(auto operand:op.getOperands()){
+                  if(operand.getParentRegion()==subopRoot->getParentRegion()){
+                     if(auto *definingOp=operand.getDefiningOp()) {
+                        pipelineRequirements[subopRoot].push_back(definingOp);
+                     }
+                  }
+               }
+            }
+         }
          for (auto readMember : subop.getReadMembers()) {
             for (auto* conflict : writtenMembers[readMember]) {
                addDependency(subopRoot, conflict, roots);

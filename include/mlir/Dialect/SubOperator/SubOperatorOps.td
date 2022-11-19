@@ -351,6 +351,11 @@ def ReduceOp : SubOperator_Op<"reduce",[SubOperator]> {
 // Utility Operations
 //===----------------------------------------------------------------------===//
 
+def GetSingleValOp : SubOperator_Op<"get_single_val", [Pure]> {
+    let arguments = (ins TupleStream : $stream, ColumnRefAttr:$column);
+    let results = (outs AnyType : $res);
+    let assemblyFormat = [{  $stream `[` custom<CustRef>($column) `]` `->` type($res) attr-dict }];
+}
 def InFlightOp : SubOperator_Op<"in_flight", [Pure,SubOperator]> {
     let summary = "operation symbolizes 'in flight' tuple stream -> values => columns";
 
@@ -373,6 +378,27 @@ def CombineTupleOp : SubOperator_Op<"combine_tuple", [Pure,SubOperator]> {
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream `,` $right attr-dict }];
 }
+
+//===----------------------------------------------------------------------===//
+// Control-Flow
+//===----------------------------------------------------------------------===//
+
+def LoopOp : SubOperator_Op<"loop",[SubOperator]> {
+  let summary = "loop";
+  let regions = (region SizedRegion<1>:$body);
+  let arguments = (ins Variadic<AnyType>: $args);
+  let results = (outs Variadic<AnyType>:$res);
+  let hasCustomAssemblyFormat = 1;
+  let extraClassDeclaration = [{
+    std::vector<std::string> getWrittenMembers();
+    std::vector<std::string> getReadMembers();
+  }];
+}
+def LoopContinueOp : SubOperator_Op<"loop_continue",[Terminator]> {
+    let arguments = (ins TupleStream:$cond_stream, ColumnRefAttr: $cond_column, Variadic<AnyType>:$values);
+    let assemblyFormat = [{ `(` $cond_stream `[` custom<CustRef>($cond_column) `]` `)` ($values^ `:` type($values))?  attr-dict }];
+}
+
 
 //===----------------------------------------------------------------------===//
 // Not used in the future (replaced by views) //todo: remove
