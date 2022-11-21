@@ -7,6 +7,7 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
+#include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
 #include "mlir/Dialect/TupleStream/TupleStreamDialect.h"
 
 #include "mlir/Dialect/SCF/IR/SCF.h"
@@ -40,6 +41,7 @@ int main(int argc, char** argv) {
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
    registry.insert<mlir::tuples::TupleStreamDialect>();
+   registry.insert<mlir::subop::SubOperatorDialect>();
    registry.insert<mlir::db::DBDialect>();
    registry.insert<mlir::dsa::DSADialect>();
    registry.insert<mlir::func::FuncDialect>();

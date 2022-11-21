@@ -322,7 +322,7 @@ class RuntimeCallLowering : public OpConversionPattern<mlir::db::RuntimeCall> {
       mlir::Type resType = runtimeCallOp->getNumResults() == 1 ? runtimeCallOp->getResultTypes()[0] : mlir::Type();
       if (std::holds_alternative<mlir::util::FunctionSpec>(fn->implementation)) {
          auto& implFn = std::get<mlir::util::FunctionSpec>(fn->implementation);
-         auto resRange = implFn(rewriter, rewriter.getUnknownLoc())(adaptor.getArgs());
+         auto resRange = implFn(rewriter, runtimeCallOp->getLoc())(adaptor.getArgs());
          assert((resRange.size() == 1 && resType) || (resRange.empty() && !resType));
          result = resRange.size() == 1 ? resRange[0] : mlir::Value();
       } else if (std::holds_alternative<mlir::db::RuntimeFunction::loweringFnT>(fn->implementation)) {
