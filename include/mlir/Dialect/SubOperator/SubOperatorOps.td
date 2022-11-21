@@ -111,6 +111,18 @@ def GenericEntryRef : SubOperator_Type<"EntryRef", "entry_ref",[StateEntryRefere
         StateMembersAttr getMembers() { return getState().getMembers(); }
     }];
 }
+def TableEntryRef : SubOperator_Type<"TableEntryRef", "table_entry_ref",[StateEntryReference]> {
+    let summary = "reference to entry of table";
+    let parameters = (ins "StateMembersAttr": $tableColumns);
+    let assemblyFormat = "`<` custom<StateMembers>($tableColumns) `>`";
+    let extraClassDeclaration = [{
+        bool isReadable(){return true;}
+        bool isWriteable(){return false;}
+        bool isStable(){return false;}
+        bool canBeOffset(){return false;}
+        StateMembersAttr getMembers() { return getTableColumns(); }
+    }];
+}
 def GenericLookupEntryRef : SubOperator_Type<"LookupEntryRef", "lookup_entry_ref",[StateEntryReference]> {
     let summary = "reference to entry of some state";
     let parameters = (ins "LookupAbleState":$state);
@@ -292,7 +304,6 @@ def MaterializeOp : SubOperator_Op<"materialize",[SubOperator]> {
     let summary = "materialize state (sequentially)";
 
     let arguments = (ins TupleStream : $stream, AnyType : $state, DictionaryAttr : $mapping );
-    let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream custom<ColumnStateMapping>($mapping) `,` $state `:` type($state)  attr-dict }];
     let extraClassDeclaration = [{
         std::vector<std::string> getWrittenMembers();
@@ -342,7 +353,6 @@ def ScatterOp : SubOperator_Op<"scatter",[SubOperator]> {
     let summary = "scatter";
 
     let arguments = (ins TupleStream : $stream, ColumnRefAttr: $ref, DictionaryAttr : $mapping );
-    let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<ColumnStateMapping>($mapping)  attr-dict }];
     let extraClassDeclaration = [{
         std::vector<std::string> getWrittenMembers();

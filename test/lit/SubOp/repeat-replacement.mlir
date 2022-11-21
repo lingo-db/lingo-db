@@ -39,7 +39,7 @@ module{
       }
       tuples.return %14 : !tuples.tuplestream
     }
-    %13 = subop.materialize %11 {@constrel1::@const0 => const0p0}, %12 : !subop.result_table<[const0p0 : i32]>
+    subop.materialize %11 {@constrel1::@const0 => const0p0}, %12 : !subop.result_table<[const0p0 : i32]>
     subop.set_result 0 %12 : !subop.result_table<[const0p0 : i32]>
     return
 }

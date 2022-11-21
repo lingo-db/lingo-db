@@ -1,5 +1,6 @@
 #include "llvm/Support/Debug.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
+#include "mlir/Dialect/SubOperator/Transforms/ColumnUsageAnalysis.h"
 #include "mlir/Dialect/SubOperator/Transforms/Passes.h"
 #include "mlir/Dialect/SubOperator/Transforms/SubOpDependencyAnalysis.h"
 #include "mlir/Dialect/TupleStream/TupleStreamDialect.h"
@@ -21,6 +22,24 @@ class SplitTableScan : public mlir::RewritePattern {
       : RewritePattern(mlir::subop::ScanOp::getOperationName(), 1, context) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto scanOp = mlir::cast<mlir::subop::ScanOp>(op);
+      if (!scanOp.getState().getType().isa<mlir::subop::TableType>()) return mlir::failure();
+      auto tableType = scanOp.getState().getType().cast<mlir::subop::TableType>();
+      std::vector<mlir::Attribute> memberNames;
+      std::vector<mlir::Attribute> memberTypes;
+      auto tableMembers = tableType.getMembers();
+      for (auto i = 0ul; i < tableMembers.getTypes().size(); i++) {
+         auto type = tableMembers.getTypes()[i].cast<mlir::TypeAttr>();
+         auto name = tableMembers.getNames()[i].cast<mlir::StringAttr>();
+         if (scanOp.getMapping().contains(name)) {
+            memberNames.push_back(name);
+            memberTypes.push_back(type);
+         }
+      }
+      auto members = mlir::subop::StateMembersAttr::get(getContext(), mlir::ArrayAttr::get(getContext(), memberNames), mlir::ArrayAttr::get(getContext(), memberTypes));
+
+      auto [refDef, refRef] = createColumn(mlir::subop::TableEntryRefType::get(getContext(), members), "scan", "ref");
+      mlir::Value scanRefsOp = rewriter.create<mlir::subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
+      rewriter.replaceOpWithNewOp<mlir::subop::GatherOp>(op, scanRefsOp, refRef, scanOp.getMapping());
       return mlir::success();
    }
 };
@@ -48,17 +67,18 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
 
    void runOnOperation() override {
       //transform "standalone" aggregation functions
-      {
-         mlir::RewritePatternSet patterns(&getContext());
-         //patterns.insert<SplitTableScan>(&getContext());
-         patterns.insert<SplitGenericScan>(&getContext());
+      auto columnUsageAnalysis = getAnalysis<mlir::subop::ColumnUsageAnalysis>();
 
-         if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
-            assert(false && "should not happen");
-         }
+      mlir::RewritePatternSet patterns(&getContext());
+      patterns.insert<SplitTableScan>(&getContext());
+      patterns.insert<SplitGenericScan>(&getContext());
+
+      if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+         assert(false && "should not happen");
       }
    }
 };
 } // end anonymous namespace
 
-std::unique_ptr<mlir::Pass> mlir::subop::createNormalizeSubOpPass() { return std::make_unique<NormalizeSubOpPass>(); }
+std::unique_ptr<mlir::Pass>
+mlir::subop::createNormalizeSubOpPass() { return std::make_unique<NormalizeSubOpPass>(); }
