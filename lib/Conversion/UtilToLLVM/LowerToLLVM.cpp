@@ -144,17 +144,14 @@ class AllocaOpLowering : public OpConversionPattern<mlir::util::AllocaOp> {
       auto genericMemrefType = allocOp.getRef().getType().cast<mlir::util::RefType>();
       Value entries;
       if (allocOp.getSize()) {
-         entries = allocOp.getSize();
+         entries = adaptor.getSize();
       } else {
          int64_t staticSize = 1;
          entries = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(staticSize));
       }
-      auto bytesPerEntry = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getI64Type(), genericMemrefType.getElementType());
-      Value sizeInBytes = rewriter.create<mlir::arith::MulIOp>(loc, rewriter.getI64Type(), entries, bytesPerEntry);
-      Value sizeInBytesI64 = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getI64Type(), sizeInBytes);
 
       auto elemPtrType = mlir::LLVM::LLVMPointerType::get(typeConverter->convertType(genericMemrefType.getElementType()));
-      mlir::Value allocatedElementPtr = rewriter.create<LLVM::AllocaOp>(loc, elemPtrType, sizeInBytesI64, 0);
+      mlir::Value allocatedElementPtr = rewriter.create<LLVM::AllocaOp>(loc, elemPtrType, entries, 0);
       rewriter.replaceOp(allocOp, allocatedElementPtr);
 
       return success();
