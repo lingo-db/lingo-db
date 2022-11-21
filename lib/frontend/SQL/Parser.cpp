@@ -1773,7 +1773,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       std::vector<mlir::Value> createdValues;
       std::vector<mlir::Attribute> createdCols;
       for (auto p : toMap) {
-         auto colRef = p.cast<mlir::tuples::ColumnRefAttr>();
+         auto colRef = p.cast<mlir::tuples::ColumnDefAttr>();
          mlir::Value expr = mapBuilder.create<mlir::db::NullOp>(builder.getUnknownLoc(), colRef.getColumn().type);
          auto attrDef = attrManager.createDef(&colRef.getColumn());
          createdCols.push_back(attrDef);
@@ -1857,12 +1857,12 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       std::vector<mlir::Attribute> createdCols;
       for (size_t i = 0; i < toMap.size(); i++) {
          auto colRef = toMap[i].cast<mlir::tuples::ColumnRefAttr>();
-         auto newColRef = mapTo[i].cast<mlir::tuples::ColumnRefAttr>();
+         auto newColDef = mapTo[i].cast<mlir::tuples::ColumnDefAttr>();
          mlir::Value expr = mapBuilder.create<mlir::tuples::GetColumnOp>(builder.getUnknownLoc(), colRef.getColumn().type, colRef, tuple);
-         if (colRef.getColumn().type != newColRef.getColumn().type) {
-            expr = mapBuilder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(), newColRef.getColumn().type, expr);
+         if (colRef.getColumn().type != newColDef.getColumn().type) {
+            expr = mapBuilder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(), newColDef.getColumn().type, expr);
          }
-         auto attrDef = attrManager.createDef(&newColRef.getColumn());
+         auto attrDef = attrManager.createDef(&newColDef.getColumn());
          createdCols.push_back(attrDef);
          createdValues.push_back(expr);
       }
