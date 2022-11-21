@@ -48,25 +48,28 @@ def StateMembers : SubOperator_Attr<"StateMembers"> {
 class SubOperator_Type<string name, string typeMnemonic, list<Trait> traits = []> : TypeDef<SubOperator_Dialect, name,traits> {
     let mnemonic = typeMnemonic;
 }
-def Table : SubOperator_Type<"Table", "table"> {
+def Table : SubOperator_Type<"Table", "table",[State]> {
     let summary = "external table";
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
 }
-def ResultTable : SubOperator_Type<"ResultTable", "result_table"> {
+def ResultTable : SubOperator_Type<"ResultTable", "result_table",[State]> {
     let summary = "reference to table";
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
 }
-def SimpleState : SubOperator_Type<"SimpleState", "simple_state",[State,StateSupportingLookup]> {
+def SimpleState : SubOperator_Type<"SimpleState", "simple_state",[State,LookupAbleState]> {
     let summary = "simple state with multiple members";
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
         let extraClassDeclaration = [{
+            StateMembersAttr getKeyMembers(){
+            return mlir::subop::StateMembersAttr::get(getContext(), mlir::ArrayAttr::get(getContext(), {}), mlir::ArrayAttr::get(getContext(), {}));
+            }
             StateMembersAttr getValueMembers();
         }];
 }
-def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,StateSupportingLookup]> {
+def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,LookupAbleState]> {
     let summary = "simple state with multiple members";
     let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
     let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
@@ -74,7 +77,7 @@ def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,StateSupportingLookup
         StateMembersAttr getMembers();
     }];
 }
-def LazyMultiMap : SubOperator_Type<"LazyMultiMap", "lazy_multi_map",[State,StateSupportingLookup]> {
+def LazyMultiMap : SubOperator_Type<"LazyMultiMap", "lazy_multi_map",[State,LookupAbleState]> {
     let summary = "simple state with multiple members";
     let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
     let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
@@ -82,7 +85,7 @@ def LazyMultiMap : SubOperator_Type<"LazyMultiMap", "lazy_multi_map",[State,Stat
         StateMembersAttr getMembers();
     }];
 }
-def Vector : SubOperator_Type<"Vector", "vector", [State,StateSupportingLookup]> {
+def Vector : SubOperator_Type<"Vector", "vector", [State]> {
     let summary = "vector type";
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
@@ -96,14 +99,33 @@ def Entry : SubOperator_Type<"Entry", "entry"> {
     let parameters = (ins "Type":$t);
     let assemblyFormat = "`<` $t `>`";
 }
-def EntryRef : SubOperator_Type<"EntryRef", "entry_ref"> {
+def GenericEntryRef : SubOperator_Type<"EntryRef", "entry_ref",[StateEntryReference]> {
     let summary = "reference to entry of some state";
-    let parameters = (ins "Type":$t);
-    let assemblyFormat = "`<` $t `>`";
+    let parameters = (ins "State":$state);
+    let assemblyFormat = "`<` $state `>`";
+    let extraClassDeclaration = [{
+        bool isReadable(){return true;}
+        bool isWriteable(){return true;}
+        bool isStable(){return false;}
+        bool canBeOffset(){return false;}
+        StateMembersAttr getMembers() { return getState().getMembers(); }
+    }];
 }
-def List : SubOperator_Type<"List", "list"> {
+def GenericLookupEntryRef : SubOperator_Type<"LookupEntryRef", "lookup_entry_ref",[StateEntryReference]> {
+    let summary = "reference to entry of some state";
+    let parameters = (ins "LookupAbleState":$state);
+    let assemblyFormat = "`<` $state `>`";
+    let extraClassDeclaration = [{
+        bool isReadable(){return true;}
+        bool isWriteable(){return true;}
+        bool isStable(){return false;}
+        bool canBeOffset(){return false;}
+        StateMembersAttr getMembers(){ return getState().getValueMembers();}
+    }];
+}
+def EntryList : SubOperator_Type<"List", "list"> {
     let summary = "list type";
-    let parameters = (ins "Type":$t);
+    let parameters = (ins "StateEntryReference":$t);
     let assemblyFormat = "`<` $t `>`";
 }
 

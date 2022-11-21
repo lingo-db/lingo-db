@@ -598,8 +598,8 @@ ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
    if (parser.parseLParen() || parser.parseLSquare()) {
       return failure();
    }
-   auto referenceType = reference.getColumn().type.cast<mlir::subop::EntryRefType>();
-   auto stateMembers = referenceType.getT().cast<mlir::subop::State>().getMembers();
+   auto referenceType = reference.getColumn().type.cast<mlir::subop::StateEntryReference>();
+   auto stateMembers = referenceType.getMembers();
    for (size_t i = 0; i < columns.size(); i++) {
       leftArgs[i].type = columns[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
       if (i > 0 && parser.parseComma().failed()) return failure();

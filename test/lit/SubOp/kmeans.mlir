@@ -85,7 +85,7 @@ module{
                          %dist = arith.addf %diffX2, %diffY2 : f32
                          tuples.return %dist : f32
                       }
-                      %cstream3 = subop.lookup %cstream2 %local_best[] : !subop.simple_state<[min_dist: f32, arg_min : i32]> @local_best::@ref({type=!subop.entry_ref<!subop.simple_state<[min_dist: f32, arg_min : i32]>>})
+                      %cstream3 = subop.lookup %cstream2 %local_best[] : !subop.simple_state<[min_dist: f32, arg_min : i32]> @local_best::@ref({type=!subop.lookup_entry_ref<!subop.simple_state<[min_dist: f32, arg_min : i32]>>})
                       subop.reduce %cstream3 @local_best::@ref [@m::@dist, @cluster::@id] ["min_dist","arg_min"] ([%curr_dist, %curr_id],[%min_dist,%min_id]){
                         %lt = arith.cmpf olt, %curr_dist, %min_dist : f32
                         %new_min_dist, %new_arg_min = scf.if %lt -> (f32,i32) {
@@ -98,7 +98,7 @@ module{
                       %bstream = subop.scan %local_best : !subop.simple_state<[min_dist: f32, arg_min : i32]> {min_dist => @best::@dist({type=f32}),arg_min => @best::@id({type=i32})}
                     tuples.return %bstream : !tuples.tuplestream
                  }
-                 %sstream3 =subop.lookup_or_insert %stream2 %hashmap[@best::@id] : !subop.hashmap<[centroidId : i32],[sumX : f32, sumY : f32, count : i32]> @aggr::@ref({type=!subop.entry_ref<!subop.hashmap<[centroidId : i32],[sumX : f32, sumY : f32, count : i32]>>})
+                 %sstream3 =subop.lookup_or_insert %stream2 %hashmap[@best::@id] : !subop.hashmap<[centroidId : i32],[sumX : f32, sumY : f32, count : i32]> @aggr::@ref({type=!subop.lookup_entry_ref<!subop.hashmap<[centroidId : i32],[sumX : f32, sumY : f32, count : i32]>>})
                                         eq: ([%l], [%r]){
                                             %eq = arith.cmpi eq, %l, %r :i32
                                             tuples.return %eq : i1
@@ -132,7 +132,7 @@ module{
                   tuples.return %false : i1
                 }
                  %cstream = subop.scan %centroids : !subop.vector<[clusterX : f32, clusterY : f32, clusterId : i32]> {clusterX => @cluster::@x({type=f32}),clusterY => @cluster::@y({type=f32}),clusterId => @cluster::@id({type=i32})}
-                 %cstream2 =subop.lookup_or_insert %cstream %hashmap[@cluster::@id] : !subop.hashmap<[centroidId : i32],[sumX : f32, sumY : f32, count : i32]> @hm::@ref({type=!subop.entry_ref<!subop.hashmap<[centroidId : i32],[sumX : f32, sumY : f32, count : i32]>>})
+                 %cstream2 =subop.lookup_or_insert %cstream %hashmap[@cluster::@id] : !subop.hashmap<[centroidId : i32],[sumX : f32, sumY : f32, count : i32]> @hm::@ref({type=!subop.lookup_entry_ref<!subop.hashmap<[centroidId : i32],[sumX : f32, sumY : f32, count : i32]>>})
                                         eq: ([%l], [%r]){
                                             %eq = arith.cmpi eq, %l, %r :i32
                                             tuples.return %eq : i1
@@ -141,7 +141,7 @@ module{
                                                                              %zeroi = arith.constant 0 : i32
                                                                              tuples.return %zero,%zero,%zeroi : f32,f32, i32
                                                                          }
-                 %cstream3 = subop.lookup %cstream2 %changed[] :  !subop.simple_state<[changed :i1]> @changed::@ref({type=!subop.entry_ref< !subop.simple_state<[changed :i1]>>})
+                 %cstream3 = subop.lookup %cstream2 %changed[] :  !subop.simple_state<[changed :i1]> @changed::@ref({type=!subop.lookup_entry_ref< !subop.simple_state<[changed :i1]>>})
                  %cstream4 = subop.gather %cstream3 @hm::@ref {sumX => @hm::@sum_x({type=f32}), sumY => @hm::@sum_y({type=f32}), count => @hm::@count({type=i32})}
                   %cstream5 = subop.map %cstream4 computes : [@m::@iseq({type=i1})] (%tpl: !tuples.tuple){
                      %old_x = tuples.getcol %tpl @cluster::@x : f32

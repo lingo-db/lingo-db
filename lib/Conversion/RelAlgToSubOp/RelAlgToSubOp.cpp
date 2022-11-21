@@ -310,7 +310,7 @@ class ProjectionDistinctLowering : public OpConversionPattern<mlir::relalg::Proj
 
       auto stateType = mlir::subop::HashMapType::get(rewriter.getContext(), keyMembers, stateMembers);
       mlir::Value state = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{}, 0);
-      auto [referenceDef, referenceRef] = createColumn(mlir::subop::EntryRefType::get(context, stateType), "lookup", "ref");
+      auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
       auto lookupOp = rewriter.create<mlir::subop::LookupOrInsertOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), adaptor.getRel(), state, projectionOp.getCols(), referenceDef);
       auto* initialValueBlock = new Block;
       {
@@ -568,7 +568,7 @@ class UnionDistinctLowering : public OpConversionPattern<mlir::relalg::UnionOp> 
 
       auto stateType = mlir::subop::HashMapType::get(rewriter.getContext(), keyMembers, stateMembers);
       mlir::Value state = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{}, 0);
-      auto [referenceDef, referenceRef] = createColumn(mlir::subop::EntryRefType::get(context, stateType), "lookup", "ref");
+      auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
       mlir::Value left = mapColsToNullable(adaptor.getLeft(), rewriter, loc, projectionOp.getMapping(), 0);
       mlir::Value right = mapColsToNullable(adaptor.getRight(), rewriter, loc, projectionOp.getMapping(), 1);
       auto lookupOpLeft = rewriter.create<mlir::subop::LookupOrInsertOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), left, state, rewriter.getArrayAttr(refs), referenceDef);
@@ -639,7 +639,7 @@ class CountingSetOperationLowering : public ConversionPattern {
 
       auto stateType = mlir::subop::HashMapType::get(rewriter.getContext(), keyMembers, stateMembers);
       mlir::Value state = rewriter.create<mlir::subop::CreateOp>(loc, stateType, mlir::Attribute{}, 0);
-      auto [referenceDef, referenceRef] = createColumn(mlir::subop::EntryRefType::get(context, stateType), "lookup", "ref");
+      auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
       mlir::Value left = mapColsToNullable(operands[0], rewriter, loc, mapping, 0);
       mlir::Value right = mapColsToNullable(operands[1], rewriter, loc, mapping, 1);
       auto lookupOpLeft = rewriter.create<mlir::subop::LookupOrInsertOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), left, state, rewriter.getArrayAttr(refs), referenceDef);
@@ -824,7 +824,7 @@ static mlir::Value translateHJ(mlir::Value left, mlir::Value right, mlir::ArrayA
    });
    rewriter.create<mlir::subop::MaterializeOp>(loc, right, lmm, helper.createColumnstateMapping({rewriter.getNamedAttr(hashMember, hashRef)}));
    rewriter.create<mlir::subop::MaintainOp>(loc, lmm, "finalize");
-   auto entryRefType = mlir::subop::EntryRefType::get(rewriter.getContext(), lmmType);
+   auto entryRefType = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), lmmType);
    auto entryRefListType = mlir::subop::ListType::get(rewriter.getContext(), entryRefType);
    auto [listDef, listRef] = createColumn(entryRefListType, "lookup", "list");
    auto [entryDef, entryRef] = createColumn(entryRefType, "lookup", "entryref");
@@ -912,7 +912,7 @@ static std::pair<mlir::Value, mlir::Value> translateHJWithMarker(mlir::Value lef
    });
    rewriter.create<mlir::subop::MaterializeOp>(loc, left, lmm, helper.createColumnstateMapping({rewriter.getNamedAttr(hashMember, hashRef)}));
    rewriter.create<mlir::subop::MaintainOp>(loc, lmm, "finalize");
-   auto entryRefType = mlir::subop::EntryRefType::get(rewriter.getContext(), lmmType);
+   auto entryRefType = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), lmmType);
    auto entryRefListType = mlir::subop::ListType::get(rewriter.getContext(), entryRefType);
    auto [listDef, listRef] = createColumn(entryRefListType, "lookup", "list");
    auto [entryDef, entryRef] = createColumn(entryRefType, "lookup", "entryref");
@@ -960,7 +960,7 @@ static mlir::Value anyTuple(mlir::Value stream, mlir::tuples::ColumnDefAttr mark
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    auto [markerState, markerName] = createMarkerState(rewriter, loc);
    auto [mapped, boolColumn] = mapBool(stream, rewriter, loc, true);
-   auto [referenceDefAttr, referenceRefAttr] = createColumn(mlir::subop::EntryRefType::get(rewriter.getContext(), markerState.getType()), "lookup", "ref");
+   auto [referenceDefAttr, referenceRefAttr] = createColumn(mlir::subop::LookupEntryRefType::get(rewriter.getContext(), markerState.getType()), "lookup", "ref");
    auto afterLookup = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(rewriter.getContext()), mapped, markerState, rewriter.getArrayAttr({}), referenceDefAttr);
    rewriter.create<mlir::subop::ScatterOp>(rewriter.getUnknownLoc(), afterLookup, referenceRefAttr, rewriter.getDictionaryAttr(rewriter.getNamedAttr(markerName, colManager.createRef(boolColumn))));
    return rewriter.create<mlir::subop::ScanOp>(loc, markerState, rewriter.getDictionaryAttr(rewriter.getNamedAttr(markerName, markerDefAttr)));
@@ -1169,7 +1169,7 @@ class SingleJoinLowering : public OpConversionPattern<mlir::relalg::SingleJoinOp
          MaterializationHelper helper(columnsToMaterialize, rewriter.getContext());
          auto constantStateType = mlir::subop::SimpleStateType::get(rewriter.getContext(), helper.createStateMembersAttr());
          mlir::Value constantState = rewriter.create<mlir::subop::CreateOp>(loc, constantStateType, mlir::Attribute(), 0);
-         auto entryRefType = mlir::subop::EntryRefType::get(rewriter.getContext(), constantStateType);
+         auto entryRefType = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), constantStateType);
          auto [entryDef, entryRef] = createColumn(entryRefType, "lookup", "entryref");
          auto afterLookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), adaptor.getRight(), constantState, rewriter.getArrayAttr({}), entryDef);
          rewriter.create<mlir::subop::ScatterOp>(loc, afterLookup, entryRef, helper.createColumnstateMapping());
@@ -1215,7 +1215,7 @@ class LimitLowering : public OpConversionPattern<mlir::relalg::LimitOp> {
       auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       auto [counterState, counterName] = createCounterState(rewriter, limitOp->getLoc());
       auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("lookup"), "ref");
-      referenceDefAttr.getColumn().type = mlir::subop::EntryRefType::get(rewriter.getContext(), counterState.getType());
+      referenceDefAttr.getColumn().type = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), counterState.getType());
       auto counterDefAttr = colManager.createDef(colManager.getUniqueScope("limit"), "counter");
       counterDefAttr.getColumn().type = rewriter.getI64Type();
       auto afterLookup = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(rewriter.getContext()), adaptor.getRel(), counterState, rewriter.getArrayAttr({}), referenceDefAttr);
@@ -1685,7 +1685,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
             rewriter.create<mlir::tuples::ReturnOp>(rewriter.getUnknownLoc(), compared);
          }
       }
-      referenceDefAttr.getColumn().type = mlir::subop::EntryRefType::get(context, stateType);
+      referenceDefAttr.getColumn().type = mlir::subop::LookupEntryRefType::get(context, stateType);
 
       auto referenceRefAttr = colManager.createRef(&referenceDefAttr.getColumn());
       performReduce(loc, rewriter, distAggrFuncs, referenceRefAttr, afterLookup, state, names, defMapping);
@@ -1721,7 +1721,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       for (size_t i = 1; i < subResults.size(); i++) {
          mlir::Value state = std::get<0>(subResults.at(i));
          mlir::DictionaryAttr stateColumnMapping = std::get<2>(subResults.at(i));
-         auto [referenceDef, referenceRef] = createColumn(mlir::subop::EntryRefType::get(getContext(), state.getType()), "lookup", "ref");
+         auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(getContext(), state.getType()), "lookup", "ref");
          mlir::Value afterLookup = rewriter.create<mlir::subop::LookupOp>(rewriter.getUnknownLoc(), mlir::tuples::TupleStreamType::get(getContext()), newStream, state, aggregationOp.getGroupByCols(), referenceDef);
          newStream = rewriter.create<mlir::subop::GatherOp>(aggregationOp->getLoc(), afterLookup, referenceRef, stateColumnMapping);
       }

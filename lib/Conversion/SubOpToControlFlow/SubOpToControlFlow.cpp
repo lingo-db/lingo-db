@@ -153,7 +153,7 @@ class CreateLazyMultiMapLowering : public OpConversionPattern<mlir::subop::Creat
    using OpConversionPattern<mlir::subop::CreateOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::subop::CreateOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (!createOp.getType().isa<mlir::subop::LazyMultiMapType>()) return failure();
-      auto stateType = createOp.getType().cast<mlir::subop::StateSupportingLookup>();
+      auto stateType = createOp.getType().cast<mlir::subop::LazyMultiMapType>();
       auto tupleType = mlir::TupleType::get(getContext(), unpackTypes(stateType.getValueMembers().getTypes()));
       auto entryType = mlir::TupleType::get(getContext(), {rewriter.getIndexType(), tupleType});
       Value typesize = rewriter.create<mlir::util::SizeOfOp>(createOp->getLoc(), rewriter.getIndexType(), typeConverter->convertType(entryType));
@@ -571,7 +571,7 @@ class ScanLazyMultiMapLowering : public OpConversionPattern<mlir::subop::ScanOp>
       if (!scanOp.getState().getType().isa<mlir::subop::LazyMultiMapType>()) return failure();
       auto columns = scanOp.getState().getType().cast<mlir::subop::LazyMultiMapType>().getValueMembers();
       ColumnMapping mapping;
-      auto stateType = scanOp.getState().getType().cast<mlir::subop::StateSupportingLookup>();
+      auto stateType = scanOp.getState().getType().cast<mlir::subop::LazyMultiMapType>();
       auto tupleType = mlir::TupleType::get(getContext(), unpackTypes(stateType.getValueMembers().getTypes()));
       auto entryType = mlir::TupleType::get(getContext(), {rewriter.getIndexType(), tupleType});
       auto elementType = mlir::util::RefType::get(getContext(), entryType);
@@ -718,7 +718,7 @@ class ScanListLowering : public OpConversionPattern<mlir::subop::ScanListOp> {
       auto ptr = unpacked.getResult(0);
       auto hash = unpacked.getResult(1);
       auto iteratorType = ptr.getType();
-      auto stateType = scanOp.getList().getType().cast<mlir::subop::ListType>().getT().cast<mlir::subop::EntryRefType>().getT().cast<mlir::subop::StateSupportingLookup>();
+      auto referenceType = scanOp.getList().getType().cast<mlir::subop::ListType>().getT();
 
       auto whileOp = rewriter.create<mlir::scf::WhileOp>(loc, iteratorType, ptr);
       Block* before = new Block;
@@ -737,7 +737,7 @@ class ScanListLowering : public OpConversionPattern<mlir::subop::ScanListOp> {
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(after);
-         auto tupleType = mlir::TupleType::get(getContext(), unpackTypes(stateType.getValueMembers().getTypes()));
+         auto tupleType = mlir::TupleType::get(getContext(), unpackTypes(referenceType.getMembers().getTypes()));
          auto i8PtrType = mlir::util::RefType::get(getContext(), rewriter.getI8Type());
          Value castedPtr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), mlir::TupleType::get(getContext(), {i8PtrType, tupleType})), afterPtr);
          Value valuePtr = rewriter.create<util::TupleElementPtrOp>(loc, util::RefType::get(getContext(), tupleType), castedPtr, 1);
@@ -1240,7 +1240,7 @@ class GatherOpLowering : public TupleStreamConsumerLowering<mlir::subop::GatherO
    using TupleStreamConsumerLowering<mlir::subop::GatherOp>::TupleStreamConsumerLowering;
 
    LogicalResult matchAndRewriteConsumer(mlir::subop::GatherOp gatherOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
-      auto columns = gatherOp.getRef().getColumn().type.cast<mlir::subop::EntryRefType>().getT().cast<mlir::subop::StateSupportingLookup>().getValueMembers();
+      auto columns = gatherOp.getRef().getColumn().type.cast<mlir::subop::StateEntryReference>().getMembers();
       auto loaded = rewriter.create<mlir::util::LoadOp>(gatherOp->getLoc(), mapping.resolve(gatherOp.getRef()));
       auto unpackedValues = rewriter.create<mlir::util::UnPackOp>(gatherOp->getLoc(), loaded).getResults();
       std::unordered_map<std::string, mlir::Value> values;
@@ -1260,7 +1260,7 @@ class ScatterOpLowering : public TupleStreamConsumerLowering<mlir::subop::Scatte
    using TupleStreamConsumerLowering<mlir::subop::ScatterOp>::TupleStreamConsumerLowering;
 
    LogicalResult matchAndRewriteConsumer(mlir::subop::ScatterOp scatterOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
-      auto columns = scatterOp.getRef().getColumn().type.cast<mlir::subop::EntryRefType>().getT().cast<mlir::subop::StateSupportingLookup>().getValueMembers();
+      auto columns = scatterOp.getRef().getColumn().type.cast<mlir::subop::StateEntryReference>().getMembers();
 
       auto loaded = rewriter.create<mlir::util::LoadOp>(scatterOp->getLoc(), mapping.resolve(scatterOp.getRef()));
       auto unpackedValues = rewriter.create<mlir::util::UnPackOp>(scatterOp->getLoc(), loaded).getResults();
@@ -1320,7 +1320,7 @@ class ReduceOpLowering : public TupleStreamConsumerLowering<mlir::subop::ReduceO
    using TupleStreamConsumerLowering<mlir::subop::ReduceOp>::TupleStreamConsumerLowering;
 
    LogicalResult matchAndRewriteConsumer(mlir::subop::ReduceOp reduceOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
-      auto columns = reduceOp.getRef().getColumn().type.cast<mlir::subop::EntryRefType>().getT().cast<mlir::subop::StateSupportingLookup>().getValueMembers();
+      auto columns = reduceOp.getRef().getColumn().type.cast<mlir::subop::StateEntryReference>().getMembers();
 
       auto loaded = rewriter.create<mlir::util::LoadOp>(reduceOp->getLoc(), mapping.resolve(reduceOp.getRef()));
       auto unpackedValues = rewriter.create<mlir::util::UnPackOp>(reduceOp->getLoc(), loaded).getResults();

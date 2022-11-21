@@ -25,24 +25,36 @@ def SubOperator : OpInterface<"SubOperator"> {
 
 }
 
+def LookupAbleState : TypeInterface<"LookupAbleState"> {
+  let cppNamespace = "::mlir::subop";
+  let methods = [
+    InterfaceMethod</*description=*/"", /*retTy=*/"StateMembersAttr", /*methodName=*/"getKeyMembers">,
+    InterfaceMethod</*description=*/"", /*retTy=*/"StateMembersAttr", /*methodName=*/"getValueMembers">
+  ];
+}
 def State : TypeInterface<"State"> {
   let cppNamespace = "::mlir::subop";
   let methods = [
-     InterfaceMethod<
-       /*description=*/"",
-       /*retTy=*/"StateMembersAttr",
-       /*methodName=*/"getMembers">
-      ];
-}
-def StateSupportingLookup : TypeInterface<"StateSupportingLookup"> {
-  let cppNamespace = "::mlir::subop";
-  let methods = [
-     InterfaceMethod<
-       /*description=*/"",
-       /*retTy=*/"StateMembersAttr",
-       /*methodName=*/"getValueMembers">
-      ];
+    InterfaceMethod</*description=*/"", /*retTy=*/"StateMembersAttr", /*methodName=*/"getMembers">,
+    InterfaceMethod</*description=*/"", /*retTy=*/"bool", /*methodName=*/"canPerformMaterialize",(ins ),"", /*defaultImplementation=*/[{
+        return false;
+    }]>,
+    InterfaceMethod</*description=*/"", /*retTy=*/"bool", /*methodName=*/"canPerformScan",(ins ),"", /*defaultImplementation=*/[{
+        return true;
+    }]>
+  ];
 }
 
+
+def StateEntryReference : TypeInterface<"StateEntryReference"> {
+  let cppNamespace = "::mlir::subop";
+  let methods = [
+     InterfaceMethod</*description=*/"", /*retTy=*/"bool", /*methodName=*/"isReadable">,
+     InterfaceMethod</*description=*/"", /*retTy=*/"bool", /*methodName=*/"isWriteable">,
+     InterfaceMethod</*description=*/"", /*retTy=*/"bool", /*methodName=*/"isStable">,
+     InterfaceMethod</*description=*/"", /*retTy=*/"bool", /*methodName=*/"canBeOffset">,
+     InterfaceMethod</*description=*/"", /*retTy=*/"StateMembersAttr", /*methodName=*/"getMembers">
+  ];
+}
 
 #endif// Interfaces
