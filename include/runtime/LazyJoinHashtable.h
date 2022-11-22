@@ -1,6 +1,6 @@
 #ifndef RUNTIME_LAZYJOINHASHTABLE_H
 #define RUNTIME_LAZYJOINHASHTABLE_H
-#include "runtime/Vector.h"
+#include "runtime/Buffer.h"
 #include "runtime/helpers.h"
 namespace runtime {
 class LazyJoinHashtable {

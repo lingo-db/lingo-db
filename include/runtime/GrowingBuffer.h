@@ -1,11 +1,12 @@
-#ifndef LINGODB_GROWINGBUFFER_H
-#define LINGODB_GROWINGBUFFER_H
+#ifndef RUNTIME_GROWINGBUFFER_H
+#define RUNTIME_GROWINGBUFFER_H
 #include "runtime/Buffer.h"
 namespace runtime {
 class GrowingBuffer {
    runtime::FlexibleBuffer values;
+
    public:
-   GrowingBuffer(size_t cap, size_t typeSize) : values(cap,typeSize) {}
+   GrowingBuffer(size_t cap, size_t typeSize) : values(cap, typeSize) {}
    uint8_t* insert();
    static GrowingBuffer* create(size_t sizeOfType, size_t initialCapacity);
    size_t getLen() const;
@@ -15,4 +16,4 @@ class GrowingBuffer {
    BufferIterator* createIterator();
 };
 } // end namespace runtime
-#endif //LINGODB_GROWINGBUFFER_H
+#endif //RUNTIME_GROWINGBUFFER_H

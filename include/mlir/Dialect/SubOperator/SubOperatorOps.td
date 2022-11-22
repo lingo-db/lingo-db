@@ -85,13 +85,26 @@ def LazyMultiMap : SubOperator_Type<"LazyMultiMap", "lazy_multi_map",[State,Look
         StateMembersAttr getMembers();
     }];
 }
-def Vector : SubOperator_Type<"Vector", "vector", [State]> {
-    let summary = "vector type";
+def Buffer : SubOperator_Type<"Buffer", "buffer", [State]> {
+    let summary = "growing buffer type";
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
-            let extraClassDeclaration = [{
-                StateMembersAttr getValueMembers();
-            }];
+}
+def ContinuousView : SubOperator_Type<"ContinuousView", "continuous_view", [State]> {
+    let summary = "continuous view type";
+    let parameters = (ins "State":$based_on);
+    let assemblyFormat = "`<` $based_on `>`";
+     let extraClassDeclaration = [{
+         StateMembersAttr getMembers(){return getBasedOn().getMembers();}
+     }];
+}
+def SortedView : SubOperator_Type<"SortedView", "sorted_view", [State]> {
+    let summary = "sorted view type";
+    let parameters = (ins "State":$based_on);
+    let assemblyFormat = "`<` $based_on `>`";
+     let extraClassDeclaration = [{
+         StateMembersAttr getMembers(){return getBasedOn().getMembers();}
+     }];
 }
 
 def Entry : SubOperator_Type<"Entry", "entry"> {
@@ -453,7 +466,8 @@ def SortOp : SubOperator_Op<"sort", [IsolatedFromAbove,SubOperator]> {
         Sort a records in a vector. The region yields the order of two arguments as in C++ `std::sort`.
     }];
 
-    let arguments = (ins Vector:$toSort,ArrayAttr: $sortBy);
+    let arguments = (ins Buffer:$toSort,ArrayAttr: $sortBy);
+    let results = (outs SortedView:$result);
     let regions = (region SizedRegion<1>:$region);
   let hasCustomAssemblyFormat = 1;
       let extraClassDeclaration = [{

@@ -60,9 +60,6 @@ mlir::subop::StateMembersAttr mlir::subop::LazyMultiMapType::getMembers() {
 mlir::subop::StateMembersAttr mlir::subop::SimpleStateType::getValueMembers() {
    return getMembers();
 }
-mlir::subop::StateMembersAttr mlir::subop::VectorType::getValueMembers() {
-   return getMembers();
-}
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOpsTypes.cpp.inc"
 namespace mlir::subop {

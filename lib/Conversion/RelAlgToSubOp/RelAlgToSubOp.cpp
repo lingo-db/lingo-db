@@ -398,7 +398,8 @@ class ConstRelationLowering : public OpConversionPattern<mlir::relalg::ConstRela
    using OpConversionPattern<mlir::relalg::ConstRelationOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::relalg::ConstRelationOp constRelationOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       MaterializationHelper helper(constRelationOp.getColumns(), getContext());
-      auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), helper.createStateMembersAttr());
+      auto vectorType = mlir::subop::BufferType::get(rewriter.getContext(), helper.createStateMembersAttr());
+      //todo: replace with generator
       mlir::Value vector;
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
@@ -790,7 +791,7 @@ static std::pair<mlir::Value, std::string> createCounterState(mlir::OpBuilder& r
 
 static mlir::Value translateNLJ(mlir::Value left, mlir::Value right, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, std::function<mlir::Value(mlir::Value, mlir::ConversionPatternRewriter& rewriter)> fn) {
    MaterializationHelper helper(columns, rewriter.getContext());
-   auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), helper.createStateMembersAttr());
+   auto vectorType = mlir::subop::BufferType::get(rewriter.getContext(), helper.createStateMembersAttr());
    mlir::Value vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute(), 0);
    rewriter.create<mlir::subop::MaterializeOp>(loc, right, vector, helper.createColumnstateMapping());
    auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), left, rewriter.getArrayAttr({}));
@@ -867,7 +868,7 @@ static std::pair<mlir::Value, mlir::Value> translateNLJWithMarker(mlir::Value le
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    MaterializationHelper helper(columns, rewriter.getContext());
    auto flagMember = helper.addFlag(markerDefAttr);
-   auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), helper.createStateMembersAttr());
+   auto vectorType = mlir::subop::BufferType::get(rewriter.getContext(), helper.createStateMembersAttr());
    mlir::Value vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute(), 0);
    left = mapBool(left, rewriter, loc, false, &markerDefAttr.getColumn());
    rewriter.create<mlir::subop::MaterializeOp>(loc, left, vector, helper.createColumnstateMapping());
@@ -1267,7 +1268,7 @@ class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
       mlir::relalg::ColumnSet requiredColumns = getRequired(sortOp);
       requiredColumns.insert(sortOp.getUsedColumns());
       MaterializationHelper helper(requiredColumns, rewriter.getContext());
-      auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), helper.createStateMembersAttr());
+      auto vectorType = mlir::subop::BufferType::get(rewriter.getContext(), helper.createStateMembersAttr());
       mlir::Value vector = rewriter.create<mlir::subop::CreateOp>(sortOp->getLoc(), vectorType, mlir::Attribute{}, 0);
       rewriter.create<mlir::subop::MaterializeOp>(sortOp->getLoc(), adaptor.getRel(), vector, helper.createColumnstateMapping());
       auto* block = new Block;
@@ -1300,9 +1301,10 @@ class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
          mlir::Value isLt = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, spaceShipResult, zero);
          rewriter.create<mlir::tuples::ReturnOp>(sortOp->getLoc(), isLt);
       }
-      auto subOpSort = rewriter.create<mlir::subop::SortOp>(sortOp->getLoc(), vector, rewriter.getArrayAttr(sortByMembers));
+
+      auto subOpSort = rewriter.create<mlir::subop::SortOp>(sortOp->getLoc(),mlir::subop::SortedViewType::get(getContext(),vectorType), vector, rewriter.getArrayAttr(sortByMembers));
       subOpSort.getRegion().getBlocks().push_back(block);
-      rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(sortOp, vector, helper.createStateColumnMapping());
+      rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(sortOp, subOpSort.getResult(), helper.createStateColumnMapping());
       return success();
    }
 };
@@ -1312,7 +1314,7 @@ class TmpLowering : public OpConversionPattern<mlir::relalg::TmpOp> {
    LogicalResult matchAndRewrite(mlir::relalg::TmpOp tmpOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       MaterializationHelper helper(getRequired(tmpOp), rewriter.getContext());
 
-      auto vectorType = mlir::subop::VectorType::get(rewriter.getContext(), helper.createStateMembersAttr());
+      auto vectorType = mlir::subop::BufferType::get(rewriter.getContext(), helper.createStateMembersAttr());
       mlir::Value vector = rewriter.create<mlir::subop::CreateOp>(tmpOp->getLoc(), vectorType, mlir::Attribute{}, 0);
       rewriter.create<mlir::subop::MaterializeOp>(tmpOp->getLoc(), adaptor.getRel(), vector, helper.createColumnstateMapping());
       std::vector<mlir::Value> results;

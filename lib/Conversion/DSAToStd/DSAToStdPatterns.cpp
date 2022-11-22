@@ -8,7 +8,6 @@
 #include "runtime-defs/Hashtable.h"
 #include "runtime-defs/LazyJoinHashtable.h"
 #include "runtime-defs/TableBuilder.h"
-#include "runtime-defs/Vector.h"
 using namespace mlir;
 namespace {
 

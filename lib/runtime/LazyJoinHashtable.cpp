@@ -5,7 +5,7 @@ void runtime::LazyJoinHashtable::finalize() {
    htMask = htSize - 1;
    ht.setNewSize(htSize);
    values.iterate([&](uint8_t* ptr) {
-      auto entry = (Entry*) ptr;
+      auto *entry = (Entry*) ptr;
       size_t hash = (size_t) entry->next;
       auto pos = hash & htMask;
       auto* previousPtr = ht.at(pos);

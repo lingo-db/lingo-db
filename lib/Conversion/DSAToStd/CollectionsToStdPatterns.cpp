@@ -10,7 +10,6 @@
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
 
-#include "runtime-defs/Vector.h"
 using namespace mlir;
 namespace {
 

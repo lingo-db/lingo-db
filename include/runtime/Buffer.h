@@ -1,8 +1,10 @@
-#ifndef LINGODB_BUFFER_H
-#define LINGODB_BUFFER_H
+#ifndef RUNTIME_BUFFER_H
+#define RUNTIME_BUFFER_H
+#include <stddef.h>
+
 #include <cstdint>
 #include <vector>
-#include <stddef.h>
+
 namespace runtime {
 /*
  * Buffer: continuous memory area, which is directly accessed by generated code
@@ -19,7 +21,7 @@ struct BufferIterator {
    static void iteratorNext(BufferIterator* iterator);
    static Buffer iteratorGetCurrentBuffer(BufferIterator* iterator);
    static void destroy(BufferIterator* iterator);
-   virtual ~BufferIterator(){}
+   virtual ~BufferIterator() {}
 };
 class FlexibleBuffer {
    size_t totalLen;
@@ -46,15 +48,15 @@ class FlexibleBuffer {
       buffers.back().numElements++;
       return res;
    }
-   template<class Fn>
-   void iterate(const Fn& fn){
+   template <class Fn>
+   void iterate(const Fn& fn) {
       for (auto buffer : buffers) {
          for (size_t i = 0; i < buffer.numElements; i++) {
             fn(&buffer.ptr[i * typeSize]);
          }
       }
    }
-   const std::vector<Buffer>& getBuffers(){
+   const std::vector<Buffer>& getBuffers() {
       return buffers;
    }
    BufferIterator* createIterator();
@@ -64,6 +66,6 @@ class FlexibleBuffer {
    size_t getLen() const;
 };
 
-}
+} // namespace runtime
 
-#endif //LINGODB_BUFFER_H
+#endif //RUNTIME_BUFFER_H

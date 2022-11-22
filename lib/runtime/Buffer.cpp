@@ -13,21 +13,21 @@ void runtime::BufferIterator::destroy(runtime::BufferIterator* iterator) {
    delete iterator;
 }
 
-
-class FlexibleBufferIterator: public runtime::BufferIterator{
+class FlexibleBufferIterator : public runtime::BufferIterator {
    runtime::FlexibleBuffer& flexibleBuffer;
    size_t currBuffer;
+
    public:
-   FlexibleBufferIterator(runtime::FlexibleBuffer& flexibleBuffer):flexibleBuffer(flexibleBuffer),currBuffer(0){}
-   bool isValid() override{
-      return currBuffer<flexibleBuffer.getBuffers().size();
+   FlexibleBufferIterator(runtime::FlexibleBuffer& flexibleBuffer) : flexibleBuffer(flexibleBuffer), currBuffer(0) {}
+   bool isValid() override {
+      return currBuffer < flexibleBuffer.getBuffers().size();
    }
-   void next() override{
+   void next() override {
       currBuffer++;
    }
-   runtime::Buffer getCurrentBuffer() override{
+   runtime::Buffer getCurrentBuffer() override {
       runtime::Buffer orig = flexibleBuffer.getBuffers().at(currBuffer);
-      return runtime::Buffer{orig.numElements * flexibleBuffer.getTypeSize(), orig.ptr};
+      return runtime::Buffer{orig.numElements * std::max(1ul, flexibleBuffer.getTypeSize()), orig.ptr};
    }
 };
 

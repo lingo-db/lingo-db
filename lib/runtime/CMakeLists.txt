@@ -2,7 +2,6 @@ add_library(runtime OBJECT
         TableBuilder.cpp
         DumpRuntime.cpp
         DataSourceIteration.cpp
-        Vector.cpp
         GrowingBuffer.cpp
         Buffer.cpp
         LazyJoinHashtable.cpp

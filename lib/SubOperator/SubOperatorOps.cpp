@@ -238,7 +238,7 @@ static void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arra
 
 ParseResult mlir::subop::SortOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    OpAsmParser::UnresolvedOperand getToSort;
-   subop::VectorType vecType;
+   subop::BufferType vecType;
    if (parser.parseOperand(getToSort) || parser.parseColonType(vecType)) {
       return failure();
    }
@@ -289,6 +289,7 @@ ParseResult mlir::subop::SortOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
    args.insert(args.end(), rightArgs.begin(), rightArgs.end());
    Region* body = result.addRegion();
    if (parser.parseRegion(*body, args)) return failure();
+   result.types.push_back(mlir::subop::SortedViewType::get(parser.getContext(),vecType));
    return success();
 }
 
@@ -778,7 +779,7 @@ std::vector<std::string> subop::LoopOp::getWrittenMembers() {
 }
 std::vector<std::string> subop::SortOp::getWrittenMembers() {
    std::vector<std::string> res;
-   for (auto x : getToSort().getType().cast<mlir::subop::VectorType>().getMembers().getNames()) {
+   for (auto x : getToSort().getType().cast<mlir::subop::BufferType>().getMembers().getNames()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
