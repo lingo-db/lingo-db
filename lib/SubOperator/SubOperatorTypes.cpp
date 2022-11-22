@@ -48,7 +48,7 @@ mlir::subop::StateMembersAttr mlir::subop::HashMapType::getMembers() {
    types.insert(types.end(), getValueMembers().getTypes().begin(), getValueMembers().getTypes().end());
    return mlir::subop::StateMembersAttr::get(this->getContext(), mlir::ArrayAttr::get(this->getContext(), names), mlir::ArrayAttr::get(this->getContext(), types));
 }
-mlir::subop::StateMembersAttr mlir::subop::LazyMultiMapType::getMembers() {
+mlir::subop::StateMembersAttr mlir::subop::HashIndexedViewType::getMembers() {
    std::vector<Attribute> names;
    std::vector<Attribute> types;
    names.insert(names.end(), getKeyMembers().getNames().begin(), getKeyMembers().getNames().end());

@@ -3,15 +3,16 @@
 #include "runtime/Buffer.h"
 #include "runtime/helpers.h"
 namespace runtime {
-class LazyJoinHashtable {
+class GrowingBuffer;
+class HashIndexedView {
    struct Entry {
       Entry* next;
+      uint64_t hashValue;
       //kv follows
    };
    runtime::FixedSizedBuffer<Entry*> ht;
-   size_t htMask;
-   runtime::FlexibleBuffer values;
-   LazyJoinHashtable(size_t initial, size_t typeSize) : ht(0), htMask(0), values(initial, typeSize) {}
+   size_t htMask; //NOLINT(clang-diagnostic-unused-private-field)
+   HashIndexedView(size_t htSize,size_t htMask):ht(htSize),htMask(htMask){}
    static uint64_t nextPow2(uint64_t v) {
       v--;
       v |= v >> 1;
@@ -25,11 +26,8 @@ class LazyJoinHashtable {
    }
 
    public:
-   static LazyJoinHashtable* create(size_t typeSize);
-   void finalize();
-   BufferIterator* createIterator();
-   uint8_t* insert(size_t hash);
-   static void destroy(LazyJoinHashtable*);
+   static HashIndexedView* build(GrowingBuffer* buffer);
+   static void destroy(HashIndexedView*);
 };
 } // end namespace runtime
 #endif // RUNTIME_LAZYJOINHASHTABLE_H

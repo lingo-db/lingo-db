@@ -77,14 +77,6 @@ def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,LookupAbleState]> {
         StateMembersAttr getMembers();
     }];
 }
-def LazyMultiMap : SubOperator_Type<"LazyMultiMap", "lazy_multi_map",[State,LookupAbleState]> {
-    let summary = "simple state with multiple members";
-    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
-    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
-    let extraClassDeclaration = [{
-        StateMembersAttr getMembers();
-    }];
-}
 def Buffer : SubOperator_Type<"Buffer", "buffer", [State]> {
     let summary = "growing buffer type";
     let parameters = (ins "StateMembersAttr":$members);
@@ -104,6 +96,14 @@ def SortedView : SubOperator_Type<"SortedView", "sorted_view", [State]> {
     let assemblyFormat = "`<` $based_on `>`";
      let extraClassDeclaration = [{
          StateMembersAttr getMembers(){return getBasedOn().getMembers();}
+     }];
+}
+def HashIndexedView : SubOperator_Type<"HashIndexedView", "hash_indexed_view", [State,LookupAbleState]> {
+    let summary = "sorted view type";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+     let extraClassDeclaration = [{
+        StateMembersAttr getMembers();
      }];
 }
 
@@ -307,6 +307,30 @@ def CreateOp : SubOperator_Op<"create", [Pure]> {
 
 }
 
+def CreateSortedViewOp : SubOperator_Op<"create_sorted_view", [IsolatedFromAbove,SubOperator]> {
+    let summary = "sort vector";
+    let description = [{
+        Sort a records in a vector. The region yields the order of two arguments as in C++ `std::sort`.
+    }];
+
+    let arguments = (ins Buffer:$toSort,ArrayAttr: $sortBy);
+    let results = (outs SortedView:$result);
+    let regions = (region SizedRegion<1>:$region);
+  let hasCustomAssemblyFormat = 1;
+      let extraClassDeclaration = [{
+          std::vector<std::string> getWrittenMembers();
+          std::vector<std::string> getReadMembers();
+      }];
+}
+def CreateHashIndexedView : SubOperator_Op<"create_hash_indexed_view", [SubOperator]> {
+    let arguments = (ins Buffer:$source,StrAttr: $hash_member, StrAttr: $link_member);
+    let results = (outs HashIndexedView:$result);
+    let assemblyFormat = [{ $source `:` type($source) `hash` `(` $hash_member `)` `link` `(` $link_member `)` `->` type($result) attr-dict }];
+      let extraClassDeclaration = [{
+          std::vector<std::string> getWrittenMembers();
+          std::vector<std::string> getReadMembers();
+      }];
+}
 //todo: add subop.create_view
 
 //===----------------------------------------------------------------------===//
@@ -457,22 +481,6 @@ def MaintainOp : SubOperator_Op<"maintain",[SubOperator]> {
       let extraClassDeclaration = [{
           std::vector<std::string> getReadMembers();
           std::vector<std::string> getWrittenMembers();
-      }];
-}
-
-def SortOp : SubOperator_Op<"sort", [IsolatedFromAbove,SubOperator]> {
-    let summary = "sort vector";
-    let description = [{
-        Sort a records in a vector. The region yields the order of two arguments as in C++ `std::sort`.
-    }];
-
-    let arguments = (ins Buffer:$toSort,ArrayAttr: $sortBy);
-    let results = (outs SortedView:$result);
-    let regions = (region SizedRegion<1>:$region);
-  let hasCustomAssemblyFormat = 1;
-      let extraClassDeclaration = [{
-          std::vector<std::string> getWrittenMembers();
-          std::vector<std::string> getReadMembers();
       }];
 }
 

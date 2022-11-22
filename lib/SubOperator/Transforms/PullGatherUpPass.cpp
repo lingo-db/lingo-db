@@ -36,6 +36,11 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
             second++;
             if (second != users.end()) break;
             currentParent = *users.begin();
+            bool otherStreams = false;
+            for (auto v : currentParent->getOperands()) {
+               otherStreams |= v != currStream && v.getType().isa<mlir::tuples::TupleStreamType>();
+            }
+            if (otherStreams) break;
             auto usedColumns = columnUsageAnalysis.getUsedColumns(currentParent);
             std::vector<mlir::NamedAttribute> usedByCurrent;
             std::vector<mlir::NamedAttribute> notUsedByCurrent;

@@ -236,7 +236,7 @@ static void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arra
    p << "]";
 }
 
-ParseResult mlir::subop::SortOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+ParseResult mlir::subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    OpAsmParser::UnresolvedOperand getToSort;
    subop::BufferType vecType;
    if (parser.parseOperand(getToSort) || parser.parseColonType(vecType)) {
@@ -293,8 +293,8 @@ ParseResult mlir::subop::SortOp::parse(::mlir::OpAsmParser& parser, ::mlir::Oper
    return success();
 }
 
-void subop::SortOp::print(OpAsmPrinter& p) {
-   subop::SortOp& op = *this;
+void subop::CreateSortedViewOp::print(OpAsmPrinter& p) {
+   subop::CreateSortedViewOp& op = *this;
    p << " " << op.getToSort() << " : " << op.getToSort().getType() << " " << op.getSortBy() << " ";
    p << "([";
    bool first = true;
@@ -777,12 +777,18 @@ std::vector<std::string> subop::LoopOp::getWrittenMembers() {
    });
    return res;
 }
-std::vector<std::string> subop::SortOp::getWrittenMembers() {
+std::vector<std::string> subop::CreateSortedViewOp::getWrittenMembers() {
    std::vector<std::string> res;
    for (auto x : getToSort().getType().cast<mlir::subop::BufferType>().getMembers().getNames()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
+}
+std::vector<std::string> subop::CreateHashIndexedView::getWrittenMembers() {
+   return {getLinkMember().str(),getHashMember().str()};
+}
+std::vector<std::string> subop::CreateHashIndexedView::getReadMembers() {
+   return {getHashMember().str()};
 }
 std::vector<std::string> subop::MaintainOp::getWrittenMembers() {
    std::vector<std::string> res;
@@ -798,7 +804,7 @@ std::vector<std::string> subop::MaintainOp::getReadMembers() {
    }
    return res;
 }
-std::vector<std::string> subop::SortOp::getReadMembers() {
+std::vector<std::string> subop::CreateSortedViewOp::getReadMembers() {
    std::vector<std::string> res;
    for (auto x : getSortBy()) {
       res.push_back(x.cast<mlir::StringAttr>().str());

@@ -14,6 +14,7 @@ class GrowingBuffer {
    runtime::Buffer sort(bool (*compareFn)(uint8_t*, uint8_t*));
    static void destroy(GrowingBuffer* vec);
    BufferIterator* createIterator();
+   runtime::FlexibleBuffer& getValues() { return values; }
 };
 } // end namespace runtime
 #endif //RUNTIME_GROWINGBUFFER_H

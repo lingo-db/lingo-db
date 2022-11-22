@@ -8,7 +8,9 @@ mlir::subop::SubOpRootAnalysis::SubOpRootAnalysis(mlir::Operation* op) {
    op->walk([&](mlir::subop::SubOperator subop) {
       for (auto x : subop->getOperands()) {
          if (auto pred = mlir::dyn_cast_or_null<mlir::subop::SubOperator>(x.getDefiningOp())) {
-            this->roots[subop].insert(this->roots[subop].end(), this->roots[pred].begin(), this->roots[pred].end());
+            if (x.getType().isa<mlir::tuples::TupleStreamType>()) {
+               this->roots[subop].insert(this->roots[subop].end(), this->roots[pred].begin(), this->roots[pred].end());
+            }
          }
       }
       if (this->roots[subop].empty()) {
@@ -28,17 +30,21 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
          for (auto x : subop->getOperands()) {
             if (!x.getType().isa<mlir::tuples::TupleStreamType>()) {
                if (auto* definingOp = x.getDefiningOp()) {
-                  if (subopRoot->getBlock() == definingOp->getBlock()) {
-                     pipelineRequirements[subopRoot].push_back(definingOp);
+                  if (mlir::dyn_cast_or_null<mlir::subop::SubOperator>(definingOp)) {
+                     addDependency(subopRoot, definingOp, roots);
+                  } else {
+                     if (subopRoot->getBlock() == definingOp->getBlock()) {
+                        pipelineRequirements[subopRoot].push_back(definingOp);
+                     }
                   }
                }
             }
          }
-         for(auto& region: subop->getRegions()){
-            for(auto& op:region.getOps()){
-               for(auto operand:op.getOperands()){
-                  if(operand.getParentRegion()==subopRoot->getParentRegion()){
-                     if(auto *definingOp=operand.getDefiningOp()) {
+         for (auto& region : subop->getRegions()) {
+            for (auto& op : region.getOps()) {
+               for (auto operand : op.getOperands()) {
+                  if (operand.getParentRegion() == subopRoot->getParentRegion()) {
+                     if (auto* definingOp = operand.getDefiningOp()) {
                         pipelineRequirements[subopRoot].push_back(definingOp);
                      }
                   }

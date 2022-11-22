@@ -1,30 +1,21 @@
 #include "runtime/LazyJoinHashtable.h"
+#include "runtime/GrowingBuffer.h"
 
-void runtime::LazyJoinHashtable::finalize() {
+runtime::HashIndexedView* runtime::HashIndexedView::build(runtime::GrowingBuffer* buffer) {
+   auto& values=buffer->getValues();
    size_t htSize = std::max(nextPow2(values.getLen() * 1.25), 1ul);
-   htMask = htSize - 1;
-   ht.setNewSize(htSize);
+   size_t htMask = htSize - 1;
+   auto *htView= new HashIndexedView(htSize,htMask);
    values.iterate([&](uint8_t* ptr) {
       auto *entry = (Entry*) ptr;
-      size_t hash = (size_t) entry->next;
+      size_t hash = (size_t) entry->hashValue;
       auto pos = hash & htMask;
-      auto* previousPtr = ht.at(pos);
-      ht.at(pos) = runtime::tag(entry, previousPtr, hash);
+      auto* previousPtr = htView->ht.at(pos);
+      htView->ht.at(pos) = runtime::tag(entry, previousPtr, hash);
       entry->next = previousPtr;
    });
+   return htView;
 }
-uint8_t* runtime::LazyJoinHashtable::insert(size_t hash) {
-   auto* entryPtr = values.insert();
-   reinterpret_cast<Entry*>(entryPtr)->next = reinterpret_cast<Entry*>(hash);
-   return entryPtr + sizeof(Entry::next);
-}
-runtime::LazyJoinHashtable* runtime::LazyJoinHashtable::create(size_t typeSize) {
-   return new LazyJoinHashtable(1024, typeSize);
-}
-void runtime::LazyJoinHashtable::destroy(LazyJoinHashtable* ht) {
+void runtime::HashIndexedView::destroy(runtime::HashIndexedView* ht) {
    delete ht;
-}
-
-runtime::BufferIterator* runtime::LazyJoinHashtable::createIterator() {
-   return values.createIterator();
 }
