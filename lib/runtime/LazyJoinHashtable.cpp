@@ -1,20 +1,17 @@
 #include "runtime/LazyJoinHashtable.h"
 
-void runtime::LazyJoinHashtable::resize() {
-   values.resize();
-}
 void runtime::LazyJoinHashtable::finalize() {
    size_t htSize = std::max(nextPow2(values.getLen() * 1.25), 1ul);
    htMask = htSize - 1;
    ht.setNewSize(htSize);
-   for (size_t i = 0; i < values.getLen(); i++) {
-      auto* entry = values.ptrAt<Entry>(i);
+   values.iterate([&](uint8_t* ptr) {
+      auto entry = (Entry*) ptr;
       size_t hash = (size_t) entry->next;
       auto pos = hash & htMask;
       auto* previousPtr = ht.at(pos);
       ht.at(pos) = runtime::tag(entry, previousPtr, hash);
       entry->next = previousPtr;
-   }
+   });
 }
 uint8_t* runtime::LazyJoinHashtable::insert(size_t hash) {
    auto* entryPtr = values.insert();
@@ -28,6 +25,6 @@ void runtime::LazyJoinHashtable::destroy(LazyJoinHashtable* ht) {
    delete ht;
 }
 
-runtime::Buffer runtime::LazyJoinHashtable::getBuffer() const {
-   return {values.getLen() * values.getTypeSize(), values.getPtr()};
+runtime::BufferIterator* runtime::LazyJoinHashtable::createIterator() {
+   return values.createIterator();
 }

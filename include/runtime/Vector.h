@@ -2,6 +2,7 @@
 #ifndef RUNTIME_VECTOR_H
 #define RUNTIME_VECTOR_H
 #include "runtime/helpers.h"
+#include "runtime/Buffer.h"
 namespace runtime {
 class Vector {
    size_t len;

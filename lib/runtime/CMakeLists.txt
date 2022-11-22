@@ -3,6 +3,8 @@ add_library(runtime OBJECT
         DumpRuntime.cpp
         DataSourceIteration.cpp
         Vector.cpp
+        GrowingBuffer.cpp
+        Buffer.cpp
         LazyJoinHashtable.cpp
         Hashtable.cpp
         StringRuntime.cpp

@@ -1,6 +1,6 @@
 #ifndef RUNTIME_HASHTABLE_H
 #define RUNTIME_HASHTABLE_H
-#include "runtime/Vector.h"
+#include "runtime/Buffer.h"
 #include "runtime/helpers.h"
 namespace runtime {
 class Hashtable {
@@ -21,16 +21,7 @@ class Hashtable {
    Entry* insert(size_t hash);
    static Hashtable* create(size_t typeSize, size_t initialCapacity);
    static void destroy(Hashtable*);
-
-   struct Iterator {
-      size_t currBuffer;
-      Iterator() : currBuffer(0) {}
-   };
-   Iterator* startIteration();
-   bool isIteratorValid(Iterator*);
-   void nextIterator(Iterator*);
-   void endIteration(Iterator*);
-   Buffer getCurrentBuffer(Iterator* it);
+   runtime::BufferIterator* createIterator();
 };
 
 } // end namespace runtime

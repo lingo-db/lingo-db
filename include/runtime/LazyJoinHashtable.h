@@ -10,7 +10,7 @@ class LazyJoinHashtable {
    };
    runtime::FixedSizedBuffer<Entry*> ht;
    size_t htMask;
-   runtime::Vector values;
+   runtime::FlexibleBuffer values;
    LazyJoinHashtable(size_t initial, size_t typeSize) : ht(0), htMask(0), values(initial, typeSize) {}
    static uint64_t nextPow2(uint64_t v) {
       v--;
@@ -27,9 +27,8 @@ class LazyJoinHashtable {
    public:
    static LazyJoinHashtable* create(size_t typeSize);
    void finalize();
-   Buffer getBuffer() const;
+   BufferIterator* createIterator();
    uint8_t* insert(size_t hash);
-   void resize();
    static void destroy(LazyJoinHashtable*);
 };
 } // end namespace runtime

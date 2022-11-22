@@ -116,10 +116,7 @@ class VarLen32 {
    std::string str() { return std::string((char*) getPtr(), getLen()); }
 };
 
-struct Buffer {
-   size_t numElements;
-   uint8_t* ptr;
-};
+
 template <class T>
 struct FixedSizedBuffer {
    FixedSizedBuffer(size_t size) : ptr((T*) malloc(size * sizeof(T))) {
@@ -138,29 +135,7 @@ struct FixedSizedBuffer {
       free(ptr);
    }
 };
-struct FlexibleBuffer {
-   size_t totalLen;
-   size_t currCapacity;
-   std::vector<Buffer> buffers;
-   size_t typeSize;
-   FlexibleBuffer(size_t initialCapacity, size_t typeSize) : totalLen(0), currCapacity(initialCapacity), typeSize(typeSize) {
-      buffers.push_back(Buffer{0, (uint8_t*) malloc(initialCapacity * typeSize)});
-   }
-   void nextBuffer() {
-      size_t nextCapacity = currCapacity * 2;
-      buffers.push_back(Buffer{0, (uint8_t*) malloc(nextCapacity * typeSize)});
-      currCapacity = nextCapacity;
-   }
-   uint8_t* insert() {
-      if (buffers.back().numElements == currCapacity) {
-         nextBuffer();
-      }
-      totalLen++;
-      auto* res = &buffers.back().ptr[typeSize * (buffers.back().numElements)];
-      buffers.back().numElements++;
-      return res;
-   }
-};
+
 template <typename T>
 T* tag(T* ptr, T* previousPtr, size_t hash) {
    constexpr uint64_t ptrMask = 0x0000ffffffffffffull;
