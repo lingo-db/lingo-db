@@ -1628,37 +1628,141 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
    }
    LogicalResult matchAndRewrite(mlir::relalg::WindowOp windowOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto& colManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
-      if (!windowOp.getPartitionBy().empty()) return failure();
+
       AnalyzedWindow analyzedWindow;
       analyze(windowOp, analyzedWindow);
       auto loc = windowOp->getLoc();
       mlir::relalg::ColumnSet requiredColumns = getRequired(windowOp);
       requiredColumns.insert(windowOp.getUsedColumns());
       requiredColumns.remove(windowOp.getCreatedColumns());
-      MaterializationHelper helper(requiredColumns, rewriter.getContext());
-      auto vectorType = mlir::subop::BufferType::get(rewriter.getContext(), helper.createStateMembersAttr());
-      mlir::Value vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute{}, 0);
-      rewriter.create<mlir::subop::MaterializeOp>(loc, adaptor.getRel(), vector, helper.createColumnstateMapping());
-      auto sortedView = createSortedView(rewriter, vector, windowOp.getOrderBy(), loc, helper);
-      auto continuousViewType = mlir::subop::ContinuousViewType::get(rewriter.getContext(), sortedView.getType());
-      auto continuousView = rewriter.create<mlir::subop::CreateContinuousView>(loc, continuousViewType, sortedView);
-      auto continuousViewRefType = mlir::subop::ContinuousViewEntryRefType::get(rewriter.getContext(), continuousViewType);
-      auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("scan"), "ref");
-      referenceDefAttr.getColumn().type = continuousViewRefType;
-      auto beginReferenceDefAttr = colManager.createDef(colManager.getUniqueScope("view"), "begin");
-      beginReferenceDefAttr.getColumn().type = continuousViewRefType;
-      auto endReferenceDefAttr = colManager.createDef(colManager.getUniqueScope("view"), "end");
-      endReferenceDefAttr.getColumn().type = continuousViewRefType;
-      mlir::Value scan = rewriter.create<mlir::subop::ScanRefsOp>(loc, continuousView, referenceDefAttr);
-      mlir::Value afterGather = rewriter.create<mlir::subop::GatherOp>(loc, scan, colManager.createRef(&referenceDefAttr.getColumn()), helper.createStateColumnMapping());
-      mlir::Value afterBegin = rewriter.create<mlir::subop::GetBeginReferenceOp>(loc, afterGather, continuousView, beginReferenceDefAttr);
-      mlir::Value afterEnd = rewriter.create<mlir::subop::GetEndReferenceOp>(loc, afterBegin, continuousView, endReferenceDefAttr);
-      mlir::Value current = afterEnd;
-      for (auto orderedWindowFn : analyzedWindow.orderedWindowFunctions) {
-         current = orderedWindowFn->evaluate(rewriter, loc, current, colManager.createRef(&beginReferenceDefAttr.getColumn()), colManager.createRef(&endReferenceDefAttr.getColumn()), colManager.createRef(&referenceDefAttr.getColumn()));
+
+
+      auto evaluate=[](ConversionPatternRewriter& rewriter,mlir::Value continuousView,AnalyzedWindow& analyzedWindow,mlir::DictionaryAttr columnMapping,mlir::Location loc) {
+         auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+         auto continuousViewRefType = mlir::subop::ContinuousViewEntryRefType::get(rewriter.getContext(), continuousView.getType().cast<mlir::subop::ContinuousViewType>());
+         auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("scan"), "ref");
+         referenceDefAttr.getColumn().type = continuousViewRefType;
+         auto beginReferenceDefAttr = colManager.createDef(colManager.getUniqueScope("view"), "begin");
+         beginReferenceDefAttr.getColumn().type = continuousViewRefType;
+         auto endReferenceDefAttr = colManager.createDef(colManager.getUniqueScope("view"), "end");
+         endReferenceDefAttr.getColumn().type = continuousViewRefType;
+         mlir::Value scan = rewriter.create<mlir::subop::ScanRefsOp>(loc, continuousView, referenceDefAttr);
+         mlir::Value afterGather = rewriter.create<mlir::subop::GatherOp>(loc, scan, colManager.createRef(&referenceDefAttr.getColumn()), columnMapping);
+         mlir::Value afterBegin = rewriter.create<mlir::subop::GetBeginReferenceOp>(loc, afterGather, continuousView, beginReferenceDefAttr);
+         mlir::Value afterEnd = rewriter.create<mlir::subop::GetEndReferenceOp>(loc, afterBegin, continuousView, endReferenceDefAttr);
+         mlir::Value current = afterEnd;
+         for (auto orderedWindowFn : analyzedWindow.orderedWindowFunctions) {
+            current = orderedWindowFn->evaluate(rewriter, loc, current, colManager.createRef(&beginReferenceDefAttr.getColumn()), colManager.createRef(&endReferenceDefAttr.getColumn()), colManager.createRef(&referenceDefAttr.getColumn()));
+         }
+         return current;
+      };
+      if (windowOp.getPartitionBy().empty()){
+         MaterializationHelper helper(requiredColumns, rewriter.getContext());
+
+         auto vectorType = mlir::subop::BufferType::get(rewriter.getContext(), helper.createStateMembersAttr());
+         mlir::Value vector = rewriter.create<mlir::subop::CreateOp>(loc, vectorType, mlir::Attribute{}, 0);
+         rewriter.create<mlir::subop::MaterializeOp>(loc, adaptor.getRel(), vector, helper.createColumnstateMapping());
+         auto sortedView = createSortedView(rewriter, vector, windowOp.getOrderBy(), loc, helper);
+         auto continuousViewType = mlir::subop::ContinuousViewType::get(rewriter.getContext(), sortedView.getType());
+         auto continuousView = rewriter.create<mlir::subop::CreateContinuousView>(loc, continuousViewType, sortedView);
+         rewriter.replaceOp(windowOp, evaluate(rewriter,continuousView,analyzedWindow,helper.createStateColumnMapping(),loc));
+         return success();
+      }else{
+         auto keyAttributes = mlir::relalg::OrderedAttributes::fromRefArr(windowOp.getPartitionBy());
+         auto valueColumns=requiredColumns;
+         valueColumns.remove(mlir::relalg::ColumnSet::fromArrayAttr(windowOp.getPartitionBy()));
+         MaterializationHelper helper(valueColumns,rewriter.getContext());
+         auto bufferType = mlir::subop::BufferType::get(rewriter.getContext(), helper.createStateMembersAttr());
+
+         std::vector<NamedAttribute> defMapping;
+
+         std::vector<mlir::Attribute> keyNames;
+         auto *context=getContext();
+         std::vector<mlir::Attribute> keyTypesAttr;
+         std::vector<mlir::Type> keyTypes;
+         std::vector<mlir::Location> locations;
+         for (auto* x : keyAttributes.getAttrs()) {
+            auto memberName = getUniqueMember("keyval");
+            keyNames.push_back(rewriter.getStringAttr(memberName));
+            keyTypesAttr.push_back(mlir::TypeAttr::get(x->type));
+            keyTypes.push_back((x->type));
+            defMapping.push_back(rewriter.getNamedAttr(memberName, colManager.createDef(x)));
+            locations.push_back(loc);
+         }
+         auto bufferMember= getUniqueMember("buffer");
+         auto [bufferDef, bufferRef]=createColumn(bufferType,"window","buffer");
+         defMapping.push_back(rewriter.getNamedAttr(bufferMember, bufferDef));
+
+         auto stateMembers=mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context,{rewriter.getStringAttr(bufferMember)}), mlir::ArrayAttr::get(context,{mlir::TypeAttr::get(bufferType)}));
+         auto keyMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
+         auto hashMapType = mlir::subop::HashMapType::get(rewriter.getContext(), keyMembers, stateMembers);
+
+         auto createOp = rewriter.create<mlir::subop::CreateOp>(loc, hashMapType, mlir::Attribute{}, 0);
+         mlir::Value hashMap = createOp.getRes();
+
+         auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("lookup"), "ref");
+         referenceDefAttr.getColumn().type = mlir::subop::LookupEntryRefType::get(context, hashMapType);
+
+         auto lookupOp = rewriter.create<mlir::subop::LookupOrInsertOp>(loc, mlir::tuples::TupleStreamType::get(getContext()), adaptor.getRel(), hashMap, keyAttributes.getArrayAttr(rewriter.getContext()), referenceDefAttr);
+         mlir::Value afterLookup = lookupOp;
+         Block* initialValueBlock = new Block;
+         {
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(initialValueBlock);
+            std::vector<mlir::Value> defaultValues;
+            mlir::Value buffer = rewriter.create<mlir::subop::CreateOp>(loc, bufferType, mlir::Attribute{}, 0);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, buffer);
+         }
+         lookupOp.getInitFn().push_back(initialValueBlock);
+         mlir::Block* equalBlock = new Block;
+         lookupOp.getEqFn().push_back(equalBlock);
+         equalBlock->addArguments(keyTypes, locations);
+         equalBlock->addArguments(keyTypes, locations);
+         {
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(equalBlock);
+            mlir::Value compared = compareKeys(rewriter, equalBlock->getArguments().drop_back(keyTypes.size()), equalBlock->getArguments().drop_front(keyTypes.size()), loc);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, compared);
+         }
+         auto referenceRefAttr = colManager.createRef(&referenceDefAttr.getColumn());
+         auto orderedValueColumns=mlir::relalg::OrderedAttributes::fromColumns(valueColumns);
+
+         auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, afterLookup, referenceRefAttr, orderedValueColumns.getArrayAttr(context), rewriter.getArrayAttr({rewriter.getStringAttr(bufferMember)}));
+         {
+            mlir::Block* reduceBlock = new Block;
+
+            std::vector<mlir::Value> columnValues;
+            for(auto *c:orderedValueColumns.getAttrs()){
+               columnValues.push_back(reduceBlock->addArgument(c->type,loc));
+            }
+            mlir::Value currentBuffer=reduceBlock->addArgument(bufferType,loc);
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(reduceBlock);
+            std::vector<mlir::Value> newStateValues;
+            mlir::Value stream=rewriter.create<mlir::subop::InFlightOp>(loc,columnValues,orderedValueColumns.getDefArrayAttr(context));
+            rewriter.create<mlir::subop::MaterializeOp>(loc, stream, currentBuffer, helper.createColumnstateMapping());
+            rewriter.create<mlir::tuples::ReturnOp>(loc, currentBuffer);
+            reduceOp.getRegion().push_back(reduceBlock);
+         }
+         mlir::Value newStream = rewriter.create<mlir::subop::ScanOp>(loc, hashMap, rewriter.getDictionaryAttr(defMapping));
+         auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), newStream, rewriter.getArrayAttr({bufferRef}));
+         auto* b = new Block;
+         b->addArgument(mlir::tuples::TupleType::get(rewriter.getContext()), loc);
+         mlir::Value buffer = b->addArgument(bufferType,loc);
+         nestedMapOp.getRegion().push_back(b);
+         {
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(b);
+            auto sortedView = createSortedView(rewriter, buffer, windowOp.getOrderBy(), loc, helper);
+            auto continuousViewType = mlir::subop::ContinuousViewType::get(rewriter.getContext(), sortedView.getType());
+            auto continuousView = rewriter.create<mlir::subop::CreateContinuousView>(loc, continuousViewType, sortedView);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, evaluate(rewriter,continuousView,analyzedWindow,helper.createStateColumnMapping(),loc));
+         }
+
+         rewriter.replaceOp(windowOp,nestedMapOp.getRes());
+         return success();
       }
-      rewriter.replaceOp(windowOp, current);
-      return success();
+      return failure();
    }
 };
 class AggregationLowering : public OpConversionPattern<mlir::relalg::AggregationOp> {
