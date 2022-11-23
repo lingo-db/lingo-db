@@ -12,6 +12,7 @@ class GrowingBuffer {
    size_t getLen() const;
    size_t getTypeSize() const;
    runtime::Buffer sort(bool (*compareFn)(uint8_t*, uint8_t*));
+   runtime::Buffer asContinuous();
    static void destroy(GrowingBuffer* vec);
    BufferIterator* createIterator();
    runtime::FlexibleBuffer& getValues() { return values; }

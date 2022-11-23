@@ -148,6 +148,18 @@ def GenericLookupEntryRef : SubOperator_Type<"LookupEntryRef", "lookup_entry_ref
         StateMembersAttr getMembers(){ return getState().getValueMembers();}
     }];
 }
+def ContinuousViewEntryRef : SubOperator_Type<"ContinuousViewEntryRef", "continous_view_entry_ref",[StateEntryReference]> {
+    let summary = "reference to entry of some state";
+    let parameters = (ins "ContinuousViewType":$view);
+    let assemblyFormat = "`<` $view `>`";
+    let extraClassDeclaration = [{
+        bool isReadable(){return true;}
+        bool isWriteable(){return true;}
+        bool isStable(){return true;}
+        bool canBeOffset(){return true;}
+        StateMembersAttr getMembers(){ return getView().getMembers();}
+    }];
+}
 def EntryList : SubOperator_Type<"List", "list"> {
     let summary = "list type";
     let parameters = (ins "StateEntryReference":$t);
@@ -331,6 +343,15 @@ def CreateHashIndexedView : SubOperator_Op<"create_hash_indexed_view", [SubOpera
           std::vector<std::string> getReadMembers();
       }];
 }
+def CreateContinuousView : SubOperator_Op<"create_continuous_view", [SubOperator]> {
+    let arguments = (ins AnyType:$source);
+    let results = (outs ContinuousView:$result);
+    let assemblyFormat = [{ $source `:` type($source)  `->` type($result) attr-dict }];
+    let extraClassDeclaration = [{
+      std::vector<std::string> getWrittenMembers();
+      std::vector<std::string> getReadMembers();
+    }];
+}
 //todo: add subop.create_view
 
 //===----------------------------------------------------------------------===//
@@ -368,6 +389,23 @@ def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
           std::vector<std::string> getReadMembers();
       }];
 }
+def GetBeginReferenceOp : SubOperator_Op<"get_begin_ref",[SubOperator]> {
+    let arguments = (ins TupleStream : $stream, AnyType : $state, ColumnDefAttr:$ref);
+    let results = (outs TupleStream: $res);
+
+    let assemblyFormat = [{  $stream $state `:` type($state) custom<CustDef>($ref)   attr-dict }];
+}
+def GetEndReferenceOp : SubOperator_Op<"get_end_ref",[SubOperator]> {
+    let arguments = (ins TupleStream : $stream, AnyType : $state, ColumnDefAttr:$ref);
+    let results = (outs TupleStream: $res);
+    let assemblyFormat = [{  $stream $state `:` type($state) custom<CustDef>($ref)   attr-dict }];
+}
+def EntriesBetweenOp : SubOperator_Op<"entries_between",[SubOperator]> {
+    let arguments = (ins TupleStream : $stream, ColumnRefAttr:$left_ref,ColumnRefAttr:$right_ref, ColumnDefAttr: $between);
+    let results = (outs TupleStream: $res);
+    let assemblyFormat = [{  $stream custom<CustRef>($left_ref) custom<CustRef>($right_ref)  custom<CustDef>($between) attr-dict }];
+}
+
 
 //todo: lookup_range?
 

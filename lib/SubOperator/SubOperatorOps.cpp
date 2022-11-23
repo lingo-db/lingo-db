@@ -790,6 +790,22 @@ std::vector<std::string> subop::CreateHashIndexedView::getWrittenMembers() {
 std::vector<std::string> subop::CreateHashIndexedView::getReadMembers() {
    return {getHashMember().str()};
 }
+std::vector<std::string> subop::CreateContinuousView::getWrittenMembers() {
+   std::vector<std::string> res;
+   auto names= getSource().getType().cast<mlir::subop::State>().getMembers().getNames();
+   for(auto name:names){
+      res.push_back(name.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
+std::vector<std::string> subop::CreateContinuousView::getReadMembers() {
+   std::vector<std::string> res;
+   auto names= getSource().getType().cast<mlir::subop::State>().getMembers().getNames();
+   for(auto name:names){
+      res.push_back(name.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
 std::vector<std::string> subop::MaintainOp::getWrittenMembers() {
    std::vector<std::string> res;
    for (auto x : getState().getType().cast<mlir::subop::State>().getMembers().getNames()) {
