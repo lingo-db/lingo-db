@@ -1,9 +1,13 @@
 #include "mlir/Dialect/TupleStream/ColumnManager.h"
+#include<iostream>
 namespace mlir::tuples {
 void ColumnManager::setContext(MLIRContext* context) {
    this->context = context;
 }
 std::shared_ptr<Column> ColumnManager::get(StringRef scope, StringRef attribute) {
+   if (!scopeUnifier.contains(std::string(scope))) {
+      scopeUnifier[std::string(scope)] = 0;
+   }
    auto pair = std::make_pair(std::string(scope), std::string(attribute));
    if (!attributes.count(pair)) {
       auto attr = std::make_shared<Column>();

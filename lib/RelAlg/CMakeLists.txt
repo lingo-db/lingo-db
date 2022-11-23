@@ -11,7 +11,6 @@ add_mlir_dialect_library(MLIRRelAlg
         Transforms/OptimizeImplementations.cpp
         Transforms/PropagateConstraints.cpp
         Transforms/IntroduceTmp.cpp
-        ColumnManager.cpp
         Transforms/Unnesting.cpp
         Transforms/Pushdown.cpp
         Transforms/ImplicitToExplicitJoins.cpp
