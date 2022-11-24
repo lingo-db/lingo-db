@@ -5,6 +5,7 @@ add_library(runtime OBJECT
         GrowingBuffer.cpp
         Buffer.cpp
         LazyJoinHashtable.cpp
+        SegmentTreeView.cpp
         Hashtable.cpp
         StringRuntime.cpp
         DecimalRuntime.cpp
