@@ -255,7 +255,7 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
    }
    if (funcName == "abs") {
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
-      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), "AbsInt", val).getRes();
+      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), getBaseType(val.getType()).isa<mlir::db::DecimalType>()?"AbsDecimal":"AbsInt", val).getRes();
    }
    if (funcName == "upper") {
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
@@ -1542,7 +1542,7 @@ Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::
             if (window->frame_options_ & FRAMEOPTION_START_CURRENT_ROW) {
                properties.start = 0;
             }
-            if (window->frame_options_ & FRAMEOPTION_END_CURRENT_ROW) {
+            if ((window->frame_options_ & FRAMEOPTION_END_CURRENT_ROW) && window->order_clause_) {
                properties.end = 0;
             }
             if (window->frame_options_ & FRAMEOPTION_START_VALUE_FOLLOWING) {
@@ -1798,9 +1798,9 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       mapBuilder.setInsertionPointToStart(block);
       std::vector<mlir::Value> createdValues;
       std::vector<mlir::Attribute> createdCols;
-      mlir::Value expr = mapBuilder.create<mlir::arith::ConstantIndexOp>(builder.getUnknownLoc(), intVal);
+      mlir::Value expr = mapBuilder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), intVal,mapBuilder.getI64Type());
       auto attrDef = attrManager.createDef(mapName, "intval");
-      attrDef.getColumn().type = mapBuilder.getIndexType();
+      attrDef.getColumn().type = mapBuilder.getI64Type();
       createdCols.push_back(attrDef);
       createdValues.push_back(expr);
 
@@ -1825,13 +1825,13 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       std::vector<mlir::Attribute> createdCols;
       auto colDef = val.cast<mlir::tuples::ColumnDefAttr>();
       auto colRef = attrManager.createRef(&colDef.getColumn());
-      mlir::Value shiftVal = mapBuilder.create<mlir::arith::ConstantIndexOp>(builder.getUnknownLoc(), shift);
+      mlir::Value shiftVal = mapBuilder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), shift,mapBuilder.getI64Type());
       mlir::Value colVal = mapBuilder.create<mlir::tuples::GetColumnOp>(builder.getUnknownLoc(), colRef.getColumn().type, colRef, tuple);
       mlir::Value shifted = mapBuilder.create<mlir::arith::ShRUIOp>(builder.getUnknownLoc(), colVal, shiftVal);
-      mlir::Value one = mapBuilder.create<mlir::arith::ConstantIndexOp>(builder.getUnknownLoc(), shift);
+      mlir::Value one = mapBuilder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 1, mapBuilder.getI64Type());
       mlir::Value expr = mapBuilder.create<mlir::arith::AndIOp>(builder.getUnknownLoc(), shifted, one);
       auto attrDef = attrManager.createDef(mapName, "intval");
-      attrDef.getColumn().type = mapBuilder.getIndexType();
+      attrDef.getColumn().type = mapBuilder.getI64Type();
       createdCols.push_back(attrDef);
       createdValues.push_back(expr);
 

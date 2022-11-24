@@ -21,7 +21,7 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
       auto& attributeManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
 
       mlir::relalg::AggrFuncOp aggrFuncOp = mlir::cast<mlir::relalg::AggrFuncOp>(op);
-      if (mlir::isa<mlir::relalg::AggregationOp>(op->getParentOp())) {
+      if (mlir::isa<mlir::relalg::AggregationOp,mlir::relalg::WindowOp>(op->getParentOp())) {
          return mlir::success(false);
       }
       std::string scopeName = attributeManager.getUniqueScope("aggr");
@@ -195,6 +195,19 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
                }
             }
          });
+      getOperation()
+         .walk([&](mlir::relalg::WindowOp aggregationOp) {
+            mlir::Value arg = aggregationOp.getAggrFunc().front().getArgument(0);
+            std::vector<mlir::Operation*> users(arg.getUsers().begin(), arg.getUsers().end());
+            for (auto* user : users) {
+               if (auto mapOp = mlir::dyn_cast_or_null<mlir::relalg::MapOp>(user)) {
+                  mapOp->moveBefore(aggregationOp);
+                  mapOp.replaceAllUsesWith(aggregationOp.getAggrFunc().front().getArgument(0));
+                  mapOp->setOperand(0, aggregationOp.getRel());
+                  aggregationOp->setOperand(0, mapOp.getResult());
+               }
+            }
+         });
       auto& attrManager = getOperation().getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       getOperation()
          .walk([&](mlir::relalg::AggregationOp aggregationOp) {
@@ -220,6 +233,76 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
             size_t id = 0;
             for (auto& op : aggregationOp.getAggrFunc().front()) {
                if (mlir::isa<mlir::relalg::AggrFuncOp, mlir::relalg::CountRowsOp>(&op)) {
+                  bool otherUser = false;
+                  for (auto* user : op.getUsers()) {
+                     otherUser |= !mlir::isa<mlir::tuples::ReturnOp>(user);
+                  }
+                  if (otherUser) {
+                     auto attr = attrManager.createDef(scope, "rw" + std::to_string(id++));
+                     attr.getColumn().type = op.getResult(0).getType();
+                     computedValues.push_back(op.getResult(0));
+                     computedColsAfter.push_back(attr);
+                     aggrMapping.insert({op.getResult(0), attrManager.createRef(&attr.getColumn())});
+                  }
+               }
+            }
+            mlir::OpBuilder builder(aggregationOp);
+            aggregationOp.setComputedColsAttr(builder.getArrayAttr(computedColsAfter));
+            returnOp->setOperands(computedValues);
+
+            if (!colsForMap.empty()) {
+               auto* block = new mlir::Block;
+               builder.setInsertionPointAfter(aggregationOp);
+               mlir::BlockAndValueMapping mapping;
+               auto loc = aggregationOp->getLoc();
+               auto newmap = builder.create<mlir::relalg::MapOp>(aggregationOp->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), aggregationOp, builder.getArrayAttr(colsForMap));
+               newmap.getPredicate().push_back(block);
+               auto tuple = newmap.getPredicate().addArgument(mlir::tuples::TupleType::get(builder.getContext()), loc);
+               builder.setInsertionPointToStart(&newmap.getPredicate().front());
+               std::vector<mlir::Operation*> getOps;
+               for (auto [v, c] : aggrMapping) {
+                  auto newVal = builder.create<mlir::tuples::GetColumnOp>(loc, v.getType(), c, tuple);
+                  mapping.map(v, newVal);
+                  getOps.push_back(newVal);
+               }
+               for (auto v : valsForMap) {
+                  mlir::relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), &newmap.getLambdaBlock(), mapping);
+               }
+               for (auto* op : getOps) {
+                  op->moveBefore(block, block->begin());
+               }
+               std::vector<mlir::Value> returnValues;
+               for (auto v : valsForMap) {
+                  returnValues.push_back(mapping.lookup(v));
+               }
+               builder.create<mlir::tuples::ReturnOp>(loc, returnValues);
+               aggregationOp.getResult().replaceAllUsesExcept(newmap.getResult(), newmap);
+            }
+         });
+      getOperation()
+         .walk([&](mlir::relalg::WindowOp aggregationOp) {
+            auto scope = attrManager.getUniqueScope("aggr_rw");
+            auto computedCols = aggregationOp.getComputedCols();
+            std::vector<mlir::Value> computedValues;
+            std::vector<mlir::Attribute> computedColsAfter;
+            llvm::DenseMap<mlir::Value, mlir::tuples::ColumnRefAttr> aggrMapping;
+            std::vector<mlir::Attribute> colsForMap;
+            std::vector<mlir::Value> valsForMap;
+            auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(aggregationOp.getAggrFunc().front().getTerminator());
+            for (size_t i = 0; i < returnOp->getNumOperands(); i++) {
+               auto returnValue = returnOp.getOperand(i);
+               auto isDirectAggregate = mlir::isa_and_nonnull<mlir::relalg::AggrFuncOp, mlir::relalg::CountRowsOp, mlir::relalg::RankOp>(returnValue.getDefiningOp());
+               if (isDirectAggregate) {
+                  computedValues.push_back(returnValue);
+                  computedColsAfter.push_back(computedCols[i]);
+               } else {
+                  colsForMap.push_back(computedCols[i]);
+                  valsForMap.push_back(returnValue);
+               }
+            }
+            size_t id = 0;
+            for (auto& op : aggregationOp.getAggrFunc().front()) {
+               if (mlir::isa<mlir::relalg::AggrFuncOp, mlir::relalg::CountRowsOp,mlir::relalg::RankOp>(&op)) {
                   bool otherUser = false;
                   for (auto* user : op.getUsers()) {
                      otherUser |= !mlir::isa<mlir::tuples::ReturnOp>(user);
