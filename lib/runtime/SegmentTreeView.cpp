@@ -12,7 +12,6 @@ SegmentTreeView::TreeNode* SegmentTreeView::buildRecursively(std::vector<uint8_t
       createInitialStateFn(leaf->state, entryPointers[from]);
       uint64_t init=0;
       memcpy(&init, leaf->state,sizeof(init));
-      std::cout<<"init["<<from<<"]="<<init<<std::endl;
       return leaf;
    } else {
       size_t mid = from + (to - from) / 2;

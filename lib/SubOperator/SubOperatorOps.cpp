@@ -638,6 +638,7 @@ void mlir::subop::CreateSegmentTreeView::print(::mlir::OpAsmPrinter& p) {
       }
       p<<arg;
    }
+   p<<")";
    p.printRegion(getInitialFn(), false, true);
    p<<"combine: ([";
    auto argCount=getType().getValueMembers().getTypes().size();

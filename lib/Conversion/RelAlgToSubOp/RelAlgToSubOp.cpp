@@ -1374,6 +1374,7 @@ class DistAggrFunc {
    DistAggrFunc(const mlir::tuples::ColumnDefAttr& destAttribute, const mlir::tuples::ColumnRefAttr& sourceAttribute) : stateType(destAttribute.cast<mlir::tuples::ColumnDefAttr>().getColumn().type), destAttribute(destAttribute), sourceAttribute(sourceAttribute) {}
    virtual mlir::Value createDefaultValue(mlir::OpBuilder& builder, mlir::Location loc) = 0;
    virtual mlir::Value aggregate(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value state, mlir::ValueRange args) = 0;
+   virtual mlir::Value combine(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value left, mlir::Value right) = 0;
    const mlir::tuples::ColumnDefAttr& getDestAttribute() const {
       return destAttribute;
    }
@@ -1396,6 +1397,9 @@ class CountStarAggrFunc : public DistAggrFunc {
       auto one = builder.create<mlir::db::ConstantOp>(loc, stateType, builder.getI64IntegerAttr(1));
       return builder.create<mlir::db::AddOp>(loc, stateType, state, one);
    }
+   mlir::Value combine(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value left, mlir::Value right) override {
+      return builder.create<mlir::db::AddOp>(loc, left, right);
+   }
 };
 class CountAggrFunc : public DistAggrFunc {
    public:
@@ -1413,6 +1417,9 @@ class CountAggrFunc : public DistAggrFunc {
          return added;
       }
    }
+   mlir::Value combine(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value left, mlir::Value right) override {
+      return builder.create<mlir::db::AddOp>(loc, left, right);
+   }
 };
 class AnyAggrFunc : public DistAggrFunc {
    public:
@@ -1422,6 +1429,9 @@ class AnyAggrFunc : public DistAggrFunc {
    }
    mlir::Value aggregate(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value state, mlir::ValueRange args) override {
       return args[0];
+   }
+   mlir::Value combine(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value left, mlir::Value right) override {
+      return left;
    }
 };
 class MaxAggrFunc : public DistAggrFunc {
@@ -1451,6 +1461,17 @@ class MaxAggrFunc : public DistAggrFunc {
       } else {
          //state non-nullable, arg not nullable
          return builder.create<mlir::arith::SelectOp>(loc, stateLtArg, args[0], state);
+      }
+   }
+   mlir::Value combine(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value left, mlir::Value right) override {
+      mlir::Value leftLtRight = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, left, right);
+      mlir::Value leftLtRightTruth = builder.create<mlir::db::DeriveTruth>(loc, leftLtRight);
+      if (stateType.isa<mlir::db::NullableType>()) {
+         mlir::Value isLeftNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), left);
+         mlir::Value setToRight = builder.create<mlir::arith::OrIOp>(loc, leftLtRightTruth, isLeftNull);
+         return builder.create<mlir::arith::SelectOp>(loc, setToRight, right, left);
+      } else {
+         return builder.create<mlir::arith::SelectOp>(loc, leftLtRight, right, left);
       }
    }
 };
@@ -1511,6 +1532,17 @@ class MinAggrFunc : public DistAggrFunc {
          return builder.create<mlir::arith::SelectOp>(loc, stateGtArg, args[0], state);
       }
    }
+   mlir::Value combine(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value left, mlir::Value right) override {
+      mlir::Value leftLtRight = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, left, right);
+      mlir::Value leftLtRightTruth = builder.create<mlir::db::DeriveTruth>(loc, leftLtRight);
+      if (stateType.isa<mlir::db::NullableType>()) {
+         mlir::Value isRightNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), right);
+         mlir::Value setToLeft = builder.create<mlir::arith::OrIOp>(loc, leftLtRightTruth, isRightNull);
+         return builder.create<mlir::arith::SelectOp>(loc, setToLeft, left, right);
+      } else {
+         return builder.create<mlir::arith::SelectOp>(loc, leftLtRight, left, right);
+      }
+   }
 };
 class SumAggrFunc : public DistAggrFunc {
    public:
@@ -1540,6 +1572,23 @@ class SumAggrFunc : public DistAggrFunc {
       } else {
          //state non-nullable, arg not nullable
          return builder.create<mlir::db::AddOp>(loc, state, args[0]);
+      }
+   }
+   mlir::Value combine(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value left, mlir::Value right) override {
+      if (stateType.isa<mlir::db::NullableType>()) {
+         // state nullable, arg not nullable
+         mlir::Value isLeftNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), left);
+         mlir::Value isRightNull = builder.create<mlir::db::IsNullOp>(loc, builder.getI1Type(), right);
+         mlir::Value zero = builder.create<mlir::db::ConstantOp>(loc, getBaseType(stateType), builder.getI64IntegerAttr(0));
+         zero = builder.create<mlir::db::AsNullableOp>(loc, stateType, zero);
+         mlir::Value newLeft = builder.create<mlir::arith::SelectOp>(loc, isLeftNull, zero, left);
+         mlir::Value newRight = builder.create<mlir::arith::SelectOp>(loc, isLeftNull, zero, right);
+         mlir::Value sum = builder.create<mlir::db::AddOp>(loc, newLeft, newRight);
+         mlir::Value bothNull = builder.create<mlir::arith::OrIOp>(loc, isLeftNull, isRightNull);
+         return builder.create<mlir::arith::SelectOp>(loc, bothNull, left, sum);
+      } else {
+         //state non-nullable, arg not nullable
+         return builder.create<mlir::db::AddOp>(loc, left, right);
       }
    }
 };
@@ -1628,8 +1677,6 @@ static std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr> perfo
    auto* initialValueBlock = createAggrFuncInitialValueBlock(loc, rewriter, distAggrFuncs);
    std::vector<mlir::Attribute> names;
    std::vector<mlir::Attribute> types;
-   std::vector<mlir::tuples::ColumnRefAttr> stateColumnsRef;
-   std::vector<mlir::Attribute> stateColumnsDef;
    std::vector<NamedAttribute> defMapping;
    std::vector<NamedAttribute> computedDefMapping;
 
@@ -1638,8 +1685,6 @@ static std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr> perfo
       names.push_back(rewriter.getStringAttr(memberName));
       types.push_back(mlir::TypeAttr::get(aggrFn->getStateType()));
       auto def = aggrFn->getDestAttribute();
-      stateColumnsRef.push_back(colManager.createRef(&def.getColumn()));
-      stateColumnsDef.push_back(def);
       defMapping.push_back(rewriter.getNamedAttr(memberName, def));
       computedDefMapping.push_back(rewriter.getNamedAttr(memberName, def));
    }
@@ -1870,6 +1915,76 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
       }
    }
 
+   std::tuple<Value, DictionaryAttr> buildSegmentTree(Location loc, ConversionPatternRewriter& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> aggrFuncs, Value continuousView,mlir::DictionaryAttr continuousViewMapping) const {
+      std::vector<mlir::Attribute> relevantMembers;
+      std::unordered_map<mlir::tuples::Column*, mlir::Value> stateMap;
+      auto *initBlock = new Block;
+      {
+         std::vector<mlir::Value> initialValues;
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(initBlock);
+         for (auto aggrFn : aggrFuncs) {
+            auto sourceColumn = aggrFn->getSourceAttribute();
+            mlir::Value initValue = aggrFn->createDefaultValue(rewriter, loc);
+            if (sourceColumn) {
+               for(auto x:continuousViewMapping){
+                  if(&x.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn()==&sourceColumn.getColumn()){
+                     relevantMembers.push_back(x.getName());
+                  }
+               }
+               mlir::Value arg = initBlock->addArgument(sourceColumn.getColumn().type, loc);
+               initValue = aggrFn->aggregate(rewriter, loc, initValue, arg);
+            } else {
+               initValue = aggrFn->aggregate(rewriter, loc, initValue, {});
+            }
+            initialValues.push_back(initValue);
+         }
+         rewriter.create<mlir::tuples::ReturnOp>(loc,initialValues);
+      }
+      auto *combineBlock = new Block;
+
+      {
+         std::vector<mlir::Value> combinedValues;
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(combineBlock);
+         std::vector<mlir::Value> leftArgs;
+         std::vector<mlir::Value> rightArgs;
+         for (auto aggrFn : aggrFuncs) {
+            auto stateType=aggrFn->getStateType();
+            leftArgs.push_back(combineBlock->addArgument(stateType,loc));
+         }
+         for (auto aggrFn : aggrFuncs) {
+            auto stateType=aggrFn->getStateType();
+            rightArgs.push_back(combineBlock->addArgument(stateType,loc));
+         }
+         for(size_t i=0;i<aggrFuncs.size();i++){
+            combinedValues.push_back(aggrFuncs.at(i)->combine(rewriter,loc,leftArgs.at(i),rightArgs.at(i)));
+         }
+         rewriter.create<mlir::tuples::ReturnOp>(loc,combinedValues);
+
+      }
+      std::vector<NamedAttribute> defMapping;
+      std::vector<mlir::Attribute> names;
+      std::vector<mlir::Attribute> types;
+      for (auto aggrFn : aggrFuncs) {
+         auto memberName = getUniqueMember("aggrval");
+         names.push_back(rewriter.getStringAttr(memberName));
+         types.push_back(mlir::TypeAttr::get(aggrFn->getStateType()));
+         auto def = aggrFn->getDestAttribute();
+         defMapping.push_back(rewriter.getNamedAttr(memberName, def));
+      }
+      auto fromMemberName = getUniqueMember("from");
+      auto toMemberName = getUniqueMember("to");
+      auto continuousViewRefType = mlir::subop::ContinuousViewEntryRefType::get(rewriter.getContext(), continuousView.getType().cast<mlir::subop::ContinuousViewType>());
+      auto cVRTAttr=mlir::TypeAttr::get(continuousViewRefType);
+      auto keyStateMembers = mlir::subop::StateMembersAttr::get(rewriter.getContext(), mlir::ArrayAttr::get(rewriter.getContext(), {rewriter.getStringAttr(fromMemberName),rewriter.getStringAttr(toMemberName)}), mlir::ArrayAttr::get(rewriter.getContext(), {cVRTAttr,cVRTAttr}));
+      auto valueStateMembers = mlir::subop::StateMembersAttr::get(rewriter.getContext(), mlir::ArrayAttr::get(rewriter.getContext(), names), mlir::ArrayAttr::get(rewriter.getContext(), types));
+      auto segmentTreeViewType=mlir::subop::SegmentTreeViewType::get(rewriter.getContext(),keyStateMembers,valueStateMembers);
+      auto createOp=rewriter.create<mlir::subop::CreateSegmentTreeView>(loc,segmentTreeViewType,continuousView,rewriter.getArrayAttr(relevantMembers));
+      createOp.getInitialFn().push_back(initBlock);
+      createOp.getCombineFn().push_back(combineBlock);
+      return {createOp.getResult(),rewriter.getDictionaryAttr(defMapping)};
+   }
    LogicalResult matchAndRewrite(mlir::relalg::WindowOp windowOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       AnalyzedWindow analyzedWindow;
       analyze(windowOp, analyzedWindow);
@@ -1880,36 +1995,60 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
          if (!analyzedWindow.distAggrFuncs[0].first.getAttrs().empty()) return failure();
          distAggrFuncs = analyzedWindow.distAggrFuncs[0].second;
       }
-      auto fromBegin = static_cast<int64_t>(windowOp.getFrom()) == std::numeric_limits<int64_t>().min();
-      auto fromEnd = static_cast<int64_t>(windowOp.getTo()) == std::numeric_limits<int64_t>().max();
+      auto from=static_cast<int64_t>(windowOp.getFrom());
+      auto to=static_cast<int64_t>(windowOp.getTo());
+      auto fromBegin = from== std::numeric_limits<int64_t>().min();
+      auto fromEnd = to == std::numeric_limits<int64_t>().max();
 
       auto evaluate = [&](ConversionPatternRewriter& rewriter, mlir::Value continuousView, mlir::DictionaryAttr columnMapping, mlir::Location loc) {
          auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
          auto continuousViewRefType = mlir::subop::ContinuousViewEntryRefType::get(rewriter.getContext(), continuousView.getType().cast<mlir::subop::ContinuousViewType>());
-         auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("scan"), "ref");
-         referenceDefAttr.getColumn().type = continuousViewRefType;
-         auto beginReferenceDefAttr = colManager.createDef(colManager.getUniqueScope("view"), "begin");
-         beginReferenceDefAttr.getColumn().type = continuousViewRefType;
-         auto endReferenceDefAttr = colManager.createDef(colManager.getUniqueScope("view"), "end");
-         endReferenceDefAttr.getColumn().type = continuousViewRefType;
+         auto [beginReferenceDefAttr,beginReferenceRefAttr]=createColumn(continuousViewRefType,"view","begin");
+         auto [endReferenceDefAttr,endReferenceRefAttr]=createColumn(continuousViewRefType,"view","end");
+         auto [referenceDefAttr,referenceRefAttr]=createColumn(continuousViewRefType,"scan","ref");
+
          std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr> staticAggregateResults;
+         std::tuple<mlir::Value, mlir::DictionaryAttr> segmentTreeViewResult;
          if (!distAggrFuncs.empty() && fromBegin && fromEnd) {
             mlir::Value scan = rewriter.create<mlir::subop::ScanOp>(loc, continuousView, columnMapping);
             staticAggregateResults = performAggregation(loc, rewriter, distAggrFuncs, mlir::relalg::OrderedAttributes::fromVec({}), scan, performAggrFuncReduce);
+         } else if (!distAggrFuncs.empty()) {
+            segmentTreeViewResult = buildSegmentTree(loc, rewriter, distAggrFuncs, continuousView,columnMapping);
          }
          mlir::Value scan = rewriter.create<mlir::subop::ScanRefsOp>(loc, continuousView, referenceDefAttr);
-         mlir::Value afterGather = rewriter.create<mlir::subop::GatherOp>(loc, scan, colManager.createRef(&referenceDefAttr.getColumn()), columnMapping);
+         mlir::Value afterGather = rewriter.create<mlir::subop::GatherOp>(loc, scan, referenceRefAttr, columnMapping);
          mlir::Value afterBegin = rewriter.create<mlir::subop::GetBeginReferenceOp>(loc, afterGather, continuousView, beginReferenceDefAttr);
          mlir::Value afterEnd = rewriter.create<mlir::subop::GetEndReferenceOp>(loc, afterBegin, continuousView, endReferenceDefAttr);
          mlir::Value current = afterEnd;
+         mlir::tuples::ColumnRefAttr rangeBegin;
+         mlir::tuples::ColumnRefAttr rangeEnd;
+         if(fromBegin){
+            rangeBegin=beginReferenceRefAttr;
+         }
+         if(fromEnd){
+            rangeEnd=endReferenceRefAttr;
+         }
+         if(from==0){
+            rangeBegin=referenceRefAttr;
+         }
+         if(to==0){
+            rangeEnd=referenceRefAttr;
+         }
+         assert(rangeBegin&&rangeEnd);
          for (auto orderedWindowFn : analyzedWindow.orderedWindowFunctions) {
-            current = orderedWindowFn->evaluate(rewriter, loc, current, colManager.createRef(&beginReferenceDefAttr.getColumn()), colManager.createRef(&endReferenceDefAttr.getColumn()), colManager.createRef(&referenceDefAttr.getColumn()));
+            current = orderedWindowFn->evaluate(rewriter, loc, current, rangeBegin, rangeEnd, colManager.createRef(&referenceDefAttr.getColumn()));
          }
          if (!distAggrFuncs.empty() && fromBegin && fromEnd) {
             mlir::Value state = std::get<0>(staticAggregateResults);
             mlir::DictionaryAttr stateColumnMapping = std::get<2>(staticAggregateResults);
             auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(getContext(), state.getType()), "lookup", "ref");
             mlir::Value afterLookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(getContext()), current, state, rewriter.getArrayAttr({}), referenceDef);
+            current = rewriter.create<mlir::subop::GatherOp>(loc, afterLookup, referenceRef, stateColumnMapping);
+         }else if(!distAggrFuncs.empty()){
+            mlir::Value segmentTreeView = std::get<0>(segmentTreeViewResult);
+            mlir::DictionaryAttr stateColumnMapping = std::get<1>(segmentTreeViewResult);
+            auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(getContext(), segmentTreeView.getType()), "lookup", "ref");
+            mlir::Value afterLookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(getContext()), current, segmentTreeView, rewriter.getArrayAttr({rangeBegin,rangeEnd}), referenceDef);
             current = rewriter.create<mlir::subop::GatherOp>(loc, afterLookup, referenceRef, stateColumnMapping);
          }
          return current;
