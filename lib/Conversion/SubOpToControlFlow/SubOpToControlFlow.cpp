@@ -102,10 +102,10 @@ static mlir::TupleType getTupleType(mlir::subop::State state) {
    return mlir::TupleType::get(state.getContext(), unpackTypes(state.getMembers().getTypes()));
 }
 
-class CreateSimpleStateLowering : public OpConversionPattern<mlir::subop::CreateOp> {
+class CreateSimpleStateLowering : public OpConversionPattern<mlir::subop::CreateSimpleStateOp> {
    public:
-   using OpConversionPattern<mlir::subop::CreateOp>::OpConversionPattern;
-   LogicalResult matchAndRewrite(mlir::subop::CreateOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+   using OpConversionPattern<mlir::subop::CreateSimpleStateOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::CreateSimpleStateOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (!createOp.getType().isa<mlir::subop::SimpleStateType>()) return failure();
       mlir::Value ref;
       {
@@ -116,7 +116,7 @@ class CreateSimpleStateLowering : public OpConversionPattern<mlir::subop::Create
       }
       if (!createOp.getInitFn().empty()) {
          auto x = rewriter.create<mlir::tuples::ReturnOp>(createOp->getLoc());
-         rewriter.mergeBlockBefore(&createOp.getInitFn().front().front(), x);
+         rewriter.mergeBlockBefore(&createOp.getInitFn().front(), x);
          auto terminator = mlir::cast<mlir::tuples::ReturnOp>(x->getPrevNode());
          auto packed = rewriter.create<mlir::util::PackOp>(createOp->getLoc(), terminator.getResults());
          rewriter.eraseOp(x);
@@ -137,10 +137,10 @@ static mlir::TupleType getHtEntryType(mlir::subop::HashMapType t, mlir::TypeConv
 
    return mlir::TupleType::get(t.getContext(), {i8PtrType, mlir::IndexType::get(t.getContext()), getHtKVType(t, converter)});
 }
-class CreateHashMapLowering : public OpConversionPattern<mlir::subop::CreateOp> {
+class CreateHashMapLowering : public OpConversionPattern<mlir::subop::GenericCreateOp> {
    public:
-   using OpConversionPattern<mlir::subop::CreateOp>::OpConversionPattern;
-   LogicalResult matchAndRewrite(mlir::subop::CreateOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+   using OpConversionPattern<mlir::subop::GenericCreateOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::GenericCreateOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (!createOp.getType().isa<mlir::subop::HashMapType>()) return failure();
       auto t = createOp.getType().cast<mlir::subop::HashMapType>();
 
@@ -151,9 +151,9 @@ class CreateHashMapLowering : public OpConversionPattern<mlir::subop::CreateOp> 
       return mlir::success();
    }
 };
-class CreateTableLowering : public OpConversionPattern<mlir::subop::CreateOp> {
+class CreateTableLowering : public OpConversionPattern<mlir::subop::CreateResultTableOp> {
    public:
-   using OpConversionPattern<mlir::subop::CreateOp>::OpConversionPattern;
+   using OpConversionPattern<mlir::subop::CreateResultTableOp>::OpConversionPattern;
    std::string arrowDescrFromType(mlir::Type type) const {
       if (type.isIndex()) {
          return "int[64]";
@@ -190,11 +190,11 @@ class CreateTableLowering : public OpConversionPattern<mlir::subop::CreateOp> {
       }
       return "";
    }
-   LogicalResult matchAndRewrite(mlir::subop::CreateOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+   LogicalResult matchAndRewrite(mlir::subop::CreateResultTableOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (!createOp.getType().isa<mlir::subop::ResultTableType>()) return failure();
       auto tableType = createOp.getType().cast<mlir::subop::ResultTableType>();
       std::string descr;
-      auto columnNames = createOp.getDescrAttr().cast<mlir::ArrayAttr>();
+      auto columnNames = createOp.getColumns();
       for (size_t i = 0; i < tableType.getMembers().getTypes().size(); i++) {
          if (!descr.empty()) {
             descr += ";";
@@ -206,10 +206,10 @@ class CreateTableLowering : public OpConversionPattern<mlir::subop::CreateOp> {
    }
 };
 
-class CreateBufferLowering : public OpConversionPattern<mlir::subop::CreateOp> {
+class CreateBufferLowering : public OpConversionPattern<mlir::subop::GenericCreateOp> {
    public:
-   using OpConversionPattern<mlir::subop::CreateOp>::OpConversionPattern;
-   LogicalResult matchAndRewrite(mlir::subop::CreateOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+   using OpConversionPattern<mlir::subop::GenericCreateOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::GenericCreateOp createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       if (!createOp.getType().isa<mlir::subop::BufferType>()) return failure();
       auto loc = createOp->getLoc();
       Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(loc, 1024);
@@ -896,7 +896,7 @@ class UnionMaterializeLowering : public OpConversionPattern<mlir::subop::UnionOp
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(unionOp->getBlock());
          auto bufferType = mlir::subop::BufferType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr(names), rewriter.getArrayAttr(types)));
-         tmpBuffer = rewriter.create<mlir::subop::CreateOp>(unionOp->getLoc(), bufferType, mlir::Attribute(), 0);
+         tmpBuffer = rewriter.create<mlir::subop::GenericCreateOp>(unionOp->getLoc(), bufferType);
       }
       for (auto stream : unionOp.getStreams()) {
          rewriter.create<mlir::subop::MaterializeOp>(loc, stream, tmpBuffer, rewriter.getDictionaryAttr(refMapping));

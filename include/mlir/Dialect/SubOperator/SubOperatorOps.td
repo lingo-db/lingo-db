@@ -319,14 +319,23 @@ def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator]> {
 // State Creation
 //===----------------------------------------------------------------------===//
 
-def CreateOp : SubOperator_Op<"create", [Pure]> {
+def CreateSimpleStateOp : SubOperator_Op<"create_simple_state", [Pure]> {
     let summary = "create new state";
+    let results = (outs SimpleState : $res);
+    let regions = (region AnyRegion:$initFn);
+    let assemblyFormat = [{ type($res) (`initial` `:` $initFn^)? attr-dict }];
+}
 
-    let arguments = (ins OptionalAttr<AnyAttr>: $descr);
+def GenericCreateOp : SubOperator_Op<"create", [Pure]> {
+    let summary = "create new state";
     let results = (outs AnyType : $res);
-    let regions = (region VariadicRegion<AnyRegion>:$initFn);
-    let assemblyFormat = [{  ($descr^)? `->` type($res) (`initial` `:` $initFn^)? attr-dict }];
-
+    let assemblyFormat = [{ type($res) attr-dict }];
+}
+def CreateResultTableOp : SubOperator_Op<"create_result_table", [Pure]> {
+    let summary = "create new state";
+    let arguments = (ins ArrayAttr: $columns);
+    let results = (outs ResultTable : $res);
+    let assemblyFormat = [{ $columns `->` type($res) attr-dict }];
 }
 
 def CreateSortedViewOp : SubOperator_Op<"create_sorted_view", [IsolatedFromAbove,SubOperator]> {

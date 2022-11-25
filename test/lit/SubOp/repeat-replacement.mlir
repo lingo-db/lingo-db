@@ -10,7 +10,7 @@
 
 module{
     func.func @main(){
-    %12 = subop.create ["const0"] -> !subop.result_table<[const0p0 : i32]>
+    %12 = subop.create_result_table ["const0"] -> !subop.result_table<[const0p0 : i32]>
     %3 = subop.generate[@constrel1::@const0({type = i32})] {
             %c1 = db.constant(1 : i32) : i32
             %c2 = db.constant(2 : i32) : i32
