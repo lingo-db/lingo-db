@@ -10,10 +10,8 @@ namespace runtime {
 
 class SegmentTreeView {
    using CreateInitialStateFn = std::add_pointer<void(uint8_t* newState, uint8_t* entry)>::type;
-   using CreateDefaultStateFn = std::add_pointer<void(uint8_t* newState)>::type;
    using CombineStatesFn = std::add_pointer<void(uint8_t* newState, uint8_t* left, uint8_t* right)>::type;
    CreateInitialStateFn createInitialStateFn;
-   CreateDefaultStateFn createDefaultStateFn;
    CombineStatesFn combineStatesFn;
    size_t stateTypeSize;
    struct TreeNode {
@@ -24,10 +22,11 @@ class SegmentTreeView {
       uint8_t* state;
    };
    TreeNode* buildRecursively(std::vector<uint8_t*>& entryPointers, size_t from, size_t to);
-   void lookup(uint8_t* result, size_t from, size_t to);
-   void lookupRecursively(TreeNode* t, uint8_t* result, size_t from, size_t to);
+   void lookupRecursively(TreeNode* t, uint8_t* result, size_t from, size_t to,bool& first);
    TreeNode* root;
-   static SegmentTreeView* build(Buffer buffer, size_t typeSize, CreateInitialStateFn createInitialStateFn, CreateDefaultStateFn createDefaultStateFn, CombineStatesFn combineStatesFn, size_t stateTypeSize);
+   public:
+   void lookup(uint8_t* result, size_t from, size_t to);
+   static SegmentTreeView* build(Buffer buffer, size_t typeSize, void (*createInitialStateFn)(unsigned char*, unsigned char*), void (*combineStatesFn)(unsigned char*, unsigned char*, unsigned char*), size_t stateTypeSize);
 };
 } // namespace runtime
 

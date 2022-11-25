@@ -32,6 +32,7 @@
 #include "runtime-defs/GrowingBuffer.h"
 #include "runtime-defs/Hashtable.h"
 #include "runtime-defs/LazyJoinHashtable.h"
+#include "runtime-defs/SegmentTreeView.h"
 
 using namespace mlir;
 
@@ -232,6 +233,102 @@ class SetResultOpLowering : public OpConversionPattern<mlir::subop::SetResultOp>
    using OpConversionPattern<mlir::subop::SetResultOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::subop::SetResultOp setResultOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       rewriter.replaceOpWithNewOp<mlir::dsa::SetResultOp>(setResultOp, setResultOp.getResultId(), adaptor.getState());
+      return mlir::success();
+   }
+};
+class CreateSegmentTreeViewLowering : public OpConversionPattern<mlir::subop::CreateSegmentTreeView> {
+   public:
+   using OpConversionPattern<mlir::subop::CreateSegmentTreeView>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::CreateSegmentTreeView createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      static size_t id = 0;
+      auto loc = createOp->getLoc();
+      auto continuousType = createOp.getSource().getType();
+      std::unordered_map<std::string, size_t> memberPositions;
+      for (auto i = 0ull; i < continuousType.getMembers().getTypes().size(); i++) {
+         memberPositions.insert({continuousType.getMembers().getNames()[i].cast<mlir::StringAttr>().str(), i});
+      }
+      auto ptrType = mlir::util::RefType::get(getContext(), IntegerType::get(getContext(), 8));
+
+      ModuleOp parentModule = createOp->getParentOfType<ModuleOp>();
+      mlir::TupleType sourceElementType = getTupleType(continuousType);
+      mlir::TupleType viewElementType = mlir::TupleType::get(getContext(), unpackTypes(createOp.getType().getValueMembers().getTypes()));
+
+      mlir::func::FuncOp initialFn;
+      {
+         OpBuilder::InsertionGuard insertionGuard(rewriter);
+         rewriter.setInsertionPointToStart(parentModule.getBody());
+         initialFn = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "segment_tree_initial_fn" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange()));
+         auto* funcBody = new Block;
+         funcBody->addArguments(TypeRange({ptrType, ptrType}), {parentModule->getLoc(), parentModule->getLoc()});
+         initialFn.getBody().push_back(funcBody);
+         rewriter.setInsertionPointToStart(funcBody);
+         Value dest = funcBody->getArgument(0);
+         Value src = funcBody->getArgument(1);
+
+         Value genericMemrefDest = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), viewElementType), dest);
+         Value genericMemrefSrc = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), sourceElementType), src);
+         Value tupleSource = rewriter.create<util::LoadOp>(loc, sourceElementType, genericMemrefSrc, Value());
+         auto unpackedSource = rewriter.create<mlir::util::UnPackOp>(loc, tupleSource);
+         std::vector<mlir::Value> args;
+         for (auto relevantMember : createOp.getRelevantMembers()) {
+            args.push_back(unpackedSource.getResult(memberPositions[relevantMember.cast<mlir::StringAttr>().str()]));
+         }
+
+         auto terminator = rewriter.create<mlir::func::ReturnOp>(loc);
+         Block* sortLambda = &createOp.getInitialFn().front();
+         auto* sortLambdaTerminator = sortLambda->getTerminator();
+         rewriter.mergeBlockBefore(sortLambda, terminator, args);
+         mlir::tuples::ReturnOp returnOp = mlir::cast<mlir::tuples::ReturnOp>(terminator->getPrevNode());
+         auto packedResult = rewriter.create<mlir::util::PackOp>(loc, returnOp.getResults());
+         rewriter.create<util::StoreOp>(loc,packedResult,genericMemrefDest,Value());
+         rewriter.create<mlir::func::ReturnOp>(loc);
+         rewriter.eraseOp(sortLambdaTerminator);
+         rewriter.eraseOp(terminator);
+      }
+      mlir::func::FuncOp combineFn;
+      {
+         OpBuilder::InsertionGuard insertionGuard(rewriter);
+         rewriter.setInsertionPointToStart(parentModule.getBody());
+         combineFn = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "segment_tree_combine_fn" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType,ptrType}), TypeRange()));
+         auto* funcBody = new Block;
+         funcBody->addArguments(TypeRange({ptrType, ptrType,ptrType}), {parentModule->getLoc(), parentModule->getLoc(),parentModule->getLoc()});
+         combineFn.getBody().push_back(funcBody);
+         rewriter.setInsertionPointToStart(funcBody);
+         Value dest = funcBody->getArgument(0);
+         Value left = funcBody->getArgument(1);
+         Value right = funcBody->getArgument(2);
+
+         Value genericMemrefDest = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), viewElementType), dest);
+         Value genericMemrefLeft = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), viewElementType), left);
+         Value genericMemrefRight = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), viewElementType), right);
+         Value tupleLeft = rewriter.create<util::LoadOp>(loc, viewElementType, genericMemrefLeft, Value());
+         Value tupleRight = rewriter.create<util::LoadOp>(loc, viewElementType, genericMemrefRight, Value());
+         auto unpackedLeft = rewriter.create<mlir::util::UnPackOp>(loc, tupleLeft).getResults();
+         auto unpackedRight = rewriter.create<mlir::util::UnPackOp>(loc, tupleRight).getResults();
+         std::vector<mlir::Value> args;
+         args.insert(args.end(),unpackedLeft.begin(),unpackedLeft.end());
+         args.insert(args.end(),unpackedRight.begin(),unpackedRight.end());
+         auto terminator = rewriter.create<mlir::func::ReturnOp>(loc);
+         Block* sortLambda = &createOp.getCombineFn().front();
+         auto* sortLambdaTerminator = sortLambda->getTerminator();
+         rewriter.mergeBlockBefore(sortLambda, terminator, args);
+         mlir::tuples::ReturnOp returnOp = mlir::cast<mlir::tuples::ReturnOp>(terminator->getPrevNode());
+         auto packedResult = rewriter.create<mlir::util::PackOp>(loc, returnOp.getResults());
+         rewriter.create<util::StoreOp>(loc,packedResult,genericMemrefDest,Value());
+         rewriter.create<mlir::func::ReturnOp>(loc);
+         rewriter.eraseOp(sortLambdaTerminator);
+         rewriter.eraseOp(terminator);
+      }
+
+
+      Value initialFnPtr = rewriter.create<mlir::func::ConstantOp>(loc, initialFn.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(initialFn.getSymName())));
+      Value combineFnPtr = rewriter.create<mlir::func::ConstantOp>(loc, combineFn.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(combineFn.getSymName())));
+      //auto genericBuffer = rt::GrowingBuffer::sort(rewriter, loc)({adaptor.getToSort(), functionPointer})[0];
+      Value sourceEntryTypeSize= rewriter.create<mlir::util::SizeOfOp>(loc,rewriter.getIndexType(),sourceElementType);
+      Value stateTypeSize= rewriter.create<mlir::util::SizeOfOp>(loc,rewriter.getIndexType(),viewElementType);
+      mlir::Value res=rt::SegmentTreeView::build(rewriter,loc)({adaptor.getSource(),sourceEntryTypeSize,initialFnPtr,combineFnPtr,stateTypeSize})[0];
+      rewriter.replaceOp(createOp,res);
       return mlir::success();
    }
 };
@@ -999,6 +1096,33 @@ class LookupHashIndexedViewLowering : public TupleStreamConsumerLowering<mlir::s
       return mlir::success();
    }
 };
+class LookupSegmentTreeViewLowering : public TupleStreamConsumerLowering<mlir::subop::LookupOp> {
+   public:
+   using TupleStreamConsumerLowering<mlir::subop::LookupOp>::TupleStreamConsumerLowering;
+   LogicalResult matchAndRewriteConsumer(mlir::subop::LookupOp lookupOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
+      if (!lookupOp.getState().getType().isa<mlir::subop::SegmentTreeViewType>()) return failure();
+
+      auto valueMembers=lookupOp.getState().getType().cast<mlir::subop::SegmentTreeViewType>().getValueMembers();
+      mlir::TupleType stateType = mlir::TupleType::get(getContext(), unpackTypes(valueMembers.getTypes()));
+
+      auto loc = lookupOp->getLoc();
+      auto unpackedLeft = rewriter.create<mlir::util::UnPackOp>(loc, mapping.resolve(lookupOp.getKeys())[0]).getResults();
+      auto unpackedRight = rewriter.create<mlir::util::UnPackOp>(loc, mapping.resolve(lookupOp.getKeys())[1]).getResults();
+      auto idxLeft=unpackedLeft[0];
+      auto idxRight=unpackedRight[0];
+      mlir::Value ref;
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         //todo: may not be valid in the long term
+         rewriter.setInsertionPointToStart(&lookupOp->getParentOfType<mlir::func::FuncOp>().getFunctionBody().front());
+         ref = rewriter.create<mlir::util::AllocaOp>(lookupOp->getLoc(), mlir::util::RefType::get(typeConverter->convertType(stateType)), mlir::Value());
+      }
+      rt::SegmentTreeView::lookup(rewriter,loc)({adaptor.getState(),ref,idxLeft,idxRight});
+      mapping.define(lookupOp.getRef(), ref);
+      newStream = mapping.createInFlight(rewriter);
+      return mlir::success();
+   }
+};
 
 class LookupHashMapLowering : public TupleStreamConsumerLowering<mlir::subop::LookupOrInsertOp> {
    public:
@@ -1535,6 +1659,9 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::subop::HashMapType t) -> Type {
       return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
    });
+   typeConverter.addConversion([&](mlir::subop::SegmentTreeViewType t) -> Type {
+      return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
+   });
    typeConverter.addConversion([&](mlir::subop::HashIndexedViewType t) -> Type {
       return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
    });
@@ -1552,6 +1679,8 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<GetExternalTableLowering>(typeConverter, ctxt);
    patterns.insert<ScanRefsTableLowering>(typeConverter, ctxt);
 
+   patterns.insert<CreateSegmentTreeViewLowering>(typeConverter, ctxt);
+   patterns.insert<LookupSegmentTreeViewLowering>(typeConverter, ctxt);
    patterns.insert<CreateHashIndexedViewLowering>(typeConverter, ctxt);
    patterns.insert<GetBeginLowering>(typeConverter, ctxt);
    patterns.insert<GetEndLowering>(typeConverter, ctxt);

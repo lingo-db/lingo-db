@@ -22,6 +22,9 @@ static mlir::Value convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::T
    if (t.isa<mlir::util::RefType>() && currentType.isa<mlir::util::RefType>()) {
       return builder.create<mlir::util::GenericMemrefCastOp>(loc, t, v);
    }
+   if (t.isa<mlir::util::BufferType>() && currentType.isa<mlir::util::BufferType>()) {
+      return builder.create<mlir::util::BufferCastOp>(loc, t, v);
+   }
    return v; //todo
 }
 mlir::ResultRange mlir::util::FunctionHelper::call(OpBuilder& builder, mlir::Location loc, const FunctionSpec& function, ValueRange values) {

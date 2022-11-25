@@ -1,4 +1,6 @@
 #include "runtime/SegmentTreeView.h"
+#include <cstring>
+#include <iostream>
 namespace runtime {
 //from: inclusive,to: inclusive
 SegmentTreeView::TreeNode* SegmentTreeView::buildRecursively(std::vector<uint8_t*>& entryPointers, size_t from, size_t to) {
@@ -8,11 +10,14 @@ SegmentTreeView::TreeNode* SegmentTreeView::buildRecursively(std::vector<uint8_t
       leaf->rightMax = to;
       leaf->state = (uint8_t*) aligned_alloc(8, stateTypeSize);
       createInitialStateFn(leaf->state, entryPointers[from]);
+      uint64_t init=0;
+      memcpy(&init, leaf->state,sizeof(init));
+      std::cout<<"init["<<from<<"]="<<init<<std::endl;
       return leaf;
    } else {
       size_t mid = from + (to - from) / 2;
       TreeNode* left = buildRecursively(entryPointers, from, mid);
-      TreeNode* right = buildRecursively(entryPointers, from, mid);
+      TreeNode* right = buildRecursively(entryPointers, mid+1, to);
       TreeNode* inner = new TreeNode;
       inner->leftMin = from;
       inner->rightMax = to;
@@ -24,20 +29,31 @@ SegmentTreeView::TreeNode* SegmentTreeView::buildRecursively(std::vector<uint8_t
    }
 }
 void SegmentTreeView::lookup(uint8_t* result, size_t from, size_t to) {
-   createDefaultStateFn(result);
-   lookupRecursively(root, result, from, to);
+   if(from>to){
+      throw std::runtime_error("from must be <= to");
+   }
+   if(!root){
+      throw std::runtime_error("can not perform lookup on empty segment tree");
+   }
+   bool first=true;
+   lookupRecursively(root, result, from, to,first);
 }
-void SegmentTreeView::lookupRecursively(runtime::SegmentTreeView::TreeNode* t, uint8_t* result, size_t from, size_t to) {
+void SegmentTreeView::lookupRecursively(runtime::SegmentTreeView::TreeNode* t, uint8_t* result, size_t from, size_t to, bool& first) {
    if (from <= t->leftMin && to >= t->rightMax) {
       //direct match
-      combineStatesFn(result, result, t->state);
+      if(first){
+         memcpy(result, t->state,stateTypeSize);
+         first=false;
+      }else {
+         combineStatesFn(result, result, t->state);
+      }
    } else if (from <= t->rightMax && to >= t->leftMin) {
       //partial match
-      lookupRecursively(t->left, result, from, to);
-      lookupRecursively(t->right, result, from, to);
+      lookupRecursively(t->left, result, from, to,first);
+      lookupRecursively(t->right, result, from, to,first);
    }
 }
-SegmentTreeView* SegmentTreeView::build(Buffer buffer, size_t typeSize, void (*createInitialStateFn)(unsigned char*, unsigned char*), void (*createDefaultStateFn)(unsigned char*), void (*combineStatesFn)(unsigned char*, unsigned char*, unsigned char*), size_t stateTypeSize) {
+SegmentTreeView* SegmentTreeView::build(Buffer buffer, size_t typeSize, void (*createInitialStateFn)(unsigned char*, unsigned char*), void (*combineStatesFn)(unsigned char*, unsigned char*, unsigned char*), size_t stateTypeSize) {
    std::vector<uint8_t*> entryPointers;
    auto numElements = buffer.numElements / typeSize;
    for (size_t i = 0; i < numElements; i++) {
@@ -46,13 +62,9 @@ SegmentTreeView* SegmentTreeView::build(Buffer buffer, size_t typeSize, void (*c
    auto* view = new SegmentTreeView;
    view->combineStatesFn = combineStatesFn;
    view->createInitialStateFn = createInitialStateFn;
-   view->createDefaultStateFn = createDefaultStateFn;
+   view->stateTypeSize=stateTypeSize;
    if (entryPointers.empty()) {
-      view->root = new TreeNode;
-      view->root->leftMin = 0;
-      view->root->rightMax = 0;
-      view->root->state = (uint8_t*) aligned_alloc(8, stateTypeSize);
-      createDefaultStateFn(view->root->state);
+      view->root = nullptr;
    } else {
       view->root = view->buildRecursively(entryPointers, 0, entryPointers.size() - 1);
    }

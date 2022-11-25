@@ -52,9 +52,13 @@ class MethodPrinter : public MatchFinder::MatchCallback {
                   if (!translated.has_value()) return {};
                   funcType += translated.value();
                }
-               auto translated = translateType(funcProtoType->getReturnType());
-               if (!translated.has_value()) return {};
-               funcType += "}, {" + translated.value() + "})";
+               if(funcProtoType->getReturnType()->isVoidType()){
+                  funcType+="},{})";
+               }else{
+                  auto translated = translateType(funcProtoType->getReturnType());
+                  if (!translated.has_value()) return {};
+                  funcType += "}, {" + translated.value() + "})";
+               }
                return funcType;
             }
          }
@@ -89,7 +93,6 @@ class MethodPrinter : public MatchFinder::MatchCallback {
       if (asString.ends_with("Buffer")) {
          return "mlir::util::BufferType::get(context," + translateIntegerType(8) + ")";
       }
-
       return std::optional<std::string>();
    }
    void emitTypeCreateFn(llvm::raw_ostream& os, std::vector<std::string> types) {

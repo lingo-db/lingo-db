@@ -289,7 +289,7 @@ ParseResult mlir::subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, 
    args.insert(args.end(), rightArgs.begin(), rightArgs.end());
    Region* body = result.addRegion();
    if (parser.parseRegion(*body, args)) return failure();
-   result.types.push_back(mlir::subop::SortedViewType::get(parser.getContext(),vecType));
+   result.types.push_back(mlir::subop::SortedViewType::get(parser.getContext(), vecType));
    return success();
 }
 
@@ -570,6 +570,94 @@ void mlir::subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
    }
    p.printRegion(getRegion(), false, true);
 }
+
+::mlir::ParseResult mlir::subop::CreateSegmentTreeView::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   OpAsmParser::UnresolvedOperand source;
+   ContinuousViewType continuousViewType;
+   if (parser.parseOperand(source) || parser.parseColonType(continuousViewType) || parser.resolveOperand(source, continuousViewType, result.operands)) {
+      return failure();
+   }
+   SegmentTreeViewType resultType;
+   if (parser.parseArrow() || parser.parseType(resultType)) {
+      return failure();
+   }
+   result.types.push_back(resultType);
+   ArrayAttr relevantMembers;
+   if (parser.parseKeyword("initial") || parser.parseAttribute(relevantMembers) || parser.parseColon()) {
+      return failure();
+   }
+   result.addAttribute("relevant_members",relevantMembers);
+   llvm::SmallVector<OpAsmParser::Argument> initialFnArguments;
+   if (parser.parseLParen() || parser.parseArgumentList(initialFnArguments) || parser.parseRParen()) {
+      return failure();
+   }
+   auto sourceMembers = continuousViewType.getMembers();
+   for (size_t i = 0; i < relevantMembers.size(); i++) {
+      size_t j = 0;
+      for (; j < sourceMembers.getNames().size(); j++) {
+         if (relevantMembers[i] == sourceMembers.getNames()[j]) {
+            break;
+         }
+      }
+      initialFnArguments[i].type = sourceMembers.getTypes()[j].cast<mlir::TypeAttr>().getValue();
+   }
+   Region* initialFn = result.addRegion();
+   if (parser.parseRegion(*initialFn, initialFnArguments)) return failure();
+   llvm::SmallVector<OpAsmParser::Argument> combineFnLeftArguments;
+   llvm::SmallVector<OpAsmParser::Argument> combineFnRightArguments;
+   if (parser.parseKeyword("combine") || parser.parseColon() || parser.parseLParen() || parser.parseLSquare()) {
+      return failure();
+   }
+   if (parser.parseArgumentList(combineFnLeftArguments) || parser.parseRSquare() || parser.parseComma() || parser.parseLSquare()) {
+      return failure();
+   }
+   if (parser.parseArgumentList(combineFnRightArguments) || parser.parseRSquare() || parser.parseRParen()) {
+      return failure();
+   }
+   for(size_t i=0;i<resultType.getValueMembers().getTypes().size();i++){
+      auto t=resultType.getValueMembers().getTypes()[i].cast<mlir::TypeAttr>().getValue();
+      combineFnLeftArguments[i].type=t;
+      combineFnRightArguments[i].type=t;
+   }
+   std::vector<OpAsmParser::Argument> args;
+   args.insert(args.end(), combineFnLeftArguments.begin(), combineFnLeftArguments.end());
+   args.insert(args.end(), combineFnRightArguments.begin(), combineFnRightArguments.end());
+   Region* combineFn = result.addRegion();
+   if (parser.parseRegion(*combineFn, args)) return failure();
+   return success();
+}
+void mlir::subop::CreateSegmentTreeView::print(::mlir::OpAsmPrinter& p) {
+   p<< getSource()<<" : " <<getSource().getType() << " -> "<<getType() <<" ";
+   p<< "initial"<<getRelevantMembers()<<":"<<"(";
+   bool first=true;
+   for(auto arg:getInitialFn().getArguments()){
+      if(first){
+         first=false;
+      }else{
+         p<<", ";
+      }
+      p<<arg;
+   }
+   p.printRegion(getInitialFn(), false, true);
+   p<<"combine: ([";
+   auto argCount=getType().getValueMembers().getTypes().size();
+   for(size_t i=0;i<argCount;i++){
+      if(i>0){
+         p<<", ";
+      }
+      p<<getCombineFn().getArgument(i);
+   }
+   p<<"],[";
+   for(size_t i=0;i<argCount;i++){
+      if(i>0){
+         p<<", ";
+      }
+      p<<getCombineFn().getArgument(i+argCount);
+   }
+   p<<"])";
+   p.printRegion(getCombineFn(), false, true);
+
+}
 ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    OpAsmParser::UnresolvedOperand stream;
    if (parser.parseOperand(stream)) {
@@ -785,23 +873,38 @@ std::vector<std::string> subop::CreateSortedViewOp::getWrittenMembers() {
    return res;
 }
 std::vector<std::string> subop::CreateHashIndexedView::getWrittenMembers() {
-   return {getLinkMember().str(),getHashMember().str()};
+   return {getLinkMember().str(), getHashMember().str()};
 }
 std::vector<std::string> subop::CreateHashIndexedView::getReadMembers() {
    return {getHashMember().str()};
 }
+std::vector<std::string> subop::CreateSegmentTreeView::getWrittenMembers() {
+   std::vector<std::string> res;
+   auto names = getType().cast<mlir::subop::SegmentTreeViewType>().getValueMembers().getNames();
+   for (auto name : names) {
+      res.push_back(name.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
+std::vector<std::string> subop::CreateSegmentTreeView::getReadMembers() {
+   std::vector<std::string> res;
+   for (auto name : getRelevantMembers()) {
+      res.push_back(name.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
 std::vector<std::string> subop::CreateContinuousView::getWrittenMembers() {
    std::vector<std::string> res;
-   auto names= getSource().getType().cast<mlir::subop::State>().getMembers().getNames();
-   for(auto name:names){
+   auto names = getSource().getType().cast<mlir::subop::State>().getMembers().getNames();
+   for (auto name : names) {
       res.push_back(name.cast<mlir::StringAttr>().str());
    }
    return res;
 }
 std::vector<std::string> subop::CreateContinuousView::getReadMembers() {
    std::vector<std::string> res;
-   auto names= getSource().getType().cast<mlir::subop::State>().getMembers().getNames();
-   for(auto name:names){
+   auto names = getSource().getType().cast<mlir::subop::State>().getMembers().getNames();
+   for (auto name : names) {
       res.push_back(name.cast<mlir::StringAttr>().str());
    }
    return res;

@@ -1,5 +1,6 @@
 gen_rt_def(grow-buf-rt-defs "GrowingBuffer.h")
 gen_rt_def(buf-rt-defs "Buffer.h")
+gen_rt_def(stv-rt-defs "SegmentTreeView.h")
 
 add_mlir_conversion_library(MLIRSubOpToControlFlow
         SubOpToControlFlow.cpp
@@ -13,6 +14,7 @@ add_mlir_conversion_library(MLIRSubOpToControlFlow
         ds-it-rt-defs
         grow-buf-rt-defs
         buf-rt-defs
+        stv-rt-defs
         LINK_COMPONENTS
         Core
 

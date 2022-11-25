@@ -108,6 +108,15 @@ def HashIndexedView : SubOperator_Type<"HashIndexedView", "hash_indexed_view", [
      }];
 }
 
+def SegmentTreeView : SubOperator_Type<"SegmentTreeView", "segment_tree_view", [State,LookupAbleState]> {
+    let summary = "segment tree view type";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+     let extraClassDeclaration = [{
+        StateMembersAttr getMembers();
+     }];
+}
+
 def Entry : SubOperator_Type<"Entry", "entry"> {
     let summary = "entry of some state";
     let parameters = (ins "Type":$t);
@@ -352,6 +361,17 @@ def CreateContinuousView : SubOperator_Op<"create_continuous_view", [SubOperator
       std::vector<std::string> getWrittenMembers();
       std::vector<std::string> getReadMembers();
     }];
+}
+
+def CreateSegmentTreeView : SubOperator_Op<"create_segment_tree_view",[SubOperator]> {
+  let regions = (region SizedRegion<1>:$initial_fn,SizedRegion<1>:$combine_fn);
+  let arguments = (ins ContinuousView:$source,ArrayAttr: $relevant_members);
+  let results = (outs SegmentTreeView:$result);
+  let hasCustomAssemblyFormat = 1;
+        let extraClassDeclaration = [{
+            std::vector<std::string> getWrittenMembers();
+            std::vector<std::string> getReadMembers();
+        }];
 }
 //todo: add subop.create_view
 
