@@ -1,4 +1,4 @@
-add_library(runner runner.cpp result_formatting.cpp)
+add_library(runner runner.cpp result_formatting.cpp EnforceCABIPass.cpp AnnotateProfilingDataPass.cpp)
 llvm_update_compile_flags(runner)
 target_link_libraries(runner PRIVATE ${LIBS} MLIRSQLFrontend PUBLIC arrow_shared pg_query::pg_query)
 if (COMPILE_FOR_PERF)

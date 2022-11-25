@@ -1,0 +1,77 @@
+#include "mlir/Analysis/DataLayoutAnalysis.h"
+#include "runner/BackendPasses.h"
+#include <mlir/Dialect/LLVMIR/LLVMDialect.h>
+#include <mlir/Pass/Pass.h>
+namespace {
+struct EnforceCPPABIPass
+   : public mlir::PassWrapper<EnforceCPPABIPass, mlir::OperationPass<mlir::LLVM::LLVMFuncOp>> {
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(EnforceCPPABIPass)
+   void getDependentDialects(mlir::DialectRegistry& registry) const override {
+      registry.insert<mlir::LLVM::LLVMDialect>();
+   }
+   void runOnOperation() override {
+      auto funcOp = getOperation();
+      if (funcOp.isPrivate()) {
+         auto moduleOp = funcOp->getParentOfType<mlir::ModuleOp>();
+         auto& dataLayoutAnalysis = getAnalysis<mlir::DataLayoutAnalysis>();
+         size_t numRegs = 0;
+         std::vector<size_t> passByMem;
+         std::vector<size_t> boolParams;
+         for (size_t i = 0; i < funcOp.getNumArguments(); i++) {
+            if (funcOp.getArgumentTypes()[i].isInteger(1)) {
+               boolParams.push_back(i);
+            }
+            auto dataLayout = dataLayoutAnalysis.getAbove(funcOp.getOperation());
+            auto typeSize = dataLayout.getTypeSize(funcOp.getArgumentTypes()[i]);
+            if (typeSize <= 16) {
+               auto requiredRegs = typeSize <= 8 ? 1 : 2;
+               if (numRegs + requiredRegs > 6) {
+                  passByMem.push_back(i);
+               } else {
+                  numRegs += requiredRegs;
+               }
+            } else {
+               passByMem.push_back(i);
+            }
+         }
+         if (passByMem.empty() && boolParams.empty()) return;
+         std::vector<mlir::Type> paramTypes(funcOp.getArgumentTypes().begin(), funcOp.getArgumentTypes().end());
+         for (size_t memId : passByMem) {
+            paramTypes[memId] = mlir::LLVM::LLVMPointerType::get(paramTypes[memId]);
+            funcOp.setArgAttr(memId, "llvm.byval", mlir::UnitAttr::get(&getContext()));
+         }
+         for (size_t paramId : boolParams) {
+            paramTypes[paramId] = mlir::IntegerType::get(&getContext(), 8);
+         }
+         funcOp.setType(mlir::LLVM::LLVMFunctionType::get(funcOp.getFunctionType().getReturnType(), paramTypes));
+         auto uses = mlir::SymbolTable::getSymbolUses(funcOp, moduleOp.getOperation());
+         for (auto use : *uses) {
+            auto callOp = mlir::cast<mlir::LLVM::CallOp>(use.getUser());
+            for (size_t memId : passByMem) {
+               auto userFunc = callOp->getParentOfType<mlir::LLVM::LLVMFuncOp>();
+               mlir::OpBuilder builder(userFunc->getContext());
+               builder.setInsertionPointToStart(&userFunc.getBody().front());
+               auto const1 = builder.create<mlir::LLVM::ConstantOp>(callOp.getLoc(), builder.getI64Type(), builder.getI64IntegerAttr(1));
+               mlir::Value allocatedElementPtr = builder.create<mlir::LLVM::AllocaOp>(callOp.getLoc(), paramTypes[memId], const1, 16);
+               mlir::OpBuilder builder2(userFunc->getContext());
+               builder2.setInsertionPoint(callOp);
+               builder2.create<mlir::LLVM::StoreOp>(callOp->getLoc(), callOp.getOperand(memId), allocatedElementPtr);
+               callOp.setOperand(memId, allocatedElementPtr);
+            }
+            for (size_t paramId : boolParams) {
+               auto userFunc = callOp->getParentOfType<mlir::LLVM::LLVMFuncOp>();
+               mlir::OpBuilder builder(userFunc->getContext());
+               builder.setInsertionPoint(callOp);
+               auto const1 = builder.create<mlir::LLVM::ConstantOp>(callOp.getLoc(), builder.getI8Type(), builder.getI64IntegerAttr(1));
+               auto x = builder.create<mlir::LLVM::ZExtOp>(callOp.getLoc(), builder.getI8Type(), callOp.getOperand(paramId));
+               auto anded = builder.create<mlir::LLVM::AndOp>(callOp.getLoc(), const1, x);
+               callOp.setOperand(paramId, anded);
+            }
+         }
+      }
+   }
+};
+} // namespace
+std::unique_ptr<mlir::Pass> runner::createEnforceCABI() {
+   return std::make_unique<EnforceCPPABIPass>();
+}
