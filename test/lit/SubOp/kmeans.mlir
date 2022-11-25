@@ -6,63 +6,59 @@
 //CHECK: |                             2  |                     6.6666665  |                             4  |
 module{
     func.func @main(){
-        %initialCentroids = subop.create -> !subop.buffer<[initialClusterX : f32, initialClusterY : f32, initialClusterId : i32]> initial : {
-          %x = db.constant(1) : f32
-          %y = db.constant(6) : f32
-          %id = db.constant(0) : i32
-          tuples.return %x, %y, %id : f32,f32,i32
-        }, {
-          %x = db.constant(3) : f32
-          %y = db.constant(1) : f32
-          %id = db.constant(1) : i32
-          tuples.return %x, %y, %id : f32,f32,i32
-        }, {
-          %x = db.constant(7) : f32
-          %y = db.constant(2) : f32
-          %id = db.constant(2) : i32
-          tuples.return %x, %y, %id : f32,f32,i32
+        %initialCentroids = subop.create -> !subop.buffer<[initialClusterX : f32, initialClusterY : f32, initialClusterId : i32]>
+        %initialCentroidStream = subop.generate [@c::@x({type=f32}),@c::@y({type=f32}),@c::@i({type=i32})] {
+            %x1 = db.constant(1) : f32
+            %y1 = db.constant(6) : f32
+            %id1 = db.constant(0) : i32
+            subop.generate_emit  %x1, %y1, %id1 : f32,f32,i32
+            %x2 = db.constant(3) : f32
+            %y2 = db.constant(1) : f32
+            %id2 = db.constant(1) : i32
+            subop.generate_emit %x2, %y2, %id2 : f32,f32,i32
+            %x3 = db.constant(7) : f32
+            %y3 = db.constant(2) : f32
+            %id3 = db.constant(2) : i32
+            subop.generate_emit %x3, %y3, %id3 : f32,f32,i32
+            tuples.return
         }
-        %points = subop.create -> !subop.buffer<[pointX : f32, pointY : f32]> initial : {
-          %x = db.constant(1) : f32
-          %y = db.constant(1) : f32
-          tuples.return %x, %y : f32,f32
-        }, {
-          %x = db.constant(1) : f32
-          %y = db.constant(2) : f32
-          tuples.return %x, %y : f32,f32
-        }, {
-          %x = db.constant(2) : f32
-          %y = db.constant(1) : f32
-          tuples.return %x, %y : f32,f32
-        }, {
-          %x = db.constant(2) : f32
-          %y = db.constant(4) : f32
-          tuples.return %x, %y : f32,f32
-        }, {
-          %x = db.constant(2) : f32
-          %y = db.constant(5) : f32
-          tuples.return %x, %y : f32,f32
-        }, {
-          %x = db.constant(3) : f32
-          %y = db.constant(2) : f32
-          tuples.return %x, %y : f32,f32
-        }, {
-          %x = db.constant(3) : f32
-          %y = db.constant(5) : f32
-          tuples.return %x, %y : f32,f32
-        }, {
-          %x = db.constant(6) : f32
-          %y = db.constant(3) : f32
-          tuples.return %x, %y : f32,f32
-        }, {
-          %x = db.constant(6) : f32
-          %y = db.constant(5) : f32
-          tuples.return %x, %y : f32,f32
-        }, {
-          %x = db.constant(8) : f32
-          %y = db.constant(4) : f32
-          tuples.return %x, %y : f32,f32
+        subop.materialize %initialCentroidStream {@c::@x=>initialClusterX, @c::@y => initialClusterY, @c::@i => initialClusterId}, %initialCentroids: !subop.buffer<[initialClusterX : f32, initialClusterY : f32, initialClusterId : i32]>
+
+        %points = subop.create -> !subop.buffer<[pointX : f32, pointY : f32]>
+        %pointsStream = subop.generate [@p::@x({type=f32}),@p::@y({type=f32})] {
+          %x1 = db.constant(1) : f32
+          %y1 = db.constant(1) : f32
+          subop.generate_emit %x1, %y1 : f32,f32
+          %x2 = db.constant(1) : f32
+          %y2 = db.constant(2) : f32
+          subop.generate_emit %x2, %y2 : f32,f32
+          %x3 = db.constant(2) : f32
+          %y3 = db.constant(1) : f32
+          subop.generate_emit %x3, %y3 : f32,f32
+          %x4 = db.constant(2) : f32
+          %y4 = db.constant(4) : f32
+          subop.generate_emit %x4, %y4 : f32,f32
+          %x5 = db.constant(2) : f32
+          %y5 = db.constant(5) : f32
+          subop.generate_emit %x5, %y5 : f32,f32
+          %x6 = db.constant(3) : f32
+          %y6 = db.constant(2) : f32
+          subop.generate_emit %x6, %y6 : f32,f32
+          %x7 = db.constant(3) : f32
+          %y7 = db.constant(5) : f32
+          subop.generate_emit %x7, %y7 : f32,f32
+          %x8 = db.constant(6) : f32
+          %y8 = db.constant(3) : f32
+          subop.generate_emit %x8, %y8 : f32,f32
+          %x9 = db.constant(6) : f32
+          %y9 = db.constant(5) : f32
+          subop.generate_emit %x9, %y9 : f32,f32
+          %x10 = db.constant(8) : f32
+          %y10 = db.constant(4) : f32
+          subop.generate_emit %x10, %y10 : f32,f32
+          tuples.return
         }
+        subop.materialize %pointsStream {@p::@x=>pointX, @p::@y => pointY}, %points: !subop.buffer<[pointX : f32, pointY : f32]>
 
         %finalCentroids = subop.loop %initialCentroids : !subop.buffer<[initialClusterX : f32, initialClusterY : f32, initialClusterId : i32]> (%centroids) -> !subop.buffer<[clusterX : f32, clusterY : f32, clusterId : i32]> {
                 %nextCentroids = subop.create -> !subop.buffer<[nextClusterX : f32, nextClusterY : f32, nextClusterId : i32]>

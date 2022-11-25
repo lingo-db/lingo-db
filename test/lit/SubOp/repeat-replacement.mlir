@@ -11,18 +11,15 @@
 module{
     func.func @main(){
     %12 = subop.create ["const0"] -> !subop.result_table<[const0p0 : i32]>
-    %0 = subop.create -> !subop.buffer<[membern1 : i32]> initial : {
-      %1400 = db.constant(1 : i32) : i32
-      tuples.return %1400 : i32
-    }, {
-      %1400 = db.constant(2 : i32) : i32
-      tuples.return %1400 : i32
-    }, {
-      %1400 = db.constant(3 : i32) : i32
-      tuples.return %1400 : i32
+    %3 = subop.generate[@constrel1::@const0({type = i32})] {
+            %c1 = db.constant(1 : i32) : i32
+            %c2 = db.constant(2 : i32) : i32
+            %c3 = db.constant(3 : i32) : i32
+            subop.generate_emit %c1 :i32
+            subop.generate_emit %c2 :i32
+            subop.generate_emit %c3 :i32
+        tuples.return
     }
-    %3 = subop.scan %0 : !subop.buffer<[membern1 : i32]> {membern1 => @constrel1::@const0({type = i32})}
-
     %10 = subop.map %3 computes : [@set2::@repeat({type = index})] (%arg0: !tuples.tuple){
       %14 = tuples.getcol %arg0 @constrel1::@const0 : i32
       %19 = arith.index_cast %14 : i32 to index
