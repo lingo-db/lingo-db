@@ -11,6 +11,7 @@ namespace mlir {
 namespace util {
 void populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeConverter, RewritePatternSet& patterns);
 void populateUtilTypeConversionPatterns(TypeConverter& typeConverter, RewritePatternSet& patterns);
+std::unique_ptr<mlir::Pass> createUtilToLLVMPass();
 } // end namespace util
 } // end namespace mlir
 

@@ -72,61 +72,8 @@
 #include <sched.h>
 
 #include <iostream>
-namespace {
-struct ToLLVMLoweringPass
-   : public mlir::PassWrapper<ToLLVMLoweringPass, mlir::OperationPass<mlir::ModuleOp>> {
-   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ToLLVMLoweringPass)
-   void getDependentDialects(mlir::DialectRegistry& registry) const override {
-      registry.insert<mlir::LLVM::LLVMDialect, mlir::scf::SCFDialect, mlir::cf::ControlFlowDialect, mlir::arith::ArithDialect>();
-   }
-   void runOnOperation() final;
-};
-
-
-} // end anonymous namespace
-
-void ToLLVMLoweringPass::runOnOperation() {
-   // The first thing to define is the conversion target. This will define the
-   // final target for this lowering. For this lowering, we are only targeting
-   // the LLVM dialect.
-   const auto& dataLayoutAnalysis = getAnalysis<mlir::DataLayoutAnalysis>();
-
-   mlir::LLVMConversionTarget target(getContext());
-   target.addLegalOp<mlir::ModuleOp>();
-
-   // During this lowering, we will also be lowering the MemRef types, that are
-   // currently being operated on, to a representation in LLVM. To perform this
-   // conversion we use a TypeConverter as part of the lowering. This converter
-   // details how one type maps to another. This is necessary now that we will be
-   // doing more complicated lowerings, involving loop region arguments.
-   mlir::LowerToLLVMOptions options(&getContext(), dataLayoutAnalysis.getAtOrAbove(getOperation()));
-   //options.emitCWrappers = true;
-   mlir::LLVMTypeConverter typeConverter(&getContext(), options, &dataLayoutAnalysis);
-   typeConverter.addSourceMaterialization([&](mlir::OpBuilder&, mlir::FunctionType type, mlir::ValueRange valueRange, mlir::Location loc) {
-      return valueRange.front();
-   });
-
-   mlir::RewritePatternSet patterns(&getContext());
-   populateAffineToStdConversionPatterns(patterns);
-   mlir::populateSCFToControlFlowConversionPatterns(patterns);
-   mlir::util::populateUtilToLLVMConversionPatterns(typeConverter, patterns);
-   mlir::populateFuncToLLVMConversionPatterns(typeConverter, patterns);
-   mlir::cf::populateControlFlowToLLVMConversionPatterns(typeConverter, patterns);
-
-   mlir::populateMemRefToLLVMConversionPatterns(typeConverter, patterns);
-   mlir::arith::populateArithToLLVMConversionPatterns(typeConverter, patterns);
-   // We want to completely lower to LLVM, so we use a `FullConversion`. This
-   // ensures that only legal operations will remain after the conversion.
-   auto module = getOperation();
-   if (failed(applyFullConversion(module, target, std::move(patterns))))
-      signalPassFailure();
-}
-
-
 namespace runner {
-std::unique_ptr<mlir::Pass> createLowerToLLVMPass() {
-   return std::make_unique<ToLLVMLoweringPass>();
-}
+
 int loadMLIR(std::string inputFilename, mlir::MLIRContext& context, mlir::OwningOpRef<mlir::ModuleOp>& module) {
    llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
       llvm::MemoryBuffer::getFileOrSTDIN(inputFilename);
@@ -391,7 +338,12 @@ bool Runner::lowerToLLVM() {
    mlir::PassManager pm2(&ctxt->context);
    pm2.enableVerifier(runMode != RunMode::SPEED);
    pm2.addPass(mlir::createConvertSCFToCFPass());
-   pm2.addPass(createLowerToLLVMPass());
+   pm2.addPass(mlir::util::createUtilToLLVMPass());
+   pm2.addPass(mlir::cf::createConvertControlFlowToLLVMPass());
+   pm2.addPass(mlir::createMemRefToLLVMConversionPass());
+   pm2.addPass(mlir::createArithToLLVMConversionPass());
+   pm2.addPass(mlir::createConvertFuncToLLVMPass());
+   pm2.addPass(mlir::createReconcileUnrealizedCastsPass());
    pm2.addNestedPass<mlir::LLVM::LLVMFuncOp>(runner::createEnforceCABI());
    pm2.addPass(mlir::createCSEPass());
    if (mlir::failed(pm2.run(ctxt->module.get()))) {
@@ -504,7 +456,7 @@ class WrappedExecutionEngine {
    WrappedExecutionEngine(mlir::ModuleOp module, RunMode runMode) : mainFuncPtr(nullptr), setContextPtr(nullptr) {
       auto start = std::chrono::high_resolution_clock::now();
       auto jitCodeGenLevel = runMode == RunMode::DEBUGGING ? llvm::CodeGenOpt::Level::None : llvm::CodeGenOpt::Level::Default;
-      auto withDebugInfo = runMode == RunMode::DEBUGGING || runMode==RunMode::PERF;
+      auto withDebugInfo = runMode == RunMode::DEBUGGING || runMode == RunMode::PERF;
       auto convertFn = [&](mlir::Operation* module, llvm::LLVMContext& context) -> std::unique_ptr<llvm::Module> { return convertMLIRModule(mlir::cast<mlir::ModuleOp>(module), context, withDebugInfo); };
       auto optimizeFn = [&](llvm::Module* module) -> llvm::Error {if (runMode==RunMode::DEBUGGING){return llvm::Error::success();}else{return optimizeModule(module);} };
       auto maybeEngine = mlir::ExecutionEngine::create(module, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = jitCodeGenLevel, .enableObjectDump = true});
