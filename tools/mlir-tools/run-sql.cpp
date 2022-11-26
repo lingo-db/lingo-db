@@ -4,8 +4,8 @@
 #include <string>
 
 #include "arrow/array.h"
+#include "execution/runner.h"
 #include "mlir-support/eval.h"
-#include "runner/runner.h"
 
 void check(bool b, std::string message) {
    if (!b) {
@@ -15,11 +15,7 @@ void check(bool b, std::string message) {
 }
 int main(int argc, char** argv) {
    std::string inputFileName = std::string(argv[1]);
-   std::ifstream istream{inputFileName};
-   std::stringstream buffer;
-   buffer << istream.rdbuf();
-   std::string sqlQuery = buffer.str();
-   std::cerr << sqlQuery << std::endl;
+
    runtime::ExecutionContext context;
    context.id = 42;
    if (argc <= 2) {
@@ -31,19 +27,15 @@ int main(int argc, char** argv) {
    context.db = std::move(database);
 
    support::eval::init();
-   runner::RunMode runMode = runner::Runner::getRunMode();
-   runner::Runner runner(runMode);
-   check(runner.loadSQL(sqlQuery, *context.db), "SQL translation failed");
-   check(runner.optimize(*context.db), "query optimization failed");
-   check(runner.lower(), "could not lower DSA/DB dialects");
-   check(runner.lowerToLLVM(), "lowering to llvm failed");
-   size_t runs = 1;
-
+   runner::RunMode runMode = runner::getRunMode();
+   auto queryExecutionConfig = runner::createQueryExecutionConfig(runMode, true);
    if (const char* numRuns = std::getenv("QUERY_RUNS")) {
-      runs = std::atoi(numRuns);
-      std::cout << "using " << runs << " runs" << std::endl;
+      queryExecutionConfig->executionBackend->setNumRepetitions(std::atoi(numRuns));
+      std::cout << "using " << queryExecutionConfig->executionBackend->getNumRepetitions() << " runs" << std::endl;
    }
-   check(runner.runJit(&context, runs), "JIT execution failed");
-   runner::Runner::printTable(&context);
+   auto executer = runner::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   executer->fromFile(inputFileName);
+   executer->setExecutionContext(&context);
+   executer->execute();
    return 0;
 }

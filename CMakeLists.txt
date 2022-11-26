@@ -108,7 +108,7 @@ set(LIBS
 set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
 
 add_subdirectory(lib/runtime)
-add_subdirectory(lib/runner)
+add_subdirectory(lib/execution)
 add_subdirectory(lib/frontend/SQL)
 add_subdirectory(tools)
 add_subdirectory(test)

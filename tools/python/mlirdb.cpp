@@ -2,7 +2,7 @@
 #include <arrow/python/pyarrow.h>
 #include <pybind11/pybind11.h>
 
-#include "runner/runner.h"
+#include "execution/runner.h"
 #include "runtime/ExternalArrowDatabase.h"
 
 runtime::ExecutionContext* executionContext;
@@ -17,18 +17,14 @@ void load(pybind11::dict dictionary) {
    executionContext->db = std::move(database);
 }
 pybind11::handle run(pybind11::str module) {
-   runner::Runner runner(runner::RunMode::SPEED);
-   runner.loadString(module);
-   //runner.dump();
-   runner.optimize(*executionContext->db);
-   //runner.dump();
-   runner.lower();
-   //runner.dump();
-   runner.lowerToLLVM();
-   //runner.dumpLLVM();
-   runner.runJit(executionContext, 1);
-   auto table = runner::Runner::getTable(executionContext);
-   if (table) return arrow::py::wrap_table(table);
+   auto queryExecutionConfig=runner::createQueryExecutionConfig(runner::RunMode::SPEED,false);
+   std::shared_ptr<arrow::Table> result;
+   queryExecutionConfig->resultProcessor=runner::createTableRetriever(result);
+   auto executer=runner::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   executer->fromData(module);
+   executer->setExecutionContext(executionContext);
+   executer->execute();
+   if (result) return arrow::py::wrap_table(result);
    return pybind11::handle();
 }
 

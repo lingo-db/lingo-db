@@ -4,9 +4,157 @@
 #include <string>
 
 #include "arrow/array.h"
+#include "execution/runner.h"
+#include "md5.h"
 #include "mlir-support/eval.h"
-#include "runner/runner.h"
 #include "runtime/ArrowDirDatabase.h"
+#include "runtime/TableBuilder.h"
+#include <arrow/pretty_print.h>
+#include <arrow/table.h>
+
+enum SortMode {
+   NONE,
+   SORT,
+   SORTROWS
+};
+static unsigned char hexval(unsigned char c) {
+   if ('0' <= c && c <= '9')
+      return c - '0';
+   else if ('a' <= c && c <= 'f')
+      return c - 'a' + 10;
+   else if ('A' <= c && c <= 'F')
+      return c - 'A' + 10;
+   else
+      abort();
+}
+struct ResultHasher : public runner::ResultProcessor {
+   //input
+   SortMode sortMode;
+   bool tsv;
+   //output
+   std::string hash = "";
+   size_t numValues = 0;
+   std::string lines = "";
+   void process(runtime::ExecutionContext* executionContext) override {
+      auto resultTable = executionContext->getResultOfType<runtime::ResultTable>(0);
+      if (!resultTable) {
+         return; //todo: proper error handling
+      }
+      auto table = resultTable.value()->get();
+      std::vector<std::string> toHash;
+      std::vector<std::string> columnReps;
+      std::vector<size_t> positions;
+      arrow::PrettyPrintOptions options;
+      options.indent_size = 0;
+      options.window = 1000000;
+      std::vector<bool> convertHex;
+      for (auto c : table->columns()) {
+         convertHex.push_back(table->schema()->field(positions.size())->type()->id() == arrow::Type::FIXED_SIZE_BINARY);
+         std::stringstream sstr;
+         arrow::PrettyPrint(*c.get(), options, &sstr); //NOLINT (clang-diagnostic-unused-result)
+         columnReps.push_back(sstr.str());
+         positions.push_back(0);
+      }
+
+      bool cont = true;
+      while (cont) {
+         cont = false;
+         for (size_t column = 0; column < columnReps.size(); column++) {
+            char lastHex = 0;
+            bool first = true;
+            std::stringstream out;
+            while (positions[column] < columnReps[column].size()) {
+               cont = true;
+               char curr = columnReps[column][positions[column]];
+               char next = columnReps[column][positions[column] + 1];
+               positions[column]++;
+               if (first && (curr == '[' || curr == ']' || curr == ',')) {
+                  continue;
+               }
+               if (curr == ',' && next == '\n') {
+                  continue;
+               }
+               if (curr == '\n') {
+                  break;
+               } else {
+                  if (convertHex[column]) {
+                     if (std::isxdigit(curr)) {
+                        if (lastHex == 0) {
+                           first = false;
+                           lastHex = curr;
+                        } else {
+                           char converted = (hexval(lastHex) << 4 | hexval(curr));
+                           out << converted;
+                           lastHex = 0;
+                        }
+                     } else {
+                        first = false;
+                        out << curr;
+                     }
+                  } else {
+                     first = false;
+                     out << curr;
+                  }
+               }
+            }
+            if (!first) {
+               toHash.push_back(out.str());
+            }
+         }
+      }
+      for (size_t i = 0; i < toHash.size(); i++) {
+         if (toHash[i] == "null") {
+            toHash[i] = "NULL";
+         }
+         if (toHash[i] == "true") {
+            toHash[i] = "t";
+         }
+         if (toHash[i] == "false") {
+            toHash[i] = "f";
+         }
+         if (toHash[i].starts_with("\"") && toHash[i].ends_with("\"")) {
+            toHash[i] = toHash[i].substr(1, toHash[i].size() - 2);
+         }
+      }
+      size_t numColumns = table->num_columns();
+      if (sortMode == SORTROWS) {
+         std::vector<std::vector<std::string>> rows;
+         std::vector<std::string> row;
+         for (auto& s : toHash) {
+            row.push_back(s);
+            if (row.size() == numColumns) {
+               rows.push_back(row);
+               row.clear();
+            }
+         }
+         std::sort(rows.begin(), rows.end());
+         toHash.clear();
+         for (auto& r : rows)
+            for (auto& v : r)
+               toHash.push_back(v);
+      } else if (sortMode == SORT) {
+         std::sort(toHash.begin(), toHash.end());
+      }
+      hash = md5Strings(toHash);
+      numValues = toHash.size();
+      std::string linesRes;
+      if (toHash.size() < 1000) {
+         if (tsv) {
+            size_t i = 0;
+            for (auto x : toHash) {
+               linesRes += x + ((((i + 1) % numColumns) == 0) ? "\n" : "\t");
+               i++;
+            }
+         } else {
+            for (auto x : toHash) {
+               linesRes += x + "\n";
+            }
+         }
+      }
+      lines = linesRes;
+      //std::cout << toHash.size() << " values hashing to " <<  << std::endl;
+   }
+};
 
 std::vector<std::string> readTestFile(std::string path) {
    std::vector<std::string> res;
@@ -64,13 +212,12 @@ void runStatement(runtime::ExecutionContext& context, const std::vector<std::str
    if (statement.starts_with("CREATE INDEX")) {
       return;
    }
-   runner::Runner runner(runner::RunMode::DEFAULT);
-   runner.setReportTimes(false);
-   runner.loadSQL(statement, *context.db);
-   runner.optimize(*context.db);
-   runner.lower();
-   runner.lowerToLLVM();
-   runner.runJit(&context, 1);
+   auto queryExecutionConfig = runner::createQueryExecutionConfig(runner::RunMode::DEFAULT, true);
+   queryExecutionConfig->resultProcessor = std::unique_ptr<runner::ResultProcessor>();
+   auto executer = runner::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   executer->fromData(statement);
+   executer->setExecutionContext(&context);
+   executer->execute();
 }
 void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>& lines, size_t& line) {
    auto parts = split(lines[line]);
@@ -84,16 +231,16 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
       query += lines[line] + "\n";
       line++;
    }
-   runner::Runner::SortMode sort = runner::Runner::NONE;
+   SortMode sort = NONE;
    auto parseSort = [&](const std::string& s) {
       if (s == "nosort") {
-         sort = runner::Runner::NONE;
+         sort = NONE;
          return true;
       } else if (s == "valuesort") {
-         sort = runner::Runner::SORT;
+         sort = SORT;
          return true;
       } else if (s == "rowsort") {
-         sort = runner::Runner::SORTROWS;
+         sort = SORTROWS;
          return true;
       } else {
          return false;
@@ -118,27 +265,25 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
       expectedResult += lines[line] + "\n";
       line++;
    }
+   auto queryExecutionConfig = runner::createQueryExecutionConfig(runner::RunMode::DEFAULT, true);
+   auto resultHasher = std::make_unique<ResultHasher>();
+   auto& resultHasherRef = *resultHasher;
+   resultHasher->sortMode = sort;
+   resultHasher->tsv = tsv;
+   queryExecutionConfig->resultProcessor = std::move(resultHasher);
 
-   runner::Runner runner(runner::RunMode::DEFAULT);
-   runner.setReportTimes(false);
-   runner.loadSQL(query, *context.db);
-   runner.optimize(*context.db);
-   runner.lower();
-   runner.lowerToLLVM();
-   size_t runs = 1;
-   size_t numValues = 0;
-   std::string hash;
-   std::string resultLines;
-   runner.runJit(&context, runs);
-   runner::Runner::hashResult(sort, numValues, hash, resultLines, tsv)(&context);
-   std::string result = std::to_string(numValues) + " values hashing to " + hash + "\n";
-   if (result != expectedResult && expectedResult != resultLines) {
+   auto executer = runner::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   executer->fromData(query);
+   executer->setExecutionContext(&context);
+   executer->execute();
+   std::string result = std::to_string(resultHasherRef.numValues) + " values hashing to " + resultHasherRef.hash + "\n";
+   if (result != expectedResult && expectedResult != resultHasherRef.lines) {
       std::cout << "executing query:" << query << std::endl;
       std::cout << "expecting:" << expectedResult << std::endl;
       std::cerr << "ERROR: result did not match" << std::endl;
       std::cerr << "EXPECTED: \"" << expectedResult << "\"" << std::endl;
       std::cerr << "RESULT: \"" << result << "\"" << std::endl;
-      std::cerr << "LINES: \"" << resultLines << "\"" << std::endl;
+      std::cerr << "LINES: \"" << resultHasherRef.lines << "\"" << std::endl;
       exit(1);
    }
 }
