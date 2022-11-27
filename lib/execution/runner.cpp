@@ -55,6 +55,7 @@
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
+#include <llvm/BinaryFormat/Dwarf.h>
 #include <llvm/Bitcode/BitcodeReader.h>
 #include <llvm/IR/LegacyPassManager.h>
 #include <llvm/Support/ErrorOr.h>
@@ -301,7 +302,7 @@ static llvm::Error performDefaultLLVMPasses(llvm::Module* module) {
    funcPM.doFinalization();
    return llvm::Error::success();
 }
-/*
+
 static void linkStatic(mlir::ExecutionEngine* engine, Error& error, runner::mainFnType& mainFunc, runner::setExecutionContextFnType& setExecutionContextFn) {
    auto currPath = std::filesystem::current_path();
 
@@ -345,7 +346,7 @@ static void linkStatic(mlir::ExecutionEngine* engine, Error& error, runner::main
    }
    return;
 }
- */
+
 class DefaultCPULLVMBackend : public ExecutionBackend {
    void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
       llvm::InitializeNativeTarget();
@@ -412,6 +413,86 @@ class DefaultCPULLVMBackend : public ExecutionBackend {
       timing["llvmOptimize"] = llvmPassesTime;
       timing["llvmCodeGen"] = totalJITTime;
       timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
+   }
+   bool requiresSnapshotting() override {
+      return false;
+   }
+};
+static void snapshot(mlir::ModuleOp moduleOp, Error& error, std::string fileName) {
+   mlir::PassManager pm(moduleOp->getContext());
+   mlir::OpPrintingFlags flags;
+   flags.enableDebugInfo(false);
+   pm.addPass(mlir::createLocationSnapshotPass(flags, fileName));
+   if (pm.run(moduleOp).failed()) {
+      error.emit() << "Snapshotting failed";
+   }
+}
+static void addDebugInfo(mlir::ModuleOp module, std::string lastSnapShotFile) {
+   auto fileAttr = mlir::LLVM::DIFileAttr::get(module->getContext(), lastSnapShotFile, std::filesystem::current_path().string());
+   auto compileUnitAttr = mlir::LLVM::DICompileUnitAttr::get(module->getContext(), llvm::dwarf::DW_LANG_C, fileAttr, mlir::StringAttr::get(module->getContext(), "LingoDB"), true, mlir::LLVM::DIEmissionKind::Full);
+   module->walk([&](mlir::LLVM::LLVMFuncOp funcOp) {
+      auto subroutineType = mlir::LLVM::DISubroutineTypeAttr::get(module->getContext(), {});
+      auto subProgramAttr = mlir::LLVM::DISubprogramAttr::get(compileUnitAttr, fileAttr, funcOp.getName(), funcOp.getName(), fileAttr, 0, 0, mlir::LLVM::DISubprogramFlags::Definition | mlir::LLVM::DISubprogramFlags::Optimized, subroutineType);
+      funcOp->setLoc(mlir::FusedLocWith<mlir::LLVM::DIScopeAttr>::get(funcOp->getLoc(), subProgramAttr, module->getContext()));
+   });
+}
+class CPULLVMDebugBackend : public ExecutionBackend {
+   void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
+      llvm::InitializeNativeTarget();
+      llvm::InitializeNativeTargetAsmPrinter();
+      auto startLowerToLLVM = std::chrono::high_resolution_clock::now();
+      if (!lowerToLLVMDialect(moduleOp, verify)) {
+         error.emit() << "Could not lower module to llvm dialect";
+         return;
+      }
+      addLLVMExecutionContextFuncs(moduleOp);
+      auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
+      auto llvmSnapshotFile="snapshot-" + std::to_string(snapShotCounter) + ".mlir";
+      snapshot(moduleOp, error, llvmSnapshotFile);
+      addDebugInfo(moduleOp,llvmSnapshotFile);
+      timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
+      auto convertFn = [&](mlir::Operation* module, llvm::LLVMContext& context) -> std::unique_ptr<llvm::Module> {
+         return translateModuleToLLVMIR(module, context, "LLVMDialectModule", true);
+      };
+      //do not optimize in debug mode
+      auto optimizeFn = [&](llvm::Module* module) -> llvm::Error { return llvm::Error::success(); };
+
+      //first step: use ExecutionEngine
+      auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = llvm::CodeGenOpt::Level::None, .enableObjectDump = true});
+      if (!maybeEngine) {
+         error.emit() << "Could not create execution engine";
+         return;
+      }
+      auto engine = std::move(maybeEngine.get());
+      auto mainFnLookupResult = engine->lookup("main");
+      if (!mainFnLookupResult) {
+         error.emit() << "Could not lookup main function";
+         return;
+      }
+      auto setExecutionContextLookup = engine->lookup("rt_set_execution_context");
+      if (!setExecutionContextLookup) {
+         error.emit() << "Could not lookup function for setting the execution context";
+         return;
+      }
+      mainFnType mainFunc;
+      setExecutionContextFnType setExecutionContextFunc;
+      linkStatic(engine.get(), error, mainFunc, setExecutionContextFunc);
+      if (error) {
+         return;
+      }
+      setExecutionContextFunc(executionContext);
+
+      std::vector<size_t> measuredTimes;
+      for (size_t i = 0; i < numRepetitions; i++) {
+         auto executionStart = std::chrono::high_resolution_clock::now();
+         mainFunc();
+         auto executionEnd = std::chrono::high_resolution_clock::now();
+         measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
+      }
+      timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
+   }
+   bool requiresSnapshotting() override {
+      return true;
    }
 };
 
@@ -484,18 +565,31 @@ bool Runner::optimize(runtime::Database& db) {
    return true;
 }
  */
+
 class DefaultQueryExecuter : public QueryExecuter {
+   size_t snapShotCounter = 0;
    void handleError(std::string phase, Error& e) {
       if (e) {
          std::cerr << phase << ": " << e.getMessage() << std::endl;
          exit(1);
       }
    }
-   void handleTiming(const std::unordered_map<std::string,double>& timing){
-      if(queryExecutionConfig->timingProcessor){
+   void handleTiming(const std::unordered_map<std::string, double>& timing) {
+      if (queryExecutionConfig->timingProcessor) {
          queryExecutionConfig->timingProcessor->addTiming(timing);
       }
    }
+   void performSnapShot(mlir::ModuleOp moduleOp, std::string fileName = "") {
+      if (queryExecutionConfig->executionBackend->requiresSnapshotting()) {
+         if (fileName.empty()) {
+            fileName = "snapshot-" + std::to_string(snapShotCounter++) + ".mlir";
+         }
+         Error e;
+         snapshot(moduleOp, e, fileName);
+         handleError("SNAPSHOT", e);
+      }
+   }
+
    public:
    using QueryExecuter::QueryExecuter;
    void execute() override {
@@ -507,6 +601,10 @@ class DefaultQueryExecuter : public QueryExecuter {
 
       if (!queryExecutionConfig->frontend) {
          std::cerr << "Frontend is missing" << std::endl;
+         exit(1);
+      }
+      if (!queryExecutionConfig->executionBackend) {
+         std::cerr << "Execution Backend is missing" << std::endl;
          exit(1);
       }
       auto& frontend = *queryExecutionConfig->frontend;
@@ -522,25 +620,26 @@ class DefaultQueryExecuter : public QueryExecuter {
       }
       handleError("FRONTEND", frontend.getError());
       mlir::ModuleOp& moduleOp = *queryExecutionConfig->frontend->getModule();
+      performSnapShot(moduleOp, "input.mlir");
       if (queryExecutionConfig->queryOptimizer) {
          auto& queryOptimizer = *queryExecutionConfig->queryOptimizer;
          queryOptimizer.setDatabase(database);
          queryOptimizer.optimize(moduleOp);
          handleError("OPTIMIZER", queryOptimizer.getError());
          handleTiming(queryOptimizer.getTiming());
+         performSnapShot(moduleOp);
       }
-      for(auto& loweringStepPtr:queryExecutionConfig->loweringSteps){
+      for (auto& loweringStepPtr : queryExecutionConfig->loweringSteps) {
          auto& loweringStep = *loweringStepPtr;
          loweringStep.setDatabase(database);
          loweringStep.implement(moduleOp);
          handleError("LOWERING", loweringStep.getError());
          handleTiming(loweringStep.getTiming());
+         performSnapShot(moduleOp);
       }
-      if (!queryExecutionConfig->executionBackend) {
-         std::cerr << "Execution Backend is missing" << std::endl;
-         exit(1);
-      }
+
       auto& executionBackend = *queryExecutionConfig->executionBackend;
+      executionBackend.setSnapShotCounter(snapShotCounter);
       executionBackend.execute(moduleOp, executionContext);
       handleError("BACKEND", executionBackend.getError());
       handleTiming(executionBackend.getTiming());
@@ -548,7 +647,7 @@ class DefaultQueryExecuter : public QueryExecuter {
          auto& resultProcessor = *queryExecutionConfig->resultProcessor;
          resultProcessor.process(executionContext);
       }
-      if(queryExecutionConfig->timingProcessor) {
+      if (queryExecutionConfig->timingProcessor) {
          queryExecutionConfig->timingProcessor->process();
       }
    }
@@ -564,12 +663,16 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(runner::RunMode
    config->loweringSteps.emplace_back(std::make_unique<RelAlgLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<SubOpLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
-   config->executionBackend = std::make_unique<DefaultCPULLVMBackend>();
+   if(runMode==RunMode::DEBUGGING){
+      config->executionBackend = std::make_unique<CPULLVMDebugBackend>();
+   }else{
+      config->executionBackend = std::make_unique<DefaultCPULLVMBackend>();
+   }
    config->resultProcessor = runner::createTablePrinter();
-   if(runMode==RunMode::SPEED){
+   if (runMode == RunMode::SPEED) {
       config->queryOptimizer->disableVerification();
       config->executionBackend->disableVerification();
-      for(auto& loweringStep:config->loweringSteps) {
+      for (auto& loweringStep : config->loweringSteps) {
          loweringStep->disableVerification();
       }
       config->executionBackend->disableVerification();
@@ -586,21 +689,7 @@ void Runner::dump() {
    ctxt->module->print(llvm::dbgs(), flags);
 }
 
-void Runner::snapshot(std::string fileName) {
-   if (runMode == RunMode::DEBUGGING || runMode == RunMode::PERF) {
-      static size_t cntr = 0;
-      RunnerContext* ctxt = (RunnerContext*) this->context;
-      mlir::PassManager pm(&ctxt->context);
-      pm.enableVerifier(runMode == RunMode::DEBUGGING);
-      mlir::OpPrintingFlags flags;
-      flags.enableDebugInfo(false);
-      if (fileName.empty()) {
-         fileName = "snapshot-" + std::to_string(cntr++) + ".mlir";
-      }
-      pm.addPass(mlir::createLocationSnapshotPass(flags, fileName));
-      assert(pm.run(*ctxt->module).succeeded());
-   }
-}
+
  */
 /*
 inline void assignToThisCore(int coreId) {

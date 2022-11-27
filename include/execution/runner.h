@@ -108,6 +108,7 @@ class ExecutionBackend {
    std::unordered_map<std::string, double> timing;
    Error error;
    bool verify = true;
+   size_t snapShotCounter;
 
    public:
    size_t getNumRepetitions() const {
@@ -124,6 +125,10 @@ class ExecutionBackend {
       verify = false;
    }
    virtual void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) = 0;
+   virtual bool requiresSnapshotting() = 0;
+   void setSnapShotCounter(size_t snapShotCounter) {
+      ExecutionBackend::snapShotCounter = snapShotCounter;
+   }
    virtual ~ExecutionBackend() {}
 };
 class ResultProcessor {
