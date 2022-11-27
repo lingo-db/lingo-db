@@ -187,8 +187,7 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       timing["qopt"] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0;
    }
 };
-
-class DefaultImplementor : public QueryImplementor {
+class RelAlgLoweringStep : public LoweringStep {
    void implement(mlir::ModuleOp& moduleOp) override {
       auto startLowerRelAlg = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerRelAlgPm(moduleOp->getContext());
@@ -199,6 +198,11 @@ class DefaultImplementor : public QueryImplementor {
          return;
       }
       auto endLowerRelAlg = std::chrono::high_resolution_clock::now();
+      timing["lowerRelAlg"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerRelAlg - startLowerRelAlg).count() / 1000.0;
+   }
+};
+class SubOpLoweringStep : public LoweringStep {
+   void implement(mlir::ModuleOp& moduleOp) override {
       auto startLowerSubOp = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerSubOpPm(moduleOp->getContext());
       lowerSubOpPm.enableVerifier(verify);
@@ -208,6 +212,11 @@ class DefaultImplementor : public QueryImplementor {
          return;
       }
       auto endLowerSubOp = std::chrono::high_resolution_clock::now();
+      timing["lowerSubOp"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerSubOp - startLowerSubOp).count() / 1000.0;
+   }
+};
+class DefaultImperativeLowering : public LoweringStep {
+   void implement(mlir::ModuleOp& moduleOp) override {
       auto startLowerDB = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerDBPm(moduleOp->getContext());
       lowerDBPm.enableVerifier(verify);
@@ -229,8 +238,6 @@ class DefaultImplementor : public QueryImplementor {
          return;
       }
       auto endLowerDSA = std::chrono::high_resolution_clock::now();
-      timing["lowerRelAlg"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerRelAlg - startLowerRelAlg).count() / 1000.0;
-      timing["lowerSubOp"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerSubOp - startLowerSubOp).count() / 1000.0;
       timing["lowerDB"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerDB - startLowerDB).count() / 1000.0;
       timing["lowerDSA"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerDSA - startLowerDSA).count() / 1000.0;
    }
@@ -517,14 +524,12 @@ class DefaultQueryExecuter : public QueryExecuter {
          queryOptimizer.optimize(moduleOp);
          handleError("OPTIMIZER", queryOptimizer.getError());
       }
-      if (!queryExecutionConfig->queryImplementor) {
-         std::cerr << "Query Implementor is missing" << std::endl;
-         exit(1);
+      for(auto& loweringStepPtr:queryExecutionConfig->loweringSteps){
+         auto& loweringStep = *loweringStepPtr;
+         loweringStep.setDatabase(database);
+         loweringStep.implement(moduleOp);
+         handleError("LOWERING", loweringStep.getError());
       }
-      auto& queryImplementor = *queryExecutionConfig->queryImplementor;
-      queryImplementor.setDatabase(database);
-      queryImplementor.implement(moduleOp);
-      handleError("IMPLEMENTATION", queryImplementor.getError());
       if (!queryExecutionConfig->executionBackend) {
          std::cerr << "Execution Backend is missing" << std::endl;
          exit(1);
@@ -546,7 +551,9 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(runner::RunMode
       config->frontend = std::make_unique<MLIRFrontend>();
    }
    config->queryOptimizer = std::make_unique<DefaultQueryOptimizer>();
-   config->queryImplementor = std::make_unique<DefaultImplementor>();
+   config->loweringSteps.emplace_back(std::make_unique<RelAlgLoweringStep>());
+   config->loweringSteps.emplace_back(std::make_unique<SubOpLoweringStep>());
+   config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
    config->executionBackend = std::make_unique<DefaultCPULLVMBackend>();
    config->resultProcessor = runner::createTablePrinter();
    return config;
@@ -702,7 +709,8 @@ bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats) {
       pid = runPerfRecord();
       uint64_t r15DefaultValue = 0xbadeaffe;
       __asm__ __volatile__("mov %0, %%r15\n\t"
-                           :*/ /* no output */
+                           :*/
+/* no output */
 /*
                            : "a"(r15DefaultValue)
                            : "%r15");

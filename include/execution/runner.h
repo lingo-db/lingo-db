@@ -76,7 +76,7 @@ class QueryOptimizer {
    virtual void optimize(mlir::ModuleOp& moduleOp) = 0;
    virtual ~QueryOptimizer() {}
 };
-class QueryImplementor {
+class LoweringStep {
    protected:
    runtime::Database* database;
    std::unordered_map<std::string, double> timing;
@@ -91,14 +91,14 @@ class QueryImplementor {
       return timing;
    }
    void setDatabase(runtime::Database* db) {
-      QueryImplementor::database = db;
+      LoweringStep::database = db;
    }
    void disableVerification() {
       verify = false;
    }
    Error& getError() { return error; }
    virtual void implement(mlir::ModuleOp& moduleOp) = 0;
-   virtual ~QueryImplementor() {}
+   virtual ~LoweringStep() {}
 };
 class ExecutionBackend {
    protected:
@@ -134,7 +134,7 @@ std::unique_ptr<ResultProcessor> createTableRetriever(std::shared_ptr<arrow::Tab
 struct QueryExecutionConfig {
    std::unique_ptr<Frontend> frontend;
    std::unique_ptr<QueryOptimizer> queryOptimizer;
-   std::unique_ptr<QueryImplementor> queryImplementor;
+   std::vector<std::unique_ptr<LoweringStep>> loweringSteps;
    std::unique_ptr<ExecutionBackend> executionBackend;
    std::unique_ptr<ResultProcessor> resultProcessor;
 };
