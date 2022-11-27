@@ -72,6 +72,6 @@ struct EnforceCPPABIPass
    }
 };
 } // namespace
-std::unique_ptr<mlir::Pass> runner::createEnforceCABI() {
+std::unique_ptr<mlir::Pass> execution::createEnforceCABI() {
    return std::make_unique<EnforceCPPABIPass>();
 }

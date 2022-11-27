@@ -2,8 +2,7 @@
 #include <iostream>
 #include <string>
 
-#include "arrow/array.h"
-#include "execution/runner.h"
+#include "execution/Execution.h"
 #include "mlir-support/eval.h"
 
 void check(bool b, std::string message) {
@@ -26,13 +25,13 @@ int main(int argc, char** argv) {
       context.db = std::move(database);
    }
    support::eval::init();
-   runner::RunMode runMode = runner::getRunMode();
-   auto queryExecutionConfig = runner::createQueryExecutionConfig(runMode, false);
+   execution::ExecutionMode runMode = execution::getExecutionMode();
+   auto queryExecutionConfig = execution::createQueryExecutionConfig(runMode, false);
    if (const char* numRuns = std::getenv("QUERY_RUNS")) {
       queryExecutionConfig->executionBackend->setNumRepetitions(std::atoi(numRuns));
       std::cout << "using " << queryExecutionConfig->executionBackend->getNumRepetitions() << " runs" << std::endl;
    }
-   auto executer = runner::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
    executer->fromFile(inputFileName);
    executer->setExecutionContext(&context);
    executer->execute();

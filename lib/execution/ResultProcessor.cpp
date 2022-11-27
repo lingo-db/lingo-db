@@ -4,7 +4,7 @@
 #include <arrow/pretty_print.h>
 #include <arrow/table.h>
 
-#include "execution/runner.h"
+#include "execution/ResultProcessing.h"
 #include "runtime/TableBuilder.h"
 #include <functional>
 
@@ -19,7 +19,7 @@ static unsigned char hexval(unsigned char c) {
       abort();
 }
 
-class TableRetriever : public runner::ResultProcessor {
+class TableRetriever : public execution::ResultProcessor {
    std::shared_ptr<arrow::Table>& result;
 
    public:
@@ -30,11 +30,11 @@ class TableRetriever : public runner::ResultProcessor {
       result = resultTable.value()->get();
    }
 };
-std::unique_ptr<runner::ResultProcessor> runner::createTableRetriever(std::shared_ptr<arrow::Table>& result) {
+std::unique_ptr<execution::ResultProcessor> execution::createTableRetriever(std::shared_ptr<arrow::Table>& result) {
    return std::make_unique<TableRetriever>(result);
 }
 
-class TablePrinter : public runner::ResultProcessor {
+class TablePrinter : public execution::ResultProcessor {
    void process(runtime::ExecutionContext* executionContext) override {
       auto resultTable = executionContext->getResultOfType<runtime::ResultTable>(0);
       if (!resultTable) return;
@@ -115,6 +115,6 @@ class TablePrinter : public runner::ResultProcessor {
       }
    }
 };
-std::unique_ptr<runner::ResultProcessor> runner::createTablePrinter() {
+std::unique_ptr<execution::ResultProcessor> execution::createTablePrinter() {
    return std::make_unique<TablePrinter>();
 }

@@ -36,6 +36,6 @@ struct InsertPerfAsmPass
 };
 } // namespace
 
-std::unique_ptr<mlir::Pass> runner::createAnnotateProfilingDataPass() {
+std::unique_ptr<mlir::Pass> execution::createAnnotateProfilingDataPass() {
    return std::make_unique<InsertPerfAsmPass>();
 }

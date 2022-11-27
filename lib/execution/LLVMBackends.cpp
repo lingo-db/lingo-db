@@ -1,3 +1,32 @@
+#include "execution/LLVMBackends.h"
+#include "execution/BackendPasses.h"
+#include "execution/Error.h"
+
+#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
+#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
+#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
+#include "mlir/Conversion/UtilToLLVM/Passes.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/ExecutionEngine/ExecutionEngine.h"
+#include "mlir/IR/Builders.h"
+#include "mlir/InitAllPasses.h"
+#include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
+#include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
+#include "mlir/Target/LLVMIR/Export.h"
+
+#include "llvm/BinaryFormat/Dwarf.h"
+#include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/Linker/Linker.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/Host.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/GVN.h"
+
 #include <csignal>
 #include <filesystem>
 #include <fstream>
@@ -6,243 +35,8 @@
 #include "dlfcn.h"
 #include "unistd.h"
 
-#include "llvm/CodeGen/TargetRegisterInfo.h"
-#include "llvm/Linker/Linker.h"
-#include "llvm/MC/TargetRegistry.h"
-#include "llvm/Support/Debug.h"
-#include "llvm/Support/Host.h"
-#include "llvm/Support/TargetSelect.h"
-#include "llvm/Support/ToolOutputFile.h"
+namespace {
 
-#include "mlir/Analysis/DataLayoutAnalysis.h"
-
-#include "frontend/SQL/Parser.h"
-
-#include "mlir/Conversion/ControlFlowToLLVM/ControlFlowToLLVM.h"
-#include "mlir/Conversion/DBToStd/DBToStd.h"
-#include "mlir/Conversion/DSAToStd/DSAToStd.h"
-#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVM.h"
-#include "mlir/Conversion/FuncToLLVM/ConvertFuncToLLVMPass.h"
-#include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
-#include "mlir/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
-#include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
-#include "mlir/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
-
-#include "mlir/Dialect/Arith/IR/Arith.h"
-#include "mlir/Dialect/DB/IR/DBDialect.h"
-#include "mlir/Dialect/DB/Passes.h"
-#include "mlir/Dialect/DSA/IR/DSADialect.h"
-#include "mlir/Dialect/Func/IR/FuncOps.h"
-#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
-#include "mlir/Dialect/MemRef/IR/MemRef.h"
-#include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
-#include "mlir/Dialect/RelAlg/Passes.h"
-#include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
-#include "mlir/Dialect/SubOperator/SubOperatorOps.h"
-
-#include "mlir/Conversion/UtilToLLVM/Passes.h"
-#include "mlir/Dialect/util/UtilDialect.h"
-#include "mlir/ExecutionEngine/ExecutionEngine.h"
-#include "mlir/IR/BuiltinOps.h"
-#include "mlir/IR/Dialect.h"
-#include "mlir/IR/MLIRContext.h"
-#include "mlir/InitAllPasses.h"
-#include "mlir/Parser/Parser.h"
-#include "mlir/Pass/Pass.h"
-#include "mlir/Pass/PassManager.h"
-#include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
-#include "mlir/Target/LLVMIR/Export.h"
-#include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-
-#include <llvm/BinaryFormat/Dwarf.h>
-#include <llvm/Bitcode/BitcodeReader.h>
-#include <llvm/IR/LegacyPassManager.h>
-#include <llvm/Support/ErrorOr.h>
-#include <llvm/Support/MemoryBuffer.h>
-#include <llvm/Support/SourceMgr.h>
-#include <llvm/Transforms/InstCombine/InstCombine.h>
-#include <llvm/Transforms/Scalar.h>
-#include <llvm/Transforms/Scalar/GVN.h>
-
-#include <execution/runner.h>
-#include <mlir/Conversion/LLVMCommon/TypeConverter.h>
-#include <mlir/Dialect/util/UtilTypes.h>
-
-#include <execution/BackendPasses.h>
-#include <sched.h>
-
-#include <iostream>
-namespace runner {
-static void initializeContext(mlir::MLIRContext& context) {
-   mlir::DialectRegistry registry;
-   registry.insert<mlir::BuiltinDialect>();
-   registry.insert<mlir::relalg::RelAlgDialect>();
-   registry.insert<mlir::tuples::TupleStreamDialect>();
-   registry.insert<mlir::subop::SubOperatorDialect>();
-   registry.insert<mlir::db::DBDialect>();
-   registry.insert<mlir::dsa::DSADialect>();
-   registry.insert<mlir::func::FuncDialect>();
-   registry.insert<mlir::arith::ArithDialect>();
-   registry.insert<mlir::cf::ControlFlowDialect>();
-
-   registry.insert<mlir::memref::MemRefDialect>();
-   registry.insert<mlir::util::UtilDialect>();
-   registry.insert<mlir::scf::SCFDialect>();
-   registry.insert<mlir::LLVM::LLVMDialect>();
-   context.appendDialectRegistry(registry);
-   context.loadAllAvailableDialects();
-   context.loadDialect<mlir::relalg::RelAlgDialect>();
-   context.disableMultithreading();
-   mlir::registerLLVMDialectTranslation(context);
-}
-class MLIRFrontend : public Frontend {
-   mlir::MLIRContext context;
-   mlir::OwningOpRef<mlir::ModuleOp> module;
-   void loadFromFile(std::string fileName) override {
-      initializeContext(context);
-      llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
-         llvm::MemoryBuffer::getFileOrSTDIN(fileName);
-      if (std::error_code ec = fileOrErr.getError()) {
-         error.emit() << "Could not open input file: " << ec.message();
-         return;
-      }
-      llvm::SourceMgr sourceMgr;
-      sourceMgr.AddNewSourceBuffer(std::move(*fileOrErr), llvm::SMLoc());
-      module = mlir::parseSourceFile<mlir::ModuleOp>(sourceMgr, &context);
-      if (!module) {
-         error.emit() << "Error can't load file " << fileName << "\n";
-         return;
-      }
-   }
-   void loadFromString(std::string data) override {
-      initializeContext(context);
-      module = mlir::parseSourceString<mlir::ModuleOp>(data, &context);
-      if (!module) {
-         error.emit() << "Error can't load module\n";
-      }
-   }
-   mlir::ModuleOp* getModule() override {
-      assert(module);
-      return module.operator->();
-   }
-};
-class SQLFrontend : public Frontend {
-   mlir::MLIRContext context;
-   mlir::OwningOpRef<mlir::ModuleOp> module;
-   void loadFromString(std::string sql) override {
-      initializeContext(context);
-
-      mlir::OpBuilder builder(&context);
-
-      mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-      if (!database) {
-         error.emit() << "Database must be attached for parsing SQL";
-      }
-      frontend::sql::Parser translator(sql, *database, moduleOp);
-
-      builder.setInsertionPointToStart(moduleOp.getBody());
-      auto* queryBlock = new mlir::Block;
-      std::vector<mlir::Type> returnTypes;
-      {
-         mlir::OpBuilder::InsertionGuard guard(builder);
-         builder.setInsertionPointToStart(queryBlock);
-         auto val = translator.translate(builder);
-         if (val.has_value()) {
-            builder.create<mlir::subop::SetResultOp>(builder.getUnknownLoc(), 0, val.value());
-         }
-         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
-      }
-      mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
-      funcOp.getBody().push_back(queryBlock);
-      module = moduleOp;
-   }
-   void loadFromFile(std::string fileName) override {
-      std::ifstream istream{fileName};
-      if (!istream) {
-         error.emit() << "Error can't load file " << fileName;
-      }
-      std::stringstream buffer;
-      buffer << istream.rdbuf();
-      std::string sqlQuery = buffer.str();
-      loadFromString(sqlQuery);
-   }
-   mlir::ModuleOp* getModule() override {
-      assert(module);
-      return module.operator->();
-   }
-};
-
-class DefaultQueryOptimizer : public QueryOptimizer {
-   void optimize(mlir::ModuleOp& moduleOp) override {
-      auto start = std::chrono::high_resolution_clock::now();
-      mlir::PassManager pm(moduleOp.getContext());
-      pm.enableVerifier(verify);
-      pm.addPass(mlir::createInlinerPass());
-      pm.addPass(mlir::createSymbolDCEPass());
-      mlir::relalg::createQueryOptPipeline(pm, database);
-      if (mlir::failed(pm.run(moduleOp))) {
-         error.emit() << " Query Optimization failed";
-      }
-      auto end = std::chrono::high_resolution_clock::now();
-      timing["QOpt"] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0;
-   }
-};
-class RelAlgLoweringStep : public LoweringStep {
-   void implement(mlir::ModuleOp& moduleOp) override {
-      auto startLowerRelAlg = std::chrono::high_resolution_clock::now();
-      mlir::PassManager lowerRelAlgPm(moduleOp->getContext());
-      lowerRelAlgPm.enableVerifier(verify);
-      mlir::relalg::createLowerRelAlgToSubOpPipeline(lowerRelAlgPm);
-      if (mlir::failed(lowerRelAlgPm.run(moduleOp))) {
-         error.emit() << "Lowering of RelAlg to Sub-Operators failed";
-         return;
-      }
-      auto endLowerRelAlg = std::chrono::high_resolution_clock::now();
-      timing["lowerRelAlg"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerRelAlg - startLowerRelAlg).count() / 1000.0;
-   }
-};
-class SubOpLoweringStep : public LoweringStep {
-   void implement(mlir::ModuleOp& moduleOp) override {
-      auto startLowerSubOp = std::chrono::high_resolution_clock::now();
-      mlir::PassManager lowerSubOpPm(moduleOp->getContext());
-      lowerSubOpPm.enableVerifier(verify);
-      mlir::subop::createLowerSubOpPipeline(lowerSubOpPm);
-      if (mlir::failed(lowerSubOpPm.run(moduleOp))) {
-         error.emit() << "Lowering of Sub-Operators to imperative operations failed";
-         return;
-      }
-      auto endLowerSubOp = std::chrono::high_resolution_clock::now();
-      timing["lowerSubOp"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerSubOp - startLowerSubOp).count() / 1000.0;
-   }
-};
-class DefaultImperativeLowering : public LoweringStep {
-   void implement(mlir::ModuleOp& moduleOp) override {
-      auto startLowerDB = std::chrono::high_resolution_clock::now();
-      mlir::PassManager lowerDBPm(moduleOp->getContext());
-      lowerDBPm.enableVerifier(verify);
-      mlir::db::createLowerDBPipeline(lowerDBPm);
-      if (mlir::failed(lowerDBPm.run(moduleOp))) {
-         error.emit() << "Lowering of imperative db operations failed";
-         return;
-      }
-      auto endLowerDB = std::chrono::high_resolution_clock::now();
-      auto startLowerDSA = std::chrono::high_resolution_clock::now();
-      mlir::PassManager lowerDSAPm(moduleOp->getContext());
-      lowerDSAPm.enableVerifier(verify);
-      lowerDSAPm.addPass(mlir::dsa::createLowerToStdPass());
-      lowerDSAPm.addPass(mlir::createCanonicalizerPass());
-      lowerDSAPm.addPass(mlir::createLoopInvariantCodeMotionPass());
-      lowerDSAPm.addPass(mlir::createCSEPass());
-      if (mlir::failed(lowerDSAPm.run(moduleOp))) {
-         error.emit() << "Lowering of dsa failed";
-         return;
-      }
-      auto endLowerDSA = std::chrono::high_resolution_clock::now();
-      timing["lowerDB"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerDB - startLowerDB).count() / 1000.0;
-      timing["lowerDSA"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerDSA - startLowerDSA).count() / 1000.0;
-   }
-};
 static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, bool verify) {
    mlir::PassManager pm2(moduleOp->getContext());
    pm2.enableVerifier(verify);
@@ -253,7 +47,7 @@ static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, bool verify) {
    pm2.addPass(mlir::createArithToLLVMConversionPass());
    pm2.addPass(mlir::createConvertFuncToLLVMPass());
    pm2.addPass(mlir::createReconcileUnrealizedCastsPass());
-   pm2.addNestedPass<mlir::LLVM::LLVMFuncOp>(runner::createEnforceCABI());
+   pm2.addNestedPass<mlir::LLVM::LLVMFuncOp>(execution::createEnforceCABI());
    pm2.addPass(mlir::createCSEPass());
    if (mlir::failed(pm2.run(moduleOp))) {
       return false;
@@ -303,7 +97,7 @@ static llvm::Error performDefaultLLVMPasses(llvm::Module* module) {
    return llvm::Error::success();
 }
 
-static void linkStatic(mlir::ExecutionEngine* engine, Error& error, runner::mainFnType& mainFunc, runner::setExecutionContextFnType& setExecutionContextFn) {
+static void linkStatic(mlir::ExecutionEngine* engine, execution::Error& error, execution::mainFnType& mainFunc, execution::setExecutionContextFnType& setExecutionContextFn) {
    auto currPath = std::filesystem::current_path();
 
    engine->dumpToObjectFile("llvm-jit-static.o");
@@ -330,14 +124,14 @@ static void linkStatic(mlir::ExecutionEngine* engine, Error& error, runner::main
       error.emit() << "Can not open static library: " << std::string(dlsymError);
       return;
    }
-   mainFunc = reinterpret_cast<runner::mainFnType>(dlsym(handle, "main"));
+   mainFunc = reinterpret_cast<execution::mainFnType>(dlsym(handle, "main"));
    dlsymError = dlerror();
    if (dlsymError) {
       dlclose(handle);
       error.emit() << "Could not load symbol for main function: " << std::string(dlsymError);
       return;
    }
-   setExecutionContextFn = reinterpret_cast<runner::setExecutionContextFnType>(dlsym(handle, "rt_set_execution_context"));
+   setExecutionContextFn = reinterpret_cast<execution::setExecutionContextFnType>(dlsym(handle, "rt_set_execution_context"));
    dlsymError = dlerror();
    if (dlsymError) {
       dlclose(handle);
@@ -347,8 +141,9 @@ static void linkStatic(mlir::ExecutionEngine* engine, Error& error, runner::main
    return;
 }
 
-class DefaultCPULLVMBackend : public ExecutionBackend {
+class DefaultCPULLVMBackend : public execution::ExecutionBackend {
    void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
+      mlir::registerLLVMDialectTranslation(*moduleOp->getContext());
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
       auto startLowerToLLVM = std::chrono::high_resolution_clock::now();
@@ -394,8 +189,8 @@ class DefaultCPULLVMBackend : public ExecutionBackend {
          error.emit() << "Could not lookup function for setting the execution context";
          return;
       }
-      auto mainFunc = reinterpret_cast<mainFnType>(mainFnLookupResult.get());
-      auto setExecutionContextFunc = reinterpret_cast<setExecutionContextFnType>(setExecutionContextLookup.get());
+      auto mainFunc = reinterpret_cast<execution::mainFnType>(mainFnLookupResult.get());
+      auto setExecutionContextFunc = reinterpret_cast<execution::setExecutionContextFnType>(setExecutionContextLookup.get());
       auto endJIT = std::chrono::high_resolution_clock::now();
       setExecutionContextFunc(executionContext);
       auto totalJITTime = std::chrono::duration_cast<std::chrono::microseconds>(endJIT - startJIT).count() / 1000.0;
@@ -418,7 +213,7 @@ class DefaultCPULLVMBackend : public ExecutionBackend {
       return false;
    }
 };
-static void snapshot(mlir::ModuleOp moduleOp, Error& error, std::string fileName) {
+static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::string fileName) {
    mlir::PassManager pm(moduleOp->getContext());
    mlir::OpPrintingFlags flags;
    flags.enableDebugInfo(false);
@@ -436,8 +231,9 @@ static void addDebugInfo(mlir::ModuleOp module, std::string lastSnapShotFile) {
       funcOp->setLoc(mlir::FusedLocWith<mlir::LLVM::DIScopeAttr>::get(funcOp->getLoc(), subProgramAttr, module->getContext()));
    });
 }
-class CPULLVMDebugBackend : public ExecutionBackend {
+class CPULLVMDebugBackend : public execution::ExecutionBackend {
    void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
+      mlir::registerLLVMDialectTranslation(*moduleOp->getContext());
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
       auto startLowerToLLVM = std::chrono::high_resolution_clock::now();
@@ -474,8 +270,8 @@ class CPULLVMDebugBackend : public ExecutionBackend {
          error.emit() << "Could not lookup function for setting the execution context";
          return;
       }
-      mainFnType mainFunc;
-      setExecutionContextFnType setExecutionContextFunc;
+      execution::mainFnType mainFunc;
+      execution::setExecutionContextFnType setExecutionContextFunc;
       linkStatic(engine.get(), error, mainFunc, setExecutionContextFunc);
       if (error) {
          return;
@@ -496,15 +292,15 @@ class CPULLVMDebugBackend : public ExecutionBackend {
    }
 };
 
-class CPULLVMProfilingBackend : public ExecutionBackend {
-   static inline void assignToThisCore(int coreId) {
+class CPULLVMProfilingBackend : public execution::ExecutionBackend {
+   inline void assignToThisCore(int coreId) {
       cpu_set_t mask;
       CPU_ZERO(&mask);
       CPU_SET(coreId, &mask);
       sched_setaffinity(0, sizeof(mask), &mask);
    }
 
-   static pid_t runPerfRecord() {
+   pid_t runPerfRecord() {
       assignToThisCore(0);
       pid_t childPid = 0;
       auto parentPid = std::to_string(getpid());
@@ -513,10 +309,11 @@ class CPULLVMProfilingBackend : public ExecutionBackend {
       sleep(5);
       assignToThisCore(0);
       if (status != 0)
-         std::cerr << "Launching application Failed: " << status << std::endl;
+         error.emit() << "Launching of perf failed" << status;
       return childPid;
    }
    void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
+      mlir::registerLLVMDialectTranslation(*moduleOp->getContext());
       LLVMInitializeX86AsmParser();
       reserveLastRegister = true;
       llvm::InitializeNativeTarget();
@@ -525,7 +322,7 @@ class CPULLVMProfilingBackend : public ExecutionBackend {
       std::string errorMessage;
       const auto* target = llvm::TargetRegistry::lookupTarget(targetTriple, errorMessage);
       if (!target) {
-         error.emit()<<"Could not lookup target";
+         error.emit() << "Could not lookup target";
          return;
       }
 
@@ -544,7 +341,7 @@ class CPULLVMProfilingBackend : public ExecutionBackend {
       snapshot(moduleOp, error, llvmSnapshotFile);
       addDebugInfo(moduleOp, llvmSnapshotFile);
       mlir::PassManager pm(moduleOp->getContext());
-      pm.addPass(createAnnotateProfilingDataPass());
+      pm.addPass(execution::createAnnotateProfilingDataPass());
       if (mlir::failed(pm.run(moduleOp))) {
          error.emit() << "Could not annotate profiling information";
          return;
@@ -584,8 +381,8 @@ class CPULLVMProfilingBackend : public ExecutionBackend {
          error.emit() << "Could not lookup function for setting the execution context";
          return;
       }
-      mainFnType mainFunc;
-      setExecutionContextFnType setExecutionContextFunc;
+      execution::mainFnType mainFunc;
+      execution::setExecutionContextFnType setExecutionContextFunc;
       linkStatic(engine.get(), error, mainFunc, setExecutionContextFunc);
       if (error) {
          return;
@@ -598,6 +395,7 @@ class CPULLVMProfilingBackend : public ExecutionBackend {
 
       //start profiling
       pid_t pid = runPerfRecord();
+      if (error) return;
       uint64_t r15DefaultValue = 0xbadeaffe;
       __asm__ __volatile__("mov %0, %%r15\n\t"
                            : /* no output */
@@ -625,145 +423,14 @@ class CPULLVMProfilingBackend : public ExecutionBackend {
    }
 };
 
-RunMode getRunMode() {
-   RunMode runMode;
-   if (RUN_QUERIES_WITH_PERF) {
-      runMode = RunMode::PERF;
-   } else {
-      runMode = RunMode::DEFAULT;
-   }
-   if (const char* mode = std::getenv("LINGODB_RUN_MODE")) {
-      if (std::string(mode) == "PERF") {
-         runMode = RunMode::PERF;
-      } else if (std::string(mode) == "DEFAULT") {
-         runMode = RunMode::DEFAULT;
-      } else if (std::string(mode) == "DEBUGGING") {
-         runMode = RunMode::DEBUGGING;
-      } else if (std::string(mode) == "SPEED") {
-         std::cout << "using speed mode" << std::endl;
-         runMode = RunMode::SPEED;
-      }
-   }
-   return runMode;
+} // namespace
+
+std::unique_ptr<execution::ExecutionBackend> execution::createDefaultLLVMBackend() {
+   return std::make_unique<DefaultCPULLVMBackend>();
 }
-
-class DefaultQueryExecuter : public QueryExecuter {
-   size_t snapShotCounter = 0;
-   void handleError(std::string phase, Error& e) {
-      if (e) {
-         std::cerr << phase << ": " << e.getMessage() << std::endl;
-         exit(1);
-      }
-   }
-   void handleTiming(const std::unordered_map<std::string, double>& timing) {
-      if (queryExecutionConfig->timingProcessor) {
-         queryExecutionConfig->timingProcessor->addTiming(timing);
-      }
-   }
-   void performSnapShot(mlir::ModuleOp moduleOp, std::string fileName = "") {
-      if (queryExecutionConfig->executionBackend->requiresSnapshotting()) {
-         if (fileName.empty()) {
-            fileName = "snapshot-" + std::to_string(snapShotCounter++) + ".mlir";
-         }
-         Error e;
-         snapshot(moduleOp, e, fileName);
-         handleError("SNAPSHOT", e);
-      }
-   }
-
-   public:
-   using QueryExecuter::QueryExecuter;
-   void execute() override {
-      if (!executionContext) {
-         std::cerr << "Execution Context is missing" << std::endl;
-         exit(1);
-      }
-      runtime::Database* database = executionContext->getDatabase();
-
-      if (!queryExecutionConfig->frontend) {
-         std::cerr << "Frontend is missing" << std::endl;
-         exit(1);
-      }
-      if (!queryExecutionConfig->executionBackend) {
-         std::cerr << "Execution Backend is missing" << std::endl;
-         exit(1);
-      }
-      auto& frontend = *queryExecutionConfig->frontend;
-
-      frontend.setDatabase(database);
-      if (data) {
-         frontend.loadFromString(data.value());
-      } else if (file) {
-         frontend.loadFromFile(file.value());
-      } else {
-         std::cerr << "Must provide file or string!" << std::endl;
-         exit(1);
-      }
-      handleError("FRONTEND", frontend.getError());
-      mlir::ModuleOp& moduleOp = *queryExecutionConfig->frontend->getModule();
-      performSnapShot(moduleOp, "input.mlir");
-      if (queryExecutionConfig->queryOptimizer) {
-         auto& queryOptimizer = *queryExecutionConfig->queryOptimizer;
-         queryOptimizer.setDatabase(database);
-         queryOptimizer.optimize(moduleOp);
-         handleError("OPTIMIZER", queryOptimizer.getError());
-         handleTiming(queryOptimizer.getTiming());
-         performSnapShot(moduleOp);
-      }
-      for (auto& loweringStepPtr : queryExecutionConfig->loweringSteps) {
-         auto& loweringStep = *loweringStepPtr;
-         loweringStep.setDatabase(database);
-         loweringStep.implement(moduleOp);
-         handleError("LOWERING", loweringStep.getError());
-         handleTiming(loweringStep.getTiming());
-         performSnapShot(moduleOp);
-      }
-
-      auto& executionBackend = *queryExecutionConfig->executionBackend;
-      executionBackend.setSnapShotCounter(snapShotCounter);
-      executionBackend.execute(moduleOp, executionContext);
-      handleError("BACKEND", executionBackend.getError());
-      handleTiming(executionBackend.getTiming());
-      if (queryExecutionConfig->resultProcessor) {
-         auto& resultProcessor = *queryExecutionConfig->resultProcessor;
-         resultProcessor.process(executionContext);
-      }
-      if (queryExecutionConfig->timingProcessor) {
-         queryExecutionConfig->timingProcessor->process();
-      }
-   }
-};
-std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(runner::RunMode runMode, bool sqlInput) {
-   auto config = std::make_unique<QueryExecutionConfig>();
-   if (sqlInput) {
-      config->frontend = std::make_unique<SQLFrontend>();
-   } else {
-      config->frontend = std::make_unique<MLIRFrontend>();
-   }
-   config->queryOptimizer = std::make_unique<DefaultQueryOptimizer>();
-   config->loweringSteps.emplace_back(std::make_unique<RelAlgLoweringStep>());
-   config->loweringSteps.emplace_back(std::make_unique<SubOpLoweringStep>());
-   config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
-   if (runMode == RunMode::DEBUGGING) {
-      config->executionBackend = std::make_unique<CPULLVMDebugBackend>();
-   } else if (runMode == RunMode::PERF) {
-      config->executionBackend = std::make_unique<CPULLVMProfilingBackend>();
-   } else {
-      config->executionBackend = std::make_unique<DefaultCPULLVMBackend>();
-   }
-   config->resultProcessor = runner::createTablePrinter();
-   if (runMode == RunMode::SPEED) {
-      config->queryOptimizer->disableVerification();
-      config->executionBackend->disableVerification();
-      for (auto& loweringStep : config->loweringSteps) {
-         loweringStep->disableVerification();
-      }
-      config->executionBackend->disableVerification();
-   }
-   return config;
+std::unique_ptr<execution::ExecutionBackend> execution::createLLVMDebugBackend() {
+   return std::make_unique<CPULLVMDebugBackend>();
 }
-std::unique_ptr<QueryExecuter> QueryExecuter::createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig) {
-   return std::make_unique<DefaultQueryExecuter>(std::move(queryExecutionConfig));
+std::unique_ptr<execution::ExecutionBackend> execution::createLLVMProfilingBackend() {
+   return std::make_unique<CPULLVMProfilingBackend>();
 }
-
-} // namespace runner

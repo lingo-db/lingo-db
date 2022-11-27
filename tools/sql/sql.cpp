@@ -1,10 +1,8 @@
 #include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 
-#include "arrow/array.h"
-#include "execution/runner.h"
+#include "execution/Execution.h"
 #include "mlir-support/eval.h"
 void check(bool b, std::string message) {
    if (!b) {
@@ -50,8 +48,8 @@ int main(int argc, char** argv) {
    return 0;
 }
 void handleQuery(runtime::ExecutionContext* context, std::string sqlQuery) {
-   auto queryExecutionConfig = runner::createQueryExecutionConfig(runner::RunMode::DEFAULT, true);
-   auto executer = runner::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::DEFAULT, true);
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
    executer->fromData(sqlQuery);
    executer->setExecutionContext(context);
    executer->execute();

@@ -4,7 +4,7 @@
 #include <string>
 
 #include "arrow/array.h"
-#include "execution/runner.h"
+#include "execution/Execution.h"
 #include "md5.h"
 #include "mlir-support/eval.h"
 #include "runtime/ArrowDirDatabase.h"
@@ -27,7 +27,7 @@ static unsigned char hexval(unsigned char c) {
    else
       abort();
 }
-struct ResultHasher : public runner::ResultProcessor {
+struct ResultHasher : public execution::ResultProcessor {
    //input
    SortMode sortMode;
    bool tsv;
@@ -212,9 +212,9 @@ void runStatement(runtime::ExecutionContext& context, const std::vector<std::str
    if (statement.starts_with("CREATE INDEX")) {
       return;
    }
-   auto queryExecutionConfig = runner::createQueryExecutionConfig(runner::RunMode::DEFAULT, true);
-   queryExecutionConfig->resultProcessor = std::unique_ptr<runner::ResultProcessor>();
-   auto executer = runner::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::DEFAULT, true);
+   queryExecutionConfig->resultProcessor = std::unique_ptr<execution::ResultProcessor>();
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
    executer->fromData(statement);
    executer->setExecutionContext(&context);
    executer->execute();
@@ -265,14 +265,14 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
       expectedResult += lines[line] + "\n";
       line++;
    }
-   auto queryExecutionConfig = runner::createQueryExecutionConfig(runner::RunMode::DEFAULT, true);
+   auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::DEFAULT, true);
    auto resultHasher = std::make_unique<ResultHasher>();
    auto& resultHasherRef = *resultHasher;
    resultHasher->sortMode = sort;
    resultHasher->tsv = tsv;
    queryExecutionConfig->resultProcessor = std::move(resultHasher);
 
-   auto executer = runner::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
    executer->fromData(query);
    executer->setExecutionContext(&context);
    executer->execute();

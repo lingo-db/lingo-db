@@ -2,8 +2,8 @@
 #define EXECUTION_BACKENDPASSES_H
 #include <memory>
 #include <mlir/Pass/Pass.h>
-namespace runner {
+namespace execution {
 std::unique_ptr<mlir::Pass> createEnforceCABI();
 std::unique_ptr<mlir::Pass> createAnnotateProfilingDataPass();
-} // namespace runner
+} // namespace execution
 #endif //EXECUTION_BACKENDPASSES_H
