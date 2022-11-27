@@ -33,6 +33,7 @@ int main(int argc, char** argv) {
       queryExecutionConfig->executionBackend->setNumRepetitions(std::atoi(numRuns));
       std::cout << "using " << queryExecutionConfig->executionBackend->getNumRepetitions() << " runs" << std::endl;
    }
+   queryExecutionConfig->timingProcessor=std::make_unique<runner::TimingPrinter>(inputFileName);
    auto executer = runner::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
    executer->fromFile(inputFileName);
    executer->setExecutionContext(&context);

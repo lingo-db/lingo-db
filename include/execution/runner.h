@@ -3,6 +3,8 @@
 
 #include "runtime/ExecutionContext.h"
 #include <functional>
+#include <iomanip>
+#include <iostream>
 #include <sstream>
 #include <string>
 #include <unordered_map>
@@ -129,6 +131,51 @@ class ResultProcessor {
    virtual void process(runtime::ExecutionContext* executionContext) = 0;
    virtual ~ResultProcessor() {}
 };
+class TimingProcessor {
+   public:
+   virtual void addTiming(const std::unordered_map<std::string, double>& timing) = 0;
+   virtual void process() = 0;
+   virtual ~TimingProcessor() {}
+};
+class TimingPrinter : public TimingProcessor {
+   std::unordered_map<std::string, double> timing;
+   std::string queryName;
+
+   public:
+   TimingPrinter(std::string queryFile) {
+      if (queryFile.find('/') != std::string::npos) {
+         queryName = queryFile.substr(queryFile.find_last_of("/\\") + 1);
+      } else {
+         queryName = queryFile;
+      }
+   }
+   void addTiming(const std::unordered_map<std::string, double>& timing) override {
+      this->timing.insert(timing.begin(), timing.end());
+   }
+   void process() override {
+      double total = 0.0;
+      for (auto [name, t] : timing) {
+         total += t;
+      }
+      timing["total"] = total;
+      std::vector<std::string> printOrder = {"QOpt", "lowerRelAlg", "lowerSubOp", "lowerDB", "lowerDSA", "lowerToLLVM", "toLLVMIR", "llvmOptimize", "llvmCodeGen", "executionTime", "total"};
+      std::cout << std::endl
+                << std::endl;
+      std::cout << std::setw(10) << "name";
+      for (auto n : printOrder) {
+         std::cout << std::setw(15) << n;
+      }
+      std::cout << std::endl;
+      std::cout << std::setw(10) << queryName;
+      for (auto n : printOrder) {
+         if (timing.contains(n)) {
+            std::cout << std::setw(15) << timing[n];
+         } else {
+            std::cout << std::setw(15) << "";
+         }
+      }
+   }
+};
 std::unique_ptr<ResultProcessor> createTablePrinter();
 std::unique_ptr<ResultProcessor> createTableRetriever(std::shared_ptr<arrow::Table>& result);
 struct QueryExecutionConfig {
@@ -137,6 +184,7 @@ struct QueryExecutionConfig {
    std::vector<std::unique_ptr<LoweringStep>> loweringSteps;
    std::unique_ptr<ExecutionBackend> executionBackend;
    std::unique_ptr<ResultProcessor> resultProcessor;
+   std::unique_ptr<TimingProcessor> timingProcessor;
 };
 enum class RunMode {
    SPEED = 0, //Aim for maximum speed (no verification of generated MLIR

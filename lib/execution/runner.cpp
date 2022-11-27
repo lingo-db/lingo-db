@@ -184,7 +184,7 @@ class DefaultQueryOptimizer : public QueryOptimizer {
          error.emit() << " Query Optimization failed";
       }
       auto end = std::chrono::high_resolution_clock::now();
-      timing["qopt"] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0;
+      timing["QOpt"] = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() / 1000.0;
    }
 };
 class RelAlgLoweringStep : public LoweringStep {
@@ -244,7 +244,7 @@ class DefaultImperativeLowering : public LoweringStep {
 };
 static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, bool verify) {
    mlir::PassManager pm2(moduleOp->getContext());
-   pm2.enableVerifier(moduleOp);
+   pm2.enableVerifier(verify);
    pm2.addPass(mlir::createConvertSCFToCFPass());
    pm2.addPass(mlir::util::createUtilToLLVMPass());
    pm2.addPass(mlir::cf::createConvertControlFlowToLLVMPass());
@@ -408,9 +408,9 @@ class DefaultCPULLVMBackend : public ExecutionBackend {
          auto executionEnd = std::chrono::high_resolution_clock::now();
          measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
       }
-      timing["llvmir-conversion"] = translateToLLVMIRTime;
-      timing["llvm-passes"] = llvmPassesTime;
-      timing["llvm-codegen"] = totalJITTime;
+      timing["toLLVMIR"] = translateToLLVMIRTime;
+      timing["llvmOptimize"] = llvmPassesTime;
+      timing["llvmCodeGen"] = totalJITTime;
       timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
    }
 };
@@ -491,7 +491,11 @@ class DefaultQueryExecuter : public QueryExecuter {
          exit(1);
       }
    }
-
+   void handleTiming(const std::unordered_map<std::string,double>& timing){
+      if(queryExecutionConfig->timingProcessor){
+         queryExecutionConfig->timingProcessor->addTiming(timing);
+      }
+   }
    public:
    using QueryExecuter::QueryExecuter;
    void execute() override {
@@ -523,12 +527,14 @@ class DefaultQueryExecuter : public QueryExecuter {
          queryOptimizer.setDatabase(database);
          queryOptimizer.optimize(moduleOp);
          handleError("OPTIMIZER", queryOptimizer.getError());
+         handleTiming(queryOptimizer.getTiming());
       }
       for(auto& loweringStepPtr:queryExecutionConfig->loweringSteps){
          auto& loweringStep = *loweringStepPtr;
          loweringStep.setDatabase(database);
          loweringStep.implement(moduleOp);
          handleError("LOWERING", loweringStep.getError());
+         handleTiming(loweringStep.getTiming());
       }
       if (!queryExecutionConfig->executionBackend) {
          std::cerr << "Execution Backend is missing" << std::endl;
@@ -537,9 +543,13 @@ class DefaultQueryExecuter : public QueryExecuter {
       auto& executionBackend = *queryExecutionConfig->executionBackend;
       executionBackend.execute(moduleOp, executionContext);
       handleError("BACKEND", executionBackend.getError());
+      handleTiming(executionBackend.getTiming());
       if (queryExecutionConfig->resultProcessor) {
          auto& resultProcessor = *queryExecutionConfig->resultProcessor;
          resultProcessor.process(executionContext);
+      }
+      if(queryExecutionConfig->timingProcessor) {
+         queryExecutionConfig->timingProcessor->process();
       }
    }
 };
@@ -556,6 +566,14 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(runner::RunMode
    config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
    config->executionBackend = std::make_unique<DefaultCPULLVMBackend>();
    config->resultProcessor = runner::createTablePrinter();
+   if(runMode==RunMode::SPEED){
+      config->queryOptimizer->disableVerification();
+      config->executionBackend->disableVerification();
+      for(auto& loweringStep:config->loweringSteps) {
+         loweringStep->disableVerification();
+      }
+      config->executionBackend->disableVerification();
+   }
    return config;
 }
 std::unique_ptr<QueryExecuter> QueryExecuter::createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig) {
