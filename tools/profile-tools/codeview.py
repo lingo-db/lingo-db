@@ -53,17 +53,31 @@ class PerfHtmlFormatter(HtmlFormatter):
 
 
 def createPerfCodeView(data, level, colorLineMap):
-    if level != 3:
-        raise NotImplementedError()
+
     data.con.execute(
         """select count(*) as cnt
            from event e""")
     total_events = data.con.fetchone()[0]
-    data.con.execute(
-        """select op.loc, count(*) as cnt
-           from operation op, event e
-           where op.loc=e.jit_srcline group by op.loc order by cnt desc""")
-
+    if level == 4:
+        data.con.execute(
+            """select op.loc, count(*) as cnt
+            from operation op, event e
+            where op.loc=e.jit_srcline group by op.loc order by cnt desc""")
+    elif level == 3:
+        data.con.execute(
+            """select op.loc, count(*) as cnt
+            from operation op,operation op1, event e
+            where op1.mapping=op.id and op1.loc=e.jit_srcline group by op.loc order by cnt desc""")  
+    elif level == 2:
+        data.con.execute(
+            """select op.loc, count(*) as cnt
+            from operation op,operation op1,operation op2, event e
+            where op1.mapping=op.id and op2.mapping=op1.id and op2.loc=e.jit_srcline group by op.loc order by cnt desc""")
+    elif level == 1:
+        data.con.execute(
+            """select op.loc, count(*) as cnt
+            from operation op,operation op1,operation op2,operation op3, event e
+            where op1.mapping=op.id and op2.mapping=op1.id and op3.mapping=op2.id and op3.loc=e.jit_srcline group by op.loc order by cnt desc""")        
     percentages = {}
     for ele in data.con.fetchall():
         percentages[int(ele[0].split(":")[1])] = (ele[1] * 100) / float(total_events)
@@ -74,13 +88,28 @@ def createPerfCodeView(data, level, colorLineMap):
 
 
 def createColorLineMap(data, level, colomap):
-    if level != 3:
-        raise NotImplementedError()
     res = {}
-    data.con.execute(
-        """select op.id, op.parent,op3.loc as cnt
-           from operation op,operation op1,operation op2,operation op3
-           where op3.mapping=op2.id and op2.mapping=op1.id and op1.mapping=op.id""")
+    if level ==1:
+        data.con.execute(
+            """select op.id, op.parent,op1.loc as cnt
+            from operation op,operation op1
+            where op1.mapping=op.id""")
+    elif level ==2:
+        data.con.execute(
+            """select op.id, op.parent,op2.loc as cnt
+            from operation op,operation op1,operation op2
+            where op2.mapping=op1.id and op1.mapping=op.id""")
+    elif level==3:
+        data.con.execute(
+            """select op.id, op.parent,op3.loc as cnt
+            from operation op,operation op1,operation op2,operation op3
+            where op3.mapping=op2.id and op2.mapping=op1.id and op1.mapping=op.id""")
+    elif level==4:
+        data.con.execute(
+        """select op.id, op.parent,op4.loc as cnt
+        from operation op,operation op1,operation op2,operation op3,operation op4
+        where op4.mapping=op3.id and op3.mapping=op2.id and op2.mapping=op1.id and op1.mapping=op.id""")
+
     for o in data.con.fetchall():
         c_id = colomap.lookupRGBA(o[0], 0.3)
         c_pid = colomap.lookupRGBA(o[1] or -1, 0.3)

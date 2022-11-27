@@ -32,8 +32,8 @@ def create_swimline_chart(data, colo_map, cond="",normalized=None):
     stepsize = (max - min) / 100
 
     data.con.execute("""select (e.time-?)/? as t,op.id, count(*) 
-                        from event e, operation op, operation op1, operation op2, operation op3 
-                        where op1.mapping=op.id and op2.mapping=op1.id and op3.mapping=op2.id and op3.loc=e.jit_srcline  """ + cond + """ 
+                        from event e, operation op, operation op1, operation op2, operation op3, operation op4
+                        where op1.mapping=op.id and op2.mapping=op1.id and op3.mapping=op2.id and op4.mapping=op3.id and op4.loc=e.jit_srcline  """ + cond + """ 
                         group by t,op.id""", [min, stepsize])
 
     res = data.con.fetchall()

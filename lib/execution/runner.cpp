@@ -447,9 +447,9 @@ class CPULLVMDebugBackend : public ExecutionBackend {
       }
       addLLVMExecutionContextFuncs(moduleOp);
       auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
-      auto llvmSnapshotFile="snapshot-" + std::to_string(snapShotCounter) + ".mlir";
+      auto llvmSnapshotFile = "snapshot-" + std::to_string(snapShotCounter) + ".mlir";
       snapshot(moduleOp, error, llvmSnapshotFile);
-      addDebugInfo(moduleOp,llvmSnapshotFile);
+      addDebugInfo(moduleOp, llvmSnapshotFile);
       timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
       auto convertFn = [&](mlir::Operation* module, llvm::LLVMContext& context) -> std::unique_ptr<llvm::Module> {
          return translateModuleToLLVMIR(module, context, "LLVMDialectModule", true);
@@ -496,12 +496,135 @@ class CPULLVMDebugBackend : public ExecutionBackend {
    }
 };
 
-/*
-static mlir::Location tagLocHook(mlir::Location loc) {
-   static size_t operationId = 0;
-   auto idAsStr = std::to_string(operationId++);
-   return mlir::NameLoc::get(mlir::StringAttr::get(loc.getContext(), idAsStr), loc);
-}*/
+class CPULLVMProfilingBackend : public ExecutionBackend {
+   static inline void assignToThisCore(int coreId) {
+      cpu_set_t mask;
+      CPU_ZERO(&mask);
+      CPU_SET(coreId, &mask);
+      sched_setaffinity(0, sizeof(mask), &mask);
+   }
+
+   static pid_t runPerfRecord() {
+      assignToThisCore(0);
+      pid_t childPid = 0;
+      auto parentPid = std::to_string(getpid());
+      const char* argV[] = {"perf", "record", "-R", "-e", "ibs_op//p", "-c", "5000", "--intr-regs=r15", "-C", "0", nullptr};
+      auto status = posix_spawn(&childPid, "/usr/bin/perf", nullptr, nullptr, const_cast<char**>(argV), environ);
+      sleep(5);
+      assignToThisCore(0);
+      if (status != 0)
+         std::cerr << "Launching application Failed: " << status << std::endl;
+      return childPid;
+   }
+   void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
+      LLVMInitializeX86AsmParser();
+      reserveLastRegister = true;
+      llvm::InitializeNativeTarget();
+      llvm::InitializeNativeTargetAsmPrinter();
+      auto targetTriple = llvm::sys::getDefaultTargetTriple();
+      std::string errorMessage;
+      const auto* target = llvm::TargetRegistry::lookupTarget(targetTriple, errorMessage);
+      if (!target) {
+         error.emit()<<"Could not lookup target";
+         return;
+      }
+
+      // Initialize LLVM targets.
+      llvm::InitializeNativeTarget();
+      llvm::InitializeNativeTargetAsmPrinter();
+      auto startLowerToLLVM = std::chrono::high_resolution_clock::now();
+      if (!lowerToLLVMDialect(moduleOp, verify)) {
+         error.emit() << "Could not lower module to llvm dialect";
+         return;
+      }
+      addLLVMExecutionContextFuncs(moduleOp);
+      auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
+      timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
+      auto llvmSnapshotFile = "snapshot-" + std::to_string(snapShotCounter) + ".mlir";
+      snapshot(moduleOp, error, llvmSnapshotFile);
+      addDebugInfo(moduleOp, llvmSnapshotFile);
+      mlir::PassManager pm(moduleOp->getContext());
+      pm.addPass(createAnnotateProfilingDataPass());
+      if (mlir::failed(pm.run(moduleOp))) {
+         error.emit() << "Could not annotate profiling information";
+         return;
+      }
+      double translateToLLVMIRTime;
+      auto convertFn = [&](mlir::Operation* module, llvm::LLVMContext& context) -> std::unique_ptr<llvm::Module> {
+         auto startTranslationToLLVMIR = std::chrono::high_resolution_clock::now();
+         auto res = translateModuleToLLVMIR(module, context, "LLVMDialectModule", true);
+         auto endTranslationToLLVMIR = std::chrono::high_resolution_clock::now();
+         translateToLLVMIRTime = std::chrono::duration_cast<std::chrono::microseconds>(endTranslationToLLVMIR - startTranslationToLLVMIR).count() / 1000.0;
+         return std::move(res);
+      };
+      double llvmPassesTime;
+
+      auto optimizeFn = [&](llvm::Module* module) -> llvm::Error {
+         auto startLLVMIRPasses = std::chrono::high_resolution_clock::now();
+         auto error = performDefaultLLVMPasses(module);
+         auto endLLVMIRPasses = std::chrono::high_resolution_clock::now();
+         llvmPassesTime = std::chrono::duration_cast<std::chrono::microseconds>(endLLVMIRPasses - startLLVMIRPasses).count() / 1000.0;
+         return error;
+      };
+      auto startJIT = std::chrono::high_resolution_clock::now();
+
+      auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = llvm::CodeGenOpt::Level::Default, .enableObjectDump = true});
+      if (!maybeEngine) {
+         error.emit() << "Could not create execution engine";
+         return;
+      }
+      auto engine = std::move(maybeEngine.get());
+      auto mainFnLookupResult = engine->lookup("main");
+      if (!mainFnLookupResult) {
+         error.emit() << "Could not lookup main function";
+         return;
+      }
+      auto setExecutionContextLookup = engine->lookup("rt_set_execution_context");
+      if (!setExecutionContextLookup) {
+         error.emit() << "Could not lookup function for setting the execution context";
+         return;
+      }
+      mainFnType mainFunc;
+      setExecutionContextFnType setExecutionContextFunc;
+      linkStatic(engine.get(), error, mainFunc, setExecutionContextFunc);
+      if (error) {
+         return;
+      }
+      auto endJIT = std::chrono::high_resolution_clock::now();
+      setExecutionContextFunc(executionContext);
+      auto totalJITTime = std::chrono::duration_cast<std::chrono::microseconds>(endJIT - startJIT).count() / 1000.0;
+      totalJITTime -= translateToLLVMIRTime;
+      totalJITTime -= llvmPassesTime;
+
+      //start profiling
+      pid_t pid = runPerfRecord();
+      uint64_t r15DefaultValue = 0xbadeaffe;
+      __asm__ __volatile__("mov %0, %%r15\n\t"
+                           : /* no output */
+                           : "a"(r15DefaultValue)
+                           : "%r15");
+      std::vector<size_t> measuredTimes;
+      for (size_t i = 0; i < numRepetitions; i++) {
+         auto executionStart = std::chrono::high_resolution_clock::now();
+         mainFunc();
+         auto executionEnd = std::chrono::high_resolution_clock::now();
+         measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
+      }
+      //finish profiling
+      reserveLastRegister = false;
+      kill(pid, SIGINT);
+      sleep(2);
+
+      timing["toLLVMIR"] = translateToLLVMIRTime;
+      timing["llvmOptimize"] = llvmPassesTime;
+      timing["llvmCodeGen"] = totalJITTime;
+      timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
+   }
+   bool requiresSnapshotting() override {
+      return true;
+   }
+};
+
 RunMode getRunMode() {
    RunMode runMode;
    if (RUN_QUERIES_WITH_PERF) {
@@ -509,7 +632,7 @@ RunMode getRunMode() {
    } else {
       runMode = RunMode::DEFAULT;
    }
-   if (const char* mode = std::getenv("LINGO_DEBUG_MODE")) {
+   if (const char* mode = std::getenv("LINGODB_RUN_MODE")) {
       if (std::string(mode) == "PERF") {
          runMode = RunMode::PERF;
       } else if (std::string(mode) == "DEFAULT") {
@@ -523,48 +646,6 @@ RunMode getRunMode() {
    }
    return runMode;
 }
-/*
-Runner::Runner(RunMode mode) : context(nullptr), runMode(mode) {
-   llvm::DebugFlag = false;
-   LLVMInitializeX86AsmParser();
-   if (mode == RunMode::DEBUGGING || mode == RunMode::PERF) {
-      mlir::Operation::setTagLocationHook(tagLocHook);
-   }
-   RunnerContext* ctxt = new RunnerContext;
-   this->context = (void*) ctxt;
-}
-
-bool Runner::optimize(runtime::Database& db) {
-   auto start = std::chrono::high_resolution_clock::now();
-   RunnerContext* ctxt = (RunnerContext*) this->context;
-   mlir::PassManager pm(&ctxt->context);
-   pm.enableVerifier(runMode != RunMode::SPEED);
-   pm.addPass(mlir::createInlinerPass());
-   pm.addPass(mlir::createSymbolDCEPass());
-   mlir::relalg::createQueryOptPipeline(pm, &db);
-   if (mlir::failed(pm.run(ctxt->module.get()))) {
-      return false;
-   }
-   snapshot();
-   auto end = std::chrono::high_resolution_clock::now();
-   ctxt->stats.queryOptTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-   {
-      auto start = std::chrono::high_resolution_clock::now();
-
-      mlir::PassManager pm2(&ctxt->context);
-      pm2.enableVerifier(runMode != RunMode::SPEED);
-      mlir::relalg::createLowerRelAlgToSubOpPipeline(pm2);
-      mlir::subop::createLowerSubOpPipeline(pm2);
-      if (mlir::failed(pm2.run(ctxt->module.get()))) {
-         return false;
-      }
-      auto end = std::chrono::high_resolution_clock::now();
-      ctxt->stats.lowerRelAlgTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-   }
-   snapshot();
-   return true;
-}
- */
 
 class DefaultQueryExecuter : public QueryExecuter {
    size_t snapShotCounter = 0;
@@ -663,9 +744,11 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(runner::RunMode
    config->loweringSteps.emplace_back(std::make_unique<RelAlgLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<SubOpLoweringStep>());
    config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
-   if(runMode==RunMode::DEBUGGING){
+   if (runMode == RunMode::DEBUGGING) {
       config->executionBackend = std::make_unique<CPULLVMDebugBackend>();
-   }else{
+   } else if (runMode == RunMode::PERF) {
+      config->executionBackend = std::make_unique<CPULLVMProfilingBackend>();
+   } else {
       config->executionBackend = std::make_unique<DefaultCPULLVMBackend>();
    }
    config->resultProcessor = runner::createTablePrinter();
@@ -682,173 +765,5 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(runner::RunMode
 std::unique_ptr<QueryExecuter> QueryExecuter::createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig) {
    return std::make_unique<DefaultQueryExecuter>(std::move(queryExecutionConfig));
 }
-/*
-void Runner::dump() {
-   RunnerContext* ctxt = (RunnerContext*) this->context;
-   mlir::OpPrintingFlags flags;
-   ctxt->module->print(llvm::dbgs(), flags);
-}
-
-
- */
-/*
-inline void assignToThisCore(int coreId) {
-   cpu_set_t mask;
-   CPU_ZERO(&mask);
-   CPU_SET(coreId, &mask);
-   sched_setaffinity(0, sizeof(mask), &mask);
-}
-
-static pid_t runPerfRecord() {
-   assignToThisCore(0);
-   pid_t childPid = 0;
-   auto parentPid = std::to_string(getpid());
-   const char* argV[] = {"perf", "record", "-R", "-e", "ibs_op//p", "-c", "5000", "--intr-regs=r15", "-C", "0", nullptr};
-   auto status = posix_spawn(&childPid, "/usr/bin/perf", nullptr, nullptr, const_cast<char**>(argV), environ);
-   sleep(5);
-   assignToThisCore(0);
-   if (status != 0)
-      std::cerr << "Launching application Failed: " << status << std::endl;
-   return childPid;
-}
- */
-/*
-class WrappedExecutionEngine {
-   std::unique_ptr<mlir::ExecutionEngine> engine;
-   size_t jitTime;
-   size_t conversionTime;
-   void* mainFuncPtr;
-   void* setContextPtr;
-   std::unique_ptr<llvm::Module> convertMLIRModule(mlir::ModuleOp module, llvm::LLVMContext& context, bool withDebugInfo) {
-      auto startConv = std::chrono::high_resolution_clock::now();
-
-      std::unique_ptr<llvm::Module> mainModule =
-         translateModuleToLLVMIR(module, context, "LLVMDialectModule", withDebugInfo);
-      auto endConv = std::chrono::high_resolution_clock::now();
-
-      conversionTime = std::chrono::duration_cast<std::chrono::microseconds>(endConv - startConv).count();
-      return mainModule;
-   }
-
-   public:
-   WrappedExecutionEngine(mlir::ModuleOp module, RunMode runMode) : mainFuncPtr(nullptr), setContextPtr(nullptr) {
-      auto start = std::chrono::high_resolution_clock::now();
-      auto jitCodeGenLevel = runMode == RunMode::DEBUGGING ? llvm::CodeGenOpt::Level::None : llvm::CodeGenOpt::Level::Default;
-      auto withDebugInfo = runMode == RunMode::DEBUGGING || runMode == RunMode::PERF;
-      auto convertFn = [&](mlir::Operation* module, llvm::LLVMContext& context) -> std::unique_ptr<llvm::Module> { return convertMLIRModule(mlir::cast<mlir::ModuleOp>(module), context, withDebugInfo); };
-      auto optimizeFn = [&](llvm::Module* module) -> llvm::Error {if (runMode==RunMode::DEBUGGING){return llvm::Error::success();}else{return optimizeModule(module);} };
-      auto maybeEngine = mlir::ExecutionEngine::create(module, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = jitCodeGenLevel, .enableObjectDump = true});
-      assert(maybeEngine && "failed to construct an execution engine");
-      engine = std::move(maybeEngine.get());
-
-      auto lookupResult = engine->lookup("main");
-      if (!lookupResult) {
-         llvm::errs() << "JIT invocation failed\n";
-      }
-      mainFuncPtr = lookupResult.get();
-      auto lookupResult2 = engine->lookup("rt_set_execution_context");
-      if (!lookupResult2) {
-         llvm::errs() << "JIT invocation failed\n";
-      }
-      setContextPtr = lookupResult2.get();
-      auto end = std::chrono::high_resolution_clock::now();
-      jitTime = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-   }
-   bool succeeded() {
-      return mainFuncPtr != nullptr && setContextPtr != nullptr;
-   }
-
-   size_t getConversionTime() {
-      return conversionTime;
-   }
-   size_t getJitTime() {
-      return jitTime;
-   }
-   void* getMainFuncPtr() const {
-      return mainFuncPtr;
-   }
-   void* getSetContextPtr() const {
-      return setContextPtr;
-   }
-};
- */
-/*
-bool Runner::runJit(runtime::ExecutionContext* context, size_t repeats) {
-   if (runMode == RunMode::PERF) {
-      repeats = 1;
-      reserveLastRegister = true;
-   }
-   RunnerContext* ctxt = (RunnerContext*) this->context;
-   // Initialize LLVM targets.
-   llvm::InitializeNativeTarget();
-   llvm::InitializeNativeTargetAsmPrinter();
-   auto targetTriple = llvm::sys::getDefaultTargetTriple();
-   std::string errorMessage;
-   const auto* target = llvm::TargetRegistry::lookupTarget(targetTriple, errorMessage);
-   if (!target) {
-      assert(false && "could not get target");
-      return false;
-   }
-
-   // Initialize LLVM targets.
-   llvm::InitializeNativeTarget();
-   llvm::InitializeNativeTargetAsmPrinter();
-
-   // An optimization pipeline to use within the execution engine.
-   if (runMode == RunMode::PERF) {
-      mlir::PassManager pm(&ctxt->context);
-      pm.enableVerifier(false);
-      pm.addPass(createAnnotateProfilingDataPass());
-      if (mlir::failed(pm.run(ctxt->module.get()))) {
-         return false;
-      }
-   }
-   WrappedExecutionEngine engine(ctxt->module.get(), runMode);
-   if (!engine.succeeded()) return false;
-   if ((runMode == RunMode::PERF || runMode == RunMode::DEBUGGING) && !engine.linkStatic()) return false;
-   typedef uint8_t* (*myfunc)(void*);
-   auto fn = (myfunc) engine.getSetContextPtr();
-   fn(context);
-   ctxt->stats.convertToLLVMIR = engine.getConversionTime();
-   ctxt->stats.compileTime = engine.getJitTime();
-   pid_t pid;
-   if (runMode == RunMode::PERF) {
-      pid = runPerfRecord();
-      uint64_t r15DefaultValue = 0xbadeaffe;
-      __asm__ __volatile__("mov %0, %%r15\n\t"
-                           :*/
-/* no output */
-/*
-                           : "a"(r15DefaultValue)
-                           : "%r15");
-   }
-   std::vector<size_t> measuredTimes;
-   for (size_t i = 0; i < repeats; i++) {
-      auto executionStart = std::chrono::high_resolution_clock::now();
-      typedef void (*myfunc)();
-      auto fn = (myfunc) engine.getMainFuncPtr();
-      fn();
-      auto executionEnd = std::chrono::high_resolution_clock::now();
-      measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count());
-   }
-   if (runMode == RunMode::PERF) {
-      reserveLastRegister = false;
-      kill(pid, SIGINT);
-      sleep(2);
-   }
-   ctxt->stats.executionTime = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
-   if (reportTimes) {
-      ctxt->stats.print(std::cout);
-   }
-
-   return true;
-}
-
-Runner::~Runner() {
-   if (this->context) {
-      delete (RunnerContext*) this->context;
-   }
-}
- */
 
 } // namespace runner
