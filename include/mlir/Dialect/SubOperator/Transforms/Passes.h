@@ -7,6 +7,7 @@ namespace subop {
 std::unique_ptr<Pass> createEnforceOrderPass();
 std::unique_ptr<Pass> createNormalizeSubOpPass();
 std::unique_ptr<Pass> createPullGatherUpPass();
+std::unique_ptr<Pass> createReuseLocalPass();
 void registerSubOpTransformations();
 } // end namespace subop
 } // end namespace mlir

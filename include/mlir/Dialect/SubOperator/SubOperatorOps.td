@@ -450,9 +450,13 @@ def EntriesBetweenOp : SubOperator_Op<"entries_between",[SubOperator]> {
     let results = (outs TupleStream: $res);
     let assemblyFormat = [{  $stream custom<CustRef>($left_ref) custom<CustRef>($right_ref)  custom<CustDef>($between) attr-dict }];
 }
+def ReferenceValidOp : SubOperator_Op<"ref_valid",[SubOperator]> {
+    let arguments = (ins TupleStream : $stream, ColumnRefAttr:$ref,ColumnDefAttr: $is_valid);
+    let results = (outs TupleStream: $res);
+    let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<CustDef>($is_valid) attr-dict }];
+}
 
 
-//todo: lookup_range?
 
 //===----------------------------------------------------------------------===//
 // Streams & References

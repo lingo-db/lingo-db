@@ -1295,6 +1295,123 @@ class LookupSegmentTreeViewLowering : public TupleStreamConsumerLowering<mlir::s
    }
 };
 
+class PureLookupHashMapLowering : public TupleStreamConsumerLowering<mlir::subop::LookupOp> {
+   public:
+   using TupleStreamConsumerLowering<mlir::subop::LookupOp>::TupleStreamConsumerLowering;
+   LogicalResult matchAndRewriteConsumer(mlir::subop::LookupOp lookupOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
+      if (!lookupOp.getState().getType().isa<mlir::subop::HashMapType>()) return failure();
+      mlir::subop::HashMapType htStateType = lookupOp.getState().getType().cast<mlir::subop::HashMapType>();
+      auto packed = rewriter.create<mlir::util::PackOp>(lookupOp->getLoc(), mapping.resolve(lookupOp.getKeys()));
+
+      mlir::Value hash = rewriter.create<mlir::db::Hash>(lookupOp->getLoc(), packed); //todo: external hash
+      auto equalFnBuilder = [&lookupOp](mlir::OpBuilder& rewriter, Value left, Value right) -> Value {
+         auto unpackedLeft = rewriter.create<mlir::util::UnPackOp>(lookupOp->getLoc(), left).getResults();
+         auto unpackedRight = rewriter.create<mlir::util::UnPackOp>(lookupOp->getLoc(), right).getResults();
+         std::vector<mlir::Value> arguments;
+         arguments.insert(arguments.end(), unpackedLeft.begin(), unpackedLeft.end());
+         arguments.insert(arguments.end(), unpackedRight.begin(), unpackedRight.end());
+         auto res = inlineBlock(&lookupOp.getEqFn().front(), rewriter, arguments);
+         return res[0];
+      };
+      auto loc = lookupOp->getLoc();
+      Value hashed = hash;
+
+      auto keyType = packed.getType();
+      auto* context = rewriter.getContext();
+      auto entryType = getHtEntryType(htStateType, *typeConverter);
+      auto i8PtrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
+      auto i8PtrPtrType = mlir::util::RefType::get(context, i8PtrType);
+
+      auto idxType = rewriter.getIndexType();
+      auto idxPtrType = util::RefType::get(rewriter.getContext(), idxType);
+      auto kvType = getHtKVType(htStateType, *typeConverter);
+      auto kvPtrType = mlir::util::RefType::get(context, kvType);
+      auto keyPtrType = mlir::util::RefType::get(context, keyType);
+      auto entryPtrType = mlir::util::RefType::get(context, entryType);
+      auto htType = mlir::util::RefType::get(context, entryPtrType);
+
+      Value castedState = rewriter.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(), mlir::TupleType::get(getContext(), {htType, rewriter.getIndexType()})), adaptor.getState());
+      Value htAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), htType), castedState, 0);
+      Value htMaskAddress = rewriter.create<util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), rewriter.getIndexType()), castedState, 1);
+      Value ht = rewriter.create<util::LoadOp>(loc, htType, htAddress);
+      Value htMask = rewriter.create<util::LoadOp>(loc, rewriter.getIndexType(), htMaskAddress);
+
+      Value trueValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
+      Value falseValue = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
+
+      //position = hash & hashTableMask
+      Value position = rewriter.create<arith::AndIOp>(loc, htMask, hashed);
+      // ptr = &hashtable[position]
+      Type bucketPtrType = util::RefType::get(context, entryType);
+      Type doneType = rewriter.getI1Type();
+      Value ptr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
+
+      auto whileOp = rewriter.create<scf::WhileOp>(loc, bucketPtrType, ValueRange({ptr}));
+      Block* before = rewriter.createBlock(&whileOp.getBefore(), {}, bucketPtrType, {loc});
+      Block* after = rewriter.createBlock(&whileOp.getAfter(), {}, bucketPtrType, {loc});
+
+      // The conditional block of the while loop.
+      {
+         rewriter.setInsertionPointToStart(&whileOp.getBefore().front());
+         Value ptr = before->getArgument(0);
+
+         Value currEntryPtr = ptr;
+         //    if (*ptr != nullptr){
+         Value cmp = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), currEntryPtr);
+         auto ifOp = rewriter.create<scf::IfOp>(
+            loc, TypeRange({doneType, bucketPtrType}), cmp,
+            [&](OpBuilder& b, Location loc) {
+
+               Value hashAddress=rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, currEntryPtr, 1);
+               Value entryHash = rewriter.create<util::LoadOp>(loc, idxType, hashAddress);
+               Value hashMatches = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, entryHash,hashed);
+               auto ifOpH = b.create<scf::IfOp>(
+                  loc, TypeRange({doneType,bucketPtrType}), hashMatches, [&](OpBuilder& b, Location loc) {
+                     Value kvAddress = rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
+                     Value entryKeyAddress = rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, kvAddress, 0);
+                     Value entryKey = rewriter.create<util::LoadOp>(loc, keyType, entryKeyAddress);
+
+                     Value keyMatches = equalFnBuilder(b, entryKey, packed);
+                     auto ifOp2 = b.create<scf::IfOp>(
+                        loc, TypeRange({doneType, bucketPtrType}), keyMatches, [&](OpBuilder& b, Location loc) {
+
+
+                           b.create<scf::YieldOp>(loc, ValueRange{falseValue, ptr}); }, [&](OpBuilder& b, Location loc) {
+                           Value nextPtrAddr=rewriter.create<util::TupleElementPtrOp>(loc, i8PtrPtrType, currEntryPtr, 0);
+                           //          ptr = &entry.next
+                           Value newEntryPtr=b.create<util::LoadOp>(loc,nextPtrAddr,mlir::Value());
+                           Value newPtr=b.create<util::GenericMemrefCastOp>(loc, bucketPtrType,newEntryPtr);
+                           //          yield ptr,done=false
+                           b.create<scf::YieldOp>(loc, ValueRange{trueValue, newPtr }); });
+                     b.create<scf::YieldOp>(loc, ifOp2.getResults());
+                  }, [&](OpBuilder& b, Location loc) {
+                     Value nextPtrAddr=rewriter.create<util::TupleElementPtrOp>(loc, i8PtrPtrType, currEntryPtr, 0);
+                     //          ptr = &entry.next
+                     Value newEntryPtr=b.create<util::LoadOp>(loc,nextPtrAddr,mlir::Value());
+                     Value newPtr=b.create<util::GenericMemrefCastOp>(loc, bucketPtrType,newEntryPtr);
+                     //          yield ptr,done=false
+                     b.create<scf::YieldOp>(loc, ValueRange{trueValue, newPtr });});
+               b.create<scf::YieldOp>(loc, ifOpH.getResults()); }, [&](OpBuilder& b, Location loc) { b.create<scf::YieldOp>(loc, ValueRange{falseValue, ptr}); });
+
+         Value done = ifOp.getResult(0);
+         Value newPtr = ifOp.getResult(1);
+         rewriter.create<scf::ConditionOp>(loc, done, ValueRange({newPtr}));
+      }
+
+      // The body of the while loop: shift right until reaching a value of 0.
+      {
+         rewriter.setInsertionPointToStart(&whileOp.getAfter().front());
+         rewriter.create<scf::YieldOp>(loc, after->getArguments());
+      }
+
+      rewriter.setInsertionPointAfter(whileOp);
+
+      Value currEntryPtr = whileOp.getResult(0);
+      mapping.define(lookupOp.getRef(), currEntryPtr);
+      newStream = mapping.createInFlight(rewriter);
+      return mlir::success();
+   }
+};
 class LookupHashMapLowering : public TupleStreamConsumerLowering<mlir::subop::LookupOrInsertOp> {
    public:
    using TupleStreamConsumerLowering<mlir::subop::LookupOrInsertOp>::TupleStreamConsumerLowering;
@@ -1763,6 +1880,19 @@ class EntriesBetweenLowering : public TupleStreamConsumerLowering<mlir::subop::E
       return success();
    }
 };
+class IsRefValidLowering : public TupleStreamConsumerLowering<mlir::subop::ReferenceValidOp> {
+   public:
+   using TupleStreamConsumerLowering<mlir::subop::ReferenceValidOp>::TupleStreamConsumerLowering;
+   LogicalResult matchAndRewriteConsumer(mlir::subop::ReferenceValidOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
+      auto ref = mapping.resolve(op.getRef());
+      if (ref.getType().isa<mlir::util::RefType>()) {
+         mapping.define(op.getIsValid(), rewriter.create<mlir::util::IsRefValidOp>(op->getLoc(), rewriter.getI1Type(), ref));
+         newStream = mapping.createInFlight(rewriter);
+         return success();
+      }
+      return failure();
+   }
+};
 static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter) {
    std::vector<Type> types;
    for (auto t : tupleType.getTypes()) {
@@ -1882,6 +2012,8 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<CombineInFlightLowering>(typeConverter, ctxt);
    patterns.insert<LookupSimpleStateLowering>(typeConverter, ctxt);
    patterns.insert<LookupHashMapLowering>(typeConverter, ctxt);
+   patterns.insert<PureLookupHashMapLowering>(typeConverter, ctxt);
+   patterns.insert<IsRefValidLowering>(typeConverter, ctxt);
    patterns.insert<LookupHashIndexedViewLowering>(typeConverter, ctxt);
    patterns.insert<ScanHashMapLowering>(typeConverter, ctxt);
    patterns.insert<ReduceOpLowering>(typeConverter, ctxt);
@@ -1908,6 +2040,7 @@ mlir::subop::createLowerSubOpPass() {
    return std::make_unique<SubOpToControlFlowLoweringPass>();
 }
 void mlir::subop::createLowerSubOpPipeline(mlir::OpPassManager& pm) {
+   pm.addPass(mlir::subop::createReuseLocalPass());
    pm.addPass(mlir::subop::createNormalizeSubOpPass());
    pm.addPass(mlir::subop::createPullGatherUpPass());
    pm.addPass(mlir::subop::createEnforceOrderPass());
