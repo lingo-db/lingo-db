@@ -1,15 +1,86 @@
 #include "llvm/ADT/TypeSwitch.h"
+#include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/ColumnSet.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace {
+bool isNotNullCheckOnColumn(mlir::relalg::ColumnSet relevantColumns, mlir::relalg::SelectionOp selectionOp) {
+   if (selectionOp.getPredicate().empty()) return false;
+   if (selectionOp.getPredicate().front().empty()) return false;
+   if (auto returnOp = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(selectionOp.getPredicate().front().getTerminator())) {
+      if (returnOp.getResults().size() != 1) return false;
+      if (auto notOp = mlir::dyn_cast_or_null<mlir::db::NotOp>(returnOp.getResults()[0].getDefiningOp())) {
+         if (auto isNullOp = mlir::dyn_cast_or_null<mlir::db::IsNullOp>(notOp.getVal().getDefiningOp())) {
+            if (auto getColOp = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(isNullOp.getVal().getDefiningOp())) {
+               return relevantColumns.contains(&getColOp.getAttr().getColumn());
+            }
+         }
+      }
+   }
+   return false;
+}
+class OuterJoinToInnerJoin : public mlir::RewritePattern {
+   public:
+   OuterJoinToInnerJoin(mlir::MLIRContext* context)
+      : RewritePattern(mlir::relalg::OuterJoinOp::getOperationName(), 1, context) {}
+   mlir::LogicalResult match(mlir::Operation* op) const override {
+      auto outerJoinOp = mlir::cast<mlir::relalg::OuterJoinOp>(op);
+      mlir::Value currStream = outerJoinOp.asRelation();
 
+      while (currStream) {
+         auto users = currStream.getUsers();
+         if (users.begin() == users.end()) break;
+         auto second = users.begin();
+         second++;
+         if (second != users.end()) break;
+         if (auto selectionOp = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(*users.begin())) {
+            if (isNotNullCheckOnColumn(outerJoinOp.getCreatedColumns(), selectionOp)) {
+               return mlir::success();
+            }
+            currStream = selectionOp.asRelation();
+         } else {
+            currStream = mlir::Value();
+         }
+      }
+      return mlir::failure();
+   }
+   void rewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto outerJoinOp = mlir::cast<mlir::relalg::OuterJoinOp>(op);
+      auto newJoin = rewriter.create<mlir::relalg::InnerJoinOp>(op->getLoc(), outerJoinOp.getLeft(), outerJoinOp.getRight());
+      rewriter.inlineRegionBefore(outerJoinOp.getPredicate(), newJoin.getPredicate(), newJoin.getPredicate().end());
+      std::vector<mlir::Attribute> mapColumnDefs;
+      auto* mapBlock = new mlir::Block;
+
+      {
+         std::vector<mlir::Value> returnValues;
+         auto tuple = mapBlock->addArgument(mlir::tuples::TupleType::get(getContext()), op->getLoc());
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(mapBlock);
+         for (auto m : outerJoinOp.getMapping()) {
+            auto defAttr = m.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
+            auto refAttr = defAttr.getFromExisting().cast<mlir::ArrayAttr>()[0].cast<mlir::tuples::ColumnRefAttr>();
+            auto colVal = rewriter.create<mlir::tuples::GetColumnOp>(op->getLoc(), defAttr.getColumn().type, refAttr, tuple);
+            if (colVal.getType() != defAttr.getColumn().type) {
+               returnValues.push_back(rewriter.create<mlir::db::AsNullableOp>(op->getLoc(), defAttr.getColumn().type, colVal, mlir::Value()));
+            } else {
+               returnValues.push_back(colVal);
+            }
+            mapColumnDefs.push_back(defAttr);
+         }
+         rewriter.create<mlir::tuples::ReturnOp>(op->getLoc(), returnValues);
+      }
+      auto mapOp = rewriter.replaceOpWithNewOp<mlir::relalg::MapOp>(op, newJoin.asRelation(), rewriter.getArrayAttr(mapColumnDefs));
+      mapOp.getPredicate().push_back(mapBlock);
+   }
+};
 class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-pushdown"; }
+
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(Pushdown)
    private:
@@ -80,6 +151,11 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
             });
          }
       });
+      mlir::RewritePatternSet patterns(&getContext());
+      patterns.insert<OuterJoinToInnerJoin>(&getContext());
+      if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+         signalPassFailure();
+      }
    }
 };
 } // end anonymous namespace

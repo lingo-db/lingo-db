@@ -10,6 +10,7 @@ namespace mlir {
 namespace relalg {
 std::unique_ptr<Pass> createExtractNestedOperatorsPass();
 std::unique_ptr<Pass> createDecomposeLambdasPass();
+std::unique_ptr<Pass> createInferNotNullConditionsPass();
 std::unique_ptr<Pass> createImplicitToExplicitJoinsPass();
 std::unique_ptr<Pass> createUnnestingPass();
 std::unique_ptr<Pass> createPushdownPass();
