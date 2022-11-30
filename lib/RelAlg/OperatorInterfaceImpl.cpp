@@ -419,4 +419,67 @@ void mlir::relalg::detail::moveSubTreeBefore(mlir::Operation* op, mlir::Operatio
       moveSubTreeBefore(child, tree);
    }
 }
+static void replaceColumnUsesInLamda(mlir::MLIRContext* context, mlir::Block& block, const mlir::relalg::ColumnFoldInfo& columnInfo) {
+   auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+   block.walk([&columnInfo, &colManager](mlir::tuples::GetColumnOp getColumnOp) {
+      auto* currColumn = &getColumnOp.getAttr().getColumn();
+      if (columnInfo.directMappings.contains(currColumn)) {
+         getColumnOp.setAttrAttr(colManager.createRef(columnInfo.directMappings.at(currColumn)));
+      }
+   });
+}
+mlir::LogicalResult mlir::relalg::MapOp::foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo) {
+   auto& colManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+   replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
+   auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(getPredicate().front().getTerminator());
+   for (auto z : llvm::zip(returnOp.getResults(), getComputedCols())) {
+      if (auto getColumnOp = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(std::get<0>(z).getDefiningOp())) {
+         auto* previousColumn = &getColumnOp.getAttr().getColumn();
+         auto* currentColumn = &std::get<1>(z).cast<mlir::tuples::ColumnDefAttr>().getColumn();
+         columnInfo.directMappings[currentColumn] = previousColumn;
+      }
+   }
+   return success();
+}
+mlir::LogicalResult mlir::relalg::MapOp::eliminateDeadColumns(mlir::relalg::ColumnSet& usedColumns, mlir::Value& newStream) {
+   auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(getPredicate().front().getTerminator());
+   std::vector<mlir::Value> results;
+   std::vector<mlir::Attribute> resultingColumns;
+   for (auto z : llvm::zip(returnOp.getResults(), getComputedCols())) {
+      auto defAttr = std::get<1>(z).cast<mlir::tuples::ColumnDefAttr>();
+      if (usedColumns.contains(&defAttr.getColumn())) {
+         results.push_back(std::get<0>(z));
+         resultingColumns.push_back(defAttr);
+      }
+   }
+   if (results.size() == returnOp.getNumOperands()) {
+      return mlir::failure();
+   }
+   if(results.size()==0){
+      newStream=this->getRel();
+      return mlir::success();
+   }
+   returnOp->setOperands(results);
+   setComputedColsAttr(mlir::ArrayAttr::get(getContext(),resultingColumns));
+   return mlir::success();
+}
+mlir::LogicalResult mlir::relalg::SelectionOp::foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo) {
+   replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
+   return success();
+}
+mlir::LogicalResult mlir::relalg::CrossProductOp::foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo) {
+   return success();
+}
+mlir::LogicalResult mlir::relalg::InnerJoinOp::foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo) {
+   replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
+   return success();
+}
+mlir::LogicalResult mlir::relalg::SemiJoinOp::foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo) {
+   replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
+   return success();
+}
+mlir::LogicalResult mlir::relalg::AntiSemiJoinOp::foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo) {
+   replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
+   return success();
+}
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"

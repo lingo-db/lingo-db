@@ -7,6 +7,19 @@
 #include <unordered_set>
 
 namespace {
+class DecomposeInnerJoin : public mlir::RewritePattern {
+   public:
+   DecomposeInnerJoin(mlir::MLIRContext* context)
+      : RewritePattern(mlir::relalg::InnerJoinOp::getOperationName(), 1, context) {}
+   mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto innerJoin = mlir::cast<mlir::relalg::InnerJoinOp>(op);
+      auto cp = rewriter.create<mlir::relalg::CrossProductOp>(op->getLoc(), innerJoin.getLeft(), innerJoin.getRight());
+      auto sel = rewriter.create<mlir::relalg::SelectionOp>(op->getLoc(), cp);
+      rewriter.inlineRegionBefore(innerJoin.getPredicate(), sel.getPredicate(), sel.getPredicate().end());
+      rewriter.replaceOp(op,sel.getResult());
+      return mlir::success();
+   }
+};
 class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-decompose-lambdas"; }
 
@@ -203,6 +216,11 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
       }
    }
    void runOnOperation() override {
+      mlir::RewritePatternSet patterns(&getContext());
+      patterns.insert<DecomposeInnerJoin>(&getContext());
+      if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
+         signalPassFailure();
+      }
       getOperation().walk([&](mlir::relalg::SelectionOp op) {
          auto* terminator = op.getRegion().front().getTerminator();
          mlir::Value val = op.getRel();
@@ -216,6 +234,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          op.replaceAllUsesWith(val);
          op->erase();
       });
+
       getOperation().walk([&](mlir::relalg::OuterJoinOp op) {
          auto* terminator = op.getRegion().front().getTerminator();
          auto retval = terminator->getOperand(0);
@@ -227,6 +246,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          builder.create<mlir::tuples::ReturnOp>(terminator->getLoc(), val ? mlir::ValueRange{val} : mlir::ValueRange{});
          terminator->erase();
       });
+
    }
 };
 } // end anonymous namespace

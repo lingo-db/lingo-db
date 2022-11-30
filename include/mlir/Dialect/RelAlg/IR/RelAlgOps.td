@@ -127,7 +127,7 @@ def BaseTableOp : RelAlg_Op<"basetable",[Pure,Operator]> {
 
 def SelectionOp : RelAlg_Op<"selection",
         [Pure,Operator,PredicateOperator,TupleLamdaOperator,
-         UnaryOperator]> {
+         UnaryOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
     let summary = "selection operation";
     let description = [{
         Filter tuple stream, the region returns `1` iff the value should be
@@ -138,9 +138,12 @@ def SelectionOp : RelAlg_Op<"selection",
     let results = (outs TupleStream:$result);
     let regions = (region SizedRegion<1>:$predicate);
     let assemblyFormat = [{ $rel custom<CustRegion>($predicate) attr-dict-with-keyword }];
+    let extraClassDeclaration = [{
+        mlir::LogicalResult foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo);
+    }];
 }
 
-def MapOp : RelAlg_Op<"map", [Pure,Operator,TupleLamdaOperator,UnaryOperator]> {
+def MapOp : RelAlg_Op<"map", [Pure,Operator,TupleLamdaOperator,UnaryOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
     let summary = "map operation";
 
     let arguments = (ins TupleStream:$rel,ArrayAttr:$computed_cols);
@@ -150,6 +153,8 @@ def MapOp : RelAlg_Op<"map", [Pure,Operator,TupleLamdaOperator,UnaryOperator]> {
 
     let extraClassDeclaration = [{
         ColumnSet getCreatedColumns();
+        mlir::LogicalResult foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo);
+        mlir::LogicalResult eliminateDeadColumns(mlir::relalg::ColumnSet& usedColumns, mlir::Value& newStream);
     }];
     let hasVerifier=1;
 }
@@ -176,12 +181,15 @@ def TopKOp : RelAlg_Op<"topk", [Pure,Operator,UnaryOperator]> {
 }
 
 def CrossProductOp : RelAlg_Op<"crossproduct",
-        [Pure,Operator,BinaryOperator]> {
+        [Pure,Operator,BinaryOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
     let summary = "crossproduct operation";
 
     let arguments = (ins TupleStream:$left,TupleStream:$right);
     let results = (outs TupleStream:$result);
     let assemblyFormat = [{ $left `,` $right attr-dict }];
+    let extraClassDeclaration = [{
+        mlir::LogicalResult foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo);
+    }];
 }
 
 def RenamingOp : RelAlg_Op<"renaming",
@@ -241,7 +249,7 @@ def SortOp : RelAlg_Op<"sort", [Pure,Operator,UnaryOperator]> {
 // Joins
 class RelAlg_JoinOp<string mnemonic> : RelAlg_Op<mnemonic,
         [Pure,Operator,BinaryOperator,PredicateOperator,
-         TupleLamdaOperator]> {
+         TupleLamdaOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
     let arguments = (ins TupleStream:$left,TupleStream:$right);
     let results = (outs TupleStream:$result);
     let regions = (region SizedRegion<1>:$predicate);
@@ -250,13 +258,16 @@ class RelAlg_JoinOp<string mnemonic> : RelAlg_Op<mnemonic,
 
 def InnerJoinOp : RelAlg_JoinOp<"join"> {
     let summary = "inner join operation";
+    let extraClassDeclaration = [{
+        mlir::LogicalResult foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo);
+    }];
 }
 
 def SemiJoinOp : RelAlg_JoinOp<"semijoin"> {
     let summary = "semi join operation";
-
     let extraClassDeclaration = [{
         ColumnSet getAvailableColumns();
+        mlir::LogicalResult foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo);
     }];
 }
 
@@ -265,6 +276,7 @@ def AntiSemiJoinOp : RelAlg_JoinOp<"antisemijoin"> {
 
     let extraClassDeclaration = [{
         ColumnSet getAvailableColumns();
+        mlir::LogicalResult foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo);
     }];
 }
 

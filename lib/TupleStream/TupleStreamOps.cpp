@@ -1,4 +1,5 @@
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
+#include "mlir/Dialect/TupleStream/TupleStreamDialect.h"
 
 #include "mlir/IR/DialectImplementation.h"
 #include "mlir/IR/OpImplementation.h"

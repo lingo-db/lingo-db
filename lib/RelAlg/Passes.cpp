@@ -21,6 +21,9 @@ void mlir::relalg::createQueryOptPipeline(mlir::OpPassManager& pm, runtime::Data
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createImplicitToExplicitJoinsPass());
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createPushdownPass());
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createUnnestingPass());
+   pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createColumnFoldingPass());
+   pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createDecomposeLambdasPass());
+   pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createPushdownPass());
    if (db) {
       pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createAttachMetaDataPass(*db));
    }
@@ -72,7 +75,9 @@ void mlir::relalg::registerQueryOptimizationPasses() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createExpandTransitiveEqualities();
    });
-
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::relalg::createColumnFoldingPass();
+   });
    mlir::PassPipelineRegistration<EmptyPipelineOptions>(
       "relalg-query-opt",
       "",

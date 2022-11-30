@@ -254,4 +254,11 @@ mlir::relalg::detail::initPredicate(this->getOperation());
 >];
 }
 
+def ColumnFoldable : OpInterface<"ColumnFoldable"> {
+let methods = [
+InterfaceMethod<"","mlir::LogicalResult", "foldColumns",(ins "mlir::relalg::ColumnFoldInfo&":$columnInfo),"",[{return mlir::failure();}]>,
+InterfaceMethod<"","mlir::LogicalResult", "eliminateDeadColumns",(ins "mlir::relalg::ColumnSet&":$usedColumns,"mlir::Value&":$newStream),"",[{return mlir::failure();}]>
+];
+}
+
 #endif// Interfaces

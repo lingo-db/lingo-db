@@ -7,6 +7,7 @@
 #include "mlir/Dialect/RelAlg/FunctionalDependencies.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgTypes.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOpsTypes.h"
+#include "mlir/Dialect/RelAlg/Transforms/ColumnFolding.h"
 
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinAttributes.h"
