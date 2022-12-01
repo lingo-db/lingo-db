@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 #include <cstdint>
+#include <cstdlib>
 #include <vector>
 
 namespace runtime {
