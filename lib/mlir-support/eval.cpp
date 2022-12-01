@@ -141,6 +141,11 @@ std::unique_ptr<expr> createLike(std::unique_ptr<expr> a, std::string like) {
    auto res = arrow::compute::call("match_like", args, options);
    return pack(res);
 }
+std::unique_ptr<expr> createIsNull(std::unique_ptr<expr> val) {
+   if (!val) return {};
+   auto res=arrow::compute::is_null(unpack(val));
+   return pack(res);
+}
 std::unique_ptr<expr> createInvalid() {
    return {};
 }

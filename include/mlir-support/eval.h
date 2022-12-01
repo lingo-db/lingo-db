@@ -27,6 +27,7 @@ std::unique_ptr<expr> createLte(std::unique_ptr<expr> a, std::unique_ptr<expr> b
 std::unique_ptr<expr> createGte(std::unique_ptr<expr> a, std::unique_ptr<expr> b);
 std::unique_ptr<expr> createGt(std::unique_ptr<expr> a, std::unique_ptr<expr> b);
 std::unique_ptr<expr> createLike(std::unique_ptr<expr> a, std::string pattern);
+std::unique_ptr<expr> createIsNull(std::unique_ptr<expr> val);
 
 std::optional<size_t> countResults(std::shared_ptr<arrow::RecordBatch> batch, std::unique_ptr<expr> filter);
 } // end namespace support::eval

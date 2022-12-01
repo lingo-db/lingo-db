@@ -134,8 +134,6 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
          return support::eval::createLt(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));
       } else if (cmpOp.isGreaterPred(false)) {
          return support::eval::createGt(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));
-      } else {
-         return support::eval::createInvalid();
       }
    } else if (auto betweenOp = mlir::dyn_cast_or_null<mlir::db::BetweenOp>(op)) {
       std::vector<std::unique_ptr<support::eval::expr>> expressions;
@@ -149,8 +147,9 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
       }
       return support::eval::createOr(expressions);
    } else if (auto notOp = mlir::dyn_cast_or_null<mlir::db::NotOp>(op)) {
-      std::vector<std::unique_ptr<support::eval::expr>> expressions;
       return support::eval::createNot(buildEvalExpr(notOp.getVal(), mapping));
+   } else if (auto isNullOp = mlir::dyn_cast_or_null<mlir::db::IsNullOp>(op)) {
+      return support::eval::createIsNull(buildEvalExpr(isNullOp.getVal(), mapping));
    } else if (auto andOp = mlir::dyn_cast_or_null<mlir::db::AndOp>(op)) {
       std::vector<std::unique_ptr<support::eval::expr>> expressions;
       for (auto v : andOp.getVals()) {
@@ -169,8 +168,8 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
             return support::eval::createLike(buildEvalExpr(runtimeCall.getArgs()[0], mapping), constantOp.getValue().cast<mlir::StringAttr>().str());
          }
       }
-      return support::eval::createInvalid();
    }
+   val.dump();
    return support::eval::createInvalid();
 }
 
