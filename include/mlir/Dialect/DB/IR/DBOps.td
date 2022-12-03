@@ -266,7 +266,7 @@ def DB_ModOp : DB_BinaryOp<"mod"> {
    MLIRContext* context, Optional<Location> location, ValueRange operands,
    DictionaryAttr attributes, RegionRange regions,
    SmallVectorImpl<Type>& inferredReturnTypes) {
-         return inferDivReturnType(context,location,operands,inferredReturnTypes);
+         return inferRemReturnType(context,location,operands,inferredReturnTypes);
     }
   }];
 }

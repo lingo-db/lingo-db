@@ -32,7 +32,7 @@
 //CHECK: int(1)
 //CHECK: float(1)
 //CHECK: float(1)
-//CHECK: decimal(1.00)
+//CHECK: decimal(1.00000000000000000)
  module {
  	func.func @main () {
  	     %char_const = db.constant ( "AB" ) : !db.char<2>
@@ -102,7 +102,7 @@
  		 db.runtime_call "DumpValue" (%int64_div) : (i64) -> ()
  		 db.runtime_call "DumpValue" (%float32_div) : (f32) -> ()
  		 db.runtime_call "DumpValue" (%float64_div) : (f64) -> ()
- 		 db.runtime_call "DumpValue" (%decimal2_div) : (!db.decimal<15,2>) -> ()
+ 		 db.runtime_call "DumpValue" (%decimal2_div) : (!db.decimal<32,17>) -> ()
 
  		return
   }

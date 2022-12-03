@@ -133,8 +133,8 @@ struct SQLTypeInference {
       if (datePresent) return getHigherDateType(left, right);
       if (stringPresent) return mlir::db::StringType::get(left.getContext());
       if (charPresent) return left == right ? left : mlir::db::StringType::get(left.getContext());
-      if (decimalPresent) return getHigherDecimalType(left, right);
       if (floatPresent) return getHigherFloatType(left, right);
+      if (decimalPresent) return getHigherDecimalType(left, right);
       if (intPresent) return getHigherIntType(left, right);
       return left;
    }
@@ -163,15 +163,22 @@ struct SQLTypeInference {
       }
       return res;
    }
-   static std::vector<mlir::Value> toCommonBaseTypesExceptDecimals(mlir::OpBuilder& builder, mlir::ValueRange values) {
-      std::vector<mlir::Value> res;
-      for (auto val : values) {
-         if (!getBaseType(val.getType()).isa<mlir::db::DecimalType>()) {
-            return toCommonBaseTypes(builder, values);
+   static std::vector<mlir::Value> toCommonNumber(mlir::OpBuilder& builder, mlir::ValueRange values) {
+      auto anyDecimal = llvm::any_of(values, [](mlir::Value v) { return getBaseType(v.getType()).isa<mlir::db::DecimalType>(); });
+      auto anyFloat = llvm::any_of(values, [](mlir::Value v) { return getBaseType(v.getType()).isIntOrFloat()&&!getBaseType(v.getType()).isIntOrIndex(); });
+      if (anyDecimal&&!anyFloat) {
+         std::vector<mlir::Value> res;
+         for (auto val : values) {
+            if (!getBaseType(val.getType()).isa<mlir::db::DecimalType>()) {
+               res.push_back(castValueToType(builder, val, mlir::db::DecimalType::get(builder.getContext(), 19, 0)));
+            } else {
+               res.push_back(val);
+            }
          }
-         res.push_back(val);
+         return res;
+      } else {
+         return toCommonBaseTypes(builder, values);
       }
-      return res;
    }
 };
 #define T_FakeNode T_TidScan

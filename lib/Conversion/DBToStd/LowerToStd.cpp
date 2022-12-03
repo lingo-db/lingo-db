@@ -481,8 +481,42 @@ class DecimalOpScaledLowering : public OpConversionPattern<DBOp> {
       auto type = getBaseType(decimalOp.getType());
       if (auto decimalType = type.template dyn_cast_or_null<mlir::db::DecimalType>()) {
          auto stdType = this->typeConverter->convertType(decimalType);
-         auto scaled = rewriter.create<arith::MulIOp>(decimalOp->getLoc(), stdType, adaptor.getLeft(), getDecimalScaleMultiplierConstant(rewriter, decimalType.getS(), stdType, decimalOp->getLoc()));
-         rewriter.template replaceOpWithNewOp<Op>(decimalOp, stdType, scaled, adaptor.getRight());
+         mlir::Value left = adaptor.getLeft();
+         mlir::Value right = adaptor.getRight();
+         if (stdType != left.getType()) {
+            left = rewriter.create<mlir::arith::ExtSIOp>(decimalOp->getLoc(), stdType, left);
+         }
+         if (stdType != right.getType()) {
+            right = rewriter.create<mlir::arith::ExtSIOp>(decimalOp->getLoc(), stdType, right);
+         }
+         auto scaled = rewriter.create<arith::MulIOp>(decimalOp->getLoc(), stdType, left, getDecimalScaleMultiplierConstant(rewriter, decimalType.getS() + decimalOp.getRight().getType().template cast<mlir::db::DecimalType>().getS() - decimalOp.getLeft().getType().template cast<mlir::db::DecimalType>().getS(), stdType, decimalOp->getLoc()));
+         rewriter.template replaceOpWithNewOp<Op>(decimalOp, stdType, scaled, right);
+         return success();
+      }
+      return failure();
+   }
+};
+class DecimalMulOpLowering : public OpConversionPattern<mlir::db::MulOp> {
+   public:
+   using OpConversionPattern<mlir::db::MulOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::db::MulOp mulOp, typename OpConversionPattern<mlir::db::MulOp>::OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (auto decimalType = mulOp.getType().template dyn_cast_or_null<mlir::db::DecimalType>()) {
+         auto leftScale = mulOp.getLeft().getType().template cast<mlir::db::DecimalType>().getS();
+         auto rightScale = mulOp.getRight().getType().template cast<mlir::db::DecimalType>().getS();
+         auto stdType = this->typeConverter->convertType(decimalType);
+         mlir::Value left = adaptor.getLeft();
+         mlir::Value right = adaptor.getRight();
+         if (stdType != left.getType()) {
+            left = rewriter.create<mlir::arith::ExtSIOp>(mulOp->getLoc(), stdType, left);
+         }
+         if (stdType != right.getType()) {
+            right = rewriter.create<mlir::arith::ExtSIOp>(mulOp->getLoc(), stdType, right);
+         }
+         mlir::Value result = rewriter.create<arith::MulIOp>(mulOp->getLoc(), stdType, left, right);
+         if (decimalType.getS() < leftScale + rightScale) {
+            result = rewriter.create<arith::DivSIOp>(mulOp->getLoc(), stdType, result, getDecimalScaleMultiplierConstant(rewriter, leftScale + rightScale - decimalType.getS(), stdType, mulOp->getLoc()));
+         }
+         rewriter.replaceOp(mulOp, result);
          return success();
       }
       return failure();
@@ -769,7 +803,10 @@ class CastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
          if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
             auto sourceScale = decimalSourceType.getS();
             auto targetScale = decimalTargetType.getS();
-            size_t decimalWidth = convertedSourceType.cast<mlir::IntegerType>().getWidth();
+            size_t decimalWidth = convertedTargetType.cast<mlir::IntegerType>().getWidth();
+            if (convertedSourceType.getIntOrFloatBitWidth() < convertedTargetType.getIntOrFloatBitWidth()) {
+               value = rewriter.create<mlir::arith::ExtSIOp>(loc, convertedTargetType, value);
+            }
             auto [low, high] = support::getDecimalScaleMultiplier(std::max(sourceScale, targetScale) - std::min(sourceScale, targetScale));
             std::vector<uint64_t> parts = {low, high};
             auto multiplier = rewriter.create<arith::ConstantOp>(loc, convertedTargetType, rewriter.getIntegerAttr(convertedTargetType, APInt(decimalWidth, parts)));
@@ -1066,7 +1103,7 @@ void DBToStdLoweringPass::runOnOperation() {
 
    patterns.insert<DecimalBinOpLowering<mlir::db::AddOp, arith::AddIOp>>(typeConverter, ctxt);
    patterns.insert<DecimalBinOpLowering<mlir::db::SubOp, arith::SubIOp>>(typeConverter, ctxt);
-   patterns.insert<DecimalBinOpLowering<mlir::db::MulOp, arith::MulIOp>>(typeConverter, ctxt);
+   patterns.insert<DecimalMulOpLowering>(typeConverter, ctxt);
    patterns.insert<DecimalOpScaledLowering<mlir::db::DivOp, arith::DivSIOp>>(typeConverter, ctxt);
    patterns.insert<DecimalOpScaledLowering<mlir::db::ModOp, arith::RemSIOp>>(typeConverter, ctxt);
 

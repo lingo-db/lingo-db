@@ -21,7 +21,7 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
       auto& attributeManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
 
       mlir::relalg::AggrFuncOp aggrFuncOp = mlir::cast<mlir::relalg::AggrFuncOp>(op);
-      if (mlir::isa<mlir::relalg::AggregationOp,mlir::relalg::WindowOp>(op->getParentOp())) {
+      if (mlir::isa<mlir::relalg::AggregationOp, mlir::relalg::WindowOp>(op->getParentOp())) {
          return mlir::success(false);
       }
       std::string scopeName = attributeManager.getUniqueScope("aggr");
@@ -112,25 +112,31 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
       if (aggrFuncOp.getFn() == mlir::relalg::AggrFunc::var_samp) {
          auto rel = aggrFuncOp.getRel();
          auto xType = aggrFuncOp.getResult().getType();
+         auto asDoubleAttr = attrManager.createDef(attrManager.getUniqueScope("var_samp"), "asDouble");
          auto squaredAttr = attrManager.createDef(attrManager.getUniqueScope("var_samp"), "x2");
          squaredAttr.getColumn().type = xType;
-         auto mapOp = rewriter.create<mlir::relalg::MapOp>(op->getLoc(), mlir::tuples::TupleStreamType::get(getContext()), rel, rewriter.getArrayAttr({squaredAttr}));
+         asDoubleAttr.getColumn().type = xType;
+
+         auto mapOp = rewriter.create<mlir::relalg::MapOp>(op->getLoc(), mlir::tuples::TupleStreamType::get(getContext()), rel, rewriter.getArrayAttr({squaredAttr, asDoubleAttr}));
          auto* block = new mlir::Block;
          auto tuple = block->addArgument(mlir::tuples::TupleType::get(getContext()), loc);
          {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(block);
             auto x = rewriter.create<mlir::tuples::GetColumnOp>(loc, aggrFuncOp.getAttr().getColumn().type, aggrFuncOp.getAttr(), tuple);
-            mlir::Value squared = rewriter.create<mlir::db::MulOp>(loc, x, x);
-            rewriter.create<mlir::tuples::ReturnOp>(loc, squared);
+            mlir::Value asDouble = rewriter.create<mlir::db::CastOp>(loc, x.getType().isa<mlir::db::NullableType>() ? (mlir::Type) mlir::db::NullableType::get(getContext(), rewriter.getF64Type()) : (mlir::Type) rewriter.getF64Type(), x);
+            mlir::Value squared = rewriter.create<mlir::db::MulOp>(loc, asDouble, asDouble);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange{squared, asDouble});
          }
          mapOp.getPredicate().push_back(block);
-         mlir::Value sumSquared = rewriter.create<mlir::relalg::AggrFuncOp>(loc, xType, mlir::relalg::AggrFunc::sum, mapOp.getResult(), attrManager.createRef(&squaredAttr.getColumn()));
-         auto originalType = aggrFuncOp.getAttr().getColumn().type;
-         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, originalType.isa<mlir::db::NullableType>() ? originalType : mlir::db::NullableType::get(originalType), mlir::relalg::AggrFunc::sum, rel, aggrFuncOp.getAttr());
-         mlir::Value squareSum = rewriter.create<mlir::db::MulOp>(loc, sum, sum);
+         auto squaredAttrRef = attrManager.createRef(&squaredAttr.getColumn());
+         auto asDoubleAttrRef = attrManager.createRef(&asDoubleAttr.getColumn());
+         mlir::Value sumSquared = rewriter.create<mlir::relalg::AggrFuncOp>(loc, xType, mlir::relalg::AggrFunc::sum, mapOp.getResult(), squaredAttrRef);
+         auto originalType = xType;
+         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, originalType.isa<mlir::db::NullableType>() ? originalType : mlir::db::NullableType::get(originalType), mlir::relalg::AggrFunc::sum, rel, asDoubleAttrRef);
 
-         mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(loc, rewriter.getI64Type(), mlir::relalg::AggrFunc::count, rel, aggrFuncOp.getAttr());
+         mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(loc, rewriter.getI64Type(), mlir::relalg::AggrFunc::count, rel, asDoubleAttrRef);
+         mlir::Value squareSum = rewriter.create<mlir::db::MulOp>(loc, sum, sum);
          mlir::Value castedCount = rewriter.create<mlir::db::CastOp>(loc, getBaseType(sumSquared.getType()), count);
 
          mlir::Value one = rewriter.create<mlir::db::ConstantOp>(loc, castedCount.getType(), rewriter.getI64IntegerAttr(1));
@@ -150,9 +156,24 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
          return mlir::success();
       }
       if (aggrFuncOp.getFn() == mlir::relalg::AggrFunc::avg) {
-         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, aggrFuncOp.getResult().getType(), mlir::relalg::AggrFunc::sum, aggrFuncOp.getRel(), aggrFuncOp.getAttr());
+         auto asNullable = [&](mlir::Type t) -> mlir::Type {
+            if (t.isa<mlir::db::NullableType>()) {
+               return t;
+            }
+            if (aggrFuncOp.getType().isa<mlir::db::NullableType>()) {
+               return mlir::db::NullableType::get(t.getContext(), t);
+            } else {
+               return t;
+            }
+         };
+         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, asNullable(aggrFuncOp.getAttr().getColumn().type), mlir::relalg::AggrFunc::sum, aggrFuncOp.getRel(), aggrFuncOp.getAttr());
          mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(loc, rewriter.getI64Type(), mlir::relalg::AggrFunc::count, aggrFuncOp.getRel(), aggrFuncOp.getAttr());
-         mlir::Value casted = rewriter.create<mlir::db::CastOp>(loc, getBaseType(sum.getType()), count);
+         if (!getBaseType(sum.getType()).isa<mlir::db::DecimalType>() && getBaseType(aggrFuncOp.getResult().getType()).isa<mlir::db::DecimalType>()) {
+            sum = rewriter.create<mlir::db::CastOp>(loc, asNullable(mlir::db::DecimalType::get(getContext(), 19, 0)), sum); //todo
+         }
+         auto baseType = getBaseType(sum.getType());
+
+         mlir::Value casted = rewriter.create<mlir::db::CastOp>(loc, baseType.isa<mlir::db::DecimalType>() ? mlir::db::DecimalType::get(getContext(), 19, 0) : baseType, count);
          rewriter.replaceOpWithNewOp<mlir::db::DivOp>(aggrFuncOp, sum, casted);
          return mlir::success();
       }
@@ -162,6 +183,7 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
 
 class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-simplify-aggrs"; }
+
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SimplifyAggregations)
    private:
@@ -302,7 +324,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
             }
             size_t id = 0;
             for (auto& op : aggregationOp.getAggrFunc().front()) {
-               if (mlir::isa<mlir::relalg::AggrFuncOp, mlir::relalg::CountRowsOp,mlir::relalg::RankOp>(&op)) {
+               if (mlir::isa<mlir::relalg::AggrFuncOp, mlir::relalg::CountRowsOp, mlir::relalg::RankOp>(&op)) {
                   bool otherUser = false;
                   for (auto* user : op.getUsers()) {
                      otherUser |= !mlir::isa<mlir::tuples::ReturnOp>(user);

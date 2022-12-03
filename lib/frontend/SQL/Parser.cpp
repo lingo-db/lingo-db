@@ -151,7 +151,8 @@ mlir::Value frontend::sql::Parser::translateWhenCaseExpression(mlir::OpBuilder& 
    auto* w = reinterpret_cast<CaseWhen*>(whenCell->data.ptr_value);
    auto cond = translateExpression(builder, reinterpret_cast<Node*>(w->expr_), context);
    if (compareValue) {
-      cond = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, cond, compareValue);
+      auto asCommon = SQLTypeInference::toCommonBaseTypes(builder, mlir::ValueRange{cond, compareValue});
+      cond = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, asCommon.at(0), asCommon.at(1));
    }
    auto* whenBlock = new mlir::Block;
    auto* elseBlock = new mlir::Block;
@@ -255,7 +256,7 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
    }
    if (funcName == "abs") {
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
-      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), getBaseType(val.getType()).isa<mlir::db::DecimalType>()?"AbsDecimal":"AbsInt", val).getRes();
+      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), getBaseType(val.getType()).isa<mlir::db::DecimalType>() ? "AbsDecimal" : "AbsInt", val).getRes();
    }
    if (funcName == "upper") {
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
@@ -374,11 +375,11 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
          }
          return builder.create<mlir::db::SubOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
       case ExpressionType::OPERATOR_MULTIPLY:
-         return builder.create<mlir::db::MulOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypesExceptDecimals(builder, {left, right}));
+         return builder.create<mlir::db::MulOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonNumber(builder, {left, right}));
       case ExpressionType::OPERATOR_DIVIDE:
-         return builder.create<mlir::db::DivOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
+         return builder.create<mlir::db::DivOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonNumber(builder, {left, right}));
       case ExpressionType::OPERATOR_MOD:
-         return builder.create<mlir::db::ModOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
+         return builder.create<mlir::db::ModOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonNumber(builder, {left, right}));
       case ExpressionType::COMPARE_EQUAL:
       case ExpressionType::COMPARE_NOT_EQUAL:
       case ExpressionType::COMPARE_LESS_THAN:
@@ -881,6 +882,9 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                   if (auto intervalType = resType.dyn_cast<mlir::db::IntervalType>()) {
                      std::string unit = "";
                      auto stringRepresentation = constOp.getValue().cast<mlir::StringAttr>().str();
+                     if (!columnType.modifiers.empty() && std::get<std::string>(columnType.modifiers[0]) == "years") {
+                        stringRepresentation = std::to_string(std::stol(stringRepresentation) * 12);
+                     }
                      if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime && !stringRepresentation.ends_with("days")) {
                         stringRepresentation += "days";
                      }
@@ -1281,7 +1285,17 @@ runtime::ColumnType frontend::sql::Parser::createColumnType(std::string datatype
    }
    if (datatypeName == "interval") {
       if (typeModifiers.size() > 0 && std::holds_alternative<size_t>(typeModifiers[0])) {
-         std::string unit = (std::get<size_t>(typeModifiers[0]) & 8) ? "daytime" : "months";
+         std::string unit = "";
+         if (std::get<size_t>(typeModifiers[0]) & 2) {
+            unit = "months";
+         }
+         if (std::get<size_t>(typeModifiers[0]) & 4) {
+            unit = "years";
+         }
+         if (std::get<size_t>(typeModifiers[0]) & 8) {
+            unit = "daytime";
+         }
+         assert(!unit.empty() && "should not happen");
          typeModifiers.clear();
          typeModifiers.push_back(unit);
       } else {
@@ -1703,15 +1717,38 @@ std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> 
             aggrResultType = builder.getI64Type();
          } else {
             aggrResultType = refAttr.getColumn().type;
-            if (aggrFunc == mlir::relalg::AggrFunc::stddev_samp || aggrFunc == mlir::relalg::AggrFunc::var_samp) {
-               mlir::OpBuilder b(builder.getContext());
-               mlir::Value x = b.create<mlir::db::ConstantOp>(b.getUnknownLoc(), refAttr.getColumn().type, b.getUnitAttr());
-               mlir::Value x2 = b.create<mlir::db::MulOp>(b.getUnknownLoc(), x, x);
-               aggrResultType = x2.getType();
-               x2.getDefiningOp()->destroy();
-               x.getDefiningOp()->destroy();
+            if (aggrFunc == mlir::relalg::AggrFunc::avg) {
+               auto baseType = getBaseType(aggrResultType);
+               if (baseType.isIntOrFloat() && !baseType.isIntOrIndex()) {
+                  //keep aggrResultType
+               } else if (baseType.isa<mlir::db::DecimalType>()) {
+                  mlir::OpBuilder b(builder.getContext());
+                  mlir::Value x = b.create<mlir::db::ConstantOp>(b.getUnknownLoc(), baseType, b.getUnitAttr());
+                  mlir::Value x2 = b.create<mlir::db::ConstantOp>(b.getUnknownLoc(), mlir::db::DecimalType::get(b.getContext(), 19, 0), b.getUnitAttr());
+                  mlir::Value div = b.create<mlir::db::DivOp>(b.getUnknownLoc(), x, x2);
+                  aggrResultType = div.getType();
+                  div.getDefiningOp()->erase();
+                  x2.getDefiningOp()->erase();
+                  x.getDefiningOp()->erase();
+               } else {
+                  mlir::OpBuilder b(builder.getContext());
+                  mlir::Value x = b.create<mlir::db::ConstantOp>(b.getUnknownLoc(), mlir::db::DecimalType::get(b.getContext(), 19, 0), b.getUnitAttr());
+                  mlir::Value div = b.create<mlir::db::DivOp>(b.getUnknownLoc(), x, x);
+                  aggrResultType = div.getType();
+                  div.getDefiningOp()->erase();
+                  x.getDefiningOp()->erase();
+               }
+               if (refAttr.getColumn().type.isa<mlir::db::NullableType>()) {
+                  aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
+               }
             }
-            if (!aggrResultType.isa<mlir::db::NullableType>() && (aggrFunc == mlir::relalg::AggrFunc::stddev_samp || aggrFunc == mlir::relalg::AggrFunc::var_samp || groupByAttrs.empty())) {
+            if (aggrFunc == mlir::relalg::AggrFunc::stddev_samp || aggrFunc == mlir::relalg::AggrFunc::var_samp) {
+               aggrResultType = builder.getF64Type();
+               if (refAttr.getColumn().type.isa<mlir::db::NullableType>()) {
+                  aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
+               }
+            }
+            if (!aggrResultType.isa<mlir::db::NullableType>() && (groupByAttrs.empty())) {
                aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
             }
          }
@@ -1798,7 +1835,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       mapBuilder.setInsertionPointToStart(block);
       std::vector<mlir::Value> createdValues;
       std::vector<mlir::Attribute> createdCols;
-      mlir::Value expr = mapBuilder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), intVal,mapBuilder.getI64Type());
+      mlir::Value expr = mapBuilder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), intVal, mapBuilder.getI64Type());
       auto attrDef = attrManager.createDef(mapName, "intval");
       attrDef.getColumn().type = mapBuilder.getI64Type();
       createdCols.push_back(attrDef);
@@ -1825,7 +1862,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       std::vector<mlir::Attribute> createdCols;
       auto colDef = val.cast<mlir::tuples::ColumnDefAttr>();
       auto colRef = attrManager.createRef(&colDef.getColumn());
-      mlir::Value shiftVal = mapBuilder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), shift,mapBuilder.getI64Type());
+      mlir::Value shiftVal = mapBuilder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), shift, mapBuilder.getI64Type());
       mlir::Value colVal = mapBuilder.create<mlir::tuples::GetColumnOp>(builder.getUnknownLoc(), colRef.getColumn().type, colRef, tuple);
       mlir::Value shifted = mapBuilder.create<mlir::arith::ShRUIOp>(builder.getUnknownLoc(), colVal, shiftVal);
       mlir::Value one = mapBuilder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 1, mapBuilder.getI64Type());
@@ -2097,7 +2134,38 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                aggrResultType = builder.getI64Type();
             } else {
                aggrResultType = refAttr.getColumn().type;
-               if (!aggrResultType.isa<mlir::db::NullableType>() && groupByAttrs.empty()) {
+               if (aggrFunc == mlir::relalg::AggrFunc::avg) {
+                  auto baseType = getBaseType(aggrResultType);
+                  if (baseType.isIntOrFloat() && !baseType.isIntOrIndex()) {
+                     //keep aggrResultType
+                  } else if (baseType.isa<mlir::db::DecimalType>()) {
+                     mlir::OpBuilder b(builder.getContext());
+                     mlir::Value x = b.create<mlir::db::ConstantOp>(b.getUnknownLoc(), baseType, b.getUnitAttr());
+                     mlir::Value x2 = b.create<mlir::db::ConstantOp>(b.getUnknownLoc(), mlir::db::DecimalType::get(b.getContext(), 19, 0), b.getUnitAttr());
+                     mlir::Value div = b.create<mlir::db::DivOp>(b.getUnknownLoc(), x, x2);
+                     aggrResultType = div.getType();
+                     div.getDefiningOp()->erase();
+                     x2.getDefiningOp()->erase();
+                     x.getDefiningOp()->erase();
+                  } else {
+                     mlir::OpBuilder b(builder.getContext());
+                     mlir::Value x = b.create<mlir::db::ConstantOp>(b.getUnknownLoc(), mlir::db::DecimalType::get(b.getContext(), 19, 0), b.getUnitAttr());
+                     mlir::Value div = b.create<mlir::db::DivOp>(b.getUnknownLoc(), x, x);
+                     aggrResultType = div.getType();
+                     div.getDefiningOp()->erase();
+                     x.getDefiningOp()->erase();
+                  }
+                  if (refAttr.getColumn().type.isa<mlir::db::NullableType>()) {
+                     aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
+                  }
+               }
+               if (aggrFunc == mlir::relalg::AggrFunc::stddev_samp || aggrFunc == mlir::relalg::AggrFunc::var_samp) {
+                  aggrResultType = builder.getF64Type();
+                  if (refAttr.getColumn().type.isa<mlir::db::NullableType>()) {
+                     aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
+                  }
+               }
+               if (!aggrResultType.isa<mlir::db::NullableType>() && (groupByAttrs.empty())) {
                   aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
                }
             }

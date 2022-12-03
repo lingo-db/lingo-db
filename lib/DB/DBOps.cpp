@@ -35,6 +35,17 @@ int getIntegerWidth(mlir::Type type, bool isUnSigned) {
    }
    return 0;
 }
+
+mlir::Type getAdaptedDecimalTypeAfterMulDiv(mlir::MLIRContext* context, int precision, int scale) {
+   int beforeComma = precision - scale;
+   if (beforeComma > 32 && scale > 6) {
+      return mlir::db::DecimalType::get(context, 38, 6);
+   }
+   if (beforeComma > 32 && scale <= 6) {
+      return mlir::db::DecimalType::get(context, 38, scale);
+   }
+   return mlir::db::DecimalType::get(context, std::min(precision, 38), std::min(scale, 38 - beforeComma));
+}
 LogicalResult inferReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
@@ -60,7 +71,7 @@ LogicalResult inferMulReturnType(MLIRContext* context, Optional<Location> locati
       auto b = baseTypeRight.cast<mlir::db::DecimalType>();
       auto sump = a.getP() + b.getP();
       auto sums = a.getS() + b.getS();
-      baseType = mlir::db::DecimalType::get(a.getContext(), sump, sums);
+      baseType = getAdaptedDecimalTypeAfterMulDiv(context, sump, sums);
    }
    inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
    return success();
@@ -70,14 +81,26 @@ LogicalResult inferDivReturnType(MLIRContext* context, Optional<Location> locati
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType = baseTypeLeft;
    if (baseTypeLeft.isa<mlir::db::DecimalType>()) {
-      auto leftDecType = baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
-      auto rightDecType = baseTypeRight.dyn_cast<mlir::db::DecimalType>();
-      baseType = mlir::db::DecimalType::get(baseType.getContext(), std::max(leftDecType.getP(), rightDecType.getP()), std::max(leftDecType.getS(), rightDecType.getS()));
+      auto a = baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
+      auto b = baseTypeRight.dyn_cast<mlir::db::DecimalType>();
+      baseType = getAdaptedDecimalTypeAfterMulDiv(context, a.getP() - a.getS() + b.getS() + std::max(6, a.getS() + b.getP()), std::max(6, a.getS() + b.getP()));
    }
    inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
    return success();
 }
 
+LogicalResult inferRemReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
+   Type baseTypeLeft = getBaseType(operands[0].getType());
+   Type baseTypeRight = getBaseType(operands[1].getType());
+   Type baseType = baseTypeLeft;
+   if (baseTypeLeft.isa<mlir::db::DecimalType>()) {
+      auto a = baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
+      auto b = baseTypeRight.dyn_cast<mlir::db::DecimalType>();
+      baseType = mlir::db::DecimalType::get(a.getContext(), std::min(a.getP() - a.getS(), b.getP() - b.getS()) + std::max(a.getS(), b.getS()), std::max(a.getS(), b.getS()));
+   }
+   inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
+   return success();
+}
 ::mlir::LogicalResult mlir::db::RuntimeCall::verify() {
    mlir::db::RuntimeCall& runtimeCall = *this;
    auto reg = runtimeCall.getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
