@@ -657,19 +657,14 @@ class ScanRefsContinuousViewLowering : public OpConversionPattern<mlir::subop::S
       auto one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
       auto length = rewriter.create<mlir::util::BufferGetLen>(loc, rewriter.getIndexType(), adaptor.getState());
       auto forOp = rewriter.create<mlir::scf::ForOp>(scanOp->getLoc(), zero, length, one);
-      mlir::Block* block = new mlir::Block;
-      block->addArgument(rewriter.getIndexType(), scanOp->getLoc());
-      forOp.getBodyRegion().getBlocks().clear();
-      forOp.getBodyRegion().push_back(block);
+      mlir::Block* block = forOp.getBody();
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(block);
          auto pair = rewriter.create<mlir::util::PackOp>(loc, mlir::ValueRange{forOp.getInductionVar(), adaptor.getState()});
          mapping.define(scanOp.getRef(), pair);
-
          mlir::Value newInFlight = mapping.createInFlight(rewriter);
          rewriter.replaceOp(scanOp, newInFlight);
-         rewriter.create<mlir::scf::YieldOp>(scanOp->getLoc());
       }
       return success();
    }
