@@ -10,6 +10,7 @@ gen_rt_def(string-rt-defs "StringRuntime.h")
 gen_rt_def(date-rt-defs "DateRuntime.h")
 gen_rt_def(decimal-rt-defs "DecimalRuntime.h")
 gen_rt_def(integer-rt-defs "IntegerRuntime.h")
+gen_rt_def(float-rt-defs "FloatRuntime.h")
 
 add_mlir_dialect_library(MLIRDB
         DBDialect.cpp
@@ -28,6 +29,7 @@ add_mlir_dialect_library(MLIRDB
         string-rt-defs
         date-rt-defs
         integer-rt-defs
+        float-rt-defs
         decimal-rt-defs
         MLIRDBOpsIncGen
         MLIRDBEliminateNullsIncGen

@@ -4,6 +4,7 @@
 #include "runtime-defs/DateRuntime.h"
 #include "runtime-defs/DecimalRuntime.h"
 #include "runtime-defs/DumpRuntime.h"
+#include "runtime-defs/FloatRuntime.h"
 #include "runtime-defs/IntegerRuntime.h"
 #include "runtime-defs/StringRuntime.h"
 
@@ -28,12 +29,18 @@ static mlir::Value absImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredAr
 }
 static mlir::Value sqrtImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;
+
    mlir::Value val = loweredArguments[0];
-   mlir::Value res = rt::IntegerRuntime::sqrt(rewriter, loc)(val)[0]; //todo: for decimals
-   if (res.getType() != val.getType()) {
-      res = rewriter.create<mlir::arith::TruncIOp>(loc, val.getType(), res);
+   if (val.getType().isa<mlir::IntegerType>()) {
+      mlir::Value res = rt::IntegerRuntime::sqrt(rewriter, loc)(val)[0]; //todo: for decimals
+      if (res.getType() != val.getType()) {
+         res = rewriter.create<mlir::arith::TruncIOp>(loc, val.getType(), res);
+      }
+      return res;
+
+   } else {
+      return rt::FloatRuntime::sqrt(rewriter, loc)(val)[0];
    }
-   return res;
 }
 static mlir::Value dateSubImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;

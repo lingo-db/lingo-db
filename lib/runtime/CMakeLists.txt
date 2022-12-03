@@ -8,6 +8,7 @@ add_library(runtime OBJECT
         SegmentTreeView.cpp
         Hashtable.cpp
         StringRuntime.cpp
+        FloatRuntime.cpp
         DecimalRuntime.cpp
         IntegerRuntime.cpp
         Hash.cpp
