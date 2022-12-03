@@ -151,6 +151,7 @@ def MapOp : RelAlg_Op<"map", [Pure,Operator,TupleLamdaOperator,UnaryOperator]> {
     let extraClassDeclaration = [{
         ColumnSet getCreatedColumns();
     }];
+    let hasVerifier=1;
 }
 
 def LimitOp : RelAlg_Op<"limit", [Pure,Operator,UnaryOperator]> {

@@ -3,6 +3,7 @@
 
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/IR/DialectImplementation.h"
@@ -314,6 +315,30 @@ void mlir::relalg::BaseTableOp::print(OpAsmPrinter& p) {
       printCustDef(p, *this, relationDefAttr);
    }
    p << "}";
+}
+
+::mlir::LogicalResult mlir::relalg::MapOp::verify() {
+   if (getPredicate().empty() || getPredicate().front().empty()) {
+      emitError("mapOp without body");
+      return mlir::failure();
+   }
+   auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(getPredicate().front().getTerminator());
+   if (returnOp->getNumOperands() != getComputedCols().size()) {
+      emitError("mapOp return vs computed cols mismatch");
+      return mlir::failure();
+   }
+   for (auto z : llvm::zip(returnOp.getResults(), getComputedCols())) {
+      if (auto colDef = std::get<1>(z).dyn_cast_or_null<mlir::tuples::ColumnDefAttr>()) {
+         if (colDef.getColumn().type != std::get<0>(z).getType()) {
+            emitError("type mismatch between returned value and column definition");
+            return mlir::failure();
+         }
+      } else {
+         emitError("expected column definition for computed column");
+         return mlir::failure();
+      }
+   }
+   return mlir::success();
 }
 
 #define GET_OP_CLASSES
