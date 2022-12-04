@@ -256,3 +256,7 @@ runtime::VarLen32 runtime::StringRuntime::fromDate(int64_t date) {
    auto asString = arrow_vendored::date::format("%F", epoch + std::chrono::nanoseconds{date});
    return runtime::VarLen32(reinterpret_cast<uint8_t*>(asString.data()), asString.length());
 }
+
+extern "C" runtime::VarLen32 createVarLen32(uint8_t* ptr, uint32_t len){ //NOLINT(clang-diagnostic-return-type-c-linkage)
+   return runtime::VarLen32(ptr,len);
+}

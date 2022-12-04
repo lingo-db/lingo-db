@@ -267,14 +267,52 @@ class CreateVarLenLowering : public OpConversionPattern<mlir::util::CreateVarLen
    public:
    using OpConversionPattern<mlir::util::CreateVarLen>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::CreateVarLen op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      mlir::Type i128Ty = rewriter.getIntegerType(128);
-      Value lazymask = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), rewriter.getI32Type(), rewriter.getI32IntegerAttr(0x80000000));
-      Value lazylen = rewriter.create<mlir::LLVM::OrOp>(op->getLoc(), lazymask, adaptor.getLen());
-      Value asI128 = rewriter.create<mlir::LLVM::ZExtOp>(op->getLoc(), i128Ty, lazylen);
-      Value rawPtr = rewriter.create<mlir::LLVM::PtrToIntOp>(op->getLoc(), i128Ty, adaptor.getRef());
-      auto const64 = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), i128Ty, rewriter.getIntegerAttr(i128Ty, 64));
-      auto shlPtr = rewriter.create<mlir::LLVM::ShlOp>(op->getLoc(), rawPtr, const64);
-      rewriter.replaceOpWithNewOp<mlir::LLVM::OrOp>(op, asI128, shlPtr);
+      auto fn = LLVM::lookupOrCreateFn(op->getParentOfType<ModuleOp>(), "createVarLen32", {mlir::LLVM::LLVMPointerType::get(rewriter.getI8Type()), rewriter.getI32Type()}, rewriter.getIntegerType(128));
+      Value castedPointer = rewriter.create<LLVM::BitcastOp>(op->getLoc(), LLVM::LLVMPointerType::get(rewriter.getI8Type()), adaptor.getRef());
+      auto result = rewriter.create<mlir::LLVM::CallOp>(op->getLoc(), fn, mlir::ValueRange{castedPointer, adaptor.getLen()}).getResult();
+      rewriter.replaceOp(op, result);
+      return success();
+   }
+};
+class VarLenCmpLowering : public OpConversionPattern<mlir::util::VarLenCmp> {
+   public:
+   using OpConversionPattern<mlir::util::VarLenCmp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::util::VarLenCmp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      Value shiftAmount = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getIntegerType(128), rewriter.getIntegerAttr(rewriter.getIntegerType(128), 64));
+      Value first64Left = rewriter.create<LLVM::TruncOp>(loc, rewriter.getI64Type(), adaptor.getLeft());
+      Value last64Left = rewriter.create<LLVM::TruncOp>(loc, rewriter.getI64Type(), rewriter.create<LLVM::LShrOp>(loc, adaptor.getLeft(), shiftAmount));
+      Value last64Right = rewriter.create<LLVM::TruncOp>(loc, rewriter.getI64Type(), rewriter.create<LLVM::LShrOp>(loc, adaptor.getRight(), shiftAmount));
+      Value first64Right = rewriter.create<LLVM::TruncOp>(loc, rewriter.getI64Type(), adaptor.getRight());
+      Value first64Eq = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, first64Left, first64Right);
+      Value last64Eq = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, last64Left, last64Right);
+      Value totalEq = rewriter.create<LLVM::AndOp>(loc, last64Eq, first64Eq);
+      Value mask = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0xFFFFFFFF));
+      Value c12 = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(12));
+      Value len = rewriter.create<LLVM::AndOp>(loc, first64Left, mask);
+      Value lenGt12 = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::ugt, len, c12);
+      Value needsDetailedCmp = rewriter.create<LLVM::AndOp>(loc, lenGt12, first64Eq);
+      rewriter.replaceOp(op, mlir::ValueRange{totalEq, needsDetailedCmp});
+      return success();
+   }
+};
+class VarLenTryCheapHashLowering : public OpConversionPattern<mlir::util::VarLenTryCheapHash> {
+   public:
+   using OpConversionPattern<mlir::util::VarLenTryCheapHash>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::util::VarLenTryCheapHash op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      Value shiftAmount = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getIntegerType(128), rewriter.getIntegerAttr(rewriter.getIntegerType(128), 64));
+      Value first64 = rewriter.create<LLVM::TruncOp>(loc, rewriter.getI64Type(), adaptor.getVarlen());
+      Value last64 = rewriter.create<LLVM::TruncOp>(loc, rewriter.getI64Type(), rewriter.create<LLVM::LShrOp>(loc, adaptor.getVarlen(), shiftAmount));
+
+      Value mask = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0xFFFFFFFF));
+      Value c13 = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(13));
+      Value len = rewriter.create<LLVM::AndOp>(loc, first64, mask);
+      Value lenLt13 = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::ult, len, c13);
+      Value fHash = rewriter.create<util::Hash64>(loc, rewriter.getIndexType(), first64);
+      Value lHash = rewriter.create<util::Hash64>(loc, rewriter.getIndexType(), last64);
+      Value hash = rewriter.create<util::HashCombine>(loc, rewriter.getIndexType(), fHash, lHash);
+      rewriter.replaceOp(op, mlir::ValueRange{lenLt13, hash});
       return success();
    }
 };
@@ -453,6 +491,8 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<CreateVarLenLowering>(typeConverter, patterns.getContext());
    patterns.add<CreateConstVarLenLowering>(typeConverter, patterns.getContext());
    patterns.add<VarLenGetLenLowering>(typeConverter, patterns.getContext());
+   patterns.add<VarLenCmpLowering>(typeConverter, patterns.getContext());
+   patterns.add<VarLenTryCheapHashLowering>(typeConverter, patterns.getContext());
    patterns.add<HashCombineLowering>(typeConverter, patterns.getContext());
    patterns.add<Hash64Lowering>(typeConverter, patterns.getContext());
    patterns.add<HashVarLenLowering>(typeConverter, patterns.getContext());

@@ -57,7 +57,6 @@ class VarLen32 {
 
    public:
    static constexpr uint32_t shortLen = 12;
-   static constexpr uint32_t lazyMask = 0x80000000;
    union {
       uint8_t bytes[shortLen];
       struct __attribute__((__packed__)) {
@@ -102,10 +101,7 @@ class VarLen32 {
       return len <= shortLen;
    }
    uint32_t getLen() {
-      return len & ~lazyMask;
-   }
-   bool isLazy() {
-      return (len & lazyMask) != 0;
+      return len;
    }
 
    __int128 asI128() {
