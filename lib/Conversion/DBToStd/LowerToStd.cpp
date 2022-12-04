@@ -759,6 +759,9 @@ class CmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
       return arith::CmpFPredicate::OEQ;
    }
    LogicalResult matchAndRewrite(mlir::db::CmpOp cmpOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if(cmpOp.getLeft().getType().isa<mlir::db::CharType>()){
+         return failure();
+      }
       if (!adaptor.getLeft().getType().isIntOrIndexOrFloat()) {
          return failure();
       }
