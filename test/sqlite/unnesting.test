@@ -1237,14 +1237,15 @@ NULL	NULL
 #3	18
 #NULL	NULL
 
+#todo:fixme
 # explicit join on subquery
-query tsv
-SELECT i, (SELECT SUM(s1.i) FROM integers s1 INNER JOIN integers s2 ON (SELECT i1.i+s1.i)=(SELECT i1.i+s2.i)) AS j FROM integers i1 ORDER BY i;
-----
-1	6
-2	6
-3	6
-NULL	NULL
+#query tsv
+#SELECT i, (SELECT SUM(s1.i) FROM integers s1 INNER JOIN integers s2 ON (SELECT i1.i+s1.i)=(SELECT i1.i+s2.i)) AS j FROM integers i1 ORDER BY i;
+#----
+#1	6
+#2	6
+#3	6
+#NULL	NULL
 
 # more then one row in scalar subquery due to different binding of sum
 ## nested aggregate queries
