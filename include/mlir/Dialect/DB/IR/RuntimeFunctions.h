@@ -38,6 +38,7 @@ struct RuntimeFunction {
       };
    }
    std::function<bool(mlir::TypeRange types, mlir::Type resType)> verifyFn;
+   std::optional<std::function<mlir::LogicalResult(mlir::TypeRange,::llvm::ArrayRef<::mlir::Attribute>, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>&)>> foldFn;
    using loweringFnT = std::function<mlir::Value(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter*, mlir::Location)>;
    std::variant<loweringFnT, mlir::util::FunctionSpec> implementation;
 
@@ -61,6 +62,10 @@ struct RuntimeFunction {
    }
    RuntimeFunction& needsWrapping() {
       nullHandleType = NeedsWrapping;
+      return *this;
+   }
+   RuntimeFunction& folds(std::function<mlir::LogicalResult(mlir::TypeRange typeRange,::llvm::ArrayRef<::mlir::Attribute>, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>&)> foldFn) {
+      this->foldFn = foldFn;
       return *this;
    }
    RuntimeFunction& matchesTypes(const std::vector<TypeMatcher>& matchers, ResTypeMatcher resMatcher) {

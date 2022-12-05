@@ -7,6 +7,7 @@
 #include "runtime-defs/FloatRuntime.h"
 #include "runtime-defs/IntegerRuntime.h"
 #include "runtime-defs/StringRuntime.h"
+#include "runtime/DateRuntime.h"
 
 mlir::db::RuntimeFunction* mlir::db::RuntimeFunctionRegistry::lookup(std::string name) {
    return registeredFunctions[name].get();
@@ -198,6 +199,42 @@ static mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange lo
    }
    return mlir::Value();
 }
+static mlir::LogicalResult dateAddFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<::mlir::Attribute> operands, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>& results) {
+   if (auto dateType = types[0].dyn_cast_or_null<mlir::db::DateType>()) {
+      if (auto intervalType = types[1].dyn_cast_or_null<mlir::db::IntervalType>()) {
+         auto leftIntAttr = operands[0].dyn_cast_or_null<mlir::IntegerAttr>();
+         auto rightIntAttr = operands[1].dyn_cast_or_null<mlir::IntegerAttr>();
+         if (leftIntAttr && rightIntAttr) {
+            if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime) {
+               results.push_back(mlir::IntegerAttr::get(mlir::IntegerType::get(dateType.getContext(), 64), leftIntAttr.getValue() + rightIntAttr.getValue()));
+               return mlir::success();
+            } else {
+               results.push_back(mlir::IntegerAttr::get(mlir::IntegerType::get(dateType.getContext(), 64), runtime::DateRuntime::addMonths(leftIntAttr.getInt(), rightIntAttr.getInt())));
+               return mlir::success();
+            }
+         }
+      }
+   }
+   return mlir::failure();
+}
+static mlir::LogicalResult dateSubtractFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<::mlir::Attribute> operands, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>& results) {
+   if (auto dateType = types[0].dyn_cast_or_null<mlir::db::DateType>()) {
+      if (auto intervalType = types[1].dyn_cast_or_null<mlir::db::IntervalType>()) {
+         auto leftIntAttr = operands[0].dyn_cast_or_null<mlir::IntegerAttr>();
+         auto rightIntAttr = operands[1].dyn_cast_or_null<mlir::IntegerAttr>();
+         if (leftIntAttr && rightIntAttr) {
+            if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime) {
+               results.push_back(mlir::IntegerAttr::get(mlir::IntegerType::get(dateType.getContext(), 64), leftIntAttr.getValue() - rightIntAttr.getValue()));
+               return mlir::success();
+            } else {
+               results.push_back(mlir::IntegerAttr::get(mlir::IntegerType::get(dateType.getContext(), 64), runtime::DateRuntime::subtractMonths(leftIntAttr.getInt(), rightIntAttr.getInt())));
+               return mlir::success();
+            }
+         }
+      }
+   }
+   return mlir::failure();
+}
 std::shared_ptr<mlir::db::RuntimeFunctionRegistry> mlir::db::RuntimeFunctionRegistry::getBuiltinRegistry(mlir::MLIRContext* context) {
    auto builtinRegistry = std::make_shared<RuntimeFunctionRegistry>(context);
    builtinRegistry->add("DumpValue").handlesNulls().matchesTypes({RuntimeFunction::anyType}, RuntimeFunction::noReturnType).implementedAs(dumpValuesImpl);
@@ -227,10 +264,10 @@ std::shared_ptr<mlir::db::RuntimeFunctionRegistry> mlir::db::RuntimeFunctionRegi
    builtinRegistry->add("ExtractYearFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(rt::DateRuntime::extractYear);
    builtinRegistry->add("ExtractMonthFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(rt::DateRuntime::extractMonth);
    builtinRegistry->add("ExtractDayFromDate").matchesTypes({RuntimeFunction::dateLike}, resTypeIsI64).implementedAs(rt::DateRuntime::extractDay);
-   builtinRegistry->add("DateAdd").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateAddImpl);
+   builtinRegistry->add("DateAdd").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateAddImpl).folds(dateAddFoldFn);
    builtinRegistry->add("AbsInt").handlesInvalid().matchesTypes({RuntimeFunction::intLike}, RuntimeFunction::matchesArgument()).implementedAs(absImpl);
    builtinRegistry->add("AbsDecimal").handlesInvalid().matchesTypes({RuntimeFunction::anyDecimal}, RuntimeFunction::matchesArgument()).implementedAs(absImpl);
    builtinRegistry->add("Sqrt").needsWrapping().matchesTypes({RuntimeFunction::anyNumber}, RuntimeFunction::matchesArgument()).implementedAs(sqrtImpl);
-   builtinRegistry->add("DateSubtract").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateSubImpl);
+   builtinRegistry->add("DateSubtract").handlesInvalid().matchesTypes({RuntimeFunction::dateLike, RuntimeFunction::dateInterval}, RuntimeFunction::matchesArgument()).implementedAs(dateSubImpl).folds(dateSubtractFoldFn);
    return builtinRegistry;
 }

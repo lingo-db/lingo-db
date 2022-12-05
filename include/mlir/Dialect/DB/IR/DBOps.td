@@ -35,6 +35,8 @@ def DB_Dialect : Dialect {
             }
     }];
     let useDefaultTypePrinterParser=1;
+      let hasConstantMaterializer = 1;
+
 }
 
 class DB_Op<string mnemonic, list<Trait> traits = []> : Op<DB_Dialect, mnemonic, traits>{
@@ -129,13 +131,13 @@ def DB_StringType : DB_Type<"String","string"> {
 def AnyBool: AnyTypeOf<[I1,NullableType]>;
 def NullableDBType: AnyTypeOf<[AnyType,NullableType]>;
 
-def DB_ConstantOp : DB_Op<"constant", [Pure]> {
+def DB_ConstantOp : DB_Op<"constant", [ConstantLike,Pure]> {
     let summary = "Create constant value";
 
     let arguments = (ins AnyAttr:$value);
     let results = (outs AnyType:$result);
     let assemblyFormat = "`(` $value `)` `:` type($result) attr-dict";
-
+    let hasFolder = 1;
 }
 
 def DB_NullOp : DB_Op<"null", [Pure]> {
@@ -203,6 +205,7 @@ def DB_RuntimeCall : DB_Op<"runtime_call", [DB_MayNeedNullWrap,DB_MaySupportInva
     let assemblyFormat = "$fn  `(` $args `)` `:`  functional-type($args,$res)  attr-dict";
 
     let hasVerifier=1;
+    let hasFolder = 1;
 }
 
 def DB_Hash : DB_Op<"hash", [Pure]> {
@@ -230,9 +233,11 @@ class DB_BinaryOp<string mnemonic, list<Trait> traits = []> :
 
 def DB_AddOp : DB_BinaryOp<"add",[DB_SupportsInvalidValues]> {
     let summary = "Add int/float/decimal";
+    let hasFolder = 1;
 }
 def DB_SubOp : DB_BinaryOp<"sub",[DB_SupportsInvalidValues]> {
     let summary = "Subtract int/float/decimal";
+    let hasFolder = 1;
 }
 def DB_MulOp : DB_BinaryOp<"mul",[DB_SupportsInvalidValues]> {
     let summary = "Multiply int/float/decimal";
@@ -354,6 +359,7 @@ def CastOp : DB_Op<"cast",[DB_NeedsNullWrap,DB_MaySupportInvalidValues,Pure]> {
     let arguments = (ins NullableDBType:$val);
     let results = (outs NullableDBType:$res);
     let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
+    let hasFolder = 1;
 }
 
 #endif// OPS
