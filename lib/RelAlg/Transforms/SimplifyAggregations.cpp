@@ -114,8 +114,8 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
          auto xType = aggrFuncOp.getResult().getType();
          auto asDoubleAttr = attrManager.createDef(attrManager.getUniqueScope("var_samp"), "asDouble");
          auto squaredAttr = attrManager.createDef(attrManager.getUniqueScope("var_samp"), "x2");
-         squaredAttr.getColumn().type = xType;
-         asDoubleAttr.getColumn().type = xType;
+         squaredAttr.getColumn().type = aggrFuncOp.getAttr().getColumn().type.isa<mlir::db::NullableType>() ? (mlir::Type) mlir::db::NullableType::get(getContext(), rewriter.getF64Type()) : (mlir::Type) rewriter.getF64Type();
+         asDoubleAttr.getColumn().type = aggrFuncOp.getAttr().getColumn().type.isa<mlir::db::NullableType>() ? (mlir::Type) mlir::db::NullableType::get(getContext(), rewriter.getF64Type()) : (mlir::Type) rewriter.getF64Type();
 
          auto mapOp = rewriter.create<mlir::relalg::MapOp>(op->getLoc(), mlir::tuples::TupleStreamType::get(getContext()), rel, rewriter.getArrayAttr({squaredAttr, asDoubleAttr}));
          auto* block = new mlir::Block;
@@ -287,9 +287,15 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
                   mapping.map(v, newVal);
                   getOps.push_back(newVal);
                }
+               std::sort(valsForMap.begin(), valsForMap.end(), [](mlir::Value v1, mlir::Value v2) {
+                  assert(v1.getDefiningOp() && v2.getDefiningOp());
+                  return v1.getDefiningOp()->isBeforeInBlock(v2.getDefiningOp());
+               });
+               auto placeHolder = builder.create<mlir::tuples::ReturnOp>(loc);
                for (auto v : valsForMap) {
-                  mlir::relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), &newmap.getLambdaBlock(), mapping);
+                  mlir::relalg::detail::inlineOpIntoBlock(v.getDefiningOp(), v.getDefiningOp()->getParentOp(), &newmap.getLambdaBlock(), mapping, placeHolder);
                }
+               placeHolder.erase();
                for (auto* op : getOps) {
                   op->moveBefore(block, block->begin());
                }
