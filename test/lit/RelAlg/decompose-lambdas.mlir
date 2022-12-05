@@ -27,6 +27,8 @@ module @querymodule  {
 		%10 = db.and %6,%9:i1,i1
         tuples.return %10 : i1
   	}
+    %res_table = relalg.materialize %3 [] => [] : !subop.result_table<[]>
+    subop.set_result 0 %res_table : !subop.result_table<[]>
     return
   }
 }
@@ -47,7 +49,7 @@ module @querymodule  {
 	//CHECK: %{{.*}} = relalg.map %{{.*}} computes : [@map::@attr4({type = i32})] (%arg0: !tuples.tuple)
 	//CHECK: %{{.*}} = tuples.getcol %arg0 @constrel::@attr2 : i32
 	//CHECK: %{{.*}} = tuples.getcol %arg0 @constrel2::@attr2 : i32
-	//CHECK: %{{.*}} = db.add %5 : i32, %6 : i32
+	//CHECK: %{{.*}} = db.add %{{.*}} : i32, %{{.*}} : i32
 	//CHECK: tuples.return %{{.*}} : i32
   	%3 = relalg.map %2 computes: [ @map::@attr3({type = i32}), @map::@attr4({type = i32})] (%arg0: !tuples.tuple) {
 		%4 = tuples.getcol %arg0 @constrel::@attr1 : i32
@@ -58,6 +60,8 @@ module @querymodule  {
 		%9 = db.add %7 : i32, %8 : i32
         tuples.return %6, %9 : i32, i32
   	}
+  	%res_table = relalg.materialize %3 [@map::@attr3, @map::@attr4] => ["a","b"] : !subop.result_table<[a: i32,b:i32]>
+    subop.set_result 0 %res_table : !subop.result_table<[a: i32,b:i32]>
     return
   }
 }

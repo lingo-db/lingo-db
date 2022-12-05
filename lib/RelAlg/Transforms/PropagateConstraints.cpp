@@ -91,7 +91,6 @@ class ReduceAggrKeyPattern : public mlir::RewritePattern {
             }
             return attr;
          });
-         std::cout << "before: " << keys.size() << " after: " << reducedKeys.size() << std::endl;
          return mlir::success();
       }
       return mlir::failure();

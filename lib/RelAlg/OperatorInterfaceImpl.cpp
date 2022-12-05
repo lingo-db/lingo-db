@@ -429,7 +429,6 @@ static void replaceColumnUsesInLamda(mlir::MLIRContext* context, mlir::Block& bl
    });
 }
 mlir::LogicalResult mlir::relalg::MapOp::foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo) {
-   auto& colManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
    auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(getPredicate().front().getTerminator());
    for (auto z : llvm::zip(returnOp.getResults(), getComputedCols())) {
