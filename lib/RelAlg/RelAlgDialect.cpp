@@ -38,6 +38,10 @@ struct ArithCmpICmpInterface
       auto cmpOp = mlir::cast<mlir::arith::CmpIOp>(op);
       return cmpOp.getPredicate() == mlir::arith::CmpIPredicate::eq;
    }
+   bool isUnequalityPred(mlir::Operation* op) const {
+      auto cmpOp = mlir::cast<mlir::arith::CmpIOp>(op);
+      return cmpOp.getPredicate() == mlir::arith::CmpIPredicate::ne;
+   }
    bool isLessPred(mlir::Operation* op, bool eq) const {
       auto cmpOp = mlir::cast<mlir::arith::CmpIOp>(op);
       switch (cmpOp.getPredicate()) {
@@ -78,6 +82,10 @@ struct ArithCmpFCmpInterface
    bool isEqualityPred(mlir::Operation* op) const {
       auto cmpOp = mlir::cast<mlir::arith::CmpFOp>(op);
       return cmpOp.getPredicate() == mlir::arith::CmpFPredicate::OEQ || cmpOp.getPredicate() == mlir::arith::CmpFPredicate::UEQ;
+   }
+   bool isUnequalityPred(mlir::Operation* op) const {
+      auto cmpOp = mlir::cast<mlir::arith::CmpFOp>(op);
+      return cmpOp.getPredicate() == mlir::arith::CmpFPredicate::ONE || cmpOp.getPredicate() == mlir::arith::CmpFPredicate::UNE;
    }
    bool isLessPred(mlir::Operation* op, bool eq) const {
       auto cmpOp = mlir::cast<mlir::arith::CmpFOp>(op);

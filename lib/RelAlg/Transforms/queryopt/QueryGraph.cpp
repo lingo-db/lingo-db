@@ -134,6 +134,12 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
          return support::eval::createLt(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));
       } else if (cmpOp.isGreaterPred(false)) {
          return support::eval::createGt(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));
+      } else if (cmpOp.isLessPred(true)) {
+         return support::eval::createLte(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));
+      } else if (cmpOp.isGreaterPred(true)) {
+         return support::eval::createGte(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));
+      } else if (cmpOp.isUnequalityPred()) {
+         return support::eval::createNot(support::eval::createEq(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping)));
       }
    } else if (auto betweenOp = mlir::dyn_cast_or_null<mlir::db::BetweenOp>(op)) {
       std::vector<std::unique_ptr<support::eval::expr>> expressions;

@@ -11,6 +11,11 @@ def Relalg_CmpOpInterface : OpInterface<"CmpOpInterface"> {
       /*methodName=*/"isEqualityPred"
     >,
     InterfaceMethod<
+      /*description=*/"Returns true if it is UnEquality Predicate",
+      /*retTy=*/"bool",
+      /*methodName=*/"isUnequalityPred"
+    >,
+    InterfaceMethod<
       /*description=*/"Returns true if it is Equality Predicate",
       /*retTy=*/"bool",
       /*methodName=*/"isLessPred"

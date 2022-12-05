@@ -10,6 +10,7 @@
 #include <queue>
 using namespace mlir;
 bool mlir::db::CmpOp::isEqualityPred() { return getPredicate() == mlir::db::DBCmpPredicate::eq; }
+bool mlir::db::CmpOp::isUnequalityPred() { return getPredicate() == mlir::db::DBCmpPredicate::neq; }
 bool mlir::db::CmpOp::isLessPred(bool eq) { return getPredicate() == (eq ? mlir::db::DBCmpPredicate::lte : mlir::db::DBCmpPredicate::lt); }
 bool mlir::db::CmpOp::isGreaterPred(bool eq) { return getPredicate() == (eq ? mlir::db::DBCmpPredicate::gte : mlir::db::DBCmpPredicate::gt); }
 static Type wrapNullableType(MLIRContext* context, Type type, ValueRange values) {
