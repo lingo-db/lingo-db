@@ -180,6 +180,14 @@ std::shared_ptr<arrow::RecordBatch> createSample(std::shared_ptr<arrow::Table> t
    auto res = arrow::compute::CallFunction("take", args).ValueOrDie();
    return res.table()->CombineChunksToBatch().ValueOrDie();
 }
+std::optional<size_t> countDistinctValues(std::shared_ptr<arrow::ChunkedArray> column) {
+   //todo: replace with approximate count in the future
+   auto res = arrow::compute::CallFunction("count_distinct", {column});
+   if (res.ok()) {
+      return res.ValueOrDie().scalar_as<arrow::Int64Scalar>().value;
+   }
+   return {};
+}
 void ArrowDirDatabase::appendTable(std::string tableName, std::shared_ptr<arrow::Table> newRows) {
    if (!hasTable(tableName)) {
       throw std::runtime_error("can not append to non-existing table " + tableName);
@@ -193,7 +201,11 @@ void ArrowDirDatabase::appendTable(std::string tableName, std::shared_ptr<arrow:
    tables[tableName] = arrow::Table::FromRecordBatches(batches).ValueOrDie();
    samples[tableName] = createSample(tables[tableName]);
    metaData[tableName]->setNumRows(tables[tableName]->num_rows());
+   for (auto c : metaData[tableName]->getOrderedColumns()) {
+      metaData[tableName]->getColumnMetaData(c)->setDistinctValues(countDistinctValues(tables[tableName]->GetColumnByName(c)));
+   }
 }
+
 ArrowDirDatabase::~ArrowDirDatabase() {
    if (writeback) {
       writeMetaData(directory + "/metadata.json");
