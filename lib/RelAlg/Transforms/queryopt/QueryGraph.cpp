@@ -128,7 +128,7 @@ std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unorder
    } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
       auto left = cmpOp.getLeft();
       auto right = cmpOp.getRight();
-      if (cmpOp.isEqualityPred()) {
+      if (cmpOp.isEqualityPred(false)) {
          return support::eval::createEq(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));
       } else if (cmpOp.isLessPred(false)) {
          return support::eval::createLt(buildEvalExpr(left, mapping), buildEvalExpr(right, mapping));

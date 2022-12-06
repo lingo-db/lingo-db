@@ -37,7 +37,7 @@ class HashJoinUtils {
          if (auto getAttr = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
             required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.getAttr())});
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
-            if (cmpOp.isEqualityPred() && isAndedResult(op)) {
+            if (cmpOp.isEqualityPred(true) && isAndedResult(op)) {
                auto leftAttributes = required[cmpOp.getLeft()];
                auto rightAttributes = required[cmpOp.getRight()];
                mlir::Value keyVal;
@@ -103,7 +103,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          if (auto getAttr = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
             required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.getAttr())});
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
-            if (cmpOp.isEqualityPred() && HashJoinUtils::isAndedResult(op)) {
+            if (cmpOp.isEqualityPred(true) && HashJoinUtils::isAndedResult(op)) {
                auto leftAttributes = required[cmpOp.getLeft()];
                auto rightAttributes = required[cmpOp.getRight()];
                if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {

@@ -337,6 +337,9 @@ class StringCmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
          case db::DBCmpPredicate::gte:
             res = rt::StringRuntime::compareGte(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
+         case db::DBCmpPredicate::isa:
+            assert(false&&"should not happen");
+            break;
       }
       rewriter.replaceOp(cmpOp, res);
       return success();
@@ -736,6 +739,9 @@ class CmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
             return arith::CmpIPredicate::sle;
          case db::DBCmpPredicate::gte:
             return arith::CmpIPredicate::sge;
+         case db::DBCmpPredicate::isa:
+            assert(false&&"should not happen");
+            break;
       }
       assert(false && "unexpected case");
       return arith::CmpIPredicate::eq;
@@ -754,6 +760,9 @@ class CmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
             return arith::CmpFPredicate::OLE;
          case db::DBCmpPredicate::gte:
             return arith::CmpFPredicate::OGE;
+         case db::DBCmpPredicate::isa:
+            assert(false&&"should not happen");
+            break;
       }
       assert(false && "unexpected case");
       return arith::CmpFPredicate::OEQ;

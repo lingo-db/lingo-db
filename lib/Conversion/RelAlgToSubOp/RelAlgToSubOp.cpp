@@ -116,28 +116,7 @@ static mlir::LogicalResult safelyMoveRegion(ConversionPatternRewriter& rewriter,
 static mlir::Value compareKeys(mlir::OpBuilder& rewriter, mlir::ValueRange leftUnpacked, mlir::ValueRange rightUnpacked, mlir::Location loc) {
    mlir::Value equal = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI1Type(), rewriter.getIntegerAttr(rewriter.getI1Type(), 1));
    for (size_t i = 0; i < leftUnpacked.size(); i++) {
-      mlir::Value compared;
-      auto currLeftType = leftUnpacked[i].getType();
-      auto currRightType = rightUnpacked[i].getType();
-      auto currLeftNullableType = currLeftType.dyn_cast_or_null<mlir::db::NullableType>();
-      auto currRightNullableType = currRightType.dyn_cast_or_null<mlir::db::NullableType>();
-      if (currLeftNullableType || currRightNullableType) {
-         mlir::Value isNull1 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), leftUnpacked[i]);
-         mlir::Value isNull2 = rewriter.create<mlir::db::IsNullOp>(loc, rewriter.getI1Type(), rightUnpacked[i]);
-         mlir::Value anyNull = rewriter.create<mlir::arith::OrIOp>(loc, isNull1, isNull2);
-         mlir::Value bothNull = rewriter.create<mlir::arith::AndIOp>(loc, isNull1, isNull2);
-         compared = rewriter.create<mlir::scf::IfOp>(
-                               loc, rewriter.getI1Type(), anyNull, [&](mlir::OpBuilder& b, mlir::Location loc) { b.create<mlir::scf::YieldOp>(loc, bothNull); },
-                               [&](mlir::OpBuilder& b, mlir::Location loc) {
-                                  mlir::Value left = rewriter.create<mlir::db::NullableGetVal>(loc, leftUnpacked[i]);
-                                  mlir::Value right = rewriter.create<mlir::db::NullableGetVal>(loc, rightUnpacked[i]);
-                                  mlir::Value cmpRes = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, left, right);
-                                  b.create<mlir::scf::YieldOp>(loc, cmpRes);
-                               })
-                       .getResult(0);
-      } else {
-         compared = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, leftUnpacked[i], rightUnpacked[i]);
-      }
+      mlir::Value compared = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::isa, leftUnpacked[i], rightUnpacked[i]);
       mlir::Value localEqual = rewriter.create<mlir::arith::AndIOp>(loc, rewriter.getI1Type(), mlir::ValueRange({equal, compared}));
       equal = localEqual;
    }

@@ -118,7 +118,7 @@ static std::optional<std::pair<const mlir::tuples::Column*, const mlir::tuples::
    if (returnOp.getResults().empty()) return {};
    mlir::Value v = returnOp.getResults()[0];
    if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(v.getDefiningOp())) {
-      if (!cmpOp.isEqualityPred()) return {};
+      if (!cmpOp.isEqualityPred(false)) return {};
       if (auto leftColref = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.getLeft().getDefiningOp())) {
          if (auto rightColref = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.getRight().getDefiningOp())) {
             return std::make_pair<const mlir::tuples::Column*, const mlir::tuples::Column*>(&leftColref.getAttr().getColumn(), &rightColref.getAttr().getColumn());

@@ -26,7 +26,7 @@ module @querymodule  {
 	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !tuples.tuple)
 	//CHECK: %{{.*}} = tuples.getcol %arg0 @constrel::@attr1 : i32
     //CHECK: %{{.*}} = tuples.getcol %arg0 @renaming{{.*}}::@renamed0 : i32
-    //CHECK: %{{.*}} = db.compare eq %{{.*}} : i32, %{{.*}} : i32
+    //CHECK: %{{.*}} = db.compare isa %{{.*}} : i32, %{{.*}} : i32
 
 
   	%3 = relalg.join %0, %110 (%arg0: !tuples.tuple) {
@@ -49,7 +49,7 @@ module @querymodule  {
 	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !tuples.tuple)
 	//CHECK: %{{.*}} = tuples.getcol %arg0 @constrel::@attr1 : i32
     //CHECK: %{{.*}} = tuples.getcol %arg0 @renaming{{.*}}::@renamed0 : i32
-    //CHECK: %{{.*}} = db.compare eq %{{.*}} : i32, %{{.*}} : i32
+    //CHECK: %{{.*}} = db.compare isa %{{.*}} : i32, %{{.*}} : i32
   	%2 = relalg.selection %1 (%arg0: !tuples.tuple) {
 	    %3 = tuples.getcol %arg0 @constrel::@attr1 : i32
 	    %4 = tuples.getcol %arg0 @constrel2::@attr1 : i32
@@ -81,7 +81,7 @@ module @querymodule  {
 	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !tuples.tuple)
 	//CHECK: %{{.*}} = tuples.getcol %arg0 @constrel::@attr1 : i32
     //CHECK: %{{.*}} = tuples.getcol %arg0 @renaming{{.*}}::@renamed0 : i32
-    //CHECK: %{{.*}} = db.compare eq %{{.*}} : i32, %{{.*}} : i32
+    //CHECK: %{{.*}} = db.compare isa %{{.*}} : i32, %{{.*}} : i32
   	%2 = relalg.selection %1 (%arg0: !tuples.tuple) {
 	    %3 = tuples.getcol %arg0 @constrel::@attr1 : i32
 	    %4 = tuples.getcol %arg0 @constrel2::@attr1 : i32
@@ -162,7 +162,7 @@ module @querymodule  {
 	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !tuples.tuple)
 	//CHECK: %{{.*}} = tuples.getcol %arg0 @constrel::@attr1 : i32
     //CHECK: %{{.*}} = tuples.getcol %arg0 @renaming{{.*}}::@renamed0 : i32
-    //CHECK: %{{.*}} = db.compare eq %{{.*}} : i32, %{{.*}} : i32
+    //CHECK: %{{.*}} = db.compare isa %{{.*}} : i32, %{{.*}} : i32
 
 
   	%3 = relalg.join %0, %110 (%arg0: !tuples.tuple) {

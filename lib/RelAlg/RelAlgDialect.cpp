@@ -34,7 +34,7 @@ struct ArithCmpICmpInterface
    : public CmpOpInterface::ExternalModel<ArithCmpICmpInterface, mlir::arith::CmpIOp> {
    // No need to define `exampleInterfaceHook` that has a default implementation
    // in `ExternalModel`. But it can be overridden if desired.
-   bool isEqualityPred(mlir::Operation* op) const {
+   bool isEqualityPred(mlir::Operation* op,bool nullsAreEqual) const {
       auto cmpOp = mlir::cast<mlir::arith::CmpIOp>(op);
       return cmpOp.getPredicate() == mlir::arith::CmpIPredicate::eq;
    }
@@ -79,7 +79,7 @@ struct ArithCmpFCmpInterface
    : public CmpOpInterface::ExternalModel<ArithCmpFCmpInterface, mlir::arith::CmpFOp> {
    // No need to define `exampleInterfaceHook` that has a default implementation
    // in `ExternalModel`. But it can be overridden if desired.
-   bool isEqualityPred(mlir::Operation* op) const {
+   bool isEqualityPred(mlir::Operation* op,bool nullsAreEqual) const {
       auto cmpOp = mlir::cast<mlir::arith::CmpFOp>(op);
       return cmpOp.getPredicate() == mlir::arith::CmpFPredicate::OEQ || cmpOp.getPredicate() == mlir::arith::CmpFPredicate::UEQ;
    }

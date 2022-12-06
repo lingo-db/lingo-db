@@ -296,8 +296,10 @@ def DB_CMP_P_LT : I64EnumAttrCase<"lt", 2>;
 def DB_CMP_P_LTE : I64EnumAttrCase<"lte", 3>;
 def DB_CMP_P_GT : I64EnumAttrCase<"gt", 4>;
 def DB_CMP_P_GTE : I64EnumAttrCase<"gte", 5>;
+def DB_CMP_P_ISA  : I64EnumAttrCase<"isa", 6>;
+
 def DB_CmpPredicateAttr : I64EnumAttr<"DBCmpPredicate", "",
-        [DB_CMP_P_EQ, DB_CMP_P_NEQ, DB_CMP_P_LT, DB_CMP_P_LTE, DB_CMP_P_GT,DB_CMP_P_GTE]> {
+        [DB_CMP_P_EQ, DB_CMP_P_NEQ, DB_CMP_P_LT, DB_CMP_P_LTE, DB_CMP_P_GT,DB_CMP_P_GTE,DB_CMP_P_ISA]> {
     let cppNamespace = "::mlir::db";
 }
 
@@ -307,6 +309,18 @@ def DB_CmpOp : DB_LogicalOp<"compare",
 
     let arguments = (ins DB_CmpPredicateAttr:$predicate, NullableDBType:$left, NullableDBType:$right);
     let assemblyFormat = "$predicate $left `:` type($left) `,` $right `:` type($right) attr-dict";
+        let extraClassDefinition = [{
+            LogicalResult $cppClass::inferReturnTypes(MLIRContext* context, Optional<Location>, ValueRange operands,
+                    DictionaryAttr attrs, RegionRange, SmallVectorImpl<Type>& inferredReturnTypes) {
+                mlir::Type i1 = IntegerType::get(context, 1);
+                if(attrs.get("predicate").cast<mlir::db::DBCmpPredicateAttr>().getValue()==mlir::db::DBCmpPredicate::isa){
+                   inferredReturnTypes.assign({i1});
+                   return success();
+                }
+                inferredReturnTypes.assign({wrapNullableType(context, i1, operands)});
+                return success();
+            }
+        }];
 }
 
 def DB_BetweenOp : DB_LogicalOp<"between",[DB_NeedsNullWrap]> {

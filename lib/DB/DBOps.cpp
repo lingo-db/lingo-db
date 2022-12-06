@@ -11,7 +11,7 @@
 #include <llvm/Support/Debug.h>
 #include <queue>
 using namespace mlir;
-bool mlir::db::CmpOp::isEqualityPred() { return getPredicate() == mlir::db::DBCmpPredicate::eq; }
+bool mlir::db::CmpOp::isEqualityPred(bool nullsAreEqual) { return getPredicate() == mlir::db::DBCmpPredicate::eq || (nullsAreEqual ? (getPredicate() == DBCmpPredicate::isa) : false); }
 bool mlir::db::CmpOp::isUnequalityPred() { return getPredicate() == mlir::db::DBCmpPredicate::neq; }
 bool mlir::db::CmpOp::isLessPred(bool eq) { return getPredicate() == (eq ? mlir::db::DBCmpPredicate::lte : mlir::db::DBCmpPredicate::lt); }
 bool mlir::db::CmpOp::isGreaterPred(bool eq) { return getPredicate() == (eq ? mlir::db::DBCmpPredicate::gte : mlir::db::DBCmpPredicate::gt); }
@@ -119,7 +119,7 @@ OpFoldResult mlir::db::ConstantOp::fold(ArrayRef<Attribute> operands) {
    } else if (type.isa<mlir::db::CharType>()) {
       std::string str = std::get<std::string>(parseResult);
       return mlir::StringAttr::get(getContext(), str);
-   } else if (type.isa<mlir::db::IntervalType, mlir::db::DateType,mlir::db::TimestampType>()) {
+   } else if (type.isa<mlir::db::IntervalType, mlir::db::DateType, mlir::db::TimestampType>()) {
       return mlir::IntegerAttr::get(mlir::IntegerType::get(getContext(), 64), std::get<int64_t>(parseResult));
    } else {
       type.dump();
@@ -160,7 +160,7 @@ OpFoldResult mlir::db::ConstantOp::fold(ArrayRef<Attribute> operands) {
       } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
          auto [low, high] = support::getDecimalScaleMultiplier(decimalTargetType.getS());
          std::vector<uint64_t> parts = {low, high};
-         return IntegerAttr::get(IntegerType::get(getContext(),128), APInt(128,intVal)*APInt(128, parts));
+         return IntegerAttr::get(IntegerType::get(getContext(), 128), APInt(128, intVal) * APInt(128, parts));
       } else if (auto targetIntWidth = getIntegerWidth(scalarTargetType, false)) {
          return {};
       }
@@ -189,7 +189,7 @@ OpFoldResult mlir::db::ConstantOp::fold(ArrayRef<Attribute> operands) {
 
 ::mlir::LogicalResult mlir::db::RuntimeCall::fold(::llvm::ArrayRef<::mlir::Attribute> operands, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>& results) {
    auto reg = getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
-   auto *fn = reg->lookup(getFn().str());
+   auto* fn = reg->lookup(getFn().str());
    if (!fn) { return failure(); }
    if (!fn->foldFn) return failure();
    auto foldFn = fn->foldFn.value();

@@ -16,6 +16,7 @@ namespace {
 
 class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-unnesting"; }
+
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(Unnesting)
    private:
@@ -150,16 +151,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
                auto attrefDependent = attributeManager.createRef(renamed[attr]);
                Value valLeft = builder.create<tuples::GetColumnOp>(loc, attr->type, attributeManager.createRef(attr), tuple);
                Value valRight = builder.create<tuples::GetColumnOp>(loc, attr->type, attrefDependent, tuple);
-               Value cmpEq = builder.create<db::CmpOp>(loc, db::DBCmpPredicate::eq, valLeft, valRight);
-               if (valLeft.getType().isa<mlir::db::NullableType>() && valRight.getType().isa<mlir::db::NullableType>()) {
-                  Value nullLeft = builder.create<db::IsNullOp>(loc, valLeft);
-                  Value nullRight = builder.create<db::IsNullOp>(loc, valRight);
-                  Value bothNull = builder.create<db::AndOp>(loc, ValueRange{nullLeft, nullRight});
-                  Value eqOrBothNull = builder.create<db::OrOp>(loc, ValueRange{cmpEq, bothNull});
-                  return eqOrBothNull;
-               } else {
-                  return cmpEq;
-               }
+               return builder.create<db::CmpOp>(loc, db::DBCmpPredicate::isa, valLeft, valRight);
             });
          }
 
