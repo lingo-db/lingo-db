@@ -575,7 +575,7 @@ class ToSQL {
                   })
                   .Case<mlir::relalg::LimitOp>([&](mlir::relalg::LimitOp op) {
                      std::vector<std::string> attrs;
-                     output << operators[op.getRel().getDefiningOp()] << " limit " << op.getRows();
+                     output << operators[op.getRel().getDefiningOp()] << " limit " << op.getMaxRows();
                   })
 
                   .Case<mlir::relalg::SortOp>([&](mlir::relalg::SortOp op) {

@@ -162,9 +162,9 @@ def MapOp : RelAlg_Op<"map", [Pure,Operator,TupleLamdaOperator,UnaryOperator,Dec
 def LimitOp : RelAlg_Op<"limit", [Pure,Operator,UnaryOperator]> {
     let summary = "limit operation";
 
-    let arguments = (ins I32Attr:$rows, TupleStream:$rel);
+    let arguments = (ins I32Attr:$max_rows, TupleStream:$rel);
     let results = (outs TupleStream:$result);
-    let assemblyFormat = [{ $rows $rel attr-dict }];
+    let assemblyFormat = [{ $max_rows $rel attr-dict }];
 }
 
 def TopKOp : RelAlg_Op<"topk", [Pure,Operator,UnaryOperator]> {

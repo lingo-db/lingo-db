@@ -229,6 +229,13 @@ double getRows(mlir::relalg::QueryGraph::Node& n) {
       baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(n.op.getContext()), numRows));
       return numRows == 0 ? 1 : numRows;
    }
+   if (n.op) {
+      if (n.op->hasAttr("rows")) {
+         if (auto floatAttr = n.op->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()) {
+            return floatAttr.getValueAsDouble();
+         }
+      }
+   }
    return 1;
 }
 void mlir::relalg::QueryGraph::estimate() {
