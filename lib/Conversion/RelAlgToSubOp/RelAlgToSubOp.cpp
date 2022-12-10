@@ -86,7 +86,9 @@ class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> 
 
          colNames.push_back(rewriter.getStringAttr(memberName));
          colTypes.push_back(mlir::TypeAttr::get(attrDef.getColumn().type));
-         mapping.push_back(rewriter.getNamedAttr(memberName, attrDef));
+         if (required.contains(&attrDef.getColumn())) {
+            mapping.push_back(rewriter.getNamedAttr(memberName, attrDef));
+         }
       }
       scanDescription += "} }";
       auto tableRefType = mlir::subop::TableType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr(colNames), rewriter.getArrayAttr(colTypes)));

@@ -2133,6 +2133,7 @@ mlir::subop::createLowerSubOpPass() {
    return std::make_unique<SubOpToControlFlowLoweringPass>();
 }
 void mlir::subop::createLowerSubOpPipeline(mlir::OpPassManager& pm) {
+   pm.addPass(mlir::subop::createGlobalOptPass());
    pm.addPass(mlir::subop::createFoldColumnsPass());
    pm.addPass(mlir::subop::createReuseLocalPass());
    pm.addPass(mlir::subop::createSpecializeSubOpPass());

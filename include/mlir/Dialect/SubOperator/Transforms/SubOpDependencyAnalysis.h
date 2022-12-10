@@ -21,6 +21,9 @@ struct SubOpDependencyAnalysis {
    std::unordered_map<std::string, std::unordered_set<mlir::Operation*>> writtenMembers;
    std::unordered_map<mlir::Block*, std::vector<mlir::Operation*>> validOrder;
    SubOpDependencyAnalysis(mlir::Operation* op, AnalysisManager& am);
+   bool isDependentOn(mlir::Operation* curr, mlir::Operation* other);
+   bool areIndependent(mlir::Operation* op,mlir::Operation* op2);
+   void addToRoot(mlir::Operation* root,mlir::Operation* previousRoot);
    void addDependency(mlir::Operation* a, mlir::Operation* b, std::vector<mlir::Operation*> exclude) {
       if (a == b) return;
       if (a->getBlock() != b->getBlock()) return; //todo: recheck

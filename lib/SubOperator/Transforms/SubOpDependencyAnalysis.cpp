@@ -18,6 +18,26 @@ mlir::subop::SubOpRootAnalysis::SubOpRootAnalysis(mlir::Operation* op) {
       }
    });
 }
+bool mlir::subop::SubOpDependencyAnalysis::isDependentOn(mlir::Operation* curr, mlir::Operation* other) {
+   for (auto* d : getDependenciesOf(curr)) {
+      if (d == other) return true;
+      if (isDependentOn(d, other)) {
+         return true;
+      }
+   }
+   return false;
+}
+bool mlir::subop::SubOpDependencyAnalysis::areIndependent(mlir::Operation* op, mlir::Operation* op2) {
+   return !isDependentOn(op, op2) && !isDependentOn(op2, op);
+}
+void mlir::subop::SubOpDependencyAnalysis::addToRoot(mlir::Operation* root, mlir::Operation* previousRoot) {
+   for(auto *dep:dependencies[previousRoot]){
+      addDependency(root,dep,{});
+   }
+   for(auto *dep:inverseDependencies[previousRoot]){
+      addDependency(dep,root,{});
+   }
+}
 mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* op, AnalysisManager& am) {
    SubOpRootAnalysis& rootAnalysis = am.getAnalysis<SubOpRootAnalysis>();
    std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>> pipelines;

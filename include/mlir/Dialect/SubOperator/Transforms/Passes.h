@@ -10,6 +10,7 @@ std::unique_ptr<Pass> createNormalizeSubOpPass();
 std::unique_ptr<Pass> createSpecializeSubOpPass();
 std::unique_ptr<Pass> createPullGatherUpPass();
 std::unique_ptr<Pass> createReuseLocalPass();
+std::unique_ptr<Pass> createGlobalOptPass();
 void registerSubOpTransformations();
 } // end namespace subop
 } // end namespace mlir

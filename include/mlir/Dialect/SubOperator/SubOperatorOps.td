@@ -473,7 +473,7 @@ def LookupOrInsertOp : SubOperator_Op<"lookup_or_insert",[SubOperator,ReferenceP
       }];
 }
 
-def LookupOp : SubOperator_Op<"lookup",[SubOperator,ReferenceProducer]> {
+def LookupOp : SubOperator_Op<"lookup",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>,ReferenceProducer]> {
     let summary = "performs a lookup in a state and annotates the result as attribute ";
     let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
     let results = (outs TupleStream: $res);

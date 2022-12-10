@@ -952,7 +952,7 @@ std::vector<std::string> subop::CreateSortedViewOp::getWrittenMembers() {
    return res;
 }
 std::vector<std::string> subop::CreateHashIndexedView::getWrittenMembers() {
-   return {getLinkMember().str(), getHashMember().str()};
+   return {getLinkMember().str()};
 }
 std::vector<std::string> subop::CreateHashIndexedView::getReadMembers() {
    return {getHashMember().str()};
@@ -1146,6 +1146,15 @@ void subop::ScatterOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& t
       setRefAttr(transformer.getColumnManager().createRef(newColumn));
       setMappingAttr(transformer.updateMapping(getMappingAttr()));
    }
+}
+void subop::LookupOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   if (state == getState() && newType != state.getType()) {
+      auto newRefType = transformer.getNewRefType(this->getOperation(), getRef().getColumn().type);
+      setRefAttr(transformer.createReplacementColumn(getRefAttr(), newRefType));
+   }
+}
+void subop::LookupOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
+   assert(false && "should not happen");
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"

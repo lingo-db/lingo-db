@@ -115,12 +115,12 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
       for (auto lookupOp : lookupOps) {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPoint(lookupOp);
-         auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, lookupOp.getStream(), rewriter.getArrayAttr({hashDef, linkDef}));
-         //auto afterLookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), mapOp.getResult(), lmm, rewriter.getArrayAttr({hashRef}), listDef);
+         auto [hashDefLookup, hashRefLookup] = createColumn(rewriter.getIndexType(), "hj", "hash");
+         auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, lookupOp.getStream(), rewriter.getArrayAttr({hashDefLookup}));
          auto [listDef, listRef] = createColumn(entryRefListType, "lookup", "list");
          auto lookupRef = lookupOp.getRef();
          auto lookupKeys = lookupOp.getKeys();
-         rewriter.replaceOpWithNewOp<mlir::subop::LookupOp>(lookupOp, mlir::tuples::TupleStreamType::get(rewriter.getContext()), mapOp.getResult(), hashIndexedView, rewriter.getArrayAttr({hashRef}), listDef);
+         rewriter.replaceOpWithNewOp<mlir::subop::LookupOp>(lookupOp, mlir::tuples::TupleStreamType::get(rewriter.getContext()), mapOp.getResult(), hashIndexedView, rewriter.getArrayAttr({hashRefLookup}), listDef);
          auto* mapBlock = new mlir::Block;
          mlir::Value tuple = mapBlock->addArgument(mlir::tuples::TupleType::get(getContext()), loc);
          mapOp.getFn().push_back(mapBlock);
@@ -131,8 +131,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
             values.push_back(rewriter.create<mlir::tuples::GetColumnOp>(loc, keyColumn.getColumn().type, keyColumn, tuple));
          }
          mlir::Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.create<mlir::util::PackOp>(loc, values));
-         mlir::Value inValidLink = rewriter.create<mlir::util::InvalidRefOp>(loc, linkType);
-         rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange{hashed, inValidLink});
+         rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange{hashed});
          transformer.replaceColumn(&lookupRef.getColumn(), &listDef.getColumn());
       }
       rewriter.eraseOp(materializeOp);
