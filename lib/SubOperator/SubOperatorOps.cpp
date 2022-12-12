@@ -236,6 +236,83 @@ static void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arra
    p << "]";
 }
 
+ParseResult mlir::subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   mlir::ArrayAttr sortBy;
+   if (parser.parseAttribute(sortBy).failed()) {
+      return failure();
+   }
+   result.addAttribute("sortBy", sortBy);
+   mlir::subop::HeapType heapType;
+   if(parser.parseArrow().failed()||parser.parseType(heapType)){
+      return failure();
+   }
+   std::vector<OpAsmParser::Argument> leftArgs(sortBy.size());
+   std::vector<OpAsmParser::Argument> rightArgs(sortBy.size());
+   if (parser.parseLParen() || parser.parseLSquare()) {
+      return failure();
+   }
+   for (size_t i = 0; i < sortBy.size(); i++) {
+      size_t j = 0;
+      for (; j < heapType.getMembers().getNames().size(); j++) {
+         if (sortBy[i] == heapType.getMembers().getNames()[j]) {
+            break;
+         }
+      }
+      leftArgs[i].type = heapType.getMembers().getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      if (i > 0 && parser.parseComma().failed()) return failure();
+      if (parser.parseArgument(leftArgs[i])) return failure();
+   }
+   if (parser.parseRSquare() || parser.parseComma() || parser.parseLSquare()) {
+      return failure();
+   }
+   for (size_t i = 0; i < sortBy.size(); i++) {
+      size_t j = 0;
+      for (; j < heapType.getMembers().getNames().size(); j++) {
+         if (sortBy[i] == heapType.getMembers().getNames()[j]) {
+            break;
+         }
+      }
+      rightArgs[i].type = heapType.getMembers().getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      if (i > 0 && parser.parseComma().failed()) return failure();
+      if (parser.parseArgument(rightArgs[i])) return failure();
+   }
+   if (parser.parseRSquare() || parser.parseRParen()) {
+      return failure();
+   }
+   std::vector<OpAsmParser::Argument> args;
+   args.insert(args.end(), leftArgs.begin(), leftArgs.end());
+   args.insert(args.end(), rightArgs.begin(), rightArgs.end());
+   Region* body = result.addRegion();
+   if (parser.parseRegion(*body, args)) return failure();
+   result.types.push_back(heapType);
+   return success();
+}
+
+void subop::CreateHeapOp::print(OpAsmPrinter& p) {
+   p << " : " << getSortBy() << " -> "<<getType()<<"\n";
+   p << "([";
+   bool first = true;
+   for (size_t i = 0; i < getSortBy().size(); i++) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      p << getRegion().front().getArgument(i);
+   }
+   p << "],[";
+   first = true;
+   for (size_t i = 0; i < getSortBy().size(); i++) {
+      if (first) {
+         first = false;
+      } else {
+         p << ",";
+      }
+      p << getRegion().front().getArgument(getSortBy().size() + i);
+   }
+   p << "])";
+   p.printRegion(getRegion(), false, true);
+}
 ParseResult mlir::subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    OpAsmParser::UnresolvedOperand getToSort;
    subop::BufferType vecType;
@@ -586,7 +663,7 @@ void mlir::subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
    if (parser.parseKeyword("initial") || parser.parseAttribute(relevantMembers) || parser.parseColon()) {
       return failure();
    }
-   result.addAttribute("relevant_members",relevantMembers);
+   result.addAttribute("relevant_members", relevantMembers);
    llvm::SmallVector<OpAsmParser::Argument> initialFnArguments;
    if (parser.parseLParen() || parser.parseArgumentList(initialFnArguments) || parser.parseRParen()) {
       return failure();
@@ -614,10 +691,10 @@ void mlir::subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
    if (parser.parseArgumentList(combineFnRightArguments) || parser.parseRSquare() || parser.parseRParen()) {
       return failure();
    }
-   for(size_t i=0;i<resultType.getValueMembers().getTypes().size();i++){
-      auto t=resultType.getValueMembers().getTypes()[i].cast<mlir::TypeAttr>().getValue();
-      combineFnLeftArguments[i].type=t;
-      combineFnRightArguments[i].type=t;
+   for (size_t i = 0; i < resultType.getValueMembers().getTypes().size(); i++) {
+      auto t = resultType.getValueMembers().getTypes()[i].cast<mlir::TypeAttr>().getValue();
+      combineFnLeftArguments[i].type = t;
+      combineFnRightArguments[i].type = t;
    }
    std::vector<OpAsmParser::Argument> args;
    args.insert(args.end(), combineFnLeftArguments.begin(), combineFnLeftArguments.end());
@@ -627,37 +704,37 @@ void mlir::subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
    return success();
 }
 void mlir::subop::CreateSegmentTreeView::print(::mlir::OpAsmPrinter& p) {
-   p<< getSource()<<" : " <<getSource().getType() << " -> "<<getType() <<" ";
-   p<< "initial"<<getRelevantMembers()<<":"<<"(";
-   bool first=true;
-   for(auto arg:getInitialFn().getArguments()){
-      if(first){
-         first=false;
-      }else{
-         p<<", ";
+   p << getSource() << " : " << getSource().getType() << " -> " << getType() << " ";
+   p << "initial" << getRelevantMembers() << ":"
+     << "(";
+   bool first = true;
+   for (auto arg : getInitialFn().getArguments()) {
+      if (first) {
+         first = false;
+      } else {
+         p << ", ";
       }
-      p<<arg;
+      p << arg;
    }
-   p<<")";
+   p << ")";
    p.printRegion(getInitialFn(), false, true);
-   p<<"combine: ([";
-   auto argCount=getType().getValueMembers().getTypes().size();
-   for(size_t i=0;i<argCount;i++){
-      if(i>0){
-         p<<", ";
+   p << "combine: ([";
+   auto argCount = getType().getValueMembers().getTypes().size();
+   for (size_t i = 0; i < argCount; i++) {
+      if (i > 0) {
+         p << ", ";
       }
-      p<<getCombineFn().getArgument(i);
+      p << getCombineFn().getArgument(i);
    }
-   p<<"],[";
-   for(size_t i=0;i<argCount;i++){
-      if(i>0){
-         p<<", ";
+   p << "],[";
+   for (size_t i = 0; i < argCount; i++) {
+      if (i > 0) {
+         p << ", ";
       }
-      p<<getCombineFn().getArgument(i+argCount);
+      p << getCombineFn().getArgument(i + argCount);
    }
-   p<<"])";
+   p << "])";
    p.printRegion(getCombineFn(), false, true);
-
 }
 ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    OpAsmParser::UnresolvedOperand stream;

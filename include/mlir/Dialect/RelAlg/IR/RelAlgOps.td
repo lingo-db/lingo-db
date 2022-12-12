@@ -170,14 +170,17 @@ def LimitOp : RelAlg_Op<"limit", [Pure,Operator,UnaryOperator]> {
 def TopKOp : RelAlg_Op<"topk", [Pure,Operator,UnaryOperator]> {
     let summary = "top k operation";
     let description = [{
-        Return top `rows` elements according to the sorting region. This is
+        Return top `max_rows` elements according to the sorting region. This is
         conceptually similar to a combination of `sort` and `limit`, but allows
         for further optimizations.
     }];
 
-    let arguments = (ins I32Attr:$rows, TupleStream:$rel,ArrayAttr:$sortspecs);
+    let arguments = (ins I32Attr:$max_rows, TupleStream:$rel,ArrayAttr:$sortspecs);
     let results = (outs TupleStream:$result);
-    let assemblyFormat = [{ $rows $rel custom<SortSpecs>($sortspecs) attr-dict}];
+    let assemblyFormat = [{ $max_rows $rel custom<SortSpecs>($sortspecs) attr-dict}];
+    let extraClassDeclaration = [{
+        ColumnSet getUsedColumns();
+    }];
 }
 
 def CrossProductOp : RelAlg_Op<"crossproduct",

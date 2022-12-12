@@ -31,6 +31,7 @@
 #include "runtime-defs/DataSourceIteration.h"
 #include "runtime-defs/GrowingBuffer.h"
 #include "runtime-defs/Hashtable.h"
+#include "runtime-defs/Heap.h"
 #include "runtime-defs/LazyJoinHashtable.h"
 #include "runtime-defs/SegmentTreeView.h"
 
@@ -321,6 +322,65 @@ class CreateSegmentTreeViewLowering : public OpConversionPattern<mlir::subop::Cr
       Value stateTypeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), viewElementType);
       mlir::Value res = rt::SegmentTreeView::build(rewriter, loc)({adaptor.getSource(), sourceEntryTypeSize, initialFnPtr, combineFnPtr, stateTypeSize})[0];
       rewriter.replaceOp(createOp, res);
+      return mlir::success();
+   }
+};
+class CreateHeapLowering : public OpConversionPattern<mlir::subop::CreateHeapOp> {
+   public:
+   using OpConversionPattern<mlir::subop::CreateHeapOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::CreateHeapOp heapOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      static size_t id = 0;
+      std::unordered_map<std::string, size_t> memberPositions;
+      auto heapType = heapOp.getType();
+      for (auto i = 0ull; i < heapType.getMembers().getTypes().size(); i++) {
+         memberPositions.insert({heapType.getMembers().getNames()[i].cast<mlir::StringAttr>().str(), i});
+      }
+      auto ptrType = mlir::util::RefType::get(getContext(), IntegerType::get(getContext(), 8));
+
+      ModuleOp parentModule = heapOp->getParentOfType<ModuleOp>();
+      mlir::TupleType elementType = getTupleType(heapOp.getType());
+      auto loc = heapOp.getLoc();
+      mlir::func::FuncOp funcOp;
+      {
+         OpBuilder::InsertionGuard insertionGuard(rewriter);
+         rewriter.setInsertionPointToStart(parentModule.getBody());
+         funcOp = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "dsa_heap_compare" + std::to_string(id++), rewriter.getFunctionType(TypeRange({ptrType, ptrType}), TypeRange(rewriter.getI1Type())));
+         auto* funcBody = new Block;
+         funcBody->addArguments(TypeRange({ptrType, ptrType}), {parentModule->getLoc(), parentModule->getLoc()});
+         funcOp.getBody().push_back(funcBody);
+         rewriter.setInsertionPointToStart(funcBody);
+         Value left = funcBody->getArgument(0);
+         Value right = funcBody->getArgument(1);
+
+         Value genericMemrefLeft = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), elementType), left);
+         Value genericMemrefRight = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), elementType), right);
+         Value tupleLeft = rewriter.create<util::LoadOp>(loc, elementType, genericMemrefLeft, Value());
+         Value tupleRight = rewriter.create<util::LoadOp>(loc, elementType, genericMemrefRight, Value());
+         auto unpackedLeft = rewriter.create<mlir::util::UnPackOp>(loc, tupleLeft);
+         auto unpackedRight = rewriter.create<mlir::util::UnPackOp>(loc, tupleRight);
+         std::vector<mlir::Value> args;
+         for (auto sortByMember : heapOp.getSortBy()) {
+            args.push_back(unpackedLeft.getResult(memberPositions[sortByMember.cast<mlir::StringAttr>().str()]));
+         }
+         for (auto sortByMember : heapOp.getSortBy()) {
+            args.push_back(unpackedRight.getResult(memberPositions[sortByMember.cast<mlir::StringAttr>().str()]));
+         }
+         auto terminator = rewriter.create<mlir::func::ReturnOp>(loc);
+         Block* sortLambda = &heapOp.getRegion().front();
+         auto* sortLambdaTerminator = sortLambda->getTerminator();
+         rewriter.mergeBlockBefore(sortLambda, terminator, args);
+         mlir::tuples::ReturnOp returnOp = mlir::cast<mlir::tuples::ReturnOp>(terminator->getPrevNode());
+         Value x = returnOp.getResults()[0];
+         rewriter.create<mlir::func::ReturnOp>(loc, x);
+         rewriter.eraseOp(sortLambdaTerminator);
+         rewriter.eraseOp(terminator);
+      }
+      Value typeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), elementType);
+      Value maxElements = rewriter.create<mlir::arith::ConstantIndexOp>(loc, heapType.getMaxElements());
+      Value functionPointer = rewriter.create<mlir::func::ConstantOp>(loc, funcOp.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.getSymName())));
+      auto heap = rt::Heap::create(rewriter, loc)({maxElements, typeSize, functionPointer})[0];
+      rewriter.replaceOp(heapOp, heap);
       return mlir::success();
    }
 };
@@ -645,6 +705,34 @@ class ScanRefsSortedViewLowering : public OpConversionPattern<mlir::subop::ScanR
       return success();
    }
 };
+
+class ScanRefsHeapLowering : public OpConversionPattern<mlir::subop::ScanRefsOp> {
+   public:
+   using OpConversionPattern<mlir::subop::ScanRefsOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::ScanRefsOp scanOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (!scanOp.getState().getType().isa<mlir::subop::HeapType>()) return failure();
+      ColumnMapping mapping;
+      auto loc = scanOp->getLoc();
+      mlir::TupleType elementType = getTupleType(scanOp.getState().getType().cast<mlir::subop::HeapType>());
+      auto buffer = rt::Heap::getBuffer(rewriter, scanOp->getLoc())({adaptor.getState()})[0];
+      auto castedBuffer = rewriter.create<mlir::util::BufferCastOp>(loc, mlir::util::BufferType::get(rewriter.getContext(), elementType), buffer);
+      auto forOp = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, castedBuffer, mlir::ValueRange{});
+      mlir::Block* block = new mlir::Block;
+      block->addArgument(mlir::util::RefType::get(getContext(), elementType), scanOp->getLoc());
+      forOp.getBodyRegion().push_back(block);
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(block);
+         mapping.define(scanOp.getRef(), forOp.getInductionVar());
+
+         mlir::Value newInFlight = mapping.createInFlight(rewriter);
+         rewriter.replaceOp(scanOp, newInFlight);
+         rewriter.create<mlir::dsa::YieldOp>(scanOp->getLoc());
+      }
+      return success();
+   }
+};
 class ScanRefsContinuousViewLowering : public OpConversionPattern<mlir::subop::ScanRefsOp> {
    public:
    using OpConversionPattern<mlir::subop::ScanRefsOp>::OpConversionPattern;
@@ -822,7 +910,7 @@ static bool shouldUnionBeMaterialized(mlir::subop::UnionOp unionOp) {
       for (auto userResultType : user->getResultTypes()) {
          tupleStreamContinues |= userResultType.isa<mlir::tuples::TupleStreamType>();
       }
-      if(!tupleStreamContinues){
+      if (!tupleStreamContinues) {
          numEndUsers++;
       }
    }
@@ -877,7 +965,7 @@ class UnionMaterializeLowering : public OpConversionPattern<mlir::subop::UnionOp
          commonColumns = commonColumns.intersect(mlir::relalg::ColumnSet::fromArrayAttr(currStream.getColumns()));
       }
       for (auto m : firstStream.getColumns()) {
-         auto *column = &m.cast<mlir::tuples::ColumnDefAttr>().getColumn();
+         auto* column = &m.cast<mlir::tuples::ColumnDefAttr>().getColumn();
          if (commonColumns.contains(column)) {
             auto name = getUniqueMember("tmp_union");
             types.push_back(mlir::TypeAttr::get(typeConverter->convertType(column->type)));
@@ -1089,6 +1177,32 @@ class MaterializeTableLowering : public TupleStreamConsumerLowering<mlir::subop:
          rewriter.create<mlir::dsa::Append>(materializeOp->getLoc(), state, val, valid);
       }
       rewriter.create<mlir::dsa::NextRow>(materializeOp->getLoc(), state);
+      return mlir::success();
+   }
+};
+class MaterializeHeapLowering : public TupleStreamConsumerLowering<mlir::subop::MaterializeOp> {
+   public:
+   using TupleStreamConsumerLowering<mlir::subop::MaterializeOp>::TupleStreamConsumerLowering;
+
+   LogicalResult matchAndRewriteConsumer(mlir::subop::MaterializeOp materializeOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
+      if (!materializeOp.getState().getType().isa<mlir::subop::HeapType>()) return failure();
+      auto stateType = materializeOp.getState().getType().cast<mlir::subop::HeapType>();
+      std::vector<mlir::Value> values;
+      for (size_t i = 0; i < stateType.getMembers().getTypes().size(); i++) {
+         auto memberName = stateType.getMembers().getNames()[i].cast<mlir::StringAttr>().str();
+         auto attribute = materializeOp.getMapping().get(memberName).cast<mlir::tuples::ColumnRefAttr>();
+         auto val = mapping.resolve(attribute);
+         values.push_back(val);
+      }
+      mlir::Value packed = rewriter.create<mlir::util::PackOp>(materializeOp->getLoc(), values);
+      mlir::Value ref;
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(&materializeOp->getParentOfType<mlir::func::FuncOp>().getFunctionBody().front());
+         ref = rewriter.create<mlir::util::AllocaOp>(materializeOp->getLoc(), mlir::util::RefType::get(packed.getType()), mlir::Value());
+      }
+      rewriter.create<util::StoreOp>(materializeOp->getLoc(), packed, ref, mlir::Value());
+      rt::Heap::insert(rewriter, materializeOp->getLoc())({adaptor.getState(), ref});
       return mlir::success();
    }
 };
@@ -1722,6 +1836,9 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::subop::HashIndexedViewType t) -> Type {
       return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
    });
+   typeConverter.addConversion([&](mlir::subop::HeapType t) -> Type {
+      return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
+   });
    /*typeConverter.addConversion([&](mlir::subop::LazyMultiMapType t) -> Type {
       return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
    });*/
@@ -1775,6 +1892,9 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<UnionMaterializeLowering>(typeConverter, ctxt);
    patterns.insert<GenerateLowering>(typeConverter, ctxt);
    patterns.insert<GenerateEmitLowering>(typeConverter, ctxt);
+   patterns.insert<CreateHeapLowering>(typeConverter, ctxt);
+   patterns.insert<ScanRefsHeapLowering>(typeConverter, ctxt);
+   patterns.insert<MaterializeHeapLowering>(typeConverter, ctxt);
    if (failed(applyFullConversion(module, target, std::move(patterns)))) {
       signalPassFailure();
    }

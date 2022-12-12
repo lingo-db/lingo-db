@@ -1,4 +1,5 @@
 add_library(runtime OBJECT
+        Heap.cpp
         TableBuilder.cpp
         DumpRuntime.cpp
         DataSourceIteration.cpp

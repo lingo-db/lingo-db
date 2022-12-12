@@ -133,6 +133,14 @@ ColumnSet SortOp::getUsedColumns() {
    }
    return used;
 }
+ColumnSet TopKOp::getUsedColumns() {
+   ColumnSet used;
+   for (Attribute a : getSortspecs()) {
+      used.insert(&a.dyn_cast_or_null<mlir::relalg::SortSpecificationAttr>().getAttr().getColumn());
+   }
+   return used;
+}
+
 
 ColumnSet ConstRelationOp::getCreatedColumns() {
    return ColumnSet::fromArrayAttr(getColumns());

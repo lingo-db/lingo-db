@@ -170,8 +170,18 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       mlir::cast<Operator>(predicateOperator.getOperation()).setChildren({left, right});
    }
    void runOnOperation() override {
+      std::vector<mlir::Operation*> toErase;
       getOperation().walk([&](Operator op) {
          ::llvm::TypeSwitch<mlir::Operation*, void>(op.getOperation())
+            .Case<mlir::relalg::LimitOp>([&](mlir::relalg::LimitOp limitOp) {
+               if (auto sortOp = mlir::dyn_cast_or_null<mlir::relalg::SortOp>(limitOp.getRel().getDefiningOp())) {
+                  mlir::OpBuilder builder(limitOp);
+                  toErase.push_back(limitOp);
+                  toErase.push_back(sortOp);
+
+                  limitOp.replaceAllUsesWith(builder.create<mlir::relalg::TopKOp>(limitOp.getLoc(), limitOp.getMaxRows(), sortOp.getRel(), sortOp.getSortspecs()).asRelation());
+               }
+            })
             .Case<mlir::relalg::InnerJoinOp, mlir::relalg::CollectionJoinOp, mlir::relalg::FullOuterJoinOp>([&](PredicateOperator predicateOperator) {
                auto binOp = mlir::cast<BinaryOperator>(predicateOperator.getOperation());
                auto left = mlir::cast<Operator>(binOp.leftChild());
@@ -251,6 +261,9 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             .Default([&](auto x) {
             });
       });
+      for (auto* op : toErase) {
+         op->erase();
+      }
    }
 };
 } // end anonymous namespace

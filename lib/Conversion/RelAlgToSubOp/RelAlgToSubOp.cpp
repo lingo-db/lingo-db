@@ -379,7 +379,7 @@ class ConstRelationLowering : public OpConversionPattern<mlir::relalg::ConstRela
    LogicalResult matchAndRewrite(mlir::relalg::ConstRelationOp constRelationOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = constRelationOp->getLoc();
 
-      auto generateOp = rewriter.replaceOpWithNewOp<mlir::subop::GenerateOp>(constRelationOp, mlir::tuples::TupleStreamType::get(rewriter.getContext()),constRelationOp.getColumns());
+      auto generateOp = rewriter.replaceOpWithNewOp<mlir::subop::GenerateOp>(constRelationOp, mlir::tuples::TupleStreamType::get(rewriter.getContext()), constRelationOp.getColumns());
       {
          auto* generateBlock = new Block;
          mlir::OpBuilder::InsertionGuard guard2(rewriter);
@@ -390,7 +390,7 @@ class ConstRelationLowering : public OpConversionPattern<mlir::relalg::ConstRela
             std::vector<Value> values;
             size_t i = 0;
             for (auto entryAttr : row.getValue()) {
-               auto type=constRelationOp.getColumns()[i].cast<mlir::tuples::ColumnDefAttr>().getColumn().type;
+               auto type = constRelationOp.getColumns()[i].cast<mlir::tuples::ColumnDefAttr>().getColumn().type;
                if (type.isa<mlir::db::NullableType>() && entryAttr.isa<mlir::UnitAttr>()) {
                   auto entryVal = rewriter.create<mlir::db::NullOp>(constRelationOp->getLoc(), type);
                   values.push_back(entryVal);
@@ -1298,6 +1298,55 @@ class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
       return success();
    }
 };
+
+class TopKLowering : public OpConversionPattern<mlir::relalg::TopKOp> {
+   public:
+   using OpConversionPattern<mlir::relalg::TopKOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::relalg::TopKOp topk, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = topk->getLoc();
+      mlir::relalg::ColumnSet requiredColumns = getRequired(topk);
+      requiredColumns.insert(topk.getUsedColumns());
+      MaterializationHelper helper(requiredColumns, rewriter.getContext());
+
+      auto* block = new Block;
+      std::vector<Attribute> sortByMembers;
+      std::vector<Type> argumentTypes;
+      std::vector<Location> locs;
+      for (auto attr : topk.getSortspecs()) {
+         auto sortspecAttr = attr.cast<mlir::relalg::SortSpecificationAttr>();
+         argumentTypes.push_back(sortspecAttr.getAttr().getColumn().type);
+         locs.push_back(loc);
+         sortByMembers.push_back(helper.lookupStateMemberForMaterializedColumn(&sortspecAttr.getAttr().getColumn()));
+      }
+      block->addArguments(argumentTypes, locs);
+      block->addArguments(argumentTypes, locs);
+      std::vector<std::pair<mlir::Value, mlir::Value>> sortCriteria;
+      for (auto attr : topk.getSortspecs()) {
+         auto sortspecAttr = attr.cast<mlir::relalg::SortSpecificationAttr>();
+         mlir::Value left = block->getArgument(sortCriteria.size());
+         mlir::Value right = block->getArgument(sortCriteria.size() + topk.getSortspecs().size());
+         if (sortspecAttr.getSortSpec() == mlir::relalg::SortSpec::desc) {
+            std::swap(left, right);
+         }
+         sortCriteria.push_back({left, right});
+      }
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(block);
+         auto zero = rewriter.create<mlir::db::ConstantOp>(loc, rewriter.getI8Type(), rewriter.getIntegerAttr(rewriter.getI8Type(), 0));
+         auto spaceShipResult = spaceShipCompare(rewriter, sortCriteria, 0, loc);
+         mlir::Value isLt = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::lt, spaceShipResult, zero);
+         rewriter.create<mlir::tuples::ReturnOp>(loc, isLt);
+      }
+      auto heapType = mlir::subop::HeapType::get(getContext(), helper.createStateMembersAttr(), topk.getMaxRows());
+      auto createHeapOp = rewriter.create<mlir::subop::CreateHeapOp>(loc, heapType, rewriter.getArrayAttr(sortByMembers));
+      createHeapOp.getRegion().getBlocks().push_back(block);
+      rewriter.create<mlir::subop::MaterializeOp>(loc, adaptor.getRel(), createHeapOp.getRes(), helper.createColumnstateMapping());
+      rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(topk, createHeapOp.getRes(), helper.createStateColumnMapping());
+      return success();
+   }
+};
 class TmpLowering : public OpConversionPattern<mlir::relalg::TmpOp> {
    public:
    using OpConversionPattern<mlir::relalg::TmpOp>::OpConversionPattern;
@@ -2166,6 +2215,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<FullOuterJoinLowering>(typeConverter, ctxt);
    patterns.insert<SingleJoinLowering>(typeConverter, ctxt);
    patterns.insert<LimitLowering>(typeConverter, ctxt);
+   patterns.insert<TopKLowering>(typeConverter, ctxt);
    patterns.insert<UnionAllLowering>(typeConverter, ctxt);
    patterns.insert<UnionDistinctLowering>(typeConverter, ctxt);
    patterns.insert<CountingSetOperationLowering>(ctxt);

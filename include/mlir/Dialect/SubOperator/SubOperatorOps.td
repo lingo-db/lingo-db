@@ -91,6 +91,12 @@ def ContinuousView : SubOperator_Type<"ContinuousView", "continuous_view", [Stat
          StateMembersAttr getMembers(){return getBasedOn().getMembers();}
      }];
 }
+
+def Heap : SubOperator_Type<"Heap", "heap", [State]> {
+    let summary = "heap type";
+    let parameters = (ins "StateMembersAttr":$members, "uint32_t": $max_elements);
+    let assemblyFormat = "`<` $max_elements `,` custom<StateMembers>($members) `>`";
+}
 def SortedView : SubOperator_Type<"SortedView", "sorted_view", [State]> {
     let summary = "sorted view type";
     let parameters = (ins "State":$based_on);
@@ -324,6 +330,15 @@ def CreateSimpleStateOp : SubOperator_Op<"create_simple_state", [Pure]> {
     let results = (outs SimpleState : $res);
     let regions = (region AnyRegion:$initFn);
     let assemblyFormat = [{ type($res) (`initial` `:` $initFn^)? attr-dict }];
+}
+
+def CreateHeapOp : SubOperator_Op<"create_heap", [Pure]> {
+    let summary = "create new heap";
+    let arguments = (ins ArrayAttr: $sortBy);
+    let results = (outs Heap : $res);
+    let regions = (region AnyRegion:$initFn);
+    let regions = (region SizedRegion<1>:$region);
+    let hasCustomAssemblyFormat = 1;
 }
 
 def GenericCreateOp : SubOperator_Op<"create", [Pure]> {
