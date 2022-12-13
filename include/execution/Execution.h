@@ -71,7 +71,9 @@ enum class ExecutionMode {
    SPEED = 0, //Aim for maximum speed (no verification of generated MLIR
    DEFAULT = 1, //Execute without introducing extra steps for debugging/profiling, but verify generated MLIR
    PERF = 2, //Profiling
-   DEBUGGING = 3 //Make generated code debuggable
+   DEBUGGING = 3, //Make generated code debuggable
+   CHEAP = 4, // compile as cheap (compile time) as possible
+   EXTREME_CHEAP = 5, // compile as cheap (compile time) as possible, don't verify MLIR module
 };
 std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(ExecutionMode runMode, bool sqlInput);
 ExecutionMode getExecutionMode();

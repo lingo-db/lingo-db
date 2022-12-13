@@ -1,4 +1,5 @@
 #include "execution/Execution.h"
+#include "execution/CraneliftBackend.h"
 #include "execution/LLVMBackends.h"
 #include "mlir/Conversion/DBToStd/DBToStd.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
@@ -97,10 +98,15 @@ ExecutionMode getExecutionMode() {
    } else {
       runMode = ExecutionMode::DEFAULT;
    }
+
    if (const char* mode = std::getenv("LINGODB_EXECUTION_MODE")) {
       if (std::string(mode) == "PERF") {
          runMode = ExecutionMode::PERF;
-      } else if (std::string(mode) == "DEFAULT") {
+      } else if (std::string(mode) == "CHEAP") {
+         runMode = ExecutionMode::CHEAP;
+      }  else if (std::string(mode) == "EXTREME_CHEAP") {
+         runMode = ExecutionMode::EXTREME_CHEAP;
+      }  else if (std::string(mode) == "DEFAULT") {
          runMode = ExecutionMode::DEFAULT;
       } else if (std::string(mode) == "DEBUGGING") {
          runMode = ExecutionMode::DEBUGGING;
@@ -108,6 +114,7 @@ ExecutionMode getExecutionMode() {
          std::cout << "using speed mode" << std::endl;
          runMode = ExecutionMode::SPEED;
       }
+
    }
    return runMode;
 }
@@ -213,11 +220,17 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
       config->executionBackend = createLLVMDebugBackend();
    } else if (runMode == ExecutionMode::PERF) {
       config->executionBackend = createLLVMProfilingBackend();
+   } else if (runMode == ExecutionMode::CHEAP) {
+#if CRANELIFT_ENABLED==1
+      config->executionBackend = createCraneliftBackend();
+#else
+      config->executionBackend = createDefaultLLVMBackend();
+#endif
    } else {
       config->executionBackend = createDefaultLLVMBackend();
    }
    config->resultProcessor = execution::createTablePrinter();
-   if (runMode == ExecutionMode::SPEED) {
+   if (runMode == ExecutionMode::SPEED || runMode == ExecutionMode::EXTREME_CHEAP) {
       config->queryOptimizer->disableVerification();
       config->executionBackend->disableVerification();
       for (auto& loweringStep : config->loweringSteps) {

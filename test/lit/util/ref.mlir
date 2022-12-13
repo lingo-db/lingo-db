@@ -25,21 +25,10 @@
         db.runtime_call "DumpValue" (%res1) : (!db.nullable<i32>) -> ()
         //CHECK: int(42)
         db.runtime_call "DumpValue" (%res2) : (!db.nullable<i32>) -> ()
-        util.dealloc %generic_memref : !util.ref<!db.nullable<i32>>
+        //util.dealloc %generic_memref : !util.ref<!db.nullable<i32>>
 
 
-        %generic_memref_allocated=util.alloc(%c2) : !util.ref<i8>
-        %generic_memref_casted = util.generic_memref_cast %generic_memref_allocated : !util.ref<i8> -> !util.ref<!db.nullable<i32>>
 
-        util.store %testval1:!db.nullable<i32>,%generic_memref_casted[%c1] :!util.ref<!db.nullable<i32>>
-        util.store %testval2:!db.nullable<i32>,%generic_memref_casted[] :!util.ref<!db.nullable<i32>>
-        %res1casted=util.load %generic_memref_casted[%c1] :!util.ref<!db.nullable<i32>> -> !db.nullable<i32>
-        %res2casted=util.load %generic_memref_casted[] :!util.ref<!db.nullable<i32>> -> !db.nullable<i32>
-        //CHECK: int(NULL)
-        db.runtime_call "DumpValue" (%res1casted) : (!db.nullable<i32>) -> ()
-        //CHECK: int(42)
-        db.runtime_call "DumpValue" (%res2casted) : (!db.nullable<i32>) -> ()
-        util.dealloc %generic_memref_casted : !util.ref<!db.nullable<i32>>
 		return
 	}
  }

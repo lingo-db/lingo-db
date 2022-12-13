@@ -6,6 +6,7 @@
 #include "execution/Timing.h"
 #include "mlir-support/eval.h"
 
+#include <stdlib.h>
 void check(bool b, std::string message) {
    if (!b) {
       std::cerr << "ERROR: " << message << std::endl;
@@ -32,6 +33,7 @@ int main(int argc, char** argv) {
       queryExecutionConfig->executionBackend->setNumRepetitions(std::atoi(numRuns));
       std::cout << "using " << queryExecutionConfig->executionBackend->getNumRepetitions() << " runs" << std::endl;
    }
+   unsetenv("PERF_BUILDID_DIR");
    queryExecutionConfig->timingProcessor=std::make_unique<execution::TimingPrinter>(inputFileName);
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
    executer->fromFile(inputFileName);

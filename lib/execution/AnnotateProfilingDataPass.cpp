@@ -11,6 +11,9 @@ struct InsertPerfAsmPass
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::LLVM::LLVMDialect>();
    }
+   llvm::StringRef getArgument() const final {
+      return "--llvm-insert-profiling-helpers";
+   }
    static mlir::Location dropNames(mlir::Location l) {
       if (auto namedLoc = l.dyn_cast<mlir::NameLoc>()) {
          return dropNames(namedLoc.getChildLoc());

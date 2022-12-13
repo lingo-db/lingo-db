@@ -1,0 +1,13 @@
+
+set(LLVM_TARGET_DEFINITIONS CraneliftOps.td)
+mlir_tablegen(CraneliftOpsDialect.h.inc -gen-dialect-decls)
+mlir_tablegen(CraneliftOpsDialect.cpp.inc -gen-dialect-defs)
+mlir_tablegen(CraneliftOps.h.inc -gen-op-decls)
+mlir_tablegen(CraneliftOps.cpp.inc -gen-op-defs)
+mlir_tablegen(CraneliftOpsTypes.h.inc --gen-typedef-decls)
+mlir_tablegen(CraneliftOpsTypes.cpp.inc --gen-typedef-defs)
+mlir_tablegen(CraneliftOpsEnums.h.inc -gen-enum-decls)
+mlir_tablegen(CraneliftOpsEnums.cpp.inc -gen-enum-defs)
+add_public_tablegen_target(MLIRCraneliftOpsIncGen)
+add_dependencies(build_includes MLIRCraneliftOpsIncGen)
+add_mlir_doc(CraneliftOps CraneliftDialect Cranelift/ -gen-dialect-doc)

@@ -15,6 +15,7 @@ for qnum in range(1, 23):
     proc1 = subprocess.run(command, stdout=subprocess.PIPE,stderr=subprocess.PIPE)
     returncode=proc1.returncode
     runtime =0.0
+    conversion=0.0
     if returncode==0:
         output = proc1.stdout.decode('utf8')
         headerRead=False

@@ -1,4 +1,5 @@
 add_executable(sqlite-tester sqlite-tester.cpp)
 target_link_libraries(sqlite-tester runner runtime mlir-support)
 target_link_options(sqlite-tester PUBLIC -Wl,--export-dynamic)
-set_target_properties(sqlite-tester PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+set_target_properties(sqlite-tester PROPERTIES  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+target_link_directories( sqlite-tester PUBLIC ${CMAKE_BINARY_DIR}/lib/execution/cranelift/rust-cranelift/release)

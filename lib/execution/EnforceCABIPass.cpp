@@ -9,6 +9,9 @@ struct EnforceCPPABIPass
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::LLVM::LLVMDialect>();
    }
+   llvm::StringRef getArgument() const final {
+      return "--llvm-enforce-cpp-abi";
+   }
    void runOnOperation() override {
       auto funcOp = getOperation();
       if (funcOp.getFunctionBody().empty()&&funcOp.isPrivate()) {

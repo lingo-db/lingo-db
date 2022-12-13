@@ -8,7 +8,10 @@ ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN pip3 install numpy pandas Cython pybind11
-RUN apt-get install -y git cmake  ninja-build wget unzip ccache
+RUN apt-get install -y git cmake  ninja-build wget unzip ccache curl
+RUN curl https://sh.rustup.rs -sSf | bash -s -- -y
+ENV PATH="/root/.cargo/bin:$PATH"
+RUN cargo install --force cbindgen
 RUN mkdir /dbgen
 
 

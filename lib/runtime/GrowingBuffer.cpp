@@ -1,6 +1,7 @@
 #include "runtime/GrowingBuffer.h"
 #include <algorithm>
 #include <cstring>
+#include <iostream>
 
 runtime::GrowingBuffer* runtime::GrowingBuffer::create(size_t sizeOfType, size_t initialCapacity) {
    return new GrowingBuffer(initialCapacity, sizeOfType);

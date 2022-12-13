@@ -49,12 +49,6 @@
 		//CHECK: float(1)
 		db.runtime_call "DumpValue" (%7) : (f32) -> ()
 
-  		%8 = db.mod %constm10 : f32,%const4 : f32
- 		//CHECK: float(-0.900001)
- 		db.runtime_call "DumpValue" (%8) : (f32) -> ()
-		%9 = db.mod %const10 : f32,%const4 : f32
-		//CHECK: float(1.3)
-		db.runtime_call "DumpValue" (%9) : (f32) -> ()
 
  		return
   }
