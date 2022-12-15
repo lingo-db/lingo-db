@@ -183,8 +183,50 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
             }
             return collectSimpleDependencies(sel.getChildren()[0], attributes, selectionOps);
          })
+         .Case<mlir::relalg::AggregationOp>([&](mlir::relalg::AggregationOp aggregationOp) {
+            if(aggregationOp.getUsedColumns().intersects(attributes)){
+               return false;
+            }
+            std::vector<mlir::relalg::SelectionOp> extractedSelections;
+            if (!collectSimpleDependencies(aggregationOp.getChildren()[0], attributes, extractedSelections)) {
+               return false;
+            }
+
+            std::vector<mlir::db::CmpOp> toAnalyze;
+            for (auto sel : extractedSelections) {
+               auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(sel.getPredicateBlock().getTerminator());
+               if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(returnOp.getResults()[0].getDefiningOp())) {
+                  if (cmpOp.getPredicate() == mlir::db::DBCmpPredicate::eq) {
+                     toAnalyze.push_back(cmpOp);
+                  } else {
+                     return false;
+                  }
+               } else {
+                  return false;
+               }
+            }
+            mlir::relalg::ColumnSet groupByColumns=mlir::relalg::ColumnSet::fromArrayAttr(aggregationOp.getGroupByCols());
+            for (auto cmpOp : toAnalyze) {
+               auto leftColDef = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.getLeft().getDefiningOp());
+               auto rightColDef = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.getRight().getDefiningOp());
+               if (!leftColDef || !rightColDef) return false;
+               if (attributes.contains(&rightColDef.getAttr().getColumn())) {
+                  std::swap(leftColDef, rightColDef);
+               }
+               groupByColumns.insert(&rightColDef.getAttr().getColumn());
+            }
+            selectionOps.insert(selectionOps.end(),extractedSelections.begin(),extractedSelections.end());
+            aggregationOp.setGroupByColsAttr(groupByColumns.asRefArrayAttr(&getContext()));
+            return true;
+         })
          .Case<BinaryOperator>([&](BinaryOperator join) {
             return false;
+         })
+         .Case<mlir::relalg::MapOp>([&](mlir::relalg::MapOp mapOp){
+            if(mapOp.getUsedColumns().intersects(attributes)){
+               return false;
+            }
+            return collectSimpleDependencies(mapOp.getChildren()[0], attributes, selectionOps);
          })
          .Default([&](Operator others) {
             return false;

@@ -40,16 +40,11 @@ module @querymodule  {
   func.func @query() {
   	%0 = relalg.const_relation columns: [ @constrel ::@attr1({type = i32})] values: [1, 2]
   	%1 = relalg.const_relation columns: [ @constrel2 ::@attr1({type = i32})] values: [1]
-  	//CHECK: %{{.*}} = relalg.projection distinct [@constrel::@attr1] %0
-  	//CHECK: %{{.*}} = relalg.crossproduct %{{.*}}, %1
-  	//CHECK: %{{.*}} = relalg.selection %{{.*}}
-  	//CHECK: tuples.return
-  	//CHECK: %{{.*}} = relalg.aggregation %{{.*}}  [{{.*}},{{.*}}] computes : []
-	//CHECK: %{{.*}} = relalg.renaming %{{.*}}  renamed : [@renaming{{.*}}::@renamed0({type = i32})=[@constrel::@attr1]]
+  	//CHECK: %{{.*}} = relalg.aggregation %{{.*}}  [{{.*}}] computes : []
 	//CHECK: %{{.*}} = relalg.join %0, %{{.*}} (%arg0: !tuples.tuple)
 	//CHECK: %{{.*}} = tuples.getcol %arg0 @constrel::@attr1 : i32
-    //CHECK: %{{.*}} = tuples.getcol %arg0 @renaming{{.*}}::@renamed0 : i32
-    //CHECK: %{{.*}} = db.compare isa %{{.*}} : i32, %{{.*}} : i32
+    //CHECK: %{{.*}} = tuples.getcol %arg0 @constrel2::@attr1 : i32
+    //CHECK: %{{.*}} = db.compare eq %{{.*}} : i32, %{{.*}} : i32
   	%2 = relalg.selection %1 (%arg0: !tuples.tuple) {
 	    %3 = tuples.getcol %arg0 @constrel::@attr1 : i32
 	    %4 = tuples.getcol %arg0 @constrel2::@attr1 : i32
