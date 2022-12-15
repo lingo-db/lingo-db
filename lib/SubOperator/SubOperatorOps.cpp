@@ -289,7 +289,7 @@ ParseResult mlir::subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir
 }
 
 void subop::CreateHeapOp::print(OpAsmPrinter& p) {
-   p << " : " << getSortBy() << " -> "<<getType()<<"\n";
+   p << getSortBy() << " -> "<<getType()<<"\n";
    p << "([";
    bool first = true;
    for (size_t i = 0; i < getSortBy().size(); i++) {
