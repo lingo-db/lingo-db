@@ -120,11 +120,14 @@ lint:
    script:
       - mkdir -p /datasets/tpch-1
       - mkdir -p /datasets/tpcds-1
-      - apt-get install -y bison flex
+      - mkdir -p /datasets/job
+      - apt-get install -y bison flex zstd
       - bash ./tools/generate/tpch.sh /build/lingodb/ /datasets/tpch-1 1
       - bash ./tools/generate/tpcds.sh /build/lingodb/ /datasets/tpcds-1 1
+      - bash ./tools/generate/job.sh /build/lingodb/ /datasets/job
       - /build/lingodb/sqlite-tester ./test/sqlite-datasets/tpchSf1.test /datasets/tpch-1
       - /build/lingodb/sqlite-tester ./test/sqlite-datasets/tpcdsSf1.test /datasets/tpcds-1
+      - /build/lingodb/sqlite-tester ./test/sqlite-datasets/job.test /datasets/job
 
 file_tests_debug:
    extends:

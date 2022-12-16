@@ -4,6 +4,7 @@
 #include "mlir/Conversion/LLVMCommon/ConversionTarget.h"
 #include "mlir/Conversion/LLVMCommon/TypeConverter.h"
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/LLVMIR/FunctionCallUtils.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -517,7 +518,18 @@ class FuncConstTypeConversionPattern : public ConversionPattern {
       return success();
    }
 };
+class ArithSelectTypeConversionPattern : public ConversionPattern {
+   public:
+   explicit ArithSelectTypeConversionPattern(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::arith::SelectOp::getOperationName(), 1, context) {}
 
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOpWithNewOp<mlir::arith::SelectOp>(op, operands);
+      return success();
+   }
+};
 struct UtilToLLVMLoweringPass
    : public PassWrapper<UtilToLLVMLoweringPass, OperationPass<ModuleOp>> {
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(UtilToLLVMLoweringPass)
@@ -537,6 +549,7 @@ struct UtilToLLVMLoweringPass
       mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
       mlir::populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
       patterns.add<FuncConstTypeConversionPattern>(typeConverter, patterns.getContext());
+      patterns.add<ArithSelectTypeConversionPattern>(typeConverter, patterns.getContext());
       LLVMConversionTarget target(getContext());
       target.addIllegalDialect<mlir::util::UtilDialect>();
       target.addLegalDialect<LLVM::LLVMDialect>();
@@ -545,7 +558,7 @@ struct UtilToLLVMLoweringPass
       };
       auto opIsWithoutUtilTypes = [&](Operation* op) { return !hasUtilType(typeConverter, op->getOperandTypes()) && !hasUtilType(typeConverter, op->getResultTypes()); };
 
-      target.addDynamicallyLegalOp<mlir::func::CallOp, mlir::func::CallIndirectOp, mlir::func::ReturnOp>(opIsWithoutUtilTypes);
+      target.addDynamicallyLegalOp<mlir::func::CallOp, mlir::func::CallIndirectOp, mlir::func::ReturnOp, mlir::arith::SelectOp>(opIsWithoutUtilTypes);
       target.addDynamicallyLegalDialect<mlir::cf::ControlFlowDialect>(opIsWithoutUtilTypes);
 
       target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
