@@ -1,6 +1,7 @@
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 #include "mlir/Dialect/TupleStream/ColumnManager.h"
 #include "mlir/Dialect/TupleStream/TupleStreamDialect.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOpsAttributes.h"
 
 #include "mlir/IR/DialectImplementation.h"
@@ -243,7 +244,7 @@ ParseResult mlir::subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir
    }
    result.addAttribute("sortBy", sortBy);
    mlir::subop::HeapType heapType;
-   if(parser.parseArrow().failed()||parser.parseType(heapType)){
+   if (parser.parseArrow().failed() || parser.parseType(heapType)) {
       return failure();
    }
    std::vector<OpAsmParser::Argument> leftArgs(sortBy.size());
@@ -289,7 +290,7 @@ ParseResult mlir::subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir
 }
 
 void subop::CreateHeapOp::print(OpAsmPrinter& p) {
-   p << getSortBy() << " -> "<<getType()<<"\n";
+   p << getSortBy() << " -> " << getType() << "\n";
    p << "([";
    bool first = true;
    for (size_t i = 0; i < getSortBy().size(); i++) {
@@ -1049,6 +1050,35 @@ std::vector<std::string> subop::GatherOp::getReadMembers() {
       res.push_back(x.getName().str());
    }
    return res;
+}
+static void replaceColumnUsesInLamda(mlir::MLIRContext* context, mlir::Block& block, const mlir::subop::ColumnFoldInfo& columnInfo) {
+   auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+   block.walk([&columnInfo, &colManager](mlir::tuples::GetColumnOp getColumnOp) {
+      auto* currColumn = &getColumnOp.getAttr().getColumn();
+      if (columnInfo.directMappings.contains(currColumn)) {
+         getColumnOp.setAttrAttr(colManager.createRef(columnInfo.directMappings.at(currColumn)));
+      }
+   });
+}
+
+mlir::LogicalResult subop::MapOp::foldColumns(mlir::subop::ColumnFoldInfo& columnInfo) {
+   replaceColumnUsesInLamda(getContext(), getFn().front(), columnInfo);
+   return mlir::success();
+}
+mlir::LogicalResult subop::MaterializeOp::foldColumns(mlir::subop::ColumnFoldInfo& columnInfo) {
+   auto& colManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+
+   std::vector<mlir::NamedAttribute> newMapping;
+   mlir::OpBuilder b(getContext());
+   for(auto m:getMapping()){
+      auto col=m.getValue().cast<mlir::tuples::ColumnRefAttr>();
+      if(columnInfo.directMappings.contains(&col.getColumn())){
+         col=colManager.createRef(columnInfo.directMappings[&col.getColumn()]);
+      }
+      newMapping.push_back(b.getNamedAttr(m.getName().getValue(),col));
+   }
+   setMappingAttr(b.getDictionaryAttr(newMapping));
+   return mlir::success();
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"

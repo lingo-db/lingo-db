@@ -261,7 +261,7 @@ def UnionOp : SubOperator_Op<"union", [Pure,SubOperator]> {
     let assemblyFormat = [{  $streams attr-dict }];
 }
 
-def MapOp : SubOperator_Op<"map", [Pure,SubOperator]> {
+def MapOp : SubOperator_Op<"map", [Pure,SubOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
     let summary = "map operation";
 
     let arguments = (ins TupleStream:$stream,ArrayAttr:$computed_cols);
@@ -403,7 +403,7 @@ def CreateSegmentTreeView : SubOperator_Op<"create_segment_tree_view",[SubOperat
 // Streams & States
 //===----------------------------------------------------------------------===//
 
-def MaterializeOp : SubOperator_Op<"materialize",[SubOperator]> {
+def MaterializeOp : SubOperator_Op<"materialize",[SubOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
     let summary = "materialize state (sequentially)";
 
     let arguments = (ins TupleStream : $stream, AnyType : $state, DictionaryAttr : $mapping );

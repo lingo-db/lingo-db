@@ -4,6 +4,7 @@
 #include <memory>
 namespace mlir {
 namespace subop {
+std::unique_ptr<Pass> createFoldColumnsPass();
 std::unique_ptr<Pass> createEnforceOrderPass();
 std::unique_ptr<Pass> createNormalizeSubOpPass();
 std::unique_ptr<Pass> createPullGatherUpPass();

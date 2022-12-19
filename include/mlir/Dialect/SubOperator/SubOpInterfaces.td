@@ -56,5 +56,11 @@ def StateEntryReference : TypeInterface<"StateEntryReference"> {
      InterfaceMethod</*description=*/"", /*retTy=*/"StateMembersAttr", /*methodName=*/"getMembers">
   ];
 }
+def ColumnFoldable : OpInterface<"ColumnFoldable"> {
+  let cppNamespace = "::mlir::subop";
+    let methods = [
+    InterfaceMethod<"","mlir::LogicalResult", "foldColumns",(ins "mlir::subop::ColumnFoldInfo&":$columnInfo)>,
+    ];
+}
 
 #endif// Interfaces
