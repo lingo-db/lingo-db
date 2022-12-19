@@ -40,6 +40,9 @@ class AvoidUnnecessaryMaterialization : public mlir::RewritePattern {
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       auto scanOp = mlir::cast<mlir::subop::ScanOp>(op);
+      if (!scanOp.getState().getType().isa<mlir::subop::BufferType>()) {
+         return mlir::failure();
+      }
       auto readMembers = scanOp.getReadMembers();
       auto* stateCreateOp = scanOp.getState().getDefiningOp();
       if (!stateCreateOp) {
