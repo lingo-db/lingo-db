@@ -73,6 +73,8 @@ pub extern "C" fn cranelift_module_new(target_triple: *const c_char, flags: *con
     flag_builder.set("opt_level","speed").unwrap();
     flag_builder.set("enable_verifier","false").unwrap();
     flag_builder.set("enable_probestack","false").unwrap();
+    flag_builder.set("is_pic", "false").unwrap();
+
     for s in flag.split(",") {
         if s.len() > 0 {
             let n = s.find(",");
@@ -249,26 +251,6 @@ pub extern "C" fn cranelift_clear_data(ptr: *mut ModuleData) {
     };
     inst.data_ctx.clear();
 }
-/*
-#[no_mangle]
-pub extern "C" fn cranelift_write_data_in_data(ptr: *mut ModuleData, target_id: u32, offset: u32, source_id: u32, addend: i64) {
-    let inst = unsafe {
-        assert!(!ptr.is_null());
-        &mut *ptr
-    };
-    let gv = inst.module.as_mut().unwrap().declare_data_in_data(DataId::from_u32(source_id), &mut inst.data_ctx);
-    inst.module.as_mut().unwrap().write_data_dataaddr(DataId::from_u32(target_id), offset as usize, gv, addend);
-}
-
-#[no_mangle]
-pub extern "C" fn cranelift_write_function_in_data(ptr: *mut ModuleData, target_id: u32, offset: u32, source_id: u32) {
-    let inst = unsafe {
-        assert!(!ptr.is_null());
-        &mut *ptr
-    };
-    let gv = inst.module.as_mut().unwrap().declare_func_in_data(FuncId::from_u32(source_id), &mut inst.data_ctx);
-    inst.module.as_mut().unwrap().write_data_funcaddr(DataId::from_u32(target_id), offset as usize, gv)
-}*/
 
 #[no_mangle]
 pub extern "C" fn cranelift_assign_data_to_global(ptr: *mut ModuleData, id: u32) -> bool {

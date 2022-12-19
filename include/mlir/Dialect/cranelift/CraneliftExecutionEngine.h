@@ -25,6 +25,7 @@ class CraneliftExecutionEngine {
       return success;
    }
    size_t getJitTime() const;
+   ~CraneliftExecutionEngine();
 };
 } // end namespace mlir::cranelift
 #endif //MLIR_DIALECT_CRANELIFT_CRANELIFTEXECUTIONENGINE_H

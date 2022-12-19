@@ -12,7 +12,7 @@
 
 mlir::cranelift::CraneliftExecutionEngine::CraneliftExecutionEngine(mlir::ModuleOp module) : moduleOp(module) {
    mod = cranelift_module_new(
-      "x86_64-pc-linux", "is_pic,enable_simd,enable_atomics,enable_llvm_abi_extensions", "mymodule", 0,
+      "x86_64-pc-linux", "enable_simd,enable_atomics,enable_llvm_abi_extensions", "mymodule", 0,
       [](uintptr_t userdata, const char* err, const char* fn) {
          printf("Error %s: %s\n", fn, err);
       },
@@ -282,4 +282,8 @@ void* mlir::cranelift::CraneliftExecutionEngine::getFunction(std::string name) {
 }
 size_t mlir::cranelift::CraneliftExecutionEngine::getJitTime() const {
    return jitTime;
+}
+
+mlir::cranelift::CraneliftExecutionEngine::~CraneliftExecutionEngine() {
+   cranelift_module_delete(mod);
 }
