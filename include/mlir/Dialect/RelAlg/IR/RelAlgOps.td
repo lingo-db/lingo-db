@@ -60,6 +60,14 @@ def RelAlg_SortSpec : I64EnumAttr<"SortSpec", "sort order",
     let cppNamespace = "::mlir::relalg";
 }
 
+def RelAlg_GroupJoinBehavior_Inner  : I64EnumAttrCase<"inner", 0>;
+def RelAlg_GroupJoinBehavior_Outer  : I64EnumAttrCase<"outer", 1>;
+
+def RelAlg_GroupJoinBehavior: I64EnumAttr<"GroupJoinBehavior", "groupjoin behavior",
+        [RelAlg_GroupJoinBehavior_Inner,RelAlg_GroupJoinBehavior_Outer]> {
+    let cppNamespace = "::mlir::relalg";
+}
+
 def RelAlg_Func_Sum   : I64EnumAttrCase<"sum", 0>;
 def RelAlg_Func_Min   : I64EnumAttrCase<"min", 1>;
 def RelAlg_Func_Max   : I64EnumAttrCase<"max", 2>;
@@ -225,6 +233,20 @@ def AggregationOp : RelAlg_Op<"aggregation", [Pure,Operator,UnaryOperator]> {
         ColumnSet getCreatedColumns();
     }];
 }
+
+def GroupJoinOp : RelAlg_Op<"groupjoin", [Pure,Operator,BinaryOperator]> {
+    let summary = "groupjoin operation";
+
+    let arguments = (ins TupleStream:$left,TupleStream:$right, RelAlg_GroupJoinBehavior:$behavior, ArrayAttr:$leftCols, ArrayAttr:$rightCols, ArrayAttr:$mapped_cols,ArrayAttr:$computed_cols);
+    let results = (outs TupleStream:$result);
+    let regions = (region SizedRegion<1>:$predicate,SizedRegion<1>:$map_func,SizedRegion<1>:$aggr_func);
+    let assemblyFormat = [{ $left `,` $right `behavior` `=` $behavior custom<CustRefArr>($leftCols) `=` custom<CustRefArr>($rightCols) custom<CustRegion>($predicate) `mapped` `:` custom<CustDefArr>($mapped_cols) custom<CustRegion>($map_func) `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($aggr_func)  attr-dict-with-keyword }];
+    let extraClassDeclaration = [{
+        ColumnSet getUsedColumns();
+        ColumnSet getAvailableColumns();
+        ColumnSet getCreatedColumns();
+    }];
+}
 def WindowOp : RelAlg_Op<"window", [Pure,Operator,UnaryOperator]> {
     let summary = "window operation";
 
@@ -264,6 +286,7 @@ def InnerJoinOp : RelAlg_JoinOp<"join"> {
     let summary = "inner join operation";
     let extraClassDeclaration = [{
         mlir::LogicalResult foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo);
+        mlir::relalg::FunctionalDependencies getFDs();
     }];
 }
 

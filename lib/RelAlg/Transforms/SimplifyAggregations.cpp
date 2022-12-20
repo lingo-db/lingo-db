@@ -21,7 +21,7 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
       auto& attributeManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
 
       mlir::relalg::AggrFuncOp aggrFuncOp = mlir::cast<mlir::relalg::AggrFuncOp>(op);
-      if (mlir::isa<mlir::relalg::AggregationOp, mlir::relalg::WindowOp>(op->getParentOp())) {
+      if (mlir::isa<mlir::relalg::AggregationOp, mlir::relalg::WindowOp,mlir::relalg::GroupJoinOp>(op->getParentOp())) {
          return mlir::success(false);
       }
       std::string scopeName = attributeManager.getUniqueScope("aggr");
@@ -61,7 +61,7 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
       auto& attributeManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
 
       mlir::relalg::CountRowsOp aggrFuncOp = mlir::cast<mlir::relalg::CountRowsOp>(op);
-      if (mlir::isa<mlir::relalg::AggregationOp>(op->getParentOp())) {
+      if (mlir::isa<mlir::relalg::AggregationOp,mlir::relalg::GroupJoinOp>(op->getParentOp())) {
          return mlir::success(false);
       }
       std::string scopeName = attributeManager.getUniqueScope("aggr");

@@ -181,6 +181,11 @@ def EntryList : SubOperator_Type<"List", "list"> {
     let parameters = (ins "StateEntryReference":$t);
     let assemblyFormat = "`<` $t `>`";
 }
+def OptionalType : SubOperator_Type<"Optional", "optional"> {
+    let summary = "optional type";
+    let parameters = (ins "StateEntryReference":$t);
+    let assemblyFormat = "`<` $t `>`";
+}
 
 //===----------------------------------------------------------------------===//
 // Operations
@@ -450,10 +455,10 @@ def EntriesBetweenOp : SubOperator_Op<"entries_between",[SubOperator]> {
     let results = (outs TupleStream: $res);
     let assemblyFormat = [{  $stream custom<CustRef>($left_ref) custom<CustRef>($right_ref)  custom<CustDef>($between) attr-dict }];
 }
-def ReferenceValidOp : SubOperator_Op<"ref_valid",[SubOperator]> {
-    let arguments = (ins TupleStream : $stream, ColumnRefAttr:$ref,ColumnDefAttr: $is_valid);
+def UnwrapOptionalRefOp : SubOperator_Op<"unwrap_optional_ref",[SubOperator]> {
+    let arguments = (ins TupleStream : $stream, ColumnRefAttr:$optional_ref, ColumnDefAttr: $ref);
     let results = (outs TupleStream: $res);
-    let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<CustDef>($is_valid) attr-dict }];
+    let assemblyFormat = [{  $stream custom<CustRef>($optional_ref) custom<CustDef>($ref) attr-dict }];
 }
 
 

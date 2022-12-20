@@ -118,7 +118,7 @@ class SimplifyCompareISAPattern : public mlir::RewritePattern {
       auto cmpOp = mlir::cast<mlir::db::CmpOp>(op);
       if (cmpOp.getPredicate() != mlir::db::DBCmpPredicate::isa) return mlir::failure();
       auto isLeftNullable = cmpOp.getLeft().getType().isa<mlir::db::NullableType>();
-      auto isRightNullable = cmpOp.getLeft().getType().isa<mlir::db::NullableType>();
+      auto isRightNullable = cmpOp.getRight().getType().isa<mlir::db::NullableType>();
       auto loc = op->getLoc();
       if (isLeftNullable && isRightNullable) {
          mlir::Value isLeftNull = rewriter.create<mlir::db::IsNullOp>(loc, cmpOp.getLeft());

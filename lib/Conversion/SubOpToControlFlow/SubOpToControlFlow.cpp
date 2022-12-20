@@ -1353,8 +1353,7 @@ class PureLookupHashMapLowering : public TupleStreamConsumerLowering<mlir::subop
       };
       auto loc = lookupOp->getLoc();
       Value hashed = hash;
-
-      auto keyType = packed.getType();
+      auto keyType = mlir::TupleType::get(getContext(), unpackTypes(htStateType.getKeyMembers().getTypes()));
       auto* context = rewriter.getContext();
       auto entryType = getHtEntryType(htStateType, *typeConverter);
       auto i8PtrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
@@ -1407,7 +1406,7 @@ class PureLookupHashMapLowering : public TupleStreamConsumerLowering<mlir::subop
                   loc, TypeRange({doneType,bucketPtrType}), hashMatches, [&](OpBuilder& b, Location loc) {
                      Value kvAddress = rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
                      Value entryKeyAddress = rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, kvAddress, 0);
-                     Value entryKey = rewriter.create<util::LoadOp>(loc, keyType, entryKeyAddress);
+                     Value entryKey = rewriter.create<util::LoadOp>(loc, entryKeyAddress);
 
                      Value keyMatches = equalFnBuilder(b, entryKey, packed);
                      auto ifOp2 = b.create<scf::IfOp>(
@@ -1919,17 +1918,33 @@ class EntriesBetweenLowering : public TupleStreamConsumerLowering<mlir::subop::E
       return success();
    }
 };
-class IsRefValidLowering : public TupleStreamConsumerLowering<mlir::subop::ReferenceValidOp> {
+class UnwrapOptionalHashmapRefLowering : public TupleStreamConsumerLowering<mlir::subop::UnwrapOptionalRefOp> {
    public:
-   using TupleStreamConsumerLowering<mlir::subop::ReferenceValidOp>::TupleStreamConsumerLowering;
-   LogicalResult matchAndRewriteConsumer(mlir::subop::ReferenceValidOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
-      auto ref = mapping.resolve(op.getRef());
-      if (ref.getType().isa<mlir::util::RefType>()) {
-         mapping.define(op.getIsValid(), rewriter.create<mlir::util::IsRefValidOp>(op->getLoc(), rewriter.getI1Type(), ref));
+   using TupleStreamConsumerLowering<mlir::subop::UnwrapOptionalRefOp>::TupleStreamConsumerLowering;
+   LogicalResult matchAndRewriteConsumer(mlir::subop::UnwrapOptionalRefOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
+      auto optionalType=op.getOptionalRef().getColumn().type.dyn_cast_or_null<mlir::subop::OptionalType>();
+      if(!optionalType) return mlir::failure();
+      auto lookupRefType=optionalType.getT().dyn_cast_or_null<mlir::subop::LookupEntryRefType>();
+      if(!lookupRefType)return mlir::failure();
+      auto hashmapType=lookupRefType.getState().dyn_cast_or_null<mlir::subop::HashMapType>();
+      if(!hashmapType)return mlir::failure();
+      auto loc=op.getLoc();
+      auto cond=rewriter.create<mlir::util::IsRefValidOp>(loc,rewriter.getI1Type(),mapping.resolve(op.getOptionalRef()));
+      auto ifOp=rewriter.create<mlir::scf::IfOp>(loc, mlir::TypeRange{}, cond);
+      auto htEntryType=getHtEntryType(hashmapType, *typeConverter);
+      auto htEntryPtrType=mlir::util::RefType::get(getContext(),htEntryType);
+      auto kvPtrType = mlir::util::RefType::get(getContext(), getHtKVType(hashmapType, *typeConverter));
+      auto valPtrType = mlir::util::RefType::get(getContext(), mlir::TupleType::get(getContext(), unpackTypes(hashmapType.getValueMembers().getTypes())));
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(&ifOp.getThenRegion().front());
+         Value ptr = rewriter.create<util::GenericMemrefCastOp>(loc, htEntryPtrType,mapping.resolve(adaptor.getOptionalRef()));
+         auto kvPtr = rewriter.create<mlir::util::TupleElementPtrOp>(loc, kvPtrType, ptr, 2);
+         auto valuePtr = rewriter.create<mlir::util::TupleElementPtrOp>(loc, valPtrType, kvPtr, 1);
+         mapping.define(op.getRef(), valuePtr);
          newStream = mapping.createInFlight(rewriter);
-         return success();
       }
-      return failure();
+      return mlir::success();
    }
 };
 static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter) {
@@ -2059,7 +2074,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<LookupSimpleStateLowering>(typeConverter, ctxt);
    patterns.insert<LookupHashMapLowering>(typeConverter, ctxt);
    patterns.insert<PureLookupHashMapLowering>(typeConverter, ctxt);
-   patterns.insert<IsRefValidLowering>(typeConverter, ctxt);
+   patterns.insert<UnwrapOptionalHashmapRefLowering>(typeConverter, ctxt);
    patterns.insert<LookupHashIndexedViewLowering>(typeConverter, ctxt);
    patterns.insert<ScanHashMapLowering>(typeConverter, ctxt);
    patterns.insert<ReduceOpLowering>(typeConverter, ctxt);

@@ -112,6 +112,24 @@ ColumnSet AggregationOp::getUsedColumns() {
    });
    return used;
 }
+ColumnSet GroupJoinOp::getCreatedColumns() {
+   return ColumnSet::fromArrayAttr(getComputedCols());
+}
+ColumnSet GroupJoinOp::getUsedColumns() {
+   auto used = mlir::relalg::detail::getUsedColumns(getOperation());
+   used.insert(ColumnSet::fromArrayAttr(getLeftCols()));
+   used.insert(ColumnSet::fromArrayAttr(getRightCols()));
+   getOperation()->walk([&](mlir::relalg::AggrFuncOp aggrFn) {
+      used.insert(&aggrFn.getAttr().getColumn());
+   });
+   return used;
+}
+ColumnSet GroupJoinOp::getAvailableColumns() {
+   ColumnSet available = getCreatedColumns();
+   available.insert(ColumnSet::fromArrayAttr(getLeftCols()));
+   available.insert(ColumnSet::fromArrayAttr(getRightCols()));
+   return available;
+}
 ColumnSet WindowOp::getCreatedColumns() {
    return ColumnSet::fromArrayAttr(getComputedCols());
 }
@@ -353,6 +371,30 @@ mlir::relalg::FunctionalDependencies mlir::relalg::SelectionOp::getFDs() {
    }
    return dependencies;
 }
+mlir::relalg::FunctionalDependencies mlir::relalg::InnerJoinOp::getFDs() {
+   FunctionalDependencies dependencies = mlir::relalg::detail::getFDs(getOperation());
+   if (!getPredicateBlock().empty()) {
+      if (auto returnOp = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(getPredicateBlock().getTerminator())) {
+         if (returnOp.getResults().size() == 1) {
+            if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(returnOp.getResults()[0].getDefiningOp())) {
+               if (cmpOp.isEqualityPred(false)) {
+                  if (auto getColLeft = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.getLeft().getDefiningOp())) {
+                     if (auto getColRight = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.getRight().getDefiningOp())) {
+                        mlir::relalg::ColumnSet left;
+                        left.insert(&getColLeft.getAttr().getColumn());
+                        mlir::relalg::ColumnSet right;
+                        right.insert(&getColRight.getAttr().getColumn());
+                        dependencies.insert(left, right);
+                        dependencies.insert(right, left);
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+   return dependencies;
+}
 ColumnSet mlir::relalg::AggregationOp::getAvailableColumns() {
    ColumnSet available = getCreatedColumns();
    available.insert(ColumnSet::fromArrayAttr(getGroupByCols()));
@@ -512,4 +554,5 @@ mlir::LogicalResult mlir::relalg::AntiSemiJoinOp::foldColumns(mlir::relalg::Colu
    replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
    return success();
 }
+
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"

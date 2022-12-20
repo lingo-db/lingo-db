@@ -30,11 +30,12 @@ void mlir::relalg::createQueryOptPipeline(mlir::OpPassManager& pm, runtime::Data
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createReduceGroupByKeysPass());
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createExpandTransitiveEqualities());
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createOptimizeJoinOrderPass());
+
+   pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createCombinePredicatesPass());
+   pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createOptimizeImplementationsPass());
    if (db) {
       pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createDetachMetaDataPass());
    }
-   pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createCombinePredicatesPass());
-   pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createOptimizeImplementationsPass());
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createIntroduceTmpPass());
    pm.addPass(mlir::createCanonicalizerPass());
 }
