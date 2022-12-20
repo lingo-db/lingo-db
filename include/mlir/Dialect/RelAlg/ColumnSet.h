@@ -96,6 +96,11 @@ class ColumnSet {
       res.insert(&attrRef.getColumn());
       return res;
    }
+   static ColumnSet from(const mlir::tuples::Column* col) {
+      ColumnSet res;
+      res.insert(col);
+      return res;
+   }
 };
 } // namespace mlir::relalg
 #endif // MLIR_DIALECT_RELALG_COLUMNSET_H

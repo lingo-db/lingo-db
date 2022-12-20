@@ -141,7 +141,6 @@ ColumnSet TopKOp::getUsedColumns() {
    return used;
 }
 
-
 ColumnSet ConstRelationOp::getCreatedColumns() {
    return ColumnSet::fromArrayAttr(getColumns());
 }
@@ -330,6 +329,30 @@ mlir::relalg::FunctionalDependencies BaseTableOp::getFDs() {
    dependencies.insert(pk, right);
    return dependencies;
 }
+mlir::relalg::FunctionalDependencies mlir::relalg::SelectionOp::getFDs() {
+   FunctionalDependencies dependencies = getChildren()[0].getFDs();
+   if (!getPredicateBlock().empty()) {
+      if (auto returnOp = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(getPredicateBlock().getTerminator())) {
+         if (returnOp.getResults().size() == 1) {
+            if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(returnOp.getResults()[0].getDefiningOp())) {
+               if (cmpOp.isEqualityPred(false)) {
+                  if (auto getColLeft = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.getLeft().getDefiningOp())) {
+                     if (auto getColRight = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.getRight().getDefiningOp())) {
+                        mlir::relalg::ColumnSet left;
+                        left.insert(&getColLeft.getAttr().getColumn());
+                        mlir::relalg::ColumnSet right;
+                        right.insert(&getColRight.getAttr().getColumn());
+                        dependencies.insert(left, right);
+                        dependencies.insert(right, left);
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+   return dependencies;
+}
 ColumnSet mlir::relalg::AggregationOp::getAvailableColumns() {
    ColumnSet available = getCreatedColumns();
    available.insert(ColumnSet::fromArrayAttr(getGroupByCols()));
@@ -462,12 +485,12 @@ mlir::LogicalResult mlir::relalg::MapOp::eliminateDeadColumns(mlir::relalg::Colu
    if (results.size() == returnOp.getNumOperands()) {
       return mlir::failure();
    }
-   if(results.size()==0){
-      newStream=this->getRel();
+   if (results.size() == 0) {
+      newStream = this->getRel();
       return mlir::success();
    }
    returnOp->setOperands(results);
-   setComputedColsAttr(mlir::ArrayAttr::get(getContext(),resultingColumns));
+   setComputedColsAttr(mlir::ArrayAttr::get(getContext(), resultingColumns));
    return mlir::success();
 }
 mlir::LogicalResult mlir::relalg::SelectionOp::foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo) {

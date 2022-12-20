@@ -140,6 +140,7 @@ def SelectionOp : RelAlg_Op<"selection",
     let assemblyFormat = [{ $rel custom<CustRegion>($predicate) attr-dict-with-keyword }];
     let extraClassDeclaration = [{
         mlir::LogicalResult foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo);
+        mlir::relalg::FunctionalDependencies getFDs();
     }];
 }
 
