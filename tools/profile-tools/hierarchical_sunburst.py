@@ -66,6 +66,29 @@ def hierarchical_sunburst(profile_data, colo_map,cond=""):
         color=curr["color"]
         colors.append("#ffffff" if color is None else color)
 
+    con.execute(
+        """select symbol, count(*) as cnt
+           from event e
+           where e.jit_srcline is null
+           group by symbol
+           """)
+    unknown = con.fetchall()
+    total_unknown=0
+    for u in unknown:
+        id = "id_" + str(u[0])
+        names.append(u[0])
+        ids.append(id)
+        total_unknown+=u[1]
+        values.append(u[1])
+        parents.append("unknown")
+        colors.append("#333333")
+    if len(unknown)>0:
+        id = "unknown"
+        names.append("unknown")
+        ids.append(id)
+        values.append(total_unknown)
+        parents.append("")
+        colors.append("#999999")
     import plotly.express as px
 
     fig = px.sunburst(
