@@ -1382,6 +1382,7 @@ class PureLookupHashMapLowering : public TupleStreamConsumerLowering<mlir::subop
       Type bucketPtrType = util::RefType::get(context, entryType);
       Type doneType = rewriter.getI1Type();
       Value ptr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
+      ptr =rewriter.create<util::FilterTaggedPtr>(loc,ptr.getType(),ptr,hashed);
 
       auto whileOp = rewriter.create<scf::WhileOp>(loc, bucketPtrType, ValueRange({ptr}));
       Block* before = rewriter.createBlock(&whileOp.getBefore(), {}, bucketPtrType, {loc});
@@ -1511,9 +1512,10 @@ class LookupHashMapLowering : public TupleStreamConsumerLowering<mlir::subop::Lo
       // ptr = &hashtable[position]
       Type bucketPtrType = util::RefType::get(context, entryType);
       Type doneType = rewriter.getI1Type();
-      Value ptr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
+      Value firstPtr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
+      firstPtr =rewriter.create<util::FilterTaggedPtr>(loc,firstPtr.getType(),firstPtr,hashed);
 
-      auto whileOp = rewriter.create<scf::WhileOp>(loc, bucketPtrType, ValueRange({ptr}));
+      auto whileOp = rewriter.create<scf::WhileOp>(loc, bucketPtrType, ValueRange({firstPtr}));
       Block* before = rewriter.createBlock(&whileOp.getBefore(), {}, bucketPtrType, {loc});
       Block* after = rewriter.createBlock(&whileOp.getAfter(), {}, bucketPtrType, {loc});
 

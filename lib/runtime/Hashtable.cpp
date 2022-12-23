@@ -7,12 +7,12 @@ void runtime::Hashtable::resize() {
    size_t newHtSize = oldHtSize * 2;
    ht.setNewSize(newHtSize);
    hashMask = newHtSize - 1;
-   values.iterate([&](uint8_t* entryRawPtr){
+   values.iterate([&](uint8_t* entryRawPtr) {
       auto* entry = (Entry*) entryRawPtr;
       auto pos = entry->hashValue & hashMask;
       auto* previousPtr = ht.at(pos);
-      ht.at(pos) = entry;
-      entry->next = previousPtr;
+      ht.at(pos) = runtime::tag(entry, previousPtr, entry->hashValue);
+      entry->next = runtime::untag(previousPtr);
    });
 }
 void runtime::Hashtable::destroy(runtime::Hashtable* ht) {
@@ -26,9 +26,9 @@ runtime::Hashtable::Entry* runtime::Hashtable::insert(size_t hash) {
    Entry* res = (Entry*) values.insert();
    auto pos = hash & hashMask;
    auto* previousPtr = ht.at(pos);
-   res->next = previousPtr;
+   ht.at(pos) = runtime::tag(res, previousPtr, hash);
+   res->next = runtime::untag(previousPtr);
    res->hashValue = hash;
-   ht.at(pos) = res;
    return res;
 }
 

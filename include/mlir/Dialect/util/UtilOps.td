@@ -67,6 +67,11 @@ def HashCombine : Util_Op<"hash_combine",[Pure]> {
     let results = (outs Index:$hash);
     let assemblyFormat = "$h1 `,` $h2 attr-dict";
 }
+def TagPtr : Util_Op<"tag_ptr",[Pure]> {
+    let arguments = (ins RefType:$ref,Index:$hash);
+    let results = (outs RefType:$res);
+    let assemblyFormat = "$hash `,` $ref `:` type($ref) `->` type($res) attr-dict";
+}
 def FilterTaggedPtr : Util_Op<"filter_tagged_ptr",[Pure]> {
     let arguments = (ins RefType:$ref,Index:$hash);
     let results = (outs RefType:$res);
