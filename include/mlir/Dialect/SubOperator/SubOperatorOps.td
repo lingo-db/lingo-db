@@ -238,7 +238,7 @@ def SetResultOp : SubOperator_Op<"set_result"> {
 // Creating Tuple Streams
 //===----------------------------------------------------------------------===//
 
-def ScanOp : SubOperator_Op<"scan", [Pure,SubOperator]> {
+def ScanOp : SubOperator_Op<"scan", [Pure,SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let summary = "scan state (sequentially)";
 
     let arguments = (ins AnyType : $state, DictionaryAttr : $mapping );
@@ -257,7 +257,7 @@ def ScanListOp : SubOperator_Op<"scan_list", [Pure,SubOperator,DeclareOpInterfac
     let assemblyFormat = [{  $list `:` type($list) custom<CustDef>($elem) attr-dict }];
 }
 
-def ScanRefsOp : SubOperator_Op<"scan_refs", [Pure,SubOperator]> {
+def ScanRefsOp : SubOperator_Op<"scan_refs", [Pure,SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let summary = "scan state (sequentially) and emits references to its elements";
 
     let arguments = (ins AnyType : $state, ColumnDefAttr:$ref);
@@ -502,7 +502,7 @@ def GatherOp : SubOperator_Op<"gather",[SubOperator,DeclareOpInterfaceMethods<St
         std::vector<std::string> getReadMembers();
     }];
 }
-def ScatterOp : SubOperator_Op<"scatter",[SubOperator]> {
+def ScatterOp : SubOperator_Op<"scatter",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let summary = "scatter";
 
     let arguments = (ins TupleStream : $stream, ColumnRefAttr: $ref, DictionaryAttr : $mapping );
@@ -512,7 +512,7 @@ def ScatterOp : SubOperator_Op<"scatter",[SubOperator]> {
     }];
 }
 
-def ReduceOp : SubOperator_Op<"reduce",[SubOperator]> {
+def ReduceOp : SubOperator_Op<"reduce",[SubOperator,]> {
   let summary = "reduce";
   let description =[{
   ```mlir

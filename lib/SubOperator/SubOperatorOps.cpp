@@ -1110,11 +1110,38 @@ void subop::ScanListOp::updateStateType(mlir::subop::SubOpStateUsageTransformer&
 void subop::ScanListOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
    assert(false && "should not happen");
 }
+void subop::ScanRefsOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   if (state == getState() && newType != state.getType()) {
+      auto newRefType = transformer.getNewRefType(this->getOperation(), getRef().getColumn().type);
+      setRefAttr(transformer.createReplacementColumn(getRefAttr(), newRefType));
+   }
+}
+void subop::ScanRefsOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
+   assert(false && "should not happen");
+}
+
+void subop::ScanOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   if (state == getState() && newType != state.getType()) {
+      setMappingAttr(transformer.updateMapping(getMappingAttr()));
+   }
+}
+void subop::ScanOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
+   assert(false && "should not happen");
+}
 
 void subop::GatherOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
    assert(false && "should not happen");
 }
 void subop::GatherOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
+   if (&getRef().getColumn() == oldColumn) {
+      setRefAttr(transformer.getColumnManager().createRef(newColumn));
+      setMappingAttr(transformer.updateMapping(getMappingAttr()));
+   }
+}
+void subop::ScatterOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   assert(false && "should not happen");
+}
+void subop::ScatterOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
    if (&getRef().getColumn() == oldColumn) {
       setRefAttr(transformer.getColumnManager().createRef(newColumn));
       setMappingAttr(transformer.updateMapping(getMappingAttr()));
