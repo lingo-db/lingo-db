@@ -1,11 +1,8 @@
 #include "frontend/SQL/Parser.h"
+#include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 #include <regex>
 
-static std::string getUniqueSubOpMember(std::string name) {
-   static std::unordered_map<std::string, size_t> counts;
-   return name + "p" + std::to_string(counts[name]++); //todo: very hacky
-}
 frontend::sql::ExpressionType frontend::sql::stringToExpressionType(const std::string& parserStr) {
    std::string str = parserStr;
    std::transform(str.begin(), str.end(), str.begin(), ::toupper);
@@ -1200,10 +1197,10 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
             std::vector<mlir::Attribute> names;
             std::vector<mlir::Attribute> colMemberNames;
             std::vector<mlir::Attribute> colTypes;
-
+            auto& memberManager = builder.getContext()->getLoadedDialect<mlir::subop::SubOperatorDialect>()->getMemberManager();
             for (auto x : targetInfo.namedResults) {
                names.push_back(builder.getStringAttr(x.first));
-               auto colMemberName = getUniqueSubOpMember(x.first);
+               auto colMemberName = memberManager.getUniqueMember(x.first);
                auto columnType = x.second->type;
                attrs.push_back(attrManager.createRef(x.second));
                colTypes.push_back(mlir::TypeAttr::get(columnType));
@@ -1432,8 +1429,9 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
    std::vector<mlir::Attribute> orderedColNamesAttrs;
    std::vector<mlir::Attribute> orderedColAttrs;
    std::vector<mlir::Attribute> colTypes;
+   auto& memberManager = builder.getContext()->getLoadedDialect<mlir::subop::SubOperatorDialect>()->getMemberManager();
    for (auto x : tableMetaData->getOrderedColumns()) {
-      colMemberNames.push_back(builder.getStringAttr(getUniqueSubOpMember(x)));
+      colMemberNames.push_back(builder.getStringAttr(memberManager.getUniqueMember(x)));
       orderedColNamesAttrs.push_back(builder.getStringAttr(x));
       orderedColAttrs.push_back(insertedCols.at(x));
       colTypes.push_back(mlir::TypeAttr::get(insertedCols.at(x).cast<mlir::tuples::ColumnRefAttr>().getColumn().type));

@@ -12,6 +12,8 @@ void mlir::subop::ColumnUsageAnalysis::analyze(mlir::Operation* op, mlir::Attrib
       }
    } else if (auto columnRefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnRefAttr>()) {
       usedColumns[op].insert(&columnRefAttr.getColumn());
+      operationsUsingColumn[&columnRefAttr.getColumn()].insert(op);
+
    } else if (auto columnDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>()) {
       analyze(op, columnDefAttr.getFromExisting());
    }

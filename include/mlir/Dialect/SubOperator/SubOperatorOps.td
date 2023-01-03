@@ -24,7 +24,11 @@ def SubOperator_Dialect : Dialect {
             private:
             void registerTypes();
             void registerAttrs();
+            MemberManager memberManager;
             public:
+            MemberManager& getMemberManager(){
+                return memberManager;
+            }
         }];
     let useDefaultTypePrinterParser=1;
     let useDefaultAttributePrinterParser=1;
@@ -72,6 +76,14 @@ def SimpleState : SubOperator_Type<"SimpleState", "simple_state",[State,LookupAb
 }
 def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,LookupAbleState]> {
     let summary = "simple state with multiple members";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let extraClassDeclaration = [{
+        StateMembersAttr getMembers();
+    }];
+}
+def MultiMap : SubOperator_Type<"MultiMap", "multimap",[State,LookupAbleState]> {
+    let summary = "multi map: key -> [values]";
     let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
     let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
     let extraClassDeclaration = [{
@@ -176,6 +188,18 @@ def ContinuousViewEntryRef : SubOperator_Type<"ContinuousViewEntryRef", "contino
         StateMembersAttr getMembers(){ return getView().getMembers();}
     }];
 }
+def MultiMapEntryRef : SubOperator_Type<"MultiMapEntryRef", "multi_map_entry_ref",[StateEntryReference]> {
+    let summary = "reference to entry of some state";
+    let parameters = (ins "MultiMapType":$multi_map);
+    let assemblyFormat = "`<` $multi_map `>`";
+    let extraClassDeclaration = [{
+        bool isReadable(){return true;}
+        bool isWriteable(){return true;}
+        bool isStable(){return true;}
+        bool canBeOffset(){return true;}
+        StateMembersAttr getMembers(){ return getMultiMap().getMembers();}
+    }];
+}
 def EntryList : SubOperator_Type<"List", "list"> {
     let summary = "list type";
     let parameters = (ins "StateEntryReference":$t);
@@ -225,7 +249,7 @@ def ScanOp : SubOperator_Op<"scan", [Pure,SubOperator]> {
     }];
 }
 
-def ScanListOp : SubOperator_Op<"scan_list", [Pure,SubOperator]> {
+def ScanListOp : SubOperator_Op<"scan_list", [Pure,SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let summary = "scan state (sequentially)";
 
     let arguments = (ins AnyType : $list, ColumnDefAttr: $elem);
@@ -298,7 +322,7 @@ def RenamingOp : SubOperator_Op<"rename", [Pure,SubOperator]> {
     let assemblyFormat = [{ $stream `renamed` `:` custom<CustDefArr>($columns) attr-dict-with-keyword }];
 }
 
-def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator]> {
+def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
    let summary = "compute nested map";
   let description = [{#
      Example:
@@ -468,7 +492,7 @@ def UnwrapOptionalRefOp : SubOperator_Op<"unwrap_optional_ref",[SubOperator]> {
 //===----------------------------------------------------------------------===//
 
 
-def GatherOp : SubOperator_Op<"gather",[SubOperator]> {
+def GatherOp : SubOperator_Op<"gather",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let summary = "scatter";
 
     let arguments = (ins TupleStream : $stream, ColumnRefAttr: $ref, DictionaryAttr : $mapping );

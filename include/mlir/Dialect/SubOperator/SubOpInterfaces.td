@@ -25,6 +25,23 @@ def SubOperator : OpInterface<"SubOperator"> {
 
 }
 
+def StateUsingSubOperator : OpInterface<"StateUsingSubOperator"> {
+  let cppNamespace = "::mlir::subop";
+
+  let methods = [
+    InterfaceMethod<
+      /*description=*/"",
+      /*retTy=*/"void",
+      /*methodName=*/"updateStateType",(ins "mlir::subop::SubOpStateUsageTransformer&":$transformer,"mlir::Value":$state,"mlir::Type":$newType)
+    >,
+    InterfaceMethod<
+      /*description=*/"",
+      /*retTy=*/"void",
+      /*methodName=*/"replaceColumns",(ins "mlir::subop::SubOpStateUsageTransformer&":$transformer,"mlir::tuples::Column*":$oldColumn,"mlir::tuples::Column*":$newColumn)
+    >,
+  ];
+
+}
 def LookupAbleState : TypeInterface<"LookupAbleState"> {
   let cppNamespace = "::mlir::subop";
   let methods = [

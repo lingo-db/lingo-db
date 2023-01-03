@@ -356,6 +356,7 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
    executer->fromData(query);
    executer->setExecutionContext(&context);
+   std::cerr << "executing:" << description << std::endl;
    executer->execute();
    std::string result = std::to_string(resultHasherRef.numValues) + " values hashing to " + resultHasherRef.hash + "\n";
    auto resultLines = std::regex_replace(resultHasherRef.lines, std::regex("\\s+\n"), "\n");

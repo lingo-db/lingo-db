@@ -980,14 +980,12 @@ class UnionLowering : public OpConversionPattern<mlir::subop::UnionOp> {
       return mlir::success();
    }
 };
-static std::string getUniqueMember(std::string name) {
-   static std::unordered_map<std::string, size_t> counts;
-   return name + "s" + std::to_string(counts[name]++);
-}
+
 class UnionMaterializeLowering : public OpConversionPattern<mlir::subop::UnionOp> {
    public:
    using OpConversionPattern<mlir::subop::UnionOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::subop::UnionOp unionOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto& memberManager=getContext()->getLoadedDialect<mlir::subop::SubOperatorDialect>()->getMemberManager();
       bool ready = llvm::all_of(unionOp.getStreams(), [](mlir::Value v) { return mlir::isa_and_nonnull<mlir::subop::InFlightOp>(v.getDefiningOp()); });
       if (!ready || !shouldUnionBeMaterialized(unionOp)) return failure();
       auto firstStream = mlir::cast<mlir::subop::InFlightOp>(unionOp.getStreams()[0].getDefiningOp());
@@ -1005,7 +1003,7 @@ class UnionMaterializeLowering : public OpConversionPattern<mlir::subop::UnionOp
       for (auto m : firstStream.getColumns()) {
          auto* column = &m.cast<mlir::tuples::ColumnDefAttr>().getColumn();
          if (commonColumns.contains(column)) {
-            auto name = getUniqueMember("tmp_union");
+            auto name = memberManager.getUniqueMember("tmp_union");
             types.push_back(mlir::TypeAttr::get(typeConverter->convertType(column->type)));
             names.push_back(rewriter.getStringAttr(name));
             defMapping.push_back(rewriter.getNamedAttr(name, m));
@@ -1609,7 +1607,8 @@ class DefaultGatherOpLowering : public TupleStreamConsumerLowering<mlir::subop::
          values[name] = unpackedValues[i];
       }
       for (auto x : gatherOp.getMapping()) {
-         mapping.define(x.getValue().cast<mlir::tuples::ColumnDefAttr>(), values[x.getName().str()]);
+         auto memberName=x.getName().str();
+         mapping.define(x.getValue().cast<mlir::tuples::ColumnDefAttr>(), values.at(memberName));
       }
       newStream = mapping.createInFlight(rewriter);
       return success();
@@ -2105,6 +2104,7 @@ mlir::subop::createLowerSubOpPass() {
 void mlir::subop::createLowerSubOpPipeline(mlir::OpPassManager& pm) {
    pm.addPass(mlir::subop::createFoldColumnsPass());
    pm.addPass(mlir::subop::createReuseLocalPass());
+   pm.addPass(mlir::subop::createSpecializeSubOpPass());
    pm.addPass(mlir::subop::createNormalizeSubOpPass());
    pm.addPass(mlir::subop::createPullGatherUpPass());
    pm.addPass(mlir::subop::createEnforceOrderPass());

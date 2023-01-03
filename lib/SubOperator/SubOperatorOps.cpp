@@ -1070,15 +1070,55 @@ mlir::LogicalResult subop::MaterializeOp::foldColumns(mlir::subop::ColumnFoldInf
 
    std::vector<mlir::NamedAttribute> newMapping;
    mlir::OpBuilder b(getContext());
-   for(auto m:getMapping()){
-      auto col=m.getValue().cast<mlir::tuples::ColumnRefAttr>();
-      if(columnInfo.directMappings.contains(&col.getColumn())){
-         col=colManager.createRef(columnInfo.directMappings[&col.getColumn()]);
+   for (auto m : getMapping()) {
+      auto col = m.getValue().cast<mlir::tuples::ColumnRefAttr>();
+      if (columnInfo.directMappings.contains(&col.getColumn())) {
+         col = colManager.createRef(columnInfo.directMappings[&col.getColumn()]);
       }
-      newMapping.push_back(b.getNamedAttr(m.getName().getValue(),col));
+      newMapping.push_back(b.getNamedAttr(m.getName().getValue(), col));
    }
    setMappingAttr(b.getDictionaryAttr(newMapping));
    return mlir::success();
+}
+
+void subop::NestedMapOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   assert(false && "should not happen");
+}
+
+void subop::NestedMapOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
+   std::vector<Attribute> newColumns;
+   for (auto col : getParameters()) {
+      auto colRef = col.cast<mlir::tuples::ColumnRefAttr>();
+      if (&colRef.getColumn() == oldColumn) {
+         auto argumentPos = newColumns.size() + 1;
+         transformer.updateValue(getRegion().getArgument(argumentPos), newColumn->type);
+         getRegion().getArgument(argumentPos).setType(newColumn->type);
+         newColumns.push_back(transformer.getColumnManager().createRef(newColumn));
+      } else {
+         newColumns.push_back(col);
+      }
+   }
+   setParametersAttr(mlir::OpBuilder(getContext()).getArrayAttr(newColumns));
+}
+
+void subop::ScanListOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   if (state == getList() && newType != state.getType()) {
+      auto newRefType = transformer.getNewRefType(this->getOperation(), getElem().getColumn().type);
+      setElemAttr(transformer.createReplacementColumn(getElemAttr(), newRefType));
+   }
+}
+void subop::ScanListOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
+   assert(false && "should not happen");
+}
+
+void subop::GatherOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   assert(false && "should not happen");
+}
+void subop::GatherOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
+   if (&getRef().getColumn() == oldColumn) {
+      setRefAttr(transformer.getColumnManager().createRef(newColumn));
+      setMappingAttr(transformer.updateMapping(getMappingAttr()));
+   }
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"

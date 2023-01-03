@@ -5,7 +5,9 @@ add_mlir_dialect_library(MLIRSubOperator
         SubOperatorAttributes.cpp
         SubOpInterfaces.cpp
         Transforms/SubOpDependencyAnalysis.cpp
+        Transforms/SubOpStateUsageTransformer.cpp
         Transforms/ReuseLocalPass.cpp
+        Transforms/SpecializeSubOpPass.cpp
         Transforms/FoldColumnsPass.cpp
         Transforms/Passes.cpp
         Transforms/EnforceOrder.cpp
