@@ -262,20 +262,26 @@ def ScanOp : SubOperator_Op<"scan", [Pure,SubOperator,DeclareOpInterfaceMethods<
     }];
 }
 
-def ScanListOp : SubOperator_Op<"scan_list", [Pure,SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
+def ScanListOp : SubOperator_Op<"scan_list", [Pure,SubOperator,ReferenceProducer,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let summary = "scan state (sequentially)";
 
     let arguments = (ins AnyType : $list, ColumnDefAttr: $elem);
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $list `:` type($list) custom<CustDef>($elem) attr-dict }];
+    let extraClassDeclaration = [{
+        mlir::tuples::ColumnDefAttr getProducedReference(){ return getElem(); }
+    }];
 }
 
-def ScanRefsOp : SubOperator_Op<"scan_refs", [Pure,SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
+def ScanRefsOp : SubOperator_Op<"scan_refs", [Pure,SubOperator,ReferenceProducer,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let summary = "scan state (sequentially) and emits references to its elements";
 
     let arguments = (ins AnyType : $state, ColumnDefAttr:$ref);
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $state `:` type($state) custom<CustDef>($ref) attr-dict }];
+    let extraClassDeclaration = [{
+        mlir::tuples::ColumnDefAttr getProducedReference(){ return getRef(); }
+    }];
 }
 def GenerateOp : SubOperator_Op<"generate",[Pure,SubOperator]> {
     let summary = "generate tuples using imperative code";
@@ -455,7 +461,7 @@ def MaterializeOp : SubOperator_Op<"materialize",[SubOperator,DeclareOpInterface
     }];
 }
 
-def LookupOrInsertOp : SubOperator_Op<"lookup_or_insert",[SubOperator]> {
+def LookupOrInsertOp : SubOperator_Op<"lookup_or_insert",[SubOperator,ReferenceProducer]> {
     let summary = "performs a lookup in a state and annotates the result as attribute ";
     let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
     let results = (outs TupleStream: $res);
@@ -463,10 +469,11 @@ def LookupOrInsertOp : SubOperator_Op<"lookup_or_insert",[SubOperator]> {
       let hasCustomAssemblyFormat = 1;
       let extraClassDeclaration = [{
           std::vector<std::string> getWrittenMembers();
+          mlir::tuples::ColumnDefAttr getProducedReference(){ return getRef(); }
       }];
 }
 
-def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
+def LookupOp : SubOperator_Op<"lookup",[SubOperator,ReferenceProducer]> {
     let summary = "performs a lookup in a state and annotates the result as attribute ";
     let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
     let results = (outs TupleStream: $res);
@@ -474,6 +481,7 @@ def LookupOp : SubOperator_Op<"lookup",[SubOperator]> {
       let hasCustomAssemblyFormat = 1;
       let extraClassDeclaration = [{
           std::vector<std::string> getReadMembers();
+          mlir::tuples::ColumnDefAttr getProducedReference(){ return getRef(); }
       }];
 }
 def GetBeginReferenceOp : SubOperator_Op<"get_begin_ref",[SubOperator]> {
@@ -525,7 +533,7 @@ def ScatterOp : SubOperator_Op<"scatter",[SubOperator,DeclareOpInterfaceMethods<
     }];
 }
 
-def ReduceOp : SubOperator_Op<"reduce",[SubOperator,]> {
+def ReduceOp : SubOperator_Op<"reduce",[SubOperator]> {
   let summary = "reduce";
   let description =[{
   ```mlir

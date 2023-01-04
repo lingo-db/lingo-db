@@ -25,6 +25,33 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
       for (auto gatherOp : gatherOps) {
          std::vector<mlir::NamedAttribute> remaining = gatherOp.getMapping().getValue();
          gatherOp.getRes().replaceAllUsesWith(gatherOp.getStream());
+         auto* currentChild = gatherOp.getStream().getDefiningOp();
+         mlir::Block* safeBlock = gatherOp->getBlock();
+         while (currentChild) {
+            if (auto refProducer = mlir::dyn_cast_or_null<mlir::subop::ReferenceProducer>(currentChild)) {
+               if (&refProducer.getProducedReference().getColumn() == &gatherOp.getRef().getColumn()) {
+                  mlir::Block* minimalSafeBlock = nullptr;
+                  for (auto operand : currentChild->getOperands()) {
+                     if (!operand.getType().isa<mlir::tuples::TupleStreamType>()) {
+                        mlir::Block* localSafeBlock;
+                        if (auto blockArgument = operand.dyn_cast<mlir::BlockArgument>()) {
+                           localSafeBlock = blockArgument.getOwner()->getParentOp()->getBlock();
+                        } else if (auto* definingOp = operand.getDefiningOp()) {
+                           localSafeBlock = definingOp->getBlock();
+                        }
+                        if (minimalSafeBlock == nullptr || minimalSafeBlock->getParentOp()->isAncestor(localSafeBlock->getParentOp())) {
+                           minimalSafeBlock = localSafeBlock;
+                        }
+                     }
+                  }
+                  if (minimalSafeBlock != nullptr) {
+                     safeBlock = minimalSafeBlock;
+                  }
+                  break;
+               }
+            }
+            currentChild = currentChild->getNumOperands() == 1 ? currentChild->getOperand(0).getDefiningOp() : nullptr;
+         }
          mlir::Value currStream = gatherOp.getStream();
          gatherOp->setOperand(0, gatherOp.getResult());
          mlir::Operation* currentParent;
@@ -67,7 +94,15 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
          }
          if (!currStream && currentParent) {
             if (mlir::isa<mlir::tuples::ReturnOp>(currentParent)) {
-               currStream = lastStream;
+               if (auto nestedMapOp = mlir::dyn_cast_or_null<mlir::subop::NestedMapOp>(currentParent->getParentOp())) {
+                  if (safeBlock->getParentOp()->isProperAncestor(currentParent->getParentOp())) {
+                     currStream = nestedMapOp.getResult();
+                  } else {
+                     currStream = lastStream;
+                  }
+               } else {
+                  currStream = lastStream;
+               }
             }
          }
          if (!remaining.empty() && currStream) {

@@ -80,4 +80,10 @@ def ColumnFoldable : OpInterface<"ColumnFoldable"> {
     ];
 }
 
+def ReferenceProducer : OpInterface<"ReferenceProducer"> {
+  let cppNamespace = "::mlir::subop";
+    let methods = [
+    InterfaceMethod<"","mlir::tuples::ColumnDefAttr", "getProducedReference",(ins )>,
+    ];
+}
 #endif// Interfaces
