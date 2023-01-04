@@ -200,6 +200,19 @@ def MultiMapEntryRef : SubOperator_Type<"MultiMapEntryRef", "multi_map_entry_ref
         StateMembersAttr getMembers(){ return getMultiMap().getMembers();}
     }];
 }
+def HashMapEntryRef : SubOperator_Type<"HashMapEntryRef", "hash_map_entry_ref",[StateEntryReference]> {
+    let summary = "reference to entry of some state";
+    let parameters = (ins "HashMapType":$hash_map);
+    let assemblyFormat = "`<` $hash_map `>`";
+    let extraClassDeclaration = [{
+        bool isReadable(){return true;}
+        bool isWriteable(){return true;}
+        bool isStable(){return true;}
+        bool canBeOffset(){return true;}
+        StateMembersAttr getMembers();
+    }];
+    let extraClassDefinition= [{ StateMembersAttr $cppClass::getMembers(){ return getHashMap().getMembers();} }];
+}
 def EntryList : SubOperator_Type<"List", "list"> {
     let summary = "list type";
     let parameters = (ins "StateEntryReference":$t);

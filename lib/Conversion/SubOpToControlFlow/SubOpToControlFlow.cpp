@@ -758,43 +758,22 @@ class ScanRefsContinuousViewLowering : public OpConversionPattern<mlir::subop::S
    }
 };
 
-class ScanHashMapLowering : public OpConversionPattern<mlir::subop::ScanOp> {
+class ScanHashMapLowering : public OpConversionPattern<mlir::subop::ScanRefsOp> {
    public:
-   using OpConversionPattern<mlir::subop::ScanOp>::OpConversionPattern;
+   using OpConversionPattern<mlir::subop::ScanRefsOp>::OpConversionPattern;
 
-   LogicalResult matchAndRewrite(mlir::subop::ScanOp scanOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!scanOp.getState().getType().isa<mlir::subop::HashMapType>()) return failure();
-      auto hashMapType = scanOp.getState().getType().cast<mlir::subop::HashMapType>();
-      auto keyMembers = hashMapType.getKeyMembers();
-      auto valMembers = hashMapType.getValueMembers();
+   LogicalResult matchAndRewrite(mlir::subop::ScanRefsOp scanRefsOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      if (!scanRefsOp.getState().getType().isa<mlir::subop::HashMapType>()) return failure();
+      auto hashMapType = scanRefsOp.getState().getType().cast<mlir::subop::HashMapType>();
       ColumnMapping mapping;
-      auto loc = scanOp->getLoc();
+      auto loc = scanRefsOp->getLoc();
       auto it = rt::Hashtable::createIterator(rewriter, loc)({adaptor.getState()})[0];
       auto kvPtrType = mlir::util::RefType::get(getContext(), getHtKVType(hashMapType, *typeConverter));
-      implementBufferIteration(it, getHtEntryType(hashMapType, *typeConverter), scanOp->getLoc(), rewriter, [&](ConversionPatternRewriter& rewriter, mlir::Value ptr) {
+      implementBufferIteration(it, getHtEntryType(hashMapType, *typeConverter), loc, rewriter, [&](ConversionPatternRewriter& rewriter, mlir::Value ptr) {
          auto kvPtr = rewriter.create<mlir::util::TupleElementPtrOp>(loc, kvPtrType, ptr, 2);
-         auto kvLoaded = rewriter.create<mlir::util::LoadOp>(loc, kvPtr, mlir::Value());
-         auto kv = rewriter.create<mlir::util::UnPackOp>(scanOp->getLoc(), kvLoaded).getResults();
-         auto unpackedKeys = rewriter.create<mlir::util::UnPackOp>(scanOp->getLoc(), kv[0]).getResults();
-         auto unpackedVals = rewriter.create<mlir::util::UnPackOp>(scanOp->getLoc(), kv[1]).getResults();
-
-         for (auto i = 0ul; i < keyMembers.getTypes().size(); i++) {
-            auto name = keyMembers.getNames()[i].cast<mlir::StringAttr>().str();
-            if (scanOp.getMapping().contains(name)) {
-               auto columnDefAttr = scanOp.getMapping().get(name).cast<mlir::tuples::ColumnDefAttr>();
-               mapping.define(columnDefAttr, unpackedKeys[i]);
-            }
-         }
-         for (auto i = 0ul; i < valMembers.getTypes().size(); i++) {
-            auto name = valMembers.getNames()[i].cast<mlir::StringAttr>().str();
-            if (scanOp.getMapping().contains(name)) {
-               auto columnDefAttr = scanOp.getMapping().get(name).cast<mlir::tuples::ColumnDefAttr>();
-               mapping.define(columnDefAttr, unpackedVals[i]);
-            }
-         }
-
+         mapping.define(scanRefsOp.getRef(),kvPtr);
          mlir::Value newInFlight = mapping.createInFlight(rewriter);
-         rewriter.replaceOp(scanOp, newInFlight);
+         rewriter.replaceOp(scanRefsOp, newInFlight);
       });
       return success();
    }
@@ -806,9 +785,15 @@ class ScanHashMapListLowering : public OpConversionPattern<mlir::subop::ScanList
    LogicalResult matchAndRewrite(mlir::subop::ScanListOp scanOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto listType=scanOp.getList().getType().dyn_cast_or_null<mlir::subop::ListType>();
       if(!listType) return mlir::failure();
-      auto lookupRefType=listType.getT().dyn_cast_or_null<mlir::subop::LookupEntryRefType>();
-      if(!lookupRefType)return mlir::failure();
-      auto hashmapType=lookupRefType.getState().dyn_cast_or_null<mlir::subop::HashMapType>();
+      bool onlyValues=false;
+      mlir::subop::HashMapType hashmapType;
+      if(auto lookupRefType=listType.getT().dyn_cast_or_null<mlir::subop::LookupEntryRefType>()){
+         hashmapType=lookupRefType.getState().dyn_cast_or_null<mlir::subop::HashMapType>();
+         onlyValues=true;
+      }else if(auto entryRefType=listType.getT().dyn_cast_or_null<mlir::subop::HashMapEntryRefType>()){
+         hashmapType=entryRefType.getHashMap();
+      }
+
       if(!hashmapType)return mlir::failure();
       auto loc=scanOp.getLoc();
       ColumnMapping mapping;
@@ -824,8 +809,12 @@ class ScanHashMapListLowering : public OpConversionPattern<mlir::subop::ScanList
          rewriter.setInsertionPointToStart(&ifOp.getThenRegion().front());
          Value ptr = rewriter.create<util::GenericMemrefCastOp>(loc, htEntryPtrType,adaptor.getList());
          auto kvPtr = rewriter.create<mlir::util::TupleElementPtrOp>(loc, kvPtrType, ptr, 2);
-         auto valuePtr = rewriter.create<mlir::util::TupleElementPtrOp>(loc, valPtrType, kvPtr, 1);
-         mapping.define(scanOp.getElem(), valuePtr);
+         if(onlyValues) {
+            auto valuePtr = rewriter.create<mlir::util::TupleElementPtrOp>(loc, valPtrType, kvPtr, 1);
+            mapping.define(scanOp.getElem(), valuePtr);
+         }else{
+            mapping.define(scanOp.getElem(), kvPtr);
+         }
          mlir::Value newInFlight = mapping.createInFlight(rewriter);
          rewriter.replaceOp(scanOp, newInFlight);
       }
@@ -1641,6 +1630,39 @@ class ContinuousViewRefGatherOpLowering : public TupleStreamConsumerLowering<mli
       return success();
    }
 };
+class HashMapRefGatherOpLowering : public TupleStreamConsumerLowering<mlir::subop::GatherOp, 2> {
+   public:
+   using TupleStreamConsumerLowering<mlir::subop::GatherOp, 2>::TupleStreamConsumerLowering;
+
+   LogicalResult matchAndRewriteConsumer(mlir::subop::GatherOp gatherOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter, mlir::Value& newStream, ColumnMapping& mapping) const override {
+      auto refType = gatherOp.getRef().getColumn().type;
+      if (!refType.isa<mlir::subop::HashMapEntryRefType>()) { return failure(); }
+      auto keyMembers = refType.cast<mlir::subop::HashMapEntryRefType>().getHashMap().getKeyMembers();
+      auto valMembers = refType.cast<mlir::subop::HashMapEntryRefType>().getHashMap().getValueMembers();
+      auto loc=gatherOp->getLoc();
+      auto kvLoaded = rewriter.create<mlir::util::LoadOp>(loc, mapping.resolve(gatherOp.getRef()), mlir::Value());
+      auto kv = rewriter.create<mlir::util::UnPackOp>(loc, kvLoaded).getResults();
+      auto unpackedKeys = rewriter.create<mlir::util::UnPackOp>(loc, kv[0]).getResults();
+      auto unpackedVals = rewriter.create<mlir::util::UnPackOp>(loc, kv[1]).getResults();
+
+      for (auto i = 0ul; i < keyMembers.getTypes().size(); i++) {
+         auto name = keyMembers.getNames()[i].cast<mlir::StringAttr>().str();
+         if (gatherOp.getMapping().contains(name)) {
+            auto columnDefAttr = gatherOp.getMapping().get(name).cast<mlir::tuples::ColumnDefAttr>();
+            mapping.define(columnDefAttr, unpackedKeys[i]);
+         }
+      }
+      for (auto i = 0ul; i < valMembers.getTypes().size(); i++) {
+         auto name = valMembers.getNames()[i].cast<mlir::StringAttr>().str();
+         if (gatherOp.getMapping().contains(name)) {
+            auto columnDefAttr = gatherOp.getMapping().get(name).cast<mlir::tuples::ColumnDefAttr>();
+            mapping.define(columnDefAttr, unpackedVals[i]);
+         }
+      }
+      newStream = mapping.createInFlight(rewriter);
+      return success();
+   }
+};
 class TableRefGatherOpLowering : public TupleStreamConsumerLowering<mlir::subop::GatherOp, 2> {
    public:
    using TupleStreamConsumerLowering<mlir::subop::GatherOp, 2>::TupleStreamConsumerLowering;
@@ -2034,7 +2056,15 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
          }
          return mlir::TupleType::get(t.getContext(), {mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8)), mlir::IndexType::get(t.getContext())});
       }
+      if(auto hashMapEntryRefType=t.getT().dyn_cast_or_null<mlir::subop::HashMapEntryRefType>()) {
+         return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
+      }
+
       return mlir::Type();
+   });
+   typeConverter.addConversion([&](mlir::subop::HashMapEntryRefType t) -> Type {
+      auto hashMapType = t.getHashMap();
+      return mlir::util::RefType::get(t.getContext(), getHtKVType(hashMapType, typeConverter));
    });
    RewritePatternSet patterns(&getContext());
    patterns.insert<FilterLowering>(typeConverter, ctxt);
@@ -2082,6 +2112,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    patterns.insert<ScatterOpLowering>(typeConverter, ctxt);
    patterns.insert<DefaultGatherOpLowering>(typeConverter, ctxt);
    patterns.insert<TableRefGatherOpLowering>(typeConverter, ctxt);
+   patterns.insert<HashMapRefGatherOpLowering>(typeConverter, ctxt);
    patterns.insert<UnionLowering>(typeConverter, ctxt);
    patterns.insert<UnionMaterializeLowering>(typeConverter, ctxt);
    patterns.insert<GenerateLowering>(typeConverter, ctxt);

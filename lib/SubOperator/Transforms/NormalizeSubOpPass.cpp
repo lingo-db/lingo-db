@@ -50,14 +50,14 @@ class SplitGenericScan : public mlir::RewritePattern {
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto scanOp = mlir::cast<mlir::subop::ScanOp>(op);
       if (scanOp.getState().getType().isa<mlir::subop::TableType>()) return mlir::failure();
-      if (scanOp.getState().getType().isa<mlir::subop::HashMapType>()) return mlir::failure();
-      //if (scanOp.getState().getType().isa<mlir::subop::LazyMultiMapType>()) return mlir::failure();
       //todo: check that one can obtain references
       mlir::Type refType=mlir::subop::EntryRefType::get(getContext(), scanOp.getState().getType());
       if(auto continuousView=scanOp.getState().getType().dyn_cast_or_null<mlir::subop::ContinuousViewType>()){
          refType = mlir::subop::ContinuousViewEntryRefType::get(rewriter.getContext(), continuousView);
       }
-
+      if(auto hashMapType=scanOp.getState().getType().dyn_cast_or_null<mlir::subop::HashMapType>()){
+         refType = mlir::subop::HashMapEntryRefType::get(rewriter.getContext(), hashMapType);
+      }
       auto [refDef, refRef] = createColumn(refType, "scan", "ref");
       mlir::Value scanRefsOp = rewriter.create<mlir::subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
       rewriter.replaceOpWithNewOp<mlir::subop::GatherOp>(op, scanRefsOp, refRef, scanOp.getMapping());

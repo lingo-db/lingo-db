@@ -5,13 +5,15 @@ using namespace mlir::subop;
 mlir::Type SubOpStateUsageTransformer::getNewRefType(mlir::Operation* op, mlir::Type oldRefType) {
    return getNewRefTypeFn(op, oldRefType);
 }
-
-void SubOpStateUsageTransformer::updateValue(mlir::Value oldValue, mlir::Type newType, const std::unordered_map<std::string, std::string>& memberMapping) {
+void SubOpStateUsageTransformer::mapMembers(const std::unordered_map<std::string, std::string>& memberMapping) {
    this->memberMapping.insert(memberMapping.begin(), memberMapping.end());
+}
+void SubOpStateUsageTransformer::updateValue(mlir::Value oldValue, mlir::Type newType) {
    for (auto* user : oldValue.getUsers()) {
       if (auto stateUsingSubOp = mlir::dyn_cast_or_null<mlir::subop::StateUsingSubOperator>(user)) {
          stateUsingSubOp.updateStateType(*this, oldValue, newType);
       } else {
+         user->dump();
          assert(false);
       }
    }
@@ -22,6 +24,7 @@ void SubOpStateUsageTransformer::replaceColumn(mlir::tuples::Column* oldColumn, 
       if (auto stateUsingSubOp = mlir::dyn_cast_or_null<mlir::subop::StateUsingSubOperator>(user)) {
          stateUsingSubOp.replaceColumns(*this, oldColumn, newColumn);
       } else {
+         user->dump();
          assert(false);
       }
    }
