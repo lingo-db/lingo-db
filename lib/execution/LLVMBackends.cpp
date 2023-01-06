@@ -197,7 +197,7 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       totalJITTime -= translateToLLVMIRTime;
       totalJITTime -= llvmPassesTime;
 
-      std::vector<size_t> measuredTimes;
+      std::vector<double> measuredTimes;
       for (size_t i = 0; i < numRepetitions; i++) {
          auto executionStart = std::chrono::high_resolution_clock::now();
          mainFunc();
@@ -278,7 +278,7 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
       }
       setExecutionContextFunc(executionContext);
 
-      std::vector<size_t> measuredTimes;
+      std::vector<double> measuredTimes;
       for (size_t i = 0; i < numRepetitions; i++) {
          auto executionStart = std::chrono::high_resolution_clock::now();
          mainFunc();
@@ -401,7 +401,7 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
                            : /* no output */
                            : "a"(r15DefaultValue)
                            : "%r15");
-      std::vector<size_t> measuredTimes;
+      std::vector<double> measuredTimes;
       for (size_t i = 0; i < numRepetitions; i++) {
          auto executionStart = std::chrono::high_resolution_clock::now();
          mainFunc();

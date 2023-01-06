@@ -6,11 +6,14 @@
 #include "mlir/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 #include "mlir/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
+#include "mlir/Dialect/SubOperator/Transforms/Passes.h"
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 
 #include <chrono>
+#include <sstream>
+#include <unordered_set>
 namespace execution {
 static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::string fileName) {
    mlir::PassManager pm(moduleOp->getContext());
@@ -55,7 +58,27 @@ class SubOpLoweringStep : public LoweringStep {
       auto startLowerSubOp = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerSubOpPm(moduleOp->getContext());
       lowerSubOpPm.enableVerifier(verify);
-      mlir::subop::createLowerSubOpPipeline(lowerSubOpPm);
+      std::unordered_set<std::string> enabledPasses = {"GlobalOpt", "ReuseLocal", "Specialize", "PullGatherUp"};
+      if (const char* mode = std::getenv("LINGODB_SUBOP_OPTS")) {
+         enabledPasses.clear();
+         std::stringstream configList(mode);
+         std::string optPass;
+         while (std::getline(configList, optPass, ',')) {
+            enabledPasses.insert(optPass);
+         }
+      }
+      if (enabledPasses.contains("GlobalOpt"))
+         lowerSubOpPm.addPass(mlir::subop::createGlobalOptPass());
+      lowerSubOpPm.addPass(mlir::subop::createFoldColumnsPass());
+      if (enabledPasses.contains("ReuseLocal"))
+         lowerSubOpPm.addPass(mlir::subop::createReuseLocalPass());
+      lowerSubOpPm.addPass(mlir::subop::createSpecializeSubOpPass(enabledPasses.contains("Specialize")));
+      lowerSubOpPm.addPass(mlir::subop::createNormalizeSubOpPass());
+      if (enabledPasses.contains("PullGatherUp"))
+         lowerSubOpPm.addPass(mlir::subop::createPullGatherUpPass());
+      lowerSubOpPm.addPass(mlir::subop::createEnforceOrderPass());
+      lowerSubOpPm.addPass(mlir::subop::createLowerSubOpPass());
+      lowerSubOpPm.addPass(mlir::createCanonicalizerPass());
       if (mlir::failed(lowerSubOpPm.run(moduleOp))) {
          error.emit() << "Lowering of Sub-Operators to imperative operations failed";
          return;
@@ -104,9 +127,9 @@ ExecutionMode getExecutionMode() {
          runMode = ExecutionMode::PERF;
       } else if (std::string(mode) == "CHEAP") {
          runMode = ExecutionMode::CHEAP;
-      }  else if (std::string(mode) == "EXTREME_CHEAP") {
+      } else if (std::string(mode) == "EXTREME_CHEAP") {
          runMode = ExecutionMode::EXTREME_CHEAP;
-      }  else if (std::string(mode) == "DEFAULT") {
+      } else if (std::string(mode) == "DEFAULT") {
          runMode = ExecutionMode::DEFAULT;
       } else if (std::string(mode) == "DEBUGGING") {
          runMode = ExecutionMode::DEBUGGING;
@@ -114,7 +137,6 @@ ExecutionMode getExecutionMode() {
          std::cout << "using speed mode" << std::endl;
          runMode = ExecutionMode::SPEED;
       }
-
    }
    return runMode;
 }
@@ -221,7 +243,7 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    } else if (runMode == ExecutionMode::PERF) {
       config->executionBackend = createLLVMProfilingBackend();
    } else if (runMode == ExecutionMode::CHEAP) {
-#if CRANELIFT_ENABLED==1
+#if CRANELIFT_ENABLED == 1
       config->executionBackend = createCraneliftBackend();
 #else
       config->executionBackend = createDefaultLLVMBackend();

@@ -144,6 +144,8 @@ class SpecializeSubOpPass : public mlir::PassWrapper<SpecializeSubOpPass, mlir::
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SpecializeSubOpPass)
    virtual llvm::StringRef getArgument() const override { return "subop-specialize"; }
+
+   SpecializeSubOpPass(bool withOptimizations){}
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::util::UtilDialect, mlir::db::DBDialect>();
    }
@@ -162,4 +164,4 @@ class SpecializeSubOpPass : public mlir::PassWrapper<SpecializeSubOpPass, mlir::
 } // end anonymous namespace
 
 std::unique_ptr<mlir::Pass>
-mlir::subop::createSpecializeSubOpPass() { return std::make_unique<SpecializeSubOpPass>(); }
+mlir::subop::createSpecializeSubOpPass(bool withOptimizations) { return std::make_unique<SpecializeSubOpPass>(withOptimizations); }

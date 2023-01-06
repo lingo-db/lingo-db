@@ -2136,7 +2136,7 @@ void mlir::subop::createLowerSubOpPipeline(mlir::OpPassManager& pm) {
    pm.addPass(mlir::subop::createGlobalOptPass());
    pm.addPass(mlir::subop::createFoldColumnsPass());
    pm.addPass(mlir::subop::createReuseLocalPass());
-   pm.addPass(mlir::subop::createSpecializeSubOpPass());
+   pm.addPass(mlir::subop::createSpecializeSubOpPass(true));
    pm.addPass(mlir::subop::createNormalizeSubOpPass());
    pm.addPass(mlir::subop::createPullGatherUpPass());
    pm.addPass(mlir::subop::createEnforceOrderPass());

@@ -44,7 +44,7 @@ class CraneliftBackend : public execution::ExecutionBackend {
 
       auto totalJITTime = std::chrono::duration_cast<std::chrono::microseconds>(endJIT - startJIT).count() / 1000.0;
       setExecutionContextFn(executionContext);
-      std::vector<size_t> measuredTimes;
+      std::vector<double> measuredTimes;
       for (size_t i = 0; i < numRepetitions; i++) {
          auto executionStart = std::chrono::high_resolution_clock::now();
          mainFunc();

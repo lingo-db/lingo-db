@@ -17,7 +17,7 @@ void mlir::subop::registerSubOpTransformations() {
       return mlir::subop::createFoldColumnsPass();
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
-      return mlir::subop::createSpecializeSubOpPass();
+      return mlir::subop::createSpecializeSubOpPass(true);
    });
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::subop::createGlobalOptPass();
