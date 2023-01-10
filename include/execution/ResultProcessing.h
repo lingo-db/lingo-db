@@ -8,6 +8,7 @@ class ResultProcessor {
    virtual ~ResultProcessor() {}
 };
 std::unique_ptr<ResultProcessor> createTablePrinter();
+std::unique_ptr<ResultProcessor> createBatchedTablePrinter();
 std::unique_ptr<ResultProcessor> createTableRetriever(std::shared_ptr<arrow::Table>& result);
 } // namespace execution
 #endif //EXECUTION_RESULTPROCESSING_H
