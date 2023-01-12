@@ -16,7 +16,10 @@ struct ColumnUsageAnalysis {
       return usedColumns[op];
    }
    const std::unordered_set<mlir::Operation*> findOperationsUsing(mlir::tuples::Column* column) const {
-      return operationsUsingColumn.at(column);
+      if (operationsUsingColumn.contains(column)) {
+         return operationsUsingColumn.at(column);
+      }
+      return {};
    }
 };
 } // namespace mlir::subop

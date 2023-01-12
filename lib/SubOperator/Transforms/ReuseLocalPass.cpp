@@ -125,8 +125,7 @@ class ReuseHashtable : public mlir::RewritePattern {
       }
 
       if (auto scanOp = mlir::dyn_cast_or_null<mlir::subop::ScanOp>(insertOp.getStream().getDefiningOp())) {
-         if (auto htType = scanOp.getState().getType().dyn_cast_or_null<mlir::subop::HashMapType>()) {
-            htType.dump();
+         if (auto htType = scanOp.getState().getType().dyn_cast_or_null<mlir::subop::MapType>()) {
             std::vector<mlir::tuples::Column*> hashedColumns;
             for (auto m : multimapType.getKeyMembers().getNames()) {
                hashedColumns.push_back(&insertOp.getMapping().get(m.cast<mlir::StringAttr>().strref()).cast<mlir::tuples::ColumnRefAttr>().getColumn());
@@ -155,7 +154,7 @@ class ReuseHashtable : public mlir::RewritePattern {
                   return mlir::failure();
                }
             }
-            auto hmRefType = mlir::subop::HashMapEntryRefType::get(getContext(), htType);
+            auto hmRefType = mlir::subop::MapEntryRefType::get(getContext(), htType);
             mlir::subop::SubOpStateUsageTransformer transformer(analysis, getContext(), [&](mlir::Operation* op, mlir::Type type) -> mlir::Type {
                return llvm::TypeSwitch<mlir::Operation*, mlir::Type>(op)
                   .Case([&](mlir::subop::ScanListOp scanListOp) {

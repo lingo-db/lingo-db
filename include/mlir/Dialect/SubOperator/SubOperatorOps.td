@@ -74,6 +74,14 @@ def SimpleState : SubOperator_Type<"SimpleState", "simple_state",[State,LookupAb
             StateMembersAttr getValueMembers();
         }];
 }
+def Map : SubOperator_Type<"Map", "map",[State,LookupAbleState]> {
+    let summary = "simple state with multiple members";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let extraClassDeclaration = [{
+        StateMembersAttr getMembers();
+    }];
+}
 def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,LookupAbleState]> {
     let summary = "simple state with multiple members";
     let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
@@ -214,6 +222,19 @@ def MultiMapEntryRef : SubOperator_Type<"MultiMapEntryRef", "multi_map_entry_ref
         bool canBeOffset(){return true;}
         StateMembersAttr getMembers(){ return getMultiMap().getMembers();}
     }];
+}
+def MapEntryRef : SubOperator_Type<"MapEntryRef", "map_entry_ref",[StateEntryReference]> {
+    let summary = "reference to entry of some state";
+    let parameters = (ins "MapType":$map);
+    let assemblyFormat = "`<` $map `>`";
+    let extraClassDeclaration = [{
+        bool isReadable(){return true;}
+        bool isWriteable(){return true;}
+        bool isStable(){return true;}
+        bool canBeOffset(){return true;}
+        StateMembersAttr getMembers();
+    }];
+    let extraClassDefinition= [{ StateMembersAttr $cppClass::getMembers(){ return getMap().getMembers();} }];
 }
 def HashMapEntryRef : SubOperator_Type<"HashMapEntryRef", "hash_map_entry_ref",[StateEntryReference]> {
     let summary = "reference to entry of some state";

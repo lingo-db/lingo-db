@@ -293,7 +293,7 @@ class ProjectionDistinctLowering : public OpConversionPattern<mlir::relalg::Proj
       auto keyMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
       auto stateMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, {}), mlir::ArrayAttr::get(context, {}));
 
-      auto stateType = mlir::subop::HashMapType::get(rewriter.getContext(), keyMembers, stateMembers);
+      auto stateType = mlir::subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers);
       mlir::Value state = rewriter.create<mlir::subop::GenericCreateOp>(loc, stateType);
       auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
       auto lookupOp = rewriter.create<mlir::subop::LookupOrInsertOp>(loc, mlir::tuples::TupleStreamType::get(getContext()), adaptor.getRel(), state, projectionOp.getCols(), referenceDef);
@@ -555,7 +555,7 @@ class UnionDistinctLowering : public OpConversionPattern<mlir::relalg::UnionOp> 
       auto keyMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
       auto stateMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, {}), mlir::ArrayAttr::get(context, {}));
 
-      auto stateType = mlir::subop::HashMapType::get(rewriter.getContext(), keyMembers, stateMembers);
+      auto stateType = mlir::subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers);
       mlir::Value state = rewriter.create<mlir::subop::GenericCreateOp>(loc, stateType);
       auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
       mlir::Value left = mapColsToNullable(adaptor.getLeft(), rewriter, loc, projectionOp.getMapping(), 0);
@@ -626,12 +626,13 @@ class CountingSetOperationLowering : public ConversionPattern {
       auto keyMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
       auto stateMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, counterNames), mlir::ArrayAttr::get(context, counterTypes));
 
-      auto stateType = mlir::subop::HashMapType::get(rewriter.getContext(), keyMembers, stateMembers);
+      auto stateType = mlir::subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers);
       mlir::Value state = rewriter.create<mlir::subop::GenericCreateOp>(loc, stateType);
-      auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
+      auto [referenceDefLeft, referenceRefLeft] = createColumn(mlir::subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
+      auto [referenceDefRight, referenceRefRight] = createColumn(mlir::subop::LookupEntryRefType::get(context, stateType), "lookup", "ref");
       mlir::Value left = mapColsToNullable(operands[0], rewriter, loc, mapping, 0);
       mlir::Value right = mapColsToNullable(operands[1], rewriter, loc, mapping, 1);
-      auto lookupOpLeft = rewriter.create<mlir::subop::LookupOrInsertOp>(loc, mlir::tuples::TupleStreamType::get(getContext()), left, state, rewriter.getArrayAttr(refs), referenceDef);
+      auto lookupOpLeft = rewriter.create<mlir::subop::LookupOrInsertOp>(loc, mlir::tuples::TupleStreamType::get(getContext()), left, state, rewriter.getArrayAttr(refs), referenceDefLeft);
       auto* leftInitialValueBlock = new Block;
       auto* rightInitialValueBlock = new Block;
 
@@ -650,7 +651,7 @@ class CountingSetOperationLowering : public ConversionPattern {
       lookupOpLeft.getInitFn().push_back(leftInitialValueBlock);
       lookupOpLeft.getEqFn().push_back(createCompareBlock(keyTypes, rewriter, loc));
       {
-         auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, lookupOpLeft, referenceRef, rewriter.getArrayAttr({}), rewriter.getArrayAttr({counterNames[0]}));
+         auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, lookupOpLeft, referenceRefLeft, rewriter.getArrayAttr({}), rewriter.getArrayAttr({counterNames[0]}));
          mlir::Block* reduceBlock = new Block;
          mlir::Value currCounter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
          {
@@ -661,12 +662,12 @@ class CountingSetOperationLowering : public ConversionPattern {
          }
          reduceOp.getRegion().push_back(reduceBlock);
       }
-      auto lookupOpRight = rewriter.create<mlir::subop::LookupOrInsertOp>(loc, mlir::tuples::TupleStreamType::get(getContext()), right, state, rewriter.getArrayAttr(refs), referenceDef);
+      auto lookupOpRight = rewriter.create<mlir::subop::LookupOrInsertOp>(loc, mlir::tuples::TupleStreamType::get(getContext()), right, state, rewriter.getArrayAttr(refs), referenceDefRight);
       lookupOpRight.getInitFn().push_back(rightInitialValueBlock);
       lookupOpRight.getEqFn().push_back(createCompareBlock(keyTypes, rewriter, loc));
 
       {
-         auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, lookupOpRight, referenceRef, rewriter.getArrayAttr({}), rewriter.getArrayAttr({counterNames[1]}));
+         auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, lookupOpRight, referenceRefRight, rewriter.getArrayAttr({}), rewriter.getArrayAttr({counterNames[1]}));
          mlir::Block* reduceBlock = new Block;
          mlir::Value currCounter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
          {
@@ -1750,7 +1751,7 @@ static std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr> perfo
          locations.push_back(loc);
       }
       auto keyMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
-      stateType = mlir::subop::HashMapType::get(rewriter.getContext(), keyMembers, stateMembers);
+      stateType = mlir::subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers);
 
       auto createOp = rewriter.create<mlir::subop::GenericCreateOp>(loc, stateType);
       state = createOp.getRes();
@@ -1876,7 +1877,7 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
 
          auto stateMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, {rewriter.getStringAttr(bufferMember)}), mlir::ArrayAttr::get(context, {mlir::TypeAttr::get(bufferType)}));
          auto keyMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
-         auto hashMapType = mlir::subop::HashMapType::get(rewriter.getContext(), keyMembers, stateMembers);
+         auto hashMapType = mlir::subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers);
 
          auto createOp = rewriter.create<mlir::subop::GenericCreateOp>(loc, hashMapType);
          mlir::Value hashMap = createOp.getRes();
@@ -2317,7 +2318,7 @@ class GroupJoinLowering : public OpConversionPattern<mlir::relalg::GroupJoinOp> 
          otherKeyTypes.push_back((x->type));
       }
       auto keyMembers = mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, keyNames), mlir::ArrayAttr::get(context, keyTypesAttr));
-      auto stateType = mlir::subop::HashMapType::get(rewriter.getContext(), keyMembers, stateMembers);
+      auto stateType = mlir::subop::MapType::get(rewriter.getContext(), keyMembers, stateMembers);
 
       auto createOp = rewriter.create<mlir::subop::GenericCreateOp>(loc, stateType);
       auto state = createOp.getRes();

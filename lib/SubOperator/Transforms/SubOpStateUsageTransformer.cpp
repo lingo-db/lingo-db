@@ -62,7 +62,6 @@ mlir::ArrayAttr SubOpStateUsageTransformer::updateMembers(mlir::ArrayAttr curren
       return currentMembers;
    }
 }
-
 mlir::DictionaryAttr SubOpStateUsageTransformer::updateMapping(mlir::DictionaryAttr currentMapping) {
    bool anyNeedsReplacement = false;
    for (auto m : currentMapping) {

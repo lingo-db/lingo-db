@@ -196,6 +196,45 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
       return mlir::success();
    }
 };
+class MapAsHashMap : public mlir::RewritePattern {
+   const mlir::subop::ColumnUsageAnalysis& analysis;
+
+   public:
+   MapAsHashMap(mlir::MLIRContext* context, mlir::subop::ColumnUsageAnalysis& analysis)
+      : RewritePattern(mlir::subop::GenericCreateOp::getOperationName(), 1, context), analysis(analysis) {}
+   mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto createOp = mlir::cast<mlir::subop::GenericCreateOp>(op);
+      auto mapType = createOp.getType().dyn_cast_or_null<mlir::subop::MapType>();
+      if (!mapType) {
+         return mlir::failure();
+      }
+      auto hashMapType = mlir::subop::HashMapType::get(getContext(), mapType.getKeyMembers(), mapType.getValueMembers());
+
+      mlir::TypeConverter typeConverter;
+      typeConverter.addConversion([&](mlir::subop::ListType listType) {
+         return mlir::subop::ListType::get(listType.getContext(), typeConverter.convertType(listType.getT()).cast<mlir::subop::StateEntryReference>());
+      });
+      typeConverter.addConversion([&](mlir::subop::OptionalType optionalType) {
+         return mlir::subop::OptionalType::get(optionalType.getContext(), typeConverter.convertType(optionalType.getT()).cast<mlir::subop::StateEntryReference>());
+      });
+      typeConverter.addConversion([&](mlir::subop::MapEntryRefType refType) {
+         return mlir::subop::HashMapEntryRefType::get(refType.getContext(), hashMapType);
+      });
+      typeConverter.addConversion([&](mlir::subop::LookupEntryRefType lookupRefType) {
+         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), typeConverter.convertType(lookupRefType.getState()));
+      });
+      typeConverter.addConversion([&](mlir::subop::MapType mapType) {
+         return hashMapType;
+      });
+      mlir::subop::SubOpStateUsageTransformer transformer(analysis, getContext(), [&](mlir::Operation* op, mlir::Type type) -> mlir::Type {
+         return typeConverter.convertType(type);
+      });
+      transformer.updateValue(createOp.getRes(), hashMapType);
+      rewriter.replaceOpWithNewOp<mlir::subop::GenericCreateOp>(op, hashMapType);
+
+      return mlir::success();
+   }
+};
 class MultiMapAsHashMultiMap : public mlir::RewritePattern {
    const mlir::subop::ColumnUsageAnalysis& analysis;
 
@@ -253,6 +292,7 @@ class SpecializeSubOpPass : public mlir::PassWrapper<SpecializeSubOpPass, mlir::
       if(withOptimizations){
          patterns.insert<MultiMapAsHashIndexedView>(&getContext(), columnUsageAnalysis);
       }
+      patterns.insert<MapAsHashMap>(&getContext(), columnUsageAnalysis);
       patterns.insert<MultiMapAsHashMultiMap>(&getContext(), columnUsageAnalysis);
 
       if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
