@@ -341,6 +341,43 @@ void mlir::relalg::BaseTableOp::print(OpAsmPrinter& p) {
    return mlir::success();
 }
 
+::mlir::ParseResult mlir::relalg::NestedOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
+   llvm::SmallVector<mlir::OpAsmParser::UnresolvedOperand> inputs;
+   if (parser.parseOperandList(inputs)) {
+      return mlir::failure();
+   }
+   auto tupleStreamType = mlir::tuples::TupleStreamType::get(parser.getContext());
+
+   if (parser.resolveOperands(inputs, tupleStreamType, result.operands)) {
+      return mlir::failure();
+   }
+   mlir::ArrayAttr usedCols, availableCols;
+   if(parseCustRefArr(parser,usedCols).failed()||parser.parseArrow().failed()||parseCustRefArr(parser,availableCols).failed()){
+      return mlir::failure();
+   }
+   result.addAttribute("used_cols",usedCols);
+   result.addAttribute("available_cols",availableCols);
+   llvm::SmallVector<mlir::OpAsmParser::Argument> regionArgs;
+
+   if (parser.parseArgumentList(regionArgs, mlir::OpAsmParser::Delimiter::Paren)) {
+      return mlir::failure();
+   }
+   for (auto& arg : regionArgs) {
+      arg.type = tupleStreamType;
+   }
+   if (parser.parseRegion(*result.addRegion(), regionArgs)) return failure();
+   result.addTypes(tupleStreamType);
+   return mlir::success();
+}
+
+void mlir::relalg::NestedOp::print(::mlir::OpAsmPrinter& p) {
+   p.printOperands(getInputs());
+   p << getUsedCols() << " -> " << getAvailableCols();
+   p << " (";
+   p.printOperands(getNestedFn().front().getArguments());
+   p << ") ";
+   p.printRegion(getNestedFn(), false, true);
+}
 #define GET_OP_CLASSES
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.cpp.inc"
 #define GET_TYPEDEF_CLASSES

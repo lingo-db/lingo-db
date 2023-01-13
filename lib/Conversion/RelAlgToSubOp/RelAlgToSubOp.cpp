@@ -2340,6 +2340,31 @@ class GroupJoinLowering : public OpConversionPattern<mlir::relalg::GroupJoinOp> 
       return success();
    }
 };
+
+class NestedLowering : public OpConversionPattern<mlir::relalg::NestedOp> {
+   public:
+   using OpConversionPattern<mlir::relalg::NestedOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::relalg::NestedOp nestedOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto* b = &nestedOp.getNestedFn().front();
+      auto* terminator = b->getTerminator();
+      auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(terminator);
+      rewriter.mergeBlockBefore(b, &*rewriter.getInsertionPoint(), adaptor.getInputs());
+      {
+         auto* b2 = new mlir::Block;
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(b2);
+         rewriter.create<mlir::tuples::ReturnOp>(rewriter.getUnknownLoc());
+      }
+      std::vector<mlir::Value> res;
+      for (auto val : returnOp.getResults()) {
+         res.push_back(val);
+      }
+      rewriter.replaceOp(nestedOp, res);
+      rewriter.eraseOp(terminator);
+      return success();
+   }
+};
 void RelalgToSubOpLoweringPass::runOnOperation() {
    auto module = getOperation();
    getContext().getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(module);
@@ -2393,6 +2418,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<UnionDistinctLowering>(typeConverter, ctxt);
    patterns.insert<CountingSetOperationLowering>(ctxt);
    patterns.insert<GroupJoinLowering>(ctxt);
+   patterns.insert<NestedLowering>(ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();

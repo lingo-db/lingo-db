@@ -554,5 +554,14 @@ mlir::LogicalResult mlir::relalg::AntiSemiJoinOp::foldColumns(mlir::relalg::Colu
    replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
    return success();
 }
+ColumnSet mlir::relalg::NestedOp::getCreatedColumns() {
+   return {};
+}
 
+ColumnSet mlir::relalg::NestedOp::getUsedColumns() {
+   return mlir::relalg::ColumnSet::fromArrayAttr(getUsedCols());
+}
+ColumnSet mlir::relalg::NestedOp::getAvailableColumns(){
+   return mlir::relalg::ColumnSet::fromArrayAttr(getAvailableCols());
+}
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"

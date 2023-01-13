@@ -414,6 +414,18 @@ def ExceptOp : RelAlg_BinarySetOp<"except"> {
     let summary = "except operation";
 }
 
+def NestedOp : RelAlg_Op<"nested", [Pure,Operator]> {
+    let summary = "nested";
+    let arguments = (ins Variadic<TupleStream>:$inputs,ArrayAttr:$used_cols,ArrayAttr:$available_cols);
+    let results = (outs TupleStream:$result);
+    let regions = (region SizedRegion<1>:$nested_fn);
+    let extraClassDeclaration = [{
+        ColumnSet getCreatedColumns();
+        ColumnSet getUsedColumns();
+        ColumnSet getAvailableColumns();
+    }];
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
 // Utility
