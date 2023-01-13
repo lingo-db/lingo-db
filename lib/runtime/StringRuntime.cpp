@@ -215,10 +215,22 @@ size_t runtime::StringRuntime::findMatch(VarLen32 str, VarLen32 needle, size_t s
    if (found == std::string::npos || found + needle.getLen() > end) return invalidPos;
    return found + needle.getLen();
 }
+size_t runtime::StringRuntime::findNext(VarLen32 str, VarLen32 needle, size_t start) {
+   constexpr size_t invalidPos = 0x8000000000000000;
+   if (start >= invalidPos) return invalidPos;
+   size_t found = std::string_view(str.data(), str.getLen()).find(std::string_view(needle.data(), needle.getLen()), start);
+
+   if (found == std::string::npos) return invalidPos;
+   return found;
+}
 void toUpper(char* str, size_t len) {
    for (auto i = 0ul; i < len; i++) {
       str[i] = std::toupper(str[i]);
    }
+}
+
+int64_t runtime::StringRuntime::len(VarLen32 str) {
+   return str.getLen();
 }
 runtime::VarLen32 runtime::StringRuntime::toUpper(runtime::VarLen32 str) {
    if (str.isShort()) {
@@ -257,6 +269,6 @@ runtime::VarLen32 runtime::StringRuntime::fromDate(int64_t date) {
    return runtime::VarLen32(reinterpret_cast<uint8_t*>(asString.data()), asString.length());
 }
 
-extern "C" runtime::VarLen32 createVarLen32(uint8_t* ptr, uint32_t len){ //NOLINT(clang-diagnostic-return-type-c-linkage)
-   return runtime::VarLen32(ptr,len);
+extern "C" runtime::VarLen32 createVarLen32(uint8_t* ptr, uint32_t len) { //NOLINT(clang-diagnostic-return-type-c-linkage)
+   return runtime::VarLen32(ptr, len);
 }

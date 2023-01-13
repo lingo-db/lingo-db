@@ -13,6 +13,7 @@ struct StringRuntime {
    static bool NO_SIDE_EFFECTS startsWith(VarLen32 str, VarLen32 substr);
    static bool NO_SIDE_EFFECTS endsWith(VarLen32 str, VarLen32 substr);
    static NO_SIDE_EFFECTS int64_t toInt(VarLen32 str);
+   static NO_SIDE_EFFECTS int64_t len(VarLen32 str);
    static NO_SIDE_EFFECTS float toFloat32(VarLen32 str);
    static NO_SIDE_EFFECTS double toFloat64(VarLen32 str);
    static NO_SIDE_EFFECTS __int128 toDecimal(VarLen32 str, int32_t reqScale);
@@ -27,6 +28,7 @@ struct StringRuntime {
    static VarLen32 toUpper(VarLen32 str);
    static VarLen32 concat(VarLen32 a, VarLen32 b);
    static NO_SIDE_EFFECTS size_t findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end);
+   static NO_SIDE_EFFECTS size_t findNext(VarLen32 str, VarLen32 needle, size_t start);
 };
 } // namespace runtime
 #endif // RUNTIME_STRINGRUNTIME_H
