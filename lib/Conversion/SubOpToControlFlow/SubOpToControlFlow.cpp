@@ -759,6 +759,23 @@ class CreateBufferLowering : public SubOpConversionPattern<mlir::subop::GenericC
       return mlir::success();
    }
 };
+class CreateArrayLowering : public SubOpConversionPattern<mlir::subop::GenericCreateOp> {
+   public:
+   using SubOpConversionPattern<mlir::subop::GenericCreateOp>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::GenericCreateOp createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      auto arrayType = createOp.getType().dyn_cast_or_null<mlir::subop::ArrayType>();
+      if (!arrayType) return failure();
+      auto loc = createOp->getLoc();
+      EntryStorageHelper storageHelper(arrayType.getMembers(), typeConverter);
+      Value numElements = rewriter.create<arith::ConstantIndexOp>(loc, arrayType.getNumElements());
+      auto elementType = storageHelper.getStorageType();
+      auto typeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), elementType);
+      auto numBytes = rewriter.create<mlir::arith::MulIOp>(loc, typeSize, numElements);
+      mlir::Value vector = rt::Buffer::createZeroed(rewriter, loc)({numBytes})[0];
+      rewriter.replaceOpWithNewOp<mlir::util::BufferCastOp>(createOp, typeConverter->convertType(createOp.getType()), vector);
+      return mlir::success();
+   }
+};
 
 class SetResultOpLowering : public SubOpConversionPattern<mlir::subop::SetResultOp> {
    public:
@@ -1904,6 +1921,28 @@ class HashMapRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPatt
    }
 };
 
+class ContinuousViewRefScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp, 2> {
+   public:
+   using SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp, 2>::SubOpTupleStreamConsumerConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::ScatterOp scatterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto continuousRefEntryType = scatterOp.getRef().getColumn().type.dyn_cast_or_null<mlir::subop::ContinuousViewEntryRefType>();
+      if (!continuousRefEntryType) { return failure(); }
+      auto unpackedReference = rewriter.create<mlir::util::UnPackOp>(scatterOp->getLoc(), mapping.resolve(scatterOp.getRef())).getResults();
+      EntryStorageHelper storageHelper(continuousRefEntryType.getMembers(), typeConverter);
+      auto ptrType = storageHelper.getRefType();
+      auto baseRef = rewriter.create<mlir::util::BufferGetRef>(scatterOp->getLoc(), ptrType, unpackedReference[1]);
+      auto elementRef = rewriter.create<mlir::util::ArrayElementPtrOp>(scatterOp->getLoc(), ptrType, baseRef, unpackedReference[0]);
+      auto values = storageHelper.loadValues(elementRef, rewriter, scatterOp->getLoc());
+      for (auto x : scatterOp.getMapping()) {
+         values[x.getName().str()] = mapping.resolve(x.getValue().cast<mlir::tuples::ColumnRefAttr>());
+      }
+      storageHelper.storeValues(elementRef, values, rewriter, scatterOp->getLoc());
+      rewriter.eraseOp(scatterOp);
+      return success();
+   }
+};
+
 class ScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp>::SubOpTupleStreamConsumerConversionPattern;
@@ -2082,6 +2121,11 @@ class CreateHashIndexedViewLowering : public SubOpConversionPattern<mlir::subop:
 class CreateContinuousViewLowering : public SubOpConversionPattern<mlir::subop::CreateContinuousView> {
    using SubOpConversionPattern<mlir::subop::CreateContinuousView>::SubOpConversionPattern;
    LogicalResult matchAndRewrite(mlir::subop::CreateContinuousView createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      if (createOp.getSource().getType().isa<mlir::subop::ArrayType>()) {
+         //todo: for now: every sorted view is equivalent to continuous view
+         rewriter.replaceOp(createOp, adaptor.getSource());
+         return success();
+      }
       if (createOp.getSource().getType().isa<mlir::subop::SortedViewType>()) {
          //todo: for now: every sorted view is equivalent to continuous view
          rewriter.replaceOp(createOp, adaptor.getSource());
@@ -2127,6 +2171,18 @@ class EntriesBetweenLowering : public SubOpTupleStreamConsumerConversionPattern<
       auto difference = rewriter.create<mlir::arith::SubIOp>(op->getLoc(), unpackedRight[0], unpackedLeft[0]);
       mapping.define(op.getBetween(), difference);
       rewriter.replaceTupleStream(op, mapping);
+      return success();
+   }
+};
+class OffsetReferenceByLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::OffsetReferenceBy> {
+   public:
+   using SubOpTupleStreamConsumerConversionPattern<mlir::subop::OffsetReferenceBy>::SubOpTupleStreamConsumerConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::OffsetReferenceBy op, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      auto unpackedRef = rewriter.create<mlir::util::UnPackOp>(op->getLoc(), mapping.resolve(op.getRef())).getResults();
+      auto newIdx = rewriter.create<mlir::arith::AddIOp>(op->getLoc(), unpackedRef[0], mapping.resolve(op.getIdx()));
+      auto newRef = rewriter.create<mlir::util::PackOp>(op->getLoc(), mlir::ValueRange{newIdx, unpackedRef[1]});
+      mapping.define(op.getNewRef(), newRef);
+      rewriter.replaceTupleStream(op,mapping);
       return success();
    }
 };
@@ -2192,6 +2248,9 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    });
    typeConverter.addConversion([&](mlir::subop::SortedViewType t) -> Type {
       return mlir::util::BufferType::get(t.getContext(), EntryStorageHelper(t.getBasedOn().getMembers(), &typeConverter).getStorageType());
+   });
+   typeConverter.addConversion([&](mlir::subop::ArrayType t) -> Type {
+      return mlir::util::BufferType::get(t.getContext(), EntryStorageHelper(t.getMembers(), &typeConverter).getStorageType());
    });
    typeConverter.addConversion([&](mlir::subop::ContinuousViewType t) -> Type {
       return mlir::util::BufferType::get(t.getContext(), EntryStorageHelper(t.getBasedOn().getMembers(), &typeConverter).getStorageType());
@@ -2270,6 +2329,8 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    rewriter.insertPattern<CreateContinuousViewLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ScanRefsContinuousViewLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ContinuousViewRefGatherOpLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ContinuousViewRefScatterOpLowering>(typeConverter, ctxt);
+
    //Heap
    rewriter.insertPattern<CreateHeapLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ScanRefsHeapLowering>(typeConverter, ctxt);
@@ -2277,6 +2338,8 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    //SegmentTreeView
    rewriter.insertPattern<CreateSegmentTreeViewLowering>(typeConverter, ctxt);
    rewriter.insertPattern<LookupSegmentTreeViewLowering>(typeConverter, ctxt);
+   //Array
+   rewriter.insertPattern<CreateArrayLowering>(typeConverter, ctxt);
 
    rewriter.insertPattern<DefaultGatherOpLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ScatterOpLowering>(typeConverter, ctxt);
@@ -2285,6 +2348,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    rewriter.insertPattern<UnrealizedConversionCastLowering>(typeConverter, ctxt);
    rewriter.insertPattern<CombineInFlightLowering>(typeConverter, ctxt);
    rewriter.insertPattern<UnwrapOptionalHashmapRefLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<OffsetReferenceByLowering>(typeConverter, ctxt);
    rewriter.insertPattern<GetBeginLowering>(typeConverter, ctxt);
    rewriter.insertPattern<GetEndLowering>(typeConverter, ctxt);
    rewriter.insertPattern<EntriesBetweenLowering>(typeConverter, ctxt);
@@ -2295,66 +2359,6 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    rewriter.insertPattern<GetSingleValLowering>(typeConverter, ctxt);
 
    rewriter.rewrite(module.getBody());
-   /*
-   RewritePatternSet patterns(&getContext());
-   patterns.insert<RenameLowering>(typeConverter, ctxt);
-   patterns.insert<MapLowering>(typeConverter, ctxt);
-   patterns.insert<NestedMapLowering>(typeConverter, ctxt);
-   patterns.insert<GetExternalTableLowering>(typeConverter, ctxt);
-   patterns.insert<ScanRefsTableLowering>(typeConverter, ctxt);
-
-   patterns.insert<CreateSegmentTreeViewLowering>(typeConverter, ctxt);
-   patterns.insert<LookupSegmentTreeViewLowering>(typeConverter, ctxt);
-   patterns.insert<CreateHashIndexedViewLowering>(typeConverter, ctxt);
-   patterns.insert<GetBeginLowering>(typeConverter, ctxt);
-   patterns.insert<GetEndLowering>(typeConverter, ctxt);
-   patterns.insert<EntriesBetweenLowering>(typeConverter, ctxt);
-   patterns.insert<ContinuousViewRefGatherOpLowering>(typeConverter, ctxt);
-   patterns.insert<CreateContinuousViewLowering>(typeConverter, ctxt);
-   patterns.insert<ScanRefsVectorLowering>(typeConverter, ctxt);
-   patterns.insert<ScanRefsSortedViewLowering>(typeConverter, ctxt);
-   patterns.insert<ScanRefsContinuousViewLowering>(typeConverter, ctxt);
-   patterns.insert<CreateTableLowering>(typeConverter, ctxt);
-   patterns.insert<CreateBufferLowering>(typeConverter, ctxt);
-   patterns.insert<CreateHashMapLowering>(typeConverter, ctxt);
-   patterns.insert<CreateSimpleStateLowering>(typeConverter, ctxt);
-   patterns.insert<ScanRefsSimpleStateLowering>(typeConverter, ctxt);
-   patterns.insert<ScanListLowering>(typeConverter, ctxt);
-   patterns.insert<ScanHashMapListLowering>(typeConverter, ctxt);
-   patterns.insert<MaterializeTableLowering>(typeConverter, ctxt);
-   patterns.insert<MaterializeVectorLowering>(typeConverter, ctxt);
-   patterns.insert<SetResultOpLowering>(typeConverter, ctxt);
-   patterns.insert<LoopLowering>(typeConverter, ctxt);
-   patterns.insert<GetSingleValLowering>(typeConverter, ctxt);
-   patterns.insert<UnrealizedConversionCastLowering>(typeConverter, ctxt);
-   mlir::util::populateUtilTypeConversionPatterns(typeConverter, patterns);
-
-   patterns.insert<SortLowering>(typeConverter, ctxt);
-   patterns.insert<CombineInFlightLowering>(typeConverter, ctxt);
-   patterns.insert<LookupSimpleStateLowering>(typeConverter, ctxt);
-   patterns.insert<LookupHashMapLowering>(typeConverter, ctxt);
-   patterns.insert<PureLookupHashMapLowering>(typeConverter, ctxt);
-   patterns.insert<UnwrapOptionalHashmapRefLowering>(typeConverter, ctxt);
-   patterns.insert<LookupHashIndexedViewLowering>(typeConverter, ctxt);
-   patterns.insert<ScanHashMapLowering>(typeConverter, ctxt);
-   patterns.insert<ReduceOpLowering>(typeConverter, ctxt);
-   patterns.insert<ScatterOpLowering>(typeConverter, ctxt);
-   patterns.insert<DefaultGatherOpLowering>(typeConverter, ctxt);
-   patterns.insert<TableRefGatherOpLowering>(typeConverter, ctxt);
-   patterns.insert<HashMapRefGatherOpLowering>(typeConverter, ctxt);
-   patterns.insert<UnionLowering>(typeConverter, ctxt);
-   patterns.insert<UnionMaterializeLowering>(typeConverter, ctxt);
-   patterns.insert<GenerateLowering>(typeConverter, ctxt);
-   patterns.insert<GenerateEmitLowering>(typeConverter, ctxt);
-   patterns.insert<CreateHeapLowering>(typeConverter, ctxt);
-   patterns.insert<ScanRefsHeapLowering>(typeConverter, ctxt);
-   patterns.insert<MaterializeHeapLowering>(typeConverter, ctxt);
-   if (failed(applyFullConversion(module, target, std::move(patterns)))) {
-      signalPassFailure();
-   }
-   if (mlir::applyPatternsAndFoldGreedily(module, mlir::FrozenRewritePatternSet()).failed()) {
-      signalPassFailure();
-   }*/
 }
 } //namespace
 std::unique_ptr<mlir::Pass>

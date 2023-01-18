@@ -13,6 +13,7 @@ namespace runtime {
 struct Buffer {
    size_t numElements;
    uint8_t* ptr;
+   static Buffer createZeroed(size_t bytes);
 };
 struct BufferIterator {
    virtual bool isValid() = 0;

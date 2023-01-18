@@ -95,6 +95,13 @@ def Buffer : SubOperator_Type<"Buffer", "buffer", [State]> {
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
 }
+
+def Array : SubOperator_Type<"Array", "array", [State]> {
+    let summary = "fixed sized array";
+    let parameters = (ins "StateMembersAttr":$members,"uint32_t": $num_elements);
+    let assemblyFormat = "`<` $num_elements `,` custom<StateMembers>($members) `>`";
+}
+
 def ContinuousView : SubOperator_Type<"ContinuousView", "continuous_view", [State]> {
     let summary = "continuous view type";
     let parameters = (ins "State":$based_on);
@@ -499,6 +506,11 @@ def EntriesBetweenOp : SubOperator_Op<"entries_between",[SubOperator]> {
     let arguments = (ins TupleStream : $stream, ColumnRefAttr:$left_ref,ColumnRefAttr:$right_ref, ColumnDefAttr: $between);
     let results = (outs TupleStream: $res);
     let assemblyFormat = [{  $stream custom<CustRef>($left_ref) custom<CustRef>($right_ref)  custom<CustDef>($between) attr-dict }];
+}
+def OffsetReferenceBy : SubOperator_Op<"offset_ref_by",[SubOperator]> {
+    let arguments = (ins TupleStream : $stream, ColumnRefAttr:$ref,ColumnRefAttr:$idx, ColumnDefAttr: $newRef);
+    let results = (outs TupleStream: $res);
+    let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<CustRef>($idx) custom<CustDef>($newRef) attr-dict }];
 }
 def UnwrapOptionalRefOp : SubOperator_Op<"unwrap_optional_ref",[SubOperator]> {
     let arguments = (ins TupleStream : $stream, ColumnRefAttr:$optional_ref, ColumnDefAttr: $ref);
