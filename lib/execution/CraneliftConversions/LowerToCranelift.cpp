@@ -836,6 +836,7 @@ struct ToCraneliftPass
       patterns.add<TupleElementPtrOpLowering>(typeConverter, patterns.getContext(), dataLayoutAnalysis);
       patterns.add<AllocaOpLowering>(typeConverter, patterns.getContext(), dataLayoutAnalysis);
       patterns.add<SimpleArithmeticLowering<mlir::arith::ShRUIOp, mlir::cranelift::UShrOp>>(typeConverter, patterns.getContext());
+      patterns.add<SimpleArithmeticLowering<mlir::arith::ShLIOp, mlir::cranelift::IShlOp>>(typeConverter, patterns.getContext());
       patterns.add<SimpleArithmeticLowering<mlir::arith::AddIOp, mlir::cranelift::IAddOp>>(typeConverter, patterns.getContext());
       patterns.add<SimpleArithmeticLowering<mlir::arith::SubIOp, mlir::cranelift::ISubOp>>(typeConverter, patterns.getContext());
       patterns.add<SimpleArithmeticLowering<mlir::arith::MulIOp, mlir::cranelift::IMulOp>>(typeConverter, patterns.getContext());
