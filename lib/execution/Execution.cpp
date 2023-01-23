@@ -58,7 +58,7 @@ class SubOpLoweringStep : public LoweringStep {
       auto startLowerSubOp = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerSubOpPm(moduleOp->getContext());
       lowerSubOpPm.enableVerifier(verify);
-      std::unordered_set<std::string> enabledPasses = {"GlobalOpt", "ReuseLocal", "Specialize", "PullGatherUp"};
+      std::unordered_set<std::string> enabledPasses = {"GlobalOpt", "ReuseLocal", "Specialize", "PullGatherUp","Compression"};
       if (const char* mode = std::getenv("LINGODB_SUBOP_OPTS")) {
          enabledPasses.clear();
          std::stringstream configList(mode);
@@ -77,6 +77,7 @@ class SubOpLoweringStep : public LoweringStep {
       if (enabledPasses.contains("PullGatherUp"))
          lowerSubOpPm.addPass(mlir::subop::createPullGatherUpPass());
       lowerSubOpPm.addPass(mlir::subop::createEnforceOrderPass());
+      mlir::subop::setCompressionEnabled(enabledPasses.contains("Compression"));
       lowerSubOpPm.addPass(mlir::subop::createLowerSubOpPass());
       lowerSubOpPm.addPass(mlir::createCanonicalizerPass());
       if (mlir::failed(lowerSubOpPm.run(moduleOp))) {

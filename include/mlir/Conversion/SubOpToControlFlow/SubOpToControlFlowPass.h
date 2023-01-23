@@ -5,6 +5,7 @@
 
 namespace mlir {
 namespace subop {
+void setCompressionEnabled(bool compressionEnabled);
 std::unique_ptr<Pass> createLowerSubOpPass();
 void registerSubOpToControlFlowConversionPasses();
 void createLowerSubOpPipeline(mlir::OpPassManager& pm);

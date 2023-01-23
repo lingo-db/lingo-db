@@ -158,7 +158,6 @@ class ColumnMapping {
 };
 class EntryStorageHelper {
    mlir::subop::StateMembersAttr members;
-   mlir::TypeConverter* typeConverter;
    mlir::TupleType storageType;
    size_t nullBitSetPos; //position of the nullBitSet in the entry
    mlir::Type nullBitsetType; //physical type of the nullBitSet (e.g. i8,i32, i64,...)
@@ -172,8 +171,8 @@ class EntryStorageHelper {
    std::unordered_map<std::string, MemberInfo> memberInfos;
 
    public:
-   EntryStorageHelper(mlir::subop::StateMembersAttr members, mlir::TypeConverter* typeConverter) : members(members), typeConverter(typeConverter) {
-      //storageType=typeConverter->convertType(mlir::TupleType::get(members.getContext(), unpackTypes(members.getTypes()))).cast<mlir::TupleType>();
+   static bool compressionEnabled;
+   EntryStorageHelper(mlir::subop::StateMembersAttr members, mlir::TypeConverter* typeConverter) : members(members){
       std::vector<mlir::Type> types;
       size_t nullBitOffset = 0;
       for (auto m : llvm::zip(members.getNames(), members.getTypes())) {
@@ -183,13 +182,18 @@ class EntryStorageHelper {
          type = converted ? converted : type;
          MemberInfo memberInfo;
          if (auto nullableType = mlir::dyn_cast_or_null<mlir::db::NullableType>(type)) {
-            memberInfo.isNullable = true;
-            if (nullBitOffset == 0) {
-               nullBitSetPos = types.size();
-               types.push_back(mlir::Type());
+            if (compressionEnabled) {
+               memberInfo.isNullable = true;
+               if (nullBitOffset == 0) {
+                  nullBitSetPos = types.size();
+                  types.push_back(mlir::Type());
+               }
+               memberInfo.nullBitOffset = nullBitOffset++;
+               memberInfo.stored = nullableType.getType();
+            } else {
+               memberInfo.isNullable = false;
+               memberInfo.stored = type;
             }
-            memberInfo.nullBitOffset = nullBitOffset++;
-            memberInfo.stored = nullableType.getType();
          } else {
             memberInfo.isNullable = false;
             memberInfo.stored = type;
@@ -317,6 +321,7 @@ class EntryStorageHelper {
       }
    }
 };
+bool EntryStorageHelper::compressionEnabled = false;
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////// State management ///////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2177,6 +2182,9 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
 std::unique_ptr<mlir::Pass>
 mlir::subop::createLowerSubOpPass() {
    return std::make_unique<SubOpToControlFlowLoweringPass>();
+}
+void mlir::subop::setCompressionEnabled(bool compressionEnabled) {
+   EntryStorageHelper::compressionEnabled=compressionEnabled;
 }
 void mlir::subop::createLowerSubOpPipeline(mlir::OpPassManager& pm) {
    pm.addPass(mlir::subop::createGlobalOptPass());
