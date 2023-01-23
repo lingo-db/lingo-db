@@ -159,36 +159,127 @@ class ColumnMapping {
 class EntryStorageHelper {
    mlir::subop::StateMembersAttr members;
    mlir::TypeConverter* typeConverter;
+   mlir::TupleType storageType;
+   size_t nullBitSetPos; //position of the nullBitSet in the entry
+   mlir::Type nullBitsetType; //physical type of the nullBitSet (e.g. i8,i32, i64,...)
+
+   struct MemberInfo {
+      bool isNullable;
+      size_t nullBitOffset;
+      mlir::Type stored;
+      size_t offset;
+   };
+   std::unordered_map<std::string, MemberInfo> memberInfos;
 
    public:
    EntryStorageHelper(mlir::subop::StateMembersAttr members, mlir::TypeConverter* typeConverter) : members(members), typeConverter(typeConverter) {
+      //storageType=typeConverter->convertType(mlir::TupleType::get(members.getContext(), unpackTypes(members.getTypes()))).cast<mlir::TupleType>();
+      std::vector<mlir::Type> types;
+      size_t nullBitOffset = 0;
+      for (auto m : llvm::zip(members.getNames(), members.getTypes())) {
+         auto memberName = std::get<0>(m).cast<StringAttr>().str();
+         auto type = std::get<1>(m).cast<mlir::TypeAttr>().getValue();
+         auto converted = typeConverter->convertType(type);
+         type = converted ? converted : type;
+         MemberInfo memberInfo;
+         if (auto nullableType = mlir::dyn_cast_or_null<mlir::db::NullableType>(type)) {
+            memberInfo.isNullable = true;
+            if (nullBitOffset == 0) {
+               nullBitSetPos = types.size();
+               types.push_back(mlir::Type());
+            }
+            memberInfo.nullBitOffset = nullBitOffset++;
+            memberInfo.stored = nullableType.getType();
+         } else {
+            memberInfo.isNullable = false;
+            memberInfo.stored = type;
+         }
+         memberInfo.offset = types.size();
+         memberInfos.insert({memberName, memberInfo});
+         types.push_back(memberInfo.stored);
+      }
+      if (nullBitOffset == 0) {
+      } else if (nullBitOffset <= 8) {
+         nullBitsetType = mlir::IntegerType::get(members.getContext(), 8);
+      } else if (nullBitOffset <= 16) {
+         nullBitsetType = mlir::IntegerType::get(members.getContext(), 16);
+      } else if (nullBitOffset <= 32) {
+         nullBitsetType = mlir::IntegerType::get(members.getContext(), 32);
+      } else if (nullBitOffset <= 64) {
+         nullBitsetType = mlir::IntegerType::get(members.getContext(), 64);
+      } else {
+         assert(false && "should not happen");
+      }
+      if (nullBitOffset > 0) {
+         types[nullBitSetPos] = nullBitsetType;
+      }
+      storageType = mlir::TupleType::get(members.getContext(), types);
+   }
+
+   void storeValues(mlir::Value ref, std::unordered_map<std::string, mlir::Value> values, mlir::OpBuilder& rewriter, mlir::Location loc) {
+      ref = ensureRefType(ref, rewriter, loc);
+
+      mlir::Value nullBitSetRef;
+      mlir::Value nullBitSet;
+      if (nullBitsetType) {
+         nullBitSetRef = rewriter.create<mlir::util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), nullBitsetType), ref, nullBitSetPos);
+         nullBitSet = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, nullBitsetType);
+      }
+      for (auto i = 0ul; i < members.getTypes().size(); i++) {
+         auto name = members.getNames()[i].cast<mlir::StringAttr>().str();
+         const MemberInfo& memberInfo = memberInfos.at(name);
+         auto valueToStore = values[name];
+         if (memberInfo.isNullable) {
+            mlir::Value nullBit = rewriter.create<mlir::db::IsNullOp>(loc, valueToStore);
+            mlir::Value shiftAmount = rewriter.create<mlir::arith::ConstantIntOp>(loc, memberInfo.nullBitOffset, nullBitsetType);
+            mlir::Value shiftedNullBit = rewriter.create<mlir::arith::ShLIOp>(loc, rewriter.create<mlir::arith::ExtUIOp>(loc, nullBitsetType, nullBit), shiftAmount);
+            valueToStore = rewriter.create<mlir::db::NullableGetVal>(loc, valueToStore);
+            nullBitSet = rewriter.create<mlir::arith::OrIOp>(loc, nullBitSet, shiftedNullBit);
+         }
+         auto memberRef = rewriter.create<mlir::util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), memberInfo.stored), ref, memberInfo.offset);
+         rewriter.create<mlir::util::StoreOp>(loc, valueToStore, memberRef, mlir::Value());
+      }
+      if (nullBitsetType) {
+         rewriter.create<mlir::util::StoreOp>(loc, nullBitSet, nullBitSetRef, mlir::Value());
+      }
+   }
+   std::unordered_map<std::string, mlir::Value> loadValues(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc) {
+      ref = ensureRefType(ref, rewriter, loc);
+      std::unordered_map<std::string, mlir::Value> res;
+      mlir::Value nullBitSet;
+      if (nullBitsetType) {
+         mlir::Value nullBitSetRef = rewriter.create<mlir::util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), nullBitsetType), ref, nullBitSetPos);
+         nullBitSet = rewriter.create<mlir::util::LoadOp>(loc, nullBitSetRef);
+      }
+      for (auto i = 0ul; i < members.getTypes().size(); i++) {
+         auto name = members.getNames()[i].cast<mlir::StringAttr>().str();
+         const MemberInfo& memberInfo = memberInfos.at(name);
+         auto memberRef = rewriter.create<mlir::util::TupleElementPtrOp>(loc, mlir::util::RefType::get(rewriter.getContext(), memberInfo.stored), ref, memberInfo.offset);
+         mlir::Value loadedValue = rewriter.create<mlir::util::LoadOp>(loc, memberRef);
+         if (memberInfo.isNullable) {
+            mlir::Value shiftedNullBit = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1ull << memberInfo.nullBitOffset, nullBitsetType);
+            mlir::Value isNull = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, rewriter.create<mlir::arith::AndIOp>(loc, nullBitSet, shiftedNullBit), shiftedNullBit);
+            loadedValue = rewriter.create<mlir::db::AsNullableOp>(loc, mlir::db::NullableType::get(rewriter.getContext(), memberInfo.stored), loadedValue, isNull);
+         }
+         res[name] = loadedValue;
+      }
+      return res;
    }
    mlir::TupleType getStorageType() {
-      return typeConverter->convertType(mlir::TupleType::get(members.getContext(), unpackTypes(members.getTypes()))).cast<mlir::TupleType>();
+      return storageType;
    }
    mlir::util::RefType getRefType() {
       return mlir::util::RefType::get(members.getContext(), getStorageType());
-      ;
    }
    mlir::Value ensureRefType(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc) {
       auto refType = ref.getType().cast<mlir::util::RefType>();
-      auto expectedType = mlir::util::RefType::get(rewriter.getContext(), getStorageType());
+      auto expectedType = getRefType();
       if (refType != expectedType) {
          ref = rewriter.create<util::GenericMemrefCastOp>(loc, expectedType, ref);
       }
       return ref;
    }
-   std::unordered_map<std::string, mlir::Value> loadValues(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc) {
-      ref = ensureRefType(ref, rewriter, loc);
-      std::unordered_map<std::string, mlir::Value> res;
-      auto loaded = rewriter.create<mlir::util::LoadOp>(loc, ref);
-      auto unpackedValues = rewriter.create<mlir::util::UnPackOp>(loc, loaded).getResults();
-      for (auto i = 0ul; i < members.getTypes().size(); i++) {
-         auto name = members.getNames()[i].cast<mlir::StringAttr>().str();
-         res[name] = unpackedValues[i];
-      }
-      return res;
-   }
+
    std::vector<mlir::Value> loadValuesOrdered(mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc, ArrayAttr relevantMembers = {}) {
       auto values = loadValues(ref, rewriter, loc);
       if (!relevantMembers) {
@@ -208,16 +299,7 @@ class EntryStorageHelper {
       }
       storeValues(ref, toStore, rewriter, loc);
    }
-   void storeValues(mlir::Value ref, std::unordered_map<std::string, mlir::Value> values, mlir::OpBuilder& rewriter, mlir::Location loc) {
-      ref = ensureRefType(ref, rewriter, loc);
-      std::vector<mlir::Value> toStore;
-      for (auto i = 0ul; i < members.getTypes().size(); i++) {
-         auto name = members.getNames()[i].cast<mlir::StringAttr>().str();
-         toStore.push_back(values[name]);
-      }
-      mlir::Value packed = rewriter.create<mlir::util::PackOp>(loc, toStore);
-      rewriter.create<mlir::util::StoreOp>(loc, packed, ref, mlir::Value());
-   }
+
    void storeFromColumns(mlir::DictionaryAttr mapping, ColumnMapping& columnMapping, mlir::Value ref, mlir::OpBuilder& rewriter, mlir::Location loc) {
       std::unordered_map<std::string, mlir::Value> toStore;
       for (auto x : mapping) {
@@ -1921,7 +2003,8 @@ class UnwrapOptionalHashmapRefLowering : public TupleStreamConsumerLowering<mlir
       auto htEntryType = getHtEntryType(hashmapType, *typeConverter);
       auto htEntryPtrType = mlir::util::RefType::get(getContext(), htEntryType);
       auto kvPtrType = mlir::util::RefType::get(getContext(), getHtKVType(hashmapType, *typeConverter));
-      auto valPtrType = mlir::util::RefType::get(getContext(), mlir::TupleType::get(getContext(), unpackTypes(hashmapType.getValueMembers().getTypes())));
+      EntryStorageHelper valStorageHelper(hashmapType.getValueMembers(), typeConverter);
+      auto valPtrType = valStorageHelper.getRefType();
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(&ifOp.getThenRegion().front());
