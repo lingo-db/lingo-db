@@ -59,7 +59,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
       auto [linkDef, linkRef] = createColumn(linkType, "hj", "link");
       auto loc = op->getLoc();
 
-      std::vector<mlir::Attribute> bufferMemberTypes{mlir::TypeAttr::get(rewriter.getIndexType()), mlir::TypeAttr::get(linkType)};
+      std::vector<mlir::Attribute> bufferMemberTypes{mlir::TypeAttr::get(linkType),mlir::TypeAttr::get(rewriter.getIndexType())};
       std::vector<mlir::Attribute> bufferMemberNames{rewriter.getStringAttr(linkMember), rewriter.getStringAttr(hashMember)};
       bufferMemberNames.insert(bufferMemberNames.end(), multiMapType.getMembers().getNames().begin(), multiMapType.getMembers().getNames().end());
       bufferMemberTypes.insert(bufferMemberTypes.end(), multiMapType.getMembers().getTypes().begin(), multiMapType.getMembers().getTypes().end());
