@@ -27,8 +27,9 @@ class HashJoinUtils {
       mlir::Block* block;
       std::vector<mlir::Attribute> createdColumns;
    };
-   static std::vector<mlir::Attribute> extractKeys(mlir::Block* block, mlir::relalg::ColumnSet keyAttributes, mlir::relalg::ColumnSet otherAttributes, MapBlockInfo& mapBlockInfo) {
+   static std::pair<std::vector<mlir::Attribute>, std::vector<mlir::Attribute>> extractKeys(mlir::Block* block, mlir::relalg::ColumnSet keyAttributes, mlir::relalg::ColumnSet otherAttributes, MapBlockInfo& mapBlockInfo) {
       std::vector<mlir::Attribute> toHash;
+      std::vector<mlir::Attribute> nullsEqual;
       llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> required;
       mlir::BlockAndValueMapping mapping;
       mapping.map(block->getArgument(0), mapBlockInfo.block->getArgument(0));
@@ -72,6 +73,14 @@ class HashJoinUtils {
                         keyVal.replaceAllUsesWith(builder2.create<mlir::tuples::GetColumnOp>(builder2.getUnknownLoc(), keyVal.getType(), ref, block->getArgument(0)));
                      }
                   }
+                  mlir::OpBuilder builder2(cmpOp->getContext());
+                  nullsEqual.push_back(builder2.getI8IntegerAttr(!cmpOp.isEqualityPred(false)));
+                  builder2.setInsertionPoint(cmpOp);
+                  mlir::Value constTrue = builder2.create<mlir::arith::ConstantIntOp>(builder2.getUnknownLoc(), 1, 1);
+                  if (cmpOp->getResult(0).getType().isa<mlir::db::NullableType>()) {
+                     constTrue = builder2.create<mlir::db::AsNullableOp>(builder2.getUnknownLoc(), cmpOp->getResult(0).getType(), constTrue);
+                  }
+                  cmpOp->replaceAllUsesWith(mlir::ValueRange{constTrue});
                }
             }
          } else {
@@ -86,7 +95,7 @@ class HashJoinUtils {
             }
          }
       });
-      return toHash;
+      return {toHash, nullsEqual};
    }
 };
 class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations, mlir::OperationPass<mlir::func::FuncOp>> {
@@ -137,7 +146,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          HashJoinUtils::MapBlockInfo mapBlockInfo;
          mapBlockInfo.block = new mlir::Block;
          mapBlockInfo.block->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
-         auto keys = HashJoinUtils::extractKeys(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns(), mapBlockInfo);
+         auto [keys, nullsEqual] = HashJoinUtils::extractKeys(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns(), mapBlockInfo);
          if (!mapBlockInfo.createdColumns.empty()) {
             builder.setInsertionPoint(predicateOperator);
             auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), left.asRelation(), builder.getArrayAttr(mapBlockInfo.createdColumns));
@@ -148,6 +157,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             left = mapOp;
          }
          predicateOperator->setAttr("leftHash", builder.getArrayAttr(keys));
+         predicateOperator->setAttr("nullsEqual", builder.getArrayAttr(nullsEqual));
       }
 
       //right
@@ -156,7 +166,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          HashJoinUtils::MapBlockInfo mapBlockInfo;
          mapBlockInfo.block = new mlir::Block;
          mapBlockInfo.block->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
-         auto keys = HashJoinUtils::extractKeys(&predicateOperator.getPredicateBlock(), right.getAvailableColumns(), left.getAvailableColumns(), mapBlockInfo);
+         auto [keys, nullEquals] = HashJoinUtils::extractKeys(&predicateOperator.getPredicateBlock(), right.getAvailableColumns(), left.getAvailableColumns(), mapBlockInfo);
          if (!mapBlockInfo.createdColumns.empty()) {
             builder.setInsertionPoint(predicateOperator);
             auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), right.asRelation(), builder.getArrayAttr(mapBlockInfo.createdColumns));

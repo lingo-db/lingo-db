@@ -33,6 +33,12 @@ ColumnSet mlir::relalg::detail::getUsedColumns(mlir::Operation* op) {
    op->walk([&](GetColumnOp attrOp) {
       creations.insert(&attrOp.getAttr().getColumn());
    });
+   if(op->hasAttr("rightHash")){
+      creations.insert(ColumnSet::fromArrayAttr(op->getAttrOfType<mlir::ArrayAttr>("rightHash")));
+   }
+   if(op->hasAttr("leftHash")){
+      creations.insert(ColumnSet::fromArrayAttr(op->getAttrOfType<mlir::ArrayAttr>("leftHash")));
+   }
    return creations;
 }
 ColumnSet mlir::relalg::detail::getAvailableColumns(mlir::Operation* op) {

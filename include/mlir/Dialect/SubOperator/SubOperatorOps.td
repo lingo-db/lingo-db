@@ -82,6 +82,14 @@ def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,LookupAbleState]> {
         StateMembersAttr getMembers();
     }];
 }
+def HashMultimap : SubOperator_Type<"HashMultiMap", "hashmultimap",[State,LookupAbleState]> {
+    let summary = "simple state with multiple members";
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let extraClassDeclaration = [{
+        StateMembersAttr getMembers();
+    }];
+}
 def MultiMap : SubOperator_Type<"MultiMap", "multimap",[State,LookupAbleState]> {
     let summary = "multi map: key -> [values]";
     let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
@@ -219,6 +227,19 @@ def HashMapEntryRef : SubOperator_Type<"HashMapEntryRef", "hash_map_entry_ref",[
         StateMembersAttr getMembers();
     }];
     let extraClassDefinition= [{ StateMembersAttr $cppClass::getMembers(){ return getHashMap().getMembers();} }];
+}
+def HashMultiMapEntryRef : SubOperator_Type<"HashMultiMapEntryRef", "hash_multimap_entry_ref",[StateEntryReference]> {
+    let summary = "reference to entry of some state";
+    let parameters = (ins "HashMultiMapType":$hash_multimap);
+    let assemblyFormat = "`<` $hash_multimap `>`";
+    let extraClassDeclaration = [{
+        bool isReadable(){return true;}
+        bool isWriteable(){return true;}
+        bool isStable(){return true;}
+        bool canBeOffset(){return true;}
+        StateMembersAttr getMembers();
+    }];
+    let extraClassDefinition= [{ StateMembersAttr $cppClass::getMembers(){ return getHashMultimap().getMembers();} }];
 }
 def EntryList : SubOperator_Type<"List", "list"> {
     let summary = "list type";
@@ -458,7 +479,7 @@ def CreateSegmentTreeView : SubOperator_Op<"create_segment_tree_view",[SubOperat
 // Streams & States
 //===----------------------------------------------------------------------===//
 
-def MaterializeOp : SubOperator_Op<"materialize",[SubOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
+def MaterializeOp : SubOperator_Op<"materialize",[SubOperator,DeclareOpInterfaceMethods<ColumnFoldable>,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let summary = "materialize state (sequentially)";
 
     let arguments = (ins TupleStream : $stream, AnyType : $state, DictionaryAttr : $mapping );
@@ -468,7 +489,7 @@ def MaterializeOp : SubOperator_Op<"materialize",[SubOperator,DeclareOpInterface
     }];
 }
 
-def LookupOrInsertOp : SubOperator_Op<"lookup_or_insert",[SubOperator,ReferenceProducer]> {
+def LookupOrInsertOp : SubOperator_Op<"lookup_or_insert",[SubOperator,ReferenceProducer,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let summary = "performs a lookup in a state and annotates the result as attribute ";
     let arguments = (ins TupleStream: $stream, AnyType: $state, ArrayAttr: $keys,ColumnDefAttr:$ref);
     let results = (outs TupleStream: $res);
@@ -477,6 +498,15 @@ def LookupOrInsertOp : SubOperator_Op<"lookup_or_insert",[SubOperator,ReferenceP
       let extraClassDeclaration = [{
           std::vector<std::string> getWrittenMembers();
           mlir::tuples::ColumnDefAttr getProducedReference(){ return getRef(); }
+      }];
+}
+def InsertOp : SubOperator_Op<"insert",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>,DeclareOpInterfaceMethods<ColumnFoldable>]> {
+    let summary = "performs a lookup in a state and annotates the result as attribute ";
+    let arguments = (ins TupleStream: $stream, LookupAbleState: $state, DictionaryAttr : $mapping);
+    let regions = (region AnyRegion:$eqFn);
+      let hasCustomAssemblyFormat = 1;
+      let extraClassDeclaration = [{
+          std::vector<std::string> getWrittenMembers();
       }];
 }
 
@@ -512,7 +542,7 @@ def OffsetReferenceBy : SubOperator_Op<"offset_ref_by",[SubOperator]> {
     let results = (outs TupleStream: $res);
     let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<CustRef>($idx) custom<CustDef>($newRef) attr-dict }];
 }
-def UnwrapOptionalRefOp : SubOperator_Op<"unwrap_optional_ref",[SubOperator]> {
+def UnwrapOptionalRefOp : SubOperator_Op<"unwrap_optional_ref",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let arguments = (ins TupleStream : $stream, ColumnRefAttr:$optional_ref, ColumnDefAttr: $ref);
     let results = (outs TupleStream: $res);
     let assemblyFormat = [{  $stream custom<CustRef>($optional_ref) custom<CustDef>($ref) attr-dict }];
@@ -545,7 +575,7 @@ def ScatterOp : SubOperator_Op<"scatter",[SubOperator,DeclareOpInterfaceMethods<
     }];
 }
 
-def ReduceOp : SubOperator_Op<"reduce",[SubOperator]> {
+def ReduceOp : SubOperator_Op<"reduce",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
   let summary = "reduce";
   let description =[{
   ```mlir

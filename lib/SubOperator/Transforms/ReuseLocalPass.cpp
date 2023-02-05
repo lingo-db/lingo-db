@@ -106,12 +106,11 @@ class ReuseHashtable : public mlir::RewritePattern {
 
    public:
    ReuseHashtable(mlir::MLIRContext* context, mlir::subop::ColumnUsageAnalysis& analysis)
-      : RewritePattern(mlir::subop::MaterializeOp::getOperationName(), 1, context), analysis(analysis) {}
+      : RewritePattern(mlir::subop::InsertOp::getOperationName(), 1, context), analysis(analysis) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
-      auto materializeOp = mlir::cast<mlir::subop::MaterializeOp>(op);
-      auto loc = materializeOp.getLoc();
-      auto state = materializeOp.getState();
+      auto insertOp = mlir::cast<mlir::subop::InsertOp>(op);
+      auto state = insertOp.getState();
       auto multimapType = state.getType().dyn_cast_or_null<mlir::subop::MultiMapType>();
       if (!multimapType) return mlir::failure();
       std::vector<mlir::subop::LookupOp> lookupOps;
@@ -125,14 +124,15 @@ class ReuseHashtable : public mlir::RewritePattern {
          }
       }
 
-      if (auto scanOp = mlir::dyn_cast_or_null<mlir::subop::ScanOp>(materializeOp.getStream().getDefiningOp())) {
+      if (auto scanOp = mlir::dyn_cast_or_null<mlir::subop::ScanOp>(insertOp.getStream().getDefiningOp())) {
          if (auto htType = scanOp.getState().getType().dyn_cast_or_null<mlir::subop::HashMapType>()) {
+            htType.dump();
             std::vector<mlir::tuples::Column*> hashedColumns;
             for (auto m : multimapType.getKeyMembers().getNames()) {
-               hashedColumns.push_back(&materializeOp.getMapping().get(m.cast<mlir::StringAttr>().strref()).cast<mlir::tuples::ColumnRefAttr>().getColumn());
+               hashedColumns.push_back(&insertOp.getMapping().get(m.cast<mlir::StringAttr>().strref()).cast<mlir::tuples::ColumnRefAttr>().getColumn());
             }
             std::unordered_map<std::string, std::string> memberMapping;
-            for (auto m : materializeOp.getMapping()) {
+            for (auto m : insertOp.getMapping()) {
                auto colDef = colManager.createDef(&m.getValue().cast<mlir::tuples::ColumnRefAttr>().getColumn());
                auto hmMember = lookupByValue(scanOp.getMapping(), colDef);
                auto bufferMember = m.getName().str();
@@ -166,7 +166,7 @@ class ReuseHashtable : public mlir::RewritePattern {
                      return mlir::Type();
                   });
             });
-            rewriter.eraseOp(materializeOp);
+            rewriter.eraseOp(insertOp);
             transformer.mapMembers(memberMapping);
             for (auto lookupOp : lookupOps) {
                std::vector<mlir::tuples::Column*> lookupHashedColumns;
@@ -183,35 +183,18 @@ class ReuseHashtable : public mlir::RewritePattern {
                   auto* col = columnMapping.at(keyMemberToColumn.at(keyMember.cast<mlir::StringAttr>().str()));
                   lookupColumns.push_back(colManager.createRef(col));
                }
-               mlir::Block* equalityBlock = new mlir::Block;
-               std::vector<mlir::Value> leftArgs;
-               std::vector<mlir::Value> rightArgs;
-               for (auto t : htType.getKeyMembers().getTypes()) {
-                  leftArgs.push_back(equalityBlock->addArgument(t.cast<mlir::TypeAttr>().getValue(), loc));
-               }
-               for (auto t : htType.getKeyMembers().getTypes()) {
-                  rightArgs.push_back(equalityBlock->addArgument(t.cast<mlir::TypeAttr>().getValue(), loc));
-               }
-               {
-                  mlir::OpBuilder::InsertionGuard guard(rewriter);
-                  rewriter.setInsertionPointToStart(equalityBlock);
-                  std::vector<mlir::Value> comparisons;
-                  for (auto z : llvm::zip(leftArgs, rightArgs)) {
-                     comparisons.push_back(rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::isa, std::get<0>(z), std::get<1>(z)));
-                  }
-                  mlir::Value anded = rewriter.create<mlir::db::AndOp>(loc, comparisons);
-                  rewriter.create<mlir::tuples::ReturnOp>(loc, anded);
-               }
                rewriter.setInsertionPointAfter(lookupOp);
                auto hmRefListType = mlir::subop::ListType::get(getContext(), hmRefType);
                auto lookupRef = lookupOp.getRef();
                auto [listDef, listRef] = createColumn(hmRefListType, "lookup", "list");
-
+               auto *equalityBlock=&lookupOp.getEqFn().front();
+               lookupOp.getEqFn().getBlocks().remove(equalityBlock);
                auto newLookupOp = rewriter.replaceOpWithNewOp<mlir::subop::LookupOp>(lookupOp, lookupOp.getStream(), scanOp.getState(), rewriter.getArrayAttr(lookupColumns), listDef);
                newLookupOp.getEqFn().push_back(equalityBlock);
                transformer.replaceColumn(&lookupRef.getColumn(), &listDef.getColumn());
             }
             transformer.updateValue(state, htType);
+            llvm::dbgs()<<"reusing ht\n";
          }
       }
 
