@@ -54,8 +54,7 @@ void mlir::relalg::QueryGraph::print(llvm::raw_ostream& out) {
    out << "]\n";
    out << "}\n";
 }
-
-std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unordered_map<const mlir::tuples::Column*, std::string>& mapping) {
+std::unique_ptr<support::eval::expr> mlir::relalg::buildEvalExpr(mlir::Value val, std::unordered_map<const mlir::tuples::Column*, std::string>& mapping){
    auto* op = val.getDefiningOp();
    if (!op) return std::move(support::eval::createInvalid());
    if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(op)) {
@@ -194,7 +193,7 @@ std::optional<double> estimateUsingSample(mlir::relalg::QueryGraph::Node& n) {
       for (auto pred : n.additionalPredicates) {
          if (auto selOp = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(pred.getOperation())) {
             auto v = mlir::cast<mlir::tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
-            expressions.push_back(buildEvalExpr(v, mapping)); //todo: ignore failing ones?
+            expressions.push_back(mlir::relalg::buildEvalExpr(v, mapping)); //todo: ignore failing ones?
          }
       }
       auto optionalCount = support::eval::countResults(sample, support::eval::createAnd(expressions));

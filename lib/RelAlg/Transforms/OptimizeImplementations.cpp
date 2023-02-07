@@ -1,11 +1,15 @@
 #include "llvm/ADT/TypeSwitch.h"
+#include "mlir-support/eval.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
+#include "mlir/Dialect/RelAlg/Transforms/queryopt/QueryGraph.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include <unordered_set>
+
 namespace {
 class HashJoinUtils {
    public:
@@ -208,10 +212,134 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       mapOp.getPredicate().push_back(mapBlock);
       return mapOp.getResult();
    }
+
+   size_t estimatedEvaluationCost(mlir::Value v) {
+      if (auto* definingOp = v.getDefiningOp()) {
+         return llvm::TypeSwitch<mlir::Operation*, size_t>(definingOp)
+            .Case([&](mlir::db::ConstantOp) {
+               return 0;
+            })
+            .Case([&](mlir::db::OrOp orOp) {
+               size_t res = orOp.getVals().size();
+               for (auto val : orOp.getVals()) {
+                  res += estimatedEvaluationCost(val);
+               }
+               return res;
+            })
+            .Case([&](mlir::tuples::GetColumnOp& getColumnOp) {
+               if (getBaseType(getColumnOp.getType()).isa<mlir::db::StringType>()) {
+                  return 4;
+               } else if (getBaseType(getColumnOp.getType()).isa<mlir::db::DecimalType>()) {
+                  return 2;
+               } else{
+                  return 1;
+               }
+            })
+            .Case([&](mlir::relalg::CmpOpInterface cmpOp) {
+               auto t = cmpOp.getLeft().getType();
+               auto childCost = estimatedEvaluationCost(cmpOp.getLeft()) + estimatedEvaluationCost(cmpOp.getRight());
+               if (getBaseType(t).isa<mlir::db::StringType>()) {
+                  return 10 + childCost;
+               } else {
+                  return 1 + childCost;
+               }
+            })
+            .Case([&](mlir::db::BetweenOp cmpOp) {
+               auto t = cmpOp.getLower().getType();
+               auto childCost = estimatedEvaluationCost(cmpOp.getVal())+estimatedEvaluationCost(cmpOp.getLower()) + estimatedEvaluationCost(cmpOp.getUpper());
+               if (getBaseType(t).isa<mlir::db::StringType>()) {
+                  return 20 + childCost;
+               } else {
+                  return 2 + childCost;
+               }
+            })
+            .Default([&](mlir::Operation* op) {
+               return 1000;
+            });
+      } else {
+         return 10000;
+      }
+   }
    void runOnOperation() override {
       std::vector<mlir::Operation*> toErase;
       getOperation().walk([&](Operator op) {
          ::llvm::TypeSwitch<mlir::Operation*, void>(op.getOperation())
+            .Case<mlir::relalg::SelectionOp>([&](mlir::relalg::SelectionOp selectionOp) {
+               std::unordered_set<mlir::Operation*> users(selectionOp->getUsers().begin(), selectionOp->getUsers().end());
+               if (users.empty()) return;
+               bool reorder = users.size() > 1 || !mlir::isa<mlir::relalg::SelectionOp>(*users.begin());
+               if (!reorder) return;
+               std::vector<mlir::relalg::SelectionOp> selections;
+               selections.push_back(selectionOp);
+               mlir::relalg::SelectionOp currentSelection = selectionOp;
+               while (currentSelection) {
+                  Operator child = currentSelection.getChildren()[0];
+                  if (std::vector<mlir::Operation*>(child->getUsers().begin(), child->getUsers().end()).size() > 1) {
+                     child = {};
+                  }
+                  currentSelection = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(child.getOperation());
+                  if (currentSelection) {
+                     selections.push_back(currentSelection);
+                  }
+               }
+               auto firstStream = selections[selections.size() - 1].getRel();
+               mlir::relalg::BaseTableOp baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(selections[selections.size() - 1].getRel().getDefiningOp());
+               if (baseTableOp) {
+                  std::unordered_map<const mlir::tuples::Column*, std::string> mapping;
+                  for (auto c : baseTableOp.getColumns()) {
+                     mapping[&c.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn()] = c.getName().str();
+                  }
+                  auto meta = baseTableOp.getMeta().getMeta();
+                  auto sample = meta->getSample();
+                  if (sample) {
+                     for (auto selOp : selections) {
+                        auto v = mlir::cast<mlir::tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
+                        auto expr = mlir::relalg::buildEvalExpr(v, mapping);
+                        auto optionalCount = support::eval::countResults(sample, std::move(expr));
+                        if (optionalCount) {
+                           auto count = optionalCount.value();
+                           if (count == 0) count = 1;
+                           double selectivity = static_cast<double>(count) / static_cast<double>(sample->num_rows());
+                           selOp->setAttr("selectivity", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), selectivity));
+                        }
+                     }
+                  }
+               }
+               for (auto selOp : selections) {
+                  auto v = mlir::cast<mlir::tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator()).getResults()[0];
+                  double evaluationCost = estimatedEvaluationCost(v);
+                  selOp->setAttr("evaluationCost", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), evaluationCost));
+               }
+               if (selections.size() > 1) {
+                  std::vector<mlir::relalg::SelectionOp> finalOrder;
+                  std::vector<std::pair<double, mlir::relalg::SelectionOp>> toProcess;
+                  for (auto sel : selections) {
+                     double selectivity = sel->hasAttr("selectivity") ? sel->getAttrOfType<mlir::FloatAttr>("selectivity").getValueAsDouble() : 1;
+                     toProcess.push_back({selectivity, sel});
+                  }
+                  std::sort(toProcess.begin(), toProcess.end(), [](auto a, auto b) { return a.first < b.first; });
+                  for (size_t i = 0; i < toProcess.size() - 1; i++) {
+                     auto& first = toProcess[i];
+                     auto& second = toProcess[i + 1];
+                     auto s1 = first.first;
+                     auto s2 = second.first;
+                     auto c1 = first.second->getAttrOfType<mlir::FloatAttr>("evaluationCost").getValueAsDouble();
+                     auto c2 = second.second->getAttrOfType<mlir::FloatAttr>("evaluationCost").getValueAsDouble();
+                     if (c1 + s1 * c2 > c2 + s2 * c1) {
+                        std::swap(first, second);
+                     }
+                  }
+                  mlir::Value stream = firstStream;
+                  for (auto sel : toProcess) {
+                     sel.second->moveAfter(stream.getDefiningOp());
+                     sel.second.setOperand(stream);
+                     stream = sel.second;
+                  }
+                  selectionOp.getResult().replaceUsesWithIf(stream, [&](auto& use) {
+                     return users.contains(use.getOwner());
+                  });
+               }
+            })
             .Case<mlir::relalg::LimitOp>([&](mlir::relalg::LimitOp limitOp) {
                if (auto sortOp = mlir::dyn_cast_or_null<mlir::relalg::SortOp>(limitOp.getRel().getDefiningOp())) {
                   mlir::OpBuilder builder(limitOp);

@@ -1,5 +1,8 @@
 #ifndef MLIR_DIALECT_RELALG_TRANSFORMS_QUERYOPT_UTILS_H
 #define MLIR_DIALECT_RELALG_TRANSFORMS_QUERYOPT_UTILS_H
+
+#include "mlir-support/eval.h"
+
 #include <llvm/ADT/EquivalenceClasses.h>
 #include <llvm/ADT/SmallBitVector.h>
 #include <llvm/ADT/TypeSwitch.h>
@@ -7,7 +10,6 @@
 #include <iomanip>
 #include <iterator>
 #include <mlir/Dialect/RelAlg/IR/RelAlgOps.h>
-
 namespace mlir::relalg {
 class QueryGraph;
 class NodeSet {
@@ -143,5 +145,7 @@ class Plan {
 
    static std::shared_ptr<Plan> joinPlans(NodeSet leftProblem, NodeSet rightProblem, std::shared_ptr<Plan> leftPlan, std::shared_ptr<Plan> rightPlan, QueryGraph& queryPlan, NodeSet& combinedProblem);
 };
+
+std::unique_ptr<support::eval::expr> buildEvalExpr(mlir::Value val, std::unordered_map<const mlir::tuples::Column*, std::string>& mapping);
 } // namespace mlir::relalg
 #endif // MLIR_DIALECT_RELALG_TRANSFORMS_QUERYOPT_UTILS_H

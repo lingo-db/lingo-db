@@ -797,9 +797,9 @@ static mlir::Value translateNLJ(mlir::Value left, mlir::Value right, mlir::relal
    }
    return nestedMapOp.getRes();
 }
-mlir::Block* createEqFn(mlir::ConversionPatternRewriter& rewriter,mlir::ArrayAttr leftColumns, mlir::ArrayAttr rightColumns, mlir::ArrayAttr nullsEqual,mlir::Location loc) {
+mlir::Block* createEqFn(mlir::ConversionPatternRewriter& rewriter, mlir::ArrayAttr leftColumns, mlir::ArrayAttr rightColumns, mlir::ArrayAttr nullsEqual, mlir::Location loc) {
    mlir::OpBuilder::InsertionGuard guard(rewriter);
-   auto *eqFnBlock = new mlir::Block;
+   auto* eqFnBlock = new mlir::Block;
    rewriter.setInsertionPointToStart(eqFnBlock);
    std::vector<mlir::Value> leftArgs;
    std::vector<mlir::Value> rightArgs;
@@ -817,8 +817,8 @@ mlir::Block* createEqFn(mlir::ConversionPatternRewriter& rewriter,mlir::ArrayAtt
       cmps.push_back(compared);
    }
    mlir::Value anded = rewriter.create<mlir::db::AndOp>(loc, cmps);
-   if(anded.getType().isa<mlir::db::NullableType>()){
-      anded=rewriter.create<mlir::db::DeriveTruth>(loc,anded);
+   if (anded.getType().isa<mlir::db::NullableType>()) {
+      anded = rewriter.create<mlir::db::DeriveTruth>(loc, anded);
    }
    rewriter.create<mlir::tuples::ReturnOp>(loc, anded);
    return eqFnBlock;
@@ -831,15 +831,15 @@ static mlir::Value translateHJ(mlir::Value left, mlir::Value right, mlir::ArrayA
    MaterializationHelper valueHelper(valueColumns, rewriter.getContext());
    auto multiMapType = mlir::subop::MultiMapType::get(rewriter.getContext(), keyHelper.createStateMembersAttr(), valueHelper.createStateMembersAttr());
    mlir::Value multiMap = rewriter.create<mlir::subop::GenericCreateOp>(loc, multiMapType);
-   auto insertOp=rewriter.create<mlir::subop::InsertOp>(loc, right, multiMap, keyHelper.createColumnstateMapping(valueHelper.createColumnstateMapping().getValue()));
-   insertOp.getEqFn().push_back(createEqFn(rewriter,hashRight, hashRight,nullsEqual,loc));
+   auto insertOp = rewriter.create<mlir::subop::InsertOp>(loc, right, multiMap, keyHelper.createColumnstateMapping(valueHelper.createColumnstateMapping().getValue()));
+   insertOp.getEqFn().push_back(createEqFn(rewriter, hashRight, hashRight, nullsEqual, loc));
 
    auto entryRefType = mlir::subop::MultiMapEntryRefType::get(rewriter.getContext(), multiMapType);
    auto entryRefListType = mlir::subop::ListType::get(rewriter.getContext(), entryRefType);
    auto [listDef, listRef] = createColumn(entryRefListType, "lookup", "list");
    auto [entryDef, entryRef] = createColumn(entryRefType, "lookup", "entryref");
    auto afterLookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), left, multiMap, hashLeft, listDef);
-   afterLookup.getEqFn().push_back(createEqFn(rewriter,hashRight, hashLeft,nullsEqual,loc));
+   afterLookup.getEqFn().push_back(createEqFn(rewriter, hashRight, hashLeft, nullsEqual, loc));
    auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), afterLookup, rewriter.getArrayAttr(listRef));
    auto* b = new Block;
    mlir::Value tuple = b->addArgument(mlir::tuples::TupleType::get(rewriter.getContext()), loc);
@@ -906,13 +906,13 @@ static std::pair<mlir::Value, mlir::Value> translateHJWithMarker(mlir::Value lef
    mlir::Value multiMap = rewriter.create<mlir::subop::GenericCreateOp>(loc, multiMapType);
    left = mapBool(left, rewriter, loc, false, &markerDefAttr.getColumn());
    auto insertOp = rewriter.create<mlir::subop::InsertOp>(loc, left, multiMap, keyHelper.createColumnstateMapping(valueHelper.createColumnstateMapping().getValue()));
-   insertOp.getEqFn().push_back(createEqFn(rewriter,hashLeft, hashLeft,nullsEqual,loc));
+   insertOp.getEqFn().push_back(createEqFn(rewriter, hashLeft, hashLeft, nullsEqual, loc));
    auto entryRefType = mlir::subop::MultiMapEntryRefType::get(rewriter.getContext(), multiMapType);
    auto entryRefListType = mlir::subop::ListType::get(rewriter.getContext(), entryRefType);
    auto [listDef, listRef] = createColumn(entryRefListType, "lookup", "list");
    auto [entryDef, entryRef] = createColumn(entryRefType, "lookup", "entryref");
    auto afterLookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), right, multiMap, hashRight, listDef);
-   afterLookup.getEqFn().push_back(createEqFn(rewriter,hashLeft, hashRight,nullsEqual,loc));
+   afterLookup.getEqFn().push_back(createEqFn(rewriter, hashLeft, hashRight, nullsEqual, loc));
 
    auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), afterLookup, rewriter.getArrayAttr(listRef));
    auto* b = new Block;
