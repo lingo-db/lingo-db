@@ -127,7 +127,7 @@ def called_from_generated(callchain):
 
 
 def process_event(param_dict):
-    if param_dict["comm"] != "run-sql":
+    if param_dict["comm"] != "run-sql" and param_dict["comm"] != "run-mlir":
         return
     b = bytearray(param_dict["raw_buf"])
     ibs_data = IBSData.from_buffer_copy(b[4:])
