@@ -124,6 +124,7 @@ std::shared_ptr<arrow::DataType> createDataType(const ColumnType& columnType) {
    if (columnType.base == "string") return arrow::utf8();
    if (columnType.base == "char") return arrow::fixed_size_binary(asInt(columnType.modifiers.at(0)));
    if (columnType.base == "decimal") return arrow::decimal(asInt(columnType.modifiers.at(0)), asInt(columnType.modifiers.at(1)));
+   if (columnType.base == "timestamp") return arrow::timestamp(arrow::TimeUnit::SECOND);
    throw std::runtime_error("unsupported type");
 }
 std::shared_ptr<arrow::Schema> createSchema(std::shared_ptr<TableMetaData> metaData) {
