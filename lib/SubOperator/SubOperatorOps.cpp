@@ -1074,7 +1074,7 @@ std::vector<std::string> subop::CreateSortedViewOp::getWrittenMembers() {
    return res;
 }
 std::vector<std::string> subop::CreateHashIndexedView::getWrittenMembers() {
-   return {getLinkMember().str()};
+   return {getLinkMember().str(),getHashMember().str()};//todo: hack
 }
 std::vector<std::string> subop::CreateHashIndexedView::getReadMembers() {
    return {getHashMember().str()};
