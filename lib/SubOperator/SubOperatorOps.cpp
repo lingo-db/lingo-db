@@ -1052,6 +1052,13 @@ std::vector<std::string> subop::NestedMapOp::getWrittenMembers() {
 }
 std::vector<std::string> subop::LoopOp::getReadMembers() {
    std::vector<std::string> res;
+   for(auto arg:getArgs()){
+      if(auto stateType=mlir::dyn_cast_or_null<mlir::subop::State>(arg.getType())){
+         for (auto x : stateType.getMembers().getNames()) {
+            res.push_back(x.cast<mlir::StringAttr>().str());
+         }
+      }
+   }
    this->getRegion().walk([&](mlir::subop::SubOperator subop) {
       auto read = subop.getReadMembers();
       res.insert(res.end(), read.begin(), read.end());
@@ -1064,6 +1071,13 @@ std::vector<std::string> subop::LoopOp::getWrittenMembers() {
       auto written = subop.getWrittenMembers();
       res.insert(res.end(), written.begin(), written.end());
    });
+   for(auto resT:getResultTypes()){
+      if(auto stateType=mlir::dyn_cast_or_null<mlir::subop::State>(resT)){
+         for (auto x : stateType.getMembers().getNames()) {
+            res.push_back(x.cast<mlir::StringAttr>().str());
+         }
+      }
+   }
    return res;
 }
 std::vector<std::string> subop::CreateSortedViewOp::getWrittenMembers() {
