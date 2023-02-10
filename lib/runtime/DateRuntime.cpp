@@ -16,6 +16,7 @@ class DateHelper {
    int64_t tmYear() const { return static_cast<int>(yearMonthDay().year()) - 1900; }
 
    int64_t tmMon() const { return static_cast<unsigned int>(yearMonthDay().month()) - 1; }
+   int64_t tmHour() const { return timeOfDay().hours().count(); }
 
    int64_t tmYday() const {
       auto toDays = date::floor<date::days>(tp);
@@ -67,4 +68,11 @@ int64_t runtime::DateRuntime::extractMonth(int64_t date) {
 }
 int64_t runtime::DateRuntime::extractDay(int64_t date) {
    return DateHelper(date).tmMday();
+}
+int64_t runtime::DateRuntime::dateDiffSeconds(int64_t start, int64_t end) {
+   auto diffNanos=end-start;
+   return diffNanos/(1000000000ull);
+}
+int64_t runtime::DateRuntime::extractHour(int64_t date) {
+   return DateHelper(date).tmHour();
 }

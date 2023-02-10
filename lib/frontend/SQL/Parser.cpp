@@ -240,6 +240,12 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
    if (funcName == "pg_catalog") {
       funcName = reinterpret_cast<value*>(funcCall->funcname_->tail->data.ptr_value)->val_.str_;
    }
+   if (funcName == "date_diff") {
+      auto unit = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
+      auto arg1 = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->next->data.ptr_value), context);
+      auto arg2 = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
+      return builder.create<mlir::db::RuntimeCall>(loc, builder.getI64Type(), "DateDiff", mlir::ValueRange({unit, arg1, arg2})).getRes();
+   }
    if (funcName == "date_part") {
       auto part = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       auto arg2 = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
@@ -1270,6 +1276,14 @@ runtime::ColumnType frontend::sql::Parser::createColumnType(std::string datatype
    }
    if (datatypeName == "int8") {
       datatypeName = "int";
+      typeModifiers.push_back(64ull);
+   }
+   if (datatypeName == "float4") {
+      datatypeName = "float";
+      typeModifiers.push_back(32ull);
+   }
+   if (datatypeName == "float8") {
+      datatypeName = "float";
       typeModifiers.push_back(64ull);
    }
    if (datatypeName == "char" && std::get<size_t>(typeModifiers[0]) > 8) {
@@ -2390,6 +2404,7 @@ mlir::Type frontend::sql::Parser::createBaseTypeFromColumnType(mlir::MLIRContext
    if (colType.base == "char") return mlir::db::CharType::get(context, asInt(colType.modifiers.at(0)));
    if (colType.base == "decimal") return mlir::db::DecimalType::get(context, asInt(colType.modifiers.at(0)), asInt(colType.modifiers.at(1)));
    if (colType.base == "interval") return mlir::db::IntervalType::get(context, std::get<std::string>(colType.modifiers.at(0)) == "daytime" ? mlir::db::IntervalUnitAttr::daytime : mlir::db::IntervalUnitAttr::months);
+   if (colType.base == "timestamp") return mlir::db::TimestampType::get(context, mlir::db::TimeUnitAttr::second);
    assert(false);
    return mlir::Type();
 }
