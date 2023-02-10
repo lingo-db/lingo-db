@@ -134,7 +134,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
 
          for (size_t i = 1; i < t.second.size(); i++) {
             auto other = t.second[i];
-            if (subOpDependencyAnalysis.areIndependent(first.getOperation(), other.getOperation())) {
+            if (subOpDependencyAnalysis.areIndependent(first.getOperation(), other.getOperation())&&first->getBlock()==other->getBlock()) {
                std::vector<mlir::Attribute> mappedCols;
                std::vector<mlir::Value> mappedColVals;
                auto* mapBlock = new mlir::Block;
