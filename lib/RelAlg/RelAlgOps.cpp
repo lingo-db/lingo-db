@@ -329,7 +329,8 @@ void mlir::relalg::BaseTableOp::print(OpAsmPrinter& p) {
    }
    for (auto z : llvm::zip(returnOp.getResults(), getComputedCols())) {
       if (auto colDef = std::get<1>(z).dyn_cast_or_null<mlir::tuples::ColumnDefAttr>()) {
-         if (colDef.getColumn().type != std::get<0>(z).getType()) {
+         auto expected=std::get<0>(z).getType();
+         if (colDef.getColumn().type != expected) {
             emitError("type mismatch between returned value and column definition");
             return mlir::failure();
          }
@@ -372,7 +373,10 @@ void mlir::relalg::BaseTableOp::print(OpAsmPrinter& p) {
 
 void mlir::relalg::NestedOp::print(::mlir::OpAsmPrinter& p) {
    p.printOperands(getInputs());
-   p << getUsedCols() << " -> " << getAvailableCols();
+   printCustRefArr(p,this->getOperation(),getUsedCols());
+   p<< " -> ";
+   printCustRefArr(p,this->getOperation(),getAvailableCols());
+
    p << " (";
    p.printOperands(getNestedFn().front().getArguments());
    p << ") ";
