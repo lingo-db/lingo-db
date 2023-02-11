@@ -2690,7 +2690,6 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 void SubOpToControlFlowLoweringPass::runOnOperation() {
    auto module = getOperation();
    getContext().getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(module);
-   module->dump();
    auto* ctxt = &getContext();
 
    SubOpRewriter rewriter(ctxt);
