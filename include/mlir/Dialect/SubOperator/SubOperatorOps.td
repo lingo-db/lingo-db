@@ -114,8 +114,8 @@ def Buffer : SubOperator_Type<"Buffer", "buffer", [State]> {
 
 def Array : SubOperator_Type<"Array", "array", [State]> {
     let summary = "fixed sized array";
-    let parameters = (ins "StateMembersAttr":$members,"uint32_t": $num_elements);
-    let assemblyFormat = "`<` $num_elements `,` custom<StateMembers>($members) `>`";
+    let parameters = (ins "StateMembersAttr":$members);
+    let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
 }
 
 def ContinuousView : SubOperator_Type<"ContinuousView", "continuous_view", [State]> {
@@ -442,6 +442,17 @@ def GenericCreateOp : SubOperator_Op<"create", [Pure]> {
     let summary = "create new state";
     let results = (outs AnyType : $res);
     let assemblyFormat = [{ type($res) attr-dict }];
+}
+def CreateArrayOp : SubOperator_Op<"create_array", [Pure,SubOperator]> {
+    let summary = "create new state";
+    let arguments = (ins SimpleState: $numElements);
+    let results = (outs Array : $res);
+    let assemblyFormat = [{ $numElements `:` type($numElements) `->` type($res) attr-dict }];
+      let hasCustomAssemblyFormat = 1;
+          let extraClassDeclaration = [{
+              std::vector<std::string> getWrittenMembers();
+              std::vector<std::string> getReadMembers();
+          }];
 }
 def CreateResultTableOp : SubOperator_Op<"create_result_table", [Pure]> {
     let summary = "create new state";

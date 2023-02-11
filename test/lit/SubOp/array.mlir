@@ -14,8 +14,12 @@
 !result_table_type = !subop.result_table<[v : index]>
 module {
     func.func @main(){
-        %vals = subop.create !subop.array<10,[val : index]>
-        %view = subop.create_continuous_view %vals : !subop.array<10,[val : index]> -> !subop.continuous_view<!subop.array<10,[val : index]>>
+        %numElements = subop.create_simple_state !subop.simple_state<[numElements: index]> initial: {
+             %c10 = arith.constant 10  : index
+            tuples.return %c10 : index
+        }
+        %vals = subop.create_array %numElements : !subop.simple_state<[numElements: index]> -> !subop.array<[val : index]>
+        %view = subop.create_continuous_view %vals : !subop.array<[val : index]> -> !subop.continuous_view<!subop.array<[val : index]>>
 
         %generated = subop.generate [@t::@c1({type=index}),@t::@c2({type=index})] {
             %n = arith.constant 10 : index
@@ -26,12 +30,12 @@ module {
             }
             tuples.return
         }
-        %stream1 = subop.get_begin_ref %generated %view : !subop.continuous_view<!subop.array<10,[val : index]>> @view::@begin({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<10,[val : index]>>>})
-        %stream2 = subop.offset_ref_by %stream1 @view::@begin @t::@c1 @t::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<10,[val : index]>>>})
+        %stream1 = subop.get_begin_ref %generated %view : !subop.continuous_view<!subop.array<[val : index]>> @view::@begin({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[val : index]>>>})
+        %stream2 = subop.offset_ref_by %stream1 @view::@begin @t::@c1 @t::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[val : index]>>>})
         subop.scatter %stream2 @t::@ref {@t::@c2 => val}
 
         %result_table = subop.create_result_table ["v"] -> !result_table_type
-        %stream4 = subop.scan_refs %view : !subop.continuous_view<!subop.array<10,[val : index]>> @scan::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<10,[val : index]>>>})
+        %stream4 = subop.scan_refs %view : !subop.continuous_view<!subop.array<[val : index]>> @scan::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[val : index]>>>})
         %stream5 = subop.gather %stream4 @scan::@ref { val => @scan::@currval({type=index}) }
         subop.materialize %stream5 {@scan::@currval => v}, %result_table : !result_table_type
         subop.set_result 0 %result_table  : !result_table_type

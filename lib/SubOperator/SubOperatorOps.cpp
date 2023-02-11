@@ -1080,6 +1080,20 @@ std::vector<std::string> subop::LoopOp::getWrittenMembers() {
    }
    return res;
 }
+std::vector<std::string> subop::CreateArrayOp::getReadMembers() {
+   std::vector<std::string> res;
+   for (auto x : getNumElements().getType().getMembers().getNames()) {
+      res.push_back(x.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
+std::vector<std::string> subop::CreateArrayOp::getWrittenMembers() {
+   std::vector<std::string> res;
+   for (auto x : getRes().getType().getMembers().getNames()) {
+      res.push_back(x.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
 std::vector<std::string> subop::CreateSortedViewOp::getWrittenMembers() {
    std::vector<std::string> res;
    for (auto x : getToSort().getType().cast<mlir::subop::BufferType>().getMembers().getNames()) {
