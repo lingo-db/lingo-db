@@ -50,6 +50,20 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
    static void handleScanUserRec(mlir::Operation* op, std::unordered_map<mlir::tuples::Column*, std::string>& columnFingerPrints, std::vector<mlir::subop::MaterializeOp>& materializeOps,
                                  std::vector<mlir::subop::FilterOp>& filterOps) {
       llvm::TypeSwitch<mlir::Operation*>(op)
+         .Case([&](mlir::subop::RenamingOp renamingOp) {
+            for (auto computed : renamingOp.getColumns()) {
+               auto colDefAttr = computed.cast<mlir::tuples::ColumnDefAttr>();
+               auto* colDefAttrCol = &colDefAttr.getColumn();
+               auto* colRefAttrCol = &colDefAttr.getFromExisting().cast<mlir::ArrayAttr>()[0].cast<mlir::tuples::ColumnRefAttr>().getColumn();
+               auto fp = columnFingerPrints.contains(colRefAttrCol);
+               if (fp) {
+                  columnFingerPrints.insert({colDefAttrCol, columnFingerPrints.at(colRefAttrCol)});
+               }
+            }
+            for (auto* user : renamingOp->getUsers()) {
+               handleScanUserRec(user, columnFingerPrints, materializeOps, filterOps);
+            }
+         })
          .Case([&](mlir::subop::MapOp mapOp) {
             auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(mapOp.getFn().front().getTerminator());
             for (auto computed : llvm::zip(mapOp.getComputedCols(), returnOp.getResults())) {
@@ -134,29 +148,22 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
 
          for (size_t i = 1; i < t.second.size(); i++) {
             auto other = t.second[i];
-            if (subOpDependencyAnalysis.areIndependent(first.getOperation(), other.getOperation())&&first->getBlock()==other->getBlock()) {
+            if (subOpDependencyAnalysis.areIndependent(first.getOperation(), other.getOperation()) && first->getBlock() == other->getBlock()) {
                std::vector<mlir::Attribute> mappedCols;
-               std::vector<mlir::Value> mappedColVals;
-               auto* mapBlock = new mlir::Block;
-               auto tuple = mapBlock->addArgument(mlir::tuples::TupleType::get(&getContext()), other.getLoc());
-               mlir::OpBuilder mapBuilder(&getContext());
-               mapBuilder.setInsertionPointToStart(mapBlock);
 
                for (auto x : other.getMapping()) {
                   if (mapping.contains(x.getName().str())) {
-                     mappedCols.push_back(x.getValue());
-                     auto colRef = colManager.createRef(&mapping.at(x.getName().str()).cast<mlir::tuples::ColumnDefAttr>().getColumn());
-                     mappedColVals.push_back(mapBuilder.create<mlir::tuples::GetColumnOp>(other.getLoc(), colRef.getColumn().type, colRef, tuple));
+                     auto fromRef = colManager.createRef(&mapping.at(x.getName().str()).cast<mlir::tuples::ColumnDefAttr>().getColumn());
+                     auto toDef = colManager.createDef(&x.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn(), mlir::ArrayAttr::get(&getContext(), fromRef));
+                     mappedCols.push_back(toDef);
                   } else {
                      mapping.insert({x.getName().str(), x.getValue()});
                   }
                }
                mlir::Value newScan = first;
                if (!mappedCols.empty()) {
-                  mapBuilder.create<mlir::tuples::ReturnOp>(other.getLoc(), mappedColVals);
                   mlir::OpBuilder builder(other.getOperation());
-                  auto mapOp = builder.create<mlir::subop::MapOp>(other.getLoc(), newScan, builder.getArrayAttr(mappedCols));
-                  mapOp.getFn().push_back(mapBlock);
+                  auto mapOp = builder.create<mlir::subop::RenamingOp>(other.getLoc(), newScan, builder.getArrayAttr(mappedCols));
                   newScan = mapOp.getResult();
                }
                other.getRes().replaceAllUsesWith(newScan);
@@ -263,25 +270,6 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
                   failed |= !firstFilters.contains(cf);
                }
                if (failed) continue;
-               /*
-               //todo: compute overlaping
-               llvm::dbgs() << "first:";
-               materializeOps[first][0].dump();
-               materializeOps[first][0].getLoc().dump();
-               llvm::dbgs() << "replacement candidate:";
-               materializeOps[other][0].dump();
-               materializeOps[other][0].getLoc().dump();
-               llvm::dbgs() << " extraMembers: ";
-               for (auto eM : extraMembers) {
-                  llvm::dbgs() << eM << ",";
-               }
-               llvm::dbgs() << "\n";
-               llvm::dbgs() << "used by:";
-               for (auto* user : materializeOps[other][0].getState().getUsers()) {
-                  user->dump();
-               }
-               llvm::dbgs() << "\n\n\n\n\n";
-*/
                if (!extraMembers.empty()) continue;
                std::unordered_map<std::string, std::string> memberMapping;
                for (auto c : materializeOps[other][0].getMapping()) {
@@ -324,20 +312,138 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
                   //todo: implement for buffer
                   continue;
                }
-
-               //steps:
-               //1. create new state type for first materialization
-               //2. adapt previous uses of state to the new type
-               //2.1 create
-               //2.2 materialization
-               //2.3 create_hash_indexed_view ->
-               //3. fix module => map members
-               //4. local optimizations to allow for further effects
-               //4.1 create_hash_indexed_view [link member is not first one]
-               //    => replace create_hash_indexed_view with a duplicate one (using the same hash)
             }
          }
       });
+
+      getOperation().walk([&](mlir::subop::ScanOp op) {
+         std::unordered_map<mlir::tuples::Column*, std::string> columnFingerPrints;
+         for (auto m : op.getMapping()) {
+            auto* col = &m.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn();
+            columnFingerPrints.insert({col, m.getName().str()});
+         }
+         std::unordered_map<mlir::Operation*, std::vector<mlir::subop::MaterializeOp>> materializeOps;
+         std::unordered_map<mlir::Operation*, std::vector<mlir::subop::FilterOp>> filterOps;
+         std::unordered_map<std::string, std::vector<mlir::Operation*>> operationsByCommonFilters;
+         for (auto* user : op->getUsers()) {
+            handleScanUserRec(user, columnFingerPrints, materializeOps[user], filterOps[user]);
+            std::string filterFingerPrint;
+            bool failed = false;
+            for (auto f : filterOps[user]) {
+               for (auto p : f.getConditions()) {
+                  auto* col = &p.cast<mlir::tuples::ColumnRefAttr>().getColumn();
+                  if (columnFingerPrints.contains(col)) {
+                     filterFingerPrint += columnFingerPrints[col];
+                  } else {
+                     failed = true;
+                  }
+               }
+            }
+            if (!failed && !filterFingerPrint.empty()) {
+               operationsByCommonFilters[filterFingerPrint].push_back(user);
+            }
+         }
+         for (auto& group : operationsByCommonFilters) {
+            if (group.second.size() < 2) continue;
+            //llvm::dbgs() << group.first << "\n";
+            std::sort(group.second.begin(), group.second.end(), [&](mlir::Operation* left, mlir::Operation* right) {
+               return filterOps[left][filterOps[left].size() - 1]->isBeforeInBlock(filterOps[right][filterOps[right].size() - 1]);
+            });
+            for (size_t i = 1; i < group.second.size(); i++) {
+               auto replaceWith = filterOps[group.second[0]][filterOps[group.second[0]].size() - 1];
+               op.getRes().replaceUsesWithIf(replaceWith, [&](auto& use) { return use.getOwner() == group.second[i]; });
+               mlir::Operation* moveAfter = replaceWith.getOperation();
+               mlir::Operation* current = group.second[i];
+               while (current && current->isBeforeInBlock(moveAfter)) {
+                  current->moveAfter(moveAfter);
+                  moveAfter = current;
+                  current = current->getUsers().empty() ? nullptr : *current->getUsers().begin();
+               }
+               for (auto filterOp : filterOps[group.second[i]]) {
+                  filterOp.replaceAllUsesWith(filterOp.getStream());
+               }
+            }
+         }
+      });
+
+      //Q28
+      static size_t uniqueId = 0;
+      getOperation().walk([&](mlir::subop::ScanOp scanOp) {
+         std::unordered_map<std::string, std::tuple<size_t, double, std::vector<mlir::Operation*>>> groupByMembers;
+         std::unordered_map<mlir::Operation*, size_t> groupForOp;
+         std::unordered_map<mlir::tuples::Column*, std::string> columnFingerPrints;
+         for (auto m : scanOp.getMapping()) {
+            auto* col = &m.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn();
+            columnFingerPrints.insert({col, m.getName().str()});
+         }
+         std::unordered_map<mlir::Operation*, std::vector<mlir::subop::MaterializeOp>> materializeOps;
+         std::unordered_map<mlir::Operation*, std::vector<mlir::subop::FilterOp>> filterOps;
+         std::unordered_map<std::string, std::vector<mlir::Operation*>> operationsByCommonFilters;
+         size_t counter = 0;
+         for (auto* user : scanOp->getUsers()) {
+            handleScanUserRec(user, columnFingerPrints, materializeOps[user], filterOps[user]);
+            std::string filterFingerPrint;
+            bool failed = false;
+            if (filterOps[user].empty()) continue;
+            auto f = filterOps[user][0];
+            if (!f->hasAttr("selectivity")) continue;
+            double sel = f->getAttrOfType<mlir::FloatAttr>("selectivity").getValueAsDouble();
+            for (auto p : f.getConditions()) {
+               auto* col = &p.cast<mlir::tuples::ColumnRefAttr>().getColumn();
+               if (columnFingerPrints.contains(col)) {
+                  filterFingerPrint += columnFingerPrints[col];
+               } else {
+                  failed = true;
+               }
+            }
+            if (failed) continue;
+            std::string requiredMembers;
+            for (auto m : scanOp.getMapping()) {
+               auto members = m.getName().str();
+               if (filterFingerPrint.find(members) != std::string::npos) {
+                  requiredMembers += "," + members;
+               }
+            }
+            if (requiredMembers.empty()) continue;
+            while (true) {
+               if (groupByMembers.contains(requiredMembers)) {
+                  auto& entry = groupByMembers[requiredMembers];
+                  if (std::get<1>(entry) + sel < 0.3) {
+                     std::get<2>(entry).push_back(user);
+                     break;
+                  }
+               } else {
+                  groupByMembers.insert({requiredMembers, {counter++, sel, {user}}});
+                  break;
+               }
+               requiredMembers += "//";
+            }
+         }
+         bool first = true;
+
+         for (auto& e : groupByMembers) {
+            if (first) {
+               first = false;
+               //no rewriting necessary
+            } else {
+               auto& groupUsers = std::get<2>(e.second);
+               std::sort(groupUsers.begin(), groupUsers.end(), [&](mlir::Operation* left, mlir::Operation* right) {
+                  return left->isBeforeInBlock(right);
+               });
+               auto *firstGroupUser = groupUsers[0];
+               mlir::OpBuilder builder(firstGroupUser->getContext());
+               builder.setInsertionPoint(firstGroupUser);
+               auto* cloned = builder.clone(*scanOp);
+               cloned->setAttr("scanNr" + std::to_string(uniqueId++), builder.getUnitAttr());
+               auto clonedScan = mlir::cast<mlir::subop::ScanOp>(cloned);
+
+               for (auto* op : std::get<2>(e.second)) {
+                  scanOp.getRes().replaceUsesWithIf(clonedScan.getRes(), [&](auto& use) { return use.getOwner() == op; });
+               }
+            }
+         }
+      });
+
    }
 };
 } // end anonymous namespace

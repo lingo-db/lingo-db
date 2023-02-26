@@ -1222,6 +1222,20 @@ mlir::LogicalResult subop::MapOp::foldColumns(mlir::subop::ColumnFoldInfo& colum
    replaceColumnUsesInLamda(getContext(), getFn().front(), columnInfo);
    return mlir::success();
 }
+mlir::LogicalResult subop::FilterOp::foldColumns(mlir::subop::ColumnFoldInfo& columnInfo) {
+   auto& colManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+   std::vector<mlir::Attribute> newConditions;
+   for (auto f : getConditions()) {
+      auto col = f.cast<mlir::tuples::ColumnRefAttr>();
+      if (columnInfo.directMappings.contains(&col.getColumn())) {
+         col = colManager.createRef(columnInfo.directMappings[&col.getColumn()]);
+      }
+      newConditions.push_back(col);
+   }
+   mlir::OpBuilder b(getContext());
+   setConditionsAttr(b.getArrayAttr(newConditions));
+   return mlir::success();
+}
 mlir::LogicalResult subop::MaterializeOp::foldColumns(mlir::subop::ColumnFoldInfo& columnInfo) {
    auto& colManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
 

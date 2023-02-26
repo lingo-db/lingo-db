@@ -375,7 +375,7 @@ def FilterSemantic : I64EnumAttr<"FilterSemantic", "",
     let cppNamespace = "::mlir::subop";
 }
 
-def FilterOp : SubOperator_Op<"filter", [Pure,SubOperator]> {
+def FilterOp : SubOperator_Op<"filter", [Pure,SubOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
     let summary = "filter stream of tuples according to one or more boolean columns (all 1 => keep tuple, otherwise discard) ";
     let arguments = (ins TupleStream : $stream, FilterSemantic:$filterSemantic,ArrayAttr : $conditions );
     let results = (outs TupleStream : $res);

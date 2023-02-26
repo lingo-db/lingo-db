@@ -218,7 +218,14 @@ class SelectionLowering : public OpConversionPattern<mlir::relalg::SelectionOp> 
    using OpConversionPattern<mlir::relalg::SelectionOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::relalg::SelectionOp selectionOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOp(selectionOp, translateSelection(adaptor.getRel(), selectionOp.getPredicate(), rewriter, selectionOp->getLoc()));
+      auto repl=translateSelection(adaptor.getRel(), selectionOp.getPredicate(), rewriter, selectionOp->getLoc());
+      if(auto *definingOp=repl.getDefiningOp()){
+         if(selectionOp->hasAttr("selectivity")){
+            definingOp->setAttr("selectivity",selectionOp->getAttr("selectivity"));
+         }
+      }
+      rewriter.replaceOp(selectionOp, repl);
+
       return success();
    }
 };

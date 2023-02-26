@@ -2,6 +2,7 @@
 //CHECK: |                           ctr  |
 //CHECK: ----------------------------------
 //CHECK: |                             6  |
+
 module{
     func.func @main(){
         %ctri = subop.create_simple_state !subop.simple_state<[ctri:i32]> initial: {
