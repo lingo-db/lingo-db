@@ -46,11 +46,17 @@ build/llvm-build/.buildstamp: build/llvm-build/.stamp
 
 resources/data/tpch-1/.stamp: tools/generate/tpch.sh
 	mkdir -p resources/data/tpch-1
+
 	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
 	touch $@
 
 resources/data/tpcds-1/.stamp: tools/generate/tpcds.sh
 	mkdir -p resources/data/tpcds-1
+	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
+	touch $@
+
+resources/data/job/.stamp: tools/generate/tpcds.sh
+	mkdir -p resources/data/job
 	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
 	touch $@
 
@@ -63,6 +69,16 @@ dependencies: $(LDB_DEPS)
 build/lingodb-debug/.stamp: $(LDB_DEPS)
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS)
 	touch $@
+
+build/lingodb-debug/.buildstamp: build/lingodb-debug/.stamp
+	cmake --build $(dir $@) -- -j${NPROCS}
+	touch $@
+
+
+build/lingodb-release/.buildstamp: build/lingodb-release/.stamp
+	cmake --build $(dir $@) -- -j${NPROCS}
+	touch $@
+
 build/lingodb-release/.stamp: $(LDB_DEPS)
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS) -DCMAKE_BUILD_TYPE=Release
 	touch $@
@@ -83,9 +99,14 @@ run-test: build/lingodb-debug/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql pymlirdbext sql-to-mlir mlir-doc -- -j${NPROCS}
 	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit -v $(dir $<)/test/lit
 .PHONY: run-benchmark
-run-benchmark: build/lingodb-release/.stamp resources/data/tpch-1/.stamp
+run-benchmark: build/lingodb-release/.stamp build/lingodb-debug/.stamp resources/data/tpch-1/.stamp
 	cmake --build $(dir $<) --target run-sql -- -j${NPROCS}
 	env QUERY_RUNS=5 env LINGODB_EXECUTION_MODE=SPEED python3 tools/scripts/benchmark-tpch.py $(dir $<) tpch-1
+
+run-benchmarks: build/lingodb-release/.stamp build/lingodb-debug/.stamp resources/data/tpch-1/.stamp resources/data/tpcds-1/.stamp
+	cmake --build $(dir $<) --target run-sql -- -j${NPROCS}
+	env QUERY_RUNS=5 env LINGODB_EXECUTION_MODE=SPEED python3 tools/scripts/benchmark-tpch.py $(dir $<) tpch-1
+	env QUERY_RUNS=5 env LINGODB_EXECUTION_MODE=SPEED python3 tools/scripts/benchmark-tpcds.py $(dir $<) tpcds-1
 
 docker-buildimg:
 	DOCKER_BUILDKIT=1 docker build -f "tools/docker/Dockerfile" -t lingodb-buildimg:$(shell echo "$$(git submodule status)" | cut -c 2-9 | tr '\n' '-') --target buildimg "."
@@ -93,6 +114,9 @@ build-docker:
 	DOCKER_BUILDKIT=1 docker build -f "tools/docker/Dockerfile" -t lingodb:latest --target lingodb  "."
 build-repr-docker:
 	DOCKER_BUILDKIT=1 docker build -f "tools/docker/Dockerfile" -t lingodb-repr:latest --target reproduce "."
+
+build-release: build/lingodb-release/.buildstamp
+build-debug: build/lingodb-debug/.buildstamp
 
 .repr-docker-built:
 	$(MAKE) build-repr-docker
