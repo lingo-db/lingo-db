@@ -118,6 +118,18 @@ LogicalResult mlir::util::StoreOp::canonicalize(mlir::util::StoreOp op, mlir::Pa
    return failure();
 }
 
+::mlir::LogicalResult mlir::util::UndefOp::canonicalize(mlir::util::UndefOp op, ::mlir::PatternRewriter& rewriter) {
+   if (auto ty = op.getType().dyn_cast_or_null<mlir::TupleType>()) {
+      std::vector<mlir::Value> values;
+      for (auto t : ty.getTypes()) {
+         values.push_back(rewriter.create<mlir::util::UndefOp>(op->getLoc(), t));
+      }
+      rewriter.replaceOpWithNewOp<mlir::util::PackOp>(op, values);
+      return mlir::success();
+   }
+   return failure();
+}
+
 void mlir::util::LoadOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects::EffectInstance<::mlir::MemoryEffects::Effect>>& effects) {
    if (!getOperation()->hasAttr("nosideffect")) {
       effects.emplace_back(MemoryEffects::Read::get());

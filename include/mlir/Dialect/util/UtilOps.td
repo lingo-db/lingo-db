@@ -188,6 +188,7 @@ def UndefOp : Util_Op<"undef",[Pure]> {
     let summary = "undefined value";
     let arguments = (ins);
     let results =(outs AnyType:$res);
+    let hasCanonicalizeMethod = 1;
     let assemblyFormat = " attr-dict `:` type($res) ";
 }
 def GetTupleOp : Util_Op<"get_tuple",[Pure]> {

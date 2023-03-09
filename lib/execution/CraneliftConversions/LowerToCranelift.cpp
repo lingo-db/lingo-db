@@ -70,11 +70,40 @@ class ExtSILowering : public OpConversionPattern<mlir::arith::ExtSIOp> {
       return success();
    }
 };
+
+static void ensureSIToFloat32(mlir::ModuleOp module, OpBuilder& builder) {
+   mlir::cranelift::FuncOp funcOp = module.lookupSymbol<mlir::cranelift::FuncOp>("__floattisf");
+   if (!funcOp) {
+      OpBuilder::InsertionGuard insertionGuard(builder);
+      builder.setInsertionPointToStart(module.getBody());
+      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "__floattisf", builder.getFunctionType({builder.getIntegerType(128)}, {builder.getF32Type()}));
+   }
+}
+static void ensureSIToFloat64(mlir::ModuleOp module, OpBuilder& builder) {
+   mlir::cranelift::FuncOp funcOp = module.lookupSymbol<mlir::cranelift::FuncOp>("__floattidf");
+   if (!funcOp) {
+      OpBuilder::InsertionGuard insertionGuard(builder);
+      builder.setInsertionPointToStart(module.getBody());
+      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "__floattidf", builder.getFunctionType({builder.getIntegerType(128)}, {builder.getF64Type()}));
+   }
+}
 class SIToFPLowering : public OpConversionPattern<mlir::arith::SIToFPOp> {
    public:
    using OpConversionPattern<mlir::arith::SIToFPOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::arith::SIToFPOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOpWithNewOp<mlir::cranelift::SIToFP>(op, op.getType(), adaptor.getIn());
+      if (adaptor.getIn().getType().isInteger(128)) {
+         if (op.getType().isF32()) {
+            ensureSIToFloat32(op->getParentOfType<mlir::ModuleOp>(), rewriter);
+            rewriter.replaceOpWithNewOp<mlir::cranelift::CallOp>(op, rewriter.getF32Type(), "__floattisf", adaptor.getIn());
+            return success();
+         } else {
+            ensureSIToFloat64(op->getParentOfType<mlir::ModuleOp>(), rewriter);
+            rewriter.replaceOpWithNewOp<mlir::cranelift::CallOp>(op, rewriter.getF64Type(), "__floattidf", adaptor.getIn());
+            return success();
+         }
+      } else {
+         rewriter.replaceOpWithNewOp<mlir::cranelift::SIToFP>(op, op.getType(), adaptor.getIn());
+      }
       return success();
    }
 };
@@ -335,6 +364,12 @@ class UndefLowering : public OpConversionPattern<mlir::util::UndefOp> {
          return success();
       } else if (targetType.isIntOrIndex()) {
          rewriter.replaceOpWithNewOp<mlir::cranelift::IConstOp>(op, targetType, 0);
+         return success();
+      } else if (targetType.isF32()) {
+         rewriter.replaceOpWithNewOp<mlir::cranelift::F32ConstOp>(op, targetType, rewriter.getF32FloatAttr(0));
+         return success();
+      } else if (targetType.isF64()) {
+         rewriter.replaceOpWithNewOp<mlir::cranelift::F64ConstOp>(op, targetType, rewriter.getF64FloatAttr(0));
          return success();
       }
       return failure();
@@ -697,7 +732,6 @@ class InvalidRefOpLowering : public OpConversionPattern<mlir::util::InvalidRefOp
       return success();
    }
 };
-
 
 class VarLenCmpLowering : public OpConversionPattern<mlir::util::VarLenCmp> {
    public:

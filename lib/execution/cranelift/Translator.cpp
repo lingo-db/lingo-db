@@ -107,7 +107,7 @@ void mlir::cranelift::CraneliftExecutionEngine::translate(mlir::cranelift::FuncO
                .Case([&](mlir::cranelift::FSubOp op) { store(op, cranelift_fsub(fd, load(op.getLhs()), load(op.getRhs()))); })
                .Case([&](mlir::cranelift::FMulOp op) { store(op, cranelift_fmul(fd, load(op.getLhs()), load(op.getRhs()))); })
                .Case([&](mlir::cranelift::FDivOp op) { store(op, cranelift_fdiv(fd, load(op.getLhs()), load(op.getRhs()))); }) //todo: use immediate if possible?
-
+               .Case([&](mlir::cranelift::SShrOp op) { store(op, cranelift_sshr(fd, load(op.getLhs()), load(op.getRhs()))); })
                .Case([&](mlir::cranelift::UShrOp op) { store(op, cranelift_ushr(fd, load(op.getLhs()), load(op.getRhs()))); })
                .Case([&](mlir::cranelift::IShlOp op) { store(op, cranelift_ishl(fd, load(op.getLhs()), load(op.getRhs()))); })
                .Case([&](mlir::cranelift::BOrOp op) { store(op, cranelift_bor(fd, load(op.getLhs()), load(op.getRhs()))); })
@@ -120,13 +120,11 @@ void mlir::cranelift::CraneliftExecutionEngine::translate(mlir::cranelift::FuncO
                .Case([&](mlir::cranelift::BAndOp op) { store(op, cranelift_band(fd, load(op.getLhs()), load(op.getRhs()))); })
                .Case([&](mlir::cranelift::BSwap op) { store(op, cranelift_bswap(fd, load(op.getX()))); })
                .Case([&](mlir::cranelift::SelectOp op) {
-                  assert(!op.getType().isInteger(128));
                   store(op, cranelift_select(fd, load(op.getCondition()), load(op.getTrueVal()), load(op.getFalseVal()))); })
                .Case([&](mlir::cranelift::ICmpOp op) { store(op, cranelift_icmp(fd, static_cast<CraneliftIntCC>(op.getPredicate()), load(op.getLhs()), load(op.getRhs()))); })
                .Case([&](mlir::cranelift::FCmpOp op) { store(op, cranelift_fcmp(fd, static_cast<CraneliftFloatCC>(op.getPredicate()), load(op.getLhs()), load(op.getRhs()))); })
 
                .Case([&](mlir::cranelift::SExtendOp op) {
-                  //assert(!op.getType().isInteger(128));
                   store(op, cranelift_sextend(fd, translateType(op.getType()), load(op.getValue()))); })
                .Case([&](mlir::cranelift::UExtendOp op) {
                   auto val = load(op.getValue());

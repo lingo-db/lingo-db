@@ -118,6 +118,7 @@ lint:
 
 .sqlite_dataset_tests:
    script:
+      - export LINGODB_EXECUTION_MODE=CHEAP
       - mkdir -p /datasets/tpch-1
       - mkdir -p /datasets/tpcds-1
       - mkdir -p /datasets/job
