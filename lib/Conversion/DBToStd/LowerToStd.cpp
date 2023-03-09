@@ -129,6 +129,9 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
       if (atOp.getValid()) {
          values.push_back(newAtOp.getValid());
       }
+      if(auto charType=t.dyn_cast_or_null<mlir::db::CharType>()){
+         newAtOp->setAttr("numBytes",rewriter.getI64IntegerAttr(charType.getBytes()));
+      }
       if (t.isa<mlir::db::DateType, mlir::db::TimestampType>()) {
          if (values[0].getType() != rewriter.getI64Type()) {
             values[0] = rewriter.create<mlir::arith::ExtUIOp>(loc, rewriter.getI64Type(), values[0]);
@@ -209,7 +212,10 @@ class AppendTBLowering : public ConversionPattern {
             val = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), val);
          }
       }
-      rewriter.create<mlir::dsa::Append>(loc, adaptor.getDs(), val, adaptor.getValid());
+      auto newAppendOp=rewriter.create<mlir::dsa::Append>(loc, adaptor.getDs(), val, adaptor.getValid());
+      if(auto charType=t.dyn_cast_or_null<mlir::db::CharType>()){
+         newAppendOp->setAttr("numBytes",rewriter.getI64IntegerAttr(charType.getBytes()));
+      }
 
       rewriter.eraseOp(op);
       return success();
@@ -273,24 +279,23 @@ class CharCmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
    public:
    using OpConversionPattern<mlir::db::CmpOp>::OpConversionPattern;
 
-
    LogicalResult matchAndRewrite(mlir::db::CmpOp cmpOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto type = cmpOp.getLeft().getType();
       auto charType = type.dyn_cast_or_null<mlir::db::CharType>();
       if (!charType) {
          return failure();
       }
-      if(cmpOp.getPredicate()==mlir::db::DBCmpPredicate::eq){
+      if (cmpOp.getPredicate() == mlir::db::DBCmpPredicate::eq) {
          rewriter.replaceOpWithNewOp<arith::CmpIOp>(cmpOp, mlir::arith::CmpIPredicate::eq, adaptor.getLeft(), adaptor.getRight());
          return success();
       }
-      if(cmpOp.getPredicate()==mlir::db::DBCmpPredicate::neq){
+      if (cmpOp.getPredicate() == mlir::db::DBCmpPredicate::neq) {
          rewriter.replaceOpWithNewOp<arith::CmpIOp>(cmpOp, mlir::arith::CmpIPredicate::ne, adaptor.getLeft(), adaptor.getRight());
          return success();
       }
-      mlir::Value left=rewriter.create<mlir::db::CastOp>(cmpOp->getLoc(),mlir::db::StringType::get(getContext()),cmpOp.getLeft());
-      mlir::Value right=rewriter.create<mlir::db::CastOp>(cmpOp->getLoc(),mlir::db::StringType::get(getContext()),cmpOp.getRight());
-      rewriter.replaceOpWithNewOp<mlir::db::CmpOp>(cmpOp,cmpOp.getPredicate(),left,right);
+      mlir::Value left = rewriter.create<mlir::db::CastOp>(cmpOp->getLoc(), mlir::db::StringType::get(getContext()), cmpOp.getLeft());
+      mlir::Value right = rewriter.create<mlir::db::CastOp>(cmpOp->getLoc(), mlir::db::StringType::get(getContext()), cmpOp.getRight());
+      rewriter.replaceOpWithNewOp<mlir::db::CmpOp>(cmpOp, cmpOp.getPredicate(), left, right);
       return success();
    }
 };
@@ -338,7 +343,7 @@ class StringCmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
             res = rt::StringRuntime::compareGte(rewriter, cmpOp->getLoc())({left, right})[0];
             break;
          case db::DBCmpPredicate::isa:
-            assert(false&&"should not happen");
+            assert(false && "should not happen");
             break;
       }
       rewriter.replaceOp(cmpOp, res);
@@ -740,7 +745,7 @@ class CmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
          case db::DBCmpPredicate::gte:
             return arith::CmpIPredicate::sge;
          case db::DBCmpPredicate::isa:
-            assert(false&&"should not happen");
+            assert(false && "should not happen");
             break;
       }
       assert(false && "unexpected case");
@@ -761,14 +766,14 @@ class CmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
          case db::DBCmpPredicate::gte:
             return arith::CmpFPredicate::OGE;
          case db::DBCmpPredicate::isa:
-            assert(false&&"should not happen");
+            assert(false && "should not happen");
             break;
       }
       assert(false && "unexpected case");
       return arith::CmpFPredicate::OEQ;
    }
    LogicalResult matchAndRewrite(mlir::db::CmpOp cmpOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if(cmpOp.getLeft().getType().isa<mlir::db::CharType>()){
+      if (cmpOp.getLeft().getType().isa<mlir::db::CharType>()) {
          return failure();
       }
       if (!adaptor.getLeft().getType().isIntOrIndexOrFloat()) {
@@ -957,10 +962,10 @@ class HashLowering : public ConversionPattern {
       } else if (auto varLenType = v.getType().dyn_cast_or_null<mlir::util::VarLen32Type>()) {
          auto varlenTryCheapHash = builder.create<mlir::util::VarLenTryCheapHash>(loc, builder.getI1Type(), builder.getIndexType(), v);
          mlir::Value hash = builder.create<mlir::scf::IfOp>(
-                          loc, builder.getIndexType(), varlenTryCheapHash.getComplete(), [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, varlenTryCheapHash.getHash()); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+                                      loc, builder.getIndexType(), varlenTryCheapHash.getComplete(), [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, varlenTryCheapHash.getHash()); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
                                          mlir::Value hash = builder.create<mlir::util::HashVarLen>(loc, builder.getIndexType(), v);
                                          builder.create<mlir::scf::YieldOp>(loc, hash); })
-                   .getResult(0);
+                               .getResult(0);
 
          return combineHashes(builder, loc, hash, totalHash);
       } else if (auto tupleType = v.getType().dyn_cast_or_null<mlir::TupleType>()) {
@@ -1032,7 +1037,17 @@ void DBToStdLoweringPass::runOnOperation() {
    });
    typeConverter.addConversion([&](::mlir::db::CharType t) {
       if (t.getBytes() > 8) return mlir::Type();
-      return (Type) mlir::IntegerType::get(ctxt, t.getBytes() * 8);
+      size_t bits = 0;
+      if (t.getBytes() == 1) {
+         bits = 8;
+      } else if (t.getBytes() == 2) {
+         bits = 16;
+      } else if (t.getBytes()<=4){
+         bits=32;
+      }else{
+         bits=64;
+      }
+      return (Type) mlir::IntegerType::get(ctxt, bits);
    });
    typeConverter.addConversion([&](::mlir::db::StringType t) {
       return mlir::util::VarLen32Type::get(ctxt);

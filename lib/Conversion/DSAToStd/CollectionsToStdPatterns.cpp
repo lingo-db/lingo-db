@@ -140,15 +140,80 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
          val = getBit(rewriter, loc, originalValueBuffer, realPos);
       } else if (typeConverter->convertType(baseType).isIntOrIndexOrFloat()) {
          auto convertedType = typeConverter->convertType(baseType);
-         if (convertedType.isInteger(24) || convertedType.isInteger(48) || convertedType.isInteger(56)) {
-            Value factor = rewriter.create<mlir::arith::ConstantIndexOp>(loc, convertedType.cast<mlir::IntegerType>().getWidth() / 8);
-            Value pos = rewriter.create<arith::AddIOp>(loc, columnOffset, index);
-            pos = rewriter.create<arith::MulIOp>(loc, pos, factor);
-            Value valBuffer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, rewriter.getI8Type()), originalValueBuffer);
-            Value ptr = rewriter.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, rewriter.getI8Type()), valBuffer, pos);
-            ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, convertedType), ptr);
-            val = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(baseType), ptr);
-            val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+         if (auto numBytesAttr = atOp->getAttrOfType<mlir::IntegerAttr>("numBytes")) {
+            auto numBytes = numBytesAttr.getInt();
+            auto bits = numBytes * 8;
+            if (bits == convertedType.getIntOrFloatBitWidth()) {
+               //simple case: matches length of
+               val = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(baseType), valueBuffer, index);
+               val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+            } else {
+               Value factor = rewriter.create<mlir::arith::ConstantIndexOp>(loc, numBytes);
+               Value pos = rewriter.create<arith::AddIOp>(loc, columnOffset, index);
+               pos = rewriter.create<arith::MulIOp>(loc, pos, factor);
+               Value valBuffer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, rewriter.getI8Type()), originalValueBuffer);
+               Value ptr = rewriter.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, rewriter.getI8Type()), valBuffer, pos);
+               auto combine = [loc](mlir::IntegerType largerType, mlir::Value first, mlir::Value second, size_t shiftAmount, mlir::OpBuilder& rewriter) -> mlir::Value {
+                  mlir::Value ext1 = rewriter.create<arith::ExtUIOp>(loc, largerType, first);
+                  mlir::Value ext2 = rewriter.create<arith::ExtUIOp>(loc, largerType, second);
+                  mlir::Value shiftAmountConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, shiftAmount, largerType);
+                  mlir::Value shifted = rewriter.create<mlir::arith::ShLIOp>(loc, ext2, shiftAmountConst);
+                  return rewriter.create<mlir::arith::OrIOp>(loc, ext1, shifted);
+               };
+               if (bits == 24) {
+                  mlir::Value i16Ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, rewriter.getI16Type()), ptr);
+                  mlir::Value i16Val = rewriter.create<util::LoadOp>(loc, i16Ptr);
+                  Value const2 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 2);
+                  Value pos2 = rewriter.create<arith::AddIOp>(loc, pos, const2);
+                  Value i8Ptr = rewriter.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, rewriter.getI8Type()), valBuffer, pos2);
+                  mlir::Value i8Val = rewriter.create<util::LoadOp>(loc, i8Ptr);
+                  val = combine(rewriter.getI32Type(), i16Val, i8Val, 16, rewriter);
+
+                  i16Val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+                  i8Val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+
+               } else if (bits == 40) {
+                  mlir::Value i32Ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, rewriter.getI32Type()), ptr);
+                  mlir::Value i32Val = rewriter.create<util::LoadOp>(loc, i32Ptr);
+                  Value const4 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 4);
+                  Value pos2 = rewriter.create<arith::AddIOp>(loc, pos, const4);
+                  Value i8Ptr = rewriter.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, rewriter.getI8Type()), valBuffer, pos2);
+                  mlir::Value i8Val = rewriter.create<util::LoadOp>(loc, i8Ptr);
+                  val = combine(rewriter.getI64Type(), i32Val, i8Val, 32, rewriter);
+
+                  i32Val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+                  i8Val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+               } else if (bits == 48) {
+                  mlir::Value i32Ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, rewriter.getI32Type()), ptr);
+                  mlir::Value i32Val = rewriter.create<util::LoadOp>(loc, i32Ptr);
+                  Value const4 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 4);
+                  Value pos2 = rewriter.create<arith::AddIOp>(loc, pos, const4);
+                  Value i8Ptr = rewriter.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, rewriter.getI8Type()), valBuffer, pos2);
+                  mlir::Value i16Ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, rewriter.getI16Type()), i8Ptr);
+
+                  mlir::Value i16Val = rewriter.create<util::LoadOp>(loc, i16Ptr);
+                  val = combine(rewriter.getI64Type(), i32Val, i16Val, 32, rewriter);
+
+                  i32Val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+                  i16Val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+               } else if (bits == 56) {
+                  mlir::Value i32Ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, rewriter.getI32Type()), ptr);
+                  mlir::Value i32Val = rewriter.create<util::LoadOp>(loc, i32Ptr);
+                  Value const3 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 3);
+                  Value const1i32 = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 32);
+
+                  Value pos3 = rewriter.create<arith::AddIOp>(loc, pos, const3);
+                  Value ptr3 = rewriter.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, rewriter.getI8Type()), valBuffer, pos3);
+                  mlir::Value secondI32Ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, rewriter.getI32Type()), ptr3);
+
+                  mlir::Value secondI32Val = rewriter.create<util::LoadOp>(loc, secondI32Ptr);
+                  mlir::Value noDuplicate = rewriter.create<mlir::arith::ShRUIOp>(loc, secondI32Val, const1i32);
+                  val = combine(rewriter.getI64Type(), i32Val, noDuplicate,32, rewriter);
+
+                  i32Val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+                  secondI32Val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
+               }
+            }
          } else {
             val = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(baseType), valueBuffer, index);
             val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());

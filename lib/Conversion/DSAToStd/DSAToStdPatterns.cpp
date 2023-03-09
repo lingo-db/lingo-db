@@ -31,16 +31,19 @@ class TBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
       } else if (isIntegerType(type, 1)) {
          rt::ResultTable::addBool(rewriter, loc)({builderVal, isValid, val});
       } else if (auto intWidth = getIntegerWidth(type, false)) {
-         switch (intWidth) {
-            case 8: rt::ResultTable::addInt8(rewriter, loc)({builderVal, isValid, val}); break;
-            case 16: rt::ResultTable::addInt16(rewriter, loc)({builderVal, isValid, val}); break;
-            case 32: rt::ResultTable::addInt32(rewriter, loc)({builderVal, isValid, val}); break;
-            case 64: rt::ResultTable::addInt64(rewriter, loc)({builderVal, isValid, val}); break;
-            case 128: rt::ResultTable::addDecimal(rewriter, loc)({builderVal, isValid, val}); break;
-            default: {
+         if (auto numBytesAttr = appendOp->getAttrOfType<mlir::IntegerAttr>("numBytes")) {
+            if(!val.getType().isInteger(64)){
                val = rewriter.create<arith::ExtUIOp>(loc, rewriter.getI64Type(), val);
-               rt::ResultTable::addFixedSized(rewriter, loc)({builderVal, isValid, val});
-               break;
+            }
+            rt::ResultTable::addFixedSized(rewriter, loc)({builderVal, isValid, val});
+         }else {
+            switch (intWidth) {
+               case 8: rt::ResultTable::addInt8(rewriter, loc)({builderVal, isValid, val}); break;
+               case 16: rt::ResultTable::addInt16(rewriter, loc)({builderVal, isValid, val}); break;
+               case 32: rt::ResultTable::addInt32(rewriter, loc)({builderVal, isValid, val}); break;
+               case 64: rt::ResultTable::addInt64(rewriter, loc)({builderVal, isValid, val}); break;
+               case 128: rt::ResultTable::addDecimal(rewriter, loc)({builderVal, isValid, val}); break;
+               default: assert(false&&"should not happen");
             }
          }
       } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {

@@ -192,7 +192,7 @@ static mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange lo
       rt::DumpRuntime::dumpString(rewriter, loc)({isNull, val});
    } else if (auto charType = baseType.dyn_cast_or_null<mlir::db::CharType>()) {
       Value numBytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(charType.getBytes()));
-      if (charType.getBytes() < 8) {
+      if (charType.getBytes() < 5) {
          val = rewriter.create<arith::ExtSIOp>(loc, i64Type, val);
       }
       rt::DumpRuntime::dumpChar(rewriter, loc)({isNull, val, numBytes});

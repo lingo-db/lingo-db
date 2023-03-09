@@ -102,15 +102,6 @@ class TableBuilder {
       std::vector<std::shared_ptr<arrow::Field>> fields;
       for (auto f : schema->fields()) {
          auto t = GetPhysicalType(f->type());
-         if (arrow::is_fixed_size_binary(t->id())) {
-            auto* fbt = dynamic_cast<arrow::FixedSizeBinaryType*>(t.get());
-            switch (fbt->byte_width()) {
-               case 1: t = arrow::int8(); break;
-               case 2: t = arrow::int16(); break;
-               case 4: t = arrow::int32(); break;
-               case 8: t = arrow::int64(); break;
-            }
-         }
          fields.push_back(std::make_shared<arrow::Field>(f->name(), t));
       }
       auto lowered = std::make_shared<arrow::Schema>(fields);
