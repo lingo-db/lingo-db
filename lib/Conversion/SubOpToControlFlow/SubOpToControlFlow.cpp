@@ -29,6 +29,7 @@
 #include "mlir/Transforms/Passes.h"
 #include "runtime-defs/Buffer.h"
 #include "runtime-defs/DataSourceIteration.h"
+#include "runtime-defs/ExecutionContext.h"
 #include "runtime-defs/ExternalHashIndex.h"
 #include "runtime-defs/GrowingBuffer.h"
 #include "runtime-defs/HashMultiMap.h"
@@ -1548,6 +1549,7 @@ static bool shouldUnionBeMaterialized(mlir::subop::UnionOp unionOp) {
          numEndUsers++;
       }
    }
+   //return false;
    if (numUsers == 1 && numEndUsers == 1) {
       //simple case: is "materialized" any way
       return false;
@@ -2835,6 +2837,34 @@ class UnwrapOptionalHashmapRefLowering : public SubOpTupleStreamConsumerConversi
       return mlir::success();
    }
 };
+class SetTrackedCountLowering : public SubOpConversionPattern<mlir::subop::SetTrackedCountOp> {
+   public:
+   using SubOpConversionPattern<mlir::subop::SetTrackedCountOp>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::SetTrackedCountOp setTrackedCountOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      auto loc = setTrackedCountOp->getLoc();
+
+      // Get execution context
+      auto parentModule = setTrackedCountOp->getParentOfType<ModuleOp>();
+      mlir::func::FuncOp funcOp = parentModule.lookupSymbol<mlir::func::FuncOp>("rt_get_execution_context");
+      if (!funcOp) {
+         rewriter.atStartOf(parentModule.getBody(), [&](SubOpRewriter& rewriter) {
+            funcOp = rewriter.create<mlir::func::FuncOp>(loc, "rt_get_execution_context", mlir::FunctionType::get(getContext(), {}, {mlir::util::RefType::get(getContext(), rewriter.getI8Type())}), rewriter.getStringAttr("private"));
+         });
+      }
+      mlir::Value executionContext = rewriter.create<mlir::func::CallOp>(loc, funcOp, mlir::ValueRange{}).getResult(0);
+
+      // Get resultId
+      mlir::Value resultId = rewriter.create<mlir::arith::ConstantIntOp>(loc, setTrackedCountOp.getResultId(), mlir::IntegerType::get(rewriter.getContext(), 32));
+
+      // Get tupleCount
+      Value loadedTuple = rewriter.create<mlir::util::LoadOp>(loc, adaptor.getTupleCount());
+      Value tupleCount = rewriter.create<mlir::util::UnPackOp>(loc, loadedTuple).getResults()[0];
+
+      rt::ExecutionContext::setTupleCount(rewriter, loc)({executionContext, resultId, tupleCount});
+      rewriter.eraseOp(setTrackedCountOp);
+      return mlir::success();
+   }
+};
 static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter) {
    std::vector<Type> types;
    for (auto t : tupleType.getTypes()) {
@@ -2924,6 +2954,15 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       auto hashMapType = t.getHashMap();
       return mlir::util::RefType::get(t.getContext(), getHtKVType(hashMapType, typeConverter));
    });
+   typeConverter.addConversion([&](mlir::subop::LookupEntryRefType t) -> Type {
+      if (auto hashmapType = t.getState().dyn_cast_or_null<mlir::subop::HashMapType>()) {
+         return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
+      }
+      if (auto hashMultiMapType = t.getState().dyn_cast_or_null<mlir::subop::HashMultiMapType>()) {
+         return mlir::util::RefType::get(t.getContext(), getHashMultiMapEntryType(hashMultiMapType, typeConverter));
+      }
+      return mlir::TupleType::get(t.getContext(), {mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8)), mlir::IndexType::get(t.getContext())});
+   });
 
    //basic tuple stream manipulation
    rewriter.insertPattern<MapLowering>(typeConverter, ctxt);
@@ -3010,6 +3049,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    rewriter.insertPattern<UnionLowering>(typeConverter, ctxt);
    rewriter.insertPattern<LoopLowering>(typeConverter, ctxt);
    rewriter.insertPattern<GetSingleValLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<SetTrackedCountLowering>(typeConverter, ctxt);
 
    rewriter.rewrite(module.getBody());
 }

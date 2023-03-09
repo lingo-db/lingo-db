@@ -1818,9 +1818,11 @@ void performAggrFuncReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::v
       }
    }
    for (auto aggrFn : distAggrFuncs) {
+      aggrFn->getStateType().dump();
       mlir::Value state = reduceBlock->addArgument(aggrFn->getStateType(), loc);
       stateMap.insert({&aggrFn->getDestAttribute().getColumn(), state});
    }
+   for (auto name : names) name.dump();
    auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, stream, reference, rewriter.getArrayAttr(relevantColumns), rewriter.getArrayAttr(names));
    {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
@@ -2546,6 +2548,41 @@ class NestedLowering : public OpConversionPattern<mlir::relalg::NestedOp> {
       return success();
    }
 };
+
+class TrackTuplesLowering : public OpConversionPattern<mlir::relalg::TrackTuplesOP>  {
+   public:
+   using OpConversionPattern<mlir::relalg::TrackTuplesOP>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::relalg::TrackTuplesOP trackTuplesOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = trackTuplesOp->getLoc();
+
+      // Create counter as single i64 state initialized to 0
+      auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+      auto [counterState, counterName] = createCounterState(rewriter, loc);
+      auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("lookup"), "ref");
+      referenceDefAttr.getColumn().type = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), counterState.getType());
+      auto lookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), adaptor.getRel(), counterState, rewriter.getArrayAttr({}), referenceDefAttr);
+
+      // Create reduce operation that increases counter for each seen tuple
+      auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, lookup, colManager.createRef(&referenceDefAttr.getColumn()), rewriter.getArrayAttr({}), rewriter.getArrayAttr({rewriter.getStringAttr(counterName)}));
+      mlir::Block* reduceBlock = new Block;
+      auto counter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(reduceBlock);
+         auto one = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(1));
+         mlir::Value updatedCounter = rewriter.create<mlir::arith::AddIOp>(loc, counter, one);
+         rewriter.create<mlir::tuples::ReturnOp>(loc, updatedCounter);
+      }
+      reduceOp.getRegion().push_back(reduceBlock);
+
+      // Saves counter state to execution context
+      rewriter.create<mlir::subop::SetTrackedCountOp>(loc, counterState, adaptor.getResultId(), counterName);
+
+      rewriter.eraseOp(trackTuplesOp);
+      return mlir::success();
+   }
+};
 void RelalgToSubOpLoweringPass::runOnOperation() {
    auto module = getOperation();
    getContext().getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(module);
@@ -2600,6 +2637,7 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<CountingSetOperationLowering>(ctxt);
    patterns.insert<GroupJoinLowering>(ctxt);
    patterns.insert<NestedLowering>(ctxt);
+   patterns.insert<TrackTuplesLowering>(ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();

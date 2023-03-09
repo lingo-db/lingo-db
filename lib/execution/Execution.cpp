@@ -33,6 +33,7 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       //pm.addPass(mlir::createInlinerPass());
       //pm.addPass(mlir::createSymbolDCEPass());
       mlir::relalg::createQueryOptPipeline(pm, database);
+      pm.addPass(mlir::relalg::createTrackTuplesPass());
       if (mlir::failed(pm.run(moduleOp))) {
          error.emit() << " Query Optimization failed";
       }

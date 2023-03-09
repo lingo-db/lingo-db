@@ -4,6 +4,7 @@
 namespace runtime {
 class ExecutionContext {
    std::unordered_map<uint32_t, uint8_t*> results;
+   std::unordered_map<uint32_t, int64_t> tupleCounts;
 
    public:
    int id;
@@ -17,7 +18,15 @@ class ExecutionContext {
          return {};
       }
    }
-   void setResult(uint32_t, uint8_t* ptr);
+   std::optional<int64_t> getTupleCount(uint32_t id) {
+      if (tupleCounts.contains(id)) {
+         return tupleCounts[id];
+      } else {
+         return {};
+      }
+   }
+   void setResult(uint32_t id, uint8_t* ptr);
+   void setTupleCount(uint32_t id, int64_t tupleCount);
 };
 } // end namespace runtime
 

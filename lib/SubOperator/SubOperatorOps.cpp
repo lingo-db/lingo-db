@@ -1386,6 +1386,18 @@ void subop::MaterializeOp::updateStateType(mlir::subop::SubOpStateUsageTransform
       setMappingAttr(transformer.updateMapping(getMapping()));
    }
 }
+
+void subop::SetTrackedCountOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
+   assert(false && "should not happen");
+}
+
+void subop::SetTrackedCountOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   assert(false && "should not happen");
+}
+
+std::vector<std::string> subop::SetTrackedCountOp::getReadMembers() {
+   return {getReadState().str()};
+}
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"
 

@@ -517,4 +517,10 @@ def InOp : RelAlg_Op<"in", [Pure]> {
     let assemblyFormat = [{ $val `:` type($val) `,` $rel attr-dict }];
 }
 
+def TrackTuplesOP : RelAlg_Op<"track_tuples", [Operator]> {
+    let summary = "track tuples";
+    let arguments = (ins TupleStream:$rel, I32Attr:$resultId);
+    let assemblyFormat = [{ $rel $resultId attr-dict }];
+}
+
 #endif // LINGODB_DIALECT_RELALG_IR_OPS

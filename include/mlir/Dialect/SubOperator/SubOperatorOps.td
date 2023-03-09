@@ -700,6 +700,14 @@ def LoopContinueOp : SubOperator_Op<"loop_continue",[Terminator]> {
     let assemblyFormat = [{ `(` $cond_stream `[` custom<CustRef>($cond_column) `]` `)` ($values^ `:` type($values))?  attr-dict }];
 }
 
+def SetTrackedCountOp : SubOperator_Op<"set_tracked_count",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
+   let summary = "set tracked count";
+   let arguments = (ins SimpleState:$tupleCount, I32Attr:$resultId, StrAttr:$readState);
+   let extraClassDeclaration = [{
+      std::vector<std::string> getReadMembers();
+   }];
+}
+
 
 //===----------------------------------------------------------------------===//
 // Not used in the future (replaced by views) //todo: remove

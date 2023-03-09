@@ -17,6 +17,7 @@ add_mlir_dialect_library(MLIRRelAlg
         Transforms/Pushdown.cpp
         Transforms/ImplicitToExplicitJoins.cpp
         Transforms/OptimizeJoinOrder.cpp
+        Transforms/TrackTuples.cpp
         Transforms/queryopt/utils.cpp
         Transforms/queryopt/QueryGraphBuilder.cpp
         Transforms/queryopt/DPhyp.cpp
