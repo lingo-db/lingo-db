@@ -1,6 +1,7 @@
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
+#include "mlir/Dialect/RelAlg/Transforms/ColumnCreatorAnalysis.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 
 namespace {
@@ -22,10 +23,11 @@ class InferNotNullConditions : public mlir::PassWrapper<InferNotNullConditions, 
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InferNotNullConditions)
    virtual llvm::StringRef getArgument() const override { return "relalg-infer-not-null"; }
-   void addNullCheck(mlir::relalg::SelectionOp selection, mlir::Value v) {
+   void addNullCheck(mlir::relalg::SelectionOp selection, mlir::Value v, mlir::relalg::ColumnCreatorAnalysis columnCreatorAnalysis) {
       if (v.getType().isa<mlir::db::NullableType>()) {
          if (auto getColumnOp = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(v.getDefiningOp())) {
-            if (selection.getFreeColumns().contains(&getColumnOp.getAttr().getColumn())) return;
+            const auto *c = &getColumnOp.getAttr().getColumn();
+            if (!columnCreatorAnalysis.getCreator(c).canColumnReach({}, selection, c)) return;
             auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(selection.getPredicate().front().getTerminator());
             mlir::OpBuilder builder(returnOp);
             auto isNull = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), v);
@@ -36,11 +38,12 @@ class InferNotNullConditions : public mlir::PassWrapper<InferNotNullConditions, 
       }
    }
    void runOnOperation() override {
+      mlir::relalg::ColumnCreatorAnalysis columnCreatorAnalysis(getOperation());
       getOperation().walk([&](mlir::db::CmpOp cmpOp) {
          if (auto selectionOp = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(cmpOp->getParentOp())) {
             if (isAndedResult(cmpOp.getOperation())) {
-               addNullCheck(selectionOp, cmpOp.getLeft());
-               addNullCheck(selectionOp, cmpOp.getRight());
+               addNullCheck(selectionOp, cmpOp.getLeft(), columnCreatorAnalysis);
+               addNullCheck(selectionOp, cmpOp.getRight(), columnCreatorAnalysis);
             }
          }
       });
@@ -48,7 +51,7 @@ class InferNotNullConditions : public mlir::PassWrapper<InferNotNullConditions, 
          if (!betweenOp.getLower().getType().isa<mlir::db::NullableType>() && !betweenOp.getUpper().getType().isa<mlir::db::NullableType>()) {
             if (auto selectionOp = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(betweenOp->getParentOp())) {
                if (isAndedResult(betweenOp.getOperation())) {
-                  addNullCheck(selectionOp, betweenOp.getVal());
+                  addNullCheck(selectionOp, betweenOp.getVal(), columnCreatorAnalysis);
                }
             }
          }
@@ -58,7 +61,7 @@ class InferNotNullConditions : public mlir::PassWrapper<InferNotNullConditions, 
          if (compareOnlyWithNonNullable) {
             if (auto selectionOp = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(oneOfOp->getParentOp())) {
                if (isAndedResult(oneOfOp.getOperation())) {
-                  addNullCheck(selectionOp, oneOfOp.getVal());
+                  addNullCheck(selectionOp, oneOfOp.getVal(), columnCreatorAnalysis);
                }
             }
          }

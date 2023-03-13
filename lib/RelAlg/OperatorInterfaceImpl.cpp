@@ -28,15 +28,33 @@ static ColumnSet collectColumns(operator_list operators, std::function<ColumnSet
    }
    return collected;
 }
+
+bool mlir::relalg::detail::canColumnReach(mlir::Operation* currentOp, mlir::Operation* sourceOp, mlir::Operation* targetOp, const mlir::tuples::Column* column) {
+   if (currentOp == targetOp) {
+      return true;
+   }
+   for (auto res : currentOp->getResults()) {
+      if (res.getType().isa<mlir::tuples::TupleStreamType>()) {
+         for (auto *user : res.getUsers()) {
+            if (auto op = mlir::dyn_cast_or_null<Operator>(user)) {
+               if (op.canColumnReach(currentOp, targetOp, column)) {
+                  return true;
+               }
+            }
+         }
+      }
+   }
+   return false;
+}
 ColumnSet mlir::relalg::detail::getUsedColumns(mlir::Operation* op) {
    ColumnSet creations;
    op->walk([&](GetColumnOp attrOp) {
       creations.insert(&attrOp.getAttr().getColumn());
    });
-   if(op->hasAttr("rightHash")){
+   if (op->hasAttr("rightHash")) {
       creations.insert(ColumnSet::fromArrayAttr(op->getAttrOfType<mlir::ArrayAttr>("rightHash")));
    }
-   if(op->hasAttr("leftHash")){
+   if (op->hasAttr("leftHash")) {
       creations.insert(ColumnSet::fromArrayAttr(op->getAttrOfType<mlir::ArrayAttr>("leftHash")));
    }
    return creations;
@@ -136,6 +154,13 @@ ColumnSet GroupJoinOp::getAvailableColumns() {
    available.insert(ColumnSet::fromArrayAttr(getRightCols()));
    return available;
 }
+bool GroupJoinOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
+   ColumnSet available = getAvailableColumns();
+   if (available.contains(col)) {
+      return mlir::relalg::detail::canColumnReach(this->getOperation(), source, target, col);
+   }
+   return false;
+}
 ColumnSet WindowOp::getCreatedColumns() {
    return ColumnSet::fromArrayAttr(getComputedCols());
 }
@@ -171,13 +196,31 @@ ColumnSet ConstRelationOp::getCreatedColumns() {
 ColumnSet AntiSemiJoinOp::getAvailableColumns() {
    return mlir::relalg::detail::getAvailableColumns(leftChild());
 }
+bool AntiSemiJoinOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
+   if (getRight().getDefiningOp() == source) {
+      return false;
+   }
+   return mlir::relalg::detail::canColumnReach(this->getOperation(), source, target, col);
+}
 ColumnSet SemiJoinOp::getAvailableColumns() {
    return mlir::relalg::detail::getAvailableColumns(leftChild());
+}
+bool SemiJoinOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
+   if (getRight().getDefiningOp() == source) {
+      return false;
+   }
+   return mlir::relalg::detail::canColumnReach(this->getOperation(), source, target, col);
 }
 ColumnSet MarkJoinOp::getAvailableColumns() {
    auto available = mlir::relalg::detail::getAvailableColumns(leftChild());
    available.insert(&getMarkattr().getColumn());
    return available;
+}
+bool MarkJoinOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
+   if (getRight().getDefiningOp() == source) {
+      return false;
+   }
+   return mlir::relalg::detail::canColumnReach(this->getOperation(), source, target, col);
 }
 ColumnSet RenamingOp::getCreatedColumns() {
    ColumnSet created;
@@ -204,6 +247,16 @@ ColumnSet RenamingOp::getAvailableColumns() {
    auto created = getCreatedColumns();
    availablePreviously.insert(created);
    return availablePreviously;
+}
+bool mlir::relalg::RenamingOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
+   for (Attribute attr : getColumns()) {
+      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      if (&fromExisting[0].cast<mlir::tuples::ColumnRefAttr>().getColumn() == col) {
+         return false;
+      }
+   }
+   return mlir::relalg::detail::canColumnReach(this->getOperation(), source, target, col);
 }
 ColumnSet mlir::relalg::detail::getSetOpCreatedColumns(mlir::Operation* op) {
    ColumnSet created;
@@ -253,6 +306,12 @@ ColumnSet OuterJoinOp::getAvailableColumns() {
    availablePreviously.insert(created);
    return availablePreviously;
 }
+bool OuterJoinOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
+   if (getRight().getDefiningOp() == source) {
+      return false;
+   }
+   return mlir::relalg::detail::canColumnReach(this->getOperation(), source, target, col);
+}
 ColumnSet FullOuterJoinOp::getCreatedColumns() {
    ColumnSet created;
 
@@ -273,6 +332,13 @@ ColumnSet FullOuterJoinOp::getUsedColumns() {
 }
 ColumnSet FullOuterJoinOp::getAvailableColumns() {
    return getCreatedColumns();
+}
+bool FullOuterJoinOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
+   if (source == nullptr) {
+      //source: full outer join
+      return mlir::relalg::detail::canColumnReach(this->getOperation(), source, target, col);
+   }
+   return false;
 }
 ColumnSet SingleJoinOp::getCreatedColumns() {
    ColumnSet created;
@@ -305,6 +371,12 @@ ColumnSet SingleJoinOp::getAvailableColumns() {
    availablePreviously.insert(created);
    return availablePreviously;
 }
+bool SingleJoinOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
+   if (getRight().getDefiningOp() == source) {
+      return false;
+   }
+   return mlir::relalg::detail::canColumnReach(this->getOperation(), source, target, col);
+}
 ColumnSet CollectionJoinOp::getCreatedColumns() {
    ColumnSet created;
    created.insert(&getCollAttr().getColumn());
@@ -318,6 +390,12 @@ ColumnSet CollectionJoinOp::getAvailableColumns() {
    auto created = getCreatedColumns();
    availablePreviously.insert(created);
    return availablePreviously;
+}
+bool CollectionJoinOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
+   if (getRight().getDefiningOp() == source) {
+      return false;
+   }
+   return mlir::relalg::detail::canColumnReach(this->getOperation(), source, target, col);
 }
 ColumnSet MarkJoinOp::getCreatedColumns() {
    ColumnSet created;
@@ -406,11 +484,27 @@ ColumnSet mlir::relalg::AggregationOp::getAvailableColumns() {
    available.insert(ColumnSet::fromArrayAttr(getGroupByCols()));
    return available;
 }
+
+bool AggregationOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
+   ColumnSet available = getCreatedColumns();
+   available.insert(ColumnSet::fromArrayAttr(getGroupByCols()));
+   if (available.contains(col)) {
+      return mlir::relalg::detail::canColumnReach(this->getOperation(), source, target, col);
+   }
+   return false;
+}
+
 ColumnSet mlir::relalg::ProjectionOp::getAvailableColumns() {
    return ColumnSet::fromArrayAttr(getCols());
 }
 ColumnSet mlir::relalg::ProjectionOp::getUsedColumns() {
    return getSetSemantic() == SetSemantic::distinct ? ColumnSet::fromArrayAttr(getCols()) : ColumnSet();
+}
+bool ProjectionOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
+   if (ColumnSet::fromArrayAttr(getCols()).contains(col)) {
+      return mlir::relalg::detail::canColumnReach(this->getOperation(), source, target, col);
+   }
+   return false;
 }
 bool mlir::relalg::detail::isJoin(Operation* op) {
    auto opType = getBinaryOperatorType(op);
@@ -567,7 +661,7 @@ ColumnSet mlir::relalg::NestedOp::getCreatedColumns() {
 ColumnSet mlir::relalg::NestedOp::getUsedColumns() {
    return mlir::relalg::ColumnSet::fromArrayAttr(getUsedCols());
 }
-ColumnSet mlir::relalg::NestedOp::getAvailableColumns(){
+ColumnSet mlir::relalg::NestedOp::getAvailableColumns() {
    return mlir::relalg::ColumnSet::fromArrayAttr(getAvailableCols());
 }
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"

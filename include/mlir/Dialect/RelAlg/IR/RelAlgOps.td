@@ -216,6 +216,7 @@ def RenamingOp : RelAlg_Op<"renaming",
         ColumnSet getCreatedColumns();
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns();
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
 }
 
@@ -231,6 +232,7 @@ def AggregationOp : RelAlg_Op<"aggregation", [Pure,Operator,UnaryOperator]> {
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns();
         ColumnSet getCreatedColumns();
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
 }
 
@@ -245,6 +247,7 @@ def GroupJoinOp : RelAlg_Op<"groupjoin", [Pure,Operator,BinaryOperator]> {
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns();
         ColumnSet getCreatedColumns();
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
 }
 def WindowOp : RelAlg_Op<"window", [Pure,Operator,UnaryOperator]> {
@@ -295,6 +298,7 @@ def SemiJoinOp : RelAlg_JoinOp<"semijoin"> {
     let extraClassDeclaration = [{
         ColumnSet getAvailableColumns();
         mlir::LogicalResult foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo);
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
 }
 
@@ -304,6 +308,7 @@ def AntiSemiJoinOp : RelAlg_JoinOp<"antisemijoin"> {
     let extraClassDeclaration = [{
         ColumnSet getAvailableColumns();
         mlir::LogicalResult foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo);
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
 }
 
@@ -317,6 +322,7 @@ def OuterJoinOp : RelAlg_JoinOp<"outerjoin"> {
         ColumnSet getCreatedColumns();
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns();
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
 
 }
@@ -330,6 +336,7 @@ def FullOuterJoinOp : RelAlg_JoinOp<"fullouterjoin"> {
         ColumnSet getCreatedColumns();
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns();
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
 }
 
@@ -343,6 +350,7 @@ def SingleJoinOp : RelAlg_JoinOp<"singlejoin"> {
         ColumnSet getCreatedColumns();
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns();
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
 }
 
@@ -356,6 +364,7 @@ def CollectionJoinOp : RelAlg_JoinOp<"collectionjoin"> {
         ColumnSet getCreatedColumns();
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns();
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
 }
 
@@ -368,6 +377,7 @@ def MarkJoinOp : RelAlg_JoinOp<"markjoin"> {
     let extraClassDeclaration = [{
         ColumnSet getAvailableColumns();
         ColumnSet getCreatedColumns();
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
 }
 
@@ -382,6 +392,7 @@ def ProjectionOp : RelAlg_Op<"projection",[Pure,Operator,UnaryOperator]> {
     let extraClassDeclaration = [{
         ColumnSet getAvailableColumns();
         ColumnSet getUsedColumns();
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
 }
 
@@ -394,11 +405,19 @@ class RelAlg_BinarySetOp<string mnemonic> : RelAlg_Op<mnemonic,
         ColumnSet getCreatedColumns();
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns();
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
     let extraClassDefinition =[{
         ColumnSet $cppClass::getCreatedColumns(){ return mlir::relalg::detail::getSetOpCreatedColumns(this->getOperation()); }
         ColumnSet $cppClass::getUsedColumns(){ return mlir::relalg::detail::getSetOpUsedColumns(this->getOperation()); }
         ColumnSet $cppClass::getAvailableColumns(){ return mlir::relalg::detail::getSetOpCreatedColumns(this->getOperation()); }
+        bool $cppClass::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col){
+            if(!source){
+                return mlir::relalg::detail::canColumnReach(this->getOperation(),source,target,col);
+            }
+            return false;
+        };
+
     }];
 }
 
@@ -423,6 +442,7 @@ def NestedOp : RelAlg_Op<"nested", [Pure,Operator]> {
         ColumnSet getCreatedColumns();
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns();
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col){assert(false&& "not implemented");return false;}
     }];
 }
 

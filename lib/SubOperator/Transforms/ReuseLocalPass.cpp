@@ -193,7 +193,6 @@ class ReuseHashtable : public mlir::RewritePattern {
                transformer.replaceColumn(&lookupRef.getColumn(), &listDef.getColumn());
             }
             transformer.updateValue(state, htType);
-            llvm::dbgs()<<"reusing ht\n";
          }
       }
 

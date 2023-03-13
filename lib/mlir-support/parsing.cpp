@@ -5,7 +5,7 @@
 #include <regex>
 
 int32_t parseDate32(std::string str) {
-   std::regex r("(\\d\\d\\d\\d)-(\\d)-(\\d\\d)");
+   static std::regex r("(\\d\\d\\d\\d)-(\\d)-(\\d\\d)");
    str = std::regex_replace(str, r, "$1-0$2-$3");
    int32_t res;
    if (!arrow::internal::ParseValue<arrow::Date32Type>(str.data(), str.length(), &res)) {

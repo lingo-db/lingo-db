@@ -29,8 +29,8 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       auto start = std::chrono::high_resolution_clock::now();
       mlir::PassManager pm(moduleOp.getContext());
       pm.enableVerifier(verify);
-      pm.addPass(mlir::createInlinerPass());
-      pm.addPass(mlir::createSymbolDCEPass());
+      //pm.addPass(mlir::createInlinerPass());
+      //pm.addPass(mlir::createSymbolDCEPass());
       mlir::relalg::createQueryOptPipeline(pm, database);
       if (mlir::failed(pm.run(moduleOp))) {
          error.emit() << " Query Optimization failed";
@@ -58,7 +58,7 @@ class SubOpLoweringStep : public LoweringStep {
       auto startLowerSubOp = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerSubOpPm(moduleOp->getContext());
       lowerSubOpPm.enableVerifier(verify);
-      std::unordered_set<std::string> enabledPasses = {"GlobalOpt", "ReuseLocal", "Specialize", "PullGatherUp","Compression"};
+      std::unordered_set<std::string> enabledPasses = {"GlobalOpt", "ReuseLocal", "Specialize", "PullGatherUp", "Compression"};
       if (const char* mode = std::getenv("LINGODB_SUBOP_OPTS")) {
          enabledPasses.clear();
          std::stringstream configList(mode);
@@ -244,7 +244,7 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
       config->executionBackend = createLLVMDebugBackend();
    } else if (runMode == ExecutionMode::PERF) {
       config->executionBackend = createLLVMProfilingBackend();
-   } else if (runMode == ExecutionMode::CHEAP) {
+   } else if (runMode == ExecutionMode::CHEAP || runMode == ExecutionMode::EXTREME_CHEAP) {
 #if CRANELIFT_ENABLED == 1
       config->executionBackend = createCraneliftBackend();
 #else

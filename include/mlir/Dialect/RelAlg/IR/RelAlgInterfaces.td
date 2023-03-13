@@ -56,6 +56,12 @@ return mlir::relalg::detail::getAvailableColumns(this->getOperation());
 }]
 >,
 InterfaceMethod<
+        "get all columns that are available after this operator",
+        "bool", "canColumnReach",(ins "Operator":$source, "Operator":$target,"const mlir::tuples::Column*":$column),"", /*defaultImplementation=*/[{
+        return mlir::relalg::detail::canColumnReach(this->getOperation(),source,target,column);
+}]
+>,
+InterfaceMethod<
         "get all functional dependencies that hold after this operator",
         "mlir::relalg::FunctionalDependencies", "getFDs",(ins ),"", /*defaultImplementation=*/[{
 return mlir::relalg::detail::getFDs(this->getOperation());
