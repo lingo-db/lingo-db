@@ -80,6 +80,7 @@ void Database::copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 
    convertOptions.null_values.push_back("");
    convertOptions.strings_can_be_null = true;
    for (auto f : schema->fields()) {
+      if (f->name().find("primaryKeyHashValue") != std::string::npos) continue;
       readOptions.column_names.push_back(f->name());
       convertOptions.column_types.insert({f->name(), f->type()});
    }
@@ -120,5 +121,18 @@ void Database::appendTableFromResult(runtime::VarLen32 tableName, runtime::Execu
       }
       appendTable(tableName, resultTable.value()->get());
    }
+}
+void Database::combineTableWithHashValues(runtime::VarLen32 tableName, runtime::ExecutionContext* context, size_t resultId) {
+   auto resultTable = context->getResultOfType<runtime::ResultTable>(resultId);
+   if (!resultTable) {
+      throw std::runtime_error("inserting hash values failed: no result table");
+   }
+   combineTableWithHashValuesImpl(tableName, resultTable.value()->get());
+}
+void Database::combineTableWithHashValuesImpl(std::string tableName, std::shared_ptr<arrow::Table> hashValues){
+   throw std::runtime_error("database does not support inserting hash values");
+}
+ExternalHashIndexMapping* Database::getIndex(const std::string& name, const std::vector<std::string>& mapping) {
+   throw std::runtime_error("database does not support indices");
 }
 } //end namespace runtime

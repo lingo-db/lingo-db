@@ -8,6 +8,7 @@
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include "stack"
 #include <unordered_set>
 
 namespace {
@@ -138,6 +139,66 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          }
       });
       return res;
+   }
+
+   // Verify that the join predicate in block takes all and only the primary key columns from baseTableOp into consideration
+   bool containsExactlyPrimaryKey(mlir::MLIRContext* ctxt, mlir::Operation* baseTableOp, mlir::Block* block) {
+      llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> columns;
+      auto baseTable = mlir::cast<mlir::relalg::BaseTableOp>(baseTableOp);
+      auto& colManager = ctxt->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+
+      // Initialize map to verify presence of all primary key attributes
+      std::unordered_map<std::string, bool> primaryKeyFound;
+      for (auto primaryKeyAttribute : baseTable.getMeta().getMeta()->getPrimaryKey()){
+         primaryKeyFound[primaryKeyAttribute] = false;
+      }
+
+      // Verify all cmp operations
+      bool res = true;
+      block->walk([&](mlir::Operation* op) {
+         if (auto getAttr = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
+            columns.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.getAttr())});
+         }else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
+            mlir::relalg::ColumnSet relevantColumns = columns[cmpOp.getLeft()];
+            relevantColumns.insert(columns[cmpOp.getRight()]);
+            for (auto* relevantColumn : relevantColumns){
+               std::string tableName = colManager.getName(relevantColumn).first;
+               std::string columnName = colManager.getName(relevantColumn).second;
+
+               // Only take columns contained in baseTableOp into consideration
+               if (baseTable.getCreatedColumns().contains(relevantColumn)){
+                     // Check that no non-primary key attribute was used
+                     if (!primaryKeyFound.contains(columnName)) res = false;
+                     // Mark primary key attribute as used
+                     else primaryKeyFound[columnName] = true;
+               }
+            }
+         }
+      });
+      // Check if all primary key attributes were found
+      for (auto primaryKeyAttribute : primaryKeyFound){
+         res &= primaryKeyAttribute.second;
+      }
+      return res;
+   }
+
+   bool isBaseRelationWithSelects(Operator op, std::stack<mlir::Operation*>& path ) {
+      // Saves operations until base relation is reached on stack for easy access
+      return ::llvm::TypeSwitch<mlir::Operation*, bool>(op.getOperation())
+         .Case<mlir::relalg::BaseTableOp>([&](mlir::relalg::BaseTableOp baseTableOp){
+            path.push(baseTableOp.getOperation());
+            return true;
+         })
+         .Case<mlir::relalg::SelectionOp>([&](mlir::relalg::SelectionOp selectionOp){
+            path.push(selectionOp.getOperation());
+            for (auto& child : selectionOp.getChildren()){
+               if (!isBaseRelationWithSelects(child.getOperation(), path)) return false;
+            }
+            return true;
+         })
+         .Default([&](auto&){
+            return false;
+         });
    }
 
    void prepareForHash(PredicateOperator predicateOperator) {
@@ -354,9 +415,98 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                auto left = mlir::cast<Operator>(binOp.leftChild());
                auto right = mlir::cast<Operator>(binOp.rightChild());
                if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
-                  op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
-                  op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
+                  // Determine if index nested loop is possible and is beneficial
+                  std::stack<mlir::Operation*> leftPath, rightPath;
+                  bool leftCanUsePrimaryKeyIndex = isBaseRelationWithSelects(left, leftPath) && containsExactlyPrimaryKey(binOp.getContext(), leftPath.top(), &predicateOperator.getPredicateBlock());
+                  bool rightCanUsePrimaryKeyIndex = isBaseRelationWithSelects(right, rightPath) && containsExactlyPrimaryKey(binOp.getContext(), rightPath.top(), &predicateOperator.getPredicateBlock());
+                  bool isInnerJoin = mlir::isa<mlir::relalg::InnerJoinOp>(predicateOperator);
+                  bool reversed = false;
+
                   prepareForHash(predicateOperator);
+
+                  // Select possible build side to the left
+                  if (isInnerJoin && (leftCanUsePrimaryKeyIndex || rightCanUsePrimaryKeyIndex)){
+                     if (leftCanUsePrimaryKeyIndex && rightCanUsePrimaryKeyIndex){
+                        // Compute heuristic of which base table the index is more beneficial
+                        // Used heuristic: prefer bigger ratio of |buildSide| / |probeSide|
+                        auto leftBaseTable = mlir::cast<mlir::relalg::BaseTableOp>(leftPath.top());
+                        auto rightBaseTable = mlir::cast<mlir::relalg::BaseTableOp>(rightPath.top());
+                        int numBaseRowsLeft = leftBaseTable.getMeta().getMeta()->getNumRows() + 1;
+                        int numBaseRowsRight = rightBaseTable.getMeta().getMeta()->getNumRows() + 1;
+                        int numNonBaseRowsLeft = left->hasAttr("rows") ? left->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>().getValueAsDouble() + 1 : 1;
+                        int numNonBaseRowsRight = right->hasAttr("rows") ? right->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>().getValueAsDouble() + 1 : 1;
+                        // Exchange left and right side if deemed beneficial by heuristic
+                        if (numNonBaseRowsRight / numBaseRowsLeft < numNonBaseRowsLeft / numBaseRowsRight){
+                           reversed = true;
+                           std::swap(left, right);
+                           std::swap(leftPath, rightPath);
+                           mlir::Attribute tmp = predicateOperator->getAttr("rightHash");
+                           predicateOperator->setAttr("rightHash", predicateOperator->getAttr("leftHash"));
+                           predicateOperator->setAttr("leftHash", tmp);
+                        }
+                     }else if (!leftCanUsePrimaryKeyIndex){
+                        // Exchange left and right side
+                        reversed = true;
+                        std::swap(left, right);
+                        std::swap(leftPath, rightPath);
+                        leftCanUsePrimaryKeyIndex = true;
+                        mlir::Attribute tmp = predicateOperator->getAttr("rightHash");
+                        predicateOperator->setAttr("rightHash", predicateOperator->getAttr("leftHash"));
+                        predicateOperator->setAttr("leftHash", tmp);
+                     }
+                  }
+
+                  // Compute correct number of rows for index nested loop join
+                  double numRowsLeft = 0,  numRowsRight = std::numeric_limits<double>::max(); // default: disable inlj
+                  if (auto leftCardinalityAttr = left->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()){
+                     numRowsLeft = leftCardinalityAttr.getValueAsDouble();
+                  }
+                  if (auto rightCardinalityAttr = right->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()){
+                     numRowsRight = rightCardinalityAttr.getValueAsDouble();
+                  }
+
+                  if (isInnerJoin && leftCanUsePrimaryKeyIndex && right->hasAttr("rows") && 20 * numRowsRight < numRowsLeft) {
+                     // base relations do not need to be moved
+                     auto leftBaseTable = mlir::cast<mlir::relalg::BaseTableOp>(leftPath.top());
+                     leftPath.pop();
+
+                     // update binOp
+                     binOp->setOperands(mlir::ValueRange{leftBaseTable, binOp->getOperand(!reversed)});
+                     mlir::Operation* lastMoved = binOp.getOperation();
+                     mlir::Operation* firstMoved = nullptr;
+
+                     mlir::OpBuilder builder(binOp);
+
+                     // Move selections on left side after join
+                     while (!leftPath.empty()){
+                        if (!firstMoved) firstMoved = leftPath.top();
+                        leftPath.top()->moveAfter(lastMoved);
+                        leftPath.top()->setOperands(mlir::ValueRange{lastMoved->getResult(0)});
+                        lastMoved = leftPath.top();
+                        leftPath.pop();
+                     }
+
+                     // If selections were moved, replace usages of join with last moved selection
+                     if (firstMoved){
+                        binOp->replaceAllUsesWith(mlir::ValueRange{lastMoved->getResults()});
+                        firstMoved->setOperands(binOp->getResults());
+                     }
+
+                     // Add name of table to leftHash annotation
+                     std::vector<mlir::Attribute> leftHash;
+                     leftHash.push_back(leftBaseTable.getTableIdentifierAttr());
+                     for (auto attr : op->getAttr("leftHash").dyn_cast_or_null<mlir::ArrayAttr>()){
+                        leftHash.push_back(attr);
+                     }
+                     op->setAttr("leftHash", mlir::ArrayAttr::get(&getContext(), leftHash));
+
+                     op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "indexNestedLoop"));
+                     op->setAttr("useIndexNestedLoop", mlir::UnitAttr::get(op.getContext()));
+                  }else{
+                     op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
+                     op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
+                     prepareForHash(predicateOperator);
+                  }
                }
             })
             .Case<mlir::relalg::SemiJoinOp, mlir::relalg::AntiSemiJoinOp, mlir::relalg::OuterJoinOp, mlir::relalg::MarkJoinOp>([&](PredicateOperator predicateOperator) {

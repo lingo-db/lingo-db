@@ -958,7 +958,8 @@ class HashLowering : public ConversionPattern {
          }
 
       } else if (auto floatType = v.getType().dyn_cast_or_null<mlir::FloatType>()) {
-         assert(false && "can not hash float values");
+         Value asInt = builder.create<arith::BitcastOp>(loc, IntegerType::get(builder.getContext(), floatType.getWidth()), v);
+         return combineHashes(builder, loc, hashInteger(builder, loc, asInt), totalHash);
       } else if (auto varLenType = v.getType().dyn_cast_or_null<mlir::util::VarLen32Type>()) {
          auto varlenTryCheapHash = builder.create<mlir::util::VarLenTryCheapHash>(loc, builder.getI1Type(), builder.getIndexType(), v);
          mlir::Value hash = builder.create<mlir::scf::IfOp>(

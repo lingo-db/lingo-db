@@ -2,6 +2,7 @@ gen_rt_def(grow-buf-rt-defs "GrowingBuffer.h")
 gen_rt_def(buf-rt-defs "Buffer.h")
 gen_rt_def(stv-rt-defs "SegmentTreeView.h")
 gen_rt_def(heap-rt-defs "Heap.h")
+gen_rt_def(idx-rt-defs "ExternalHashIndex.h")
 gen_rt_def(hmm-rt-defs "HashMultiMap.h")
 
 add_mlir_conversion_library(MLIRSubOpToControlFlow
@@ -19,6 +20,7 @@ add_mlir_conversion_library(MLIRSubOpToControlFlow
         buf-rt-defs
         stv-rt-defs
         heap-rt-defs
+        idx-rt-defs
         LINK_COMPONENTS
         Core
 

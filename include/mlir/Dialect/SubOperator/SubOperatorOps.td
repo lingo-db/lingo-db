@@ -106,6 +106,14 @@ def MultiMap : SubOperator_Type<"MultiMap", "multimap",[State,LookupAbleState]> 
         StateMembersAttr getMembers();
     }];
 }
+def ExternalHashIndex : SubOperator_Type<"ExternalHashIndex", "externalhashindex",[State,LookupAbleState]> {
+    let summary = "external hash index: key -> [values]";
+    let parameters = (ins "StateMembersAttr": $keyMembers, "StateMembersAttr": $valueMembers);
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let extraClassDeclaration = [{
+       StateMembersAttr getMembers();
+    }];
+}
 def Buffer : SubOperator_Type<"Buffer", "buffer", [State]> {
     let summary = "growing buffer type";
     let parameters = (ins "StateMembersAttr":$members);
@@ -248,6 +256,19 @@ def HashMapEntryRef : SubOperator_Type<"HashMapEntryRef", "hash_map_entry_ref",[
         StateMembersAttr getMembers();
     }];
     let extraClassDefinition= [{ StateMembersAttr $cppClass::getMembers(){ return getHashMap().getMembers();} }];
+}
+def ExternalHashIndexEntryRef : SubOperator_Type<"ExternalHashIndexEntryRef", "external_hash_index_entry_ref",[StateEntryReference]> {
+    let summary = "reference to entry of some state";
+    let parameters = (ins "ExternalHashIndexType":$external_hash_index);
+    let assemblyFormat = "`<` $external_hash_index `>`";
+    let extraClassDeclaration = [{
+       bool isReadable(){return true;}
+       bool isWriteable(){return true;}
+       bool isStable(){return true;}
+       bool canBeOffset(){return true;}
+       StateMembersAttr getMembers();
+    }];
+    let extraClassDefinition= [{ StateMembersAttr $cppClass::getMembers(){ return getExternalHashIndex().getMembers();} }];
 }
 def HashMultiMapEntryRef : SubOperator_Type<"HashMultiMapEntryRef", "hash_multimap_entry_ref",[StateEntryReference]> {
     let summary = "reference to entry of some state";

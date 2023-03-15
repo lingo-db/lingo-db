@@ -1,5 +1,6 @@
 #ifndef RUNTIME_DATASOURCEITERATION_H
 #define RUNTIME_DATASOURCEITERATION_H
+#include "RecordBatchInfo.h"
 #include "runtime/ExecutionContext.h"
 #include "runtime/helpers.h"
 namespace runtime {
@@ -24,17 +25,6 @@ class DataSourceIteration {
    public:
    DataSourceIteration(DataSource* dataSource, const std::vector<size_t>& colIds);
 
-   struct ColumnInfo {
-      size_t offset;
-      size_t validMultiplier;
-      uint8_t* validBuffer;
-      uint8_t* dataBuffer;
-      uint8_t* varLenBuffer;
-   };
-   struct RecordBatchInfo {
-      size_t numRows;
-      ColumnInfo columnInfo[];
-   };
    static DataSourceIteration* init(DataSource* dataSource, runtime::VarLen32 members);
    bool isValid();
    void next();

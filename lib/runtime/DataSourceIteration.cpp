@@ -39,15 +39,6 @@ bool runtime::DataSourceIteration::isValid() {
 void runtime::DataSourceIteration::next() {
    currChunk = iterator->getNext();
 }
-uint8_t* getBuffer(arrow::RecordBatch* batch, size_t columnId, size_t bufferId) {
-   static uint8_t alternative = 0b11111111;
-   if (batch->column_data(columnId)->buffers.size() > bufferId && batch->column_data(columnId)->buffers[bufferId]) {
-      auto* buffer = batch->column_data(columnId)->buffers[bufferId].get();
-      return (uint8_t*) buffer->address();
-   } else {
-      return &alternative; //always return valid pointer to at least one byte filled with ones
-   }
-}
 void runtime::DataSourceIteration::access(RecordBatchInfo* info) {
    for (size_t i = 0; i < colIds.size(); i++) {
       auto colId = colIds[i];
@@ -55,9 +46,9 @@ void runtime::DataSourceIteration::access(RecordBatchInfo* info) {
       size_t off = currChunk->column_data(colId)->offset;
       colInfo.offset = off;
       colInfo.validMultiplier = currChunk->column_data(colId)->buffers[0] ? 1 : 0;
-      colInfo.validBuffer = getBuffer(currChunk.get(), colId, 0);
-      colInfo.dataBuffer = getBuffer(currChunk.get(), colId, 1);
-      colInfo.varLenBuffer = getBuffer(currChunk.get(), colId, 2);
+      colInfo.validBuffer = RecordBatchInfo::getBuffer(currChunk.get(), colId, 0);
+      colInfo.dataBuffer = RecordBatchInfo::getBuffer(currChunk.get(), colId, 1);
+      colInfo.varLenBuffer = RecordBatchInfo::getBuffer(currChunk.get(), colId, 2);
    }
    info->numRows = currChunk->num_rows();
 }

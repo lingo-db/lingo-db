@@ -16,7 +16,12 @@ add_library(runtime OBJECT
         Hash.cpp
         DateRuntime.cpp
         ExecutionContext.cpp
-        Database.cpp MetaData.cpp ArrowDirDatabase.cpp ExternalArrowDatabase.cpp MetaDataOnlyDatabase.cpp)
+        Database.cpp
+        MetaData.cpp
+        ArrowDirDatabase.cpp
+        ExternalArrowDatabase.cpp
+        MetaDataOnlyDatabase.cpp
+        ExternalHashIndex.cpp)
 target_link_libraries(runtime PUBLIC arrow_shared)
 target_link_options(runtime PUBLIC -Wl,-export-dynamic)
 

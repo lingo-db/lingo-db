@@ -114,13 +114,18 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
          index = unpacked.getResult(0);
          auto info = unpacked.getResult(1);
          size_t column = atOp.getPos();
-         size_t baseOffset = 1 + column * 5;
+         size_t baseOffset = 1 + column * 5; // each column contains the following 5 values
+         // columnOffset: Offset where the values for the column begins in the originalValueBuffer
          columnOffset = rewriter.create<mlir::util::GetTupleOp>(loc, rewriter.getIndexType(), info, baseOffset);
-         validityBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, info.getType().cast<TupleType>().getType(baseOffset + 2), info, baseOffset + 2);
-         originalValueBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, info.getType().cast<TupleType>().getType(baseOffset + 3), info, baseOffset + 3);
-         valueBuffer = rewriter.create<mlir::util::ArrayElementPtrOp>(loc, originalValueBuffer.getType(), originalValueBuffer, columnOffset);
-         varLenBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, info.getType().cast<TupleType>().getType(baseOffset + 4), info, baseOffset + 4);
+         // nullMultiplier: necessary to compute the position of validity bit in validityBuffer
          nullMultiplier = rewriter.create<mlir::util::GetTupleOp>(loc, rewriter.getIndexType(), info, baseOffset + 1);
+         // validityBuffer: pointer to bytes to encode invalid values (e.g. null)
+         validityBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, info.getType().cast<TupleType>().getType(baseOffset + 2), info, baseOffset + 2);
+         // originalValueBuffer: pointer to the location of the row in memory
+         originalValueBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, info.getType().cast<TupleType>().getType(baseOffset + 3), info, baseOffset + 3);
+         valueBuffer = rewriter.create<mlir::util::ArrayElementPtrOp>(loc, originalValueBuffer.getType(), originalValueBuffer, columnOffset); // pointer to the column
+         // varLenBuffer: pointer to variable sized data store
+         varLenBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, info.getType().cast<TupleType>().getType(baseOffset + 4), info, baseOffset + 4);
       }
       Value val;
       auto* context = rewriter.getContext();
@@ -223,7 +228,7 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
       }
       if (atOp->getNumResults() == 2) {
          Value realPos = rewriter.create<arith::AddIOp>(loc, indexType, columnOffset, index);
-         realPos = rewriter.create<arith::MulIOp>(loc, indexType, nullMultiplier, index);
+         realPos = rewriter.create<arith::MulIOp>(loc, indexType, nullMultiplier, realPos);
          Value isValid = getBit(rewriter, loc, validityBuffer, realPos);
          rewriter.replaceOp(atOp, mlir::ValueRange{val, isValid});
       } else {

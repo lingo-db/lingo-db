@@ -34,6 +34,12 @@ std::unique_ptr<execution::ResultProcessor> execution::createTableRetriever(std:
    return std::make_unique<TableRetriever>(result);
 }
 static void printTable(const std::shared_ptr<arrow::Table>& table) {
+   // Do not output anything for insert or copy statements
+   if (table->columns().empty()){
+      std::cout << "Statement executed successfully." << std::endl;
+      return;
+   }
+
    std::vector<std::string> columnReps;
    std::vector<size_t> positions;
    arrow::PrettyPrintOptions options;
