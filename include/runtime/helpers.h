@@ -66,13 +66,14 @@ class VarLen32 {
    };
 
    private:
-   void storePtr(uint8_t* ptr) {
-      uint8_t** ptrloc = reinterpret_cast<uint8_t**>((&bytes[4]));
+   void storePtr(const uint8_t* ptr) {
+      const uint8_t** ptrloc = reinterpret_cast<const uint8_t**>((&bytes[4]));
       *ptrloc = ptr;
    }
 
    public:
-   VarLen32(uint8_t* ptr, uint32_t len) : len(len) {
+   VarLen32() : VarLen32(nullptr, 0) {}
+   VarLen32(const uint8_t* ptr, uint32_t len) : len(len) {
       if (len > shortLen) {
          this->first4 = unalignedLoad32(ptr);
          storePtr(ptr);
@@ -112,7 +113,6 @@ class VarLen32 {
    std::string str() { return std::string((char*) getPtr(), getLen()); }
 };
 
-
 template <class T>
 struct FixedSizedBuffer {
    FixedSizedBuffer(size_t size) : ptr((T*) malloc(size * sizeof(T))) {
@@ -143,6 +143,15 @@ T* tag(T* ptr, T* previousPtr, size_t hash) {
    auto tagged = (asInt & ptrMask) | previousTag | currentTag;
    auto* res = reinterpret_cast<T*>(tagged);
    return res;
+}
+template <typename T>
+T* filterTagged(T* ptr, size_t hash) {
+   constexpr uint64_t ptrMask = 0x0000ffffffffffffull;
+   constexpr uint64_t tagMask = 0xffff000000000000ull;
+   size_t asInt = reinterpret_cast<size_t>(ptr);
+   size_t requiredTag = hash & tagMask;
+   size_t currentTag = hash & tagMask;
+   return ((currentTag | requiredTag) == currentTag) ? reinterpret_cast<T*>(asInt & ptrMask) : nullptr;
 }
 template <typename T>
 T* untag(T* ptr) {

@@ -1,4 +1,5 @@
 #include "execution/Execution.h"
+#include "execution/CBackend.h"
 #include "execution/CraneliftBackend.h"
 #include "execution/LLVMBackends.h"
 #include "mlir/Conversion/DBToStd/DBToStd.h"
@@ -138,6 +139,8 @@ ExecutionMode getExecutionMode() {
       } else if (std::string(mode) == "SPEED") {
          std::cout << "using speed mode" << std::endl;
          runMode = ExecutionMode::SPEED;
+      }else if (std::string(mode) == "C") {
+         runMode = ExecutionMode::C;
       }
    }
    return runMode;
@@ -242,6 +245,8 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
    if (runMode == ExecutionMode::DEBUGGING) {
       config->executionBackend = createLLVMDebugBackend();
+   }if (runMode == ExecutionMode::C) {
+      config->executionBackend = createCBackend();
    } else if (runMode == ExecutionMode::PERF) {
       config->executionBackend = createLLVMProfilingBackend();
    } else if (runMode == ExecutionMode::CHEAP || runMode == ExecutionMode::EXTREME_CHEAP) {

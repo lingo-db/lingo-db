@@ -55,7 +55,7 @@ resources/data/tpcds-1/.stamp: tools/generate/tpcds.sh
 	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
 	touch $@
 
-resources/data/job/.stamp: tools/generate/tpcds.sh
+resources/data/job/.stamp: tools/generate/job.sh
 	mkdir -p resources/data/job
 	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
 	touch $@
@@ -97,7 +97,7 @@ test-coverage: build/lingodb-debug-coverage/.stamp
 .PHONY: run-test
 run-test: build/lingodb-debug/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql pymlirdbext sql-to-mlir mlir-doc -- -j${NPROCS}
-	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit -v $(dir $<)/test/lit
+	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit -v $(dir $<)/test/lit -j 1
 .PHONY: run-benchmark
 run-benchmark: build/lingodb-release/.stamp build/lingodb-debug/.stamp resources/data/tpch-1/.stamp
 	cmake --build $(dir $<) --target run-sql -- -j${NPROCS}

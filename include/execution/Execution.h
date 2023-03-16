@@ -74,6 +74,7 @@ enum class ExecutionMode {
    DEBUGGING = 3, //Make generated code debuggable
    CHEAP = 4, // compile as cheap (compile time) as possible
    EXTREME_CHEAP = 5, // compile as cheap (compile time) as possible, don't verify MLIR module
+   C = 6,
 };
 std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(ExecutionMode runMode, bool sqlInput);
 ExecutionMode getExecutionMode();
