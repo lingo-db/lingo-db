@@ -20,8 +20,8 @@
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/InitAllDialects.h"
 
 #include "parsenodes.h"
 #include "runtime/Database.h"
@@ -165,8 +165,8 @@ struct SQLTypeInference {
    }
    static std::vector<mlir::Value> toCommonNumber(mlir::OpBuilder& builder, mlir::ValueRange values) {
       auto anyDecimal = llvm::any_of(values, [](mlir::Value v) { return getBaseType(v.getType()).isa<mlir::db::DecimalType>(); });
-      auto anyFloat = llvm::any_of(values, [](mlir::Value v) { return getBaseType(v.getType()).isIntOrFloat()&&!getBaseType(v.getType()).isIntOrIndex(); });
-      if (anyDecimal&&!anyFloat) {
+      auto anyFloat = llvm::any_of(values, [](mlir::Value v) { return getBaseType(v.getType()).isIntOrFloat() && !getBaseType(v.getType()).isIntOrIndex(); });
+      if (anyDecimal && !anyFloat) {
          std::vector<mlir::Value> res;
          for (auto val : values) {
             if (!getBaseType(val.getType()).isa<mlir::db::DecimalType>()) {
@@ -335,7 +335,7 @@ struct Parser {
       if (!funcOp) {
          mlir::OpBuilder::InsertionGuard guard(builder);
          builder.setInsertionPointToStart(moduleOp.getBody());
-         funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "rt_get_execution_context", builder.getFunctionType({}, {mlir::util::RefType::get(builder.getContext(), builder.getI8Type())}), builder.getStringAttr("private"));
+         funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "rt_get_execution_context", builder.getFunctionType({}, {mlir::util::RefType::get(builder.getContext(), builder.getI8Type())}), builder.getStringAttr("private"), mlir::ArrayAttr{}, mlir::ArrayAttr{});
       }
 
       return builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), funcOp, mlir::ValueRange{}).getResult(0);

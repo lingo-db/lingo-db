@@ -2,7 +2,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace {
@@ -21,7 +21,7 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Oper
       Value lowerPredVal = lowerTerminator.getResults()[0];
 
       OpBuilder builder(lower);
-      mlir::BlockAndValueMapping mapping;
+      mlir::IRMapping mapping;
       mapping.map(higher.getPredicateArgument(), lower.getPredicateArgument());
       builder.setInsertionPointToEnd(&lower.getPredicateBlock());
       mlir::relalg::detail::inlineOpIntoBlock(higherPredVal.getDefiningOp(), higherPredVal.getDefiningOp()->getParentOp(), &lower.getPredicateBlock(), mapping);

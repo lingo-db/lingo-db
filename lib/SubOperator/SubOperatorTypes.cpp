@@ -5,8 +5,8 @@
 #include "mlir/IR/DialectImplementation.h"
 
 #include <llvm/ADT/TypeSwitch.h>
-
-static mlir::LogicalResult parseStateMembers(mlir::AsmParser& parser, mlir::FailureOr<mlir::subop::StateMembersAttr>& stateMembersAttr) {
+namespace {
+static mlir::LogicalResult parseStateMembers(mlir::AsmParser& parser, mlir::subop::StateMembersAttr& stateMembersAttr) {
    if (parser.parseLSquare()) return mlir::failure();
    std::vector<mlir::Attribute> names;
    std::vector<mlir::Attribute> types;
@@ -21,7 +21,7 @@ static mlir::LogicalResult parseStateMembers(mlir::AsmParser& parser, mlir::Fail
       if (parser.parseRSquare()) { return mlir::failure(); }
       break;
    }
-   stateMembersAttr.emplace(mlir::subop::StateMembersAttr::get(parser.getContext(), parser.getBuilder().getArrayAttr(names), parser.getBuilder().getArrayAttr(types)));
+   stateMembersAttr = mlir::subop::StateMembersAttr::get(parser.getContext(), parser.getBuilder().getArrayAttr(names), parser.getBuilder().getArrayAttr(types));
    return mlir::success();
 }
 static void printStateMembers(mlir::AsmPrinter& p, mlir::subop::StateMembersAttr stateMembersAttr) {
@@ -39,6 +39,7 @@ static void printStateMembers(mlir::AsmPrinter& p, mlir::subop::StateMembersAttr
    }
    p << "]";
 }
+} // namespace
 mlir::subop::StateMembersAttr mlir::subop::HashMapType::getMembers() {
    std::vector<Attribute> names;
    std::vector<Attribute> types;

@@ -1,6 +1,37 @@
 #include "mlir/Dialect/RelAlg/Transforms/queryopt/utils.h"
 #include "mlir/Dialect/RelAlg/Transforms/queryopt/QueryGraph.h"
 #include <unordered_set>
+namespace {
+std::string printPlanOp(Operator op) {
+   static size_t nodeid = 0;
+   std::string opstr;
+   llvm::raw_string_ostream strstream(opstr);
+   if (op) {
+      op.print(strstream);
+   } else {
+      strstream << "crossproduct";
+   }
+
+   std::string nodename = "n" + std::to_string(nodeid++);
+   std::string nodelabel = strstream.str();
+   std::stringstream sstream;
+   sstream << std::quoted(nodelabel);
+   llvm::dbgs() << " node [label=" << sstream.str() << "] " << nodename << ";\n";
+   return nodename;
+}
+void fix(Operator tree) {
+   for (auto child : tree.getChildren()) {
+      mlir::Operation* moveBefore = tree.getOperation();
+      for (auto* u : child->getUsers()) {
+         moveBefore = u->isBeforeInBlock(moveBefore) ? u : moveBefore;
+      }
+      if (!child->isBeforeInBlock(moveBefore)) {
+         child.moveSubTreeBefore(moveBefore);
+      }
+      fix(child);
+   }
+}
+} // namespace
 namespace mlir::relalg {
 void NodeSet::iterateSubsets(const std::function<void(NodeSet)>& fn) const {
    if (!storage.any()) return;
@@ -25,23 +56,7 @@ NodeSet NodeSet::negate() const {
    }
    return res;
 }
-static std::string printPlanOp(Operator op) {
-   static size_t nodeid = 0;
-   std::string opstr;
-   llvm::raw_string_ostream strstream(opstr);
-   if (op) {
-      op.print(strstream);
-   } else {
-      strstream << "crossproduct";
-   }
 
-   std::string nodename = "n" + std::to_string(nodeid++);
-   std::string nodelabel = strstream.str();
-   std::stringstream sstream;
-   sstream << std::quoted(nodelabel);
-   llvm::dbgs() << " node [label=" << sstream.str() << "] " << nodename << ";\n";
-   return nodename;
-}
 std::string Plan::dumpNode() {
    std::string firstNodeName;
    std::string lastNodeName;
@@ -75,18 +90,6 @@ void Plan::dump() {
    llvm::dbgs() << "}\n";
 }
 
-static void fix(Operator tree) {
-   for (auto child : tree.getChildren()) {
-      mlir::Operation* moveBefore = tree.getOperation();
-      for (auto* u : child->getUsers()) {
-         moveBefore = u->isBeforeInBlock(moveBefore) ? u : moveBefore;
-      }
-      if (!child->isBeforeInBlock(moveBefore)) {
-         child.moveSubTreeBefore(moveBefore);
-      }
-      fix(child);
-   }
-}
 Operator Plan::realizePlan() {
    Operator tree = realizePlanRec();
    fix(tree);

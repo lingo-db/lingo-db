@@ -8,7 +8,8 @@
 #include "runtime/TableBuilder.h"
 #include <functional>
 
-static unsigned char hexval(unsigned char c) {
+namespace {
+unsigned char hexval(unsigned char c) {
    if ('0' <= c && c <= '9')
       return c - '0';
    else if ('a' <= c && c <= 'f')
@@ -30,12 +31,10 @@ class TableRetriever : public execution::ResultProcessor {
       result = resultTable.value()->get();
    }
 };
-std::unique_ptr<execution::ResultProcessor> execution::createTableRetriever(std::shared_ptr<arrow::Table>& result) {
-   return std::make_unique<TableRetriever>(result);
-}
-static void printTable(const std::shared_ptr<arrow::Table>& table) {
+
+void printTable(const std::shared_ptr<arrow::Table>& table) {
    // Do not output anything for insert or copy statements
-   if (table->columns().empty()){
+   if (table->columns().empty()) {
       std::cout << "Statement executed successfully." << std::endl;
       return;
    }
@@ -134,6 +133,12 @@ class BatchedTablePrinter : public execution::ResultProcessor {
       }
    }
 };
+} // namespace
+
+std::unique_ptr<execution::ResultProcessor> execution::createTableRetriever(std::shared_ptr<arrow::Table>& result) {
+   return std::make_unique<TableRetriever>(result);
+}
+
 std::unique_ptr<execution::ResultProcessor> execution::createTablePrinter() {
    return std::make_unique<TablePrinter>();
 }

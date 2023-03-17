@@ -14,29 +14,6 @@
 #include "runtime-defs/DataSourceIteration.h"
 using namespace mlir;
 
-class WhileIterator {
-   protected:
-   mlir::TypeConverter* typeConverter;
-   MLIRContext* context;
-   mlir::Location loc;
-   WhileIterator(mlir::MLIRContext* context) : context(context), loc(mlir::UnknownLoc::get(context)) {}
-
-   public:
-   void setTypeConverter(TypeConverter* typeConverter) {
-      WhileIterator::typeConverter = typeConverter;
-   }
-   void setLoc(mlir::Location loc) {
-      this->loc = loc;
-   }
-   virtual Type iteratorType(OpBuilder& builder) = 0;
-   virtual void init(OpBuilder& builder){};
-   virtual Value iterator(OpBuilder& builder) = 0;
-   virtual Value iteratorNext(OpBuilder& builder, Value iterator) = 0;
-   virtual Value iteratorGetCurrentElement(OpBuilder& builder, Value iterator) = 0;
-   virtual Value iteratorValid(OpBuilder& builder, Value iterator) = 0;
-   virtual void iteratorFree(OpBuilder& builder, Value iterator){};
-   virtual ~WhileIterator() {}
-};
 class ForIterator {
    protected:
    mlir::TypeConverter* typeConverter;
@@ -98,12 +75,6 @@ class BufferIterator : public ForIterator {
    }
 };
 
-static std::vector<Value> remap(std::vector<Value> values, ConversionPatternRewriter& builder) {
-   for (size_t i = 0; i < values.size(); i++) {
-      values[i] = builder.getRemappedValue(values[i]);
-   }
-   return values;
-}
 class ForIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
    std::unique_ptr<ForIterator> iterator;
 
@@ -118,7 +89,7 @@ class ForIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
       iterator->setTypeConverter(&typeConverter);
       iterator->init(builder);
       iterator->setLoc(loc);
-      auto forOp = builder.create<scf::ForOp>(loc, iterator->lower(builder), iterator->upper(builder), iterator->step(builder), iterArgs.size() ? iterArgs : llvm::None);
+      auto forOp = builder.create<scf::ForOp>(loc, iterator->lower(builder), iterator->upper(builder), iterator->step(builder), iterArgs.size() ? iterArgs : std::nullopt);
       if (iterArgs.size()) {
          builder.setInsertionPointToStart(forOp.getBody());
          builder.create<scf::YieldOp>(loc);
@@ -131,7 +102,10 @@ class ForIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
       Value element;
       auto results = bodyBuilder([&](mlir::OpBuilder& b) { return element = iterator->getElement(b, forOp.getInductionVar()); }, bodyArguments, builder);
       if (iterArgs.size()) {
-         builder.create<scf::YieldOp>(loc, remap(results, builder));
+         for (size_t i = 0; i < results.size(); i++) {
+            results[i] = builder.getRemappedValue(results[i]);
+         }
+         builder.create<scf::YieldOp>(loc, results);
          builder.eraseOp(terminator);
       }
       builder.restoreInsertionPoint(insertionPoint);

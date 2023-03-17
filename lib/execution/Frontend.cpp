@@ -28,7 +28,9 @@
 
 #include <iostream>
 
-static void initializeContext(mlir::MLIRContext& context) {
+namespace {
+
+void initializeContext(mlir::MLIRContext& context) {
    mlir::DialectRegistry registry;
    registry.insert<mlir::BuiltinDialect>();
    registry.insert<mlir::relalg::RelAlgDialect>();
@@ -141,7 +143,7 @@ class BatchedSQLFrontend : public execution::Frontend {
       builder.setInsertionPointToStart(moduleOp.getBody());
       auto* queryBlock = new mlir::Block;
       std::vector<mlir::Type> returnTypes;
-      size_t i=0;
+      size_t i = 0;
       {
          mlir::OpBuilder::InsertionGuard guard(builder);
          builder.setInsertionPointToStart(queryBlock);
@@ -171,7 +173,6 @@ class BatchedSQLFrontend : public execution::Frontend {
       mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
       funcOp.getBody().push_back(queryBlock);
       module = moduleOp;
-
    }
    void loadFromFile(std::string fileName) override {
       std::ifstream istream{fileName};
@@ -188,6 +189,7 @@ class BatchedSQLFrontend : public execution::Frontend {
       return module.operator->();
    }
 };
+} // namespace
 std::unique_ptr<execution::Frontend> execution::createMLIRFrontend() {
    return std::make_unique<MLIRFrontend>();
 }

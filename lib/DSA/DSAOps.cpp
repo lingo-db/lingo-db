@@ -9,11 +9,11 @@
 #include <llvm/Support/Debug.h>
 #include <queue>
 using namespace mlir;
-
-static void printInitializationList(OpAsmPrinter& p,
-                                    Block::BlockArgListType blocksArgs,
-                                    ValueRange initializers,
-                                    StringRef prefix = "") {
+namespace {
+void printInitializationList(OpAsmPrinter& p,
+                             Block::BlockArgListType blocksArgs,
+                             ValueRange initializers,
+                             StringRef prefix = "") {
    assert(blocksArgs.size() == initializers.size() &&
           "expected same length of arguments and initializers");
    if (initializers.empty())
@@ -25,6 +25,7 @@ static void printInitializationList(OpAsmPrinter& p,
    });
    p << ")";
 }
+} // namespace
 //adapted from scf::ForOp
 void mlir::dsa::ForOp::print(OpAsmPrinter& p) {
    mlir::dsa::ForOp& op = *this;

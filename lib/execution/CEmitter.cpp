@@ -200,9 +200,8 @@ struct CppEmitter {
    std::string structDefs;
    std::unordered_set<std::string> cachedStructs;
 };
-} // namespace
 
-static LogicalResult printConstantOp(CppEmitter& emitter, Operation* operation,
+LogicalResult printConstantOp(CppEmitter& emitter, Operation* operation,
                                      Attribute value) {
    OpResult result = operation->getResult(0);
 
@@ -219,7 +218,7 @@ static LogicalResult printConstantOp(CppEmitter& emitter, Operation* operation,
    return emitter.emitAttribute(operation->getLoc(), value);
 }
 
-static LogicalResult printOperation(CppEmitter& emitter, util::GenericMemrefCastOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::GenericMemrefCastOp op) {
    raw_ostream& os = emitter.ostream();
    if (failed(emitter.emitAssignPrefix(*op.getOperation())))
       return failure();
@@ -230,7 +229,7 @@ static LogicalResult printOperation(CppEmitter& emitter, util::GenericMemrefCast
    os << ") " << emitter.getOrCreateName(op.getVal());
    return success();
 }
-static LogicalResult printStandardOperation(CppEmitter& emitter, mlir::Operation* op, const std::function<void(raw_ostream&)>& fn) {
+LogicalResult printStandardOperation(CppEmitter& emitter, mlir::Operation* op, const std::function<void(raw_ostream&)>& fn) {
    if (op->getNumResults() != 1) {
       return failure();
    }
@@ -308,7 +307,7 @@ std::unordered_map<ArithmeticCOperation, std::string> opToFormatString{
    {ArithmeticCOperation::CEIL_DIV, "@0 / @1 + ((@0 % @1)>0)"},
    {ArithmeticCOperation::FLOOR_DIV, "@0 / @1 - ((@0 % @1 < 0)"},
 };
-static LogicalResult printArithmeticOperation(CppEmitter& emitter, mlir::Operation* arithmeticOp, ArithmeticCOperation type) {
+LogicalResult printArithmeticOperation(CppEmitter& emitter, mlir::Operation* arithmeticOp, ArithmeticCOperation type) {
    raw_ostream& os = emitter.ostream();
    Operation& op = *arithmeticOp;
 
@@ -327,7 +326,7 @@ static LogicalResult printArithmeticOperation(CppEmitter& emitter, mlir::Operati
 
    return success();
 }
-static LogicalResult printSimpleCast(CppEmitter& emitter, mlir::Operation* op) {
+LogicalResult printSimpleCast(CppEmitter& emitter, mlir::Operation* op) {
    if (op->getNumResults() != 1 || op->getNumOperands() != 1) {
       return failure();
    }
@@ -341,7 +340,7 @@ static LogicalResult printSimpleCast(CppEmitter& emitter, mlir::Operation* op) {
    os << ")" << emitter.getOrCreateName(op->getOperand(0));
    return success();
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::AllocaOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::AllocaOp op) {
    std::string baseType;
    if (failed(emitter.typeToString(op->getLoc(), op.getType().getElementType(), baseType))) {
       return failure();
@@ -352,7 +351,7 @@ static LogicalResult printOperation(CppEmitter& emitter, util::AllocaOp op) {
       return printStandardOperation(emitter, op, [&](auto& os) { os << "(" << baseType << "*) alloca(sizeof(" << baseType << "))"; });
    }
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::AllocOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::AllocOp op) {
    std::string baseType;
    if (failed(emitter.typeToString(op->getLoc(), op.getType().getElementType(), baseType))) {
       return failure();
@@ -368,10 +367,10 @@ static std::string escapeQuotes(std::string s) {
    sstream << std::quoted(s);
    return sstream.str().substr(1, sstream.str().length() - 2);
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::CreateConstVarLen op) {
+LogicalResult printOperation(CppEmitter& emitter, util::CreateConstVarLen op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::VarLen32{reinterpret_cast<const uint8_t*>(\"" << escapeQuotes(op.getStr().str()) << "\"), " << op.getStr().size() << "}"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::PackOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::PackOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) {
       os << "{";
       for (size_t i = 0; i < op.getOperands().size(); i++) {
@@ -379,16 +378,16 @@ static LogicalResult printOperation(CppEmitter& emitter, util::PackOp op) {
       }
    });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::TupleElementPtrOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::TupleElementPtrOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "&" << emitter.getOrCreateName(op.getRef()) << "->t" << op.getIdx(); });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::GetTupleOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::GetTupleOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << emitter.getOrCreateName(op.getTuple()) << ".t" << op.getOffset(); });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::CreateVarLen op) {
+LogicalResult printOperation(CppEmitter& emitter, util::CreateVarLen op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::VarLen32{reinterpret_cast<uint8_t*>(" << emitter.getOrCreateName(op.getRef()) << "), (uint32_t) " << emitter.getOrCreateName(op.getLen()) << "}"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::VarLenCmp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::VarLenCmp op) {
    if (failed(emitter.emitVariableDeclaration(op->getResult(0), false))) {
       return failure();
    }
@@ -403,7 +402,7 @@ static LogicalResult printOperation(CppEmitter& emitter, util::VarLenCmp op) {
    os << "= " << left << ".getLen()>12 && " << left << ".getLen()==" << right << ".getLen() &&" << left << ".first4==" << right << ".first4";
    return success();
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::VarLenTryCheapHash op) {
+LogicalResult printOperation(CppEmitter& emitter, util::VarLenTryCheapHash op) {
    if (failed(emitter.emitVariableDeclaration(op->getResult(0), false))) {
       return failure();
    }
@@ -417,65 +416,65 @@ static LogicalResult printOperation(CppEmitter& emitter, util::VarLenTryCheapHas
 
    return success();
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::VarLenGetLen op) {
+LogicalResult printOperation(CppEmitter& emitter, util::VarLenGetLen op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << emitter.getOrCreateName(op.getVarlen()) << ".getLen()"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::UndefOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::UndefOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "{}"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::Hash64 op) {
+LogicalResult printOperation(CppEmitter& emitter, util::Hash64 op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "hash_64(" << emitter.getOrCreateName(op.getVal()) << ")"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::HashCombine op) {
+LogicalResult printOperation(CppEmitter& emitter, util::HashCombine op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "hash_combine(" << emitter.getOrCreateName(op.getH1()) << "," << emitter.getOrCreateName(op.getH2()) << ")"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::HashVarLen op) {
+LogicalResult printOperation(CppEmitter& emitter, util::HashVarLen op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "hashVarLenData(" << emitter.getOrCreateName(op.getVal()) << ")"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::FilterTaggedPtr op) {
+LogicalResult printOperation(CppEmitter& emitter, util::FilterTaggedPtr op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::filterTagged(" << emitter.getOrCreateName(op.getRef()) << "," << emitter.getOrCreateName(op.getHash()) << ")"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::BufferCastOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::BufferCastOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << emitter.getOrCreateName(op.getVal()); });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::BufferGetLen op) {
+LogicalResult printOperation(CppEmitter& emitter, util::BufferGetLen op) {
    std::string type;
    if (failed(emitter.typeToString(op->getLoc(), op.getBuffer().getType().getElementType().cast<mlir::util::RefType>().getElementType(), type))) {
       return failure();
    }
    return printStandardOperation(emitter, op, [&](auto& os) { os << emitter.getOrCreateName(op.getBuffer()) << ".numElements/std::max(1ul,sizeof(" << type << "))"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::BufferGetRef op) {
+LogicalResult printOperation(CppEmitter& emitter, util::BufferGetRef op) {
    std::string type;
    if (failed(emitter.typeToString(op->getLoc(), op.getBuffer().getType().getElementType(), type))) {
       return failure();
    }
    return printStandardOperation(emitter, op, [&](auto& os) { os << "(" << type << ")" << emitter.getOrCreateName(op.getBuffer()) << ".ptr"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::InvalidRefOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::InvalidRefOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "nullptr"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::IsRefValidOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::IsRefValidOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << emitter.getOrCreateName(op.getRef()) << "!=nullptr"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::SizeOfOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::SizeOfOp op) {
    std::string type;
-   if (failed(emitter.typeToString(op->getLoc(), op.type(), type))) {
+   if (failed(emitter.typeToString(op->getLoc(), op.getType(), type))) {
       return failure();
    }
    return printStandardOperation(emitter, op, [&](auto& os) { os << "sizeof(" << type << ")"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::ArrayElementPtrOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::ArrayElementPtrOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "&" << emitter.getOrCreateName(op.getRef()) << "[" << emitter.getOrCreateName(op.getIdx()) << "]"; });
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::LoadOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::LoadOp op) {
    if (op.getIdx()) {
       return printStandardOperation(emitter, op, [&](auto& os) { os << emitter.getOrCreateName(op.getRef()) << "[" << emitter.getOrCreateName(op.getIdx()) << "]"; });
    } else {
       return printStandardOperation(emitter, op, [&](auto& os) { os << "*" << emitter.getOrCreateName(op.getRef()); });
    }
 }
-static LogicalResult printOperation(CppEmitter& emitter, util::StoreOp op) {
+LogicalResult printOperation(CppEmitter& emitter, util::StoreOp op) {
    raw_ostream& os = emitter.ostream();
    if (op.getIdx()) {
       os << emitter.getOrCreateName(op.getRef()) << "[" << emitter.getOrCreateName(op.getIdx()) << "] = " << emitter.getOrCreateName(op.getVal());
@@ -485,7 +484,7 @@ static LogicalResult printOperation(CppEmitter& emitter, util::StoreOp op) {
    return success();
 }
 
-static LogicalResult printOperation(CppEmitter& emitter,
+LogicalResult printOperation(CppEmitter& emitter,
                                     arith::ConstantOp constantOp) {
    Operation* operation = constantOp.getOperation();
    Attribute value = constantOp.getValue();
@@ -493,7 +492,7 @@ static LogicalResult printOperation(CppEmitter& emitter,
    return printConstantOp(emitter, operation, value);
 }
 
-static LogicalResult printOperation(CppEmitter& emitter,
+LogicalResult printOperation(CppEmitter& emitter,
                                     func::ConstantOp constantOp) {
    Operation* operation = constantOp.getOperation();
    Attribute value = constantOp.getValueAttr();
@@ -501,7 +500,7 @@ static LogicalResult printOperation(CppEmitter& emitter,
    return printConstantOp(emitter, operation, value);
 }
 
-static LogicalResult printOperation(CppEmitter& emitter,
+LogicalResult printOperation(CppEmitter& emitter,
                                     cf::BranchOp branchOp) {
    raw_ostream& os = emitter.ostream();
    Block& successor = *branchOp.getSuccessor();
@@ -521,7 +520,7 @@ static LogicalResult printOperation(CppEmitter& emitter,
    return success();
 }
 
-static LogicalResult printOperation(CppEmitter& emitter,
+LogicalResult printOperation(CppEmitter& emitter,
                                     cf::CondBranchOp condBranchOp) {
    raw_indented_ostream& os = emitter.ostream();
    Block& trueSuccessor = *condBranchOp.getTrueDest();
@@ -567,7 +566,7 @@ static LogicalResult printOperation(CppEmitter& emitter,
    return success();
 }
 
-static LogicalResult printOperation(CppEmitter& emitter, func::CallOp callOp) {
+LogicalResult printOperation(CppEmitter& emitter, func::CallOp callOp) {
    if (failed(emitter.emitAssignPrefix(*callOp.getOperation())))
       return failure();
 
@@ -579,7 +578,7 @@ static LogicalResult printOperation(CppEmitter& emitter, func::CallOp callOp) {
    return success();
 }
 
-static LogicalResult printOperation(CppEmitter& emitter, scf::ForOp forOp) {
+LogicalResult printOperation(CppEmitter& emitter, scf::ForOp forOp) {
    raw_indented_ostream& os = emitter.ostream();
 
    OperandRange operands = forOp.getIterOperands();
@@ -656,7 +655,7 @@ static LogicalResult printOperation(CppEmitter& emitter, scf::ForOp forOp) {
    return success();
 }
 
-static LogicalResult printOperation(CppEmitter& emitter, scf::WhileOp whileOp) {
+LogicalResult printOperation(CppEmitter& emitter, scf::WhileOp whileOp) {
    raw_indented_ostream& os = emitter.ostream();
 
    OperandRange operands = whileOp->getOperands();
@@ -738,7 +737,7 @@ static LogicalResult printOperation(CppEmitter& emitter, scf::WhileOp whileOp) {
    return success();
 }
 
-static LogicalResult printOperation(CppEmitter& emitter, scf::IfOp ifOp) {
+LogicalResult printOperation(CppEmitter& emitter, scf::IfOp ifOp) {
    raw_indented_ostream& os = emitter.ostream();
 
    if (!emitter.shouldDeclareVariablesAtTop()) {
@@ -783,7 +782,7 @@ static LogicalResult printOperation(CppEmitter& emitter, scf::IfOp ifOp) {
    return success();
 }
 
-static LogicalResult printOperation(CppEmitter& emitter, scf::YieldOp yieldOp) {
+LogicalResult printOperation(CppEmitter& emitter, scf::YieldOp yieldOp) {
    raw_ostream& os = emitter.ostream();
    Operation& parentOp = *yieldOp.getOperation()->getParentOp();
 
@@ -810,7 +809,7 @@ static LogicalResult printOperation(CppEmitter& emitter, scf::YieldOp yieldOp) {
    return success();
 }
 
-static LogicalResult printOperation(CppEmitter& emitter,
+LogicalResult printOperation(CppEmitter& emitter,
                                     func::ReturnOp returnOp) {
    raw_ostream& os = emitter.ostream();
    os << "return";
@@ -829,7 +828,7 @@ static LogicalResult printOperation(CppEmitter& emitter,
    }
 }
 
-static LogicalResult printOperation(CppEmitter& emitter, ModuleOp moduleOp) {
+LogicalResult printOperation(CppEmitter& emitter, ModuleOp moduleOp) {
    CppEmitter::Scope scope(emitter);
 
    for (Operation& op : moduleOp) {
@@ -839,7 +838,7 @@ static LogicalResult printOperation(CppEmitter& emitter, ModuleOp moduleOp) {
    return success();
 }
 
-static LogicalResult printOperation(CppEmitter& emitter,
+LogicalResult printOperation(CppEmitter& emitter,
                                     func::FuncOp functionOp) {
    if (functionOp.getFunctionBody().empty()) {
       raw_indented_ostream& os = emitter.ostream();
@@ -950,6 +949,7 @@ static LogicalResult printOperation(CppEmitter& emitter,
    os.unindent() << "}\n";
    return success();
 }
+} // namespace
 
 CppEmitter::CppEmitter(raw_ostream& os, bool declareVariablesAtTop)
    : os(os), declareVariablesAtTop(declareVariablesAtTop) {

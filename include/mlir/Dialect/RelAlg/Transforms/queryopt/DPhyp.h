@@ -27,6 +27,7 @@ class DPHyp {
    std::shared_ptr<Plan> solve();
    void countSubGraphsRec(NodeSet s1, NodeSet x, size_t& count, size_t maxCount);
    size_t countSubGraphs(size_t maxCount);
+   std::shared_ptr<Plan> createInitialPlan(QueryGraph::Node& n);
 };
 } // namespace mlir::relalg
 

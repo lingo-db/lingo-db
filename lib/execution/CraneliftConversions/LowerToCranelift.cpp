@@ -29,7 +29,7 @@ class FuncLowering : public OpConversionPattern<mlir::func::FuncOp> {
       llvm::SmallVector<mlir::Type, 4> inputTypes, outputTypes;
       assert(typeConverter->convertTypes(op.getFunctionType().getInputs(), inputTypes).succeeded());
       assert(typeConverter->convertTypes(op.getFunctionType().getResults(), outputTypes).succeeded());
-      auto funcOp = rewriter.create<mlir::cranelift::FuncOp>(op->getLoc(), op.getSymName(), rewriter.getFunctionType(inputTypes, outputTypes));
+      auto funcOp = rewriter.create<mlir::cranelift::FuncOp>(op->getLoc(), op.getSymName(), rewriter.getFunctionType(inputTypes, outputTypes), ArrayAttr{}, ArrayAttr{});
       rewriter.inlineRegionBefore(op.getBody(), funcOp.getBody(),
                                   funcOp.end());
       TypeConverter::SignatureConversion result(funcOp.getNumArguments());
@@ -50,7 +50,7 @@ class CallLowering : public OpConversionPattern<mlir::func::CallOp> {
       if (typeConverter->convertTypes(op.getResultTypes(), resTypes).failed()) {
          return failure();
       }
-      rewriter.replaceOpWithNewOp<mlir::cranelift::CallOp>(op, resTypes, op.getCallee(), adaptor.operands());
+      rewriter.replaceOpWithNewOp<mlir::cranelift::CallOp>(op, resTypes, op.getCallee(), adaptor.getOperands());
       return success();
    }
 };
@@ -58,7 +58,7 @@ class ReturnLowering : public OpConversionPattern<mlir::func::ReturnOp> {
    public:
    using OpConversionPattern<mlir::func::ReturnOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::func::ReturnOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOpWithNewOp<mlir::cranelift::ReturnOp>(op, adaptor.operands());
+      rewriter.replaceOpWithNewOp<mlir::cranelift::ReturnOp>(op, adaptor.getOperands());
       return success();
    }
 };
@@ -76,7 +76,7 @@ static void ensureSIToFloat32(mlir::ModuleOp module, OpBuilder& builder) {
    if (!funcOp) {
       OpBuilder::InsertionGuard insertionGuard(builder);
       builder.setInsertionPointToStart(module.getBody());
-      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "__floattisf", builder.getFunctionType({builder.getIntegerType(128)}, {builder.getF32Type()}));
+      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "__floattisf", builder.getFunctionType({builder.getIntegerType(128)}, {builder.getF32Type()}), ArrayAttr{}, ArrayAttr{});
    }
 }
 static void ensureSIToFloat64(mlir::ModuleOp module, OpBuilder& builder) {
@@ -84,7 +84,7 @@ static void ensureSIToFloat64(mlir::ModuleOp module, OpBuilder& builder) {
    if (!funcOp) {
       OpBuilder::InsertionGuard insertionGuard(builder);
       builder.setInsertionPointToStart(module.getBody());
-      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "__floattidf", builder.getFunctionType({builder.getIntegerType(128)}, {builder.getF64Type()}));
+      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "__floattidf", builder.getFunctionType({builder.getIntegerType(128)}, {builder.getF64Type()}), ArrayAttr{}, ArrayAttr{});
    }
 }
 class SIToFPLowering : public OpConversionPattern<mlir::arith::SIToFPOp> {
@@ -152,7 +152,7 @@ static void ensureDiv3(mlir::ModuleOp module, OpBuilder& builder) {
    if (!funcOp) {
       OpBuilder::InsertionGuard insertionGuard(builder);
       builder.setInsertionPointToStart(module.getBody());
-      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "__divti3", builder.getFunctionType({builder.getIntegerType(128), builder.getIntegerType(128)}, {builder.getIntegerType(128)}));
+      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "__divti3", builder.getFunctionType({builder.getIntegerType(128), builder.getIntegerType(128)}, {builder.getIntegerType(128)}), ArrayAttr{}, ArrayAttr{});
    }
 }
 class DivSILowering : public OpConversionPattern<mlir::arith::DivSIOp> {
@@ -250,7 +250,7 @@ class SizeOfOpLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto sizeOfOp = mlir::dyn_cast_or_null<mlir::util::SizeOfOp>(op);
-      Type t = typeConverter->convertType(sizeOfOp.type());
+      Type t = typeConverter->convertType(sizeOfOp.getType());
 
       rewriter.replaceOpWithNewOp<mlir::cranelift::IConstOp>(op, rewriter.getI64Type(), rewriter.getI64IntegerAttr(getSizeOf(op, t, dataLayoutAnalysis)));
       return success();
@@ -289,7 +289,7 @@ static void ensureMalloc(mlir::ModuleOp module, OpBuilder& builder) {
    if (!funcOp) {
       OpBuilder::InsertionGuard insertionGuard(builder);
       builder.setInsertionPointToStart(module.getBody());
-      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "malloc", builder.getFunctionType({builder.getI64Type()}, {builder.getI64Type()}));
+      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "malloc", builder.getFunctionType({builder.getI64Type()}, {builder.getI64Type()}), ArrayAttr{}, ArrayAttr{});
    }
 }
 class AllocOpLowering : public ConversionPattern {
@@ -453,7 +453,7 @@ static void ensureCreateVarLenFn(mlir::ModuleOp module, OpBuilder& builder) {
    if (!funcOp) {
       OpBuilder::InsertionGuard insertionGuard(builder);
       builder.setInsertionPointToStart(module.getBody());
-      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "createVarLen32", builder.getFunctionType({builder.getIntegerType(64), builder.getI32Type()}, {builder.getIntegerType(128)}));
+      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "createVarLen32", builder.getFunctionType({builder.getIntegerType(64), builder.getI32Type()}, {builder.getIntegerType(128)}), ArrayAttr{}, ArrayAttr{});
    }
 }
 class CreateVarLenLowering : public OpConversionPattern<mlir::util::CreateVarLen> {
@@ -687,7 +687,7 @@ static void ensureHashVarlenFn(mlir::ModuleOp module, OpBuilder& builder) {
    if (!funcOp) {
       OpBuilder::InsertionGuard insertionGuard(builder);
       builder.setInsertionPointToStart(module.getBody());
-      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "hashVarLenData", builder.getFunctionType({builder.getIntegerType(128)}, {builder.getI64Type()}));
+      funcOp = builder.create<mlir::cranelift::FuncOp>(module.getLoc(), "hashVarLenData", builder.getFunctionType({builder.getIntegerType(128)}, {builder.getI64Type()}), ArrayAttr{}, ArrayAttr{});
    }
 }
 class HashVarLenLowering : public OpConversionPattern<mlir::util::HashVarLen> {

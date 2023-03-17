@@ -6,7 +6,7 @@
 #include <iostream>
 
 #include "mlir/Dialect/RelAlg/Passes.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 namespace {
@@ -43,7 +43,7 @@ class WrapWithNullCheck : public mlir::RewritePattern {
 
       auto supInvVal = mlir::dyn_cast_or_null<mlir::db::SupportsInvalidValues>(op);
       if (supInvVal && supInvVal.supportsInvalidValues()) {
-         mlir::BlockAndValueMapping mapping;
+         mlir::IRMapping mapping;
          for (auto operand : op->getOperands()) {
             if (operand.getType().isa<mlir::db::NullableType>()) {
                mapping.map(operand, rewriter.create<mlir::db::NullableGetVal>(op->getLoc(), operand));
@@ -59,14 +59,14 @@ class WrapWithNullCheck : public mlir::RewritePattern {
          return;
       } else {
          rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
-            op, op->getResultTypes(), isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
+            op, isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
                if(op->getNumResults()==1){
                   mlir::Value nullResult=b.create<mlir::db::NullOp>(op->getLoc(),op->getResultTypes()[0]);
                   b.create<mlir::scf::YieldOp>(loc,nullResult);
                }else{
                   b.create<mlir::scf::YieldOp>(loc);
                } }, [&](mlir::OpBuilder& b, mlir::Location loc) {
-               mlir::BlockAndValueMapping mapping;
+               mlir::IRMapping mapping;
                for (auto operand : op->getOperands()) {
                   if (operand.getType().isa<mlir::db::NullableType>()) {
                      mapping.map(operand,b.create<mlir::db::NullableGetVal>(op->getLoc(),operand));
@@ -99,7 +99,7 @@ class SimplifySortComparePattern : public mlir::RewritePattern {
       mlir::Value minus1 = rewriter.create<mlir::arith::ConstantIntOp>(loc, -1, 8);
       mlir::Value one = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 8);
       rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
-         op, op->getResultTypes(), isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
+         op, isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
             mlir::Value res = b.create<mlir::arith::SelectOp>(loc, isRightNull, minus1, one);
             res = b.create<mlir::arith::SelectOp>(loc, bothNullable, zero, res);
             b.create<mlir::scf::YieldOp>(loc, res); }, [&](mlir::OpBuilder& b, mlir::Location loc) {
@@ -125,7 +125,7 @@ class SimplifyCompareISAPattern : public mlir::RewritePattern {
          mlir::Value isRightNull = rewriter.create<mlir::db::IsNullOp>(loc, cmpOp.getRight());
          mlir::Value isAnyNull = rewriter.create<mlir::arith::OrIOp>(loc, isLeftNull, isRightNull);
          rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
-            op, op->getResultTypes(), isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
+            op, isAnyNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
                mlir::Value bothNull = rewriter.create<mlir::arith::AndIOp>(loc, isLeftNull, isRightNull);
                b.create<mlir::scf::YieldOp>(loc, bothNull); }, [&](mlir::OpBuilder& b, mlir::Location loc) {
                mlir::Value left = b.create<mlir::db::NullableGetVal>(loc, cmpOp.getLeft());
@@ -135,7 +135,7 @@ class SimplifyCompareISAPattern : public mlir::RewritePattern {
       } else if (isLeftNullable || isRightNullable) {
          mlir::Value isNull=rewriter.create<mlir::db::IsNullOp>(loc, isLeftNullable?cmpOp.getLeft():cmpOp.getRight());
          rewriter.replaceOpWithNewOp<mlir::scf::IfOp>(
-            op, op->getResultTypes(), isNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
+            op, isNull, [&](mlir::OpBuilder& b, mlir::Location loc) {
                mlir::Value falseVal = rewriter.create<mlir::arith::ConstantIntOp>(loc, 0, rewriter.getI1Type());
                b.create<mlir::scf::YieldOp>(loc, falseVal); }, [&](mlir::OpBuilder& b, mlir::Location loc) {
                mlir::Value left=cmpOp.getLeft();

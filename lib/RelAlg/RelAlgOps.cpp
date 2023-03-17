@@ -14,11 +14,9 @@
 
 using namespace mlir;
 
-///////////////////////////////////////////////////////////////////////////////////
-// Utility Functions
-///////////////////////////////////////////////////////////////////////////////////
+namespace {
 
-static mlir::tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser) {
+mlir::tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser) {
    return parser.getBuilder().getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
 }
 ::mlir::ParseResult parseSortSpec(::mlir::OpAsmParser& parser, mlir::relalg::SortSpec& spec) {
@@ -37,17 +35,17 @@ static mlir::tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser
    }
    return success();
 }
-static ParseResult parseCustRef(OpAsmParser& parser, mlir::tuples::ColumnRefAttr& attr) {
+ParseResult parseCustRef(OpAsmParser& parser, mlir::tuples::ColumnRefAttr& attr) {
    ::mlir::SymbolRefAttr parsedSymbolRefAttr;
    if (parser.parseAttribute(parsedSymbolRefAttr, parser.getBuilder().getType<::mlir::NoneType>())) { return failure(); }
    attr = getColumnManager(parser).createRef(parsedSymbolRefAttr);
    return success();
 }
 
-static void printCustRef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::ColumnRefAttr attr) {
+void printCustRef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::ColumnRefAttr attr) {
    p << attr.getName();
 }
-static ParseResult parseCustRegion(OpAsmParser& parser, Region& result) {
+ParseResult parseCustRegion(OpAsmParser& parser, Region& result) {
    OpAsmParser::Argument predArgument;
    SmallVector<OpAsmParser::Argument, 4> regionArgs;
    SmallVector<Type, 4> argTypes;
@@ -72,7 +70,7 @@ static ParseResult parseCustRegion(OpAsmParser& parser, Region& result) {
    if (parser.parseRegion(result, regionArgs)) return failure();
    return success();
 }
-static void printCustRegion(OpAsmPrinter& p, Operation* op, Region& r) {
+void printCustRegion(OpAsmPrinter& p, Operation* op, Region& r) {
    p << "(";
    bool first = true;
    for (auto arg : r.front().getArguments()) {
@@ -86,7 +84,7 @@ static void printCustRegion(OpAsmPrinter& p, Operation* op, Region& r) {
    p << ")";
    p.printRegion(r, false, true);
 }
-static ParseResult parseCustRefArr(OpAsmParser& parser, ArrayAttr& attr) {
+ParseResult parseCustRefArr(OpAsmParser& parser, ArrayAttr& attr) {
    ArrayAttr parsedAttr;
    std::vector<Attribute> attributes;
    if (parser.parseAttribute(parsedAttr, parser.getBuilder().getType<::mlir::NoneType>())) {
@@ -101,7 +99,7 @@ static ParseResult parseCustRefArr(OpAsmParser& parser, ArrayAttr& attr) {
    return success();
 }
 
-static void printCustRefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) {
+void printCustRefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) {
    p << "[";
    std::vector<Attribute> attributes;
    bool first = true;
@@ -116,7 +114,7 @@ static void printCustRefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arra
    }
    p << "]";
 }
-static ParseResult parseSortSpecs(OpAsmParser& parser, mlir::ArrayAttr& result) {
+ParseResult parseSortSpecs(OpAsmParser& parser, mlir::ArrayAttr& result) {
    if (parser.parseLSquare()) return failure();
    std::vector<mlir::Attribute> mapping;
    while (true) {
@@ -137,7 +135,7 @@ static ParseResult parseSortSpecs(OpAsmParser& parser, mlir::ArrayAttr& result) 
    result = mlir::ArrayAttr::get(parser.getBuilder().getContext(), mapping);
    return success();
 }
-static void printSortSpecs(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) {
+void printSortSpecs(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) {
    p << "[";
    std::vector<Attribute> attributes;
    bool first = true;
@@ -153,7 +151,7 @@ static void printSortSpecs(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr array
    p << "]";
 }
 
-static ParseResult parseCustDef(OpAsmParser& parser, mlir::tuples::ColumnDefAttr& attr) {
+ParseResult parseCustDef(OpAsmParser& parser, mlir::tuples::ColumnDefAttr& attr) {
    SymbolRefAttr attrSymbolAttr;
    if (parser.parseAttribute(attrSymbolAttr, parser.getBuilder().getType<::mlir::NoneType>())) { return failure(); }
    std::string attrName(attrSymbolAttr.getLeafReference().getValue());
@@ -172,7 +170,7 @@ static ParseResult parseCustDef(OpAsmParser& parser, mlir::tuples::ColumnDefAttr
    attr.getColumn().type = propType;
    return success();
 }
-static void printCustDef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::ColumnDefAttr attr) {
+void printCustDef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::ColumnDefAttr attr) {
    p << attr.getName();
    std::vector<mlir::NamedAttribute> relAttrDefProps;
    MLIRContext* context = attr.getContext();
@@ -187,7 +185,7 @@ static void printCustDef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::Col
    }
 }
 
-static ParseResult parseCustDefArr(OpAsmParser& parser, ArrayAttr& attr) {
+ParseResult parseCustDefArr(OpAsmParser& parser, ArrayAttr& attr) {
    std::vector<Attribute> attributes;
    if (parser.parseLSquare()) return failure();
    while (true) {
@@ -204,7 +202,7 @@ static ParseResult parseCustDefArr(OpAsmParser& parser, ArrayAttr& attr) {
    attr = parser.getBuilder().getArrayAttr(attributes);
    return success();
 }
-static void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) {
+void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) {
    p << "[";
    bool first = true;
    for (auto a : arrayAttr) {
@@ -219,7 +217,7 @@ static void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arra
    p << "]";
 }
 
-static ParseResult parseCustAttrMapping(OpAsmParser& parser, ArrayAttr& res) {
+ParseResult parseCustAttrMapping(OpAsmParser& parser, ArrayAttr& res) {
    if (parser.parseKeyword("mapping") || parser.parseColon() || parser.parseLBrace()) return failure();
    std::vector<mlir::Attribute> mapping;
    while (true) {
@@ -236,7 +234,7 @@ static ParseResult parseCustAttrMapping(OpAsmParser& parser, ArrayAttr& res) {
    res = mlir::ArrayAttr::get(parser.getBuilder().getContext(), mapping);
    return success();
 }
-static void printCustAttrMapping(OpAsmPrinter& p, mlir::Operation* op, Attribute mapping) {
+void printCustAttrMapping(OpAsmPrinter& p, mlir::Operation* op, Attribute mapping) {
    p << " mapping: {";
    auto first = true;
    for (auto attr : mapping.dyn_cast_or_null<ArrayAttr>()) {
@@ -250,6 +248,7 @@ static void printCustAttrMapping(OpAsmPrinter& p, mlir::Operation* op, Attribute
    }
    p << "}";
 }
+} // namespace
 
 ///////////////////////////////////////////////////////////////////////////////////
 // BaseTableOp

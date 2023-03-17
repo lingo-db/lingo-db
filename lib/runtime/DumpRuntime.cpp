@@ -37,8 +37,8 @@ void runtime::DumpRuntime::dumpDecimal(bool null, uint64_t low, uint64_t high, i
       std::cout << "decimal(" << decimalrep.ToString(scale) << ")" << std::endl;
    }
 }
-static arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
 void runtime::DumpRuntime::dumpDate(bool null, int64_t date) {
+   static arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
    if (null) {
       std::cout << "date(NULL)" << std::endl;
    } else {
@@ -47,6 +47,7 @@ void runtime::DumpRuntime::dumpDate(bool null, int64_t date) {
 }
 template <class Unit>
 void dumpTimestamp(bool null, uint64_t date) {
+   static arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
    if (null) {
       std::cout << "timestamp(NULL)" << std::endl;
    } else {

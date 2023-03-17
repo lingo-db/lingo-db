@@ -41,7 +41,7 @@ build/arrow/.pyarrowstamp: build/arrow/.buildstamp
 	touch $@
 
 build/llvm-build/.buildstamp: build/llvm-build/.stamp
-	cmake --build build/llvm-build -j${NPROCS}
+	cmake --build build/llvm-build -j16
 	touch $@
 
 resources/data/tpch-1/.stamp: tools/generate/tpch.sh

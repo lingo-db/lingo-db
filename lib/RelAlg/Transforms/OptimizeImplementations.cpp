@@ -6,7 +6,7 @@
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/Dialect/RelAlg/Transforms/queryopt/QueryGraph.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "stack"
 #include <unordered_set>
@@ -36,7 +36,7 @@ class HashJoinUtils {
       std::vector<mlir::Attribute> toHash;
       std::vector<mlir::Attribute> nullsEqual;
       llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> required;
-      mlir::BlockAndValueMapping mapping;
+      mlir::IRMapping mapping;
       mapping.map(block->getArgument(0), mapBlockInfo.block->getArgument(0));
       size_t i = 0;
       block->walk([&](mlir::Operation* op) {
@@ -628,7 +628,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          }
          auto groupJoinOp = builder.create<mlir::relalg::GroupJoinOp>(op.getLoc(), left, right, isOuterJoin ? mlir::relalg::GroupJoinBehavior::outer : mlir::relalg::GroupJoinBehavior::inner, leftKeys, rightKeys, mappedCols, op.getComputedCols());
          if (mapOp) {
-            mlir::BlockAndValueMapping mapping;
+            mlir::IRMapping mapping;
             mapOp.getPredicate().cloneInto(&groupJoinOp.getMapFunc(), mapping);
          } else {
             auto* b = new mlir::Block;
@@ -638,11 +638,11 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             mB.create<mlir::tuples::ReturnOp>(op.getLoc());
          }
          {
-            mlir::BlockAndValueMapping mapping;
+            mlir::IRMapping mapping;
             op.getAggrFunc().cloneInto(&groupJoinOp.getAggrFunc(), mapping);
          }
          {
-            mlir::BlockAndValueMapping mapping;
+            mlir::IRMapping mapping;
             join.getPredicateRegion().cloneInto(&groupJoinOp.getPredicate(), mapping);
          }
          op->replaceAllUsesWith(groupJoinOp);

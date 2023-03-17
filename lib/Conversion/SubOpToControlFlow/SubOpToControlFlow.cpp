@@ -20,8 +20,8 @@
 #include "mlir/Dialect/util/FunctionHelper.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -56,7 +56,7 @@ struct SubOpToControlFlowLoweringPass
 static std::vector<mlir::Value> inlineBlock(mlir::Block* b, mlir::OpBuilder& rewriter, mlir::ValueRange arguments) {
    auto* terminator = b->getTerminator();
    auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(terminator);
-   mlir::BlockAndValueMapping mapper;
+   mlir::IRMapping mapper;
    assert(b->getNumArguments() == arguments.size());
    for (auto i = 0ull; i < b->getNumArguments(); i++) {
       mapper.map(b->getArgument(i), arguments[i]);
@@ -363,7 +363,7 @@ struct InFlightTupleStream {
 };
 class SubOpRewriter {
    mlir::OpBuilder builder;
-   mlir::BlockAndValueMapping mapping;
+   mlir::IRMapping mapping;
    std::unordered_map<std::string, std::vector<std::unique_ptr<AbstractSubOpConversionPattern>>> patterns;
    llvm::DenseMap<mlir::Value, InFlightTupleStream> inFlightTupleStreams;
    std::vector<mlir::Operation*> toErase;
@@ -644,7 +644,7 @@ class GetExternalTableLowering : public SubOpConversionPattern<mlir::subop::GetE
       mlir::func::FuncOp funcOp = parentModule.lookupSymbol<mlir::func::FuncOp>("rt_get_execution_context");
       if (!funcOp) {
          rewriter.atStartOf(parentModule.getBody(), [&](SubOpRewriter& rewriter) {
-            funcOp = rewriter.create<mlir::func::FuncOp>(op->getLoc(), "rt_get_execution_context", mlir::FunctionType::get(getContext(), {}, {mlir::util::RefType::get(getContext(), rewriter.getI8Type())}), rewriter.getStringAttr("private"));
+            funcOp = rewriter.create<mlir::func::FuncOp>(op->getLoc(), "rt_get_execution_context", mlir::FunctionType::get(getContext(), {}, {mlir::util::RefType::get(getContext(), rewriter.getI8Type())}), rewriter.getStringAttr("private"), ArrayAttr{}, ArrayAttr{});
          });
       }
       mlir::Value executionContext = rewriter.create<mlir::func::CallOp>(op->getLoc(), funcOp, mlir::ValueRange{}).getResult(0);
@@ -658,14 +658,14 @@ class GetExternalHashIndexLowering : public SubOpConversionPattern<mlir::subop::
    public:
    using SubOpConversionPattern<mlir::subop::GetExternalOp>::SubOpConversionPattern;
 
-   LogicalResult matchAndRewrite(mlir::subop::GetExternalOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override{
+   LogicalResult matchAndRewrite(mlir::subop::GetExternalOp op, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       if (!op.getType().isa<mlir::subop::ExternalHashIndexType>()) return failure();
       auto parentModule = op->getParentOfType<ModuleOp>();
       mlir::func::FuncOp funcOp = parentModule.lookupSymbol<mlir::func::FuncOp>("rt_get_execution_context");
       if (!funcOp) {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.atStartOf(parentModule.getBody(), [&](SubOpRewriter& rewriter){
-            funcOp = rewriter.create<mlir::func::FuncOp>(op->getLoc(), "rt_get_execution_context",  mlir::FunctionType::get(getContext(), {}, {mlir::util::RefType::get(getContext(), rewriter.getI8Type())}), rewriter.getStringAttr("private"));
+         rewriter.atStartOf(parentModule.getBody(), [&](SubOpRewriter& rewriter) {
+            funcOp = rewriter.create<mlir::func::FuncOp>(op->getLoc(), "rt_get_execution_context", mlir::FunctionType::get(getContext(), {}, {mlir::util::RefType::get(getContext(), rewriter.getI8Type())}), rewriter.getStringAttr("private"), ArrayAttr{}, ArrayAttr{});
          });
       }
 
@@ -1291,6 +1291,7 @@ class ScanHashMapListLowering : public SubOpConversionPattern<mlir::subop::ScanL
       auto htEntryPtrType = mlir::util::RefType::get(getContext(), htEntryType);
       auto kvPtrType = mlir::util::RefType::get(getContext(), getHtKVType(hashmapType, *typeConverter));
       auto valPtrType = mlir::util::RefType::get(getContext(), mlir::TupleType::get(getContext(), unpackTypes(hashmapType.getValueMembers().getTypes())));
+      ifOp.ensureTerminator(ifOp.getThenRegion(),rewriter,scanOp->getLoc());
       rewriter.atStartOf(&ifOp.getThenRegion().front(), [&](SubOpRewriter& rewriter) {
          Value ptr = rewriter.create<util::GenericMemrefCastOp>(loc, htEntryPtrType, adaptor.getList());
          auto kvPtr = rewriter.create<mlir::util::TupleElementPtrOp>(loc, kvPtrType, ptr, 2);
@@ -1345,7 +1346,7 @@ class ScanListLowering : public SubOpConversionPattern<mlir::subop::ScanListOp> 
          mlir::Value currHash = rewriter.create<mlir::util::LoadOp>(loc, hashPtr, mlir::Value());
          mlir::Value hashEq = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::eq, currHash, hash);
          rewriter.create<mlir::scf::IfOp>(
-            loc, mlir::TypeRange{}, hashEq, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
+            loc, hashEq, [&](mlir::OpBuilder& builder1, mlir::Location loc) {
                mapping.define(scanOp.getElem(), valuePtr);
                rewriter.replaceTupleStream(scanOp, mapping);
                builder1.create<mlir::scf::YieldOp>(loc);
@@ -1360,22 +1361,22 @@ class ScanListLowering : public SubOpConversionPattern<mlir::subop::ScanListOp> 
       return success();
    }
 };
-class ScanExternalHashIndexListLowering : public  SubOpConversionPattern<mlir::subop::ScanListOp> {
+class ScanExternalHashIndexListLowering : public SubOpConversionPattern<mlir::subop::ScanListOp> {
    public:
    using SubOpConversionPattern<mlir::subop::ScanListOp>::SubOpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::ScanListOp scanOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      auto listType=scanOp.getList().getType().dyn_cast_or_null<mlir::subop::ListType>();
-      if(!listType) return mlir::failure();
+      auto listType = scanOp.getList().getType().dyn_cast_or_null<mlir::subop::ListType>();
+      if (!listType) return mlir::failure();
 
       mlir::subop::ExternalHashIndexType externalHashIndexType;
-      if(auto lookupRefType=listType.getT().dyn_cast_or_null<mlir::subop::LookupEntryRefType>()){
-         if (!(externalHashIndexType=lookupRefType.getState().dyn_cast_or_null<mlir::subop::ExternalHashIndexType>())){
+      if (auto lookupRefType = listType.getT().dyn_cast_or_null<mlir::subop::LookupEntryRefType>()) {
+         if (!(externalHashIndexType = lookupRefType.getState().dyn_cast_or_null<mlir::subop::ExternalHashIndexType>())) {
             return mlir::failure();
          };
-      }else if(auto entryRefType=listType.getT().dyn_cast_or_null<mlir::subop::ExternalHashIndexEntryRefType>()){
-         externalHashIndexType=entryRefType.getExternalHashIndex();
-      }else{
+      } else if (auto entryRefType = listType.getT().dyn_cast_or_null<mlir::subop::ExternalHashIndexEntryRefType>()) {
+         externalHashIndexType = entryRefType.getExternalHashIndex();
+      } else {
          return mlir::failure();
       }
 
@@ -1406,17 +1407,17 @@ class ScanExternalHashIndexListLowering : public  SubOpConversionPattern<mlir::s
       ColumnMapping mapping;
 
       // Check if iterator contains another value
-      rewriter.atStartOf(conditionBlock, [&]( SubOpRewriter& rewriter){
+      rewriter.atStartOf(conditionBlock, [&](SubOpRewriter& rewriter) {
          mlir::Value list = conditionBlock->getArgument(0);
          mlir::Value cont = rt::ExternalHashIndexIteration::containsValue(rewriter, loc)({list})[0];
          rewriter.create<scf::ConditionOp>(loc, cont, ValueRange({list}));
       });
 
       // Load record batch from iterator
-      rewriter.atStartOf(bodyBlock, [&](SubOpRewriter& rewriter){
+      rewriter.atStartOf(bodyBlock, [&](SubOpRewriter& rewriter) {
          mlir::Value list = bodyBlock->getArgument(0);
          mlir::Value recordBatchPointer;
-         rewriter.atStartOf(&scanOp->getParentOfType<mlir::func::FuncOp>().getBody().front(), [&](SubOpRewriter& rewriter){
+         rewriter.atStartOf(&scanOp->getParentOfType<mlir::func::FuncOp>().getBody().front(), [&](SubOpRewriter& rewriter) {
             recordBatchPointer = rewriter.create<mlir::util::AllocaOp>(loc, mlir::util::RefType::get(rewriter.getContext(), recordBatchType), mlir::Value());
          });
          rt::ExternalHashIndexIteration::consumeRecordBatch(rewriter, loc)({list, recordBatchPointer});
@@ -1427,7 +1428,7 @@ class ScanExternalHashIndexListLowering : public  SubOpConversionPattern<mlir::s
             mlir::Block* block2 = new mlir::Block;
             block2->addArgument(recordBatchType.getElementType(), scanOp->getLoc());
             forOp2.getBodyRegion().push_back(block2);
-            rewriter.atStartOf(block2, [&](SubOpRewriter& rewriter){
+            rewriter.atStartOf(block2, [&](SubOpRewriter& rewriter) {
                mapping.define(scanOp.getElem(), block2->getArgument(0));
                rewriter.replaceTupleStream(scanOp, mapping);
                rewriter.create<mlir::dsa::YieldOp>(scanOp->getLoc());
@@ -1466,7 +1467,7 @@ class ScanMultiMapListLowering : public SubOpConversionPattern<mlir::subop::Scan
       auto i8PtrPtrType = mlir::util::RefType::get(getContext(), i8PtrType);
       Value ptrValid = rewriter.create<mlir::util::IsRefValidOp>(loc, rewriter.getI1Type(), ptr);
       mlir::Value valuePtr = rewriter.create<scf::IfOp>(
-                                        loc, TypeRange({i8PtrType}), ptrValid, [&](OpBuilder& b, Location loc) {
+                                        loc, ptrValid, [&](OpBuilder& b, Location loc) {
                                            Value valuePtrPtr = rewriter.create<util::TupleElementPtrOp>(loc, i8PtrPtrType, ptr, 2);
                                            Value valuePtr = rewriter.create<util::LoadOp>(loc, valuePtrPtr);
                                            b.create<scf::YieldOp>(loc,valuePtr); }, [&](OpBuilder& b, Location loc) {
@@ -1625,7 +1626,7 @@ class UnionLowering : public SubOpConversionPattern<mlir::subop::UnionOp> {
                rewriter.setInsertionPointAfter(user);
                std::vector<mlir::Value> streams;
                for (auto s : unionOp.getStreams()) {
-                  mlir::BlockAndValueMapping mapping;
+                  mlir::IRMapping mapping;
                   mapping.map(unionOp.getRes(), s);
                   auto* cloned = user->clone(mapping);
                   if (cloned->getNumResults() > 0) {
@@ -1657,6 +1658,7 @@ class FilterLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::su
          cond = rewriter.create<mlir::db::NotOp>(filterOp->getLoc(), cond);
       }
       auto ifOp = rewriter.create<mlir::scf::IfOp>(filterOp->getLoc(), mlir::TypeRange{}, cond);
+      ifOp.ensureTerminator(ifOp.getThenRegion(), rewriter, filterOp->getLoc());
       rewriter.atStartOf(ifOp.thenBlock(), [&](SubOpRewriter& rewriter) {
          rewriter.replaceTupleStream(filterOp, mapping);
       });
@@ -1913,7 +1915,6 @@ class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPatte
       Value position = rewriter.create<arith::AndIOp>(loc, htMask, hashed);
       // ptr = &hashtable[position]
       Type bucketPtrType = util::RefType::get(context, entryType);
-      Type doneType = rewriter.getI1Type();
       Value ptr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
       ptr = rewriter.create<util::FilterTaggedPtr>(loc, ptr.getType(), ptr, hashed);
 
@@ -1931,20 +1932,18 @@ class PureLookupHashMapLowering : public SubOpTupleStreamConsumerConversionPatte
          //    if (*ptr != nullptr){
          Value cmp = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), currEntryPtr);
          auto ifOp = rewriter.create<scf::IfOp>(
-            loc, TypeRange({doneType, bucketPtrType}), cmp,
-            [&](OpBuilder& b, Location loc) {
-
+            loc, cmp, [&](OpBuilder& b, Location loc) {
                Value hashAddress=rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, currEntryPtr, 1);
                Value entryHash = rewriter.create<util::LoadOp>(loc, idxType, hashAddress);
                Value hashMatches = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, entryHash,hashed);
                auto ifOpH = b.create<scf::IfOp>(
-                  loc, TypeRange({doneType,bucketPtrType}), hashMatches, [&](OpBuilder& b, Location loc) {
+                  loc, hashMatches, [&](OpBuilder& b, Location loc) {
                      Value kvAddress = rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
                      Value keyRef = rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, kvAddress, 0);
                      auto keyValues=keyStorageHelper.loadValuesOrdered(keyRef,rewriter,loc);
                      Value keyMatches = equalFnBuilder(b, keyValues, lookupKey);
                      auto ifOp2 = b.create<scf::IfOp>(
-                        loc, TypeRange({doneType, bucketPtrType}), keyMatches, [&](OpBuilder& b, Location loc) {
+                        loc, keyMatches, [&](OpBuilder& b, Location loc) {
 
 
                            b.create<scf::YieldOp>(loc, ValueRange{falseValue, ptr}); }, [&](OpBuilder& b, Location loc) {
@@ -2024,7 +2023,6 @@ class LookupHashMultiMapLowering : public SubOpTupleStreamConsumerConversionPatt
       Value position = rewriter.create<arith::AndIOp>(loc, htMask, hashed);
       // ptr = &hashtable[position]
       Type bucketPtrType = util::RefType::get(context, entryType);
-      Type doneType = rewriter.getI1Type();
       Value ptr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
       ptr = rewriter.create<util::FilterTaggedPtr>(loc, ptr.getType(), ptr, hashed);
 
@@ -2042,19 +2040,17 @@ class LookupHashMultiMapLowering : public SubOpTupleStreamConsumerConversionPatt
          //    if (*ptr != nullptr){
          Value cmp = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), currEntryPtr);
          auto ifOp = rewriter.create<scf::IfOp>(
-            loc, TypeRange({doneType, bucketPtrType}), cmp,
-            [&](OpBuilder& b, Location loc) {
-
+            loc, cmp, [&](OpBuilder& b, Location loc) {
                Value hashAddress=rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, currEntryPtr, 1);
                Value entryHash = rewriter.create<util::LoadOp>(loc, idxType, hashAddress);
                Value hashMatches = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, entryHash,hashed);
                auto ifOpH = b.create<scf::IfOp>(
-                  loc, TypeRange({doneType,bucketPtrType}), hashMatches, [&](OpBuilder& b, Location loc) {
+                  loc, hashMatches, [&](OpBuilder& b, Location loc) {
                      Value keyRef = rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, currEntryPtr, 3);
                      auto keyValues=keyStorageHelper.loadValuesOrdered(keyRef,rewriter,loc);
                      Value keyMatches = equalFnBuilder(b, keyValues, lookupKey);
                      auto ifOp2 = b.create<scf::IfOp>(
-                        loc, TypeRange({doneType, bucketPtrType}), keyMatches, [&](OpBuilder& b, Location loc) {
+                        loc,  keyMatches, [&](OpBuilder& b, Location loc) {
                            b.create<scf::YieldOp>(loc, ValueRange{falseValue, ptr}); }, [&](OpBuilder& b, Location loc) {
                            Value nextPtrAddr=rewriter.create<util::TupleElementPtrOp>(loc, i8PtrPtrType, currEntryPtr, 0);
                            //          ptr = &entry.next
@@ -2132,7 +2128,6 @@ class InsertMultiMapLowering : public SubOpTupleStreamConsumerConversionPattern<
       Value position = rewriter.create<arith::AndIOp>(loc, htMask, hashed);
       // ptr = &hashtable[position]
       Type bucketPtrType = util::RefType::get(context, entryType);
-      Type doneType = rewriter.getI1Type();
       Value firstPtr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
       firstPtr = rewriter.create<util::FilterTaggedPtr>(loc, firstPtr.getType(), firstPtr, hashed);
 
@@ -2151,19 +2146,17 @@ class InsertMultiMapLowering : public SubOpTupleStreamConsumerConversionPattern<
          //    if (*ptr != nullptr){
          Value cmp = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), currEntryPtr);
          auto ifOp = rewriter.create<scf::IfOp>(
-            loc, TypeRange({doneType, bucketPtrType}), cmp,
-            [&](OpBuilder& b, Location loc) {
-
+            loc, cmp, [&](OpBuilder& b, Location loc) {
                Value hashAddress=rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, currEntryPtr, 1);
                Value entryHash = rewriter.create<util::LoadOp>(loc, idxType, hashAddress);
                Value hashMatches = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, entryHash,hashed);
                auto ifOpH = b.create<scf::IfOp>(
-                  loc, TypeRange({doneType,bucketPtrType}), hashMatches, [&](OpBuilder& b, Location loc) {
+                  loc, hashMatches, [&](OpBuilder& b, Location loc) {
                      Value keyRef=rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, currEntryPtr, 3);
                      auto keyValues=keyStorageHelper.loadValuesOrdered(keyRef,rewriter,loc);
                      Value keyMatches = equalFnBuilder(b, keyValues, lookupKey);
                      auto ifOp2 = b.create<scf::IfOp>(
-                        loc, TypeRange({doneType, bucketPtrType}), keyMatches, [&](OpBuilder& b, Location loc) {
+                        loc, keyMatches, [&](OpBuilder& b, Location loc) {
                            Value valRef=rt::HashMultiMap::insertValue(rewriter,loc)({hashTable,currEntryPtr})[0];
                            valRef=rewriter.create<util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(getContext(),mlir::TupleType::get(getContext(),{i8PtrType,valStorageHelper.getStorageType()})),valRef);
                            valRef=rewriter.create<util::TupleElementPtrOp>(loc, valStorageHelper.getRefType(), valRef, 1);
@@ -2271,7 +2264,6 @@ class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<m
       Value position = rewriter.create<arith::AndIOp>(loc, htMask, hashed);
       // ptr = &hashtable[position]
       Type bucketPtrType = util::RefType::get(context, entryType);
-      Type doneType = rewriter.getI1Type();
       Value firstPtr = rewriter.create<util::LoadOp>(loc, bucketPtrType, ht, position);
       firstPtr = rewriter.create<util::FilterTaggedPtr>(loc, firstPtr.getType(), firstPtr, hashed);
 
@@ -2290,20 +2282,18 @@ class LookupHashMapLowering : public SubOpTupleStreamConsumerConversionPattern<m
          //    if (*ptr != nullptr){
          Value cmp = rewriter.create<util::IsRefValidOp>(loc, rewriter.getI1Type(), currEntryPtr);
          auto ifOp = rewriter.create<scf::IfOp>(
-            loc, TypeRange({doneType, bucketPtrType}), cmp,
-            [&](OpBuilder& b, Location loc) {
-
+            loc, cmp, [&](OpBuilder& b, Location loc) {
                Value hashAddress=rewriter.create<util::TupleElementPtrOp>(loc, idxPtrType, currEntryPtr, 1);
                Value entryHash = rewriter.create<util::LoadOp>(loc, idxType, hashAddress);
                Value hashMatches = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::eq, entryHash,hashed);
                auto ifOpH = b.create<scf::IfOp>(
-                  loc, TypeRange({doneType,bucketPtrType}), hashMatches, [&](OpBuilder& b, Location loc) {
+                  loc, hashMatches, [&](OpBuilder& b, Location loc) {
                      Value kvAddress = rewriter.create<util::TupleElementPtrOp>(loc, kvPtrType, currEntryPtr, 2);
                      Value keyRef = rewriter.create<util::TupleElementPtrOp>(loc, keyPtrType, kvAddress, 0);
                      auto keyValues=keyStorageHelper.loadValuesOrdered(keyRef,rewriter,loc);
                      Value keyMatches = equalFnBuilder(b, keyValues, lookupKey);
                      auto ifOp2 = b.create<scf::IfOp>(
-                        loc, TypeRange({doneType, bucketPtrType}), keyMatches, [&](OpBuilder& b, Location loc) {
+                        loc,  keyMatches, [&](OpBuilder& b, Location loc) {
 
 
                            b.create<scf::YieldOp>(loc, ValueRange{falseValue, ptr}); }, [&](OpBuilder& b, Location loc) {
@@ -2354,7 +2344,7 @@ class LookupExternalHashIndexLowering : public SubOpTupleStreamConsumerConversio
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::LookupOp>::SubOpTupleStreamConsumerConversionPattern;
    LogicalResult matchAndRewrite(mlir::subop::LookupOp lookupOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       if (!lookupOp.getState().getType().isa<mlir::subop::ExternalHashIndexType>()) return failure();
-      
+
       auto loc = lookupOp->getLoc();
 
       // Calculate hash value and perform lookup in external index hashmap
@@ -2447,7 +2437,7 @@ class ExternalHashIndexRefGatherOpLowering : public SubOpTupleStreamConsumerConv
       auto columns = refType.cast<mlir::subop::ExternalHashIndexEntryRefType>().getMembers();
       auto currRow = mapping.resolve(gatherOp.getRef());
 
-     // Define mapping for values of gathered tuple
+      // Define mapping for values of gathered tuple
       for (size_t i = 0; i < columns.getTypes().size(); i++) {
          auto memberName = columns.getNames()[i].cast<mlir::StringAttr>().str();
          if (gatherOp.getMapping().contains(memberName)) {
@@ -2495,8 +2485,7 @@ class ContinuousViewRefScatterOpLowering : public SubOpTupleStreamConsumerConver
    }
 };
 
-
-class ScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp,1> {
+class ScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp, 1> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp>::SubOpTupleStreamConsumerConversionPattern;
 
@@ -2513,16 +2502,16 @@ class ScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<mlir:
       return success();
    }
 };
-class HashMultiMapScatterOp : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp,1> {
+class HashMultiMapScatterOp : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp, 1> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp>::SubOpTupleStreamConsumerConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::ScatterOp scatterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
-      auto hashMultiMapEntryRef=scatterOp.getRef().getColumn().type.dyn_cast_or_null<mlir::subop::HashMultiMapEntryRefType>();
-      if(!hashMultiMapEntryRef)return failure();
+      auto hashMultiMapEntryRef = scatterOp.getRef().getColumn().type.dyn_cast_or_null<mlir::subop::HashMultiMapEntryRefType>();
+      if (!hashMultiMapEntryRef) return failure();
       auto columns = hashMultiMapEntryRef.getHashMultimap().getValueMembers();
       EntryStorageHelper storageHelper(columns, typeConverter);
-      auto ref = rewriter.create<mlir::util::UnPackOp>(scatterOp.getLoc(),mapping.resolve(scatterOp.getRef())).getResult(1);
+      auto ref = rewriter.create<mlir::util::UnPackOp>(scatterOp.getLoc(), mapping.resolve(scatterOp.getRef())).getResult(1);
       auto values = storageHelper.loadValues(ref, rewriter, scatterOp->getLoc());
       for (auto x : scatterOp.getMapping()) {
          values[x.getName().str()] = mapping.resolve(x.getValue().cast<mlir::tuples::ColumnRefAttr>());
@@ -2827,6 +2816,7 @@ class UnwrapOptionalHashmapRefLowering : public SubOpTupleStreamConsumerConversi
       auto kvPtrType = mlir::util::RefType::get(getContext(), getHtKVType(hashmapType, *typeConverter));
       EntryStorageHelper valStorageHelper(hashmapType.getValueMembers(), typeConverter);
       auto valPtrType = valStorageHelper.getRefType();
+      ifOp.ensureTerminator(ifOp.getThenRegion(), rewriter, op->getLoc());
       rewriter.atStartOf(&ifOp.getThenRegion().front(), [&](SubOpRewriter& rewriter) {
          Value ptr = rewriter.create<util::GenericMemrefCastOp>(loc, htEntryPtrType, mapping.resolve(op.getOptionalRef()));
          auto kvPtr = rewriter.create<mlir::util::TupleElementPtrOp>(loc, kvPtrType, ptr, 2);
@@ -2848,7 +2838,7 @@ class SetTrackedCountLowering : public SubOpConversionPattern<mlir::subop::SetTr
       mlir::func::FuncOp funcOp = parentModule.lookupSymbol<mlir::func::FuncOp>("rt_get_execution_context");
       if (!funcOp) {
          rewriter.atStartOf(parentModule.getBody(), [&](SubOpRewriter& rewriter) {
-            funcOp = rewriter.create<mlir::func::FuncOp>(loc, "rt_get_execution_context", mlir::FunctionType::get(getContext(), {}, {mlir::util::RefType::get(getContext(), rewriter.getI8Type())}), rewriter.getStringAttr("private"));
+            funcOp = rewriter.create<mlir::func::FuncOp>(loc, "rt_get_execution_context", mlir::FunctionType::get(getContext(), {}, {mlir::util::RefType::get(getContext(), rewriter.getI8Type())}), rewriter.getStringAttr("private"), ArrayAttr{}, ArrayAttr{});
          });
       }
       mlir::Value executionContext = rewriter.create<mlir::func::CallOp>(loc, funcOp, mlir::ValueRange{}).getResult(0);
@@ -2934,7 +2924,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
          if (auto hashMultiMapType = lookupEntryRefType.getState().dyn_cast_or_null<mlir::subop::HashMultiMapType>()) {
             return mlir::util::RefType::get(t.getContext(), getHashMultiMapEntryType(hashMultiMapType, typeConverter));
          }
-         if (auto externalHashIndexRefType=t.getT().dyn_cast_or_null<mlir::subop::ExternalHashIndexType>()){
+         if (auto externalHashIndexRefType = t.getT().dyn_cast_or_null<mlir::subop::ExternalHashIndexType>()) {
             return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
          }
          return mlir::TupleType::get(t.getContext(), {mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8)), mlir::IndexType::get(t.getContext())});
@@ -2945,7 +2935,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       if (auto hashMultiMapEntryRefType = t.getT().dyn_cast_or_null<mlir::subop::HashMultiMapEntryRefType>()) {
          return mlir::util::RefType::get(t.getContext(), getHashMultiMapEntryType(hashMultiMapEntryRefType.getHashMultimap(), typeConverter));
       }
-      if (auto externalHashIndexRefType=t.getT().dyn_cast_or_null<mlir::subop::ExternalHashIndexEntryRefType>()){
+      if (auto externalHashIndexRefType = t.getT().dyn_cast_or_null<mlir::subop::ExternalHashIndexEntryRefType>()) {
          return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
       }
       return mlir::Type();

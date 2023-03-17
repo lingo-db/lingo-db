@@ -13,20 +13,21 @@
 #include <queue>
 
 using namespace mlir;
-static mlir::tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser) {
+namespace {
+mlir::tuples::ColumnManager& getColumnManager(::mlir::OpAsmParser& parser) {
    return parser.getBuilder().getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
 }
-static ParseResult parseCustRef(OpAsmParser& parser, mlir::tuples::ColumnRefAttr& attr) {
+ParseResult parseCustRef(OpAsmParser& parser, mlir::tuples::ColumnRefAttr& attr) {
    ::mlir::SymbolRefAttr parsedSymbolRefAttr;
    if (parser.parseAttribute(parsedSymbolRefAttr, parser.getBuilder().getType<::mlir::NoneType>())) { return failure(); }
    attr = getColumnManager(parser).createRef(parsedSymbolRefAttr);
    return success();
 }
 
-static void printCustRef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::ColumnRefAttr attr) {
+void printCustRef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::ColumnRefAttr attr) {
    p << attr.getName();
 }
-static ParseResult parseCustRefArr(OpAsmParser& parser, ArrayAttr& attr) {
+ParseResult parseCustRefArr(OpAsmParser& parser, ArrayAttr& attr) {
    ArrayAttr parsedAttr;
    std::vector<Attribute> attributes;
    if (parser.parseAttribute(parsedAttr, parser.getBuilder().getType<::mlir::NoneType>())) {
@@ -41,7 +42,7 @@ static ParseResult parseCustRefArr(OpAsmParser& parser, ArrayAttr& attr) {
    return success();
 }
 
-static void printCustRefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) {
+void printCustRefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) {
    p << "[";
    std::vector<Attribute> attributes;
    bool first = true;
@@ -56,7 +57,7 @@ static void printCustRefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arra
    }
    p << "]";
 }
-static ParseResult parseCustDef(OpAsmParser& parser, mlir::tuples::ColumnDefAttr& attr) {
+ParseResult parseCustDef(OpAsmParser& parser, mlir::tuples::ColumnDefAttr& attr) {
    SymbolRefAttr attrSymbolAttr;
    if (parser.parseAttribute(attrSymbolAttr, parser.getBuilder().getType<::mlir::NoneType>())) { return failure(); }
    std::string attrName(attrSymbolAttr.getLeafReference().getValue());
@@ -75,7 +76,7 @@ static ParseResult parseCustDef(OpAsmParser& parser, mlir::tuples::ColumnDefAttr
    attr.getColumn().type = propType;
    return success();
 }
-static void printCustDef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::ColumnDefAttr attr) {
+void printCustDef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::ColumnDefAttr attr) {
    p << attr.getName();
    std::vector<mlir::NamedAttribute> relAttrDefProps;
    MLIRContext* context = attr.getContext();
@@ -90,7 +91,7 @@ static void printCustDef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::Col
    }
 }
 
-static ParseResult parseStateColumnMapping(OpAsmParser& parser, DictionaryAttr& attr) {
+ParseResult parseStateColumnMapping(OpAsmParser& parser, DictionaryAttr& attr) {
    if (parser.parseLBrace()) return failure();
    std::vector<mlir::NamedAttribute> columns;
    while (true) {
@@ -110,7 +111,7 @@ static ParseResult parseStateColumnMapping(OpAsmParser& parser, DictionaryAttr& 
    attr = mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns);
    return success();
 }
-static ParseResult parseColumnStateMapping(OpAsmParser& parser, DictionaryAttr& attr) {
+ParseResult parseColumnStateMapping(OpAsmParser& parser, DictionaryAttr& attr) {
    if (parser.parseLBrace()) return failure();
    std::vector<mlir::NamedAttribute> columns;
    while (true) {
@@ -132,7 +133,7 @@ static ParseResult parseColumnStateMapping(OpAsmParser& parser, DictionaryAttr& 
    attr = mlir::DictionaryAttr::get(parser.getBuilder().getContext(), columns);
    return success();
 }
-static void printStateColumnMapping(OpAsmPrinter& p, mlir::Operation* op, DictionaryAttr attr) {
+void printStateColumnMapping(OpAsmPrinter& p, mlir::Operation* op, DictionaryAttr attr) {
    p << "{";
    auto first = true;
    for (auto mapping : attr) {
@@ -149,7 +150,7 @@ static void printStateColumnMapping(OpAsmPrinter& p, mlir::Operation* op, Dictio
    }
    p << "}";
 }
-static void printColumnStateMapping(OpAsmPrinter& p, mlir::Operation* op, DictionaryAttr attr) {
+void printColumnStateMapping(OpAsmPrinter& p, mlir::Operation* op, DictionaryAttr attr) {
    p << "{";
    auto first = true;
    for (auto mapping : attr) {
@@ -166,7 +167,7 @@ static void printColumnStateMapping(OpAsmPrinter& p, mlir::Operation* op, Dictio
    }
    p << "}";
 }
-static ParseResult parseCustRegion(OpAsmParser& parser, Region& result) {
+ParseResult parseCustRegion(OpAsmParser& parser, Region& result) {
    OpAsmParser::Argument predArgument;
    SmallVector<OpAsmParser::Argument, 4> regionArgs;
    SmallVector<Type, 4> argTypes;
@@ -191,7 +192,7 @@ static ParseResult parseCustRegion(OpAsmParser& parser, Region& result) {
    if (parser.parseRegion(result, regionArgs)) return failure();
    return success();
 }
-static void printCustRegion(OpAsmPrinter& p, Operation* op, Region& r) {
+void printCustRegion(OpAsmPrinter& p, Operation* op, Region& r) {
    p << "(";
    bool first = true;
    for (auto arg : r.front().getArguments()) {
@@ -205,7 +206,7 @@ static void printCustRegion(OpAsmPrinter& p, Operation* op, Region& r) {
    p << ")";
    p.printRegion(r, false, true);
 }
-static ParseResult parseCustDefArr(OpAsmParser& parser, ArrayAttr& attr) {
+ParseResult parseCustDefArr(OpAsmParser& parser, ArrayAttr& attr) {
    std::vector<Attribute> attributes;
    if (parser.parseLSquare()) return failure();
    while (true) {
@@ -222,7 +223,7 @@ static ParseResult parseCustDefArr(OpAsmParser& parser, ArrayAttr& attr) {
    attr = parser.getBuilder().getArrayAttr(attributes);
    return success();
 }
-static void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) {
+void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) {
    p << "[";
    bool first = true;
    for (auto a : arrayAttr) {
@@ -236,6 +237,16 @@ static void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arra
    }
    p << "]";
 }
+void replaceColumnUsesInLamda(mlir::MLIRContext* context, mlir::Block& block, const mlir::subop::ColumnFoldInfo& columnInfo) {
+   auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+   block.walk([&columnInfo, &colManager](mlir::tuples::GetColumnOp getColumnOp) {
+      auto* currColumn = &getColumnOp.getAttr().getColumn();
+      if (columnInfo.directMappings.contains(currColumn)) {
+         getColumnOp.setAttrAttr(colManager.createRef(columnInfo.directMappings.at(currColumn)));
+      }
+   });
+}
+} // namespace
 
 ParseResult mlir::subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    mlir::ArrayAttr sortBy;
@@ -531,11 +542,11 @@ ParseResult mlir::subop::InsertOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
       return failure();
    }
    mlir::DictionaryAttr columnStateMapping;
-   if(parseColumnStateMapping(parser,columnStateMapping).failed()){
+   if (parseColumnStateMapping(parser, columnStateMapping).failed()) {
       return failure();
    }
-   result.addAttribute("mapping",columnStateMapping);
-   auto keyTypes=stateType.getKeyMembers().getTypes();
+   result.addAttribute("mapping", columnStateMapping);
+   auto keyTypes = stateType.getKeyMembers().getTypes();
 
    std::vector<OpAsmParser::Argument> leftArgs(keyTypes.size());
    std::vector<OpAsmParser::Argument> rightArgs(keyTypes.size());
@@ -553,7 +564,7 @@ ParseResult mlir::subop::InsertOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
       if (parser.parseRSquare() || parser.parseComma() || parser.parseLSquare()) {
          return failure();
       }
-      for (size_t i = 0; i <  keyTypes.size(); i++) {
+      for (size_t i = 0; i < keyTypes.size(); i++) {
          rightArgs[i].type = keyTypes[i].cast<mlir::TypeAttr>().getValue();
          if (i > 0 && parser.parseComma().failed()) return failure();
          if (parser.parseArgument(rightArgs[i])) return failure();
@@ -576,8 +587,8 @@ void subop::InsertOp::print(OpAsmPrinter& p) {
    subop::InsertOp& op = *this;
    p << " " << op.getStream() << op.getState() << " ";
    p << " : " << op.getState().getType() << " ";
-   printColumnStateMapping(p, getOperation(),getMapping());
-   auto keyTypes=getState().getType().getKeyMembers().getTypes();
+   printColumnStateMapping(p, getOperation(), getMapping());
+   auto keyTypes = getState().getType().getKeyMembers().getTypes();
    if (!op.getEqFn().empty()) {
       p << "eq: ([";
       bool first = true;
@@ -941,8 +952,7 @@ void subop::ReduceOp::print(OpAsmPrinter& p) {
    }
    p << "])";
    p.printRegion(op.getRegion(), false, true);
-   p.printOptionalAttrDict(getOperation()->getAttrs(),{"columns","members","ref"});
-
+   p.printOptionalAttrDict(getOperation()->getAttrs(), {"columns", "members", "ref"});
 }
 
 ParseResult mlir::subop::NestedMapOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
@@ -996,7 +1006,7 @@ void subop::NestedMapOp::print(OpAsmPrinter& p) {
    p.printOperands(op.getRegion().front().getArguments());
    p << ") ";
    p.printRegion(op.getRegion(), false, true);
-   p.printOptionalAttrDict(getOperation()->getAttrs(),{"parameters"});
+   p.printOptionalAttrDict(getOperation()->getAttrs(), {"parameters"});
 }
 ParseResult mlir::subop::GenerateOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    mlir::ArrayAttr createdColumns;
@@ -1017,7 +1027,7 @@ void subop::GenerateOp::print(OpAsmPrinter& p) {
    subop::GenerateOp& op = *this;
    printCustDefArr(p, this->getOperation(), getGeneratedColumns());
    p.printRegion(op.getRegion(), false, true);
-   p.printOptionalAttrDict(getOperation()->getAttrs(),{"generated_columns"});
+   p.printOptionalAttrDict(getOperation()->getAttrs(), {"generated_columns"});
 }
 
 std::vector<std::string> subop::ScanOp::getReadMembers() {
@@ -1052,8 +1062,8 @@ std::vector<std::string> subop::NestedMapOp::getWrittenMembers() {
 }
 std::vector<std::string> subop::LoopOp::getReadMembers() {
    std::vector<std::string> res;
-   for(auto arg:getArgs()){
-      if(auto stateType=mlir::dyn_cast_or_null<mlir::subop::State>(arg.getType())){
+   for (auto arg : getArgs()) {
+      if (auto stateType = mlir::dyn_cast_or_null<mlir::subop::State>(arg.getType())) {
          for (auto x : stateType.getMembers().getNames()) {
             res.push_back(x.cast<mlir::StringAttr>().str());
          }
@@ -1071,8 +1081,8 @@ std::vector<std::string> subop::LoopOp::getWrittenMembers() {
       auto written = subop.getWrittenMembers();
       res.insert(res.end(), written.begin(), written.end());
    });
-   for(auto resT:getResultTypes()){
-      if(auto stateType=mlir::dyn_cast_or_null<mlir::subop::State>(resT)){
+   for (auto resT : getResultTypes()) {
+      if (auto stateType = mlir::dyn_cast_or_null<mlir::subop::State>(resT)) {
          for (auto x : stateType.getMembers().getNames()) {
             res.push_back(x.cast<mlir::StringAttr>().str());
          }
@@ -1102,7 +1112,7 @@ std::vector<std::string> subop::CreateSortedViewOp::getWrittenMembers() {
    return res;
 }
 std::vector<std::string> subop::CreateHashIndexedView::getWrittenMembers() {
-   return {getLinkMember().str(),getHashMember().str()};//todo: hack
+   return {getLinkMember().str(), getHashMember().str()}; //todo: hack
 }
 std::vector<std::string> subop::CreateHashIndexedView::getReadMembers() {
    return {getHashMember().str()};
@@ -1207,15 +1217,6 @@ std::vector<std::string> subop::GatherOp::getReadMembers() {
       res.push_back(x.getName().str());
    }
    return res;
-}
-static void replaceColumnUsesInLamda(mlir::MLIRContext* context, mlir::Block& block, const mlir::subop::ColumnFoldInfo& columnInfo) {
-   auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
-   block.walk([&columnInfo, &colManager](mlir::tuples::GetColumnOp getColumnOp) {
-      auto* currColumn = &getColumnOp.getAttr().getColumn();
-      if (columnInfo.directMappings.contains(currColumn)) {
-         getColumnOp.setAttrAttr(colManager.createRef(columnInfo.directMappings.at(currColumn)));
-      }
-   });
 }
 
 mlir::LogicalResult subop::MapOp::foldColumns(mlir::subop::ColumnFoldInfo& columnInfo) {

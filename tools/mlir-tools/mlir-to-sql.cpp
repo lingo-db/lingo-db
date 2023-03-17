@@ -24,7 +24,7 @@
 #include <queue>
 
 namespace cl = llvm::cl;
-
+namespace {
 static cl::opt<std::string> inputFilename(cl::Positional,
                                           cl::desc("<input mlir file>"),
                                           cl::init("-"),
@@ -188,9 +188,11 @@ class ToSQL {
                   break;
                case DBCmpPredicate::isa:
                   handleBinOp(output, "=", op.getLeft(), op.getRight());
-                  auto left=resolveVal(op.getLeft());
-                  auto right=resolveVal(op.getRight());
-                  output << "( (" << left << ") " << "=" << " (" << right << ") ) or ( ("<< left <<") is null and ("<< right << ") is null )";
+                  auto left = resolveVal(op.getLeft());
+                  auto right = resolveVal(op.getRight());
+                  output << "( (" << left << ") "
+                         << "="
+                         << " (" << right << ") ) or ( (" << left << ") is null and (" << right << ") is null )";
                   return;
             }
             handleBinOp(output, pred, op.getLeft(), op.getRight());
@@ -619,6 +621,7 @@ class ToSQL {
       return totalOutput.str();
    }
 };
+} // namespace
 
 int main(int argc, char** argv) {
    cl::ParseCommandLineOptions(argc, argv, "toy compiler\n");

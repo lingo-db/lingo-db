@@ -3,7 +3,7 @@
 #include <mlir/Dialect/TupleStream/TupleStreamOps.h>
 
 #include "mlir/Dialect/RelAlg/Passes.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
 #include <iostream>

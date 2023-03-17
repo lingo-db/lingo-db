@@ -176,7 +176,7 @@ void mlir::cranelift::CraneliftExecutionEngine::translate(mlir::cranelift::FuncO
                })
                .Case([&](mlir::cranelift::ReturnOp op) {
                   std::vector<ValueCode> returnVals;
-                  for (auto x : op.operands()) {
+                  for (auto x : op.getOperands()) {
                      if (x.getType().isInteger(1)) {
                         returnVals.push_back(cranelift_band(fd, varMapping[x], cranelift_iconst(fd, TypeI8, 1)));
                      } else {
@@ -204,7 +204,7 @@ void mlir::cranelift::CraneliftExecutionEngine::translate(mlir::cranelift::FuncO
                      ctxt->thisPtr->functionIds[op.getCallee().str()] = funcId;
                   }
                   std::vector<ValueCode> args;
-                  for (auto v : op.operands()) {
+                  for (auto v : op.getOperands()) {
                      if (v.getType().isInteger(1)) {
                         args.push_back(cranelift_band(fd, load(v), cranelift_iconst(fd, TypeI8, 1)));
                      } else {

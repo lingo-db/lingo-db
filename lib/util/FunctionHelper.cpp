@@ -4,7 +4,7 @@
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Dialect/util/UtilTypes.h"
-static mlir::Value convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t, mlir::Location loc) {
+mlir::Value mlir::util::FunctionHelper::convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t, mlir::Location loc) {
    if (v.getType() == t) return v;
    mlir::Type currentType = v.getType();
    if (currentType.isIndex() || t.isIndex()) {
@@ -33,7 +33,7 @@ mlir::ResultRange mlir::util::FunctionHelper::call(OpBuilder& builder, mlir::Loc
    if (!funcOp) {
       OpBuilder::InsertionGuard insertionGuard(builder);
       builder.setInsertionPointToStart(fnHelper.parentModule.getBody());
-      funcOp = builder.create<mlir::func::FuncOp>(fnHelper.parentModule.getLoc(), function.getMangledName(), builder.getFunctionType(function.getParameterTypes()(builder.getContext()), function.getResultTypes()(builder.getContext())), builder.getStringAttr("private"));
+      funcOp = builder.create<mlir::func::FuncOp>(fnHelper.parentModule.getLoc(), function.getMangledName(), builder.getFunctionType(function.getParameterTypes()(builder.getContext()), function.getResultTypes()(builder.getContext())), builder.getStringAttr("private"),ArrayAttr{},ArrayAttr{});
       if (function.isNoSideEffects()) {
          funcOp->setAttr("const", builder.getUnitAttr());
       }

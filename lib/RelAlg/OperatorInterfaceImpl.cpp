@@ -3,14 +3,15 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/OpImplementation.h"
 #include <functional>
 #include <unordered_set>
 using namespace mlir::tuples;
 using namespace mlir::relalg;
 using operator_list = llvm::SmallVector<Operator, 4>;
-static operator_list getChildOperators(mlir::Operation* parent) {
+namespace {
+operator_list getChildOperators(mlir::Operation* parent) {
    operator_list children;
    for (auto operand : parent->getOperands()) {
       if (auto childOperator = mlir::dyn_cast_or_null<Operator>(operand.getDefiningOp())) {
@@ -20,7 +21,7 @@ static operator_list getChildOperators(mlir::Operation* parent) {
    return children;
 }
 
-static ColumnSet collectColumns(operator_list operators, std::function<ColumnSet(Operator)> fn) {
+ColumnSet collectColumns(operator_list operators, std::function<ColumnSet(Operator)> fn) {
    ColumnSet collected;
    for (auto op : operators) {
       auto res = fn(op);
@@ -28,6 +29,43 @@ static ColumnSet collectColumns(operator_list operators, std::function<ColumnSet
    }
    return collected;
 }
+void addRequirements(mlir::Operation* op, mlir::Operation* includeChildren, mlir::Block* excludeChildren, llvm::SmallVector<mlir::Operation*, 8>& extracted, llvm::SmallPtrSet<mlir::Operation*, 8>& alreadyPresent, mlir::IRMapping& mapping) {
+   if (!op)
+      return;
+   if (alreadyPresent.contains(op))
+      return;
+   if (!includeChildren->isAncestor(op))
+      return;
+   for (auto operand : op->getOperands()) {
+      if (!mapping.contains(operand)) {
+         addRequirements(operand.getDefiningOp(), includeChildren, excludeChildren, extracted, alreadyPresent, mapping);
+      }
+   }
+   op->walk([&](mlir::Operation* op2) {
+      for (auto operand : op2->getOperands()) {
+         if (!mapping.contains(operand)) {
+            auto* definingOp = operand.getDefiningOp();
+            if (definingOp && !op->isAncestor(definingOp)) {
+               addRequirements(definingOp, includeChildren, excludeChildren, extracted, alreadyPresent, mapping);
+            }
+         }
+      }
+   });
+   alreadyPresent.insert(op);
+   if (!excludeChildren->findAncestorOpInBlock(*op)) {
+      extracted.push_back(op);
+   }
+}
+void replaceColumnUsesInLamda(mlir::MLIRContext* context, mlir::Block& block, const mlir::relalg::ColumnFoldInfo& columnInfo) {
+   auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+   block.walk([&columnInfo, &colManager](mlir::tuples::GetColumnOp getColumnOp) {
+      auto* currColumn = &getColumnOp.getAttr().getColumn();
+      if (columnInfo.directMappings.contains(currColumn)) {
+         getColumnOp.setAttrAttr(colManager.createRef(columnInfo.directMappings.at(currColumn)));
+      }
+   });
+}
+} // namespace
 
 bool mlir::relalg::detail::canColumnReach(mlir::Operation* currentOp, mlir::Operation* sourceOp, mlir::Operation* targetOp, const mlir::tuples::Column* column) {
    if (currentOp == targetOp) {
@@ -35,7 +73,7 @@ bool mlir::relalg::detail::canColumnReach(mlir::Operation* currentOp, mlir::Oper
    }
    for (auto res : currentOp->getResults()) {
       if (res.getType().isa<mlir::tuples::TupleStreamType>()) {
-         for (auto *user : res.getUsers()) {
+         for (auto* user : res.getUsers()) {
             if (auto op = mlir::dyn_cast_or_null<Operator>(user)) {
                if (op.canColumnReach(currentOp, targetOp, column)) {
                   return true;
@@ -541,34 +579,7 @@ void mlir::relalg::detail::initPredicate(mlir::Operation* op) {
    builder.create<mlir::tuples::ReturnOp>(op->getLoc());
 }
 
-static void addRequirements(mlir::Operation* op, mlir::Operation* includeChildren, mlir::Block* excludeChildren, llvm::SmallVector<mlir::Operation*, 8>& extracted, llvm::SmallPtrSet<mlir::Operation*, 8>& alreadyPresent, mlir::BlockAndValueMapping& mapping) {
-   if (!op)
-      return;
-   if (alreadyPresent.contains(op))
-      return;
-   if (!includeChildren->isAncestor(op))
-      return;
-   for (auto operand : op->getOperands()) {
-      if (!mapping.contains(operand)) {
-         addRequirements(operand.getDefiningOp(), includeChildren, excludeChildren, extracted, alreadyPresent, mapping);
-      }
-   }
-   op->walk([&](mlir::Operation* op2) {
-      for (auto operand : op2->getOperands()) {
-         if (!mapping.contains(operand)) {
-            auto* definingOp = operand.getDefiningOp();
-            if (definingOp && !op->isAncestor(definingOp)) {
-               addRequirements(definingOp, includeChildren, excludeChildren, extracted, alreadyPresent, mapping);
-            }
-         }
-      }
-   });
-   alreadyPresent.insert(op);
-   if (!excludeChildren->findAncestorOpInBlock(*op)) {
-      extracted.push_back(op);
-   }
-}
-void mlir::relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Block* newBlock, mlir::BlockAndValueMapping& mapping, mlir::Operation* first) {
+void mlir::relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operation* includeChildren, mlir::Block* newBlock, mlir::IRMapping& mapping, mlir::Operation* first) {
    llvm::SmallVector<mlir::Operation*, 8> extracted;
    llvm::SmallPtrSet<mlir::Operation*, 8> alreadyPresent;
    addRequirements(vop, includeChildren, newBlock, extracted, alreadyPresent, mapping);
@@ -592,15 +603,7 @@ void mlir::relalg::detail::moveSubTreeBefore(mlir::Operation* op, mlir::Operatio
       moveSubTreeBefore(child, tree);
    }
 }
-static void replaceColumnUsesInLamda(mlir::MLIRContext* context, mlir::Block& block, const mlir::relalg::ColumnFoldInfo& columnInfo) {
-   auto& colManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
-   block.walk([&columnInfo, &colManager](mlir::tuples::GetColumnOp getColumnOp) {
-      auto* currColumn = &getColumnOp.getAttr().getColumn();
-      if (columnInfo.directMappings.contains(currColumn)) {
-         getColumnOp.setAttrAttr(colManager.createRef(columnInfo.directMappings.at(currColumn)));
-      }
-   });
-}
+
 mlir::LogicalResult mlir::relalg::MapOp::foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo) {
    replaceColumnUsesInLamda(getContext(), getPredicate().front(), columnInfo);
    auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(getPredicate().front().getTerminator());

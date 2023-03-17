@@ -18,8 +18,8 @@
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -193,7 +193,7 @@ static mlir::Value translateSelection(mlir::Value stream, mlir::Region& predicat
          for (auto c : conditions) {
             auto [predDef, predRef] = createColumn(rewriter.getI1Type(), "map", "pred");
             stream = map(stream, rewriter, loc, rewriter.getArrayAttr(predDef), [&](mlir::ConversionPatternRewriter& b, mlir::Value tuple, mlir::Location loc) -> std::vector<mlir::Value> {
-               mlir::BlockAndValueMapping mapping;
+               mlir::IRMapping mapping;
                mapping.map(predicateBlock.getArgument(0), tuple);
                auto helperOp = b.create<mlir::arith::ConstantOp>(loc, b.getIndexAttr(0));
                mlir::relalg::detail::inlineOpIntoBlock(c.second.getDefiningOp(), c.second.getDefiningOp()->getParentOp(), b.getInsertionBlock(), mapping, helperOp);
@@ -218,10 +218,10 @@ class SelectionLowering : public OpConversionPattern<mlir::relalg::SelectionOp> 
    using OpConversionPattern<mlir::relalg::SelectionOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::relalg::SelectionOp selectionOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto repl=translateSelection(adaptor.getRel(), selectionOp.getPredicate(), rewriter, selectionOp->getLoc());
-      if(auto *definingOp=repl.getDefiningOp()){
-         if(selectionOp->hasAttr("selectivity")){
-            definingOp->setAttr("selectivity",selectionOp->getAttr("selectivity"));
+      auto repl = translateSelection(adaptor.getRel(), selectionOp.getPredicate(), rewriter, selectionOp->getLoc());
+      if (auto* definingOp = repl.getDefiningOp()) {
+         if (selectionOp->hasAttr("selectivity")) {
+            definingOp->setAttr("selectivity", selectionOp->getAttr("selectivity"));
          }
       }
       rewriter.replaceOp(selectionOp, repl);
@@ -898,12 +898,12 @@ static mlir::Value translateINLJ(mlir::Value left, mlir::Value right, mlir::Arra
    auto* ctxt = rewriter.getContext();
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    std::string tableName = mlir::cast<mlir::StringAttr>(hashRight[0]).str();
-   mlir::ArrayAttr primaryKeyHashValue =  rewriter.getArrayAttr({colManager.createRef(tableName, "primaryKeyHashValue")});
-   auto keyColumns=mlir::relalg::ColumnSet::fromArrayAttr(primaryKeyHashValue);
-   auto valueColumns=columns;
+   mlir::ArrayAttr primaryKeyHashValue = rewriter.getArrayAttr({colManager.createRef(tableName, "primaryKeyHashValue")});
+   auto keyColumns = mlir::relalg::ColumnSet::fromArrayAttr(primaryKeyHashValue);
+   auto valueColumns = columns;
    valueColumns.remove(keyColumns);
 
-   bool first=true;
+   bool first = true;
    std::vector<Attribute> keyColNames, keyColTypes, valColNames, valColTypes;
    std::vector<NamedAttribute> mapping;
 
@@ -918,15 +918,15 @@ static mlir::Value translateINLJ(mlir::Value left, mlir::Value right, mlir::Arra
       } else {
          first = false;
       }
-      auto memberName = getUniqueMember(ctxt ,identifier.str());
+      auto memberName = getUniqueMember(ctxt, identifier.str());
       externalIndexDescription += "\"" + memberName + "\" :\"" + colManager.getName(&attrDef.getColumn()).second + "\"";
 
-      if (keyColumns.contains(&attrDef.getColumn())){
+      if (keyColumns.contains(&attrDef.getColumn())) {
          keyColNames.push_back((rewriter.getStringAttr(memberName)));
          keyColTypes.push_back(mlir::TypeAttr::get(attrDef.getColumn().type));
          mapping.push_back(rewriter.getNamedAttr(memberName, attrDef));
       }
-      if (valueColumns.contains(&attrDef.getColumn())){
+      if (valueColumns.contains(&attrDef.getColumn())) {
          keyColNames.push_back((rewriter.getStringAttr(memberName)));
          keyColTypes.push_back(mlir::TypeAttr::get(attrDef.getColumn().type));
          mapping.push_back(rewriter.getNamedAttr(memberName, attrDef));
@@ -978,7 +978,7 @@ static mlir::Value translateNL(mlir::Value left, mlir::Value right, bool useHash
       return translateHJ(left, right, nullsEqual, hashLeft, hashRight, columns, rewriter, loc, fn);
    } else if (useIndexNestedLoop) {
       return translateINLJ(left, right, nullsEqual, hashLeft, hashRight, columns, rewriter, loc, fn);
-   }else {
+   } else {
       return translateNLJ(left, right, columns, rewriter, loc, fn);
    }
 }
@@ -1377,7 +1377,7 @@ static mlir::Value spaceShipCompare(mlir::OpBuilder& builder, std::vector<std::p
    auto isZero = builder.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, compareRes, zero);
    if (pos + 1 < sortCriteria.size()) {
       auto ifOp = builder.create<mlir::scf::IfOp>(
-         loc, builder.getI8Type(), isZero, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, spaceShipCompare(builder, sortCriteria, pos + 1, loc)); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, compareRes); });
+         loc, isZero, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, spaceShipCompare(builder, sortCriteria, pos + 1, loc)); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, compareRes); });
       return ifOp.getResult(0);
    } else {
       return compareRes;
@@ -1648,11 +1648,11 @@ class MinAggrFunc : public DistAggrFunc {
                                          return (mlir::Attribute) builder.getIntegerAttr(mlir::IntegerType::get(context, 128), mlir::APInt(128, parts));
                                       })
                                       .Case<::mlir::IntegerType>([&](::mlir::IntegerType t) {
-                                         if (t.getWidth() == 32){
+                                         if (t.getWidth() == 32) {
                                             return (mlir::Attribute) builder.getI32IntegerAttr(std::numeric_limits<int32_t>::max());
-                                         }else if (t.getWidth() == 64){
+                                         } else if (t.getWidth() == 64) {
                                             return (mlir::Attribute) builder.getI64IntegerAttr(std::numeric_limits<int64_t>::max());
-                                         }else{
+                                         } else {
                                             assert(false && "should not happen");
                                             return mlir::Attribute();
                                          }
@@ -1818,11 +1818,9 @@ void performAggrFuncReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::v
       }
    }
    for (auto aggrFn : distAggrFuncs) {
-      aggrFn->getStateType().dump();
       mlir::Value state = reduceBlock->addArgument(aggrFn->getStateType(), loc);
       stateMap.insert({&aggrFn->getDestAttribute().getColumn(), state});
    }
-   for (auto name : names) name.dump();
    auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, stream, reference, rewriter.getArrayAttr(relevantColumns), rewriter.getArrayAttr(names));
    {
       mlir::OpBuilder::InsertionGuard guard(rewriter);
@@ -2532,7 +2530,7 @@ class NestedLowering : public OpConversionPattern<mlir::relalg::NestedOp> {
       auto* b = &nestedOp.getNestedFn().front();
       auto* terminator = b->getTerminator();
       auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(terminator);
-      rewriter.mergeBlockBefore(b, &*rewriter.getInsertionPoint(), adaptor.getInputs());
+      rewriter.inlineBlockBefore(b, &*rewriter.getInsertionPoint(), adaptor.getInputs());
       {
          auto* b2 = new mlir::Block;
          mlir::OpBuilder::InsertionGuard guard(rewriter);
@@ -2549,7 +2547,7 @@ class NestedLowering : public OpConversionPattern<mlir::relalg::NestedOp> {
    }
 };
 
-class TrackTuplesLowering : public OpConversionPattern<mlir::relalg::TrackTuplesOP>  {
+class TrackTuplesLowering : public OpConversionPattern<mlir::relalg::TrackTuplesOP> {
    public:
    using OpConversionPattern<mlir::relalg::TrackTuplesOP>::OpConversionPattern;
 

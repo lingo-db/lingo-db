@@ -73,7 +73,7 @@ class SizeOfOpLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto sizeOfOp = mlir::dyn_cast_or_null<mlir::util::SizeOfOp>(op);
-      Type t = typeConverter->convertType(sizeOfOp.type());
+      Type t = typeConverter->convertType(sizeOfOp.getType());
       const DataLayout* layout = &defaultLayout;
       if (const DataLayoutAnalysis* analysis = llvmTypeConverter.getDataLayoutAnalysis()) {
          layout = &analysis->getAbove(op);
@@ -175,9 +175,10 @@ class AllocOpLowering : public OpConversionPattern<mlir::util::AllocOp> {
          entries = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(staticSize));
       }
 
-      auto bytesPerEntry = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getI64Type(), genericMemrefType.getElementType());
+      mlir::Value bytesPerEntry = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), genericMemrefType.getElementType());
+      bytesPerEntry = rewriter.create<mlir::UnrealizedConversionCastOp>(loc, rewriter.getI64Type(), bytesPerEntry).getResult(0);
       Value sizeInBytes = rewriter.create<mlir::LLVM::MulOp>(loc, rewriter.getI64Type(), entries, bytesPerEntry);
-      LLVM::LLVMFuncOp mallocFunc = LLVM::lookupOrCreateMallocFn(allocOp->getParentOfType<ModuleOp>(), rewriter.getI64Type());
+      LLVM::LLVMFuncOp mallocFunc = LLVM::lookupOrCreateMallocFn(allocOp->getParentOfType<ModuleOp>(), rewriter.getI64Type(), /* todo: opaque pointers*/ false);
       auto result = rewriter.create<mlir::LLVM::CallOp>(loc, mallocFunc, mlir::ValueRange{sizeInBytes}).getResult();
       mlir::Value castedPointer = rewriter.create<LLVM::BitcastOp>(loc, LLVM::LLVMPointerType::get(typeConverter->convertType(genericMemrefType.getElementType())), result);
       rewriter.replaceOp(allocOp, castedPointer);
@@ -189,7 +190,7 @@ class DeAllocOpLowering : public OpConversionPattern<mlir::util::DeAllocOp> {
    public:
    using OpConversionPattern<mlir::util::DeAllocOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::DeAllocOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto freeFunc = LLVM::lookupOrCreateFreeFn(op->getParentOfType<ModuleOp>());
+      auto freeFunc = LLVM::lookupOrCreateFreeFn(op->getParentOfType<ModuleOp>(), /* todo: opaque pointers*/ false);
       Value casted = rewriter.create<LLVM::BitcastOp>(op->getLoc(), LLVM::LLVMPointerType::get(IntegerType::get(rewriter.getContext(), 8)), adaptor.getRef());
       rewriter.replaceOpWithNewOp<LLVM::CallOp>(op, freeFunc, casted);
       return success();

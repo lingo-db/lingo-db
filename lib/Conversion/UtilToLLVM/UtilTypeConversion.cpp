@@ -27,7 +27,7 @@ class SizeOfLowering : public OpConversionPattern<mlir::util::SizeOfOp> {
    public:
    using OpConversionPattern<mlir::util::SizeOfOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::SizeOfOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOpWithNewOp<mlir::util::SizeOfOp>(op, rewriter.getIndexType(), TypeAttr::get(typeConverter->convertType(op.type())));
+      rewriter.replaceOpWithNewOp<mlir::util::SizeOfOp>(op, rewriter.getIndexType(), TypeAttr::get(typeConverter->convertType(op.getType())));
       return success();
    }
 };

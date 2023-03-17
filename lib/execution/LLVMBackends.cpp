@@ -42,8 +42,8 @@ static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, bool verify) {
    pm2.enableVerifier(verify);
    pm2.addPass(mlir::createConvertSCFToCFPass());
    pm2.addPass(mlir::util::createUtilToLLVMPass());
-   pm2.addPass(mlir::cf::createConvertControlFlowToLLVMPass());
-   pm2.addPass(mlir::createMemRefToLLVMConversionPass());
+   pm2.addPass(mlir::createConvertControlFlowToLLVMPass());
+   pm2.addPass(mlir::createFinalizeMemRefToLLVMConversionPass());
    pm2.addPass(mlir::createArithToLLVMConversionPass());
    pm2.addPass(mlir::createConvertFuncToLLVMPass());
    pm2.addPass(mlir::createReconcileUnrealizedCastsPass());

@@ -15,7 +15,7 @@
 #include <chrono>
 #include <sstream>
 #include <unordered_set>
-namespace execution {
+namespace{
 static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::string fileName) {
    mlir::PassManager pm(moduleOp->getContext());
    mlir::OpPrintingFlags flags;
@@ -25,6 +25,8 @@ static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::stri
       error.emit() << "Snapshotting failed";
    }
 }
+} // namespace
+namespace execution {
 class DefaultQueryOptimizer : public QueryOptimizer {
    void optimize(mlir::ModuleOp& moduleOp) override {
       auto start = std::chrono::high_resolution_clock::now();

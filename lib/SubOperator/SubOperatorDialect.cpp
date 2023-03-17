@@ -17,11 +17,10 @@ using namespace mlir::subop;
 
 struct SubOperatorInlinerInterface : public mlir::DialectInlinerInterface {
    using DialectInlinerInterface::DialectInlinerInterface;
-   bool isLegalToInline(mlir::Operation*, mlir::Region*, bool, mlir::BlockAndValueMapping&) const final override {
+   bool isLegalToInline(mlir::Operation*, mlir::Region*, bool, mlir::IRMapping&) const final override {
       return true;
    }
-   virtual bool isLegalToInline(mlir::Region* dest, mlir::Region* src, bool wouldBeCloned,
-                                mlir::BlockAndValueMapping& valueMapping) const override {
+   virtual bool isLegalToInline(mlir::Region* dest, mlir::Region* src, bool wouldBeCloned, mlir::IRMapping& valueMapping) const override {
       return true;
    }
 };

@@ -8,18 +8,17 @@
 #include <fstream>
 #include <iostream>
 #include <regex>
-#include <sstream>
 #include <string>
 
 #include <arrow/pretty_print.h>
 #include <arrow/table.h>
-
+namespace {
 enum SortMode {
    NONE,
    SORT,
    SORTROWS
 };
-static unsigned char hexval(unsigned char c) {
+unsigned char hexval(unsigned char c) {
    if ('0' <= c && c <= '9')
       return c - '0';
    else if ('a' <= c && c <= 'f')
@@ -164,18 +163,18 @@ struct ResultHasher : public execution::ResultProcessor {
       hash = md5Strings(toHash);
       numValues = toHash.size();
       std::string linesRes = "";
-      if (toHash.size() < 1000||tsv) {
-      if (tsv) {
-         size_t i = 0;
-         for (auto x : toHash) {
-            linesRes += x + ((((i + 1) % numColumns) == 0) ? "\n" : "\t");
-            i++;
+      if (toHash.size() < 1000 || tsv) {
+         if (tsv) {
+            size_t i = 0;
+            for (auto x : toHash) {
+               linesRes += x + ((((i + 1) % numColumns) == 0) ? "\n" : "\t");
+               i++;
+            }
+         } else {
+            for (auto x : toHash) {
+               linesRes += x + "\n";
+            }
          }
-      } else {
-         for (auto x : toHash) {
-            linesRes += x + "\n";
-         }
-      }
       }
       lines = linesRes;
    }
@@ -367,6 +366,7 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
       exit(1);
    }
 }
+} // namespace
 int main(int argc, char** argv) {
    runtime::ExecutionContext context;
    support::eval::init();

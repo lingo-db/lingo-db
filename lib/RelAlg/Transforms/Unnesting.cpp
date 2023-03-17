@@ -4,7 +4,7 @@
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 
 #include "mlir/Dialect/RelAlg/Passes.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
@@ -249,7 +249,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
       for (auto selOp : selectionOps) {
          auto higherTerminator = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(selOp.getPredicateBlock().getTerminator());
          Value higherPredVal = higherTerminator.getResults()[0];
-         mlir::BlockAndValueMapping mapping;
+         mlir::IRMapping mapping;
          mapping.map(selOp.getPredicateArgument(), lower.getPredicateArgument());
          mlir::relalg::detail::inlineOpIntoBlock(higherPredVal.getDefiningOp(), higherPredVal.getDefiningOp()->getParentOp(), &lower.getPredicateBlock(), mapping);
          nullable |= higherPredVal.getType().isa<mlir::db::NullableType>();

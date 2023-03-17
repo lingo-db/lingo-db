@@ -17,7 +17,7 @@ class CraneliftBackend : public execution::ExecutionBackend {
       if (auto mainFunc = moduleOp.lookupSymbol<mlir::func::FuncOp>("main")) {
          mlir::OpBuilder builder(moduleOp->getContext());
          builder.setInsertionPointToStart(moduleOp.getBody());
-         builder.create<mlir::func::FuncOp>(moduleOp.getLoc(), "rt_set_execution_context", builder.getFunctionType(mlir::TypeRange({mlir::util::RefType::get(moduleOp->getContext(), mlir::IntegerType::get(moduleOp->getContext(), 8))}), mlir::TypeRange()), builder.getStringAttr("private"));
+         builder.create<mlir::func::FuncOp>(moduleOp.getLoc(), "rt_set_execution_context", builder.getFunctionType(mlir::TypeRange({mlir::util::RefType::get(moduleOp->getContext(), mlir::IntegerType::get(moduleOp->getContext(), 8))}), mlir::TypeRange()), builder.getStringAttr("private"), mlir::ArrayAttr{}, mlir::ArrayAttr{});
       }
 
       mlir::PassManager pm2(moduleOp->getContext());

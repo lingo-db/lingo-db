@@ -8,10 +8,10 @@ using namespace mlir;
 using namespace mlir::db;
 struct DBInlinerInterface : public DialectInlinerInterface {
    using DialectInlinerInterface::DialectInlinerInterface;
-   bool isLegalToInline(Operation*, Region*, bool, BlockAndValueMapping&) const final override {
+   bool isLegalToInline(Operation*, Region*, bool, IRMapping&) const final override {
       return true;
    }
-   virtual bool isLegalToInline(Region* dest, Region* src, bool wouldBeCloned, BlockAndValueMapping& valueMapping) const override {
+   virtual bool isLegalToInline(Region* dest, Region* src, bool wouldBeCloned, IRMapping& valueMapping) const override {
       return true;
    }
 };

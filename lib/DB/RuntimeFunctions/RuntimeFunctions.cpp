@@ -12,7 +12,8 @@
 mlir::db::RuntimeFunction* mlir::db::RuntimeFunctionRegistry::lookup(std::string name) {
    return registeredFunctions[name].get();
 }
-static mlir::Value dateAddImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
+namespace {
+mlir::Value dateAddImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;
    if (originalArgumentTypes[1].cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
       return rewriter.create<mlir::arith::AddIOp>(loc, loweredArguments);
@@ -20,7 +21,7 @@ static mlir::Value dateAddImpl(mlir::OpBuilder& rewriter, mlir::ValueRange lower
       return rt::DateRuntime::addMonths(rewriter, loc)(loweredArguments)[0];
    }
 }
-static mlir::Value absImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
+mlir::Value absImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;
    mlir::Value val = loweredArguments[0];
    mlir::Value zero = rewriter.create<mlir::arith::ConstantOp>(loc, typeConverter->convertType(resType), rewriter.getIntegerAttr(typeConverter->convertType(resType), 0));
@@ -28,7 +29,7 @@ static mlir::Value absImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredAr
    mlir::Value ltZero = rewriter.create<mlir::arith::CmpIOp>(loc, mlir::arith::CmpIPredicate::slt, val, zero);
    return rewriter.create<mlir::arith::SelectOp>(loc, ltZero, negated, val);
 }
-static mlir::Value sqrtImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
+mlir::Value sqrtImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;
 
    mlir::Value val = loweredArguments[0];
@@ -43,7 +44,7 @@ static mlir::Value sqrtImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredA
       return rt::FloatRuntime::sqrt(rewriter, loc)(val)[0];
    }
 }
-static mlir::Value dateSubImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
+mlir::Value dateSubImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;
    if (originalArgumentTypes[1].cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
       return rewriter.create<mlir::arith::SubIOp>(loc, loweredArguments);
@@ -51,7 +52,7 @@ static mlir::Value dateSubImpl(mlir::OpBuilder& rewriter, mlir::ValueRange lower
       return rt::DateRuntime::subtractMonths(rewriter, loc)(loweredArguments)[0];
    }
 }
-static mlir::Value matchPart(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value lastMatchEnd, std::string pattern, mlir::Value str, mlir::Value end) {
+mlir::Value matchPart(mlir::OpBuilder& builder, mlir::Location loc, mlir::Value lastMatchEnd, std::string pattern, mlir::Value str, mlir::Value end) {
    if (pattern.empty()) {
       if (!lastMatchEnd) {
          lastMatchEnd = builder.create<mlir::arith::ConstantIndexOp>(loc, 0);
@@ -72,7 +73,7 @@ static mlir::Value matchPart(mlir::OpBuilder& builder, mlir::Location loc, mlir:
       return matchEnd;
    }
 }
-static mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
+mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;
    mlir::Value str = loweredArguments[0];
    mlir::Value patternValue = loweredArguments[1];
@@ -125,7 +126,7 @@ static mlir::Value constLikeImpl(mlir::OpBuilder& rewriter, mlir::ValueRange low
 
    return Value();
 }
-static mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
+mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;
    auto i128Type = IntegerType::get(rewriter.getContext(), 128);
    auto i64Type = IntegerType::get(rewriter.getContext(), 64);
@@ -199,7 +200,7 @@ static mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange lo
    }
    return mlir::Value();
 }
-static mlir::LogicalResult dateAddFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<::mlir::Attribute> operands, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>& results) {
+mlir::LogicalResult dateAddFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<::mlir::Attribute> operands, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>& results) {
    if (auto dateType = types[0].dyn_cast_or_null<mlir::db::DateType>()) {
       if (auto intervalType = types[1].dyn_cast_or_null<mlir::db::IntervalType>()) {
          auto leftIntAttr = operands[0].dyn_cast_or_null<mlir::IntegerAttr>();
@@ -217,7 +218,7 @@ static mlir::LogicalResult dateAddFoldFn(mlir::TypeRange types, ::llvm::ArrayRef
    }
    return mlir::failure();
 }
-static mlir::LogicalResult dateSubtractFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<::mlir::Attribute> operands, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>& results) {
+mlir::LogicalResult dateSubtractFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<::mlir::Attribute> operands, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>& results) {
    if (auto dateType = types[0].dyn_cast_or_null<mlir::db::DateType>()) {
       if (auto intervalType = types[1].dyn_cast_or_null<mlir::db::IntervalType>()) {
          auto leftIntAttr = operands[0].dyn_cast_or_null<mlir::IntegerAttr>();
@@ -235,6 +236,7 @@ static mlir::LogicalResult dateSubtractFoldFn(mlir::TypeRange types, ::llvm::Arr
    }
    return mlir::failure();
 }
+} // namespace
 std::shared_ptr<mlir::db::RuntimeFunctionRegistry> mlir::db::RuntimeFunctionRegistry::getBuiltinRegistry(mlir::MLIRContext* context) {
    auto builtinRegistry = std::make_shared<RuntimeFunctionRegistry>(context);
    builtinRegistry->add("DumpValue").handlesNulls().matchesTypes({RuntimeFunction::anyType}, RuntimeFunction::noReturnType).implementedAs(dumpValuesImpl);

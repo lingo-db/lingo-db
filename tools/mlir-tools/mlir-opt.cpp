@@ -15,7 +15,6 @@
 #include "mlir/Dialect/TupleStream/TupleStreamDialect.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/IR/Dialect.h"
-#include "mlir/InitAllDialects.h"
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
@@ -63,7 +62,6 @@ int main(int argc, char** argv) {
    registry.insert<mlir::util::UtilDialect>();
 
    registry.insert<mlir::scf::SCFDialect>();
-   mlir::registerAllDialects(registry);
 
    support::eval::init();
 

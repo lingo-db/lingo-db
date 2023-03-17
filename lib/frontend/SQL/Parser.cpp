@@ -123,7 +123,8 @@ mlir::Value frontend::sql::SQLTypeInference::castValueToType(mlir::OpBuilder& bu
          }
       }
       if (auto nullOp = mlir::dyn_cast_or_null<mlir::db::NullOp>(defOp)) {
-         nullOp.getResult().setType(t);
+         auto t2 = t.cast<mlir::db::NullableType>();
+         nullOp.getResult().setType(t2);
          return nullOp;
       }
    }
@@ -1163,7 +1164,7 @@ void frontend::sql::Parser::translateCopyStatement(mlir::OpBuilder& builder, Cop
 
    // To create hashValues scan table again, then calculate hashvalues and combine
    auto tableMetaData = database.getTableMetaData(tableName);
-   if (!tableMetaData->getPrimaryKey().empty()){
+   if (!tableMetaData->getPrimaryKey().empty()) {
       // TODO: function can be removed once inlining pass does not interfere with subop ordering
       // Create function to avoid reordering of subops and scanning an empty table; temporary workaround
       std::string uniqueFunctionName = "addHashForPrimaryKey" + tableName;
@@ -1175,7 +1176,7 @@ void frontend::sql::Parser::translateCopyStatement(mlir::OpBuilder& builder, Cop
          mlir::OpBuilder::InsertionGuard guard(builder);
          builder.setInsertionPointToStart(moduleOp.getBody());
 
-         funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), uniqueFunctionName, builder.getFunctionType(mlir::TypeRange{}, mlir::TypeRange{}), builder.getStringAttr("private"));
+         funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), uniqueFunctionName, builder.getFunctionType(mlir::TypeRange{}, mlir::TypeRange{}), builder.getStringAttr("private"), mlir::ArrayAttr{}, mlir::ArrayAttr{});
          functionEntryBlock = funcOp.addEntryBlock();
       }
       // Create call to declared function
@@ -1205,7 +1206,6 @@ void frontend::sql::Parser::translateCopyStatement(mlir::OpBuilder& builder, Cop
          columns.push_back(builder.getNamedAttr(x, attrDef));
       }
 
-
       mlir::Value importedTable = builder.create<mlir::relalg::BaseTableOp>(
          builder.getUnknownLoc(),
          mlir::tuples::TupleStreamType::get(builder.getContext()),
@@ -1216,14 +1216,14 @@ void frontend::sql::Parser::translateCopyStatement(mlir::OpBuilder& builder, Cop
       // Create map operation for calculation of hash values
       mlir::OpBuilder mapBuilder(builder.getContext());
       mlir::Block* block = new mlir::Block;
-      block->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());;
+      block->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
+      ;
       mlir::Value tuple = block->getArgument(0);
       mapBuilder.setInsertionPointToStart(block);
 
-
       // Extract values for primary keys
       std::vector<mlir::Value> primaryKeyValues;
-      for (auto &keyAttribute : tableMetaData->getPrimaryKey()){
+      for (auto& keyAttribute : tableMetaData->getPrimaryKey()) {
          // Primary key values must be set for every row
          auto columnType = createTypeFromColumnType(builder.getContext(), tableMetaData->getColumnMetaData(keyAttribute)->getColumnType());
          auto localAttrRef = attrs[keyAttribute];
@@ -1401,7 +1401,7 @@ runtime::ColumnType frontend::sql::Parser::createColumnType(std::string datatype
       typeModifiers.clear();
       typeModifiers.push_back("day");
    }
-   if (datatypeName == "timestamp"){
+   if (datatypeName == "timestamp") {
       datatypeName = "date";
       typeModifiers.push_back("millisecond");
    }
@@ -1551,10 +1551,10 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
       }
    }
    // calculate hash value, pack tuple, hash
-   if (!tableMetaData->getPrimaryKey().empty()){
+   if (!tableMetaData->getPrimaryKey().empty()) {
       // extract values for primary keys
       std::vector<mlir::Value> primaryKeyValues;
-      for (auto &keyAttribute : tableMetaData->getPrimaryKey()){
+      for (auto& keyAttribute : tableMetaData->getPrimaryKey()) {
          // primary key values must be set for every row
          assert(columnNameToCreatedValue.contains(keyAttribute));
          primaryKeyValues.push_back(columnNameToCreatedValue[keyAttribute]);

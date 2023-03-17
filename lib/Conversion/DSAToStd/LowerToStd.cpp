@@ -37,7 +37,7 @@ class SetResultOpLowering : public OpConversionPattern<mlir::dsa::SetResultOp> {
       if (!funcOp) {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(parentModule.getBody());
-         funcOp = rewriter.create<mlir::func::FuncOp>(op->getLoc(), "rt_get_execution_context", rewriter.getFunctionType({}, {mlir::util::RefType::get(getContext(), rewriter.getI8Type())}), rewriter.getStringAttr("private"));
+         funcOp = rewriter.create<mlir::func::FuncOp>(op->getLoc(), "rt_get_execution_context", rewriter.getFunctionType({}, {mlir::util::RefType::get(getContext(), rewriter.getI8Type())}), rewriter.getStringAttr("private"), mlir::ArrayAttr{}, mlir::ArrayAttr{});
       }
 
       mlir::Value executionContext = rewriter.create<mlir::func::CallOp>(op->getLoc(), funcOp, mlir::ValueRange{}).getResult(0);
@@ -71,9 +71,6 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
    return TupleType::get(tupleType.getContext(), TypeRange(types));
 }
 } // end anonymous namespace
-static bool hasDSAType(TypeConverter& converter, TypeRange types) {
-   return llvm::any_of(types, [&converter](mlir::Type t) { auto converted = converter.convertType(t);return converted&&converted!=t; });
-}
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
    public:
@@ -101,7 +98,9 @@ void DSAToStdLoweringPass::runOnOperation() {
    target.addLegalDialect<memref::MemRefDialect>();
    TypeConverter typeConverter;
    typeConverter.addConversion([&](mlir::Type type) { return type; });
-
+   static auto hasDSAType = [](TypeConverter& converter, TypeRange types) -> bool {
+      return llvm::any_of(types, [&converter](mlir::Type t) { auto converted = converter.convertType(t);return converted&&converted!=t; });
+   };
    auto opIsWithoutDSATypes = [&](Operation* op) { return !hasDSAType(typeConverter, op->getOperandTypes()) && !hasDSAType(typeConverter, op->getResultTypes()); };
    target.addDynamicallyLegalDialect<scf::SCFDialect>(opIsWithoutDSATypes);
    target.addDynamicallyLegalDialect<arith::ArithDialect>(opIsWithoutDSATypes);
@@ -127,7 +126,7 @@ void DSAToStdLoweringPass::runOnOperation() {
 
    target.addDynamicallyLegalOp<util::SizeOfOp>(
       [&typeConverter](util::SizeOfOp op) {
-         auto isLegal = !hasDSAType(typeConverter, op.type());
+         auto isLegal = !hasDSAType(typeConverter, op.getType());
          return isLegal;
       });
 

@@ -1,16 +1,15 @@
 #include "mlir/Dialect/RelAlg/Transforms/queryopt/QueryGraphBuilder.h"
 #include <list>
 
-namespace mlir::relalg {
-static NodeSet getNodeSetFromClass(llvm::EquivalenceClasses<size_t>& classes, size_t val, size_t numNodes) {
-   NodeSet res(numNodes);
+namespace {
+mlir::relalg::NodeSet getNodeSetFromClass(llvm::EquivalenceClasses<size_t>& classes, size_t val, size_t numNodes) {
+   mlir::relalg::NodeSet res(numNodes);
    auto eqclass = classes.findLeader(val);
    for (auto me = classes.member_end(); eqclass != me; ++eqclass) {
       res.set(*eqclass);
    }
    return res;
 }
-
 size_t countCreatingOperators(Operator op, llvm::SmallPtrSet<mlir::Operation*, 12>& alreadyOptimized) {
    size_t res = 0;
    auto children = op.getChildren();
@@ -26,6 +25,9 @@ size_t countCreatingOperators(Operator op, llvm::SmallPtrSet<mlir::Operation*, 1
    res += !created.empty();
    return res;
 }
+} // namespace
+namespace mlir::relalg {
+
 void mlir::relalg::QueryGraphBuilder::populateQueryGraph(Operator op) {
    auto children = op.getChildren();
    auto used = op.getUsedColumns();

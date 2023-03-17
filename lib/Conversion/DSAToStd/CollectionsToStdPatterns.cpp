@@ -7,7 +7,7 @@
 #include "mlir/Dialect/SCF/IR/SCF.h"
 
 #include "mlir/Dialect/util/UtilOps.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 using namespace mlir;
@@ -47,7 +47,7 @@ class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
          values.insert(values.end(), iterargs.begin(), iterargs.end());
          auto term = builder.create<mlir::scf::YieldOp>(forOp->getLoc());
          builder.setInsertionPoint(term);
-         rewriter.mergeBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
+         rewriter.inlineBlockBefore(forOp.getBody(), &*builder.getInsertionPoint(), values);
 
          std::vector<Value> results(yieldOp.getResults().begin(), yieldOp.getResults().end());
          rewriter.eraseOp(yieldOp);

@@ -182,7 +182,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
 
 cl::OptionCategory mycat("myname", "mydescription");
 
-static cl::opt<std::string> headerOutputFile("oh", cl::desc("output path for header"), cl::cat(mycat));
+cl::opt<std::string> headerOutputFile("oh", cl::desc("output path for header"), cl::cat(mycat));
 
 int main(int argc, const char** argv) {
    auto expectedParser = CommonOptionsParser::create(argc, argv, mycat);

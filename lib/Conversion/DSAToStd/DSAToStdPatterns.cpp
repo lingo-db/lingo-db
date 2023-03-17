@@ -2,7 +2,7 @@
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
 
 #include "runtime-defs/Hashtable.h"

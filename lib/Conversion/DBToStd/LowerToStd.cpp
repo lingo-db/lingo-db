@@ -52,10 +52,11 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
    }
    return TupleType::get(tupleType.getContext(), TypeRange(types));
 }
-} // end anonymous namespace
 static bool hasDBType(TypeConverter& converter, TypeRange types) {
    return llvm::any_of(types, [&converter](mlir::Type t) { auto converted = converter.convertType(t);return converted&&converted!=t; });
 }
+} // end anonymous namespace
+
 
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
@@ -321,7 +322,7 @@ class StringCmpOpLowering : public OpConversionPattern<mlir::db::CmpOp> {
          case db::DBCmpPredicate::eq: {
             auto varlenCmp = rewriter.create<mlir::util::VarLenCmp>(cmpOp->getLoc(), rewriter.getI1Type(), rewriter.getI1Type(), left, right);
             res = rewriter.create<mlir::scf::IfOp>(
-                             cmpOp->getLoc(), rewriter.getI1Type(), varlenCmp.getNeedsDetailedEval(), [&](mlir::OpBuilder& builder, mlir::Location loc) {
+                             cmpOp->getLoc(), varlenCmp.getNeedsDetailedEval(), [&](mlir::OpBuilder& builder, mlir::Location loc) {
                                                          auto rtCmp=rt::StringRuntime::compareEq(rewriter, cmpOp->getLoc())({left, right})[0];
                                                          builder.create<mlir::scf::YieldOp>(loc, rtCmp); }, [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, varlenCmp.getEq()); })
                      .getResult(0);
@@ -963,7 +964,7 @@ class HashLowering : public ConversionPattern {
       } else if (auto varLenType = v.getType().dyn_cast_or_null<mlir::util::VarLen32Type>()) {
          auto varlenTryCheapHash = builder.create<mlir::util::VarLenTryCheapHash>(loc, builder.getI1Type(), builder.getIndexType(), v);
          mlir::Value hash = builder.create<mlir::scf::IfOp>(
-                                      loc, builder.getIndexType(), varlenTryCheapHash.getComplete(), [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, varlenTryCheapHash.getHash()); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+                                      loc, varlenTryCheapHash.getComplete(), [&](mlir::OpBuilder& builder, mlir::Location loc) { builder.create<mlir::scf::YieldOp>(loc, varlenTryCheapHash.getHash()); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
                                          mlir::Value hash = builder.create<mlir::util::HashVarLen>(loc, builder.getIndexType(), v);
                                          builder.create<mlir::scf::YieldOp>(loc, hash); })
                                .getResult(0);
@@ -981,7 +982,7 @@ class HashLowering : public ConversionPattern {
             auto unpacked = builder.create<util::UnPackOp>(loc, v);
 
             mlir::Value totalHashUpdated = builder.create<mlir::scf::IfOp>(
-                                                     loc, builder.getIndexType(), unpacked.getResult(0), [totalHashBefore = totalHash](mlir::OpBuilder& builder, mlir::Location loc) {
+                                                     loc, unpacked.getResult(0), [totalHashBefore = totalHash](mlir::OpBuilder& builder, mlir::Location loc) {
                                                          mlir::Value totalHash=totalHashBefore;
                                                         if (!totalHash) {
                                                            totalHash = builder.create<arith::ConstantOp>(loc, builder.getIndexType(), builder.getIndexAttr(0));
@@ -1097,7 +1098,7 @@ void DBToStdLoweringPass::runOnOperation() {
 
    target.addDynamicallyLegalOp<util::SizeOfOp>(
       [&typeConverter](util::SizeOfOp op) {
-         auto isLegal = !hasDBType(typeConverter, op.type());
+         auto isLegal = !hasDBType(typeConverter, op.getType());
          return isLegal;
       });
 

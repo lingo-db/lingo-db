@@ -5,7 +5,7 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 
@@ -21,7 +21,7 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
       auto& attributeManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
 
       mlir::relalg::AggrFuncOp aggrFuncOp = mlir::cast<mlir::relalg::AggrFuncOp>(op);
-      if (mlir::isa<mlir::relalg::AggregationOp, mlir::relalg::WindowOp,mlir::relalg::GroupJoinOp>(op->getParentOp())) {
+      if (mlir::isa<mlir::relalg::AggregationOp, mlir::relalg::WindowOp, mlir::relalg::GroupJoinOp>(op->getParentOp())) {
          return mlir::success(false);
       }
       std::string scopeName = attributeManager.getUniqueScope("aggr");
@@ -61,7 +61,7 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
       auto& attributeManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
 
       mlir::relalg::CountRowsOp aggrFuncOp = mlir::cast<mlir::relalg::CountRowsOp>(op);
-      if (mlir::isa<mlir::relalg::AggregationOp,mlir::relalg::GroupJoinOp>(op->getParentOp())) {
+      if (mlir::isa<mlir::relalg::AggregationOp, mlir::relalg::GroupJoinOp>(op->getParentOp())) {
          return mlir::success(false);
       }
       std::string scopeName = attributeManager.getUniqueScope("aggr");
@@ -146,7 +146,7 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
          auto zero = rewriter.create<mlir::db::ConstantOp>(loc, castedCount.getType(), rewriter.getI64IntegerAttr(0));
          mlir::Value isZero = rewriter.create<mlir::db::CmpOp>(loc, mlir::db::DBCmpPredicate::eq, countM1, zero);
          mlir::Value result = rewriter.create<mlir::scf::IfOp>(
-                                         loc, sub1.getType(), isZero, [&](mlir::OpBuilder& builder, mlir::Location loc) {
+                                         loc, isZero, [&](mlir::OpBuilder& builder, mlir::Location loc) {
                                              mlir::Value null=builder.create<mlir::db::NullOp>(loc,sub1.getType());
                                             builder.create<mlir::scf::YieldOp>(loc,null); }, [&](mlir::OpBuilder& builder, mlir::Location loc) {
                                             mlir::Value average=builder.create<mlir::db::DivOp>(loc, sub1,countM1);
@@ -275,7 +275,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
             if (!colsForMap.empty()) {
                auto* block = new mlir::Block;
                builder.setInsertionPointAfter(aggregationOp);
-               mlir::BlockAndValueMapping mapping;
+               mlir::IRMapping mapping;
                auto loc = aggregationOp->getLoc();
                auto newmap = builder.create<mlir::relalg::MapOp>(aggregationOp->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), aggregationOp, builder.getArrayAttr(colsForMap));
                newmap.getPredicate().push_back(block);
@@ -351,7 +351,7 @@ class SimplifyAggregations : public mlir::PassWrapper<SimplifyAggregations, mlir
             if (!colsForMap.empty()) {
                auto* block = new mlir::Block;
                builder.setInsertionPointAfter(aggregationOp);
-               mlir::BlockAndValueMapping mapping;
+               mlir::IRMapping mapping;
                auto loc = aggregationOp->getLoc();
                auto newmap = builder.create<mlir::relalg::MapOp>(aggregationOp->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), aggregationOp, builder.getArrayAttr(colsForMap));
                newmap.getPredicate().push_back(block);

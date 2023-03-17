@@ -12,8 +12,8 @@
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
-#include "mlir/IR/BlockAndValueMapping.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 namespace {
@@ -143,7 +143,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(predFnBlock);
             mlir::Value tuple = predFnBlock->addArgument(mlir::tuples::TupleType::get(getContext()), loc);
-            mlir::BlockAndValueMapping mapping;
+            mlir::IRMapping mapping;
             size_t i = 0;
             for (auto key : keyRefsForEqFn) {
                mapping.map(lookupOp.getEqFn().getArgument(i++), rewriter.create<mlir::tuples::GetColumnOp>(loc, key.getColumn().type, key, tuple));
@@ -276,11 +276,12 @@ class MultiMapAsHashMultiMap : public mlir::RewritePattern {
 };
 class SpecializeSubOpPass : public mlir::PassWrapper<SpecializeSubOpPass, mlir::OperationPass<mlir::ModuleOp>> {
    bool withOptimizations;
+
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(SpecializeSubOpPass)
    virtual llvm::StringRef getArgument() const override { return "subop-specialize"; }
 
-   SpecializeSubOpPass(bool withOptimizations) :withOptimizations(withOptimizations){}
+   SpecializeSubOpPass(bool withOptimizations) : withOptimizations(withOptimizations) {}
    void getDependentDialects(mlir::DialectRegistry& registry) const override {
       registry.insert<mlir::util::UtilDialect, mlir::db::DBDialect>();
    }
@@ -289,7 +290,7 @@ class SpecializeSubOpPass : public mlir::PassWrapper<SpecializeSubOpPass, mlir::
       auto columnUsageAnalysis = getAnalysis<mlir::subop::ColumnUsageAnalysis>();
 
       mlir::RewritePatternSet patterns(&getContext());
-      if(withOptimizations){
+      if (withOptimizations) {
          patterns.insert<MultiMapAsHashIndexedView>(&getContext(), columnUsageAnalysis);
       }
       patterns.insert<MapAsHashMap>(&getContext(), columnUsageAnalysis);

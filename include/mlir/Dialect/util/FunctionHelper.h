@@ -39,6 +39,7 @@ class FunctionHelper {
 
    public:
    static mlir::ResultRange call(OpBuilder& builder, mlir::Location loc, const FunctionSpec& function, ValueRange values);
+   static Value convertValue(OpBuilder& builder, Value v, Type t, Location loc);
 };
 } // namespace mlir::util
 

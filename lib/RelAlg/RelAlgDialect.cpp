@@ -15,11 +15,11 @@ using namespace mlir::relalg;
 
 struct RelalgInlinerInterface : public DialectInlinerInterface {
    using DialectInlinerInterface::DialectInlinerInterface;
-   bool isLegalToInline(Operation*, Region*, bool, BlockAndValueMapping&) const final override {
+   bool isLegalToInline(Operation*, Region*, bool, IRMapping&) const final override {
       return true;
    }
    virtual bool isLegalToInline(Region* dest, Region* src, bool wouldBeCloned,
-                                BlockAndValueMapping& valueMapping) const override {
+                                IRMapping& valueMapping) const override {
       return true;
    }
 };
