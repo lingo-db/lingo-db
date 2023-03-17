@@ -65,6 +65,7 @@ struct QueryExecutionConfig {
    std::unique_ptr<ExecutionBackend> executionBackend;
    std::unique_ptr<ResultProcessor> resultProcessor;
    std::unique_ptr<TimingProcessor> timingProcessor;
+   bool trackTupleCount = false;
 };
 
 enum class ExecutionMode {

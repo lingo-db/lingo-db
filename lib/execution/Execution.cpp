@@ -33,7 +33,6 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       //pm.addPass(mlir::createInlinerPass());
       //pm.addPass(mlir::createSymbolDCEPass());
       mlir::relalg::createQueryOptPipeline(pm, database);
-      pm.addPass(mlir::relalg::createTrackTuplesPass());
       if (mlir::failed(pm.run(moduleOp))) {
          error.emit() << " Query Optimization failed";
       }
@@ -208,6 +207,15 @@ class DefaultQueryExecuter : public QueryExecuter {
          queryOptimizer.optimize(moduleOp);
          handleError("OPTIMIZER", queryOptimizer.getError());
          handleTiming(queryOptimizer.getTiming());
+         if (queryExecutionConfig->trackTupleCount) {
+            mlir::PassManager pm(moduleOp.getContext());
+            pm.addPass(mlir::relalg::createTrackTuplesPass());
+            if (pm.run(moduleOp).failed()) {
+               Error e;
+               e.emit() << "createTrackTuplesPass failed";
+               handleError("TUPLE_TRACKING", e);
+            }
+         }
          performSnapShot(moduleOp);
       }
       for (auto& loweringStepPtr : queryExecutionConfig->loweringSteps) {
