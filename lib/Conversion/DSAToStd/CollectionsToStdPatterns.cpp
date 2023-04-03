@@ -205,14 +205,14 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
                   mlir::Value i32Ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, rewriter.getI32Type()), ptr);
                   mlir::Value i32Val = rewriter.create<util::LoadOp>(loc, i32Ptr);
                   Value const3 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 3);
-                  Value const1i32 = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 32);
+                  Value const8i32 = rewriter.create<mlir::arith::ConstantIntOp>(loc, 8, 32);
 
                   Value pos3 = rewriter.create<arith::AddIOp>(loc, pos, const3);
                   Value ptr3 = rewriter.create<util::ArrayElementPtrOp>(loc, util::RefType::get(context, rewriter.getI8Type()), valBuffer, pos3);
                   mlir::Value secondI32Ptr = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(context, rewriter.getI32Type()), ptr3);
 
                   mlir::Value secondI32Val = rewriter.create<util::LoadOp>(loc, secondI32Ptr);
-                  mlir::Value noDuplicate = rewriter.create<mlir::arith::ShRUIOp>(loc, secondI32Val, const1i32);
+                  mlir::Value noDuplicate = rewriter.create<mlir::arith::ShRUIOp>(loc, secondI32Val, const8i32);
                   val = combine(rewriter.getI64Type(), i32Val, noDuplicate,32, rewriter);
 
                   i32Val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
