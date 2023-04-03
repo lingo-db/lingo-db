@@ -118,14 +118,18 @@ lint:
 
 .sqlite_dataset_tests:
    script:
+      - export BASE_PATH=$(pwd)
       - export LINGODB_EXECUTION_MODE=CHEAP
       - mkdir -p /datasets/tpch-1
+      - cd /opt/data/tpchSf1
+      - /build/lingodb/sql /datasets/tpch-1 < $BASE_PATH/resources/sql/tpch/initialize.sql
       - mkdir -p /datasets/tpcds-1
+      - cd /opt/data/tpcdsSf1
+      - /build/lingodb/sql /datasets/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
       - mkdir -p /datasets/job
-      - apt-get install -y bison flex zstd
-      - bash ./tools/generate/tpch.sh /build/lingodb/ /datasets/tpch-1 1
-      - bash ./tools/generate/tpcds.sh /build/lingodb/ /datasets/tpcds-1 1
-      - bash ./tools/generate/job.sh /build/lingodb/ /datasets/job
+      - cd /opt/data/job
+      - /build/lingodb/sql /datasets/job < $BASE_PATH/resources/sql/job/initialize.sql
+      - cd $BASE_PATH
       - /build/lingodb/sqlite-tester ./test/sqlite-datasets/tpchSf1.test /datasets/tpch-1
       - /build/lingodb/sqlite-tester ./test/sqlite-datasets/tpcdsSf1.test /datasets/tpcds-1
       - /build/lingodb/sqlite-tester ./test/sqlite-datasets/job.test /datasets/job

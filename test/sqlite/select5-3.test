@@ -1,0 +1,7983 @@
+statement ok
+CREATE TABLE t1(
+  a1 INTEGER PRIMARY KEY,
+  b1 INTEGER,
+  x1 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t1 VALUES(1,1,'table t1 row 1')
+
+statement ok
+INSERT INTO t1 VALUES(2,9,'table t1 row 2')
+
+statement ok
+INSERT INTO t1 VALUES(3,8,'table t1 row 3')
+
+statement ok
+INSERT INTO t1 VALUES(4,4,'table t1 row 4')
+
+statement ok
+INSERT INTO t1 VALUES(5,2,'table t1 row 5')
+
+statement ok
+INSERT INTO t1 VALUES(6,3,'table t1 row 6')
+
+statement ok
+INSERT INTO t1 VALUES(7,6,'table t1 row 7')
+
+statement ok
+INSERT INTO t1 VALUES(8,7,'table t1 row 8')
+
+statement ok
+INSERT INTO t1 VALUES(9,10,'table t1 row 9')
+
+statement ok
+INSERT INTO t1 VALUES(10,5,'table t1 row 10')
+
+statement ok
+CREATE TABLE t2(
+  a2 INTEGER PRIMARY KEY,
+  b2 INTEGER,
+  x2 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t2 VALUES(1,7,'table t2 row 1')
+
+statement ok
+INSERT INTO t2 VALUES(2,5,'table t2 row 2')
+
+statement ok
+INSERT INTO t2 VALUES(3,9,'table t2 row 3')
+
+statement ok
+INSERT INTO t2 VALUES(4,3,'table t2 row 4')
+
+statement ok
+INSERT INTO t2 VALUES(5,2,'table t2 row 5')
+
+statement ok
+INSERT INTO t2 VALUES(6,10,'table t2 row 6')
+
+statement ok
+INSERT INTO t2 VALUES(7,8,'table t2 row 7')
+
+statement ok
+INSERT INTO t2 VALUES(8,6,'table t2 row 8')
+
+statement ok
+INSERT INTO t2 VALUES(9,4,'table t2 row 9')
+
+statement ok
+INSERT INTO t2 VALUES(10,1,'table t2 row 10')
+
+statement ok
+CREATE TABLE t3(
+  a3 INTEGER PRIMARY KEY,
+  b3 INTEGER,
+  x3 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t3 VALUES(1,6,'table t3 row 1')
+
+statement ok
+INSERT INTO t3 VALUES(2,8,'table t3 row 2')
+
+statement ok
+INSERT INTO t3 VALUES(3,3,'table t3 row 3')
+
+statement ok
+INSERT INTO t3 VALUES(4,2,'table t3 row 4')
+
+statement ok
+INSERT INTO t3 VALUES(5,4,'table t3 row 5')
+
+statement ok
+INSERT INTO t3 VALUES(6,5,'table t3 row 6')
+
+statement ok
+INSERT INTO t3 VALUES(7,9,'table t3 row 7')
+
+statement ok
+INSERT INTO t3 VALUES(8,10,'table t3 row 8')
+
+statement ok
+INSERT INTO t3 VALUES(9,1,'table t3 row 9')
+
+statement ok
+INSERT INTO t3 VALUES(10,7,'table t3 row 10')
+
+statement ok
+CREATE TABLE t4(
+  a4 INTEGER PRIMARY KEY,
+  b4 INTEGER,
+  x4 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t4 VALUES(1,2,'table t4 row 1')
+
+statement ok
+INSERT INTO t4 VALUES(2,6,'table t4 row 2')
+
+statement ok
+INSERT INTO t4 VALUES(3,10,'table t4 row 3')
+
+statement ok
+INSERT INTO t4 VALUES(4,4,'table t4 row 4')
+
+statement ok
+INSERT INTO t4 VALUES(5,1,'table t4 row 5')
+
+statement ok
+INSERT INTO t4 VALUES(6,8,'table t4 row 6')
+
+statement ok
+INSERT INTO t4 VALUES(7,7,'table t4 row 7')
+
+statement ok
+INSERT INTO t4 VALUES(8,5,'table t4 row 8')
+
+statement ok
+INSERT INTO t4 VALUES(9,3,'table t4 row 9')
+
+statement ok
+INSERT INTO t4 VALUES(10,9,'table t4 row 10')
+
+statement ok
+CREATE TABLE t5(
+  a5 INTEGER PRIMARY KEY,
+  b5 INTEGER,
+  x5 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t5 VALUES(1,9,'table t5 row 1')
+
+statement ok
+INSERT INTO t5 VALUES(2,5,'table t5 row 2')
+
+statement ok
+INSERT INTO t5 VALUES(3,10,'table t5 row 3')
+
+statement ok
+INSERT INTO t5 VALUES(4,7,'table t5 row 4')
+
+statement ok
+INSERT INTO t5 VALUES(5,4,'table t5 row 5')
+
+statement ok
+INSERT INTO t5 VALUES(6,2,'table t5 row 6')
+
+statement ok
+INSERT INTO t5 VALUES(7,1,'table t5 row 7')
+
+statement ok
+INSERT INTO t5 VALUES(8,8,'table t5 row 8')
+
+statement ok
+INSERT INTO t5 VALUES(9,3,'table t5 row 9')
+
+statement ok
+INSERT INTO t5 VALUES(10,6,'table t5 row 10')
+
+statement ok
+CREATE TABLE t6(
+  a6 INTEGER PRIMARY KEY,
+  b6 INTEGER,
+  x6 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t6 VALUES(1,2,'table t6 row 1')
+
+statement ok
+INSERT INTO t6 VALUES(2,5,'table t6 row 2')
+
+statement ok
+INSERT INTO t6 VALUES(3,9,'table t6 row 3')
+
+statement ok
+INSERT INTO t6 VALUES(4,3,'table t6 row 4')
+
+statement ok
+INSERT INTO t6 VALUES(5,1,'table t6 row 5')
+
+statement ok
+INSERT INTO t6 VALUES(6,8,'table t6 row 6')
+
+statement ok
+INSERT INTO t6 VALUES(7,10,'table t6 row 7')
+
+statement ok
+INSERT INTO t6 VALUES(8,6,'table t6 row 8')
+
+statement ok
+INSERT INTO t6 VALUES(9,4,'table t6 row 9')
+
+statement ok
+INSERT INTO t6 VALUES(10,7,'table t6 row 10')
+
+statement ok
+CREATE TABLE t7(
+  a7 INTEGER PRIMARY KEY,
+  b7 INTEGER,
+  x7 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t7 VALUES(1,1,'table t7 row 1')
+
+statement ok
+INSERT INTO t7 VALUES(2,5,'table t7 row 2')
+
+statement ok
+INSERT INTO t7 VALUES(3,3,'table t7 row 3')
+
+statement ok
+INSERT INTO t7 VALUES(4,9,'table t7 row 4')
+
+statement ok
+INSERT INTO t7 VALUES(5,8,'table t7 row 5')
+
+statement ok
+INSERT INTO t7 VALUES(6,4,'table t7 row 6')
+
+statement ok
+INSERT INTO t7 VALUES(7,2,'table t7 row 7')
+
+statement ok
+INSERT INTO t7 VALUES(8,10,'table t7 row 8')
+
+statement ok
+INSERT INTO t7 VALUES(9,6,'table t7 row 9')
+
+statement ok
+INSERT INTO t7 VALUES(10,7,'table t7 row 10')
+
+statement ok
+CREATE TABLE t8(
+  a8 INTEGER PRIMARY KEY,
+  b8 INTEGER,
+  x8 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t8 VALUES(1,3,'table t8 row 1')
+
+statement ok
+INSERT INTO t8 VALUES(2,10,'table t8 row 2')
+
+statement ok
+INSERT INTO t8 VALUES(3,8,'table t8 row 3')
+
+statement ok
+INSERT INTO t8 VALUES(4,6,'table t8 row 4')
+
+statement ok
+INSERT INTO t8 VALUES(5,7,'table t8 row 5')
+
+statement ok
+INSERT INTO t8 VALUES(6,4,'table t8 row 6')
+
+statement ok
+INSERT INTO t8 VALUES(7,2,'table t8 row 7')
+
+statement ok
+INSERT INTO t8 VALUES(8,9,'table t8 row 8')
+
+statement ok
+INSERT INTO t8 VALUES(9,5,'table t8 row 9')
+
+statement ok
+INSERT INTO t8 VALUES(10,1,'table t8 row 10')
+
+statement ok
+CREATE TABLE t9(
+  a9 INTEGER PRIMARY KEY,
+  b9 INTEGER,
+  x9 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t9 VALUES(1,3,'table t9 row 1')
+
+statement ok
+INSERT INTO t9 VALUES(2,4,'table t9 row 2')
+
+statement ok
+INSERT INTO t9 VALUES(3,6,'table t9 row 3')
+
+statement ok
+INSERT INTO t9 VALUES(4,5,'table t9 row 4')
+
+statement ok
+INSERT INTO t9 VALUES(5,9,'table t9 row 5')
+
+statement ok
+INSERT INTO t9 VALUES(6,7,'table t9 row 6')
+
+statement ok
+INSERT INTO t9 VALUES(7,2,'table t9 row 7')
+
+statement ok
+INSERT INTO t9 VALUES(8,1,'table t9 row 8')
+
+statement ok
+INSERT INTO t9 VALUES(9,10,'table t9 row 9')
+
+statement ok
+INSERT INTO t9 VALUES(10,8,'table t9 row 10')
+
+statement ok
+CREATE TABLE t10(
+  a10 INTEGER PRIMARY KEY,
+  b10 INTEGER,
+  x10 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t10 VALUES(1,8,'table t10 row 1')
+
+statement ok
+INSERT INTO t10 VALUES(2,10,'table t10 row 2')
+
+statement ok
+INSERT INTO t10 VALUES(3,7,'table t10 row 3')
+
+statement ok
+INSERT INTO t10 VALUES(4,1,'table t10 row 4')
+
+statement ok
+INSERT INTO t10 VALUES(5,5,'table t10 row 5')
+
+statement ok
+INSERT INTO t10 VALUES(6,4,'table t10 row 6')
+
+statement ok
+INSERT INTO t10 VALUES(7,3,'table t10 row 7')
+
+statement ok
+INSERT INTO t10 VALUES(8,9,'table t10 row 8')
+
+statement ok
+INSERT INTO t10 VALUES(9,6,'table t10 row 9')
+
+statement ok
+INSERT INTO t10 VALUES(10,2,'table t10 row 10')
+
+statement ok
+CREATE TABLE t11(
+  a11 INTEGER PRIMARY KEY,
+  b11 INTEGER,
+  x11 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t11 VALUES(1,5,'table t11 row 1')
+
+statement ok
+INSERT INTO t11 VALUES(2,8,'table t11 row 2')
+
+statement ok
+INSERT INTO t11 VALUES(3,3,'table t11 row 3')
+
+statement ok
+INSERT INTO t11 VALUES(4,1,'table t11 row 4')
+
+statement ok
+INSERT INTO t11 VALUES(5,4,'table t11 row 5')
+
+statement ok
+INSERT INTO t11 VALUES(6,7,'table t11 row 6')
+
+statement ok
+INSERT INTO t11 VALUES(7,6,'table t11 row 7')
+
+statement ok
+INSERT INTO t11 VALUES(8,9,'table t11 row 8')
+
+statement ok
+INSERT INTO t11 VALUES(9,2,'table t11 row 9')
+
+statement ok
+INSERT INTO t11 VALUES(10,10,'table t11 row 10')
+
+statement ok
+CREATE TABLE t12(
+  a12 INTEGER PRIMARY KEY,
+  b12 INTEGER,
+  x12 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t12 VALUES(1,4,'table t12 row 1')
+
+statement ok
+INSERT INTO t12 VALUES(2,2,'table t12 row 2')
+
+statement ok
+INSERT INTO t12 VALUES(3,5,'table t12 row 3')
+
+statement ok
+INSERT INTO t12 VALUES(4,6,'table t12 row 4')
+
+statement ok
+INSERT INTO t12 VALUES(5,9,'table t12 row 5')
+
+statement ok
+INSERT INTO t12 VALUES(6,7,'table t12 row 6')
+
+statement ok
+INSERT INTO t12 VALUES(7,10,'table t12 row 7')
+
+statement ok
+INSERT INTO t12 VALUES(8,1,'table t12 row 8')
+
+statement ok
+INSERT INTO t12 VALUES(9,8,'table t12 row 9')
+
+statement ok
+INSERT INTO t12 VALUES(10,3,'table t12 row 10')
+
+statement ok
+CREATE TABLE t13(
+  a13 INTEGER PRIMARY KEY,
+  b13 INTEGER,
+  x13 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t13 VALUES(1,10,'table t13 row 1')
+
+statement ok
+INSERT INTO t13 VALUES(2,7,'table t13 row 2')
+
+statement ok
+INSERT INTO t13 VALUES(3,6,'table t13 row 3')
+
+statement ok
+INSERT INTO t13 VALUES(4,2,'table t13 row 4')
+
+statement ok
+INSERT INTO t13 VALUES(5,8,'table t13 row 5')
+
+statement ok
+INSERT INTO t13 VALUES(6,4,'table t13 row 6')
+
+statement ok
+INSERT INTO t13 VALUES(7,1,'table t13 row 7')
+
+statement ok
+INSERT INTO t13 VALUES(8,9,'table t13 row 8')
+
+statement ok
+INSERT INTO t13 VALUES(9,3,'table t13 row 9')
+
+statement ok
+INSERT INTO t13 VALUES(10,5,'table t13 row 10')
+
+statement ok
+CREATE TABLE t14(
+  a14 INTEGER PRIMARY KEY,
+  b14 INTEGER,
+  x14 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t14 VALUES(1,5,'table t14 row 1')
+
+statement ok
+INSERT INTO t14 VALUES(2,3,'table t14 row 2')
+
+statement ok
+INSERT INTO t14 VALUES(3,9,'table t14 row 3')
+
+statement ok
+INSERT INTO t14 VALUES(4,7,'table t14 row 4')
+
+statement ok
+INSERT INTO t14 VALUES(5,4,'table t14 row 5')
+
+statement ok
+INSERT INTO t14 VALUES(6,1,'table t14 row 6')
+
+statement ok
+INSERT INTO t14 VALUES(7,8,'table t14 row 7')
+
+statement ok
+INSERT INTO t14 VALUES(8,2,'table t14 row 8')
+
+statement ok
+INSERT INTO t14 VALUES(9,10,'table t14 row 9')
+
+statement ok
+INSERT INTO t14 VALUES(10,6,'table t14 row 10')
+
+statement ok
+CREATE TABLE t15(
+  a15 INTEGER PRIMARY KEY,
+  b15 INTEGER,
+  x15 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t15 VALUES(1,7,'table t15 row 1')
+
+statement ok
+INSERT INTO t15 VALUES(2,1,'table t15 row 2')
+
+statement ok
+INSERT INTO t15 VALUES(3,5,'table t15 row 3')
+
+statement ok
+INSERT INTO t15 VALUES(4,2,'table t15 row 4')
+
+statement ok
+INSERT INTO t15 VALUES(5,4,'table t15 row 5')
+
+statement ok
+INSERT INTO t15 VALUES(6,6,'table t15 row 6')
+
+statement ok
+INSERT INTO t15 VALUES(7,3,'table t15 row 7')
+
+statement ok
+INSERT INTO t15 VALUES(8,10,'table t15 row 8')
+
+statement ok
+INSERT INTO t15 VALUES(9,9,'table t15 row 9')
+
+statement ok
+INSERT INTO t15 VALUES(10,8,'table t15 row 10')
+
+statement ok
+CREATE TABLE t16(
+  a16 INTEGER PRIMARY KEY,
+  b16 INTEGER,
+  x16 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t16 VALUES(1,5,'table t16 row 1')
+
+statement ok
+INSERT INTO t16 VALUES(2,3,'table t16 row 2')
+
+statement ok
+INSERT INTO t16 VALUES(3,4,'table t16 row 3')
+
+statement ok
+INSERT INTO t16 VALUES(4,7,'table t16 row 4')
+
+statement ok
+INSERT INTO t16 VALUES(5,6,'table t16 row 5')
+
+statement ok
+INSERT INTO t16 VALUES(6,9,'table t16 row 6')
+
+statement ok
+INSERT INTO t16 VALUES(7,2,'table t16 row 7')
+
+statement ok
+INSERT INTO t16 VALUES(8,10,'table t16 row 8')
+
+statement ok
+INSERT INTO t16 VALUES(9,8,'table t16 row 9')
+
+statement ok
+INSERT INTO t16 VALUES(10,1,'table t16 row 10')
+
+statement ok
+CREATE TABLE t17(
+  a17 INTEGER PRIMARY KEY,
+  b17 INTEGER,
+  x17 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t17 VALUES(1,7,'table t17 row 1')
+
+statement ok
+INSERT INTO t17 VALUES(2,2,'table t17 row 2')
+
+statement ok
+INSERT INTO t17 VALUES(3,3,'table t17 row 3')
+
+statement ok
+INSERT INTO t17 VALUES(4,1,'table t17 row 4')
+
+statement ok
+INSERT INTO t17 VALUES(5,4,'table t17 row 5')
+
+statement ok
+INSERT INTO t17 VALUES(6,5,'table t17 row 6')
+
+statement ok
+INSERT INTO t17 VALUES(7,8,'table t17 row 7')
+
+statement ok
+INSERT INTO t17 VALUES(8,9,'table t17 row 8')
+
+statement ok
+INSERT INTO t17 VALUES(9,6,'table t17 row 9')
+
+statement ok
+INSERT INTO t17 VALUES(10,10,'table t17 row 10')
+
+statement ok
+CREATE TABLE t18(
+  a18 INTEGER PRIMARY KEY,
+  b18 INTEGER,
+  x18 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t18 VALUES(1,1,'table t18 row 1')
+
+statement ok
+INSERT INTO t18 VALUES(2,8,'table t18 row 2')
+
+statement ok
+INSERT INTO t18 VALUES(3,3,'table t18 row 3')
+
+statement ok
+INSERT INTO t18 VALUES(4,5,'table t18 row 4')
+
+statement ok
+INSERT INTO t18 VALUES(5,10,'table t18 row 5')
+
+statement ok
+INSERT INTO t18 VALUES(6,6,'table t18 row 6')
+
+statement ok
+INSERT INTO t18 VALUES(7,9,'table t18 row 7')
+
+statement ok
+INSERT INTO t18 VALUES(8,7,'table t18 row 8')
+
+statement ok
+INSERT INTO t18 VALUES(9,2,'table t18 row 9')
+
+statement ok
+INSERT INTO t18 VALUES(10,4,'table t18 row 10')
+
+statement ok
+CREATE TABLE t19(
+  a19 INTEGER PRIMARY KEY,
+  b19 INTEGER,
+  x19 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t19 VALUES(1,4,'table t19 row 1')
+
+statement ok
+INSERT INTO t19 VALUES(2,7,'table t19 row 2')
+
+statement ok
+INSERT INTO t19 VALUES(3,2,'table t19 row 3')
+
+statement ok
+INSERT INTO t19 VALUES(4,6,'table t19 row 4')
+
+statement ok
+INSERT INTO t19 VALUES(5,9,'table t19 row 5')
+
+statement ok
+INSERT INTO t19 VALUES(6,10,'table t19 row 6')
+
+statement ok
+INSERT INTO t19 VALUES(7,1,'table t19 row 7')
+
+statement ok
+INSERT INTO t19 VALUES(8,5,'table t19 row 8')
+
+statement ok
+INSERT INTO t19 VALUES(9,8,'table t19 row 9')
+
+statement ok
+INSERT INTO t19 VALUES(10,3,'table t19 row 10')
+
+statement ok
+CREATE TABLE t20(
+  a20 INTEGER PRIMARY KEY,
+  b20 INTEGER,
+  x20 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t20 VALUES(1,10,'table t20 row 1')
+
+statement ok
+INSERT INTO t20 VALUES(2,9,'table t20 row 2')
+
+statement ok
+INSERT INTO t20 VALUES(3,3,'table t20 row 3')
+
+statement ok
+INSERT INTO t20 VALUES(4,7,'table t20 row 4')
+
+statement ok
+INSERT INTO t20 VALUES(5,6,'table t20 row 5')
+
+statement ok
+INSERT INTO t20 VALUES(6,2,'table t20 row 6')
+
+statement ok
+INSERT INTO t20 VALUES(7,1,'table t20 row 7')
+
+statement ok
+INSERT INTO t20 VALUES(8,4,'table t20 row 8')
+
+statement ok
+INSERT INTO t20 VALUES(9,5,'table t20 row 9')
+
+statement ok
+INSERT INTO t20 VALUES(10,8,'table t20 row 10')
+
+statement ok
+CREATE TABLE t21(
+  a21 INTEGER PRIMARY KEY,
+  b21 INTEGER,
+  x21 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t21 VALUES(1,7,'table t21 row 1')
+
+statement ok
+INSERT INTO t21 VALUES(2,9,'table t21 row 2')
+
+statement ok
+INSERT INTO t21 VALUES(3,6,'table t21 row 3')
+
+statement ok
+INSERT INTO t21 VALUES(4,3,'table t21 row 4')
+
+statement ok
+INSERT INTO t21 VALUES(5,5,'table t21 row 5')
+
+statement ok
+INSERT INTO t21 VALUES(6,4,'table t21 row 6')
+
+statement ok
+INSERT INTO t21 VALUES(7,1,'table t21 row 7')
+
+statement ok
+INSERT INTO t21 VALUES(8,10,'table t21 row 8')
+
+statement ok
+INSERT INTO t21 VALUES(9,8,'table t21 row 9')
+
+statement ok
+INSERT INTO t21 VALUES(10,2,'table t21 row 10')
+
+statement ok
+CREATE TABLE t22(
+  a22 INTEGER PRIMARY KEY,
+  b22 INTEGER,
+  x22 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t22 VALUES(1,7,'table t22 row 1')
+
+statement ok
+INSERT INTO t22 VALUES(2,3,'table t22 row 2')
+
+statement ok
+INSERT INTO t22 VALUES(3,6,'table t22 row 3')
+
+statement ok
+INSERT INTO t22 VALUES(4,4,'table t22 row 4')
+
+statement ok
+INSERT INTO t22 VALUES(5,2,'table t22 row 5')
+
+statement ok
+INSERT INTO t22 VALUES(6,8,'table t22 row 6')
+
+statement ok
+INSERT INTO t22 VALUES(7,9,'table t22 row 7')
+
+statement ok
+INSERT INTO t22 VALUES(8,10,'table t22 row 8')
+
+statement ok
+INSERT INTO t22 VALUES(9,5,'table t22 row 9')
+
+statement ok
+INSERT INTO t22 VALUES(10,1,'table t22 row 10')
+
+statement ok
+CREATE TABLE t23(
+  a23 INTEGER PRIMARY KEY,
+  b23 INTEGER,
+  x23 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t23 VALUES(1,9,'table t23 row 1')
+
+statement ok
+INSERT INTO t23 VALUES(2,4,'table t23 row 2')
+
+statement ok
+INSERT INTO t23 VALUES(3,2,'table t23 row 3')
+
+statement ok
+INSERT INTO t23 VALUES(4,8,'table t23 row 4')
+
+statement ok
+INSERT INTO t23 VALUES(5,3,'table t23 row 5')
+
+statement ok
+INSERT INTO t23 VALUES(6,6,'table t23 row 6')
+
+statement ok
+INSERT INTO t23 VALUES(7,7,'table t23 row 7')
+
+statement ok
+INSERT INTO t23 VALUES(8,5,'table t23 row 8')
+
+statement ok
+INSERT INTO t23 VALUES(9,10,'table t23 row 9')
+
+statement ok
+INSERT INTO t23 VALUES(10,1,'table t23 row 10')
+
+statement ok
+CREATE TABLE t24(
+  a24 INTEGER PRIMARY KEY,
+  b24 INTEGER,
+  x24 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t24 VALUES(1,10,'table t24 row 1')
+
+statement ok
+INSERT INTO t24 VALUES(2,3,'table t24 row 2')
+
+statement ok
+INSERT INTO t24 VALUES(3,8,'table t24 row 3')
+
+statement ok
+INSERT INTO t24 VALUES(4,2,'table t24 row 4')
+
+statement ok
+INSERT INTO t24 VALUES(5,5,'table t24 row 5')
+
+statement ok
+INSERT INTO t24 VALUES(6,4,'table t24 row 6')
+
+statement ok
+INSERT INTO t24 VALUES(7,6,'table t24 row 7')
+
+statement ok
+INSERT INTO t24 VALUES(8,9,'table t24 row 8')
+
+statement ok
+INSERT INTO t24 VALUES(9,1,'table t24 row 9')
+
+statement ok
+INSERT INTO t24 VALUES(10,7,'table t24 row 10')
+
+statement ok
+CREATE TABLE t25(
+  a25 INTEGER PRIMARY KEY,
+  b25 INTEGER,
+  x25 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t25 VALUES(1,7,'table t25 row 1')
+
+statement ok
+INSERT INTO t25 VALUES(2,6,'table t25 row 2')
+
+statement ok
+INSERT INTO t25 VALUES(3,5,'table t25 row 3')
+
+statement ok
+INSERT INTO t25 VALUES(4,1,'table t25 row 4')
+
+statement ok
+INSERT INTO t25 VALUES(5,8,'table t25 row 5')
+
+statement ok
+INSERT INTO t25 VALUES(6,9,'table t25 row 6')
+
+statement ok
+INSERT INTO t25 VALUES(7,3,'table t25 row 7')
+
+statement ok
+INSERT INTO t25 VALUES(8,2,'table t25 row 8')
+
+statement ok
+INSERT INTO t25 VALUES(9,4,'table t25 row 9')
+
+statement ok
+INSERT INTO t25 VALUES(10,10,'table t25 row 10')
+
+statement ok
+CREATE TABLE t26(
+  a26 INTEGER PRIMARY KEY,
+  b26 INTEGER,
+  x26 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t26 VALUES(1,2,'table t26 row 1')
+
+statement ok
+INSERT INTO t26 VALUES(2,7,'table t26 row 2')
+
+statement ok
+INSERT INTO t26 VALUES(3,5,'table t26 row 3')
+
+statement ok
+INSERT INTO t26 VALUES(4,1,'table t26 row 4')
+
+statement ok
+INSERT INTO t26 VALUES(5,8,'table t26 row 5')
+
+statement ok
+INSERT INTO t26 VALUES(6,6,'table t26 row 6')
+
+statement ok
+INSERT INTO t26 VALUES(7,4,'table t26 row 7')
+
+statement ok
+INSERT INTO t26 VALUES(8,9,'table t26 row 8')
+
+statement ok
+INSERT INTO t26 VALUES(9,3,'table t26 row 9')
+
+statement ok
+INSERT INTO t26 VALUES(10,10,'table t26 row 10')
+
+statement ok
+CREATE TABLE t27(
+  a27 INTEGER PRIMARY KEY,
+  b27 INTEGER,
+  x27 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t27 VALUES(1,8,'table t27 row 1')
+
+statement ok
+INSERT INTO t27 VALUES(2,3,'table t27 row 2')
+
+statement ok
+INSERT INTO t27 VALUES(3,6,'table t27 row 3')
+
+statement ok
+INSERT INTO t27 VALUES(4,7,'table t27 row 4')
+
+statement ok
+INSERT INTO t27 VALUES(5,4,'table t27 row 5')
+
+statement ok
+INSERT INTO t27 VALUES(6,2,'table t27 row 6')
+
+statement ok
+INSERT INTO t27 VALUES(7,10,'table t27 row 7')
+
+statement ok
+INSERT INTO t27 VALUES(8,9,'table t27 row 8')
+
+statement ok
+INSERT INTO t27 VALUES(9,5,'table t27 row 9')
+
+statement ok
+INSERT INTO t27 VALUES(10,1,'table t27 row 10')
+
+statement ok
+CREATE TABLE t28(
+  a28 INTEGER PRIMARY KEY,
+  b28 INTEGER,
+  x28 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t28 VALUES(1,6,'table t28 row 1')
+
+statement ok
+INSERT INTO t28 VALUES(2,10,'table t28 row 2')
+
+statement ok
+INSERT INTO t28 VALUES(3,2,'table t28 row 3')
+
+statement ok
+INSERT INTO t28 VALUES(4,4,'table t28 row 4')
+
+statement ok
+INSERT INTO t28 VALUES(5,5,'table t28 row 5')
+
+statement ok
+INSERT INTO t28 VALUES(6,9,'table t28 row 6')
+
+statement ok
+INSERT INTO t28 VALUES(7,3,'table t28 row 7')
+
+statement ok
+INSERT INTO t28 VALUES(8,8,'table t28 row 8')
+
+statement ok
+INSERT INTO t28 VALUES(9,7,'table t28 row 9')
+
+statement ok
+INSERT INTO t28 VALUES(10,1,'table t28 row 10')
+
+statement ok
+CREATE TABLE t29(
+  a29 INTEGER PRIMARY KEY,
+  b29 INTEGER,
+  x29 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t29 VALUES(1,4,'table t29 row 1')
+
+statement ok
+INSERT INTO t29 VALUES(2,2,'table t29 row 2')
+
+statement ok
+INSERT INTO t29 VALUES(3,9,'table t29 row 3')
+
+statement ok
+INSERT INTO t29 VALUES(4,8,'table t29 row 4')
+
+statement ok
+INSERT INTO t29 VALUES(5,10,'table t29 row 5')
+
+statement ok
+INSERT INTO t29 VALUES(6,3,'table t29 row 6')
+
+statement ok
+INSERT INTO t29 VALUES(7,7,'table t29 row 7')
+
+statement ok
+INSERT INTO t29 VALUES(8,6,'table t29 row 8')
+
+statement ok
+INSERT INTO t29 VALUES(9,5,'table t29 row 9')
+
+statement ok
+INSERT INTO t29 VALUES(10,1,'table t29 row 10')
+
+statement ok
+CREATE TABLE t30(
+  a30 INTEGER PRIMARY KEY,
+  b30 INTEGER,
+  x30 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t30 VALUES(1,5,'table t30 row 1')
+
+statement ok
+INSERT INTO t30 VALUES(2,6,'table t30 row 2')
+
+statement ok
+INSERT INTO t30 VALUES(3,10,'table t30 row 3')
+
+statement ok
+INSERT INTO t30 VALUES(4,3,'table t30 row 4')
+
+statement ok
+INSERT INTO t30 VALUES(5,7,'table t30 row 5')
+
+statement ok
+INSERT INTO t30 VALUES(6,4,'table t30 row 6')
+
+statement ok
+INSERT INTO t30 VALUES(7,9,'table t30 row 7')
+
+statement ok
+INSERT INTO t30 VALUES(8,8,'table t30 row 8')
+
+statement ok
+INSERT INTO t30 VALUES(9,2,'table t30 row 9')
+
+statement ok
+INSERT INTO t30 VALUES(10,1,'table t30 row 10')
+
+statement ok
+CREATE TABLE t31(
+  a31 INTEGER PRIMARY KEY,
+  b31 INTEGER,
+  x31 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t31 VALUES(1,1,'table t31 row 1')
+
+statement ok
+INSERT INTO t31 VALUES(2,6,'table t31 row 2')
+
+statement ok
+INSERT INTO t31 VALUES(3,4,'table t31 row 3')
+
+statement ok
+INSERT INTO t31 VALUES(4,8,'table t31 row 4')
+
+statement ok
+INSERT INTO t31 VALUES(5,2,'table t31 row 5')
+
+statement ok
+INSERT INTO t31 VALUES(6,9,'table t31 row 6')
+
+statement ok
+INSERT INTO t31 VALUES(7,7,'table t31 row 7')
+
+statement ok
+INSERT INTO t31 VALUES(8,3,'table t31 row 8')
+
+statement ok
+INSERT INTO t31 VALUES(9,5,'table t31 row 9')
+
+statement ok
+INSERT INTO t31 VALUES(10,10,'table t31 row 10')
+
+statement ok
+CREATE TABLE t32(
+  a32 INTEGER PRIMARY KEY,
+  b32 INTEGER,
+  x32 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t32 VALUES(1,10,'table t32 row 1')
+
+statement ok
+INSERT INTO t32 VALUES(2,2,'table t32 row 2')
+
+statement ok
+INSERT INTO t32 VALUES(3,6,'table t32 row 3')
+
+statement ok
+INSERT INTO t32 VALUES(4,3,'table t32 row 4')
+
+statement ok
+INSERT INTO t32 VALUES(5,4,'table t32 row 5')
+
+statement ok
+INSERT INTO t32 VALUES(6,1,'table t32 row 6')
+
+statement ok
+INSERT INTO t32 VALUES(7,7,'table t32 row 7')
+
+statement ok
+INSERT INTO t32 VALUES(8,5,'table t32 row 8')
+
+statement ok
+INSERT INTO t32 VALUES(9,9,'table t32 row 9')
+
+statement ok
+INSERT INTO t32 VALUES(10,8,'table t32 row 10')
+
+statement ok
+CREATE TABLE t33(
+  a33 INTEGER PRIMARY KEY,
+  b33 INTEGER,
+  x33 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t33 VALUES(1,8,'table t33 row 1')
+
+statement ok
+INSERT INTO t33 VALUES(2,4,'table t33 row 2')
+
+statement ok
+INSERT INTO t33 VALUES(3,5,'table t33 row 3')
+
+statement ok
+INSERT INTO t33 VALUES(4,1,'table t33 row 4')
+
+statement ok
+INSERT INTO t33 VALUES(5,2,'table t33 row 5')
+
+statement ok
+INSERT INTO t33 VALUES(6,10,'table t33 row 6')
+
+statement ok
+INSERT INTO t33 VALUES(7,3,'table t33 row 7')
+
+statement ok
+INSERT INTO t33 VALUES(8,6,'table t33 row 8')
+
+statement ok
+INSERT INTO t33 VALUES(9,7,'table t33 row 9')
+
+statement ok
+INSERT INTO t33 VALUES(10,9,'table t33 row 10')
+
+statement ok
+CREATE TABLE t34(
+  a34 INTEGER PRIMARY KEY,
+  b34 INTEGER,
+  x34 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t34 VALUES(1,10,'table t34 row 1')
+
+statement ok
+INSERT INTO t34 VALUES(2,1,'table t34 row 2')
+
+statement ok
+INSERT INTO t34 VALUES(3,6,'table t34 row 3')
+
+statement ok
+INSERT INTO t34 VALUES(4,5,'table t34 row 4')
+
+statement ok
+INSERT INTO t34 VALUES(5,9,'table t34 row 5')
+
+statement ok
+INSERT INTO t34 VALUES(6,8,'table t34 row 6')
+
+statement ok
+INSERT INTO t34 VALUES(7,2,'table t34 row 7')
+
+statement ok
+INSERT INTO t34 VALUES(8,4,'table t34 row 8')
+
+statement ok
+INSERT INTO t34 VALUES(9,3,'table t34 row 9')
+
+statement ok
+INSERT INTO t34 VALUES(10,7,'table t34 row 10')
+
+statement ok
+CREATE TABLE t35(
+  a35 INTEGER PRIMARY KEY,
+  b35 INTEGER,
+  x35 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t35 VALUES(1,3,'table t35 row 1')
+
+statement ok
+INSERT INTO t35 VALUES(2,7,'table t35 row 2')
+
+statement ok
+INSERT INTO t35 VALUES(3,6,'table t35 row 3')
+
+statement ok
+INSERT INTO t35 VALUES(4,5,'table t35 row 4')
+
+statement ok
+INSERT INTO t35 VALUES(5,1,'table t35 row 5')
+
+statement ok
+INSERT INTO t35 VALUES(6,4,'table t35 row 6')
+
+statement ok
+INSERT INTO t35 VALUES(7,2,'table t35 row 7')
+
+statement ok
+INSERT INTO t35 VALUES(8,10,'table t35 row 8')
+
+statement ok
+INSERT INTO t35 VALUES(9,8,'table t35 row 9')
+
+statement ok
+INSERT INTO t35 VALUES(10,9,'table t35 row 10')
+
+statement ok
+CREATE TABLE t36(
+  a36 INTEGER PRIMARY KEY,
+  b36 INTEGER,
+  x36 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t36 VALUES(1,7,'table t36 row 1')
+
+statement ok
+INSERT INTO t36 VALUES(2,8,'table t36 row 2')
+
+statement ok
+INSERT INTO t36 VALUES(3,6,'table t36 row 3')
+
+statement ok
+INSERT INTO t36 VALUES(4,4,'table t36 row 4')
+
+statement ok
+INSERT INTO t36 VALUES(5,9,'table t36 row 5')
+
+statement ok
+INSERT INTO t36 VALUES(6,1,'table t36 row 6')
+
+statement ok
+INSERT INTO t36 VALUES(7,2,'table t36 row 7')
+
+statement ok
+INSERT INTO t36 VALUES(8,3,'table t36 row 8')
+
+statement ok
+INSERT INTO t36 VALUES(9,5,'table t36 row 9')
+
+statement ok
+INSERT INTO t36 VALUES(10,10,'table t36 row 10')
+
+statement ok
+CREATE TABLE t37(
+  a37 INTEGER PRIMARY KEY,
+  b37 INTEGER,
+  x37 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t37 VALUES(1,1,'table t37 row 1')
+
+statement ok
+INSERT INTO t37 VALUES(2,9,'table t37 row 2')
+
+statement ok
+INSERT INTO t37 VALUES(3,7,'table t37 row 3')
+
+statement ok
+INSERT INTO t37 VALUES(4,3,'table t37 row 4')
+
+statement ok
+INSERT INTO t37 VALUES(5,8,'table t37 row 5')
+
+statement ok
+INSERT INTO t37 VALUES(6,6,'table t37 row 6')
+
+statement ok
+INSERT INTO t37 VALUES(7,5,'table t37 row 7')
+
+statement ok
+INSERT INTO t37 VALUES(8,2,'table t37 row 8')
+
+statement ok
+INSERT INTO t37 VALUES(9,10,'table t37 row 9')
+
+statement ok
+INSERT INTO t37 VALUES(10,4,'table t37 row 10')
+
+statement ok
+CREATE TABLE t38(
+  a38 INTEGER PRIMARY KEY,
+  b38 INTEGER,
+  x38 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t38 VALUES(1,2,'table t38 row 1')
+
+statement ok
+INSERT INTO t38 VALUES(2,10,'table t38 row 2')
+
+statement ok
+INSERT INTO t38 VALUES(3,5,'table t38 row 3')
+
+statement ok
+INSERT INTO t38 VALUES(4,6,'table t38 row 4')
+
+statement ok
+INSERT INTO t38 VALUES(5,4,'table t38 row 5')
+
+statement ok
+INSERT INTO t38 VALUES(6,1,'table t38 row 6')
+
+statement ok
+INSERT INTO t38 VALUES(7,7,'table t38 row 7')
+
+statement ok
+INSERT INTO t38 VALUES(8,8,'table t38 row 8')
+
+statement ok
+INSERT INTO t38 VALUES(9,9,'table t38 row 9')
+
+statement ok
+INSERT INTO t38 VALUES(10,3,'table t38 row 10')
+
+statement ok
+CREATE TABLE t39(
+  a39 INTEGER PRIMARY KEY,
+  b39 INTEGER,
+  x39 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t39 VALUES(1,9,'table t39 row 1')
+
+statement ok
+INSERT INTO t39 VALUES(2,2,'table t39 row 2')
+
+statement ok
+INSERT INTO t39 VALUES(3,3,'table t39 row 3')
+
+statement ok
+INSERT INTO t39 VALUES(4,10,'table t39 row 4')
+
+statement ok
+INSERT INTO t39 VALUES(5,4,'table t39 row 5')
+
+statement ok
+INSERT INTO t39 VALUES(6,7,'table t39 row 6')
+
+statement ok
+INSERT INTO t39 VALUES(7,6,'table t39 row 7')
+
+statement ok
+INSERT INTO t39 VALUES(8,5,'table t39 row 8')
+
+statement ok
+INSERT INTO t39 VALUES(9,1,'table t39 row 9')
+
+statement ok
+INSERT INTO t39 VALUES(10,8,'table t39 row 10')
+
+statement ok
+CREATE TABLE t40(
+  a40 INTEGER PRIMARY KEY,
+  b40 INTEGER,
+  x40 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t40 VALUES(1,4,'table t40 row 1')
+
+statement ok
+INSERT INTO t40 VALUES(2,3,'table t40 row 2')
+
+statement ok
+INSERT INTO t40 VALUES(3,10,'table t40 row 3')
+
+statement ok
+INSERT INTO t40 VALUES(4,7,'table t40 row 4')
+
+statement ok
+INSERT INTO t40 VALUES(5,8,'table t40 row 5')
+
+statement ok
+INSERT INTO t40 VALUES(6,5,'table t40 row 6')
+
+statement ok
+INSERT INTO t40 VALUES(7,6,'table t40 row 7')
+
+statement ok
+INSERT INTO t40 VALUES(8,2,'table t40 row 8')
+
+statement ok
+INSERT INTO t40 VALUES(9,9,'table t40 row 9')
+
+statement ok
+INSERT INTO t40 VALUES(10,1,'table t40 row 10')
+
+statement ok
+CREATE TABLE t41(
+  a41 INTEGER PRIMARY KEY,
+  b41 INTEGER,
+  x41 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t41 VALUES(1,6,'table t41 row 1')
+
+statement ok
+INSERT INTO t41 VALUES(2,1,'table t41 row 2')
+
+statement ok
+INSERT INTO t41 VALUES(3,3,'table t41 row 3')
+
+statement ok
+INSERT INTO t41 VALUES(4,2,'table t41 row 4')
+
+statement ok
+INSERT INTO t41 VALUES(5,9,'table t41 row 5')
+
+statement ok
+INSERT INTO t41 VALUES(6,5,'table t41 row 6')
+
+statement ok
+INSERT INTO t41 VALUES(7,8,'table t41 row 7')
+
+statement ok
+INSERT INTO t41 VALUES(8,7,'table t41 row 8')
+
+statement ok
+INSERT INTO t41 VALUES(9,10,'table t41 row 9')
+
+statement ok
+INSERT INTO t41 VALUES(10,4,'table t41 row 10')
+
+statement ok
+CREATE TABLE t42(
+  a42 INTEGER PRIMARY KEY,
+  b42 INTEGER,
+  x42 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t42 VALUES(1,10,'table t42 row 1')
+
+statement ok
+INSERT INTO t42 VALUES(2,3,'table t42 row 2')
+
+statement ok
+INSERT INTO t42 VALUES(3,7,'table t42 row 3')
+
+statement ok
+INSERT INTO t42 VALUES(4,6,'table t42 row 4')
+
+statement ok
+INSERT INTO t42 VALUES(5,8,'table t42 row 5')
+
+statement ok
+INSERT INTO t42 VALUES(6,2,'table t42 row 6')
+
+statement ok
+INSERT INTO t42 VALUES(7,5,'table t42 row 7')
+
+statement ok
+INSERT INTO t42 VALUES(8,9,'table t42 row 8')
+
+statement ok
+INSERT INTO t42 VALUES(9,1,'table t42 row 9')
+
+statement ok
+INSERT INTO t42 VALUES(10,4,'table t42 row 10')
+
+statement ok
+CREATE TABLE t43(
+  a43 INTEGER PRIMARY KEY,
+  b43 INTEGER,
+  x43 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t43 VALUES(1,2,'table t43 row 1')
+
+statement ok
+INSERT INTO t43 VALUES(2,3,'table t43 row 2')
+
+statement ok
+INSERT INTO t43 VALUES(3,8,'table t43 row 3')
+
+statement ok
+INSERT INTO t43 VALUES(4,5,'table t43 row 4')
+
+statement ok
+INSERT INTO t43 VALUES(5,10,'table t43 row 5')
+
+statement ok
+INSERT INTO t43 VALUES(6,6,'table t43 row 6')
+
+statement ok
+INSERT INTO t43 VALUES(7,4,'table t43 row 7')
+
+statement ok
+INSERT INTO t43 VALUES(8,1,'table t43 row 8')
+
+statement ok
+INSERT INTO t43 VALUES(9,9,'table t43 row 9')
+
+statement ok
+INSERT INTO t43 VALUES(10,7,'table t43 row 10')
+
+statement ok
+CREATE TABLE t44(
+  a44 INTEGER PRIMARY KEY,
+  b44 INTEGER,
+  x44 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t44 VALUES(1,8,'table t44 row 1')
+
+statement ok
+INSERT INTO t44 VALUES(2,10,'table t44 row 2')
+
+statement ok
+INSERT INTO t44 VALUES(3,5,'table t44 row 3')
+
+statement ok
+INSERT INTO t44 VALUES(4,3,'table t44 row 4')
+
+statement ok
+INSERT INTO t44 VALUES(5,9,'table t44 row 5')
+
+statement ok
+INSERT INTO t44 VALUES(6,6,'table t44 row 6')
+
+statement ok
+INSERT INTO t44 VALUES(7,2,'table t44 row 7')
+
+statement ok
+INSERT INTO t44 VALUES(8,7,'table t44 row 8')
+
+statement ok
+INSERT INTO t44 VALUES(9,1,'table t44 row 9')
+
+statement ok
+INSERT INTO t44 VALUES(10,4,'table t44 row 10')
+
+statement ok
+CREATE TABLE t45(
+  a45 INTEGER PRIMARY KEY,
+  b45 INTEGER,
+  x45 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t45 VALUES(1,2,'table t45 row 1')
+
+statement ok
+INSERT INTO t45 VALUES(2,4,'table t45 row 2')
+
+statement ok
+INSERT INTO t45 VALUES(3,10,'table t45 row 3')
+
+statement ok
+INSERT INTO t45 VALUES(4,9,'table t45 row 4')
+
+statement ok
+INSERT INTO t45 VALUES(5,8,'table t45 row 5')
+
+statement ok
+INSERT INTO t45 VALUES(6,7,'table t45 row 6')
+
+statement ok
+INSERT INTO t45 VALUES(7,3,'table t45 row 7')
+
+statement ok
+INSERT INTO t45 VALUES(8,5,'table t45 row 8')
+
+statement ok
+INSERT INTO t45 VALUES(9,1,'table t45 row 9')
+
+statement ok
+INSERT INTO t45 VALUES(10,6,'table t45 row 10')
+
+statement ok
+CREATE TABLE t46(
+  a46 INTEGER PRIMARY KEY,
+  b46 INTEGER,
+  x46 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t46 VALUES(1,1,'table t46 row 1')
+
+statement ok
+INSERT INTO t46 VALUES(2,8,'table t46 row 2')
+
+statement ok
+INSERT INTO t46 VALUES(3,7,'table t46 row 3')
+
+statement ok
+INSERT INTO t46 VALUES(4,5,'table t46 row 4')
+
+statement ok
+INSERT INTO t46 VALUES(5,9,'table t46 row 5')
+
+statement ok
+INSERT INTO t46 VALUES(6,4,'table t46 row 6')
+
+statement ok
+INSERT INTO t46 VALUES(7,2,'table t46 row 7')
+
+statement ok
+INSERT INTO t46 VALUES(8,10,'table t46 row 8')
+
+statement ok
+INSERT INTO t46 VALUES(9,6,'table t46 row 9')
+
+statement ok
+INSERT INTO t46 VALUES(10,3,'table t46 row 10')
+
+statement ok
+CREATE TABLE t47(
+  a47 INTEGER PRIMARY KEY,
+  b47 INTEGER,
+  x47 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t47 VALUES(1,10,'table t47 row 1')
+
+statement ok
+INSERT INTO t47 VALUES(2,7,'table t47 row 2')
+
+statement ok
+INSERT INTO t47 VALUES(3,6,'table t47 row 3')
+
+statement ok
+INSERT INTO t47 VALUES(4,9,'table t47 row 4')
+
+statement ok
+INSERT INTO t47 VALUES(5,1,'table t47 row 5')
+
+statement ok
+INSERT INTO t47 VALUES(6,4,'table t47 row 6')
+
+statement ok
+INSERT INTO t47 VALUES(7,2,'table t47 row 7')
+
+statement ok
+INSERT INTO t47 VALUES(8,3,'table t47 row 8')
+
+statement ok
+INSERT INTO t47 VALUES(9,5,'table t47 row 9')
+
+statement ok
+INSERT INTO t47 VALUES(10,8,'table t47 row 10')
+
+statement ok
+CREATE TABLE t48(
+  a48 INTEGER PRIMARY KEY,
+  b48 INTEGER,
+  x48 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t48 VALUES(1,5,'table t48 row 1')
+
+statement ok
+INSERT INTO t48 VALUES(2,9,'table t48 row 2')
+
+statement ok
+INSERT INTO t48 VALUES(3,3,'table t48 row 3')
+
+statement ok
+INSERT INTO t48 VALUES(4,6,'table t48 row 4')
+
+statement ok
+INSERT INTO t48 VALUES(5,2,'table t48 row 5')
+
+statement ok
+INSERT INTO t48 VALUES(6,1,'table t48 row 6')
+
+statement ok
+INSERT INTO t48 VALUES(7,7,'table t48 row 7')
+
+statement ok
+INSERT INTO t48 VALUES(8,8,'table t48 row 8')
+
+statement ok
+INSERT INTO t48 VALUES(9,10,'table t48 row 9')
+
+statement ok
+INSERT INTO t48 VALUES(10,4,'table t48 row 10')
+
+statement ok
+CREATE TABLE t49(
+  a49 INTEGER PRIMARY KEY,
+  b49 INTEGER,
+  x49 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t49 VALUES(1,9,'table t49 row 1')
+
+statement ok
+INSERT INTO t49 VALUES(2,10,'table t49 row 2')
+
+statement ok
+INSERT INTO t49 VALUES(3,4,'table t49 row 3')
+
+statement ok
+INSERT INTO t49 VALUES(4,6,'table t49 row 4')
+
+statement ok
+INSERT INTO t49 VALUES(5,5,'table t49 row 5')
+
+statement ok
+INSERT INTO t49 VALUES(6,2,'table t49 row 6')
+
+statement ok
+INSERT INTO t49 VALUES(7,3,'table t49 row 7')
+
+statement ok
+INSERT INTO t49 VALUES(8,1,'table t49 row 8')
+
+statement ok
+INSERT INTO t49 VALUES(9,8,'table t49 row 9')
+
+statement ok
+INSERT INTO t49 VALUES(10,7,'table t49 row 10')
+
+statement ok
+CREATE TABLE t50(
+  a50 INTEGER PRIMARY KEY,
+  b50 INTEGER,
+  x50 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t50 VALUES(1,8,'table t50 row 1')
+
+statement ok
+INSERT INTO t50 VALUES(2,4,'table t50 row 2')
+
+statement ok
+INSERT INTO t50 VALUES(3,6,'table t50 row 3')
+
+statement ok
+INSERT INTO t50 VALUES(4,9,'table t50 row 4')
+
+statement ok
+INSERT INTO t50 VALUES(5,2,'table t50 row 5')
+
+statement ok
+INSERT INTO t50 VALUES(6,7,'table t50 row 6')
+
+statement ok
+INSERT INTO t50 VALUES(7,1,'table t50 row 7')
+
+statement ok
+INSERT INTO t50 VALUES(8,3,'table t50 row 8')
+
+statement ok
+INSERT INTO t50 VALUES(9,5,'table t50 row 9')
+
+statement ok
+INSERT INTO t50 VALUES(10,10,'table t50 row 10')
+
+statement ok
+CREATE TABLE t51(
+  a51 INTEGER PRIMARY KEY,
+  b51 INTEGER,
+  x51 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t51 VALUES(1,5,'table t51 row 1')
+
+statement ok
+INSERT INTO t51 VALUES(2,3,'table t51 row 2')
+
+statement ok
+INSERT INTO t51 VALUES(3,10,'table t51 row 3')
+
+statement ok
+INSERT INTO t51 VALUES(4,7,'table t51 row 4')
+
+statement ok
+INSERT INTO t51 VALUES(5,6,'table t51 row 5')
+
+statement ok
+INSERT INTO t51 VALUES(6,2,'table t51 row 6')
+
+statement ok
+INSERT INTO t51 VALUES(7,9,'table t51 row 7')
+
+statement ok
+INSERT INTO t51 VALUES(8,4,'table t51 row 8')
+
+statement ok
+INSERT INTO t51 VALUES(9,8,'table t51 row 9')
+
+statement ok
+INSERT INTO t51 VALUES(10,1,'table t51 row 10')
+
+statement ok
+CREATE TABLE t52(
+  a52 INTEGER PRIMARY KEY,
+  b52 INTEGER,
+  x52 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t52 VALUES(1,5,'table t52 row 1')
+
+statement ok
+INSERT INTO t52 VALUES(2,8,'table t52 row 2')
+
+statement ok
+INSERT INTO t52 VALUES(3,6,'table t52 row 3')
+
+statement ok
+INSERT INTO t52 VALUES(4,3,'table t52 row 4')
+
+statement ok
+INSERT INTO t52 VALUES(5,4,'table t52 row 5')
+
+statement ok
+INSERT INTO t52 VALUES(6,10,'table t52 row 6')
+
+statement ok
+INSERT INTO t52 VALUES(7,7,'table t52 row 7')
+
+statement ok
+INSERT INTO t52 VALUES(8,1,'table t52 row 8')
+
+statement ok
+INSERT INTO t52 VALUES(9,9,'table t52 row 9')
+
+statement ok
+INSERT INTO t52 VALUES(10,2,'table t52 row 10')
+
+statement ok
+CREATE TABLE t53(
+  a53 INTEGER PRIMARY KEY,
+  b53 INTEGER,
+  x53 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t53 VALUES(1,8,'table t53 row 1')
+
+statement ok
+INSERT INTO t53 VALUES(2,9,'table t53 row 2')
+
+statement ok
+INSERT INTO t53 VALUES(3,5,'table t53 row 3')
+
+statement ok
+INSERT INTO t53 VALUES(4,2,'table t53 row 4')
+
+statement ok
+INSERT INTO t53 VALUES(5,1,'table t53 row 5')
+
+statement ok
+INSERT INTO t53 VALUES(6,6,'table t53 row 6')
+
+statement ok
+INSERT INTO t53 VALUES(7,10,'table t53 row 7')
+
+statement ok
+INSERT INTO t53 VALUES(8,3,'table t53 row 8')
+
+statement ok
+INSERT INTO t53 VALUES(9,7,'table t53 row 9')
+
+statement ok
+INSERT INTO t53 VALUES(10,4,'table t53 row 10')
+
+statement ok
+CREATE TABLE t54(
+  a54 INTEGER PRIMARY KEY,
+  b54 INTEGER,
+  x54 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t54 VALUES(1,6,'table t54 row 1')
+
+statement ok
+INSERT INTO t54 VALUES(2,7,'table t54 row 2')
+
+statement ok
+INSERT INTO t54 VALUES(3,2,'table t54 row 3')
+
+statement ok
+INSERT INTO t54 VALUES(4,9,'table t54 row 4')
+
+statement ok
+INSERT INTO t54 VALUES(5,8,'table t54 row 5')
+
+statement ok
+INSERT INTO t54 VALUES(6,5,'table t54 row 6')
+
+statement ok
+INSERT INTO t54 VALUES(7,4,'table t54 row 7')
+
+statement ok
+INSERT INTO t54 VALUES(8,1,'table t54 row 8')
+
+statement ok
+INSERT INTO t54 VALUES(9,10,'table t54 row 9')
+
+statement ok
+INSERT INTO t54 VALUES(10,3,'table t54 row 10')
+
+statement ok
+CREATE TABLE t55(
+  a55 INTEGER PRIMARY KEY,
+  b55 INTEGER,
+  x55 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t55 VALUES(1,1,'table t55 row 1')
+
+statement ok
+INSERT INTO t55 VALUES(2,3,'table t55 row 2')
+
+statement ok
+INSERT INTO t55 VALUES(3,7,'table t55 row 3')
+
+statement ok
+INSERT INTO t55 VALUES(4,9,'table t55 row 4')
+
+statement ok
+INSERT INTO t55 VALUES(5,5,'table t55 row 5')
+
+statement ok
+INSERT INTO t55 VALUES(6,4,'table t55 row 6')
+
+statement ok
+INSERT INTO t55 VALUES(7,10,'table t55 row 7')
+
+statement ok
+INSERT INTO t55 VALUES(8,8,'table t55 row 8')
+
+statement ok
+INSERT INTO t55 VALUES(9,6,'table t55 row 9')
+
+statement ok
+INSERT INTO t55 VALUES(10,2,'table t55 row 10')
+
+statement ok
+CREATE TABLE t56(
+  a56 INTEGER PRIMARY KEY,
+  b56 INTEGER,
+  x56 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t56 VALUES(1,7,'table t56 row 1')
+
+statement ok
+INSERT INTO t56 VALUES(2,3,'table t56 row 2')
+
+statement ok
+INSERT INTO t56 VALUES(3,6,'table t56 row 3')
+
+statement ok
+INSERT INTO t56 VALUES(4,9,'table t56 row 4')
+
+statement ok
+INSERT INTO t56 VALUES(5,2,'table t56 row 5')
+
+statement ok
+INSERT INTO t56 VALUES(6,8,'table t56 row 6')
+
+statement ok
+INSERT INTO t56 VALUES(7,5,'table t56 row 7')
+
+statement ok
+INSERT INTO t56 VALUES(8,1,'table t56 row 8')
+
+statement ok
+INSERT INTO t56 VALUES(9,10,'table t56 row 9')
+
+statement ok
+INSERT INTO t56 VALUES(10,4,'table t56 row 10')
+
+statement ok
+CREATE TABLE t57(
+  a57 INTEGER PRIMARY KEY,
+  b57 INTEGER,
+  x57 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t57 VALUES(1,9,'table t57 row 1')
+
+statement ok
+INSERT INTO t57 VALUES(2,5,'table t57 row 2')
+
+statement ok
+INSERT INTO t57 VALUES(3,4,'table t57 row 3')
+
+statement ok
+INSERT INTO t57 VALUES(4,8,'table t57 row 4')
+
+statement ok
+INSERT INTO t57 VALUES(5,2,'table t57 row 5')
+
+statement ok
+INSERT INTO t57 VALUES(6,3,'table t57 row 6')
+
+statement ok
+INSERT INTO t57 VALUES(7,10,'table t57 row 7')
+
+statement ok
+INSERT INTO t57 VALUES(8,7,'table t57 row 8')
+
+statement ok
+INSERT INTO t57 VALUES(9,1,'table t57 row 9')
+
+statement ok
+INSERT INTO t57 VALUES(10,6,'table t57 row 10')
+
+statement ok
+CREATE TABLE t58(
+  a58 INTEGER PRIMARY KEY,
+  b58 INTEGER,
+  x58 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t58 VALUES(1,10,'table t58 row 1')
+
+statement ok
+INSERT INTO t58 VALUES(2,3,'table t58 row 2')
+
+statement ok
+INSERT INTO t58 VALUES(3,2,'table t58 row 3')
+
+statement ok
+INSERT INTO t58 VALUES(4,8,'table t58 row 4')
+
+statement ok
+INSERT INTO t58 VALUES(5,4,'table t58 row 5')
+
+statement ok
+INSERT INTO t58 VALUES(6,1,'table t58 row 6')
+
+statement ok
+INSERT INTO t58 VALUES(7,5,'table t58 row 7')
+
+statement ok
+INSERT INTO t58 VALUES(8,6,'table t58 row 8')
+
+statement ok
+INSERT INTO t58 VALUES(9,7,'table t58 row 9')
+
+statement ok
+INSERT INTO t58 VALUES(10,9,'table t58 row 10')
+
+statement ok
+CREATE TABLE t59(
+  a59 INTEGER PRIMARY KEY,
+  b59 INTEGER,
+  x59 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t59 VALUES(1,9,'table t59 row 1')
+
+statement ok
+INSERT INTO t59 VALUES(2,10,'table t59 row 2')
+
+statement ok
+INSERT INTO t59 VALUES(3,4,'table t59 row 3')
+
+statement ok
+INSERT INTO t59 VALUES(4,2,'table t59 row 4')
+
+statement ok
+INSERT INTO t59 VALUES(5,1,'table t59 row 5')
+
+statement ok
+INSERT INTO t59 VALUES(6,3,'table t59 row 6')
+
+statement ok
+INSERT INTO t59 VALUES(7,7,'table t59 row 7')
+
+statement ok
+INSERT INTO t59 VALUES(8,5,'table t59 row 8')
+
+statement ok
+INSERT INTO t59 VALUES(9,8,'table t59 row 9')
+
+statement ok
+INSERT INTO t59 VALUES(10,6,'table t59 row 10')
+
+statement ok
+CREATE TABLE t60(
+  a60 INTEGER PRIMARY KEY,
+  b60 INTEGER,
+  x60 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t60 VALUES(1,8,'table t60 row 1')
+
+statement ok
+INSERT INTO t60 VALUES(2,10,'table t60 row 2')
+
+statement ok
+INSERT INTO t60 VALUES(3,1,'table t60 row 3')
+
+statement ok
+INSERT INTO t60 VALUES(4,7,'table t60 row 4')
+
+statement ok
+INSERT INTO t60 VALUES(5,5,'table t60 row 5')
+
+statement ok
+INSERT INTO t60 VALUES(6,9,'table t60 row 6')
+
+statement ok
+INSERT INTO t60 VALUES(7,3,'table t60 row 7')
+
+statement ok
+INSERT INTO t60 VALUES(8,2,'table t60 row 8')
+
+statement ok
+INSERT INTO t60 VALUES(9,6,'table t60 row 9')
+
+statement ok
+INSERT INTO t60 VALUES(10,4,'table t60 row 10')
+
+statement ok
+CREATE TABLE t61(
+  a61 INTEGER PRIMARY KEY,
+  b61 INTEGER,
+  x61 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t61 VALUES(1,9,'table t61 row 1')
+
+statement ok
+INSERT INTO t61 VALUES(2,1,'table t61 row 2')
+
+statement ok
+INSERT INTO t61 VALUES(3,7,'table t61 row 3')
+
+statement ok
+INSERT INTO t61 VALUES(4,4,'table t61 row 4')
+
+statement ok
+INSERT INTO t61 VALUES(5,2,'table t61 row 5')
+
+statement ok
+INSERT INTO t61 VALUES(6,5,'table t61 row 6')
+
+statement ok
+INSERT INTO t61 VALUES(7,8,'table t61 row 7')
+
+statement ok
+INSERT INTO t61 VALUES(8,10,'table t61 row 8')
+
+statement ok
+INSERT INTO t61 VALUES(9,3,'table t61 row 9')
+
+statement ok
+INSERT INTO t61 VALUES(10,6,'table t61 row 10')
+
+statement ok
+CREATE TABLE t62(
+  a62 INTEGER PRIMARY KEY,
+  b62 INTEGER,
+  x62 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t62 VALUES(1,10,'table t62 row 1')
+
+statement ok
+INSERT INTO t62 VALUES(2,1,'table t62 row 2')
+
+statement ok
+INSERT INTO t62 VALUES(3,2,'table t62 row 3')
+
+statement ok
+INSERT INTO t62 VALUES(4,3,'table t62 row 4')
+
+statement ok
+INSERT INTO t62 VALUES(5,5,'table t62 row 5')
+
+statement ok
+INSERT INTO t62 VALUES(6,7,'table t62 row 6')
+
+statement ok
+INSERT INTO t62 VALUES(7,8,'table t62 row 7')
+
+statement ok
+INSERT INTO t62 VALUES(8,6,'table t62 row 8')
+
+statement ok
+INSERT INTO t62 VALUES(9,9,'table t62 row 9')
+
+statement ok
+INSERT INTO t62 VALUES(10,4,'table t62 row 10')
+
+statement ok
+CREATE TABLE t63(
+  a63 INTEGER PRIMARY KEY,
+  b63 INTEGER,
+  x63 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t63 VALUES(1,4,'table t63 row 1')
+
+statement ok
+INSERT INTO t63 VALUES(2,5,'table t63 row 2')
+
+statement ok
+INSERT INTO t63 VALUES(3,1,'table t63 row 3')
+
+statement ok
+INSERT INTO t63 VALUES(4,9,'table t63 row 4')
+
+statement ok
+INSERT INTO t63 VALUES(5,6,'table t63 row 5')
+
+statement ok
+INSERT INTO t63 VALUES(6,2,'table t63 row 6')
+
+statement ok
+INSERT INTO t63 VALUES(7,10,'table t63 row 7')
+
+statement ok
+INSERT INTO t63 VALUES(8,8,'table t63 row 8')
+
+statement ok
+INSERT INTO t63 VALUES(9,3,'table t63 row 9')
+
+statement ok
+INSERT INTO t63 VALUES(10,7,'table t63 row 10')
+
+statement ok
+CREATE TABLE t64(
+  a64 INTEGER PRIMARY KEY,
+  b64 INTEGER,
+  x64 VARCHAR(40)
+)
+
+statement ok
+INSERT INTO t64 VALUES(1,4,'table t64 row 1')
+
+statement ok
+INSERT INTO t64 VALUES(2,2,'table t64 row 2')
+
+statement ok
+INSERT INTO t64 VALUES(3,6,'table t64 row 3')
+
+statement ok
+INSERT INTO t64 VALUES(4,10,'table t64 row 4')
+
+statement ok
+INSERT INTO t64 VALUES(5,9,'table t64 row 5')
+
+statement ok
+INSERT INTO t64 VALUES(6,1,'table t64 row 6')
+
+statement ok
+INSERT INTO t64 VALUES(7,5,'table t64 row 7')
+
+statement ok
+INSERT INTO t64 VALUES(8,7,'table t64 row 8')
+
+statement ok
+INSERT INTO t64 VALUES(9,8,'table t64 row 9')
+
+statement ok
+INSERT INTO t64 VALUES(10,3,'table t64 row 10')
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-42-1
+SELECT x61,x29,x32,x21,x64,x2,x55,x11,x35,x49,x4,x3,x1,x45,x47,x23,x12,x5,x40,x15,x56,x16,x60,x24,x52,x27,x46,x18,x48,x6,x10,x25,x44,x26,x7,x51,x53,x37,x43,x30,x63,x34
+  FROM t21,t32,t30,t2,t4,t49,t26,t34,t44,t23,t40,t25,t15,t18,t24,t56,t6,t10,t61,t55,t35,t43,t16,t48,t29,t5,t60,t7,t51,t3,t1,t63,t27,t53,t45,t12,t37,t52,t46,t64,t11,t47
+ WHERE b64=a1
+   AND a12=b46
+   AND b30=a16
+   AND a49=b1
+   AND b18=a55
+   AND b35=a32
+   AND b47=a52
+   AND a18=b60
+   AND b37=a30
+   AND b23=a44
+   AND b34=a63
+   AND a2=b3
+   AND a64=b26
+   AND a5=b61
+   AND a27=b11
+   AND b48=a23
+   AND a34=b43
+   AND b10=a29
+   AND a56=b49
+   AND b29=a26
+   AND a35=b12
+   AND b40=a25
+   AND b51=a21
+   AND b27=a15
+   AND a61=b21
+   AND a40=b24
+   AND a43=b56
+   AND b45=a53
+   AND a11=b32
+   AND b52=a24
+   AND a3=b44
+   AND a10=b16
+   AND b4=a47
+   AND a45=b2
+   AND b53=a37
+   AND a48=b5
+   AND a7=b63
+   AND b55=a51
+   AND b15=a4
+   AND b6=a46
+   AND a7=3
+   AND a60=b25
+----
+42 values hashing to 7a0819ba258fbccfa53e600e204f2717
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-42-1
+SELECT x61,x29,x32,x21,x64,x2,x55,x11,x35,x49,x4,x3,x1,x45,x47,x23,x12,x5,x40,x15,x56,x16,x60,x24,x52,x27,x46,x18,x48,x6,x10,x25,x44,x26,x7,x51,x53,x37,x43,x30,x63,x34
+  FROM t10,t29,t56,t40,t48,t61,t25,t37,t16,t43,t21,t49,t34,t5,t1,t64,t12,t11,t63,t47,t3,t52,t6,t4,t24,t23,t46,t53,t35,t51,t15,t2,t60,t44,t27,t18,t7,t32,t45,t30,t55,t26
+ WHERE a43=b56
+   AND a29=b10
+   AND b35=a32
+   AND b37=a30
+   AND a24=b52
+   AND a12=b46
+   AND b30=a16
+   AND a15=b27
+   AND b29=a26
+   AND b1=a49
+   AND a47=b4
+   AND a7=3
+   AND b63=a7
+   AND a44=b23
+   AND a5=b61
+   AND b24=a40
+   AND a63=b34
+   AND b26=a64
+   AND b12=a35
+   AND b25=a60
+   AND b18=a55
+   AND a21=b51
+   AND b53=a37
+   AND b15=a4
+   AND a53=b45
+   AND b48=a23
+   AND a61=b21
+   AND b3=a2
+   AND b47=a52
+   AND a51=b55
+   AND a18=b60
+   AND b6=a46
+   AND b11=a27
+   AND a45=b2
+   AND b44=a3
+   AND b43=a34
+   AND a1=b64
+   AND b32=a11
+   AND b49=a56
+   AND a10=b16
+   AND b5=a48
+   AND a25=b40
+----
+42 values hashing to 7a0819ba258fbccfa53e600e204f2717
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-42-1
+SELECT x61,x29,x32,x21,x64,x2,x55,x11,x35,x49,x4,x3,x1,x45,x47,x23,x12,x5,x40,x15,x56,x16,x60,x24,x52,x27,x46,x18,x48,x6,x10,x25,x44,x26,x7,x51,x53,x37,x43,x30,x63,x34
+  FROM t25,t24,t45,t27,t2,t23,t1,t44,t55,t37,t48,t49,t60,t46,t6,t53,t52,t15,t32,t4,t18,t43,t26,t35,t5,t63,t21,t29,t12,t56,t3,t40,t64,t34,t11,t10,t47,t16,t7,t51,t61,t30
+ WHERE b49=a56
+   AND a64=b26
+   AND a43=b56
+   AND b60=a18
+   AND b47=a52
+   AND a60=b25
+   AND b63=a7
+   AND b34=a63
+   AND a26=b29
+   AND a45=b2
+   AND b23=a44
+   AND b52=a24
+   AND a37=b53
+   AND a16=b30
+   AND a4=b15
+   AND a5=b61
+   AND a35=b12
+   AND a46=b6
+   AND a1=b64
+   AND b4=a47
+   AND b44=a3
+   AND a23=b48
+   AND b3=a2
+   AND b45=a53
+   AND a11=b32
+   AND a30=b37
+   AND a7=3
+   AND b21=a61
+   AND a29=b10
+   AND b51=a21
+   AND a55=b18
+   AND b46=a12
+   AND b55=a51
+   AND b35=a32
+   AND a15=b27
+   AND b40=a25
+   AND b43=a34
+   AND b1=a49
+   AND b5=a48
+   AND a27=b11
+   AND b16=a10
+   AND b24=a40
+----
+42 values hashing to 7a0819ba258fbccfa53e600e204f2717
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-42-2
+SELECT x21,x34,x50,x64,x36,x57,x2,x9,x41,x63,x33,x53,x37,x20,x35,x30,x44,x52,x13,x12,x14,x3,x28,x62,x43,x1,x5,x26,x51,x40,x42,x7,x10,x6,x29,x46,x55,x38,x18,x32,x15,x27
+  FROM t12,t7,t52,t37,t6,t14,t51,t18,t33,t28,t13,t43,t3,t2,t42,t34,t53,t63,t21,t44,t9,t27,t35,t38,t20,t1,t26,t62,t46,t55,t41,t57,t64,t50,t40,t5,t10,t15,t36,t29,t32,t30
+ WHERE a53=b46
+   AND b7=a51
+   AND b53=a20
+   AND b40=a18
+   AND a26=b27
+   AND a1=b55
+   AND a7=b2
+   AND a9=b28
+   AND a29=b36
+   AND a35=b5
+   AND a6=b30
+   AND b3=a41
+   AND b29=a3
+   AND a40=b52
+   AND a34=b37
+   AND b43=a10
+   AND b50=a57
+   AND a42=5
+   AND b26=a30
+   AND a15=b62
+   AND b14=a27
+   AND a46=b35
+   AND b41=a37
+   AND a43=b44
+   AND b32=a14
+   AND b63=a33
+   AND b20=a44
+   AND a21=b33
+   AND a63=b6
+   AND a52=b51
+   AND b57=a64
+   AND b21=a2
+   AND a32=b64
+   AND a50=b10
+   AND b12=a55
+   AND b13=a42
+   AND a12=b18
+   AND b15=a36
+   AND a13=b38
+   AND b34=a28
+   AND a5=b9
+   AND a38=b1
+----
+42 values hashing to a668efb30a4b3af334e22ab3182385f1
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-42-2
+SELECT x21,x34,x50,x64,x36,x57,x2,x9,x41,x63,x33,x53,x37,x20,x35,x30,x44,x52,x13,x12,x14,x3,x28,x62,x43,x1,x5,x26,x51,x40,x42,x7,x10,x6,x29,x46,x55,x38,x18,x32,x15,x27
+  FROM t37,t27,t64,t43,t41,t29,t15,t42,t51,t34,t5,t6,t13,t55,t38,t57,t52,t14,t7,t50,t26,t1,t62,t3,t28,t40,t21,t30,t33,t18,t10,t35,t46,t63,t9,t2,t53,t20,t32,t12,t36,t44
+ WHERE a37=b41
+   AND b50=a57
+   AND b2=a7
+   AND a9=b28
+   AND b34=a28
+   AND b35=a46
+   AND b10=a50
+   AND b6=a63
+   AND a27=b14
+   AND a34=b37
+   AND b12=a55
+   AND a64=b57
+   AND a42=5
+   AND b13=a42
+   AND b3=a41
+   AND a44=b20
+   AND a13=b38
+   AND b15=a36
+   AND a32=b64
+   AND a1=b55
+   AND a38=b1
+   AND a53=b46
+   AND a20=b53
+   AND a15=b62
+   AND b52=a40
+   AND a18=b40
+   AND a35=b5
+   AND a2=b21
+   AND b36=a29
+   AND b33=a21
+   AND a12=b18
+   AND a14=b32
+   AND a5=b9
+   AND a33=b63
+   AND b44=a43
+   AND b43=a10
+   AND a6=b30
+   AND b26=a30
+   AND b7=a51
+   AND a52=b51
+   AND a3=b29
+   AND a26=b27
+----
+42 values hashing to a668efb30a4b3af334e22ab3182385f1
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-42-2
+SELECT x21,x34,x50,x64,x36,x57,x2,x9,x41,x63,x33,x53,x37,x20,x35,x30,x44,x52,x13,x12,x14,x3,x28,x62,x43,x1,x5,x26,x51,x40,x42,x7,x10,x6,x29,x46,x55,x38,x18,x32,x15,x27
+  FROM t53,t63,t64,t33,t1,t26,t40,t6,t29,t38,t30,t2,t50,t5,t10,t21,t46,t32,t35,t57,t41,t12,t51,t7,t27,t14,t52,t43,t13,t55,t15,t18,t20,t34,t62,t36,t42,t28,t37,t3,t9,t44
+ WHERE a33=b63
+   AND a51=b7
+   AND b33=a21
+   AND a9=b28
+   AND b9=a5
+   AND a15=b62
+   AND a28=b34
+   AND b35=a46
+   AND a42=b13
+   AND b38=a13
+   AND a10=b43
+   AND b46=a53
+   AND a37=b41
+   AND b10=a50
+   AND b64=a32
+   AND b57=a64
+   AND a44=b20
+   AND b21=a2
+   AND a6=b30
+   AND a29=b36
+   AND a42=5
+   AND a34=b37
+   AND a52=b51
+   AND a26=b27
+   AND b53=a20
+   AND b29=a3
+   AND a35=b5
+   AND a12=b18
+   AND b3=a41
+   AND a30=b26
+   AND b6=a63
+   AND a43=b44
+   AND b50=a57
+   AND b14=a27
+   AND a1=b55
+   AND b2=a7
+   AND a40=b52
+   AND a38=b1
+   AND b40=a18
+   AND a36=b15
+   AND a14=b32
+   AND b12=a55
+----
+42 values hashing to a668efb30a4b3af334e22ab3182385f1
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-42-3
+SELECT x42,x16,x43,x30,x51,x61,x24,x27,x34,x46,x14,x22,x3,x26,x58,x28,x59,x33,x17,x12,x49,x23,x56,x63,x39,x37,x62,x55,x18,x64,x47,x25,x57,x32,x44,x21,x31,x5,x52,x6,x8,x36
+  FROM t63,t58,t56,t22,t28,t34,t14,t37,t47,t49,t32,t59,t27,t23,t16,t17,t24,t62,t25,t6,t26,t43,t51,t36,t42,t39,t61,t3,t8,t12,t46,t18,t21,t31,t52,t57,t44,t30,t55,t5,t64,t33
+ WHERE a3=b22
+   AND b14=a6
+   AND a42=6
+   AND a55=b34
+   AND b56=a5
+   AND b18=a58
+   AND a47=b63
+   AND b12=a21
+   AND a39=b3
+   AND b25=a51
+   AND a24=b62
+   AND a49=b46
+   AND a57=b24
+   AND b6=a28
+   AND a62=b37
+   AND a42=b5
+   AND b28=a44
+   AND a26=b16
+   AND a59=b44
+   AND b49=a32
+   AND a8=b26
+   AND b17=a56
+   AND b64=a36
+   AND a17=b55
+   AND b58=a31
+   AND a33=b30
+   AND a25=b39
+   AND b59=a12
+   AND b23=a34
+   AND b21=a61
+   AND a46=b36
+   AND b43=a63
+   AND b27=a16
+   AND a30=b52
+   AND b57=a14
+   AND a18=b33
+   AND b47=a37
+   AND b51=a27
+   AND a22=b61
+   AND b31=a43
+   AND a23=b8
+   AND a52=b32
+----
+42 values hashing to d92e682130e7481c16428a8a02b7af83
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-42-3
+SELECT x42,x16,x43,x30,x51,x61,x24,x27,x34,x46,x14,x22,x3,x26,x58,x28,x59,x33,x17,x12,x49,x23,x56,x63,x39,x37,x62,x55,x18,x64,x47,x25,x57,x32,x44,x21,x31,x5,x52,x6,x8,x36
+  FROM t31,t8,t22,t46,t17,t42,t44,t32,t43,t59,t47,t36,t52,t56,t25,t63,t34,t6,t3,t5,t21,t16,t30,t14,t18,t24,t28,t62,t27,t49,t58,t33,t55,t51,t26,t37,t23,t39,t57,t12,t64,t61
+ WHERE b14=a6
+   AND a59=b44
+   AND a36=b64
+   AND b34=a55
+   AND a44=b28
+   AND a39=b3
+   AND b22=a3
+   AND b59=a12
+   AND b31=a43
+   AND b36=a46
+   AND a28=b6
+   AND a56=b17
+   AND b32=a52
+   AND a24=b62
+   AND a18=b33
+   AND b12=a21
+   AND b56=a5
+   AND b24=a57
+   AND a63=b43
+   AND a27=b51
+   AND b57=a14
+   AND b61=a22
+   AND a31=b58
+   AND b26=a8
+   AND a30=b52
+   AND b37=a62
+   AND b49=a32
+   AND a23=b8
+   AND b27=a16
+   AND a61=b21
+   AND a34=b23
+   AND a49=b46
+   AND b63=a47
+   AND b30=a33
+   AND b39=a25
+   AND a42=b5
+   AND a26=b16
+   AND b25=a51
+   AND b55=a17
+   AND a37=b47
+   AND b18=a58
+   AND a42=6
+----
+42 values hashing to d92e682130e7481c16428a8a02b7af83
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-42-3
+SELECT x42,x16,x43,x30,x51,x61,x24,x27,x34,x46,x14,x22,x3,x26,x58,x28,x59,x33,x17,x12,x49,x23,x56,x63,x39,x37,x62,x55,x18,x64,x47,x25,x57,x32,x44,x21,x31,x5,x52,x6,x8,x36
+  FROM t55,t14,t32,t5,t16,t52,t28,t36,t37,t18,t51,t31,t43,t42,t6,t49,t23,t62,t21,t27,t64,t57,t56,t17,t58,t63,t61,t34,t47,t39,t26,t8,t12,t22,t59,t3,t30,t25,t44,t46,t24,t33
+ WHERE b57=a14
+   AND b43=a63
+   AND b8=a23
+   AND b14=a6
+   AND b62=a24
+   AND a27=b51
+   AND b46=a49
+   AND a55=b34
+   AND b58=a31
+   AND b33=a18
+   AND b12=a21
+   AND a62=b37
+   AND a34=b23
+   AND b56=a5
+   AND a22=b61
+   AND b27=a16
+   AND a56=b17
+   AND a42=6
+   AND b55=a17
+   AND a3=b22
+   AND b36=a46
+   AND a44=b28
+   AND a25=b39
+   AND b18=a58
+   AND a42=b5
+   AND b30=a33
+   AND a28=b6
+   AND a26=b16
+   AND b3=a39
+   AND a30=b52
+   AND b44=a59
+   AND b26=a8
+   AND a36=b64
+   AND a51=b25
+   AND a32=b49
+   AND a12=b59
+   AND b24=a57
+   AND b47=a37
+   AND b32=a52
+   AND a43=b31
+   AND a61=b21
+   AND a47=b63
+----
+42 values hashing to d92e682130e7481c16428a8a02b7af83
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-42-4
+SELECT x48,x44,x12,x19,x23,x43,x7,x37,x47,x41,x38,x8,x6,x42,x49,x52,x3,x62,x54,x27,x45,x15,x59,x35,x26,x22,x63,x4,x36,x31,x1,x13,x17,x39,x34,x33,x9,x28,x25,x11,x55,x24
+  FROM t7,t1,t17,t24,t48,t52,t25,t63,t15,t49,t19,t31,t41,t45,t11,t62,t35,t6,t36,t33,t39,t55,t13,t26,t54,t42,t22,t47,t12,t9,t38,t8,t27,t34,t44,t28,t43,t23,t3,t59,t37,t4
+ WHERE a42=b37
+   AND b63=a39
+   AND b26=a13
+   AND b49=a62
+   AND b12=a36
+   AND b3=a17
+   AND b23=a35
+   AND b6=a3
+   AND b27=a28
+   AND b15=a23
+   AND a19=b7
+   AND a45=4
+   AND b52=a12
+   AND b62=a43
+   AND a11=b34
+   AND a8=b9
+   AND b1=a48
+   AND b31=a59
+   AND a54=b28
+   AND a41=b22
+   AND b38=a22
+   AND b8=a26
+   AND a63=b17
+   AND b55=a1
+   AND a15=b13
+   AND b35=a27
+   AND a44=b43
+   AND b42=a9
+   AND a33=b19
+   AND a6=b47
+   AND a55=b39
+   AND b48=a37
+   AND a47=b36
+   AND a7=b24
+   AND a25=b44
+   AND a45=b54
+   AND b25=a31
+   AND b4=a52
+   AND b33=a38
+   AND a49=b11
+   AND b59=a24
+   AND b41=a4
+----
+42 values hashing to dbff40cff9a10990bbbc07d4d2ff526b
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-42-4
+SELECT x48,x44,x12,x19,x23,x43,x7,x37,x47,x41,x38,x8,x6,x42,x49,x52,x3,x62,x54,x27,x45,x15,x59,x35,x26,x22,x63,x4,x36,x31,x1,x13,x17,x39,x34,x33,x9,x28,x25,x11,x55,x24
+  FROM t26,t37,t47,t1,t24,t52,t11,t41,t17,t22,t49,t42,t43,t59,t25,t62,t8,t33,t31,t28,t45,t7,t13,t4,t38,t23,t39,t15,t9,t54,t63,t55,t48,t36,t44,t3,t12,t34,t27,t6,t35,t19
+ WHERE a55=b39
+   AND a17=b3
+   AND a52=b4
+   AND a42=b37
+   AND a26=b8
+   AND b47=a6
+   AND a63=b17
+   AND b55=a1
+   AND a9=b42
+   AND b41=a4
+   AND a45=4
+   AND b25=a31
+   AND b33=a38
+   AND a27=b35
+   AND a28=b27
+   AND b34=a11
+   AND b19=a33
+   AND b26=a13
+   AND a36=b12
+   AND a22=b38
+   AND b48=a37
+   AND b49=a62
+   AND b28=a54
+   AND b63=a39
+   AND a49=b11
+   AND a44=b43
+   AND a3=b6
+   AND a48=b1
+   AND b54=a45
+   AND a25=b44
+   AND b24=a7
+   AND a47=b36
+   AND b23=a35
+   AND a19=b7
+   AND b9=a8
+   AND b22=a41
+   AND a23=b15
+   AND a59=b31
+   AND a15=b13
+   AND a24=b59
+   AND b62=a43
+   AND a12=b52
+----
+42 values hashing to dbff40cff9a10990bbbc07d4d2ff526b
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-42-4
+SELECT x48,x44,x12,x19,x23,x43,x7,x37,x47,x41,x38,x8,x6,x42,x49,x52,x3,x62,x54,x27,x45,x15,x59,x35,x26,x22,x63,x4,x36,x31,x1,x13,x17,x39,x34,x33,x9,x28,x25,x11,x55,x24
+  FROM t45,t39,t12,t52,t47,t42,t38,t7,t26,t41,t24,t8,t55,t9,t63,t28,t36,t59,t49,t1,t44,t13,t23,t33,t3,t19,t54,t25,t62,t11,t27,t34,t17,t48,t6,t37,t43,t4,t15,t22,t31,t35
+ WHERE b62=a43
+   AND a13=b26
+   AND a48=b1
+   AND b24=a7
+   AND b36=a47
+   AND a26=b8
+   AND b34=a11
+   AND b3=a17
+   AND a6=b47
+   AND b38=a22
+   AND a36=b12
+   AND a33=b19
+   AND b43=a44
+   AND a27=b35
+   AND b42=a9
+   AND b33=a38
+   AND b11=a49
+   AND a15=b13
+   AND a3=b6
+   AND a45=4
+   AND b48=a37
+   AND b4=a52
+   AND b22=a41
+   AND b59=a24
+   AND b55=a1
+   AND a45=b54
+   AND b25=a31
+   AND b49=a62
+   AND a8=b9
+   AND b27=a28
+   AND a63=b17
+   AND b28=a54
+   AND a23=b15
+   AND b41=a4
+   AND a25=b44
+   AND b39=a55
+   AND b63=a39
+   AND a35=b23
+   AND b7=a19
+   AND a12=b52
+   AND b31=a59
+   AND a42=b37
+----
+42 values hashing to dbff40cff9a10990bbbc07d4d2ff526b
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-43-1
+SELECT x46,x5,x20,x7,x47,x40,x42,x58,x15,x49,x21,x63,x12,x44,x10,x45,x28,x9,x8,x61,x37,x18,x35,x29,x30,x64,x23,x6,x16,x11,x39,x4,x43,x51,x55,x33,x60,x3,x25,x38,x1,x52,x26
+  FROM t1,t49,t30,t20,t26,t12,t4,t44,t25,t40,t33,t3,t5,t38,t51,t52,t16,t15,t8,t46,t23,t47,t11,t10,t60,t43,t9,t39,t18,t29,t7,t55,t64,t6,t35,t42,t61,t37,t21,t28,t63,t45,t58
+ WHERE b10=a35
+   AND b8=a11
+   AND a43=b28
+   AND a55=b61
+   AND b21=a16
+   AND b44=a37
+   AND a40=b29
+   AND b38=a28
+   AND a64=b7
+   AND a9=b15
+   AND a20=b30
+   AND b3=a51
+   AND a8=b18
+   AND a4=b58
+   AND a15=b60
+   AND a46=b63
+   AND b37=a42
+   AND a38=b5
+   AND b26=a49
+   AND a61=b45
+   AND b51=a29
+   AND b9=a10
+   AND a45=b42
+   AND b46=a30
+   AND b64=a3
+   AND a33=b11
+   AND b20=a47
+   AND b43=a21
+   AND b52=a26
+   AND a44=b35
+   AND a23=b39
+   AND b12=a7
+   AND b4=a6
+   AND a6=3
+   AND b55=a39
+   AND b49=a63
+   AND b47=a18
+   AND a5=b23
+   AND b25=a58
+   AND b1=a25
+   AND b33=a12
+   AND b16=a52
+   AND a1=b40
+----
+43 values hashing to e956fdb0525c0328883f4f5d9445d2e6
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-43-1
+SELECT x46,x5,x20,x7,x47,x40,x42,x58,x15,x49,x21,x63,x12,x44,x10,x45,x28,x9,x8,x61,x37,x18,x35,x29,x30,x64,x23,x6,x16,x11,x39,x4,x43,x51,x55,x33,x60,x3,x25,x38,x1,x52,x26
+  FROM t16,t7,t28,t39,t37,t29,t45,t43,t63,t30,t44,t47,t58,t55,t40,t64,t21,t25,t60,t18,t11,t61,t1,t5,t8,t4,t38,t15,t42,t49,t26,t35,t51,t46,t23,t10,t3,t6,t33,t52,t9,t20,t12
+ WHERE b38=a28
+   AND b4=a6
+   AND a3=b64
+   AND b25=a58
+   AND a61=b45
+   AND a15=b60
+   AND a21=b43
+   AND b26=a49
+   AND a47=b20
+   AND b49=a63
+   AND b28=a43
+   AND b51=a29
+   AND b18=a8
+   AND b1=a25
+   AND b63=a46
+   AND b52=a26
+   AND a40=b29
+   AND b61=a55
+   AND a16=b21
+   AND b11=a33
+   AND a51=b3
+   AND a35=b10
+   AND a44=b35
+   AND a52=b16
+   AND a39=b55
+   AND b23=a5
+   AND a1=b40
+   AND a18=b47
+   AND a23=b39
+   AND b12=a7
+   AND b7=a64
+   AND b42=a45
+   AND b30=a20
+   AND a37=b44
+   AND a30=b46
+   AND b8=a11
+   AND a12=b33
+   AND b58=a4
+   AND a6=3
+   AND a9=b15
+   AND b5=a38
+   AND b37=a42
+   AND a10=b9
+----
+43 values hashing to e956fdb0525c0328883f4f5d9445d2e6
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-43-1
+SELECT x46,x5,x20,x7,x47,x40,x42,x58,x15,x49,x21,x63,x12,x44,x10,x45,x28,x9,x8,x61,x37,x18,x35,x29,x30,x64,x23,x6,x16,x11,x39,x4,x43,x51,x55,x33,x60,x3,x25,x38,x1,x52,x26
+  FROM t25,t55,t16,t33,t39,t44,t35,t9,t40,t37,t64,t8,t6,t29,t26,t42,t63,t3,t12,t52,t15,t23,t10,t11,t60,t46,t43,t5,t49,t20,t58,t1,t18,t21,t7,t45,t51,t38,t47,t28,t30,t61,t4
+ WHERE a38=b5
+   AND a33=b11
+   AND b39=a23
+   AND b46=a30
+   AND a45=b42
+   AND a21=b43
+   AND b61=a55
+   AND a3=b64
+   AND b18=a8
+   AND b60=a15
+   AND a12=b33
+   AND a6=3
+   AND a20=b30
+   AND a46=b63
+   AND a49=b26
+   AND b29=a40
+   AND a64=b7
+   AND a58=b25
+   AND b1=a25
+   AND a10=b9
+   AND a9=b15
+   AND b16=a52
+   AND b52=a26
+   AND a28=b38
+   AND b21=a16
+   AND b49=a63
+   AND a11=b8
+   AND a51=b3
+   AND b51=a29
+   AND b23=a5
+   AND a18=b47
+   AND b55=a39
+   AND a4=b58
+   AND b35=a44
+   AND a47=b20
+   AND a7=b12
+   AND b10=a35
+   AND b45=a61
+   AND b44=a37
+   AND a1=b40
+   AND a43=b28
+   AND b4=a6
+   AND b37=a42
+----
+43 values hashing to e956fdb0525c0328883f4f5d9445d2e6
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-43-2
+SELECT x50,x20,x13,x22,x18,x25,x31,x6,x19,x35,x28,x37,x27,x8,x41,x61,x3,x14,x51,x54,x44,x12,x64,x55,x9,x57,x62,x1,x15,x17,x36,x49,x11,x10,x59,x26,x60,x24,x39,x5,x58,x7,x38
+  FROM t35,t14,t38,t62,t25,t18,t55,t36,t60,t7,t5,t57,t50,t37,t27,t41,t13,t59,t44,t6,t31,t51,t61,t39,t10,t49,t28,t15,t19,t3,t20,t11,t58,t54,t8,t64,t17,t12,t9,t24,t22,t26,t1
+ WHERE b64=a41
+   AND b22=a39
+   AND b31=a3
+   AND b39=a31
+   AND a35=b20
+   AND a15=b25
+   AND a9=6
+   AND a50=b51
+   AND b5=a26
+   AND b58=a55
+   AND a51=b35
+   AND b59=a64
+   AND b11=a57
+   AND b38=a22
+   AND b36=a49
+   AND b26=a59
+   AND a24=b55
+   AND a8=b3
+   AND b1=a14
+   AND a18=b15
+   AND b60=a5
+   AND b37=a27
+   AND b62=a28
+   AND a61=b14
+   AND a25=b24
+   AND a37=b19
+   AND b7=a10
+   AND b17=a20
+   AND a38=b41
+   AND b12=a36
+   AND a60=b10
+   AND a6=b57
+   AND a19=b28
+   AND b50=a11
+   AND b54=a13
+   AND a1=b13
+   AND a9=b18
+   AND a12=b27
+   AND a44=b49
+   AND b44=a58
+   AND a62=b6
+   AND a17=b61
+   AND a54=b8
+----
+43 values hashing to e1e52cca023c39df5be2172c1c94d972
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-43-2
+SELECT x50,x20,x13,x22,x18,x25,x31,x6,x19,x35,x28,x37,x27,x8,x41,x61,x3,x14,x51,x54,x44,x12,x64,x55,x9,x57,x62,x1,x15,x17,x36,x49,x11,x10,x59,x26,x60,x24,x39,x5,x58,x7,x38
+  FROM t7,t10,t50,t15,t12,t1,t35,t22,t57,t38,t13,t41,t19,t64,t39,t14,t60,t18,t5,t28,t37,t31,t25,t26,t55,t62,t54,t8,t51,t36,t59,t24,t9,t6,t49,t11,t20,t17,t58,t61,t27,t44,t3
+ WHERE b51=a50
+   AND a18=b15
+   AND b28=a19
+   AND a38=b41
+   AND b61=a17
+   AND b12=a36
+   AND a64=b59
+   AND a8=b3
+   AND a25=b24
+   AND a9=6
+   AND b17=a20
+   AND b8=a54
+   AND b18=a9
+   AND a60=b10
+   AND b54=a13
+   AND a12=b27
+   AND a59=b26
+   AND a39=b22
+   AND b38=a22
+   AND b57=a6
+   AND b20=a35
+   AND b1=a14
+   AND a26=b5
+   AND a5=b60
+   AND b49=a44
+   AND b31=a3
+   AND a27=b37
+   AND b58=a55
+   AND b62=a28
+   AND b25=a15
+   AND b7=a10
+   AND a58=b44
+   AND b64=a41
+   AND a1=b13
+   AND b36=a49
+   AND a37=b19
+   AND a11=b50
+   AND b6=a62
+   AND b39=a31
+   AND a24=b55
+   AND a51=b35
+   AND a61=b14
+   AND a57=b11
+----
+43 values hashing to e1e52cca023c39df5be2172c1c94d972
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-43-2
+SELECT x50,x20,x13,x22,x18,x25,x31,x6,x19,x35,x28,x37,x27,x8,x41,x61,x3,x14,x51,x54,x44,x12,x64,x55,x9,x57,x62,x1,x15,x17,x36,x49,x11,x10,x59,x26,x60,x24,x39,x5,x58,x7,x38
+  FROM t37,t54,t26,t31,t20,t1,t44,t6,t50,t8,t59,t36,t41,t51,t61,t62,t60,t24,t3,t55,t13,t9,t64,t17,t10,t39,t19,t11,t7,t22,t5,t12,t15,t57,t49,t58,t14,t28,t35,t27,t25,t38,t18
+ WHERE a54=b8
+   AND a1=b13
+   AND a24=b55
+   AND b12=a36
+   AND b41=a38
+   AND b3=a8
+   AND a59=b26
+   AND a9=b18
+   AND a35=b20
+   AND b1=a14
+   AND a10=b7
+   AND b14=a61
+   AND a41=b64
+   AND a55=b58
+   AND a13=b54
+   AND a22=b38
+   AND b5=a26
+   AND b60=a5
+   AND b27=a12
+   AND b39=a31
+   AND a27=b37
+   AND a3=b31
+   AND b11=a57
+   AND b62=a28
+   AND a60=b10
+   AND b49=a44
+   AND a11=b50
+   AND b19=a37
+   AND b6=a62
+   AND a49=b36
+   AND a19=b28
+   AND b15=a18
+   AND a51=b35
+   AND a39=b22
+   AND a25=b24
+   AND b57=a6
+   AND a58=b44
+   AND b61=a17
+   AND a9=6
+   AND a64=b59
+   AND a50=b51
+   AND a15=b25
+   AND a20=b17
+----
+43 values hashing to e1e52cca023c39df5be2172c1c94d972
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-43-3
+SELECT x40,x63,x43,x46,x26,x39,x62,x12,x9,x29,x61,x54,x22,x4,x45,x2,x48,x21,x13,x35,x36,x60,x44,x53,x3,x27,x32,x57,x5,x59,x28,x49,x42,x23,x51,x34,x8,x33,x30,x52,x6,x15,x38
+  FROM t15,t57,t27,t35,t44,t45,t51,t42,t36,t53,t49,t38,t6,t40,t54,t59,t9,t39,t4,t43,t5,t12,t46,t13,t52,t30,t29,t8,t48,t63,t62,t33,t26,t21,t28,t32,t34,t3,t60,t61,t23,t2,t22
+ WHERE b43=a28
+   AND b40=a43
+   AND a27=b28
+   AND a45=b5
+   AND a35=b54
+   AND b34=a15
+   AND a60=b12
+   AND b46=a52
+   AND a6=b2
+   AND b15=a5
+   AND a32=b35
+   AND a46=b8
+   AND b3=a23
+   AND a30=b42
+   AND b33=a13
+   AND a36=b61
+   AND a8=b26
+   AND b32=a4
+   AND b51=a3
+   AND b60=a53
+   AND a49=b39
+   AND a39=b13
+   AND a12=b4
+   AND a48=b30
+   AND b27=a61
+   AND a26=b22
+   AND b63=a38
+   AND b6=a57
+   AND a34=b62
+   AND b29=a40
+   AND b52=a62
+   AND a29=b59
+   AND a21=b49
+   AND a9=b45
+   AND a38=1
+   AND b23=a42
+   AND a22=b36
+   AND b57=a33
+   AND b21=a51
+   AND a2=b9
+   AND b53=a59
+   AND b44=a54
+   AND a63=b48
+----
+43 values hashing to fd00774d6110f510f4cebdbd71a3ff2f
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-43-3
+SELECT x40,x63,x43,x46,x26,x39,x62,x12,x9,x29,x61,x54,x22,x4,x45,x2,x48,x21,x13,x35,x36,x60,x44,x53,x3,x27,x32,x57,x5,x59,x28,x49,x42,x23,x51,x34,x8,x33,x30,x52,x6,x15,x38
+  FROM t33,t34,t23,t43,t32,t40,t42,t28,t57,t26,t15,t12,t36,t60,t38,t54,t53,t22,t13,t29,t5,t30,t63,t3,t6,t51,t27,t21,t46,t62,t8,t4,t9,t48,t45,t35,t39,t49,t52,t2,t44,t59,t61
+ WHERE a8=b26
+   AND b9=a2
+   AND a9=b45
+   AND a48=b30
+   AND a46=b8
+   AND a5=b15
+   AND a40=b29
+   AND a6=b2
+   AND b46=a52
+   AND a21=b49
+   AND b6=a57
+   AND b5=a45
+   AND b35=a32
+   AND a23=b3
+   AND a33=b57
+   AND b44=a54
+   AND b43=a28
+   AND b60=a53
+   AND b4=a12
+   AND a3=b51
+   AND b61=a36
+   AND a4=b32
+   AND a27=b28
+   AND b42=a30
+   AND a42=b23
+   AND b33=a13
+   AND a43=b40
+   AND a22=b36
+   AND a59=b53
+   AND b34=a15
+   AND a61=b27
+   AND a51=b21
+   AND a35=b54
+   AND b59=a29
+   AND b63=a38
+   AND a39=b13
+   AND a62=b52
+   AND b22=a26
+   AND b48=a63
+   AND a49=b39
+   AND a38=1
+   AND a60=b12
+   AND a34=b62
+----
+43 values hashing to fd00774d6110f510f4cebdbd71a3ff2f
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-43-3
+SELECT x40,x63,x43,x46,x26,x39,x62,x12,x9,x29,x61,x54,x22,x4,x45,x2,x48,x21,x13,x35,x36,x60,x44,x53,x3,x27,x32,x57,x5,x59,x28,x49,x42,x23,x51,x34,x8,x33,x30,x52,x6,x15,x38
+  FROM t63,t3,t32,t15,t23,t44,t9,t43,t48,t36,t46,t5,t34,t49,t51,t30,t40,t52,t21,t28,t39,t29,t6,t13,t2,t22,t35,t61,t27,t59,t12,t60,t4,t62,t53,t54,t57,t8,t42,t26,t45,t38,t33
+ WHERE a2=b9
+   AND b13=a39
+   AND a22=b36
+   AND a43=b40
+   AND a62=b52
+   AND a28=b43
+   AND a46=b8
+   AND b53=a59
+   AND a38=b63
+   AND a4=b32
+   AND a60=b12
+   AND a42=b23
+   AND b4=a12
+   AND a33=b57
+   AND b21=a51
+   AND b28=a27
+   AND a29=b59
+   AND b22=a26
+   AND b3=a23
+   AND a32=b35
+   AND b39=a49
+   AND b2=a6
+   AND a63=b48
+   AND b15=a5
+   AND b26=a8
+   AND a45=b5
+   AND a34=b62
+   AND b33=a13
+   AND a40=b29
+   AND a57=b6
+   AND b42=a30
+   AND a35=b54
+   AND a61=b27
+   AND b51=a3
+   AND a53=b60
+   AND b45=a9
+   AND a15=b34
+   AND a38=1
+   AND b61=a36
+   AND b49=a21
+   AND b30=a48
+   AND b44=a54
+   AND b46=a52
+----
+43 values hashing to fd00774d6110f510f4cebdbd71a3ff2f
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-43-4
+SELECT x27,x9,x60,x62,x29,x5,x2,x57,x51,x42,x54,x20,x49,x17,x24,x10,x23,x33,x13,x25,x16,x38,x37,x19,x55,x48,x61,x39,x28,x8,x44,x30,x22,x45,x12,x7,x43,x56,x52,x3,x36,x1,x41
+  FROM t56,t62,t13,t22,t3,t19,t10,t36,t12,t61,t2,t45,t33,t9,t38,t28,t24,t60,t29,t39,t44,t55,t27,t7,t43,t17,t25,t1,t52,t37,t20,t42,t30,t5,t8,t51,t23,t49,t41,t16,t48,t57,t54
+ WHERE b3=a19
+   AND a45=b20
+   AND b38=a12
+   AND a41=b30
+   AND a8=b62
+   AND b27=a23
+   AND a19=10
+   AND b24=a7
+   AND a1=b56
+   AND a30=b2
+   AND a44=b16
+   AND a37=b22
+   AND b1=a62
+   AND a10=b45
+   AND a38=b42
+   AND a3=b61
+   AND b7=a25
+   AND a39=b57
+   AND b60=a27
+   AND b55=a9
+   AND b44=a5
+   AND b28=a57
+   AND b37=a28
+   AND b25=a42
+   AND b10=a33
+   AND a29=b36
+   AND a49=b8
+   AND a2=b51
+   AND a36=b48
+   AND a17=b39
+   AND b43=a52
+   AND a54=b17
+   AND a13=b23
+   AND a22=b13
+   AND b5=a24
+   AND b29=a16
+   AND a56=b54
+   AND a61=b9
+   AND a48=b33
+   AND a43=b49
+   AND b41=a60
+   AND a20=b52
+   AND a55=b12
+----
+43 values hashing to 054dabb71139f8ca7d213e81e88cb7ff
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-43-4
+SELECT x27,x9,x60,x62,x29,x5,x2,x57,x51,x42,x54,x20,x49,x17,x24,x10,x23,x33,x13,x25,x16,x38,x37,x19,x55,x48,x61,x39,x28,x8,x44,x30,x22,x45,x12,x7,x43,x56,x52,x3,x36,x1,x41
+  FROM t54,t3,t19,t12,t1,t9,t60,t44,t22,t57,t5,t56,t8,t36,t29,t23,t49,t45,t48,t39,t62,t33,t17,t13,t51,t28,t30,t7,t24,t10,t41,t43,t27,t2,t16,t38,t61,t52,t55,t42,t37,t20,t25
+ WHERE b13=a22
+   AND a19=10
+   AND a1=b56
+   AND b8=a49
+   AND b24=a7
+   AND b7=a25
+   AND a38=b42
+   AND b37=a28
+   AND a12=b38
+   AND a9=b55
+   AND b23=a13
+   AND a39=b57
+   AND a23=b27
+   AND b2=a30
+   AND b10=a33
+   AND a43=b49
+   AND a52=b43
+   AND a55=b12
+   AND b41=a60
+   AND a19=b3
+   AND a27=b60
+   AND b16=a44
+   AND b61=a3
+   AND b39=a17
+   AND b30=a41
+   AND b48=a36
+   AND a42=b25
+   AND a37=b22
+   AND b29=a16
+   AND b44=a5
+   AND b45=a10
+   AND b52=a20
+   AND a29=b36
+   AND b17=a54
+   AND b28=a57
+   AND b20=a45
+   AND b1=a62
+   AND b5=a24
+   AND a48=b33
+   AND b54=a56
+   AND a8=b62
+   AND a61=b9
+   AND a2=b51
+----
+43 values hashing to 054dabb71139f8ca7d213e81e88cb7ff
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-43-4
+SELECT x27,x9,x60,x62,x29,x5,x2,x57,x51,x42,x54,x20,x49,x17,x24,x10,x23,x33,x13,x25,x16,x38,x37,x19,x55,x48,x61,x39,x28,x8,x44,x30,x22,x45,x12,x7,x43,x56,x52,x3,x36,x1,x41
+  FROM t20,t2,t56,t28,t37,t60,t27,t38,t36,t3,t10,t39,t52,t33,t9,t62,t23,t61,t12,t49,t24,t29,t42,t25,t22,t51,t17,t57,t19,t45,t1,t13,t5,t55,t44,t16,t7,t54,t41,t43,t30,t48,t8
+ WHERE b57=a39
+   AND a62=b1
+   AND b51=a2
+   AND a10=b45
+   AND b56=a1
+   AND a43=b49
+   AND b52=a20
+   AND b54=a56
+   AND b43=a52
+   AND b20=a45
+   AND b16=a44
+   AND a19=10
+   AND a8=b62
+   AND a28=b37
+   AND b3=a19
+   AND a55=b12
+   AND a23=b27
+   AND b13=a22
+   AND b41=a60
+   AND a5=b44
+   AND a57=b28
+   AND b23=a13
+   AND a9=b55
+   AND b61=a3
+   AND b42=a38
+   AND b36=a29
+   AND a42=b25
+   AND b60=a27
+   AND a17=b39
+   AND b24=a7
+   AND a33=b10
+   AND a24=b5
+   AND b8=a49
+   AND b48=a36
+   AND a37=b22
+   AND a12=b38
+   AND b33=a48
+   AND a25=b7
+   AND a16=b29
+   AND a30=b2
+   AND b30=a41
+   AND a61=b9
+   AND b17=a54
+----
+43 values hashing to 054dabb71139f8ca7d213e81e88cb7ff
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-44-1
+SELECT x62,x38,x47,x43,x58,x50,x26,x55,x45,x25,x44,x6,x46,x23,x39,x35,x2,x18,x28,x15,x8,x29,x20,x37,x40,x49,x31,x5,x41,x17,x32,x13,x21,x1,x12,x61,x54,x30,x33,x51,x4,x60,x16,x14
+  FROM t5,t26,t51,t4,t35,t43,t50,t60,t18,t14,t1,t12,t44,t8,t16,t6,t17,t46,t37,t40,t33,t25,t30,t49,t62,t31,t20,t38,t23,t58,t61,t28,t15,t45,t29,t13,t32,t21,t55,t47,t54,t39,t2,t41
+ WHERE b40=a5
+   AND a35=9
+   AND b2=a23
+   AND b16=a6
+   AND a26=b28
+   AND b50=a17
+   AND a49=b60
+   AND b62=a18
+   AND b44=a55
+   AND a21=b25
+   AND b30=a39
+   AND b31=a33
+   AND b58=a50
+   AND b39=a61
+   AND a45=b20
+   AND a62=b1
+   AND b13=a28
+   AND b21=a32
+   AND a13=b15
+   AND b49=a47
+   AND b26=a44
+   AND a38=b43
+   AND b41=a14
+   AND b29=a2
+   AND a54=b33
+   AND b6=a25
+   AND b14=a16
+   AND b4=a58
+   AND a51=b46
+   AND a4=b51
+   AND b17=a31
+   AND b55=a43
+   AND a40=b32
+   AND a15=b5
+   AND a30=b54
+   AND a29=b12
+   AND b45=a41
+   AND b37=a20
+   AND b47=a1
+   AND a8=b61
+   AND a46=b38
+   AND a12=b18
+   AND a37=b23
+   AND a35=b8
+----
+44 values hashing to 6a8ce911f177463183ba66a23005a692
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-44-1
+SELECT x62,x38,x47,x43,x58,x50,x26,x55,x45,x25,x44,x6,x46,x23,x39,x35,x2,x18,x28,x15,x8,x29,x20,x37,x40,x49,x31,x5,x41,x17,x32,x13,x21,x1,x12,x61,x54,x30,x33,x51,x4,x60,x16,x14
+  FROM t6,t33,t49,t21,t46,t25,t14,t55,t47,t37,t45,t58,t20,t13,t23,t12,t62,t26,t8,t60,t35,t41,t31,t15,t2,t29,t38,t18,t39,t40,t51,t28,t61,t44,t4,t43,t54,t5,t30,t17,t1,t32,t16,t50
+ WHERE b5=a15
+   AND b17=a31
+   AND a20=b37
+   AND b23=a37
+   AND a35=9
+   AND b21=a32
+   AND a40=b32
+   AND a43=b55
+   AND b61=a8
+   AND b26=a44
+   AND a12=b18
+   AND a35=b8
+   AND b29=a2
+   AND a50=b58
+   AND b60=a49
+   AND a41=b45
+   AND a5=b40
+   AND b39=a61
+   AND a38=b43
+   AND b44=a55
+   AND a28=b13
+   AND b25=a21
+   AND a62=b1
+   AND a29=b12
+   AND b30=a39
+   AND a18=b62
+   AND b16=a6
+   AND b4=a58
+   AND b33=a54
+   AND a4=b51
+   AND a51=b46
+   AND b31=a33
+   AND b15=a13
+   AND a26=b28
+   AND b54=a30
+   AND a23=b2
+   AND a25=b6
+   AND a47=b49
+   AND b14=a16
+   AND b38=a46
+   AND b41=a14
+   AND b47=a1
+   AND b50=a17
+   AND a45=b20
+----
+44 values hashing to 6a8ce911f177463183ba66a23005a692
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-44-1
+SELECT x62,x38,x47,x43,x58,x50,x26,x55,x45,x25,x44,x6,x46,x23,x39,x35,x2,x18,x28,x15,x8,x29,x20,x37,x40,x49,x31,x5,x41,x17,x32,x13,x21,x1,x12,x61,x54,x30,x33,x51,x4,x60,x16,x14
+  FROM t35,t32,t62,t18,t51,t50,t29,t39,t14,t17,t60,t30,t15,t43,t2,t55,t31,t8,t16,t37,t33,t46,t61,t58,t26,t5,t6,t44,t38,t12,t47,t1,t23,t25,t41,t4,t21,t45,t40,t54,t13,t49,t20,t28
+ WHERE a29=b12
+   AND b23=a37
+   AND a33=b31
+   AND b38=a46
+   AND b25=a21
+   AND b46=a51
+   AND b5=a15
+   AND b58=a50
+   AND b1=a62
+   AND a30=b54
+   AND b33=a54
+   AND a41=b45
+   AND a6=b16
+   AND b15=a13
+   AND b17=a31
+   AND b20=a45
+   AND a55=b44
+   AND a32=b21
+   AND b50=a17
+   AND a20=b37
+   AND b41=a14
+   AND b6=a25
+   AND b30=a39
+   AND b28=a26
+   AND a35=9
+   AND b40=a5
+   AND a8=b61
+   AND a58=b4
+   AND a2=b29
+   AND b39=a61
+   AND b8=a35
+   AND a47=b49
+   AND a23=b2
+   AND b60=a49
+   AND b13=a28
+   AND a44=b26
+   AND a12=b18
+   AND a16=b14
+   AND a43=b55
+   AND b62=a18
+   AND a38=b43
+   AND a1=b47
+   AND b51=a4
+   AND a40=b32
+----
+44 values hashing to 6a8ce911f177463183ba66a23005a692
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-44-2
+SELECT x24,x58,x39,x28,x55,x29,x56,x60,x13,x17,x1,x27,x7,x35,x64,x8,x9,x2,x51,x53,x32,x20,x48,x16,x5,x25,x21,x42,x41,x11,x30,x52,x40,x50,x54,x12,x45,x26,x38,x63,x18,x14,x43,x15
+  FROM t43,t7,t48,t30,t55,t15,t18,t5,t11,t60,t8,t58,t40,t20,t45,t16,t52,t13,t51,t9,t64,t12,t29,t35,t26,t1,t38,t2,t25,t50,t24,t63,t39,t27,t21,t54,t56,t14,t42,t28,t41,t17,t32,t53
+ WHERE b40=a45
+   AND a21=b17
+   AND a8=b43
+   AND a18=b38
+   AND b50=a24
+   AND a20=b13
+   AND a63=b25
+   AND b28=a29
+   AND a41=b51
+   AND b24=a35
+   AND a43=b29
+   AND b53=a39
+   AND a30=6
+   AND a9=b60
+   AND b42=a64
+   AND a50=b52
+   AND a51=b12
+   AND b11=a28
+   AND b26=a30
+   AND b39=a12
+   AND a1=b54
+   AND a13=b64
+   AND b20=a2
+   AND a38=b7
+   AND a16=b58
+   AND b8=a5
+   AND a17=b16
+   AND a55=b41
+   AND b2=a14
+   AND a32=b55
+   AND b32=a58
+   AND a7=b48
+   AND b5=a27
+   AND b27=a53
+   AND a56=b45
+   AND a15=b14
+   AND b18=a60
+   AND a25=b15
+   AND a26=b56
+   AND b9=a52
+   AND a48=b63
+   AND a40=b35
+   AND b1=a42
+   AND b21=a54
+----
+44 values hashing to 5b305f1b83ea9895e1df712d0d8de1f3
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-44-2
+SELECT x24,x58,x39,x28,x55,x29,x56,x60,x13,x17,x1,x27,x7,x35,x64,x8,x9,x2,x51,x53,x32,x20,x48,x16,x5,x25,x21,x42,x41,x11,x30,x52,x40,x50,x54,x12,x45,x26,x38,x63,x18,x14,x43,x15
+  FROM t9,t45,t35,t56,t64,t42,t43,t15,t58,t27,t32,t17,t51,t12,t54,t14,t18,t30,t29,t40,t2,t1,t8,t41,t52,t11,t7,t28,t55,t38,t26,t21,t24,t16,t39,t63,t13,t20,t48,t60,t53,t50,t25,t5
+ WHERE b13=a20
+   AND b5=a27
+   AND a39=b53
+   AND a17=b16
+   AND b18=a60
+   AND b58=a16
+   AND b27=a53
+   AND b64=a13
+   AND a35=b24
+   AND b51=a41
+   AND b45=a56
+   AND a1=b54
+   AND b63=a48
+   AND b55=a32
+   AND a14=b2
+   AND b17=a21
+   AND a30=6
+   AND a55=b41
+   AND a5=b8
+   AND a9=b60
+   AND b25=a63
+   AND a12=b39
+   AND a43=b29
+   AND a26=b56
+   AND b32=a58
+   AND a64=b42
+   AND a7=b48
+   AND a51=b12
+   AND a24=b50
+   AND b20=a2
+   AND a15=b14
+   AND a8=b43
+   AND b38=a18
+   AND a40=b35
+   AND a52=b9
+   AND b11=a28
+   AND b1=a42
+   AND a30=b26
+   AND a29=b28
+   AND b7=a38
+   AND b15=a25
+   AND b52=a50
+   AND b21=a54
+   AND b40=a45
+----
+44 values hashing to 5b305f1b83ea9895e1df712d0d8de1f3
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-44-2
+SELECT x24,x58,x39,x28,x55,x29,x56,x60,x13,x17,x1,x27,x7,x35,x64,x8,x9,x2,x51,x53,x32,x20,x48,x16,x5,x25,x21,x42,x41,x11,x30,x52,x40,x50,x54,x12,x45,x26,x38,x63,x18,x14,x43,x15
+  FROM t41,t42,t11,t56,t35,t8,t24,t17,t12,t38,t21,t5,t60,t43,t50,t30,t53,t45,t13,t15,t40,t18,t27,t28,t1,t39,t25,t51,t48,t63,t52,t26,t16,t54,t58,t7,t14,t55,t29,t64,t9,t32,t2,t20
+ WHERE a28=b11
+   AND a32=b55
+   AND b12=a51
+   AND a30=6
+   AND b56=a26
+   AND b18=a60
+   AND a55=b41
+   AND b32=a58
+   AND a52=b9
+   AND b45=a56
+   AND b35=a40
+   AND a54=b21
+   AND b1=a42
+   AND a30=b26
+   AND b7=a38
+   AND b63=a48
+   AND b5=a27
+   AND a29=b28
+   AND a53=b27
+   AND a35=b24
+   AND a50=b52
+   AND b20=a2
+   AND b25=a63
+   AND a41=b51
+   AND b58=a16
+   AND b42=a64
+   AND b2=a14
+   AND b53=a39
+   AND b48=a7
+   AND b60=a9
+   AND a8=b43
+   AND b64=a13
+   AND a45=b40
+   AND a20=b13
+   AND b17=a21
+   AND a18=b38
+   AND b54=a1
+   AND b39=a12
+   AND b15=a25
+   AND b29=a43
+   AND b8=a5
+   AND b16=a17
+   AND a24=b50
+   AND a15=b14
+----
+44 values hashing to 5b305f1b83ea9895e1df712d0d8de1f3
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-44-3
+SELECT x48,x61,x23,x18,x21,x63,x7,x59,x47,x58,x56,x60,x27,x57,x6,x32,x14,x41,x2,x8,x13,x40,x39,x37,x1,x19,x33,x43,x9,x45,x25,x62,x51,x36,x26,x50,x46,x15,x5,x42,x11,x44,x10,x4
+  FROM t21,t6,t58,t57,t59,t37,t9,t39,t33,t42,t40,t48,t26,t56,t13,t45,t15,t23,t18,t62,t5,t36,t11,t47,t25,t46,t63,t50,t41,t32,t44,t2,t14,t7,t51,t27,t1,t10,t43,t60,t8,t19,t61,t4
+ WHERE a5=b61
+   AND a57=b13
+   AND b60=a33
+   AND b46=a23
+   AND a1=b57
+   AND a15=b58
+   AND b39=a9
+   AND a11=b27
+   AND a14=b44
+   AND a62=b33
+   AND b51=a27
+   AND b4=a32
+   AND a36=1
+   AND b15=a18
+   AND b2=a40
+   AND a47=b8
+   AND b43=a45
+   AND b14=a26
+   AND b26=a37
+   AND a50=b40
+   AND b23=a59
+   AND a7=b41
+   AND a44=b19
+   AND a2=b5
+   AND a46=b9
+   AND b37=a39
+   AND b45=a4
+   AND a42=b56
+   AND a6=b7
+   AND b32=a8
+   AND a25=b48
+   AND b25=a13
+   AND a36=b21
+   AND a41=b50
+   AND a58=b47
+   AND b6=a60
+   AND a56=b59
+   AND b63=a61
+   AND b62=a10
+   AND b10=a19
+   AND b18=a48
+   AND a21=b11
+   AND b42=a43
+   AND b1=a51
+----
+44 values hashing to 06e02a1361235cf373b0a43350143f20
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-44-3
+SELECT x48,x61,x23,x18,x21,x63,x7,x59,x47,x58,x56,x60,x27,x57,x6,x32,x14,x41,x2,x8,x13,x40,x39,x37,x1,x19,x33,x43,x9,x45,x25,x62,x51,x36,x26,x50,x46,x15,x5,x42,x11,x44,x10,x4
+  FROM t36,t60,t7,t56,t57,t41,t19,t10,t62,t39,t14,t46,t4,t8,t27,t51,t42,t11,t37,t9,t45,t5,t50,t58,t32,t48,t15,t13,t2,t21,t6,t1,t61,t25,t18,t26,t47,t33,t63,t23,t40,t43,t44,t59
+ WHERE a48=b18
+   AND a8=b32
+   AND a6=b7
+   AND a62=b33
+   AND a19=b10
+   AND a45=b43
+   AND a9=b39
+   AND a42=b56
+   AND b46=a23
+   AND b60=a33
+   AND b50=a41
+   AND b27=a11
+   AND b13=a57
+   AND a7=b41
+   AND a58=b47
+   AND a36=1
+   AND a18=b15
+   AND a14=b44
+   AND b11=a21
+   AND b9=a46
+   AND b23=a59
+   AND b59=a56
+   AND b2=a40
+   AND b45=a4
+   AND b61=a5
+   AND b51=a27
+   AND a1=b57
+   AND a13=b25
+   AND a32=b4
+   AND b42=a43
+   AND b14=a26
+   AND b5=a2
+   AND b6=a60
+   AND b63=a61
+   AND a50=b40
+   AND b37=a39
+   AND a51=b1
+   AND a44=b19
+   AND b58=a15
+   AND b26=a37
+   AND b62=a10
+   AND a36=b21
+   AND b48=a25
+   AND a47=b8
+----
+44 values hashing to 06e02a1361235cf373b0a43350143f20
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-44-3
+SELECT x48,x61,x23,x18,x21,x63,x7,x59,x47,x58,x56,x60,x27,x57,x6,x32,x14,x41,x2,x8,x13,x40,x39,x37,x1,x19,x33,x43,x9,x45,x25,x62,x51,x36,x26,x50,x46,x15,x5,x42,x11,x44,x10,x4
+  FROM t6,t27,t45,t25,t61,t62,t14,t37,t51,t33,t15,t48,t44,t11,t40,t41,t5,t13,t8,t10,t1,t4,t58,t63,t50,t18,t23,t56,t42,t19,t9,t26,t21,t46,t7,t60,t59,t36,t39,t47,t57,t43,t32,t2
+ WHERE a47=b8
+   AND a57=b13
+   AND b62=a10
+   AND b2=a40
+   AND b59=a56
+   AND b23=a59
+   AND b60=a33
+   AND b18=a48
+   AND a43=b42
+   AND a27=b51
+   AND b10=a19
+   AND b26=a37
+   AND b48=a25
+   AND b7=a6
+   AND b47=a58
+   AND a36=1
+   AND b57=a1
+   AND b14=a26
+   AND a45=b43
+   AND b1=a51
+   AND b45=a4
+   AND b61=a5
+   AND a39=b37
+   AND a42=b56
+   AND b6=a60
+   AND a2=b5
+   AND b25=a13
+   AND b44=a14
+   AND a46=b9
+   AND b33=a62
+   AND b15=a18
+   AND a36=b21
+   AND a9=b39
+   AND a11=b27
+   AND b4=a32
+   AND b41=a7
+   AND a23=b46
+   AND a44=b19
+   AND a61=b63
+   AND b50=a41
+   AND b11=a21
+   AND b32=a8
+   AND b40=a50
+   AND b58=a15
+----
+44 values hashing to 06e02a1361235cf373b0a43350143f20
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-44-4
+SELECT x9,x47,x22,x28,x4,x31,x10,x8,x23,x57,x15,x1,x59,x45,x46,x41,x32,x37,x20,x30,x50,x52,x33,x61,x63,x36,x55,x17,x29,x14,x39,x64,x53,x27,x12,x56,x42,x25,x24,x54,x16,x7,x5,x35
+  FROM t22,t24,t23,t14,t29,t31,t39,t17,t59,t47,t30,t42,t35,t1,t45,t64,t4,t36,t16,t27,t7,t56,t61,t28,t5,t8,t50,t55,t33,t41,t57,t20,t12,t15,t63,t46,t9,t54,t10,t25,t52,t32,t37,t53
+ WHERE a39=b52
+   AND a41=b12
+   AND a50=b54
+   AND a36=b28
+   AND b7=a32
+   AND b24=a5
+   AND a59=9
+   AND b64=a47
+   AND a16=b53
+   AND b15=a25
+   AND a22=b27
+   AND a29=b35
+   AND a61=b42
+   AND b32=a4
+   AND b9=a46
+   AND b10=a30
+   AND b30=a54
+   AND a8=b57
+   AND a56=b22
+   AND b8=a9
+   AND b63=a7
+   AND b50=a33
+   AND a63=b1
+   AND b14=a1
+   AND a37=b56
+   AND b36=a59
+   AND a27=b31
+   AND b5=a42
+   AND b61=a35
+   AND a57=b23
+   AND a52=b20
+   AND a28=b33
+   AND b25=a20
+   AND b55=a14
+   AND b17=a55
+   AND a64=b45
+   AND b29=a15
+   AND b37=a24
+   AND a17=b16
+   AND a10=b4
+   AND a23=b47
+   AND b39=a53
+   AND b46=a12
+   AND b41=a31
+----
+44 values hashing to 0620dd3abf424e95458b536fae73f553
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-44-4
+SELECT x9,x47,x22,x28,x4,x31,x10,x8,x23,x57,x15,x1,x59,x45,x46,x41,x32,x37,x20,x30,x50,x52,x33,x61,x63,x36,x55,x17,x29,x14,x39,x64,x53,x27,x12,x56,x42,x25,x24,x54,x16,x7,x5,x35
+  FROM t55,t32,t10,t15,t24,t41,t29,t4,t25,t47,t45,t59,t14,t52,t42,t7,t57,t56,t30,t16,t39,t22,t33,t12,t35,t17,t36,t46,t53,t9,t8,t23,t54,t64,t1,t20,t27,t28,t31,t5,t37,t61,t50,t63
+ WHERE a64=b45
+   AND b32=a4
+   AND a27=b31
+   AND b14=a1
+   AND a36=b28
+   AND a16=b53
+   AND b22=a56
+   AND b1=a63
+   AND a29=b35
+   AND b39=a53
+   AND a37=b56
+   AND b27=a22
+   AND b5=a42
+   AND a52=b20
+   AND a28=b33
+   AND b61=a35
+   AND b7=a32
+   AND a59=9
+   AND b23=a57
+   AND b52=a39
+   AND a14=b55
+   AND a31=b41
+   AND a61=b42
+   AND a25=b15
+   AND b36=a59
+   AND b50=a33
+   AND b9=a46
+   AND b37=a24
+   AND a7=b63
+   AND a41=b12
+   AND a9=b8
+   AND b64=a47
+   AND a54=b30
+   AND a10=b4
+   AND a8=b57
+   AND a55=b17
+   AND a50=b54
+   AND b24=a5
+   AND a30=b10
+   AND b25=a20
+   AND b47=a23
+   AND b16=a17
+   AND b29=a15
+   AND a12=b46
+----
+44 values hashing to 0620dd3abf424e95458b536fae73f553
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-44-4
+SELECT x9,x47,x22,x28,x4,x31,x10,x8,x23,x57,x15,x1,x59,x45,x46,x41,x32,x37,x20,x30,x50,x52,x33,x61,x63,x36,x55,x17,x29,x14,x39,x64,x53,x27,x12,x56,x42,x25,x24,x54,x16,x7,x5,x35
+  FROM t55,t29,t30,t20,t8,t27,t54,t12,t45,t15,t23,t39,t10,t24,t37,t47,t61,t33,t52,t56,t9,t36,t32,t64,t1,t22,t50,t35,t16,t4,t57,t59,t7,t17,t42,t5,t25,t53,t14,t41,t28,t63,t31,t46
+ WHERE b42=a61
+   AND a36=b28
+   AND b20=a52
+   AND b46=a12
+   AND a14=b55
+   AND b1=a63
+   AND a47=b64
+   AND a57=b23
+   AND a59=9
+   AND b45=a64
+   AND b4=a10
+   AND a55=b17
+   AND b41=a31
+   AND b5=a42
+   AND b37=a24
+   AND b22=a56
+   AND b36=a59
+   AND a22=b27
+   AND a8=b57
+   AND b35=a29
+   AND b32=a4
+   AND a7=b63
+   AND b14=a1
+   AND a32=b7
+   AND a17=b16
+   AND a16=b53
+   AND a35=b61
+   AND a39=b52
+   AND a25=b15
+   AND b56=a37
+   AND a27=b31
+   AND a53=b39
+   AND a5=b24
+   AND a15=b29
+   AND b25=a20
+   AND b33=a28
+   AND b30=a54
+   AND b54=a50
+   AND a33=b50
+   AND b8=a9
+   AND a46=b9
+   AND b10=a30
+   AND b47=a23
+   AND b12=a41
+----
+44 values hashing to 0620dd3abf424e95458b536fae73f553
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-45-1
+SELECT x46,x5,x49,x2,x29,x48,x15,x35,x6,x40,x34,x55,x54,x11,x56,x10,x25,x60,x13,x58,x22,x43,x61,x16,x18,x41,x63,x26,x4,x19,x30,x12,x28,x42,x21,x53,x37,x24,x1,x38,x44,x9,x33,x50,x57
+  FROM t43,t9,t46,t63,t24,t1,t11,t29,t21,t13,t35,t57,t41,t53,t54,t58,t16,t38,t61,t60,t40,t30,t49,t10,t26,t48,t2,t42,t12,t56,t44,t6,t19,t5,t22,t4,t18,t28,t25,t34,t33,t55,t37,t15,t50
+ WHERE b26=a49
+   AND b56=a54
+   AND a50=b60
+   AND a42=b40
+   AND a29=b49
+   AND b44=a13
+   AND b53=a19
+   AND a60=b6
+   AND b54=a18
+   AND a44=b41
+   AND a21=b38
+   AND b55=a61
+   AND b13=a34
+   AND a46=b29
+   AND b2=a4
+   AND a35=b42
+   AND a37=b50
+   AND b5=a33
+   AND b28=a63
+   AND b46=a22
+   AND b4=a56
+   AND a58=b15
+   AND b34=a26
+   AND b61=a25
+   AND b12=a16
+   AND b9=a30
+   AND a43=b18
+   AND a53=b1
+   AND a55=b33
+   AND a57=3
+   AND a57=b37
+   AND a9=b19
+   AND b11=a38
+   AND b30=a48
+   AND b58=a41
+   AND b25=a12
+   AND b48=a5
+   AND b24=a10
+   AND a2=b22
+   AND b16=a11
+   AND a1=b10
+   AND a40=b43
+   AND a15=b21
+   AND b63=a24
+   AND a6=b35
+----
+45 values hashing to f7028bf8703f0add824c5dd702cd3526
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-45-1
+SELECT x46,x5,x49,x2,x29,x48,x15,x35,x6,x40,x34,x55,x54,x11,x56,x10,x25,x60,x13,x58,x22,x43,x61,x16,x18,x41,x63,x26,x4,x19,x30,x12,x28,x42,x21,x53,x37,x24,x1,x38,x44,x9,x33,x50,x57
+  FROM t4,t49,t26,t48,t16,t19,t54,t2,t34,t21,t25,t28,t41,t56,t30,t44,t22,t58,t1,t55,t13,t6,t15,t53,t57,t50,t33,t43,t37,t24,t42,t40,t5,t46,t18,t63,t38,t11,t12,t10,t35,t61,t9,t60,t29
+ WHERE b28=a63
+   AND b22=a2
+   AND a12=b25
+   AND b6=a60
+   AND a10=b24
+   AND b34=a26
+   AND b60=a50
+   AND a44=b41
+   AND b1=a53
+   AND b30=a48
+   AND b53=a19
+   AND b40=a42
+   AND a22=b46
+   AND a9=b19
+   AND b38=a21
+   AND a56=b4
+   AND a18=b54
+   AND a55=b33
+   AND b16=a11
+   AND a4=b2
+   AND b9=a30
+   AND a13=b44
+   AND a25=b61
+   AND a40=b43
+   AND a46=b29
+   AND a34=b13
+   AND a15=b21
+   AND a41=b58
+   AND a6=b35
+   AND a57=3
+   AND a58=b15
+   AND b63=a24
+   AND a16=b12
+   AND b56=a54
+   AND b26=a49
+   AND a5=b48
+   AND a61=b55
+   AND b5=a33
+   AND a35=b42
+   AND a57=b37
+   AND b11=a38
+   AND a1=b10
+   AND b50=a37
+   AND b18=a43
+   AND a29=b49
+----
+45 values hashing to f7028bf8703f0add824c5dd702cd3526
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-45-1
+SELECT x46,x5,x49,x2,x29,x48,x15,x35,x6,x40,x34,x55,x54,x11,x56,x10,x25,x60,x13,x58,x22,x43,x61,x16,x18,x41,x63,x26,x4,x19,x30,x12,x28,x42,x21,x53,x37,x24,x1,x38,x44,x9,x33,x50,x57
+  FROM t35,t58,t25,t63,t24,t11,t56,t60,t42,t53,t12,t28,t49,t57,t19,t48,t16,t5,t30,t37,t38,t54,t2,t22,t41,t34,t50,t13,t10,t44,t46,t40,t15,t33,t4,t6,t61,t55,t18,t9,t29,t26,t21,t43,t1
+ WHERE b25=a12
+   AND b43=a40
+   AND b61=a25
+   AND a55=b33
+   AND a38=b11
+   AND a11=b16
+   AND a58=b15
+   AND b46=a22
+   AND b35=a6
+   AND b37=a57
+   AND a30=b9
+   AND b28=a63
+   AND a46=b29
+   AND b12=a16
+   AND a49=b26
+   AND b24=a10
+   AND a1=b10
+   AND b21=a15
+   AND b44=a13
+   AND a4=b2
+   AND b63=a24
+   AND b55=a61
+   AND b18=a43
+   AND b40=a42
+   AND b34=a26
+   AND a54=b56
+   AND b48=a5
+   AND b50=a37
+   AND a44=b41
+   AND b4=a56
+   AND b19=a9
+   AND b58=a41
+   AND a57=3
+   AND b22=a2
+   AND b53=a19
+   AND a60=b6
+   AND a50=b60
+   AND b49=a29
+   AND b13=a34
+   AND a18=b54
+   AND a33=b5
+   AND a48=b30
+   AND b1=a53
+   AND b38=a21
+   AND a35=b42
+----
+45 values hashing to f7028bf8703f0add824c5dd702cd3526
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-45-2
+SELECT x48,x42,x26,x13,x52,x1,x15,x22,x57,x30,x8,x41,x29,x24,x7,x5,x47,x55,x40,x54,x60,x35,x58,x44,x25,x19,x39,x2,x21,x28,x23,x14,x45,x36,x12,x18,x38,x11,x34,x62,x17,x31,x46,x61,x9
+  FROM t47,t40,t45,t17,t31,t11,t41,t54,t1,t60,t22,t48,t57,t52,t26,t21,t44,t8,t24,t13,t25,t28,t61,t2,t62,t29,t5,t39,t23,t58,t19,t55,t46,t15,t18,t36,t7,t35,t14,t38,t30,t42,t12,t9,t34
+ WHERE a52=b58
+   AND a60=b31
+   AND b52=a57
+   AND a22=b42
+   AND b39=a11
+   AND a21=b44
+   AND a36=b40
+   AND b18=a55
+   AND b17=a1
+   AND a42=b9
+   AND a48=b61
+   AND a17=b2
+   AND a12=b30
+   AND b35=a38
+   AND a15=b29
+   AND b55=a31
+   AND a13=b22
+   AND b46=a40
+   AND a18=b14
+   AND b23=a29
+   AND a54=b28
+   AND a26=b7
+   AND b13=a39
+   AND b36=a19
+   AND b45=a41
+   AND a61=b1
+   AND a35=b11
+   AND b57=a7
+   AND a25=5
+   AND a45=b47
+   AND a24=b62
+   AND b48=a30
+   AND b38=a23
+   AND b34=a58
+   AND a9=b60
+   AND b21=a2
+   AND b12=a5
+   AND a25=b5
+   AND b15=a46
+   AND b41=a62
+   AND b24=a14
+   AND a44=b54
+   AND a47=b26
+   AND a34=b8
+   AND b19=a28
+----
+45 values hashing to 5c6c1a1feeff13b6f1a188f7241bd820
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-45-2
+SELECT x48,x42,x26,x13,x52,x1,x15,x22,x57,x30,x8,x41,x29,x24,x7,x5,x47,x55,x40,x54,x60,x35,x58,x44,x25,x19,x39,x2,x21,x28,x23,x14,x45,x36,x12,x18,x38,x11,x34,x62,x17,x31,x46,x61,x9
+  FROM t17,t52,t48,t8,t18,t46,t25,t60,t36,t39,t61,t30,t54,t55,t35,t45,t13,t15,t40,t24,t31,t57,t12,t34,t2,t22,t38,t11,t41,t44,t28,t9,t21,t5,t19,t58,t23,t47,t29,t1,t14,t62,t42,t7,t26
+ WHERE a21=b44
+   AND a40=b46
+   AND b8=a34
+   AND a39=b13
+   AND a24=b62
+   AND b60=a9
+   AND a30=b48
+   AND a47=b26
+   AND b39=a11
+   AND b5=a25
+   AND a5=b12
+   AND a46=b15
+   AND a12=b30
+   AND b29=a15
+   AND a29=b23
+   AND b61=a48
+   AND a58=b34
+   AND b57=a7
+   AND a57=b52
+   AND b31=a60
+   AND a52=b58
+   AND a14=b24
+   AND a42=b9
+   AND b42=a22
+   AND b38=a23
+   AND b41=a62
+   AND b11=a35
+   AND b28=a54
+   AND a28=b19
+   AND a38=b35
+   AND b14=a18
+   AND a19=b36
+   AND a2=b21
+   AND b18=a55
+   AND a61=b1
+   AND b54=a44
+   AND b2=a17
+   AND b45=a41
+   AND a36=b40
+   AND a45=b47
+   AND a31=b55
+   AND a1=b17
+   AND a26=b7
+   AND a25=5
+   AND b22=a13
+----
+45 values hashing to 5c6c1a1feeff13b6f1a188f7241bd820
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-45-2
+SELECT x48,x42,x26,x13,x52,x1,x15,x22,x57,x30,x8,x41,x29,x24,x7,x5,x47,x55,x40,x54,x60,x35,x58,x44,x25,x19,x39,x2,x21,x28,x23,x14,x45,x36,x12,x18,x38,x11,x34,x62,x17,x31,x46,x61,x9
+  FROM t48,t40,t62,t60,t58,t22,t23,t61,t12,t39,t19,t25,t35,t14,t8,t44,t1,t54,t11,t13,t46,t52,t36,t41,t24,t45,t7,t9,t21,t38,t5,t2,t55,t15,t18,t57,t34,t47,t29,t31,t26,t42,t28,t17,t30
+ WHERE b15=a46
+   AND b61=a48
+   AND a30=b48
+   AND a25=5
+   AND a62=b41
+   AND b62=a24
+   AND b30=a12
+   AND b35=a38
+   AND b28=a54
+   AND b54=a44
+   AND b17=a1
+   AND b40=a36
+   AND a18=b14
+   AND b55=a31
+   AND a42=b9
+   AND a52=b58
+   AND b19=a28
+   AND a45=b47
+   AND a47=b26
+   AND b23=a29
+   AND a17=b2
+   AND b18=a55
+   AND b34=a58
+   AND b7=a26
+   AND b38=a23
+   AND b60=a9
+   AND b31=a60
+   AND b46=a40
+   AND a41=b45
+   AND a14=b24
+   AND a19=b36
+   AND a15=b29
+   AND a57=b52
+   AND b22=a13
+   AND b1=a61
+   AND a2=b21
+   AND b57=a7
+   AND a34=b8
+   AND b39=a11
+   AND b12=a5
+   AND a21=b44
+   AND b11=a35
+   AND b42=a22
+   AND b5=a25
+   AND b13=a39
+----
+45 values hashing to 5c6c1a1feeff13b6f1a188f7241bd820
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-45-3
+SELECT x22,x39,x56,x60,x55,x16,x11,x29,x19,x59,x52,x6,x13,x32,x61,x26,x14,x43,x40,x8,x38,x3,x7,x49,x37,x10,x50,x31,x58,x28,x63,x23,x41,x42,x30,x24,x51,x53,x33,x34,x25,x20,x44,x54,x36
+  FROM t6,t14,t55,t51,t43,t61,t58,t34,t37,t11,t20,t28,t30,t26,t32,t52,t60,t16,t3,t56,t59,t19,t13,t63,t23,t33,t25,t40,t31,t38,t36,t54,t10,t49,t42,t22,t53,t7,t50,t44,t8,t24,t39,t41,t29
+ WHERE a30=b37
+   AND b58=a3
+   AND b52=a41
+   AND b31=a44
+   AND b29=a16
+   AND b49=a61
+   AND b14=a55
+   AND b11=a53
+   AND b39=a24
+   AND b10=a52
+   AND a22=b16
+   AND b41=a37
+   AND b60=a29
+   AND a60=b42
+   AND a20=b23
+   AND b54=a13
+   AND b44=a56
+   AND a50=b51
+   AND a25=b13
+   AND a26=b7
+   AND b24=a11
+   AND a38=b8
+   AND a59=7
+   AND b36=a58
+   AND b40=a8
+   AND b38=a32
+   AND b22=a28
+   AND a31=b3
+   AND b34=a49
+   AND a23=b43
+   AND a14=b53
+   AND b33=a59
+   AND b19=a36
+   AND a33=b63
+   AND b50=a43
+   AND a6=b61
+   AND a54=b26
+   AND b55=a10
+   AND b20=a7
+   AND b6=a40
+   AND b25=a19
+   AND b28=a39
+   AND b32=a63
+   AND a51=b30
+   AND a34=b56
+----
+45 values hashing to d9534e34fa52ed2814673479bb28a871
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-45-3
+SELECT x22,x39,x56,x60,x55,x16,x11,x29,x19,x59,x52,x6,x13,x32,x61,x26,x14,x43,x40,x8,x38,x3,x7,x49,x37,x10,x50,x31,x58,x28,x63,x23,x41,x42,x30,x24,x51,x53,x33,x34,x25,x20,x44,x54,x36
+  FROM t54,t16,t20,t53,t40,t22,t3,t14,t36,t52,t33,t38,t11,t34,t25,t59,t43,t56,t32,t41,t44,t49,t7,t55,t39,t28,t50,t60,t13,t31,t58,t23,t63,t24,t29,t30,t26,t51,t42,t10,t8,t37,t6,t19,t61
+ WHERE b23=a20
+   AND b60=a29
+   AND b39=a24
+   AND b42=a60
+   AND b40=a8
+   AND a50=b51
+   AND a40=b6
+   AND a56=b44
+   AND a22=b16
+   AND b56=a34
+   AND b33=a59
+   AND a31=b3
+   AND b41=a37
+   AND a44=b31
+   AND a38=b8
+   AND a23=b43
+   AND a59=7
+   AND a11=b24
+   AND a55=b14
+   AND a16=b29
+   AND b38=a32
+   AND a36=b19
+   AND a53=b11
+   AND b49=a61
+   AND a58=b36
+   AND b20=a7
+   AND a43=b50
+   AND a28=b22
+   AND b52=a41
+   AND a39=b28
+   AND b63=a33
+   AND b37=a30
+   AND a10=b55
+   AND b61=a6
+   AND b13=a25
+   AND a3=b58
+   AND a13=b54
+   AND b26=a54
+   AND a19=b25
+   AND a52=b10
+   AND a14=b53
+   AND b34=a49
+   AND a51=b30
+   AND a26=b7
+   AND b32=a63
+----
+45 values hashing to d9534e34fa52ed2814673479bb28a871
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-45-3
+SELECT x22,x39,x56,x60,x55,x16,x11,x29,x19,x59,x52,x6,x13,x32,x61,x26,x14,x43,x40,x8,x38,x3,x7,x49,x37,x10,x50,x31,x58,x28,x63,x23,x41,x42,x30,x24,x51,x53,x33,x34,x25,x20,x44,x54,x36
+  FROM t29,t24,t41,t32,t37,t44,t31,t25,t52,t33,t49,t14,t16,t59,t23,t42,t13,t10,t38,t11,t20,t55,t3,t39,t40,t56,t51,t8,t61,t58,t50,t30,t22,t53,t34,t19,t6,t60,t28,t63,t54,t7,t26,t36,t43
+ WHERE a28=b22
+   AND b56=a34
+   AND a56=b44
+   AND a13=b54
+   AND b53=a14
+   AND b26=a54
+   AND a51=b30
+   AND a3=b58
+   AND b51=a50
+   AND b41=a37
+   AND a29=b60
+   AND b7=a26
+   AND b8=a38
+   AND b55=a10
+   AND a59=7
+   AND a36=b19
+   AND b63=a33
+   AND a61=b49
+   AND b6=a40
+   AND a39=b28
+   AND a22=b16
+   AND b50=a43
+   AND a31=b3
+   AND a63=b32
+   AND b39=a24
+   AND b42=a60
+   AND a20=b23
+   AND b20=a7
+   AND b14=a55
+   AND b34=a49
+   AND a44=b31
+   AND b24=a11
+   AND a32=b38
+   AND a23=b43
+   AND b61=a6
+   AND b25=a19
+   AND b36=a58
+   AND a8=b40
+   AND b29=a16
+   AND a59=b33
+   AND b11=a53
+   AND a41=b52
+   AND b10=a52
+   AND b13=a25
+   AND b37=a30
+----
+45 values hashing to d9534e34fa52ed2814673479bb28a871
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-45-4
+SELECT x42,x57,x12,x1,x8,x35,x62,x47,x34,x11,x28,x6,x37,x54,x27,x43,x30,x5,x41,x14,x15,x19,x55,x26,x4,x24,x58,x64,x23,x32,x44,x56,x18,x61,x10,x20,x29,x16,x50,x63,x33,x52,x17,x39,x48
+  FROM t32,t58,t8,t61,t18,t4,t64,t54,t19,t5,t52,t35,t63,t26,t10,t55,t6,t29,t56,t17,t48,t62,t20,t1,t50,t39,t42,t11,t33,t44,t57,t15,t23,t16,t27,t37,t43,t30,t24,t28,t34,t12,t14,t47,t41
+ WHERE b50=a56
+   AND a23=b24
+   AND a24=b4
+   AND b42=a12
+   AND a43=b32
+   AND a35=b26
+   AND b52=a63
+   AND b35=a32
+   AND b20=a54
+   AND a27=b23
+   AND b39=a18
+   AND a61=b63
+   AND a52=b15
+   AND a48=b58
+   AND b10=a26
+   AND a10=b55
+   AND a62=b14
+   AND a28=b29
+   AND a58=b62
+   AND a39=b28
+   AND a34=b11
+   AND a44=b37
+   AND a64=b18
+   AND b54=a33
+   AND a16=b61
+   AND a14=b43
+   AND a47=b48
+   AND a4=b16
+   AND a17=b8
+   AND a1=b5
+   AND b30=a55
+   AND a20=b57
+   AND b44=a6
+   AND b6=a8
+   AND b17=a29
+   AND a57=b27
+   AND a5=b19
+   AND a30=b1
+   AND b12=a41
+   AND b64=a50
+   AND a37=b41
+   AND a15=b34
+   AND b56=a11
+   AND a33=8
+   AND a42=b47
+----
+45 values hashing to 2654a74edc9cfab77bb5357c32de428d
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-45-4
+SELECT x42,x57,x12,x1,x8,x35,x62,x47,x34,x11,x28,x6,x37,x54,x27,x43,x30,x5,x41,x14,x15,x19,x55,x26,x4,x24,x58,x64,x23,x32,x44,x56,x18,x61,x10,x20,x29,x16,x50,x63,x33,x52,x17,x39,x48
+  FROM t54,t32,t35,t30,t56,t52,t37,t4,t29,t28,t33,t20,t26,t44,t23,t15,t14,t39,t17,t58,t27,t24,t16,t47,t6,t63,t11,t5,t48,t18,t55,t34,t42,t64,t10,t43,t61,t1,t62,t19,t57,t50,t8,t12,t41
+ WHERE b34=a15
+   AND b35=a32
+   AND b27=a57
+   AND a37=b41
+   AND b61=a16
+   AND a41=b12
+   AND b6=a8
+   AND a35=b26
+   AND a17=b8
+   AND b56=a11
+   AND b17=a29
+   AND b62=a58
+   AND b4=a24
+   AND b44=a6
+   AND a4=b16
+   AND a30=b1
+   AND b42=a12
+   AND b54=a33
+   AND a23=b24
+   AND b52=a63
+   AND b64=a50
+   AND a56=b50
+   AND b11=a34
+   AND b39=a18
+   AND b18=a64
+   AND b14=a62
+   AND a43=b32
+   AND b47=a42
+   AND a54=b20
+   AND a1=b5
+   AND b55=a10
+   AND b58=a48
+   AND a5=b19
+   AND a55=b30
+   AND a52=b15
+   AND b57=a20
+   AND a33=8
+   AND a39=b28
+   AND a27=b23
+   AND a61=b63
+   AND b48=a47
+   AND a14=b43
+   AND a44=b37
+   AND b29=a28
+   AND b10=a26
+----
+45 values hashing to 2654a74edc9cfab77bb5357c32de428d
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-45-4
+SELECT x42,x57,x12,x1,x8,x35,x62,x47,x34,x11,x28,x6,x37,x54,x27,x43,x30,x5,x41,x14,x15,x19,x55,x26,x4,x24,x58,x64,x23,x32,x44,x56,x18,x61,x10,x20,x29,x16,x50,x63,x33,x52,x17,x39,x48
+  FROM t19,t52,t61,t47,t26,t43,t6,t29,t33,t48,t4,t18,t63,t11,t42,t20,t56,t10,t34,t12,t58,t27,t16,t32,t23,t44,t37,t30,t5,t8,t54,t35,t24,t57,t1,t64,t41,t55,t62,t39,t50,t14,t15,t28,t17
+ WHERE a16=b61
+   AND a14=b43
+   AND a30=b1
+   AND b30=a55
+   AND b50=a56
+   AND a33=8
+   AND b27=a57
+   AND b57=a20
+   AND a28=b29
+   AND b54=a33
+   AND b52=a63
+   AND b34=a15
+   AND a4=b16
+   AND b44=a6
+   AND b28=a39
+   AND a11=b56
+   AND b41=a37
+   AND b55=a10
+   AND a17=b8
+   AND a43=b32
+   AND b12=a41
+   AND a64=b18
+   AND b42=a12
+   AND a44=b37
+   AND b15=a52
+   AND b48=a47
+   AND b14=a62
+   AND b20=a54
+   AND a29=b17
+   AND a42=b47
+   AND b35=a32
+   AND b24=a23
+   AND a50=b64
+   AND b4=a24
+   AND b26=a35
+   AND a26=b10
+   AND b11=a34
+   AND b23=a27
+   AND a58=b62
+   AND a5=b19
+   AND a8=b6
+   AND a48=b58
+   AND b39=a18
+   AND a1=b5
+   AND a61=b63
+----
+45 values hashing to 2654a74edc9cfab77bb5357c32de428d
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-46-1
+SELECT x39,x46,x23,x21,x2,x64,x59,x32,x22,x62,x17,x60,x5,x41,x58,x44,x27,x54,x13,x4,x12,x24,x36,x9,x14,x45,x53,x50,x33,x63,x28,x38,x7,x10,x30,x1,x61,x31,x29,x48,x15,x42,x37,x34,x3,x26
+  FROM t63,t28,t54,t37,t34,t32,t2,t12,t27,t1,t44,t42,t7,t50,t3,t60,t39,t10,t59,t41,t48,t45,t30,t58,t36,t38,t29,t23,t14,t5,t13,t15,t31,t21,t17,t53,t22,t33,t26,t24,t4,t61,t46,t9,t64,t62
+ WHERE a30=b45
+   AND a45=b38
+   AND b62=a13
+   AND a58=b7
+   AND b12=a2
+   AND a42=b31
+   AND a7=b33
+   AND b3=a59
+   AND b59=a23
+   AND a31=b64
+   AND b34=a4
+   AND b32=a37
+   AND a39=b14
+   AND b22=a64
+   AND b5=a41
+   AND a24=b53
+   AND b4=a60
+   AND b21=a27
+   AND a28=b24
+   AND a62=b42
+   AND a29=b13
+   AND b36=a32
+   AND a50=b10
+   AND a44=b37
+   AND a21=b60
+   AND a34=b1
+   AND b39=a26
+   AND b17=a12
+   AND a5=b23
+   AND b61=a54
+   AND a14=b48
+   AND b15=a36
+   AND b54=a1
+   AND b28=a15
+   AND a46=b29
+   AND a63=b27
+   AND b41=a48
+   AND b30=a33
+   AND b44=a17
+   AND a22=b26
+   AND a2=4
+   AND b58=a53
+   AND b46=a61
+   AND a9=b63
+   AND a3=b50
+   AND b9=a38
+----
+46 values hashing to ad1b5b36c2af6b7c6d31c6248b67228b
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-46-1
+SELECT x39,x46,x23,x21,x2,x64,x59,x32,x22,x62,x17,x60,x5,x41,x58,x44,x27,x54,x13,x4,x12,x24,x36,x9,x14,x45,x53,x50,x33,x63,x28,x38,x7,x10,x30,x1,x61,x31,x29,x48,x15,x42,x37,x34,x3,x26
+  FROM t22,t13,t2,t41,t42,t23,t61,t50,t30,t62,t17,t59,t37,t7,t63,t64,t36,t4,t60,t15,t21,t27,t33,t3,t24,t32,t34,t44,t46,t9,t14,t53,t39,t26,t38,t12,t48,t10,t1,t5,t31,t45,t54,t29,t58,t28
+ WHERE b58=a53
+   AND b53=a24
+   AND b27=a63
+   AND b28=a15
+   AND a4=b34
+   AND a14=b48
+   AND a54=b61
+   AND a44=b37
+   AND b17=a12
+   AND a5=b23
+   AND b44=a17
+   AND a3=b50
+   AND b54=a1
+   AND a39=b14
+   AND b29=a46
+   AND b45=a30
+   AND a13=b62
+   AND b59=a23
+   AND a2=b12
+   AND b32=a37
+   AND b1=a34
+   AND a59=b3
+   AND b26=a22
+   AND b21=a27
+   AND a26=b39
+   AND a36=b15
+   AND a21=b60
+   AND b22=a64
+   AND b33=a7
+   AND b31=a42
+   AND b5=a41
+   AND a45=b38
+   AND b7=a58
+   AND a9=b63
+   AND b30=a33
+   AND a28=b24
+   AND b13=a29
+   AND b46=a61
+   AND a32=b36
+   AND a50=b10
+   AND a2=4
+   AND a60=b4
+   AND a48=b41
+   AND b9=a38
+   AND a31=b64
+   AND b42=a62
+----
+46 values hashing to ad1b5b36c2af6b7c6d31c6248b67228b
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-46-1
+SELECT x39,x46,x23,x21,x2,x64,x59,x32,x22,x62,x17,x60,x5,x41,x58,x44,x27,x54,x13,x4,x12,x24,x36,x9,x14,x45,x53,x50,x33,x63,x28,x38,x7,x10,x30,x1,x61,x31,x29,x48,x15,x42,x37,x34,x3,x26
+  FROM t41,t15,t29,t63,t17,t54,t7,t10,t23,t28,t44,t33,t32,t5,t61,t58,t36,t14,t48,t31,t21,t1,t39,t27,t62,t64,t2,t13,t30,t9,t34,t26,t38,t59,t46,t42,t37,t12,t4,t60,t3,t50,t24,t45,t22,t53
+ WHERE b46=a61
+   AND a54=b61
+   AND a62=b42
+   AND a39=b14
+   AND a1=b54
+   AND b50=a3
+   AND a21=b60
+   AND b45=a30
+   AND b44=a17
+   AND b59=a23
+   AND b62=a13
+   AND a31=b64
+   AND a42=b31
+   AND a38=b9
+   AND a46=b29
+   AND a4=b34
+   AND b13=a29
+   AND a37=b32
+   AND a22=b26
+   AND a59=b3
+   AND a64=b22
+   AND a45=b38
+   AND a28=b24
+   AND b27=a63
+   AND a44=b37
+   AND b39=a26
+   AND b33=a7
+   AND b21=a27
+   AND b15=a36
+   AND b12=a2
+   AND b7=a58
+   AND b23=a5
+   AND a15=b28
+   AND b53=a24
+   AND a32=b36
+   AND a48=b41
+   AND a12=b17
+   AND b10=a50
+   AND b5=a41
+   AND a14=b48
+   AND b30=a33
+   AND a34=b1
+   AND a60=b4
+   AND a53=b58
+   AND a2=4
+   AND b63=a9
+----
+46 values hashing to ad1b5b36c2af6b7c6d31c6248b67228b
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-46-2
+SELECT x10,x37,x26,x64,x48,x53,x14,x61,x51,x46,x12,x9,x22,x17,x19,x3,x20,x16,x33,x18,x41,x8,x57,x42,x32,x35,x11,x43,x6,x2,x23,x4,x40,x52,x44,x63,x7,x34,x62,x47,x25,x50,x60,x27,x29,x36
+  FROM t27,t23,t26,t14,t29,t36,t35,t22,t11,t60,t34,t20,t47,t10,t25,t33,t6,t8,t61,t7,t42,t3,t50,t57,t64,t17,t44,t62,t16,t41,t43,t9,t2,t4,t48,t46,t18,t53,t40,t37,t63,t12,t19,t52,t51,t32
+ WHERE a53=b9
+   AND a3=b12
+   AND a26=b47
+   AND b53=a2
+   AND b23=a46
+   AND b29=a6
+   AND a4=b60
+   AND b8=a63
+   AND a32=b6
+   AND b35=a60
+   AND a23=b17
+   AND a40=b22
+   AND a63=3
+   AND a19=b11
+   AND a41=b26
+   AND b3=a11
+   AND a14=b62
+   AND b61=a25
+   AND b16=a43
+   AND a12=b27
+   AND b36=a20
+   AND b10=a27
+   AND b48=a10
+   AND a16=b7
+   AND a33=b4
+   AND a7=b64
+   AND b37=a42
+   AND b52=a18
+   AND b2=a17
+   AND a34=b44
+   AND b33=a29
+   AND b18=a50
+   AND b40=a61
+   AND a48=b32
+   AND b19=a47
+   AND b20=a22
+   AND b57=a51
+   AND b46=a8
+   AND a36=b51
+   AND a57=b41
+   AND a64=b14
+   AND a52=b42
+   AND a62=b25
+   AND b43=a9
+   AND b50=a44
+   AND a35=b34
+----
+46 values hashing to d6af73e1aea1e9ed5877642ee77419ae
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-46-2
+SELECT x10,x37,x26,x64,x48,x53,x14,x61,x51,x46,x12,x9,x22,x17,x19,x3,x20,x16,x33,x18,x41,x8,x57,x42,x32,x35,x11,x43,x6,x2,x23,x4,x40,x52,x44,x63,x7,x34,x62,x47,x25,x50,x60,x27,x29,x36
+  FROM t29,t11,t63,t7,t25,t19,t35,t17,t40,t42,t37,t53,t52,t14,t34,t9,t36,t41,t16,t61,t8,t4,t32,t48,t47,t33,t57,t26,t64,t3,t62,t43,t10,t23,t22,t6,t27,t46,t12,t51,t60,t44,t18,t20,t50,t2
+ WHERE b25=a62
+   AND a63=b8
+   AND a16=b7
+   AND a23=b17
+   AND a36=b51
+   AND b29=a6
+   AND a27=b10
+   AND a60=b35
+   AND b2=a17
+   AND b46=a8
+   AND a57=b41
+   AND a53=b9
+   AND b48=a10
+   AND b60=a4
+   AND a14=b62
+   AND b19=a47
+   AND b11=a19
+   AND b27=a12
+   AND b53=a2
+   AND a11=b3
+   AND a43=b16
+   AND b12=a3
+   AND b23=a46
+   AND a63=3
+   AND a20=b36
+   AND a40=b22
+   AND a33=b4
+   AND a51=b57
+   AND a25=b61
+   AND a34=b44
+   AND b33=a29
+   AND a32=b6
+   AND b47=a26
+   AND a41=b26
+   AND a42=b37
+   AND b42=a52
+   AND b18=a50
+   AND a44=b50
+   AND a9=b43
+   AND b40=a61
+   AND b14=a64
+   AND b64=a7
+   AND a48=b32
+   AND a18=b52
+   AND a35=b34
+   AND a22=b20
+----
+46 values hashing to d6af73e1aea1e9ed5877642ee77419ae
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-46-2
+SELECT x10,x37,x26,x64,x48,x53,x14,x61,x51,x46,x12,x9,x22,x17,x19,x3,x20,x16,x33,x18,x41,x8,x57,x42,x32,x35,x11,x43,x6,x2,x23,x4,x40,x52,x44,x63,x7,x34,x62,x47,x25,x50,x60,x27,x29,x36
+  FROM t19,t16,t29,t44,t48,t60,t27,t26,t47,t40,t22,t18,t3,t20,t33,t52,t46,t63,t34,t36,t23,t25,t6,t43,t51,t17,t41,t12,t32,t62,t37,t7,t35,t50,t2,t42,t53,t9,t8,t14,t61,t11,t10,t4,t64,t57
+ WHERE b23=a46
+   AND b64=a7
+   AND a23=b17
+   AND a36=b51
+   AND b40=a61
+   AND a18=b52
+   AND b12=a3
+   AND a4=b60
+   AND a63=b8
+   AND a14=b62
+   AND b6=a32
+   AND a47=b19
+   AND b26=a41
+   AND a53=b9
+   AND a57=b41
+   AND b10=a27
+   AND b37=a42
+   AND b34=a35
+   AND b16=a43
+   AND b11=a19
+   AND a29=b33
+   AND b36=a20
+   AND b50=a44
+   AND a25=b61
+   AND a6=b29
+   AND b7=a16
+   AND b46=a8
+   AND a51=b57
+   AND b18=a50
+   AND b20=a22
+   AND b22=a40
+   AND b53=a2
+   AND a64=b14
+   AND b25=a62
+   AND b44=a34
+   AND a17=b2
+   AND a11=b3
+   AND a52=b42
+   AND b4=a33
+   AND b47=a26
+   AND a48=b32
+   AND b35=a60
+   AND b43=a9
+   AND a63=3
+   AND b48=a10
+   AND b27=a12
+----
+46 values hashing to d6af73e1aea1e9ed5877642ee77419ae
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-46-3
+SELECT x44,x17,x7,x59,x54,x63,x33,x38,x41,x52,x16,x37,x23,x21,x29,x50,x48,x31,x4,x60,x34,x40,x11,x49,x36,x19,x28,x1,x20,x42,x3,x39,x18,x10,x25,x64,x56,x35,x61,x47,x26,x57,x45,x6,x14,x58
+  FROM t61,t64,t34,t20,t28,t33,t59,t29,t3,t40,t31,t19,t35,t42,t63,t48,t50,t39,t41,t4,t38,t26,t56,t10,t17,t57,t25,t44,t47,t36,t49,t6,t21,t14,t1,t11,t37,t58,t54,t18,t52,t60,t45,t7,t23,t16
+ WHERE a54=b45
+   AND b38=a49
+   AND a26=b39
+   AND a38=b14
+   AND a29=b1
+   AND b10=a4
+   AND b23=a6
+   AND a59=4
+   AND b50=a34
+   AND b49=a16
+   AND b34=a10
+   AND b48=a63
+   AND b36=a58
+   AND a60=b21
+   AND a28=b18
+   AND a39=b56
+   AND b7=a35
+   AND a11=b29
+   AND b17=a14
+   AND a17=b35
+   AND a57=b11
+   AND b54=a3
+   AND a59=b20
+   AND a19=b3
+   AND b25=a31
+   AND b26=a36
+   AND a48=b64
+   AND a37=b61
+   AND a21=b42
+   AND a41=b16
+   AND a52=b63
+   AND b52=a44
+   AND a33=b40
+   AND a23=b37
+   AND b57=a20
+   AND b44=a61
+   AND b31=a18
+   AND a42=b28
+   AND a7=b33
+   AND a50=b41
+   AND b58=a45
+   AND a40=b60
+   AND a1=b19
+   AND a56=b47
+   AND a25=b6
+   AND a47=b4
+----
+46 values hashing to d0d40cf8bb757e52716a5b4faa92a2ba
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-46-3
+SELECT x44,x17,x7,x59,x54,x63,x33,x38,x41,x52,x16,x37,x23,x21,x29,x50,x48,x31,x4,x60,x34,x40,x11,x49,x36,x19,x28,x1,x20,x42,x3,x39,x18,x10,x25,x64,x56,x35,x61,x47,x26,x57,x45,x6,x14,x58
+  FROM t1,t3,t29,t42,t33,t40,t54,t61,t57,t10,t41,t36,t39,t20,t14,t52,t37,t47,t35,t64,t49,t18,t19,t4,t6,t38,t59,t56,t28,t17,t63,t50,t26,t44,t21,t48,t25,t16,t11,t23,t45,t7,t60,t31,t34,t58
+ WHERE b61=a37
+   AND b54=a3
+   AND a31=b25
+   AND a48=b64
+   AND a17=b35
+   AND b47=a56
+   AND a42=b28
+   AND b57=a20
+   AND a52=b63
+   AND a45=b58
+   AND b56=a39
+   AND a7=b33
+   AND b1=a29
+   AND b50=a34
+   AND b23=a6
+   AND b40=a33
+   AND a61=b44
+   AND b48=a63
+   AND a14=b17
+   AND b36=a58
+   AND a41=b16
+   AND b11=a57
+   AND a54=b45
+   AND b20=a59
+   AND b10=a4
+   AND a26=b39
+   AND b41=a50
+   AND a11=b29
+   AND a23=b37
+   AND b26=a36
+   AND a35=b7
+   AND b34=a10
+   AND a49=b38
+   AND a38=b14
+   AND b60=a40
+   AND a25=b6
+   AND b31=a18
+   AND b19=a1
+   AND a28=b18
+   AND a59=4
+   AND b3=a19
+   AND a47=b4
+   AND a60=b21
+   AND a44=b52
+   AND a16=b49
+   AND b42=a21
+----
+46 values hashing to d0d40cf8bb757e52716a5b4faa92a2ba
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-46-3
+SELECT x44,x17,x7,x59,x54,x63,x33,x38,x41,x52,x16,x37,x23,x21,x29,x50,x48,x31,x4,x60,x34,x40,x11,x49,x36,x19,x28,x1,x20,x42,x3,x39,x18,x10,x25,x64,x56,x35,x61,x47,x26,x57,x45,x6,x14,x58
+  FROM t29,t26,t45,t35,t50,t4,t23,t6,t18,t36,t17,t14,t56,t52,t41,t28,t19,t1,t10,t20,t21,t3,t47,t63,t48,t34,t61,t37,t16,t58,t59,t57,t25,t42,t7,t31,t38,t39,t40,t11,t44,t49,t54,t60,t64,t33
+ WHERE b38=a49
+   AND a3=b54
+   AND b11=a57
+   AND a61=b44
+   AND a39=b56
+   AND b4=a47
+   AND a59=4
+   AND a36=b26
+   AND a54=b45
+   AND a59=b20
+   AND b16=a41
+   AND a28=b18
+   AND a48=b64
+   AND a17=b35
+   AND a56=b47
+   AND a45=b58
+   AND a11=b29
+   AND a16=b49
+   AND b36=a58
+   AND b19=a1
+   AND a10=b34
+   AND a31=b25
+   AND a37=b61
+   AND b40=a33
+   AND a60=b21
+   AND a34=b50
+   AND b41=a50
+   AND a38=b14
+   AND a4=b10
+   AND a19=b3
+   AND a25=b6
+   AND a52=b63
+   AND b31=a18
+   AND a14=b17
+   AND b42=a21
+   AND a20=b57
+   AND a26=b39
+   AND a42=b28
+   AND b48=a63
+   AND b37=a23
+   AND b1=a29
+   AND a7=b33
+   AND b7=a35
+   AND a40=b60
+   AND a6=b23
+   AND b52=a44
+----
+46 values hashing to d0d40cf8bb757e52716a5b4faa92a2ba
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-46-4
+SELECT x28,x59,x45,x11,x9,x54,x53,x2,x50,x21,x62,x18,x64,x7,x48,x41,x10,x37,x40,x6,x22,x3,x13,x23,x39,x46,x60,x15,x19,x16,x34,x24,x63,x52,x30,x8,x42,x44,x31,x25,x29,x5,x58,x1,x55,x17
+  FROM t58,t1,t28,t52,t9,t10,t30,t13,t40,t55,t63,t62,t6,t59,t50,t21,t54,t18,t24,t8,t11,t37,t23,t25,t16,t44,t19,t48,t39,t2,t53,t64,t42,t3,t15,t45,t34,t60,t29,t46,t41,t22,t17,t7,t31,t5
+ WHERE b55=a40
+   AND b46=a9
+   AND a25=b41
+   AND b17=a62
+   AND a55=b23
+   AND a37=b3
+   AND a29=b6
+   AND a60=b18
+   AND a34=b39
+   AND a11=b54
+   AND a64=b15
+   AND b29=a30
+   AND b16=a2
+   AND b11=a22
+   AND b10=a1
+   AND b48=a24
+   AND b25=a39
+   AND b30=a28
+   AND b8=a23
+   AND a18=b52
+   AND b37=a45
+   AND b13=a31
+   AND b34=a58
+   AND a17=b42
+   AND b21=a50
+   AND b9=a52
+   AND b28=a21
+   AND a5=b53
+   AND b45=a16
+   AND a44=b60
+   AND b31=a41
+   AND a53=b40
+   AND a46=b2
+   AND b1=a7
+   AND a10=b19
+   AND a42=b64
+   AND b7=a13
+   AND a15=b22
+   AND b5=a3
+   AND a44=8
+   AND b63=a48
+   AND a63=b58
+   AND b59=a54
+   AND a6=b24
+   AND b62=a19
+   AND a8=b50
+----
+46 values hashing to db1d07c9777f11a4cf8f469b3176fd1c
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-46-4
+SELECT x28,x59,x45,x11,x9,x54,x53,x2,x50,x21,x62,x18,x64,x7,x48,x41,x10,x37,x40,x6,x22,x3,x13,x23,x39,x46,x60,x15,x19,x16,x34,x24,x63,x52,x30,x8,x42,x44,x31,x25,x29,x5,x58,x1,x55,x17
+  FROM t24,t54,t13,t22,t1,t48,t15,t17,t40,t45,t37,t55,t9,t21,t59,t3,t34,t30,t39,t41,t10,t7,t42,t16,t63,t64,t62,t53,t50,t5,t60,t52,t58,t31,t29,t2,t11,t8,t6,t44,t46,t23,t18,t19,t28,t25
+ WHERE b16=a2
+   AND a42=b64
+   AND a55=b23
+   AND a64=b15
+   AND b28=a21
+   AND b13=a31
+   AND b40=a53
+   AND a60=b18
+   AND b11=a22
+   AND b24=a6
+   AND a5=b53
+   AND a19=b62
+   AND a48=b63
+   AND b42=a17
+   AND b52=a18
+   AND b1=a7
+   AND b60=a44
+   AND a58=b34
+   AND b8=a23
+   AND b2=a46
+   AND a11=b54
+   AND a25=b41
+   AND a63=b58
+   AND b46=a9
+   AND a39=b25
+   AND a54=b59
+   AND b9=a52
+   AND b30=a28
+   AND a10=b19
+   AND a24=b48
+   AND a37=b3
+   AND a16=b45
+   AND b5=a3
+   AND a13=b7
+   AND b6=a29
+   AND b50=a8
+   AND b10=a1
+   AND b37=a45
+   AND b22=a15
+   AND a30=b29
+   AND b55=a40
+   AND a50=b21
+   AND b39=a34
+   AND a44=8
+   AND b31=a41
+   AND a62=b17
+----
+46 values hashing to db1d07c9777f11a4cf8f469b3176fd1c
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-46-4
+SELECT x28,x59,x45,x11,x9,x54,x53,x2,x50,x21,x62,x18,x64,x7,x48,x41,x10,x37,x40,x6,x22,x3,x13,x23,x39,x46,x60,x15,x19,x16,x34,x24,x63,x52,x30,x8,x42,x44,x31,x25,x29,x5,x58,x1,x55,x17
+  FROM t31,t60,t5,t53,t18,t64,t19,t1,t41,t7,t44,t63,t9,t39,t6,t16,t15,t59,t23,t50,t8,t34,t21,t55,t17,t28,t3,t58,t2,t45,t54,t13,t40,t62,t24,t22,t48,t10,t29,t11,t25,t46,t37,t42,t52,t30
+ WHERE a23=b8
+   AND b63=a48
+   AND b50=a8
+   AND b16=a2
+   AND b3=a37
+   AND b7=a13
+   AND b5=a3
+   AND b1=a7
+   AND a17=b42
+   AND b59=a54
+   AND a22=b11
+   AND b53=a5
+   AND b30=a28
+   AND a31=b13
+   AND b48=a24
+   AND b19=a10
+   AND b22=a15
+   AND a44=8
+   AND b21=a50
+   AND a41=b31
+   AND b62=a19
+   AND b52=a18
+   AND b60=a44
+   AND b40=a53
+   AND b9=a52
+   AND a9=b46
+   AND b29=a30
+   AND a6=b24
+   AND b2=a46
+   AND b23=a55
+   AND b28=a21
+   AND a16=b45
+   AND b64=a42
+   AND a60=b18
+   AND a40=b55
+   AND a64=b15
+   AND a1=b10
+   AND b6=a29
+   AND a63=b58
+   AND a34=b39
+   AND a25=b41
+   AND b54=a11
+   AND a62=b17
+   AND a39=b25
+   AND b37=a45
+   AND b34=a58
+----
+46 values hashing to db1d07c9777f11a4cf8f469b3176fd1c
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-47-1
+SELECT x56,x13,x54,x59,x45,x58,x20,x43,x37,x25,x50,x3,x10,x42,x33,x62,x38,x6,x52,x31,x2,x18,x53,x16,x61,x51,x15,x49,x34,x26,x17,x27,x44,x39,x32,x1,x55,x4,x46,x8,x48,x64,x24,x29,x28,x47,x19
+  FROM t52,t50,t27,t45,t59,t58,t2,t4,t29,t8,t53,t10,t46,t33,t62,t32,t15,t17,t39,t3,t13,t56,t49,t31,t20,t34,t43,t44,t64,t48,t55,t38,t37,t6,t1,t42,t28,t18,t26,t51,t47,t54,t25,t61,t24,t16,t19
+ WHERE b34=a50
+   AND b42=a56
+   AND b28=a18
+   AND a8=b16
+   AND b52=a25
+   AND b19=a2
+   AND a53=b51
+   AND a34=b32
+   AND b45=a29
+   AND a42=b58
+   AND b43=a13
+   AND a10=b6
+   AND a48=b20
+   AND b49=a17
+   AND b62=a19
+   AND a64=b29
+   AND a6=b59
+   AND b3=a46
+   AND b37=a26
+   AND a1=b8
+   AND a39=b50
+   AND b39=a61
+   AND b10=a49
+   AND a15=b1
+   AND a3=b38
+   AND a55=b27
+   AND b48=a44
+   AND b2=a54
+   AND a20=b56
+   AND a33=b55
+   AND a62=b31
+   AND a37=b18
+   AND a16=b17
+   AND b24=a27
+   AND b15=a47
+   AND a64=8
+   AND b25=a4
+   AND b46=a24
+   AND b13=a51
+   AND a45=b4
+   AND a52=b47
+   AND a43=b44
+   AND b61=a59
+   AND a38=b54
+   AND b33=a58
+   AND b26=a32
+   AND a28=b53
+----
+47 values hashing to e8a1bf6efb8ed99ab0598af059ee4927
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-47-1
+SELECT x56,x13,x54,x59,x45,x58,x20,x43,x37,x25,x50,x3,x10,x42,x33,x62,x38,x6,x52,x31,x2,x18,x53,x16,x61,x51,x15,x49,x34,x26,x17,x27,x44,x39,x32,x1,x55,x4,x46,x8,x48,x64,x24,x29,x28,x47,x19
+  FROM t34,t46,t24,t19,t27,t32,t16,t26,t4,t42,t8,t62,t49,t55,t2,t38,t54,t17,t64,t53,t39,t43,t52,t47,t50,t1,t6,t3,t15,t45,t29,t37,t58,t13,t61,t59,t18,t28,t48,t10,t44,t31,t56,t33,t20,t25,t51
+ WHERE b1=a15
+   AND b39=a61
+   AND b3=a46
+   AND a26=b37
+   AND a3=b38
+   AND a2=b19
+   AND b25=a4
+   AND a58=b33
+   AND a10=b6
+   AND a54=b2
+   AND b24=a27
+   AND b31=a62
+   AND b61=a59
+   AND b18=a37
+   AND b59=a6
+   AND a45=b4
+   AND b20=a48
+   AND b62=a19
+   AND b34=a50
+   AND a39=b50
+   AND a42=b58
+   AND a18=b28
+   AND b15=a47
+   AND b53=a28
+   AND a34=b32
+   AND a13=b43
+   AND a55=b27
+   AND a32=b26
+   AND b42=a56
+   AND a33=b55
+   AND b16=a8
+   AND b10=a49
+   AND b13=a51
+   AND a64=8
+   AND a53=b51
+   AND a29=b45
+   AND b54=a38
+   AND a43=b44
+   AND a20=b56
+   AND a16=b17
+   AND a24=b46
+   AND a52=b47
+   AND b49=a17
+   AND b48=a44
+   AND a25=b52
+   AND a64=b29
+   AND a1=b8
+----
+47 values hashing to e8a1bf6efb8ed99ab0598af059ee4927
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-47-1
+SELECT x56,x13,x54,x59,x45,x58,x20,x43,x37,x25,x50,x3,x10,x42,x33,x62,x38,x6,x52,x31,x2,x18,x53,x16,x61,x51,x15,x49,x34,x26,x17,x27,x44,x39,x32,x1,x55,x4,x46,x8,x48,x64,x24,x29,x28,x47,x19
+  FROM t19,t3,t37,t17,t55,t56,t24,t15,t43,t20,t64,t32,t51,t61,t29,t58,t2,t6,t31,t25,t18,t53,t46,t54,t4,t13,t44,t8,t28,t48,t10,t27,t59,t34,t45,t47,t50,t62,t39,t33,t26,t16,t1,t49,t38,t42,t52
+ WHERE b2=a54
+   AND b24=a27
+   AND a17=b49
+   AND a3=b38
+   AND a2=b19
+   AND a28=b53
+   AND b18=a37
+   AND a56=b42
+   AND b32=a34
+   AND a62=b31
+   AND a4=b25
+   AND b46=a24
+   AND b58=a42
+   AND a58=b33
+   AND b55=a33
+   AND b1=a15
+   AND a52=b47
+   AND a47=b15
+   AND a26=b37
+   AND a64=8
+   AND a38=b54
+   AND a59=b61
+   AND b26=a32
+   AND b56=a20
+   AND b39=a61
+   AND a16=b17
+   AND a55=b27
+   AND a25=b52
+   AND a46=b3
+   AND a45=b4
+   AND b6=a10
+   AND b10=a49
+   AND b8=a1
+   AND a39=b50
+   AND b48=a44
+   AND a64=b29
+   AND b43=a13
+   AND a53=b51
+   AND a29=b45
+   AND a18=b28
+   AND b16=a8
+   AND b44=a43
+   AND a48=b20
+   AND a51=b13
+   AND a50=b34
+   AND b59=a6
+   AND a19=b62
+----
+47 values hashing to e8a1bf6efb8ed99ab0598af059ee4927
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-47-2
+SELECT x33,x17,x49,x6,x40,x31,x26,x14,x15,x21,x7,x37,x61,x11,x9,x39,x22,x54,x36,x52,x42,x56,x53,x63,x8,x46,x30,x47,x18,x41,x45,x62,x16,x13,x10,x25,x51,x20,x50,x28,x57,x19,x29,x1,x5,x43,x24
+  FROM t46,t10,t37,t45,t49,t25,t13,t42,t29,t50,t43,t63,t39,t5,t14,t9,t22,t47,t28,t17,t33,t21,t40,t19,t57,t7,t6,t1,t52,t24,t15,t53,t54,t20,t16,t51,t61,t62,t18,t36,t8,t26,t11,t56,t30,t31,t41
+ WHERE b57=a31
+   AND b15=a6
+   AND b6=a1
+   AND b61=a14
+   AND b45=a25
+   AND a56=b54
+   AND b1=a24
+   AND b40=a5
+   AND b13=a45
+   AND a29=b49
+   AND b11=a17
+   AND b10=a50
+   AND b19=a47
+   AND b52=a26
+   AND a18=b17
+   AND a54=b24
+   AND a61=b20
+   AND a7=10
+   AND a63=b42
+   AND b36=a7
+   AND a39=b22
+   AND a16=b18
+   AND a57=b8
+   AND a46=b41
+   AND a28=b46
+   AND a19=b62
+   AND a53=b21
+   AND b51=a22
+   AND b31=a51
+   AND a20=b53
+   AND a62=b39
+   AND b14=a30
+   AND b56=a10
+   AND b47=a9
+   AND b30=a11
+   AND b16=a36
+   AND a52=b28
+   AND b26=a43
+   AND b33=a21
+   AND b29=a8
+   AND b50=a33
+   AND a40=b9
+   AND a49=b63
+   AND b37=a41
+   AND b25=a42
+   AND b43=a13
+   AND a15=b5
+----
+47 values hashing to 70ade2ea7ac4c4a81e6e2ba68fb35741
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-47-2
+SELECT x33,x17,x49,x6,x40,x31,x26,x14,x15,x21,x7,x37,x61,x11,x9,x39,x22,x54,x36,x52,x42,x56,x53,x63,x8,x46,x30,x47,x18,x41,x45,x62,x16,x13,x10,x25,x51,x20,x50,x28,x57,x19,x29,x1,x5,x43,x24
+  FROM t22,t36,t1,t14,t56,t16,t8,t21,t33,t26,t11,t13,t61,t29,t5,t57,t51,t31,t7,t62,t10,t46,t28,t45,t30,t19,t15,t42,t6,t25,t17,t37,t9,t50,t18,t41,t40,t20,t47,t43,t39,t53,t63,t24,t52,t54,t49
+ WHERE b51=a22
+   AND a5=b40
+   AND a6=b15
+   AND b21=a53
+   AND a50=b10
+   AND a31=b57
+   AND b17=a18
+   AND b36=a7
+   AND b25=a42
+   AND a56=b54
+   AND a49=b63
+   AND b18=a16
+   AND a28=b46
+   AND a36=b16
+   AND a43=b26
+   AND a1=b6
+   AND b41=a46
+   AND b28=a52
+   AND a19=b62
+   AND b49=a29
+   AND b47=a9
+   AND a8=b29
+   AND a54=b24
+   AND a47=b19
+   AND a7=10
+   AND a51=b31
+   AND b43=a13
+   AND b53=a20
+   AND a40=b9
+   AND b20=a61
+   AND b37=a41
+   AND b42=a63
+   AND b14=a30
+   AND b52=a26
+   AND b1=a24
+   AND a25=b45
+   AND b5=a15
+   AND b30=a11
+   AND a62=b39
+   AND b8=a57
+   AND a14=b61
+   AND a17=b11
+   AND a10=b56
+   AND b50=a33
+   AND a21=b33
+   AND b22=a39
+   AND a45=b13
+----
+47 values hashing to 70ade2ea7ac4c4a81e6e2ba68fb35741
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-47-2
+SELECT x33,x17,x49,x6,x40,x31,x26,x14,x15,x21,x7,x37,x61,x11,x9,x39,x22,x54,x36,x52,x42,x56,x53,x63,x8,x46,x30,x47,x18,x41,x45,x62,x16,x13,x10,x25,x51,x20,x50,x28,x57,x19,x29,x1,x5,x43,x24
+  FROM t30,t1,t62,t39,t31,t47,t8,t29,t17,t7,t22,t5,t19,t41,t26,t40,t25,t42,t20,t9,t45,t54,t52,t33,t57,t18,t6,t21,t24,t61,t36,t43,t15,t50,t46,t63,t28,t56,t49,t11,t10,t53,t37,t51,t14,t13,t16
+ WHERE a28=b46
+   AND b13=a45
+   AND b52=a26
+   AND b1=a24
+   AND b54=a56
+   AND a53=b21
+   AND a46=b41
+   AND b33=a21
+   AND a41=b37
+   AND b5=a15
+   AND a5=b40
+   AND b61=a14
+   AND b22=a39
+   AND b28=a52
+   AND a8=b29
+   AND b43=a13
+   AND b26=a43
+   AND a7=10
+   AND b31=a51
+   AND b18=a16
+   AND b24=a54
+   AND a30=b14
+   AND a6=b15
+   AND a31=b57
+   AND b49=a29
+   AND b10=a50
+   AND a36=b16
+   AND b30=a11
+   AND a22=b51
+   AND a63=b42
+   AND b17=a18
+   AND b11=a17
+   AND b8=a57
+   AND b63=a49
+   AND a33=b50
+   AND a25=b45
+   AND a20=b53
+   AND a40=b9
+   AND b47=a9
+   AND a7=b36
+   AND b25=a42
+   AND b39=a62
+   AND a1=b6
+   AND b20=a61
+   AND a10=b56
+   AND a19=b62
+   AND a47=b19
+----
+47 values hashing to 70ade2ea7ac4c4a81e6e2ba68fb35741
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-47-3
+SELECT x14,x37,x15,x51,x57,x38,x12,x17,x24,x2,x10,x49,x11,x44,x7,x19,x54,x46,x47,x39,x36,x45,x6,x20,x32,x53,x16,x8,x3,x13,x22,x33,x35,x30,x29,x64,x62,x50,x4,x61,x25,x5,x34,x27,x59,x40,x42
+  FROM t12,t11,t6,t42,t39,t30,t53,t7,t59,t51,t19,t36,t10,t62,t20,t33,t45,t37,t17,t16,t4,t50,t24,t25,t54,t35,t61,t64,t5,t13,t40,t49,t34,t15,t14,t3,t8,t22,t38,t57,t2,t46,t44,t32,t47,t27,t29
+ WHERE a54=b35
+   AND a53=b5
+   AND b30=a40
+   AND b15=a29
+   AND b16=a4
+   AND b57=a36
+   AND a13=b10
+   AND a32=b47
+   AND b6=a27
+   AND a4=6
+   AND a34=b42
+   AND a62=b38
+   AND b49=a19
+   AND a38=b51
+   AND b19=a44
+   AND b40=a61
+   AND b2=a6
+   AND b25=a12
+   AND b64=a59
+   AND b61=a33
+   AND a51=b22
+   AND b45=a15
+   AND a47=b33
+   AND b32=a8
+   AND a22=b14
+   AND b13=a5
+   AND b34=a57
+   AND b11=a20
+   AND a24=b7
+   AND a25=b59
+   AND a14=b3
+   AND a10=b50
+   AND a50=b62
+   AND b12=a2
+   AND b24=a39
+   AND b8=a7
+   AND a11=b29
+   AND a3=b27
+   AND b17=a49
+   AND a17=b46
+   AND b39=a45
+   AND a46=b53
+   AND b44=a37
+   AND b36=a64
+   AND b20=a35
+   AND b37=a16
+   AND b54=a42
+----
+47 values hashing to 0340f97af42aeb81d6dc1adb76399153
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-47-3
+SELECT x14,x37,x15,x51,x57,x38,x12,x17,x24,x2,x10,x49,x11,x44,x7,x19,x54,x46,x47,x39,x36,x45,x6,x20,x32,x53,x16,x8,x3,x13,x22,x33,x35,x30,x29,x64,x62,x50,x4,x61,x25,x5,x34,x27,x59,x40,x42
+  FROM t37,t24,t33,t15,t16,t49,t44,t36,t40,t59,t39,t25,t4,t42,t32,t11,t51,t6,t57,t38,t14,t5,t62,t10,t64,t53,t20,t13,t19,t7,t30,t2,t27,t12,t50,t61,t3,t22,t29,t17,t47,t35,t8,t34,t46,t54,t45
+ WHERE b57=a36
+   AND b51=a38
+   AND b36=a64
+   AND b49=a19
+   AND a59=b64
+   AND a22=b14
+   AND a29=b15
+   AND b39=a45
+   AND a4=6
+   AND b24=a39
+   AND b29=a11
+   AND a20=b11
+   AND a42=b54
+   AND a16=b37
+   AND b30=a40
+   AND b47=a32
+   AND b61=a33
+   AND a49=b17
+   AND a35=b20
+   AND a10=b50
+   AND a53=b5
+   AND a44=b19
+   AND b62=a50
+   AND a5=b13
+   AND a4=b16
+   AND a3=b27
+   AND a6=b2
+   AND b44=a37
+   AND a47=b33
+   AND a2=b12
+   AND b35=a54
+   AND a27=b6
+   AND b32=a8
+   AND b46=a17
+   AND b34=a57
+   AND b53=a46
+   AND b45=a15
+   AND a25=b59
+   AND b22=a51
+   AND a61=b40
+   AND b25=a12
+   AND b10=a13
+   AND a34=b42
+   AND a7=b8
+   AND a62=b38
+   AND a14=b3
+   AND b7=a24
+----
+47 values hashing to 0340f97af42aeb81d6dc1adb76399153
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-47-3
+SELECT x14,x37,x15,x51,x57,x38,x12,x17,x24,x2,x10,x49,x11,x44,x7,x19,x54,x46,x47,x39,x36,x45,x6,x20,x32,x53,x16,x8,x3,x13,x22,x33,x35,x30,x29,x64,x62,x50,x4,x61,x25,x5,x34,x27,x59,x40,x42
+  FROM t61,t29,t2,t39,t51,t5,t50,t44,t38,t59,t53,t45,t15,t13,t32,t42,t4,t34,t12,t11,t10,t36,t37,t57,t30,t16,t3,t6,t19,t14,t25,t49,t64,t27,t24,t46,t22,t54,t62,t35,t17,t40,t47,t20,t7,t8,t33
+ WHERE a64=b36
+   AND a62=b38
+   AND b62=a50
+   AND b51=a38
+   AND b42=a34
+   AND a39=b24
+   AND b32=a8
+   AND a11=b29
+   AND a24=b7
+   AND b37=a16
+   AND b33=a47
+   AND a13=b10
+   AND a51=b22
+   AND b34=a57
+   AND a6=b2
+   AND a7=b8
+   AND a10=b50
+   AND a40=b30
+   AND b47=a32
+   AND b49=a19
+   AND a22=b14
+   AND a2=b12
+   AND b20=a35
+   AND a53=b5
+   AND a45=b39
+   AND a12=b25
+   AND a29=b15
+   AND a27=b6
+   AND a14=b3
+   AND b45=a15
+   AND b27=a3
+   AND a5=b13
+   AND b57=a36
+   AND b54=a42
+   AND b19=a44
+   AND a25=b59
+   AND a33=b61
+   AND b40=a61
+   AND a59=b64
+   AND b35=a54
+   AND a4=6
+   AND a4=b16
+   AND b17=a49
+   AND b46=a17
+   AND b44=a37
+   AND a46=b53
+   AND b11=a20
+----
+47 values hashing to 0340f97af42aeb81d6dc1adb76399153
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-47-4
+SELECT x19,x28,x43,x3,x8,x42,x51,x21,x33,x14,x9,x20,x18,x1,x26,x61,x45,x38,x12,x5,x6,x56,x62,x23,x27,x31,x10,x53,x35,x50,x25,x52,x55,x17,x2,x22,x46,x41,x57,x39,x36,x60,x64,x7,x15,x59,x4
+  FROM t3,t18,t57,t9,t5,t62,t31,t27,t15,t59,t43,t35,t17,t12,t33,t52,t42,t23,t7,t38,t46,t2,t20,t19,t22,t61,t45,t36,t60,t14,t21,t6,t8,t28,t64,t55,t53,t10,t26,t41,t56,t39,t25,t1,t50,t4,t51
+ WHERE a43=b15
+   AND b39=a1
+   AND a9=b59
+   AND a15=b21
+   AND b25=a62
+   AND a22=b26
+   AND a39=b56
+   AND a17=b38
+   AND a12=b3
+   AND a25=b17
+   AND b4=a19
+   AND a21=b36
+   AND b64=a7
+   AND b60=a42
+   AND b18=a35
+   AND b6=a36
+   AND a10=b22
+   AND b28=a18
+   AND a6=b9
+   AND b1=a52
+   AND a23=b52
+   AND a33=b31
+   AND b7=a45
+   AND b35=a56
+   AND b19=a20
+   AND a41=b62
+   AND a4=b42
+   AND b33=a64
+   AND a5=b2
+   AND b12=a59
+   AND b55=a50
+   AND a57=b45
+   AND a51=b50
+   AND b57=a60
+   AND a2=b8
+   AND b27=a14
+   AND b53=a38
+   AND b51=a3
+   AND b14=a55
+   AND a61=b23
+   AND a53=b5
+   AND a27=b61
+   AND b46=a8
+   AND a28=b41
+   AND a43=9
+   AND b20=a46
+   AND b10=a31
+----
+47 values hashing to f39f057baad9f8d8f68ffe7c7ccefd8a
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-47-4
+SELECT x19,x28,x43,x3,x8,x42,x51,x21,x33,x14,x9,x20,x18,x1,x26,x61,x45,x38,x12,x5,x6,x56,x62,x23,x27,x31,x10,x53,x35,x50,x25,x52,x55,x17,x2,x22,x46,x41,x57,x39,x36,x60,x64,x7,x15,x59,x4
+  FROM t28,t3,t42,t51,t61,t21,t38,t22,t53,t12,t46,t20,t15,t27,t4,t55,t41,t14,t2,t43,t50,t45,t62,t33,t7,t5,t10,t25,t36,t18,t39,t59,t9,t57,t52,t17,t23,t56,t31,t8,t6,t60,t35,t19,t64,t26,t1
+ WHERE b46=a8
+   AND b50=a51
+   AND b22=a10
+   AND b26=a22
+   AND b39=a1
+   AND b36=a21
+   AND a17=b38
+   AND b14=a55
+   AND a45=b7
+   AND b5=a53
+   AND b15=a43
+   AND a46=b20
+   AND b33=a64
+   AND a56=b35
+   AND a41=b62
+   AND a28=b41
+   AND a52=b1
+   AND a31=b10
+   AND b31=a33
+   AND a42=b60
+   AND a15=b21
+   AND b12=a59
+   AND b8=a2
+   AND b2=a5
+   AND b4=a19
+   AND b23=a61
+   AND b18=a35
+   AND b3=a12
+   AND a57=b45
+   AND a43=9
+   AND b57=a60
+   AND b52=a23
+   AND b64=a7
+   AND b19=a20
+   AND a25=b17
+   AND b9=a6
+   AND a38=b53
+   AND a39=b56
+   AND a3=b51
+   AND b6=a36
+   AND b28=a18
+   AND a50=b55
+   AND a4=b42
+   AND a27=b61
+   AND b59=a9
+   AND b25=a62
+   AND b27=a14
+----
+47 values hashing to f39f057baad9f8d8f68ffe7c7ccefd8a
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-47-4
+SELECT x19,x28,x43,x3,x8,x42,x51,x21,x33,x14,x9,x20,x18,x1,x26,x61,x45,x38,x12,x5,x6,x56,x62,x23,x27,x31,x10,x53,x35,x50,x25,x52,x55,x17,x2,x22,x46,x41,x57,x39,x36,x60,x64,x7,x15,x59,x4
+  FROM t50,t20,t52,t61,t14,t22,t26,t6,t18,t4,t59,t31,t45,t51,t60,t25,t53,t56,t10,t36,t27,t33,t2,t42,t5,t15,t46,t21,t57,t43,t39,t1,t41,t35,t38,t55,t7,t19,t64,t8,t23,t3,t28,t17,t9,t12,t62
+ WHERE a59=b12
+   AND b28=a18
+   AND a27=b61
+   AND b39=a1
+   AND a45=b7
+   AND a4=b42
+   AND a43=b15
+   AND b5=a53
+   AND b21=a15
+   AND b18=a35
+   AND b56=a39
+   AND a19=b4
+   AND a52=b1
+   AND a31=b10
+   AND b41=a28
+   AND a3=b51
+   AND a9=b59
+   AND a8=b46
+   AND a21=b36
+   AND b9=a6
+   AND a17=b38
+   AND b25=a62
+   AND b26=a22
+   AND a10=b22
+   AND b35=a56
+   AND b53=a38
+   AND b60=a42
+   AND b8=a2
+   AND a20=b19
+   AND a51=b50
+   AND b45=a57
+   AND a50=b55
+   AND a64=b33
+   AND a55=b14
+   AND a7=b64
+   AND b20=a46
+   AND b17=a25
+   AND a14=b27
+   AND b23=a61
+   AND a33=b31
+   AND a36=b6
+   AND a5=b2
+   AND b57=a60
+   AND b3=a12
+   AND b52=a23
+   AND a41=b62
+   AND a43=9
+----
+47 values hashing to f39f057baad9f8d8f68ffe7c7ccefd8a
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-48-1
+SELECT x33,x8,x47,x30,x17,x39,x37,x9,x1,x7,x12,x29,x27,x50,x22,x44,x45,x31,x16,x15,x18,x62,x60,x6,x36,x11,x42,x58,x52,x56,x46,x49,x57,x21,x55,x19,x20,x2,x64,x10,x3,x43,x13,x25,x24,x4,x51,x41
+  FROM t45,t18,t47,t58,t24,t49,t12,t29,t7,t43,t33,t10,t21,t1,t36,t60,t44,t15,t52,t20,t62,t17,t42,t57,t11,t3,t37,t30,t8,t55,t19,t16,t22,t41,t27,t51,t13,t6,t25,t46,t56,t4,t2,t50,t9,t64,t39,t31
+ WHERE a31=b39
+   AND a30=b41
+   AND a60=b31
+   AND b58=a52
+   AND a22=b57
+   AND a8=b36
+   AND a11=b62
+   AND b24=a51
+   AND b19=a7
+   AND b55=a47
+   AND a58=b3
+   AND a64=b50
+   AND a3=b56
+   AND a27=9
+   AND a46=b33
+   AND a13=b46
+   AND a29=b9
+   AND b37=a20
+   AND b18=a43
+   AND a4=b22
+   AND a56=b29
+   AND a18=b13
+   AND b6=a39
+   AND b15=a50
+   AND b44=a1
+   AND a36=b49
+   AND a45=b8
+   AND b45=a10
+   AND a2=b43
+   AND b4=a24
+   AND a25=b42
+   AND b51=a16
+   AND b21=a33
+   AND a17=b60
+   AND b17=a44
+   AND a15=b47
+   AND a62=b16
+   AND b52=a6
+   AND a37=b10
+   AND a57=b30
+   AND a27=b1
+   AND a41=b64
+   AND b20=a42
+   AND a55=b2
+   AND b25=a12
+   AND a49=b7
+   AND a9=b11
+   AND b12=a21
+----
+48 values hashing to d0152a1115b1ef89c12916415430d759
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-48-1
+SELECT x33,x8,x47,x30,x17,x39,x37,x9,x1,x7,x12,x29,x27,x50,x22,x44,x45,x31,x16,x15,x18,x62,x60,x6,x36,x11,x42,x58,x52,x56,x46,x49,x57,x21,x55,x19,x20,x2,x64,x10,x3,x43,x13,x25,x24,x4,x51,x41
+  FROM t42,t6,t20,t11,t36,t18,t16,t58,t19,t44,t21,t27,t8,t17,t10,t45,t64,t29,t37,t57,t22,t62,t2,t24,t56,t33,t47,t51,t46,t7,t13,t4,t39,t60,t55,t49,t9,t1,t52,t12,t41,t25,t31,t43,t3,t15,t50,t30
+ WHERE b1=a27
+   AND a12=b25
+   AND a30=b41
+   AND b45=a10
+   AND a17=b60
+   AND b12=a21
+   AND b64=a41
+   AND b58=a52
+   AND a37=b10
+   AND b42=a25
+   AND a29=b9
+   AND a11=b62
+   AND a46=b33
+   AND b16=a62
+   AND a58=b3
+   AND b47=a15
+   AND a33=b21
+   AND a42=b20
+   AND b57=a22
+   AND a50=b15
+   AND b52=a6
+   AND a3=b56
+   AND a1=b44
+   AND b39=a31
+   AND b4=a24
+   AND a56=b29
+   AND a27=9
+   AND b37=a20
+   AND b36=a8
+   AND b43=a2
+   AND a60=b31
+   AND b49=a36
+   AND b22=a4
+   AND a13=b46
+   AND a7=b19
+   AND a51=b24
+   AND b8=a45
+   AND b30=a57
+   AND a18=b13
+   AND b2=a55
+   AND a44=b17
+   AND a9=b11
+   AND a43=b18
+   AND b7=a49
+   AND b51=a16
+   AND a39=b6
+   AND b50=a64
+   AND b55=a47
+----
+48 values hashing to d0152a1115b1ef89c12916415430d759
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-48-1
+SELECT x33,x8,x47,x30,x17,x39,x37,x9,x1,x7,x12,x29,x27,x50,x22,x44,x45,x31,x16,x15,x18,x62,x60,x6,x36,x11,x42,x58,x52,x56,x46,x49,x57,x21,x55,x19,x20,x2,x64,x10,x3,x43,x13,x25,x24,x4,x51,x41
+  FROM t51,t19,t10,t50,t39,t31,t1,t52,t17,t15,t7,t33,t11,t49,t18,t8,t22,t60,t16,t2,t9,t12,t20,t45,t42,t25,t37,t57,t55,t4,t47,t30,t58,t29,t21,t13,t46,t56,t6,t41,t62,t44,t27,t24,t64,t43,t36,t3
+ WHERE b3=a58
+   AND b46=a13
+   AND b10=a37
+   AND b29=a56
+   AND b33=a46
+   AND b22=a4
+   AND b50=a64
+   AND b25=a12
+   AND a16=b51
+   AND a20=b37
+   AND a25=b42
+   AND b4=a24
+   AND a44=b17
+   AND b47=a15
+   AND b60=a17
+   AND a22=b57
+   AND a33=b21
+   AND a1=b44
+   AND b39=a31
+   AND b41=a30
+   AND b2=a55
+   AND a36=b49
+   AND a11=b62
+   AND b52=a6
+   AND b45=a10
+   AND b11=a9
+   AND b9=a29
+   AND a27=9
+   AND a39=b6
+   AND b55=a47
+   AND b36=a8
+   AND a50=b15
+   AND a27=b1
+   AND a18=b13
+   AND a60=b31
+   AND a7=b19
+   AND a57=b30
+   AND a51=b24
+   AND a43=b18
+   AND a3=b56
+   AND a41=b64
+   AND b43=a2
+   AND a42=b20
+   AND b8=a45
+   AND b16=a62
+   AND a21=b12
+   AND b7=a49
+   AND a52=b58
+----
+48 values hashing to d0152a1115b1ef89c12916415430d759
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-48-2
+SELECT x60,x34,x40,x58,x5,x17,x24,x13,x19,x27,x46,x7,x8,x62,x18,x38,x14,x64,x3,x22,x61,x52,x29,x50,x37,x9,x10,x41,x26,x39,x2,x11,x12,x45,x33,x15,x6,x43,x53,x57,x25,x56,x42,x23,x55,x21,x36,x31
+  FROM t46,t39,t64,t2,t10,t57,t52,t13,t27,t17,t33,t24,t3,t58,t25,t22,t40,t19,t12,t43,t61,t18,t62,t37,t26,t6,t8,t23,t60,t42,t29,t15,t45,t36,t14,t34,t9,t56,t21,t7,t55,t53,t5,t38,t11,t50,t31,t41
+ WHERE b9=a57
+   AND b36=a15
+   AND b8=a31
+   AND a40=b14
+   AND b52=a21
+   AND a25=b17
+   AND b56=a53
+   AND b61=a36
+   AND a14=b39
+   AND b18=a38
+   AND a5=b38
+   AND b42=a24
+   AND b26=a60
+   AND b55=a29
+   AND a41=b37
+   AND a12=b2
+   AND a62=b22
+   AND a55=b57
+   AND b33=a9
+   AND b31=a10
+   AND a43=b13
+   AND a22=b5
+   AND b46=a52
+   AND b19=a11
+   AND a46=b23
+   AND a64=b58
+   AND b62=a42
+   AND a61=b24
+   AND b45=a27
+   AND b6=a33
+   AND a18=b29
+   AND b50=a56
+   AND a13=b25
+   AND a3=b15
+   AND a34=b41
+   AND a19=b12
+   AND b43=a23
+   AND a6=b7
+   AND a8=b3
+   AND b34=a58
+   AND a60=7
+   AND b27=a7
+   AND b40=a2
+   AND b10=a50
+   AND a37=b21
+   AND b11=a26
+   AND a17=b53
+   AND b64=a39
+----
+48 values hashing to efd39aefb26c896a1bb2d1e851f1df38
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-48-2
+SELECT x60,x34,x40,x58,x5,x17,x24,x13,x19,x27,x46,x7,x8,x62,x18,x38,x14,x64,x3,x22,x61,x52,x29,x50,x37,x9,x10,x41,x26,x39,x2,x11,x12,x45,x33,x15,x6,x43,x53,x57,x25,x56,x42,x23,x55,x21,x36,x31
+  FROM t14,t31,t7,t29,t18,t9,t52,t25,t8,t64,t15,t22,t21,t3,t13,t37,t11,t39,t40,t24,t61,t23,t5,t53,t55,t12,t60,t46,t6,t34,t26,t43,t45,t17,t50,t2,t57,t19,t38,t62,t36,t27,t58,t41,t10,t42,t56,t33
+ WHERE a50=b10
+   AND b12=a19
+   AND a23=b43
+   AND a62=b22
+   AND b55=a29
+   AND b29=a18
+   AND a12=b2
+   AND a57=b9
+   AND a22=b5
+   AND b58=a64
+   AND b21=a37
+   AND a24=b42
+   AND b17=a25
+   AND a36=b61
+   AND b45=a27
+   AND a14=b39
+   AND b36=a15
+   AND b25=a13
+   AND b24=a61
+   AND b52=a21
+   AND b38=a5
+   AND a56=b50
+   AND b7=a6
+   AND a60=b26
+   AND b41=a34
+   AND a38=b18
+   AND b57=a55
+   AND a42=b62
+   AND b15=a3
+   AND b31=a10
+   AND a46=b23
+   AND b11=a26
+   AND b6=a33
+   AND a8=b3
+   AND b53=a17
+   AND a58=b34
+   AND a9=b33
+   AND b27=a7
+   AND b13=a43
+   AND a39=b64
+   AND b46=a52
+   AND a41=b37
+   AND a2=b40
+   AND a11=b19
+   AND a60=7
+   AND b56=a53
+   AND b8=a31
+   AND b14=a40
+----
+48 values hashing to efd39aefb26c896a1bb2d1e851f1df38
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-48-2
+SELECT x60,x34,x40,x58,x5,x17,x24,x13,x19,x27,x46,x7,x8,x62,x18,x38,x14,x64,x3,x22,x61,x52,x29,x50,x37,x9,x10,x41,x26,x39,x2,x11,x12,x45,x33,x15,x6,x43,x53,x57,x25,x56,x42,x23,x55,x21,x36,x31
+  FROM t8,t58,t45,t36,t23,t53,t12,t62,t55,t21,t7,t29,t19,t6,t11,t33,t13,t43,t64,t15,t18,t14,t42,t39,t41,t52,t10,t27,t22,t5,t34,t3,t9,t24,t40,t60,t38,t61,t31,t25,t56,t37,t57,t17,t50,t46,t2,t26
+ WHERE b10=a50
+   AND b50=a56
+   AND a14=b39
+   AND b45=a27
+   AND a7=b27
+   AND a18=b29
+   AND a26=b11
+   AND a64=b58
+   AND a38=b18
+   AND b61=a36
+   AND b12=a19
+   AND a61=b24
+   AND b38=a5
+   AND b57=a55
+   AND a43=b13
+   AND b42=a24
+   AND b55=a29
+   AND b36=a15
+   AND b5=a22
+   AND b31=a10
+   AND a9=b33
+   AND a46=b23
+   AND b22=a62
+   AND b14=a40
+   AND a2=b40
+   AND b52=a21
+   AND a13=b25
+   AND b2=a12
+   AND a17=b53
+   AND b26=a60
+   AND b9=a57
+   AND b41=a34
+   AND b56=a53
+   AND a58=b34
+   AND b7=a6
+   AND a8=b3
+   AND b17=a25
+   AND a11=b19
+   AND a41=b37
+   AND b6=a33
+   AND b15=a3
+   AND a60=7
+   AND b21=a37
+   AND a39=b64
+   AND b8=a31
+   AND b46=a52
+   AND b43=a23
+   AND b62=a42
+----
+48 values hashing to efd39aefb26c896a1bb2d1e851f1df38
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-48-3
+SELECT x30,x52,x1,x59,x8,x29,x17,x62,x23,x56,x46,x24,x32,x51,x54,x12,x50,x60,x38,x34,x57,x63,x47,x7,x19,x6,x9,x61,x33,x26,x58,x5,x41,x40,x14,x42,x64,x21,x28,x39,x43,x31,x16,x27,x25,x20,x4,x18
+  FROM t38,t59,t32,t57,t8,t54,t61,t63,t23,t20,t46,t28,t42,t26,t60,t16,t24,t47,t6,t21,t12,t5,t7,t50,t58,t1,t51,t40,t25,t31,t4,t30,t29,t39,t14,t43,t33,t18,t17,t62,t34,t27,t56,t41,t64,t52,t19,t9
+ WHERE a26=b50
+   AND a12=b19
+   AND a16=b8
+   AND b21=a39
+   AND a5=b14
+   AND a6=b27
+   AND b58=a27
+   AND a52=b25
+   AND a58=b33
+   AND b41=a30
+   AND b56=a18
+   AND a17=b9
+   AND a47=7
+   AND a38=b32
+   AND b60=a4
+   AND a60=b7
+   AND b20=a29
+   AND b30=a7
+   AND b31=a64
+   AND a23=b18
+   AND b17=a43
+   AND a19=b26
+   AND a50=b40
+   AND b42=a56
+   AND a40=b57
+   AND b46=a54
+   AND b4=a8
+   AND a1=b29
+   AND b5=a32
+   AND a24=b61
+   AND a57=b59
+   AND a42=b1
+   AND b38=a62
+   AND a20=b43
+   AND b28=a63
+   AND a21=b64
+   AND a28=b12
+   AND a14=b24
+   AND a33=b54
+   AND a47=b34
+   AND b62=a9
+   AND a61=b51
+   AND b52=a34
+   AND a25=b63
+   AND a59=b39
+   AND b6=a51
+   AND b23=a41
+   AND a31=b16
+----
+48 values hashing to ba2ce8c0f474fc4320deb6b8ab6e4b0f
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-48-3
+SELECT x30,x52,x1,x59,x8,x29,x17,x62,x23,x56,x46,x24,x32,x51,x54,x12,x50,x60,x38,x34,x57,x63,x47,x7,x19,x6,x9,x61,x33,x26,x58,x5,x41,x40,x14,x42,x64,x21,x28,x39,x43,x31,x16,x27,x25,x20,x4,x18
+  FROM t25,t5,t21,t29,t19,t32,t23,t54,t59,t43,t20,t31,t28,t46,t39,t1,t42,t27,t51,t34,t62,t17,t6,t64,t50,t26,t12,t47,t40,t33,t63,t7,t24,t52,t9,t16,t61,t58,t57,t60,t18,t4,t41,t14,t8,t56,t30,t38
+ WHERE a14=b24
+   AND b16=a31
+   AND a39=b21
+   AND a25=b63
+   AND b19=a12
+   AND b59=a57
+   AND b5=a32
+   AND b60=a4
+   AND a24=b61
+   AND a62=b38
+   AND b27=a6
+   AND a63=b28
+   AND b39=a59
+   AND a60=b7
+   AND b46=a54
+   AND b43=a20
+   AND a42=b1
+   AND a61=b51
+   AND a23=b18
+   AND b29=a1
+   AND a17=b9
+   AND b8=a16
+   AND a18=b56
+   AND b50=a26
+   AND a47=7
+   AND b26=a19
+   AND b64=a21
+   AND b54=a33
+   AND a56=b42
+   AND b33=a58
+   AND a50=b40
+   AND a27=b58
+   AND b14=a5
+   AND a43=b17
+   AND a29=b20
+   AND a38=b32
+   AND b62=a9
+   AND b57=a40
+   AND b52=a34
+   AND b34=a47
+   AND a64=b31
+   AND a41=b23
+   AND a8=b4
+   AND b25=a52
+   AND b41=a30
+   AND b12=a28
+   AND b30=a7
+   AND a51=b6
+----
+48 values hashing to ba2ce8c0f474fc4320deb6b8ab6e4b0f
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-48-3
+SELECT x30,x52,x1,x59,x8,x29,x17,x62,x23,x56,x46,x24,x32,x51,x54,x12,x50,x60,x38,x34,x57,x63,x47,x7,x19,x6,x9,x61,x33,x26,x58,x5,x41,x40,x14,x42,x64,x21,x28,x39,x43,x31,x16,x27,x25,x20,x4,x18
+  FROM t58,t12,t60,t17,t27,t59,t32,t52,t19,t18,t4,t43,t9,t16,t61,t21,t64,t14,t39,t20,t26,t63,t31,t23,t56,t41,t33,t6,t62,t24,t34,t38,t46,t29,t30,t5,t57,t47,t40,t51,t42,t50,t25,t54,t1,t28,t8,t7
+ WHERE a62=b38
+   AND b41=a30
+   AND b60=a4
+   AND b32=a38
+   AND a29=b20
+   AND b63=a25
+   AND b12=a28
+   AND a8=b4
+   AND b27=a6
+   AND b5=a32
+   AND a42=b1
+   AND a19=b26
+   AND b43=a20
+   AND a40=b57
+   AND b42=a56
+   AND a14=b24
+   AND a7=b30
+   AND a60=b7
+   AND a50=b40
+   AND a18=b56
+   AND a61=b51
+   AND a5=b14
+   AND a23=b18
+   AND b19=a12
+   AND b31=a64
+   AND a9=b62
+   AND a24=b61
+   AND a54=b46
+   AND a1=b29
+   AND a33=b54
+   AND b8=a16
+   AND b28=a63
+   AND b6=a51
+   AND b25=a52
+   AND a59=b39
+   AND b52=a34
+   AND b9=a17
+   AND b58=a27
+   AND b16=a31
+   AND b34=a47
+   AND a41=b23
+   AND a26=b50
+   AND b17=a43
+   AND b59=a57
+   AND a39=b21
+   AND b64=a21
+   AND a47=7
+   AND a58=b33
+----
+48 values hashing to ba2ce8c0f474fc4320deb6b8ab6e4b0f
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-48-4
+SELECT x45,x2,x27,x23,x30,x16,x48,x13,x24,x18,x54,x11,x49,x59,x64,x21,x12,x46,x50,x17,x62,x7,x4,x6,x36,x3,x28,x20,x38,x29,x57,x51,x22,x43,x40,x9,x61,x1,x5,x14,x52,x58,x39,x60,x47,x44,x19,x15
+  FROM t59,t6,t18,t21,t11,t50,t40,t12,t57,t13,t15,t3,t51,t5,t44,t54,t27,t58,t48,t28,t38,t49,t19,t17,t62,t30,t2,t14,t64,t9,t24,t61,t4,t29,t47,t36,t43,t39,t60,t52,t22,t7,t16,t46,t45,t23,t1,t20
+ WHERE b7=a27
+   AND a22=b39
+   AND a30=b3
+   AND a38=b51
+   AND a50=b62
+   AND b19=a29
+   AND b47=a12
+   AND b58=a64
+   AND b14=a5
+   AND a36=b48
+   AND a45=b60
+   AND b11=a23
+   AND b61=a51
+   AND b46=a7
+   AND a2=b18
+   AND a39=b36
+   AND b2=a46
+   AND b4=a17
+   AND a49=b45
+   AND b40=a9
+   AND a60=b50
+   AND a54=b57
+   AND b28=a59
+   AND a28=b30
+   AND b29=a52
+   AND a43=10
+   AND a62=b38
+   AND b13=a58
+   AND b52=a15
+   AND b59=a47
+   AND b1=a18
+   AND a19=b44
+   AND a16=b23
+   AND b49=a4
+   AND b5=a6
+   AND b9=a21
+   AND b16=a43
+   AND b15=a11
+   AND b17=a24
+   AND a61=b22
+   AND b24=a57
+   AND b20=a40
+   AND a3=b64
+   AND a13=b27
+   AND a20=b12
+   AND a48=b6
+   AND b21=a14
+   AND a44=b54
+----
+48 values hashing to bc9d410fec58181cb873152c982de845
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-48-4
+SELECT x45,x2,x27,x23,x30,x16,x48,x13,x24,x18,x54,x11,x49,x59,x64,x21,x12,x46,x50,x17,x62,x7,x4,x6,x36,x3,x28,x20,x38,x29,x57,x51,x22,x43,x40,x9,x61,x1,x5,x14,x52,x58,x39,x60,x47,x44,x19,x15
+  FROM t61,t15,t1,t22,t38,t16,t49,t39,t4,t2,t52,t18,t54,t5,t14,t48,t21,t59,t44,t19,t51,t3,t24,t43,t23,t46,t30,t28,t62,t20,t60,t64,t29,t17,t27,t45,t57,t11,t9,t6,t12,t36,t50,t13,t7,t58,t40,t47
+ WHERE a24=b17
+   AND b9=a21
+   AND a17=b4
+   AND a48=b6
+   AND b36=a39
+   AND b46=a7
+   AND a12=b47
+   AND b39=a22
+   AND a50=b62
+   AND a9=b40
+   AND b16=a43
+   AND a19=b44
+   AND a29=b19
+   AND a23=b11
+   AND a58=b13
+   AND b18=a2
+   AND a11=b15
+   AND b12=a20
+   AND a59=b28
+   AND a43=10
+   AND b52=a15
+   AND b50=a60
+   AND a64=b58
+   AND a49=b45
+   AND b22=a61
+   AND a57=b24
+   AND a52=b29
+   AND b1=a18
+   AND b7=a27
+   AND b60=a45
+   AND b5=a6
+   AND b61=a51
+   AND b57=a54
+   AND b51=a38
+   AND b30=a28
+   AND a13=b27
+   AND b48=a36
+   AND b59=a47
+   AND a44=b54
+   AND a30=b3
+   AND a4=b49
+   AND b64=a3
+   AND a5=b14
+   AND a16=b23
+   AND b20=a40
+   AND b21=a14
+   AND a62=b38
+   AND b2=a46
+----
+48 values hashing to bc9d410fec58181cb873152c982de845
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-48-4
+SELECT x45,x2,x27,x23,x30,x16,x48,x13,x24,x18,x54,x11,x49,x59,x64,x21,x12,x46,x50,x17,x62,x7,x4,x6,x36,x3,x28,x20,x38,x29,x57,x51,x22,x43,x40,x9,x61,x1,x5,x14,x52,x58,x39,x60,x47,x44,x19,x15
+  FROM t54,t60,t44,t43,t14,t23,t45,t62,t47,t58,t38,t17,t21,t13,t50,t64,t24,t1,t46,t20,t18,t30,t22,t12,t57,t4,t28,t2,t48,t52,t9,t27,t39,t19,t29,t11,t49,t3,t61,t59,t15,t16,t40,t6,t5,t36,t51,t7
+ WHERE a14=b21
+   AND b18=a2
+   AND b47=a12
+   AND b17=a24
+   AND a58=b13
+   AND a45=b60
+   AND b48=a36
+   AND a16=b23
+   AND a46=b2
+   AND b36=a39
+   AND a50=b62
+   AND a17=b4
+   AND b20=a40
+   AND b12=a20
+   AND b40=a9
+   AND a43=10
+   AND a44=b54
+   AND b46=a7
+   AND b22=a61
+   AND a3=b64
+   AND b50=a60
+   AND a18=b1
+   AND b24=a57
+   AND b19=a29
+   AND a23=b11
+   AND a51=b61
+   AND a38=b51
+   AND a52=b29
+   AND b57=a54
+   AND a6=b5
+   AND a22=b39
+   AND b59=a47
+   AND b28=a59
+   AND b16=a43
+   AND b7=a27
+   AND b6=a48
+   AND b49=a4
+   AND a62=b38
+   AND b58=a64
+   AND a11=b15
+   AND a49=b45
+   AND b14=a5
+   AND a15=b52
+   AND a21=b9
+   AND b44=a19
+   AND a28=b30
+   AND a13=b27
+   AND a30=b3
+----
+48 values hashing to bc9d410fec58181cb873152c982de845
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-49-1
+SELECT x52,x5,x21,x56,x29,x2,x44,x45,x46,x64,x4,x14,x25,x38,x35,x36,x8,x63,x10,x30,x34,x43,x54,x28,x48,x6,x33,x41,x39,x37,x17,x19,x60,x18,x15,x32,x47,x62,x1,x13,x24,x23,x7,x22,x55,x49,x26,x40,x27
+  FROM t17,t18,t24,t26,t21,t44,t52,t37,t14,t40,t15,t45,t33,t60,t22,t1,t39,t13,t2,t47,t63,t6,t29,t23,t10,t28,t62,t8,t34,t54,t48,t49,t4,t55,t32,t43,t30,t56,t64,t5,t38,t19,t41,t35,t7,t27,t25,t36,t46
+ WHERE a64=b15
+   AND b63=a22
+   AND a43=b5
+   AND a60=b18
+   AND a55=b40
+   AND a38=b45
+   AND b27=a24
+   AND a44=b34
+   AND b39=a62
+   AND b55=a6
+   AND b4=a47
+   AND a45=b25
+   AND a39=b35
+   AND a4=b49
+   AND b8=a18
+   AND a28=b54
+   AND b44=a48
+   AND a17=b21
+   AND a21=b47
+   AND a22=4
+   AND b14=a49
+   AND a56=b37
+   AND a32=b38
+   AND a7=b52
+   AND b24=a23
+   AND a2=b26
+   AND b13=a10
+   AND b17=a63
+   AND a52=b43
+   AND b30=a36
+   AND a46=b28
+   AND b19=a5
+   AND a35=b33
+   AND b64=a19
+   AND a34=b62
+   AND b10=a8
+   AND a27=b32
+   AND b6=a26
+   AND a1=b36
+   AND a13=b56
+   AND b2=a33
+   AND a40=b46
+   AND b41=a29
+   AND b23=a15
+   AND a25=b29
+   AND b60=a14
+   AND a30=b48
+   AND a54=b7
+   AND a37=b1
+----
+49 values hashing to 4befa83b93fc2b6a81f77e61d918f881
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-49-1
+SELECT x52,x5,x21,x56,x29,x2,x44,x45,x46,x64,x4,x14,x25,x38,x35,x36,x8,x63,x10,x30,x34,x43,x54,x28,x48,x6,x33,x41,x39,x37,x17,x19,x60,x18,x15,x32,x47,x62,x1,x13,x24,x23,x7,x22,x55,x49,x26,x40,x27
+  FROM t6,t29,t40,t49,t44,t22,t64,t23,t52,t28,t34,t36,t10,t25,t38,t43,t47,t21,t60,t63,t15,t32,t17,t62,t37,t30,t35,t1,t5,t14,t13,t54,t24,t26,t8,t19,t46,t27,t39,t2,t33,t45,t56,t55,t41,t48,t18,t7,t4
+ WHERE b33=a35
+   AND b38=a32
+   AND a60=b18
+   AND a30=b48
+   AND a5=b19
+   AND a40=b46
+   AND b34=a44
+   AND b28=a46
+   AND a4=b49
+   AND b55=a6
+   AND a24=b27
+   AND b23=a15
+   AND b64=a19
+   AND a14=b60
+   AND a7=b52
+   AND b25=a45
+   AND a2=b26
+   AND b39=a62
+   AND a27=b32
+   AND b56=a13
+   AND b29=a25
+   AND a21=b47
+   AND a36=b30
+   AND b40=a55
+   AND b6=a26
+   AND a47=b4
+   AND a17=b21
+   AND a54=b7
+   AND b14=a49
+   AND b17=a63
+   AND a22=4
+   AND a18=b8
+   AND b45=a38
+   AND b10=a8
+   AND a52=b43
+   AND a22=b63
+   AND b35=a39
+   AND a64=b15
+   AND b2=a33
+   AND b13=a10
+   AND a37=b1
+   AND a28=b54
+   AND a43=b5
+   AND b41=a29
+   AND a56=b37
+   AND a48=b44
+   AND b62=a34
+   AND a23=b24
+   AND b36=a1
+----
+49 values hashing to 4befa83b93fc2b6a81f77e61d918f881
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-49-1
+SELECT x52,x5,x21,x56,x29,x2,x44,x45,x46,x64,x4,x14,x25,x38,x35,x36,x8,x63,x10,x30,x34,x43,x54,x28,x48,x6,x33,x41,x39,x37,x17,x19,x60,x18,x15,x32,x47,x62,x1,x13,x24,x23,x7,x22,x55,x49,x26,x40,x27
+  FROM t41,t8,t1,t4,t15,t14,t55,t35,t49,t29,t54,t45,t64,t24,t44,t5,t37,t30,t40,t6,t34,t33,t39,t43,t63,t7,t2,t19,t36,t23,t13,t22,t56,t48,t27,t18,t21,t46,t60,t28,t47,t10,t52,t32,t62,t17,t26,t25,t38
+ WHERE b24=a23
+   AND a22=4
+   AND a21=b47
+   AND b19=a5
+   AND b15=a64
+   AND a34=b62
+   AND a4=b49
+   AND a62=b39
+   AND b36=a1
+   AND a8=b10
+   AND b29=a25
+   AND a63=b17
+   AND b40=a55
+   AND b33=a35
+   AND a2=b26
+   AND b60=a14
+   AND b27=a24
+   AND a7=b52
+   AND b64=a19
+   AND a46=b28
+   AND b56=a13
+   AND a44=b34
+   AND b41=a29
+   AND b30=a36
+   AND a56=b37
+   AND a48=b44
+   AND b8=a18
+   AND b7=a54
+   AND b25=a45
+   AND b4=a47
+   AND b23=a15
+   AND a39=b35
+   AND a30=b48
+   AND a28=b54
+   AND b5=a43
+   AND b63=a22
+   AND a49=b14
+   AND a10=b13
+   AND a17=b21
+   AND a26=b6
+   AND b46=a40
+   AND b55=a6
+   AND b2=a33
+   AND a60=b18
+   AND b38=a32
+   AND b43=a52
+   AND b45=a38
+   AND b1=a37
+   AND a27=b32
+----
+49 values hashing to 4befa83b93fc2b6a81f77e61d918f881
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-49-2
+SELECT x5,x38,x61,x13,x42,x4,x58,x15,x54,x28,x51,x55,x6,x50,x37,x64,x29,x26,x35,x46,x12,x53,x14,x41,x18,x25,x23,x63,x22,x21,x59,x31,x44,x48,x8,x49,x10,x56,x20,x34,x27,x17,x32,x19,x39,x16,x57,x2,x60
+  FROM t17,t28,t53,t20,t37,t31,t21,t23,t26,t10,t49,t8,t51,t57,t61,t38,t6,t22,t56,t44,t59,t34,t42,t35,t32,t60,t12,t41,t39,t55,t16,t48,t4,t14,t27,t5,t25,t18,t19,t64,t54,t50,t46,t13,t2,t15,t58,t29,t63
+ WHERE a16=b18
+   AND a25=b15
+   AND b63=a57
+   AND a50=b20
+   AND a10=b32
+   AND b8=a15
+   AND a27=b22
+   AND b35=a38
+   AND a61=8
+   AND b14=a6
+   AND b46=a61
+   AND a17=b13
+   AND b54=a60
+   AND b38=a34
+   AND a12=b49
+   AND a41=b17
+   AND b31=a56
+   AND a48=b26
+   AND a58=b60
+   AND a35=b16
+   AND a31=b53
+   AND b51=a20
+   AND a54=b44
+   AND a42=b34
+   AND a55=b56
+   AND a53=b21
+   AND b23=a2
+   AND a39=b19
+   AND b29=a28
+   AND a5=b10
+   AND b2=a59
+   AND b58=a23
+   AND a32=b42
+   AND a4=b41
+   AND b5=a63
+   AND a37=b55
+   AND b12=a64
+   AND a19=b28
+   AND a46=b59
+   AND b6=a22
+   AND b27=a21
+   AND a49=b39
+   AND b37=a13
+   AND b64=a51
+   AND a26=b25
+   AND a14=b48
+   AND a8=b50
+   AND a44=b57
+   AND a18=b4
+----
+49 values hashing to 95463345c952cd0206c66c9a2ca75809
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-49-2
+SELECT x5,x38,x61,x13,x42,x4,x58,x15,x54,x28,x51,x55,x6,x50,x37,x64,x29,x26,x35,x46,x12,x53,x14,x41,x18,x25,x23,x63,x22,x21,x59,x31,x44,x48,x8,x49,x10,x56,x20,x34,x27,x17,x32,x19,x39,x16,x57,x2,x60
+  FROM t29,t49,t31,t10,t23,t26,t64,t6,t13,t21,t44,t46,t14,t22,t19,t12,t58,t25,t34,t2,t39,t48,t32,t57,t42,t41,t4,t18,t8,t59,t63,t17,t50,t28,t38,t55,t54,t15,t61,t20,t53,t60,t27,t16,t56,t51,t35,t5,t37
+ WHERE b5=a63
+   AND b29=a28
+   AND b19=a39
+   AND b41=a4
+   AND a12=b49
+   AND a17=b13
+   AND b28=a19
+   AND b26=a48
+   AND b59=a46
+   AND b44=a54
+   AND b25=a26
+   AND b8=a15
+   AND b55=a37
+   AND b17=a41
+   AND a60=b54
+   AND b64=a51
+   AND a61=8
+   AND b58=a23
+   AND a55=b56
+   AND b27=a21
+   AND a44=b57
+   AND a32=b42
+   AND b46=a61
+   AND a35=b16
+   AND b10=a5
+   AND a25=b15
+   AND a18=b4
+   AND b6=a22
+   AND b35=a38
+   AND a59=b2
+   AND b20=a50
+   AND a49=b39
+   AND a53=b21
+   AND b14=a6
+   AND a10=b32
+   AND b31=a56
+   AND a34=b38
+   AND a8=b50
+   AND a13=b37
+   AND a20=b51
+   AND b63=a57
+   AND b23=a2
+   AND a42=b34
+   AND a64=b12
+   AND a31=b53
+   AND a14=b48
+   AND a27=b22
+   AND b60=a58
+   AND b18=a16
+----
+49 values hashing to 95463345c952cd0206c66c9a2ca75809
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-49-2
+SELECT x5,x38,x61,x13,x42,x4,x58,x15,x54,x28,x51,x55,x6,x50,x37,x64,x29,x26,x35,x46,x12,x53,x14,x41,x18,x25,x23,x63,x22,x21,x59,x31,x44,x48,x8,x49,x10,x56,x20,x34,x27,x17,x32,x19,x39,x16,x57,x2,x60
+  FROM t27,t49,t32,t19,t20,t10,t23,t8,t2,t58,t22,t15,t28,t50,t21,t46,t53,t41,t17,t18,t37,t63,t12,t35,t34,t6,t55,t31,t57,t51,t59,t16,t54,t26,t42,t25,t60,t39,t56,t4,t64,t29,t5,t48,t14,t38,t61,t44,t13
+ WHERE a27=b22
+   AND b56=a55
+   AND b16=a35
+   AND a60=b54
+   AND a57=b63
+   AND a46=b59
+   AND a61=8
+   AND a48=b26
+   AND a12=b49
+   AND a10=b32
+   AND a13=b37
+   AND b23=a2
+   AND a38=b35
+   AND a22=b6
+   AND a32=b42
+   AND b58=a23
+   AND b12=a64
+   AND b8=a15
+   AND a56=b31
+   AND a26=b25
+   AND b48=a14
+   AND b18=a16
+   AND a54=b44
+   AND b21=a53
+   AND b38=a34
+   AND a41=b17
+   AND a21=b27
+   AND b53=a31
+   AND a61=b46
+   AND b60=a58
+   AND a5=b10
+   AND a6=b14
+   AND a18=b4
+   AND a8=b50
+   AND b13=a17
+   AND a49=b39
+   AND a19=b28
+   AND b51=a20
+   AND b64=a51
+   AND b57=a44
+   AND a39=b19
+   AND b15=a25
+   AND a4=b41
+   AND a63=b5
+   AND b20=a50
+   AND a37=b55
+   AND a42=b34
+   AND a59=b2
+   AND a28=b29
+----
+49 values hashing to 95463345c952cd0206c66c9a2ca75809
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-49-3
+SELECT x21,x6,x36,x31,x12,x49,x35,x58,x44,x38,x52,x27,x64,x24,x17,x45,x60,x29,x51,x34,x19,x50,x4,x57,x23,x47,x2,x15,x30,x20,x39,x40,x54,x18,x62,x28,x14,x53,x46,x56,x3,x43,x13,x59,x55,x32,x10,x11,x25
+  FROM t45,t18,t43,t6,t4,t30,t40,t55,t34,t25,t50,t64,t11,t62,t24,t35,t53,t15,t29,t52,t14,t2,t51,t23,t36,t21,t32,t59,t27,t31,t58,t20,t3,t28,t12,t57,t39,t60,t47,t46,t38,t56,t54,t10,t13,t17,t49,t19,t44
+ WHERE a19=b47
+   AND b57=a46
+   AND a3=b40
+   AND b58=a62
+   AND b24=a64
+   AND b54=a11
+   AND a15=b62
+   AND b43=a44
+   AND b6=a57
+   AND a28=b15
+   AND b30=a14
+   AND b25=a49
+   AND a59=b46
+   AND b50=a24
+   AND a4=b53
+   AND a23=b18
+   AND a34=b17
+   AND b32=a27
+   AND b52=a36
+   AND b45=a31
+   AND b36=a20
+   AND a28=1
+   AND b51=a32
+   AND b19=a13
+   AND a39=b10
+   AND b39=a12
+   AND b34=a40
+   AND b44=a50
+   AND a54=b3
+   AND a30=b49
+   AND a17=b21
+   AND b23=a35
+   AND a52=b64
+   AND b55=a25
+   AND b60=a56
+   AND b29=a45
+   AND b2=a53
+   AND a60=b11
+   AND b12=a55
+   AND b14=a29
+   AND a51=b56
+   AND a38=b31
+   AND a58=b27
+   AND a21=b20
+   AND a2=b59
+   AND a10=b35
+   AND b4=a18
+   AND a6=b13
+   AND b38=a43
+----
+49 values hashing to 26357347e000f2192e02d6038bf34e3d
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-49-3
+SELECT x21,x6,x36,x31,x12,x49,x35,x58,x44,x38,x52,x27,x64,x24,x17,x45,x60,x29,x51,x34,x19,x50,x4,x57,x23,x47,x2,x15,x30,x20,x39,x40,x54,x18,x62,x28,x14,x53,x46,x56,x3,x43,x13,x59,x55,x32,x10,x11,x25
+  FROM t44,t57,t39,t18,t59,t11,t62,t46,t54,t40,t25,t15,t34,t20,t60,t36,t12,t29,t50,t6,t30,t14,t32,t17,t23,t35,t58,t45,t43,t64,t19,t4,t31,t38,t53,t55,t13,t24,t2,t10,t51,t27,t21,t47,t52,t49,t28,t56,t3
+ WHERE a54=b3
+   AND a49=b25
+   AND a28=b15
+   AND b4=a18
+   AND a15=b62
+   AND b38=a43
+   AND a20=b36
+   AND b12=a55
+   AND a36=b52
+   AND a64=b24
+   AND b50=a24
+   AND b56=a51
+   AND b60=a56
+   AND a32=b51
+   AND a34=b17
+   AND a45=b29
+   AND b44=a50
+   AND a10=b35
+   AND b57=a46
+   AND b64=a52
+   AND a58=b27
+   AND a40=b34
+   AND a35=b23
+   AND a28=1
+   AND a44=b43
+   AND a11=b54
+   AND a25=b55
+   AND b31=a38
+   AND a57=b6
+   AND b46=a59
+   AND a31=b45
+   AND a60=b11
+   AND a30=b49
+   AND b21=a17
+   AND a12=b39
+   AND b40=a3
+   AND b59=a2
+   AND b2=a53
+   AND b47=a19
+   AND b30=a14
+   AND b58=a62
+   AND b10=a39
+   AND a6=b13
+   AND a21=b20
+   AND b18=a23
+   AND b19=a13
+   AND a29=b14
+   AND a4=b53
+   AND b32=a27
+----
+49 values hashing to 26357347e000f2192e02d6038bf34e3d
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-49-3
+SELECT x21,x6,x36,x31,x12,x49,x35,x58,x44,x38,x52,x27,x64,x24,x17,x45,x60,x29,x51,x34,x19,x50,x4,x57,x23,x47,x2,x15,x30,x20,x39,x40,x54,x18,x62,x28,x14,x53,x46,x56,x3,x43,x13,x59,x55,x32,x10,x11,x25
+  FROM t54,t60,t21,t32,t45,t36,t35,t24,t25,t47,t12,t10,t4,t30,t11,t55,t59,t40,t29,t19,t27,t15,t58,t39,t17,t13,t52,t51,t46,t23,t57,t43,t53,t18,t28,t44,t20,t50,t38,t56,t34,t31,t14,t6,t49,t2,t62,t64,t3
+ WHERE b25=a49
+   AND b10=a39
+   AND a17=b21
+   AND a10=b35
+   AND a11=b54
+   AND b40=a3
+   AND a58=b27
+   AND a18=b4
+   AND b59=a2
+   AND a30=b49
+   AND b29=a45
+   AND b30=a14
+   AND a54=b3
+   AND a28=b15
+   AND a15=b62
+   AND b51=a32
+   AND b11=a60
+   AND b23=a35
+   AND a53=b2
+   AND a27=b32
+   AND b14=a29
+   AND b46=a59
+   AND a21=b20
+   AND b45=a31
+   AND a20=b36
+   AND a50=b44
+   AND a38=b31
+   AND b39=a12
+   AND a28=1
+   AND b47=a19
+   AND b58=a62
+   AND b43=a44
+   AND a13=b19
+   AND a52=b64
+   AND b12=a55
+   AND b52=a36
+   AND a57=b6
+   AND a64=b24
+   AND a6=b13
+   AND b38=a43
+   AND b34=a40
+   AND b17=a34
+   AND a46=b57
+   AND a56=b60
+   AND a25=b55
+   AND a23=b18
+   AND b50=a24
+   AND a51=b56
+   AND a4=b53
+----
+49 values hashing to 26357347e000f2192e02d6038bf34e3d
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-49-4
+SELECT x1,x43,x21,x24,x55,x31,x7,x29,x50,x27,x19,x37,x23,x58,x8,x53,x10,x36,x35,x64,x49,x59,x40,x11,x47,x60,x42,x30,x5,x34,x15,x38,x3,x26,x20,x52,x51,x9,x48,x16,x61,x63,x25,x28,x18,x12,x62,x6,x46
+  FROM t46,t48,t3,t51,t34,t52,t16,t35,t43,t24,t25,t20,t37,t58,t26,t40,t47,t11,t30,t53,t6,t9,t55,t18,t5,t50,t7,t21,t28,t31,t15,t19,t61,t42,t23,t49,t36,t1,t12,t27,t10,t62,t63,t60,t38,t59,t29,t8,t64
+ WHERE b18=a34
+   AND a10=b43
+   AND a42=b53
+   AND a61=b12
+   AND a21=b9
+   AND a38=3
+   AND b60=a20
+   AND b63=a5
+   AND b35=a48
+   AND a26=b46
+   AND a37=b7
+   AND a62=b52
+   AND b61=a31
+   AND b29=a9
+   AND b16=a35
+   AND a46=b48
+   AND a59=b21
+   AND b37=a23
+   AND a16=b8
+   AND a15=b3
+   AND a58=b23
+   AND a11=b49
+   AND a18=b40
+   AND a6=b26
+   AND a28=b55
+   AND b59=a60
+   AND a52=b27
+   AND a25=b1
+   AND b51=a64
+   AND b50=a49
+   AND b20=a27
+   AND a51=b30
+   AND a55=b42
+   AND a8=b24
+   AND a40=b64
+   AND b34=a12
+   AND a36=b19
+   AND b31=a50
+   AND b36=a1
+   AND b10=a24
+   AND b28=a30
+   AND a43=b5
+   AND a53=b58
+   AND b62=a7
+   AND b11=a19
+   AND a38=b47
+   AND b25=a63
+   AND a47=b6
+   AND a29=b15
+----
+49 values hashing to 9fd3cc18b1032c9345d47d6ae6c1ea58
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-49-4
+SELECT x1,x43,x21,x24,x55,x31,x7,x29,x50,x27,x19,x37,x23,x58,x8,x53,x10,x36,x35,x64,x49,x59,x40,x11,x47,x60,x42,x30,x5,x34,x15,x38,x3,x26,x20,x52,x51,x9,x48,x16,x61,x63,x25,x28,x18,x12,x62,x6,x46
+  FROM t47,t19,t62,t51,t29,t15,t24,t11,t43,t53,t6,t1,t46,t38,t23,t49,t42,t63,t61,t21,t3,t40,t20,t60,t8,t12,t27,t31,t35,t48,t16,t34,t9,t28,t36,t37,t30,t18,t58,t25,t50,t7,t64,t10,t26,t59,t55,t52,t5
+ WHERE a59=b21
+   AND a31=b61
+   AND a38=3
+   AND b60=a20
+   AND a63=b25
+   AND a40=b64
+   AND a47=b6
+   AND b9=a21
+   AND a5=b63
+   AND a43=b5
+   AND b15=a29
+   AND b7=a37
+   AND b36=a1
+   AND b62=a7
+   AND a34=b18
+   AND b27=a52
+   AND b24=a8
+   AND b53=a42
+   AND a16=b8
+   AND a12=b34
+   AND b31=a50
+   AND b3=a15
+   AND a28=b55
+   AND a9=b29
+   AND b30=a51
+   AND a30=b28
+   AND b42=a55
+   AND a23=b37
+   AND a24=b10
+   AND b58=a53
+   AND b20=a27
+   AND b12=a61
+   AND a46=b48
+   AND a11=b49
+   AND b46=a26
+   AND b35=a48
+   AND b16=a35
+   AND a58=b23
+   AND a49=b50
+   AND b19=a36
+   AND a18=b40
+   AND b59=a60
+   AND b43=a10
+   AND a62=b52
+   AND a25=b1
+   AND b11=a19
+   AND a38=b47
+   AND a6=b26
+   AND a64=b51
+----
+49 values hashing to 9fd3cc18b1032c9345d47d6ae6c1ea58
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-49-4
+SELECT x1,x43,x21,x24,x55,x31,x7,x29,x50,x27,x19,x37,x23,x58,x8,x53,x10,x36,x35,x64,x49,x59,x40,x11,x47,x60,x42,x30,x5,x34,x15,x38,x3,x26,x20,x52,x51,x9,x48,x16,x61,x63,x25,x28,x18,x12,x62,x6,x46
+  FROM t19,t46,t64,t6,t35,t16,t53,t36,t1,t61,t31,t9,t40,t37,t18,t62,t27,t49,t60,t51,t10,t59,t29,t3,t34,t48,t52,t15,t12,t50,t25,t30,t38,t23,t11,t24,t8,t63,t55,t43,t47,t58,t21,t20,t42,t28,t5,t7,t26
+ WHERE b50=a49
+   AND b15=a29
+   AND b48=a46
+   AND a60=b59
+   AND a26=b46
+   AND b5=a43
+   AND a20=b60
+   AND b24=a8
+   AND b42=a55
+   AND a25=b1
+   AND a50=b31
+   AND a35=b16
+   AND a47=b6
+   AND a34=b18
+   AND a1=b36
+   AND b25=a63
+   AND a11=b49
+   AND a10=b43
+   AND a27=b20
+   AND a31=b61
+   AND b47=a38
+   AND a36=b19
+   AND b27=a52
+   AND b37=a23
+   AND a53=b58
+   AND b40=a18
+   AND a37=b7
+   AND a62=b52
+   AND b9=a21
+   AND b23=a58
+   AND b62=a7
+   AND a48=b35
+   AND b26=a6
+   AND a59=b21
+   AND b10=a24
+   AND b11=a19
+   AND a28=b55
+   AND a5=b63
+   AND a38=3
+   AND b8=a16
+   AND b12=a61
+   AND a30=b28
+   AND a9=b29
+   AND b51=a64
+   AND a15=b3
+   AND b30=a51
+   AND a42=b53
+   AND b34=a12
+   AND a40=b64
+----
+49 values hashing to 9fd3cc18b1032c9345d47d6ae6c1ea58
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-50-1
+SELECT x36,x56,x27,x13,x47,x31,x26,x59,x22,x10,x34,x6,x7,x2,x24,x64,x16,x4,x45,x11,x38,x49,x50,x63,x20,x33,x18,x55,x15,x1,x28,x58,x41,x60,x32,x57,x23,x35,x3,x40,x30,x52,x14,x54,x8,x37,x61,x9,x46,x25
+  FROM t38,t41,t3,t56,t25,t27,t1,t15,t52,t20,t9,t6,t33,t8,t10,t16,t2,t11,t35,t63,t32,t28,t26,t46,t30,t34,t24,t61,t18,t64,t60,t13,t7,t59,t37,t14,t49,t57,t47,t50,t55,t45,t36,t31,t4,t22,t40,t23,t58,t54
+ WHERE b33=a32
+   AND a61=b45
+   AND b35=a25
+   AND a28=b34
+   AND b8=a10
+   AND a13=b9
+   AND a36=b26
+   AND a50=b27
+   AND a7=b55
+   AND b25=a47
+   AND a45=b18
+   AND b57=a54
+   AND a26=b59
+   AND b7=a16
+   AND a64=b23
+   AND a56=b58
+   AND b46=a27
+   AND a24=b52
+   AND a60=b63
+   AND a46=b1
+   AND b20=a31
+   AND a35=b3
+   AND a58=b47
+   AND b37=a1
+   AND b60=a55
+   AND a57=b4
+   AND b41=a22
+   AND a8=b36
+   AND a2=b61
+   AND a41=b2
+   AND b49=a23
+   AND a56=5
+   AND a38=b28
+   AND b6=a63
+   AND a49=b16
+   AND b13=a40
+   AND b50=a30
+   AND a11=b15
+   AND a59=b54
+   AND a3=b22
+   AND a52=b11
+   AND b64=a33
+   AND a6=b10
+   AND a37=b14
+   AND b24=a14
+   AND b30=a4
+   AND b31=a34
+   AND b32=a20
+   AND b38=a9
+   AND b40=a18
+----
+50 values hashing to ae6d9d3314ede53578ec21c8192ac7ad
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-50-1
+SELECT x36,x56,x27,x13,x47,x31,x26,x59,x22,x10,x34,x6,x7,x2,x24,x64,x16,x4,x45,x11,x38,x49,x50,x63,x20,x33,x18,x55,x15,x1,x28,x58,x41,x60,x32,x57,x23,x35,x3,x40,x30,x52,x14,x54,x8,x37,x61,x9,x46,x25
+  FROM t10,t49,t28,t58,t45,t4,t64,t2,t11,t30,t22,t33,t15,t35,t40,t60,t52,t9,t24,t56,t25,t61,t59,t32,t23,t3,t41,t36,t50,t8,t34,t26,t6,t55,t31,t1,t27,t57,t14,t18,t38,t54,t16,t13,t7,t37,t47,t20,t46,t63
+ WHERE b22=a3
+   AND a56=5
+   AND b4=a57
+   AND a16=b7
+   AND a18=b40
+   AND b16=a49
+   AND a10=b8
+   AND a8=b36
+   AND a20=b32
+   AND a37=b14
+   AND b30=a4
+   AND b18=a45
+   AND a7=b55
+   AND a41=b2
+   AND b13=a40
+   AND b1=a46
+   AND b28=a38
+   AND a23=b49
+   AND a55=b60
+   AND b33=a32
+   AND a27=b46
+   AND a34=b31
+   AND b11=a52
+   AND b24=a14
+   AND a36=b26
+   AND a13=b9
+   AND a1=b37
+   AND b34=a28
+   AND a58=b47
+   AND b61=a2
+   AND b63=a60
+   AND a25=b35
+   AND a31=b20
+   AND a24=b52
+   AND b38=a9
+   AND a54=b57
+   AND a64=b23
+   AND a11=b15
+   AND a59=b54
+   AND b27=a50
+   AND a56=b58
+   AND a47=b25
+   AND b3=a35
+   AND b45=a61
+   AND b64=a33
+   AND a6=b10
+   AND a26=b59
+   AND a30=b50
+   AND a63=b6
+   AND b41=a22
+----
+50 values hashing to ae6d9d3314ede53578ec21c8192ac7ad
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-50-1
+SELECT x36,x56,x27,x13,x47,x31,x26,x59,x22,x10,x34,x6,x7,x2,x24,x64,x16,x4,x45,x11,x38,x49,x50,x63,x20,x33,x18,x55,x15,x1,x28,x58,x41,x60,x32,x57,x23,x35,x3,x40,x30,x52,x14,x54,x8,x37,x61,x9,x46,x25
+  FROM t32,t63,t31,t37,t28,t41,t40,t6,t57,t30,t13,t24,t35,t20,t61,t55,t9,t59,t8,t47,t14,t18,t52,t15,t45,t25,t2,t3,t1,t26,t58,t36,t11,t50,t16,t10,t23,t27,t49,t22,t4,t34,t56,t46,t60,t7,t38,t54,t33,t64
+ WHERE a14=b24
+   AND b63=a60
+   AND b2=a41
+   AND b8=a10
+   AND a36=b26
+   AND b47=a58
+   AND b27=a50
+   AND b7=a16
+   AND b35=a25
+   AND a31=b20
+   AND b10=a6
+   AND b6=a63
+   AND a57=b4
+   AND a23=b49
+   AND a2=b61
+   AND b25=a47
+   AND a56=b58
+   AND a55=b60
+   AND b37=a1
+   AND a45=b18
+   AND b11=a52
+   AND b13=a40
+   AND b41=a22
+   AND b57=a54
+   AND b23=a64
+   AND a9=b38
+   AND b64=a33
+   AND a8=b36
+   AND a46=b1
+   AND a11=b15
+   AND a56=5
+   AND a24=b52
+   AND a38=b28
+   AND a35=b3
+   AND b40=a18
+   AND a27=b46
+   AND a7=b55
+   AND b33=a32
+   AND a28=b34
+   AND b32=a20
+   AND a49=b16
+   AND b9=a13
+   AND a3=b22
+   AND a59=b54
+   AND a26=b59
+   AND b50=a30
+   AND a61=b45
+   AND a4=b30
+   AND b31=a34
+   AND a37=b14
+----
+50 values hashing to ae6d9d3314ede53578ec21c8192ac7ad
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-50-2
+SELECT x37,x38,x36,x2,x27,x60,x64,x47,x55,x61,x16,x19,x33,x45,x46,x13,x56,x39,x42,x32,x50,x30,x7,x44,x17,x29,x3,x28,x9,x41,x4,x53,x23,x20,x57,x22,x18,x10,x51,x15,x8,x40,x24,x48,x11,x1,x25,x31,x35,x59
+  FROM t3,t27,t64,t48,t1,t19,t29,t41,t4,t22,t15,t20,t30,t50,t13,t59,t57,t47,t16,t8,t46,t60,t2,t37,t9,t23,t36,t11,t33,t61,t28,t55,t35,t40,t17,t7,t38,t32,t10,t39,t56,t51,t31,t24,t18,t45,t44,t42,t25,t53
+ WHERE a16=b57
+   AND b23=a4
+   AND a19=b8
+   AND b15=a20
+   AND b20=a3
+   AND a47=b29
+   AND b61=a33
+   AND b40=a28
+   AND a30=b9
+   AND a57=b38
+   AND a56=b44
+   AND b50=a2
+   AND a36=b55
+   AND b18=a22
+   AND a46=b2
+   AND a11=b25
+   AND b47=a51
+   AND a53=b13
+   AND b11=a9
+   AND b28=a31
+   AND a10=b33
+   AND a7=b19
+   AND a25=b32
+   AND a37=b4
+   AND b56=a59
+   AND a40=b46
+   AND a55=b10
+   AND b1=a48
+   AND b53=a1
+   AND b41=a27
+   AND b59=a32
+   AND b3=a61
+   AND a23=b51
+   AND b24=a41
+   AND b48=a39
+   AND b36=a35
+   AND b39=a18
+   AND a44=b22
+   AND b7=a17
+   AND b17=a29
+   AND b37=a64
+   AND b27=a42
+   AND a45=b31
+   AND b35=a13
+   AND a60=b45
+   AND b16=a15
+   AND a24=b60
+   AND a50=b64
+   AND a8=b30
+   AND a42=3
+----
+50 values hashing to 90c54f0b47e9ee41fdee65c3c30fb71c
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-50-2
+SELECT x37,x38,x36,x2,x27,x60,x64,x47,x55,x61,x16,x19,x33,x45,x46,x13,x56,x39,x42,x32,x50,x30,x7,x44,x17,x29,x3,x28,x9,x41,x4,x53,x23,x20,x57,x22,x18,x10,x51,x15,x8,x40,x24,x48,x11,x1,x25,x31,x35,x59
+  FROM t53,t25,t42,t44,t16,t59,t10,t3,t37,t64,t36,t17,t4,t23,t50,t35,t28,t19,t51,t46,t47,t57,t8,t39,t27,t20,t60,t22,t30,t31,t1,t33,t55,t45,t2,t9,t32,t11,t40,t61,t41,t56,t29,t13,t18,t15,t7,t38,t48,t24
+ WHERE a16=b57
+   AND b22=a44
+   AND b37=a64
+   AND b40=a28
+   AND a9=b11
+   AND a46=b2
+   AND a3=b20
+   AND b46=a40
+   AND b32=a25
+   AND a42=3
+   AND b51=a23
+   AND a19=b8
+   AND b44=a56
+   AND b60=a24
+   AND b19=a7
+   AND b41=a27
+   AND a47=b29
+   AND b45=a60
+   AND b7=a17
+   AND b38=a57
+   AND a42=b27
+   AND a18=b39
+   AND b24=a41
+   AND b15=a20
+   AND a53=b13
+   AND a35=b36
+   AND b3=a61
+   AND b64=a50
+   AND b10=a55
+   AND b9=a30
+   AND a1=b53
+   AND b25=a11
+   AND b56=a59
+   AND b4=a37
+   AND b33=a10
+   AND b50=a2
+   AND b59=a32
+   AND a4=b23
+   AND b48=a39
+   AND a29=b17
+   AND a15=b16
+   AND b55=a36
+   AND a45=b31
+   AND a51=b47
+   AND a31=b28
+   AND a13=b35
+   AND a22=b18
+   AND a48=b1
+   AND b61=a33
+   AND b30=a8
+----
+50 values hashing to 90c54f0b47e9ee41fdee65c3c30fb71c
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-50-2
+SELECT x37,x38,x36,x2,x27,x60,x64,x47,x55,x61,x16,x19,x33,x45,x46,x13,x56,x39,x42,x32,x50,x30,x7,x44,x17,x29,x3,x28,x9,x41,x4,x53,x23,x20,x57,x22,x18,x10,x51,x15,x8,x40,x24,x48,x11,x1,x25,x31,x35,x59
+  FROM t7,t32,t64,t46,t57,t18,t17,t9,t31,t38,t27,t29,t61,t24,t13,t35,t42,t22,t53,t45,t37,t19,t4,t8,t50,t44,t16,t47,t55,t25,t20,t39,t15,t30,t56,t51,t36,t3,t11,t10,t40,t28,t60,t1,t48,t23,t2,t33,t59,t41
+ WHERE a48=b1
+   AND a28=b40
+   AND b59=a32
+   AND b25=a11
+   AND a10=b33
+   AND a44=b22
+   AND b61=a33
+   AND a42=3
+   AND a37=b4
+   AND a1=b53
+   AND b39=a18
+   AND b2=a46
+   AND b18=a22
+   AND a36=b55
+   AND b29=a47
+   AND a45=b31
+   AND a31=b28
+   AND a51=b47
+   AND b35=a13
+   AND a4=b23
+   AND b20=a3
+   AND a19=b8
+   AND b32=a25
+   AND a30=b9
+   AND b56=a59
+   AND a9=b11
+   AND a2=b50
+   AND a53=b13
+   AND a61=b3
+   AND b60=a24
+   AND b51=a23
+   AND b64=a50
+   AND b19=a7
+   AND b17=a29
+   AND b16=a15
+   AND a35=b36
+   AND b15=a20
+   AND a16=b57
+   AND a40=b46
+   AND a41=b24
+   AND a64=b37
+   AND a39=b48
+   AND a60=b45
+   AND a27=b41
+   AND a56=b44
+   AND a55=b10
+   AND b38=a57
+   AND a8=b30
+   AND b27=a42
+   AND b7=a17
+----
+50 values hashing to 90c54f0b47e9ee41fdee65c3c30fb71c
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-50-3
+SELECT x60,x42,x6,x62,x40,x53,x37,x2,x16,x31,x17,x56,x45,x7,x4,x33,x59,x44,x32,x47,x23,x1,x10,x19,x43,x22,x54,x27,x25,x55,x18,x26,x57,x8,x58,x61,x30,x14,x41,x34,x15,x49,x9,x11,x64,x39,x35,x3,x48,x63
+  FROM t31,t35,t33,t53,t59,t7,t17,t54,t16,t56,t23,t44,t61,t30,t58,t27,t43,t57,t55,t9,t64,t32,t25,t63,t47,t26,t22,t1,t3,t60,t4,t45,t19,t42,t41,t40,t8,t49,t15,t48,t62,t37,t11,t18,t39,t2,t6,t34,t14,t10
+ WHERE a60=10
+   AND a40=b63
+   AND a45=b18
+   AND a48=b3
+   AND b6=a64
+   AND b7=a47
+   AND a54=b64
+   AND b59=a43
+   AND a49=b56
+   AND a22=b4
+   AND b14=a31
+   AND a32=b44
+   AND b35=a6
+   AND a62=b26
+   AND b23=a63
+   AND b37=a9
+   AND b19=a3
+   AND a27=b47
+   AND b8=a60
+   AND a23=b57
+   AND a56=b17
+   AND a19=b31
+   AND a35=b11
+   AND a37=b61
+   AND a17=b62
+   AND a41=b55
+   AND b54=a26
+   AND b39=a30
+   AND a58=b25
+   AND b30=a53
+   AND b2=a57
+   AND b40=a15
+   AND b53=a42
+   AND b33=a4
+   AND b45=a34
+   AND a10=b49
+   AND b16=a25
+   AND b9=a7
+   AND b15=a44
+   AND a11=b32
+   AND a61=b41
+   AND a33=b27
+   AND a14=b10
+   AND a59=b48
+   AND a8=b22
+   AND b42=a16
+   AND b34=a1
+   AND b43=a18
+   AND b1=a39
+   AND a55=b58
+----
+50 values hashing to bc4a2a58f961665c592638308aa523ea
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-50-3
+SELECT x60,x42,x6,x62,x40,x53,x37,x2,x16,x31,x17,x56,x45,x7,x4,x33,x59,x44,x32,x47,x23,x1,x10,x19,x43,x22,x54,x27,x25,x55,x18,x26,x57,x8,x58,x61,x30,x14,x41,x34,x15,x49,x9,x11,x64,x39,x35,x3,x48,x63
+  FROM t32,t37,t56,t18,t33,t19,t27,t35,t1,t43,t42,t15,t9,t58,t11,t16,t7,t10,t31,t14,t17,t63,t55,t8,t47,t4,t39,t22,t26,t54,t40,t3,t34,t45,t23,t61,t41,t44,t59,t6,t30,t53,t25,t48,t62,t49,t57,t64,t60,t2
+ WHERE b16=a25
+   AND a45=b18
+   AND a42=b53
+   AND b37=a9
+   AND a15=b40
+   AND b30=a53
+   AND a47=b7
+   AND a60=b8
+   AND b44=a32
+   AND b56=a49
+   AND b41=a61
+   AND a58=b25
+   AND b58=a55
+   AND a23=b57
+   AND b3=a48
+   AND a59=b48
+   AND b19=a3
+   AND b61=a37
+   AND a8=b22
+   AND b54=a26
+   AND a10=b49
+   AND a40=b63
+   AND a30=b39
+   AND b42=a16
+   AND b1=a39
+   AND b9=a7
+   AND a57=b2
+   AND b32=a11
+   AND b26=a62
+   AND b33=a4
+   AND a60=10
+   AND a19=b31
+   AND a54=b64
+   AND a33=b27
+   AND b34=a1
+   AND a27=b47
+   AND a63=b23
+   AND b17=a56
+   AND a44=b15
+   AND a43=b59
+   AND a35=b11
+   AND a34=b45
+   AND b43=a18
+   AND a17=b62
+   AND b35=a6
+   AND a31=b14
+   AND b4=a22
+   AND a14=b10
+   AND b6=a64
+   AND b55=a41
+----
+50 values hashing to bc4a2a58f961665c592638308aa523ea
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-50-3
+SELECT x60,x42,x6,x62,x40,x53,x37,x2,x16,x31,x17,x56,x45,x7,x4,x33,x59,x44,x32,x47,x23,x1,x10,x19,x43,x22,x54,x27,x25,x55,x18,x26,x57,x8,x58,x61,x30,x14,x41,x34,x15,x49,x9,x11,x64,x39,x35,x3,x48,x63
+  FROM t16,t43,t32,t37,t47,t45,t33,t35,t64,t61,t9,t4,t23,t39,t2,t63,t40,t30,t44,t22,t49,t7,t11,t58,t60,t17,t25,t6,t27,t55,t48,t54,t53,t57,t19,t34,t18,t26,t56,t59,t3,t62,t1,t10,t42,t14,t8,t15,t41,t31
+ WHERE a10=b49
+   AND a58=b25
+   AND a4=b33
+   AND b30=a53
+   AND b31=a19
+   AND b4=a22
+   AND b16=a25
+   AND a64=b6
+   AND a30=b39
+   AND a41=b55
+   AND b62=a17
+   AND a11=b32
+   AND b2=a57
+   AND a60=10
+   AND b8=a60
+   AND b48=a59
+   AND b27=a33
+   AND a7=b9
+   AND a39=b1
+   AND b37=a9
+   AND b42=a16
+   AND b59=a43
+   AND a26=b54
+   AND a63=b23
+   AND b7=a47
+   AND b57=a23
+   AND b53=a42
+   AND a35=b11
+   AND a62=b26
+   AND a34=b45
+   AND a48=b3
+   AND a54=b64
+   AND a8=b22
+   AND a1=b34
+   AND a18=b43
+   AND a3=b19
+   AND a49=b56
+   AND a40=b63
+   AND a6=b35
+   AND a27=b47
+   AND b44=a32
+   AND a31=b14
+   AND a45=b18
+   AND a56=b17
+   AND b41=a61
+   AND b10=a14
+   AND b15=a44
+   AND b58=a55
+   AND b61=a37
+   AND b40=a15
+----
+50 values hashing to bc4a2a58f961665c592638308aa523ea
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-50-4
+SELECT x26,x16,x31,x48,x11,x58,x27,x35,x64,x63,x61,x4,x39,x37,x46,x45,x10,x34,x52,x55,x59,x50,x15,x60,x47,x54,x56,x22,x7,x12,x23,x21,x42,x3,x8,x17,x43,x18,x33,x57,x53,x41,x13,x19,x62,x32,x25,x30,x5,x51
+  FROM t55,t11,t26,t31,t57,t23,t10,t18,t33,t7,t48,t22,t42,t39,t34,t4,t45,t27,t25,t3,t8,t56,t64,t58,t37,t51,t12,t32,t13,t30,t5,t21,t60,t52,t15,t50,t61,t62,t35,t41,t43,t19,t63,t53,t17,t54,t47,t59,t16,t46
+ WHERE a5=b13
+   AND a64=b37
+   AND a59=b3
+   AND b35=a3
+   AND b64=a4
+   AND b12=a33
+   AND a25=b43
+   AND a58=b47
+   AND b15=a35
+   AND a57=b22
+   AND a39=b33
+   AND b26=a21
+   AND a43=b18
+   AND b30=a7
+   AND a53=b21
+   AND b54=a15
+   AND b46=a56
+   AND b19=a12
+   AND b10=a30
+   AND a52=b17
+   AND a32=b51
+   AND a34=b61
+   AND a26=b59
+   AND b60=a31
+   AND b48=a19
+   AND b4=a48
+   AND b41=a13
+   AND b62=a55
+   AND b56=a50
+   AND a22=b39
+   AND b11=a41
+   AND a16=b42
+   AND b45=a51
+   AND b31=a62
+   AND b57=a17
+   AND a37=b50
+   AND b27=a47
+   AND a61=b52
+   AND a42=b25
+   AND a11=b16
+   AND a23=b63
+   AND b55=a27
+   AND b5=a46
+   AND a23=2
+   AND b58=a8
+   AND a18=b53
+   AND a54=b32
+   AND b8=a10
+   AND b34=a63
+   AND b7=a45
+----
+50 values hashing to 0c6d034ebaa0f3c9feb5f324110b32bd
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-50-4
+SELECT x26,x16,x31,x48,x11,x58,x27,x35,x64,x63,x61,x4,x39,x37,x46,x45,x10,x34,x52,x55,x59,x50,x15,x60,x47,x54,x56,x22,x7,x12,x23,x21,x42,x3,x8,x17,x43,x18,x33,x57,x53,x41,x13,x19,x62,x32,x25,x30,x5,x51
+  FROM t54,t61,t19,t13,t23,t52,t47,t35,t33,t64,t55,t25,t15,t21,t7,t59,t8,t62,t32,t39,t11,t22,t5,t4,t42,t3,t34,t43,t56,t18,t53,t10,t46,t51,t60,t30,t37,t12,t48,t57,t45,t26,t31,t17,t50,t63,t27,t16,t58,t41
+ WHERE b58=a8
+   AND b63=a23
+   AND b19=a12
+   AND a46=b5
+   AND b51=a32
+   AND b56=a50
+   AND a42=b25
+   AND a48=b4
+   AND a41=b11
+   AND a53=b21
+   AND a27=b55
+   AND a17=b57
+   AND b42=a16
+   AND b30=a7
+   AND b13=a5
+   AND b12=a33
+   AND b17=a52
+   AND a25=b43
+   AND b59=a26
+   AND a43=b18
+   AND b16=a11
+   AND b53=a18
+   AND b50=a37
+   AND b54=a15
+   AND a10=b8
+   AND b27=a47
+   AND a34=b61
+   AND a3=b35
+   AND b3=a59
+   AND a63=b34
+   AND a64=b37
+   AND b52=a61
+   AND b47=a58
+   AND b48=a19
+   AND a22=b39
+   AND b22=a57
+   AND a51=b45
+   AND b32=a54
+   AND a31=b60
+   AND a30=b10
+   AND a62=b31
+   AND b33=a39
+   AND b46=a56
+   AND a23=2
+   AND b62=a55
+   AND b26=a21
+   AND a4=b64
+   AND a45=b7
+   AND a13=b41
+   AND a35=b15
+----
+50 values hashing to 0c6d034ebaa0f3c9feb5f324110b32bd
+
+query TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT valuesort join-50-4
+SELECT x26,x16,x31,x48,x11,x58,x27,x35,x64,x63,x61,x4,x39,x37,x46,x45,x10,x34,x52,x55,x59,x50,x15,x60,x47,x54,x56,x22,x7,x12,x23,x21,x42,x3,x8,x17,x43,x18,x33,x57,x53,x41,x13,x19,x62,x32,x25,x30,x5,x51
+  FROM t43,t50,t51,t42,t27,t22,t13,t31,t17,t56,t63,t34,t5,t55,t39,t52,t33,t62,t30,t21,t8,t4,t41,t16,t37,t64,t57,t25,t58,t53,t10,t3,t18,t11,t19,t15,t60,t32,t46,t54,t61,t23,t7,t26,t47,t48,t45,t59,t35,t12
+ WHERE a52=b17
+   AND b18=a43
+   AND a3=b35
+   AND a58=b47
+   AND a34=b61
+   AND a42=b25
+   AND b33=a39
+   AND b57=a17
+   AND a57=b22
+   AND a61=b52
+   AND a64=b37
+   AND a55=b62
+   AND a63=b34
+   AND b19=a12
+   AND a62=b31
+   AND b43=a25
+   AND b39=a22
+   AND b3=a59
+   AND b30=a7
+   AND a23=2
+   AND b59=a26
+   AND a31=b60
+   AND a10=b8
+   AND a19=b48
+   AND a45=b7
+   AND a30=b10
+   AND a5=b13
+   AND a54=b32
+   AND a23=b63
+   AND b53=a18
+   AND a21=b26
+   AND a48=b4
+   AND b41=a13
+   AND b21=a53
+   AND b54=a15
+   AND a50=b56
+   AND b16=a11
+   AND b46=a56
+   AND a16=b42
+   AND b27=a47
+   AND b58=a8
+   AND a51=b45
+   AND b11=a41
+   AND b5=a46
+   AND b55=a27
+   AND b15=a35
+   AND b12=a33
+   AND a37=b50
+   AND a32=b51
+   AND a4=b64
+----
+50 values hashing to 0c6d034ebaa0f3c9feb5f324110b32bd
