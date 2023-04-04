@@ -79,6 +79,9 @@ void mlir::relalg::registerQueryOptimizationPasses() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createColumnFoldingPass();
    });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::relalg::createTrackTuplesPass();
+   });
    mlir::PassPipelineRegistration<EmptyPipelineOptions>(
       "relalg-query-opt",
       "",
