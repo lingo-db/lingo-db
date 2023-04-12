@@ -326,7 +326,7 @@ void subop::CreateHeapOp::print(OpAsmPrinter& p) {
    }
    p << "])";
    p.printRegion(getRegion(), false, true);
-   p.printOptionalAttrDict(getOperation()->getAttrs());
+   p.printOptionalAttrDict(getOperation()->getAttrs(),{getSortByAttrName()});
 }
 ParseResult mlir::subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    OpAsmParser::UnresolvedOperand getToSort;
