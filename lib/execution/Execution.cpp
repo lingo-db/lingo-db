@@ -15,11 +15,12 @@
 #include <chrono>
 #include <sstream>
 #include <unordered_set>
-namespace{
+namespace {
 static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::string fileName) {
    mlir::PassManager pm(moduleOp->getContext());
    mlir::OpPrintingFlags flags;
-   flags.enableDebugInfo(false);
+   flags.shouldPrintDebugInfo();
+   flags.enableDebugInfo(true, false);
    pm.addPass(mlir::createLocationSnapshotPass(flags, fileName));
    if (pm.run(moduleOp).failed()) {
       error.emit() << "Snapshotting failed";
@@ -141,7 +142,7 @@ ExecutionMode getExecutionMode() {
       } else if (std::string(mode) == "SPEED") {
          std::cout << "using speed mode" << std::endl;
          runMode = ExecutionMode::SPEED;
-      }else if (std::string(mode) == "C") {
+      } else if (std::string(mode) == "C") {
          runMode = ExecutionMode::C;
       }
    }
@@ -256,7 +257,8 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
    if (runMode == ExecutionMode::DEBUGGING) {
       config->executionBackend = createLLVMDebugBackend();
-   }if (runMode == ExecutionMode::C) {
+   }
+   if (runMode == ExecutionMode::C) {
       config->executionBackend = createCBackend();
    } else if (runMode == ExecutionMode::PERF) {
       config->executionBackend = createLLVMProfilingBackend();

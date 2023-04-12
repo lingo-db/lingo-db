@@ -216,7 +216,7 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
 static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::string fileName) {
    mlir::PassManager pm(moduleOp->getContext());
    mlir::OpPrintingFlags flags;
-   flags.enableDebugInfo(false);
+   flags.enableDebugInfo(true, false);
    pm.addPass(mlir::createLocationSnapshotPass(flags, fileName));
    if (pm.run(moduleOp).failed()) {
       error.emit() << "Snapshotting failed";
@@ -301,13 +301,13 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
    }
 
    pid_t runPerfRecord() {
-      assignToThisCore(0);
+      assignToThisCore(9);
       pid_t childPid = 0;
       auto parentPid = std::to_string(getpid());
-      const char* argV[] = {"perf", "record", "-R", "-e", "ibs_op//p", "-c", "5000", "--intr-regs=r15", "-C", "0", nullptr};
+      const char* argV[] = {"perf", "record", "-R", "-e", "ibs_op//p", "-c", "5000", "--intr-regs=r15", "-C", "9", nullptr};
       auto status = posix_spawn(&childPid, "/usr/bin/perf", nullptr, nullptr, const_cast<char**>(argV), environ);
       sleep(5);
-      assignToThisCore(0);
+      assignToThisCore(9);
       if (status != 0)
          error.emit() << "Launching of perf failed" << status;
       return childPid;

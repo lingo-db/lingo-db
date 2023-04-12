@@ -20,7 +20,7 @@ class PerfHtmlFormatter(HtmlFormatter):
     def get_p(self, line):
         return self.percentages[line] if line in self.percentages else 0
 
-    def wrap(self, source, outfile):
+    def wrap(self, source):
         return self._wrap_code(source)
 
     def _wrap_code(self, source):
