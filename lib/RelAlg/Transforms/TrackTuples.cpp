@@ -18,23 +18,25 @@ class InsertTrackTuplesAfterRelalg : public mlir::RewritePattern {
       : RewritePattern(MatchAnyOpTypeTag(), 1, context) {}
    mlir::LogicalResult match(mlir::Operation* op) const override {
       // Only track tuples for relalg operations
-      if (op->getDialect()->getNamespace() != "relalg"){
+      if (op->getDialect()->getNamespace() != "relalg") {
          return mlir::failure();
       }
       // Check if op emits a tuple stream
-      bool isApplicableType = llvm::any_of(op->getResultTypes(), [](mlir::Type type){
+      bool isApplicableType = llvm::any_of(op->getResultTypes(), [](mlir::Type type) {
          return type.isa<mlir::tuples::TupleStreamType>();
       });
 
-      if (!isApplicableType){
+      if (!isApplicableType) {
          return mlir::failure();
       }
 
       // Check if rewrite pattern has already been applied
-      bool notAlreadyRewritten = std::count_if(op->getUsers().begin(), op->getUsers().end(), [](mlir::Operation* user){
-         return mlir::dyn_cast_or_null<mlir::relalg::TrackTuplesOP>(user) != nullptr;
-      }) == 0;
-      return notAlreadyRewritten ? mlir::success() : mlir::failure();
+      bool notAlreadyRewritten = std::count_if(op->getUsers().begin(), op->getUsers().end(), [](mlir::Operation* user) {
+                                    return mlir::dyn_cast_or_null<mlir::relalg::TrackTuplesOP>(user) != nullptr;
+                                 }) == 0;
+
+      bool isVirtual = op->hasAttr("virtual");
+      return notAlreadyRewritten && !isVirtual ? mlir::success() : mlir::failure();
    }
    void rewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       // keep track of number of used tupleCounters
@@ -42,8 +44,8 @@ class InsertTrackTuplesAfterRelalg : public mlir::RewritePattern {
 
       // Introduce a TrackTuplesOp for every result tupleStream of op
       rewriter.setInsertionPointAfter(op);
-      for (auto result : op->getResults()){
-         if (result.getType().isa<mlir::tuples::TupleStreamType>()){
+      for (auto result : op->getResults()) {
+         if (result.getType().isa<mlir::tuples::TupleStreamType>()) {
             rewriter.create<mlir::relalg::TrackTuplesOP>(op->getLoc(), result, currentTupleCounter++);
          }
       }

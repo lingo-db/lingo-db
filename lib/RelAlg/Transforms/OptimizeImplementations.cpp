@@ -491,6 +491,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                         binOp->replaceAllUsesWith(mlir::ValueRange{lastMoved->getResults()});
                         firstMoved->setOperands(binOp->getResults());
                      }
+                     leftBaseTable->setAttr("virtual",mlir::UnitAttr::get(&getContext()));
 
                      // Add name of table to leftHash annotation
                      std::vector<mlir::Attribute> leftHash;
