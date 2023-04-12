@@ -155,6 +155,12 @@ class ToJson {
                {"precision", decimalType.getP()},
                {"scale", decimalType.getS()}};
          })
+         .Case<mlir::IndexType>([](mlir::IndexType indexType) {
+            return nlohmann::json{
+               {"type", "numeric"},
+               {"numBits", 64},
+               {"signed", false}};
+         })
          .Case<mlir::IntegerType>([](mlir::IntegerType integerType) {
             return nlohmann::json{
                {"type", "numeric"},
@@ -184,7 +190,7 @@ class ToJson {
    }
 
    // Match mlir runtime call names to umbra function names
-   std::string convertRuntimeCallFuncName(std::string unconvertedName) {
+   std::optional<std::string> convertRuntimeCallFuncName(std::string unconvertedName) {
       if (unconvertedName == "Like") {
          return "like";
       }
@@ -192,8 +198,7 @@ class ToJson {
          // TODO: is actually a different name for year, day, and month
          return "extract";
       } else {
-         llvm::errs() << unconvertedName << "\n";
-         assert(false && "unknown runtime call for conversion");
+         return std::nullopt;
       }
    }
 
@@ -242,6 +247,14 @@ class ToJson {
             if (returnOp->getOperands().size()) return convertExpression(returnOp.getOperand(0).getDefiningOp());
             return nlohmann::json{};
          })
+         .Case<mlir::arith::ExtUIOp>([&](mlir::arith::ExtUIOp extUiOp) { return convertExpression(extUiOp.getIn().getDefiningOp()); })
+         .Case<mlir::arith::ExtSIOp>([&](mlir::arith::ExtSIOp extUiOp) { return convertExpression(extUiOp.getIn().getDefiningOp()); })
+         .Case<mlir::arith::SelectOp>([&](mlir::arith::SelectOp selectOp) {
+            return nlohmann::json{
+               {"expression", "call"},
+               {"fn", "select"},
+               {"input", {convertExpression(selectOp.getCondition().getDefiningOp()), convertExpression(selectOp.getTrueValue().getDefiningOp()), convertExpression(selectOp.getFalseValue().getDefiningOp())}}};
+         })
          .Case<mlir::db::NotOp>([&](mlir::db::NotOp notOp) {
             if (auto isNullOp = mlir::dyn_cast_or_null<mlir::db::IsNullOp>(notOp.getOperand().getDefiningOp())) {
                return nlohmann::json{
@@ -252,6 +265,11 @@ class ToJson {
                   {"expression", "not"},
                   {"input", convertExpression(notOp.getOperand().getDefiningOp())}};
             }
+         })
+         .Case<mlir::db::NullOp>([&](mlir::db::NullOp isNullOp) {
+            return nlohmann::json{
+               {"expression", "null"},
+            };
          })
          .Case<mlir::db::IsNullOp>([&](mlir::db::IsNullOp isNullOp) {
             return nlohmann::json{
@@ -335,9 +353,10 @@ class ToJson {
             return convertConstant(constantOp.getValue(), constantOp.getType());
          })
          .Case<mlir::db::RuntimeCall>([&](mlir::db::RuntimeCall runtimeCall) {
-            nlohmann::json result{
-               {"expression", convertRuntimeCallFuncName(runtimeCall.getFn().str())},
-               {"input", nlohmann::json()}};
+            nlohmann::json result = {
+               {"expression", "call"},
+               {"fn", runtimeCall.getFn().str()},
+               {"input", nlohmann::json::array()}};
             for (auto arg : runtimeCall->getOperands()) {
                result["input"].push_back(convertExpression(arg.getDefiningOp()));
             }
@@ -382,7 +401,7 @@ class ToJson {
       assert(leftJoinColumns && rightJoinColumns && leftJoinColumns.size() - skipFirstLeft == rightJoinColumns.size());
       nlohmann::json result{
          {"expression", "and"},
-         {"input", nlohmann::json()}};
+         {"input", nlohmann::json::array()}};
       for (size_t i = skipFirstLeft; i != leftJoinColumns.size(); i++) {
          auto leftColumn = leftJoinColumns[i].dyn_cast_or_null<mlir::tuples::ColumnRefAttr>();
          auto rightColumn = rightJoinColumns[i - skipFirstLeft].dyn_cast_or_null<mlir::tuples::ColumnRefAttr>();
@@ -531,7 +550,8 @@ class ToJson {
                assert(innerResult.contains("cardinality"));
                innerResult["condition"] = nlohmann::json{
                   {"expression", "and"},
-                  {"input", {innerResult["condition"], expression}}};
+                  innerResult["condition"].empty() ? nlohmann::json{"input", nlohmann::json::array({expression})} :
+                                                     nlohmann::json{"input", {innerResult["condition"], expression}}};
                innerResult["cardinality"] = selectionOp->getAttr("rows").cast<mlir::FloatAttr>().getValueAsDouble();
                if (result.contains("analyzePlanCardinality")) innerResult["analyzePlanCardinality"] = result["analyzePlanCardinality"];
                return innerResult;
@@ -600,7 +620,7 @@ class ToJson {
             result["operator"] = "groupby";
             result["physicalOperator"] = "groupby";
             result["input"] = convertOperation(aggregationOp.getOperand().getDefiningOp());
-            result["key"] = nlohmann::json();
+            result["key"] = nlohmann::json::array();
             result["values"] = nlohmann::json();
             size_t arg = 0;
             for (auto groupByCol : aggregationOp.getGroupByCols()) {
@@ -675,7 +695,6 @@ class ToJson {
             size_t mapIndex = 0;
             for (auto returnValue : mapReturn->getOperands()) {
                std::string mappedColName = symbolRefToIuString(groupJoinOp.getMappedCols()[mapIndex++].cast<mlir::tuples::ColumnDefAttr>().getName());
-               std::cout << "inserting" << mappedColName << std::endl;
                mappedCols[mappedColName] = convertExpression(returnValue.getDefiningOp());
             }
 
@@ -685,7 +704,6 @@ class ToJson {
                // We don't make the distinction between left and right aggregates -> put everything to left
                auto aggrFuncOp = mlir::cast<mlir::relalg::AggrFuncOp>(returnValue.getDefiningOp());
                std::string aggrFuncColName = symbolRefToIuString(aggrFuncOp.getAttr().getName());
-               std::cout << "checking " << aggrFuncColName << std::endl;
                if (mappedCols.contains(aggrFuncColName)) {
                   result["valuesLeft"].push_back(mappedCols[aggrFuncColName]);
                } else {
@@ -858,17 +876,14 @@ class ToJson {
             plan = convertOperation(operation);
          }
       });
-      nlohmann::json result{
-         {"optimizersteps", nlohmann::json()}};
       nlohmann::json planWrapper{
          {"name", "plan"}};
       planWrapper["plan"] = nlohmann::json{
          {"plan", plan},
          {"output", nlohmann::json::array({})},
-         {"type", "select"},
+         {"type", 0},
          {"query", true}};
-      result["optimizersteps"].push_back(planWrapper);
-      return to_string(result);
+      return to_string(planWrapper);
    }
 };
 
@@ -881,10 +896,10 @@ runtime::ExecutionContext execute(std::string inputFileName, std::string databas
    context.db = std::move(database);
 
    support::eval::init();
-   execution::ExecutionMode runMode = execution::getExecutionMode();
-   auto queryExecutionConfig = execution::createQueryExecutionConfig(runMode, false);
-   queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
+   auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::CHEAP, false);
+   queryExecutionConfig->timingProcessor = {};
    queryExecutionConfig->queryOptimizer = {};
+   queryExecutionConfig->resultProcessor = {};
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
    executer->fromFile(inputFileName);
    executer->setExecutionContext(&context);
