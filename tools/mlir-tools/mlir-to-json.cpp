@@ -545,16 +545,6 @@ class ToJson {
                innerResult["cardinality"] = selectionOp->getAttr("rows").cast<mlir::FloatAttr>().getValueAsDouble();
                if (result.contains("analyzePlanCardinality")) innerResult["analyzePlanCardinality"] = result["analyzePlanCardinality"];
                return innerResult;
-            } else if (innerResult["operator"] == "join" || innerResult["operator"] == "select") {
-               assert(innerResult.contains("condition"));
-               assert(innerResult.contains("cardinality"));
-               innerResult["condition"] = nlohmann::json{
-                  {"expression", "and"},
-                  innerResult["condition"].empty() ? nlohmann::json{"input", nlohmann::json::array({expression})} :
-                                                     nlohmann::json{"input", {innerResult["condition"], expression}}};
-               innerResult["cardinality"] = selectionOp->getAttr("rows").cast<mlir::FloatAttr>().getValueAsDouble();
-               if (result.contains("analyzePlanCardinality")) innerResult["analyzePlanCardinality"] = result["analyzePlanCardinality"];
-               return innerResult;
             } else {
                // No operation to fold into found, use standalone select
                result["operator"] = "select";
