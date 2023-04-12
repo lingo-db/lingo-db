@@ -496,6 +496,20 @@ mlir::relalg::FunctionalDependencies mlir::relalg::SelectionOp::getFDs() {
 mlir::relalg::FunctionalDependencies mlir::relalg::InnerJoinOp::getFDs() {
    FunctionalDependencies dependencies = mlir::relalg::detail::getFDs(getOperation());
    if (!getPredicateBlock().empty()) {
+      if(this->getOperation()->hasAttr("leftHash")&&this->getOperation()->hasAttr("rightHash")){
+         auto left=this->getOperation()->getAttr("leftHash").cast<mlir::ArrayAttr>();
+         auto right=this->getOperation()->getAttr("rightHash").cast<mlir::ArrayAttr>();
+         for(auto z:llvm::zip(left,right)){
+            auto *leftColumn=&std::get<0>(z).cast<mlir::tuples::ColumnRefAttr>().getColumn();
+            auto *rightColumn=&std::get<1>(z).cast<mlir::tuples::ColumnRefAttr>().getColumn();
+            mlir::relalg::ColumnSet left;
+            left.insert(leftColumn);
+            mlir::relalg::ColumnSet right;
+            right.insert(rightColumn);
+            dependencies.insert(left, right);
+            dependencies.insert(right, left);
+         }
+      }
       if (auto returnOp = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(getPredicateBlock().getTerminator())) {
          if (returnOp.getResults().size() == 1) {
             if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(returnOp.getResults()[0].getDefiningOp())) {
