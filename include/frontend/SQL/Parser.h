@@ -246,8 +246,11 @@ struct Parser {
          resolver.insertIntoScope(&scope, name, attr);
       }
       const mlir::tuples::Column* getAttribute(std::string name) {
-         assert(resolver.lookup(name));
-         return resolver.lookup(name);
+         const auto *res=resolver.lookup(name);
+         if(!res){
+            error("could not resolve '"+name+"'");
+         }
+         return res;
       }
       TupleScope createTupleScope() {
          return TupleScope(this);
@@ -325,7 +328,7 @@ struct Parser {
       result = pg_query_parse(sql.c_str());
    }
 
-   void error(std::string str) { //todo: improve error handling
+   static void error(std::string str) { //todo: improve error handling
       std::cerr << str << std::endl;
       abort();
    }

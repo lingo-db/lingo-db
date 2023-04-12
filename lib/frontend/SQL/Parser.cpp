@@ -1313,7 +1313,7 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
             for (auto x : targetInfo.namedResults) {
                if (x.first == "primaryKeyHashValue") continue;
                names.push_back(builder.getStringAttr(x.first));
-               auto colMemberName = memberManager.getUniqueMember(x.first);
+               auto colMemberName = memberManager.getUniqueMember(x.first.empty()?"unnamed":x.first);
                auto columnType = x.second->type;
                attrs.push_back(attrManager.createRef(x.second));
                colTypes.push_back(mlir::TypeAttr::get(columnType));
