@@ -442,7 +442,7 @@ def NestedOp : RelAlg_Op<"nested", [Pure,Operator]> {
         ColumnSet getCreatedColumns();
         ColumnSet getUsedColumns();
         ColumnSet getAvailableColumns();
-        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col){assert(false&& "not implemented");return false;}
+        bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
     }];
 }
 

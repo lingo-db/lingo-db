@@ -658,7 +658,7 @@ mlir::LogicalResult mlir::relalg::AntiSemiJoinOp::foldColumns(mlir::relalg::Colu
    return success();
 }
 ColumnSet mlir::relalg::NestedOp::getCreatedColumns() {
-   return {};
+   return getAvailableColumns(); //todo: fix
 }
 
 ColumnSet mlir::relalg::NestedOp::getUsedColumns() {
@@ -666,5 +666,12 @@ ColumnSet mlir::relalg::NestedOp::getUsedColumns() {
 }
 ColumnSet mlir::relalg::NestedOp::getAvailableColumns() {
    return mlir::relalg::ColumnSet::fromArrayAttr(getAvailableCols());
+}
+bool mlir::relalg::NestedOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
+   ColumnSet available = getAvailableColumns();
+   if (available.contains(col)) {
+      return mlir::relalg::detail::canColumnReach(this->getOperation(), source, target, col);
+   }
+   return false;
 }
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsInterfaces.cpp.inc"
