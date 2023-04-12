@@ -56,12 +56,12 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
       auto children = op.getChildren();
       llvm::TypeSwitch<mlir::Operation*>(op.getOperation())
          .Case<mlir::relalg::MapOp>([&](mlir::relalg::MapOp mapOp) {
-            if (children.size()==1&&children[0]->hasAttr("rows")) {
+            if (children.size() == 1 && children[0]->hasAttr("rows")) {
                mapOp->setAttr("rows", children[0]->getAttr("rows"));
             }
          })
          .Case<mlir::relalg::LimitOp>([&](mlir::relalg::LimitOp limitOp) {
-            if (children.size()==1&&children[0]->hasAttr("rows")) {
+            if (children.size() == 1 && children[0]->hasAttr("rows")) {
                limitOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), std::min(children[0]->getAttr("rows").cast<mlir::FloatAttr>().getValueAsDouble(), (double) limitOp.getMaxRows())));
             }
          })
@@ -80,9 +80,15 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
                unionOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), sum));
             }
          })
-
+         .Case<mlir::relalg::AggregationOp>([&](mlir::relalg::AggregationOp aggregationOp) {
+            if (aggregationOp.getGroupByCols().empty()) {
+               aggregationOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()),1.0));
+            } else if (children.size() == 1 && children[0]->hasAttr("rows")) {
+               aggregationOp->setAttr("rows", children[0]->getAttr("rows"));
+            }
+         })
          .Case<UnaryOperator>([&](UnaryOperator unaryOperator) {
-            if (children.size()==1&&children[0]->hasAttr("rows")) {
+            if (children.size() == 1 && children[0]->hasAttr("rows")) {
                unaryOperator->setAttr("rows", children[0]->getAttr("rows"));
             }
          });
