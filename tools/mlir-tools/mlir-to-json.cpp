@@ -181,6 +181,9 @@ class ToJson {
          .Case<mlir::db::CharType>([](mlir::db::CharType charType) {
             return nlohmann::json{{"type", "text"}};
          })
+         .Case<mlir::FloatType>([](mlir::FloatType floatType) {
+            return nlohmann::json{{"type", "float"}};
+         })
          .Default([](mlir::Type type) {
             llvm::errs() << "type could not be converted ";
             type.dump();
@@ -209,6 +212,8 @@ class ToJson {
       result["value"]["type"] = convertType(type);
       if (auto integerAttr = attr.dyn_cast_or_null<mlir::IntegerAttr>()) {
          result["value"]["value"] = integerAttr.getInt();
+      } else if (auto floatAttr = attr.dyn_cast_or_null<mlir::FloatAttr>()) {
+         result["value"]["value"] = floatAttr.getValueAsDouble();
       } else if (auto stringAttr = attr.dyn_cast_or_null<mlir::StringAttr>()) {
          result["value"]["value"] = stringAttr.str();
       } else if (auto boolAttr = attr.dyn_cast_or_null<mlir::BoolAttr>()) {
@@ -470,7 +475,7 @@ class ToJson {
       result["operator"] = "sort";
       result["physicalOperator"] = "sort";
       result["input"] = convertOperation(input);
-      result["order"] = nlohmann::json();
+      result["order"] = nlohmann::json::array();
       for (auto attr : sortspecs) {
          auto sortspecAttr = attr.cast<mlir::relalg::SortSpecificationAttr>();
          result["order"].push_back(nlohmann::json{
@@ -511,6 +516,30 @@ class ToJson {
             result["tid"] = nlohmann::json{{"iu", "tid"}, {"type", {"type", "bigint"}}};
             result["tableoid"] = nlohmann::json{{"type", "tableoid"}, {"type", {"type", "integer"}}};
             result["rowstate"] = nlohmann::json{{"iu", "rowstate"}, {"type", {"type", "bigint"}}};
+            // Filled by folded selections
+            result["restrictions"] = nlohmann::json::array({});
+            // Unused, functionality unclear
+            result["residuals"] = nlohmann::json::array({});
+            return result;
+         })
+         .Case<mlir::relalg::ConstRelationOp>([&](mlir::relalg::ConstRelationOp constRelationOp) {
+            result["operator"] = "inlinetable";
+            result["physicalOperator"] = "inlinetable";
+            result["cardinality"] = constRelationOp.getValues().size();
+            result["values"] = nlohmann::json::array({});
+            result["attributes"] = nlohmann::json::array({});
+
+            for (auto col:constRelationOp.getColumns()){
+               result["attributes"].push_back(nlohmann::json{
+                  {"name",""},
+                  {"iu",columnDefAttrToIuref(col.cast<mlir::tuples::ColumnDefAttr>())}
+               });
+            }
+            for (auto row : constRelationOp.getValues()) {
+               for (auto c : llvm::zip(row.cast<mlir::ArrayAttr>(), constRelationOp.getColumns())) {
+                  result["values"].push_back(convertConstant(std::get<0>(c), std::get<1>(c).cast<mlir::tuples::ColumnDefAttr>().getColumn().type));
+               }
+            }
             // Filled by folded selections
             result["restrictions"] = nlohmann::json::array({});
             // Unused, functionality unclear
@@ -562,7 +591,7 @@ class ToJson {
                result["operator"] = "map";
                result["physicalOperator"] = "map";
                result["input"] = convertOperation(mapOp.getOperand().getDefiningOp());
-               result["values"] = nlohmann::json();
+               result["values"] = nlohmann::json::array();
             }
             for (auto column : mapOp.getComputedCols()) {
                auto columnDefAttr = column.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
@@ -611,7 +640,7 @@ class ToJson {
             result["physicalOperator"] = "groupby";
             result["input"] = convertOperation(aggregationOp.getOperand().getDefiningOp());
             result["key"] = nlohmann::json::array();
-            result["values"] = nlohmann::json();
+            result["values"] = nlohmann::json::array();
             size_t arg = 0;
             for (auto groupByCol : aggregationOp.getGroupByCols()) {
                auto colRefAttr = groupByCol.cast<mlir::tuples::ColumnRefAttr>();
@@ -622,7 +651,7 @@ class ToJson {
                   {"expression", "iuref"},
                   {"iu", symbolRefToIuString(colRefAttr.getName())}});
             }
-            result["aggregates"] = nlohmann::json();
+            result["aggregates"] = nlohmann::json::array();
             std::vector<nlohmann::json> computedColIus;
             for (auto aggregate : aggregationOp.getComputedCols()) {
                auto colDefAttr = aggregate.cast<mlir::tuples::ColumnDefAttr>();

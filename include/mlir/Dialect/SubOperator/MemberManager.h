@@ -9,6 +9,7 @@ class MemberManager {
    public:
    std::string getUniqueMember(std::string name) {
       auto sanitizedName = name.substr(0, name.find("$"));
+      std::replace(sanitizedName.begin(), sanitizedName.end(), ' ', '_');
       auto id = counts[sanitizedName]++;
       auto res = sanitizedName + "$" + std::to_string(id);
       return res;

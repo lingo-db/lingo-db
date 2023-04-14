@@ -246,9 +246,9 @@ struct Parser {
          resolver.insertIntoScope(&scope, name, attr);
       }
       const mlir::tuples::Column* getAttribute(std::string name) {
-         const auto *res=resolver.lookup(name);
-         if(!res){
-            error("could not resolve '"+name+"'");
+         const auto* res = resolver.lookup(name);
+         if (!res) {
+            error("could not resolve '" + name + "'");
          }
          return res;
       }
@@ -326,6 +326,11 @@ struct Parser {
       moduleOp.getContext()->getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
       pg_query_parse_init();
       result = pg_query_parse(sql.c_str());
+      if (result.error) {
+         std::stringstream syntaxErrorMessage;
+         syntaxErrorMessage << "Syntax Error at position " << result.error->cursorpos << ":" << result.error->message;
+         error(syntaxErrorMessage.str());
+      }
    }
 
    static void error(std::string str) { //todo: improve error handling

@@ -633,7 +633,7 @@ ParseResult mlir::subop::LookupOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
       return failure();
    }
    result.addAttribute("keys", keys);
-   mlir::Type stateType;
+   LookupAbleState stateType;
    if (parser.parseColonType(stateType).failed()) {
       return failure();
    }
@@ -654,7 +654,7 @@ ParseResult mlir::subop::LookupOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
          return failure();
       }
       for (size_t i = 0; i < keys.size(); i++) {
-         leftArgs[i].type = keys[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+         leftArgs[i].type = stateType.getKeyMembers().getTypes()[i].cast<mlir::TypeAttr>().getValue();
          if (i > 0 && parser.parseComma().failed()) return failure();
          if (parser.parseArgument(leftArgs[i])) return failure();
       }
