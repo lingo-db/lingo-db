@@ -2,6 +2,7 @@
 #define RUNTIME_BUFFER_H
 #include <stddef.h>
 
+#include "ExecutionContext.h"
 #include <cstdint>
 #include <cstdlib>
 #include <vector>
@@ -13,7 +14,7 @@ namespace runtime {
 struct Buffer {
    size_t numElements;
    uint8_t* ptr;
-   static Buffer createZeroed(size_t bytes);
+   static Buffer createZeroed(runtime::ExecutionContext* executionContext, size_t bytes);
 };
 struct BufferIterator {
    virtual bool isValid() = 0;
@@ -66,6 +67,11 @@ class FlexibleBuffer {
       return typeSize;
    }
    size_t getLen() const;
+   ~FlexibleBuffer() {
+      for (auto buf : buffers) {
+         free(buf.ptr);
+      }
+   }
 };
 
 } // namespace runtime

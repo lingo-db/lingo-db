@@ -1,7 +1,9 @@
 #include "runtime/HashMultiMap.h"
 
-runtime::HashMultiMap* runtime::HashMultiMap::create(size_t entryTypeSize, size_t valueTypeSize, size_t initialCapacity) {
-   return new HashMultiMap(initialCapacity, entryTypeSize, valueTypeSize);
+runtime::HashMultiMap* runtime::HashMultiMap::create(runtime::ExecutionContext* executionContext,size_t entryTypeSize, size_t valueTypeSize, size_t initialCapacity) {
+   auto* hmm= new HashMultiMap(initialCapacity, entryTypeSize, valueTypeSize);
+   executionContext->registerState({hmm, [](void* ptr) { delete reinterpret_cast<runtime::HashMultiMap*>(ptr); }});
+   return hmm;
 }
 void runtime::HashMultiMap::destroy(HashMultiMap* hashMultiMap) {
    delete hashMultiMap;

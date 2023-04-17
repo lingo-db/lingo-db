@@ -22,11 +22,16 @@ class SegmentTreeView {
       uint8_t* state;
    };
    TreeNode* buildRecursively(std::vector<uint8_t*>& entryPointers, size_t from, size_t to);
-   void lookupRecursively(TreeNode* t, uint8_t* result, size_t from, size_t to,bool& first);
+   void lookupRecursively(TreeNode* t, uint8_t* result, size_t from, size_t to, bool& first);
    TreeNode* root;
+   void destroyNode(TreeNode* node);
+
    public:
    void lookup(uint8_t* result, size_t from, size_t to);
-   static SegmentTreeView* build(Buffer buffer, size_t typeSize, void (*createInitialStateFn)(unsigned char*, unsigned char*), void (*combineStatesFn)(unsigned char*, unsigned char*, unsigned char*), size_t stateTypeSize);
+   static SegmentTreeView* build(runtime::ExecutionContext* executionContext, Buffer buffer, size_t typeSize, void (*createInitialStateFn)(unsigned char*, unsigned char*), void (*combineStatesFn)(unsigned char*, unsigned char*, unsigned char*), size_t stateTypeSize);
+   ~SegmentTreeView() {
+      destroyNode(root);
+   }
 };
 } // namespace runtime
 

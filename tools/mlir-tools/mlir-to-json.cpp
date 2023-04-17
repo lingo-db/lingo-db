@@ -529,11 +529,10 @@ class ToJson {
             result["values"] = nlohmann::json::array({});
             result["attributes"] = nlohmann::json::array({});
 
-            for (auto col:constRelationOp.getColumns()){
+            for (auto col : constRelationOp.getColumns()) {
                result["attributes"].push_back(nlohmann::json{
-                  {"name",""},
-                  {"iu",columnDefAttrToIuref(col.cast<mlir::tuples::ColumnDefAttr>())}
-               });
+                  {"name", ""},
+                  {"iu", columnDefAttrToIuref(col.cast<mlir::tuples::ColumnDefAttr>())}});
             }
             for (auto row : constRelationOp.getValues()) {
                for (auto c : llvm::zip(row.cast<mlir::ArrayAttr>(), constRelationOp.getColumns())) {
@@ -906,8 +905,7 @@ class ToJson {
    }
 };
 
-runtime::ExecutionContext execute(std::string inputFileName, std::string databasePath) {
-   runtime::ExecutionContext context;
+void execute(std::string inputFileName, std::string databasePath, runtime::ExecutionContext& context) {
    context.id = 42;
 
    std::cout << "Loading Database from: " << databasePath << '\n';
@@ -923,7 +921,6 @@ runtime::ExecutionContext execute(std::string inputFileName, std::string databas
    executer->fromFile(inputFileName);
    executer->setExecutionContext(&context);
    executer->execute();
-   return context;
 }
 
 int main(int argc, char** argv) {
@@ -955,7 +952,7 @@ int main(int argc, char** argv) {
    });
    runtime::ExecutionContext executionContext;
    if (trackingTuples) {
-      executionContext = execute(inputFilename, databasePath);
+      execute(inputFilename, databasePath, executionContext);
    }
 
    ToJson toJson(&executionContext, module.get());

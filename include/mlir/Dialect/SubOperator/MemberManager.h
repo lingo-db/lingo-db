@@ -1,5 +1,6 @@
 #ifndef MLIR_DIALECT_SUBOPERATOR_MEMBERMANAGER_H
 #define MLIR_DIALECT_SUBOPERATOR_MEMBERMANAGER_H
+#include <algorithm>
 #include <string>
 #include <unordered_map>
 namespace mlir::subop {

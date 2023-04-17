@@ -1,7 +1,7 @@
 #include "runtime/Heap.h"
 #include <cstring>
 
-void runtime::Heap::bubbleDown(size_t idx,size_t end) {
+void runtime::Heap::bubbleDown(size_t idx, size_t end) {
    size_t leftChild = idx * 2;
    if (leftChild > end) return;
    size_t rightChild = idx * 2 + 1;
@@ -11,12 +11,12 @@ void runtime::Heap::bubbleDown(size_t idx,size_t end) {
    }
    if (isLt(idx, maxChild)) {
       swap(idx, maxChild);
-      bubbleDown(maxChild,end);
+      bubbleDown(maxChild, end);
    }
 }
 void runtime::Heap::buildHeap() {
    for (int i = currElements; i > 0; i--) {
-      bubbleDown(i,currElements);
+      bubbleDown(i, currElements);
    }
 }
 
@@ -32,19 +32,21 @@ void runtime::Heap::insert(uint8_t* currData) {
    auto* lastData = &data[typeSize];
    if (cmpFn(currData, lastData)) {
       memcpy(&data[typeSize], currData, typeSize);
-      bubbleDown(1,currElements);
+      bubbleDown(1, currElements);
    }
 }
-runtime::Heap* runtime::Heap::create(size_t maxElements, size_t typeSize, bool (*cmpFn)(unsigned char*, unsigned char*)) {
-   return new Heap(maxElements, typeSize, cmpFn);
+runtime::Heap* runtime::Heap::create(runtime::ExecutionContext* executionContext, size_t maxElements, size_t typeSize, bool (*cmpFn)(unsigned char*, unsigned char*)) {
+   auto* heap = new Heap(maxElements, typeSize, cmpFn);
+   executionContext->registerState({heap, [](void* ptr) { delete reinterpret_cast<Heap*>(ptr); }});
+   return heap;
 }
 runtime::Buffer runtime::Heap::getBuffer() {
    if (currElements < maxElements) {
       buildHeap();
    }
-   for(size_t i=0;i<currElements;i++){
-      swap(1,currElements-i);
-      bubbleDown(1,currElements-i-1);
+   for (size_t i = 0; i < currElements; i++) {
+      swap(1, currElements - i);
+      bubbleDown(1, currElements - i - 1);
    }
 
    return runtime::Buffer{currElements * std::max(1ul, typeSize), &data[typeSize]};

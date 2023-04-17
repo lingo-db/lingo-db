@@ -155,7 +155,6 @@ class TableBuilder {
    void nextRow();
 };
 
-
 #define EXPORT extern "C" __attribute__((visibility("default")))
 
 TableBuilder* TableBuilder::create(runtime::VarLen32 schemaDescription) {
@@ -181,7 +180,7 @@ void TableBuilder::addBool(bool isValid, bool value) {
 }
 
 #define TABLE_BUILDER_ADD_PRIMITIVE(name, type)                                                \
-   void TableBuilder::add##name(bool isValid, arrow::type ::c_type val) {             \
+   void TableBuilder::add##name(bool isValid, arrow::type ::c_type val) {                      \
       auto* typedBuilder = getBuilder<arrow::NumericBuilder<arrow::type>>();                   \
       if (!isValid) {                                                                          \
          handleStatus(typedBuilder->AppendNull()); /*NOLINT (clang-diagnostic-unused-result)*/ \
@@ -250,9 +249,10 @@ RESULT_TABLE_FORWARD(addFixedSized, int64_t);
 void runtime::ResultTable::nextRow() {
    builder->nextRow();
 }
-runtime::ResultTable* runtime::ResultTable::create(runtime::VarLen32 schemaDescription) {
+runtime::ResultTable* runtime::ResultTable::create(runtime::ExecutionContext* executionContext, runtime::VarLen32 schemaDescription) {
    ResultTable* resultTable = new ResultTable;
    resultTable->builder = TableBuilder::create(schemaDescription);
+   executionContext->registerState({resultTable, [](void* ptr) { delete reinterpret_cast<ResultTable*>(ptr); }});
    return resultTable;
 }
 std::shared_ptr<arrow::Table> runtime::ResultTable::get() {

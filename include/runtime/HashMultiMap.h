@@ -26,7 +26,7 @@ class HashMultiMap {
    void resize();
    Entry* insertEntry(size_t hash);
    Value* insertValue(Entry* entry);
-   static HashMultiMap* create(size_t entryTypeSize, size_t valueTypeSize, size_t initialCapacity);
+   static HashMultiMap* create(runtime::ExecutionContext* executionContext,size_t entryTypeSize, size_t valueTypeSize, size_t initialCapacity);
    static void destroy(HashMultiMap*);
    runtime::BufferIterator* createIterator();
 };

@@ -19,7 +19,7 @@ class Hashtable {
    public:
    void resize();
    Entry* insert(size_t hash);
-   static Hashtable* create(size_t typeSize, size_t initialCapacity);
+   static Hashtable* create(runtime::ExecutionContext* executionContext, size_t typeSize, size_t initialCapacity);
    static void destroy(Hashtable*);
    runtime::BufferIterator* createIterator();
 };

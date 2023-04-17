@@ -1,6 +1,8 @@
 #include "runtime/Hashtable.h"
-runtime::Hashtable* runtime::Hashtable::create(size_t typeSize, size_t initialCapacity) {
-   return new (malloc(sizeof(Hashtable) + typeSize)) Hashtable(initialCapacity, typeSize);
+runtime::Hashtable* runtime::Hashtable::create(runtime::ExecutionContext* executionContext, size_t typeSize, size_t initialCapacity) {
+   auto* ht = new Hashtable(initialCapacity, typeSize);
+   executionContext->registerState({ht, [](void* ptr) { delete reinterpret_cast<runtime::Hashtable*>(ptr); }});
+   return ht;
 }
 void runtime::Hashtable::resize() {
    size_t oldHtSize = hashMask + 1;
@@ -16,8 +18,7 @@ void runtime::Hashtable::resize() {
    });
 }
 void runtime::Hashtable::destroy(runtime::Hashtable* ht) {
-   ht->~Hashtable();
-   free(ht);
+   delete ht;
 }
 runtime::Hashtable::Entry* runtime::Hashtable::insert(size_t hash) {
    if (values.getLen() > hashMask / 2) {

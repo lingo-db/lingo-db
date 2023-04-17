@@ -25,7 +25,7 @@ class Heap {
    public:
    Heap(size_t maxElements, size_t typeSize, CmpFn cmpFn) : cmpFn(cmpFn), typeSize(typeSize), maxElements(maxElements), currElements(0), data(new uint8_t[typeSize * (maxElements + 1)]) {
    }
-   static Heap* create(size_t maxElements, size_t typeSize, bool (*cmpFn)(unsigned char*, unsigned char*));
+   static Heap* create(ExecutionContext* executionContext, size_t maxElements, size_t typeSize, bool (*cmpFn)(unsigned char*, unsigned char*));
    void insert(uint8_t* currData);
    Buffer getBuffer();
    static void destroy(Heap*);

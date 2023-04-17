@@ -202,6 +202,7 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
          auto executionStart = std::chrono::high_resolution_clock::now();
          mainFunc();
          auto executionEnd = std::chrono::high_resolution_clock::now();
+         executionContext->reset();
          measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
       }
       timing["toLLVMIR"] = translateToLLVMIRTime;
@@ -283,6 +284,7 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
          auto executionStart = std::chrono::high_resolution_clock::now();
          mainFunc();
          auto executionEnd = std::chrono::high_resolution_clock::now();
+         executionContext->reset();
          measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
       }
       timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
@@ -406,6 +408,7 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
          auto executionStart = std::chrono::high_resolution_clock::now();
          mainFunc();
          auto executionEnd = std::chrono::high_resolution_clock::now();
+         executionContext->reset();
          measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
       }
       //finish profiling

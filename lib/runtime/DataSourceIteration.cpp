@@ -1,8 +1,7 @@
 #include "runtime/DataSourceIteration.h"
 #include "json.h"
-#include <arrow/array.h>
+#include "runtime/Database.h"
 #include <arrow/table.h>
-
 class ArrowTableSourceIterator : public runtime::DataSourceIterator {
    arrow::TableBatchReader reader;
 

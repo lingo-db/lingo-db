@@ -3,8 +3,10 @@
 #include <cstring>
 #include <iostream>
 
-runtime::GrowingBuffer* runtime::GrowingBuffer::create(size_t sizeOfType, size_t initialCapacity) {
-   return new GrowingBuffer(initialCapacity, sizeOfType);
+runtime::GrowingBuffer* runtime::GrowingBuffer::create(runtime::ExecutionContext* executionContext, size_t sizeOfType, size_t initialCapacity) {
+   auto* res = new GrowingBuffer(initialCapacity, sizeOfType);
+   executionContext->registerState({res, [](void* ptr) { delete reinterpret_cast<GrowingBuffer*>(ptr); }});
+   return res;
 }
 
 uint8_t* runtime::GrowingBuffer::insert() {
@@ -17,7 +19,7 @@ size_t runtime::GrowingBuffer::getLen() const {
 size_t runtime::GrowingBuffer::getTypeSize() const {
    return values.getTypeSize();
 }
-runtime::Buffer runtime::GrowingBuffer::sort(bool (*compareFn)(uint8_t*, uint8_t*)) {
+runtime::Buffer runtime::GrowingBuffer::sort(runtime::ExecutionContext* executionContext, bool (*compareFn)(uint8_t*, uint8_t*)) {
    std::vector<uint8_t*> toSort;
    values.iterate([&](uint8_t* entryRawPtr) {
       toSort.push_back(entryRawPtr);
@@ -28,13 +30,14 @@ runtime::Buffer runtime::GrowingBuffer::sort(bool (*compareFn)(uint8_t*, uint8_t
       return compareFn(left, right);
    });
    uint8_t* sorted = new uint8_t[typeSize * len];
+   executionContext->registerState({sorted, [](void* ptr) { delete[] reinterpret_cast<uint8_t*>(ptr); }});
    for (size_t i = 0; i < len; i++) {
       uint8_t* ptr = sorted + (i * typeSize);
       memcpy(ptr, toSort[i], typeSize);
    }
    return Buffer{typeSize * len, sorted};
 }
-runtime::Buffer runtime::GrowingBuffer::asContinuous() {
+runtime::Buffer runtime::GrowingBuffer::asContinuous(runtime::ExecutionContext* executionContext) {
    //todo make more performant...
    std::vector<uint8_t*> toSort;
    values.iterate([&](uint8_t* entryRawPtr) {
@@ -43,6 +46,7 @@ runtime::Buffer runtime::GrowingBuffer::asContinuous() {
    size_t typeSize = values.getTypeSize();
    size_t len = values.getLen();
    uint8_t* continuous = new uint8_t[typeSize * len];
+   executionContext->registerState({continuous, [](void* ptr) { delete[] reinterpret_cast<uint8_t*>(ptr); }});
    for (size_t i = 0; i < len; i++) {
       uint8_t* ptr = continuous + (i * typeSize);
       memcpy(ptr, toSort[i], typeSize);
@@ -56,8 +60,9 @@ runtime::BufferIterator* runtime::GrowingBuffer::createIterator() {
    return values.createIterator();
 }
 
-runtime::Buffer runtime::Buffer::createZeroed(size_t bytes) {
+runtime::Buffer runtime::Buffer::createZeroed(runtime::ExecutionContext* executionContext, size_t bytes) {
    auto* ptr = new uint8_t[bytes];
    std::memset(ptr, 0, bytes);
+   executionContext->registerState({ptr, [](void* ptr) { delete[] reinterpret_cast<uint8_t*>(ptr); }});
    return Buffer{bytes, ptr};
 }

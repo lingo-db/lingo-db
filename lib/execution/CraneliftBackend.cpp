@@ -49,6 +49,7 @@ class CraneliftBackend : public execution::ExecutionBackend {
          auto executionStart = std::chrono::high_resolution_clock::now();
          mainFunc();
          auto executionEnd = std::chrono::high_resolution_clock::now();
+         executionContext->reset();
          measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
       }
       timing["llvmCodeGen"] = totalJITTime;
