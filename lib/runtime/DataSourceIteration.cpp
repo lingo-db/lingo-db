@@ -93,3 +93,12 @@ runtime::DataSource* runtime::DataSource::get(runtime::ExecutionContext* executi
    }
    return new ArrowTableSource(*table.get(), memberToColumnId);
 }
+void runtime::DataSourceIteration::iterate(void (*forEachChunk)(runtime::RecordBatchInfo*, void*), void* context) {
+   runtime::RecordBatchInfo* recordBatchInfo = reinterpret_cast<runtime::RecordBatchInfo*>(malloc(sizeof(runtime::RecordBatchInfo) + sizeof(runtime::ColumnInfo) * colIds.size()));
+   while (!!currChunk) {
+      access(recordBatchInfo);
+      forEachChunk(recordBatchInfo, context);
+      currChunk = iterator->getNext();
+   }
+   free(recordBatchInfo);
+}

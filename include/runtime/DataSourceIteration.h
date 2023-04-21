@@ -11,8 +11,8 @@ class DataSourceIterator {
 };
 class DataSource {
    public:
-   virtual size_t getColumnId(std::string member)=0;
-   virtual std::shared_ptr<DataSourceIterator> getIterator()=0;
+   virtual size_t getColumnId(std::string member) = 0;
+   virtual std::shared_ptr<DataSourceIterator> getIterator() = 0;
    virtual ~DataSource() {}
    static DataSource* get(ExecutionContext* executionContext, runtime::VarLen32 description);
 };
@@ -30,6 +30,7 @@ class DataSourceIteration {
    void next();
    void access(RecordBatchInfo* info);
    static void end(DataSourceIteration*);
+   void iterate(void (*forEachChunk)(RecordBatchInfo*,void*),void*);
 };
 } // end namespace runtime
 #endif // RUNTIME_DATASOURCEITERATION_H
