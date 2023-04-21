@@ -113,13 +113,13 @@ lint:
 
 .sqlite_tests:
    script:
-      - export LINGODB_EXECUTION_MODE=CHEAP
+      #- export LINGODB_EXECUTION_MODE=CHEAP
       - time find ./test/sqlite/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P $(nproc) /build/lingodb/sqlite-tester
 
 .sqlite_dataset_tests:
    script:
       - export BASE_PATH=$(pwd)
-      - export LINGODB_EXECUTION_MODE=CHEAP
+      #- export LINGODB_EXECUTION_MODE=CHEAP
       - mkdir -p /datasets/tpch-1
       - cd /opt/data/tpchSf1
       - /build/lingodb/sql /datasets/tpch-1 < $BASE_PATH/resources/sql/tpch/initialize.sql
