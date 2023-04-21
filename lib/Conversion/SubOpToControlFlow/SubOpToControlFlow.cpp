@@ -1073,7 +1073,7 @@ class StateContext {
    void analyze() {
       for (auto res : scanOp->getResults()) {
          if (res.getType().isa<mlir::tuples::TupleStreamType>()) {
-            for (auto user : res.getUsers()) {
+            for (auto *user : res.getUsers()) {
                analyze(user);
             }
          }
@@ -1103,8 +1103,6 @@ class StateContext {
       });
       for (auto x : offset) {
          mlir::Value idx = rewriter.create<mlir::arith::ConstantIndexOp>(scanOp->getLoc(), x.second);
-         auto targetType = x.first->getResult(0).getType();
-         auto convertedTargetType = converter.convertType(targetType);
          mlir::Value ptr = rewriter.getMapped(x.first->getResult(0), nullptr);
          mlir::Value plainPtr = rewriter.create<util::GenericMemrefCastOp>(scanOp->getLoc(), mlir::util::RefType::get(rewriter.getContext(), rewriter.getI8Type()), ptr);
          rewriter.create<util::StoreOp>(scanOp->getLoc(), plainPtr, contextPtr, idx);
@@ -3147,7 +3145,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
          }
       }
    }
-   for (auto op : defs) {
+   for (auto *op : defs) {
       op->moveBefore(&module.getBody()->getOperations().front());
    }
 }
