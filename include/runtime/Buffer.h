@@ -19,11 +19,13 @@ struct Buffer {
 struct BufferIterator {
    virtual bool isValid() = 0;
    virtual void next() = 0;
+
    virtual Buffer getCurrentBuffer() = 0;
    static bool isIteratorValid(BufferIterator* iterator);
    static void iteratorNext(BufferIterator* iterator);
    static Buffer iteratorGetCurrentBuffer(BufferIterator* iterator);
    static void destroy(BufferIterator* iterator);
+   static void iterate(BufferIterator* iterator, void (*forEachChunk)(Buffer, void*), void*);
    virtual ~BufferIterator() {}
 };
 class FlexibleBuffer {

@@ -37,3 +37,10 @@ runtime::BufferIterator* runtime::FlexibleBuffer::createIterator() {
 size_t runtime::FlexibleBuffer::getLen() const {
    return totalLen;
 }
+
+void runtime::BufferIterator::iterate(runtime::BufferIterator* iterator, void (*forEachChunk)(runtime::Buffer, void*), void* contextPtr) {
+   while(iterator->isValid()){
+      forEachChunk(iterator->getCurrentBuffer(),contextPtr);
+      iterator->next();
+   }
+}
