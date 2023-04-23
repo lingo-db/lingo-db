@@ -53,6 +53,11 @@ def StateMembers : SubOperator_Attr<"StateMembers"> {
 class SubOperator_Type<string name, string typeMnemonic, list<Trait> traits = []> : TypeDef<SubOperator_Dialect, name,traits> {
     let mnemonic = typeMnemonic;
 }
+def ThreadLocal : SubOperator_Type<"ThreadLocal", "thread_local"> {
+    let summary = "wrapper around any State that makes it thread local";
+    let parameters = (ins "State":$wrapped);
+    let assemblyFormat = "`<` $wrapped `>`";
+}
 def Table : SubOperator_Type<"Table", "table",[State]> {
     let summary = "external table";
     let parameters = (ins "StateMembersAttr":$members);
@@ -316,6 +321,24 @@ def SetResultOp : SubOperator_Op<"set_result"> {
     let arguments = (ins I32Attr:$result_id, AnyType : $state);
     let assemblyFormat = [{ $result_id $state `:` type($state)  attr-dict }];
 }
+def CreateThreadLocalOp : SubOperator_Op<"create_thread_local", [Pure]> {
+    let summary = "create new thread local";
+    let results = (outs ThreadLocal : $res);
+    let regions = (region AnyRegion:$initFn);
+    let assemblyFormat = [{ type($res) (`initial` `:` $initFn^)? attr-dict }];
+}
+def MergeOp : SubOperator_Op<"merge", [Pure]> {
+  let summary = "merge thread_local ";
+  let arguments = (ins ThreadLocal: $threadLocal);
+  let results = (outs AnyType : $res);
+  let assemblyFormat = [{ $threadLocal `:` type($threadLocal) `->` type($res) attr-dict }];
+}
+def GetLocal : SubOperator_Op<"get_local"> {
+     let summary = "get local state from thread local";
+     let arguments = (ins ThreadLocal: $threadLocal);
+     let results = (outs AnyType : $res);
+     let assemblyFormat = [{ $threadLocal `:` type($threadLocal) `->` type($res)  attr-dict }];
+ }
 
 //===----------------------------------------------------------------------===//
 // Creating Tuple Streams
