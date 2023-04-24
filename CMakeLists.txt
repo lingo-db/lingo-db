@@ -114,7 +114,7 @@ set(LIBS
         MLIRMathTransforms
         )
 set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
-
+find_package(TBB)
 add_subdirectory(lib/runtime)
 add_subdirectory(lib/execution)
 add_subdirectory(lib/frontend/SQL)

@@ -15,6 +15,10 @@ class Database {
    public:
    //void addTable(std::string name, std::shared_ptr<arrow::Table> table);
    static std::unique_ptr<Database> loadFromDir(std::string directory);
+   virtual bool recordBatchesAvailable() {
+      return false;
+   }
+   virtual const std::vector<std::shared_ptr<arrow::RecordBatch>>& getRecordBatches(const std::string& name);
    virtual bool hasTable(const std::string& name) = 0;
 
    virtual std::shared_ptr<arrow::Table> getTable(const std::string& name) = 0;
@@ -24,7 +28,6 @@ class Database {
    virtual void createTable(std::string tableName, std::shared_ptr<TableMetaData>);
    virtual void appendTable(std::string tableName, std::shared_ptr<arrow::Table> newRows);
    virtual void combineTableWithHashValuesImpl(std::string tableName, std::shared_ptr<arrow::Table> hashValues);
-
 
    void createTable(runtime::VarLen32 name, runtime::VarLen32 meta);
    void appendTableFromResult(runtime::VarLen32 tableName, runtime::ExecutionContext* context, size_t resultId);

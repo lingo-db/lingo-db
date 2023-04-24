@@ -92,14 +92,14 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
    }
    void getRequired(std::unordered_set<mlir::tuples::Column*>& requiredColumns, const std::unordered_set<mlir::tuples::Column*>& usedColumns, mlir::subop::ColumnCreationAnalysis& columnCreationAnalysis, mlir::Operation* op) {
       const auto& createdCols = columnCreationAnalysis.getCreatedColumns(op);
-      for (auto *c : createdCols) {
+      for (auto* c : createdCols) {
          if (usedColumns.contains(c)) {
             requiredColumns.insert(c);
          }
       }
       for (auto operand : op->getOperands()) {
          if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
-            if (auto *defOp = operand.getDefiningOp()) {
+            if (auto* defOp = operand.getDefiningOp()) {
                getRequired(requiredColumns, usedColumns, columnCreationAnalysis, defOp);
             }
          }
@@ -114,7 +114,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
          if (auto unionOp = mlir::dyn_cast_or_null<mlir::subop::UnionOp>(op)) {
             size_t streams = 0;
             for (auto stream : unionOp.getStreams()) {
-               if (auto *def = stream.getDefiningOp()) {
+               if (auto* def = stream.getDefiningOp()) {
                   if (unionStreamCount.contains(def)) {
                      streams += unionStreamCount[def];
                   } else {
@@ -155,7 +155,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                std::vector<mlir::Attribute> names;
                std::vector<mlir::NamedAttribute> defMapping;
                std::vector<mlir::NamedAttribute> refMapping;
-               for (auto *column : requiredColumns) {
+               for (auto* column : requiredColumns) {
                   auto name = memberManager.getUniqueMember("tmp_union");
                   types.push_back(mlir::TypeAttr::get(column->type));
                   names.push_back(builder.getStringAttr(name));
@@ -180,7 +180,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
             size_t sum = 0;
             for (auto operand : op->getOperands()) {
                if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
-                  if (auto *def = operand.getDefiningOp()) {
+                  if (auto* def = operand.getDefiningOp()) {
                      if (unionStreamCount.contains(def)) {
                         sum += unionStreamCount[def];
                      }
@@ -190,7 +190,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
             if (auto nestedMapOp = mlir::dyn_cast_or_null<mlir::subop::NestedMapOp>(op)) {
                if (auto returnOp = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(nestedMapOp.getRegion().front().getTerminator())) {
                   for (auto operand : returnOp.getOperands()) {
-                     if (auto *def = operand.getDefiningOp()) {
+                     if (auto* def = operand.getDefiningOp()) {
                         if (unionStreamCount.contains(def)) {
                            sum += unionStreamCount[def];
                         }

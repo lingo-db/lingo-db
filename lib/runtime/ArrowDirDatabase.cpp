@@ -55,6 +55,21 @@ std::shared_ptr<arrow::RecordBatch> ArrowDirDatabase::loadSample(std::string nam
    return batch;
 }
 
+void ArrowDirDatabase::updateRecordBatches(const std::string& name) {
+   std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+   arrow::TableBatchReader reader(getTable(name));
+   reader.set_chunksize(20000);
+   std::shared_ptr<arrow::RecordBatch> nextChunk;
+   while (reader.ReadNext(&nextChunk) == arrow::Status::OK()) {
+      if(nextChunk) {
+         batches.push_back(nextChunk);
+      }else{
+         break;
+      }
+      nextChunk.reset();
+   }
+   recordBatches[name] = batches;
+}
 std::unique_ptr<Database> ArrowDirDatabase::load(std::string directory) {
    std::string json;
    auto database = std::make_unique<ArrowDirDatabase>();
@@ -65,6 +80,7 @@ std::unique_ptr<Database> ArrowDirDatabase::load(std::string directory) {
       if (path.extension().string() == ".arrow") {
          auto tablename = path.stem().string();
          database->tables[tablename] = loadTable(path.string());
+         database->updateRecordBatches(tablename);
       }
       if (path.extension().string() == ".sample" && path.stem().string().ends_with(".arrow")) {
          auto stem = path.stem().string();
@@ -115,7 +131,7 @@ std::shared_ptr<arrow::DataType> createDataType(const ColumnType& columnType) {
          case 64: return arrow::int64();
       }
    }
-   if (columnType.base == "index"){
+   if (columnType.base == "index") {
       return arrow::int64();
    }
    if (columnType.base == "float") {
@@ -145,7 +161,7 @@ std::shared_ptr<arrow::Schema> createSchema(std::shared_ptr<TableMetaData> metaD
    return std::make_shared<arrow::Schema>(fields);
 }
 void ArrowDirDatabase::createTable(std::string tableName, std::shared_ptr<TableMetaData> mD) {
-   if (!mD->getPrimaryKey().empty()){
+   if (!mD->getPrimaryKey().empty()) {
       std::shared_ptr<ColumnMetaData> cdm = std::make_shared<ColumnMetaData>();
       std::variant<size_t, std::string> modifier = static_cast<size_t>(64);
       cdm->setColumnType(ColumnType{"index", false});
@@ -159,6 +175,7 @@ void ArrowDirDatabase::createTable(std::string tableName, std::shared_ptr<TableM
       cols.push_back(arrow::ChunkedArray::MakeEmpty(schema->field(i)->type()).ValueOrDie());
    }
    tables[tableName] = arrow::Table::Make(schema, cols);
+   updateRecordBatches(tableName);
    metaData[tableName] = mD;
 }
 template <typename I>
@@ -212,17 +229,17 @@ void ArrowDirDatabase::appendTable(std::string tableName, std::shared_ptr<arrow:
    }
 
    auto table = tables.at(tableName);
-   if (table->num_columns() != newRows->num_columns()){
-      if (table->num_columns() == newRows->num_columns()+1 && table->GetColumnByName("primaryKeyHashValue")){
+   if (table->num_columns() != newRows->num_columns()) {
+      if (table->num_columns() == newRows->num_columns() + 1 && table->GetColumnByName("primaryKeyHashValue")) {
          // Since it is not possible to combine record batches of different schemas,
          // we need to delete already computed hashValues and  recompute for entire table
-         for (size_t i=0; i!=table->ColumnNames().size(); i++){
-            if (table->ColumnNames()[i] == "primaryKeyHashValue"){
+         for (size_t i = 0; i != table->ColumnNames().size(); i++) {
+            if (table->ColumnNames()[i] == "primaryKeyHashValue") {
                table = table->RemoveColumn(i).ValueOrDie();
                break;
             }
          }
-      }else{
+      } else {
          throw std::runtime_error("can not append using a different schema");
       }
    }
@@ -232,6 +249,7 @@ void ArrowDirDatabase::appendTable(std::string tableName, std::shared_ptr<arrow:
    }
    batches.push_back(newRows->CombineChunksToBatch().ValueOrDie());
    tables[tableName] = arrow::Table::FromRecordBatches(batches).ValueOrDie();
+   updateRecordBatches(tableName);
    samples[tableName] = createSample(tables[tableName]);
    metaData[tableName]->setNumRows(tables[tableName]->num_rows());
    for (auto c : metaData[tableName]->getOrderedColumns()) {
@@ -249,6 +267,7 @@ void ArrowDirDatabase::combineTableWithHashValuesImpl(std::string tableName, std
    // Create new column for hashValue and update metadata
    auto primaryKeyHashValueField = std::make_shared<arrow::Field>("primaryKeyHashValue", arrow::int64());
    tables[tableName] = table->AddColumn(table->num_columns(), primaryKeyHashValueField, hashValues->GetColumnByName("primaryKeyHashValue")).ValueOrDie();
+   updateRecordBatches(tableName);
    samples[tableName] = createSample(tables[tableName]);
    metaData[tableName]->getColumnMetaData("primaryKeyHashValue")->setDistinctValues(countDistinctValues(tables[tableName]->GetColumnByName("primaryKeyHashValue")));
 }

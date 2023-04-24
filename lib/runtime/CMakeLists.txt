@@ -22,6 +22,6 @@ add_library(runtime OBJECT
         ExternalArrowDatabase.cpp
         MetaDataOnlyDatabase.cpp
         ExternalHashIndex.cpp)
-target_link_libraries(runtime PUBLIC arrow_shared)
+target_link_libraries(runtime PUBLIC arrow_shared PRIVATE TBB::tbb)
 target_link_options(runtime PUBLIC -Wl,-export-dynamic)
 

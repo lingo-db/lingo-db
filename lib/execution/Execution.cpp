@@ -15,6 +15,8 @@
 #include <chrono>
 #include <sstream>
 #include <unordered_set>
+
+#include <oneapi/tbb.h>
 namespace {
 static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::string fileName) {
    mlir::PassManager pm(moduleOp->getContext());
@@ -232,6 +234,23 @@ class DefaultQueryExecuter : public QueryExecuter {
 
       auto& executionBackend = *queryExecutionConfig->executionBackend;
       executionBackend.setSnapShotCounter(snapShotCounter);
+      size_t numThreads = 1;
+      if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
+         numThreads = std::stol(mode);
+      }
+      tbb::global_control c(tbb::global_control::max_allowed_parallelism, numThreads);
+      int sum = oneapi::tbb::parallel_reduce(
+         oneapi::tbb::blocked_range<int>(1, 100000), 0,
+         [](oneapi::tbb::blocked_range<int> const& r, int init) -> int {
+            for (int v = r.begin(); v != r.end(); v++) {
+               init += v;
+            }
+            return init;
+         },
+         [](int lhs, int rhs) -> int {
+            return lhs + rhs;
+         });
+      if (sum < 0) { exit(0); }
       executionBackend.execute(moduleOp, executionContext);
       handleError("BACKEND", executionBackend.getError());
       handleTiming(executionBackend.getTiming());

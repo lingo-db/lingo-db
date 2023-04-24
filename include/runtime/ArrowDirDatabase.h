@@ -7,16 +7,21 @@ class ArrowDirDatabase : public runtime::Database {
    std::string directory;
    bool writeback = true;
    std::unordered_map<std::string, std::shared_ptr<arrow::Table>> tables;
+   std::unordered_map<std::string, std::vector<std::shared_ptr<arrow::RecordBatch>>> recordBatches;
    std::unordered_map<std::string, std::shared_ptr<arrow::RecordBatch>> samples;
    std::unordered_map<std::string, std::shared_ptr<TableMetaData>> metaData;
    ExternalHashIndexManager externalHashIndexManager;
    static std::shared_ptr<arrow::RecordBatch> loadSample(std::string name);
    static std::shared_ptr<arrow::Table> loadTable(std::string name);
    void writeMetaData(std::string filename);
-
+   void updateRecordBatches(const std::string& name);
    public:
    std::shared_ptr<arrow::RecordBatch> getSample(const std::string& name) override;
    std::shared_ptr<arrow::Table> getTable(const std::string& name) override;
+   bool recordBatchesAvailable() override { return true; }
+   const std::vector<std::shared_ptr<arrow::RecordBatch>> & getRecordBatches(const std::string &name) override{
+      return recordBatches.at(name);
+   }
    std::shared_ptr<TableMetaData> getTableMetaData(const std::string& name) override;
    ExternalHashIndexMapping* getIndex(const std::string& name, const std::vector<std::string>& mapping) override;
    bool hasTable(const std::string& name) override;
