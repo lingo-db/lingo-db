@@ -11,6 +11,7 @@ std::unique_ptr<Pass> createSpecializeSubOpPass(bool withOptimizations);
 std::unique_ptr<Pass> createPullGatherUpPass();
 std::unique_ptr<Pass> createReuseLocalPass();
 std::unique_ptr<Pass> createGlobalOptPass();
+std::unique_ptr<Pass> createParallelizePass();
 void registerSubOpTransformations();
 } // end namespace subop
 } // end namespace mlir

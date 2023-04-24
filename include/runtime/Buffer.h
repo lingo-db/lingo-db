@@ -69,6 +69,10 @@ class FlexibleBuffer {
       return typeSize;
    }
    size_t getLen() const;
+   void merge(FlexibleBuffer& other) {
+      buffers.insert(buffers.begin(), other.buffers.begin(), other.buffers.end());
+      other.buffers.clear();
+   }
    ~FlexibleBuffer() {
       for (auto buf : buffers) {
          free(buf.ptr);

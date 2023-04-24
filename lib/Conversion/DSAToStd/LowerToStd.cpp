@@ -47,6 +47,14 @@ class SetResultOpLowering : public OpConversionPattern<mlir::dsa::SetResultOp> {
       return success();
    }
 };
+class DownCastLowering : public OpConversionPattern<mlir::dsa::DownCast> {
+   public:
+   using OpConversionPattern<mlir::dsa::DownCast>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::dsa::DownCast op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOp(op,adaptor.getOperands());
+      return success();
+   }
+};
 } // end anonymous namespace
 
 namespace {
@@ -149,6 +157,7 @@ void DSAToStdLoweringPass::runOnOperation() {
    patterns.insert<SimpleTypeConversionPattern<mlir::func::ConstantOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
    patterns.insert<SetResultOpLowering>(typeConverter, &getContext());
+   patterns.insert<DownCastLowering>(typeConverter, &getContext());
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();

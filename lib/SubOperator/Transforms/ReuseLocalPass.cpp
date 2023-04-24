@@ -91,6 +91,9 @@ class AvoidDeadMaterialization : public mlir::RewritePattern {
       : RewritePattern(mlir::subop::MaterializeOp::getOperationName(), 1, context) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto materializeOp = mlir::cast<mlir::subop::MaterializeOp>(op);
+      if (auto getLocal = mlir::dyn_cast_or_null<mlir::subop::GetLocal>(materializeOp.getState().getDefiningOp())) {
+         return mlir::failure();
+      }
       for (auto* user : materializeOp.getState().getUsers()) {
          if (user != op) {
             //other user of state => "probably" still useful
@@ -186,7 +189,7 @@ class ReuseHashtable : public mlir::RewritePattern {
                auto hmRefListType = mlir::subop::ListType::get(getContext(), hmRefType);
                auto lookupRef = lookupOp.getRef();
                auto [listDef, listRef] = createColumn(hmRefListType, "lookup", "list");
-               auto *equalityBlock=&lookupOp.getEqFn().front();
+               auto* equalityBlock = &lookupOp.getEqFn().front();
                lookupOp.getEqFn().getBlocks().remove(equalityBlock);
                auto newLookupOp = rewriter.replaceOpWithNewOp<mlir::subop::LookupOp>(lookupOp, lookupOp.getStream(), scanOp.getState(), rewriter.getArrayAttr(lookupColumns), listDef);
                newLookupOp.getEqFn().push_back(equalityBlock);

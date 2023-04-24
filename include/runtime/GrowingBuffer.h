@@ -1,5 +1,6 @@
 #ifndef RUNTIME_GROWINGBUFFER_H
 #define RUNTIME_GROWINGBUFFER_H
+#include "ThreadLocal.h"
 #include "ExecutionContext.h"
 #include "runtime/Buffer.h"
 namespace runtime {
@@ -17,6 +18,7 @@ class GrowingBuffer {
    static void destroy(GrowingBuffer* vec);
    BufferIterator* createIterator();
    runtime::FlexibleBuffer& getValues() { return values; }
+   static GrowingBuffer* merge(ThreadLocal* threadLocal);
 };
 } // end namespace runtime
 #endif //RUNTIME_GROWINGBUFFER_H

@@ -1,6 +1,7 @@
 #ifndef RUNTIME_HEAP_H
 #define RUNTIME_HEAP_H
 #include "Buffer.h"
+#include "ThreadLocal.h"
 #include <cstddef>
 #include <cstdint>
 #include <type_traits>
@@ -29,6 +30,13 @@ class Heap {
    void insert(uint8_t* currData);
    Buffer getBuffer();
    static void destroy(Heap*);
+   void mergeWithOther(Heap* other){
+      for(size_t i=1;i<=currElements;i++){
+         insert(&data[i*typeSize]);
+      }
+   }
+   static Heap* merge(ThreadLocal* threadLocal);
+
    ~Heap() {
       delete[] data;
    }

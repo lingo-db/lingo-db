@@ -82,6 +82,7 @@ class SubOpLoweringStep : public LoweringStep {
       lowerSubOpPm.addPass(mlir::subop::createNormalizeSubOpPass());
       if (enabledPasses.contains("PullGatherUp"))
          lowerSubOpPm.addPass(mlir::subop::createPullGatherUpPass());
+      lowerSubOpPm.addPass(mlir::subop::createParallelizePass());
       lowerSubOpPm.addPass(mlir::subop::createEnforceOrderPass());
       mlir::subop::setCompressionEnabled(enabledPasses.contains("Compression"));
       lowerSubOpPm.addPass(mlir::subop::createLowerSubOpPass());
@@ -234,10 +235,11 @@ class DefaultQueryExecuter : public QueryExecuter {
 
       auto& executionBackend = *queryExecutionConfig->executionBackend;
       executionBackend.setSnapShotCounter(snapShotCounter);
-      size_t numThreads = 1;
+      size_t numThreads = tbb::info::default_concurrency() / 2;
       if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
          numThreads = std::stol(mode);
       }
+      std::cerr << "numThreads:" << numThreads << std::endl;
       tbb::global_control c(tbb::global_control::max_allowed_parallelism, numThreads);
       int sum = oneapi::tbb::parallel_reduce(
          oneapi::tbb::blocked_range<int>(1, 100000), 0,

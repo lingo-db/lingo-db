@@ -103,7 +103,12 @@ def DSA_NextRow : DSA_Op<"next_row"> {
     let assemblyFormat = "$builder `:` type($builder) attr-dict";
 }
 
-
+def DSA_DownCast : DSA_Op<"down_cast"> {
+    let summary = "set result";
+    let arguments = (ins AnyType : $state);
+    let results = (outs AnyType: $res);
+    let assemblyFormat = [{ $state `:` type($state) `->` type($res) attr-dict }];
+}
 def DSA_SetResultOp : DSA_Op<"set_result"> {
     let summary = "set result";
     let arguments = (ins I32Attr:$result_id, AnyType : $state);

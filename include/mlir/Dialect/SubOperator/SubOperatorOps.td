@@ -327,10 +327,14 @@ def CreateThreadLocalOp : SubOperator_Op<"create_thread_local", [Pure]> {
     let regions = (region AnyRegion:$initFn);
     let assemblyFormat = [{ type($res) (`initial` `:` $initFn^)? attr-dict }];
 }
-def MergeOp : SubOperator_Op<"merge", [Pure]> {
+def MergeOp : SubOperator_Op<"merge", [Pure,SubOperator]> {
   let summary = "merge thread_local ";
   let arguments = (ins ThreadLocal: $threadLocal);
   let results = (outs AnyType : $res);
+  let extraClassDeclaration = [{
+    std::vector<std::string> getWrittenMembers();
+    std::vector<std::string> getReadMembers();
+  }];
   let assemblyFormat = [{ $threadLocal `:` type($threadLocal) `->` type($res) attr-dict }];
 }
 def GetLocal : SubOperator_Op<"get_local"> {

@@ -4,6 +4,7 @@ gen_rt_def(stv-rt-defs "SegmentTreeView.h")
 gen_rt_def(heap-rt-defs "Heap.h")
 gen_rt_def(idx-rt-defs "ExternalHashIndex.h")
 gen_rt_def(hmm-rt-defs "HashMultiMap.h")
+gen_rt_def(tls-rt-defs "ThreadLocal.h")
 
 add_mlir_conversion_library(MLIRSubOpToControlFlow
         SubOpToControlFlow.cpp
@@ -21,6 +22,8 @@ add_mlir_conversion_library(MLIRSubOpToControlFlow
         stv-rt-defs
         heap-rt-defs
         idx-rt-defs
+        tls-rt-defs
+        tb-rt-defs
         LINK_COMPONENTS
         Core
 

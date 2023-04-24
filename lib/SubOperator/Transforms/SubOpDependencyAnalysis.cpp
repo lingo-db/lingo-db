@@ -31,11 +31,11 @@ bool mlir::subop::SubOpDependencyAnalysis::areIndependent(mlir::Operation* op, m
    return !isDependentOn(op, op2) && !isDependentOn(op2, op);
 }
 void mlir::subop::SubOpDependencyAnalysis::addToRoot(mlir::Operation* root, mlir::Operation* previousRoot) {
-   for(auto *dep:dependencies[previousRoot]){
-      addDependency(root,dep,{});
+   for (auto* dep : dependencies[previousRoot]) {
+      addDependency(root, dep, {});
    }
-   for(auto *dep:inverseDependencies[previousRoot]){
-      addDependency(dep,root,{});
+   for (auto* dep : inverseDependencies[previousRoot]) {
+      addDependency(dep, root, {});
    }
 }
 mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* op, AnalysisManager& am) {
@@ -54,6 +54,11 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
                      addDependency(subopRoot, definingOp, roots);
                   } else {
                      if (subopRoot->getBlock() == definingOp->getBlock()) {
+                        if (auto getLocal = mlir::dyn_cast_or_null<mlir::subop::GetLocal>(definingOp)) {
+                           if (auto createTLOp = getLocal.getThreadLocal().getDefiningOp()) {
+                              pipelineRequirements[subopRoot].push_back(createTLOp);
+                           }
+                        }
                         pipelineRequirements[subopRoot].push_back(definingOp);
                      }
                   }

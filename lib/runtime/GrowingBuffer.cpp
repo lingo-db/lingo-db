@@ -56,6 +56,19 @@ runtime::Buffer runtime::GrowingBuffer::asContinuous(runtime::ExecutionContext* 
 void runtime::GrowingBuffer::destroy(GrowingBuffer* vec) {
    delete vec;
 }
+
+runtime::GrowingBuffer* runtime::GrowingBuffer::merge(runtime::ThreadLocal* threadLocal) {
+   GrowingBuffer* first = nullptr;
+   for (auto* ptr : threadLocal->getTls()) {
+      auto* current = reinterpret_cast<GrowingBuffer*>(ptr);
+      if (!first) {
+         first = current;
+      } else {
+         first->values.merge(current->values);//todo: cleanup
+      }
+   }
+   return first;
+}
 runtime::BufferIterator* runtime::GrowingBuffer::createIterator() {
    return values.createIterator();
 }

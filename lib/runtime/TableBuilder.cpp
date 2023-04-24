@@ -153,6 +153,11 @@ class TableBuilder {
    void addFixedSized(bool isValid, int64_t);
    void addBinary(bool isValid, runtime::VarLen32);
    void nextRow();
+   void merge(TableBuilder* other) {
+      other->flushBatch();
+      batches.insert(batches.end(), other->batches.begin(), other->batches.end());
+      other->batches.clear();
+   }
 };
 
 #define EXPORT extern "C" __attribute__((visibility("default")))
@@ -262,4 +267,17 @@ std::shared_ptr<arrow::Table> runtime::ResultTable::get() {
       resultTable = builder->build();
    }
    return resultTable;
+}
+
+runtime::ResultTable* runtime::ResultTable::merge(runtime::ThreadLocal* threadLocal) {
+   ResultTable* first = nullptr;
+   for (auto* ptr : threadLocal->getTls()) {
+      auto* current = reinterpret_cast<ResultTable*>(ptr);
+      if (!first) {
+         first = current;
+      } else {
+         first->builder->merge(current->builder);
+      }
+   }
+   return first;
 }

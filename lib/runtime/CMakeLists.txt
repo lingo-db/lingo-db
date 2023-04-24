@@ -1,4 +1,5 @@
 add_library(runtime OBJECT
+        ThreadLocal.cpp
         Heap.cpp
         TableBuilder.cpp
         DumpRuntime.cpp

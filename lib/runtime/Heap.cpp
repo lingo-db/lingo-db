@@ -54,3 +54,16 @@ runtime::Buffer runtime::Heap::getBuffer() {
 void runtime::Heap::destroy(Heap* h) {
    delete h;
 }
+
+runtime::Heap* runtime::Heap::merge(runtime::ThreadLocal* threadLocal) {
+   Heap* first = nullptr;
+   for (auto* ptr : threadLocal->getTls()) {
+      auto* current = reinterpret_cast<Heap*>(ptr);
+      if (!first) {
+         first = current;
+      } else {
+         first->mergeWithOther(current);
+      }
+   }
+   return first;
+}

@@ -5,6 +5,7 @@
 
 #include <cassert>
 
+#include "ThreadLocal.h"
 #include <arrow/type_fwd.h>
 class TableBuilder;
 namespace runtime {
@@ -17,6 +18,7 @@ class ResultTable {
    std::shared_ptr<arrow::Table> get();
    //interface for generated code
    static ResultTable* create(ExecutionContext*,VarLen32 schemaDescription);
+   static ResultTable* merge(ThreadLocal* threadLocal);
    void addBool(bool isValid, bool value);
    void addInt8(bool isValid, int8_t);
    void addInt16(bool isValid, int16_t);

@@ -326,7 +326,7 @@ void subop::CreateHeapOp::print(OpAsmPrinter& p) {
    }
    p << "])";
    p.printRegion(getRegion(), false, true);
-   p.printOptionalAttrDict(getOperation()->getAttrs(),{getSortByAttrName()});
+   p.printOptionalAttrDict(getOperation()->getAttrs(), {getSortByAttrName()});
 }
 ParseResult mlir::subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, ::mlir::OperationState& result) {
    OpAsmParser::UnresolvedOperand getToSort;
@@ -1116,6 +1116,22 @@ std::vector<std::string> subop::CreateHashIndexedView::getWrittenMembers() {
 }
 std::vector<std::string> subop::CreateHashIndexedView::getReadMembers() {
    return {getHashMember().str()};
+}
+std::vector<std::string> subop::MergeOp::getReadMembers() {
+   auto names = getThreadLocal().getType().getWrapped().getMembers().getNames();
+   std::vector<std::string> res;
+   for (auto name : names) {
+      res.push_back(name.cast<mlir::StringAttr>().str());
+   }
+   return res;
+}
+std::vector<std::string> subop::MergeOp::getWrittenMembers() {
+   auto names = getThreadLocal().getType().getWrapped().getMembers().getNames();
+   std::vector<std::string> res;
+   for (auto name : names) {
+      res.push_back(name.cast<mlir::StringAttr>().str());
+   }
+   return res;
 }
 std::vector<std::string> subop::CreateSegmentTreeView::getWrittenMembers() {
    std::vector<std::string> res;

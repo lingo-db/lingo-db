@@ -32,7 +32,7 @@ class RecordBatchTableSource : public runtime::DataSource {
          tbb::enumerable_thread_specific<runtime::RecordBatchInfo*> batchInfo([&]() { return reinterpret_cast<runtime::RecordBatchInfo*>(malloc(sizeof(runtime::RecordBatchInfo) + sizeof(runtime::ColumnInfo) * colIds.size())); });
          tbb::parallel_for(tbb::blocked_range<size_t>(0, batches.size(), 1), [&](const tbb::blocked_range<size_t>& r) {
             for (size_t idx = r.begin(); idx < r.end(); idx++) {
-               access(colIds, batchInfo.local(), batches[r.begin()]);
+               access(colIds, batchInfo.local(), batches[idx]);
                cb(batchInfo.local());
             }
          });
