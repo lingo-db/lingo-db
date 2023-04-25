@@ -52,8 +52,25 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                   }
                   return false;
                };
-
+               std::unordered_set<std::string> readMembers;
+               std::unordered_set<std::string> writtenMembers;
                for (auto* pipelineOp : pipelineOps) {
+                  if (auto subOp = mlir::dyn_cast<mlir::subop::SubOperator>(pipelineOp)) {
+                     auto currentReadMembers = subOp.getReadMembers();
+                     auto currentWrittenMembers = subOp.getWrittenMembers();
+                     readMembers.insert(currentReadMembers.begin(), currentReadMembers.end());
+                     writtenMembers.insert(currentWrittenMembers.begin(), currentWrittenMembers.end());
+                     for (auto r : currentReadMembers) {
+                        if (writtenMembers.contains(r)) {
+                           canBeParallel = false;
+                        }
+                     }
+                     for (auto w : currentWrittenMembers) {
+                        if (readMembers.contains(w)) {
+                           canBeParallel = false;
+                        }
+                     }
+                  }
                   if (llvm::all_of(pipelineOp->getOperands(), isStreamTypeOrNested)) {
                      //ignore: do not interact with states
                      continue;
@@ -62,9 +79,14 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                         toThreadLocals[createOp].push_back(materializeOp);
                         continue;
                      }
+                  } else if (auto lookupOp = mlir::dyn_cast<mlir::subop::LookupOp>(pipelineOp)) {
+                     //ignore lookupOps
+                     continue;
+                  } else if (auto gatherOp = mlir::dyn_cast<mlir::subop::GatherOp>(pipelineOp)) {
+                     //ignore gathers
+                     continue;
                   }
                   canBeParallel = false;
-                  pipelineOp->dump();
                }
                //finally: mark as parallel
                if (canBeParallel) {
@@ -96,7 +118,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
          assert(otherUsers.size() > 0);
          builder.setInsertionPoint(otherUsers[0]);
          mlir::Value merged = builder.create<mlir::subop::MergeOp>(createOp->getLoc(), createOp->getResultTypes()[0], createThreadLocal.getResult());
-         for (auto localUser : localUsers) {
+         for (auto *localUser : localUsers) {
             builder.setInsertionPoint(localUser);
             mlir::Value local = builder.create<mlir::subop::GetLocal>(createOp->getLoc(), createOp->getResultTypes()[0], createThreadLocal.getResult());
             localUser->replaceUsesOfWith(createOp->getResult(0), local);

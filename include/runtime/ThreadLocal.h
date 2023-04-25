@@ -10,7 +10,10 @@ class ThreadLocal {
    public:
    uint8_t* getLocal();
    static ThreadLocal* create(uint8_t* (*initFn)());
-   const tbb::enumerable_thread_specific<uint8_t*>& getTls() const {
+   const tbb::enumerable_thread_specific<uint8_t*>& getTls() {
+      if(tls.empty()){
+         tls.local();
+      }
       return tls;
    }
 };

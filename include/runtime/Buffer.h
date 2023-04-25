@@ -72,6 +72,9 @@ class FlexibleBuffer {
    void merge(FlexibleBuffer& other) {
       buffers.insert(buffers.begin(), other.buffers.begin(), other.buffers.end());
       other.buffers.clear();
+      totalLen+=other.totalLen;
+      other.totalLen=0;
+      other.currCapacity=0;
    }
    ~FlexibleBuffer() {
       for (auto buf : buffers) {

@@ -1,7 +1,7 @@
 #ifndef RUNTIME_GROWINGBUFFER_H
 #define RUNTIME_GROWINGBUFFER_H
-#include "ThreadLocal.h"
 #include "ExecutionContext.h"
+#include "ThreadLocal.h"
 #include "runtime/Buffer.h"
 namespace runtime {
 class GrowingBuffer {
