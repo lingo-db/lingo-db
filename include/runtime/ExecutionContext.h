@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 #include <unordered_set>
+#include <oneapi/tbb.h>
 namespace runtime {
 class Database;
 //some state required for query processing;
@@ -14,7 +15,7 @@ struct State {
 class ExecutionContext {
    std::unordered_map<uint32_t, uint8_t*> results;
    std::unordered_map<uint32_t, int64_t> tupleCounts;
-   std::unordered_map<void*, State> states;
+   tbb::concurrent_hash_map<void*, State> states;
 
    public:
    int id;

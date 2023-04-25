@@ -6,9 +6,7 @@ runtime::Database* runtime::ExecutionContext::getDatabase() {
 }
 
 void runtime::ExecutionContext::setResult(uint32_t id, uint8_t* ptr) {
-   if (states.contains(ptr)) {
-      states.erase(ptr);
-   }
+   states.erase(ptr);
    results[id] = ptr;
 }
 
