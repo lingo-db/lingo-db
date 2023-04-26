@@ -132,7 +132,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
             return getTopLevelOp(left)->isBeforeInBlock(getTopLevelOp(right));
          });
          assert(otherUsers.size() > 0);
-         builder.setInsertionPoint(otherUsers[0]);
+         builder.setInsertionPoint(getTopLevelOp(otherUsers[0]));
          mlir::Value merged = builder.create<mlir::subop::MergeOp>(createOp->getLoc(), createOp->getResultTypes()[0], createThreadLocal.getResult());
          for (auto* localUser : localUsers) {
             builder.setInsertionPoint(localUser);

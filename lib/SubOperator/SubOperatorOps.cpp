@@ -941,9 +941,6 @@ ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
          }
          combineFnLeftArguments[i].type = stateMembers.getTypes()[j].cast<mlir::TypeAttr>().getValue();
          combineFnRightArguments[i].type = stateMembers.getTypes()[j].cast<mlir::TypeAttr>().getValue();
-
-         if (i > 0 && parser.parseComma().failed()) return failure();
-         if (parser.parseArgument(rightArgs[i])) return failure();
       }
       std::vector<OpAsmParser::Argument> combineArgs;
       combineArgs.insert(combineArgs.end(), combineFnLeftArguments.begin(), combineFnLeftArguments.end());

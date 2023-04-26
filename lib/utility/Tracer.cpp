@@ -99,7 +99,7 @@ void Tracer::dumpInternal() {
       }
    }
 
-   sort(traceRecords.begin(), traceRecords.end(), [](const TraceRecord& a, const TraceRecord& b) {
+   std::stable_sort(traceRecords.begin(), traceRecords.end(), [](const TraceRecord& a, const TraceRecord& b) { //workaround, std::sort crashes :(
       return a.traceBegin < b.traceEnd;
    });
    for (auto& r : traceRecords) {

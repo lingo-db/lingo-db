@@ -71,7 +71,7 @@ class DefaultCBackend : public execution::ExecutionBackend {
       usleep(20000);
 
       auto currPath = std::filesystem::current_path();
-      std::string cmd = " clang++ -shared -O0 -g -fPIC -Wl,--export-dynamic -x c++ -std=c++20 -I " + std::string(SOURCE_DIR) + "/include mlir-c-module.cpp -o c-backend.so";
+      std::string cmd = " clang++ -shared -O0 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -x c++ -std=c++20 -I " + std::string(SOURCE_DIR) + "/include mlir-c-module.cpp -o c-backend.so";
       auto* pPipe = ::popen(cmd.c_str(), "r");
       if (pPipe == nullptr) {
          error.emit() << "Could not compile query module statically (Pipe could not be opened)";

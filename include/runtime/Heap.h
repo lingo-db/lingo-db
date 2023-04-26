@@ -30,9 +30,9 @@ class Heap {
    void insert(uint8_t* currData);
    Buffer getBuffer();
    static void destroy(Heap*);
-   void mergeWithOther(Heap* other){
-      for(size_t i=1;i<=currElements;i++){
-         insert(&data[i*typeSize]);
+   void mergeWithOther(Heap* other) {
+      for (size_t i = 1; i <= other->currElements; i++) {
+         insert(&other->data[i * typeSize]);
       }
    }
    static Heap* merge(ThreadLocal* threadLocal);

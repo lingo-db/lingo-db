@@ -1,5 +1,9 @@
 #include "runtime/Heap.h"
+#include "utility/Tracer.h"
 #include <cstring>
+namespace {
+utility::Tracer::Event mergeHeapEvent("Heap", "merge");
+} //end namespace
 
 void runtime::Heap::bubbleDown(size_t idx, size_t end) {
    size_t leftChild = idx * 2;
@@ -56,6 +60,7 @@ void runtime::Heap::destroy(Heap* h) {
 }
 
 runtime::Heap* runtime::Heap::merge(runtime::ThreadLocal* threadLocal) {
+   utility::Tracer::Trace trace(mergeHeapEvent);
    Heap* first = nullptr;
    for (auto* ptr : threadLocal->getTls()) {
       auto* current = reinterpret_cast<Heap*>(ptr);

@@ -1748,9 +1748,9 @@ class SumAggrFunc : public DistAggrFunc {
          mlir::Value zero = builder.create<mlir::db::ConstantOp>(loc, getBaseType(stateType), builder.getI64IntegerAttr(0));
          zero = builder.create<mlir::db::AsNullableOp>(loc, stateType, zero);
          mlir::Value newLeft = builder.create<mlir::arith::SelectOp>(loc, isLeftNull, zero, left);
-         mlir::Value newRight = builder.create<mlir::arith::SelectOp>(loc, isLeftNull, zero, right);
+         mlir::Value newRight = builder.create<mlir::arith::SelectOp>(loc, isRightNull, zero, right);
          mlir::Value sum = builder.create<mlir::db::AddOp>(loc, newLeft, newRight);
-         mlir::Value bothNull = builder.create<mlir::arith::OrIOp>(loc, isLeftNull, isRightNull);
+         mlir::Value bothNull = builder.create<mlir::arith::AndIOp>(loc, isLeftNull, isRightNull);
          return builder.create<mlir::arith::SelectOp>(loc, bothNull, left, sum);
       } else {
          //state non-nullable, arg not nullable
@@ -1858,7 +1858,6 @@ void performAggrFuncReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::v
    }
    reduceOp.getRegion().push_back(reduceBlock);
    reduceOp.getCombine().push_back(combineBlock);
-
 }
 static std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr> performAggregation(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, mlir::relalg::OrderedAttributes keyAttributes, mlir::Value stream, std::function<void(mlir::Location, mlir::OpBuilder&, std::vector<std::shared_ptr<DistAggrFunc>>, mlir::tuples::ColumnRefAttr, mlir::Value, std::vector<mlir::Attribute>, std::vector<NamedAttribute>)> createReduceFn) {
    auto* context = rewriter.getContext();
