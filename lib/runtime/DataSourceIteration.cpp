@@ -4,9 +4,17 @@
 #include <iterator>
 
 #include "runtime/Database.h"
+#include "utility/Tracer.h"
 #include <arrow/table.h>
 #include <oneapi/tbb.h>
 namespace {
+static utility::Tracer::Event processMorsel("DataSourceIteration", "processMorsel");
+static utility::Tracer::Event tbbForEach("DataSourceIteration", "tbbForEach");
+
+static utility::Tracer::Event processMorselSingle("DataSourceIteration", "processMorselSingle");
+
+static utility::Tracer::Event cleanupTLS("DataSourceIteration", "cleanup");
+static utility::Tracer::Event tableScan("DataSourceIteration", "tableScan");
 
 static void access(std::vector<size_t> colIds, runtime::RecordBatchInfo* info, const std::shared_ptr<arrow::RecordBatch>& currChunk) {
    for (size_t i = 0; i < colIds.size(); i++) {
@@ -30,23 +38,30 @@ class RecordBatchTableSource : public runtime::DataSource {
    void iterate(bool parallel, std::vector<size_t> colIds, const std::function<void(runtime::RecordBatchInfo*)>& cb) override {
       if (parallel) {
          tbb::enumerable_thread_specific<runtime::RecordBatchInfo*> batchInfo([&]() { return reinterpret_cast<runtime::RecordBatchInfo*>(malloc(sizeof(runtime::RecordBatchInfo) + sizeof(runtime::ColumnInfo) * colIds.size())); });
-         tbb::parallel_for(tbb::blocked_range<size_t>(0, batches.size(), 1), [&](const tbb::blocked_range<size_t>& r) {
-            for (size_t idx = r.begin(); idx < r.end(); idx++) {
-               access(colIds, batchInfo.local(), batches[idx]);
-               cb(batchInfo.local());
-            }
+         utility::Tracer::Trace tbbTrace(tbbForEach);
+         tbb::parallel_for_each(batches.begin(), batches.end(), [&](const std::shared_ptr<arrow::RecordBatch>& batch) {
+            utility::Tracer::Trace trace(processMorsel);
+            access(colIds, batchInfo.local(), batch);
+            cb(batchInfo.local());
+            trace.stop();
          });
+         tbbTrace.stop();
+         utility::Tracer::Trace cleanUpTrace(cleanupTLS);
+
          for (auto* bI : batchInfo) {
             if (bI) {
                free(bI);
             }
          }
+         cleanUpTrace.stop();
       } else {
          auto* batchInfo = reinterpret_cast<runtime::RecordBatchInfo*>(malloc(sizeof(runtime::RecordBatchInfo) + sizeof(runtime::ColumnInfo) * colIds.size()));
 
          for (const auto& batch : batches) {
+            utility::Tracer::Trace trace(processMorselSingle);
             access(colIds, batchInfo, batch);
             cb(batchInfo);
+            trace.stop();
          }
          free(batchInfo);
       }
@@ -134,7 +149,9 @@ runtime::DataSource* runtime::DataSource::get(runtime::ExecutionContext* executi
 }
 
 void runtime::DataSourceIteration::iterate(bool parallel, void (*forEachChunk)(runtime::RecordBatchInfo*, void*), void* context) {
+   utility::Tracer::Trace trace(tableScan);
    dataSource->iterate(parallel, colIds, [context, forEachChunk](runtime::RecordBatchInfo* recordBatchInfo) {
       forEachChunk(recordBatchInfo, context);
    });
+   trace.stop();
 }

@@ -11,6 +11,7 @@
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "utility/Tracer.h"
 
 #include <chrono>
 #include <sstream>
@@ -253,6 +254,9 @@ class DefaultQueryExecuter : public QueryExecuter {
          });
       if (sum < 0) { exit(0); }
       executionBackend.execute(moduleOp, executionContext);
+#ifdef TRACER
+      utility::Tracer::dump();
+#endif
       handleError("BACKEND", executionBackend.getError());
       handleTiming(executionBackend.getTiming());
       if (queryExecutionConfig->resultProcessor) {

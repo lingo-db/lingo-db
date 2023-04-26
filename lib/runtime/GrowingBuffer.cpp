@@ -1,11 +1,17 @@
 #include "runtime/GrowingBuffer.h"
+#include "utility/Tracer.h"
 #include <algorithm>
 #include <cstring>
 #include <iostream>
-
+namespace {
+static utility::Tracer::Event createEvent("GrowingBuffer", "create");
+static utility::Tracer::Event mergeEvent("GrowingBuffer", "merge");
+} // end namespace
 runtime::GrowingBuffer* runtime::GrowingBuffer::create(runtime::ExecutionContext* executionContext, size_t sizeOfType, size_t initialCapacity) {
+   utility::Tracer::Trace trace(createEvent);
    auto* res = new GrowingBuffer(initialCapacity, sizeOfType);
    executionContext->registerState({res, [](void* ptr) { delete reinterpret_cast<GrowingBuffer*>(ptr); }});
+   trace.stop();
    return res;
 }
 
@@ -58,15 +64,17 @@ void runtime::GrowingBuffer::destroy(GrowingBuffer* vec) {
 }
 
 runtime::GrowingBuffer* runtime::GrowingBuffer::merge(runtime::ThreadLocal* threadLocal) {
+   utility::Tracer::Trace trace(mergeEvent);
    GrowingBuffer* first = nullptr;
    for (auto* ptr : threadLocal->getTls()) {
       auto* current = reinterpret_cast<GrowingBuffer*>(ptr);
       if (!first) {
          first = current;
       } else {
-         first->values.merge(current->values);//todo: cleanup
+         first->values.merge(current->values); //todo: cleanup
       }
    }
+   trace.stop();
    return first;
 }
 runtime::BufferIterator* runtime::GrowingBuffer::createIterator() {

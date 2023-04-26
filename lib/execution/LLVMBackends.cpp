@@ -34,8 +34,9 @@
 
 #include "dlfcn.h"
 #include "unistd.h"
-
+#include "utility/Tracer.h"
 namespace {
+static utility::Tracer::Event execution("LLVM", "execution");
 
 static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, bool verify) {
    mlir::PassManager pm2(moduleOp->getContext());
@@ -200,7 +201,9 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       std::vector<double> measuredTimes;
       for (size_t i = 0; i < numRepetitions; i++) {
          auto executionStart = std::chrono::high_resolution_clock::now();
+         utility::Tracer::Trace trace(execution);
          mainFunc();
+         trace.stop();
          auto executionEnd = std::chrono::high_resolution_clock::now();
          executionContext->reset();
          measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);

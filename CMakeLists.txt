@@ -5,6 +5,7 @@ endif ()
 project(lingodb LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard to conform to")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DTRACER")
 
 option(COMPILE_FOR_PERF "compile for perf" OFF)
 option(ENABLE_CRANELIFT_BACKEND "enable cranelift backend" OFF)
@@ -72,6 +73,7 @@ add_subdirectory(lib/SubOperator)
 add_subdirectory(lib/DB)
 add_subdirectory(lib/DSA)
 add_subdirectory(lib/util)
+add_subdirectory(lib/utility)
 
 add_subdirectory(lib/Conversion/DBToStd)
 add_subdirectory(lib/Conversion/DSAToStd)

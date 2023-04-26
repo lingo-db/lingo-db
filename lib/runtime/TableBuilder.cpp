@@ -3,6 +3,7 @@
 #include <iostream>
 #include <string>
 
+#include "utility/Tracer.h"
 #include <arrow/array/builder_binary.h>
 #include <arrow/array/builder_decimal.h>
 #include <arrow/array/builder_primitive.h>
@@ -10,6 +11,9 @@
 #include <arrow/table_builder.h>
 #include <arrow/util/decimal.h>
 
+namespace {
+static utility::Tracer::Event tableBuilderMerge("TableBuilder", "merge");
+} // end namespace
 class TableBuilder {
    static constexpr size_t maxBatchSize = 100000;
    std::shared_ptr<arrow::Schema> schema;
@@ -270,6 +274,7 @@ std::shared_ptr<arrow::Table> runtime::ResultTable::get() {
 }
 
 runtime::ResultTable* runtime::ResultTable::merge(runtime::ThreadLocal* threadLocal) {
+   utility::Tracer::Trace trace(tableBuilderMerge);
    ResultTable* first = nullptr;
    for (auto* ptr : threadLocal->getTls()) {
       auto* current = reinterpret_cast<ResultTable*>(ptr);
@@ -279,5 +284,6 @@ runtime::ResultTable* runtime::ResultTable::merge(runtime::ThreadLocal* threadLo
          first->builder->merge(current->builder);
       }
    }
+   trace.stop();
    return first;
 }
