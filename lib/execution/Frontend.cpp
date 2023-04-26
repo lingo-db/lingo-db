@@ -85,6 +85,7 @@ class MLIRFrontend : public execution::Frontend {
 class SQLFrontend : public execution::Frontend {
    mlir::MLIRContext context;
    mlir::OwningOpRef<mlir::ModuleOp> module;
+   bool parallismAllowed;
    void loadFromString(std::string sql) override {
       initializeContext(context);
 
@@ -95,7 +96,6 @@ class SQLFrontend : public execution::Frontend {
          error.emit() << "Database must be attached for parsing SQL";
       }
       frontend::sql::Parser translator(sql, *database, moduleOp);
-
       builder.setInsertionPointToStart(moduleOp.getBody());
       auto* queryBlock = new mlir::Block;
       std::vector<mlir::Type> returnTypes;
@@ -111,6 +111,7 @@ class SQLFrontend : public execution::Frontend {
       mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
       funcOp.getBody().push_back(queryBlock);
       module = moduleOp;
+      parallismAllowed=translator.isParallelismAllowed();
    }
    void loadFromFile(std::string fileName) override {
       std::ifstream istream{fileName};
@@ -125,6 +126,9 @@ class SQLFrontend : public execution::Frontend {
    mlir::ModuleOp* getModule() override {
       assert(module);
       return module.operator->();
+   }
+   bool isParallelismAllowed() override{
+      return parallismAllowed;
    }
 };
 class BatchedSQLFrontend : public execution::Frontend {

@@ -1301,6 +1301,7 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
             break;
          }
          case T_SelectStmt: {
+            parallelismAllowed=true;
             TranslationContext context;
             auto scope = context.createResolverScope();
             auto [tree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(statement), context, scope);
@@ -2564,4 +2565,7 @@ std::vector<std::string> frontend::sql::Parser::listToStringVec(List* l) {
       }
    }
    return res;
+}
+bool frontend::sql::Parser::isParallelismAllowed() const {
+   return parallelismAllowed;
 }

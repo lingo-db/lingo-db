@@ -26,6 +26,7 @@ class Frontend {
    Error& getError() { return error; }
    virtual void loadFromFile(std::string fileName) = 0;
    virtual void loadFromString(std::string data) = 0;
+   virtual bool isParallelismAllowed() { return true; }
    virtual mlir::ModuleOp* getModule() = 0;
    virtual ~Frontend() {}
 };

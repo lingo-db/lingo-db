@@ -306,6 +306,9 @@ struct Parser {
    PgQueryInternalParsetreeAndError result;
    runtime::Database& database;
    std::vector<std::unique_ptr<FakeNode>> fakeNodes;
+
+   bool isParallelismAllowed() const;
+
    struct TargetInfo {
       std::vector<std::pair<std::string, const mlir::tuples::Column*>> namedResults;
       void map(std::string name, const mlir::tuples::Column* attr) {
@@ -322,7 +325,8 @@ struct Parser {
       return ptr;
    }
    mlir::ModuleOp moduleOp;
-   Parser(std::string sql, runtime::Database& database, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager()), sql(sql), database(database), moduleOp(moduleOp) {
+   bool parallelismAllowed;
+   Parser(std::string sql, runtime::Database& database, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager()), sql(sql), database(database), moduleOp(moduleOp), parallelismAllowed(false) {
       moduleOp.getContext()->getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
       pg_query_parse_init();
       result = pg_query_parse(sql.c_str());

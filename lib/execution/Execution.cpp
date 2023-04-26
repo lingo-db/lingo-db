@@ -240,6 +240,9 @@ class DefaultQueryExecuter : public QueryExecuter {
       if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
          numThreads = std::stol(mode);
       }
+      if (!frontend.isParallelismAllowed()) {
+         numThreads = 1;
+      }
       tbb::global_control c(tbb::global_control::max_allowed_parallelism, numThreads);
       int sum = oneapi::tbb::parallel_reduce(
          oneapi::tbb::blocked_range<int>(1, 100000), 0,
