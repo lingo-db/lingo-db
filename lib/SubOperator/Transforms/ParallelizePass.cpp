@@ -85,12 +85,22 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                   } else if (auto gatherOp = mlir::dyn_cast<mlir::subop::GatherOp>(pipelineOp)) {
                      //ignore gathers
                      continue;
+                  } else if (mlir::isa<mlir::subop::ScanListOp, mlir::subop::CombineTupleOp>(pipelineOp)) {
+                     //ignore gathers
+                     continue;
                   }
+                  //llvm::dbgs()<<"problematic operation:";
+                  //pipelineOp->dump();
                   canBeParallel = false;
                }
                //finally: mark as parallel
                if (canBeParallel) {
                   scanRefsOp->setAttr("parallel", mlir::UnitAttr::get(&getContext()));
+                  //llvm::dbgs()<<"parallel: ";
+                  //scanRefsOp.dump();
+               } else {
+                  //llvm::dbgs()<<"not parallel: ";
+                  //scanRefsOp.dump();
                }
             }
          }
@@ -112,13 +122,19 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                otherUsers.push_back(user); //todo fix behavior for nested
             }
          }
+         auto getTopLevelOp = [](mlir::Operation* op) {
+            while (!mlir::isa<mlir::func::FuncOp>(op->getParentOp())) {
+               op = op->getParentOp();
+            }
+            return op;
+         };
          std::sort(otherUsers.begin(), otherUsers.end(), [&](mlir::Operation* left, mlir::Operation* right) {
-            return left->isBeforeInBlock(right);
+            return getTopLevelOp(left)->isBeforeInBlock(getTopLevelOp(right));
          });
          assert(otherUsers.size() > 0);
          builder.setInsertionPoint(otherUsers[0]);
          mlir::Value merged = builder.create<mlir::subop::MergeOp>(createOp->getLoc(), createOp->getResultTypes()[0], createThreadLocal.getResult());
-         for (auto *localUser : localUsers) {
+         for (auto* localUser : localUsers) {
             builder.setInsertionPoint(localUser);
             mlir::Value local = builder.create<mlir::subop::GetLocal>(createOp->getLoc(), createOp->getResultTypes()[0], createThreadLocal.getResult());
             localUser->replaceUsesOfWith(createOp->getResult(0), local);
