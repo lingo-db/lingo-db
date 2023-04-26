@@ -1805,6 +1805,7 @@ static Block* createAggrFuncInitialValueBlock(mlir::Location loc, mlir::OpBuilde
 }
 void performAggrFuncReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, mlir::tuples::ColumnRefAttr reference, mlir::Value stream, std::vector<mlir::Attribute> names, std::vector<NamedAttribute> defMapping) {
    mlir::Block* reduceBlock = new Block;
+   mlir::Block* combineBlock = new Block;
    std::vector<mlir::Attribute> relevantColumns;
    std::unordered_map<mlir::tuples::Column*, mlir::Value> stateMap;
    std::unordered_map<mlir::tuples::Column*, mlir::Value> argMap;
@@ -1835,7 +1836,29 @@ void performAggrFuncReduce(mlir::Location loc, mlir::OpBuilder& rewriter, std::v
       }
       rewriter.create<mlir::tuples::ReturnOp>(loc, newStateValues);
    }
+
+   {
+      std::vector<mlir::Value> combinedValues;
+      mlir::OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(combineBlock);
+      std::vector<mlir::Value> leftArgs;
+      std::vector<mlir::Value> rightArgs;
+      for (auto aggrFn : distAggrFuncs) {
+         auto stateType = aggrFn->getStateType();
+         leftArgs.push_back(combineBlock->addArgument(stateType, loc));
+      }
+      for (auto aggrFn : distAggrFuncs) {
+         auto stateType = aggrFn->getStateType();
+         rightArgs.push_back(combineBlock->addArgument(stateType, loc));
+      }
+      for (size_t i = 0; i < distAggrFuncs.size(); i++) {
+         combinedValues.push_back(distAggrFuncs.at(i)->combine(rewriter, loc, leftArgs.at(i), rightArgs.at(i)));
+      }
+      rewriter.create<mlir::tuples::ReturnOp>(loc, combinedValues);
+   }
    reduceOp.getRegion().push_back(reduceBlock);
+   reduceOp.getCombine().push_back(combineBlock);
+
 }
 static std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr> performAggregation(mlir::Location loc, mlir::OpBuilder& rewriter, std::vector<std::shared_ptr<DistAggrFunc>> distAggrFuncs, mlir::relalg::OrderedAttributes keyAttributes, mlir::Value stream, std::function<void(mlir::Location, mlir::OpBuilder&, std::vector<std::shared_ptr<DistAggrFunc>>, mlir::tuples::ColumnRefAttr, mlir::Value, std::vector<mlir::Attribute>, std::vector<NamedAttribute>)> createReduceFn) {
    auto* context = rewriter.getContext();

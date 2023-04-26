@@ -666,7 +666,7 @@ def ReduceOp : SubOperator_Op<"reduce",[SubOperator,DeclareOpInterfaceMethods<St
     } eq: (){} combine: (){} initial: (){}
   ```
   }];
-  let regions = (region SizedRegion<1>:$region);
+  let regions = (region SizedRegion<1>:$region,AnyRegion:$combine);
   let arguments = (ins TupleStream: $stream, ColumnRefAttr: $ref, ArrayAttr: $columns, ArrayAttr: $members);
   let hasCustomAssemblyFormat = 1;
         let extraClassDeclaration = [{

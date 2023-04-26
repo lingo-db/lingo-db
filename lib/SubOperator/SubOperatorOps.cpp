@@ -919,6 +919,37 @@ ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
    args.insert(args.end(), rightArgs.begin(), rightArgs.end());
    Region* body = result.addRegion();
    if (parser.parseRegion(*body, args)) return failure();
+   Region* combineFn = result.addRegion();
+   llvm::SmallVector<OpAsmParser::Argument> combineFnLeftArguments;
+   llvm::SmallVector<OpAsmParser::Argument> combineFnRightArguments;
+   if (parser.parseOptionalKeyword("combine").succeeded()) {
+      if (parser.parseColon() || parser.parseLParen() || parser.parseLSquare()) {
+         return failure();
+      }
+      if (parser.parseArgumentList(combineFnLeftArguments) || parser.parseRSquare() || parser.parseComma() || parser.parseLSquare()) {
+         return failure();
+      }
+      if (parser.parseArgumentList(combineFnRightArguments) || parser.parseRSquare() || parser.parseRParen()) {
+         return failure();
+      }
+      for (size_t i = 0; i < members.size(); i++) {
+         size_t j = 0;
+         for (; j < stateMembers.getNames().size(); j++) {
+            if (members[i] == stateMembers.getNames()[j]) {
+               break;
+            }
+         }
+         combineFnLeftArguments[i].type = stateMembers.getTypes()[j].cast<mlir::TypeAttr>().getValue();
+         combineFnRightArguments[i].type = stateMembers.getTypes()[j].cast<mlir::TypeAttr>().getValue();
+
+         if (i > 0 && parser.parseComma().failed()) return failure();
+         if (parser.parseArgument(rightArgs[i])) return failure();
+      }
+      std::vector<OpAsmParser::Argument> combineArgs;
+      combineArgs.insert(combineArgs.end(), combineFnLeftArguments.begin(), combineFnLeftArguments.end());
+      combineArgs.insert(combineArgs.end(), combineFnRightArguments.begin(), combineFnRightArguments.end());
+      if (parser.parseRegion(*combineFn, combineArgs)) return failure();
+   }
    if (parser.parseOptionalAttrDict(result.attributes))
       return ::mlir::failure();
    return success();
@@ -952,6 +983,30 @@ void subop::ReduceOp::print(OpAsmPrinter& p) {
    }
    p << "])";
    p.printRegion(op.getRegion(), false, true);
+   if(!op.getCombine().empty()) {
+      p << "combine: ([";
+      bool first = true;
+      for (size_t i = 0; i < op.getColumns().size(); i++) {
+         if (first) {
+            first = false;
+         } else {
+            p << ",";
+         }
+         p << op.getRegion().front().getArgument(i);
+      }
+      p << "],[";
+      first = true;
+      for (size_t i = 0; i < op.getMembers().size(); i++) {
+         if (first) {
+            first = false;
+         } else {
+            p << ",";
+         }
+         p << op.getRegion().front().getArgument(op.getColumns().size() + i);
+      }
+      p << "])";
+      p.printRegion(op.getCombine(), false, true);
+   }
    p.printOptionalAttrDict(getOperation()->getAttrs(), {"columns", "members", "ref"});
 }
 
