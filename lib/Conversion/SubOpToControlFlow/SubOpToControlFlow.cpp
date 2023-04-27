@@ -2820,11 +2820,20 @@ class ExternalHashIndexRefGatherOpLowering : public SubOpTupleStreamConsumerConv
       return success();
    }
 };
+static bool checkAtomicStore(mlir::Operation* op) {
+   //on x86, stores are always atomic (if aligned)
+#ifdef __x86_64__
+   return true;
+#else
+   return !op->hasAttr("atomic");
+#endif
+}
 class ContinuousViewRefScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp, 2> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp, 2>::SubOpTupleStreamConsumerConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::ScatterOp scatterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      if (!checkAtomicStore(scatterOp)) return failure();
       auto continuousRefEntryType = scatterOp.getRef().getColumn().type.dyn_cast_or_null<mlir::subop::ContinuousViewEntryRefType>();
       if (!continuousRefEntryType) { return failure(); }
       auto unpackedReference = rewriter.create<mlir::util::UnPackOp>(scatterOp->getLoc(), mapping.resolve(scatterOp.getRef())).getResults();
@@ -2847,6 +2856,7 @@ class ScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<mlir:
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp>::SubOpTupleStreamConsumerConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::ScatterOp scatterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
+      if (!checkAtomicStore(scatterOp)) return failure();
       auto columns = scatterOp.getRef().getColumn().type.cast<mlir::subop::StateEntryReference>().getMembers();
       EntryStorageHelper storageHelper(columns, typeConverter);
       auto ref = mapping.resolve(scatterOp.getRef());

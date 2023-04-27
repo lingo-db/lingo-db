@@ -44,6 +44,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
    void runOnOperation() override {
       auto columnCreationAnalysis = getAnalysis<mlir::subop::ColumnCreationAnalysis>();
       std::unordered_map<mlir::Operation*, ToThreadLocalInfo> toThreadLocals;
+      std::unordered_set<mlir::Operation*> markAsAtomic;
       //getOperation().dump();
       getOperation()->walk([&](mlir::Operation* op) {
          if (auto scanRefsOp = mlir::dyn_cast_or_null<mlir::subop::ScanRefsOp>(op)) {
@@ -157,8 +158,14 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                         }
                      }
 
-                  } else if (mlir::isa<mlir::subop::ScatterOp, mlir::subop::UnwrapOptionalRefOp>(pipelineOp)) {
-                     //can have side effects, but are not automatically detected as they don't have a state as argument
+                  } else if (mlir::isa<mlir::subop::ScatterOp>(pipelineOp)) {
+                     auto collisions = getCollisions();
+                     if (collisions.size() == 1) {
+                        if (auto lookupOp = mlir::dyn_cast<mlir::subop::LookupOp>(*collisions.begin())) {
+                           markAsAtomic.insert(pipelineOp);
+                           continue;
+                        }
+                     }
                   } else if (llvm::all_of(pipelineOp->getOperands(), isStreamTypeOrNested)) {
                      //ignore: do not interact with states
                      continue;
@@ -172,8 +179,11 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                   scanRefsOp->setAttr("parallel", mlir::UnitAttr::get(&getContext()));
                   //llvm::dbgs()<<"parallel: ";
                   //scanRefsOp.dump();
-                  for (auto *l : localToThreadLocals) {
+                  for (auto* l : localToThreadLocals) {
                      l->transform = true;
+                  }
+                  for (auto* mA : markAsAtomic) {
+                     mA->setAttr("atomic", mlir::UnitAttr::get(&getContext()));
                   }
                } else {
                   //llvm::dbgs()<<"not parallel: ";
@@ -232,6 +242,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
             createOp->erase();
          }
       }
+      //getOperation()->dump();
    }
 };
 } // end anonymous namespace
