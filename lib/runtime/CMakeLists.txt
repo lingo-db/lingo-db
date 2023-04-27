@@ -6,6 +6,7 @@ add_library(runtime OBJECT
         DataSourceIteration.cpp
         GrowingBuffer.cpp
         Buffer.cpp
+        SimpleState.cpp
         LazyJoinHashtable.cpp
         SegmentTreeView.cpp
         Hashtable.cpp

@@ -37,6 +37,7 @@
 #include "runtime-defs/Heap.h"
 #include "runtime-defs/LazyJoinHashtable.h"
 #include "runtime-defs/SegmentTreeView.h"
+#include "runtime-defs/SimpleState.h"
 #include "runtime-defs/TableBuilder.h"
 #include "runtime-defs/ThreadLocal.h"
 
@@ -706,10 +707,19 @@ class CreateSimpleStateLowering : public SubOpConversionPattern<mlir::subop::Cre
    LogicalResult matchAndRewrite(mlir::subop::CreateSimpleStateOp createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       auto simpleStateType = createOp.getType().dyn_cast_or_null<mlir::subop::SimpleStateType>();
       if (!simpleStateType) return failure();
+
       mlir::Value ref;
-      rewriter.atStartOf(&createOp->getParentOfType<mlir::func::FuncOp>().getFunctionBody().front(), [&](SubOpRewriter& rewriter) {
-         ref = rewriter.create<mlir::util::AllocaOp>(createOp->getLoc(), typeConverter->convertType(createOp.getType()), mlir::Value());
-      });
+      if (createOp->hasAttr("allocateOnHeap")) {
+         auto loweredType = typeConverter->convertType(createOp.getType()).cast<mlir::util::RefType>();
+         mlir::Value typeSize = rewriter.create<mlir::util::SizeOfOp>(createOp->getLoc(), rewriter.getIndexType(), loweredType.getElementType());
+         ref = rt::SimpleState::create(rewriter, createOp->getLoc())(mlir::ValueRange{getExecutionContext(rewriter, createOp), typeSize})[0];
+         ref = rewriter.create<mlir::util::GenericMemrefCastOp>(createOp->getLoc(), loweredType, ref);
+
+      } else {
+         rewriter.atStartOf(&createOp->getParentOfType<mlir::func::FuncOp>().getFunctionBody().front(), [&](SubOpRewriter& rewriter) {
+            ref = rewriter.create<mlir::util::AllocaOp>(createOp->getLoc(), typeConverter->convertType(createOp.getType()), mlir::Value());
+         });
+      }
       if (!createOp.getInitFn().empty()) {
          EntryStorageHelper storageHelper(simpleStateType.getMembers(), typeConverter);
          rewriter.inlineBlock<mlir::tuples::ReturnOpAdaptor>(&createOp.getInitFn().front(), {}, [&](mlir::tuples::ReturnOpAdaptor returnOpAdaptor) {
@@ -1056,6 +1066,121 @@ class MergeThreadLocalHeap : public SubOpConversionPattern<mlir::subop::MergeOp>
       return mlir::success();
    }
 };
+class MergeThreadLocalSimpleState : public SubOpConversionPattern<mlir::subop::MergeOp> {
+   public:
+   using SubOpConversionPattern<mlir::subop::MergeOp>::SubOpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::MergeOp mergeOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      if (!mergeOp.getType().isa<mlir::subop::SimpleStateType>()) return mlir::failure();
+      auto ptrType = mlir::util::RefType::get(getContext(), IntegerType::get(getContext(), 8));
+      auto loc = mergeOp->getLoc();
+      mlir::func::FuncOp combineFn;
+      static size_t id = 0;
+      ModuleOp parentModule = mergeOp->getParentOfType<ModuleOp>();
+      EntryStorageHelper storageHelper(mergeOp.getType().cast<mlir::subop::SimpleStateType>().getMembers(), typeConverter);
+
+      rewriter.atStartOf(parentModule.getBody(), [&](SubOpRewriter& rewriter) {
+         combineFn = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "simple_state__combine_fn" + std::to_string(id++), mlir::FunctionType::get(getContext(), TypeRange({ptrType, ptrType}), TypeRange()));
+      });
+      {
+         auto* funcBody = new Block;
+         Value left = funcBody->addArgument(ptrType, loc);
+         Value dest = left;
+         Value right = funcBody->addArgument(ptrType, loc);
+         combineFn.getBody().push_back(funcBody);
+         rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
+            auto leftValues = storageHelper.loadValuesOrdered(left, rewriter, loc);
+            auto rightValues = storageHelper.loadValuesOrdered(right, rewriter, loc);
+            std::vector<mlir::Value> args;
+            args.insert(args.end(), leftValues.begin(), leftValues.end());
+            args.insert(args.end(), rightValues.begin(), rightValues.end());
+            Block* sortLambda = &mergeOp.getCombineFn().front();
+            rewriter.inlineBlock<mlir::tuples::ReturnOpAdaptor>(sortLambda, args, [&](mlir::tuples::ReturnOpAdaptor adaptor) {
+               storageHelper.storeOrderedValues(dest, adaptor.getResults(), rewriter, loc);
+            });
+            rewriter.create<mlir::func::ReturnOp>(loc);
+         });
+      }
+
+      Value combineFnPtr = rewriter.create<mlir::func::ConstantOp>(loc, combineFn.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(combineFn.getSymName())));
+      mlir::Value merged = rt::SimpleState::merge(rewriter, mergeOp->getLoc())(mlir::ValueRange{adaptor.getThreadLocal(), combineFnPtr})[0];
+      merged = rewriter.create<mlir::util::GenericMemrefCastOp>(mergeOp->getLoc(), typeConverter->convertType(mergeOp.getType()), merged);
+      rewriter.replaceOp(mergeOp, merged);
+      return mlir::success();
+   }
+};
+class MergeThreadLocalHashMap : public SubOpConversionPattern<mlir::subop::MergeOp> {
+   public:
+   using SubOpConversionPattern<mlir::subop::MergeOp>::SubOpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::subop::MergeOp mergeOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      if (!mergeOp.getType().isa<mlir::subop::HashMapType>()) return mlir::failure();
+      auto hashMapType = mergeOp.getType().cast<mlir::subop::HashMapType>();
+      auto ptrType = mlir::util::RefType::get(getContext(), IntegerType::get(getContext(), 8));
+      auto loc = mergeOp->getLoc();
+      mlir::func::FuncOp combineFn;
+      mlir::func::FuncOp eqFn;
+      static size_t id = 0;
+      ModuleOp parentModule = mergeOp->getParentOfType<ModuleOp>();
+      EntryStorageHelper keyStorageHelper(hashMapType.getKeyMembers(), typeConverter);
+      EntryStorageHelper valStorageHelper(hashMapType.getValueMembers(), typeConverter);
+
+      rewriter.atStartOf(parentModule.getBody(), [&](SubOpRewriter& rewriter) {
+         eqFn = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "hashmap_eq_fn" + std::to_string(id++), mlir::FunctionType::get(getContext(), TypeRange({ptrType, ptrType}), TypeRange(rewriter.getI1Type())));
+         combineFn = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "hashmap_combine_fn" + std::to_string(id++), mlir::FunctionType::get(getContext(), TypeRange({ptrType, ptrType}), TypeRange()));
+      });
+      {
+         auto* funcBody = new Block;
+         Value left = funcBody->addArgument(ptrType, loc);
+         Value right = funcBody->addArgument(ptrType, loc);
+         combineFn.getBody().push_back(funcBody);
+         rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
+            if (!mergeOp.getCombineFn().empty()) {
+               auto kvType = getHtKVType(hashMapType, *typeConverter);
+               auto kvPtrType = mlir::util::RefType::get(context, kvType);
+               left = rewriter.create<mlir::util::GenericMemrefCastOp>(mergeOp->getLoc(), kvPtrType, left);
+               right = rewriter.create<mlir::util::GenericMemrefCastOp>(mergeOp->getLoc(), kvPtrType, right);
+
+               left = rewriter.create<mlir::util::TupleElementPtrOp>(loc, mlir::util::RefType::get(context, kvType.getType(1)), left, 1);
+               right = rewriter.create<mlir::util::TupleElementPtrOp>(loc, mlir::util::RefType::get(context, kvType.getType(1)), right, 1);
+               Value dest = left;
+               auto leftValues = valStorageHelper.loadValuesOrdered(left, rewriter, loc);
+               auto rightValues = valStorageHelper.loadValuesOrdered(right, rewriter, loc);
+               std::vector<mlir::Value> args;
+               args.insert(args.end(), leftValues.begin(), leftValues.end());
+               args.insert(args.end(), rightValues.begin(), rightValues.end());
+               Block* sortLambda = &mergeOp.getCombineFn().front();
+               rewriter.inlineBlock<mlir::tuples::ReturnOpAdaptor>(sortLambda, args, [&](mlir::tuples::ReturnOpAdaptor adaptor) {
+                  valStorageHelper.storeOrderedValues(dest, adaptor.getResults(), rewriter, loc);
+               });
+            }
+            rewriter.create<mlir::func::ReturnOp>(loc);
+         });
+      }
+      {
+         auto* funcBody = new Block;
+         Value left = funcBody->addArgument(ptrType, loc);
+         Value right = funcBody->addArgument(ptrType, loc);
+         eqFn.getBody().push_back(funcBody);
+         rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
+            auto leftKeys = keyStorageHelper.loadValuesOrdered(left, rewriter, loc);
+            auto rightKeys = keyStorageHelper.loadValuesOrdered(right, rewriter, loc);
+            std::vector<mlir::Value> args;
+            args.insert(args.end(), leftKeys.begin(), leftKeys.end());
+            args.insert(args.end(), rightKeys.begin(), rightKeys.end());
+            auto res = inlineBlock(&mergeOp.getEqFn().front(), rewriter, args)[0];
+            rewriter.create<mlir::func::ReturnOp>(loc, res);
+         });
+      }
+
+      Value combineFnPtr = rewriter.create<mlir::func::ConstantOp>(loc, combineFn.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(combineFn.getSymName())));
+      Value eqFnPtr = rewriter.create<mlir::func::ConstantOp>(loc, eqFn.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(eqFn.getSymName())));
+      mlir::Value merged = rt::Hashtable::merge(rewriter, mergeOp->getLoc())(mlir::ValueRange{adaptor.getThreadLocal(), eqFnPtr, combineFnPtr})[0];
+      merged = rewriter.create<mlir::util::GenericMemrefCastOp>(mergeOp->getLoc(), typeConverter->convertType(mergeOp.getType()), merged);
+      rewriter.replaceOp(mergeOp, merged);
+      return mlir::success();
+   }
+};
 class SortLowering : public SubOpConversionPattern<mlir::subop::CreateSortedViewOp> {
    public:
    using SubOpConversionPattern<mlir::subop::CreateSortedViewOp>::SubOpConversionPattern;
@@ -1087,7 +1212,7 @@ class SortLowering : public SubOpConversionPattern<mlir::subop::CreateSortedView
       });
 
       Value functionPointer = rewriter.create<mlir::func::ConstantOp>(sortOp->getLoc(), funcOp.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.getSymName())));
-      auto genericBuffer = rt::GrowingBuffer::sort(rewriter, sortOp->getLoc())({adaptor.getToSort(),getExecutionContext(rewriter, sortOp), functionPointer})[0];
+      auto genericBuffer = rt::GrowingBuffer::sort(rewriter, sortOp->getLoc())({adaptor.getToSort(), getExecutionContext(rewriter, sortOp), functionPointer})[0];
       rewriter.replaceOpWithNewOp<mlir::util::BufferCastOp>(sortOp, typeConverter->convertType(sortOp.getType()), genericBuffer);
       return mlir::success();
    }
@@ -2970,7 +3095,7 @@ class CreateContinuousViewLowering : public SubOpConversionPattern<mlir::subop::
       }
       auto bufferType = createOp.getSource().getType().dyn_cast<mlir::subop::BufferType>();
       if (!bufferType) return failure();
-      auto genericBuffer = rt::GrowingBuffer::asContinuous(rewriter, createOp->getLoc())({adaptor.getSource(),getExecutionContext(rewriter, createOp)})[0];
+      auto genericBuffer = rt::GrowingBuffer::asContinuous(rewriter, createOp->getLoc())({adaptor.getSource(), getExecutionContext(rewriter, createOp)})[0];
       rewriter.replaceOpWithNewOp<mlir::util::BufferCastOp>(createOp, typeConverter->convertType(createOp.getType()), genericBuffer);
       return success();
    }
@@ -3253,6 +3378,8 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    rewriter.insertPattern<MergeThreadLocalResultTable>(typeConverter, ctxt);
    rewriter.insertPattern<MergeThreadLocalBuffer>(typeConverter, ctxt);
    rewriter.insertPattern<MergeThreadLocalHeap>(typeConverter, ctxt);
+   rewriter.insertPattern<MergeThreadLocalSimpleState>(typeConverter, ctxt);
+   rewriter.insertPattern<MergeThreadLocalHashMap>(typeConverter, ctxt);
 
    rewriter.insertPattern<DefaultGatherOpLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ScatterOpLowering>(typeConverter, ctxt);

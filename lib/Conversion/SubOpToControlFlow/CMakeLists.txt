@@ -5,6 +5,7 @@ gen_rt_def(heap-rt-defs "Heap.h")
 gen_rt_def(idx-rt-defs "ExternalHashIndex.h")
 gen_rt_def(hmm-rt-defs "HashMultiMap.h")
 gen_rt_def(tls-rt-defs "ThreadLocal.h")
+gen_rt_def(st-rt-defs "SimpleState.h")
 
 add_mlir_conversion_library(MLIRSubOpToControlFlow
         SubOpToControlFlow.cpp
@@ -24,6 +25,7 @@ add_mlir_conversion_library(MLIRSubOpToControlFlow
         idx-rt-defs
         tls-rt-defs
         tb-rt-defs
+        st-rt-defs
         LINK_COMPONENTS
         Core
 

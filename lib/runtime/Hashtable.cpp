@@ -1,4 +1,9 @@
 #include "runtime/Hashtable.h"
+#include "utility/Tracer.h"
+#include <iostream>
+namespace {
+static utility::Tracer::Event mergeEvent("Hashtable", "merge");
+} // end namespace
 runtime::Hashtable* runtime::Hashtable::create(runtime::ExecutionContext* executionContext, size_t typeSize, size_t initialCapacity) {
    auto* ht = new Hashtable(initialCapacity, typeSize);
    executionContext->registerState({ht, [](void* ptr) { delete reinterpret_cast<runtime::Hashtable*>(ptr); }});
@@ -35,4 +40,48 @@ runtime::Hashtable::Entry* runtime::Hashtable::insert(size_t hash) {
 
 runtime::BufferIterator* runtime::Hashtable::createIterator() {
    return values.createIterator();
+}
+
+runtime::Hashtable* runtime::Hashtable::merge(runtime::ThreadLocal* threadLocal, bool (*isEq)(uint8_t*, uint8_t*), void (*merge)(uint8_t*, uint8_t*)) {
+   utility::Tracer::Trace mergeHt(mergeEvent);
+   runtime::Hashtable* first = nullptr;
+   for (auto* ptr : threadLocal->getTls()) {
+      auto* current = reinterpret_cast<runtime::Hashtable*>(ptr);
+      if (!first) {
+         first = current;
+      } else {
+         first->mergeEntries(isEq, merge, current);
+      }
+   }
+
+   return first;
+}
+void runtime::Hashtable::mergeEntries(bool (*isEq)(uint8_t*, uint8_t*), void (*merge)(uint8_t*, uint8_t*), runtime::Hashtable* other) {
+   utility::Tracer::Trace trace(mergeEvent);
+   other->values.iterate([&](uint8_t* entryRawPtr) {
+      auto* otherEntry = (Entry*) entryRawPtr;
+      auto otherHash = otherEntry->hashValue;
+      auto pos = otherHash & hashMask;
+      auto* candidate = ht.at(pos);
+      candidate = runtime::filterTagged(candidate, otherHash);
+      bool matchFound = false;
+      while (candidate) {
+         if (candidate->hashValue == otherHash) {
+            auto* candidateContent = reinterpret_cast<uint8_t*>(&candidate->content);
+            auto* otherContent = reinterpret_cast<uint8_t*>(&otherEntry->content);
+            if (isEq(candidateContent, otherContent)) {
+               merge(candidateContent, otherContent);
+               matchFound = true;
+               break;
+            }
+         }
+         candidate = candidate->next;
+      }
+      if (!matchFound) {
+         auto* newEntry = insert(otherHash);
+         std::memcpy(newEntry->content, otherEntry->content, typeSize - sizeof(Entry));
+      }
+   });
+
+   //todo migrate buffers?
 }

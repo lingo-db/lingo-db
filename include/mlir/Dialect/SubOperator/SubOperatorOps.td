@@ -335,7 +335,9 @@ def MergeOp : SubOperator_Op<"merge", [Pure,SubOperator]> {
     std::vector<std::string> getWrittenMembers();
     std::vector<std::string> getReadMembers();
   }];
-  let assemblyFormat = [{ $threadLocal `:` type($threadLocal) `->` type($res) attr-dict }];
+  let regions = (region AnyRegion:$combineFn,AnyRegion:$eqFn);
+  let assemblyFormat = [{ type($res)  attr-dict }];
+  let assemblyFormat = [{ $threadLocal `:` type($threadLocal) `->` type($res) (`combine` `:` $combineFn^)? (`eq` `:` $eqFn^)? attr-dict }];
 }
 def GetLocal : SubOperator_Op<"get_local"> {
      let summary = "get local state from thread local";
