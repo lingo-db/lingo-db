@@ -6,6 +6,9 @@
 #include <initializer_list>
 #include <string>
 #include <vector>
+
+#include <sys/mman.h>
+
 #define EXPORT extern "C" __attribute__((visibility("default")))
 #define INLINE __attribute__((always_inline))
 #define NO_SIDE_EFFECTS __attribute__((annotate("rt-no-sideffect")))
@@ -114,8 +117,8 @@ class VarLen32 {
 };
 
 template <class T>
-struct FixedSizedBuffer {
-   FixedSizedBuffer(size_t size) : ptr((T*) malloc(size * sizeof(T))) {
+struct LegacyFixedSizedBuffer {
+   LegacyFixedSizedBuffer(size_t size) : ptr((T*) malloc(size * sizeof(T))) {
       runtime::MemoryHelper::zero((uint8_t*) ptr, size * sizeof(T));
    }
    T* ptr;
@@ -127,11 +130,36 @@ struct FixedSizedBuffer {
    T& at(size_t i) {
       return ptr[i];
    }
-   ~FixedSizedBuffer() {
+   T* getPtr(size_t i) {
+      return &ptr[i];
+   }
+   ~LegacyFixedSizedBuffer() {
       free(ptr);
    }
 };
 
+template <class T>
+struct FixedSizedBuffer {
+   static bool shouldUseMMAP(size_t elements) {
+      return (sizeof(T) * elements) >= 65536;
+   }
+   static T* createZeroed(size_t elements) {
+      if (shouldUseMMAP(elements)) {
+         return (T*) mmap(NULL, elements * sizeof(T), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
+      } else {
+         auto res = (T*) malloc(elements * sizeof(T));
+         runtime::MemoryHelper::zero((uint8_t*) res, elements * sizeof(T));
+         return res;
+      }
+   }
+   static void deallocate(T* ptr, size_t elements) {
+      if (shouldUseMMAP(elements)) {
+         munmap(ptr, elements * sizeof(T));
+      } else {
+         free(ptr);
+      }
+   }
+};
 template <typename T>
 T* tag(T* ptr, T* previousPtr, size_t hash) {
    constexpr uint64_t ptrMask = 0x0000ffffffffffffull;

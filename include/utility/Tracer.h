@@ -28,6 +28,7 @@ class Tracer {
       unsigned eventId;
       uint64_t traceBegin;
       uint64_t traceEnd;
+      uint64_t metaData;
    };
    class TraceRecordList {
       struct Chunk {
@@ -79,7 +80,7 @@ class Tracer {
 
    static unsigned registerEvent(std::string_view category, std::string_view name);
    static void ensureThreadLocalTraceRecordList();
-   static void recordTrace(unsigned eventId, std::chrono::steady_clock::time_point begin, std::chrono::steady_clock::time_point end);
+   static void recordTrace(unsigned eventId, std::chrono::steady_clock::time_point begin, std::chrono::steady_clock::time_point end, uint64_t metaData);
 
    public:
    Tracer() {}
@@ -91,13 +92,17 @@ class Tracer {
       unsigned eventId;
       bool alreadyRecorded = false;
       std::chrono::steady_clock::time_point begin;
+      uint64_t metaData;
 
       public:
-      Trace(const Event& event) : eventId(event.id), begin(std::chrono::steady_clock::now()) {}
+      Trace(const Event& event) : eventId(event.id), begin(std::chrono::steady_clock::now()), metaData(-1) {}
       ~Trace() { stop(); }
+      void setMetaData(uint64_t metaData) {
+         this->metaData = metaData;
+      }
       void stop() {
          if (!alreadyRecorded) {
-            recordTrace(eventId, begin, std::chrono::steady_clock::now());
+            recordTrace(eventId, begin, std::chrono::steady_clock::now(), metaData);
             alreadyRecorded = true;
          }
       }
@@ -107,6 +112,7 @@ class Tracer {
    class Trace {
       public:
       constexpr Trace(const Event& /*event*/) {}
+      void setMetaData(uint64_t metaData) {}
       constexpr ~Trace() {}
       void stop() {}
    };

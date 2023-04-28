@@ -1,5 +1,10 @@
 #include "runtime/Buffer.h"
-
+#include "utility/Tracer.h"
+#include <iostream>
+#include <oneapi/tbb.h>
+namespace {
+static utility::Tracer::Event iterateEvent("FlexibleBuffer", "iterateParallel");
+} // end namespace
 bool runtime::BufferIterator::isIteratorValid(runtime::BufferIterator* iterator) {
    return iterator->isValid();
 }
@@ -12,7 +17,14 @@ runtime::Buffer runtime::BufferIterator::iteratorGetCurrentBuffer(runtime::Buffe
 void runtime::BufferIterator::destroy(runtime::BufferIterator* iterator) {
    delete iterator;
 }
-
+void runtime::FlexibleBuffer::iterateBuffersParallel(const std::function<void(Buffer)>& fn) {
+   tbb::parallel_for_each(buffers.begin(), buffers.end(), [&](const Buffer& buffer) {
+      utility::Tracer::Trace trace(iterateEvent);
+      trace.setMetaData(buffer.numElements);
+      fn(buffer);
+      trace.stop();
+   });
+}
 class FlexibleBufferIterator : public runtime::BufferIterator {
    runtime::FlexibleBuffer& flexibleBuffer;
    size_t currBuffer;
@@ -39,8 +51,8 @@ size_t runtime::FlexibleBuffer::getLen() const {
 }
 
 void runtime::BufferIterator::iterate(runtime::BufferIterator* iterator, void (*forEachChunk)(runtime::Buffer, void*), void* contextPtr) {
-   while(iterator->isValid()){
-      forEachChunk(iterator->getCurrentBuffer(),contextPtr);
+   while (iterator->isValid()) {
+      forEachChunk(iterator->getCurrentBuffer(), contextPtr);
       iterator->next();
    }
 }

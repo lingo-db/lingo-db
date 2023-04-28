@@ -11,7 +11,7 @@ class Hashtable {
       uint8_t content[];
       //kv follows
    };
-   runtime::FixedSizedBuffer<Entry*> ht;
+   runtime::LegacyFixedSizedBuffer<Entry*> ht;
    size_t hashMask;
    runtime::FlexibleBuffer values;
    size_t typeSize;

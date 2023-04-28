@@ -10,9 +10,9 @@ class HashIndexedView {
       uint64_t hashValue;
       //kv follows
    };
-   runtime::FixedSizedBuffer<Entry*> ht;
+   Entry** ht;
    size_t htMask; //NOLINT(clang-diagnostic-unused-private-field)
-   HashIndexedView(size_t htSize,size_t htMask):ht(htSize),htMask(htMask){}
+   HashIndexedView(size_t htSize,size_t htMask);
    static uint64_t nextPow2(uint64_t v) {
       v--;
       v |= v >> 1;
@@ -28,6 +28,7 @@ class HashIndexedView {
    public:
    static HashIndexedView* build(runtime::ExecutionContext* executionContext,GrowingBuffer* buffer);
    static void destroy(HashIndexedView*);
+   ~HashIndexedView();
 };
 } // end namespace runtime
 #endif // RUNTIME_LAZYJOINHASHTABLE_H

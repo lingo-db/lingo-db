@@ -53,7 +53,7 @@ void Tracer::ensureThreadLocalTraceRecordList() {
       threadLocalTraceRecordList = tracer->traceRecordLists[threadId].get();
    }
 }
-void Tracer::recordTrace(unsigned eventId, std::chrono::steady_clock::time_point begin, std::chrono::steady_clock::time_point end) {
+void Tracer::recordTrace(unsigned eventId, std::chrono::steady_clock::time_point begin, std::chrono::steady_clock::time_point end,uint64_t metaData) {
    static std::chrono::steady_clock::time_point initial = std::chrono::steady_clock::now();
    ensureThreadLocalTraceRecordList();
    auto diffInMicroSecond = [](auto a, auto b) {
@@ -63,6 +63,7 @@ void Tracer::recordTrace(unsigned eventId, std::chrono::steady_clock::time_point
    record->eventId = eventId;
    record->traceBegin = diffInMicroSecond(initial, begin);
    record->traceEnd = diffInMicroSecond(initial, end);
+   record->metaData=metaData;
 }
 void Tracer::dump() {
    getTracer()->dumpInternal();
@@ -113,6 +114,11 @@ void Tracer::dumpInternal() {
       recordObject["tid"] = r.threadId;
       recordObject["ts"] = r.traceBegin;
       recordObject["dur"] = r.traceEnd - r.traceBegin;
+      {
+         recordObject["args"] = nlohmann::json::object();
+         auto& args = recordObject["args"];
+         args["meta"] = r.metaData;
+      }
       eventList.push_back(recordObject);
    }
 

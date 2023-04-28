@@ -53,6 +53,7 @@ class FlexibleBuffer {
       buffers.back().numElements++;
       return res;
    }
+   void iterateBuffersParallel(const std::function<void(Buffer)>& fn);
    template <class Fn>
    void iterate(const Fn& fn) {
       for (auto buffer : buffers) {
@@ -60,6 +61,14 @@ class FlexibleBuffer {
             fn(&buffer.ptr[i * typeSize]);
          }
       }
+   }
+   template <class Fn>
+   void iterateParallel(const Fn& fn) {
+      iterateBuffersParallel([&](auto buffer) {
+         for (size_t i = 0; i < buffer.numElements; i++) {
+            fn(&buffer.ptr[i * typeSize]);
+         }
+      });
    }
    const std::vector<Buffer>& getBuffers() {
       return buffers;
@@ -72,9 +81,9 @@ class FlexibleBuffer {
    void merge(FlexibleBuffer& other) {
       buffers.insert(buffers.begin(), other.buffers.begin(), other.buffers.end());
       other.buffers.clear();
-      totalLen+=other.totalLen;
-      other.totalLen=0;
-      other.currCapacity=0;
+      totalLen += other.totalLen;
+      other.totalLen = 0;
+      other.currCapacity = 0;
    }
    ~FlexibleBuffer() {
       for (auto buf : buffers) {

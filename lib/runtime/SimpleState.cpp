@@ -14,7 +14,6 @@ uint8_t* runtime::SimpleState::create(runtime::ExecutionContext* executionContex
 }
 
 uint8_t* runtime::SimpleState::merge(runtime::ThreadLocal* threadLocal, void (*merge)(uint8_t*, uint8_t*)) {
-   std::cout<<"merge single"<<std::endl;
    utility::Tracer::Trace trace(mergeEvent);
    uint8_t* first = nullptr;
    for (auto* ptr : threadLocal->getTls()) {

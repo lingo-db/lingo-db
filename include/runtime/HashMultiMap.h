@@ -14,7 +14,7 @@ class HashMultiMap {
       Value* valueList;
       uint8_t keyContent[];
    };
-   runtime::FixedSizedBuffer<Entry*> ht;
+   runtime::LegacyFixedSizedBuffer<Entry*> ht;
    size_t hashMask;
    runtime::FlexibleBuffer entries;
    runtime::FlexibleBuffer values;
