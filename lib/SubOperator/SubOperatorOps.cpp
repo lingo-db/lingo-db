@@ -983,7 +983,7 @@ void subop::ReduceOp::print(OpAsmPrinter& p) {
    if(!op.getCombine().empty()) {
       p << "combine: ([";
       bool first = true;
-      for (size_t i = 0; i < op.getColumns().size(); i++) {
+      for (size_t i = 0; i < op.getMembers().size(); i++) {
          if (first) {
             first = false;
          } else {

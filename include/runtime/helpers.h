@@ -44,7 +44,10 @@ static bool cachelineRemains8(const uint8_t* p) {
 static uint64_t read8PadZero(const uint8_t* p, uint32_t len) {
    if (len == 0) return 0; //do not dereference!
    if (len >= 8) return unalignedLoad64(p); //best case
-   if (cachelineRemains8(p)) {
+   /*uint64_t x;
+   memcpy(&x,p,len);
+   return x;
+   */if (cachelineRemains8(p)) {
       auto bytes = unalignedLoad64(p);
       auto shift = len * 8;
       auto mask = ~((~0ull) << shift);

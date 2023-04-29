@@ -10,6 +10,7 @@ add_library(runtime OBJECT
         LazyJoinHashtable.cpp
         SegmentTreeView.cpp
         Hashtable.cpp
+        PreAggregationHashtable.cpp
         HashMultiMap.cpp
         StringRuntime.cpp
         FloatRuntime.cpp

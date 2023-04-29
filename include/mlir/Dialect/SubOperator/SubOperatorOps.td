@@ -95,6 +95,20 @@ def Hashmap : SubOperator_Type<"HashMap", "hashmap",[State,LookupAbleState]> {
         StateMembersAttr getMembers();
     }];
 }
+def PreAggrHtFragment : SubOperator_Type<"PreAggrHtFragment", "optimistic_ht_fragment",[State,LookupAbleState]> {
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let extraClassDeclaration = [{
+        StateMembersAttr getMembers();
+    }];
+}
+def PreAggrHt : SubOperator_Type<"PreAggrHt", "optimistic_ht",[State,LookupAbleState]> {
+    let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
+    let assemblyFormat = "`<` custom<StateMembers>($keyMembers) `,` custom<StateMembers>($valueMembers) `>`";
+    let extraClassDeclaration = [{
+        StateMembersAttr getMembers();
+    }];
+}
 def HashMultimap : SubOperator_Type<"HashMultiMap", "hashmultimap",[State,LookupAbleState]> {
     let summary = "simple state with multiple members";
     let parameters = (ins "StateMembersAttr":$keyMembers,"StateMembersAttr":$valueMembers );
@@ -252,6 +266,19 @@ def MapEntryRef : SubOperator_Type<"MapEntryRef", "map_entry_ref",[StateEntryRef
 def HashMapEntryRef : SubOperator_Type<"HashMapEntryRef", "hash_map_entry_ref",[StateEntryReference]> {
     let summary = "reference to entry of some state";
     let parameters = (ins "HashMapType":$hash_map);
+    let assemblyFormat = "`<` $hash_map `>`";
+    let extraClassDeclaration = [{
+        bool isReadable(){return true;}
+        bool isWriteable(){return true;}
+        bool isStable(){return true;}
+        bool canBeOffset(){return true;}
+        StateMembersAttr getMembers();
+    }];
+    let extraClassDefinition= [{ StateMembersAttr $cppClass::getMembers(){ return getHashMap().getMembers();} }];
+}
+def PreAggrHTEntryRef : SubOperator_Type<"PreAggrHTEntryRef", "optimistic_ht_entry_ref",[StateEntryReference]> {
+    let summary = "reference to entry of some state";
+    let parameters = (ins "PreAggrHtType":$hash_map);
     let assemblyFormat = "`<` $hash_map `>`";
     let extraClassDeclaration = [{
         bool isReadable(){return true;}

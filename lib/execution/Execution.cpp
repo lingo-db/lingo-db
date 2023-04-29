@@ -84,6 +84,7 @@ class SubOpLoweringStep : public LoweringStep {
       if (enabledPasses.contains("PullGatherUp"))
          lowerSubOpPm.addPass(mlir::subop::createPullGatherUpPass());
       lowerSubOpPm.addPass(mlir::subop::createParallelizePass());
+      lowerSubOpPm.addPass(mlir::subop::createSpecializeParallelPass());
       lowerSubOpPm.addPass(mlir::subop::createEnforceOrderPass());
       mlir::subop::setCompressionEnabled(enabledPasses.contains("Compression"));
       lowerSubOpPm.addPass(mlir::subop::createLowerSubOpPass());

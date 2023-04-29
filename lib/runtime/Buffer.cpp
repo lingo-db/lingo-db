@@ -4,6 +4,8 @@
 #include <oneapi/tbb.h>
 namespace {
 static utility::Tracer::Event iterateEvent("FlexibleBuffer", "iterateParallel");
+static utility::Tracer::Event bufferIteratorEvent("BufferIterator", "iterate");
+
 } // end namespace
 bool runtime::BufferIterator::isIteratorValid(runtime::BufferIterator* iterator) {
    return iterator->isValid();
@@ -41,6 +43,20 @@ class FlexibleBufferIterator : public runtime::BufferIterator {
       runtime::Buffer orig = flexibleBuffer.getBuffers().at(currBuffer);
       return runtime::Buffer{orig.numElements * std::max(1ul, flexibleBuffer.getTypeSize()), orig.ptr};
    }
+   void iterateEfficient(bool parallel,void (*forEachChunk)(runtime::Buffer, void*), void* contextPtr) override{
+      if(parallel){
+         flexibleBuffer.iterateBuffersParallel([&](runtime::Buffer buffer){
+            buffer=runtime::Buffer{buffer.numElements * std::max(1ul, flexibleBuffer.getTypeSize()),buffer.ptr};
+            forEachChunk(buffer,contextPtr);
+         });
+      }else{
+         for(auto buffer:flexibleBuffer.getBuffers()){
+            buffer=runtime::Buffer{buffer.numElements * std::max(1ul, flexibleBuffer.getTypeSize()),buffer.ptr};
+            forEachChunk(buffer,contextPtr);
+         }
+      }
+   }
+
 };
 
 runtime::BufferIterator* runtime::FlexibleBuffer::createIterator() {
@@ -50,9 +66,7 @@ size_t runtime::FlexibleBuffer::getLen() const {
    return totalLen;
 }
 
-void runtime::BufferIterator::iterate(runtime::BufferIterator* iterator, void (*forEachChunk)(runtime::Buffer, void*), void* contextPtr) {
-   while (iterator->isValid()) {
-      forEachChunk(iterator->getCurrentBuffer(), contextPtr);
-      iterator->next();
-   }
+void runtime::BufferIterator::iterate(runtime::BufferIterator* iterator,bool parallel, void (*forEachChunk)(runtime::Buffer, void*), void* contextPtr) {
+   utility::Tracer::Trace trace(bufferIteratorEvent);
+   iterator->iterateEfficient(parallel,forEachChunk,contextPtr);
 }

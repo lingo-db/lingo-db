@@ -11,3 +11,4 @@
 --//CHECK: |                         29555  |                             2  |                         58675  |
 select s.matrnr,s.semester, sum(s.matrnr) over (partition by s.semester order by s.matrnr)
 from studenten s
+order by s.matrnr
