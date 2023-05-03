@@ -17,6 +17,7 @@ add_library(runtime OBJECT
         DecimalRuntime.cpp
         IntegerRuntime.cpp
         Hash.cpp
+        Timing.cpp
         DateRuntime.cpp
         ExecutionContext.cpp
         Database.cpp

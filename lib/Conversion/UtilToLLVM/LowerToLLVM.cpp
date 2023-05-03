@@ -88,9 +88,8 @@ class ToGenericMemrefOpLowering : public OpConversionPattern<mlir::util::ToGener
    public:
    using OpConversionPattern<mlir::util::ToGenericMemrefOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::ToGenericMemrefOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto* context = getContext();
       auto genericMemrefType = op.getRef().getType().cast<mlir::util::RefType>();
-      auto i8PointerType = mlir::LLVM::LLVMPointerType::get(IntegerType::get(context, 8));
+      auto i8PointerType = mlir::LLVM::LLVMPointerType::get(getContext());
       auto elemType = typeConverter->convertType(genericMemrefType.getElementType());
       auto elemPtrType = mlir::LLVM::LLVMPointerType::get(elemType);
       Value alignedPtr = rewriter.create<LLVM::ExtractValueOp>(op->getLoc(), i8PointerType, adaptor.getMemref(), rewriter.getDenseI64ArrayAttr(1));
@@ -107,7 +106,7 @@ class ToMemrefOpLowering : public OpConversionPattern<mlir::util::ToMemrefOp> {
 
       auto targetType = typeConverter->convertType(memrefType);
 
-      auto targetPointerType = mlir::LLVM::LLVMPointerType::get(typeConverter->convertType(memrefType.getElementType()));
+      auto targetPointerType = mlir::LLVM::LLVMPointerType::get(getContext());
       Value tpl = rewriter.create<LLVM::UndefOp>(op->getLoc(), targetType);
 
       Value elementPtr = adaptor.getRef();

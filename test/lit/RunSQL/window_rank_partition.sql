@@ -11,3 +11,4 @@
 --//CHECK: |                         29555  |                             2  |                             2  |
 select s.matrnr,s.semester, rank() over (partition by s.semester order by s.matrnr)
 from studenten s
+order by s.matrnr

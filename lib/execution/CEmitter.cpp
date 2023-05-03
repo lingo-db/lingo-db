@@ -14,6 +14,7 @@
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlowOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
+#include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BuiltinOps.h"
@@ -202,7 +203,7 @@ struct CppEmitter {
 };
 
 LogicalResult printConstantOp(CppEmitter& emitter, Operation* operation,
-                                     Attribute value) {
+                              Attribute value) {
    OpResult result = operation->getResult(0);
 
    // Only emit an assignment as the variable was already declared when printing
@@ -387,6 +388,21 @@ LogicalResult printOperation(CppEmitter& emitter, util::GetTupleOp op) {
 LogicalResult printOperation(CppEmitter& emitter, util::CreateVarLen op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::VarLen32{reinterpret_cast<uint8_t*>(" << emitter.getOrCreateName(op.getRef()) << "), (uint32_t) " << emitter.getOrCreateName(op.getLen()) << "}"; });
 }
+LogicalResult printOperation(CppEmitter& emitter, util::ToMemrefOp op) {
+   return printStandardOperation(emitter, op, [&](auto& os) { os << emitter.getOrCreateName(op.getRef()); });
+}
+LogicalResult printOperation(CppEmitter& emitter, memref::AtomicRMWOp op) {
+   assert(op.getKind() == mlir::arith::AtomicRMWKind::addf || op.getKind() == mlir::arith::AtomicRMWKind::addi || op.getKind() == mlir::arith::AtomicRMWKind::ori);
+   return printStandardOperation(emitter, op, [&](auto& os) {
+      os << "std::atomic_ref<";
+      assert(emitter.emitType(op.getLoc(), op.getValue().getType()).succeeded());
+      if (op.getKind() == mlir::arith::AtomicRMWKind::addf || op.getKind() == mlir::arith::AtomicRMWKind::addi) {
+         os << ">(*" << emitter.getOrCreateName(op.getMemref()) << ").fetch_add(" << emitter.getOrCreateName(op.getValue()) << ")";
+      } else {
+         os << ">(*" << emitter.getOrCreateName(op.getMemref()) << ").fetch_or(" << emitter.getOrCreateName(op.getValue()) << ")";
+      }
+   });
+}
 LogicalResult printOperation(CppEmitter& emitter, util::VarLenCmp op) {
    if (failed(emitter.emitVariableDeclaration(op->getResult(0), false))) {
       return failure();
@@ -485,7 +501,7 @@ LogicalResult printOperation(CppEmitter& emitter, util::StoreOp op) {
 }
 
 LogicalResult printOperation(CppEmitter& emitter,
-                                    arith::ConstantOp constantOp) {
+                             arith::ConstantOp constantOp) {
    Operation* operation = constantOp.getOperation();
    Attribute value = constantOp.getValue();
 
@@ -493,7 +509,7 @@ LogicalResult printOperation(CppEmitter& emitter,
 }
 
 LogicalResult printOperation(CppEmitter& emitter,
-                                    func::ConstantOp constantOp) {
+                             func::ConstantOp constantOp) {
    Operation* operation = constantOp.getOperation();
    Attribute value = constantOp.getValueAttr();
 
@@ -501,7 +517,7 @@ LogicalResult printOperation(CppEmitter& emitter,
 }
 
 LogicalResult printOperation(CppEmitter& emitter,
-                                    cf::BranchOp branchOp) {
+                             cf::BranchOp branchOp) {
    raw_ostream& os = emitter.ostream();
    Block& successor = *branchOp.getSuccessor();
 
@@ -521,7 +537,7 @@ LogicalResult printOperation(CppEmitter& emitter,
 }
 
 LogicalResult printOperation(CppEmitter& emitter,
-                                    cf::CondBranchOp condBranchOp) {
+                             cf::CondBranchOp condBranchOp) {
    raw_indented_ostream& os = emitter.ostream();
    Block& trueSuccessor = *condBranchOp.getTrueDest();
    Block& falseSuccessor = *condBranchOp.getFalseDest();
@@ -810,7 +826,7 @@ LogicalResult printOperation(CppEmitter& emitter, scf::YieldOp yieldOp) {
 }
 
 LogicalResult printOperation(CppEmitter& emitter,
-                                    func::ReturnOp returnOp) {
+                             func::ReturnOp returnOp) {
    raw_ostream& os = emitter.ostream();
    os << "return";
    switch (returnOp.getNumOperands()) {
@@ -839,7 +855,7 @@ LogicalResult printOperation(CppEmitter& emitter, ModuleOp moduleOp) {
 }
 
 LogicalResult printOperation(CppEmitter& emitter,
-                                    func::FuncOp functionOp) {
+                             func::FuncOp functionOp) {
    if (functionOp.getFunctionBody().empty()) {
       raw_indented_ostream& os = emitter.ostream();
 
@@ -1080,7 +1096,6 @@ LogicalResult CppEmitter::emitAttribute(Location loc, Attribute attr) {
       }
    }
 
-
    // Print symbolic reference attributes.
    if (auto sAttr = attr.dyn_cast<SymbolRefAttr>()) {
       if (sAttr.getNestedReferences().size() > 1)
@@ -1303,6 +1318,8 @@ LogicalResult CppEmitter::emitOperation(Operation& op, bool trailingSemicolon) {
          // SCF ops.
          .Case<util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp, util::LoadOp, util::StoreOp, util::AllocOp, util::AllocaOp, util::CreateConstVarLen, util::UndefOp, util::BufferCastOp, util::InvalidRefOp, util::IsRefValidOp, util::SizeOfOp, util::PackOp, util::CreateVarLen, util::Hash64, util::HashCombine, util::HashVarLen, util::FilterTaggedPtr, util::BufferGetRef, util::BufferGetLen, util::VarLenCmp, util::VarLenGetLen, util::GetTupleOp, util::VarLenTryCheapHash>(
             [&](auto op) { return printOperation(*this, op); })
+         .Case<util::ToMemrefOp, memref::AtomicRMWOp>(
+            [&](auto op) { return printOperation(*this, op); })
          .Default([&](Operation*) {
             return op.emitOpError("unable to find printer for op");
          });
@@ -1396,6 +1413,12 @@ LogicalResult CppEmitter::emitType(Location loc, Type type, llvm::raw_ostream& o
    }
    if (auto pType = type.dyn_cast<mlir::util::RefType>()) {
       if (failed(emitType(loc, pType.getElementType(), os)))
+         return failure();
+      os << "*";
+      return success();
+   }
+   if (auto memrefType = type.dyn_cast<mlir::MemRefType>()) {
+      if (failed(emitType(loc, memrefType.getElementType(), os)))
          return failure();
       os << "*";
       return success();

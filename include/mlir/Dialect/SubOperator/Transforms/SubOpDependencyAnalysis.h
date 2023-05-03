@@ -20,10 +20,11 @@ struct SubOpDependencyAnalysis {
    std::unordered_map<std::string, std::unordered_set<mlir::Operation*>> readMembers;
    std::unordered_map<std::string, std::unordered_set<mlir::Operation*>> writtenMembers;
    std::unordered_map<mlir::Block*, std::vector<mlir::Operation*>> validOrder;
+   void addNonTupleStreamDependencies(mlir::Value x, std::vector<mlir::Operation*>& roots, mlir::Operation* subopRoot, std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>>& pipelineRequirements);
    SubOpDependencyAnalysis(mlir::Operation* op, AnalysisManager& am);
    bool isDependentOn(mlir::Operation* curr, mlir::Operation* other);
-   bool areIndependent(mlir::Operation* op,mlir::Operation* op2);
-   void addToRoot(mlir::Operation* root,mlir::Operation* previousRoot);
+   bool areIndependent(mlir::Operation* op, mlir::Operation* op2);
+   void addToRoot(mlir::Operation* root, mlir::Operation* previousRoot);
    void addDependency(mlir::Operation* a, mlir::Operation* b, std::vector<mlir::Operation*> exclude) {
       if (a == b) return;
       if (a->getBlock() != b->getBlock()) return; //todo: recheck

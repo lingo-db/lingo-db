@@ -108,7 +108,7 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
    std::unordered_set<mlir::Operation*> availableRequirements;
    while (!queue.empty()) {
       auto* currRoot = queue.front();
-      //llvm::dbgs() << "curr :" << currRoot << "\n";
+      availableRequirements.insert(currRoot);
       queue.pop();
       for (auto* otherRoot : inverseDependencies[currRoot]) {
          if (dependCount[otherRoot] > 0 && otherRoot != currRoot) {

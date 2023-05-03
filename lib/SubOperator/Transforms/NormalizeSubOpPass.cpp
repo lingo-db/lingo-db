@@ -70,6 +70,9 @@ class SplitGenericScan : public mlir::RewritePattern {
 
       auto [refDef, refRef] = createColumn(refType, "scan", "ref");
       mlir::Value scanRefsOp = rewriter.create<mlir::subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
+      if(scanOp->hasAttr("sequential")){
+         scanRefsOp.getDefiningOp()->setAttr("sequential",rewriter.getUnitAttr());
+      }
       rewriter.replaceOpWithNewOp<mlir::subop::GatherOp>(op, scanRefsOp, refRef, scanOp.getMapping());
 
       return mlir::success();

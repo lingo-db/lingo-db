@@ -20,11 +20,20 @@ void runtime::BufferIterator::destroy(runtime::BufferIterator* iterator) {
    delete iterator;
 }
 void runtime::FlexibleBuffer::iterateBuffersParallel(const std::function<void(Buffer)>& fn) {
-   tbb::parallel_for_each(buffers.begin(), buffers.end(), [&](const Buffer& buffer) {
-      utility::Tracer::Trace trace(iterateEvent);
-      trace.setMetaData(buffer.numElements);
-      fn(buffer);
-      trace.stop();
+   tbb::parallel_for_each(buffers.begin(), buffers.end(), [&](Buffer buffer, tbb::feeder<Buffer>& feeder) {
+      if (buffer.numElements <= 20000) {
+         utility::Tracer::Trace trace(iterateEvent);
+         trace.setMetaData(buffer.numElements);
+         fn(buffer);
+         trace.stop();
+      } else {
+         for (size_t i = 0; i < buffer.numElements; i += 20000) {
+            size_t begin = i;
+            size_t end = std::min(i + 20000, buffer.numElements);
+            size_t len = end - begin;
+            feeder.add({len, buffer.ptr + begin * std::max(1ul, getTypeSize())});
+         }
+      }
    });
 }
 class FlexibleBufferIterator : public runtime::BufferIterator {
@@ -43,20 +52,19 @@ class FlexibleBufferIterator : public runtime::BufferIterator {
       runtime::Buffer orig = flexibleBuffer.getBuffers().at(currBuffer);
       return runtime::Buffer{orig.numElements * std::max(1ul, flexibleBuffer.getTypeSize()), orig.ptr};
    }
-   void iterateEfficient(bool parallel,void (*forEachChunk)(runtime::Buffer, void*), void* contextPtr) override{
-      if(parallel){
-         flexibleBuffer.iterateBuffersParallel([&](runtime::Buffer buffer){
-            buffer=runtime::Buffer{buffer.numElements * std::max(1ul, flexibleBuffer.getTypeSize()),buffer.ptr};
-            forEachChunk(buffer,contextPtr);
+   void iterateEfficient(bool parallel, void (*forEachChunk)(runtime::Buffer, void*), void* contextPtr) override {
+      if (parallel) {
+         flexibleBuffer.iterateBuffersParallel([&](runtime::Buffer buffer) {
+            buffer = runtime::Buffer{buffer.numElements * std::max(1ul, flexibleBuffer.getTypeSize()), buffer.ptr};
+            forEachChunk(buffer, contextPtr);
          });
-      }else{
-         for(auto buffer:flexibleBuffer.getBuffers()){
-            buffer=runtime::Buffer{buffer.numElements * std::max(1ul, flexibleBuffer.getTypeSize()),buffer.ptr};
-            forEachChunk(buffer,contextPtr);
+      } else {
+         for (auto buffer : flexibleBuffer.getBuffers()) {
+            buffer = runtime::Buffer{buffer.numElements * std::max(1ul, flexibleBuffer.getTypeSize()), buffer.ptr};
+            forEachChunk(buffer, contextPtr);
          }
       }
    }
-
 };
 
 runtime::BufferIterator* runtime::FlexibleBuffer::createIterator() {
@@ -66,7 +74,45 @@ size_t runtime::FlexibleBuffer::getLen() const {
    return totalLen;
 }
 
-void runtime::BufferIterator::iterate(runtime::BufferIterator* iterator,bool parallel, void (*forEachChunk)(runtime::Buffer, void*), void* contextPtr) {
+void runtime::BufferIterator::iterate(runtime::BufferIterator* iterator, bool parallel, void (*forEachChunk)(runtime::Buffer, void*), void* contextPtr) {
    utility::Tracer::Trace trace(bufferIteratorEvent);
-   iterator->iterateEfficient(parallel,forEachChunk,contextPtr);
+   iterator->iterateEfficient(parallel, forEachChunk, contextPtr);
+}
+
+class PlainBufferIterator : public runtime::BufferIterator {
+   runtime::Buffer buffer;
+   size_t typeSize;
+   bool valid;
+
+   public:
+   PlainBufferIterator(runtime::Buffer buffer, size_t typeSize) : buffer(buffer), typeSize(std::max(1ul, typeSize)), valid(true) {}
+   bool isValid() override {
+      return valid;
+   }
+   void next() override {
+      valid = false;
+   }
+   runtime::Buffer getCurrentBuffer() override {
+      return buffer;
+   }
+   void iterateEfficient(bool parallel, void (*forEachChunk)(runtime::Buffer, void*), void* contextPtr) override {
+      size_t len = buffer.numElements / typeSize;
+
+      auto range = tbb::blocked_range<size_t>(0, len);
+
+      if (parallel) {
+         tbb::parallel_for(range, [&](tbb::blocked_range<size_t> r) {
+            utility::Tracer::Trace trace(iterateEvent);
+            trace.setMetaData(r.size());
+            forEachChunk(runtime::Buffer{r.size() * typeSize, buffer.ptr + r.begin() * typeSize}, contextPtr);
+            trace.stop();
+         });
+      } else {
+         forEachChunk(buffer, contextPtr);
+      }
+   }
+};
+
+runtime::BufferIterator* runtime::Buffer::createIterator(runtime::Buffer buffer, size_t typeSize) {
+   return new PlainBufferIterator(buffer, typeSize);
 }

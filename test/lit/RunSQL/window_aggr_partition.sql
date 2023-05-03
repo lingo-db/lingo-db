@@ -13,3 +13,4 @@
 
 select s.matrnr,s.semester, avg(s.matrnr) over (partition by s.semester)
 from studenten s
+order by s.matrnr

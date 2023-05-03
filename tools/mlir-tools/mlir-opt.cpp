@@ -6,6 +6,7 @@
 #include "mlir/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
+#include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
@@ -60,6 +61,7 @@ int main(int argc, char** argv) {
 
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<mlir::util::UtilDialect>();
+   registry.insert<mlir::LLVM::LLVMDialect>();
 
    registry.insert<mlir::scf::SCFDialect>();
 

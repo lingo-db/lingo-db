@@ -7,6 +7,7 @@
 #include "runtime-defs/FloatRuntime.h"
 #include "runtime-defs/IntegerRuntime.h"
 #include "runtime-defs/StringRuntime.h"
+#include "runtime-defs/Timing.h"
 #include "runtime/DateRuntime.h"
 
 mlir::db::RuntimeFunction* mlir::db::RuntimeFunctionRegistry::lookup(std::string name) {
@@ -261,6 +262,8 @@ std::shared_ptr<mlir::db::RuntimeFunctionRegistry> mlir::db::RuntimeFunctionRegi
       return res;
    });
    builtinRegistry->add("RoundInt64").implementedAs(rt::IntegerRuntime::round64).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
+   builtinRegistry->add("startTiming").implementedAs(rt::Timing::start).matchesTypes({}, resTypeIsI64);
+   builtinRegistry->add("stopTiming").implementedAs(rt::Timing::stop).matchesTypes({RuntimeFunction::intLike}, RuntimeFunction::noReturnType);
    builtinRegistry->add("RoundInt32").implementedAs(rt::IntegerRuntime::round32).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("RoundInt16").implementedAs(rt::IntegerRuntime::round16).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());
    builtinRegistry->add("RoundInt8").implementedAs(rt::IntegerRuntime::round8).matchesTypes({RuntimeFunction::intLike, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument());

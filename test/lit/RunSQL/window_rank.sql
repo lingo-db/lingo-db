@@ -11,3 +11,4 @@
 --//CHECK: |                         29555  |                             8  |
 select s.matrnr, rank() over (order by s.matrnr)
 from studenten s
+order by s.matrnr

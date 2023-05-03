@@ -47,9 +47,24 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
       std::unordered_map<mlir::Operation*, ToThreadLocalInfo> toThreadLocalsGlobal;
       std::unordered_set<mlir::Operation*> markAsAtomic;
       std::unordered_set<std::string> nestedMembers;
-
+      auto getTopLevelOp = [](mlir::Operation* op) {
+         if (op->getParentOp() && op->getParentOp()->getParentOp()) {
+            while (!mlir::isa<mlir::func::FuncOp>(op->getParentOp()) && !(mlir::isa<mlir::subop::LoopOp>(op->getParentOp()) && mlir::isa<mlir::func::FuncOp>(op->getParentOp()->getParentOp()))) {
+               op = op->getParentOp();
+            }
+         }
+         return op;
+      };
+      auto getTopLevelFunc = [](mlir::Operation* op) {
+         if (op->getParentOp()) {
+            while (!mlir::isa<mlir::func::FuncOp>(op->getParentOp())) {
+               op = op->getParentOp();
+            }
+         }
+         return op;
+      };
       getOperation()->walk([&](mlir::Operation* op) {
-         if (!mlir::isa<mlir::subop::GetLocal>(op) && !mlir::isa_and_nonnull<mlir::func::FuncOp>(op->getParentOp())) {
+         if (!mlir::isa<mlir::subop::GetLocal>(op) && getTopLevelOp(op) != op) {
             if (op->getNumResults() == 1) {
                if (auto stateType = op->getResultTypes()[0].dyn_cast_or_null<mlir::subop::State>()) {
                   for (auto m : stateType.getMembers().getNames()) {
@@ -63,17 +78,20 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
       //getOperation().dump();
       getOperation()->walk([&](mlir::Operation* op) {
          if (auto scanRefsOp = mlir::dyn_cast_or_null<mlir::subop::ScanRefsOp>(op)) {
-            if (auto funcOp = mlir::dyn_cast_or_null<mlir::func::FuncOp>(scanRefsOp->getParentOp())) {
+            auto* currentTopLevelOp = getTopLevelOp(scanRefsOp);
+            if (currentTopLevelOp == scanRefsOp && !scanRefsOp->hasAttr("sequential")) {
                std::unordered_map<mlir::Operation*, ToThreadLocalInfo> toThreadLocals;
                std::vector<mlir::Operation*> pipelineOps;
                collectPipelineOperations(pipelineOps, op, true);
                bool canBeParallel = true;
                auto isNested = [&](mlir::Value v) {
                   if (auto* def = v.getDefiningOp()) {
-                     if (def->getParentOp() != funcOp.getOperation() && funcOp->isAncestor(def)) {
+                     auto *parentOp = currentTopLevelOp->getParentOp();
+                     if (parentOp != def->getParentOp() && parentOp->isAncestor(def)) {
                         return true;
                      }
                   }
+
                   return false;
                };
                auto isStreamTypeOrNested = [&](mlir::Value v) {
@@ -136,42 +154,54 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                            continue;
                         }
                      }
-                  } else if (auto gatherOp = mlir::dyn_cast<mlir::subop::GatherOp>(pipelineOp)) {
+                  } else if (mlir::isa<mlir::subop::GatherOp, mlir::subop::ScanRefsOp>(pipelineOp)) {
                      if (getCollisions().empty()) {
                         //ignore gathers
                         continue;
                      }
-                  } else if (mlir::isa<mlir::subop::ScanListOp, mlir::subop::CombineTupleOp>(pipelineOp)) {
+                  } else if (mlir::isa<mlir::subop::ScanListOp, mlir::subop::CombineTupleOp, mlir::subop::GetBeginReferenceOp, mlir::subop::GetEndReferenceOp, mlir::subop::EntriesBetweenOp, mlir::subop::OffsetReferenceBy>(pipelineOp)) {
                      continue;
                   } else if (auto reduceOp = mlir::dyn_cast<mlir::subop::ReduceOp>(pipelineOp)) {
                      //todo: order of members in reduce fn must match member order in state
                      auto collisions = getCollisions();
-                     if (collisions.size() == 1 && !reduceOp.getCombine().empty()) {
+                     if (collisions.size() == 0) {
+                        continue;
+                     }
+                     if (collisions.size() == 1) {
                         if (auto lookupOp = mlir::dyn_cast<mlir::subop::LookupOp>(*collisions.begin())) {
                            if (!isNested(lookupOp.getState())) {
                               if (auto* createOp = lookupOp.getState().getDefiningOp()) {
                                  if (auto simpleStateType = createOp->getResultTypes()[0].dyn_cast_or_null<mlir::subop::SimpleStateType>()) {
-                                    if (simpleStateType.getMembers().getTypes().size() == reduceOp.getMembers().size()) {
+                                    if (simpleStateType.getMembers().getTypes().size() == reduceOp.getMembers().size() && !reduceOp.getCombine().empty()) {
                                        toThreadLocals[createOp].shouldUse.push_back(lookupOp);
                                        toThreadLocals[createOp].combineRegion = &reduceOp.getCombine();
                                        continue;
                                     }
                                  }
                               }
+                           } else {
+                              continue;
                            }
                         }
                         if (auto lookupOrInsertOp = mlir::dyn_cast<mlir::subop::LookupOrInsertOp>(*collisions.begin())) {
                            if (!isNested(lookupOrInsertOp.getState())) {
                               if (auto* createOp = lookupOrInsertOp.getState().getDefiningOp()) {
                                  if (auto hashMapType = createOp->getResultTypes()[0].dyn_cast_or_null<mlir::subop::HashMapType>()) {
-                                    if (hashMapType.getValueMembers().getTypes().size() == reduceOp.getMembers().size()) {
+                                    if (hashMapType.getValueMembers().getTypes().size() == reduceOp.getMembers().size() && !reduceOp.getCombine().empty()) {
                                        toThreadLocals[createOp].combineRegion = &reduceOp.getCombine();
                                        continue;
                                     }
                                  }
                               }
+                           } else {
+                              continue;
                            }
                         }
+                     }
+                     if (reduceOp.getMembers().size() == 1 && reduceOp.getRegion().front().getArguments().back().getType().isIntOrFloat()) {
+                        //we can perform generic atomic
+                        markAsAtomic.insert(pipelineOp);
+                        continue;
                      }
 
                   } else if (auto scatterOp = mlir::dyn_cast_or_null<mlir::subop::ScatterOp>(pipelineOp)) {
@@ -189,14 +219,14 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                      //ignore: do not interact with states
                      continue;
                   }
-                  //llvm::dbgs() << "problematic operation:";
-                  //pipelineOp->dump();
+                  llvm::dbgs() << "problematic operation:";
+                  pipelineOp->dump();
                   canBeParallel = false;
                }
                //finally: mark as parallel
                if (canBeParallel) {
                   scanRefsOp->setAttr("parallel", mlir::UnitAttr::get(&getContext()));
-                  //llvm::dbgs()<<"parallel: ";
+                  //llvm::dbgs() << "parallel: ";
                   //scanRefsOp.dump();
                   for (auto l : toThreadLocals) {
                      if (toThreadLocalsGlobal.contains(l.first)) {
@@ -241,14 +271,15 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                otherUsers.push_back(user); //todo fix behavior for nested
             }
          }
-         auto getTopLevelOp = [](mlir::Operation* op) {
-            while (!mlir::isa<mlir::func::FuncOp>(op->getParentOp())) {
-               op = op->getParentOp();
-            }
-            return op;
-         };
+
          std::sort(otherUsers.begin(), otherUsers.end(), [&](mlir::Operation* left, mlir::Operation* right) {
-            return getTopLevelOp(left)->isBeforeInBlock(getTopLevelOp(right));
+            auto *topLevelLeft = getTopLevelOp(left);
+            auto *topLevelRight = getTopLevelOp(right);
+            if (topLevelLeft->getBlock() == topLevelRight->getBlock()) {
+               return topLevelLeft->isBeforeInBlock(topLevelRight);
+            } else {
+               return getTopLevelFunc(left)->isBeforeInBlock(getTopLevelFunc(right));
+            }
          });
          assert(otherUsers.size() > 0);
          builder.setInsertionPoint(getTopLevelOp(otherUsers[0]));
@@ -270,7 +301,6 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
          createOp->replaceAllUsesWith(mlir::ValueRange{merged});
          createOp->erase();
       }
-      //getOperation()->dump();
    }
 };
 } // end anonymous namespace

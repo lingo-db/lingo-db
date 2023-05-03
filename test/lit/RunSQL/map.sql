@@ -13,3 +13,4 @@
 
 select s.matrnr, s.semester+1 as nextsem,1+3 as const4
 from studenten s
+order by s.matrnr

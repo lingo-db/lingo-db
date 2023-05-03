@@ -13,3 +13,4 @@
 
 select *
 from studenten
+order by matrnr

@@ -11,10 +11,12 @@ namespace runtime {
 /*
  * Buffer: continuous memory area, which is directly accessed by generated code
  */
+struct BufferIterator;
 struct Buffer {
    size_t numElements;
    uint8_t* ptr;
    static Buffer createZeroed(runtime::ExecutionContext* executionContext, size_t bytes);
+   static BufferIterator* createIterator(Buffer,size_t typeSize);
 };
 struct BufferIterator {
    virtual bool isValid() = 0;

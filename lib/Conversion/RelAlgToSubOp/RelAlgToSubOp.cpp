@@ -1431,7 +1431,8 @@ class SortLowering : public OpConversionPattern<mlir::relalg::SortOp> {
       mlir::Value vector = rewriter.create<mlir::subop::GenericCreateOp>(sortOp->getLoc(), vectorType);
       rewriter.create<mlir::subop::MaterializeOp>(sortOp->getLoc(), adaptor.getRel(), vector, helper.createColumnstateMapping());
       auto sortedView = createSortedView(rewriter, vector, sortOp.getSortspecs(), loc, helper);
-      rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(sortOp, sortedView, helper.createStateColumnMapping());
+      auto scanOp = rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(sortOp, sortedView, helper.createStateColumnMapping());
+      scanOp->setAttr("sequential", rewriter.getUnitAttr());
       return success();
    }
 };
@@ -1480,7 +1481,8 @@ class TopKLowering : public OpConversionPattern<mlir::relalg::TopKOp> {
       auto createHeapOp = rewriter.create<mlir::subop::CreateHeapOp>(loc, heapType, rewriter.getArrayAttr(sortByMembers));
       createHeapOp.getRegion().getBlocks().push_back(block);
       rewriter.create<mlir::subop::MaterializeOp>(loc, adaptor.getRel(), createHeapOp.getRes(), helper.createColumnstateMapping());
-      rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(topk, createHeapOp.getRes(), helper.createStateColumnMapping());
+      auto scanOp = rewriter.replaceOpWithNewOp<mlir::subop::ScanOp>(topk, createHeapOp.getRes(), helper.createStateColumnMapping());
+      scanOp->setAttr("sequential", rewriter.getUnitAttr());
       return success();
    }
 };
