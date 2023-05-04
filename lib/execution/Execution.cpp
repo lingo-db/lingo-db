@@ -83,8 +83,8 @@ class SubOpLoweringStep : public LoweringStep {
       lowerSubOpPm.addPass(mlir::subop::createNormalizeSubOpPass());
       if (enabledPasses.contains("PullGatherUp"))
          lowerSubOpPm.addPass(mlir::subop::createPullGatherUpPass());
-      lowerSubOpPm.addPass(mlir::subop::createParallelizePass());
-      if(!moduleOp->hasAttr("sequential")) {
+      if (!moduleOp->hasAttr("subop.sequential")) {
+         lowerSubOpPm.addPass(mlir::subop::createParallelizePass());
          lowerSubOpPm.addPass(mlir::subop::createSpecializeParallelPass());
       }
       lowerSubOpPm.addPass(mlir::subop::createEnforceOrderPass());
@@ -228,8 +228,8 @@ class DefaultQueryExecuter : public QueryExecuter {
          }
          performSnapShot(moduleOp);
       }
-      if(!frontend.isParallelismAllowed()){
-         moduleOp->setAttr("sequential",mlir::UnitAttr::get(moduleOp->getContext()));
+      if (!frontend.isParallelismAllowed()) {
+         moduleOp->setAttr("subop.sequential", mlir::UnitAttr::get(moduleOp->getContext()));
       }
       for (auto& loweringStepPtr : queryExecutionConfig->loweringSteps) {
          auto& loweringStep = *loweringStepPtr;
