@@ -43,6 +43,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
       std::vector<mlir::Operation*> shouldUse = {};
    };
    void runOnOperation() override {
+      //getOperation()->dump();
       auto columnCreationAnalysis = getAnalysis<mlir::subop::ColumnCreationAnalysis>();
       std::unordered_map<mlir::Operation*, ToThreadLocalInfo> toThreadLocalsGlobal;
       std::unordered_set<mlir::Operation*> markAsAtomic;
@@ -179,6 +180,11 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                                     }
                                  }
                               }
+                              if (reduceOp.getMembers().size() == 1 && reduceOp.getRegion().front().getArguments().back().getType().isIntOrFloat()) {
+                                 //we can perform generic atomic
+                                 markAsAtomic.insert(pipelineOp);
+                                 continue;
+                              }
                            } else {
                               continue;
                            }
@@ -197,11 +203,6 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                               continue;
                            }
                         }
-                     }
-                     if (reduceOp.getMembers().size() == 1 && reduceOp.getRegion().front().getArguments().back().getType().isIntOrFloat()) {
-                        //we can perform generic atomic
-                        markAsAtomic.insert(pipelineOp);
-                        continue;
                      }
 
                   } else if (auto scatterOp = mlir::dyn_cast_or_null<mlir::subop::ScatterOp>(pipelineOp)) {
@@ -301,6 +302,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
          createOp->replaceAllUsesWith(mlir::ValueRange{merged});
          createOp->erase();
       }
+      //getOperation()->dump();
    }
 };
 } // end anonymous namespace

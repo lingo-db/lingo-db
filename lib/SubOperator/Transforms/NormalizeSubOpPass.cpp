@@ -70,8 +70,8 @@ class SplitGenericScan : public mlir::RewritePattern {
 
       auto [refDef, refRef] = createColumn(refType, "scan", "ref");
       mlir::Value scanRefsOp = rewriter.create<mlir::subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
-      if(scanOp->hasAttr("sequential")){
-         scanRefsOp.getDefiningOp()->setAttr("sequential",rewriter.getUnitAttr());
+      if (scanOp->hasAttr("sequential")) {
+         scanRefsOp.getDefiningOp()->setAttr("sequential", rewriter.getUnitAttr());
       }
       rewriter.replaceOpWithNewOp<mlir::subop::GatherOp>(op, scanRefsOp, refRef, scanOp.getMapping());
 
@@ -202,7 +202,60 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                }
             }
             if (sum > 0) {
-               unionStreamCount[op] = sum;
+               if (sum > 3) {
+                  size_t numUsers = 0;
+                  size_t numEndUsers = 0;
+                  for (auto* user : op->getUsers()) {
+                     numUsers++;
+                     bool tupleStreamContinues = false;
+                     for (auto userResultType : user->getResultTypes()) {
+                        tupleStreamContinues |= userResultType.isa<mlir::tuples::TupleStreamType>();
+                     }
+                     if (!tupleStreamContinues) {
+                        numEndUsers++;
+                     }
+                  }
+                  if (numUsers == 0) {
+                  } else if (numUsers == 1 && numEndUsers == 1) {
+                  } else {
+                     assert(op->getNumResults() == 1);
+                     //materialize
+                     std::unordered_set<mlir::tuples::Column*> usedColumns;
+                     std::unordered_set<mlir::tuples::Column*> requiredColumns;
+                     for (auto* user : op->getUsers()) {
+                        getRecursivelyUsedColumns(usedColumns, columnUsageAnalysis, user);
+                     }
+                     getRequired(requiredColumns, usedColumns, columnCreationAnalysis, op);
+                     mlir::OpBuilder builder(&getContext());
+
+                     auto& memberManager = builder.getContext()->getLoadedDialect<mlir::subop::SubOperatorDialect>()->getMemberManager();
+                     auto& colManager = builder.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+
+                     std::vector<mlir::Attribute> types;
+                     std::vector<mlir::Attribute> names;
+                     std::vector<mlir::NamedAttribute> defMapping;
+                     std::vector<mlir::NamedAttribute> refMapping;
+                     for (auto* column : requiredColumns) {
+                        auto name = memberManager.getUniqueMember("tmp_union");
+                        types.push_back(mlir::TypeAttr::get(column->type));
+                        names.push_back(builder.getStringAttr(name));
+                        defMapping.push_back(builder.getNamedAttr(name, colManager.createDef(column)));
+                        refMapping.push_back(builder.getNamedAttr(name, colManager.createRef(column)));
+                     }
+                     builder.setInsertionPointToStart(op->getBlock());
+                     auto bufferType = mlir::subop::BufferType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(names), builder.getArrayAttr(types)));
+                     mlir::Value tmpBuffer = builder.create<mlir::subop::GenericCreateOp>(op->getLoc(), bufferType);
+                     builder.setInsertionPointAfter(op);
+                     auto materializeOp = builder.create<mlir::subop::MaterializeOp>(op->getLoc(), op->getResult(0), tmpBuffer, builder.getDictionaryAttr(refMapping));
+                     auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
+                     scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(builder.getContext(), tmpBuffer.getType());
+                     auto scan = builder.create<mlir::subop::ScanRefsOp>(op->getLoc(), tmpBuffer, scanRefDef);
+                     mlir::Value loaded = builder.create<mlir::subop::GatherOp>(op->getLoc(), scan, colManager.createRef(&scanRefDef.getColumn()), builder.getDictionaryAttr(defMapping));
+                     op->getResult(0).replaceAllUsesExcept(loaded, materializeOp);
+                  }
+               } else {
+                  unionStreamCount[op] = sum;
+               }
             }
          }
       });

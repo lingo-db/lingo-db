@@ -351,6 +351,7 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
    resultHasher->sortMode = sort;
    resultHasher->tsv = tsv;
    queryExecutionConfig->resultProcessor = std::move(resultHasher);
+   std::cerr << "executing:" << description << std::endl;
 
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
    executer->fromData(query);

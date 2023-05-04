@@ -22,6 +22,7 @@
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/IRMapping.h"
+#include "mlir/IR/Verifier.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
@@ -2101,37 +2102,19 @@ class GenerateLowering : public SubOpConversionPattern<mlir::subop::GenerateOp> 
          rewriter.eraseOp(emitOp);
       }
       rewriter.inlineBlock<mlir::tuples::ReturnOpAdaptor>(&generateOp.getRegion().front(), {}, [](auto x) {});
-      //todo hack
-      auto unionOp = rewriter.create<mlir::subop::UnionOp>(generateOp->getLoc(), streams);
-      generateOp.replaceAllUsesWith(unionOp.getResult());
-      rewriter.eraseOp(generateOp);
+      if (streams.size() != 1) {
+         auto unionOp = rewriter.create<mlir::subop::UnionOp>(generateOp->getLoc(), streams);
+         unionOp->setAttr("materialize", rewriter.operator mlir::OpBuilder&().getUnitAttr());
+         generateOp.replaceAllUsesWith(unionOp.getResult());
+         rewriter.eraseOp(generateOp);
+      } else {
+         rewriter.replaceTupleStream(generateOp.getRes(), rewriter.getTupleStream(streams[0]));
+      }
 
       return success();
    }
 };
-static bool shouldUnionBeMaterialized(mlir::subop::UnionOp unionOp) {
-   size_t numUsers = 0;
-   size_t numEndUsers = 0;
-   for (auto* user : unionOp.getRes().getUsers()) {
-      numUsers++;
-      bool tupleStreamContinues = false;
-      for (auto userResultType : user->getResultTypes()) {
-         tupleStreamContinues |= userResultType.isa<mlir::tuples::TupleStreamType>();
-      }
-      if (!tupleStreamContinues) {
-         numEndUsers++;
-      }
-   }
-   //return false;
-   if (numUsers == 1 && numEndUsers == 1) {
-      //simple case: is "materialized" any way
-      return false;
-   } else if (unionOp.getStreams().size() <= 3) {
-      return false;
-   } else {
-      return true;
-   }
-}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////// Consuming a TupleStream//////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2139,7 +2122,7 @@ class UnionLowering : public SubOpConversionPattern<mlir::subop::UnionOp> {
    public:
    using SubOpConversionPattern<mlir::subop::UnionOp>::SubOpConversionPattern;
    LogicalResult matchAndRewrite(mlir::subop::UnionOp unionOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      if (shouldUnionBeMaterialized(unionOp)) {
+      if (unionOp->hasAttr("materialize")) {
          auto& memberManager = getContext()->getLoadedDialect<mlir::subop::SubOperatorDialect>()->getMemberManager();
          auto firstStream = rewriter.getTupleStream(unionOp.getStreams()[0]);
          auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
@@ -3323,7 +3306,7 @@ static void implementAtomicReduce(mlir::subop::ReduceOp reduceOp, SubOpRewriter&
    mlir::Value memberValue = reduceOp.getRegion().front().getArguments().back();
    mlir::Value atomicOperand;
 
-   if (auto *defOp = returnOp.getResults()[0].getDefiningOp()) {
+   if (auto* defOp = returnOp.getResults()[0].getDefiningOp()) {
       if (auto addFOp = mlir::dyn_cast_or_null<mlir::arith::AddFOp>(defOp)) {
          if (addFOp.getLhs() == memberValue) {
             atomicKind = mlir::arith::AtomicRMWKind::addf;
@@ -3894,6 +3877,12 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    for (auto* op : defs) {
       op->moveBefore(&module.getBody()->getOperations().front());
    }
+   /*getOperation().dump();
+   getOperation().walk([](mlir::Operation* op){
+      if(mlir::verify(op,false).failed()){
+         op->dump();
+      }
+   });*/
 }
 } //namespace
 std::unique_ptr<mlir::Pass>
