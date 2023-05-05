@@ -11955,7 +11955,7 @@ with ss as
  ) x
  group by rollup (channel, id)
  order by channel
-         ,id
+         ,id, sales desc
  limit 100;
 ----
 catalog channel	1	134474707.10	1898705.87	-14349448.34
