@@ -658,32 +658,63 @@ class CountingSetOperationLowering : public ConversionPattern {
       lookupOpLeft.getInitFn().push_back(leftInitialValueBlock);
       lookupOpLeft.getEqFn().push_back(createCompareBlock(keyTypes, rewriter, loc));
       {
-         auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, lookupOpLeft, referenceRefLeft, rewriter.getArrayAttr({}), rewriter.getArrayAttr({counterNames[0]}));
-         mlir::Block* reduceBlock = new Block;
-         mlir::Value currCounter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
+         auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, lookupOpLeft, referenceRefLeft, rewriter.getArrayAttr({}), rewriter.getArrayAttr(counterNames));
+
          {
+            mlir::Block* reduceBlock = new Block;
+            mlir::Value currCounter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
+            mlir::Value otherCounter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(reduceBlock);
             mlir::Value constOne = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(1));
-            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({rewriter.create<mlir::arith::AddIOp>(loc, currCounter, constOne)}));
+            currCounter=rewriter.create<mlir::arith::AddIOp>(loc, currCounter, constOne);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({currCounter,otherCounter}));
+            reduceOp.getRegion().push_back(reduceBlock);
          }
-         reduceOp.getRegion().push_back(reduceBlock);
+         {
+            mlir::Block* combineBlock = new Block;
+            mlir::Value counter1A = combineBlock->addArgument(rewriter.getI64Type(), loc);
+            mlir::Value counter2A = combineBlock->addArgument(rewriter.getI64Type(), loc);
+            mlir::Value counter1B = combineBlock->addArgument(rewriter.getI64Type(), loc);
+            mlir::Value counter2B = combineBlock->addArgument(rewriter.getI64Type(), loc);
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(combineBlock);
+            mlir::Value counter1=rewriter.create<mlir::arith::AddIOp>(loc, counter1A, counter1B);
+            mlir::Value counter2=rewriter.create<mlir::arith::AddIOp>(loc, counter2A, counter2B);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({counter1,counter2}));
+            reduceOp.getCombine().push_back(combineBlock);
+         }
       }
       auto lookupOpRight = rewriter.create<mlir::subop::LookupOrInsertOp>(loc, mlir::tuples::TupleStreamType::get(getContext()), right, state, rewriter.getArrayAttr(refs), referenceDefRight);
       lookupOpRight.getInitFn().push_back(rightInitialValueBlock);
       lookupOpRight.getEqFn().push_back(createCompareBlock(keyTypes, rewriter, loc));
 
       {
-         auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, lookupOpRight, referenceRefRight, rewriter.getArrayAttr({}), rewriter.getArrayAttr({counterNames[1]}));
-         mlir::Block* reduceBlock = new Block;
-         mlir::Value currCounter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
+         auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, lookupOpRight, referenceRefRight, rewriter.getArrayAttr({}), rewriter.getArrayAttr(counterNames));
          {
+            mlir::Block* reduceBlock = new Block;
+            mlir::Value otherCounter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
+            mlir::Value currCounter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(reduceBlock);
             mlir::Value constOne = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(1));
-            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({rewriter.create<mlir::arith::AddIOp>(loc, currCounter, constOne)}));
+            currCounter=rewriter.create<mlir::arith::AddIOp>(loc, currCounter, constOne);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({otherCounter,currCounter}));
+            reduceOp.getRegion().push_back(reduceBlock);
          }
-         reduceOp.getRegion().push_back(reduceBlock);
+         {
+            mlir::Block* combineBlock = new Block;
+            mlir::Value counter1A = combineBlock->addArgument(rewriter.getI64Type(), loc);
+            mlir::Value counter2A = combineBlock->addArgument(rewriter.getI64Type(), loc);
+            mlir::Value counter1B = combineBlock->addArgument(rewriter.getI64Type(), loc);
+            mlir::Value counter2B = combineBlock->addArgument(rewriter.getI64Type(), loc);
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(combineBlock);
+            mlir::Value counter1=rewriter.create<mlir::arith::AddIOp>(loc, counter1A, counter1B);
+            mlir::Value counter2=rewriter.create<mlir::arith::AddIOp>(loc, counter2A, counter2B);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({counter1,counter2}));
+            reduceOp.getCombine().push_back(combineBlock);
+         }
       }
       mlir::Value scan = rewriter.create<mlir::subop::ScanOp>(loc, state, rewriter.getDictionaryAttr(defMapping));
       if (distinct) {
