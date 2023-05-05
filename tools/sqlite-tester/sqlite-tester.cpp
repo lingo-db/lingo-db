@@ -49,6 +49,7 @@ struct ResultHasher : public execution::ResultProcessor {
       arrow::PrettyPrintOptions options;
       options.indent_size = 0;
       options.window = 1000000;
+      options.container_window =1000000;
       std::vector<bool> convertHex;
       std::vector<bool> isFloat;
       for (auto c : table->columns()) {

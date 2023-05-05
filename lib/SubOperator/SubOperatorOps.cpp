@@ -989,7 +989,7 @@ void subop::ReduceOp::print(OpAsmPrinter& p) {
          } else {
             p << ",";
          }
-         p << op.getRegion().front().getArgument(i);
+         p << op.getCombine().front().getArgument(i);
       }
       p << "],[";
       first = true;
@@ -999,7 +999,7 @@ void subop::ReduceOp::print(OpAsmPrinter& p) {
          } else {
             p << ",";
          }
-         p << op.getRegion().front().getArgument(op.getColumns().size() + i);
+         p << op.getCombine().front().getArgument(op.getMembers().size() + i);
       }
       p << "])";
       p.printRegion(op.getCombine(), false, true);

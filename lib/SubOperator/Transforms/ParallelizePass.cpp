@@ -41,6 +41,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
       mlir::Region* combineRegion = nullptr;
       mlir::Region* compareRegion = nullptr;
       std::vector<mlir::Operation*> shouldUse = {};
+      bool requiresCombine=false;
    };
    void runOnOperation() override {
       //getOperation()->dump();
@@ -152,6 +153,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                         if (auto* createOp = lookupOrInsertOp.getState().getDefiningOp()) {
                            toThreadLocals[createOp].compareRegion = &lookupOrInsertOp.getEqFn();
                            toThreadLocals[createOp].shouldUse.push_back(lookupOrInsertOp);
+                           toThreadLocals[createOp].requiresCombine=true;
                            continue;
                         }
                      }
@@ -223,6 +225,11 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                   llvm::dbgs() << "problematic operation:";
                   pipelineOp->dump();
                   canBeParallel = false;
+               }
+               for (auto l : toThreadLocals) {
+                  if(l.second.requiresCombine&&!l.second.combineRegion){
+                     canBeParallel=false;
+                  }
                }
                //finally: mark as parallel
                if (canBeParallel) {
