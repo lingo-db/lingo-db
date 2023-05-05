@@ -434,9 +434,27 @@ class SubOpRewriter {
    void mapSpecial(Operation* op, mlir::Value original, mlir::Value replacement, mlir::Block* block) {
       specialMapping[op].push_back({{original, replacement}, block});
    }
+   mlir::Block* cloneBlock(mlir::Block* block, IRMapping& mapping) {
+      mlir::Block* clonedBlock = new mlir::Block;
+      for (auto arg : block->getArguments()) {
+         auto clonedArg = clonedBlock->addArgument(arg.getType(), arg.getLoc());
+         mapping.map(arg, clonedArg);
+      }
+      atStartOf(clonedBlock, [&](SubOpRewriter& rewriter) {
+         for (auto& op : block->getOperations()) {
+            rewriter.builder.insert(rewriter.clone(&op, mapping));
+         }
+      });
 
+      return clonedBlock;
+   }
    mlir::Operation* clone(mlir::Operation* op, IRMapping& mapping) {
-      auto* cloned = op->clone(mapping);
+      auto* cloned = op->cloneWithoutRegions(mapping);
+      for (auto r : llvm::zip(op->getRegions(), cloned->getRegions())) {
+         for (auto& b : std::get<0>(r).getBlocks()) {
+            std::get<1>(r).push_back(cloneBlock(&b, mapping));
+         }
+      }
       if (specialMapping.contains(op)) {
          specialMapping.insert({cloned, specialMapping[op]});
       }
