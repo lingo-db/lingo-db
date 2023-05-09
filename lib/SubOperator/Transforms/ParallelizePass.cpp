@@ -1,4 +1,3 @@
-#include "llvm/Support/Debug.h"
 #include "mlir/Dialect/SubOperator/SubOperatorInterfaces.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 
@@ -41,13 +40,13 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
       mlir::Region* combineRegion = nullptr;
       mlir::Region* compareRegion = nullptr;
       std::vector<mlir::Operation*> shouldUse = {};
-      bool requiresCombine=false;
+      bool requiresCombine = false;
    };
    void runOnOperation() override {
       //getOperation()->dump();
       auto columnCreationAnalysis = getAnalysis<mlir::subop::ColumnCreationAnalysis>();
       std::unordered_map<mlir::Operation*, ToThreadLocalInfo> toThreadLocalsGlobal;
-      std::unordered_set<mlir::Operation*> markAsAtomic;
+      std::vector<std::pair<mlir::tuples::ColumnRefAttr, std::vector<mlir::Operation*>>> toLockGlobal;
       std::unordered_set<std::string> nestedMembers;
       auto getTopLevelOp = [](mlir::Operation* op) {
          if (op->getParentOp() && op->getParentOp()->getParentOp()) {
@@ -83,12 +82,15 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
             auto* currentTopLevelOp = getTopLevelOp(scanRefsOp);
             if (currentTopLevelOp == scanRefsOp && !scanRefsOp->hasAttr("sequential")) {
                std::unordered_map<mlir::Operation*, ToThreadLocalInfo> toThreadLocals;
+               std::vector<std::pair<mlir::tuples::ColumnRefAttr, std::vector<mlir::Operation*>>> toLock;
                std::vector<mlir::Operation*> pipelineOps;
+               std::unordered_set<mlir::Operation*> markAsAtomic;
+
                collectPipelineOperations(pipelineOps, op, true);
                bool canBeParallel = true;
                auto isNested = [&](mlir::Value v) {
                   if (auto* def = v.getDefiningOp()) {
-                     auto *parentOp = currentTopLevelOp->getParentOp();
+                     auto* parentOp = currentTopLevelOp->getParentOp();
                      if (parentOp != def->getParentOp() && parentOp->isAncestor(def)) {
                         return true;
                      }
@@ -137,9 +139,13 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                   };
 
                   if (auto materializeOp = mlir::dyn_cast_or_null<mlir::subop::MaterializeOp>(pipelineOp)) {
-                     if (getCollisions().empty() && !isNested(materializeOp.getState())) {
-                        if (auto* createOp = materializeOp.getState().getDefiningOp()) {
-                           toThreadLocals[createOp].shouldUse.push_back(materializeOp);
+                     if (getCollisions().empty()) {
+                        if (!isNested(materializeOp.getState())) {
+                           if (auto* createOp = materializeOp.getState().getDefiningOp()) {
+                              toThreadLocals[createOp].shouldUse.push_back(materializeOp);
+                              continue;
+                           }
+                        } else {
                            continue;
                         }
                      }
@@ -150,10 +156,14 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                      }
                   } else if (auto lookupOrInsertOp = mlir::dyn_cast_or_null<mlir::subop::LookupOrInsertOp>(pipelineOp)) {
                      if (getCollisions().empty()) {
-                        if (auto* createOp = lookupOrInsertOp.getState().getDefiningOp()) {
-                           toThreadLocals[createOp].compareRegion = &lookupOrInsertOp.getEqFn();
-                           toThreadLocals[createOp].shouldUse.push_back(lookupOrInsertOp);
-                           toThreadLocals[createOp].requiresCombine=true;
+                        if (!isNested(lookupOrInsertOp.getState())) {
+                           if (auto* createOp = lookupOrInsertOp.getState().getDefiningOp()) {
+                              toThreadLocals[createOp].compareRegion = &lookupOrInsertOp.getEqFn();
+                              toThreadLocals[createOp].shouldUse.push_back(lookupOrInsertOp);
+                              toThreadLocals[createOp].requiresCombine = true;
+                              continue;
+                           }
+                        } else {
                            continue;
                         }
                      }
@@ -187,6 +197,13 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                                  markAsAtomic.insert(pipelineOp);
                                  continue;
                               }
+                              if (auto* createOp = lookupOp.getState().getDefiningOp()) {
+                                 if (auto hashMapType = createOp->getResultTypes()[0].dyn_cast_or_null<mlir::subop::HashMapType>()) {
+                                    toLock.push_back({reduceOp.getRef(), {reduceOp}});
+                                    continue;
+                                 }
+                              }
+
                            } else {
                               continue;
                            }
@@ -222,20 +239,21 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                      //ignore: do not interact with states
                      continue;
                   }
-                  llvm::dbgs() << "problematic operation:";
-                  pipelineOp->dump();
+                  //llvm::dbgs() << "problematic operation:";
+                  //pipelineOp->dump();
                   canBeParallel = false;
                }
-               for (auto l : toThreadLocals) {
+               /*for (auto l : toThreadLocals) {
                   if(l.second.requiresCombine&&!l.second.combineRegion){
                      canBeParallel=false;
                   }
-               }
+               }*/
                //finally: mark as parallel
                if (canBeParallel) {
                   scanRefsOp->setAttr("parallel", mlir::UnitAttr::get(&getContext()));
                   //llvm::dbgs() << "parallel: ";
                   //scanRefsOp.dump();
+
                   for (auto l : toThreadLocals) {
                      if (toThreadLocalsGlobal.contains(l.first)) {
                         //todo: make sure that everything fits together
@@ -250,8 +268,11 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                         toThreadLocalsGlobal.insert(l);
                      }
                   }
-                  for (auto* mA : markAsAtomic) {
+                  for (auto *mA : markAsAtomic) {
                      mA->setAttr("atomic", mlir::UnitAttr::get(&getContext()));
+                  }
+                  for (auto l : toLock) {
+                     toLockGlobal.push_back(l);
                   }
                } else {
                   //llvm::dbgs()<<"not parallel: ";
@@ -260,6 +281,31 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
             }
          }
       });
+      for (auto toLock : toLockGlobal) {
+         mlir::OpBuilder builder(&getContext());
+         builder.setInsertionPoint(toLock.second.front());
+         auto tupleStream = toLock.second.front()->getOperand(0);
+         auto lockOp = builder.create<mlir::subop::LockOp>(builder.getUnknownLoc(), tupleStream, toLock.first);
+         auto* block = new mlir::Block;
+         auto tupleStream2 = block->addArgument(mlir::tuples::TupleStreamType::get(builder.getContext()), builder.getUnknownLoc());
+         for (auto* op : toLock.second) {
+            op->remove();
+            block->push_back(op);
+         }
+         toLock.second.front()->setOperand(0, tupleStream2);
+         auto* lastOp = toLock.second.back();
+
+         if (lastOp->getNumResults() > 0) {
+            mlir::Value lastResult = lastOp->getResult(0);
+            lastResult.replaceAllUsesWith(lockOp.getRes());
+            builder.setInsertionPointToEnd(block);
+            builder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), lastResult);
+         } else {
+            builder.setInsertionPointToEnd(block);
+            builder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc());
+         }
+         lockOp.getNested().push_back(block);
+      }
       for (auto toThreadLocal : toThreadLocalsGlobal) {
          auto* createOp = toThreadLocal.first;
          mlir::OpBuilder builder(&getContext());
@@ -281,8 +327,8 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
          }
 
          std::sort(otherUsers.begin(), otherUsers.end(), [&](mlir::Operation* left, mlir::Operation* right) {
-            auto *topLevelLeft = getTopLevelOp(left);
-            auto *topLevelRight = getTopLevelOp(right);
+            auto* topLevelLeft = getTopLevelOp(left);
+            auto* topLevelRight = getTopLevelOp(right);
             if (topLevelLeft->getBlock() == topLevelRight->getBlock()) {
                return topLevelLeft->isBeforeInBlock(topLevelRight);
             } else {

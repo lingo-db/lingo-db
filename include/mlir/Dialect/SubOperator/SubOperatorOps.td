@@ -366,6 +366,17 @@ def MergeOp : SubOperator_Op<"merge", [Pure,SubOperator]> {
   let assemblyFormat = [{ type($res)  attr-dict }];
   let assemblyFormat = [{ $threadLocal `:` type($threadLocal) `->` type($res) (`combine` `:` $combineFn^)? (`eq` `:` $eqFn^)? attr-dict }];
 }
+def LockOp : SubOperator_Op<"lock", [SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
+  let summary = "merge thread_local ";
+  let arguments = (ins TupleStream: $stream, ColumnRefAttr:$ref);
+  let results = (outs TupleStream : $res);
+  let extraClassDeclaration = [{
+    std::vector<std::string> getWrittenMembers();
+    std::vector<std::string> getReadMembers();
+  }];
+  let regions = (region SizedRegion<1>:$nested);
+  let assemblyFormat = [{ $stream `lock` `(` $ref `)` $nested attr-dict }];
+}
 def GetLocal : SubOperator_Op<"get_local"> {
      let summary = "get local state from thread local";
      let arguments = (ins ThreadLocal: $threadLocal);

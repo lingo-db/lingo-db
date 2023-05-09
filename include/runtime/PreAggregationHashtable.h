@@ -24,12 +24,24 @@ class PreAggregationHashtableFragment {
    Entry* insert(size_t hash);
 };
 class PreAggregationHashtable {
+   using Entry=PreAggregationHashtableFragment::Entry;
+   struct PartitionHt{
+      Entry** ht;
+      size_t hashMask;
+   };
+   PartitionHt ht[PreAggregationHashtableFragment::numOutputs];
    runtime::FlexibleBuffer buffer;
-   PreAggregationHashtable() : buffer(1, sizeof(PreAggregationHashtableFragment::Entry*)) {}
+   PreAggregationHashtable() : ht(), buffer(1, sizeof(PreAggregationHashtableFragment::Entry*)) {
+
+   }
 
    public:
-   static runtime::PreAggregationHashtable* merge(ThreadLocal*, bool (*eq)(uint8_t*, uint8_t*), void (*combine)(uint8_t*, uint8_t*));
+   static runtime::PreAggregationHashtable* merge(runtime::ExecutionContext* context,ThreadLocal*, bool (*eq)(uint8_t*, uint8_t*), void (*combine)(uint8_t*, uint8_t*));
+   Entry* lookup(size_t hash);
+   static void lock(Entry* entry,size_t subtract);
+   static void unlock(Entry* entry,size_t subtract);
    runtime::BufferIterator* createIterator();
+   ~PreAggregationHashtable();
 };
 
 } // end namespace runtime

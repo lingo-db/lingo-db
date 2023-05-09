@@ -452,6 +452,19 @@ class FilterTaggedPtrLowering : public OpConversionPattern<mlir::util::FilterTag
       return success();
    }
 };
+class UnTagPtrLowering : public OpConversionPattern<mlir::util::UnTagPtr> {
+   public:
+   using OpConversionPattern<mlir::util::UnTagPtr>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::util::UnTagPtr op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto loc = op->getLoc();
+      auto ptrMask = rewriter.create<mlir::LLVM::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(0x0000ffffffffffffull));
+      Value ptrAsInt = rewriter.create<LLVM::PtrToIntOp>(loc, rewriter.getI64Type(), adaptor.getRef());
+      Value maskedPtr = rewriter.create<LLVM::AndOp>(loc, ptrAsInt, ptrMask);
+      maskedPtr = rewriter.create<LLVM::IntToPtrOp>(loc, adaptor.getRef().getType(), maskedPtr);
+      rewriter.replaceOp(op, maskedPtr);
+      return success();
+   }
+};
 class TagPtrLowering : public OpConversionPattern<mlir::util::TagPtr> {
    public:
    using OpConversionPattern<mlir::util::TagPtr>::OpConversionPattern;
@@ -513,6 +526,7 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<HashVarLenLowering>(typeConverter, patterns.getContext());
    patterns.add<FilterTaggedPtrLowering>(typeConverter, patterns.getContext());
    patterns.add<TagPtrLowering>(typeConverter, patterns.getContext());
+   patterns.add<UnTagPtrLowering>(typeConverter, patterns.getContext());
 }
 namespace {
 class FuncConstTypeConversionPattern : public ConversionPattern {

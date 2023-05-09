@@ -174,7 +174,7 @@ std::unique_ptr<support::eval::expr> mlir::relalg::buildEvalExpr(mlir::Value val
          }
       }
    }
-   val.dump();
+   //val.dump();
    return support::eval::createInvalid();
 }
 

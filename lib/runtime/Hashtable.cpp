@@ -53,7 +53,6 @@ runtime::Hashtable* runtime::Hashtable::merge(runtime::ThreadLocal* threadLocal,
          first->mergeEntries(isEq, merge, current);
       }
    }
-
    return first;
 }
 void runtime::Hashtable::mergeEntries(bool (*isEq)(uint8_t*, uint8_t*), void (*merge)(uint8_t*, uint8_t*), runtime::Hashtable* other) {
@@ -84,4 +83,19 @@ void runtime::Hashtable::mergeEntries(bool (*isEq)(uint8_t*, uint8_t*), void (*m
    });
 
    //todo migrate buffers?
+}
+void runtime::Hashtable::lock(runtime::Hashtable::Entry* entry, size_t subtract) {
+   entry = reinterpret_cast<Entry*>(reinterpret_cast<uint8_t*>(entry) - subtract);
+   uintptr_t& nextPtr = reinterpret_cast<uintptr_t&>(entry->next);
+   std::atomic_ref<uintptr_t> l(nextPtr);
+   uintptr_t mask = 0xffff000000000000;
+   while (l.exchange(nextPtr | mask) & mask) {
+   }
+}
+void runtime::Hashtable::unlock(runtime::Hashtable::Entry* entry, size_t subtract) {
+   entry = reinterpret_cast<Entry*>(reinterpret_cast<uint8_t*>(entry) - subtract);
+   uintptr_t& nextPtr = reinterpret_cast<uintptr_t&>(entry->next);
+   std::atomic_ref<uintptr_t> l(nextPtr);
+   l.store(nextPtr & ~0xffff000000000000);
+
 }

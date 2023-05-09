@@ -652,7 +652,6 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             toErase.push_back(mapOp);
          }
          toErase.push_back(join.getOperation());
-         llvm::dbgs() << "introducing groupjoin\n";
       });
       for (auto* op : toErase) {
          op->erase();

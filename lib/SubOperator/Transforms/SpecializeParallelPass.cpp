@@ -38,11 +38,10 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
       std::vector<mlir::subop::LookupOrInsertOp> lookupOrInsertOps;
       std::unordered_set<mlir::Operation*> getLocalOps;
       mlir::subop::MergeOp mergeOp;
-      std::vector<mlir::subop::ScanRefsOp> scanOps;
-      for (auto *threadLocalUser : threadLocalParent->getUsers()) {
+      for (auto* threadLocalUser : threadLocalParent->getUsers()) {
          if (auto getLocal = mlir::dyn_cast<mlir::subop::GetLocal>(threadLocalUser)) {
             getLocalOps.insert(getLocal.getOperation());
-            for (auto *localUser : getLocal->getUsers()) {
+            for (auto* localUser : getLocal->getUsers()) {
                if (auto lOI = mlir::dyn_cast<mlir::subop::LookupOrInsertOp>(localUser)) {
                   lookupOrInsertOps.push_back(lOI);
                } else {
@@ -51,10 +50,10 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
             }
          } else if (auto merge = mlir::dyn_cast<mlir::subop::MergeOp>(threadLocalUser)) {
             mergeOp = merge;
-            for (auto *mergedUser : merge->getUsers()) {
-               if (auto scanRefOp = mlir::dyn_cast<mlir::subop::ScanRefsOp>(mergedUser)) {
-                  scanOps.push_back(scanRefOp);
+            for (auto* mergedUser : merge->getUsers()) {
+               if (mlir::isa<mlir::subop::ScanRefsOp, mlir::subop::LookupOp>(mergedUser)) {
                } else {
+                  //todo
                   return mlir::failure();
                }
             }
@@ -65,29 +64,41 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
       auto optimisticHt = mlir::subop::PreAggrHtType::get(getContext(), mapType.getKeyMembers(), mapType.getValueMembers());
       auto optimisticHtFragment = mlir::subop::PreAggrHtFragmentType::get(getContext(), mapType.getKeyMembers(), mapType.getValueMembers());
       auto threadLocalType = mlir::subop::ThreadLocalType::get(getContext(), optimisticHtFragment);
-      mlir::TypeConverter typeConverter;
-      typeConverter.addConversion([&](mlir::subop::ListType listType) {
-         return mlir::subop::ListType::get(listType.getContext(), typeConverter.convertType(listType.getT()).cast<mlir::subop::StateEntryReference>());
+      mlir::TypeConverter fragmentTypeConverter;
+
+      fragmentTypeConverter.addConversion([&](mlir::subop::LookupEntryRefType lookupRefType) {
+         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), fragmentTypeConverter.convertType(lookupRefType.getState()));
       });
-      typeConverter.addConversion([&](mlir::subop::OptionalType optionalType) {
-         return mlir::subop::OptionalType::get(optionalType.getContext(), typeConverter.convertType(optionalType.getT()).cast<mlir::subop::StateEntryReference>());
-      });
-      typeConverter.addConversion([&](mlir::subop::HashMapEntryRefType refType) {
-         return mlir::subop::PreAggrHTEntryRefType::get(refType.getContext(), optimisticHt);
-      });
-      typeConverter.addConversion([&](mlir::subop::LookupEntryRefType lookupRefType) {
-         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), typeConverter.convertType(lookupRefType.getState()));
-      });
-      typeConverter.addConversion([&](mlir::subop::HashMapType mapType) {
+      fragmentTypeConverter.addConversion([&](mlir::subop::HashMapType mapType) {
          return optimisticHtFragment;
       });
-      mlir::subop::SubOpStateUsageTransformer transformer(analysis, getContext(), [&](mlir::Operation* op, mlir::Type type) -> mlir::Type {
-         return typeConverter.convertType(type);
+      mlir::TypeConverter htTypeConverter;
+      htTypeConverter.addConversion([&](mlir::subop::HashMapType mapType) {
+         return optimisticHt;
       });
-      for (auto *l : getLocalOps) {
-         transformer.updateValue(l->getResult(0), optimisticHtFragment);
+      htTypeConverter.addConversion([&](mlir::subop::HashMapEntryRefType refType) {
+         return mlir::subop::PreAggrHTEntryRefType::get(refType.getContext(), optimisticHt);
+      });
+      htTypeConverter.addConversion([&](mlir::subop::LookupEntryRefType lookupRefType) {
+         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), htTypeConverter.convertType(lookupRefType.getState()));
+      });
+
+      htTypeConverter.addConversion([&](mlir::subop::ListType listType) {
+         return mlir::subop::ListType::get(listType.getContext(), htTypeConverter.convertType(listType.getT()).cast<mlir::subop::StateEntryReference>());
+      });
+      htTypeConverter.addConversion([&](mlir::subop::OptionalType optionalType) {
+         return mlir::subop::OptionalType::get(optionalType.getContext(), htTypeConverter.convertType(optionalType.getT()).cast<mlir::subop::StateEntryReference>());
+      });
+      mlir::subop::SubOpStateUsageTransformer fragmentTransformer(analysis, getContext(), [&](mlir::Operation* op, mlir::Type type) -> mlir::Type {
+         return fragmentTypeConverter.convertType(type);
+      });
+      mlir::subop::SubOpStateUsageTransformer htTransformer(analysis, getContext(), [&](mlir::Operation* op, mlir::Type type) -> mlir::Type {
+         return htTypeConverter.convertType(type);
+      });
+      for (auto* l : getLocalOps) {
+         fragmentTransformer.updateValue(l->getResult(0), optimisticHtFragment);
       }
-      transformer.updateValue(mergeOp.getRes(), optimisticHt);
+      htTransformer.updateValue(mergeOp.getRes(), optimisticHt);
       auto loc = op->getLoc();
       auto newCreateThreadLocal = rewriter.create<mlir::subop::CreateThreadLocalOp>(loc, threadLocalType);
       auto* newBlock = new mlir::Block;
@@ -97,7 +108,7 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
          rewriter.setInsertionPointToStart(newBlock);
          rewriter.create<mlir::tuples::ReturnOp>(loc, rewriter.create<mlir::subop::GenericCreateOp>(loc, optimisticHtFragment).getRes());
       }
-      for (auto *l : getLocalOps) {
+      for (auto* l : getLocalOps) {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPoint(l);
          auto local = rewriter.create<mlir::subop::GetLocal>(l->getLoc(), optimisticHtFragment, newCreateThreadLocal.getRes());

@@ -79,6 +79,60 @@ class OuterJoinToInnerJoin : public mlir::RewritePattern {
       mapOp.getPredicate().push_back(mapBlock);
    }
 };
+class SingleJoinToInnerJoin : public mlir::RewritePattern {
+   public:
+   SingleJoinToInnerJoin(mlir::MLIRContext* context)
+      : RewritePattern(mlir::relalg::SingleJoinOp::getOperationName(), 1, context) {}
+   mlir::LogicalResult match(mlir::Operation* op) const override {
+      auto outerJoinOp = mlir::cast<mlir::relalg::SingleJoinOp>(op);
+      mlir::Value currStream = outerJoinOp.asRelation();
+
+      while (currStream) {
+         auto users = currStream.getUsers();
+         if (users.begin() == users.end()) break;
+         auto second = users.begin();
+         second++;
+         if (second != users.end()) break;
+         if (auto selectionOp = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(*users.begin())) {
+            if (isNotNullCheckOnColumn(outerJoinOp.getCreatedColumns(), selectionOp)) {
+               return mlir::success();
+            }
+            currStream = selectionOp.asRelation();
+         } else {
+            currStream = mlir::Value();
+         }
+      }
+      return mlir::failure();
+   }
+   void rewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto outerJoinOp = mlir::cast<mlir::relalg::SingleJoinOp>(op);
+      auto newJoin = rewriter.create<mlir::relalg::InnerJoinOp>(op->getLoc(), outerJoinOp.getLeft(), outerJoinOp.getRight());
+      rewriter.inlineRegionBefore(outerJoinOp.getPredicate(), newJoin.getPredicate(), newJoin.getPredicate().end());
+      std::vector<mlir::Attribute> mapColumnDefs;
+      auto* mapBlock = new mlir::Block;
+
+      {
+         std::vector<mlir::Value> returnValues;
+         auto tuple = mapBlock->addArgument(mlir::tuples::TupleType::get(getContext()), op->getLoc());
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(mapBlock);
+         for (auto m : outerJoinOp.getMapping()) {
+            auto defAttr = m.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
+            auto refAttr = defAttr.getFromExisting().cast<mlir::ArrayAttr>()[0].cast<mlir::tuples::ColumnRefAttr>();
+            auto colVal = rewriter.create<mlir::tuples::GetColumnOp>(op->getLoc(), defAttr.getColumn().type, refAttr, tuple);
+            if (colVal.getType() != defAttr.getColumn().type) {
+               returnValues.push_back(rewriter.create<mlir::db::AsNullableOp>(op->getLoc(), defAttr.getColumn().type, colVal, mlir::Value()));
+            } else {
+               returnValues.push_back(colVal);
+            }
+            mapColumnDefs.push_back(defAttr);
+         }
+         rewriter.create<mlir::tuples::ReturnOp>(op->getLoc(), returnValues);
+      }
+      auto mapOp = rewriter.replaceOpWithNewOp<mlir::relalg::MapOp>(op, newJoin.asRelation(), rewriter.getArrayAttr(mapColumnDefs));
+      mapOp.getPredicate().push_back(mapBlock);
+   }
+};
 class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-pushdown"; }
 
@@ -164,6 +218,7 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
       });
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<OuterJoinToInnerJoin>(&getContext());
+      patterns.insert<SingleJoinToInnerJoin>(&getContext());
       if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
          signalPassFailure();
       }

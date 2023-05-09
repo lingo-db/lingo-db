@@ -65,6 +65,7 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    patterns.add<SimpleTypeConversionPattern<ArrayElementPtrOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<FilterTaggedPtr>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<TagPtr>>(typeConverter, patterns.getContext());
+   patterns.add<SimpleTypeConversionPattern<UnTagPtr>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<BufferCastOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<BufferGetLen>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<BufferGetRef>>(typeConverter, patterns.getContext());

@@ -1096,6 +1096,22 @@ std::vector<std::string> subop::MaterializeOp::getWrittenMembers() {
    }
    return res;
 }
+std::vector<std::string> subop::LockOp::getReadMembers() {
+   std::vector<std::string> res;
+   this->getNested().walk([&](mlir::subop::SubOperator subop) {
+      auto read = subop.getReadMembers();
+      res.insert(res.end(), read.begin(), read.end());
+   });
+   return res;
+}
+std::vector<std::string> subop::LockOp::getWrittenMembers() {
+   std::vector<std::string> res;
+   this->getNested().walk([&](mlir::subop::SubOperator subop) {
+      auto written = subop.getWrittenMembers();
+      res.insert(res.end(), written.begin(), written.end());
+   });
+   return res;
+}
 std::vector<std::string> subop::NestedMapOp::getReadMembers() {
    std::vector<std::string> res;
    this->getRegion().walk([&](mlir::subop::SubOperator subop) {
@@ -1445,6 +1461,14 @@ void subop::UnwrapOptionalRefOp::replaceColumns(mlir::subop::SubOpStateUsageTran
       setOptionalRefAttr(transformer.getColumnManager().createRef(newColumn));
       auto newRefType = transformer.getNewRefType(this->getOperation(), getRef().getColumn().type);
       setRefAttr(transformer.createReplacementColumn(getRefAttr(), newRefType));
+   }
+}
+void subop::LockOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   assert(false && "should not happen");
+}
+void subop::LockOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
+   if (&getRef().getColumn() == oldColumn) {
+      setRefAttr(transformer.getColumnManager().createRef(newColumn));
    }
 }
 void subop::MaterializeOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {

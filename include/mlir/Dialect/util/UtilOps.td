@@ -72,6 +72,11 @@ def TagPtr : Util_Op<"tag_ptr",[Pure]> {
     let results = (outs RefType:$res);
     let assemblyFormat = "$hash `,` $ref `:` type($ref) `->` type($res) attr-dict";
 }
+def UnTagPtr : Util_Op<"untag_ptr",[Pure]> {
+    let arguments = (ins RefType:$ref);
+    let results = (outs RefType:$res);
+    let assemblyFormat = "$ref `:` type($ref) `->` type($res) attr-dict";
+}
 def FilterTaggedPtr : Util_Op<"filter_tagged_ptr",[Pure]> {
     let arguments = (ins RefType:$ref,Index:$hash);
     let results = (outs RefType:$res);

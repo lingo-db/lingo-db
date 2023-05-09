@@ -450,6 +450,9 @@ LogicalResult printOperation(CppEmitter& emitter, util::HashVarLen op) {
 LogicalResult printOperation(CppEmitter& emitter, util::FilterTaggedPtr op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::filterTagged(" << emitter.getOrCreateName(op.getRef()) << "," << emitter.getOrCreateName(op.getHash()) << ")"; });
 }
+LogicalResult printOperation(CppEmitter& emitter, util::UnTagPtr op) {
+   return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::untag(" << emitter.getOrCreateName(op.getRef()) << ")"; });
+}
 LogicalResult printOperation(CppEmitter& emitter, util::BufferCastOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << emitter.getOrCreateName(op.getVal()); });
 }
@@ -1316,7 +1319,7 @@ LogicalResult CppEmitter::emitOperation(Operation& op, bool trailingSemicolon) {
             }
          })
          // SCF ops.
-         .Case<util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp, util::LoadOp, util::StoreOp, util::AllocOp, util::AllocaOp, util::CreateConstVarLen, util::UndefOp, util::BufferCastOp, util::InvalidRefOp, util::IsRefValidOp, util::SizeOfOp, util::PackOp, util::CreateVarLen, util::Hash64, util::HashCombine, util::HashVarLen, util::FilterTaggedPtr, util::BufferGetRef, util::BufferGetLen, util::VarLenCmp, util::VarLenGetLen, util::GetTupleOp, util::VarLenTryCheapHash>(
+         .Case<util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp, util::LoadOp, util::StoreOp, util::AllocOp, util::AllocaOp, util::CreateConstVarLen, util::UndefOp, util::BufferCastOp, util::InvalidRefOp, util::IsRefValidOp, util::SizeOfOp, util::PackOp, util::CreateVarLen, util::Hash64, util::HashCombine, util::HashVarLen, util::FilterTaggedPtr,util::UnTagPtr, util::BufferGetRef, util::BufferGetLen, util::VarLenCmp, util::VarLenGetLen, util::GetTupleOp, util::VarLenTryCheapHash>(
             [&](auto op) { return printOperation(*this, op); })
          .Case<util::ToMemrefOp, memref::AtomicRMWOp>(
             [&](auto op) { return printOperation(*this, op); })

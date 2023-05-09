@@ -228,8 +228,18 @@ class DefaultQueryExecuter : public QueryExecuter {
          }
          performSnapShot(moduleOp);
       }
-      if (!frontend.isParallelismAllowed()) {
+      bool parallelismEnabled = true;
+      size_t numThreads = tbb::info::default_concurrency() / 2;
+      if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
+         if (std::string(mode) == "OFF") {
+            parallelismEnabled = false;
+         } else {
+            numThreads = std::stol(mode);
+         }
+      }
+      if (!frontend.isParallelismAllowed() || !parallelismEnabled) {
          moduleOp->setAttr("subop.sequential", mlir::UnitAttr::get(moduleOp->getContext()));
+         numThreads = 1;
       }
       for (auto& loweringStepPtr : queryExecutionConfig->loweringSteps) {
          auto& loweringStep = *loweringStepPtr;
@@ -242,13 +252,7 @@ class DefaultQueryExecuter : public QueryExecuter {
 
       auto& executionBackend = *queryExecutionConfig->executionBackend;
       executionBackend.setSnapShotCounter(snapShotCounter);
-      size_t numThreads = tbb::info::default_concurrency() / 2;
-      if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
-         numThreads = std::stol(mode);
-      }
-      if (!frontend.isParallelismAllowed()) {
-         numThreads = 1;
-      }
+
       tbb::global_control c(tbb::global_control::max_allowed_parallelism, numThreads);
       int sum = oneapi::tbb::parallel_reduce(
          oneapi::tbb::blocked_range<int>(1, 100000), 0,

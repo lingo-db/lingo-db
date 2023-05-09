@@ -224,7 +224,9 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
       getOperation().walk([&](mlir::relalg::SelectionOp op) {
          auto* terminator = op.getRegion().front().getTerminator();
          mlir::Value val = op.getRel();
-         decomposeSelection(terminator->getOperand(0), val);
+         if(terminator->getNumOperands()>0){
+            decomposeSelection(terminator->getOperand(0), val);
+         }
          op.replaceAllUsesWith(val);
          op->erase();
       });
