@@ -98,7 +98,7 @@ runtime::PreAggregationHashtable* runtime::PreAggregationHashtable::merge(runtim
             if (!merged) {
                auto* loc = reinterpret_cast<Entry**>(localBuffer.insert());
                *loc = curr;
-               auto *previousPtr = ht[pos];
+               auto* previousPtr = ht[pos];
                ht[pos] = runtime::tag(curr, previousPtr, curr->hashValue);
                curr->next = runtime::untag(previousPtr);
             }
@@ -143,8 +143,6 @@ void runtime::PreAggregationHashtable::unlock(Entry* entry, size_t subtract) {
 
 runtime::PreAggregationHashtable::~PreAggregationHashtable() {
    for (auto p : ht) {
-      if (p.hashMask) {
-         runtime::FixedSizedBuffer<Entry*>::deallocate(p.ht, p.hashMask + 1);
-      }
+      runtime::FixedSizedBuffer<Entry*>::deallocate(p.ht, p.hashMask + 1);
    }
 }

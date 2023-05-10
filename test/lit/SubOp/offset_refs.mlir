@@ -28,7 +28,7 @@ module {
          %result_table = subop.create_result_table ["v","b","e","r"] -> !result_table_type
 
         %view = subop.create_continuous_view %vals : !subop.buffer<[val : index]> -> !subop.continuous_view<!subop.buffer<[val : index]>>
-        %stream = subop.scan_refs %view : !subop.continuous_view<!subop.buffer<[val : index]>> @scan::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.buffer<[val : index]>>>})
+        %stream = subop.scan_refs %view : !subop.continuous_view<!subop.buffer<[val : index]>> @scan::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.buffer<[val : index]>>>})  {sequential}
         %stream1 = subop.gather %stream @scan::@ref { val => @scan::@currval({type=index}) }
         %stream2 = subop.get_begin_ref %stream1 %view : !subop.continuous_view<!subop.buffer<[val : index]>> @view::@begin({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.buffer<[val : index]>>>})
         %stream3 = subop.get_end_ref %stream2 %view : !subop.continuous_view<!subop.buffer<[val : index]>> @view::@end({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.buffer<[val : index]>>>})

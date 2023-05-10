@@ -35,7 +35,7 @@ module {
         subop.scatter %stream2 @t::@ref {@t::@c2 => val}
 
         %result_table = subop.create_result_table ["v"] -> !result_table_type
-        %stream4 = subop.scan_refs %view : !subop.continuous_view<!subop.array<[val : index]>> @scan::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[val : index]>>>})
+        %stream4 = subop.scan_refs %view : !subop.continuous_view<!subop.array<[val : index]>> @scan::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[val : index]>>>}) {sequential}
         %stream5 = subop.gather %stream4 @scan::@ref { val => @scan::@currval({type=index}) }
         subop.materialize %stream5 {@scan::@currval => v}, %result_table : !result_table_type
         subop.set_result 0 %result_table  : !result_table_type

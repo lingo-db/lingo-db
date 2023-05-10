@@ -39,7 +39,7 @@ module {
                                     %added = arith.addi %left, %right : index
                                     tuples.return %added : index
                                 }
-        %stream = subop.scan_refs %view : !c_v @scan::@ref({type=!c_v_e_r})
+        %stream = subop.scan_refs %view : !c_v @scan::@ref({type=!c_v_e_r})  {sequential}
         %stream1 = subop.gather %stream @scan::@ref { val => @scan::@currval({type=index}) }
         %stream2 = subop.get_begin_ref %stream1 %view : !c_v @view::@begin({type=!c_v_e_r})
         %stream3 = subop.lookup %stream2 %segment_tree_view[@view::@begin,@scan::@ref] :  !subop.segment_tree_view<[from : !c_v_e_r, to : !c_v_e_r],[sum : index]>  @st::@ref({type=!subop.lookup_entry_ref<!subop.segment_tree_view<[from : !c_v_e_r, to : !c_v_e_r],[sum : index]>>})

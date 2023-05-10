@@ -1713,36 +1713,37 @@ class ScanRefsContinuousViewLowering : public SubOpConversionPattern<mlir::subop
 
    LogicalResult matchAndRewrite(mlir::subop::ScanRefsOp scanOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       if (!scanOp.getState().getType().isa<mlir::subop::ContinuousViewType>()) return failure();
-      /*if (scanOp->hasAttr("parallel")) {
+      if (scanOp->hasAttr("parallel")) {
          StateContext stateContext(scanOp, *typeConverter);
          if (!stateContext.anyNonPointer && !stateContext.anyTuple) {
             ColumnMapping mapping;
             auto loc = scanOp->getLoc();
-            auto bufferType=adaptor.getState().getType().cast<mlir::util::BufferType>();
+            auto bufferType = adaptor.getState().getType().cast<mlir::util::BufferType>();
             mlir::Value typeSize = rewriter.create<mlir::util::SizeOfOp>(scanOp->getLoc(), rewriter.getIndexType(), typeConverter->convertType(bufferType.getT()));
 
-            auto it = rt::Buffer::createIterator(rewriter, loc)({adaptor.getState(),typeSize})[0];
             auto* ctxt = rewriter.getContext();
-            ModuleOp parentModule = it.getDefiningOp()->getParentOfType<ModuleOp>();
+            ModuleOp parentModule = typeSize.getDefiningOp()->getParentOfType<ModuleOp>();
             mlir::func::FuncOp funcOp;
             static size_t funcIds;
             auto ptrType = mlir::util::RefType::get(ctxt, IntegerType::get(ctxt, 8));
             auto plainBufferType = mlir::util::BufferType::get(ctxt, mlir::IntegerType::get(ctxt, 8));
             rewriter.atStartOf(parentModule.getBody(), [&](SubOpRewriter& rewriter) {
-               funcOp = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "scan_cv_func" + std::to_string(funcIds++), mlir::FunctionType::get(ctxt, TypeRange{plainBufferType, ptrType}, TypeRange()));
+               funcOp = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "scan_cv_func" + std::to_string(funcIds++), mlir::FunctionType::get(ctxt, TypeRange{plainBufferType, rewriter.getI64Type(), rewriter.getI64Type(), ptrType}, TypeRange()));
             });
             auto* funcBody = new Block;
             mlir::Value buffer = funcBody->addArgument(plainBufferType, loc);
+            mlir::Value startPos = funcBody->addArgument(rewriter.getI64Type(), loc);
+            mlir::Value endPos = funcBody->addArgument(rewriter.getI64Type(), loc);
+
             mlir::Value contextPtr = funcBody->addArgument(ptrType, loc);
             funcOp.getBody().push_back(funcBody);
             rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
                stateContext.load(rewriter, contextPtr);
                auto castedBuffer = rewriter.create<mlir::util::BufferCastOp>(loc, bufferType, buffer);
-
-               auto zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+               startPos=rewriter.create<mlir::arith::IndexCastOp>(loc,rewriter.getIndexType(),startPos);
+               endPos=rewriter.create<mlir::arith::IndexCastOp>(loc,rewriter.getIndexType(),endPos);
                auto one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
-               auto length = rewriter.create<mlir::util::BufferGetLen>(loc, rewriter.getIndexType(), castedBuffer);
-               auto forOp = rewriter.create<mlir::scf::ForOp>(scanOp->getLoc(), zero, length, one);
+               auto forOp = rewriter.create<mlir::scf::ForOp>(scanOp->getLoc(), startPos, endPos, one);
                mlir::Block* block = forOp.getBody();
                rewriter.atStartOf(block, [&](SubOpRewriter& rewriter) {
                   auto pair = rewriter.create<mlir::util::PackOp>(loc, mlir::ValueRange{forOp.getInductionVar(), castedBuffer});
@@ -1753,10 +1754,10 @@ class ScanRefsContinuousViewLowering : public SubOpConversionPattern<mlir::subop
             });
             Value functionPointer = rewriter.create<mlir::func::ConstantOp>(loc, funcOp.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.getSymName())));
             Value parallelConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, true, rewriter.getI1Type());
-            rt::BufferIterator::iterate(rewriter, loc)({it, parallelConst, functionPointer, stateContext.store(rewriter)});
+            rt::Buffer::iterate(rewriter, loc)({parallelConst,adaptor.getState(), typeSize, functionPointer, stateContext.store(rewriter)});
             return mlir::success();
          }
-      }*/
+      }
       ColumnMapping mapping;
       auto loc = scanOp->getLoc();
       auto zero = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);

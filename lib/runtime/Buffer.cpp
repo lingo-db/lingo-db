@@ -79,40 +79,19 @@ void runtime::BufferIterator::iterate(runtime::BufferIterator* iterator, bool pa
    iterator->iterateEfficient(parallel, forEachChunk, contextPtr);
 }
 
-class PlainBufferIterator : public runtime::BufferIterator {
-   runtime::Buffer buffer;
-   size_t typeSize;
-   bool valid;
+void runtime::Buffer::iterate(bool parallel, runtime::Buffer buffer, size_t typeSize, void (*forEachChunk)(runtime::Buffer, size_t, size_t, void*), void* contextPtr) {
+   size_t len = buffer.numElements / typeSize;
 
-   public:
-   PlainBufferIterator(runtime::Buffer buffer, size_t typeSize) : buffer(buffer), typeSize(std::max(1ul, typeSize)), valid(true) {}
-   bool isValid() override {
-      return valid;
-   }
-   void next() override {
-      valid = false;
-   }
-   runtime::Buffer getCurrentBuffer() override {
-      return buffer;
-   }
-   void iterateEfficient(bool parallel, void (*forEachChunk)(runtime::Buffer, void*), void* contextPtr) override {
-      size_t len = buffer.numElements / typeSize;
+   auto range = tbb::blocked_range<size_t>(0, len);
 
-      auto range = tbb::blocked_range<size_t>(0, len);
-
-      if (parallel) {
-         tbb::parallel_for(range, [&](tbb::blocked_range<size_t> r) {
-            utility::Tracer::Trace trace(iterateEvent);
-            trace.setMetaData(r.size());
-            forEachChunk(runtime::Buffer{r.size() * typeSize, buffer.ptr + r.begin() * typeSize}, contextPtr);
-            trace.stop();
-         });
-      } else {
-         forEachChunk(buffer, contextPtr);
-      }
+   if (parallel) {
+      tbb::parallel_for(range, [&](tbb::blocked_range<size_t> r) {
+         utility::Tracer::Trace trace(iterateEvent);
+         trace.setMetaData(r.size());
+         forEachChunk(buffer, r.begin(), r.end(), contextPtr);
+         trace.stop();
+      });
+   } else {
+      forEachChunk(buffer, 0, buffer.numElements / typeSize, contextPtr);
    }
-};
-
-runtime::BufferIterator* runtime::Buffer::createIterator(runtime::Buffer buffer, size_t typeSize) {
-   return new PlainBufferIterator(buffer, typeSize);
 }

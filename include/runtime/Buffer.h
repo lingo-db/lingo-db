@@ -16,20 +16,20 @@ struct Buffer {
    size_t numElements;
    uint8_t* ptr;
    static Buffer createZeroed(runtime::ExecutionContext* executionContext, size_t bytes);
-   static BufferIterator* createIterator(Buffer,size_t typeSize);
+   static void iterate(bool parallel, Buffer, size_t typeSize, void (*forEachChunk)(Buffer, size_t, size_t, void*), void* contextPtr);
 };
 struct BufferIterator {
    virtual bool isValid() = 0;
    virtual void next() = 0;
 
    virtual Buffer getCurrentBuffer() = 0;
-   virtual void iterateEfficient(bool parallel,void (*forEachChunk)(Buffer, void*), void*)=0;
+   virtual void iterateEfficient(bool parallel, void (*forEachChunk)(Buffer, void*), void*) = 0;
    static bool isIteratorValid(BufferIterator* iterator);
    static void iteratorNext(BufferIterator* iterator);
 
    static Buffer iteratorGetCurrentBuffer(BufferIterator* iterator);
    static void destroy(BufferIterator* iterator);
-   static void iterate(BufferIterator* iterator,bool parallel, void (*forEachChunk)(Buffer, void*), void*);
+   static void iterate(BufferIterator* iterator, bool parallel, void (*forEachChunk)(Buffer, void*), void*);
    virtual ~BufferIterator() {}
 };
 class FlexibleBuffer {
