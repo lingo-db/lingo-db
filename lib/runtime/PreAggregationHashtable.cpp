@@ -33,6 +33,13 @@ runtime::PreAggregationHashtableFragment* runtime::PreAggregationHashtableFragme
    context->registerState({fragment, [](void* ptr) { delete reinterpret_cast<PreAggregationHashtableFragment*>(ptr); }});
    return fragment;
 }
+runtime::PreAggregationHashtableFragment::~PreAggregationHashtableFragment() {
+   for(size_t i=0;i<numOutputs;i++){
+      if(outputs[i]){
+         delete outputs[i];
+      }
+   }
+}
 runtime::PreAggregationHashtable* runtime::PreAggregationHashtable::merge(runtime::ExecutionContext* context, runtime::ThreadLocal* threadLocal, bool (*eq)(uint8_t*, uint8_t*), void (*combine)(uint8_t*, uint8_t*)) {
    utility::Tracer::Trace trace(mergeEvent);
    constexpr size_t htShift = 6; //2^6=64

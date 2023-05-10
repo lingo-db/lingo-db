@@ -27,14 +27,16 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
             }
          }
       }
-      op->walk([&](mlir::Operation* nested) {
-         if (nested != op) {
-            auto isStreamType = [](mlir::Type t) { return t.isa<mlir::tuples::TupleStreamType>(); };
-            if (llvm::none_of(nested->getOperandTypes(), isStreamType) && llvm::any_of(nested->getResultTypes(), isStreamType)) {
-               collectPipelineOperations(ops, nested);
+      if (!mlir::isa<mlir::subop::ReduceOp>(op)) {
+         op->walk([&](mlir::Operation* nested) {
+            if (nested != op) {
+               auto isStreamType = [](mlir::Type t) { return t.isa<mlir::tuples::TupleStreamType>(); };
+               if (llvm::none_of(nested->getOperandTypes(), isStreamType) && llvm::any_of(nested->getResultTypes(), isStreamType)) {
+                  collectPipelineOperations(ops, nested);
+               }
             }
-         }
-      });
+         });
+      }
    }
    struct ToThreadLocalInfo {
       mlir::Region* combineRegion = nullptr;
@@ -43,7 +45,6 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
       bool requiresCombine = false;
    };
    void runOnOperation() override {
-      //getOperation()->dump();
       auto columnCreationAnalysis = getAnalysis<mlir::subop::ColumnCreationAnalysis>();
       std::unordered_map<mlir::Operation*, ToThreadLocalInfo> toThreadLocalsGlobal;
       std::vector<std::pair<mlir::tuples::ColumnRefAttr, std::vector<mlir::Operation*>>> toLockGlobal;
@@ -87,6 +88,15 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                std::unordered_set<mlir::Operation*> markAsAtomic;
 
                collectPipelineOperations(pipelineOps, op, true);
+               std::vector<mlir::Operation*> uniquePipelineOpsOrdered;
+               std::unordered_set<mlir::Operation*> uniquePipelineOps;
+               for(auto *op:pipelineOps){
+                  if(!uniquePipelineOps.contains(op)){
+                     uniquePipelineOps.insert(op);
+                     uniquePipelineOpsOrdered.push_back(op);
+                  }
+               }
+               pipelineOps=uniquePipelineOpsOrdered;
                bool canBeParallel = true;
                auto isNested = [&](mlir::Value v) {
                   if (auto* def = v.getDefiningOp()) {
@@ -155,17 +165,17 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                         continue;
                      }
                   } else if (auto lookupOrInsertOp = mlir::dyn_cast_or_null<mlir::subop::LookupOrInsertOp>(pipelineOp)) {
-                     if (getCollisions().empty()) {
-                        if (!isNested(lookupOrInsertOp.getState())) {
+                     if (!isNested(lookupOrInsertOp.getState())) {
+                        if (getCollisions().empty()) {
                            if (auto* createOp = lookupOrInsertOp.getState().getDefiningOp()) {
                               toThreadLocals[createOp].compareRegion = &lookupOrInsertOp.getEqFn();
                               toThreadLocals[createOp].shouldUse.push_back(lookupOrInsertOp);
                               toThreadLocals[createOp].requiresCombine = true;
                               continue;
                            }
-                        } else {
-                           continue;
                         }
+                     } else {
+                        continue;
                      }
                   } else if (mlir::isa<mlir::subop::GatherOp, mlir::subop::ScanRefsOp>(pipelineOp)) {
                      if (getCollisions().empty()) {
@@ -268,7 +278,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                         toThreadLocalsGlobal.insert(l);
                      }
                   }
-                  for (auto *mA : markAsAtomic) {
+                  for (auto* mA : markAsAtomic) {
                      mA->setAttr("atomic", mlir::UnitAttr::get(&getContext()));
                   }
                   for (auto l : toLock) {

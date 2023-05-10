@@ -382,8 +382,12 @@ class MaterializationHelper {
       return mlir::subop::StateMembersAttr::get(context, mlir::ArrayAttr::get(context, localNames), mlir::ArrayAttr::get(context, localTypes));
    }
 
-   mlir::DictionaryAttr createStateColumnMapping(std::vector<mlir::NamedAttribute> additional = {}) {
-      additional.insert(additional.end(), defMapping.begin(), defMapping.end());
+   mlir::DictionaryAttr createStateColumnMapping(std::vector<mlir::NamedAttribute> additional = {}, std::unordered_set<std::string> excludedMembers = {}) {
+      for (auto x : defMapping) {
+         if (!excludedMembers.contains(x.getName().str())) {
+            additional.push_back(x);
+         }
+      }
       return mlir::DictionaryAttr::get(context, additional);
    }
    mlir::DictionaryAttr createColumnstateMapping(std::vector<mlir::NamedAttribute> additional = {}) {
@@ -667,8 +671,8 @@ class CountingSetOperationLowering : public ConversionPattern {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(reduceBlock);
             mlir::Value constOne = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(1));
-            currCounter=rewriter.create<mlir::arith::AddIOp>(loc, currCounter, constOne);
-            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({currCounter,otherCounter}));
+            currCounter = rewriter.create<mlir::arith::AddIOp>(loc, currCounter, constOne);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({currCounter, otherCounter}));
             reduceOp.getRegion().push_back(reduceBlock);
          }
          {
@@ -679,9 +683,9 @@ class CountingSetOperationLowering : public ConversionPattern {
             mlir::Value counter2B = combineBlock->addArgument(rewriter.getI64Type(), loc);
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(combineBlock);
-            mlir::Value counter1=rewriter.create<mlir::arith::AddIOp>(loc, counter1A, counter1B);
-            mlir::Value counter2=rewriter.create<mlir::arith::AddIOp>(loc, counter2A, counter2B);
-            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({counter1,counter2}));
+            mlir::Value counter1 = rewriter.create<mlir::arith::AddIOp>(loc, counter1A, counter1B);
+            mlir::Value counter2 = rewriter.create<mlir::arith::AddIOp>(loc, counter2A, counter2B);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({counter1, counter2}));
             reduceOp.getCombine().push_back(combineBlock);
          }
       }
@@ -698,8 +702,8 @@ class CountingSetOperationLowering : public ConversionPattern {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(reduceBlock);
             mlir::Value constOne = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(1));
-            currCounter=rewriter.create<mlir::arith::AddIOp>(loc, currCounter, constOne);
-            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({otherCounter,currCounter}));
+            currCounter = rewriter.create<mlir::arith::AddIOp>(loc, currCounter, constOne);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({otherCounter, currCounter}));
             reduceOp.getRegion().push_back(reduceBlock);
          }
          {
@@ -710,9 +714,9 @@ class CountingSetOperationLowering : public ConversionPattern {
             mlir::Value counter2B = combineBlock->addArgument(rewriter.getI64Type(), loc);
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(combineBlock);
-            mlir::Value counter1=rewriter.create<mlir::arith::AddIOp>(loc, counter1A, counter1B);
-            mlir::Value counter2=rewriter.create<mlir::arith::AddIOp>(loc, counter2A, counter2B);
-            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({counter1,counter2}));
+            mlir::Value counter1 = rewriter.create<mlir::arith::AddIOp>(loc, counter1A, counter1B);
+            mlir::Value counter2 = rewriter.create<mlir::arith::AddIOp>(loc, counter2A, counter2B);
+            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange({counter1, counter2}));
             reduceOp.getCombine().push_back(combineBlock);
          }
       }
@@ -1032,7 +1036,7 @@ static std::pair<mlir::Value, mlir::Value> translateNLJWithMarker(mlir::Value le
       referenceDefAttr.getColumn().type = mlir::subop::EntryRefType::get(rewriter.getContext(), vectorType);
       mlir::Value scan = rewriter.create<mlir::subop::ScanRefsOp>(loc, vector, referenceDefAttr);
 
-      mlir::Value gathered = rewriter.create<mlir::subop::GatherOp>(loc, scan, colManager.createRef(&referenceDefAttr.getColumn()), helper.createStateColumnMapping());
+      mlir::Value gathered = rewriter.create<mlir::subop::GatherOp>(loc, scan, colManager.createRef(&referenceDefAttr.getColumn()), helper.createStateColumnMapping({}, {flagMember}));
       mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, gathered, tuple);
       auto res = fn(combined, tuple, rewriter, colManager.createRef(&referenceDefAttr.getColumn()), flagMember);
       if (res) {
@@ -1073,7 +1077,7 @@ static std::pair<mlir::Value, mlir::Value> translateHJWithMarker(mlir::Value lef
       mlir::OpBuilder::InsertionGuard guard(rewriter);
       rewriter.setInsertionPointToStart(b);
       mlir::Value scan = rewriter.create<mlir::subop::ScanListOp>(loc, list, entryDef);
-      mlir::Value gathered = rewriter.create<mlir::subop::GatherOp>(loc, scan, entryRef, keyHelper.createStateColumnMapping(valueHelper.createStateColumnMapping().getValue()));
+      mlir::Value gathered = rewriter.create<mlir::subop::GatherOp>(loc, scan, entryRef, keyHelper.createStateColumnMapping(valueHelper.createStateColumnMapping({}, {flagMember}).getValue()));
       mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, gathered, tuple);
       auto res = fn(combined, tuple, rewriter, entryRef, flagMember);
       if (res) {
@@ -2079,6 +2083,7 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
             rewriter.setInsertionPointToStart(initialValueBlock);
             std::vector<mlir::Value> defaultValues;
             mlir::Value buffer = rewriter.create<mlir::subop::GenericCreateOp>(loc, bufferType);
+            buffer.getDefiningOp()->setAttr("initial_capacity",rewriter.getI64IntegerAttr(16));
             rewriter.create<mlir::tuples::ReturnOp>(loc, buffer);
          }
          lookupOp.getInitFn().push_back(initialValueBlock);
@@ -2111,6 +2116,19 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
             rewriter.create<mlir::subop::MaterializeOp>(loc, stream, currentBuffer, helper.createColumnstateMapping());
             rewriter.create<mlir::tuples::ReturnOp>(loc, currentBuffer);
             reduceOp.getRegion().push_back(reduceBlock);
+         }
+         {
+            mlir::Block* combineBlock = new Block;
+            mlir::Value currentBuffer = combineBlock->addArgument(bufferType, loc);
+            mlir::Value otherBuffer = combineBlock->addArgument(bufferType, loc);
+
+            mlir::OpBuilder::InsertionGuard guard(rewriter);
+            rewriter.setInsertionPointToStart(combineBlock);
+            std::vector<mlir::Value> newStateValues;
+            auto scan = rewriter.create<mlir::subop::ScanOp>(loc, otherBuffer, helper.createStateColumnMapping());
+            rewriter.create<mlir::subop::MaterializeOp>(loc, scan.getRes(), currentBuffer, helper.createColumnstateMapping());
+            rewriter.create<mlir::tuples::ReturnOp>(loc, currentBuffer);
+            reduceOp.getCombine().push_back(combineBlock);
          }
          mlir::Value newStream = rewriter.create<mlir::subop::ScanOp>(loc, hashMap, rewriter.getDictionaryAttr(defMapping));
          auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), newStream, rewriter.getArrayAttr({bufferRef}));

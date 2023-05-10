@@ -22,6 +22,7 @@ class PreAggregationHashtableFragment {
    PreAggregationHashtableFragment(size_t typeSize) : ht(), typeSize(typeSize), len(0), outputs() {}
    static PreAggregationHashtableFragment* create(runtime::ExecutionContext* context, size_t typeSize);
    Entry* insert(size_t hash);
+   ~PreAggregationHashtableFragment();
 };
 class PreAggregationHashtable {
    using Entry=PreAggregationHashtableFragment::Entry;

@@ -900,7 +900,7 @@ class CreateBufferLowering : public SubOpConversionPattern<mlir::subop::GenericC
       if (!bufferType) return failure();
       auto loc = createOp->getLoc();
       EntryStorageHelper storageHelper(bufferType.getMembers(), typeConverter);
-      Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(loc, 1024);
+      Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(loc, createOp->hasAttr("initial_capacity")?createOp->getAttr("initial_capacity").cast<mlir::IntegerAttr>().getInt(): 1024);
       auto elementType = storageHelper.getStorageType();
       auto typeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), elementType);
       mlir::Value vector = rt::GrowingBuffer::create(rewriter, loc)({getExecutionContext(rewriter, createOp), typeSize, initialCapacity})[0];
@@ -1149,6 +1149,12 @@ class MergeThreadLocalSimpleState : public SubOpConversionPattern<mlir::subop::M
             std::vector<mlir::Value> args;
             args.insert(args.end(), leftValues.begin(), leftValues.end());
             args.insert(args.end(), rightValues.begin(), rightValues.end());
+            for (size_t i = 0; i < args.size(); i++) {
+               auto expectedType = mergeOp.getCombineFn().front().getArgument(i).getType();
+               if (args[i].getType() != expectedType) {
+                  args[i] = rewriter.create<mlir::UnrealizedConversionCastOp>(loc, expectedType, args[i]).getResult(0);
+               }
+            }
             Block* sortLambda = &mergeOp.getCombineFn().front();
             rewriter.inlineBlock<mlir::tuples::ReturnOpAdaptor>(sortLambda, args, [&](mlir::tuples::ReturnOpAdaptor adaptor) {
                storageHelper.storeOrderedValues(dest, adaptor.getResults(), rewriter, loc);
@@ -1204,6 +1210,12 @@ class MergeThreadLocalHashMap : public SubOpConversionPattern<mlir::subop::Merge
                std::vector<mlir::Value> args;
                args.insert(args.end(), leftValues.begin(), leftValues.end());
                args.insert(args.end(), rightValues.begin(), rightValues.end());
+               for (size_t i = 0; i < args.size(); i++) {
+                  auto expectedType = mergeOp.getCombineFn().front().getArgument(i).getType();
+                  if (args[i].getType() != expectedType) {
+                     args[i] = rewriter.create<mlir::UnrealizedConversionCastOp>(loc, expectedType, args[i]).getResult(0);
+                  }
+               }
                Block* sortLambda = &mergeOp.getCombineFn().front();
                rewriter.inlineBlock<mlir::tuples::ReturnOpAdaptor>(sortLambda, args, [&](mlir::tuples::ReturnOpAdaptor adaptor) {
                   valStorageHelper.storeOrderedValues(dest, adaptor.getResults(), rewriter, loc);
@@ -1276,6 +1288,12 @@ class MergePreAggrHashMap : public SubOpConversionPattern<mlir::subop::MergeOp> 
                std::vector<mlir::Value> args;
                args.insert(args.end(), leftValues.begin(), leftValues.end());
                args.insert(args.end(), rightValues.begin(), rightValues.end());
+               for (size_t i = 0; i < args.size(); i++) {
+                  auto expectedType = mergeOp.getCombineFn().front().getArgument(i).getType();
+                  if (args[i].getType() != expectedType) {
+                     args[i] = rewriter.create<mlir::UnrealizedConversionCastOp>(loc, expectedType, args[i]).getResult(0);
+                  }
+               }
                Block* sortLambda = &mergeOp.getCombineFn().front();
                rewriter.inlineBlock<mlir::tuples::ReturnOpAdaptor>(sortLambda, args, [&](mlir::tuples::ReturnOpAdaptor adaptor) {
                   valStorageHelper.storeOrderedValues(dest, adaptor.getResults(), rewriter, loc);
@@ -1299,7 +1317,6 @@ class MergePreAggrHashMap : public SubOpConversionPattern<mlir::subop::MergeOp> 
             rewriter.create<mlir::func::ReturnOp>(loc, res);
          });
       }
-
       Value combineFnPtr = rewriter.create<mlir::func::ConstantOp>(loc, combineFn.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(combineFn.getSymName())));
       Value eqFnPtr = rewriter.create<mlir::func::ConstantOp>(loc, eqFn.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(eqFn.getSymName())));
       mlir::Value merged = rt::PreAggregationHashtable::merge(rewriter, mergeOp->getLoc())(mlir::ValueRange{getExecutionContext(rewriter, mergeOp), adaptor.getThreadLocal(), eqFnPtr, combineFnPtr})[0];
@@ -1740,8 +1757,8 @@ class ScanRefsContinuousViewLowering : public SubOpConversionPattern<mlir::subop
             rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
                stateContext.load(rewriter, contextPtr);
                auto castedBuffer = rewriter.create<mlir::util::BufferCastOp>(loc, bufferType, buffer);
-               startPos=rewriter.create<mlir::arith::IndexCastOp>(loc,rewriter.getIndexType(),startPos);
-               endPos=rewriter.create<mlir::arith::IndexCastOp>(loc,rewriter.getIndexType(),endPos);
+               startPos = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), startPos);
+               endPos = rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), endPos);
                auto one = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
                auto forOp = rewriter.create<mlir::scf::ForOp>(scanOp->getLoc(), startPos, endPos, one);
                mlir::Block* block = forOp.getBody();
@@ -1754,7 +1771,7 @@ class ScanRefsContinuousViewLowering : public SubOpConversionPattern<mlir::subop
             });
             Value functionPointer = rewriter.create<mlir::func::ConstantOp>(loc, funcOp.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.getSymName())));
             Value parallelConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, true, rewriter.getI1Type());
-            rt::Buffer::iterate(rewriter, loc)({parallelConst,adaptor.getState(), typeSize, functionPointer, stateContext.store(rewriter)});
+            rt::Buffer::iterate(rewriter, loc)({parallelConst, adaptor.getState(), typeSize, functionPointer, stateContext.store(rewriter)});
             return mlir::success();
          }
       }
