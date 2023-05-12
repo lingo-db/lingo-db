@@ -2555,8 +2555,8 @@ class GroupJoinLowering : public OpConversionPattern<mlir::relalg::GroupJoinOp> 
          auto leftAttr = std::get<0>(z).cast<mlir::tuples::ColumnRefAttr>();
          if (!storedColumns.contains(&leftAttr.getColumn())) {
             renameLeftDefs.push_back(mlir::tuples::ColumnDefAttr::get(getContext(), leftAttr.getName(), leftAttr.getColumnPtr(), rewriter.getArrayAttr(rightAttr)));
-            renameRightDefs.push_back(mlir::tuples::ColumnDefAttr::get(getContext(), rightAttr.getName(), rightAttr.getColumnPtr(), rewriter.getArrayAttr(leftAttr)));
          }
+         renameRightDefs.push_back(mlir::tuples::ColumnDefAttr::get(getContext(), rightAttr.getName(), rightAttr.getColumnPtr(), rewriter.getArrayAttr(leftAttr)));
       }
       if (!additionalColsDefMapping.empty()) {
          unwrap = rewriter.create<mlir::subop::GatherOp>(loc, unwrap, unwrappedAggrRef, rewriter.getDictionaryAttr(additionalColsDefMapping));

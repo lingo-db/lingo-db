@@ -466,6 +466,7 @@ mlir::relalg::FunctionalDependencies BaseTableOp::getFDs() {
       }
    }
    right.remove(pk);
+   dependencies.setKey(pk);
    dependencies.insert(pk, right);
    return dependencies;
 }
@@ -493,21 +494,38 @@ mlir::relalg::FunctionalDependencies mlir::relalg::SelectionOp::getFDs() {
    }
    return dependencies;
 }
+mlir::relalg::FunctionalDependencies mlir::relalg::AggregationOp::getFDs() {
+   FunctionalDependencies dependencies = getChildren()[0].getFDs();
+   if (!getGroupByCols().empty()) {
+      dependencies.setKey(mlir::relalg::ColumnSet::fromArrayAttr(getGroupByCols()));
+   }
+   return dependencies;
+}
+mlir::relalg::FunctionalDependencies mlir::relalg::SemiJoinOp::getFDs() {
+   return getChildren()[0].getFDs();
+}
+mlir::relalg::FunctionalDependencies mlir::relalg::AntiSemiJoinOp::getFDs() {
+   return getChildren()[0].getFDs();
+}
 mlir::relalg::FunctionalDependencies mlir::relalg::InnerJoinOp::getFDs() {
-   FunctionalDependencies dependencies = mlir::relalg::detail::getFDs(getOperation());
+   FunctionalDependencies leftFds = getChildren()[0].getFDs();
+   FunctionalDependencies rightFds = getChildren()[1].getFDs();
+   FunctionalDependencies newFds;
    if (!getPredicateBlock().empty()) {
-      if(this->getOperation()->hasAttr("leftHash")&&this->getOperation()->hasAttr("rightHash")){
-         auto left=this->getOperation()->getAttr("leftHash").cast<mlir::ArrayAttr>();
-         auto right=this->getOperation()->getAttr("rightHash").cast<mlir::ArrayAttr>();
-         for(auto z:llvm::zip(left,right)){
-            auto *leftColumn=&std::get<0>(z).cast<mlir::tuples::ColumnRefAttr>().getColumn();
-            auto *rightColumn=&std::get<1>(z).cast<mlir::tuples::ColumnRefAttr>().getColumn();
-            mlir::relalg::ColumnSet left;
-            left.insert(leftColumn);
-            mlir::relalg::ColumnSet right;
-            right.insert(rightColumn);
-            dependencies.insert(left, right);
-            dependencies.insert(right, left);
+      if (this->getOperation()->hasAttr("leftHash") && this->getOperation()->hasAttr("rightHash")) {
+         auto left = this->getOperation()->getAttr("leftHash").cast<mlir::ArrayAttr>();
+         auto right = this->getOperation()->getAttr("rightHash").cast<mlir::ArrayAttr>();
+         if (left.size() == right.size()) { //todo remove! only hackish check to avoid bug related to hackish inl implementation
+            for (auto z : llvm::zip(left, right)) {
+               auto* leftColumn = &std::get<0>(z).cast<mlir::tuples::ColumnRefAttr>().getColumn();
+               auto* rightColumn = &std::get<1>(z).cast<mlir::tuples::ColumnRefAttr>().getColumn();
+               mlir::relalg::ColumnSet left;
+               left.insert(leftColumn);
+               mlir::relalg::ColumnSet right;
+               right.insert(rightColumn);
+               newFds.insert(left, right);
+               newFds.insert(right, left);
+            }
          }
       }
       if (auto returnOp = mlir::dyn_cast_or_null<mlir::tuples::ReturnOp>(getPredicateBlock().getTerminator())) {
@@ -520,8 +538,8 @@ mlir::relalg::FunctionalDependencies mlir::relalg::InnerJoinOp::getFDs() {
                         left.insert(&getColLeft.getAttr().getColumn());
                         mlir::relalg::ColumnSet right;
                         right.insert(&getColRight.getAttr().getColumn());
-                        dependencies.insert(left, right);
-                        dependencies.insert(right, left);
+                        newFds.insert(left, right);
+                        newFds.insert(right, left);
                      }
                   }
                }
@@ -529,7 +547,16 @@ mlir::relalg::FunctionalDependencies mlir::relalg::InnerJoinOp::getFDs() {
          }
       }
    }
-   return dependencies;
+   newFds.insert(leftFds);
+   newFds.insert(rightFds);
+   if (leftFds.getKey() && rightFds.getKey()) {
+      if (newFds.expand(leftFds.getKey().value()).intersect(rightFds.getKey().value()).size() == rightFds.getKey().value().size()) {
+         newFds.setKey(leftFds.getKey().value());
+      } else if (newFds.expand(rightFds.getKey().value()).intersect(leftFds.getKey().value()).size() == leftFds.getKey().value().size()) {
+         newFds.setKey(rightFds.getKey().value());
+      }
+   }
+   return newFds;
 }
 ColumnSet mlir::relalg::AggregationOp::getAvailableColumns() {
    ColumnSet available = getCreatedColumns();

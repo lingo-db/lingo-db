@@ -4,8 +4,22 @@ namespace mlir::relalg {
 
 class FunctionalDependencies {
    std::vector<std::pair<mlir::relalg::ColumnSet, mlir::relalg::ColumnSet>> fds;
+   /*
+    * if set, these columns not only determine all other values functionally,
+    * but are also unique (i.e. no other tuple with the same values will
+    * occur in the tuple stream
+    */
+   std::optional<mlir::relalg::ColumnSet> key;
 
    public:
+   FunctionalDependencies() : fds(), key() {}
+
+   void setKey(mlir::relalg::ColumnSet key) {
+      this->key = key;
+   }
+   const std::optional<mlir::relalg::ColumnSet>& getKey() {
+      return key;
+   }
    void insert(const FunctionalDependencies& other) {
       fds.insert(fds.end(), other.fds.begin(), other.fds.end());
    }
@@ -22,7 +36,7 @@ class FunctionalDependencies {
    }
    ColumnSet expand(const ColumnSet& available) {
       ColumnSet result = available;
-      bool didChange = false;
+      bool didChange;
       do {
          ColumnSet local = result;
          for (auto fd : fds) {
@@ -45,6 +59,13 @@ class FunctionalDependencies {
          }
       }
       return res;
+   }
+   bool isDuplicateFreeKey(const ColumnSet& candidate) {
+      if (key) {
+         return key.value().isSubsetOf(expand(candidate));
+      } else {
+         return false;
+      }
    }
 };
 } // namespace mlir::relalg

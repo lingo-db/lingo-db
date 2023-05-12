@@ -233,6 +233,7 @@ def AggregationOp : RelAlg_Op<"aggregation", [Pure,Operator,UnaryOperator]> {
         ColumnSet getAvailableColumns();
         ColumnSet getCreatedColumns();
         bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
+        mlir::relalg::FunctionalDependencies getFDs();
     }];
 }
 
@@ -299,6 +300,7 @@ def SemiJoinOp : RelAlg_JoinOp<"semijoin"> {
         ColumnSet getAvailableColumns();
         mlir::LogicalResult foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo);
         bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
+        mlir::relalg::FunctionalDependencies getFDs();
     }];
 }
 
@@ -309,6 +311,7 @@ def AntiSemiJoinOp : RelAlg_JoinOp<"antisemijoin"> {
         ColumnSet getAvailableColumns();
         mlir::LogicalResult foldColumns(mlir::relalg::ColumnFoldInfo& columnInfo);
         bool canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col);
+        mlir::relalg::FunctionalDependencies getFDs();
     }];
 }
 
