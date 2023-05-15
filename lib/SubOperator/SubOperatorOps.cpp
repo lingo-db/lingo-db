@@ -980,7 +980,7 @@ void subop::ReduceOp::print(OpAsmPrinter& p) {
    }
    p << "])";
    p.printRegion(op.getRegion(), false, true);
-   if(!op.getCombine().empty()) {
+   if (!op.getCombine().empty()) {
       p << "combine: ([";
       bool first = true;
       for (size_t i = 0; i < op.getMembers().size(); i++) {
@@ -1121,12 +1121,18 @@ std::vector<std::string> subop::NestedMapOp::getReadMembers() {
    return res;
 }
 std::vector<std::string> subop::NestedMapOp::getWrittenMembers() {
-   std::vector<std::string> res;
+   std::unordered_set<std::string> res;
    this->getRegion().walk([&](mlir::subop::SubOperator subop) {
       auto written = subop.getWrittenMembers();
-      res.insert(res.end(), written.begin(), written.end());
+      res.insert(written.begin(), written.end());
    });
-   return res;
+   this->getRegion().walk([&](mlir::subop::StateCreator creator) {
+      auto created = creator.getCreatedMembers();
+      for (auto m : created) {
+         res.erase(m);
+      }
+   });
+   return std::vector<std::string>(res.begin(), res.end());
 }
 std::vector<std::string> subop::LoopOp::getReadMembers() {
    std::vector<std::string> res;
@@ -1490,6 +1496,16 @@ void subop::SetTrackedCountOp::updateStateType(mlir::subop::SubOpStateUsageTrans
 
 std::vector<std::string> subop::SetTrackedCountOp::getReadMembers() {
    return {getReadState().str()};
+}
+std::vector<std::string> subop::GenericCreateOp::getCreatedMembers() {
+   if (auto stateType = getRes().getType().cast<mlir::subop::State>()) {
+      std::vector<std::string> res;
+      for (auto m : stateType.getMembers().getNames()) {
+         res.push_back(m.cast<mlir::StringAttr>().str());
+      }
+      return res;
+   }
+   return {};
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"

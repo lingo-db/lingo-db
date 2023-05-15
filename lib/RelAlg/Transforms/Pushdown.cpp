@@ -4,6 +4,8 @@
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
+#include "mlir/Dialect/SubOperator/SubOperatorOps.h"
+
 #include "mlir/Dialect/RelAlg/Transforms/ColumnCreatorAnalysis.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/IR/IRMapping.h"
@@ -193,6 +195,48 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                        }
                        asOp.setChildren({left, right});
                        return asOp;
+                    })
+                    .Case<mlir::relalg::NestedOp>([&](mlir::relalg::NestedOp nestedOp) -> Operator {
+                       auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(nestedOp.getNestedFn().front().getTerminator());
+                       mlir::Value returnedStream = returnOp.getResults()[0];
+                       bool canPushThrough = true;
+                       while (auto* definingOp = returnedStream.getDefiningOp()) {
+                          if (definingOp->hasOneUse() && definingOp->getNumOperands() > 0) {
+                             bool isFirstTupleStream = definingOp->getOperand(0).getType().isa<mlir::tuples::TupleStreamType>();
+                             bool noOtherTupleStream = llvm::none_of(definingOp->getOperands().drop_front(), [](mlir::Value v) { return v.getType().isa<mlir::tuples::TupleStreamType>(); });
+                             if (isFirstTupleStream && noOtherTupleStream) {
+                                returnedStream = definingOp->getOperand(0);
+                             } else {
+                                canPushThrough = false;
+                             }
+                             if (auto subop = mlir::dyn_cast_or_null<mlir::subop::SubOperator>(definingOp)) {
+                                if (!subop.getWrittenMembers().empty()) {
+                                   canPushThrough = false;
+                                }
+                             }
+                          } else {
+                             canPushThrough = false;
+                          }
+                       }
+                       if (canPushThrough) {
+                          for (size_t i = 0; i < nestedOp.getNumOperands(); i++) {
+                             if (returnedStream == nestedOp.getNestedFn().getArgument(i)) {
+                                bool allColumnsAvailable = true;
+                                auto candidate = mlir::cast<Operator>(nestedOp->getOperand(i).getDefiningOp());
+                                for (const auto* c : usedAttributes) {
+                                   allColumnsAvailable &= columnCreatorAnalysis.getCreator(c).canColumnReach(Operator{}, candidate, c);
+                                }
+                                if (allColumnsAvailable) {
+                                   topush->moveBefore(candidate.getOperation());
+                                   Operator pushedDown = pushdown(topush, candidate, columnCreatorAnalysis);
+                                   nestedOp.setOperand(i, pushedDown.asRelation());
+                                   return nestedOp;
+                                }
+                             }
+                          }
+                       }
+                       topush.setChildren({nestedOp});
+                       return topush;
                     })
                     .Default([&](Operator others) {
                        topush.setChildren({others});

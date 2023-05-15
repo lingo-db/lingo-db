@@ -42,6 +42,22 @@ def StateUsingSubOperator : OpInterface<"StateUsingSubOperator"> {
   ];
 
 }
+def StateCreator : OpInterface<"StateCreator"> {
+  let cppNamespace = "::mlir::subop";
+
+    let methods = [
+      InterfaceMethod<
+        /*description=*/"",
+        /*retTy=*/"std::vector<std::string>",
+        /*methodName=*/"getCreatedMembers",(ins ),"",
+         /*defaultImplementation=*/[{
+             return {};
+         }]
+      >
+  ];
+
+}
+
 def LookupAbleState : TypeInterface<"LookupAbleState"> {
   let cppNamespace = "::mlir::subop";
   let methods = [

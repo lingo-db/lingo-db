@@ -526,10 +526,13 @@ def CreateHeapOp : SubOperator_Op<"create_heap", [Pure]> {
     let hasCustomAssemblyFormat = 1;
 }
 
-def GenericCreateOp : SubOperator_Op<"create", [Pure]> {
+def GenericCreateOp : SubOperator_Op<"create", [Pure,StateCreator]> {
     let summary = "create new state";
     let results = (outs AnyType : $res);
     let assemblyFormat = [{ type($res) attr-dict }];
+      let extraClassDeclaration = [{
+          std::vector<std::string> getCreatedMembers();
+          }];
 }
 def CreateArrayOp : SubOperator_Op<"create_array", [Pure,SubOperator]> {
     let summary = "create new state";
