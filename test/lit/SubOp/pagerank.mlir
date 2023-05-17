@@ -99,8 +99,8 @@ module{
         %initialWeights = subop.create_array %numVertices : !subop.simple_state<[numVertices:index]> -> !subop.array<[initialRank : f64, initialL: i32]>
         %initialWeightsView = subop.create_continuous_view %initialWeights : !subop.array<[initialRank : f64, initialL: i32]> -> !subop.continuous_view<!subop.array<[initialRank : f64, initialL: i32]>>
         %iStream1 = subop.scan %edges :!subop.buffer<[edgeFrom : i32, edgeTo : i32]> {edgeFrom => @edge::@from1({type=i32}),edgeTo => @edge::@to1({type=i32})}
-        %iStream2 = subop.get_begin_ref %iStream1 %initialWeightsView :!subop.continuous_view<!subop.array<[initialRank : f64, initialL: i32]>> @view::@begin({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[initialRank : f64, initialL: i32]>>>})
-        %iStream3 = subop.offset_ref_by %iStream2 @view::@begin @edge::@from1 @view::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[initialRank : f64, initialL: i32]>>>})
+        %iStream2 = subop.get_begin_ref %iStream1 %initialWeightsView :!subop.continuous_view<!subop.array<[initialRank : f64, initialL: i32]>> @view::@begin({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[initialRank : f64, initialL: i32]>>>})
+        %iStream3 = subop.offset_ref_by %iStream2 @view::@begin @edge::@from1 @view::@ref({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[initialRank : f64, initialL: i32]>>>})
         %iStream4 = subop.lookup %iStream3 %numVertices[] : !subop.simple_state<[numVertices:index]> @numVertices::@ref2({type=!subop.entry_ref<!subop.simple_state<[numVertices:index]>>})
         %iStream5 = subop.gather %iStream4 @numVertices::@ref2 {numVertices => @numVertices::@val2({type=index})}
        subop.reduce %iStream5 @view::@ref [@numVertices::@val2] ["initialRank","initialL"] ([%totalVertices],[%currRank, %currL]){
@@ -121,7 +121,7 @@ module{
                 %nextWeights = subop.create_array %numVertices : !subop.simple_state<[numVertices:index]> -> !subop.array<[nextRank: f64,nextL : i32]>
                 %weightsView = subop.create_continuous_view %weights : !subop.array<[rank : f64, l: i32]> -> !subop.continuous_view<!subop.array<[rank : f64, l: i32]>>
                 %nextWeightsView = subop.create_continuous_view %nextWeights : !subop.array<[nextRank: f64,nextL : i32]> -> !subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>>
-                %iLStream1 = subop.scan_refs %nextWeightsView : !subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>> @nextWeightsView::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>>>})
+                %iLStream1 = subop.scan_refs %nextWeightsView : !subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>> @nextWeightsView::@ref({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>>>})
                 %iLStream2 = subop.lookup %iLStream1 %numVertices[] : !subop.simple_state<[numVertices:index]> @numVertices::@ref3({type=!subop.entry_ref<!subop.simple_state<[numVertices:index]>>})
                 %iLStream3 = subop.gather %iLStream2 @numVertices::@ref3 {numVertices => @numVertices::@val3({type=index})}
                 %iLStream4 = subop.map %iLStream3 computes: [@m::@initialRank({type=f64})] (%tpl: !tuples.tuple){
@@ -132,18 +132,18 @@ module{
                     %initialRank = arith.divf %c15,%totalVerticesf : f64
                     tuples.return %initialRank : f64
                 }
-                %iLStream5 = subop.get_begin_ref %iLStream4 %nextWeightsView :!subop.continuous_view<!subop.array<[nextRank : f64, nextL: i32]>> @nextWeightsView::@begin({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[nextRank : f64, nextL: i32]>>>})
+                %iLStream5 = subop.get_begin_ref %iLStream4 %nextWeightsView :!subop.continuous_view<!subop.array<[nextRank : f64, nextL: i32]>> @nextWeightsView::@begin({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[nextRank : f64, nextL: i32]>>>})
                 %iLStream6 =  subop.entries_between %iLStream5 @nextWeightsView::@begin @nextWeightsView::@ref @nextWeightsView::@id({type=index})
-                %iLStream7 = subop.get_begin_ref %iLStream6 %weightsView :!subop.continuous_view<!subop.array<[rank : f64, l: i32]>> @weightsView::@begin({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[rank : f64, l: i32]>>>})
-                %iLStream8 = subop.offset_ref_by %iLStream7 @weightsView::@begin @nextWeightsView::@id @weights::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[rank : f64, l: i32]>>>})
+                %iLStream7 = subop.get_begin_ref %iLStream6 %weightsView :!subop.continuous_view<!subop.array<[rank : f64, l: i32]>> @weightsView::@begin({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[rank : f64, l: i32]>>>})
+                %iLStream8 = subop.offset_ref_by %iLStream7 @weightsView::@begin @nextWeightsView::@id @weights::@ref({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[rank : f64, l: i32]>>>})
                 %iLStream9 = subop.gather %iLStream8 @weights::@ref {l => @weights::@l({type=i32})}
                 subop.scatter %iLStream9 @nextWeightsView::@ref { @m::@initialRank => nextRank, @weights::@l => nextL }
                 %hashmap = subop.create !subop.hashmap<[centroidId : i32],[sumX : f64, sumY : f64, count : i32]>
                 %stream1 = subop.scan %edges :!subop.buffer<[edgeFrom : i32, edgeTo : i32]> {edgeFrom => @edge::@from({type=i32}),edgeTo => @edge::@to({type=i32})} {attr="1"}
-                %stream2 = subop.get_begin_ref %stream1 %weightsView :!subop.continuous_view<!subop.array<[rank : f64, l: i32]>> @weightsView::@begin({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[rank : f64, l: i32]>>>})
-                %stream3 = subop.offset_ref_by %stream2 @weightsView::@begin @edge::@from @from::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[rank : f64, l: i32]>>>})
-                %stream4 = subop.get_begin_ref %stream3 %nextWeightsView :!subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>> @nextWeightsView::@begin({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>>>})
-                %stream5 = subop.offset_ref_by %stream4 @nextWeightsView::@begin @edge::@to @to::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>>>})
+                %stream2 = subop.get_begin_ref %stream1 %weightsView :!subop.continuous_view<!subop.array<[rank : f64, l: i32]>> @weightsView::@begin({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[rank : f64, l: i32]>>>})
+                %stream3 = subop.offset_ref_by %stream2 @weightsView::@begin @edge::@from @from::@ref({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[rank : f64, l: i32]>>>})
+                %stream4 = subop.get_begin_ref %stream3 %nextWeightsView :!subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>> @nextWeightsView::@begin({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>>>})
+                %stream5 = subop.offset_ref_by %stream4 @nextWeightsView::@begin @edge::@to @to::@ref({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>>>})
                 %gatheredFrom = subop.gather %stream5 @from::@ref {rank => @from::@rank({type=f64}), l => @from::@l({type=i32})}
                 subop.reduce %gatheredFrom @to::@ref [@from::@rank,@from::@l] ["nextRank"] ([%currRank,%currL],[%rank]){
                     %c085 = arith.constant 0.85 : f64
@@ -172,9 +172,9 @@ module{
         //todo: properly implement damping factor...
         //todo: backwards mapping
          %finalWeightsView = subop.create_continuous_view %finalWeights : !subop.array<[rank : f64, l: i32]> -> !subop.continuous_view<!subop.array<[rank : f64, l: i32]>>
-         %fstream1 = subop.scan_refs %finalWeightsView : !subop.continuous_view<!subop.array<[rank : f64, l: i32]>> @finalWeights::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[rank : f64, l: i32]>>>})
+         %fstream1 = subop.scan_refs %finalWeightsView : !subop.continuous_view<!subop.array<[rank : f64, l: i32]>> @finalWeights::@ref({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[rank : f64, l: i32]>>>})
          %fstream2 = subop.gather %fstream1 @finalWeights::@ref { rank => @weights::@rank({type=f64}), l =>@weights::@l({type=i1})}
-         %fstream3 = subop.get_begin_ref %fstream2 %finalWeightsView :!subop.continuous_view<!subop.array<[rank : f64, l: i32]>> @finalWeights::@begin({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.array<[rank : f64, l: i32]>>>})
+         %fstream3 = subop.get_begin_ref %fstream2 %finalWeightsView :!subop.continuous_view<!subop.array<[rank : f64, l: i32]>> @finalWeights::@begin({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[rank : f64, l: i32]>>>})
          %fstream4 =  subop.entries_between %fstream3 @finalWeights::@begin @finalWeights::@ref @finalWeights::@id({type=i32})
 
          %fstream5 = subop.lookup_or_insert %fstream4 %reverseVertexMapping[@finalWeights::@id] : !subop.hashmap<[ revDenseId : i32],[revVertexId : i32]> @rM::@ref({type=!subop.lookup_entry_ref<!subop.hashmap<[ revDenseId : i32],[revVertexId : i32]>>})

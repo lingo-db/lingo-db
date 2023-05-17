@@ -700,81 +700,90 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             }
          }
       });
-      getOperation().walk([&](mlir::relalg::AggregationOp op) {
-         auto* potentialJoin = op.getRel().getDefiningOp();
-         mlir::relalg::MapOp mapOp = mlir::dyn_cast_or_null<mlir::relalg::MapOp>(potentialJoin);
-         mlir::relalg::ColumnSet usedColumns = op.getUsedColumns();
-         if (mapOp) {
-            usedColumns.insert(mapOp.getUsedColumns());
-            potentialJoin = mapOp.getRel().getDefiningOp();
+      bool enableGroupJoins = true;
+      if (const char* shouldEnableGJ = std::getenv("LINGODB_ENABLE_GJ")) {
+         if (std::string(shouldEnableGJ) == "OFF") {
+            enableGroupJoins = false;
          }
+      }
+      if (enableGroupJoins) {
+         getOperation().walk([&](mlir::relalg::AggregationOp op) {
+            auto* potentialJoin = op.getRel().getDefiningOp();
+            mlir::relalg::MapOp mapOp = mlir::dyn_cast_or_null<mlir::relalg::MapOp>(potentialJoin);
+            mlir::relalg::ColumnSet usedColumns = op.getUsedColumns();
+            if (mapOp) {
+               usedColumns.insert(mapOp.getUsedColumns());
+               potentialJoin = mapOp.getRel().getDefiningOp();
+            }
 
-         auto isInnerJoin = mlir::isa<mlir::relalg::InnerJoinOp>(potentialJoin);
-         auto isOuterJoin = mlir::isa<mlir::relalg::OuterJoinOp>(potentialJoin);
-         if (!isInnerJoin && !isOuterJoin) return;
-         PredicateOperator join = mlir::cast<PredicateOperator>(potentialJoin);
-         Operator joinOperator = mlir::cast<Operator>(potentialJoin);
-         usedColumns.insert(joinOperator.getUsedColumns());
-         if (!join->hasAttr("useHashJoin") || !join->hasAttr("leftHash") || !join->hasAttr("rightHash")) return;
-         auto leftKeys = join->getAttr("leftHash").cast<mlir::ArrayAttr>();
-         auto rightKeys = join->getAttr("rightHash").cast<mlir::ArrayAttr>();
-         for (auto p : llvm::zip(leftKeys, rightKeys)) {
-            auto t1 = std::get<0>(p).cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
-            auto t2 = std::get<1>(p).cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
-            if (t1 != t2) return;
-         }
-         auto leftKeySet = mlir::relalg::ColumnSet::fromArrayAttr(leftKeys);
-         auto rightKeySet = mlir::relalg::ColumnSet::fromArrayAttr(rightKeys);
-         auto groupByKeySet = mlir::relalg::ColumnSet::fromArrayAttr(op.getGroupByCols());
-         if (groupByKeySet.size() != leftKeySet.size()) return;
-         groupByKeySet.remove(leftKeySet);
-         groupByKeySet.remove(rightKeySet);
-         if (!groupByKeySet.empty()) return;
+            auto isInnerJoin = mlir::isa<mlir::relalg::InnerJoinOp>(potentialJoin);
+            auto isOuterJoin = mlir::isa<mlir::relalg::OuterJoinOp>(potentialJoin);
+            if (!isInnerJoin && !isOuterJoin) return;
+            PredicateOperator join = mlir::cast<PredicateOperator>(potentialJoin);
+            Operator joinOperator = mlir::cast<Operator>(potentialJoin);
+            usedColumns.insert(joinOperator.getUsedColumns());
+            if (!join->hasAttr("useHashJoin") || !join->hasAttr("leftHash") || !join->hasAttr("rightHash")) return;
+            auto leftKeys = join->getAttr("leftHash").cast<mlir::ArrayAttr>();
+            auto rightKeys = join->getAttr("rightHash").cast<mlir::ArrayAttr>();
+            for (auto p : llvm::zip(leftKeys, rightKeys)) {
+               auto t1 = std::get<0>(p).cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+               auto t2 = std::get<1>(p).cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+               if (t1 != t2) return;
+            }
+            auto leftKeySet = mlir::relalg::ColumnSet::fromArrayAttr(leftKeys);
+            auto rightKeySet = mlir::relalg::ColumnSet::fromArrayAttr(rightKeys);
+            auto groupByKeySet = mlir::relalg::ColumnSet::fromArrayAttr(op.getGroupByCols());
+            if (groupByKeySet.size() != leftKeySet.size()) return;
+            groupByKeySet.remove(leftKeySet);
+            groupByKeySet.remove(rightKeySet);
+            if (!groupByKeySet.empty()) return;
 
-         auto leftChild = joinOperator.getChildren()[0];
-         auto rightChild = joinOperator.getChildren()[1];
-         //auto leftUsedColumns = usedColumns.intersect(leftChild.getAvailableColumns());
-         auto fds = leftChild.getFDs();
-         if (!fds.isDuplicateFreeKey(leftKeySet)) return;
-         bool containsProjection = false;
-         bool containsCountRows = false;
-         op.walk([&](mlir::relalg::ProjectionOp) { containsProjection = true; });
-         op.walk([&](mlir::relalg::CountRowsOp) { containsCountRows = true; });
-         if (containsProjection || (isOuterJoin && containsCountRows)) return;
-         mlir::OpBuilder builder(op);
-         mlir::ArrayAttr mappedCols = mapOp ? mapOp.getComputedCols() : builder.getArrayAttr({});
-         mlir::Value left = leftChild.asRelation();
-         mlir::Value right = rightChild.asRelation();
-         if (isOuterJoin) {
-            auto outerJoin = mlir::cast<mlir::relalg::OuterJoinOp>(potentialJoin);
-            right = mapColsToNullable(right, builder, op.getLoc(), outerJoin.getMapping());
-         }
-         auto groupJoinOp = builder.create<mlir::relalg::GroupJoinOp>(op.getLoc(), left, right, isOuterJoin ? mlir::relalg::GroupJoinBehavior::outer : mlir::relalg::GroupJoinBehavior::inner, leftKeys, rightKeys, mappedCols, op.getComputedCols());
-         if (mapOp) {
-            mlir::IRMapping mapping;
-            mapOp.getPredicate().cloneInto(&groupJoinOp.getMapFunc(), mapping);
-         } else {
-            auto* b = new mlir::Block;
-            mlir::OpBuilder mB(&getContext());
-            groupJoinOp.getMapFunc().push_back(b);
-            mB.setInsertionPointToStart(b);
-            mB.create<mlir::tuples::ReturnOp>(op.getLoc());
-         }
-         {
-            mlir::IRMapping mapping;
-            op.getAggrFunc().cloneInto(&groupJoinOp.getAggrFunc(), mapping);
-         }
-         {
-            mlir::IRMapping mapping;
-            join.getPredicateRegion().cloneInto(&groupJoinOp.getPredicate(), mapping);
-         }
-         op->replaceAllUsesWith(groupJoinOp);
-         toErase.push_back(op.getOperation());
-         if (mapOp) {
-            toErase.push_back(mapOp);
-         }
-         toErase.push_back(join.getOperation());
-      });
+            auto leftChild = joinOperator.getChildren()[0];
+            auto rightChild = joinOperator.getChildren()[1];
+            //auto leftUsedColumns = usedColumns.intersect(leftChild.getAvailableColumns());
+            auto fds = leftChild.getFDs();
+            if (!fds.isDuplicateFreeKey(leftKeySet)) return;
+            bool containsProjection = false;
+            bool containsCountRows = false;
+            op.walk([&](mlir::relalg::ProjectionOp) { containsProjection = true; });
+            op.walk([&](mlir::relalg::CountRowsOp) { containsCountRows = true; });
+            if (containsProjection || (isOuterJoin && containsCountRows)) return;
+            mlir::OpBuilder builder(op);
+            mlir::ArrayAttr mappedCols = mapOp ? mapOp.getComputedCols() : builder.getArrayAttr({});
+            mlir::Value left = leftChild.asRelation();
+            mlir::Value right = rightChild.asRelation();
+            if (isOuterJoin) {
+               auto outerJoin = mlir::cast<mlir::relalg::OuterJoinOp>(potentialJoin);
+               right = mapColsToNullable(right, builder, op.getLoc(), outerJoin.getMapping());
+            }
+            llvm::dbgs() << "introducing groupjoin\n";
+            auto groupJoinOp = builder.create<mlir::relalg::GroupJoinOp>(op.getLoc(), left, right, isOuterJoin ? mlir::relalg::GroupJoinBehavior::outer : mlir::relalg::GroupJoinBehavior::inner, leftKeys, rightKeys, mappedCols, op.getComputedCols());
+            if (mapOp) {
+               mlir::IRMapping mapping;
+               mapOp.getPredicate().cloneInto(&groupJoinOp.getMapFunc(), mapping);
+            } else {
+               auto* b = new mlir::Block;
+               mlir::OpBuilder mB(&getContext());
+               groupJoinOp.getMapFunc().push_back(b);
+               mB.setInsertionPointToStart(b);
+               mB.create<mlir::tuples::ReturnOp>(op.getLoc());
+            }
+            {
+               mlir::IRMapping mapping;
+               op.getAggrFunc().cloneInto(&groupJoinOp.getAggrFunc(), mapping);
+            }
+            {
+               mlir::IRMapping mapping;
+               join.getPredicateRegion().cloneInto(&groupJoinOp.getPredicate(), mapping);
+            }
+            op->replaceAllUsesWith(groupJoinOp);
+            toErase.push_back(op.getOperation());
+            if (mapOp) {
+               toErase.push_back(mapOp);
+            }
+            toErase.push_back(join.getOperation());
+         });
+      }
       for (auto* op : toErase) {
          op->erase();
       }

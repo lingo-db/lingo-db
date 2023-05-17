@@ -88,8 +88,8 @@ module{
           }
           tuples.return %randomSampleStream : !tuples.tuplestream 
         }
-        %beginRef = subop.get_begin_ref %nested %continuousPoints : !subop.continuous_view<!subop.buffer<[pointX : f32, pointY : f32]>> @view::@begin({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.buffer<[pointX : f32, pointY : f32]>>>})
-        %offsetRef = subop.offset_ref_by %beginRef @view::@begin @generated::@idx @view::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.buffer<[pointX : f32, pointY : f32]>>>})
+        %beginRef = subop.get_begin_ref %nested %continuousPoints : !subop.continuous_view<!subop.buffer<[pointX : f32, pointY : f32]>> @view::@begin({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.buffer<[pointX : f32, pointY : f32]>>>})
+        %offsetRef = subop.offset_ref_by %beginRef @view::@begin @generated::@idx @view::@ref({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.buffer<[pointX : f32, pointY : f32]>>>})
         %gathered = subop.gather %offsetRef @view::@ref { pointX => @sample::@x({type=f32}),pointY => @sample::@y({type=f32}) }
         subop.materialize %gathered {@sample::@x=>initialClusterX, @sample::@y => initialClusterY, @generated::@id => initialClusterId}, %initialCentroids: !subop.buffer<[initialClusterX : f32, initialClusterY : f32, initialClusterId : i32]>
 

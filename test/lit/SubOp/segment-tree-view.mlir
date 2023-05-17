@@ -14,7 +14,7 @@
 
 !result_table_type = !subop.result_table<[v : index, s : index]>
 !c_v = !subop.continuous_view<!subop.buffer<[val : index]>>
-!c_v_e_r = !subop.continous_view_entry_ref<!c_v>
+!c_v_e_r = !subop.continous_entry_ref<!c_v>
 module {
     func.func @main(){
         %vals = subop.create!subop.buffer<[val : index]>

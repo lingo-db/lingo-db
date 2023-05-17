@@ -1729,7 +1729,7 @@ class ScanRefsContinuousViewLowering : public SubOpConversionPattern<mlir::subop
    using SubOpConversionPattern<mlir::subop::ScanRefsOp>::SubOpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::ScanRefsOp scanOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      if (!scanOp.getState().getType().isa<mlir::subop::ContinuousViewType>()) return failure();
+      if (!scanOp.getState().getType().isa<mlir::subop::ContinuousViewType,mlir::subop::ArrayType>()) return failure();
       if (scanOp->hasAttr("parallel")) {
          StateContext stateContext(scanOp, *typeConverter);
          if (!stateContext.anyNonPointer && !stateContext.anyTuple) {
@@ -3255,12 +3255,12 @@ class DefaultGatherOpLowering : public SubOpTupleStreamConsumerConversionPattern
       return success();
    }
 };
-class ContinuousViewRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::GatherOp, 2> {
+class ContinuousRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::GatherOp, 2> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::GatherOp, 2>::SubOpTupleStreamConsumerConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::GatherOp gatherOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
-      auto continuousRefEntryType = gatherOp.getRef().getColumn().type.dyn_cast_or_null<mlir::subop::ContinuousViewEntryRefType>();
+      auto continuousRefEntryType = gatherOp.getRef().getColumn().type.dyn_cast_or_null<mlir::subop::ContinuousEntryRefType>();
       if (!continuousRefEntryType) { return failure(); }
       auto unpackedReference = rewriter.create<mlir::util::UnPackOp>(gatherOp->getLoc(), mapping.resolve(gatherOp.getRef())).getResults();
       EntryStorageHelper storageHelper(continuousRefEntryType.getMembers(), typeConverter);
@@ -3379,13 +3379,13 @@ static bool checkAtomicStore(mlir::Operation* op) {
    return !op->hasAttr("atomic");
 #endif
 }
-class ContinuousViewRefScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp, 2> {
+class ContinuousRefScatterOpLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp, 2> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::ScatterOp, 2>::SubOpTupleStreamConsumerConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::ScatterOp scatterOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       if (!checkAtomicStore(scatterOp)) return failure();
-      auto continuousRefEntryType = scatterOp.getRef().getColumn().type.dyn_cast_or_null<mlir::subop::ContinuousViewEntryRefType>();
+      auto continuousRefEntryType = scatterOp.getRef().getColumn().type.dyn_cast_or_null<mlir::subop::ContinuousEntryRefType>();
       if (!continuousRefEntryType) { return failure(); }
       auto unpackedReference = rewriter.create<mlir::util::UnPackOp>(scatterOp->getLoc(), mapping.resolve(scatterOp.getRef())).getResults();
       EntryStorageHelper storageHelper(continuousRefEntryType.getMembers(), typeConverter);
@@ -3489,7 +3489,7 @@ class ReduceContinuousRefLowering : public SubOpTupleStreamConsumerConversionPat
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::ReduceOp>::SubOpTupleStreamConsumerConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::ReduceOp reduceOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
-      auto continuousRefEntryType = reduceOp.getRef().getColumn().type.dyn_cast_or_null<mlir::subop::ContinuousViewEntryRefType>();
+      auto continuousRefEntryType = reduceOp.getRef().getColumn().type.dyn_cast_or_null<mlir::subop::ContinuousEntryRefType>();
       if (!continuousRefEntryType) { return failure(); }
       if (reduceOp->hasAttr("atomic")) {
          return mlir::failure();
@@ -3637,7 +3637,7 @@ class ReduceContinuousRefAtomicLowering : public SubOpTupleStreamConsumerConvers
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::ReduceOp>::SubOpTupleStreamConsumerConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::ReduceOp reduceOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
-      auto continuousRefEntryType = reduceOp.getRef().getColumn().type.dyn_cast_or_null<mlir::subop::ContinuousViewEntryRefType>();
+      auto continuousRefEntryType = reduceOp.getRef().getColumn().type.dyn_cast_or_null<mlir::subop::ContinuousEntryRefType>();
       if (!continuousRefEntryType) { return failure(); }
       if (!reduceOp->hasAttr("atomic")) {
          return mlir::failure();
@@ -4093,8 +4093,8 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    //ContinuousView
    rewriter.insertPattern<CreateContinuousViewLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ScanRefsContinuousViewLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ContinuousViewRefGatherOpLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<ContinuousViewRefScatterOpLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ContinuousRefGatherOpLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<ContinuousRefScatterOpLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ReduceContinuousRefLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ReduceContinuousRefAtomicLowering>(typeConverter, ctxt);
 

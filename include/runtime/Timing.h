@@ -5,6 +5,8 @@ namespace runtime {
 class Timing {
    public:
    static uint64_t start();
+   static void startPerf();
+   static void stopPerf();
    static void stop(uint64_t start);
 };
 } // end namespace runtime

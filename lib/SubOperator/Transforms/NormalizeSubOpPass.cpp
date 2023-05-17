@@ -59,7 +59,10 @@ class SplitGenericScan : public mlir::RewritePattern {
       //todo: check that one can obtain references
       mlir::Type refType = mlir::subop::EntryRefType::get(getContext(), scanOp.getState().getType());
       if (auto continuousView = scanOp.getState().getType().dyn_cast_or_null<mlir::subop::ContinuousViewType>()) {
-         refType = mlir::subop::ContinuousViewEntryRefType::get(rewriter.getContext(), continuousView);
+         refType = mlir::subop::ContinuousEntryRefType::get(rewriter.getContext(), continuousView);
+      }
+      if (auto array = scanOp.getState().getType().dyn_cast_or_null<mlir::subop::ArrayType>()) {
+         refType = mlir::subop::ContinuousEntryRefType::get(rewriter.getContext(), array);
       }
       if (auto hashMapType = scanOp.getState().getType().dyn_cast_or_null<mlir::subop::HashMapType>()) {
          refType = mlir::subop::HashMapEntryRefType::get(rewriter.getContext(), hashMapType);

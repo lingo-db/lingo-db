@@ -2203,7 +2203,7 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
       }
       auto fromMemberName = getUniqueMember(getContext(), "from");
       auto toMemberName = getUniqueMember(getContext(), "to");
-      auto continuousViewRefType = mlir::subop::ContinuousViewEntryRefType::get(rewriter.getContext(), continuousView.getType().cast<mlir::subop::ContinuousViewType>());
+      auto continuousViewRefType = mlir::subop::ContinuousEntryRefType::get(rewriter.getContext(), continuousView.getType().cast<mlir::subop::ContinuousViewType>());
       auto cVRTAttr = mlir::TypeAttr::get(continuousViewRefType);
       auto keyStateMembers = mlir::subop::StateMembersAttr::get(rewriter.getContext(), mlir::ArrayAttr::get(rewriter.getContext(), {rewriter.getStringAttr(fromMemberName), rewriter.getStringAttr(toMemberName)}), mlir::ArrayAttr::get(rewriter.getContext(), {cVRTAttr, cVRTAttr}));
       auto valueStateMembers = mlir::subop::StateMembersAttr::get(rewriter.getContext(), mlir::ArrayAttr::get(rewriter.getContext(), names), mlir::ArrayAttr::get(rewriter.getContext(), types));
@@ -2230,7 +2230,7 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
 
       auto evaluate = [&](ConversionPatternRewriter& rewriter, mlir::Value continuousView, mlir::DictionaryAttr columnMapping, mlir::Location loc) {
          auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
-         auto continuousViewRefType = mlir::subop::ContinuousViewEntryRefType::get(rewriter.getContext(), continuousView.getType().cast<mlir::subop::ContinuousViewType>());
+         auto continuousViewRefType = mlir::subop::ContinuousEntryRefType::get(rewriter.getContext(), continuousView.getType().cast<mlir::subop::ContinuousViewType>());
          auto [beginReferenceDefAttr, beginReferenceRefAttr] = createColumn(continuousViewRefType, "view", "begin");
          auto [endReferenceDefAttr, endReferenceRefAttr] = createColumn(continuousViewRefType, "view", "end");
          auto [referenceDefAttr, referenceRefAttr] = createColumn(continuousViewRefType, "scan", "ref");

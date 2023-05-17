@@ -226,16 +226,16 @@ def GenericLookupEntryRef : SubOperator_Type<"LookupEntryRef", "lookup_entry_ref
         StateMembersAttr getMembers(){ return getState().getValueMembers();}
     }];
 }
-def ContinuousViewEntryRef : SubOperator_Type<"ContinuousViewEntryRef", "continous_view_entry_ref",[StateEntryReference]> {
+def ContinuousEntryRef : SubOperator_Type<"ContinuousEntryRef", "continous_entry_ref",[StateEntryReference]> {
     let summary = "reference to entry of some state";
-    let parameters = (ins "ContinuousViewType":$view);
-    let assemblyFormat = "`<` $view `>`";
+    let parameters = (ins "State":$state);
+    let assemblyFormat = "`<` $state `>`";
     let extraClassDeclaration = [{
         bool isReadable(){return true;}
         bool isWriteable(){return true;}
         bool isStable(){return true;}
         bool canBeOffset(){return true;}
-        StateMembersAttr getMembers(){ return getView().getMembers();}
+        StateMembersAttr getMembers(){ return getState().getMembers();}
     }];
 }
 def MultiMapEntryRef : SubOperator_Type<"MultiMapEntryRef", "multi_map_entry_ref",[StateEntryReference]> {

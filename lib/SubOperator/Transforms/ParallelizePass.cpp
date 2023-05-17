@@ -90,13 +90,13 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                collectPipelineOperations(pipelineOps, op, true);
                std::vector<mlir::Operation*> uniquePipelineOpsOrdered;
                std::unordered_set<mlir::Operation*> uniquePipelineOps;
-               for(auto *op:pipelineOps){
-                  if(!uniquePipelineOps.contains(op)){
+               for (auto* op : pipelineOps) {
+                  if (!uniquePipelineOps.contains(op)) {
                      uniquePipelineOps.insert(op);
                      uniquePipelineOpsOrdered.push_back(op);
                   }
                }
-               pipelineOps=uniquePipelineOpsOrdered;
+               pipelineOps = uniquePipelineOpsOrdered;
                bool canBeParallel = true;
                auto isNested = [&](mlir::Value v) {
                   if (auto* def = v.getDefiningOp()) {
@@ -188,7 +188,14 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                      //todo: order of members in reduce fn must match member order in state
                      auto collisions = getCollisions();
                      if (collisions.size() == 0) {
-                        continue;
+                        //todo: fix
+                        if (reduceOp.getRef().getColumn().type.isa<mlir::subop::ContinuousEntryRefType>()) {
+                           if (reduceOp.getMembers().size() == 1 && reduceOp.getRegion().front().getArguments().back().getType().isIntOrFloat()) {
+                              //we can perform generic atomic
+                              //markAsAtomic.insert(pipelineOp);
+                              continue;
+                           }
+                        }
                      }
                      if (collisions.size() == 1) {
                         if (auto lookupOp = mlir::dyn_cast<mlir::subop::LookupOp>(*collisions.begin())) {
@@ -365,7 +372,6 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
          createOp->replaceAllUsesWith(mlir::ValueRange{merged});
          createOp->erase();
       }
-      //getOperation()->dump();
    }
 };
 } // end anonymous namespace

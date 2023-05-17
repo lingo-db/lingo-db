@@ -85,6 +85,147 @@ class AvoidUnnecessaryMaterialization : public mlir::RewritePattern {
    }
 };
 
+class AvoidArrayMaterialization : public mlir::RewritePattern {
+   mlir::subop::ColumnUsageAnalysis& analysis;
+   mlir::Operation* getRoot(mlir::Operation* op) const {
+      if (op->getNumOperands() < 1) {
+         return op;
+      }
+      bool isFirstTupleStream = op->getOperand(0).getType().isa<mlir::tuples::TupleStreamType>();
+      bool noOtherTupleStream = llvm::none_of(op->getOperands().drop_front(), [](mlir::Value v) { return v.getType().isa<mlir::tuples::TupleStreamType>(); });
+      if (isFirstTupleStream && noOtherTupleStream) {
+         return getRoot(op->getOperand(0).getDefiningOp());
+      } else if (isFirstTupleStream) {
+         return nullptr;
+      } else {
+         return op;
+      }
+   }
+
+   public:
+   AvoidArrayMaterialization(mlir::MLIRContext* context, mlir::subop::ColumnUsageAnalysis& analysis)
+      : RewritePattern(mlir::subop::ScanRefsOp::getOperationName(), 1, context), analysis(analysis) {}
+
+   mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
+      auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+      auto scanRefsOp = mlir::cast<mlir::subop::ScanRefsOp>(op);
+      if (!scanRefsOp.getState().getType().isa<mlir::subop::ArrayType>()) {
+         return mlir::failure();
+      }
+      if (scanRefsOp->hasAttr("sequential")) {
+         return mlir::failure();
+      }
+      auto state = scanRefsOp.getState();
+      std::vector<mlir::subop::GetBeginReferenceOp> otherUsers;
+      for (auto* user : state.getUsers()) {
+         if (user == op) {
+            continue;
+         } else if (auto getBeginOp = mlir::dyn_cast_or_null<mlir::subop::GetBeginReferenceOp>(user)) {
+            otherUsers.push_back(getBeginOp);
+         } else {
+            return mlir::failure();
+         }
+      }
+      if (!otherUsers.size()) {
+         return mlir::failure();
+      }
+      mlir::subop::ScatterOp scatterOp;
+      mlir::subop::OffsetReferenceBy offsetByOp;
+      std::vector<mlir::subop::EntriesBetweenOp> needsChanges;
+      mlir::tuples::ColumnRefAttr replaceWith;
+      mlir::tuples::ColumnRefAttr replaceIdxWith;
+      for (auto user : otherUsers) {
+         auto colUsers = analysis.findOperationsUsing(&user.getRef().getColumn());
+         for (auto* colUser : colUsers) {
+            if (auto* root = getRoot(colUser)) {
+               if (root == op) {
+                  if (auto entriesBetween = mlir::dyn_cast_or_null<mlir::subop::EntriesBetweenOp>(colUser)) {
+                     needsChanges.push_back(entriesBetween);
+                  } else {
+                     return mlir::failure();
+                  }
+               } else {
+                  if (auto otherScanRefsOp = mlir::dyn_cast_or_null<mlir::subop::ScanRefsOp>(root)) {
+                     auto otherState = otherScanRefsOp.getState();
+                     if (!otherState.getType().isa<mlir::subop::ArrayType>()) {
+                        return mlir::failure();
+                     }
+                     if (auto offsetBy = mlir::dyn_cast_or_null<mlir::subop::OffsetReferenceBy>(colUser)) {
+                        bool idxMatches = false;
+                        for (auto* otherScanRefsUser : analysis.findOperationsUsing(&otherScanRefsOp.getRef().getColumn())) {
+                           if (auto entriesBetweenOp = mlir::dyn_cast_or_null<mlir::subop::EntriesBetweenOp>(otherScanRefsUser)) {
+                              if (&offsetBy.getIdx().getColumn() == &entriesBetweenOp.getBetween().getColumn()) {
+                                 idxMatches = true;
+                                 replaceIdxWith = colManager.createRef(&entriesBetweenOp.getBetween().getColumn());
+                              }
+                           }
+                        }
+                        if (!idxMatches) {
+                           return mlir::failure();
+                        }
+                        auto offsetByUsers = analysis.findOperationsUsing(&offsetBy.getNewRef().getColumn());
+                        if (offsetByUsers.size() != 1) {
+                           return mlir::failure();
+                        }
+                        if (auto localScatterOp = mlir::dyn_cast_or_null<mlir::subop::ScatterOp>(*offsetByUsers.begin())) {
+                           if (scatterOp) {
+                              return mlir::failure();
+                           }
+                           scatterOp = localScatterOp;
+                           offsetByOp = offsetBy;
+                           replaceWith = colManager.createRef(&otherScanRefsOp.getRef().getColumn());
+                           if (scatterOp.getWrittenMembers().size() != scanRefsOp.getState().getType().cast<mlir::subop::State>().getMembers().getNames().size()) {
+                              return mlir::failure();
+                           }
+                        } else {
+                           return mlir::failure();
+                        }
+                     }
+                  }
+               }
+            } else {
+               return mlir::failure();
+            }
+         }
+      }
+      auto scanRefUsers = analysis.findOperationsUsing(&scanRefsOp.getRef().getColumn());
+      std::vector<mlir::subop::GatherOp> gatherOps;
+      for (auto* scanRefUser : scanRefUsers) {
+         if (auto gatherOp = mlir::dyn_cast_or_null<mlir::subop::GatherOp>(scanRefUser)) {
+            gatherOps.push_back(gatherOp);
+         } else if (mlir::isa<mlir::subop::EntriesBetweenOp>(scanRefUser)) {
+         } else {
+            return mlir::failure();
+         }
+      }
+      if (scatterOp) {
+         std::unordered_map<std::string, mlir::tuples::ColumnRefAttr> scatterMapping;
+         for (auto m : scatterOp.getMapping()) {
+            scatterMapping.insert({m.getName().str(), m.getValue().cast<mlir::tuples::ColumnRefAttr>()});
+         }
+         std::vector<mlir::Attribute> renamed;
+         for (auto gatherOp : gatherOps) {
+            for (auto m : gatherOp.getMapping()) {
+               renamed.push_back(colManager.createDef(&m.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn(), rewriter.getArrayAttr(scatterMapping.at(m.getName().str()))));
+            }
+            rewriter.replaceOp(gatherOp, gatherOp.getStream());
+         }
+         for (auto betweenOp : needsChanges) {
+            renamed.push_back(colManager.createDef(&betweenOp.getBetween().getColumn(), rewriter.getArrayAttr({replaceIdxWith})));
+            rewriter.replaceOp(betweenOp, betweenOp.getStream());
+         }
+         for (auto getBeginOp : otherUsers) {
+            rewriter.replaceOp(getBeginOp, getBeginOp.getStream());
+         }
+         rewriter.replaceOpWithNewOp<mlir::subop::RenamingOp>(op, scatterOp.getStream(), rewriter.getArrayAttr(renamed));
+         rewriter.replaceOp(offsetByOp, offsetByOp.getStream());
+         rewriter.eraseOp(scatterOp);
+         //todo: replace scan_refs op with
+      }
+      return mlir::failure();
+   }
+};
+
 class AvoidDeadMaterialization : public mlir::RewritePattern {
    public:
    AvoidDeadMaterialization(mlir::MLIRContext* context)
@@ -212,6 +353,7 @@ class ReuseLocalPass : public mlir::PassWrapper<ReuseLocalPass, mlir::OperationP
 
       mlir::RewritePatternSet patterns(&getContext());
       patterns.insert<AvoidUnnecessaryMaterialization>(&getContext());
+      patterns.insert<AvoidArrayMaterialization>(&getContext(), columnUsageAnalysis);
       patterns.insert<AvoidDeadMaterialization>(&getContext());
       patterns.insert<ReuseHashtable>(&getContext(), columnUsageAnalysis);
       if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {

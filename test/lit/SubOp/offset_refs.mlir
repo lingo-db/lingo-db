@@ -28,10 +28,10 @@ module {
          %result_table = subop.create_result_table ["v","b","e","r"] -> !result_table_type
 
         %view = subop.create_continuous_view %vals : !subop.buffer<[val : index]> -> !subop.continuous_view<!subop.buffer<[val : index]>>
-        %stream = subop.scan_refs %view : !subop.continuous_view<!subop.buffer<[val : index]>> @scan::@ref({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.buffer<[val : index]>>>})  {sequential}
+        %stream = subop.scan_refs %view : !subop.continuous_view<!subop.buffer<[val : index]>> @scan::@ref({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.buffer<[val : index]>>>})  {sequential}
         %stream1 = subop.gather %stream @scan::@ref { val => @scan::@currval({type=index}) }
-        %stream2 = subop.get_begin_ref %stream1 %view : !subop.continuous_view<!subop.buffer<[val : index]>> @view::@begin({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.buffer<[val : index]>>>})
-        %stream3 = subop.get_end_ref %stream2 %view : !subop.continuous_view<!subop.buffer<[val : index]>> @view::@end({type=!subop.continous_view_entry_ref<!subop.continuous_view<!subop.buffer<[val : index]>>>})
+        %stream2 = subop.get_begin_ref %stream1 %view : !subop.continuous_view<!subop.buffer<[val : index]>> @view::@begin({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.buffer<[val : index]>>>})
+        %stream3 = subop.get_end_ref %stream2 %view : !subop.continuous_view<!subop.buffer<[val : index]>> @view::@end({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.buffer<[val : index]>>>})
         %stream4 = subop.gather %stream3 @view::@begin { val => @scan::@firstval({type=index}) }
         %stream5 = subop.gather %stream4 @view::@end { val => @scan::@lastval({type=index}) }
         %stream6 = subop.entries_between %stream5 @view::@begin @scan::@ref @scan::@rank({type=index})
