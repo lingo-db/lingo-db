@@ -70,14 +70,14 @@ void ArrowDirDatabase::updateRecordBatches(const std::string& name) {
    }
    recordBatches[name] = batches;
 }
-std::unique_ptr<Database> ArrowDirDatabase::load(std::string directory) {
+std::unique_ptr<Database> ArrowDirDatabase::load(std::string directory, bool loadTables) {
    std::string json;
    auto database = std::make_unique<ArrowDirDatabase>();
-   database->directory = directory;
+   database->setDirectory(directory);
    database->writeback = false;
    for (const auto& p : std::filesystem::directory_iterator(directory)) {
       auto path = p.path();
-      if (path.extension().string() == ".arrow") {
+      if (loadTables && path.extension().string() == ".arrow") {
          auto tablename = path.stem().string();
          database->tables[tablename] = loadTable(path.string());
          database->updateRecordBatches(tablename);
@@ -93,10 +93,13 @@ std::unique_ptr<Database> ArrowDirDatabase::load(std::string directory) {
                             std::istreambuf_iterator<char>());
       }
    }
-   for (auto& table : database->tables) {
-      database->metaData[table.first] = runtime::TableMetaData::create(json, table.first, database->getSample(table.first));
+   // Set meta data
+   for (auto& sample : database->samples) {
+      database->metaData[sample.first] = runtime::TableMetaData::create(json, sample.first, sample.second);
    }
+   // Set indices
    for (auto table : database->tables) database->externalHashIndexManager.addIndex(table.first, table.second, database->metaData[table.first]);
+
    return database;
 }
 std::shared_ptr<arrow::Table> ArrowDirDatabase::getTable(const std::string& name) {
@@ -113,6 +116,9 @@ ExternalHashIndexMapping* ArrowDirDatabase::getIndex(const std::string& name, co
 }
 bool ArrowDirDatabase::hasTable(const std::string& name) {
    return tables.contains(name);
+}
+bool ArrowDirDatabase::hasTableInMetadata(const std::string& tableName) {
+   return metaData.contains(tableName);
 }
 size_t asInt(std::variant<size_t, std::string> intOrStr) {
    if (std::holds_alternative<size_t>(intOrStr)) {
@@ -160,6 +166,10 @@ std::shared_ptr<arrow::Schema> createSchema(std::shared_ptr<TableMetaData> metaD
    }
    return std::make_shared<arrow::Schema>(fields);
 }
+void ArrowDirDatabase::addTable(std::string tableName, std::shared_ptr<arrow::Table> table) {
+   tables[tableName] = table;
+   updateRecordBatches(tableName);
+}
 void ArrowDirDatabase::createTable(std::string tableName, std::shared_ptr<TableMetaData> mD) {
    if (!mD->getPrimaryKey().empty()) {
       std::shared_ptr<ColumnMetaData> cdm = std::make_shared<ColumnMetaData>();
@@ -177,6 +187,7 @@ void ArrowDirDatabase::createTable(std::string tableName, std::shared_ptr<TableM
    tables[tableName] = arrow::Table::Make(schema, cols);
    updateRecordBatches(tableName);
    metaData[tableName] = mD;
+   storeTable(getDirectory() + "/" + tableName + ".arrow", tables[tableName]);
 }
 template <typename I>
 class BoxedIntegerIterator {
@@ -274,12 +285,13 @@ void ArrowDirDatabase::combineTableWithHashValuesImpl(std::string tableName, std
 
 ArrowDirDatabase::~ArrowDirDatabase() {
    if (writeback) {
-      writeMetaData(directory + "/metadata.json");
+      auto dir = getDirectory();
+      writeMetaData(dir + "/metadata.json");
       for (auto t : tables) {
-         storeTable(directory + "/" + t.first + ".arrow", t.second);
+         storeTable(dir + "/" + t.first + ".arrow", t.second);
       }
       for (auto s : samples) {
-         storeSample(directory + "/" + s.first + ".arrow.sample", s.second);
+         storeSample(dir + "/" + s.first + ".arrow.sample", s.second);
       }
    }
 }
@@ -300,3 +312,4 @@ void ArrowDirDatabase::writeMetaData(std::string filename) {
 void ArrowDirDatabase::setWriteback(bool writeback) {
    ArrowDirDatabase::writeback = writeback;
 }
+

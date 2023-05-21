@@ -2,11 +2,13 @@
 #include "execution/CBackend.h"
 #include "execution/CraneliftBackend.h"
 #include "execution/LLVMBackends.h"
+#include "json.h"
 #include "mlir/Conversion/DBToStd/DBToStd.h"
 #include "mlir/Conversion/DSAToStd/DSAToStd.h"
 #include "mlir/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 #include "mlir/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
+#include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 #include "mlir/Dialect/SubOperator/Transforms/Passes.h"
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/Pass.h"
@@ -58,6 +60,20 @@ class RelAlgLoweringStep : public LoweringStep {
       }
       auto endLowerRelAlg = std::chrono::high_resolution_clock::now();
       timing["lowerRelAlg"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerRelAlg - startLowerRelAlg).count() / 1000.0;
+
+      // Load the required tables for the query
+      // TODO-lazy-load: Also build indices here
+      moduleOp.walk([&](mlir::Operation* op) {
+         if (auto getExternalOp = mlir::dyn_cast_or_null<mlir::subop::GetExternalOp>(*op)) {
+            auto json = nlohmann::json::parse(getExternalOp.getDescr().str());
+            auto tableName = json.value("table", "");
+            std::cout << "loading table: " << tableName << std::endl;
+            auto* db = getDatabase();
+            std::string path = db->getDirectory() + '/' + tableName + ".arrow";
+            auto newTable = db->loadTable(path);
+            db->addTable(tableName, newTable);
+         }
+      });
    }
 };
 class SubOpLoweringStep : public LoweringStep {

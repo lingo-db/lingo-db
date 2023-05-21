@@ -23,3 +23,7 @@ std::shared_ptr<TableMetaData> runtime::ExternalArrowDatabase::getTableMetaData(
 bool ExternalArrowDatabase::hasTable(const std::string& name) {
    return tables.contains(name);
 }
+bool ExternalArrowDatabase::hasTableInMetadata(const std::string& tableName) {
+   // ExternalArrowDatabase has no `metaData` so we check in the tables
+   return hasTable(tableName);
+}

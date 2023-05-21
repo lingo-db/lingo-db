@@ -428,7 +428,7 @@ mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, R
    if (stmt->alias_ && stmt->alias_->type_ == T_Alias && stmt->alias_->aliasname_) {
       alias = stmt->alias_->aliasname_;
    }
-   if (!database.hasTable(relation)) {
+   if (!database.hasTableInMetadata(relation)) {
       if (ctes.contains(relation)) {
          auto renamedScope = attrManager.getUniqueScope(relation);
          auto [tree, targetInfo] = ctes.at(relation);

@@ -10,8 +10,9 @@ class ExternalArrowDatabase : public Database {
    std::shared_ptr<arrow::Table> getTable(const std::string& name) override;
    std::shared_ptr<arrow::RecordBatch> getSample(const std::string& name) override;
    std::shared_ptr<TableMetaData> getTableMetaData(const std::string& name) override;
-   void addTable(std::string, std::shared_ptr<arrow::Table>);
+   void addTable(std::string, std::shared_ptr<arrow::Table>) override;
    bool hasTable(const std::string& name) override;
+   bool hasTableInMetadata(const std::string& tableName) override;
 };
 } // end namespace runtime
 #endif // RUNTIME_EXTERNALARROWDATABASE_H

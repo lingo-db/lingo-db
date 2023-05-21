@@ -21,6 +21,12 @@ std::unique_ptr<runtime::Database> MetaDataOnlyDatabase::emptyMetaData() {
 bool MetaDataOnlyDatabase::hasTable(const std::string& name) {
    return metaData.contains(name);
 }
+bool MetaDataOnlyDatabase::hasTableInMetadata(const std::string& tableName){
+   return hasTable(tableName);
+}
+void MetaDataOnlyDatabase::addTable(std::string tableName, std::shared_ptr<arrow::Table> table) {
+   throw std::runtime_error("addTable on MetaDataOnlyDatabase");
+}
 std::shared_ptr<arrow::Table> MetaDataOnlyDatabase::getTable(const std::string& name) {
    throw std::runtime_error("getTable on MetaDataOnlyDatabase");
 }

@@ -14,16 +14,17 @@ void check(bool b, std::string message) {
    }
 }
 int main(int argc, char** argv) {
-   std::string inputFileName = std::string(argv[1]);
-
-   runtime::ExecutionContext context;
-   context.id = 42;
    if (argc <= 2) {
       std::cerr << "USAGE: run-sql *.sql database" << std::endl;
       return 1;
    }
-   std::cout << "Loading Database from: " << argv[2] << '\n';
-   auto database = runtime::Database::loadFromDir(std::string(argv[2]));
+   std::string inputFileName = std::string(argv[1]);
+   std::string directory = std::string(argv[2]);
+
+   runtime::ExecutionContext context;
+   context.id = 42;
+   std::cout << "Loading Database from: " << directory << '\n';
+   auto database = runtime::Database::loadMetaDataAndSamplesFromDir(directory);
    context.db = std::move(database);
 
    support::eval::init();

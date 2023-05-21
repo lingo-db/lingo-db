@@ -23,6 +23,12 @@ void Database::appendTable(std::string tableName, std::shared_ptr<arrow::Table> 
 std::unique_ptr<Database> Database::loadFromDir(std::string directory) {
    return ArrowDirDatabase::load(directory);
 }
+std::unique_ptr<Database> Database::loadMetaDataAndSamplesFromDir(std::string directory) {
+   return ArrowDirDatabase::load(directory, false);
+}
+std::shared_ptr<arrow::Table> Database::loadTable(std::string name) {
+   return ArrowDirDatabase::loadTable(name);
+}
 const std::vector<std::shared_ptr<arrow::RecordBatch>>& Database::getRecordBatches(const std::string& name) {
    throw std::runtime_error("database does not support getRecordBatches");
 }
@@ -115,6 +121,12 @@ void Database::setPersistMode(bool persist) {
 }
 void Database::setPersist(bool persist) {
    setPersistMode(persist);
+}
+void Database::setDirectory(std::string dir) {
+   directory = dir;
+}
+std::string Database::getDirectory() {
+   return directory;
 }
 void Database::appendTableFromResult(runtime::VarLen32 tableName, runtime::ExecutionContext* context, size_t resultId) {
    {
