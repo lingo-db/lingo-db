@@ -159,7 +159,13 @@ class BatchedSQLFrontend : public execution::Frontend {
                //exit from repl loop
                break;
             }
-            while (batched.good()) {
+            while (true) {
+               if (!batched.good()) {
+                  if (batched.eof()) {
+                     query << line << std::endl;
+                  }
+                  break;
+               }
                query << line << std::endl;
                if (!line.empty() && line.find(';') == line.size() - 1) {
                   break;
