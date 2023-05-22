@@ -62,7 +62,8 @@ resources/data/job/.stamp: tools/generate/job.sh
 
 LDB_ARGS=-DMLIR_DIR=${ROOT_DIR}build/llvm-build/lib/cmake/mlir \
 		 -DArrow_DIR=${ROOT_DIR}build/arrow/install/lib/cmake/arrow \
-		 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+		 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+	   	 -DCMAKE_BUILD_TYPE=Debug
 LDB_DEPS=build/llvm-build/.buildstamp build/arrow/.buildstamp build/arrow/.pyarrowstamp
 dependencies: $(LDB_DEPS)
 
