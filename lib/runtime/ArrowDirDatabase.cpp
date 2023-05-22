@@ -114,6 +114,10 @@ std::shared_ptr<arrow::RecordBatch> ArrowDirDatabase::getSample(const std::strin
 ExternalHashIndexMapping* ArrowDirDatabase::getIndex(const std::string& name, const std::vector<std::string>& mapping) {
    return externalHashIndexManager.getIndex(name, mapping);
 }
+void ArrowDirDatabase::addIndex(std::string& tableName) {
+   // Client must ensure that db `hasTable(tableName)`
+   externalHashIndexManager.addIndex(tableName, tables[tableName], metaData[tableName]);
+}
 bool ArrowDirDatabase::hasTable(const std::string& name) {
    return tables.contains(name);
 }

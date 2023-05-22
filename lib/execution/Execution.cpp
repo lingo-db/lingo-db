@@ -61,17 +61,37 @@ class RelAlgLoweringStep : public LoweringStep {
       auto endLowerRelAlg = std::chrono::high_resolution_clock::now();
       timing["lowerRelAlg"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerRelAlg - startLowerRelAlg).count() / 1000.0;
 
-      // Load the required tables for the query
-      // TODO-lazy-load: Also build indices here
+      // Load the required tables/indices for the query
       moduleOp.walk([&](mlir::Operation* op) {
          if (auto getExternalOp = mlir::dyn_cast_or_null<mlir::subop::GetExternalOp>(*op)) {
+            getExternalOp.dump();
+            auto* db = getDatabase();
             auto json = nlohmann::json::parse(getExternalOp.getDescr().str());
             auto tableName = json.value("table", "");
-            std::cout << "loading table: " << tableName << std::endl;
-            auto* db = getDatabase();
-            std::string path = db->getDirectory() + '/' + tableName + ".arrow";
-            auto newTable = db->loadTable(path);
-            db->addTable(tableName, newTable);
+            bool addIndex = false;
+            if (!tableName.size()) {
+               tableName = json.value("externalHashIndex", "");
+               if (!tableName.size()) return;
+               addIndex = true;
+            }
+            // Load table
+            if(!db->hasTable(tableName)) {
+               std::cout << "loading table: " << tableName << std::endl;
+               auto directory = db->getDirectory();
+               if (directory.back() != '/') {
+                  directory = directory + '/';
+               }
+               std::string path = directory + tableName + ".arrow";
+               auto newTable = db->loadTable(path);
+               db->addTable(tableName, newTable);
+            }
+            // Load index
+            if (addIndex) {
+               std::cout << "loading index for table: " << tableName << std::endl;
+               db->addIndex(tableName);
+
+            }
+>>>>>>> f999679b (Add index lazily)
          }
       });
    }

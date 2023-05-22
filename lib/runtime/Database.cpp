@@ -150,4 +150,7 @@ void Database::combineTableWithHashValuesImpl(std::string tableName, std::shared
 ExternalHashIndexMapping* Database::getIndex(const std::string& name, const std::vector<std::string>& mapping) {
    throw std::runtime_error("database does not support indices");
 }
+void Database::addIndex(std::string& tableName) {
+   throw std::runtime_error("database does not support addIndex");
+}
 } //end namespace runtime

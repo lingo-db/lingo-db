@@ -29,6 +29,7 @@ class Database {
 
    virtual std::shared_ptr<arrow::Table> getTable(const std::string& name) = 0;
    virtual ExternalHashIndexMapping* getIndex(const std::string& name, const std::vector<std::string>& mapping);
+   virtual void addIndex(std::string& tableName);
    virtual std::shared_ptr<arrow::RecordBatch> getSample(const std::string& name) = 0;
    virtual std::shared_ptr<TableMetaData> getTableMetaData(const std::string& name) = 0;
    virtual void createTable(std::string tableName, std::shared_ptr<TableMetaData>);

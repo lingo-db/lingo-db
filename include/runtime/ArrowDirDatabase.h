@@ -22,6 +22,7 @@ class ArrowDirDatabase : public runtime::Database {
    }
    std::shared_ptr<TableMetaData> getTableMetaData(const std::string& name) override;
    ExternalHashIndexMapping* getIndex(const std::string& name, const std::vector<std::string>& mapping) override;
+   void addIndex(std::string& name) override;
    bool hasTable(const std::string& name) override;
    bool hasTableInMetadata(const std::string& tableName) override;
    static std::unique_ptr<Database> empty() { return std::make_unique<ArrowDirDatabase>(); }
