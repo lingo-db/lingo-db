@@ -17,6 +17,12 @@ void runtime::ExecutionContext::reset() {
    for (auto s : states) {
       s.second.freeFn(s.second.ptr);
    }
+   for (auto local : allocators) {
+      for (auto a : local) {
+         a.second.freeFn(a.second.ptr);
+      }
+   }
+   allocators.clear();
    states.clear();
 }
 runtime::ExecutionContext::~ExecutionContext() {

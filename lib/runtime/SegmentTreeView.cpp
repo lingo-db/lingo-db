@@ -1,14 +1,28 @@
 #include "runtime/SegmentTreeView.h"
+#include "runtime/helpers.h"
+#include "utility/Tracer.h"
+#include <cassert>
 #include <cstring>
 #include <iostream>
+namespace {
+utility::Tracer::Event buildEvent("SegmentTree", "build");
+} // end namespace
 namespace runtime {
+SegmentTreeView::TreeNode* SegmentTreeView::allocate() {
+   assert(storageCntr < numEntries);
+   return &storage[storageCntr++];
+}
+uint8_t* SegmentTreeView::allocateState() {
+   assert(stateCntr < numEntries);
+   return &stateStorage[stateTypeSize * stateCntr++];
+}
 //from: inclusive,to: inclusive
 SegmentTreeView::TreeNode* SegmentTreeView::buildRecursively(std::vector<uint8_t*>& entryPointers, size_t from, size_t to) {
    if (from == to) {
-      TreeNode* leaf = new TreeNode;
+      TreeNode* leaf = allocate();
       leaf->leftMin = from;
       leaf->rightMax = to;
-      leaf->state = (uint8_t*) aligned_alloc(8, stateTypeSize);
+      leaf->state = allocateState();
       createInitialStateFn(leaf->state, entryPointers[from]);
       uint64_t init = 0;
       memcpy(&init, leaf->state, sizeof(init));
@@ -17,12 +31,12 @@ SegmentTreeView::TreeNode* SegmentTreeView::buildRecursively(std::vector<uint8_t
       size_t mid = from + (to - from) / 2;
       TreeNode* left = buildRecursively(entryPointers, from, mid);
       TreeNode* right = buildRecursively(entryPointers, mid + 1, to);
-      TreeNode* inner = new TreeNode;
+      TreeNode* inner = allocate();
       inner->leftMin = from;
       inner->rightMax = to;
       inner->left = left;
       inner->right = right;
-      inner->state = (uint8_t*) aligned_alloc(8, stateTypeSize);
+      inner->state = allocateState();
       combineStatesFn(inner->state, left->state, right->state);
       return inner;
    }
@@ -61,21 +75,32 @@ void SegmentTreeView::lookupRecursively(runtime::SegmentTreeView::TreeNode* t, u
    }
 }
 SegmentTreeView* SegmentTreeView::build(runtime::ExecutionContext* executionContext, Buffer buffer, size_t typeSize, void (*createInitialStateFn)(unsigned char*, unsigned char*), void (*combineStatesFn)(unsigned char*, unsigned char*, unsigned char*), size_t stateTypeSize) {
+   utility::Tracer::Trace trace(buildEvent);
    std::vector<uint8_t*> entryPointers;
    auto numElements = buffer.numElements / typeSize;
    for (size_t i = 0; i < numElements; i++) {
       entryPointers.push_back(&buffer.ptr[i * typeSize]);
    }
+   if (stateTypeSize % 8 != 0) {
+      stateTypeSize += 8 - stateTypeSize % 8;
+   }
    auto* view = new SegmentTreeView;
    executionContext->registerState({view, [](void* ptr) { delete reinterpret_cast<SegmentTreeView*>(ptr); }});
+   view->stateTypeSize = stateTypeSize;
+   view->numEntries = numElements * 2 - 1;
+   view->storage = runtime::FixedSizedBuffer<TreeNode>::createZeroed(view->numEntries);
+   view->stateStorage = runtime::FixedSizedBuffer<uint8_t>::createZeroed(view->numEntries * stateTypeSize);
    view->combineStatesFn = combineStatesFn;
    view->createInitialStateFn = createInitialStateFn;
-   view->stateTypeSize = stateTypeSize;
+
    if (entryPointers.empty()) {
       view->root = nullptr;
    } else {
       view->root = view->buildRecursively(entryPointers, 0, entryPointers.size() - 1);
    }
    return view;
+}
+SegmentTreeView::~SegmentTreeView() {
+   FixedSizedBuffer<TreeNode>::deallocate(storage, numEntries);
 }
 } // namespace runtime

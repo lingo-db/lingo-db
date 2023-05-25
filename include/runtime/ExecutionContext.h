@@ -10,13 +10,14 @@ namespace runtime {
 class Database;
 //some state required for query processing;
 struct State {
-   void* ptr;
+   void* ptr = nullptr;
    std::function<void(void*)> freeFn;
 };
 class ExecutionContext {
    std::unordered_map<uint32_t, uint8_t*> results;
    std::unordered_map<uint32_t, int64_t> tupleCounts;
    tbb::concurrent_hash_map<void*, State> states;
+   tbb::enumerable_thread_specific<std::unordered_map<size_t, State>> allocators;
 
    public:
    int id;
@@ -41,6 +42,9 @@ class ExecutionContext {
    void setTupleCount(uint32_t id, int64_t tupleCount);
    void registerState(const State& s) {
       states.insert({s.ptr, s});
+   }
+   State& getAllocator(size_t group) {
+      return allocators.local()[group];
    }
    void reset();
    ~ExecutionContext();

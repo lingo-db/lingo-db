@@ -472,6 +472,25 @@ static std::pair<mlir::Value, const mlir::tuples::Column*> mapBool(mlir::Value s
    mapOp.getFn().push_back(mapBlock);
    return {mapOp.getResult(), &markAttrDef.getColumn()};
 }
+static std::pair<mlir::Value, const mlir::tuples::Column*> mapIndex(mlir::Value stream, mlir::OpBuilder& rewriter, mlir::Location loc, size_t value) {
+   Block* mapBlock = new Block;
+   {
+      mlir::OpBuilder::InsertionGuard guard(rewriter);
+      rewriter.setInsertionPointToStart(mapBlock);
+      mlir::Value val = rewriter.create<mlir::arith::ConstantIndexOp>(loc, value);
+      rewriter.create<mlir::tuples::ReturnOp>(loc, val);
+   }
+
+   auto& columnManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+   std::string scopeName = columnManager.getUniqueScope("map");
+   std::string attributeName = "ival";
+   tuples::ColumnDefAttr markAttrDef = columnManager.createDef(scopeName, attributeName);
+   auto& ra = markAttrDef.getColumn();
+   ra.type = rewriter.getI1Type();
+   auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), stream, rewriter.getArrayAttr(markAttrDef));
+   mapOp.getFn().push_back(mapBlock);
+   return {mapOp.getResult(), &markAttrDef.getColumn()};
+}
 static mlir::Value mapColsToNull(mlir::Value stream, mlir::OpBuilder& rewriter, mlir::Location loc, mlir::ArrayAttr mapping, mlir::relalg::ColumnSet excluded = {}) {
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    std::vector<mlir::Attribute> defAttrs;
@@ -2072,7 +2091,8 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
             rewriter.setInsertionPointToStart(initialValueBlock);
             std::vector<mlir::Value> defaultValues;
             mlir::Value buffer = rewriter.create<mlir::subop::GenericCreateOp>(loc, bufferType);
-            buffer.getDefiningOp()->setAttr("initial_capacity", rewriter.getI64IntegerAttr(16));
+            buffer.getDefiningOp()->setAttr("initial_capacity", rewriter.getI64IntegerAttr(1));
+            buffer.getDefiningOp()->setAttr("group", rewriter.getI64IntegerAttr(0));
             rewriter.create<mlir::tuples::ReturnOp>(loc, buffer);
          }
          lookupOp.getInitFn().push_back(initialValueBlock);
@@ -2258,9 +2278,19 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
          }
          if (from == 0) {
             rangeBegin = referenceRefAttr;
+         } else {
+            auto [fromDefAttr, fromRefAttr] = createColumn(continuousViewRefType, "frame", "from");
+            auto [withConst, constCol] = mapIndex(current, rewriter, loc, from);
+            current = rewriter.create<mlir::subop::OffsetReferenceBy>(loc, withConst, referenceRefAttr, colManager.createRef(constCol), fromDefAttr);
+            rangeBegin = fromRefAttr;
          }
          if (to == 0) {
             rangeEnd = referenceRefAttr;
+         } else {
+            auto [toDefAttr, toRefAttr] = createColumn(continuousViewRefType, "frame", "to");
+            auto [withConst, constCol] = mapIndex(current, rewriter, loc, to);
+            current = rewriter.create<mlir::subop::OffsetReferenceBy>(loc, withConst, referenceRefAttr, colManager.createRef(constCol), toDefAttr);
+            rangeEnd = toRefAttr;
          }
          assert(rangeBegin && rangeEnd);
          for (auto orderedWindowFn : analyzedWindow.orderedWindowFunctions) {

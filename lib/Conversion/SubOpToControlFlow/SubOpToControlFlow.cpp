@@ -900,10 +900,21 @@ class CreateBufferLowering : public SubOpConversionPattern<mlir::subop::GenericC
       if (!bufferType) return failure();
       auto loc = createOp->getLoc();
       EntryStorageHelper storageHelper(bufferType.getMembers(), typeConverter);
-      Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(loc, createOp->hasAttr("initial_capacity")?createOp->getAttr("initial_capacity").cast<mlir::IntegerAttr>().getInt(): 1024);
+      Value initialCapacity = rewriter.create<arith::ConstantIndexOp>(loc, createOp->hasAttr("initial_capacity") ? createOp->getAttr("initial_capacity").cast<mlir::IntegerAttr>().getInt() : 1024);
       auto elementType = storageHelper.getStorageType();
       auto typeSize = rewriter.create<mlir::util::SizeOfOp>(loc, rewriter.getIndexType(), elementType);
-      mlir::Value vector = rt::GrowingBuffer::create(rewriter, loc)({getExecutionContext(rewriter, createOp), typeSize, initialCapacity})[0];
+      mlir::Value executionContext;
+      mlir::Value allocator;
+      rewriter.atStartOf(&createOp->getParentOfType<mlir::func::FuncOp>().getBody().front(), [&](SubOpRewriter& rewriter) {
+         executionContext = getExecutionContext(rewriter, createOp);
+         if (createOp->hasAttrOfType<mlir::IntegerAttr>("group")) {
+            Value groupId = rewriter.create<arith::ConstantIndexOp>(loc, createOp->getAttr("group").cast<mlir::IntegerAttr>().getInt());
+            allocator = rt::GrowingBufferAllocator::getGroupAllocator(rewriter, loc)({executionContext, groupId})[0];
+         } else {
+            allocator = rt::GrowingBufferAllocator::getDefaultAllocator(rewriter, loc)({})[0];
+         }
+      });
+      mlir::Value vector = rt::GrowingBuffer::create(rewriter, loc)({allocator, executionContext, typeSize, initialCapacity})[0];
       rewriter.replaceOp(createOp, vector);
       return mlir::success();
    }
@@ -1372,14 +1383,15 @@ class SortLowering : public SubOpConversionPattern<mlir::subop::CreateSortedView
 class StateContext {
    mlir::Operation* scanOp;
    llvm::DenseMap<mlir::Value, size_t> offset;
+   llvm::DenseMap<mlir::Value, mlir::Value> mappingForStoring;
    size_t numPtrs = 0;
    std::vector<std::tuple<mlir::Value, mlir::Operation*, size_t>> mapping; // value, owner, offset
    mlir::TypeConverter& converter;
-
+   SubOpRewriter& rewriter;
    public:
    bool anyTuple = false;
    bool anyNonPointer = false;
-   StateContext(mlir::Operation* op, mlir::TypeConverter& converter) : scanOp(op), converter(converter) {
+   StateContext(mlir::Operation* op, mlir::TypeConverter& converter,SubOpRewriter& rewriter) : scanOp(op), converter(converter),rewriter(rewriter) {
       analyze();
    }
    void analyze(mlir::Operation* op, mlir::Operation* exclude = nullptr) {
@@ -1402,7 +1414,7 @@ class StateContext {
             if (auto* def = operand.getDefiningOp()) {
                if (!exclude || !exclude->isAncestor(def)) {
                   anyNonPointer |= converter.convertType(operand.getType()) == operand.getType();
-
+                  mappingForStoring.insert({operand,rewriter.getMapped(operand,op)});
                   if (!offset.contains(operand)) {
                      auto localOffset = numPtrs++;
                      offset[operand] = localOffset;
@@ -1415,6 +1427,7 @@ class StateContext {
             } else if (auto* parentOp = operand.getParentBlock()->getParentOp()) {
                if (!exclude || !exclude->isAncestor(parentOp)) {
                   anyNonPointer |= converter.convertType(operand.getType()) == operand.getType();
+                  mappingForStoring.insert({operand,rewriter.getMapped(operand,op)});
                   if (!offset.contains(operand)) {
                      auto localOffset = numPtrs++;
                      offset[operand] = localOffset;
@@ -1491,8 +1504,14 @@ class StateContext {
             mlir::Value threadLocalPtr = rewriter.getMapped(getLocalOp.getThreadLocal(), nullptr);
             rewriter.create<util::StoreOp>(scanOp->getLoc(), threadLocalPtr, contextPtr, idx);
          } else {
-            mlir::Value ptr = rewriter.getMapped(x.first, nullptr);
+            mlir::Value ptr = mappingForStoring.at(x.first);
+
             if (!ptr.getType().isa<mlir::util::RefType>()) {
+               /*scanOp->dump();
+               ptr.dump();
+               if (!ptr.getDefiningOp()) {
+                  ptr.getParentBlock()->getParentOp()->dump();
+               }*/
                Value realPtr;
                rewriter.atStartOf(&scanOp->getParentOfType<mlir::func::FuncOp>().getBody().front(), [&](SubOpRewriter& rewriter) {
                   realPtr = rewriter.create<mlir::util::AllocaOp>(scanOp->getLoc(), util::RefType::get(rewriter.getContext(), ptr.getType()), mlir::Value());
@@ -1551,7 +1570,7 @@ class ScanRefsTableLowering : public SubOpConversionPattern<mlir::subop::ScanRef
       mlir::Value recordBatchPointer = funcBody->addArgument(ptrType, loc);
       mlir::Value contextPtr = funcBody->addArgument(ptrType, loc);
       funcOp.getBody().push_back(funcBody);
-      StateContext stateContext(scanOp.getOperation(), *typeConverter);
+      StateContext stateContext(scanOp.getOperation(), *typeConverter,rewriter);
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
          stateContext.load(rewriter, contextPtr);
          recordBatchPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), recordBatchType), recordBatchPointer);
@@ -1600,7 +1619,7 @@ void implementBufferIterationRuntime(bool parallel, mlir::Value bufferIterator, 
    mlir::Value buffer = funcBody->addArgument(plainBufferType, loc);
    mlir::Value contextPtr = funcBody->addArgument(ptrType, loc);
    funcOp.getBody().push_back(funcBody);
-   StateContext stateContext(op, typeConverter);
+   StateContext stateContext(op, typeConverter,rewriter);
    rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
       stateContext.load(rewriter, contextPtr);
       auto castedBuffer = rewriter.create<mlir::util::BufferCastOp>(loc, mlir::util::BufferType::get(rewriter.getContext(), entryType), buffer);
@@ -1648,7 +1667,7 @@ void implementBufferIterationDirect(mlir::Value bufferIterator, mlir::Type entry
    rt::BufferIterator::destroy(rewriter, loc)({bufferIterator});
 }
 void implementBufferIteration(bool parallel, mlir::Value bufferIterator, mlir::Type entryType, mlir::Location loc, SubOpRewriter& rewriter, mlir::TypeConverter& typeConverter, mlir::Operation* op, std::function<void(SubOpRewriter& rewriter, mlir::Value)> fn) {
-   StateContext context(op, typeConverter);
+   StateContext context(op, typeConverter,rewriter);
    if (context.anyTuple || context.anyNonPointer) {
       //llvm::dbgs() << "falling back\n";
       implementBufferIterationDirect(bufferIterator, entryType, loc, rewriter, typeConverter, op, fn);
@@ -1729,9 +1748,9 @@ class ScanRefsContinuousViewLowering : public SubOpConversionPattern<mlir::subop
    using SubOpConversionPattern<mlir::subop::ScanRefsOp>::SubOpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::ScanRefsOp scanOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      if (!scanOp.getState().getType().isa<mlir::subop::ContinuousViewType,mlir::subop::ArrayType>()) return failure();
+      if (!scanOp.getState().getType().isa<mlir::subop::ContinuousViewType, mlir::subop::ArrayType>()) return failure();
       if (scanOp->hasAttr("parallel")) {
-         StateContext stateContext(scanOp, *typeConverter);
+         StateContext stateContext(scanOp, *typeConverter,rewriter);
          if (!stateContext.anyNonPointer && !stateContext.anyTuple) {
             ColumnMapping mapping;
             auto loc = scanOp->getLoc();
@@ -3742,7 +3761,11 @@ class LoopLowering : public SubOpConversionPattern<mlir::subop::LoopOp> {
          std::vector<mlir::Value> args;
          for (size_t i = 0; i < loopOp.getBody().getNumArguments(); i++) {
             mlir::Value whileArg = after->getArguments()[i + 1];
-            args.push_back(rewriter.create<mlir::UnrealizedConversionCastOp>(loc, loopOp.getBody().getArgument(i).getType(), whileArg).getResult(0));
+            if (whileArg.getType() != loopOp.getBody().getArgument(i).getType()) {
+               args.push_back(rewriter.create<mlir::UnrealizedConversionCastOp>(loc, loopOp.getBody().getArgument(i).getType(), whileArg).getResult(0));
+            } else {
+               args.push_back(whileArg);
+            }
          }
          rewriter.inlineBlock<mlir::subop::LoopContinueOpAdaptor>(b, args, [&](mlir::subop::LoopContinueOpAdaptor adaptor) {
             std::vector<mlir::Value> res;
@@ -3839,7 +3862,15 @@ class OffsetReferenceByLowering : public SubOpTupleStreamConsumerConversionPatte
       if (!offset.getType().isIndex()) {
          offset = rewriter.create<mlir::arith::IndexCastOp>(op->getLoc(), rewriter.getIndexType(), offset);
       }
-      auto newIdx = rewriter.create<mlir::arith::AddIOp>(op->getLoc(), unpackedRef[0], offset);
+      offset = rewriter.create<mlir::arith::IndexCastOp>(op->getLoc(), rewriter.getI64Type(), offset);
+      auto currIdx = rewriter.create<mlir::arith::IndexCastOp>(op->getLoc(), rewriter.getI64Type(), unpackedRef[0]);
+      mlir::Value newIdx = rewriter.create<mlir::arith::AddIOp>(op->getLoc(), currIdx, offset);
+      newIdx = rewriter.create<mlir::arith::MaxSIOp>(op->getLoc(), rewriter.create<mlir::arith::ConstantIntOp>(op->getLoc(), 0, rewriter.getI64Type()), newIdx);
+      newIdx = rewriter.create<mlir::arith::IndexCastOp>(op->getLoc(), rewriter.getIndexType(), newIdx);
+      auto length = rewriter.create<mlir::util::BufferGetLen>(op->getLoc(), rewriter.getIndexType(), unpackedRef[1]);
+      auto maxIdx = rewriter.create<mlir::arith::SubIOp>(op->getLoc(), length, rewriter.create<mlir::arith::ConstantIndexOp>(op->getLoc(), 1));
+      newIdx = rewriter.create<mlir::arith::MinUIOp>(op->getLoc(), maxIdx, newIdx);
+
       auto newRef = rewriter.create<mlir::util::PackOp>(op->getLoc(), mlir::ValueRange{newIdx, unpackedRef[1]});
       mapping.define(op.getNewRef(), newRef);
       rewriter.replaceTupleStream(op, mapping);
