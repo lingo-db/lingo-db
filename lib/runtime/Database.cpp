@@ -123,6 +123,9 @@ void Database::setPersist(bool persist) {
    setPersistMode(persist);
 }
 void Database::setDirectory(std::string dir) {
+   if(dir.back() == '/') {
+      dir.pop_back();
+   }
    directory = dir;
 }
 std::string Database::getDirectory() {

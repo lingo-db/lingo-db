@@ -64,7 +64,6 @@ class RelAlgLoweringStep : public LoweringStep {
       // Load the required tables/indices for the query
       moduleOp.walk([&](mlir::Operation* op) {
          if (auto getExternalOp = mlir::dyn_cast_or_null<mlir::subop::GetExternalOp>(*op)) {
-            getExternalOp.dump();
             auto* db = getDatabase();
             auto json = nlohmann::json::parse(getExternalOp.getDescr().str());
             auto tableName = json.value("table", "");
@@ -76,22 +75,15 @@ class RelAlgLoweringStep : public LoweringStep {
             }
             // Load table
             if(!db->hasTable(tableName)) {
-               std::cout << "loading table: " << tableName << std::endl;
-               auto directory = db->getDirectory();
-               if (directory.back() != '/') {
-                  directory = directory + '/';
-               }
-               std::string path = directory + tableName + ".arrow";
+               std::string path = db->getDirectory() + '/' + tableName + ".arrow";
                auto newTable = db->loadTable(path);
                db->addTable(tableName, newTable);
             }
             // Load index
             if (addIndex) {
-               std::cout << "loading index for table: " << tableName << std::endl;
                db->addIndex(tableName);
 
             }
->>>>>>> f999679b (Add index lazily)
          }
       });
    }
