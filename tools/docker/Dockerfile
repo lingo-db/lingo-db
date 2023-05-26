@@ -3,7 +3,7 @@ ARG builtImage="lingodb"
 FROM ubuntu:jammy AS baseimg
 RUN apt-get update
 RUN DEBIAN_FRONTEND="noninteractive" apt-get -y install tzdata
-RUN apt-get -y install python3-pip python3-venv
+RUN apt-get -y install python3-pip python3-venv libtbb-dev
 ENV VIRTUAL_ENV=/opt/venv
 RUN python3 -m venv $VIRTUAL_ENV
 ENV PATH="$VIRTUAL_ENV/bin:$PATH"
