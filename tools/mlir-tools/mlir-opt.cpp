@@ -25,7 +25,7 @@
 int main(int argc, char** argv) {
    if (argc > 2) {
       if (std::string(argv[1]) == "--use-db") {
-         std::shared_ptr<runtime::Database> database = runtime::Database::loadFromDir(std::string(argv[2]));
+         std::shared_ptr<runtime::Database> database = runtime::Database::loadMetaDataAndSamplesFromDir(std::string(argv[2]));
          mlir::relalg::setStaticDB(database);
          char** argvReduced = new char*[argc - 2];
          argvReduced[0] = argv[0];
