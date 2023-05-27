@@ -12,6 +12,7 @@ make
 set -x
 ./dbgen -f -s $3
 ls -la .
+chmod +r *.tbl
 for table in ./*.tbl; do  sed -i 's/|$//' "$table"; done
 
 "$1/sql" $2 < initialize.sql

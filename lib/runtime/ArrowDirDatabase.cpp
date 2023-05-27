@@ -16,6 +16,8 @@
 #include <random>
 #include <ranges>
 
+#include "json.h"
+
 using namespace runtime;
 std::shared_ptr<runtime::TableMetaData> runtime::ArrowDirDatabase::getTableMetaData(const std::string& name) {
    if (!metaData.contains(name)) {
@@ -93,13 +95,17 @@ std::unique_ptr<Database> ArrowDirDatabase::load(std::string directory, bool loa
                             std::istreambuf_iterator<char>());
       }
    }
-   // Set meta data
-   for (auto& sample : database->samples) {
-      database->metaData[sample.first] = runtime::TableMetaData::create(json, sample.first, sample.second);
-   }
-   // Set indices
-   for (auto table : database->tables) database->externalHashIndexManager.addIndex(table.first, table.second, database->metaData[table.first]);
+   if(!json.empty()){
+      nlohmann::json parsedMetaData = nlohmann::json::parse(json);
 
+      // Set meta data
+      for (auto table : parsedMetaData["tables"].items()) {
+         std::string tableName=table.key();
+         database->metaData[tableName] = runtime::TableMetaData::create(json, tableName,database->getSample(tableName));
+      }
+      // Set indices
+      for (auto table : database->tables) database->externalHashIndexManager.addIndex(table.first, table.second, database->metaData[table.first]);
+   }
    return database;
 }
 std::shared_ptr<arrow::Table> ArrowDirDatabase::getTable(const std::string& name) {
