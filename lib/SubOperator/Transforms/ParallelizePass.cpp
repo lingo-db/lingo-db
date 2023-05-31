@@ -188,13 +188,15 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                      //todo: order of members in reduce fn must match member order in state
                      auto collisions = getCollisions();
                      if (collisions.size() == 0) {
-                        //todo: fix
+                        //todo: needs more detailed handling
                         if (reduceOp.getRef().getColumn().type.isa<mlir::subop::ContinuousEntryRefType>()) {
                            if (reduceOp.getMembers().size() == 1 && reduceOp.getRegion().front().getArguments().back().getType().isIntOrFloat()) {
                               //we can perform generic atomic
-                              //markAsAtomic.insert(pipelineOp);
+                              markAsAtomic.insert(pipelineOp);
                               continue;
                            }
+                        }else{
+                           continue;
                         }
                      }
                      if (collisions.size() == 1) {
