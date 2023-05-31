@@ -13,7 +13,7 @@ ls
 make
 set -x
 ./dsdgen -FORCE -SCALE $3
-ls -la .
+chmod +r *.dat
 for table in ./*.dat; do  sed -i 's/|$//' "$table"; mv "$table" "../$table";  done
 cd ..
 "$1/sql" $2 < initialize.sql

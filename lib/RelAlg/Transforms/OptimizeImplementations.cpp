@@ -658,8 +658,8 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   }
                   auto available = mlir::cast<Operator>(topRightVal.getDefiningOp()).getAvailableColumns();
                   required.remove(available);
-                  llvm::dbgs() << "still required:";
-                  required.dump(&getContext());
+                  //llvm::dbgs() << "still required:";
+                  //required.dump(&getContext());
                   if (!required.empty()) {
                      mlir::OpBuilder builder(&getContext());
                      auto previousTerminator = mlir::cast<mlir::tuples::ReturnOp>(aggrOp.getAggrFunc().front().getTerminator());

@@ -11,6 +11,10 @@ llvm-jit-static.*
 perf-result.json
 sourcemap*
 snapshot-*
+mlir-c-module.cpp
+input.mlir
+c-backend.so
+lingodb.trace
 sql-input.mlir
 perf.*
 events.parquet

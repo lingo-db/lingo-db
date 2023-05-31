@@ -19,6 +19,7 @@ SF=$3
 ./dbgen -qf -T p -s "$SF"
 ./dbgen -qf -T s -s "$SF"
 ./dbgen -q -T l -s "$SF"
+chmod +r *.tbl
 for table in ./*.tbl; do  sed -i 's/|$//' "$table"; done
 
 "$1/sql" $2 < initialize.sql
