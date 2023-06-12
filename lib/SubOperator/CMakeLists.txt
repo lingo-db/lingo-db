@@ -27,4 +27,5 @@ add_mlir_dialect_library(MLIRSubOperator
 
         LINK_LIBS mlir-support PUBLIC
         MLIRIR
+        runtime_funcs_ptr
         )

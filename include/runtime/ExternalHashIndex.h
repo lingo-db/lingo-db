@@ -3,10 +3,7 @@
 
 #include "DataSourceIteration.h"
 
-#include "arrow/record_batch.h"
-#include "arrow/table.h"
-#include <arrow/api.h>
-#include <arrow/result.h>
+
 
 #include "runtime/Database.h"
 #include "runtime/ExecutionContext.h"
@@ -49,47 +46,7 @@ struct ExternalHashIndexMapping {
 
    ExternalHashIndexIteration* lookup(size_t hashValue);
 
-   ExternalHashIndexMapping(ExternalHashIndex* externalHashIndex, const std::vector<std::string>& mapping) : externalHashIndex{externalHashIndex} {
-      // Find column ids for relevant columns
-      for (auto columnToMap : mapping) {
-         auto columnNames = externalHashIndex->table->ColumnNames();
-         size_t columnId = 0;
-         bool found = false;
-         for (auto column : columnNames) {
-            if (column == columnToMap) {
-               colIds.push_back(columnId);
-               found = true;
-               break;
-            }
-            columnId++;
-         }
-         if (!found) throw std::runtime_error("column not found: " + columnToMap);
-      }
-
-      // Calculate size of RecordBatchInfo for relevant columns
-      recordBatchInfoSize = sizeof(size_t) + colIds.size() * sizeof(ColumnInfo);
-
-      // Prepare RecordBatchInfo for each record batch to facilitate computation for individual tuples at runtime
-      for (auto& recordBatchPtr : externalHashIndex->recordBatches) {
-         RecordBatchInfo* recordBatchInfo = static_cast<RecordBatchInfo*>(malloc(recordBatchInfoSize));
-         recordBatchInfo->numRows = 1;
-         for (size_t i = 0; i != colIds.size(); ++i) {
-            auto colId = colIds[i];
-            ColumnInfo& colInfo = recordBatchInfo->columnInfo[i];
-            // Base offset for record batch, will need to add individual tuple offset in record batch
-            colInfo.offset = recordBatchPtr->column_data(colId)->offset;
-            // Facilitates handling of null values
-            colInfo.validMultiplier = recordBatchPtr->column_data(colId)->buffers[0] ? 1 : 0;
-            // Compact representation of null values (inversed)
-            colInfo.validBuffer = RecordBatchInfo::getBuffer(recordBatchPtr.get(), colId, 0);
-            // Pointer to fixed size data for column
-            colInfo.dataBuffer = RecordBatchInfo::getBuffer(recordBatchPtr.get(), colId, 1);
-            // Pointer to variable length data for column
-            colInfo.varLenBuffer = RecordBatchInfo::getBuffer(recordBatchPtr.get(), colId, 2);
-         }
-         recordBatchInfos.push_back(recordBatchInfo);
-      }
-   }
+   ExternalHashIndexMapping(ExternalHashIndex* externalHashIndex, const std::vector<std::string>& mapping);
 
    ~ExternalHashIndexMapping() {
       for (auto* ptr : recordBatchInfos) free(ptr);

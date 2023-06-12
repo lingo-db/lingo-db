@@ -14,7 +14,7 @@
 #include "runtime/TableBuilder.h"
 
 namespace runtime {
-void Database::createTable(std::string tableName, std::shared_ptr<TableMetaData>) {
+void Database::createTable_(std::string tableName, std::shared_ptr<TableMetaData>) {
    throw std::runtime_error("database does not support table creation");
 }
 void Database::appendTable(std::string tableName, std::shared_ptr<arrow::Table> newRows) {
@@ -66,7 +66,7 @@ void Database::createTable(runtime::VarLen32 name, runtime::VarLen32 meta) {
    if (hasTable(name.str())) {
       throw std::runtime_error("table " + name.str() + " does already exist");
    }
-   createTable(name.str(), runtime::TableMetaData::deserialize(meta.str()));
+   createTable_(name.str(), runtime::TableMetaData::deserialize(meta.str()));
 }
 void Database::copyFromIntoTable(runtime::VarLen32 tableName, runtime::VarLen32 fileName, runtime::VarLen32 delimiter, runtime::VarLen32 escape) {
    arrow::io::IOContext ioContext = arrow::io::default_io_context();

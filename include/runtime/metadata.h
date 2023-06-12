@@ -34,6 +34,9 @@ class TableMetaData {
    size_t getNumRows() const {
       return numRows;
    }
+   void setPresent() {
+      present = true;
+   }
    void setNumRows(size_t numRows) {
       TableMetaData::numRows = numRows;
    }

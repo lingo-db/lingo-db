@@ -23,6 +23,7 @@ DeclarationMatcher methodMatcher = cxxRecordDecl(isDefinition(), hasParent(names
 
 class MethodPrinter : public MatchFinder::MatchCallback {
    llvm::raw_ostream& hStream;
+   llvm::raw_ostream& cppStream;
    std::string translateIntegerType(size_t width) {
       return "mlir::IntegerType::get(context," + std::to_string(width) + ")";
    }
@@ -52,9 +53,9 @@ class MethodPrinter : public MatchFinder::MatchCallback {
                   if (!translated.has_value()) return {};
                   funcType += translated.value();
                }
-               if(funcProtoType->getReturnType()->isVoidType()){
-                  funcType+="},{})";
-               }else{
+               if (funcProtoType->getReturnType()->isVoidType()) {
+                  funcType += "},{})";
+               } else {
                   auto translated = translateType(funcProtoType->getReturnType());
                   if (!translated.has_value()) return {};
                   funcType += "}, {" + translated.value() + "})";
@@ -110,7 +111,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
    }
 
    public:
-   MethodPrinter(raw_ostream& hStream) : hStream(hStream) {}
+   MethodPrinter(raw_ostream& hStream, raw_ostream& cppStream) : hStream(hStream), cppStream(cppStream) {}
    virtual void run(const MatchFinder::MatchResult& result) override {
       //std::cout << "match" << std::endl;
       if (const CXXRecordDecl* md = result.Nodes.getNodeAs<clang::CXXRecordDecl>("class")) {
@@ -166,15 +167,19 @@ class MethodPrinter : public MatchFinder::MatchCallback {
                std::cerr << "ignoring func " << methodName << std::endl;
                continue;
             }
+            auto getPtrFuncName = "getPtrOfMethod" + methodName;
+            hStream << "static void* " << getPtrFuncName << "();\n";
+            hStream << "#ifndef RUNTIME_PTR_LIB\n";
             hStream << " inline static mlir::util::FunctionSpec " << methodName << " = ";
-
             std::string fullName = "runtime::" + className + "::" + methodName;
             hStream << " mlir::util::FunctionSpec(\"" << fullName << "\", \"" << mangled << "\", ";
             emitTypeCreateFn(hStream, types);
             hStream << ",";
             emitTypeCreateFn(hStream, resTypes);
-            hStream << "," << (noSideEffects ? "true" : "false") << ");\n";
-         }
+            hStream << "," << (noSideEffects ? "true" : "false") << "," << getPtrFuncName << ");\n";
+            hStream << "#endif \n";
+            cppStream << "void* rt::" << className << "::" << getPtrFuncName << "(){  auto x= &" << fullName << ";  return *reinterpret_cast<void**>(&x);}";
+         };
          hStream << "};\n";
       }
    }
@@ -183,6 +188,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
 cl::OptionCategory mycat("myname", "mydescription");
 
 cl::opt<std::string> headerOutputFile("oh", cl::desc("output path for header"), cl::cat(mycat));
+cl::opt<std::string> cppOutputFile("ocpp", cl::desc("output path for cpp file"), cl::cat(mycat));
 
 int main(int argc, const char** argv) {
    auto expectedParser = CommonOptionsParser::create(argc, argv, mycat);
@@ -193,21 +199,36 @@ int main(int argc, const char** argv) {
    }
    CommonOptionsParser& optionsParser = expectedParser.get();
    std::string hContent;
+   std::string cppContent;
+
    llvm::raw_string_ostream hStream(hContent);
+   llvm::raw_string_ostream cppStream(cppContent);
+
    ClangTool tool(optionsParser.getCompilations(), optionsParser.getSourcePathList());
-   MethodPrinter printer(hStream);
+   auto currentFile = optionsParser.getSourcePathList().at(0);
+   std::string delimiter = "include/";
+   currentFile.erase(0, currentFile.find(delimiter) + delimiter.length());
+
+   MethodPrinter printer(hStream, cppStream);
    MatchFinder finder;
    finder.addMatcher(methodMatcher, &printer);
    hStream << "#include <mlir/Dialect/util/FunctionHelper.h>\n";
    hStream << "namespace rt {\n";
+   cppStream << "#define RUNTIME_PTR_LIB\n";
+   cppStream << "#include \""<<headerOutputFile<<"\"\n";
+   cppStream << "#include \"" << currentFile << "\"\n";
+
    tool.run(newFrontendActionFactory(&finder).get());
 
    hStream << "}\n";
    hStream.flush();
+   cppStream.flush();
    std::cout << "------ .h --------" << std::endl;
    std::cout << hContent << std::endl;
    std::error_code errorCode;
    llvm::raw_fd_ostream hOStream(headerOutputFile, errorCode);
    hOStream << hContent;
+   llvm::raw_fd_ostream cppOStream(cppOutputFile, errorCode);
+   cppOStream << cppContent;
    return 0;
 }

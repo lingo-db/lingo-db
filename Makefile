@@ -36,10 +36,6 @@ build/arrow-perf/.buildstamp: build/arrow-perf/.stamp
 	cmake --install build/arrow-perf --prefix build/arrow-perf/install
 	touch $@
 
-build/arrow/.pyarrowstamp: build/arrow/.buildstamp
-	cd arrow/python; python3 setup.py build_ext --inplace --extra-cmake-args="-DArrow_DIR=${ROOT_DIR}/build/arrow/install/lib/cmake/arrow -DArrowPython_DIR=${ROOT_DIR}/build/arrow/install/lib/cmake/arrow"
-	touch $@
-
 build/llvm-build/.buildstamp: build/llvm-build/.stamp
 	cmake --build build/llvm-build -j16
 	touch $@
@@ -61,10 +57,9 @@ resources/data/job/.stamp: tools/generate/job.sh
 	touch $@
 
 LDB_ARGS=-DMLIR_DIR=${ROOT_DIR}build/llvm-build/lib/cmake/mlir \
-		 -DArrow_DIR=${ROOT_DIR}build/arrow/install/lib/cmake/arrow \
 		 -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
 	   	 -DCMAKE_BUILD_TYPE=Debug
-LDB_DEPS=build/llvm-build/.buildstamp build/arrow/.buildstamp build/arrow/.pyarrowstamp
+LDB_DEPS=build/llvm-build/.buildstamp
 dependencies: $(LDB_DEPS)
 
 build/lingodb-debug/.stamp: $(LDB_DEPS)
@@ -89,15 +84,15 @@ build/lingodb-debug-coverage/.stamp: $(LDB_DEPS)
 
 .PHONY: test-coverage
 test-coverage: build/lingodb-debug-coverage/.stamp
-	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql pymlirdbext sql-to-mlir -- -j${NPROCS}
-	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit $(dir $<)/test/lit
+	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir -- -j${NPROCS}
+	./build/llvm-build/bin/llvm-lit $(dir $<)/test/lit
 	lcov --capture --directory $(dir $<)  --output-file $(dir $<)/coverage.info
 	lcov --remove $(dir $<)/coverage.info -o $(dir $<)/filtered-coverage.info \
 			'**/build/llvm-build/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*' '**/vendored/*' '/usr/*'
 	genhtml  --ignore-errors source $(dir $<)/filtered-coverage.info --legend --title "lcov-test" --output-directory=$(dir $<)/coverage-report
 .PHONY: run-test
 run-test: build/lingodb-debug/.stamp
-	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql pymlirdbext sql-to-mlir mlir-doc -- -j${NPROCS}
+	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir mlir-doc -- -j${NPROCS}
 	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit -v $(dir $<)/test/lit -j 1
 .PHONY: run-benchmark
 run-benchmark: build/lingodb-release/.stamp build/lingodb-debug/.stamp resources/data/tpch-1/.stamp
@@ -132,3 +127,7 @@ reproduce: .repr-docker-built
 
 lint: build/lingodb-debug/.stamp
 	python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored" -clang-tidy-binary=./build/llvm-build/bin/clang-tidy
+
+python-package:
+	docker build -t pylingodb-builder -f "tools/python/Dockerfile" .
+	docker run --rm -v "${ROOT_DIR}:/repo" -v "${ROOT_DIR}:/built-packages" pylingodb-builder create_package.sh cp310-cp310

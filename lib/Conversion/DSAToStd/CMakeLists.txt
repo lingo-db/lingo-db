@@ -1,8 +1,4 @@
-gen_rt_def(tb-rt-defs "TableBuilder.h")
-gen_rt_def(ds-it-rt-defs "DataSourceIteration.h")
-gen_rt_def(join-ht-rt-defs "LazyJoinHashtable.h")
-gen_rt_def(ht-rt-defs "Hashtable.h")
-gen_rt_def(ec-rt-defs "ExecutionContext.h")
+
 
 add_mlir_conversion_library(MLIRDSAToStd
         CollectionIterators.cpp
@@ -26,4 +22,5 @@ add_mlir_conversion_library(MLIRDSAToStd
         MLIRIR
         MLIRDSA
         MLIRSCFTransforms
+        runtime_funcs_ptr
         )

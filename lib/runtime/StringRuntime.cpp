@@ -144,7 +144,7 @@ __int128 runtime::StringRuntime::toDecimal(runtime::VarLen32 string, int32_t req
       arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                      \
       uint8_t* data = nullptr;                                                                                                     \
       size_t len = 0;                                                                                                              \
-      arrow::Status status = formatter(value, [&](arrow::util::string_view v) {                                                    \
+      arrow::Status status = formatter(value, [&](std::string_view v) {                                                    \
          len = v.length();                                                                                                         \
          data = new uint8_t[len];                                                                                                  \
          memcpy(data, v.data(), len);                                                                                              \

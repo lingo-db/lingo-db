@@ -37,5 +37,6 @@ class ExecutionBackend {
    }
    virtual ~ExecutionBackend() {}
 };
+void visitBareFunctions(const std::function<void(std::string, void*)>& fn);
 } // namespace execution
 #endif //EXECUTION_BACKEND_H

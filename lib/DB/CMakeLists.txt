@@ -5,13 +5,7 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 add_dependencies(build_includes MLIRDBEliminateNullsIncGen)
 
 
-gen_rt_def(dump-rt-defs "DumpRuntime.h")
-gen_rt_def(string-rt-defs "StringRuntime.h")
-gen_rt_def(date-rt-defs "DateRuntime.h")
-gen_rt_def(decimal-rt-defs "DecimalRuntime.h")
-gen_rt_def(integer-rt-defs "IntegerRuntime.h")
-gen_rt_def(float-rt-defs "FloatRuntime.h")
-gen_rt_def(timing-rt-defs "Timing.h")
+
 
 add_mlir_dialect_library(MLIRDB
         DBDialect.cpp
@@ -39,4 +33,5 @@ add_mlir_dialect_library(MLIRDB
         MLIRIR
         MLIRFuncTransforms
         MLIRUtil
+        runtime_funcs_ptr
         )

@@ -8,6 +8,8 @@
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
+#include "mlir/Dialect/util/FunctionHelper.h"
+
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/InitAllPasses.h"
@@ -181,6 +183,17 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
          return;
       }
       auto engine = std::move(maybeEngine.get());
+      auto runtimeSymbolMap = [&](llvm::orc::MangleAndInterner interner) {
+         auto symbolMap = llvm::orc::SymbolMap();
+         mlir::util::FunctionHelper::visitAllFunctions([&](std::string s, void* ptr) {
+            symbolMap[interner(s)] = llvm::JITEvaluatedSymbol::fromPointer(ptr);
+         });
+         execution::visitBareFunctions([&](std::string s, void* ptr) {
+            symbolMap[interner(s)] = llvm::JITEvaluatedSymbol::fromPointer(ptr);
+         });
+         return symbolMap;
+      };
+      engine->registerSymbols(runtimeSymbolMap);
       auto mainFnLookupResult = engine->lookup("main");
       if (!mainFnLookupResult) {
          error.emit() << "Could not lookup main function";

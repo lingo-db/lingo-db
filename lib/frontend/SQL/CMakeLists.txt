@@ -1,4 +1,3 @@
-gen_rt_def(db-rt-defs "Database.h")
 
 add_mlir_library(MLIRSQLFrontend
         Parser.cpp
@@ -9,4 +8,5 @@ add_mlir_library(MLIRSQLFrontend
         ${dialect_libs}
         ${conversion_libs}
         ${translation_libs}
+        runtime_funcs_ptr
         )

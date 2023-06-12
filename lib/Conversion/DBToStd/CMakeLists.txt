@@ -16,4 +16,5 @@ add_mlir_conversion_library(MLIRDBToArrowStd
         MLIRIR
         MLIRDB
         MLIRSCFTransforms
+        runtime_funcs_ptr
         )

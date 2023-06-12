@@ -1,6 +1,6 @@
 #include "runtime/ExternalArrowDatabase.h"
-
 #include <iostream>
+#include <arrow/table.h>
 using namespace runtime;
 void runtime::ExternalArrowDatabase::addTable(std::string name, std::shared_ptr<arrow::Table> table) {
    std::cout << "adding table:" << name << std::endl;

@@ -1,4 +1,5 @@
 add_library(runtime OBJECT
+        RecordBatchInfo.cpp
         ThreadLocal.cpp
         Heap.cpp
         TableBuilder.cpp
@@ -26,6 +27,6 @@ add_library(runtime OBJECT
         ExternalArrowDatabase.cpp
         MetaDataOnlyDatabase.cpp
         ExternalHashIndex.cpp)
-target_link_libraries(runtime PUBLIC arrow_shared PRIVATE TBB::tbb)
-target_link_options(runtime PUBLIC -Wl,-export-dynamic)
+target_link_libraries(runtime PRIVATE TBB::tbb arrow_static)
+target_link_options(runtime PUBLIC -Wl,--exclude-libs,ALL)
 

@@ -1,12 +1,4 @@
-gen_rt_def(grow-buf-rt-defs "GrowingBuffer.h")
-gen_rt_def(buf-rt-defs "Buffer.h")
-gen_rt_def(stv-rt-defs "SegmentTreeView.h")
-gen_rt_def(heap-rt-defs "Heap.h")
-gen_rt_def(idx-rt-defs "ExternalHashIndex.h")
-gen_rt_def(hmm-rt-defs "HashMultiMap.h")
-gen_rt_def(tls-rt-defs "ThreadLocal.h")
-gen_rt_def(st-rt-defs "SimpleState.h")
-gen_rt_def(paht-rt-defs "PreAggregationHashtable.h")
+
 
 add_mlir_conversion_library(MLIRSubOpToControlFlow
         SubOpToControlFlow.cpp
@@ -36,4 +28,5 @@ add_mlir_conversion_library(MLIRSubOpToControlFlow
         MLIRDB
         MLIRDSA
         MLIRSubOperator
+        runtime_funcs_ptr
         )

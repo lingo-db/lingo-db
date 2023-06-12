@@ -12,4 +12,5 @@ add_mlir_conversion_library(MLIRelAlgToSubOp
         MLIRIR
         MLIRRelAlg
         MLIRSubOperator
+        runtime_funcs_ptr
         )

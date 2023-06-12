@@ -15,13 +15,11 @@ class DataSourceIteration {
    std::shared_ptr<arrow::RecordBatch> currChunk;
    DataSource* dataSource;
    std::vector<size_t> colIds;
-   void access(RecordBatchInfo* info, std::shared_ptr<arrow::RecordBatch> batch);
 
    public:
    DataSourceIteration(DataSource* dataSource, const std::vector<size_t>& colIds);
 
    static DataSourceIteration* init(DataSource* dataSource, runtime::VarLen32 members);
-   void access(RecordBatchInfo* info);
    static void end(DataSourceIteration*);
    void iterate(bool parallel, void (*forEachChunk)(RecordBatchInfo*, void*), void*);
 };
