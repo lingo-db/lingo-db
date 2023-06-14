@@ -1119,7 +1119,7 @@ static mlir::Value anyTuple(mlir::Value stream, mlir::tuples::ColumnDefAttr mark
    auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
    auto [markerState, markerName] = createMarkerState(rewriter, loc);
    auto [mapped, boolColumn] = mapBool(stream, rewriter, loc, true);
-   auto [referenceDefAttr, referenceRefAttr] = createColumn(mlir::subop::LookupEntryRefType::get(rewriter.getContext(), markerState.getType()), "lookup", "ref");
+   auto [referenceDefAttr, referenceRefAttr] = createColumn(mlir::subop::LookupEntryRefType::get(rewriter.getContext(), markerState.getType().cast<mlir::subop::LookupAbleState>()), "lookup", "ref");
    auto afterLookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), mapped, markerState, rewriter.getArrayAttr({}), referenceDefAttr);
    rewriter.create<mlir::subop::ScatterOp>(loc, afterLookup, referenceRefAttr, rewriter.getDictionaryAttr(rewriter.getNamedAttr(markerName, colManager.createRef(boolColumn))));
    return rewriter.create<mlir::subop::ScanOp>(loc, markerState, rewriter.getDictionaryAttr(rewriter.getNamedAttr(markerName, markerDefAttr)));
@@ -1457,7 +1457,7 @@ static mlir::Value createSortedView(ConversionPatternRewriter& rewriter, mlir::V
       rewriter.create<mlir::tuples::ReturnOp>(loc, isLt);
    }
 
-   auto subOpSort = rewriter.create<mlir::subop::CreateSortedViewOp>(loc, mlir::subop::SortedViewType::get(rewriter.getContext(), buffer.getType()), buffer, rewriter.getArrayAttr(sortByMembers));
+   auto subOpSort = rewriter.create<mlir::subop::CreateSortedViewOp>(loc, mlir::subop::SortedViewType::get(rewriter.getContext(), buffer.getType().cast<mlir::subop::State>()), buffer, rewriter.getArrayAttr(sortByMembers));
    subOpSort.getRegion().getBlocks().push_back(block);
    return subOpSort.getResult();
 }
@@ -1967,7 +1967,7 @@ static std::tuple<mlir::Value, mlir::DictionaryAttr, mlir::DictionaryAttr> perfo
          rewriter.create<mlir::tuples::ReturnOp>(loc, compared);
       }
    }
-   referenceDefAttr.getColumn().type = mlir::subop::LookupEntryRefType::get(context, stateType);
+   referenceDefAttr.getColumn().type = mlir::subop::LookupEntryRefType::get(context, stateType.cast<mlir::subop::LookupAbleState>());
 
    auto referenceRefAttr = colManager.createRef(&referenceDefAttr.getColumn());
    createReduceFn(loc, rewriter, distAggrFuncs, referenceRefAttr, afterLookup, names, defMapping);
@@ -2043,7 +2043,7 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
             continuousView = rewriter.create<mlir::subop::CreateContinuousView>(loc, continuousViewType, vector);
          } else {
             auto sortedView = createSortedView(rewriter, vector, windowOp.getOrderBy(), loc, helper);
-            auto continuousViewType = mlir::subop::ContinuousViewType::get(rewriter.getContext(), sortedView.getType());
+            auto continuousViewType = mlir::subop::ContinuousViewType::get(rewriter.getContext(), sortedView.getType().cast<mlir::subop::State>());
             continuousView = rewriter.create<mlir::subop::CreateContinuousView>(loc, continuousViewType, sortedView);
          }
          rewriter.replaceOp(windowOp, evaluate(rewriter, continuousView, helper.createStateColumnMapping(), loc));
@@ -2150,11 +2150,11 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
             rewriter.setInsertionPointToStart(b);
             mlir::Value continuousView;
             if (windowOp.getOrderBy().empty()) {
-               auto continuousViewType = mlir::subop::ContinuousViewType::get(rewriter.getContext(), buffer.getType());
+               auto continuousViewType = mlir::subop::ContinuousViewType::get(rewriter.getContext(), buffer.getType().cast<mlir::subop::State>());
                continuousView = rewriter.create<mlir::subop::CreateContinuousView>(loc, continuousViewType, buffer);
             } else {
                auto sortedView = createSortedView(rewriter, buffer, windowOp.getOrderBy(), loc, helper);
-               auto continuousViewType = mlir::subop::ContinuousViewType::get(rewriter.getContext(), sortedView.getType());
+               auto continuousViewType = mlir::subop::ContinuousViewType::get(rewriter.getContext(), sortedView.getType().cast<mlir::subop::State>());
                continuousView = rewriter.create<mlir::subop::CreateContinuousView>(loc, continuousViewType, sortedView);
             }
             rewriter.create<mlir::tuples::ReturnOp>(loc, evaluate(rewriter, continuousView, helper.createStateColumnMapping(), loc));
@@ -2299,13 +2299,13 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
          if (!distAggrFuncs.empty() && fromBegin && fromEnd) {
             mlir::Value state = std::get<0>(staticAggregateResults);
             mlir::DictionaryAttr stateColumnMapping = std::get<2>(staticAggregateResults);
-            auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(getContext(), state.getType()), "lookup", "ref");
+            auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(getContext(), state.getType().cast<mlir::subop::LookupAbleState>()), "lookup", "ref");
             mlir::Value afterLookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(getContext()), current, state, rewriter.getArrayAttr({}), referenceDef);
             current = rewriter.create<mlir::subop::GatherOp>(loc, afterLookup, referenceRef, stateColumnMapping);
          } else if (!distAggrFuncs.empty()) {
             mlir::Value segmentTreeView = std::get<0>(segmentTreeViewResult);
             mlir::DictionaryAttr stateColumnMapping = std::get<1>(segmentTreeViewResult);
-            auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(getContext(), segmentTreeView.getType()), "lookup", "ref");
+            auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(getContext(), segmentTreeView.getType().cast<mlir::subop::LookupAbleState>()), "lookup", "ref");
             mlir::Value afterLookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(getContext()), current, segmentTreeView, rewriter.getArrayAttr({rangeBegin, rangeEnd}), referenceDef);
             current = rewriter.create<mlir::subop::GatherOp>(loc, afterLookup, referenceRef, stateColumnMapping);
          }
@@ -2393,7 +2393,7 @@ class AggregationLowering : public OpConversionPattern<mlir::relalg::Aggregation
       for (size_t i = 1; i < subResults.size(); i++) {
          mlir::Value state = std::get<0>(subResults.at(i));
          mlir::DictionaryAttr stateColumnMapping = std::get<2>(subResults.at(i));
-         auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(getContext(), state.getType()), "lookup", "ref");
+         auto [referenceDef, referenceRef] = createColumn(mlir::subop::LookupEntryRefType::get(getContext(), state.getType().cast<mlir::subop::LookupAbleState>()), "lookup", "ref");
          mlir::Value afterLookup = rewriter.create<mlir::subop::LookupOp>(aggregationOp->getLoc(), mlir::tuples::TupleStreamType::get(getContext()), newStream, state, aggregationOp.getGroupByCols(), referenceDef);
          newStream = rewriter.create<mlir::subop::GatherOp>(aggregationOp->getLoc(), afterLookup, referenceRef, stateColumnMapping);
       }
@@ -2649,7 +2649,7 @@ class TrackTuplesLowering : public OpConversionPattern<mlir::relalg::TrackTuples
       auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       auto [counterState, counterName] = createCounterState(rewriter, loc);
       auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("lookup"), "ref");
-      referenceDefAttr.getColumn().type = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), counterState.getType());
+      referenceDefAttr.getColumn().type = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), counterState.getType().cast<mlir::subop::LookupAbleState>());
       auto lookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), adaptor.getRel(), counterState, rewriter.getArrayAttr({}), referenceDefAttr);
 
       // Create reduce operation that increases counter for each seen tuple

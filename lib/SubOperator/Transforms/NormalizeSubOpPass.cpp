@@ -57,7 +57,7 @@ class SplitGenericScan : public mlir::RewritePattern {
       auto scanOp = mlir::cast<mlir::subop::ScanOp>(op);
       if (scanOp.getState().getType().isa<mlir::subop::TableType>()) return mlir::failure();
       //todo: check that one can obtain references
-      mlir::Type refType = mlir::subop::EntryRefType::get(getContext(), scanOp.getState().getType());
+      mlir::Type refType = mlir::subop::EntryRefType::get(getContext(), scanOp.getState().getType().cast<mlir::subop::State>());
       if (auto continuousView = scanOp.getState().getType().dyn_cast_or_null<mlir::subop::ContinuousViewType>()) {
          refType = mlir::subop::ContinuousEntryRefType::get(rewriter.getContext(), continuousView);
       }
@@ -176,7 +176,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                   builder.create<mlir::subop::MaterializeOp>(unionOp->getLoc(), stream, tmpBuffer, builder.getDictionaryAttr(refMapping));
                }
                auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
-               scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(builder.getContext(), tmpBuffer.getType());
+               scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(builder.getContext(), tmpBuffer.getType().cast<mlir::subop::State>());
                auto scan = builder.create<mlir::subop::ScanRefsOp>(unionOp->getLoc(), tmpBuffer, scanRefDef);
                mlir::Value loaded = builder.create<mlir::subop::GatherOp>(unionOp->getLoc(), scan, colManager.createRef(&scanRefDef.getColumn()), builder.getDictionaryAttr(defMapping));
                unionOp.getRes().replaceAllUsesWith(loaded);
@@ -251,7 +251,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                      builder.setInsertionPointAfter(op);
                      auto materializeOp = builder.create<mlir::subop::MaterializeOp>(op->getLoc(), op->getResult(0), tmpBuffer, builder.getDictionaryAttr(refMapping));
                      auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
-                     scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(builder.getContext(), tmpBuffer.getType());
+                     scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(builder.getContext(), tmpBuffer.getType().cast<mlir::subop::State>());
                      auto scan = builder.create<mlir::subop::ScanRefsOp>(op->getLoc(), tmpBuffer, scanRefDef);
                      mlir::Value loaded = builder.create<mlir::subop::GatherOp>(op->getLoc(), scan, colManager.createRef(&scanRefDef.getColumn()), builder.getDictionaryAttr(defMapping));
                      op->getResult(0).replaceAllUsesExcept(loaded, materializeOp);

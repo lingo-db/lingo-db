@@ -329,7 +329,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
          auto* createOp = toThreadLocal.first;
          mlir::OpBuilder builder(&getContext());
          builder.setInsertionPoint(createOp);
-         auto threadLocalType = mlir::subop::ThreadLocalType::get(builder.getContext(), createOp->getResultTypes()[0]);
+         auto threadLocalType = mlir::subop::ThreadLocalType::get(builder.getContext(), createOp->getResultTypes()[0].cast<mlir::subop::State>());
          auto createThreadLocal = builder.create<mlir::subop::CreateThreadLocalOp>(createOp->getLoc(), threadLocalType);
          auto* block = new mlir::Block;
          createThreadLocal.getInitFn().push_back(block);

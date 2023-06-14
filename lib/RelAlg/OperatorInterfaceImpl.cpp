@@ -75,7 +75,7 @@ bool mlir::relalg::detail::canColumnReach(mlir::Operation* currentOp, mlir::Oper
       if (res.getType().isa<mlir::tuples::TupleStreamType>()) {
          for (auto* user : res.getUsers()) {
             if (auto op = mlir::dyn_cast_or_null<Operator>(user)) {
-               if (op.canColumnReach(currentOp, targetOp, column)) {
+               if (op.canColumnReach(mlir::cast<Operator>(currentOp), mlir::cast<Operator>(targetOp), column)) {
                   return true;
                }
             }

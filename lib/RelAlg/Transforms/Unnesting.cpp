@@ -25,7 +25,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
       for (auto child : tree.getChildren()) {
          mlir::Operation* otherFirst = getFirstOfTree(child);
          if (otherFirst->isBeforeInBlock(currFirst)) {
-            currFirst = otherFirst;
+            currFirst = mlir::cast<Operator>(otherFirst);
          }
       }
       return currFirst;
@@ -51,7 +51,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
       if (!op.getFreeColumns().intersects(availableD)) {
          mlir::OpBuilder builder(&getContext());
          builder.setInsertionPointAfter(op.getOperation());
-         return builder.create<CrossProductOp>(loc, relType, op.asRelation(), d.asRelation()).getOperation();
+         return mlir::cast<Operator>(builder.create<CrossProductOp>(loc, relType, op.asRelation(), d.asRelation()).getOperation());
       }
       assert(countUses(op) <= 1);
 
@@ -122,9 +122,9 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
                return mlir::dyn_cast_or_null<Operator>(join.getOperation());
             }
          })
-         .Default([&](Operator others) {
-            handleChildren(loc, d, others);
-            return others;
+         .Default([&](mlir::Operation* others) -> Operator {
+            handleChildren(loc, d, mlir::cast<Operator>(others));
+            return mlir::cast<Operator>(others);
          });
    }
    void handleJoin(mlir::Location loc, BinaryOperator join, Operator newLeft, Operator newRight, bool joinDependent, bool renameRight, mlir::relalg::ColumnSet& dependentAttributes) {
@@ -184,7 +184,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
             return collectSimpleDependencies(sel.getChildren()[0], attributes, selectionOps);
          })
          .Case<mlir::relalg::AggregationOp>([&](mlir::relalg::AggregationOp aggregationOp) {
-            if(aggregationOp.getUsedColumns().intersects(attributes)){
+            if (aggregationOp.getUsedColumns().intersects(attributes)) {
                return false;
             }
             std::vector<mlir::relalg::SelectionOp> extractedSelections;
@@ -205,7 +205,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
                   return false;
                }
             }
-            mlir::relalg::ColumnSet groupByColumns=mlir::relalg::ColumnSet::fromArrayAttr(aggregationOp.getGroupByCols());
+            mlir::relalg::ColumnSet groupByColumns = mlir::relalg::ColumnSet::fromArrayAttr(aggregationOp.getGroupByCols());
             for (auto cmpOp : toAnalyze) {
                auto leftColDef = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.getLeft().getDefiningOp());
                auto rightColDef = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.getRight().getDefiningOp());
@@ -215,20 +215,20 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
                }
                groupByColumns.insert(&rightColDef.getAttr().getColumn());
             }
-            selectionOps.insert(selectionOps.end(),extractedSelections.begin(),extractedSelections.end());
+            selectionOps.insert(selectionOps.end(), extractedSelections.begin(), extractedSelections.end());
             aggregationOp.setGroupByColsAttr(groupByColumns.asRefArrayAttr(&getContext()));
             return true;
          })
          .Case<BinaryOperator>([&](BinaryOperator join) {
             return false;
          })
-         .Case<mlir::relalg::MapOp>([&](mlir::relalg::MapOp mapOp){
-            if(mapOp.getUsedColumns().intersects(attributes)){
+         .Case<mlir::relalg::MapOp>([&](mlir::relalg::MapOp mapOp) {
+            if (mapOp.getUsedColumns().intersects(attributes)) {
                return false;
             }
             return collectSimpleDependencies(mapOp.getChildren()[0], attributes, selectionOps);
          })
-         .Default([&](Operator others) {
+         .Default([&](mlir::Operation* others) {
             return false;
          });
    }
@@ -300,7 +300,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          if (!dependentLeft.empty() && !dependentRight.empty()) {
             return;
          }
-         if (trySimpleUnnesting(binaryOperator.getOperation())) {
+         if (trySimpleUnnesting(mlir::cast<BinaryOperator>(binaryOperator.getOperation()))) {
             if (!mlir::relalg::detail::isDependentJoin(binaryOperator.getOperation())) return;
          }
          mlir::relalg::ColumnSet dependentAttributes = dependentLeft;

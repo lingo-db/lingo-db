@@ -38,7 +38,7 @@ class QueryGraph {
       NodeSet right;
       NodeSet left;
       double selectivity = 1;
-      llvm::Optional<size_t> createdNode;
+      std::optional<size_t> createdNode;
       std::optional<std::pair<const mlir::tuples::Column*, const mlir::tuples::Column*>> equality;
 
       [[nodiscard]] bool connects(const NodeSet& s1, const NodeSet& s2) const {
@@ -122,7 +122,7 @@ class QueryGraph {
       }
       return {};
    }
-   void addJoinEdge(NodeSet left, NodeSet right, Operator op, llvm::Optional<size_t> createdNode) {
+   void addJoinEdge(NodeSet left, NodeSet right, Operator op, std::optional<size_t> createdNode) {
       assert(left.valid());
       assert(right.valid());
 

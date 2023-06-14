@@ -26,7 +26,7 @@ void fix(Operator tree) {
          moveBefore = u->isBeforeInBlock(moveBefore) ? u : moveBefore;
       }
       if (!child->isBeforeInBlock(moveBefore)) {
-         child.moveSubTreeBefore(moveBefore);
+         child.moveSubTreeBefore(mlir::cast<Operator>(moveBefore));
       }
       fix(child);
    }

@@ -15,6 +15,7 @@
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 
@@ -147,6 +148,7 @@ static void linkStatic(mlir::ExecutionEngine* engine, execution::Error& error, e
 
 class DefaultCPULLVMBackend : public execution::ExecutionBackend {
    void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
+      mlir::registerBuiltinDialectTranslation(*moduleOp->getContext());
       mlir::registerLLVMDialectTranslation(*moduleOp->getContext());
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
@@ -186,10 +188,10 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       auto runtimeSymbolMap = [&](llvm::orc::MangleAndInterner interner) {
          auto symbolMap = llvm::orc::SymbolMap();
          mlir::util::FunctionHelper::visitAllFunctions([&](std::string s, void* ptr) {
-            symbolMap[interner(s)] = llvm::JITEvaluatedSymbol::fromPointer(ptr);
+            symbolMap[interner(s)] = llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(ptr), llvm::JITSymbolFlags::Exported);
          });
          execution::visitBareFunctions([&](std::string s, void* ptr) {
-            symbolMap[interner(s)] = llvm::JITEvaluatedSymbol::fromPointer(ptr);
+            symbolMap[interner(s)] = llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(ptr), llvm::JITSymbolFlags::Exported);
          });
          return symbolMap;
       };
@@ -251,6 +253,7 @@ static void addDebugInfo(mlir::ModuleOp module, std::string lastSnapShotFile) {
 }
 class CPULLVMDebugBackend : public execution::ExecutionBackend {
    void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
+      mlir::registerBuiltinDialectTranslation(*moduleOp->getContext());
       mlir::registerLLVMDialectTranslation(*moduleOp->getContext());
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
@@ -332,6 +335,7 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
       return childPid;
    }
    void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
+      mlir::registerBuiltinDialectTranslation(*moduleOp->getContext());
       mlir::registerLLVMDialectTranslation(*moduleOp->getContext());
       LLVMInitializeX86AsmParser();
       reserveLastRegister = true;

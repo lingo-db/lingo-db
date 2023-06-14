@@ -106,7 +106,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
          mlir::Value inValidLink = rewriter.create<mlir::util::InvalidRefOp>(loc, linkType);
          rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange{hashed, inValidLink});
       }
-      auto entryRefType = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), hashIndexedViewType);
+      auto entryRefType = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), hashIndexedViewType.cast<mlir::subop::LookupAbleState>());
       auto entryRefListType = mlir::subop::ListType::get(rewriter.getContext(), entryRefType);
       mlir::subop::SubOpStateUsageTransformer transformer(analysis, getContext(), [&](mlir::Operation* op, mlir::Type type) -> mlir::Type {
          return llvm::TypeSwitch<mlir::Operation*, mlir::Type>(op)
@@ -221,7 +221,7 @@ class MapAsHashMap : public mlir::RewritePattern {
          return mlir::subop::HashMapEntryRefType::get(refType.getContext(), hashMapType);
       });
       typeConverter.addConversion([&](mlir::subop::LookupEntryRefType lookupRefType) {
-         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), typeConverter.convertType(lookupRefType.getState()));
+         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), typeConverter.convertType(lookupRefType.getState()).cast<mlir::subop::LookupAbleState>());
       });
       typeConverter.addConversion([&](mlir::subop::MapType mapType) {
          return hashMapType;
@@ -260,7 +260,7 @@ class MultiMapAsHashMultiMap : public mlir::RewritePattern {
          return mlir::subop::HashMultiMapEntryRefType::get(refType.getContext(), hashMapType);
       });
       typeConverter.addConversion([&](mlir::subop::LookupEntryRefType lookupRefType) {
-         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), typeConverter.convertType(lookupRefType.getState()));
+         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), typeConverter.convertType(lookupRefType.getState()).cast<mlir::subop::LookupAbleState>());
       });
       typeConverter.addConversion([&](mlir::subop::MultiMapType mapType) {
          return hashMapType;

@@ -207,7 +207,7 @@ mlir::Type getAdaptedDecimalTypeAfterMulDiv(mlir::MLIRContext* context, int prec
    }
    return mlir::db::DecimalType::get(context, std::min(precision, 38), std::min(scale, 38 - beforeComma));
 }
-LogicalResult inferReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
+LogicalResult inferReturnType(MLIRContext* context, std::optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType = baseTypeLeft;
@@ -223,7 +223,7 @@ LogicalResult inferReturnType(MLIRContext* context, Optional<Location> location,
    inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
    return success();
 }
-LogicalResult inferMulReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
+LogicalResult inferMulReturnType(MLIRContext* context, std::optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType = baseTypeLeft;
@@ -237,7 +237,7 @@ LogicalResult inferMulReturnType(MLIRContext* context, Optional<Location> locati
    inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
    return success();
 }
-LogicalResult inferDivReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
+LogicalResult inferDivReturnType(MLIRContext* context, std::optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType = baseTypeLeft;
@@ -250,7 +250,7 @@ LogicalResult inferDivReturnType(MLIRContext* context, Optional<Location> locati
    return success();
 }
 
-LogicalResult inferRemReturnType(MLIRContext* context, Optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
+LogicalResult inferRemReturnType(MLIRContext* context, std::optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType = baseTypeLeft;

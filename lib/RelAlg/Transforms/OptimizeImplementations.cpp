@@ -193,7 +193,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          .Case<mlir::relalg::SelectionOp>([&](mlir::relalg::SelectionOp selectionOp) {
             path.push(selectionOp.getOperation());
             for (auto& child : selectionOp.getChildren()) {
-               if (!isBaseRelationWithSelects(child.getOperation(), path)) return false;
+               if (!isBaseRelationWithSelects(mlir::cast<Operator>(child.getOperation()), path)) return false;
             }
             return true;
          })

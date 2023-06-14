@@ -238,8 +238,8 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                        topush.setChildren({nestedOp});
                        return topush;
                     })
-                    .Default([&](Operator others) {
-                       topush.setChildren({others});
+                    .Default([&](mlir::Operation* others) {
+                       topush.setChildren({mlir::cast<Operator>(others)});
                        return topush;
                     });
       return res;

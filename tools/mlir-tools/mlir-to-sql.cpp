@@ -599,9 +599,9 @@ class ToSQL {
                         output << attr;
                      }
                   })
-                  .Default([&](Operator others) {
+                  .Default([&](mlir::Operation* others) {
                      llvm::dbgs() << "could not translate:\n";
-                     others.dump();
+                     others->dump();
                   });
                if (output.str().empty()) {
                   addComma = false;

@@ -67,7 +67,7 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
       mlir::TypeConverter fragmentTypeConverter;
 
       fragmentTypeConverter.addConversion([&](mlir::subop::LookupEntryRefType lookupRefType) {
-         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), fragmentTypeConverter.convertType(lookupRefType.getState()));
+         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), fragmentTypeConverter.convertType(lookupRefType.getState()).cast<mlir::subop::LookupAbleState>());
       });
       fragmentTypeConverter.addConversion([&](mlir::subop::HashMapType mapType) {
          return optimisticHtFragment;
@@ -80,7 +80,7 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
          return mlir::subop::PreAggrHTEntryRefType::get(refType.getContext(), optimisticHt);
       });
       htTypeConverter.addConversion([&](mlir::subop::LookupEntryRefType lookupRefType) {
-         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), htTypeConverter.convertType(lookupRefType.getState()));
+         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), htTypeConverter.convertType(lookupRefType.getState()).cast<mlir::subop::LookupAbleState>());
       });
 
       htTypeConverter.addConversion([&](mlir::subop::ListType listType) {

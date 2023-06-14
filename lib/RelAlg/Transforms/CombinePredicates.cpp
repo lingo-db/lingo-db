@@ -40,7 +40,7 @@ class CombinePredicates : public mlir::PassWrapper<CombinePredicates, mlir::Oper
          mlir::Value lower = op.getRel();
          bool canCombine = mlir::isa<mlir::relalg::InnerJoinOp>(lower.getDefiningOp());
          if (canCombine&&lower.hasOneUse()) {
-            combine(op, lower.getDefiningOp());
+            combine(op, mlir::cast<PredicateOperator>(lower.getDefiningOp()));
             op.replaceAllUsesWith(lower);
             op->erase();
          }

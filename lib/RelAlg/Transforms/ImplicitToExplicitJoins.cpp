@@ -122,9 +122,9 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
             treeVal = collectionJoin;
             surroundingOperator->setOperand(0, treeVal);
          } else if (auto existsop = mlir::dyn_cast_or_null<mlir::relalg::ExistsOp>(op)) {
-            handleScalarBoolOp(existsop->getLoc(), surroundingOperator, op, existsop.getRel().getDefiningOp(), [](auto) {});
+            handleScalarBoolOp(existsop->getLoc(), surroundingOperator, op, mlir::cast<Operator>(existsop.getRel().getDefiningOp()), [](auto) {});
          } else if (auto inop = mlir::dyn_cast_or_null<mlir::relalg::InOp>(op)) {
-            Operator relOperator = inop.getRel().getDefiningOp();
+            Operator relOperator = mlir::cast<Operator>(inop.getRel().getDefiningOp());
             //get attribute of relation to search in
             const auto* attr = *relOperator.getAvailableColumns().begin();
             auto searchInAttr = attributeManager.createRef(attr);
