@@ -126,6 +126,7 @@ reproduce: .repr-docker-built
 	 docker run --privileged -it lingodb-repr /bin/bash -c "python3 tools/scripts/benchmark-tpch.py /build/lingodb/ tpch-1"
 
 lint: build/lingodb-debug/.stamp
+	sed -i 's/-fno-lifetime-dse//g' build/lingodb-debug/compile_commands.json
 	python3 tools/scripts/run-clang-tidy.py -p $(dir $<) -quiet -header-filter="$(shell pwd)/include/.*" -exclude="arrow|vendored" -clang-tidy-binary=./build/llvm-build/bin/clang-tidy
 
 python-package:

@@ -5,7 +5,7 @@
 #pragma once
 namespace arrow {
 class RecordBatch;
-}
+} // end namespace arrow
 namespace runtime {
 struct ColumnInfo {
    // Offset of tuple/record batch

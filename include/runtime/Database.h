@@ -32,7 +32,7 @@ class Database {
    virtual void addIndex(std::string& tableName);
    virtual std::shared_ptr<arrow::RecordBatch> getSample(const std::string& name) = 0;
    virtual std::shared_ptr<TableMetaData> getTableMetaData(const std::string& name) = 0;
-   virtual void createTable_(std::string tableName, std::shared_ptr<TableMetaData>);
+   virtual void addTable(std::string tableName, std::shared_ptr<TableMetaData> mD);
    virtual void appendTable(std::string tableName, std::shared_ptr<arrow::Table> newRows);
    virtual void combineTableWithHashValuesImpl(std::string tableName, std::shared_ptr<arrow::Table> hashValues);
 

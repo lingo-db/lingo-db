@@ -1,38 +1,74 @@
 #include "bridge.h"
 #include "execution/Execution.h"
-
 #include "runtime/ArrowDirDatabase.h"
 #include "runtime/ExternalArrowDatabase.h"
-#include <iostream>
-#include <arrow/pretty_print.h>
-runtime::ExecutionContext* currentExecutionContext = nullptr;
-void bridge::createInMemory() {
-   currentExecutionContext = new runtime::ExecutionContext;
-   currentExecutionContext->db = std::make_unique<runtime::ExternalArrowDatabase>();
+#include <arrow/table.h>
+namespace bridge {
+class Connection {
+   runtime::ExecutionContext executionContext;
+
+   public:
+   Connection() : executionContext() {}
+   void setDatabase(std::unique_ptr<runtime::Database> db) {
+      executionContext.db = std::move(db);
+   }
+   runtime::ExecutionContext& getExecutionContext() {
+      return executionContext;
+   }
+   runtime::Database& getDatabase() {
+      return *executionContext.db;
+   }
+};
+} //namespace bridge
+bridge::Connection* bridge::createInMemory() {
+   auto* res = new Connection;
+   res->setDatabase(std::make_unique<runtime::ExternalArrowDatabase>());
+   return res;
 }
-void bridge::loadFromDisk(const char* directory) {
-   currentExecutionContext = new runtime::ExecutionContext;
-   auto database = runtime::Database::loadMetaDataAndSamplesFromDir(directory);
-   currentExecutionContext->db = std::move(database);
+bridge::Connection* bridge::loadFromDisk(const char* directory) {
+   auto* res = new Connection;
+   res->setDatabase(runtime::Database::loadMetaDataAndSamplesFromDir(directory));
+   return res;
 }
-void bridge::run(const char* module) {
+bool bridge::run(Connection* connection, const char* module, ArrowArrayStream* res) {
    auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::SPEED, false);
-   queryExecutionConfig->resultProcessor = execution::createTablePrinter();
-   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   std::shared_ptr<arrow::Table> result;
+   queryExecutionConfig->resultProcessor = execution::createTableRetriever(result);   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
    executer->fromData(module);
-   executer->setExecutionContext(currentExecutionContext);
+   executer->setExecutionContext(&connection->getExecutionContext());
    executer->execute();
+   if (result) {
+      auto batchReader = std::make_shared<arrow::TableBatchReader>(*result);
+      if (!arrow::ExportRecordBatchReader(batchReader, res).ok()) {
+         std::cerr << "export failed" << std::endl;
+      }else{
+         return true;
+      }
+   }
+   return false;
 }
-void bridge::runSQL(const char* query) {
+bool bridge::runSQL(Connection* connection, const char* query, ArrowArrayStream* res) {
    auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::SPEED, true);
-   queryExecutionConfig->resultProcessor = execution::createTablePrinter();
+   std::shared_ptr<arrow::Table> result;
+   queryExecutionConfig->resultProcessor = execution::createTableRetriever(result);
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
    executer->fromData(query);
-   executer->setExecutionContext(currentExecutionContext);
+   executer->setExecutionContext(&connection->getExecutionContext());
    executer->execute();
+   if (result) {
+      auto batchReader = std::make_shared<arrow::TableBatchReader>(*result);
+      if (!arrow::ExportRecordBatchReader(batchReader, res).ok()) {
+         std::cerr << "export failed" << std::endl;
+      }else{
+         return true;
+      }
+   }
+   return false;
 }
-void bridge::addTable(const char* name, ArrowArrayStream* recordBatchStream) {
+void bridge::addTable(Connection* connection, const char* name, ArrowArrayStream* recordBatchStream) {
    auto recordBatchReader = arrow::ImportRecordBatchReader(recordBatchStream).ValueOrDie();
-   currentExecutionContext->db->addTable(name, recordBatchReader->ToTable().ValueOrDie());
-   arrow::PrettyPrint(*currentExecutionContext->db->getTable(name), {}, &std::cout);
+   connection->getDatabase().addTable(name, recordBatchReader->ToTable().ValueOrDie());
+}
+void bridge::closeConnection(bridge::Connection* con) {
+   delete con;
 }

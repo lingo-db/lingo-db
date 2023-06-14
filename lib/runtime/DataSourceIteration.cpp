@@ -1,12 +1,11 @@
 #include "runtime/DataSourceIteration.h"
 #include "json.h"
-#include <iostream>
 #include <iterator>
 
 #include "runtime/Database.h"
 #include "utility/Tracer.h"
-#include <arrow/table.h>
 #include <arrow/array.h>
+#include <arrow/table.h>
 #include <oneapi/tbb.h>
 namespace {
 static utility::Tracer::Event processMorsel("DataSourceIteration", "processMorsel");

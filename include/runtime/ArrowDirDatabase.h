@@ -29,7 +29,7 @@ class ArrowDirDatabase : public runtime::Database {
    static std::unique_ptr<Database> load(std::string dir, bool loadTables = true);
    static std::shared_ptr<arrow::Table> loadTable(std::string name);
    void addTable(std::string tableName, std::shared_ptr<arrow::Table> table) override;
-   void createTable_(std::string tableName, std::shared_ptr<TableMetaData>) override;
+   void addTable(std::string tableName, std::shared_ptr<TableMetaData>) override;
    void appendTable(std::string tableName, std::shared_ptr<arrow::Table> newRows) override;
    void combineTableWithHashValuesImpl(std::string tableName, std::shared_ptr<arrow::Table> hashValues) override;
 

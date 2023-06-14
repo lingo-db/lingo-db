@@ -180,7 +180,7 @@ void ArrowDirDatabase::addTable(std::string tableName, std::shared_ptr<arrow::Ta
    tables[tableName] = table;
    updateRecordBatches(tableName);
 }
-void ArrowDirDatabase::createTable_(std::string tableName, std::shared_ptr<TableMetaData> mD) {
+void ArrowDirDatabase::addTable(std::string tableName, std::shared_ptr<TableMetaData> mD) {
    if (!mD->getPrimaryKey().empty()) {
       std::shared_ptr<ColumnMetaData> cdm = std::make_shared<ColumnMetaData>();
       std::variant<size_t, std::string> modifier = static_cast<size_t>(64);

@@ -11,7 +11,7 @@ std::unordered_map<std::string, mlir::util::FunctionSpec>& getFunctions() {
 
    return functions;
 }
-}
+} // end namespace
 mlir::Value mlir::util::FunctionHelper::convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t, mlir::Location loc) {
    if (v.getType() == t) return v;
    mlir::Type currentType = v.getType();
