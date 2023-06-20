@@ -1,4 +1,6 @@
 #include "execution/CBackend.h"
+#include "mlir/Dialect/util/FunctionHelper.h"
+
 //emits C code for a MLIR module containing operations of the func, arith, scf, and util dialects
 
 // Derived from https://github.com/llvm/llvm-project/blob/56470b72f1fc1727d5ee87e2fed96e7dad286230/mlir/lib/Target/Cpp/TranslateToCpp.cpp
@@ -75,6 +77,10 @@ inline LogicalResult interleaveSemicolonWithError(const Container& c,
 namespace {
 /// Emitter that uses dialect specific emitters to emit C++ code.
 struct CppEmitter {
+   std::unordered_map<std::string, void*> symbolMap;
+   void* resolveFunction(std::string name) {
+      return symbolMap.at(name);
+   }
    explicit CppEmitter(raw_ostream& os, bool declareVariablesAtTop);
 
    /// Emits attribute or returns failure.
@@ -867,8 +873,8 @@ LogicalResult printOperation(CppEmitter& emitter,
       if (failed(emitter.emitTypes(functionOp.getLoc(),
                                    functionOp.getFunctionType().getResults())))
          return failure();
-      os << " " << functionOp.getName();
-      os << "(";
+      os << "( *" << functionOp.getName();
+      os << ")(";
       if (failed(interleaveCommaWithError(
              functionOp.getFunctionType().getInputs(), os,
              [&](mlir::Type argType) -> LogicalResult {
@@ -877,11 +883,15 @@ LogicalResult printOperation(CppEmitter& emitter,
                 return success();
              })))
          return failure();
-      os << ")";
-      // if (functionOp.getName().starts_with("_Z")) {
+      os << ")=(";
+      if (emitter.emitType(functionOp->getLoc(), functionOp.getFunctionType(), os).failed()) {
+         return failure();
+      }
+      os << ")" << emitter.resolveFunction(functionOp.getName().str()) << ";";
+      /*// if (functionOp.getName().starts_with("_Z")) {
       os << "asm(\"" << functionOp.getName() << "\")";
       //}
-      os << ";";
+      os << ";";*/
       return success();
    }
    // We need to declare variables at top if the function has multiple blocks.
@@ -976,6 +986,12 @@ CppEmitter::CppEmitter(raw_ostream& os, bool declareVariablesAtTop)
    : os(os), declareVariablesAtTop(declareVariablesAtTop) {
    valueInScopeCount.push(0);
    labelInScopeCount.push(0);
+   mlir::util::FunctionHelper::visitAllFunctions([&](std::string s, void* ptr) {
+      symbolMap.insert({s, ptr});
+   });
+   execution::visitBareFunctions([&](std::string s, void* ptr) {
+      symbolMap.insert({s, ptr});
+   });
 }
 
 /// Return the existing or a new name for a Value.
@@ -1321,7 +1337,7 @@ LogicalResult CppEmitter::emitOperation(Operation& op, bool trailingSemicolon) {
             }
          })
          // SCF ops.
-         .Case<util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp, util::LoadOp, util::StoreOp, util::AllocOp, util::AllocaOp, util::CreateConstVarLen, util::UndefOp, util::BufferCastOp, util::InvalidRefOp, util::IsRefValidOp, util::SizeOfOp, util::PackOp, util::CreateVarLen, util::Hash64, util::HashCombine, util::HashVarLen, util::FilterTaggedPtr,util::UnTagPtr, util::BufferGetRef, util::BufferGetLen, util::VarLenCmp, util::VarLenGetLen, util::GetTupleOp, util::VarLenTryCheapHash>(
+         .Case<util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp, util::LoadOp, util::StoreOp, util::AllocOp, util::AllocaOp, util::CreateConstVarLen, util::UndefOp, util::BufferCastOp, util::InvalidRefOp, util::IsRefValidOp, util::SizeOfOp, util::PackOp, util::CreateVarLen, util::Hash64, util::HashCombine, util::HashVarLen, util::FilterTaggedPtr, util::UnTagPtr, util::BufferGetRef, util::BufferGetLen, util::VarLenCmp, util::VarLenGetLen, util::GetTupleOp, util::VarLenTryCheapHash>(
             [&](auto op) { return printOperation(*this, op); })
          .Case<util::ToMemrefOp, memref::AtomicRMWOp>(
             [&](auto op) { return printOperation(*this, op); })
