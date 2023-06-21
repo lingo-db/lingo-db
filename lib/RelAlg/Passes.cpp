@@ -5,12 +5,12 @@
 
 #include <iostream>
 
-std::shared_ptr<runtime::Database> staticDB = {};
-void mlir::relalg::setStaticDB(std::shared_ptr<runtime::Database> db) {
-   std::cerr << "Warning: setting static database, should only be used in combination with mlir-db-opt" << std::endl;
-   staticDB = db;
+std::shared_ptr<runtime::Catalog> staticCatalog = {};
+void mlir::relalg::setStaticCatalog(std::shared_ptr<runtime::Catalog> catalog) {
+   std::cerr << "Warning: setting static catalog, should only be used in combination with mlir-db-opt" << std::endl;
+   staticCatalog = catalog;
 }
-void mlir::relalg::createQueryOptPipeline(mlir::OpPassManager& pm, runtime::Database* db) {
+void mlir::relalg::createQueryOptPipeline(mlir::OpPassManager& pm, runtime::Catalog* catalog) {
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createSimplifyAggregationsPass());
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createExtractNestedOperatorsPass());
    pm.addPass(mlir::createCSEPass());
@@ -26,8 +26,8 @@ void mlir::relalg::createQueryOptPipeline(mlir::OpPassManager& pm, runtime::Data
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createColumnFoldingPass());
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createDecomposeLambdasPass());
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createPushdownPass());
-   if (db) {
-      pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createAttachMetaDataPass(*db));
+   if (catalog) {
+      pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createAttachMetaDataPass(*catalog));
    }
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createReduceGroupByKeysPass());
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createExpandTransitiveEqualities());
@@ -35,7 +35,7 @@ void mlir::relalg::createQueryOptPipeline(mlir::OpPassManager& pm, runtime::Data
 
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createCombinePredicatesPass());
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createOptimizeImplementationsPass());
-   if (db) {
+   if (catalog) {
       pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createDetachMetaDataPass());
    }
    pm.addNestedPass<mlir::func::FuncOp>(mlir::relalg::createIntroduceTmpPass());
@@ -87,5 +87,5 @@ void mlir::relalg::registerQueryOptimizationPasses() {
    mlir::PassPipelineRegistration<EmptyPipelineOptions>(
       "relalg-query-opt",
       "",
-      [](mlir::OpPassManager& pm) { return createQueryOptPipeline(pm, staticDB.get()); });
+      [](mlir::OpPassManager& pm) { return createQueryOptPipeline(pm, staticCatalog.get()); });
 }

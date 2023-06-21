@@ -434,13 +434,14 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
                   // Determine if index nested loop is possible and is beneficial
                   std::stack<mlir::Operation*> leftPath, rightPath;
-                  bool leftCanUsePrimaryKeyIndex = isBaseRelationWithSelects(left, leftPath) && containsExactlyPrimaryKey(binOp.getContext(), leftPath.top(), &predicateOperator.getPredicateBlock());
+                  /*bool leftCanUsePrimaryKeyIndex = isBaseRelationWithSelects(left, leftPath) && containsExactlyPrimaryKey(binOp.getContext(), leftPath.top(), &predicateOperator.getPredicateBlock());
                   bool rightCanUsePrimaryKeyIndex = isBaseRelationWithSelects(right, rightPath) && containsExactlyPrimaryKey(binOp.getContext(), rightPath.top(), &predicateOperator.getPredicateBlock());
                   bool isInnerJoin = mlir::isa<mlir::relalg::InnerJoinOp>(predicateOperator);
-                  bool reversed = false;
+                  bool reversed = false;*/
 
                   prepareForHash(predicateOperator);
-
+                  //todo: reenable INL
+                  /*
                   // Select possible build side to the left
                   if (isInnerJoin && (leftCanUsePrimaryKeyIndex || rightCanUsePrimaryKeyIndex)) {
                      if (leftCanUsePrimaryKeyIndex && rightCanUsePrimaryKeyIndex) {
@@ -481,7 +482,6 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   if (auto rightCardinalityAttr = right->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()) {
                      numRowsRight = rightCardinalityAttr.getValueAsDouble();
                   }
-
                   if (isInnerJoin && leftCanUsePrimaryKeyIndex && right->hasAttr("rows") && 20 * numRowsRight < numRowsLeft) {
                      // base relations do not need to be moved
                      auto leftBaseTable = mlir::cast<mlir::relalg::BaseTableOp>(leftPath.top());
@@ -520,7 +520,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
 
                      op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "indexNestedLoop"));
                      op->setAttr("useIndexNestedLoop", mlir::UnitAttr::get(op.getContext()));
-                  } else {
+                  } else */{
                      op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
                      op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
                      prepareForHash(predicateOperator);

@@ -24,10 +24,10 @@
 #include "mlir/IR/BuiltinOps.h"
 
 #include "parsenodes.h"
-#include "runtime/Database.h"
+#include "runtime/Catalog.h"
 
-#include "runtime-defs/Database.h"
 #include "runtime-defs/ExecutionContext.h"
+#include "runtime-defs/RelationHelper.h"
 
 #include <llvm/ADT/StringSwitch.h>
 
@@ -304,7 +304,7 @@ struct Parser {
    };
    std::string sql;
    PgQueryInternalParsetreeAndError result;
-   runtime::Database& database;
+   runtime::Catalog& catalog;
    std::vector<std::unique_ptr<FakeNode>> fakeNodes;
 
    bool isParallelismAllowed() const;
@@ -326,7 +326,7 @@ struct Parser {
    }
    mlir::ModuleOp moduleOp;
    bool parallelismAllowed;
-   Parser(std::string sql, runtime::Database& database, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager()), sql(sql), database(database), moduleOp(moduleOp), parallelismAllowed(false) {
+   Parser(std::string sql, runtime::Catalog& catalog, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager()), sql(sql), catalog(catalog), moduleOp(moduleOp), parallelismAllowed(false) {
       moduleOp.getContext()->getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
       pg_query_parse_init();
       result = pg_query_parse(sql.c_str());
@@ -351,9 +351,6 @@ struct Parser {
       }
 
       return builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), funcOp, mlir::ValueRange{}).getResult(0);
-   }
-   mlir::Value getCurrentDatabaseValue(mlir::OpBuilder& builder) {
-      return rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(getExecutionContextValue(builder))[0];
    }
    mlir::Value createStringValue(mlir::OpBuilder& builder, std::string str) {
       return builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(str));

@@ -11,17 +11,17 @@ class ModuleOp;
 namespace execution {
 class QueryOptimizer {
    protected:
-   runtime::Database* database;
+   runtime::Catalog* catalog;
    std::unordered_map<std::string, double> timing;
    Error error;
    bool verify = true;
 
    public:
-   runtime::Database* getDatabase() const {
-      return database;
+   runtime::Catalog* getDatabase() const {
+      return catalog;
    }
-   void setDatabase(runtime::Database* db) {
-      QueryOptimizer::database = db;
+   void setCatalog(runtime::Catalog* catalog) {
+      QueryOptimizer::catalog = catalog;
    }
    void disableVerification() {
       verify = false;
@@ -35,20 +35,20 @@ class QueryOptimizer {
 };
 class LoweringStep {
    protected:
-   runtime::Database* database;
+   runtime::Catalog* catalog;
    std::unordered_map<std::string, double> timing;
    Error error;
    bool verify = true;
 
    public:
-   runtime::Database* getDatabase() const {
-      return database;
+   runtime::Catalog* getCatalog() const {
+      return catalog;
    }
    const std::unordered_map<std::string, double>& getTiming() const {
       return timing;
    }
-   void setDatabase(runtime::Database* db) {
-      LoweringStep::database = db;
+   void setCatalog(runtime::Catalog* catalog) {
+      LoweringStep::catalog = catalog;
    }
    void disableVerification() {
       verify = false;
@@ -83,24 +83,21 @@ ExecutionMode getExecutionMode();
 class QueryExecuter {
    protected:
    std::unique_ptr<QueryExecutionConfig> queryExecutionConfig;
-   runtime::ExecutionContext* executionContext;
+   std::unique_ptr<runtime::ExecutionContext> executionContext;
    std::optional<std::string> data;
    std::optional<std::string> file;
 
    public:
-   QueryExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig) : queryExecutionConfig(std::move(queryExecutionConfig)), executionContext(nullptr), data(), file() {}
+   QueryExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, std::unique_ptr<runtime::ExecutionContext> executionContext) : queryExecutionConfig(std::move(queryExecutionConfig)), executionContext(std::move(executionContext)), data(), file() {}
    void fromData(std::string data) {
       this->data = data;
    }
    void fromFile(std::string file) {
       this->file = file;
    }
-   void setExecutionContext(runtime::ExecutionContext* executionContext) {
-      this->executionContext = executionContext;
-   }
    virtual void execute() = 0;
    QueryExecutionConfig& getConfig() { return *queryExecutionConfig; }
-   static std::unique_ptr<QueryExecuter> createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig);
+   static std::unique_ptr<QueryExecuter> createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, runtime::Session& session);
    virtual ~QueryExecuter() {}
 };
 

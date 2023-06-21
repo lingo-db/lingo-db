@@ -33,7 +33,7 @@ print(con.sql("select 1").to_pandas())
 df = pd.DataFrame(data={'col1': [1, 2, 3, 4]})
 
 con2 = pylingodb.create_in_memory()
-con2.add_table("df",pa.Table.from_pandas(df))
+con2.add_table("df","""{"columns":[{"name":"col1","type":{"base": "int","nullable":false,"props":[64]}}]}""",pa.Table.from_pandas(df))
 print(con2.mlir("""module {
   func.func @main() {
     %0 = relalg.basetable {table_identifier = "df"} columns: { col1 => @df::@col1({type = i64})}
@@ -53,3 +53,4 @@ print(con2.mlir("""module {
   }
 }
 """).to_pandas())
+print(con2.sql("select count(*) from df where col1>2").to_pandas())

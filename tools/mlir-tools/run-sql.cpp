@@ -20,12 +20,8 @@ int main(int argc, char** argv) {
    }
    std::string inputFileName = std::string(argv[1]);
    std::string directory = std::string(argv[2]);
-
-   runtime::ExecutionContext context;
-   context.id = 42;
    std::cout << "Loading Database from: " << directory << '\n';
-   auto database = runtime::Database::loadMetaDataAndSamplesFromDir(directory);
-   context.db = std::move(database);
+   auto session = runtime::Session::createSession(directory);
 
    support::eval::init();
    execution::ExecutionMode runMode = execution::getExecutionMode();
@@ -35,10 +31,9 @@ int main(int argc, char** argv) {
       std::cout << "using " << queryExecutionConfig->executionBackend->getNumRepetitions() << " runs" << std::endl;
    }
    unsetenv("PERF_BUILDID_DIR");
-   queryExecutionConfig->timingProcessor=std::make_unique<execution::TimingPrinter>(inputFileName);
-   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
-   executer->setExecutionContext(&context);
    executer->execute();
    return 0;
 }

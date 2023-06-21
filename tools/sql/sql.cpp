@@ -10,18 +10,18 @@ void check(bool b, std::string message) {
       exit(1);
    }
 }
-void handleQuery(runtime::ExecutionContext* context, std::string basicString);
-
+void handleQuery(runtime::Session& session, std::string sqlQuery) {
+   auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::DEFAULT, true);
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), session);
+   executer->fromData(sqlQuery);
+   executer->execute();
+}
 int main(int argc, char** argv) {
-   runtime::ExecutionContext context;
-   context.id = 42;
    if (argc <= 1) {
       std::cerr << "USAGE: sql database" << std::endl;
       return 1;
    }
-   std::cout << "Loading Database from: " << argv[1] << '\n';
-   auto database = runtime::Database::loadFromDir(std::string(argv[1]));
-   context.db = std::move(database);
+   auto session = runtime::Session::createSession(std::string(argv[1]));
 
    support::eval::init();
    while (true) {
@@ -42,15 +42,9 @@ int main(int argc, char** argv) {
          }
          std::getline(std::cin, line);
       }
-      handleQuery(&context, query.str());
+      handleQuery(*session, query.str());
    }
 
    return 0;
 }
-void handleQuery(runtime::ExecutionContext* context, std::string sqlQuery) {
-   auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::DEFAULT, true);
-   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
-   executer->fromData(sqlQuery);
-   executer->setExecutionContext(context);
-   executer->execute();
-}
+

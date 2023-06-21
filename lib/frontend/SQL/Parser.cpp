@@ -428,7 +428,8 @@ mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, R
    if (stmt->alias_ && stmt->alias_->type_ == T_Alias && stmt->alias_->aliasname_) {
       alias = stmt->alias_->aliasname_;
    }
-   if (!database.hasTableInMetadata(relation)) {
+   auto rel = catalog.findRelation(relation);
+   if (!rel) {
       if (ctes.contains(relation)) {
          auto renamedScope = attrManager.getUniqueScope(relation);
          auto [tree, targetInfo] = ctes.at(relation);
@@ -446,7 +447,7 @@ mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, R
          error("unknown relation " + relation);
       }
    }
-   auto tableMetaData = database.getTableMetaData(relation);
+   auto tableMetaData = rel->getMetaData();
    char lastCharacter = alias.back();
    std::string scopeName = attrManager.getUniqueScope(alias + (isdigit(lastCharacter) ? "_" : ""));
 
@@ -1066,8 +1067,7 @@ void frontend::sql::Parser::translateCreateStatement(mlir::OpBuilder& builder, C
    auto tableMetaData = translateTableMetaData(statement->table_elts_);
    auto tableNameValue = createStringValue(builder, tableName);
    auto descriptionValue = createStringValue(builder, tableMetaData->serialize());
-   auto databaseValue = getCurrentDatabaseValue(builder);
-   rt::Database::createTable(builder, builder.getUnknownLoc())(mlir::ValueRange({databaseValue, tableNameValue, descriptionValue}));
+   rt::RelationHelper::createTable(builder, builder.getUnknownLoc())(mlir::ValueRange({getExecutionContextValue(builder), tableNameValue, descriptionValue}));
 }
 mlir::Value frontend::sql::Parser::translateSubSelect(mlir::OpBuilder& builder, SelectStmt* stmt, std::string alias, std::vector<std::string> colAlias, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
    mlir::Value subQuery;
@@ -1155,15 +1155,15 @@ void frontend::sql::Parser::translateCopyStatement(mlir::OpBuilder& builder, Cop
          error("unsupported copy option");
       }
    }
-   auto databaseValue = getCurrentDatabaseValue(builder);
    auto tableNameValue = createStringValue(builder, tableName);
    auto fileNameValue = createStringValue(builder, fileName);
    auto delimiterValue = createStringValue(builder, delimiter);
    auto escapeValue = createStringValue(builder, escape);
-   rt::Database::copyFromIntoTable(builder, builder.getUnknownLoc())(mlir::ValueRange{databaseValue, tableNameValue, fileNameValue, delimiterValue, escapeValue});
-
+   rt::RelationHelper::copyFromIntoTable(builder, builder.getUnknownLoc())(mlir::ValueRange{getExecutionContextValue(builder), tableNameValue, fileNameValue, delimiterValue, escapeValue});
+   //todo: reenable index
+   /*
    // To create hashValues scan table again, then calculate hashvalues and combine
-   auto tableMetaData = database.getTableMetaData(tableName);
+   auto tableMetaData = catalog.findRelation(tableName)->getMetaData();
    if (!tableMetaData->getPrimaryKey().empty()) {
       // TODO: function can be removed once inlining pass does not interfere with subop ordering
       // Create function to avoid reordering of subops and scanning an empty table; temporary workaround
@@ -1256,7 +1256,8 @@ void frontend::sql::Parser::translateCopyStatement(mlir::OpBuilder& builder, Cop
 
       auto executionContextValue = getExecutionContextValue(builder);
       auto resultIdValue = builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 0, builder.getI32Type());
-      rt::Database::combineTableWithHashValues(builder, builder.getUnknownLoc())(mlir::ValueRange{getCurrentDatabaseValue(builder), createStringValue(builder, tableName), executionContextValue, resultIdValue});
+      //todo
+      //rt::Database::combineTableWithHashValues(builder, builder.getUnknownLoc())(mlir::ValueRange{getCurrentDatabaseValue(builder), createStringValue(builder, tableName), executionContextValue, resultIdValue});
 
       // TODO: find more elegant solution
       // disable unwanted output by overwriting the result
@@ -1266,6 +1267,7 @@ void frontend::sql::Parser::translateCopyStatement(mlir::OpBuilder& builder, Cop
 
       builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
    }
+    */
 }
 void frontend::sql::Parser::translateVariableSetStatement(mlir::OpBuilder& builder, VariableSetStmt* variableSetStatement) {
    std::string varName = variableSetStatement->name_;
@@ -1278,8 +1280,7 @@ void frontend::sql::Parser::translateVariableSetStatement(mlir::OpBuilder& build
       auto* constNode = reinterpret_cast<A_Const*>(paramNode);
       assert(constNode->val_.type_ == T_Integer);
       auto persistValue = builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), constNode->val_.val_.ival_, 1);
-      auto databaseValue = getCurrentDatabaseValue(builder);
-      rt::Database::setPersist(builder, builder.getUnknownLoc())({databaseValue, persistValue});
+      rt::RelationHelper::setPersist(builder, builder.getUnknownLoc())({getExecutionContextValue(builder), persistValue});
    }
 }
 std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& builder) {
@@ -1301,7 +1302,7 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
             break;
          }
          case T_SelectStmt: {
-            parallelismAllowed=true;
+            parallelismAllowed = true;
             TranslationContext context;
             auto scope = context.createResolverScope();
             auto [tree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(statement), context, scope);
@@ -1314,7 +1315,7 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
             for (auto x : targetInfo.namedResults) {
                if (x.first == "primaryKeyHashValue") continue;
                names.push_back(builder.getStringAttr(x.first));
-               auto colMemberName = memberManager.getUniqueMember(x.first.empty()?"unnamed":x.first);
+               auto colMemberName = memberManager.getUniqueMember(x.first.empty() ? "unnamed" : x.first);
                auto columnType = x.second->type;
                attrs.push_back(attrManager.createRef(x.second));
                colTypes.push_back(mlir::TypeAttr::get(columnType));
@@ -1495,8 +1496,11 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
    TranslationContext context;
    auto scope = context.createResolverScope();
    auto [tree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(stmt->select_stmt_), context, scope);
-
-   auto tableMetaData = database.getTableMetaData(tableName);
+   auto rel = catalog.findRelation(tableName);
+   if (!rel) {
+      error("can not insert into unknown relation");
+   }
+   auto tableMetaData = rel->getMetaData();
    std::unordered_map<std::string, mlir::Type> tableColumnTypes;
    for (auto c : tableMetaData->getOrderedColumns()) {
       auto type = createTypeFromColumnType(builder.getContext(), tableMetaData->getColumnMetaData(c)->getColumnType());
@@ -1511,7 +1515,6 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
    } else {
       insertColNames = tableMetaData->getOrderedColumns();
    }
-   assert(insertColNames.size() + !tableMetaData->getPrimaryKey().empty() == tableColumnTypes.size());
    assert(insertColNames.size() == targetInfo.namedResults.size());
    std::vector<mlir::Attribute> attrs;
 
@@ -1551,6 +1554,10 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
          insertedCols[insertColNames[i]] = attrRef;
       }
    }
+   //todo: renenable index
+   /*
+    assert(insertColNames.size() + !tableMetaData->getPrimaryKey().empty() == tableColumnTypes.size());
+
    // calculate hash value, pack tuple, hash
    if (!tableMetaData->getPrimaryKey().empty()) {
       // extract values for primary keys
@@ -1570,7 +1577,7 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
 
       createdValues.push_back(casted);
       insertedCols["primaryKeyHashValue"] = attrManager.createRef(&attrDef.getColumn());
-   }
+   }*/
 
    auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
    mapOp.getPredicate().push_back(block);
@@ -1589,12 +1596,12 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
    auto resultTableType = mlir::subop::ResultTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)));
    mlir::Value newRows = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), resultTableType, mapOp.getResult(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
 
-   auto databaseValue = getCurrentDatabaseValue(builder);
    auto executionContextValue = getExecutionContextValue(builder);
    auto tableNameValue = createStringValue(builder, tableName);
    auto resultIdValue = builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 0, builder.getI32Type());
    builder.create<mlir::subop::SetResultOp>(builder.getUnknownLoc(), 0, newRows);
-   rt::Database::appendTableFromResult(builder, builder.getUnknownLoc())(mlir::ValueRange{databaseValue, tableNameValue, executionContextValue, resultIdValue});
+
+   rt::RelationHelper::appendTableFromResult(builder, builder.getUnknownLoc())(mlir::ValueRange{tableNameValue, executionContextValue, resultIdValue});
 
    // TODO: find more elegant solution
    // disable unwanted output by overwriting the result

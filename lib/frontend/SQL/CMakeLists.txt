@@ -2,7 +2,7 @@
 add_mlir_library(MLIRSQLFrontend
         Parser.cpp
         DEPENDS
-        db-rt-defs
+        #db-rt-defs
         ec-rt-defs
         LINK_LIBS PUBLIC
         ${dialect_libs}

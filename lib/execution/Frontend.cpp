@@ -92,10 +92,7 @@ class SQLFrontend : public execution::Frontend {
       mlir::OpBuilder builder(&context);
 
       mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-      if (!database) {
-         error.emit() << "Database must be attached for parsing SQL";
-      }
-      frontend::sql::Parser translator(sql, *database, moduleOp);
+      frontend::sql::Parser translator(sql, *catalog, moduleOp);
       builder.setInsertionPointToStart(moduleOp.getBody());
       auto* queryBlock = new mlir::Block;
       std::vector<mlir::Type> returnTypes;
@@ -140,9 +137,6 @@ class BatchedSQLFrontend : public execution::Frontend {
       mlir::OpBuilder builder(&context);
 
       mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-      if (!database) {
-         error.emit() << "Database must be attached for parsing SQL";
-      }
       std::stringstream batched(sql);
       builder.setInsertionPointToStart(moduleOp.getBody());
       auto* queryBlock = new mlir::Block;
@@ -172,7 +166,7 @@ class BatchedSQLFrontend : public execution::Frontend {
                }
                std::getline(batched, line);
             }
-            frontend::sql::Parser translator(query.str(), *database, moduleOp);
+            frontend::sql::Parser translator(query.str(), *catalog, moduleOp);
             auto val = translator.translate(builder);
             if (val.has_value()) {
                builder.create<mlir::subop::SetResultOp>(builder.getUnknownLoc(), i++, val.value());

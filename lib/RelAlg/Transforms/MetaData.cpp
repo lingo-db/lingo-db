@@ -3,18 +3,21 @@
 #include "mlir/Dialect/RelAlg/Passes.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
-#include "runtime/Database.h"
+#include "runtime/Catalog.h"
 namespace {
 class AttachMetaData : public mlir::PassWrapper<AttachMetaData, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-attach-meta-data"; }
-   runtime::Database& db;
+   runtime::Catalog& catalog;
 
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AttachMetaData)
-   AttachMetaData(runtime::Database& db) : db(db) {}
+   AttachMetaData(runtime::Catalog& catalog) : catalog(catalog) {}
    void runOnOperation() override {
       getOperation().walk([&](mlir::relalg::BaseTableOp op) {
-         op.setMetaAttr(mlir::relalg::TableMetaDataAttr::get(&getContext(), db.getTableMetaData(op.getTableIdentifier().str())));
+         auto relation = catalog.findRelation(op.getTableIdentifier().str());
+         if (relation) {
+            op.setMetaAttr(mlir::relalg::TableMetaDataAttr::get(&getContext(), relation->getMetaData()));
+         }
       });
    }
 };
@@ -35,7 +38,7 @@ class DetachMetaData : public mlir::PassWrapper<DetachMetaData, mlir::OperationP
 
 namespace mlir {
 namespace relalg {
-std::unique_ptr<Pass> createAttachMetaDataPass(runtime::Database& db) { return std::make_unique<AttachMetaData>(db); }
+std::unique_ptr<Pass> createAttachMetaDataPass(runtime::Catalog& catalog) { return std::make_unique<AttachMetaData>(catalog); }
 std::unique_ptr<Pass> createDetachMetaDataPass() { return std::make_unique<DetachMetaData>(); }
 } // end namespace relalg
 } // end namespace mlir

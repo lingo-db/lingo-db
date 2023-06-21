@@ -12,7 +12,7 @@ void runtime::ExternalHashIndexManager::addIndex(std::string name, std::shared_p
    // Create fixed size hash table for known number of elements in table
    existingIndices[name] = ExternalHashIndex();
    existingIndices[name].table = table;
-   int64_t size = 1ull << ((8*sizeof(uint64_t)) - __builtin_clzl(table->num_rows())); // next power of 2
+   int64_t size = 1ull << ((8 * sizeof(uint64_t)) - __builtin_clzl(table->num_rows())); // next power of 2
    existingIndices[name].hashValues = std::vector<int64_t>(table->num_rows());
    existingIndices[name].next = std::vector<int64_t>(table->num_rows(), -1);
    existingIndices[name].ht = std::vector<int64_t>(size, -1);
@@ -38,9 +38,9 @@ void runtime::ExternalHashIndexManager::addIndex(std::string name, std::shared_p
          int64_t hashValue = hashValues->Value(additionalOffset);
          int64_t nextPtr = externalHashIndex.ht[hashValue & mask];
 
-         externalHashIndex.hashValues[currOffset] = hashValue;    // materialize hashValue in buffer
-         externalHashIndex.next[currOffset] = nextPtr;            // set next pointer to enable chaining
-         externalHashIndex.ht[hashValue & mask] = currOffset;     // set entry pointer to first entry in chain
+         externalHashIndex.hashValues[currOffset] = hashValue; // materialize hashValue in buffer
+         externalHashIndex.next[currOffset] = nextPtr; // set next pointer to enable chaining
+         externalHashIndex.ht[hashValue & mask] = currOffset; // set entry pointer to first entry in chain
          currOffset++;
       }
       firstGlobalIndexInBatch += recordBatch->num_rows();
@@ -50,17 +50,16 @@ void runtime::ExternalHashIndexManager::addIndex(std::string name, std::shared_p
 runtime::ExternalHashIndexMapping* runtime::ExternalHashIndexManager::get(runtime::ExecutionContext* executionContext, runtime::VarLen32 description) {
    nlohmann::json descr = nlohmann::json ::parse(description.str());
    std::string tableName = descr["externalHashIndex"];
-   if (!executionContext->db){
-      throw std::runtime_error("no database attached");
-   }
-   if (!executionContext->db->hasTable(tableName)){
+   auto& session = executionContext->getSession();
+   auto relation = session.getCatalog()->findRelation(tableName);
+   if (!relation) {
       throw std::runtime_error{"could not find table"};
    }
    std::vector<std::string> mapping;
-   for (auto m : descr["mapping"].get<nlohmann::json::object_t>()){
+   for (auto m : descr["mapping"].get<nlohmann::json::object_t>()) {
       mapping.push_back(m.second.get<std::string>());
    }
-   return executionContext->db->getIndex(tableName, mapping);
+   return relation->getHashIndex(mapping);
 }
 
 runtime::ExternalHashIndexMapping* runtime::ExternalHashIndexManager::getIndex(const std::string& name, const std::vector<std::string>& mapping) {
@@ -88,7 +87,7 @@ void runtime::ExternalHashIndexIteration::consumeRecordBatch(runtime::RecordBatc
 
    // update copied record with offset in record batch
    int recordBatchOffset = currOffset - externalHashIndex->firstGlobalIndexInBatch[recordBatchIndex];
-   for (size_t i=0; i!=externalHashIndexMapping->colIds.size(); ++i){
+   for (size_t i = 0; i != externalHashIndexMapping->colIds.size(); ++i) {
       info->columnInfo[i].offset += recordBatchOffset;
    }
 
@@ -100,7 +99,7 @@ void runtime::ExternalHashIndexIteration::close(runtime::ExternalHashIndexIterat
    delete iteration;
 }
 
-runtime::ExternalHashIndexMapping::ExternalHashIndexMapping(runtime::ExternalHashIndex* externalHashIndex, const std::vector<std::string>& mapping)  : externalHashIndex{externalHashIndex} {
+runtime::ExternalHashIndexMapping::ExternalHashIndexMapping(runtime::ExternalHashIndex* externalHashIndex, const std::vector<std::string>& mapping) : externalHashIndex{externalHashIndex} {
    // Find column ids for relevant columns
    for (auto columnToMap : mapping) {
       auto columnNames = externalHashIndex->table->ColumnNames();

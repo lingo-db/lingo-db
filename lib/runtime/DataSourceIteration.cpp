@@ -2,7 +2,6 @@
 #include "json.h"
 #include <iterator>
 
-#include "runtime/Database.h"
 #include "utility/Tracer.h"
 #include <arrow/array.h>
 #include <arrow/table.h>
@@ -73,41 +72,13 @@ class RecordBatchTableSource : public runtime::DataSource {
       return memberToColumnId[member];
    }
 };
-class ArrowTableSource : public runtime::DataSource {
-   std::unordered_map<std::string, size_t> memberToColumnId;
-   arrow::Table& table;
-
-   public:
-   ArrowTableSource(arrow::Table& table, std::unordered_map<std::string, size_t> memberToColumnId) : memberToColumnId(memberToColumnId), table(table) {}
-   void iterate(bool parallel, std::vector<size_t> colIds, const std::function<void(runtime::RecordBatchInfo*)>& cb) override {
-      auto* batchInfo = reinterpret_cast<runtime::RecordBatchInfo*>(malloc(sizeof(runtime::RecordBatchInfo) + sizeof(runtime::ColumnInfo) * colIds.size()));
-      std::shared_ptr<arrow::RecordBatch> nextChunk;
-      arrow::TableBatchReader reader(table);
-      while (reader.ReadNext(&nextChunk) == arrow::Status::OK()) {
-         if (nextChunk) {
-            access(colIds, batchInfo, nextChunk);
-            cb(batchInfo);
-         } else {
-            break;
-         }
-         nextChunk.reset();
-      }
-      free(batchInfo);
-   }
-   size_t getColumnId(std::string member) override {
-      if (!memberToColumnId.contains(member)) {
-         throw std::runtime_error("data source: invalid member");
-      }
-      return memberToColumnId[member];
-   }
-};
 } // end namespace
 
 void runtime::DataSourceIteration::end(DataSourceIteration* iteration) {
    delete iteration;
 }
-uint64_t getTableColumnId(const std::shared_ptr<arrow::Table>& table, std::string columnName) {
-   auto columnNames = table->ColumnNames();
+uint64_t getTableColumnId(const std::shared_ptr<arrow::Schema>& schema, std::string columnName) {
+   auto columnNames = schema->field_names();
    size_t columnId = 0;
    for (auto column : columnNames) {
       if (column == columnName) {
@@ -131,21 +102,16 @@ runtime::DataSourceIteration::DataSourceIteration(DataSource* dataSource, const 
 runtime::DataSource* runtime::DataSource::get(runtime::ExecutionContext* executionContext, runtime::VarLen32 description) {
    nlohmann::json descr = nlohmann::json::parse(description.str());
    std::string tableName = descr["table"];
-   if (!executionContext->db) {
-      throw std::runtime_error("no database attached");
-   }
-   auto table = (executionContext)->db->getTable(tableName);
-   if (!table) {
-      throw std::runtime_error("could not find table");
+   auto& session = executionContext->getSession();
+   auto relation = session.getCatalog()->findRelation(tableName);
+   if (!relation) {
+      throw std::runtime_error("could not find relation");
    }
    std::unordered_map<std::string, size_t> memberToColumnId;
    for (auto m : descr["mapping"].get<nlohmann::json::object_t>()) {
-      memberToColumnId[m.first] = getTableColumnId(table, m.second.get<std::string>());
+      memberToColumnId[m.first] = getTableColumnId(relation->getArrowSchema(), m.second.get<std::string>());
    }
-   if (executionContext->db->recordBatchesAvailable()) {
-      return new RecordBatchTableSource(executionContext->db->getRecordBatches(tableName), memberToColumnId);
-   }
-   return new ArrowTableSource(*table, memberToColumnId);
+   return new RecordBatchTableSource(relation->getRecordBatches(), memberToColumnId);
 }
 
 void runtime::DataSourceIteration::iterate(bool parallel, void (*forEachChunk)(runtime::RecordBatchInfo*, void*), void* context) {

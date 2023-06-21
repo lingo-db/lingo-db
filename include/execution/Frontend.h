@@ -1,24 +1,24 @@
 #ifndef EXECUTION_FRONTEND_H
 #define EXECUTION_FRONTEND_H
 #include "Error.h"
-#include "runtime/Database.h"
+#include "runtime/Catalog.h"
 namespace mlir {
 class ModuleOp;
 } // namespace mlir
 namespace execution {
 class Frontend {
    protected:
-   runtime::Database* database;
+   runtime::Catalog* catalog;
    Error error;
 
    std::unordered_map<std::string, double> timing;
 
    public:
-   runtime::Database* getDatabase() const {
-      return database;
+   runtime::Catalog* getCatalog() const {
+      return catalog;
    }
-   void setDatabase(runtime::Database* db) {
-      Frontend::database = db;
+   void setCatalog(runtime::Catalog* catalog) {
+      Frontend::catalog = catalog;
    }
    const std::unordered_map<std::string, double>& getTiming() const {
       return timing;

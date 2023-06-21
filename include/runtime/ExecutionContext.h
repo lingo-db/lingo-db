@@ -5,6 +5,8 @@
 #include <optional>
 #include <unordered_set>
 
+#include "Session.h"
+
 #include <oneapi/tbb.h>
 namespace runtime {
 class Database;
@@ -18,11 +20,13 @@ class ExecutionContext {
    std::unordered_map<uint32_t, int64_t> tupleCounts;
    tbb::concurrent_hash_map<void*, State> states;
    tbb::enumerable_thread_specific<std::unordered_map<size_t, State>> allocators;
+   Session& session;
 
    public:
-   int id;
-   std::unique_ptr<Database> db;
-   Database* getDatabase();
+   ExecutionContext(Session& session) : session(session) {}
+   Session& getSession() {
+      return session;
+   }
    template <class T>
    std::optional<T*> getResultOfType(uint32_t id) {
       if (results.contains(id)) {
@@ -37,6 +41,9 @@ class ExecutionContext {
       } else {
          return {};
       }
+   }
+   const std::unordered_map<uint32_t, int64_t>& getTupleCounts() const {
+      return tupleCounts;
    }
    void setResult(uint32_t id, uint8_t* ptr);
    void setTupleCount(uint32_t id, int64_t tupleCount);

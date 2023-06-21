@@ -1,7 +1,7 @@
 #include "frontend/SQL/Parser.h"
 #include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
-#include "runtime/MetaDataOnlyDatabase.h"
+#include "runtime/Session.h"
 int main(int argc, char** argv) {
    mlir::MLIRContext context;
    mlir::DialectRegistry registry;
@@ -22,16 +22,16 @@ int main(int argc, char** argv) {
    context.loadDialect<mlir::relalg::RelAlgDialect>();
    mlir::OpBuilder builder(&context);
    std::string filename = std::string(argv[1]);
-   auto metadataDB = runtime::MetaDataOnlyDatabase::emptyMetaData();
+   auto catalog = runtime::Catalog::createEmpty();
    if (argc >= 3) {
-      std::string metadataFile = std::string(argv[2]);
-      metadataDB = runtime::MetaDataOnlyDatabase::loadMetaData(metadataFile);
+      std::string dbDir = std::string(argv[2]);
+      catalog = runtime::DBCatalog::create(catalog, dbDir);
    }
    std::ifstream istream{filename};
    std::stringstream buffer;
    buffer << istream.rdbuf();
    mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-   frontend::sql::Parser translator(buffer.str(), *metadataDB, moduleOp);
+   frontend::sql::Parser translator(buffer.str(), *catalog, moduleOp);
 
    builder.setInsertionPointToStart(moduleOp.getBody());
    auto* queryBlock = new mlir::Block;

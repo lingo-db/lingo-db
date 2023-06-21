@@ -1,9 +1,5 @@
 #include "runtime/ExecutionContext.h"
-#include "runtime/Database.h"
 #include <iostream>
-runtime::Database* runtime::ExecutionContext::getDatabase() {
-   return db.get();
-}
 
 void runtime::ExecutionContext::setResult(uint32_t id, uint8_t* ptr) {
    states.erase(ptr);

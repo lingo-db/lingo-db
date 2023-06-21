@@ -40,7 +40,7 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       pm.enableVerifier(verify);
       //pm.addPass(mlir::createInlinerPass());
       //pm.addPass(mlir::createSymbolDCEPass());
-      mlir::relalg::createQueryOptPipeline(pm, database);
+      mlir::relalg::createQueryOptPipeline(pm, catalog);
       if (mlir::failed(pm.run(moduleOp))) {
          error.emit() << " Query Optimization failed";
       }
@@ -64,7 +64,7 @@ class RelAlgLoweringStep : public LoweringStep {
       // Load the required tables/indices for the query
       moduleOp.walk([&](mlir::Operation* op) {
          if (auto getExternalOp = mlir::dyn_cast_or_null<mlir::subop::GetExternalOp>(*op)) {
-            auto* db = getDatabase();
+            auto *catalog = getCatalog();
             auto json = nlohmann::json::parse(getExternalOp.getDescr().str());
             auto tableName = json.value("table", "");
             bool addIndex = false;
@@ -74,15 +74,11 @@ class RelAlgLoweringStep : public LoweringStep {
                addIndex = true;
             }
             // Load table
-            if(!db->hasTable(tableName)) {
-               std::string path = db->getDirectory() + '/' + tableName + ".arrow";
-               auto newTable = db->loadTable(path);
-               db->addTable(tableName, newTable);
-            }
-            // Load index
-            if (addIndex) {
-               db->addIndex(tableName);
-
+            if (auto relation = catalog->findRelation(tableName)) {
+               relation->loadData();
+               if (addIndex) {
+                  relation->buildIndex();
+               }
             }
          }
       });
@@ -215,7 +211,7 @@ class DefaultQueryExecuter : public QueryExecuter {
          std::cerr << "Execution Context is missing" << std::endl;
          exit(1);
       }
-      runtime::Database* database = executionContext->getDatabase();
+      auto *catalog = executionContext->getSession().getCatalog().get();
 
       if (!queryExecutionConfig->frontend) {
          std::cerr << "Frontend is missing" << std::endl;
@@ -227,7 +223,7 @@ class DefaultQueryExecuter : public QueryExecuter {
       }
       auto& frontend = *queryExecutionConfig->frontend;
 
-      frontend.setDatabase(database);
+      frontend.setCatalog(catalog);
       if (data) {
          frontend.loadFromString(data.value());
       } else if (file) {
@@ -241,7 +237,7 @@ class DefaultQueryExecuter : public QueryExecuter {
       performSnapShot(moduleOp, "input.mlir");
       if (queryExecutionConfig->queryOptimizer) {
          auto& queryOptimizer = *queryExecutionConfig->queryOptimizer;
-         queryOptimizer.setDatabase(database);
+         queryOptimizer.setCatalog(catalog);
          queryOptimizer.optimize(moduleOp);
          handleError("OPTIMIZER", queryOptimizer.getError());
          handleTiming(queryOptimizer.getTiming());
@@ -271,7 +267,7 @@ class DefaultQueryExecuter : public QueryExecuter {
       }
       for (auto& loweringStepPtr : queryExecutionConfig->loweringSteps) {
          auto& loweringStep = *loweringStepPtr;
-         loweringStep.setDatabase(database);
+         loweringStep.setCatalog(catalog);
          loweringStep.implement(moduleOp);
          handleError("LOWERING", loweringStep.getError());
          handleTiming(loweringStep.getTiming());
@@ -294,7 +290,7 @@ class DefaultQueryExecuter : public QueryExecuter {
             return lhs + rhs;
          });
       if (sum < 0) { exit(0); }
-      executionBackend.execute(moduleOp, executionContext);
+      executionBackend.execute(moduleOp, executionContext.get());
 #ifdef TRACER
       utility::Tracer::dump();
 #endif
@@ -302,7 +298,7 @@ class DefaultQueryExecuter : public QueryExecuter {
       handleTiming(executionBackend.getTiming());
       if (queryExecutionConfig->resultProcessor) {
          auto& resultProcessor = *queryExecutionConfig->resultProcessor;
-         resultProcessor.process(executionContext);
+         resultProcessor.process(executionContext.get());
       }
       if (queryExecutionConfig->timingProcessor) {
          queryExecutionConfig->timingProcessor->process();
@@ -347,8 +343,8 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    }
    return config;
 }
-std::unique_ptr<QueryExecuter> QueryExecuter::createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig) {
-   return std::make_unique<DefaultQueryExecuter>(std::move(queryExecutionConfig));
+std::unique_ptr<QueryExecuter> QueryExecuter::createDefaultExecuter(std::unique_ptr<QueryExecutionConfig> queryExecutionConfig, runtime::Session& session) {
+   return std::make_unique<DefaultQueryExecuter>(std::move(queryExecutionConfig), std::move(session.createExecutionContext()));
 }
 
 } // namespace execution

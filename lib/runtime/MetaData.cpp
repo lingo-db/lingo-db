@@ -1,11 +1,44 @@
 #include <iostream>
 #include <regex>
 
+#include <arrow/buffer.h>
+#include <arrow/io/api.h>
+#include <arrow/ipc/api.h>
+
 #include "json.h"
 
-#include "runtime/Database.h"
 #include "runtime/metadata.h"
 
+namespace {
+std::string serializeRecordBatch(std::shared_ptr<arrow::RecordBatch> batch) {
+   std::shared_ptr<arrow::ResizableBuffer> buffer = arrow::AllocateResizableBuffer(0).ValueOrDie();
+   std::unique_ptr<arrow::io::BufferOutputStream> bufferOutputStream = std::make_unique<arrow::io::BufferOutputStream>(buffer);
+   std::shared_ptr<arrow::ipc::RecordBatchWriter> recordBatchWriter = arrow::ipc::MakeStreamWriter(bufferOutputStream.get(), batch->schema()).ValueOrDie();
+
+   assert(recordBatchWriter->WriteRecordBatch(*batch) == arrow::Status::OK());
+   assert(recordBatchWriter->Close() == arrow::Status::OK());
+   auto resBuffer = bufferOutputStream->Finish();
+   return resBuffer.ValueOrDie()->ToHexString();
+}
+//adapted from stack overflow: https://stackoverflow.com/a/30606613
+std::shared_ptr<arrow::ResizableBuffer> hexToBytes(const std::string& hex) {
+   auto bytes = arrow::AllocateResizableBuffer(hex.size() / 2).ValueOrDie();
+   for (unsigned int i = 0; i < hex.length(); i += 2) {
+      std::string byteString = hex.substr(i, 2);
+      char byte = (char) strtol(byteString.c_str(), NULL, 16);
+      bytes->mutable_data()[i / 2] = byte;
+   }
+
+   return bytes;
+}
+std::shared_ptr<arrow::RecordBatch> deserializeRecordBatch(std::string str) {
+   auto resizableBuffer = hexToBytes(str);
+   auto reader = arrow::ipc::RecordBatchStreamReader::Open(std::make_shared<arrow::io::BufferReader>(resizableBuffer)).ValueOrDie();
+   std::shared_ptr<arrow::RecordBatch> batch;
+   assert(reader->ReadNext(&batch) == arrow::Status::OK());
+   return batch;
+}
+} // end namespace
 std::shared_ptr<runtime::ColumnMetaData> createColumnMetaData(const nlohmann::json& info) {
    auto res = std::make_shared<runtime::ColumnMetaData>();
    if (info.contains("distinct_values")) {
@@ -59,7 +92,7 @@ std::shared_ptr<runtime::TableMetaData> runtime::TableMetaData::create(const std
       }
    }
    if (json.contains("sample")) {
-      res->sample = runtime::Database::deserializeRecordBatch(json["sample"]);
+      res->sample = deserializeRecordBatch(json["sample"]);
    }
    if (!json.contains("columns")) return res;
    for (auto c : json["columns"].get<nlohmann::json::array_t>()) {
@@ -94,7 +127,7 @@ std::string runtime::TableMetaData::serialize(bool serializeSample) const {
    json["num_rows"] = numRows;
    json["pkey"] = primaryKey;
    if (sample && serializeSample) {
-      json["sample"] = Database::serializeRecordBatch(sample);
+      json["sample"] = serializeRecordBatch(sample);
    }
    json["columns"] = nlohmann::json::array_t();
    for (auto c : orderedColumns) {

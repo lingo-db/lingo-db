@@ -16,6 +16,7 @@
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 
 #include "execution/Execution.h"
+#include "execution/ResultProcessing.h"
 #include "mlir-support/eval.h"
 
 #include "json.h"
@@ -62,9 +63,9 @@ int loadMLIR(mlir::MLIRContext& context, mlir::OwningOpRef<mlir::ModuleOp>& modu
 
 class ToJson {
    /// Attributes
-   runtime::ExecutionContext* context;
    mlir::ModuleOp moduleOp;
    std::unordered_map<mlir::Operation*, size_t> tmpRelations;
+   std::unordered_map<uint32_t, int64_t> tupleCounts;
    size_t operatorId = 0;
 
    /// Common helper functions
@@ -118,7 +119,11 @@ class ToJson {
    std::optional<int64_t> getAnalyzedCardinality(mlir::Operation* op) {
       for (auto* user : op->getUsers()) {
          if (auto trackTuplesOp = mlir::dyn_cast_or_null<mlir::relalg::TrackTuplesOP>(user)) {
-            return context->getTupleCount(trackTuplesOp.getResultId());
+            if (tupleCounts.contains(trackTuplesOp.getResultId())) {
+               return tupleCounts.at(trackTuplesOp.getResultId());
+            } else {
+               return {};
+            }
          }
       }
       return std::nullopt;
@@ -885,7 +890,7 @@ class ToJson {
    }
 
    public:
-   ToJson(runtime::ExecutionContext* context, mlir::ModuleOp moduleOp) : context(context), moduleOp(moduleOp) {}
+   ToJson(mlir::ModuleOp moduleOp, std::unordered_map<uint32_t, int64_t> tupleCounts) : moduleOp(moduleOp), tupleCounts(tupleCounts) {}
    std::string run() {
       mlir::func::FuncOp func = mlir::dyn_cast_or_null<mlir::func::FuncOp>(&moduleOp.getRegion().front().front());
       nlohmann::json plan;
@@ -904,22 +909,24 @@ class ToJson {
       return to_string(planWrapper);
    }
 };
+class TupleCountResultProcessor : public execution::ResultProcessor {
+   std::unordered_map<uint32_t, int64_t>& tupleCounts;
 
-void execute(std::string inputFileName, std::string databasePath, runtime::ExecutionContext& context) {
-   context.id = 42;
-
-   std::cout << "Loading Database from: " << databasePath << '\n';
-   auto database = runtime::Database::loadFromDir(databasePath);
-   context.db = std::move(database);
-
+   public:
+   TupleCountResultProcessor(std::unordered_map<uint32_t, int64_t>& tupleCounts) : tupleCounts(tupleCounts) {}
+   void process(runtime::ExecutionContext* executionContext) override {
+      tupleCounts = executionContext->getTupleCounts();
+   }
+};
+void execute(std::string inputFileName, std::string databasePath, std::unordered_map<uint32_t, int64_t>& tupleCounts) {
+   auto session = runtime::Session::createSession(databasePath);
    support::eval::init();
    auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::CHEAP, false);
    queryExecutionConfig->timingProcessor = {};
    queryExecutionConfig->queryOptimizer = {};
-   queryExecutionConfig->resultProcessor = {};
-   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   queryExecutionConfig->resultProcessor = std::make_unique<TupleCountResultProcessor>(tupleCounts);
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
-   executer->setExecutionContext(&context);
    executer->execute();
 }
 
@@ -950,11 +957,11 @@ int main(int argc, char** argv) {
    module.get().walk([&](mlir::Operation* operation) {
       trackingTuples |= mlir::isa<mlir::relalg::TrackTuplesOP>(operation);
    });
-   runtime::ExecutionContext executionContext;
+   std::unordered_map<uint32_t, int64_t> tupleCounts;
    if (trackingTuples) {
-      execute(inputFilename, databasePath, executionContext);
+      execute(inputFilename, databasePath, tupleCounts);
    }
 
-   ToJson toJson(&executionContext, module.get());
+   ToJson toJson(module.get(), tupleCounts);
    llvm::outs() << toJson.run() << "\n";
 }

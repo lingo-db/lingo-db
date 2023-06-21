@@ -17,12 +17,12 @@ int main(int argc, char** argv) {
       inputFileName = std::string(argv[1]);
    }
 
-   runtime::ExecutionContext context;
-   context.id = 42;
+   std::shared_ptr<runtime::Session> session;
    if (argc > 2) {
       std::cout << "Loading Database from: " << argv[2] << '\n';
-      auto database = runtime::Database::loadFromDir(std::string(argv[2]));
-      context.db = std::move(database);
+      session = runtime::Session::createSession(std::string(argv[2]));
+   } else {
+      session = runtime::Session::createSession();
    }
    support::eval::init();
    execution::ExecutionMode runMode = execution::getExecutionMode();
@@ -31,10 +31,9 @@ int main(int argc, char** argv) {
       queryExecutionConfig->executionBackend->setNumRepetitions(std::atoi(numRuns));
       std::cout << "using " << queryExecutionConfig->executionBackend->getNumRepetitions() << " runs" << std::endl;
    }
-   queryExecutionConfig->timingProcessor=std::make_unique<execution::TimingPrinter>(inputFileName);
-   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
    executer->fromFile(inputFileName);
-   executer->setExecutionContext(&context);
    executer->execute();
    return 0;
 }

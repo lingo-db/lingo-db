@@ -21,12 +21,16 @@ add_library(runtime OBJECT
         Timing.cpp
         DateRuntime.cpp
         ExecutionContext.cpp
-        Database.cpp
+        RelationHelper.cpp
+        #Database.cpp
         MetaData.cpp
-        ArrowDirDatabase.cpp
-        ExternalArrowDatabase.cpp
-        MetaDataOnlyDatabase.cpp
-        ExternalHashIndex.cpp)
+        #ArrowDirDatabase.cpp
+        #ExternalArrowDatabase.cpp
+        #MetaDataOnlyDatabase.cpp
+        ExternalHashIndex.cpp
+        Relation.cpp
+        Session.cpp
+        Catalog.cpp)
 target_link_libraries(runtime PRIVATE TBB::tbb arrow_static)
 target_link_options(runtime PUBLIC -Wl,--exclude-libs,ALL)
 

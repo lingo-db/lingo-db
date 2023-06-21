@@ -2,7 +2,6 @@
 #include "execution/Execution.h"
 #include "md5.h"
 #include "mlir-support/eval.h"
-#include "runtime/ArrowDirDatabase.h"
 #include "runtime/TableBuilder.h"
 
 #include <fstream>
@@ -49,7 +48,7 @@ struct ResultHasher : public execution::ResultProcessor {
       arrow::PrettyPrintOptions options;
       options.indent_size = 0;
       options.window = 1000000;
-      options.container_window =1000000;
+      options.container_window = 1000000;
       std::vector<bool> convertHex;
       std::vector<bool> isFloat;
       for (auto c : table->columns()) {
@@ -226,7 +225,7 @@ static std::vector<std::string> split(std::string_view input, char del = ' ')
    return result;
 }
 
-void runStatement(runtime::ExecutionContext& context, const std::vector<std::string>& lines, size_t& line) {
+void runStatement(runtime::Session& session, const std::vector<std::string>& lines, size_t& line) {
    auto parts = split(lines[line]);
    line++;
    std::string statement;
@@ -243,9 +242,8 @@ void runStatement(runtime::ExecutionContext& context, const std::vector<std::str
    }
    auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::DEFAULT, true);
    queryExecutionConfig->resultProcessor = std::unique_ptr<execution::ResultProcessor>();
-   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig),session);
    executer->fromData(statement);
-   executer->setExecutionContext(&context);
    executer->execute();
 }
 inline std::string& rtrim(std::string& s, const char* t) {
@@ -299,7 +297,7 @@ bool compareFuzzy(std::string expected, std::string result) {
    }
    return true;
 }
-void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>& lines, size_t& line) {
+void runQuery(runtime::Session& session, const std::vector<std::string>& lines, size_t& line) {
    auto description = lines[line];
    auto parts = split(description);
    line++;
@@ -354,9 +352,8 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
    queryExecutionConfig->resultProcessor = std::move(resultHasher);
    std::cerr << "executing:" << description << std::endl;
 
-   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig));
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig),session);
    executer->fromData(query);
-   executer->setExecutionContext(&context);
    executer->execute();
    std::string result = std::to_string(resultHasherRef.numValues) + " values hashing to " + resultHasherRef.hash + "\n";
    auto resultLines = std::regex_replace(resultHasherRef.lines, std::regex("\\s+\n"), "\n");
@@ -370,18 +367,17 @@ void runQuery(runtime::ExecutionContext& context, const std::vector<std::string>
 }
 } // namespace
 int main(int argc, char** argv) {
-   runtime::ExecutionContext context;
    support::eval::init();
    if (argc < 2 || argc > 3) {
       std::cerr << "usage: sqllite-tester file [dataset]" << std::endl;
       exit(1);
    }
+   std::shared_ptr<runtime::Session> session;
    if (argc == 3) {
-      context.db = runtime::Database::loadFromDir(std::string(argv[2]));
+      session = runtime::Session::createSession(std::string(argv[2]),true);
    } else {
-      context.db = runtime::ArrowDirDatabase::empty();
+      session = runtime::Session::createSession();
    }
-   context.db->setPersist(false);
    auto lines = filterLines(readTestFile(argv[1]));
    size_t line = 0;
    while (line < lines.size()) {
@@ -391,10 +387,10 @@ int main(int argc, char** argv) {
          continue;
       }
       if (parts[0] == "statement") {
-         runStatement(context, lines, line);
+         runStatement(*session, lines, line);
       }
       if (parts[0] == "query") {
-         runQuery(context, lines, line);
+         runQuery(*session, lines, line);
       }
       if (parts[0] == "hash-threshold") {
          line += 2;
