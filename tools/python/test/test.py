@@ -3,37 +3,18 @@ import pyarrow as pa
 import pylingodb
 
 import pandas as pd
-con = pylingodb.connect_to_db("./resources/data/tpch")
-print(con.sql("""-- TPC-H Query 1
-
-select
-        l_returnflag,
-        l_linestatus,
-        sum(l_quantity) as sum_qty,
-        sum(l_extendedprice) as sum_base_price,
-        sum(l_extendedprice * (1 - l_discount)) as sum_disc_price,
-        sum(l_extendedprice * (1 - l_discount) * (1 + l_tax)) as sum_charge,
-        avg(l_quantity) as avg_qty,
-        avg(l_extendedprice) as avg_price,
-        avg(l_discount) as avg_disc,
-        count(*) as count_order
-from
-        lineitem
-where
-        l_shipdate <= date '1998-12-01' - interval '90' day
-group by
-        l_returnflag,
-        l_linestatus
-order by
-        l_returnflag,
-        l_linestatus
+con = pylingodb.connect_to_db("./resources/data/uni")
+print(con.sql("""
+-- all students who never attended a lecture
+select * from studenten s
+where not exists(select * from hoeren h where h.matrnr=s.matrnr)
 """).to_pandas())
 print(con.sql("select 1").to_pandas())
 
 df = pd.DataFrame(data={'col1': [1, 2, 3, 4]})
 
 con2 = pylingodb.create_in_memory()
-con2.add_table("df","""{"columns":[{"name":"col1","type":{"base": "int","nullable":false,"props":[64]}}]}""",pa.Table.from_pandas(df))
+con2.add_table("df", pylingodb.meta_data_from_arrow(pa.Table.from_pandas(df)), pa.Table.from_pandas(df))
 print(con2.mlir("""module {
   func.func @main() {
     %0 = relalg.basetable {table_identifier = "df"} columns: { col1 => @df::@col1({type = i64})}
