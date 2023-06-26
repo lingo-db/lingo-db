@@ -20,6 +20,7 @@ add_mlir_conversion_library(MLIRSubOpToControlFlow
         tb-rt-defs
         st-rt-defs
         paht-rt-defs
+        db-rt-defs
         LINK_COMPONENTS
         Core
 

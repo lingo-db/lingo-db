@@ -64,7 +64,7 @@ class RelAlgLoweringStep : public LoweringStep {
       // Load the required tables/indices for the query
       moduleOp.walk([&](mlir::Operation* op) {
          if (auto getExternalOp = mlir::dyn_cast_or_null<mlir::subop::GetExternalOp>(*op)) {
-            auto *catalog = getCatalog();
+            auto* catalog = getCatalog();
             auto json = nlohmann::json::parse(getExternalOp.getDescr().str());
             auto tableName = json.value("table", "");
             bool addIndex = false;
@@ -77,7 +77,7 @@ class RelAlgLoweringStep : public LoweringStep {
             if (auto relation = catalog->findRelation(tableName)) {
                relation->loadData();
                if (addIndex) {
-                  relation->buildIndex();
+                  //relation->buildIndex();
                }
             }
          }
@@ -211,7 +211,7 @@ class DefaultQueryExecuter : public QueryExecuter {
          std::cerr << "Execution Context is missing" << std::endl;
          exit(1);
       }
-      auto *catalog = executionContext->getSession().getCatalog().get();
+      auto* catalog = executionContext->getSession().getCatalog().get();
 
       if (!queryExecutionConfig->frontend) {
          std::cerr << "Frontend is missing" << std::endl;
@@ -252,7 +252,7 @@ class DefaultQueryExecuter : public QueryExecuter {
          }
          performSnapShot(moduleOp);
       }
-      bool parallelismEnabled = true;
+      bool parallelismEnabled = queryExecutionConfig->parallel;
       size_t numThreads = tbb::info::default_concurrency() / 2;
       if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
          if (std::string(mode) == "OFF") {

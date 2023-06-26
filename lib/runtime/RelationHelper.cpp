@@ -1,8 +1,12 @@
 #include "runtime/RelationHelper.h"
 #include "runtime/TableBuilder.h"
+
+#include <iostream>
+
+#include "json.h"
+
 #include <arrow/csv/api.h>
 #include <arrow/io/api.h>
-
 namespace runtime {
 void RelationHelper::createTable(runtime::ExecutionContext* context, runtime::VarLen32 name, runtime::VarLen32 meta) {
    auto& session = context->getSession();
@@ -78,5 +82,22 @@ void RelationHelper::setPersist(runtime::ExecutionContext* context, bool value) 
    auto& session = context->getSession();
    auto catalog = session.getCatalog();
    catalog->setPersist(value);
+}
+HashIndexAccess* RelationHelper::getIndex(runtime::ExecutionContext* context, runtime::VarLen32 description) {
+   auto json = nlohmann::json::parse(description.str());
+   std::string relationName = json["relation"];
+   std::string index = json["index"];
+   auto& session = context->getSession();
+   auto catalog = session.getCatalog();
+   if (auto relation = catalog->findRelation(relationName)) {
+      auto *hashIndex = static_cast<HashIndex*>(relation->getIndex(index).get());
+      std::vector<std::string> cols;
+      for (auto m : json["mapping"].get<nlohmann::json::object_t>()) {
+         cols.push_back(m.second.get<std::string>());
+      }
+      return new HashIndexAccess(*hashIndex, cols);
+   } else {
+      throw std::runtime_error("no such table");
+   }
 }
 } // end namespace runtime

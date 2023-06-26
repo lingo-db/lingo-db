@@ -94,6 +94,17 @@ std::shared_ptr<runtime::TableMetaData> runtime::TableMetaData::create(const std
    if (json.contains("sample")) {
       res->sample = deserializeRecordBatch(json["sample"]);
    }
+   if (json.contains("indices")) {
+      for (auto idx : json["indices"].get<nlohmann::json::array_t>()) {
+         auto metaData=std::make_shared<IndexMetaData>();
+         metaData->type=idx["type"];
+         metaData->name=idx["name"];
+         for (auto c: idx["columns"].get<nlohmann::json::array_t>()) {
+            metaData->columns.push_back(c);
+         }
+         res->indices.push_back(metaData);
+      }
+   }
    if (!json.contains("columns")) return res;
    for (auto c : json["columns"].get<nlohmann::json::array_t>()) {
       auto columnName = c["name"];
@@ -122,6 +133,16 @@ nlohmann::json::object_t serializeColumn(std::shared_ptr<runtime::ColumnMetaData
    res["type"]["props"] = props;
    return res;
 }
+nlohmann::json::object_t serializeIndex(std::shared_ptr<runtime::IndexMetaData> indexMetaData) {
+   nlohmann::json::object_t res;
+   res["name"] = indexMetaData->name;
+   res["columns"] = nlohmann::json::array_t();
+   for (auto c : indexMetaData->columns) {
+      res["columns"].push_back(c);
+   }
+   res["type"] = indexMetaData->type;
+   return res;
+}
 std::string runtime::TableMetaData::serialize(bool serializeSample) const {
    nlohmann::json json;
    json["num_rows"] = numRows;
@@ -134,6 +155,10 @@ std::string runtime::TableMetaData::serialize(bool serializeSample) const {
       auto serializedColumn = serializeColumn(columns.at(c));
       serializedColumn["name"] = c;
       json["columns"].push_back(serializedColumn);
+   }
+   json["indices"] = nlohmann::json::array_t();
+   for (auto idx : indices) {
+      json["indices"].push_back(serializeIndex(idx));
    }
    std::string str = json.dump();
    return str;

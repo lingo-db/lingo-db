@@ -271,6 +271,15 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
       auto scale = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
       return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), getBaseType(val.getType()).isIntOrIndex() ? "RoundInt" + std::to_string(getBaseType(val.getType()).getIntOrFloatBitWidth()) : "RoundDecimal", mlir::ValueRange{val, scale}).getRes();
    }
+   if (funcName == "hash") {
+      std::vector<mlir::Value> values;
+      for (auto* cell = funcCall->args_->head; cell != nullptr; cell = cell->next) {
+         values.push_back(translateExpression(builder, reinterpret_cast<Node*>(cell->data.ptr_value), context));
+      }
+
+      auto packed = builder.create<mlir::util::PackOp>(loc, values);
+      return builder.create<mlir::db::Hash>(loc, builder.getIndexType(), packed);
+   }
    error("could not translate func call");
    return mlir::Value();
 }
@@ -1160,114 +1169,6 @@ void frontend::sql::Parser::translateCopyStatement(mlir::OpBuilder& builder, Cop
    auto delimiterValue = createStringValue(builder, delimiter);
    auto escapeValue = createStringValue(builder, escape);
    rt::RelationHelper::copyFromIntoTable(builder, builder.getUnknownLoc())(mlir::ValueRange{getExecutionContextValue(builder), tableNameValue, fileNameValue, delimiterValue, escapeValue});
-   //todo: reenable index
-   /*
-   // To create hashValues scan table again, then calculate hashvalues and combine
-   auto tableMetaData = catalog.findRelation(tableName)->getMetaData();
-   if (!tableMetaData->getPrimaryKey().empty()) {
-      // TODO: function can be removed once inlining pass does not interfere with subop ordering
-      // Create function to avoid reordering of subops and scanning an empty table; temporary workaround
-      std::string uniqueFunctionName = "addHashForPrimaryKey" + tableName;
-      mlir::func::FuncOp funcOp = moduleOp.lookupSymbol<mlir::func::FuncOp>(uniqueFunctionName);
-      assert(!funcOp);
-      mlir::Block* functionEntryBlock;
-      // Create function
-      {
-         mlir::OpBuilder::InsertionGuard guard(builder);
-         builder.setInsertionPointToStart(moduleOp.getBody());
-
-         funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), uniqueFunctionName, builder.getFunctionType(mlir::TypeRange{}, mlir::TypeRange{}), builder.getStringAttr("private"), mlir::ArrayAttr{}, mlir::ArrayAttr{});
-         functionEntryBlock = funcOp.addEntryBlock();
-      }
-      // Create call to declared function
-      builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), funcOp);
-
-      // Define function
-      mlir::OpBuilder::InsertionGuard guard(builder);
-      builder.setInsertionPointToStart(functionEntryBlock);
-
-      auto scopeName = attrManager.getUniqueScope("copy");
-      std::vector<mlir::Attribute> names, colTypes, colMemberNames;
-      std::unordered_map<std::string, ::mlir::tuples::ColumnRefAttr> attrs;
-      std::vector<mlir::NamedAttribute> columns;
-      auto& memberManager = builder.getContext()->getLoadedDialect<mlir::subop::SubOperatorDialect>()->getMemberManager();
-      for (auto x : tableMetaData->getOrderedColumns()) {
-         if (x == "primaryKeyHashValue") continue;
-         names.push_back(builder.getStringAttr(x));
-         auto colMemberName = memberManager.getUniqueMember(x);
-         auto columnType = createTypeFromColumnType(builder.getContext(), tableMetaData->getColumnMetaData(x)->getColumnType());
-
-         auto attrDef = attrManager.createDef(scopeName, x);
-         attrs[x] = attrManager.createRef(&attrDef.getColumn());
-         colTypes.push_back(mlir::TypeAttr::get(columnType));
-         colMemberNames.push_back(builder.getStringAttr(colMemberName));
-
-         attrDef.getColumn().type = columnType;
-         columns.push_back(builder.getNamedAttr(x, attrDef));
-      }
-
-      mlir::Value importedTable = builder.create<mlir::relalg::BaseTableOp>(
-         builder.getUnknownLoc(),
-         mlir::tuples::TupleStreamType::get(builder.getContext()),
-         copyStatement->relation_->relname_,
-         mlir::relalg::TableMetaDataAttr::get(builder.getContext(), std::make_shared<runtime::TableMetaData>()),
-         builder.getDictionaryAttr(columns));
-
-      // Create map operation for calculation of hash values
-      mlir::OpBuilder mapBuilder(builder.getContext());
-      mlir::Block* block = new mlir::Block;
-      block->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
-      ;
-      mlir::Value tuple = block->getArgument(0);
-      mapBuilder.setInsertionPointToStart(block);
-
-      // Extract values for primary keys
-      std::vector<mlir::Value> primaryKeyValues;
-      for (auto& keyAttribute : tableMetaData->getPrimaryKey()) {
-         // Primary key values must be set for every row
-         auto columnType = createTypeFromColumnType(builder.getContext(), tableMetaData->getColumnMetaData(keyAttribute)->getColumnType());
-         auto localAttrRef = attrs[keyAttribute];
-         mlir::Value expr = mapBuilder.create<mlir::tuples::GetColumnOp>(mapBuilder.getUnknownLoc(), columnType, localAttrRef, tuple);
-         primaryKeyValues.push_back(expr);
-      }
-      // Pack and hash primary keys
-      mlir::Value primaryKeyTuple = mapBuilder.create<mlir::util::PackOp>(builder.getUnknownLoc(), mlir::ValueRange{primaryKeyValues});
-      mlir::Value hashValue = mapBuilder.create<mlir::db::Hash>(builder.getUnknownLoc(), mapBuilder.getIndexType(), primaryKeyTuple);
-
-      // Create new column for hashValues
-      auto mapName = attrManager.getUniqueScope("hashValuesMap");
-      auto attrDef = attrManager.createDef(mapName, std::string("primaryKeyHashValue"));
-      attrDef.getColumn().type = mapBuilder.getIndexType();
-      mlir::Attribute attrRef = attrManager.createRef(&attrDef.getColumn());
-      std::vector<mlir::Attribute> createdCols{attrDef};
-      std::vector<mlir::Value> createdValues{hashValue};
-
-      // Return hash value column
-      mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValues);
-
-      // Build map operation
-      auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), importedTable, builder.getArrayAttr(createdCols));
-      mapOp.getPredicate().push_back(block);
-
-      // Materialize calculated hash values
-      auto resultTableType = mlir::subop::ResultTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(builder.getStringAttr("primaryKeyHashValue")), builder.getArrayAttr({mlir::TypeAttr::get(mlir::IndexType::get(builder.getContext()))})));
-      auto resultColumn = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), resultTableType, mapOp.getResult(), builder.getArrayAttr({attrRef}), builder.getArrayAttr({builder.getStringAttr("primaryKeyHashValue")}));
-      builder.create<mlir::subop::SetResultOp>(builder.getUnknownLoc(), 0, resultColumn);
-
-      auto executionContextValue = getExecutionContextValue(builder);
-      auto resultIdValue = builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 0, builder.getI32Type());
-      //todo
-      //rt::Database::combineTableWithHashValues(builder, builder.getUnknownLoc())(mlir::ValueRange{getCurrentDatabaseValue(builder), createStringValue(builder, tableName), executionContextValue, resultIdValue});
-
-      // TODO: find more elegant solution
-      // disable unwanted output by overwriting the result
-      auto emptyTableType = mlir::subop::ResultTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr({}), builder.getArrayAttr({})));
-      auto emptyMaterialization = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), emptyTableType, mapOp.getResult(), builder.getArrayAttr({}), builder.getArrayAttr({}));
-      builder.create<mlir::subop::SetResultOp>(builder.getUnknownLoc(), 0, emptyMaterialization);
-
-      builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
-   }
-    */
 }
 void frontend::sql::Parser::translateVariableSetStatement(mlir::OpBuilder& builder, VariableSetStmt* variableSetStatement) {
    std::string varName = variableSetStatement->name_;
@@ -1554,30 +1455,6 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
          insertedCols[insertColNames[i]] = attrRef;
       }
    }
-   //todo: renenable index
-   /*
-    assert(insertColNames.size() + !tableMetaData->getPrimaryKey().empty() == tableColumnTypes.size());
-
-   // calculate hash value, pack tuple, hash
-   if (!tableMetaData->getPrimaryKey().empty()) {
-      // extract values for primary keys
-      std::vector<mlir::Value> primaryKeyValues;
-      for (auto& keyAttribute : tableMetaData->getPrimaryKey()) {
-         // primary key values must be set for every row
-         assert(columnNameToCreatedValue.contains(keyAttribute));
-         primaryKeyValues.push_back(columnNameToCreatedValue[keyAttribute]);
-      }
-      mlir::Value primaryKeyTuple = mapBuilder.create<mlir::util::PackOp>(builder.getUnknownLoc(), mlir::ValueRange{primaryKeyValues});
-      mlir::Value hashValue = mapBuilder.create<mlir::db::Hash>(builder.getUnknownLoc(), mapBuilder.getIndexType(), primaryKeyTuple);
-      auto attrDef = attrManager.createDef(mapName, std::string("inserted") + std::to_string(insertColNames.size()));
-      attrDef.getColumn().type = mapBuilder.getIndexType();
-
-      createdCols.push_back(attrDef);
-      mlir::Value casted = SQLTypeInference::castValueToType(mapBuilder, hashValue, mapBuilder.getIndexType());
-
-      createdValues.push_back(casted);
-      insertedCols["primaryKeyHashValue"] = attrManager.createRef(&attrDef.getColumn());
-   }*/
 
    auto mapOp = builder.create<mlir::relalg::MapOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(createdCols));
    mapOp.getPredicate().push_back(block);

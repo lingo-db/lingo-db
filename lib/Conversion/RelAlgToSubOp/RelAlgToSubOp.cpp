@@ -962,7 +962,7 @@ static mlir::Value translateINLJ(mlir::Value left, mlir::Value right, mlir::Arra
    std::vector<NamedAttribute> mapping;
 
    // Create description for external index get operation
-   std::string externalIndexDescription = R"({ "externalHashIndex": ")" + tableName + R"(", "mapping": { )";
+   std::string externalIndexDescription = R"({"type": "hash", "index": ")" + std::string("pk_hash") + R"(", "relation": ")" + tableName + R"(", "mapping": { )";
    for (auto namedAttr : rightScan.getMapping()) {
       auto identifier = namedAttr.getName();
       auto attr = namedAttr.getValue();

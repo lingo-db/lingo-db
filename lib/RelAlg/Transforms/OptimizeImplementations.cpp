@@ -142,7 +142,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
    }
 
    // Verify that the join predicate in block takes all and only the primary key columns from baseTableOp into consideration
-   bool containsExactlyPrimaryKey(mlir::MLIRContext* ctxt, mlir::Operation* baseTableOp, mlir::Block* block) {
+   bool containsExactlyPrimaryKey(mlir::MLIRContext* ctxt, mlir::Operation* baseTableOp, mlir::Block* block, std::string& indexName) {
       llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> columns;
       auto baseTable = mlir::cast<mlir::relalg::BaseTableOp>(baseTableOp);
       auto& colManager = ctxt->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
@@ -180,6 +180,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       for (auto primaryKeyAttribute : primaryKeyFound) {
          res &= primaryKeyAttribute.second;
       }
+      indexName = "pk_hash";
       return res;
    }
 
@@ -434,14 +435,14 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                if (hashImplPossible(&predicateOperator.getPredicateBlock(), left.getAvailableColumns(), right.getAvailableColumns())) {
                   // Determine if index nested loop is possible and is beneficial
                   std::stack<mlir::Operation*> leftPath, rightPath;
-                  /*bool leftCanUsePrimaryKeyIndex = isBaseRelationWithSelects(left, leftPath) && containsExactlyPrimaryKey(binOp.getContext(), leftPath.top(), &predicateOperator.getPredicateBlock());
-                  bool rightCanUsePrimaryKeyIndex = isBaseRelationWithSelects(right, rightPath) && containsExactlyPrimaryKey(binOp.getContext(), rightPath.top(), &predicateOperator.getPredicateBlock());
+                  std::string leftIndexName, rightIndexName;
+                  bool leftCanUsePrimaryKeyIndex = isBaseRelationWithSelects(left, leftPath) && containsExactlyPrimaryKey(binOp.getContext(), leftPath.top(), &predicateOperator.getPredicateBlock(), leftIndexName);
+                  bool rightCanUsePrimaryKeyIndex = isBaseRelationWithSelects(right, rightPath) && containsExactlyPrimaryKey(binOp.getContext(), rightPath.top(), &predicateOperator.getPredicateBlock(), rightIndexName);
                   bool isInnerJoin = mlir::isa<mlir::relalg::InnerJoinOp>(predicateOperator);
-                  bool reversed = false;*/
+                  bool reversed = false;
 
                   prepareForHash(predicateOperator);
-                  //todo: reenable INL
-                  /*
+
                   // Select possible build side to the left
                   if (isInnerJoin && (leftCanUsePrimaryKeyIndex || rightCanUsePrimaryKeyIndex)) {
                      if (leftCanUsePrimaryKeyIndex && rightCanUsePrimaryKeyIndex) {
@@ -458,6 +459,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                            reversed = true;
                            std::swap(left, right);
                            std::swap(leftPath, rightPath);
+                           std::swap(leftIndexName, rightIndexName);
                            mlir::Attribute tmp = predicateOperator->getAttr("rightHash");
                            predicateOperator->setAttr("rightHash", predicateOperator->getAttr("leftHash"));
                            predicateOperator->setAttr("leftHash", tmp);
@@ -467,6 +469,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                         reversed = true;
                         std::swap(left, right);
                         std::swap(leftPath, rightPath);
+                        std::swap(leftIndexName, rightIndexName);
                         leftCanUsePrimaryKeyIndex = true;
                         mlir::Attribute tmp = predicateOperator->getAttr("rightHash");
                         predicateOperator->setAttr("rightHash", predicateOperator->getAttr("leftHash"));
@@ -520,7 +523,8 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
 
                      op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "indexNestedLoop"));
                      op->setAttr("useIndexNestedLoop", mlir::UnitAttr::get(op.getContext()));
-                  } else */{
+                     op->setAttr("index", mlir::StringAttr::get(op.getContext(), leftIndexName));
+                  } else {
                      op->setAttr("impl", mlir::StringAttr::get(op.getContext(), "hash"));
                      op->setAttr("useHashJoin", mlir::UnitAttr::get(op.getContext()));
                      prepareForHash(predicateOperator);

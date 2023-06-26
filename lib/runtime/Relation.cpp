@@ -1,5 +1,5 @@
 #include "runtime/Relation.h"
-#include "runtime/ExternalHashIndex.h"
+#include "runtime/HashIndex.h"
 
 #include <arrow/api.h>
 #include <arrow/compute/api.h>
@@ -37,6 +37,9 @@ class BoxedIntegerIterator {
    I operator*() { return i; }
 };
 std::shared_ptr<arrow::RecordBatch> createSample(std::shared_ptr<arrow::Table> table) {
+   if (table->num_rows() == 0) {
+      return std::shared_ptr<arrow::RecordBatch>();
+   }
    std::vector<int> result;
    arrow::NumericBuilder<arrow::Int32Type> numericBuilder;
 
@@ -174,7 +177,7 @@ class DBRelation : public Relation {
    std::vector<std::shared_ptr<arrow::RecordBatch>> recordBatches;
    std::shared_ptr<arrow::Schema> schema;
    std::shared_ptr<arrow::RecordBatch> sample;
-   ExternalHashIndexManager externalHashIndexManager;
+   std::unordered_map<std::string, std::shared_ptr<Index>> indices;
    std::string dbDir;
    void flush() {
       if (!persist) return;
@@ -195,8 +198,15 @@ class DBRelation : public Relation {
    }
 
    public:
-   DBRelation(const std::string dbDir, const std::string name, const std::shared_ptr<arrow::Table>& table, const std::shared_ptr<TableMetaData>& metaData, const std::vector<std::shared_ptr<arrow::RecordBatch>>& recordBatches, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<arrow::RecordBatch>& sample) : table(table), metaData(metaData), recordBatches(recordBatches), schema(schema), sample(sample), externalHashIndexManager(), dbDir(dbDir) {
+   DBRelation(const std::string dbDir, const std::string name, const std::shared_ptr<arrow::Table>& table, const std::shared_ptr<TableMetaData>& metaData, const std::vector<std::shared_ptr<arrow::RecordBatch>>& recordBatches, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<arrow::RecordBatch>& sample) : table(table), metaData(metaData), recordBatches(recordBatches), schema(schema), sample(sample), dbDir(dbDir) {
       Relation::name = name;
+      for (auto index : metaData->getIndices()) {
+         indices.insert({index->name, Index::createHashIndex(*index, *this, table, dbDir)});
+      }
+      for (auto idx : indices) {
+         idx.second->ensureLoaded();
+         idx.second->setPersist(persist);
+      }
    }
 
    std::shared_ptr<TableMetaData> getMetaData() override {
@@ -211,14 +221,13 @@ class DBRelation : public Relation {
    const std::vector<std::shared_ptr<arrow::RecordBatch>>& getRecordBatches() override {
       return recordBatches;
    }
-   ExternalHashIndexMapping* getHashIndex(const std::vector<std::string>& mapping) override {
-      return externalHashIndexManager.getIndex(getName(), mapping);
+   std::shared_ptr<Index> getIndex(const std::string name) override {
+      if (indices.contains(name)) {
+         return indices.at(name);
+      }
+      throw std::runtime_error("index not found");
    }
    void loadData() override {
-   }
-   void buildIndex() override {
-      //todo: renable enable index
-      //externalHashIndexManager.addIndex(getName(), table, metaData);
    }
    void append(std::shared_ptr<arrow::Table> toAppend) override {
       std::vector<std::shared_ptr<arrow::RecordBatch>> newTableBatches;
@@ -232,14 +241,19 @@ class DBRelation : public Relation {
       sample = createSample(table);
       metaData->setNumRows(table->num_rows());
       for (auto c : metaData->getOrderedColumns()) {
-         if (c == "primaryKeyHashValue" && table->GetColumnByName(c)) continue;
          metaData->getColumnMetaData(c)->setDistinctValues(countDistinctValues(table->GetColumnByName(c)));
       }
       flush();
+      for (auto idx : indices) {
+         idx.second->appendRows(toAppend);
+      }
    }
    void setPersist(bool persist) override {
       Relation::setPersist(persist);
       flush();
+      for (auto idx : indices) {
+         idx.second->setPersist(persist);
+      }
    }
 };
 std::shared_ptr<Relation> Relation::loadRelation(std::string dbDir, std::string name, std::string json) {
@@ -269,6 +283,13 @@ std::shared_ptr<Relation> Relation::createDBRelation(std::string dbDir, std::str
    auto schema = createSchema(metaData);
    std::shared_ptr<arrow::RecordBatch> sample;
    std::vector<std::shared_ptr<arrow::RecordBatch>> recordBatches;
+   if (!metaData->getPrimaryKey().empty()) {
+      auto pkIndex = std::make_shared<IndexMetaData>();
+      pkIndex->type = Index::Type::HASH;
+      pkIndex->name = "pk_hash";
+      pkIndex->columns = metaData->getPrimaryKey();
+      metaData->getIndices().push_back(pkIndex);
+   }
    return std::make_shared<DBRelation>(dbDir, name, arrow::Table::MakeEmpty(schema).ValueOrDie(), metaData, recordBatches, schema, sample);
 }
 
@@ -301,15 +322,13 @@ class LocalRelation : public Relation {
    const std::vector<std::shared_ptr<arrow::RecordBatch>>& getRecordBatches() override {
       return recordBatches;
    }
-   ExternalHashIndexMapping* getHashIndex(const std::vector<std::string>& mapping) override {
-      return nullptr;
+   std::shared_ptr<Index> getIndex(const std::string name) override {
+      throw std::runtime_error("indexes are not supported");
    }
    void loadData() override {
       //no effect
    }
-   void buildIndex() override {
-      //no effect
-   }
+
    void append(std::shared_ptr<arrow::Table> toAppend) override {
       std::vector<std::shared_ptr<arrow::RecordBatch>> newTableBatches;
 

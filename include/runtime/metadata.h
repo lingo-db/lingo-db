@@ -4,6 +4,8 @@
 #include <unordered_map>
 #include <variant>
 
+#include "runtime/Index.h"
+
 #include <arrow/record_batch.h>
 namespace runtime {
 struct ColumnType {
@@ -21,6 +23,11 @@ class ColumnMetaData {
    const ColumnType& getColumnType() const;
    void setColumnType(const ColumnType& columnType);
 };
+struct IndexMetaData {
+   std::string name;
+   Index::Type type;
+   std::vector<std::string> columns;
+};
 class TableMetaData {
    bool present;
    size_t numRows;
@@ -28,6 +35,7 @@ class TableMetaData {
    std::unordered_map<std::string, std::shared_ptr<ColumnMetaData>> columns;
    std::vector<std::string> orderedColumns;
    std::shared_ptr<arrow::RecordBatch> sample;
+   std::vector<std::shared_ptr<IndexMetaData>> indices;
 
    public:
    TableMetaData() : present(false) {}
@@ -55,6 +63,9 @@ class TableMetaData {
    }
    const std::shared_ptr<arrow::RecordBatch>& getSample() const {
       return sample;
+   }
+   std::vector<std::shared_ptr<IndexMetaData>>& getIndices() {
+      return indices;
    }
    const std::vector<std::string>& getOrderedColumns() const;
    static std::shared_ptr<TableMetaData> deserialize(std::string);

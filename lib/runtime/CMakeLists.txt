@@ -27,7 +27,8 @@ add_library(runtime OBJECT
         #ArrowDirDatabase.cpp
         #ExternalArrowDatabase.cpp
         #MetaDataOnlyDatabase.cpp
-        ExternalHashIndex.cpp
+        #ExternalHashIndex.cpp
+        HashIndex.cpp
         Relation.cpp
         Session.cpp
         Catalog.cpp)

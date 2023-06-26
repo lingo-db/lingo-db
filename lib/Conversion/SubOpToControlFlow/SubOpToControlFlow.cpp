@@ -31,13 +31,14 @@
 #include "runtime-defs/Buffer.h"
 #include "runtime-defs/DataSourceIteration.h"
 #include "runtime-defs/ExecutionContext.h"
-#include "runtime-defs/ExternalHashIndex.h"
 #include "runtime-defs/GrowingBuffer.h"
+#include "runtime-defs/HashIndex.h"
 #include "runtime-defs/HashMultiMap.h"
 #include "runtime-defs/Hashtable.h"
 #include "runtime-defs/Heap.h"
 #include "runtime-defs/LazyJoinHashtable.h"
 #include "runtime-defs/PreAggregationHashtable.h"
+#include "runtime-defs/RelationHelper.h"
 #include "runtime-defs/SegmentTreeView.h"
 #include "runtime-defs/SimpleState.h"
 #include "runtime-defs/TableBuilder.h"
@@ -720,7 +721,7 @@ class GetExternalHashIndexLowering : public SubOpConversionPattern<mlir::subop::
       if (!op.getType().isa<mlir::subop::ExternalHashIndexType>()) return failure();
       mlir::Value description = rewriter.create<mlir::util::CreateConstVarLen>(op->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), op.getDescrAttr());
 
-      rewriter.replaceOp(op, rt::ExternalHashIndexManager::get(rewriter, op->getLoc())({getExecutionContext(rewriter, op), description})[0]);
+      rewriter.replaceOp(op, rt::RelationHelper::getIndex(rewriter, op->getLoc())({getExecutionContext(rewriter, op), description})[0]);
       return mlir::success();
    }
 };
@@ -1388,10 +1389,11 @@ class StateContext {
    std::vector<std::tuple<mlir::Value, mlir::Operation*, size_t>> mapping; // value, owner, offset
    mlir::TypeConverter& converter;
    SubOpRewriter& rewriter;
+
    public:
    bool anyTuple = false;
    bool anyNonPointer = false;
-   StateContext(mlir::Operation* op, mlir::TypeConverter& converter,SubOpRewriter& rewriter) : scanOp(op), converter(converter),rewriter(rewriter) {
+   StateContext(mlir::Operation* op, mlir::TypeConverter& converter, SubOpRewriter& rewriter) : scanOp(op), converter(converter), rewriter(rewriter) {
       analyze();
    }
    void analyze(mlir::Operation* op, mlir::Operation* exclude = nullptr) {
@@ -1414,7 +1416,7 @@ class StateContext {
             if (auto* def = operand.getDefiningOp()) {
                if (!exclude || !exclude->isAncestor(def)) {
                   anyNonPointer |= converter.convertType(operand.getType()) == operand.getType();
-                  mappingForStoring.insert({operand,rewriter.getMapped(operand,op)});
+                  mappingForStoring.insert({operand, rewriter.getMapped(operand, op)});
                   if (!offset.contains(operand)) {
                      auto localOffset = numPtrs++;
                      offset[operand] = localOffset;
@@ -1427,7 +1429,7 @@ class StateContext {
             } else if (auto* parentOp = operand.getParentBlock()->getParentOp()) {
                if (!exclude || !exclude->isAncestor(parentOp)) {
                   anyNonPointer |= converter.convertType(operand.getType()) == operand.getType();
-                  mappingForStoring.insert({operand,rewriter.getMapped(operand,op)});
+                  mappingForStoring.insert({operand, rewriter.getMapped(operand, op)});
                   if (!offset.contains(operand)) {
                      auto localOffset = numPtrs++;
                      offset[operand] = localOffset;
@@ -1570,7 +1572,7 @@ class ScanRefsTableLowering : public SubOpConversionPattern<mlir::subop::ScanRef
       mlir::Value recordBatchPointer = funcBody->addArgument(ptrType, loc);
       mlir::Value contextPtr = funcBody->addArgument(ptrType, loc);
       funcOp.getBody().push_back(funcBody);
-      StateContext stateContext(scanOp.getOperation(), *typeConverter,rewriter);
+      StateContext stateContext(scanOp.getOperation(), *typeConverter, rewriter);
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
          stateContext.load(rewriter, contextPtr);
          recordBatchPointer = rewriter.create<util::GenericMemrefCastOp>(loc, util::RefType::get(getContext(), recordBatchType), recordBatchPointer);
@@ -1619,7 +1621,7 @@ void implementBufferIterationRuntime(bool parallel, mlir::Value bufferIterator, 
    mlir::Value buffer = funcBody->addArgument(plainBufferType, loc);
    mlir::Value contextPtr = funcBody->addArgument(ptrType, loc);
    funcOp.getBody().push_back(funcBody);
-   StateContext stateContext(op, typeConverter,rewriter);
+   StateContext stateContext(op, typeConverter, rewriter);
    rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
       stateContext.load(rewriter, contextPtr);
       auto castedBuffer = rewriter.create<mlir::util::BufferCastOp>(loc, mlir::util::BufferType::get(rewriter.getContext(), entryType), buffer);
@@ -1667,7 +1669,7 @@ void implementBufferIterationDirect(mlir::Value bufferIterator, mlir::Type entry
    rt::BufferIterator::destroy(rewriter, loc)({bufferIterator});
 }
 void implementBufferIteration(bool parallel, mlir::Value bufferIterator, mlir::Type entryType, mlir::Location loc, SubOpRewriter& rewriter, mlir::TypeConverter& typeConverter, mlir::Operation* op, std::function<void(SubOpRewriter& rewriter, mlir::Value)> fn) {
-   StateContext context(op, typeConverter,rewriter);
+   StateContext context(op, typeConverter, rewriter);
    if (context.anyTuple || context.anyNonPointer) {
       //llvm::dbgs() << "falling back\n";
       implementBufferIterationDirect(bufferIterator, entryType, loc, rewriter, typeConverter, op, fn);
@@ -1750,7 +1752,7 @@ class ScanRefsContinuousViewLowering : public SubOpConversionPattern<mlir::subop
    LogicalResult matchAndRewrite(mlir::subop::ScanRefsOp scanOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       if (!scanOp.getState().getType().isa<mlir::subop::ContinuousViewType, mlir::subop::ArrayType>()) return failure();
       if (scanOp->hasAttr("parallel")) {
-         StateContext stateContext(scanOp, *typeConverter,rewriter);
+         StateContext stateContext(scanOp, *typeConverter, rewriter);
          if (!stateContext.anyNonPointer && !stateContext.anyTuple) {
             ColumnMapping mapping;
             auto loc = scanOp->getLoc();
@@ -2077,7 +2079,7 @@ class ScanExternalHashIndexListLowering : public SubOpConversionPattern<mlir::su
       // Check if iterator contains another value
       rewriter.atStartOf(conditionBlock, [&](SubOpRewriter& rewriter) {
          mlir::Value list = conditionBlock->getArgument(0);
-         mlir::Value cont = rt::ExternalHashIndexIteration::containsValue(rewriter, loc)({list})[0];
+         mlir::Value cont = rt::HashIndexIteration::hasNext(rewriter, loc)({list})[0];
          rewriter.create<scf::ConditionOp>(loc, cont, ValueRange({list}));
       });
 
@@ -2088,7 +2090,7 @@ class ScanExternalHashIndexListLowering : public SubOpConversionPattern<mlir::su
          rewriter.atStartOf(&scanOp->getParentOfType<mlir::func::FuncOp>().getBody().front(), [&](SubOpRewriter& rewriter) {
             recordBatchPointer = rewriter.create<mlir::util::AllocaOp>(loc, mlir::util::RefType::get(rewriter.getContext(), recordBatchType), mlir::Value());
          });
-         rt::ExternalHashIndexIteration::consumeRecordBatch(rewriter, loc)({list, recordBatchPointer});
+         rt::HashIndexIteration::consumeRecordBatch(rewriter, loc)({list, recordBatchPointer});
          mlir::Value recordBatch = rewriter.create<mlir::util::LoadOp>(loc, recordBatchPointer, mlir::Value());
          // load tuple from record batch
          auto forOp2 = rewriter.create<mlir::dsa::ForOp>(scanOp->getLoc(), mlir::TypeRange{}, recordBatch, mlir::ValueRange{});
@@ -2106,7 +2108,7 @@ class ScanExternalHashIndexListLowering : public SubOpConversionPattern<mlir::su
       });
 
       // Close iterator
-      rt::ExternalHashIndexIteration::close(rewriter, loc)({adaptor.getList()});
+      rt::HashIndexIteration::close(rewriter, loc)({adaptor.getList()});
       return success();
    }
 };
@@ -3255,7 +3257,7 @@ class LookupExternalHashIndexLowering : public SubOpTupleStreamConsumerConversio
 
       // Calculate hash value and perform lookup in external index hashmap
       auto hashValue = rewriter.create<mlir::db::Hash>(loc, rewriter.create<mlir::util::PackOp>(loc, mapping.resolve(lookupOp.getKeys())));
-      mlir::Value list = rt::ExternalHashIndexMapping::lookup(rewriter, loc)({adaptor.getState(), hashValue})[0];
+      mlir::Value list = rt::HashIndexAccess::lookup(rewriter, loc)({adaptor.getState(), hashValue})[0];
 
       mapping.define(lookupOp.getRef(), list);
       rewriter.replaceTupleStream(lookupOp, mapping);
