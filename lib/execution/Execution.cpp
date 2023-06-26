@@ -69,15 +69,15 @@ class RelAlgLoweringStep : public LoweringStep {
             auto tableName = json.value("table", "");
             bool addIndex = false;
             if (!tableName.size()) {
-               tableName = json.value("externalHashIndex", "");
-               if (!tableName.size()) return;
-               addIndex = true;
+               addIndex = json.contains("index");
+               if (!addIndex) return;
+               tableName = json["relation"];
             }
             // Load table
             if (auto relation = catalog->findRelation(tableName)) {
                relation->loadData();
                if (addIndex) {
-                  //relation->buildIndex();
+                  relation->getIndex(json["index"])->ensureLoaded();
                }
             }
          }

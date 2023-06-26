@@ -10,7 +10,7 @@ class Session {
 
    public:
    static std::shared_ptr<Session> createSession();
-   static std::shared_ptr<Session> createSession(std::string dbDir,bool readOnly=true);
+   static std::shared_ptr<Session> createSession(std::string dbDir,bool eagerLoading=true);
    std::shared_ptr<Catalog> getCatalog();
    std::unique_ptr<ExecutionContext> createExecutionContext();
 };

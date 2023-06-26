@@ -919,7 +919,7 @@ class TupleCountResultProcessor : public execution::ResultProcessor {
    }
 };
 void execute(std::string inputFileName, std::string databasePath, std::unordered_map<uint32_t, int64_t>& tupleCounts) {
-   auto session = runtime::Session::createSession(databasePath);
+   auto session = runtime::Session::createSession(databasePath,false);
    support::eval::init();
    auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::CHEAP, false);
    queryExecutionConfig->timingProcessor = {};

@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
       std::cerr << "USAGE: sql database" << std::endl;
       return 1;
    }
-   auto session = runtime::Session::createSession(std::string(argv[1]));
+   auto session = runtime::Session::createSession(std::string(argv[1]),true);
 
    support::eval::init();
    while (true) {

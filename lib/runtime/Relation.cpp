@@ -179,6 +179,7 @@ class DBRelation : public Relation {
    std::shared_ptr<arrow::RecordBatch> sample;
    std::unordered_map<std::string, std::shared_ptr<Index>> indices;
    std::string dbDir;
+   bool eagerLoading;
    void flush() {
       if (!persist) return;
       auto dataFile = dbDir + "/" + name + ".arrow";
@@ -198,13 +199,15 @@ class DBRelation : public Relation {
    }
 
    public:
-   DBRelation(const std::string dbDir, const std::string name, const std::shared_ptr<arrow::Table>& table, const std::shared_ptr<TableMetaData>& metaData, const std::vector<std::shared_ptr<arrow::RecordBatch>>& recordBatches, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<arrow::RecordBatch>& sample) : table(table), metaData(metaData), recordBatches(recordBatches), schema(schema), sample(sample), dbDir(dbDir) {
+   DBRelation(const std::string dbDir, const std::string name, const std::shared_ptr<arrow::Table>& table, const std::shared_ptr<TableMetaData>& metaData, const std::vector<std::shared_ptr<arrow::RecordBatch>>& recordBatches, const std::shared_ptr<arrow::Schema>& schema, const std::shared_ptr<arrow::RecordBatch>& sample, bool eagerLoading) : table(table), metaData(metaData), recordBatches(recordBatches), schema(schema), sample(sample), dbDir(dbDir), eagerLoading(eagerLoading) {
       Relation::name = name;
       for (auto index : metaData->getIndices()) {
-         indices.insert({index->name, Index::createHashIndex(*index, *this, table, dbDir)});
+         indices.insert({index->name, Index::createHashIndex(*index, *this, dbDir)});
       }
       for (auto idx : indices) {
-         idx.second->ensureLoaded();
+         if (eagerLoading) {
+            idx.second->ensureLoaded();
+         }
          idx.second->setPersist(persist);
       }
    }
@@ -228,6 +231,13 @@ class DBRelation : public Relation {
       throw std::runtime_error("index not found");
    }
    void loadData() override {
+      if (!eagerLoading && table->num_rows() == 0) {
+         auto dataFile = dbDir + "/" + name + ".arrow";
+         if (std::filesystem::exists(dataFile)) {
+            table = loadTable(dataFile);
+            recordBatches = toRecordBatches(table);
+         }
+      }
    }
    void append(std::shared_ptr<arrow::Table> toAppend) override {
       std::vector<std::shared_ptr<arrow::RecordBatch>> newTableBatches;
@@ -248,6 +258,9 @@ class DBRelation : public Relation {
          idx.second->appendRows(toAppend);
       }
    }
+   std::shared_ptr<arrow::Table> getTable() override {
+      return table;
+   }
    void setPersist(bool persist) override {
       Relation::setPersist(persist);
       flush();
@@ -256,7 +269,7 @@ class DBRelation : public Relation {
       }
    }
 };
-std::shared_ptr<Relation> Relation::loadRelation(std::string dbDir, std::string name, std::string json) {
+std::shared_ptr<Relation> Relation::loadRelation(std::string dbDir, std::string name, std::string json, bool eagerLoading) {
    std::shared_ptr<TableMetaData> metaData;
    std::vector<std::shared_ptr<arrow::RecordBatch>> recordBatches;
    std::shared_ptr<arrow::Schema> schema;
@@ -264,7 +277,7 @@ std::shared_ptr<Relation> Relation::loadRelation(std::string dbDir, std::string 
    auto dataFile = dbDir + "/" + name + ".arrow";
    auto sampleFile = dbDir + "/" + name + ".arrow.sample";
    std::shared_ptr<arrow::Table> table;
-   if (std::filesystem::exists(dataFile)) {
+   if (std::filesystem::exists(dataFile) && eagerLoading) {
       table = loadTable(dataFile);
       recordBatches = toRecordBatches(table);
       schema = table->schema();
@@ -277,7 +290,7 @@ std::shared_ptr<Relation> Relation::loadRelation(std::string dbDir, std::string 
       schema = createSchema(metaData);
       table = arrow::Table::MakeEmpty(schema).ValueOrDie();
    }
-   return std::make_shared<DBRelation>(dbDir, name, table, metaData, recordBatches, schema, sample);
+   return std::make_shared<DBRelation>(dbDir, name, table, metaData, recordBatches, schema, sample, eagerLoading);
 }
 std::shared_ptr<Relation> Relation::createDBRelation(std::string dbDir, std::string name, std::shared_ptr<TableMetaData> metaData) {
    auto schema = createSchema(metaData);
@@ -290,7 +303,7 @@ std::shared_ptr<Relation> Relation::createDBRelation(std::string dbDir, std::str
       pkIndex->columns = metaData->getPrimaryKey();
       metaData->getIndices().push_back(pkIndex);
    }
-   return std::make_shared<DBRelation>(dbDir, name, arrow::Table::MakeEmpty(schema).ValueOrDie(), metaData, recordBatches, schema, sample);
+   return std::make_shared<DBRelation>(dbDir, name, arrow::Table::MakeEmpty(schema).ValueOrDie(), metaData, recordBatches, schema, sample, true);
 }
 
 class LocalRelation : public Relation {
@@ -324,6 +337,9 @@ class LocalRelation : public Relation {
    }
    std::shared_ptr<Index> getIndex(const std::string name) override {
       throw std::runtime_error("indexes are not supported");
+   }
+   std::shared_ptr<arrow::Table> getTable() override {
+      return table;
    }
    void loadData() override {
       //no effect

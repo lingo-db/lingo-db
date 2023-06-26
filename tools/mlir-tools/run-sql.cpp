@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
    std::string inputFileName = std::string(argv[1]);
    std::string directory = std::string(argv[2]);
    std::cout << "Loading Database from: " << directory << '\n';
-   auto session = runtime::Session::createSession(directory);
+   auto session = runtime::Session::createSession(directory,false);
 
    support::eval::init();
    execution::ExecutionMode runMode = execution::getExecutionMode();

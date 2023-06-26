@@ -97,7 +97,7 @@ void HashIndex::computeHashes() {
 }
 void HashIndex::ensureLoaded() {
    auto dataFile = dbDir + "/" + relation.getName() + "." + name + ".arrow";
-
+   table = relation.getTable();
    if (std::filesystem::exists(dataFile)) {
       auto inputFile = arrow::io::ReadableFile::Open(dataFile).ValueOrDie();
       auto batchReader = arrow::ipc::RecordBatchFileReader::Open(inputFile).ValueOrDie();
@@ -185,8 +185,8 @@ HashIndexAccess::HashIndexAccess(runtime::HashIndex& hashIndex, std::vector<std:
       recordBatchInfos.push_back(recordBatchInfo);
    }
 }
-std::shared_ptr<Index> Index::createHashIndex(runtime::IndexMetaData& metaData, runtime::Relation& relation, std::shared_ptr<arrow::Table> table, std::string dbDir) {
-   auto res = std::make_shared<HashIndex>(relation, table, metaData.columns, dbDir);
+std::shared_ptr<Index> Index::createHashIndex(runtime::IndexMetaData& metaData, runtime::Relation& relation, std::string dbDir) {
+   auto res = std::make_shared<HashIndex>(relation, metaData.columns, dbDir);
    res->name = metaData.name;
    return res;
 }

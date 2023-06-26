@@ -11,6 +11,6 @@ std::shared_ptr<runtime::Catalog> runtime::Session::getCatalog() {
 std::shared_ptr<runtime::Session> runtime::Session::createSession() {
    return std::shared_ptr<Session>(new Session(LocalCatalog::create(Catalog::createEmpty())));
 }
-std::shared_ptr<runtime::Session> runtime::Session::createSession(std::string dbDir,bool readOnly) {
-   return std::shared_ptr<Session>(new Session(DBCatalog::create(Catalog::createEmpty(),dbDir)));
+std::shared_ptr<runtime::Session> runtime::Session::createSession(std::string dbDir, bool eagerLoading) {
+   return std::shared_ptr<Session>(new Session(DBCatalog::create(Catalog::createEmpty(), dbDir, eagerLoading)));
 }

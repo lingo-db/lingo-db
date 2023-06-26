@@ -25,7 +25,7 @@ int main(int argc, char** argv) {
    auto catalog = runtime::Catalog::createEmpty();
    if (argc >= 3) {
       std::string dbDir = std::string(argv[2]);
-      catalog = runtime::DBCatalog::create(catalog, dbDir);
+      catalog = runtime::DBCatalog::create(catalog, dbDir, false);
    }
    std::ifstream istream{filename};
    std::stringstream buffer;

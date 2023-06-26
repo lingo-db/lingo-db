@@ -27,7 +27,7 @@ class Index {
    virtual void setPersist(bool value) {
       persist = value;
    }
-   static std::shared_ptr<Index> createHashIndex(IndexMetaData& metaData, Relation& relation, std::shared_ptr<arrow::Table> table, std::string dbDir);
+   static std::shared_ptr<Index> createHashIndex(IndexMetaData& metaData, Relation& relation, std::string dbDir);
    virtual ~Index() {}
 };
 

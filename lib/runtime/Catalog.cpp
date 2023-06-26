@@ -44,7 +44,7 @@ void LocalCatalog::setPersist(bool value) {
 std::shared_ptr<Catalog> Catalog::createEmpty() {
    return std::make_shared<EmptyCatalog>();
 }
-std::shared_ptr<DBCatalog> DBCatalog::create(std::shared_ptr<Catalog> nested, std::string dbDir) {
+std::shared_ptr<DBCatalog> DBCatalog::create(std::shared_ptr<Catalog> nested, std::string dbDir,bool eagerLoading) {
    auto* catalog = new DBCatalog(nested);
    catalog->dbDirectory = dbDir;
    for (const auto& p : std::filesystem::directory_iterator(dbDir)) {
@@ -53,7 +53,7 @@ std::shared_ptr<DBCatalog> DBCatalog::create(std::shared_ptr<Catalog> nested, st
          auto tableName = path.stem().string().substr(0, path.stem().string().size() - std::string(".metadata").size());
          std::ifstream t(path);
          auto json = std::string((std::istreambuf_iterator<char>(t)), std::istreambuf_iterator<char>());
-         catalog->relations.insert({tableName, Relation::loadRelation(dbDir, tableName, json)});
+         catalog->relations.insert({tableName, Relation::loadRelation(dbDir, tableName, json,eagerLoading)});
       }
    }
    return std::shared_ptr<DBCatalog>(catalog);

@@ -30,7 +30,7 @@ class DBCatalog : public Catalog {
 
    public:
    std::shared_ptr<Relation> findRelation(std::string name) override;
-   static std::shared_ptr<DBCatalog> create(std::shared_ptr<Catalog> nested, std::string dbDir);
+   static std::shared_ptr<DBCatalog> create(std::shared_ptr<Catalog> nested, std::string dbDir,bool eagerLoading);
    void addTable(std::string tableName, std::shared_ptr<TableMetaData> mD) override;
    void setPersist(bool value) override;
 };

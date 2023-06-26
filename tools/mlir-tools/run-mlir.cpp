@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
    std::shared_ptr<runtime::Session> session;
    if (argc > 2) {
       std::cout << "Loading Database from: " << argv[2] << '\n';
-      session = runtime::Session::createSession(std::string(argv[2]));
+      session = runtime::Session::createSession(std::string(argv[2]),false);
    } else {
       session = runtime::Session::createSession();
    }

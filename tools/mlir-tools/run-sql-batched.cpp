@@ -18,7 +18,7 @@ int main(int argc, char** argv) {
    std::cout << "Loading Database from: " << directory << '\n';
    //auto database = runtime::Database::loadMetaDataAndSamplesFromDir(directory);
    //context.db = std::move(database);
-   auto session = runtime::Session::createSession(directory);
+   auto session = runtime::Session::createSession(directory,false);
 
    support::eval::init();
    execution::ExecutionMode runMode = execution::getExecutionMode();

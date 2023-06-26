@@ -16,7 +16,7 @@ bridge::Connection* bridge::createInMemory() {
    return new Connection(runtime::Session::createSession());
 }
 bridge::Connection* bridge::loadFromDisk(const char* directory) {
-   return new Connection(runtime::Session::createSession(directory));
+   return new Connection(runtime::Session::createSession(directory,true));
 }
 bool bridge::run(Connection* connection, const char* module, ArrowArrayStream* res) {
    auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::SPEED, false);

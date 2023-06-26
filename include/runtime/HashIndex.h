@@ -24,8 +24,9 @@ class HashIndex : public Index {
    std::string dbDir;
    void build();
    void computeHashes();
+
    public:
-   HashIndex(Relation& r, std::shared_ptr<arrow::Table> table, std::vector<std::string> keyColumns,std::string dbDir) : Index(r, keyColumns), buffer(16, sizeof(Entry)), table(table),dbDir(dbDir) {}
+   HashIndex(Relation& r, std::vector<std::string> keyColumns, std::string dbDir) : Index(r, keyColumns), buffer(16, sizeof(Entry)), dbDir(dbDir) {}
    void flush();
    void ensureLoaded() override;
    void appendRows(std::shared_ptr<arrow::Table> table) override;
