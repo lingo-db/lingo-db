@@ -91,7 +91,11 @@ build_pylingodb:
    script:
       - rm -rf /built-packages
       - mkdir -p /built-packages
-      - create_package.sh cp310-cp310
+      - create_package.sh cp311-cp311
+      - cd tools/python
+      - /opt/python/cp311-cp311/bin/python3 -m build .
+      - cp dist/*.whl /built-packages/.
+      - cd ../..
       - cp -r /built-packages built-packages
    tags:
       - "lingodb-python-builder"
@@ -104,6 +108,10 @@ test_pylingodb:
    needs:
       - build_pylingodb
    script:
+      - apt-get update
+      - apt install -y python3.11-venv
+      - python3 -m venv venv
+      - . venv/bin/activate
       - pip install built-packages/*.whl
       - pip install pandas
       - python3 tools/python/test/test.py

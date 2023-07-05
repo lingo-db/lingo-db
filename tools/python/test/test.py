@@ -1,9 +1,9 @@
-import pyarrow as pa
-
-import pylingodb
+import lingodb
 
 import pandas as pd
-con = pylingodb.connect_to_db("./resources/data/uni")
+import pyarrow as pa
+
+con = lingodb.connect_to_db("./resources/data/uni")
 print(con.sql("""
 -- all students who never attended a lecture
 select * from studenten s
@@ -11,10 +11,10 @@ where not exists(select * from hoeren h where h.matrnr=s.matrnr)
 """).to_pandas())
 print(con.sql("select 1").to_pandas())
 
-df = pd.DataFrame(data={'col1': [1, 2, 3, 4]})
+df = pd.DataFrame(data={'col1': [1, 2, 3, 4], 'col2': ["foo", "foo", "bar", "bar"]})
 
-con2 = pylingodb.create_in_memory()
-con2.add_table("df", pylingodb.meta_data_from_arrow(pa.Table.from_pandas(df)), pa.Table.from_pandas(df))
+con2 = lingodb.create_in_memory()
+con2.add_table("df", pa.Table.from_pandas(df))
 print(con2.mlir("""module {
   func.func @main() {
     %0 = relalg.basetable {table_identifier = "df"} columns: { col1 => @df::@col1({type = i64})}
@@ -34,4 +34,4 @@ print(con2.mlir("""module {
   }
 }
 """).to_pandas())
-print(con2.sql("select count(*) from df where col1>2").to_pandas())
+print(con2.sql("select count(*) as c1,count(distinct col2) as c2 from df where col1>2").to_pandas())

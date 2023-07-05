@@ -50,7 +50,7 @@ COPY --from=buildllvm /build/llvm/lib /build/llvm/lib
 COPY --from=buildllvm /build/llvm/include /build/llvm/include
 COPY --from=buildllvm /build/llvm/tools/mlir/include /build/llvm/tools/mlir/include
 COPY --from=buildllvm /build/llvm/tools/clang/include /build/llvm/tools/clang/include
-COPY tools/python/create_package.sh /usr/bin/
+COPY tools/python/bridge/create_package.sh /usr/bin/
 RUN chmod +x /usr/bin/create_package.sh
 VOLUME [ "/repo" ]
 WORKDIR /repo

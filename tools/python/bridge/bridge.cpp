@@ -16,7 +16,7 @@ bridge::Connection* bridge::createInMemory() {
    return new Connection(runtime::Session::createSession());
 }
 bridge::Connection* bridge::loadFromDisk(const char* directory) {
-   return new Connection(runtime::Session::createSession(directory,true));
+   return new Connection(runtime::Session::createSession(directory, true));
 }
 bool bridge::run(Connection* connection, const char* module, ArrowArrayStream* res) {
    auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::SPEED, false);
@@ -52,9 +52,11 @@ bool bridge::runSQL(Connection* connection, const char* query, ArrowArrayStream*
    }
    return false;
 }
-void bridge::addTable(Connection* connection, const char* name, const char* metaData, ArrowArrayStream* recordBatchStream) {
-   auto recordBatchReader = arrow::ImportRecordBatchReader(recordBatchStream).ValueOrDie();
+void bridge::createTable(Connection* connection, const char* name, const char* metaData) {
    connection->getSession().getCatalog()->addTable(name, runtime::TableMetaData::create(metaData, name, {}));
+}
+void bridge::appendTable(Connection* connection, const char* name, ArrowArrayStream* recordBatchStream) {
+   auto recordBatchReader = arrow::ImportRecordBatchReader(recordBatchStream).ValueOrDie();
    connection->getSession().getCatalog()->findRelation(name)->append(recordBatchReader->ToTable().ValueOrDie());
 }
 void bridge::closeConnection(bridge::Connection* con) {
