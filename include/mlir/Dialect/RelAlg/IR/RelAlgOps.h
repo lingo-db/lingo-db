@@ -9,7 +9,9 @@
 #include "mlir/Dialect/DB/IR/DBTypes.h"
 #include "mlir/Dialect/DSA/IR/DSATypes.h"
 
-#include "mlir/Dialect/RelAlg/IR/Column.h"
+#include "mlir/Dialect/TupleStream/Column.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOpsAttributes.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOpsTypes.h"
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsAttributes.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOpsEnums.h"

@@ -26,17 +26,22 @@ struct RuntimeFunction {
    using ResTypeMatcher = std::function<bool(mlir::Type, mlir::TypeRange)>;
    static inline auto anyType = [](mlir::Type) { return true; };
    static inline auto intLike = [](mlir::Type t) { return getBaseType(t).isIntOrIndex(); };
-   static inline auto stringLike = [](mlir::Type t) { return getBaseType(t).isa<mlir::db::StringType,mlir::db::CharType>(); };
-   static inline auto dateLike = [](mlir::Type t) { return getBaseType(t).isa<mlir::db::DateType>(); };
+   static inline auto onlyIndex = [](mlir::Type t) { return t.isIndex(); };
+   static inline auto stringLike = [](mlir::Type t) { return getBaseType(t).isa<mlir::db::StringType, mlir::db::CharType>(); };
+   static inline auto dateLike = [](mlir::Type t) { return getBaseType(t).isa<mlir::db::DateType, mlir::db::TimestampType>(); };
+   static inline auto float64 = [](mlir::Type t) { return getBaseType(t).isF64(); };
    static inline auto dateInterval = [](mlir::Type t) { return getBaseType(t).isa<mlir::db::IntervalType>(); };
-   static inline auto noReturnType = [](mlir::Type t,mlir::TypeRange){return !t;};
+   static inline auto anyDecimal = [](mlir::Type t) { return getBaseType(t).isa<mlir::db::DecimalType>(); };
+   static inline auto anyNumber = [](mlir::Type t) { return intLike(t) || anyDecimal(t) || getBaseType(t).isF64(); };
+   static inline auto noReturnType = [](mlir::Type t, mlir::TypeRange) { return !t; };
    static ResTypeMatcher matchesArgument(size_t argIdx = 0) {
       return [](mlir::Type resType, mlir::TypeRange types) {
          return resType == types[0];
       };
    }
    std::function<bool(mlir::TypeRange types, mlir::Type resType)> verifyFn;
-   using loweringFnT = std::function<mlir::Value(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter*,mlir::Location)>;
+   std::optional<std::function<mlir::LogicalResult(mlir::TypeRange, ::llvm::ArrayRef<::mlir::Attribute>, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>&)>> foldFn;
+   using loweringFnT = std::function<mlir::Value(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter*, mlir::Location)>;
    std::variant<loweringFnT, mlir::util::FunctionSpec> implementation;
 
    //builder functions
@@ -49,16 +54,20 @@ struct RuntimeFunction {
       implementation = function;
       return *this;
    }
-   RuntimeFunction& handlesNulls(){
-      nullHandleType=HandlesNulls;
+   RuntimeFunction& handlesNulls() {
+      nullHandleType = HandlesNulls;
       return *this;
    }
-   RuntimeFunction& handlesInvalid(){
-      nullHandleType=HandlesInvalidVaues;
+   RuntimeFunction& handlesInvalid() {
+      nullHandleType = HandlesInvalidVaues;
       return *this;
    }
-   RuntimeFunction& needsWrapping(){
-      nullHandleType=NeedsWrapping;
+   RuntimeFunction& needsWrapping() {
+      nullHandleType = NeedsWrapping;
+      return *this;
+   }
+   RuntimeFunction& folds(std::function<mlir::LogicalResult(mlir::TypeRange typeRange, ::llvm::ArrayRef<::mlir::Attribute>, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>&)> foldFn) {
+      this->foldFn = foldFn;
       return *this;
    }
    RuntimeFunction& matchesTypes(const std::vector<TypeMatcher>& matchers, ResTypeMatcher resMatcher) {

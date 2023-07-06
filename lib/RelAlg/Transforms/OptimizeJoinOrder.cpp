@@ -12,6 +12,9 @@ namespace {
 class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::OperationPass<mlir::func::FuncOp>> {
    virtual llvm::StringRef getArgument() const override { return "relalg-optimize-join-order"; }
 
+   public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(OptimizeJoinOrder)
+   private:
    llvm::SmallPtrSet<mlir::Operation*, 12> alreadyOptimized;
 
    bool isUnsupportedOp(mlir::Operation* op) {
@@ -49,6 +52,47 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
       return isUnsupportedOp(op);
    }
 
+   void estimateUnsupported(Operator op) {
+      auto children = op.getChildren();
+      llvm::TypeSwitch<mlir::Operation*>(op.getOperation())
+         .Case<mlir::relalg::MapOp>([&](mlir::relalg::MapOp mapOp) {
+            if (children.size() == 1 && children[0]->hasAttr("rows")) {
+               mapOp->setAttr("rows", children[0]->getAttr("rows"));
+            }
+         })
+         .Case<mlir::relalg::LimitOp>([&](mlir::relalg::LimitOp limitOp) {
+            if (children.size() == 1 && children[0]->hasAttr("rows")) {
+               limitOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), std::min(children[0]->getAttr("rows").cast<mlir::FloatAttr>().getValueAsDouble(), (double) limitOp.getMaxRows())));
+            }
+         })
+         .Case<mlir::relalg::BaseTableOp>([&](mlir::relalg::BaseTableOp baseTableOp) {
+            auto numRows = baseTableOp.getMeta().getMeta()->getNumRows();
+            baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(&getContext()), numRows));
+         })
+         .Case<mlir::relalg::UnionOp>([&](mlir::relalg::UnionOp unionOp) {
+            double sum = 0;
+            for (auto child : children) {
+               if (child->hasAttr("rows")) {
+                  sum += child->getAttr("rows").cast<mlir::FloatAttr>().getValueAsDouble();
+               }
+            }
+            if (sum != 0) {
+               unionOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), sum));
+            }
+         })
+         .Case<mlir::relalg::AggregationOp>([&](mlir::relalg::AggregationOp aggregationOp) {
+            if (aggregationOp.getGroupByCols().empty()) {
+               aggregationOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()),1.0));
+            } else if (children.size() == 1 && children[0]->hasAttr("rows")) {
+               aggregationOp->setAttr("rows", children[0]->getAttr("rows"));
+            }
+         })
+         .Case<UnaryOperator>([&](UnaryOperator unaryOperator) {
+            if (children.size() == 1 && children[0]->hasAttr("rows")) {
+               unaryOperator->setAttr("rows", children[0]->getAttr("rows"));
+            }
+         });
+   }
    Operator optimize(Operator op) {
       if (alreadyOptimized.count(op.getOperation())) {
          //don't do anything, subtree is already optimized
@@ -61,6 +105,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
             children[i] = optimize(children[i]);
          }
          op.setChildren(children);
+         estimateUnsupported(op);
          alreadyOptimized.insert(op.getOperation());
          return op;
       } else {

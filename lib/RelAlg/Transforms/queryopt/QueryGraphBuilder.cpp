@@ -1,16 +1,15 @@
 #include "mlir/Dialect/RelAlg/Transforms/queryopt/QueryGraphBuilder.h"
 #include <list>
 
-namespace mlir::relalg {
-static NodeSet getNodeSetFromClass(llvm::EquivalenceClasses<size_t>& classes, size_t val, size_t numNodes) {
-   NodeSet res(numNodes);
+namespace {
+mlir::relalg::NodeSet getNodeSetFromClass(llvm::EquivalenceClasses<size_t>& classes, size_t val, size_t numNodes) {
+   mlir::relalg::NodeSet res(numNodes);
    auto eqclass = classes.findLeader(val);
    for (auto me = classes.member_end(); eqclass != me; ++eqclass) {
       res.set(*eqclass);
    }
    return res;
 }
-
 size_t countCreatingOperators(Operator op, llvm::SmallPtrSet<mlir::Operation*, 12>& alreadyOptimized) {
    size_t res = 0;
    auto children = op.getChildren();
@@ -26,6 +25,9 @@ size_t countCreatingOperators(Operator op, llvm::SmallPtrSet<mlir::Operation*, 1
    res += !created.empty();
    return res;
 }
+} // namespace
+namespace mlir::relalg {
+
 void mlir::relalg::QueryGraphBuilder::populateQueryGraph(Operator op) {
    auto children = op.getChildren();
    auto used = op.getUsedColumns();
@@ -66,7 +68,7 @@ void mlir::relalg::QueryGraphBuilder::populateQueryGraph(Operator op) {
       NodeSet leftTes = (leftT & tes).any() ? (leftT & tes) : leftT;
       NodeSet rightTes = (rightT & tes).any() ? (rightT & tes) : rightT;
 
-      llvm::Optional<size_t> createdNode;
+      std::optional<size_t> createdNode;
       if (!created.empty()) {
          size_t newNode = qg.addPseudoNode();
          for (const auto* attr : op.getCreatedColumns()) {
@@ -83,7 +85,7 @@ void mlir::relalg::QueryGraphBuilder::populateQueryGraph(Operator op) {
 }
 void QueryGraphBuilder::ensureConnected() {
    llvm::EquivalenceClasses<size_t> alreadyConnected;
-   for (size_t i = 0; i < qg.getNodes().size(); i++) {
+   for (size_t i = 0; i < qg.numNodes; i++) {
       alreadyConnected.insert(i);
    }
    size_t last = 0;
@@ -115,7 +117,7 @@ void QueryGraphBuilder::ensureConnected() {
          NodeSet left = getNodeSetFromClass(alreadyConnected, best1, numNodes);
          NodeSet right = getNodeSetFromClass(alreadyConnected, best2, numNodes);
          //construct cross-product
-         qg.addJoinEdge(left, right, Operator(), llvm::Optional<size_t>());
+         qg.addJoinEdge(left, right, Operator(), std::optional<size_t>());
       }
 
       size_t newSet = *alreadyConnected.unionSets(best1, best2);

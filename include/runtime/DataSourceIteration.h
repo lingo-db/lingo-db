@@ -1,37 +1,27 @@
 #ifndef RUNTIME_DATASOURCEITERATION_H
 #define RUNTIME_DATASOURCEITERATION_H
+#include "RecordBatchInfo.h"
 #include "runtime/ExecutionContext.h"
 #include "runtime/helpers.h"
 namespace runtime {
 class DataSource {
    public:
-   virtual std::shared_ptr<arrow::RecordBatch> getNext() = 0;
+   virtual size_t getColumnId(std::string member) = 0;
+   virtual void iterate(bool parallel, std::vector<size_t> colIds, const std::function<void(runtime::RecordBatchInfo*)>& cb) = 0;
    virtual ~DataSource() {}
+   static DataSource* get(ExecutionContext* executionContext, runtime::VarLen32 description);
 };
 class DataSourceIteration {
    std::shared_ptr<arrow::RecordBatch> currChunk;
-   std::shared_ptr<DataSource> dataSource;
+   DataSource* dataSource;
    std::vector<size_t> colIds;
 
    public:
-   DataSourceIteration(const std::shared_ptr<DataSource>& dataSource, const std::vector<size_t>& colIds);
+   DataSourceIteration(DataSource* dataSource, const std::vector<size_t>& colIds);
 
-   struct ColumnInfo {
-      size_t offset;
-      size_t validMultiplier;
-      uint8_t* validBuffer;
-      uint8_t* dataBuffer;
-      uint8_t* varLenBuffer;
-   };
-   struct RecordBatchInfo {
-      size_t numRows;
-      ColumnInfo columnInfo[];
-   };
-   static DataSourceIteration* start(ExecutionContext* executionContext, runtime::VarLen32 description);
-   bool isValid();
-   void next();
-   void access(RecordBatchInfo* info);
+   static DataSourceIteration* init(DataSource* dataSource, runtime::VarLen32 members);
    static void end(DataSourceIteration*);
+   void iterate(bool parallel, void (*forEachChunk)(RecordBatchInfo*, void*), void*);
 };
 } // end namespace runtime
 #endif // RUNTIME_DATASOURCEITERATION_H

@@ -14,6 +14,7 @@ class GOO {
    GOO(QueryGraph& qg) : queryGraph(qg) {}
 
    std::shared_ptr<Plan> solve();
+   std::shared_ptr<Plan> createInitialPlan(QueryGraph::Node& n);
 };
 } // namespace mlir::relalg
 

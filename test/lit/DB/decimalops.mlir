@@ -43,18 +43,18 @@
 		db.runtime_call "DumpValue" (%5) : (!db.decimal<24,16>) -> ()
 
   		%6 = db.div %constm10 : !db.decimal<12,8>,%constm10 : !db.decimal<12,8>
- 		//CHECK: decimal(1.00000000)
- 		db.runtime_call "DumpValue" (%6) : (!db.decimal<12,8>) -> ()
+ 		//CHECK: decimal(1.00000000000000000000)
+ 		db.runtime_call "DumpValue" (%6) : (!db.decimal<32, 20>) -> ()
 		%7 = db.div %const10 : !db.decimal<12,8>,%const10 : !db.decimal<12,8>
-		//CHECK: decimal(1.00000000)
-		db.runtime_call "DumpValue" (%7) : (!db.decimal<12,8>) -> ()
+		//CHECK: decimal(1.00000000000000000000)
+		db.runtime_call "DumpValue" (%7) : (!db.decimal<32, 20>) -> ()
 
   		%8 = db.mod %constm10 : !db.decimal<12,8>,%const4 : !db.decimal<12,8>
  		//CHECK: decimal(-2.00000024)
- 		db.runtime_call "DumpValue" (%8) : (!db.decimal<12,8>) -> ()
+ 		db.runtime_call "DumpValue" (%8) : (!db.decimal<12, 8>) -> ()
 		%9 = db.mod %const10 : !db.decimal<12,8>,%const4 : !db.decimal<12,8>
 		//CHECK: decimal(2.00000018)
-		db.runtime_call "DumpValue" (%9) : (!db.decimal<12,8>) -> ()
+		db.runtime_call "DumpValue" (%9) : (!db.decimal<12, 8>) -> ()
 
  		return
   }

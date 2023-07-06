@@ -7,7 +7,6 @@ from profile_data import ProfileData, OpColorMap
 from hierarchical_sunburst import hierarchical_sunburst
 from opgraph import opgraph
 from swimlane import create_swimline_chart
-from memory_heatmap import memory_heatmaps
 from codeview import createPerfCodeView, createColorLineMap
 
 data = ProfileData()
@@ -42,7 +41,6 @@ navbar = dbc.Navbar(
             ),
             dbc.Nav(
                 [
-                    dbc.NavItem(dbc.NavLink("Overview", active='exact', href="/overview")),
                     dbc.NavItem(dbc.NavLink(dbc.Row(
                         [
                             dbc.Col(html.I(className="fa fa-solid fa-clock"), ),
@@ -53,21 +51,28 @@ navbar = dbc.Navbar(
                     ), active='exact', href="/overview")),
                     dbc.NavItem(dbc.NavLink(dbc.Row(
                         [
-                            dbc.Col(html.I(className="fa fa-solid fa-memory"), ),
-                            dbc.Col(" Memory"),
+                            dbc.Col(html.I(className="fa fa-solid fa-code"), ),
+                            dbc.Col(" SubOp"),
                         ],
                         align="center",
                         className="g-0",
-                    ), active='exact', href="/memory")),
+                    ), active='exact', href="/mlir-subop")),
                     dbc.NavItem(dbc.NavLink(dbc.Row(
                         [
                             dbc.Col(html.I(className="fa fa-solid fa-code"), ),
-                            dbc.Col(" MLIR"),
+                            dbc.Col(" Std"),
                         ],
                         align="center",
                         className="g-0",
-                    ), active='exact', href="/mlir")),
-
+                    ), active='exact', href="/mlir-std")),
+                    dbc.NavItem(dbc.NavLink(dbc.Row(
+                        [
+                            dbc.Col(html.I(className="fa fa-solid fa-code"), ),
+                            dbc.Col(" LLVM"),
+                        ],
+                        align="center",
+                        className="g-0",
+                    ), active='exact', href="/mlir-llvm")),
                 ]
             ),
 
@@ -213,43 +218,32 @@ overviewPage = tabs = dbc.Tabs(
         dbc.Tab(overviewPageCacheMisses, label="Cache misses"),
     ]
 )
-########################################################################################################################
-################################################  Memory  ##############################################################
-########################################################################################################################
-memoryHeatmapsData = memory_heatmaps(data)
-memory = html.Div(children=dbc.Row(list(map(lambda x: dbc.Col(dbc.Card(
-    dbc.CardBody(
-        [
-            html.H5(x[1], style={'textAlign': 'center'}),
-            dcc.Graph(
-                id='mem' + str(x[0]),
-                figure=x[2],
-                style={"height": "35vh"},
-                # config={'staticPlot': True}
-
-            )
-        ],
-    )
-), width=4), memoryHeatmapsData))))
 
 ########################################################################################################################
 #################################################  MLIR  ###############################################################
 ########################################################################################################################
 
-MLIRPage = html.Div(children=dbc.Row(
+MLIRLLVMPage = html.Div(children=dbc.Row(
+    [dbc.Col(createPerfCodeView(data, 4, colorLineMap=createColorLineMap(data, 4, colo_map)), width=8),
+     dbc.Col(opgraph(data, colo_map, True), width=4)]))
+MLIRStdPage = html.Div(children=dbc.Row(
     [dbc.Col(createPerfCodeView(data, 3, colorLineMap=createColorLineMap(data, 3, colo_map)), width=8),
      dbc.Col(opgraph(data, colo_map, True), width=4)]))
-
+MLIRSubOpPage = html.Div(children=dbc.Row(
+    [dbc.Col(createPerfCodeView(data, 1, colorLineMap=createColorLineMap(data, 1, colo_map)), width=8),
+     dbc.Col(opgraph(data, colo_map, True), width=4)]))
 
 @app.callback(dash.dependencies.Output('page-content', 'children'),
               [dash.dependencies.Input('url', 'pathname')])
 def display_page(pathname):
     if pathname == '/overview':
         return overviewPage
-    elif pathname == '/memory':
-        return memory
-    elif pathname == '/mlir':
-        return MLIRPage
+    elif pathname == '/mlir-subop':
+        return MLIRSubOpPage
+    elif pathname == '/mlir-std':
+        return MLIRStdPage
+    elif pathname == '/mlir-llvm':
+        return MLIRLLVMPage
     elif pathname == '/other':
         return alternative
     else:

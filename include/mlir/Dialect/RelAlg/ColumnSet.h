@@ -3,11 +3,11 @@
 #define MLIR_DIALECT_RELALG_COLUMNSET_H
 #include <llvm/ADT/SmallPtrSet.h>
 #include <llvm/Support/Debug.h>
-#include <mlir/Dialect/RelAlg/IR/Column.h>
-#include <mlir/Dialect/RelAlg/IR/RelAlgDialect.h>
+#include <mlir/Dialect/TupleStream/Column.h>
+#include <mlir/Dialect/TupleStream/TupleStreamDialect.h>
 namespace mlir::relalg {
 class ColumnSet {
-   using attribute_set = llvm::SmallPtrSet<const mlir::relalg::Column*, 8>;
+   using attribute_set = llvm::SmallPtrSet<const mlir::tuples::Column*, 8>;
    attribute_set attributes;
 
    public:
@@ -26,10 +26,10 @@ class ColumnSet {
    size_t size() const {
       return attributes.size();
    }
-   void insert(const mlir::relalg::Column* attr) {
+   void insert(const mlir::tuples::Column* attr) {
       attributes.insert(attr);
    }
-   bool contains(const mlir::relalg::Column* attr) const {
+   bool contains(const mlir::tuples::Column* attr) const {
       return attributes.contains(attr);
    }
    ColumnSet& insert(const ColumnSet& other) {
@@ -65,14 +65,14 @@ class ColumnSet {
       return attributes.end();
    }
    void dump(MLIRContext* context) {
-      auto& attributeManager = context->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager();
+      auto& attributeManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       for (const auto* x : attributes) {
          auto [scope, name] = attributeManager.getName(x);
          llvm::dbgs() << x << "(" << scope << "," << name << "),";
       }
    }
    ArrayAttr asRefArrayAttr(MLIRContext* context) {
-      auto& attributeManager = context->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager();
+      auto& attributeManager = context->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
 
       std::vector<Attribute> refAttrs;
       for (const auto* attr : attributes) {
@@ -83,17 +83,22 @@ class ColumnSet {
    static ColumnSet fromArrayAttr(ArrayAttr arrayAttr) {
       ColumnSet res;
       for (const auto attr : arrayAttr) {
-         if (auto attrRef = attr.dyn_cast_or_null<mlir::relalg::ColumnRefAttr>()) {
+         if (auto attrRef = attr.dyn_cast_or_null<mlir::tuples::ColumnRefAttr>()) {
             res.insert(&attrRef.getColumn());
-         } else if (auto attrDef = attr.dyn_cast_or_null<mlir::relalg::ColumnDefAttr>()) {
+         } else if (auto attrDef = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>()) {
             res.insert(&attrDef.getColumn());
          }
       }
       return res;
    }
-   static ColumnSet from(mlir::relalg::ColumnRefAttr attrRef) {
+   static ColumnSet from(mlir::tuples::ColumnRefAttr attrRef) {
       ColumnSet res;
       res.insert(&attrRef.getColumn());
+      return res;
+   }
+   static ColumnSet from(const mlir::tuples::Column* col) {
+      ColumnSet res;
+      res.insert(col);
       return res;
    }
 };

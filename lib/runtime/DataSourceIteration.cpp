@@ -1,54 +1,84 @@
 #include "runtime/DataSourceIteration.h"
 #include "json.h"
+#include <iterator>
+
+#include "utility/Tracer.h"
 #include <arrow/array.h>
 #include <arrow/table.h>
+#include <oneapi/tbb.h>
+namespace {
+static utility::Tracer::Event processMorsel("DataSourceIteration", "processMorsel");
+static utility::Tracer::Event tbbForEach("DataSourceIteration", "tbbForEach");
 
-class ArrowTableSource : public runtime::DataSource {
-   arrow::TableBatchReader reader;
+static utility::Tracer::Event processMorselSingle("DataSourceIteration", "processMorselSingle");
 
-   public:
-   ArrowTableSource(arrow::Table& table) : reader(table) {}
-   std::shared_ptr<arrow::RecordBatch> getNext() override {
-      std::shared_ptr<arrow::RecordBatch> nextChunk;
-      if (reader.ReadNext(&nextChunk) != arrow::Status::OK()) {
-         nextChunk.reset();
-      }
-      return nextChunk;
-   }
-};
-bool runtime::DataSourceIteration::isValid() {
-   return !!currChunk;
-}
-void runtime::DataSourceIteration::next() {
-   currChunk = dataSource->getNext();
-}
-uint8_t* getBuffer(arrow::RecordBatch* batch, size_t columnId, size_t bufferId) {
-   static uint8_t alternative = 0b11111111;
-   if (batch->column_data(columnId)->buffers.size() > bufferId && batch->column_data(columnId)->buffers[bufferId]) {
-      auto* buffer = batch->column_data(columnId)->buffers[bufferId].get();
-      return (uint8_t*) buffer->address();
-   } else {
-      return &alternative; //always return valid pointer to at least one byte filled with ones
-   }
-}
-void runtime::DataSourceIteration::access(RecordBatchInfo* info) {
+static utility::Tracer::Event cleanupTLS("DataSourceIteration", "cleanup");
+static utility::Tracer::Event tableScan("DataSourceIteration", "tableScan");
+
+static void access(std::vector<size_t> colIds, runtime::RecordBatchInfo* info, const std::shared_ptr<arrow::RecordBatch>& currChunk) {
    for (size_t i = 0; i < colIds.size(); i++) {
       auto colId = colIds[i];
-      ColumnInfo& colInfo = info->columnInfo[i];
+      runtime::ColumnInfo& colInfo = info->columnInfo[i];
       size_t off = currChunk->column_data(colId)->offset;
       colInfo.offset = off;
       colInfo.validMultiplier = currChunk->column_data(colId)->buffers[0] ? 1 : 0;
-      colInfo.validBuffer = getBuffer(currChunk.get(), colId, 0);
-      colInfo.dataBuffer = getBuffer(currChunk.get(), colId, 1);
-      colInfo.varLenBuffer = getBuffer(currChunk.get(), colId, 2);
+      colInfo.validBuffer = runtime::RecordBatchInfo::getBuffer(currChunk.get(), colId, 0);
+      colInfo.dataBuffer = runtime::RecordBatchInfo::getBuffer(currChunk.get(), colId, 1);
+      colInfo.varLenBuffer = runtime::RecordBatchInfo::getBuffer(currChunk.get(), colId, 2);
    }
    info->numRows = currChunk->num_rows();
 }
+class RecordBatchTableSource : public runtime::DataSource {
+   const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches;
+   std::unordered_map<std::string, size_t> memberToColumnId;
+
+   public:
+   RecordBatchTableSource(const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches, std::unordered_map<std::string, size_t> memberToColumnId) : batches(batches), memberToColumnId(memberToColumnId) {}
+   void iterate(bool parallel, std::vector<size_t> colIds, const std::function<void(runtime::RecordBatchInfo*)>& cb) override {
+      if (parallel) {
+         tbb::enumerable_thread_specific<runtime::RecordBatchInfo*> batchInfo([&]() { return reinterpret_cast<runtime::RecordBatchInfo*>(malloc(sizeof(runtime::RecordBatchInfo) + sizeof(runtime::ColumnInfo) * colIds.size())); });
+         utility::Tracer::Trace tbbTrace(tbbForEach);
+         tbb::parallel_for_each(batches.begin(), batches.end(), [&](const std::shared_ptr<arrow::RecordBatch>& batch) {
+            utility::Tracer::Trace trace(processMorsel);
+            access(colIds, batchInfo.local(), batch);
+            cb(batchInfo.local());
+            trace.stop();
+         });
+         tbbTrace.stop();
+         utility::Tracer::Trace cleanUpTrace(cleanupTLS);
+
+         for (auto* bI : batchInfo) {
+            if (bI) {
+               free(bI);
+            }
+         }
+         cleanUpTrace.stop();
+      } else {
+         auto* batchInfo = reinterpret_cast<runtime::RecordBatchInfo*>(malloc(sizeof(runtime::RecordBatchInfo) + sizeof(runtime::ColumnInfo) * colIds.size()));
+
+         for (const auto& batch : batches) {
+            utility::Tracer::Trace trace(processMorselSingle);
+            access(colIds, batchInfo, batch);
+            cb(batchInfo);
+            trace.stop();
+         }
+         free(batchInfo);
+      }
+   }
+   size_t getColumnId(std::string member) override {
+      if (!memberToColumnId.contains(member)) {
+         throw std::runtime_error("data source: invalid member");
+      }
+      return memberToColumnId[member];
+   }
+};
+} // end namespace
+
 void runtime::DataSourceIteration::end(DataSourceIteration* iteration) {
    delete iteration;
 }
-uint64_t getColumnId(std::shared_ptr<arrow::Table> table, std::string columnName) {
-   auto columnNames = table->ColumnNames();
+uint64_t getTableColumnId(const std::shared_ptr<arrow::Schema>& schema, std::string columnName) {
+   auto columnNames = schema->field_names();
    size_t columnId = 0;
    for (auto column : columnNames) {
       if (column == columnName) {
@@ -58,22 +88,36 @@ uint64_t getColumnId(std::shared_ptr<arrow::Table> table, std::string columnName
    }
    throw std::runtime_error("column not found: " + columnName);
 }
-runtime::DataSourceIteration* runtime::DataSourceIteration::start(ExecutionContext* executionContext, runtime::VarLen32 description) {
+runtime::DataSourceIteration* runtime::DataSourceIteration::init(DataSource* dataSource, runtime::VarLen32 members) {
+   nlohmann::json descr = nlohmann::json::parse(members.str());
+   std::vector<size_t> colIds;
+   for (std::string c : descr.get<nlohmann::json::array_t>()) {
+      colIds.push_back(dataSource->getColumnId(c));
+   }
+   return new DataSourceIteration(dataSource, colIds);
+}
+runtime::DataSourceIteration::DataSourceIteration(DataSource* dataSource, const std::vector<size_t>& colIds) : dataSource(dataSource), colIds(colIds) {
+}
+
+runtime::DataSource* runtime::DataSource::get(runtime::ExecutionContext* executionContext, runtime::VarLen32 description) {
    nlohmann::json descr = nlohmann::json::parse(description.str());
    std::string tableName = descr["table"];
-   if (!executionContext->db) {
-      throw std::runtime_error("no database attached");
+   auto& session = executionContext->getSession();
+   auto relation = session.getCatalog()->findRelation(tableName);
+   if (!relation) {
+      throw std::runtime_error("could not find relation");
    }
-   auto table = (executionContext)->db->getTable(tableName);
-   if (!table) {
-      throw std::runtime_error("could not find table");
+   std::unordered_map<std::string, size_t> memberToColumnId;
+   for (auto m : descr["mapping"].get<nlohmann::json::object_t>()) {
+      memberToColumnId[m.first] = getTableColumnId(relation->getArrowSchema(), m.second.get<std::string>());
    }
-   std::vector<size_t> colIds;
-   for (std::string c : descr["columns"]) {
-      colIds.push_back(getColumnId(table, c));
-   }
-   return new DataSourceIteration(std::make_shared<ArrowTableSource>(*table.get()), colIds);
+   return new RecordBatchTableSource(relation->getRecordBatches(), memberToColumnId);
 }
-runtime::DataSourceIteration::DataSourceIteration(const std::shared_ptr<DataSource>& dataSource, const std::vector<size_t>& colIds) : dataSource(dataSource), colIds(colIds) {
-   currChunk = dataSource->getNext();
+
+void runtime::DataSourceIteration::iterate(bool parallel, void (*forEachChunk)(runtime::RecordBatchInfo*, void*), void* context) {
+   utility::Tracer::Trace trace(tableScan);
+   dataSource->iterate(parallel, colIds, [context, forEachChunk](runtime::RecordBatchInfo* recordBatchInfo) {
+      forEachChunk(recordBatchInfo, context);
+   });
+   trace.stop();
 }

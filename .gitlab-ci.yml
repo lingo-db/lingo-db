@@ -1,0 +1,166 @@
+default:
+   retry:
+      max: 2 # two retries maximum, three runs in total
+      when:
+         - runner_system_failure
+
+# Remove duplicate work for branches with open merge requests
+# Based on https://docs.gitlab.com/ee/ci/yaml/workflow.html#switch-between-branch-pipelines-and-merge-request-pipelines
+workflow:
+   rules:
+      -  if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      -  if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS'
+         when: never
+      -  if: '$CI_COMMIT_BRANCH'
+
+#---------------------------------------------------------------------------
+# Build Jobs
+#---------------------------------------------------------------------------
+.build:
+   before_script:
+      - rm -rf /build/lingodb
+   tags:
+      - "lingodb-builder"
+
+build_debug:
+   extends: .build
+   script:
+      - export CXX="ccache g++"
+      - export C="ccache gcc"
+      - export VIRTUAL_ENV=/opt/venv
+      - export PATH="$VIRTUAL_ENV/bin:$PATH"
+      - mkdir /build/lingodb
+      - cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DCMAKE_BUILD_TYPE=Debug  -DENABLE_CRANELIFT_BACKEND=ON
+      - cmake --build /build/lingodb -j$(nproc)
+      - strip /build/lingodb/mlir-db-opt /build/lingodb/run-sql /build/lingodb/run-mlir /build/lingodb/sql /build/lingodb/sqlite-tester /build/lingodb/sql-to-mlir
+      - tar -cvzf lingodb_debug.tar.gz /build/lingodb/mlir-db-opt /build/lingodb/run-sql /build/lingodb/run-mlir /build/lingodb/sql /build/lingodb/sqlite-tester /build/lingodb/test/ /build/lingodb/sql-to-mlir
+   artifacts:
+      paths:
+         - lingodb_debug.tar.gz
+      expire_in: 1 hrs
+
+build_release:
+   extends: .build
+   script:
+      - export CXX="ccache g++"
+      - export C="ccache gcc"
+      - export VIRTUAL_ENV=/opt/venv
+      - export PATH="$VIRTUAL_ENV/bin:$PATH"
+      - mkdir /build/lingodb
+      - cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DCMAKE_BUILD_TYPE=Release  -DENABLE_CRANELIFT_BACKEND=ON
+      - cmake --build /build/lingodb -j$(nproc)
+      - strip /build/lingodb/mlir-db-opt /build/lingodb/run-sql /build/lingodb/run-mlir /build/lingodb/sql /build/lingodb/sqlite-tester /build/lingodb/sql-to-mlir
+      - tar -cvzf lingodb_release.tar.gz /build/lingodb/mlir-db-opt /build/lingodb/run-sql /build/lingodb/run-mlir /build/lingodb/sql /build/lingodb/sqlite-tester /build/lingodb/test/ /build/lingodb/sql-to-mlir
+   artifacts:
+      paths:
+         - lingodb_release.tar.gz
+      expire_in: 1 hrs
+
+lint:
+   extends: .build
+   script:
+      - export VIRTUAL_ENV=/opt/venv
+      - export PATH="$VIRTUAL_ENV/bin:$PATH"
+      - mkdir /build/lingodb
+      - cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  -DENABLE_CRANELIFT_BACKEND=ON
+      - cmake --build /build/lingodb -j$(nproc) --target build_includes
+      - sed -i 's/-fno-lifetime-dse//g' /build/lingodb/compile_commands.json
+      - python3 tools/scripts/run-clang-tidy.py -p /build/lingodb -quiet  -exclude="arrow|vendored" -header-filter="$PWD/include/.*"  -clang-tidy-binary=/build/llvm/bin/clang-tidy
+
+.debug_build:
+   needs:
+      - build_debug
+   before_script:
+      - rm -rf build
+      - tar -xvzf lingodb_debug.tar.gz
+      - mv build/lingodb /build/lingodb
+   tags:
+      - "lingodb-tester"
+
+.release_build:
+   needs:
+      - build_release
+   before_script:
+      - rm -rf build
+      - tar -xvzf lingodb_release.tar.gz
+      - mv build/lingodb /build/lingodb
+   tags:
+      - "lingodb-tester"
+
+build_pylingodb:
+   script:
+      - rm -rf /built-packages
+      - mkdir -p /built-packages
+      - create_package.sh cp311-cp311
+      - cd tools/python
+      - /opt/python/cp311-cp311/bin/python3 -m build .
+      - cp dist/*.whl /built-packages/.
+      - cd ../..
+      - cp -r /built-packages built-packages
+   tags:
+      - "lingodb-python-builder"
+   artifacts:
+      paths:
+         - built-packages/*.whl
+      expire_in: 1 hrs
+
+test_pylingodb:
+   needs:
+      - build_pylingodb
+   script:
+      - apt-get update
+      - apt install -y python3.11-venv
+      - python3 -m venv venv
+      - . venv/bin/activate
+      - pip install built-packages/*.whl
+      - pip install pandas
+      - python3 tools/python/test/test.py
+   tags:
+      - "python3"
+
+.file_tests:
+   script:
+      - /build/llvm/bin/llvm-lit -v /build/lingodb/test/lit
+
+.sqlite_tests:
+   script:
+      #- export LINGODB_EXECUTION_MODE=CHEAP
+      - time find ./test/sqlite/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P $(nproc) /build/lingodb/sqlite-tester
+
+.sqlite_dataset_tests:
+   script:
+      - export BASE_PATH=$(pwd)
+      #- export LINGODB_EXECUTION_MODE=CHEAP
+      - mkdir -p /datasets/tpch-1
+      - cd /opt/data/tpchSf1
+      - /build/lingodb/sql /datasets/tpch-1 < $BASE_PATH/resources/sql/tpch/initialize.sql
+      - mkdir -p /datasets/tpcds-1
+      - cd /opt/data/tpcdsSf1
+      - /build/lingodb/sql /datasets/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
+      - mkdir -p /datasets/job
+      - cd /opt/data/job
+      - /build/lingodb/sql /datasets/job < $BASE_PATH/resources/sql/job/initialize.sql
+      - cd $BASE_PATH
+      - /build/lingodb/sqlite-tester ./test/sqlite-datasets/tpchSf1.test /datasets/tpch-1
+      - /build/lingodb/sqlite-tester ./test/sqlite-datasets/tpcdsSf1.test /datasets/tpcds-1
+      - /build/lingodb/sqlite-tester ./test/sqlite-datasets/job.test /datasets/job
+
+file_tests_debug:
+   extends:
+      - .debug_build
+      - .file_tests
+
+sqlite_tests_release:
+   extends:
+      - .release_build
+      - .sqlite_tests
+
+sqlite_dataset_tests_release:
+   extends:
+      - .release_build
+      - .sqlite_dataset_tests
+
+
+
+
+

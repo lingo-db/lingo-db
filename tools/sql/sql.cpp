@@ -1,43 +1,27 @@
 #include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 
-#include "arrow/array.h"
+#include "execution/Execution.h"
 #include "mlir-support/eval.h"
-#include "runner/runner.h"
 void check(bool b, std::string message) {
    if (!b) {
       std::cerr << "ERROR: " << message << std::endl;
       exit(1);
    }
 }
-void handleQuery(runtime::ExecutionContext* context, std::string basicString);
-bool beingTraced() {
-   std::ifstream sf("/proc/self/status");
-   std::string s;
-   while (sf >> s) {
-      if (s == "TracerPid:") {
-         int pid;
-         sf >> pid;
-         return pid != 0;
-      }
-      std::getline(sf, s);
-   }
-
-   return false;
+void handleQuery(runtime::Session& session, std::string sqlQuery) {
+   auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::DEFAULT, true);
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), session);
+   executer->fromData(sqlQuery);
+   executer->execute();
 }
-
 int main(int argc, char** argv) {
-   runtime::ExecutionContext context;
-   context.id = 42;
    if (argc <= 1) {
       std::cerr << "USAGE: sql database" << std::endl;
       return 1;
    }
-   std::cout << "Loading Database from: " << argv[1] << '\n';
-   auto database = runtime::Database::loadFromDir(std::string(argv[1]));
-   context.db = std::move(database);
+   auto session = runtime::Session::createSession(std::string(argv[1]),true);
 
    support::eval::init();
    while (true) {
@@ -58,17 +42,9 @@ int main(int argc, char** argv) {
          }
          std::getline(std::cin, line);
       }
-      handleQuery(&context, query.str());
+      handleQuery(*session, query.str());
    }
 
    return 0;
 }
-void handleQuery(runtime::ExecutionContext* context, std::string sqlQuery) {
-   runner::Runner runner(runner::RunMode::DEFAULT);
-   check(runner.loadSQL(sqlQuery, *context->db), "could not load SQL");
-   check(runner.optimize(*context->db), "query optimization failed");
-   check(runner.lower(), "could not lower DSA/DB dialects");
-   check(runner.lowerToLLVM(), "lowering to llvm failed");
-   size_t runs = 1;
-   runner.runJit(context, runs, runner::Runner::printTable);
-}
+

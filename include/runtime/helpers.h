@@ -6,6 +6,9 @@
 #include <initializer_list>
 #include <string>
 #include <vector>
+
+#include <sys/mman.h>
+
 #define EXPORT extern "C" __attribute__((visibility("default")))
 #define INLINE __attribute__((always_inline))
 #define NO_SIDE_EFFECTS __attribute__((annotate("rt-no-sideffect")))
@@ -41,7 +44,10 @@ static bool cachelineRemains8(const uint8_t* p) {
 static uint64_t read8PadZero(const uint8_t* p, uint32_t len) {
    if (len == 0) return 0; //do not dereference!
    if (len >= 8) return unalignedLoad64(p); //best case
-   if (cachelineRemains8(p)) {
+   /*uint64_t x;
+   memcpy(&x,p,len);
+   return x;
+   */if (cachelineRemains8(p)) {
       auto bytes = unalignedLoad64(p);
       auto shift = len * 8;
       auto mask = ~((~0ull) << shift);
@@ -57,7 +63,6 @@ class VarLen32 {
 
    public:
    static constexpr uint32_t shortLen = 12;
-   static constexpr uint32_t lazyMask = 0x80000000;
    union {
       uint8_t bytes[shortLen];
       struct __attribute__((__packed__)) {
@@ -67,13 +72,14 @@ class VarLen32 {
    };
 
    private:
-   void storePtr(uint8_t* ptr) {
-      uint8_t** ptrloc = reinterpret_cast<uint8_t**>((&bytes[4]));
+   void storePtr(const uint8_t* ptr) {
+      const uint8_t** ptrloc = reinterpret_cast<const uint8_t**>((&bytes[4]));
       *ptrloc = ptr;
    }
 
    public:
-   VarLen32(uint8_t* ptr, uint32_t len) : len(len) {
+   VarLen32() : VarLen32(nullptr, 0) {}
+   VarLen32(const uint8_t* ptr, uint32_t len) : len(len) {
       if (len > shortLen) {
          this->first4 = unalignedLoad32(ptr);
          storePtr(ptr);
@@ -98,11 +104,11 @@ class VarLen32 {
    char* data() {
       return (char*) getPtr();
    }
-   uint32_t getLen() {
-      return len & ~lazyMask;
+   bool isShort() {
+      return len <= shortLen;
    }
-   bool isLazy() {
-      return (len & lazyMask) != 0;
+   uint32_t getLen() {
+      return len;
    }
 
    __int128 asI128() {
@@ -112,9 +118,10 @@ class VarLen32 {
    operator std::string() { return std::string((char*) getPtr(), getLen()); }
    std::string str() { return std::string((char*) getPtr(), getLen()); }
 };
+
 template <class T>
-struct FixedSizedBuffer {
-   FixedSizedBuffer(size_t size) : ptr((T*) malloc(size * sizeof(T))) {
+struct LegacyFixedSizedBuffer {
+   LegacyFixedSizedBuffer(size_t size) : ptr((T*) malloc(size * sizeof(T))) {
       runtime::MemoryHelper::zero((uint8_t*) ptr, size * sizeof(T));
    }
    T* ptr;
@@ -126,8 +133,34 @@ struct FixedSizedBuffer {
    T& at(size_t i) {
       return ptr[i];
    }
-   ~FixedSizedBuffer(){
+   T* getPtr(size_t i) {
+      return &ptr[i];
+   }
+   ~LegacyFixedSizedBuffer() {
       free(ptr);
+   }
+};
+
+template <class T>
+struct FixedSizedBuffer {
+   static bool shouldUseMMAP(size_t elements) {
+      return (sizeof(T) * elements) >= 65536;
+   }
+   static T* createZeroed(size_t elements) {
+      if (shouldUseMMAP(elements)) {
+         return (T*) mmap(NULL, elements * sizeof(T), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_POPULATE, -1, 0);
+      } else {
+         auto res = (T*) malloc(elements * sizeof(T));
+         runtime::MemoryHelper::zero((uint8_t*) res, elements * sizeof(T));
+         return res;
+      }
+   }
+   static void deallocate(T* ptr, size_t elements) {
+      if (shouldUseMMAP(elements)) {
+         munmap(ptr, elements * sizeof(T));
+      } else {
+         free(ptr);
+      }
    }
 };
 template <typename T>
@@ -141,6 +174,15 @@ T* tag(T* ptr, T* previousPtr, size_t hash) {
    auto tagged = (asInt & ptrMask) | previousTag | currentTag;
    auto* res = reinterpret_cast<T*>(tagged);
    return res;
+}
+template <typename T>
+T* filterTagged(T* ptr, size_t hash) {
+   constexpr uint64_t ptrMask = 0x0000ffffffffffffull;
+   constexpr uint64_t tagMask = 0xffff000000000000ull;
+   size_t asInt = reinterpret_cast<size_t>(ptr);
+   size_t requiredTag = hash & tagMask;
+   size_t currentTag = hash & tagMask;
+   return ((currentTag | requiredTag) == currentTag) ? reinterpret_cast<T*>(asInt & ptrMask) : nullptr;
 }
 template <typename T>
 T* untag(T* ptr) {

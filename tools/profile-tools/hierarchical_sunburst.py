@@ -11,8 +11,8 @@ def hierarchical_sunburst(profile_data, colo_map,cond=""):
         nested_op_stats[op[0]] = {"operation": createOpNameFromRepr(op[1]), "count": 0, "parent": None,"color":colo_map.lookup(op[0])}
     con.execute(
         """select op.id, count(*) as cnt
-           from operation op, operation op1, operation op2, operation op3, event e
-           where op1.mapping=op.id and op2.mapping=op1.id and op3.mapping=op2.id and op3.loc=e.jit_srcline and e.loc_type=='jit' """ + cond + """ group by op.id order by cnt desc""")
+           from operation op, operation op1, operation op2, operation op3,operation op4, event e
+           where op1.mapping=op.id and op2.mapping=op1.id and op3.mapping=op2.id and op4.mapping=op3.id and op4.loc=e.jit_srcline and e.loc_type=='jit' """ + cond + """ group by op.id order by cnt desc""")
 
     stats = con.fetchall()
     for stat in stats:
@@ -21,8 +21,8 @@ def hierarchical_sunburst(profile_data, colo_map,cond=""):
 
     con.execute(
         """select op.id,e.symbol, count(*) as cnt
-           from operation op, operation op1, operation op2, operation op3, event e
-           where op1.mapping=op.id and op2.mapping=op1.id and op3.mapping=op2.id and op3.loc=e.jit_srcline and e.loc_type=='rt' """ + cond + """ group by op.id,e.symbol order by cnt desc""")
+           from operation op, operation op1, operation op2, operation op3, operation op4, event e
+           where op1.mapping=op.id and op2.mapping=op1.id and op3.mapping=op2.id and op4.mapping=op3.id and op4.loc=e.jit_srcline and e.loc_type=='rt' """ + cond + """ group by op.id,e.symbol order by cnt desc""")
     rt_stats = con.fetchall()
     fake_id = 100000000
     rt_ids=[]
@@ -66,6 +66,29 @@ def hierarchical_sunburst(profile_data, colo_map,cond=""):
         color=curr["color"]
         colors.append("#ffffff" if color is None else color)
 
+    con.execute(
+        """select symbol, count(*) as cnt
+           from event e
+           where e.jit_srcline is null
+           group by symbol
+           """)
+    unknown = con.fetchall()
+    total_unknown=0
+    for u in unknown:
+        id = "id_" + str(u[0])
+        names.append(u[0])
+        ids.append(id)
+        total_unknown+=u[1]
+        values.append(u[1])
+        parents.append("unknown")
+        colors.append("#333333")
+    if len(unknown)>0:
+        id = "unknown"
+        names.append("unknown")
+        ids.append(id)
+        values.append(total_unknown)
+        parents.append("")
+        colors.append("#999999")
     import plotly.express as px
 
     fig = px.sunburst(

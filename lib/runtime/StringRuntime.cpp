@@ -1,6 +1,6 @@
+#include "runtime/StringRuntime.h"
 #include "arrow/util/formatting.h"
 #include "arrow/util/value_parsing.h"
-#include "runtime/StringRuntime.h"
 #include "runtime/helpers.h"
 
 #include <arrow/type.h>
@@ -144,7 +144,7 @@ __int128 runtime::StringRuntime::toDecimal(runtime::VarLen32 string, int32_t req
       arrow::internal::StringFormatter<ARROW_TYPE> formatter;                                                                      \
       uint8_t* data = nullptr;                                                                                                     \
       size_t len = 0;                                                                                                              \
-      arrow::Status status = formatter(value, [&](arrow::util::string_view v) {                                                    \
+      arrow::Status status = formatter(value, [&](std::string_view v) {                                                    \
          len = v.length();                                                                                                         \
          data = new uint8_t[len];                                                                                                  \
          memcpy(data, v.data(), len);                                                                                              \
@@ -201,6 +201,7 @@ EXPORT char* rt_varlen_to_ref(runtime::VarLen32* varlen) { // NOLINT (clang-diag
 }
 runtime::VarLen32 runtime::StringRuntime::substr(runtime::VarLen32 str, size_t from, size_t to) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    from -= 1;
+   to = std::min((size_t) str.getLen(), to);
    if (from > to || str.getLen() < to) throw std::runtime_error("can not perform substring operation");
    return runtime::VarLen32(&str.getPtr()[from], to - from);
 }
@@ -213,4 +214,61 @@ size_t runtime::StringRuntime::findMatch(VarLen32 str, VarLen32 needle, size_t s
 
    if (found == std::string::npos || found + needle.getLen() > end) return invalidPos;
    return found + needle.getLen();
+}
+size_t runtime::StringRuntime::findNext(VarLen32 str, VarLen32 needle, size_t start) {
+   constexpr size_t invalidPos = 0x8000000000000000;
+   if (start >= invalidPos) return invalidPos;
+   size_t found = std::string_view(str.data(), str.getLen()).find(std::string_view(needle.data(), needle.getLen()), start);
+
+   if (found == std::string::npos) return invalidPos;
+   return found;
+}
+void toUpper(char* str, size_t len) {
+   for (auto i = 0ul; i < len; i++) {
+      str[i] = std::toupper(str[i]);
+   }
+}
+
+int64_t runtime::StringRuntime::len(VarLen32 str) {
+   return str.getLen();
+}
+runtime::VarLen32 runtime::StringRuntime::toUpper(runtime::VarLen32 str) {
+   if (str.isShort()) {
+      ::toUpper(str.data(), str.getLen());
+      return str;
+   } else {
+      char* copied = new char[str.getLen()];
+      memcpy(copied, str.data(), str.getLen());
+      ::toUpper(copied, str.getLen());
+      return runtime::VarLen32((uint8_t*) copied, str.getLen());
+   }
+}
+runtime::VarLen32 runtime::StringRuntime::concat(runtime::VarLen32 a, runtime::VarLen32 b) {
+   auto totalLength = a.getLen() + b.getLen();
+   if (totalLength <= runtime::VarLen32::shortLen) {
+      uint8_t data[runtime::VarLen32::shortLen];
+      memcpy(data, a.data(), a.getLen());
+      memcpy(&data[a.getLen()], b.data(), b.getLen());
+      return runtime::VarLen32(data, totalLength);
+   } else {
+      char* copied = new char[totalLength];
+      memcpy(copied, a.data(), a.getLen());
+      memcpy(&copied[a.getLen()], b.data(), b.getLen());
+      return runtime::VarLen32((uint8_t*) copied, totalLength);
+   }
+}
+int64_t runtime::StringRuntime::toDate(runtime::VarLen32 str) {
+   int32_t res;
+   arrow::internal::ParseValue<arrow::Date32Type>(str.data(), str.getLen(), &res);
+   int64_t date64 = static_cast<int64_t>(res) * 24 * 60 * 60 * 1000000000ll;
+   return date64;
+}
+runtime::VarLen32 runtime::StringRuntime::fromDate(int64_t date) {
+   static arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
+   auto asString = arrow_vendored::date::format("%F", epoch + std::chrono::nanoseconds{date});
+   return runtime::VarLen32(reinterpret_cast<uint8_t*>(asString.data()), asString.length());
+}
+
+extern "C" runtime::VarLen32 createVarLen32(uint8_t* ptr, uint32_t len) { //NOLINT(clang-diagnostic-return-type-c-linkage)
+   return runtime::VarLen32(ptr, len);
 }

@@ -1,6 +1,37 @@
 #include "mlir/Dialect/RelAlg/Transforms/queryopt/utils.h"
 #include "mlir/Dialect/RelAlg/Transforms/queryopt/QueryGraph.h"
 #include <unordered_set>
+namespace {
+std::string printPlanOp(Operator op) {
+   static size_t nodeid = 0;
+   std::string opstr;
+   llvm::raw_string_ostream strstream(opstr);
+   if (op) {
+      op.print(strstream);
+   } else {
+      strstream << "crossproduct";
+   }
+
+   std::string nodename = "n" + std::to_string(nodeid++);
+   std::string nodelabel = strstream.str();
+   std::stringstream sstream;
+   sstream << std::quoted(nodelabel);
+   llvm::dbgs() << " node [label=" << sstream.str() << "] " << nodename << ";\n";
+   return nodename;
+}
+void fix(Operator tree) {
+   for (auto child : tree.getChildren()) {
+      mlir::Operation* moveBefore = tree.getOperation();
+      for (auto* u : child->getUsers()) {
+         moveBefore = u->isBeforeInBlock(moveBefore) ? u : moveBefore;
+      }
+      if (!child->isBeforeInBlock(moveBefore)) {
+         child.moveSubTreeBefore(mlir::cast<Operator>(moveBefore));
+      }
+      fix(child);
+   }
+}
+} // namespace
 namespace mlir::relalg {
 void NodeSet::iterateSubsets(const std::function<void(NodeSet)>& fn) const {
    if (!storage.any()) return;
@@ -25,23 +56,7 @@ NodeSet NodeSet::negate() const {
    }
    return res;
 }
-static std::string printPlanOp(Operator op) {
-   static size_t nodeid = 0;
-   std::string opstr;
-   llvm::raw_string_ostream strstream(opstr);
-   if (op) {
-      op.print(strstream);
-   } else {
-      strstream << "crossproduct";
-   }
 
-   std::string nodename = "n" + std::to_string(nodeid++);
-   std::string nodelabel = strstream.str();
-   std::stringstream sstream;
-   sstream << std::quoted(nodelabel);
-   llvm::dbgs() << " node [label=" << sstream.str() << "] " << nodename << ";\n";
-   return nodename;
-}
 std::string Plan::dumpNode() {
    std::string firstNodeName;
    std::string lastNodeName;
@@ -75,14 +90,6 @@ void Plan::dump() {
    llvm::dbgs() << "}\n";
 }
 
-static void fix(Operator tree) {
-   for (auto child : tree.getChildren()) {
-      if (!child->isBeforeInBlock(tree)) {
-         child.moveSubTreeBefore(tree);
-      }
-      fix(child);
-   }
-}
 Operator Plan::realizePlan() {
    Operator tree = realizePlanRec();
    fix(tree);
@@ -93,6 +100,16 @@ Operator Plan::realizePlanRec() {
    Operator firstNode{};
    Operator lastNode{};
    for (auto op : additionalOps) {
+      if (auto innerJoin = mlir::dyn_cast_or_null<mlir::relalg::InnerJoinOp>(op.getOperation())) {
+         mlir::OpBuilder builder(innerJoin.getOperation());
+         mlir::Value v = innerJoin.getResult(); //hack;
+         auto x = builder.create<mlir::relalg::SelectionOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), v);
+         x.getPredicate().push_back(new mlir::Block);
+         x.getLambdaBlock().addArgument(mlir::tuples::TupleType::get(builder.getContext()), innerJoin->getLoc());
+         innerJoin.getLambdaArgument().replaceAllUsesWith(x.getLambdaArgument());
+         x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), innerJoin.getLambdaBlock().getOperations());
+         op = x;
+      }
       op->setAttr("cost", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), cost));
       op->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), rows));
       if (lastNode) {
@@ -114,9 +131,9 @@ Operator Plan::realizePlanRec() {
          if (mlir::isa<mlir::relalg::SelectionOp>(currop.getOperation()) && children.size() == 2) {
             auto selop = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(currop.getOperation());
             mlir::OpBuilder builder(currop.getOperation());
-            auto x = builder.create<mlir::relalg::InnerJoinOp>(selop.getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
-            x.predicate().push_back(new mlir::Block);
-            x.getLambdaBlock().addArgument(mlir::relalg::TupleType::get(builder.getContext()), selop->getLoc());
+            auto x = builder.create<mlir::relalg::InnerJoinOp>(selop.getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
+            x.getPredicate().push_back(new mlir::Block);
+            x.getLambdaBlock().addArgument(mlir::tuples::TupleType::get(builder.getContext()), selop->getLoc());
             selop.getLambdaArgument().replaceAllUsesWith(x.getLambdaArgument());
             x.getLambdaBlock().getOperations().splice(x.getLambdaBlock().end(), selop.getLambdaBlock().getOperations());
             //selop.replaceAllUsesWith(x.getOperation());
@@ -127,8 +144,8 @@ Operator Plan::realizePlanRec() {
          currop->setAttr("cost", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), cost));
          currop->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()), rows));
       } else if (!currop && children.size() == 2) {
-         mlir::OpBuilder builder(children[0].getOperation());
-         currop = builder.create<mlir::relalg::CrossProductOp>(children[0].getOperation()->getLoc(), mlir::relalg::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
+         mlir::OpBuilder builder(children[0]->isBeforeInBlock(children[1]) ? children[1].getOperation() : children[0].getOperation());
+         currop = builder.create<mlir::relalg::CrossProductOp>(children[0].getOperation()->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), children[0]->getResult(0), children[1]->getResult(0));
          //currop->setAttr("cost",mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()),cost));
          //currop->setAttr("rows",mlir::FloatAttr::get(mlir::FloatType::getF64(op.getContext()),rows));
       } else if (!currop && children.size() == 1) {
@@ -177,7 +194,7 @@ std::shared_ptr<Plan> Plan::joinPlans(NodeSet s1, NodeSet s2, std::shared_ptr<Pl
    Operator specialJoin{};
    double totalSelectivity = 1;
 
-   llvm::EquivalenceClasses<const mlir::relalg::Column*> equivalentColumns;
+   llvm::EquivalenceClasses<const mlir::tuples::Column*> equivalentColumns;
    for (auto& edge : queryGraph.joins) {
       if (!edge.connects(s1, s2) && edge.left.isSubsetOf(s) && edge.right.isSubsetOf(s) && edge.equality) {
          equivalentColumns.unionSets(edge.equality->first, edge.equality->second);
@@ -209,7 +226,7 @@ std::shared_ptr<Plan> Plan::joinPlans(NodeSet s1, NodeSet s2, std::shared_ptr<Pl
             equivalentColumns.unionSets(edge.equality->first, edge.equality->second);
          }
          if (edge.createdNode) {
-            s |= NodeSet::single(queryGraph.numNodes, edge.createdNode.getValue());
+            s |= NodeSet::single(queryGraph.numNodes, edge.createdNode.value());
          }
       }
    }

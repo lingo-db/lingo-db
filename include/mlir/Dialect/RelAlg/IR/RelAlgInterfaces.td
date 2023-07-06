@@ -9,6 +9,12 @@ def Relalg_CmpOpInterface : OpInterface<"CmpOpInterface"> {
       /*description=*/"Returns true if it is Equality Predicate",
       /*retTy=*/"bool",
       /*methodName=*/"isEqualityPred"
+      ,(ins "bool":$nullsAreEqual)
+    >,
+    InterfaceMethod<
+      /*description=*/"Returns true if it is UnEquality Predicate",
+      /*retTy=*/"bool",
+      /*methodName=*/"isUnequalityPred"
     >,
     InterfaceMethod<
       /*description=*/"Returns true if it is Equality Predicate",
@@ -50,6 +56,12 @@ return mlir::relalg::detail::getAvailableColumns(this->getOperation());
 }]
 >,
 InterfaceMethod<
+        "get all columns that are available after this operator",
+        "bool", "canColumnReach",(ins "Operator":$source, "Operator":$target,"const mlir::tuples::Column*":$column),"", /*defaultImplementation=*/[{
+        return mlir::relalg::detail::canColumnReach(this->getOperation(),source,target,column);
+}]
+>,
+InterfaceMethod<
         "get all functional dependencies that hold after this operator",
         "mlir::relalg::FunctionalDependencies", "getFDs",(ins ),"", /*defaultImplementation=*/[{
 return mlir::relalg::detail::getFDs(this->getOperation());
@@ -69,7 +81,7 @@ InterfaceMethod<
     auto op=this->getOperation();
     for (auto operand : op->getOperands()) {
         mlir::Type t=operand.getType();
-        bool isreltype=t.isa<mlir::relalg::TupleStreamType>();
+        bool isreltype=t.isa<mlir::tuples::TupleStreamType>();
         auto childOp=operand.getDefiningOp();
         if (isreltype&&childOp) {
             auto childOperator=mlir::dyn_cast_or_null<Operator>(childOp);
@@ -102,7 +114,7 @@ InterfaceMethod<
     size_t j=0;
     for (auto operand : op->getOperands()) {
         mlir::Type t=operand.getType();
-        bool isreltype=t.isa<mlir::relalg::TupleStreamType>();
+        bool isreltype=t.isa<mlir::tuples::TupleStreamType>();
         auto childOp=operand.getDefiningOp();
         if (isreltype&&childOp) {
             op->setOperand(i,children[j].asRelation());
@@ -252,6 +264,13 @@ InterfaceMethod<
 mlir::relalg::detail::initPredicate(this->getOperation());
 }]
 >];
+}
+
+def ColumnFoldable : OpInterface<"ColumnFoldable"> {
+let methods = [
+InterfaceMethod<"","mlir::LogicalResult", "foldColumns",(ins "mlir::relalg::ColumnFoldInfo&":$columnInfo),"",[{return mlir::failure();}]>,
+InterfaceMethod<"","mlir::LogicalResult", "eliminateDeadColumns",(ins "mlir::relalg::ColumnSet&":$usedColumns,"mlir::Value&":$newStream),"",[{return mlir::failure();}]>
+];
 }
 
 #endif// Interfaces

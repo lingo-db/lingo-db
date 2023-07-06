@@ -6,83 +6,78 @@ include "mlir/IR/EnumAttr.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
+include "mlir/Dialect/util/UtilBase.td"
 
-def Util_Dialect : Dialect {
-let name = "util";
-let cppNamespace = "::mlir::util";
-let extraClassDeclaration = [{
-private:
-void registerTypes();
-std::shared_ptr<FunctionHelper> functionHelper;
-public:
-FunctionHelper& getFunctionHelper(){
-    return *functionHelper;
-}
-}];
-}
 
 class Util_Op<string mnemonic, list<Trait> traits = []> :
 Op<Util_Dialect, mnemonic, traits>{
 
 }
 
-class Util_Type<string name, string typeMnemonic> : TypeDef<Util_Dialect, name> {
-    let mnemonic = typeMnemonic;
-}
 
 
-def RefType : Util_Type<"Ref","ref"> {
-    let summary = "ref type";
-    let parameters = (ins "Type":$elementType);
-    let builders = [
-        TypeBuilder<(ins), [{
-            return $_get($_ctxt, mlir::IntegerType::get($_ctxt,8));
-        }]>,
-        TypeBuilderWithInferredContext<(ins "Type":$type), [{
-            return $_get(type.getContext(), type);
-        }]>,
-    ];
-    let builderCall = "$_builder.getType<" # dialect.cppNamespace # "::" # cppClassName # ">()";
-    let hasCustomAssemblyFormat = 1;
-}
-
-
-def VarLen32Type : Util_Type<"VarLen32","varlen32"> {
-    let summary = "type representing variable-length data up to 2^31 bytes";
-}
-
-def CreateVarLen  : Util_Op<"varlen32_create",[NoSideEffect]> {//todo: technically not currect
+def CreateVarLen  : Util_Op<"varlen32_create",[Pure]> {//todo: technically not currect
     let arguments = (ins RefType:$ref, I32: $len);
     let results=(outs VarLen32Type:$varlen);
     let assemblyFormat = " $ref `,` $len attr-dict";
 }
-def CreateConstVarLen  : Util_Op<"varlen32_create_const",[NoSideEffect]> {
+def CreateConstVarLen  : Util_Op<"varlen32_create_const",[Pure]> {
     let arguments = (ins StrAttr: $str);
     let results = (outs VarLen32Type:$varlen);
     let assemblyFormat = " $str attr-dict";
+}
+def BufferGetLen : Util_Op<"buffer_getlen"> {
+    let arguments = (ins BufferType:$buffer);
+    let results = (outs Index: $len);
+    let assemblyFormat = " $buffer `:` type($buffer)  attr-dict";
+}
+def BufferGetRef : Util_Op<"buffer_getref"> {
+    let arguments = (ins BufferType:$buffer);
+    let results = (outs RefType: $ref);
+    let assemblyFormat = " $buffer `:` type($buffer) `->` type($ref) attr-dict";
 }
 def VarLenGetLen : Util_Op<"varlen32_getlen"> {
     let arguments = (ins VarLen32Type:$varlen);
     let results = (outs Index: $len);
     let assemblyFormat = " $varlen attr-dict";
 }
+def VarLenCmp : Util_Op<"varlen32_cmp"> {
+    let arguments = (ins VarLen32Type:$left, VarLen32Type:$right);
+    let results = (outs I1: $eq, I1: $needs_detailed_eval);
+    let assemblyFormat = " $left `,` $right attr-dict";
+}
+def VarLenTryCheapHash : Util_Op<"varlen32_try_cheap_hash"> {
+    let arguments = (ins VarLen32Type:$varlen);
+    let results = (outs I1: $complete, Index:$hash);
+    let assemblyFormat = " $varlen attr-dict";
+}
 
-def Hash64 : Util_Op<"hash_64",[NoSideEffect]> {
+def Hash64 : Util_Op<"hash_64",[Pure]> {
     let arguments = (ins Index:$val);
     let results = (outs Index:$hash);
     let assemblyFormat = "$val attr-dict";
 }
-def HashVarLen : Util_Op<"hash_varlen",[NoSideEffect]> {
+def HashVarLen : Util_Op<"hash_varlen",[Pure]> {
     let arguments = (ins VarLen32Type:$val);
     let results = (outs Index:$hash);
     let assemblyFormat = "$val attr-dict";
 }
-def HashCombine : Util_Op<"hash_combine",[NoSideEffect]> {
+def HashCombine : Util_Op<"hash_combine",[Pure]> {
     let arguments = (ins Index:$h1, Index:$h2);
     let results = (outs Index:$hash);
     let assemblyFormat = "$h1 `,` $h2 attr-dict";
 }
-def FilterTaggedPtr : Util_Op<"filter_tagged_ptr",[NoSideEffect]> {
+def TagPtr : Util_Op<"tag_ptr",[Pure]> {
+    let arguments = (ins RefType:$ref,Index:$hash);
+    let results = (outs RefType:$res);
+    let assemblyFormat = "$hash `,` $ref `:` type($ref) `->` type($res) attr-dict";
+}
+def UnTagPtr : Util_Op<"untag_ptr",[Pure]> {
+    let arguments = (ins RefType:$ref);
+    let results = (outs RefType:$res);
+    let assemblyFormat = "$ref `:` type($ref) `->` type($res) attr-dict";
+}
+def FilterTaggedPtr : Util_Op<"filter_tagged_ptr",[Pure]> {
     let arguments = (ins RefType:$ref,Index:$hash);
     let results = (outs RefType:$res);
     let assemblyFormat = "$hash `,` $ref `:` type($ref) `->` type($res) attr-dict";
@@ -101,30 +96,36 @@ def DeAllocOp  : Util_Op<"dealloc"> {
 let arguments = (ins RefType:$ref);
 let assemblyFormat = "$ref `:` type($ref) attr-dict";
 }
-def ToGenericMemrefOp  : Util_Op<"to_generic_memref",[NoSideEffect]> {
+def ToGenericMemrefOp  : Util_Op<"to_generic_memref",[Pure]> {
 let arguments = (ins I8MemRef:$memref);
 let results=(outs RefType:$ref);
 let assemblyFormat = "$memref `:` type($memref) `->` type($ref) attr-dict";
 }
-def ToMemrefOp  : Util_Op<"to_memref",[NoSideEffect]> {
+def ToMemrefOp  : Util_Op<"to_memref",[Pure]> {
 let arguments = (ins RefType:$ref);
 let results=(outs AnyMemRef:$memref);
 let assemblyFormat = "$ref `:` type($ref) `->` type($memref) attr-dict";
 }
-def IsRefValidOp  : Util_Op<"is_ref_valid",[NoSideEffect]> {
+def IsRefValidOp  : Util_Op<"is_ref_valid",[Pure]> {
 let arguments = (ins RefType:$ref);
 let results=(outs I1:$valid);
 let assemblyFormat = "$ref `:` type($ref) attr-dict";
 }
-def InvalidRefOp  : Util_Op<"invalid_ref",[NoSideEffect]> {
+def InvalidRefOp  : Util_Op<"invalid_ref",[Pure]> {
 let arguments = (ins );
 let results=(outs RefType:$ref);
 let assemblyFormat = "type($ref) attr-dict";
 }
-def GenericMemrefCastOp : Util_Op<"generic_memref_cast",[NoSideEffect]> {
+def GenericMemrefCastOp : Util_Op<"generic_memref_cast",[Pure]> {
 let summary = "generic memref cast function";
 let arguments = (ins RefType:$val);
 let results=(outs RefType:$res);
+let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
+}
+def BufferCastOp : Util_Op<"buffer_cast",[Pure]> {
+let summary = "generic memref cast function";
+let arguments = (ins BufferType:$val);
+let results=(outs BufferType:$res);
 let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
 }
 def StoreOp  : Util_Op<"store"> {
@@ -144,23 +145,23 @@ let builders = [
     }]>
 ];
 }
-def ArrayElementPtrOp  : Util_Op<"arrayelementptr",[NoSideEffect]> {
+def ArrayElementPtrOp  : Util_Op<"arrayelementptr",[Pure]> {
     let arguments = (ins RefType:$ref,Index:$idx);
     let results=(outs RefType:$res);
     let assemblyFormat = "$ref `[` $idx `]` `:`type($ref) `->` type($res) attr-dict";
 }
-def TupleElementPtrOp  : Util_Op<"tupleelementptr",[NoSideEffect]> {
+def TupleElementPtrOp  : Util_Op<"tupleelementptr",[Pure]> {
     let arguments = (ins RefType:$ref,I32Attr:$idx);
     let results=(outs RefType:$res);
     let assemblyFormat = "$ref `[` $idx `]` `:`type($ref) `->` type($res) attr-dict";
     let hasVerifier=1;
 }
-def SizeOfOp  : Util_Op<"sizeof",[NoSideEffect]> {
+def SizeOfOp  : Util_Op<"sizeof",[Pure]> {
 let arguments = (ins TypeAttr:$type);
 let results=(outs Index:$res);
 let assemblyFormat = "$type attr-dict";
 }
-def PackOp : Util_Op<"pack",[NoSideEffect]> {
+def PackOp : Util_Op<"pack",[Pure]> {
 let summary = "string constant";
 let arguments = (ins Variadic<AnyType>:$vals);
 let results =(outs TupleOf<[AnyType]>:$tuple);
@@ -175,7 +176,7 @@ let builders = [
     build($_builder, $_state, TupleType::get($_builder.getContext(),types), vals);
 }]>];
 }
-def UnPackOp : Util_Op<"unpack",[NoSideEffect]> {
+def UnPackOp : Util_Op<"unpack",[Pure]> {
 let summary = "unpack tuple";
 let arguments = (ins TupleOf<[AnyType]>:$tuple);
 let results =(outs Variadic<AnyType>:$vals);
@@ -188,13 +189,14 @@ let builders = [
 }]>
 ];
 }
-def UndefOp : Util_Op<"undef",[NoSideEffect]> {
+def UndefOp : Util_Op<"undef",[Pure]> {
     let summary = "undefined value";
     let arguments = (ins);
     let results =(outs AnyType:$res);
+    let hasCanonicalizeMethod = 1;
     let assemblyFormat = " attr-dict `:` type($res) ";
 }
-def GetTupleOp : Util_Op<"get_tuple",[NoSideEffect]> {
+def GetTupleOp : Util_Op<"get_tuple",[Pure]> {
 let summary = "get tuple";
 let arguments = (ins TupleOf<[AnyType]>:$tuple, I32Attr:$offset);
 let results =(outs AnyType: $val);

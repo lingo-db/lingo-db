@@ -8,7 +8,6 @@
 
 using namespace mlir;
 
-
 void mlir::util::RefType::print(::mlir::AsmPrinter& printer) const {
    printer << "<";
    printer << getElementType() << ">";
@@ -25,7 +24,11 @@ void mlir::util::RefType::print(::mlir::AsmPrinter& printer) const {
    }
    return mlir::util::RefType::get(parser.getContext(), elementType);
 }
+Type mlir::util::BufferType::getElementType() {
+   return mlir::util::RefType::get(getContext(), getT());
+}
 
+#include "mlir/Dialect/util/UtilOpsTypeInterfaces.cpp.inc"
 #define GET_TYPEDEF_CLASSES
 #include "mlir/Dialect/util/UtilOpsTypes.cpp.inc"
 

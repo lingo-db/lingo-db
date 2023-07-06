@@ -40,6 +40,7 @@ target_include_directories(
         ${CMAKE_CURRENT_SOURCE_DIR}/src/postgres/include
         ${CMAKE_CURRENT_SOURCE_DIR}
 )
+set_target_properties(pg_query PROPERTIES COMPILE_FLAGS "-w")
 
 set_target_properties(pg_query PROPERTIES LINKER_LANGUAGE C)
 set_target_properties(pg_query PROPERTIES POSITION_INDEPENDENT_CODE ON)

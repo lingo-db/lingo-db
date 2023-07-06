@@ -1,8 +1,0 @@
-add_library(runner runner.cpp result_formatting.cpp )
-llvm_update_compile_flags(runner)
-target_link_libraries(runner PRIVATE ${LIBS} MLIRSQLFrontend PUBLIC arrow_shared pg_query::pg_query )
-if (COMPILE_FOR_PERF)
-    target_compile_definitions(runner PRIVATE RUN_QUERIES_WITH_PERF=1)
-else ()
-    target_compile_definitions(runner PRIVATE RUN_QUERIES_WITH_PERF=0)
-endif (COMPILE_FOR_PERF)

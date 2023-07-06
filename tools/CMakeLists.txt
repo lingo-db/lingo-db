@@ -1,4 +1,4 @@
-add_subdirectory(python)
+add_subdirectory(python/bridge)
 add_subdirectory(mlir-tools)
 add_subdirectory(sourcemap)
 add_subdirectory(sql)

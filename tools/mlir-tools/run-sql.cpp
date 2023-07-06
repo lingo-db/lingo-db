@@ -1,12 +1,12 @@
 #include <fstream>
 #include <iostream>
-#include <sstream>
 #include <string>
 
-#include "arrow/array.h"
+#include "execution/Execution.h"
+#include "execution/Timing.h"
 #include "mlir-support/eval.h"
-#include "runner/runner.h"
 
+#include <stdlib.h>
 void check(bool b, std::string message) {
    if (!b) {
       std::cerr << "ERROR: " << message << std::endl;
@@ -14,35 +14,26 @@ void check(bool b, std::string message) {
    }
 }
 int main(int argc, char** argv) {
-   std::string inputFileName = std::string(argv[1]);
-   std::ifstream istream{inputFileName};
-   std::stringstream buffer;
-   buffer << istream.rdbuf();
-   std::string sqlQuery = buffer.str();
-   std::cerr << sqlQuery << std::endl;
-   runtime::ExecutionContext context;
-   context.id = 42;
    if (argc <= 2) {
       std::cerr << "USAGE: run-sql *.sql database" << std::endl;
       return 1;
    }
-   std::cout << "Loading Database from: " << argv[2] << '\n';
-   auto database = runtime::Database::loadFromDir(std::string(argv[2]));
-   context.db = std::move(database);
+   std::string inputFileName = std::string(argv[1]);
+   std::string directory = std::string(argv[2]);
+   std::cout << "Loading Database from: " << directory << '\n';
+   auto session = runtime::Session::createSession(directory,false);
 
    support::eval::init();
-   runner::RunMode runMode = runner::Runner::getRunMode();
-   runner::Runner runner(runMode);
-   check(runner.loadSQL(sqlQuery, *context.db), "SQL translation failed");
-   check(runner.optimize(*context.db), "query optimization failed");
-   check(runner.lower(), "could not lower DSA/DB dialects");
-   check(runner.lowerToLLVM(), "lowering to llvm failed");
-   size_t runs = 1;
-
+   execution::ExecutionMode runMode = execution::getExecutionMode();
+   auto queryExecutionConfig = execution::createQueryExecutionConfig(runMode, true);
    if (const char* numRuns = std::getenv("QUERY_RUNS")) {
-      runs = std::atoi(numRuns);
-      std::cout << "using " << runs << " runs" << std::endl;
+      queryExecutionConfig->executionBackend->setNumRepetitions(std::atoi(numRuns));
+      std::cout << "using " << queryExecutionConfig->executionBackend->getNumRepetitions() << " runs" << std::endl;
    }
-   check(runner.runJit(&context, runs, runner::Runner::printTable), "JIT execution failed");
+   unsetenv("PERF_BUILDID_DIR");
+   queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
+   auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
+   executer->fromFile(inputFileName);
+   executer->execute();
    return 0;
 }

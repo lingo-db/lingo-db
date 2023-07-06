@@ -5,12 +5,11 @@
 
 namespace mlir::relalg {
 class QueryGraphBuilder {
-
    Operator root;
-   llvm::SmallPtrSet<mlir::Operation*,12>& alreadyOptimized;
+   llvm::SmallPtrSet<mlir::Operation*, 12>& alreadyOptimized;
    size_t numNodes;
    QueryGraph qg;
-   std::unordered_map<const relalg::Column*, size_t> attrToNodes;
+   std::unordered_map<const tuples::Column*, size_t> attrToNodes;
 
    size_t addNode(Operator op) {
       QueryGraph::Node n(op);
@@ -50,9 +49,8 @@ class QueryGraphBuilder {
 
    void ensureConnected();
 
-
    public:
-   QueryGraphBuilder(Operator root, llvm::SmallPtrSet<mlir::Operation*,12>& alreadyOptimized);
+   QueryGraphBuilder(Operator root, llvm::SmallPtrSet<mlir::Operation*, 12>& alreadyOptimized);
    void generate() {
       populateQueryGraph(root);
       ensureConnected();

@@ -5,7 +5,7 @@ void mlir::relalg::DPHyp::emitCsgCmp(const NodeSet& s1, const NodeSet& s2) {
    auto p1 = dpTable[s1];
    auto p2 = dpTable[s2];
    NodeSet s;
-   auto currPlan = Plan::joinPlans(s1, s2, p1, p2, queryGraph,s);
+   auto currPlan = Plan::joinPlans(s1, s2, p1, p2, queryGraph, s);
    if (!dpTable.count(s) || currPlan->getCost() < dpTable[s]->getCost()) {
       dpTable[s] = currPlan;
    }
@@ -47,10 +47,10 @@ void mlir::relalg::DPHyp::emitCsg(NodeSet s1) {
       enumerateCmpRec(s1, s2, x);
    });
 }
-static std::shared_ptr<mlir::relalg::Plan> createInitialPlan(mlir::relalg::QueryGraph::Node& n) {
+std::shared_ptr<mlir::relalg::Plan> mlir::relalg::DPHyp::createInitialPlan(mlir::relalg::QueryGraph::Node& n) {
    std::string description = std::to_string(n.id);
    if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
-      description = baseTableOp.table_identifier().str();
+      description = baseTableOp.getTableIdentifier().str();
    }
    auto currPlan = std::make_shared<mlir::relalg::Plan>(n.op, std::vector<std::shared_ptr<mlir::relalg::Plan>>({}), std::vector<Operator>({n.additionalPredicates}), n.rows * n.selectivity);
    currPlan->setDescription(description);

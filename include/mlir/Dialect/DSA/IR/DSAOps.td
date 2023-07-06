@@ -9,6 +9,7 @@ include "mlir/Interfaces/InferTypeOpInterface.td"
 include "mlir/Interfaces/LoopLikeInterface.td"
 include "mlir/Dialect/DSA/IR/DSAInterfaces.td"
 include "mlir/Dialect/RelAlg/IR/RelAlgInterfaces.td"
+include "mlir/Dialect/util/UtilBase.td"
 
 //===----------------------------------------------------------------------===//
 // DSA dialect definition.
@@ -24,6 +25,7 @@ def DSA_Dialect : Dialect {
         public:
 
     }];
+        let useDefaultTypePrinterParser=1;
 }
 
 class DSA_Op<string mnemonic, list<Trait> traits = []> : Op<DSA_Dialect, mnemonic, traits> {
@@ -31,93 +33,38 @@ class DSA_Op<string mnemonic, list<Trait> traits = []> : Op<DSA_Dialect, mnemoni
 
 }
 
-class DSA_Type<string name, string typeMnemonic> : TypeDef<DSA_Dialect, name> {
+class DSA_Type<string name, string typeMnemonic, list<Trait> traits = []> : TypeDef<DSA_Dialect, name,traits> {
     let mnemonic = typeMnemonic;
 }
 
-class DSA_Collection<string name, string typeMnemonic> : TypeDef<DSA_Dialect, name,[],"::mlir::dsa::CollectionType"> {
-    let mnemonic = typeMnemonic;
-}
 
-def DSA_Collection : Type<CPred<"$_self.isa<::mlir::dsa::CollectionType>()">,"DSA dialect collection">;
-
-def DSA_GenericIterable : DSA_Collection<"GenericIterable","iterable"> {
-    let summary = "generic iterable";
-    let parameters = (ins "Type":$elementType,"std::string":$iteratorName);
-    let hasCustomAssemblyFormat=1;
-}
-
-def DSA_Flag : DSA_Type<"Flag", "flag"> {
-    let summary = "binary flag";
+def DSA_ResultTable : DSA_Type<"ResultTable", "result_table"> {
+    let summary = "result_table";
     let description = [{
-        Flag which can be used to terminate a `for` loop.  Flag types are lowered to local variables allocated using `alloca`.
-
-        For example, a flag is used to terminate iteration over records when reaching the output limit or to indicate whether a matching join row has been found.
-    }];
-
-    let assemblyFormat = "";
-}
-
-def DSA_Table : DSA_Type<"Table", "table"> {
-    let summary = "materialized table";
-    let assemblyFormat = "";
-}
-
-def DSA_TableBuilder : DSA_Type<"TableBuilder", "table_builder"> {
-    let summary = "table builder";
-    let description = [{
-        Stateful table builder with a fixed schema. Values to the last row can
+        Stateful result_table with a fixed schema. Values to the last row can
         be added using `ds_append` and once all columns are filled, the row can
-        be finalized using `next_row`. The final table can be created using
-        `finalize`.
+        be finalized using `next_row`.
     }];
 
     let parameters = (ins "TupleType":$rowType);
     let assemblyFormat = "`<` $rowType `>`";
 }
 
-def DSA_Vector : DSA_Collection<"Vector","vector"> {
-    let summary = "vector";
-    let parameters = (ins "Type":$elementType);
-    let assemblyFormat = "`<` $elementType `>`";
-}
-def DSA_Record: DSA_Collection<"Record","record"> {
+
+def DSA_Record: DSA_Type<"Record","record"> {
     let summary = "record";
     let parameters = (ins "TupleType":$rowType);
     let assemblyFormat = "`<` $rowType `>`";
 }
-def DSA_RecordBatch: DSA_Collection<"RecordBatch","record_batch"> {
+def DSA_RecordBatch: DSA_Type<"RecordBatch","record_batch",[CollectionType]> {
     let summary = "record_batch";
     let parameters = (ins "TupleType":$rowType);
     let assemblyFormat = "`<` $rowType `>`";
-}
-def DSA_AggregationHashtable : DSA_Collection<"AggregationHashtable","aggr_ht"> {
-    let summary = "aggregation hashtable";
-    let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
-    let assemblyFormat = "`<` $keyType `,` $valType `>`";
-}
-def DSA_JoinHashtable : DSA_Collection<"JoinHashtable","join_ht"> {
-    let summary = "join hashtable";
-    let parameters = (ins "TupleType":$keyType,"TupleType":$valType);
-    let assemblyFormat = "`<` $keyType `,` $valType `>`";
+    let extraClassDeclaration = [{
+        mlir::Type getElementType();
+    }];
 }
 
-def DSA_CreateFlag : DSA_Op<"createflag"> {
-    let summary = "Create flag";
-    let results = (outs DSA_Flag:$flag);
-    let assemblyFormat = "attr-dict";
-}
-def DSA_SetFlag : DSA_Op<"setflag"> {
-    let summary = "Set flag to a value";
-    let arguments = (ins DSA_Flag:$flag, I1:$val);
-    let assemblyFormat = "$flag `,` $val attr-dict";
-}
-def DSA_GetFlag : DSA_Op<"getflag"> {
-    let summary = "Get flag value";
-    let arguments = (ins DSA_Flag:$flag);
-    let results = (outs I1:$res);
-    let assemblyFormat = "$flag attr-dict";
-}
 
 def DSA_CreateDS : DSA_Op<"create_ds"> {
     let summary = "create data structure";
@@ -141,7 +88,7 @@ def DSA_CreateDS : DSA_Op<"create_ds"> {
     ];
 }
 
-def DSA_At : DSA_Op<"at", [NoSideEffect]> {
+def DSA_At : DSA_Op<"at", [Pure]> {
     let summary = "access column in a record";
 
     let arguments = (ins DSA_Record:$collection,I32Attr:$pos);
@@ -152,26 +99,20 @@ def DSA_At : DSA_Op<"at", [NoSideEffect]> {
 def DSA_NextRow : DSA_Op<"next_row"> {
     let summary = "start next row in a table builder";
 
-    let arguments = (ins DSA_TableBuilder:$builder);
+    let arguments = (ins DSA_ResultTable:$builder);
     let assemblyFormat = "$builder `:` type($builder) attr-dict";
 }
 
-def DSA_HashtableInsert : DSA_Op<"ht_insert"> {
-    let summary = "insert into a JoinHashtable or AggregationHashTable";
-
-    let arguments = (ins AnyType:$ht, AnyType:$key, Optional<AnyType>: $val);
-    let regions = (region AnyRegion:$hash, AnyRegion:$equal, AnyRegion:$reduce);
+def DSA_DownCast : DSA_Op<"down_cast"> {
+    let summary = "set result";
+    let arguments = (ins AnyType : $state);
+    let results = (outs AnyType: $res);
+    let assemblyFormat = [{ $state `:` type($state) `->` type($res) attr-dict }];
 }
-
-def DSA_Finalize : DSA_Op<"finalize"> {
-    let summary = "finalize TableBuilder or JoinHashtable";
-
-    let arguments = (ins AnyType:$ht);
-    let results = (outs Optional<AnyType>:$res);
-    let assemblyFormat = "$ht `:` type($ht)  (`->` type($res)^)? attr-dict";
-    let builders = [OpBuilder<(ins "mlir::Value":$v), [{
-        build($_builder, $_state, mlir::TypeRange(),v);
-    }]>];
+def DSA_SetResultOp : DSA_Op<"set_result"> {
+    let summary = "set result";
+    let arguments = (ins I32Attr:$result_id, AnyType : $state);
+    let assemblyFormat = [{ $result_id $state `:` type($state)  attr-dict }];
 }
 
 def DSA_Append : DSA_Op<"ds_append"> {
@@ -185,39 +126,15 @@ def DSA_Append : DSA_Op<"ds_append"> {
 }
 
 
-def DSA_ScanSource : DSA_Op<"scan_source"> {
-    let arguments = (ins StrAttr:$descr);
-    let results = (outs DSA_GenericIterable:$iterable);
-    let assemblyFormat = "$descr `:` type($iterable) attr-dict";
-}
-
-def DSA_Lookup : DSA_Op<"lookup", [NoSideEffect]> {
-    let summary = "lookup in a hash table";
-
-    let arguments = (ins DSA_Collection:$collection,AnyType:$key);
-    let results = (outs DSA_GenericIterable:$iterable);
-    let assemblyFormat = "$collection `:` type($collection) `,` $key `:` type($key) `->` type($iterable) attr-dict";
-}
-
-
-def DSA_SortOp : DSA_Op<"sort", [IsolatedFromAbove]> {
-    let summary = "sort vector";
-    let description = [{
-        Sort a records in a vector. The region yields the order of two arguments as in C++ `std::sort`.
-    }];
-
-    let arguments = (ins DSA_Vector:$toSort);
-    let regions = (region SizedRegion<1>:$region);
-}
 
 def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
-                           RecursiveSideEffects, AttrSizedOperandSegments]> {
+                           RecursiveMemoryEffects]> {
     let summary = "iterate over collection";
     let description = [{
         Iterate over all elements of a collection. The iteration can be interrupted when the optionally specified flag becomes set.
     }];
 
-    let arguments = (ins DSA_Collection:$collection,Optional<DSA_Flag>:$until,Variadic<AnyType>:$initArgs);
+    let arguments = (ins AnyType:$collection,Variadic<AnyType>:$initArgs);
     let results = (outs Variadic<AnyType>:$results);
     let regions = (region SizedRegion<1>:$region);
 
@@ -235,7 +152,7 @@ def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
             return getBody()->getNumArguments() - 1;
         }
         /// Number of operands controlling the loop: lb, ub, step
-        unsigned getNumControlOperands() { return until()?2:1; }
+        unsigned getNumControlOperands() { return 1; }
         /// Does the operation hold operands for loop-carried values
         bool hasIterOperands() {
             return getOperation()->getNumOperands() > getNumControlOperands();
@@ -247,23 +164,12 @@ def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
     }];
 }
 
-def YieldOp : DSA_Op<"yield", [NoSideEffect, Terminator,
-                               ParentOneOf<["ForOp","SortOp","HashtableInsert"]>]> {
+def YieldOp : DSA_Op<"yield", [Pure, Terminator,
+                               ParentOneOf<["ForOp"]>]> {
     let arguments = (ins Variadic<AnyType>:$results);
     let builders = [OpBuilder<(ins), [{ /* nothing to do */ }]>];
     let assemblyFormat = [{  attr-dict ($results^ `:` type($results))? }];
 }
 
-def CondSkipOp : DSA_Op<"cond_skip", [ParentOneOf<["ForOp"]>]> {
-    let summary = "conditional skip in for loop (continue)";
-
-    let arguments = (ins AnyType:$condition, Variadic<AnyType>:$args);
-    let assemblyFormat = [{ `(` $condition `:` type($condition) `)` attr-dict ( `(` $args^ `:` type($args)`)`)? }];
-}
-
-def FreeOp : DSA_Op<"free"> {
-    let arguments = (ins AnyType: $val);
-    let assemblyFormat = "$val `:` type($val) attr-dict";
-}
 
 #endif// OPS

@@ -1,0 +1,21 @@
+[package]
+name = "ccranelift"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name ="ccranelift"
+crate-type =["staticlib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+cranelift = "0.90.1"
+cranelift-module =  "0.90.1"
+cranelift-jit = {version="0.90.1",features=["selinux-fix"]}
+cranelift-codegen="0.90.1"
+target-lexicon="0.12.4"
+libc="0.2.126"
+cranelift-object="0.90.1"
+
+

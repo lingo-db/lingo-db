@@ -31,14 +31,13 @@ select x,y from (values(1),(2)) s(x) right outer join (values(2),(3),(4)) t(y) o
 NULL	3
 NULL	4
 
-#todo: implement full outer join
-#query tsv rowsort
-#select x,y from (values(1),(2)) s(x) full outer join (values(2),(3),(4)) t(y) on x=y;
-#----
-#1	NULL
-#2	2
-#NULL	3
-#NULL	4
+query tsv rowsort
+select x,y from (values(1),(2)) s(x) full outer join (values(2),(3),(4)) t(y) on x=y;
+----
+1	NULL
+2	2
+NULL	3
+NULL	4
 
 query tsv rowsort
 select x,y from (values(1),(2.5)) s(x) left outer join (values(1),(2),(3)) t(y) on x=y;

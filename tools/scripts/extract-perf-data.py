@@ -127,7 +127,7 @@ def called_from_generated(callchain):
 
 
 def process_event(param_dict):
-    if param_dict["comm"] != "run-sql":
+    if param_dict["comm"] != "run-sql" and param_dict["comm"] != "run-mlir":
         return
     b = bytearray(param_dict["raw_buf"])
     ibs_data = IBSData.from_buffer_copy(b[4:])
@@ -153,10 +153,11 @@ def process_event(param_dict):
     if loc_type == "jit":
         jit_srcline = srcline
     if loc_type == "rt":
-        rt_srcline = srcline
-        line = int(param_dict["iregs"].strip().split(":")[1], base=16)
-        if line < 0x80000000 and line >= 0:
-            jit_srcline = "snapshot-3.mlir:" + str(line)
+        if "libc" not in param_dict["dso"]:
+            rt_srcline = srcline
+            line = int(param_dict["iregs"].strip().split(":")[1], base=16)
+            if line < 0x80000000 and line >= 0:
+                jit_srcline = "snapshot-3.mlir:" + str(line)
     events["rt_srcline"].append(rt_srcline)
     events["symbol"].append(symbol)
     events["jit_srcline"].append(jit_srcline)

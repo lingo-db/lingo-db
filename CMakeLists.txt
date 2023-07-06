@@ -3,10 +3,13 @@ if (POLICY CMP0116)
     cmake_policy(SET CMP0116 OLD)
 endif ()
 project(lingodb LANGUAGES CXX C)
-
+set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard to conform to")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DTRACER")
+find_package(Arrow REQUIRED)
 
 option(COMPILE_FOR_PERF "compile for perf" OFF)
+option(ENABLE_CRANELIFT_BACKEND "enable cranelift backend" OFF)
 if (COMPILE_FOR_PERF)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffixed-r15")
 endif (COMPILE_FOR_PERF)
@@ -36,7 +39,6 @@ set("CLANG_VERSION" ${LLVM_VERSION_MAJOR}.${LLVM_VERSION_MINOR}.${LLVM_VERSION_P
 include_directories(${LLVM_INCLUDE_DIRS})
 include_directories(${MLIR_INCLUDE_DIRS})
 include_directories(${CLANG_INCLUDE_DIRS})
-include_directories(${PROJECT_SOURCE_DIR}/torch-mlir/include)
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
 include_directories(${PROJECT_SOURCE_DIR}/vendored)
@@ -53,23 +55,60 @@ set(LLVM_LINK_COMPONENTS
         X86
         )
 
-set(ArrowPython_DIR ${Arrow_DIR})
-include(${Arrow_DIR}/FindArrow.cmake)
-include(${Arrow_DIR}/FindArrowPython.cmake)
-include_directories(${ARROW_INCLUDE_DIR})
 
+add_custom_target(build_includes)
+set(runtime_funcs_ptr_libs "")
 add_subdirectory(include)
 add_subdirectory(tools/build-tools)
+gen_rt_def(dump-rt-defs "DumpRuntime.h")
+gen_rt_def(string-rt-defs "StringRuntime.h")
+gen_rt_def(date-rt-defs "DateRuntime.h")
+gen_rt_def(decimal-rt-defs "DecimalRuntime.h")
+gen_rt_def(integer-rt-defs "IntegerRuntime.h")
+gen_rt_def(float-rt-defs "FloatRuntime.h")
+gen_rt_def(timing-rt-defs "Timing.h")
+gen_rt_def(tb-rt-defs "TableBuilder.h")
+gen_rt_def(ds-it-rt-defs "DataSourceIteration.h")
+gen_rt_def(join-ht-rt-defs "LazyJoinHashtable.h")
+gen_rt_def(ht-rt-defs "Hashtable.h")
+gen_rt_def(ec-rt-defs "ExecutionContext.h")
+gen_rt_def(db-rt-defs "RelationHelper.h")
+gen_rt_def(grow-buf-rt-defs "GrowingBuffer.h")
+gen_rt_def(buf-rt-defs "Buffer.h")
+gen_rt_def(stv-rt-defs "SegmentTreeView.h")
+gen_rt_def(heap-rt-defs "Heap.h")
+gen_rt_def(idx-rt-defs "HashIndex.h")
+gen_rt_def(hmm-rt-defs "HashMultiMap.h")
+gen_rt_def(tls-rt-defs "ThreadLocal.h")
+gen_rt_def(st-rt-defs "SimpleState.h")
+gen_rt_def(paht-rt-defs "PreAggregationHashtable.h")
+message("cpp files ${runtime_funcs_ptr_libs}")
+string (REPLACE " " ";" runtime_funcs_ptr_libs "${runtime_funcs_ptr_libs}")
+
+add_library(runtime_funcs_ptr ${runtime_funcs_ptr_libs})
+add_dependencies(runtime_funcs_ptr build_includes)
 add_subdirectory(lib/mlir-support)
+if(ENABLE_CRANELIFT_BACKEND)
+add_subdirectory(lib/execution/cranelift)
+endif(ENABLE_CRANELIFT_BACKEND)
 add_subdirectory(lib/RelAlg)
+add_subdirectory(lib/TupleStream)
+add_subdirectory(lib/SubOperator)
+
 add_subdirectory(lib/DB)
 add_subdirectory(lib/DSA)
 add_subdirectory(lib/util)
+add_subdirectory(lib/utility)
+
 add_subdirectory(lib/Conversion/DBToStd)
 add_subdirectory(lib/Conversion/DSAToStd)
-add_subdirectory(lib/Conversion/RelAlgToDB)
+add_subdirectory(lib/Conversion/RelAlgToSubOp)
+add_subdirectory(lib/Conversion/SubOpToControlFlow)
+
 add_subdirectory(lib/Conversion/UtilToLLVM)
-add_subdirectory(lib/Transforms)
+if (ENABLE_CRANELIFT_BACKEND)
+    add_subdirectory(lib/execution/CraneliftConversions)
+endif(ENABLE_CRANELIFT_BACKEND)
 
 get_property(dialect_libs GLOBAL PROPERTY MLIR_DIALECT_LIBS)
 get_property(conversion_libs GLOBAL PROPERTY MLIR_CONVERSION_LIBS)
@@ -81,6 +120,8 @@ set(LIBS
         ${translation_libs}
         MLIROptLib
         MLIRRelAlg
+        MLIRTupleStream
+        MLIRSubOperator
         MLIRUtil
         MLIRDB
         MLIRDSA
@@ -97,31 +138,12 @@ set(LIBS
         MLIRCallInterfaces
         MLIRSideEffectInterfaces
         MLIRTransforms
-        MLIRCustomTransforms
         MLIRMathTransforms
-        TorchMLIRInitAll
-        TorchMLIRConversionPasses
-        TorchMLIRRefBackend
-        TorchMLIRTMTensorDialect
-        TorchMLIRTMTensorPasses
-        TorchMLIRTorchConversionDialect
-        TorchMLIRTorchConversionPasses
-        TorchMLIRTorchDialect
-        TorchMLIRTorchPasses
-        TorchMLIRTorchToLinalg
-        TorchMLIRTorchToSCF
-        TorchMLIRTorchToStd
-        TorchMLIRTorchToTosa
-        TorchMLIRTorchUtils
-        MLIRMathTransforms
-        TorchMLIRTMTensorDialect
-        TorchMLIRConversionUtils
-        TorchMLIRTorchToTMTensor
         )
 set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
-
+find_package(TBB)
 add_subdirectory(lib/runtime)
-add_subdirectory(lib/runner)
+add_subdirectory(lib/execution)
 add_subdirectory(lib/frontend/SQL)
 add_subdirectory(tools)
 add_subdirectory(test)

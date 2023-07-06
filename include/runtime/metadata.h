@@ -2,7 +2,9 @@
 #define RUNTIME_METADATA_H
 #include <optional>
 #include <unordered_map>
-#include<variant>
+#include <variant>
+
+#include "runtime/Index.h"
 
 #include <arrow/record_batch.h>
 namespace runtime {
@@ -21,6 +23,11 @@ class ColumnMetaData {
    const ColumnType& getColumnType() const;
    void setColumnType(const ColumnType& columnType);
 };
+struct IndexMetaData {
+   std::string name;
+   Index::Type type;
+   std::vector<std::string> columns;
+};
 class TableMetaData {
    bool present;
    size_t numRows;
@@ -28,17 +35,21 @@ class TableMetaData {
    std::unordered_map<std::string, std::shared_ptr<ColumnMetaData>> columns;
    std::vector<std::string> orderedColumns;
    std::shared_ptr<arrow::RecordBatch> sample;
+   std::vector<std::shared_ptr<IndexMetaData>> indices;
 
    public:
    TableMetaData() : present(false) {}
    size_t getNumRows() const {
       return numRows;
    }
+   void setPresent() {
+      present = true;
+   }
    void setNumRows(size_t numRows) {
       TableMetaData::numRows = numRows;
    }
-   void addColumn(std::string name,std::shared_ptr<ColumnMetaData> columnMetaData){
-      columns[name]=columnMetaData;
+   void addColumn(std::string name, std::shared_ptr<ColumnMetaData> columnMetaData) {
+      columns[name] = columnMetaData;
       orderedColumns.push_back(name);
    }
    void setPrimaryKey(const std::vector<std::string>& primaryKey) {
@@ -53,9 +64,12 @@ class TableMetaData {
    const std::shared_ptr<arrow::RecordBatch>& getSample() const {
       return sample;
    }
+   std::vector<std::shared_ptr<IndexMetaData>>& getIndices() {
+      return indices;
+   }
    const std::vector<std::string>& getOrderedColumns() const;
    static std::shared_ptr<TableMetaData> deserialize(std::string);
-   std::string serialize(bool serializeSample=true) const;
+   std::string serialize(bool serializeSample = true) const;
    static std::shared_ptr<TableMetaData> create(const std::string& json, const std::string& name, std::shared_ptr<arrow::RecordBatch> sample);
    bool isPresent() const;
 };

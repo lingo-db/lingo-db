@@ -23,11 +23,11 @@ class SimpleTypeConversionPattern : public ConversionPattern {
    }
 };
 
-class SizeOfLowering :  public OpConversionPattern<mlir::util::SizeOfOp> {
+class SizeOfLowering : public OpConversionPattern<mlir::util::SizeOfOp> {
    public:
    using OpConversionPattern<mlir::util::SizeOfOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::SizeOfOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOpWithNewOp<mlir::util::SizeOfOp>(op, rewriter.getIndexType(), TypeAttr::get(typeConverter->convertType(op.type())));
+      rewriter.replaceOpWithNewOp<mlir::util::SizeOfOp>(op, rewriter.getIndexType(), TypeAttr::get(typeConverter->convertType(op.getType())));
       return success();
    }
 };
@@ -37,6 +37,7 @@ class SizeOfLowering :  public OpConversionPattern<mlir::util::SizeOfOp> {
 namespace {
 struct UtilToLLVMLoweringPass
    : public PassWrapper<UtilToLLVMLoweringPass, OperationPass<ModuleOp>> {
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(UtilToLLVMLoweringPass)
    void getDependentDialects(DialectRegistry& registry) const override {
       registry.insert<LLVM::LLVMDialect>();
    }
@@ -63,9 +64,17 @@ void mlir::util::populateUtilTypeConversionPatterns(TypeConverter& typeConverter
    patterns.add<SimpleTypeConversionPattern<TupleElementPtrOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<ArrayElementPtrOp>>(typeConverter, patterns.getContext());
    patterns.add<SimpleTypeConversionPattern<FilterTaggedPtr>>(typeConverter, patterns.getContext());
+   patterns.add<SimpleTypeConversionPattern<TagPtr>>(typeConverter, patterns.getContext());
+   patterns.add<SimpleTypeConversionPattern<UnTagPtr>>(typeConverter, patterns.getContext());
+   patterns.add<SimpleTypeConversionPattern<BufferCastOp>>(typeConverter, patterns.getContext());
+   patterns.add<SimpleTypeConversionPattern<BufferGetLen>>(typeConverter, patterns.getContext());
+   patterns.add<SimpleTypeConversionPattern<BufferGetRef>>(typeConverter, patterns.getContext());
 
    typeConverter.addConversion([&](mlir::util::RefType genericMemrefType) {
       return mlir::util::RefType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getElementType()));
+   });
+   typeConverter.addConversion([&](mlir::util::BufferType genericMemrefType) {
+      return mlir::util::BufferType::get(genericMemrefType.getContext(), typeConverter.convertType(genericMemrefType.getT()));
    });
    typeConverter.addConversion([&](mlir::util::VarLen32Type varType) {
       return varType;

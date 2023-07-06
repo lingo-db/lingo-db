@@ -7,26 +7,27 @@
 #include "llvm/ADT/SmallString.h"
 
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
-#include "mlir/Dialect/SCF/SCF.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/IR/BuiltinDialect.h"
 #include "mlir/IR/BuiltinOps.h"
-#include "mlir/InitAllDialects.h"
 
 #include "parsenodes.h"
-#include "runtime/Database.h"
+#include "runtime/Catalog.h"
 
-#include "runtime-defs/Database.h"
 #include "runtime-defs/ExecutionContext.h"
+#include "runtime-defs/RelationHelper.h"
 
 #include <llvm/ADT/StringSwitch.h>
 
@@ -34,6 +35,7 @@
 #include <fstream>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <stack>
 #include <unordered_set>
 namespace frontend::sql {
@@ -118,16 +120,21 @@ struct SQLTypeInference {
    static mlir::FloatType getHigherFloatType(mlir::Type left, mlir::Type right);
    static mlir::IntegerType getHigherIntType(mlir::Type left, mlir::Type right);
    static mlir::db::DecimalType getHigherDecimalType(mlir::Type left, mlir::Type right);
+   static mlir::db::DateType getHigherDateType(mlir::Type left, mlir::Type right);
    static mlir::Type getCommonBaseType(mlir::Type left, mlir::Type right) {
       left = getBaseType(left);
       right = getBaseType(right);
       bool stringPresent = left.isa<mlir::db::StringType>() || right.isa<mlir::db::StringType>();
       bool intPresent = left.isa<mlir::IntegerType>() || right.isa<mlir::IntegerType>();
+      bool charPresent = left.isa<mlir::db::CharType>() || right.isa<mlir::db::CharType>();
       bool floatPresent = left.isa<mlir::FloatType>() || right.isa<mlir::FloatType>();
       bool decimalPresent = left.isa<mlir::db::DecimalType>() || right.isa<mlir::db::DecimalType>();
+      bool datePresent = left.isa<mlir::db::DateType>() || right.isa<mlir::db::DateType>();
+      if (datePresent) return getHigherDateType(left, right);
       if (stringPresent) return mlir::db::StringType::get(left.getContext());
-      if (decimalPresent) return getHigherDecimalType(left, right);
+      if (charPresent) return left == right ? left : mlir::db::StringType::get(left.getContext());
       if (floatPresent) return getHigherFloatType(left, right);
+      if (decimalPresent) return getHigherDecimalType(left, right);
       if (intPresent) return getHigherIntType(left, right);
       return left;
    }
@@ -156,15 +163,22 @@ struct SQLTypeInference {
       }
       return res;
    }
-   static std::vector<mlir::Value> toCommonBaseTypesExceptDecimals(mlir::OpBuilder& builder, mlir::ValueRange values) {
-      std::vector<mlir::Value> res;
-      for (auto val : values) {
-         if (!getBaseType(val.getType()).isa<mlir::db::DecimalType>()) {
-            return toCommonBaseTypes(builder, values);
+   static std::vector<mlir::Value> toCommonNumber(mlir::OpBuilder& builder, mlir::ValueRange values) {
+      auto anyDecimal = llvm::any_of(values, [](mlir::Value v) { return getBaseType(v.getType()).isa<mlir::db::DecimalType>(); });
+      auto anyFloat = llvm::any_of(values, [](mlir::Value v) { return getBaseType(v.getType()).isIntOrFloat() && !getBaseType(v.getType()).isIntOrIndex(); });
+      if (anyDecimal && !anyFloat) {
+         std::vector<mlir::Value> res;
+         for (auto val : values) {
+            if (!getBaseType(val.getType()).isa<mlir::db::DecimalType>()) {
+               res.push_back(castValueToType(builder, val, mlir::db::DecimalType::get(builder.getContext(), 19, 0)));
+            } else {
+               res.push_back(val);
+            }
          }
-         res.push_back(val);
+         return res;
+      } else {
+         return toCommonBaseTypes(builder, values);
       }
-      return res;
    }
 };
 #define T_FakeNode T_TidScan
@@ -176,13 +190,22 @@ struct FakeNode : Node {
       type = T_FakeNode;
    }
 };
+struct WindowProperties {
+   std::vector<Node*> partitionBy;
+   std::vector<std::pair<SortByDir, Node*>> orderBy;
+   int64_t start = std::numeric_limits<int64_t>::min();
+   int64_t end = std::numeric_limits<int64_t>::max();
+};
 struct ReplaceState {
+   std::unordered_map<FakeNode*, std::string> groupingFuncs;
    std::unordered_map<FakeNode*, Node*> evalBeforeAggr;
    std::unordered_map<FakeNode*, std::tuple<std::string, Node*, bool>> aggrs;
+   std::unordered_map<FakeNode*, Node*> evalBeforeWindowFunc;
+   std::unordered_map<FakeNode*, std::tuple<std::string, Node*, WindowProperties>> windowFunctions;
 };
 ExpressionType stringToExpressionType(const std::string& parserStr);
 struct Parser {
-   mlir::relalg::ColumnManager& attrManager;
+   mlir::tuples::ColumnManager& attrManager;
    struct StringInfo {
       static bool isEqual(std::string a, std::string b) { return a == b; }
       static std::string getEmptyKey() { return ""; }
@@ -191,11 +214,11 @@ struct Parser {
    };
    struct TranslationContext {
       std::stack<mlir::Value> currTuple;
-      std::unordered_set<const mlir::relalg::Column*> useZeroInsteadNull;
-      std::stack<std::vector<std::pair<std::string, const mlir::relalg::Column*>>> definedAttributes;
+      std::unordered_set<const mlir::tuples::Column*> useZeroInsteadNull;
+      std::stack<std::vector<std::pair<std::string, const mlir::tuples::Column*>>> definedAttributes;
 
-      llvm::ScopedHashTable<std::string, const mlir::relalg::Column*, StringInfo> resolver;
-      using ResolverScope = llvm::ScopedHashTable<std::string, const mlir::relalg::Column*, StringInfo>::ScopeTy;
+      llvm::ScopedHashTable<std::string, const mlir::tuples::Column*, StringInfo> resolver;
+      using ResolverScope = llvm::ScopedHashTable<std::string, const mlir::tuples::Column*, StringInfo>::ScopeTy;
       struct TupleScope {
          TranslationContext* context;
          bool active;
@@ -218,13 +241,16 @@ struct Parser {
       void setCurrentTuple(mlir::Value v) {
          currTuple.top() = v;
       }
-      void mapAttribute(ResolverScope& scope, std::string name, const mlir::relalg::Column* attr) {
+      void mapAttribute(ResolverScope& scope, std::string name, const mlir::tuples::Column* attr) {
          definedAttributes.top().push_back({name, attr});
          resolver.insertIntoScope(&scope, name, attr);
       }
-      const mlir::relalg::Column* getAttribute(std::string name) {
-         assert(resolver.lookup(name));
-         return resolver.lookup(name);
+      const mlir::tuples::Column* getAttribute(std::string name) {
+         const auto* res = resolver.lookup(name);
+         if (!res) {
+            error("could not resolve '" + name + "'");
+         }
+         return res;
       }
       TupleScope createTupleScope() {
          return TupleScope(this);
@@ -244,23 +270,48 @@ struct Parser {
       DefineScope createDefineScope() {
          return DefineScope(*this);
       }
-      const std::vector<std::pair<std::string, const mlir::relalg::Column*>>& getAllDefinedColumns() {
+      const std::vector<std::pair<std::string, const mlir::tuples::Column*>>& getAllDefinedColumns() {
          return definedAttributes.top();
       }
-      void removeFromDefinedColumns(const mlir::relalg::Column* col) {
+      void removeFromDefinedColumns(const mlir::tuples::Column* col) {
          auto& currDefinedColumns = definedAttributes.top();
-         auto position = std::find_if(currDefinedColumns.begin(), currDefinedColumns.end(), [&](auto el) { return el.second == col; });
-         if (position != currDefinedColumns.end()) // == myVector.end() means the element was not found
+         auto start = currDefinedColumns.begin();
+         auto end = currDefinedColumns.end();
+         auto position = std::find_if(start, end, [&](auto el) { return el.second == col; });
+         if (position != currDefinedColumns.end()) {
             currDefinedColumns.erase(position);
+         }
+      }
+
+      void replace(ResolverScope& scope, const mlir::tuples::Column* col, const mlir::tuples::Column* col2) {
+         auto& currDefinedColumns = definedAttributes.top();
+         auto start = currDefinedColumns.begin();
+         auto end = currDefinedColumns.end();
+         std::vector<std::string> toReplace;
+         while (start != end) {
+            auto position = std::find_if(start, end, [&](auto el) { return el.second == col; });
+            if (position != currDefinedColumns.end()) {
+               start = position + 1;
+               toReplace.push_back(position->first);
+            } else {
+               start = end;
+            }
+         }
+         for (auto s : toReplace) {
+            mapAttribute(scope, s, col2);
+         }
       }
    };
    std::string sql;
    PgQueryInternalParsetreeAndError result;
-   runtime::Database& database;
+   runtime::Catalog& catalog;
    std::vector<std::unique_ptr<FakeNode>> fakeNodes;
+
+   bool isParallelismAllowed() const;
+
    struct TargetInfo {
-      std::vector<std::pair<std::string, const mlir::relalg::Column*>> namedResults;
-      void map(std::string name, const mlir::relalg::Column* attr) {
+      std::vector<std::pair<std::string, const mlir::tuples::Column*>> namedResults;
+      void map(std::string name, const mlir::tuples::Column* attr) {
          namedResults.push_back({name, attr});
       }
    };
@@ -274,13 +325,19 @@ struct Parser {
       return ptr;
    }
    mlir::ModuleOp moduleOp;
-   Parser(std::string sql, runtime::Database& database, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<mlir::relalg::RelAlgDialect>()->getColumnManager()), sql(sql), database(database), moduleOp(moduleOp) {
+   bool parallelismAllowed;
+   Parser(std::string sql, runtime::Catalog& catalog, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager()), sql(sql), catalog(catalog), moduleOp(moduleOp), parallelismAllowed(false) {
       moduleOp.getContext()->getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
       pg_query_parse_init();
       result = pg_query_parse(sql.c_str());
+      if (result.error) {
+         std::stringstream syntaxErrorMessage;
+         syntaxErrorMessage << "Syntax Error at position " << result.error->cursorpos << ":" << result.error->message;
+         error(syntaxErrorMessage.str());
+      }
    }
 
-   void error(std::string str) { //todo: improve error handling
+   static void error(std::string str) { //todo: improve error handling
       std::cerr << str << std::endl;
       abort();
    }
@@ -290,13 +347,10 @@ struct Parser {
       if (!funcOp) {
          mlir::OpBuilder::InsertionGuard guard(builder);
          builder.setInsertionPointToStart(moduleOp.getBody());
-         funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "rt_get_execution_context", builder.getFunctionType({}, {mlir::util::RefType::get(builder.getContext(), builder.getI8Type())}), builder.getStringAttr("private"));
+         funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "rt_get_execution_context", builder.getFunctionType({}, {mlir::util::RefType::get(builder.getContext(), builder.getI8Type())}), builder.getStringAttr("private"), mlir::ArrayAttr{}, mlir::ArrayAttr{});
       }
 
       return builder.create<mlir::func::CallOp>(builder.getUnknownLoc(), funcOp, mlir::ValueRange{}).getResult(0);
-   }
-   mlir::Value getCurrentDatabaseValue(mlir::OpBuilder& builder) {
-      return rt::ExecutionContext::getDatabase(builder, builder.getUnknownLoc())(getExecutionContextValue(builder))[0];
    }
    mlir::Value createStringValue(mlir::OpBuilder& builder, std::string str) {
       return builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(str));
@@ -348,7 +402,7 @@ struct Parser {
    std::vector<std::string> listToStringVec(List* l);
 
    //translate target list in selection and also consider aggregation and groupby
-   std::pair<mlir::Value, TargetInfo> translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, mlir::Value tree, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   std::pair<mlir::Value, TargetInfo> translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, List* distinctClause, mlir::Value tree, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
    //translate insert statement
    void translateInsertStmt(mlir::OpBuilder& builder, InsertStmt* stmt);
@@ -419,6 +473,8 @@ struct Parser {
    //translate a select statement which is either a 'classic select statement or a set operation
    std::pair<mlir::Value, TargetInfo> translateSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
+   std::pair<mlir::Value, mlir::tuples::ColumnRefAttr> mapExpressionToAttribute(mlir::Value tree, TranslationContext& context, mlir::OpBuilder& builder, TranslationContext::ResolverScope& scope, Node* expression);
+   std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> performAggregation(mlir::OpBuilder& builder, std::vector<mlir::Attribute> groupByAttrs, const ReplaceState& replaceState, TranslationContext& context, mlir::Value tree);
    ~Parser();
 };
 } // end namespace frontend::sql

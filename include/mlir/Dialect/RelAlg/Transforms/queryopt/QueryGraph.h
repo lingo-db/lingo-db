@@ -5,6 +5,7 @@
 #include <mlir/Dialect/DB/IR/DBOps.h>
 #include <mlir/Dialect/RelAlg/IR/RelAlgOps.h>
 #include <mlir/Dialect/RelAlg/Transforms/queryopt/utils.h>
+#include <mlir/Dialect/TupleStream/TupleStreamOps.h>
 namespace mlir::relalg {
 class QueryGraph {
    public:
@@ -37,8 +38,8 @@ class QueryGraph {
       NodeSet right;
       NodeSet left;
       double selectivity = 1;
-      llvm::Optional<size_t> createdNode;
-      std::optional<std::pair<const mlir::relalg::Column*, const mlir::relalg::Column*>> equality;
+      std::optional<size_t> createdNode;
+      std::optional<std::pair<const mlir::tuples::Column*, const mlir::tuples::Column*>> equality;
 
       [[nodiscard]] bool connects(const NodeSet& s1, const NodeSet& s2) const {
          if (!(left.any() && right.any())) {
@@ -107,21 +108,21 @@ class QueryGraph {
       normalNodesMask = NodeSet::fillUntil(numNodes, numNodes - 1 - pseudoNodes);
       return numNodes - pseudoNodes;
    }
-   static std::optional<std::pair<const mlir::relalg::Column*, const mlir::relalg::Column*>> analyzePredicate(PredicateOperator selection) {
-      auto returnOp = mlir::cast<mlir::relalg::ReturnOp>(selection.getPredicateBlock().getTerminator());
-      if (returnOp.results().empty()) return {};
-      mlir::Value v = returnOp.results()[0];
+   static std::optional<std::pair<const mlir::tuples::Column*, const mlir::tuples::Column*>> analyzePredicate(PredicateOperator selection) {
+      auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(selection.getPredicateBlock().getTerminator());
+      if (returnOp.getResults().empty()) return {};
+      mlir::Value v = returnOp.getResults()[0];
       if (auto cmpOp = mlir::dyn_cast_or_null<mlir::db::CmpOp>(v.getDefiningOp())) {
-         if (!cmpOp.isEqualityPred()) return {};
-         if (auto leftColref = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(cmpOp.left().getDefiningOp())) {
-            if (auto rightColref = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(cmpOp.right().getDefiningOp())) {
-               return std::make_pair<const mlir::relalg::Column*, const mlir::relalg::Column*>(&leftColref.attr().getColumn(), &rightColref.attr().getColumn());
+         if (!cmpOp.isEqualityPred(true)) return {};
+         if (auto leftColref = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.getLeft().getDefiningOp())) {
+            if (auto rightColref = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(cmpOp.getRight().getDefiningOp())) {
+               return std::make_pair<const mlir::tuples::Column*, const mlir::tuples::Column*>(&leftColref.getAttr().getColumn(), &rightColref.getAttr().getColumn());
             }
          }
       }
       return {};
    }
-   void addJoinEdge(NodeSet left, NodeSet right, Operator op, llvm::Optional<size_t> createdNode) {
+   void addJoinEdge(NodeSet left, NodeSet right, Operator op, std::optional<size_t> createdNode) {
       assert(left.valid());
       assert(right.valid());
 
@@ -138,7 +139,8 @@ class QueryGraph {
       e.right = right;
       e.createdNode = createdNode;
       if (createdNode) {
-         pseudoNodeOwner[createdNode.getValue()] = edgeid;
+         pseudoNodeOwner[createdNode.value()] = edgeid;
+         addJoinEdge(left | right, NodeSet::single(numNodes, createdNode.value()), {}, {});
       }
       for (auto n : left) {
          if (n >= nodes.size()) {
@@ -205,8 +207,9 @@ class QueryGraph {
          return false;
       }
       for (auto pseudo : (s1 & ~normalNodesMask)) {
-         if (s1.test(pseudoNodeOwner[pseudo])){
-            //pseudo but is not lonley
+         auto join = joins[pseudoNodeOwner[pseudo]];
+         if (join.left.isSubsetOf(s1) && join.right.isSubsetOf(s1)) {
+            //pseudo but is not lonely
          } else {
             return true;
          }
@@ -294,12 +297,13 @@ class QueryGraph {
       llvm::DenseMap<mlir::Value, mlir::relalg::ColumnSet> required;
       std::vector<Predicate> predicates;
       block->walk([&](mlir::Operation* op) {
-         if (auto getAttr = mlir::dyn_cast_or_null<mlir::relalg::GetColumnOp>(op)) {
-            required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.attr())});
+         if (auto getAttr = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(op)) {
+            required.insert({getAttr.getResult(), mlir::relalg::ColumnSet::from(getAttr.getAttr())});
          } else if (auto cmpOp = mlir::dyn_cast_or_null<mlir::relalg::CmpOpInterface>(op)) {
-            if (cmpOp.isEqualityPred()) {
+            if (cmpOp.isEqualityPred(true)) {
                auto leftAttributes = required[cmpOp.getLeft()];
                auto rightAttributes = required[cmpOp.getRight()];
+               if (leftAttributes.empty() || rightAttributes.empty()) return;
                if (leftAttributes.isSubsetOf(availableLeft) && rightAttributes.isSubsetOf(availableRight)) {
                   predicates.push_back(Predicate(leftAttributes, rightAttributes, true));
                } else if (leftAttributes.isSubsetOf(availableRight) && rightAttributes.isSubsetOf(availableLeft)) {

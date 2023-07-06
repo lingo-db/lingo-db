@@ -12,37 +12,37 @@ module{
 // -----
 module{
 %0 = relalg.const_relation columns : [@constrel::@attr1({type = i1})] values : ["true", "false"]
-//CHECK: %1 = relalg.selection %0 (%arg0: !relalg.tuple)
-%1 = relalg.selection %0 (%arg0: !relalg.tuple) {
-    //CHECK:    %2 = relalg.getcol %arg0 @constrel::@attr1 : i1
-	%2 = relalg.getcol %arg0 @constrel::@attr1 : i1
-	//CHECK:    relalg.return %2 : i1
-	relalg.return %2 : i1
+//CHECK: %1 = relalg.selection %0 (%arg0: !tuples.tuple)
+%1 = relalg.selection %0 (%arg0: !tuples.tuple) {
+    //CHECK:    %2 = tuples.getcol %arg0 @constrel::@attr1 : i1
+	%2 = tuples.getcol %arg0 @constrel::@attr1 : i1
+	//CHECK:    tuples.return %2 : i1
+	tuples.return %2 : i1
 }
 }
 // -----
 module{
 %0 = relalg.const_relation columns : [@constrel::@attr1({type = !db.string})] values : ["A", "B"]
-//CHECK: %1 = relalg.map %0 computes : [@map::@attr2({type = i1})] (%arg0: !relalg.tuple)
-%1 = relalg.map %0 computes : [@map::@attr2({type = i1})] (%arg0: !relalg.tuple) {
+//CHECK: %1 = relalg.map %0 computes : [@map::@attr2({type = i1})] (%arg0: !tuples.tuple)
+%1 = relalg.map %0 computes : [@map::@attr2({type = i1})] (%arg0: !tuples.tuple) {
     //CHECK:    %2 = db.constant("true") : i1
 	%2 = db.constant("true") : i1
-	//CHECK: relalg.return %2 : i1
-	relalg.return %2 : i1
+	//CHECK: tuples.return %2 : i1
+	tuples.return %2 : i1
 }
 }
 // -----
 module{
 %0 = relalg.const_relation columns : [@constrel::@attr1({type = !db.string})] values : ["A", "B"]
-//CHECK: %1 = relalg.aggregation %0 [@constrel::@attr1] computes : [] (%arg0: !relalg.tuplestream,%arg1: !relalg.tuple)
-%1 = relalg.aggregation %0 [@constrel::@attr1] computes : [] (%arg0: !relalg.tuplestream, %arg1: !relalg.tuple) {
-	relalg.return
+//CHECK: %1 = relalg.aggregation %0 [@constrel::@attr1] computes : [] (%arg0: !tuples.tuplestream,%arg1: !tuples.tuple)
+%1 = relalg.aggregation %0 [@constrel::@attr1] computes : [] (%arg0: !tuples.tuplestream, %arg1: !tuples.tuple) {
+	tuples.return
 }
 }
 // -----
 module{
 %0 = relalg.const_relation columns : [@constrel::@attr1({type = !db.string})] values : ["A", "B"]
-%1 = relalg.materialize %0 [@constrel::@attr1] => ["col1"] : !dsa.table
+%1 = relalg.materialize %0 [@constrel::@attr1] => ["col1"] : !subop.result_table<[col1: !db.string]>
 }
 
 //renaming:
@@ -68,24 +68,24 @@ module{
 module{
 %0 = relalg.const_relation columns : [@constrel::@attr1({type = !db.string}),@constrel::@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
 %1 = relalg.const_relation columns : [@constrel2::@attr1({type = !db.string}),@constrel2::@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
-//CHECK: %2 = relalg.join %0, %1  (%arg0: !relalg.tuple)
-%2 = relalg.join %0, %1  (%arg0: !relalg.tuple) {
+//CHECK: %2 = relalg.join %0, %1  (%arg0: !tuples.tuple)
+%2 = relalg.join %0, %1  (%arg0: !tuples.tuple) {
     //CHECK:    %3 = db.constant("true") : i1
 	%3 = db.constant("true") : i1
-	//CHECK:    relalg.return %3 : i1
-	relalg.return %3 : i1
+	//CHECK:    tuples.return %3 : i1
+	tuples.return %3 : i1
 }
 }
 // -----
 module{
 %0 = relalg.const_relation columns : [@constrel::@attr1({type = !db.string}),@constrel::@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
 %1 = relalg.const_relation columns : [@constrel2::@attr1({type = !db.string}),@constrel2::@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
-//CHECK: %2 = relalg.semijoin %0, %1  (%arg0: !relalg.tuple)
-%2 = relalg.semijoin %0, %1  (%arg0: !relalg.tuple) {
+//CHECK: %2 = relalg.semijoin %0, %1  (%arg0: !tuples.tuple)
+%2 = relalg.semijoin %0, %1  (%arg0: !tuples.tuple) {
     //CHECK:    %3 = db.constant("true") : i1
 	%3 = db.constant("true") : i1
-	//CHECK:    relalg.return %3 : i1
-	relalg.return %3 : i1
+	//CHECK:    tuples.return %3 : i1
+	tuples.return %3 : i1
 }
 }
 
@@ -93,12 +93,12 @@ module{
 module{
 %0 = relalg.const_relation columns : [@constrel::@attr1({type = !db.string}),@constrel::@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
 %1 = relalg.const_relation columns : [@constrel2::@attr1({type = !db.string}),@constrel2::@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
-//CHECK: %2 = relalg.antisemijoin %0, %1  (%arg0: !relalg.tuple)
-%2 = relalg.antisemijoin %0, %1  (%arg0: !relalg.tuple) {
+//CHECK: %2 = relalg.antisemijoin %0, %1  (%arg0: !tuples.tuple)
+%2 = relalg.antisemijoin %0, %1  (%arg0: !tuples.tuple) {
     //CHECK:    %3 = db.constant("true") : i1
 	%3 = db.constant("true") : i1
-	//CHECK:    relalg.return %3 : i1
-	relalg.return %3 : i1
+	//CHECK:    tuples.return %3 : i1
+	tuples.return %3 : i1
 }
 }
 
@@ -106,12 +106,12 @@ module{
 module{
 %0 = relalg.const_relation columns : [@constrel::@attr1({type = !db.string}),@constrel::@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
 %1 = relalg.const_relation columns : [@constrel2::@attr1({type = !db.string}),@constrel2::@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
-//CHECK: %2 = relalg.outerjoin %0, %1  (%arg0: !relalg.tuple)
-%2 = relalg.outerjoin %0, %1  (%arg0: !relalg.tuple) {
+//CHECK: %2 = relalg.outerjoin %0, %1  (%arg0: !tuples.tuple)
+%2 = relalg.outerjoin %0, %1  (%arg0: !tuples.tuple) {
     //CHECK:    %3 = db.constant("true") : i1
 	%3 = db.constant("true") : i1
-	//CHECK:    relalg.return %3 : i1
-	relalg.return %3 : i1
+	//CHECK:    tuples.return %3 : i1
+	tuples.return %3 : i1
 } mapping: {@outerjoin::@attr1({type = !db.string})=[@constrel2::@attr1]}
 }
 
@@ -119,24 +119,24 @@ module{
 module{
 %0 = relalg.const_relation columns : [@constrel::@attr1({type = !db.string}),@constrel::@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
 %1 = relalg.const_relation columns : [@constrel2::@attr1({type = !db.string}),@constrel2::@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
-//CHECK: %2 = relalg.fullouterjoin %0, %1  (%arg0: !relalg.tuple)
-%2 = relalg.fullouterjoin %0, %1  (%arg0: !relalg.tuple) {
+//CHECK: %2 = relalg.fullouterjoin %0, %1  (%arg0: !tuples.tuple)
+%2 = relalg.fullouterjoin %0, %1  (%arg0: !tuples.tuple) {
     //CHECK:    %3 = db.constant("true") : i1
 	%3 = db.constant("true") : i1
-	//CHECK:    relalg.return %3 : i1
-	relalg.return %3 : i1
-}
+	//CHECK:    tuples.return %3 : i1
+	tuples.return %3 : i1
+} mapping: {@outerjoin::@attr1({type = !db.string})=[@constrel2::@attr1]}
 }
 // -----
 module{
 %0 = relalg.const_relation columns : [@constrel::@attr1({type = !db.string}),@constrel::@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
 %1 = relalg.const_relation columns : [@constrel2::@attr1({type = !db.string}),@constrel2::@attr2({type = !db.string})] values : [["A1","B1"], ["A2","B2"]]
-//CHECK: %2 = relalg.markjoin @markjoin::@markattr({type = !db.string}) %0, %1  (%arg0: !relalg.tuple)
-%2 = relalg.markjoin @markjoin::@markattr({type = !db.string}) %0, %1  (%arg0: !relalg.tuple) {
+//CHECK: %2 = relalg.markjoin @markjoin::@markattr({type = !db.string}) %0, %1  (%arg0: !tuples.tuple)
+%2 = relalg.markjoin @markjoin::@markattr({type = !db.string}) %0, %1  (%arg0: !tuples.tuple) {
     //CHECK:    %3 = db.constant("true") : i1
 	%3 = db.constant("true") : i1
-	//CHECK:    relalg.return %3 : i1
-	relalg.return %3 : i1
+	//CHECK:    tuples.return %3 : i1
+	tuples.return %3 : i1
 }
 }
 

@@ -5,8 +5,9 @@
 
 #include "mlir-support/parsing.h"
 #include "mlir/Dialect/RelAlg/Passes.h"
-#include "mlir/IR/BlockAndValueMapping.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include <optional>
 #include <variant>
 namespace {
 
@@ -59,10 +60,10 @@ class ReplaceFnWithFn : public mlir::RewritePattern {
    ReplaceFnWithFn(mlir::MLIRContext* context, std::string funcName, std::vector<std::shared_ptr<Matcher>> matchers, std::string newFuncName) : RewritePattern(mlir::db::RuntimeCall::getOperationName(), mlir::PatternBenefit(1), context), funcName(funcName), newFuncName(newFuncName), matchers(matchers) {}
    mlir::LogicalResult match(mlir::Operation* op) const override {
       auto runtimeCall = mlir::cast<mlir::db::RuntimeCall>(op);
-      if (runtimeCall.fn().str() != funcName) { return mlir::failure(); }
-      if (runtimeCall.args().size() != matchers.size()) { return mlir::failure(); }
-      for (size_t i = 0; i < runtimeCall.args().size(); ++i) {
-         if (!matchers[i]->matches(runtimeCall.args()[i])) { return mlir::failure(); }
+      if (runtimeCall.getFn().str() != funcName) { return mlir::failure(); }
+      if (runtimeCall.getArgs().size() != matchers.size()) { return mlir::failure(); }
+      for (size_t i = 0; i < runtimeCall.getArgs().size(); ++i) {
+         if (!matchers[i]->matches(runtimeCall.getArgs()[i])) { return mlir::failure(); }
       }
       return mlir::success();
    }
@@ -70,11 +71,11 @@ class ReplaceFnWithFn : public mlir::RewritePattern {
    void rewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       std::vector<mlir::Value> values;
       auto runtimeCall = mlir::cast<mlir::db::RuntimeCall>(op);
-      for (size_t i = 0; i < runtimeCall.args().size(); ++i) {
+      for (size_t i = 0; i < runtimeCall.getArgs().size(); ++i) {
          if (matchers[i]->skip()) {
             continue;
          }
-         values.push_back(runtimeCall.args()[i]);
+         values.push_back(runtimeCall.getArgs()[i]);
       }
       rewriter.replaceOpWithNewOp<mlir::db::RuntimeCall>(op, op->getResultTypes(), newFuncName, mlir::ValueRange{values});
    }
@@ -84,6 +85,7 @@ class OptimizeRuntimeFunctions : public mlir::PassWrapper<OptimizeRuntimeFunctio
    virtual llvm::StringRef getArgument() const override { return "db-optimize-runtime-functions"; }
 
    public:
+   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(OptimizeRuntimeFunctions)
    void runOnOperation() override {
       //transform "standalone" aggregation functions
       {
@@ -91,7 +93,9 @@ class OptimizeRuntimeFunctions : public mlir::PassWrapper<OptimizeRuntimeFunctio
          patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("month"), std::make_shared<AnyMatcher>()}, "ExtractMonthFromDate");
          patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("year"), std::make_shared<AnyMatcher>()}, "ExtractYearFromDate");
          patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("day"), std::make_shared<AnyMatcher>()}, "ExtractDayFromDate");
-         patterns.insert<ReplaceFnWithFn>(&getContext(), "Like", std::vector<std::shared_ptr<Matcher>>{std::make_shared<AnyMatcher>(),std::make_shared<ConstStringMatcher>()}, "ConstLike");
+         patterns.insert<ReplaceFnWithFn>(&getContext(), "ExtractFromDate", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("hour"), std::make_shared<AnyMatcher>()}, "ExtractHourFromDate");
+         patterns.insert<ReplaceFnWithFn>(&getContext(), "DateDiff", std::vector<std::shared_ptr<Matcher>>{std::make_shared<StringConstMatcher>("second"), std::make_shared<AnyMatcher>(), std::make_shared<AnyMatcher>()}, "DateDiffSecond");
+         patterns.insert<ReplaceFnWithFn>(&getContext(), "Like", std::vector<std::shared_ptr<Matcher>>{std::make_shared<AnyMatcher>(), std::make_shared<ConstStringMatcher>()}, "ConstLike");
          if (mlir::applyPatternsAndFoldGreedily(getOperation().getRegion(), std::move(patterns)).failed()) {
             assert(false && "should not happen");
          }

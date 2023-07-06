@@ -23,6 +23,7 @@ DeclarationMatcher methodMatcher = cxxRecordDecl(isDefinition(), hasParent(names
 
 class MethodPrinter : public MatchFinder::MatchCallback {
    llvm::raw_ostream& hStream;
+   llvm::raw_ostream& cppStream;
    std::string translateIntegerType(size_t width) {
       return "mlir::IntegerType::get(context," + std::to_string(width) + ")";
    }
@@ -33,7 +34,6 @@ class MethodPrinter : public MatchFinder::MatchCallback {
       return "mlir::util::RefType::get(context,mlir::IntegerType::get(context,8))";
    }
    std::optional<std::string> translateType(QualType type) {
-      //type.dump();
       if (const auto* tdType = type->getAs<TypedefType>()) {
          return translateType(tdType->desugar());
       }
@@ -53,14 +53,18 @@ class MethodPrinter : public MatchFinder::MatchCallback {
                   if (!translated.has_value()) return {};
                   funcType += translated.value();
                }
-               auto translated = translateType(funcProtoType->getReturnType());
-               if (!translated.has_value()) return {};
-               funcType += "}, {" + translated.value() + "})";
+               if (funcProtoType->getReturnType()->isVoidType()) {
+                  funcType += "},{})";
+               } else {
+                  auto translated = translateType(funcProtoType->getReturnType());
+                  if (!translated.has_value()) return {};
+                  funcType += "}, {" + translated.value() + "})";
+               }
                return funcType;
             }
          }
          auto asString = pointeeType.getAsString();
-         if (asString == "struct runtime::ArrowTable") {
+         if (asString == "std::shared_ptr<arrow::Table>") {
             return "mlir::dsa::TableType::get(context)";
          }
          return translatePointer();
@@ -84,8 +88,11 @@ class MethodPrinter : public MatchFinder::MatchCallback {
          }
       }
       std::string asString = type.getAsString();
-      if (asString.ends_with("runtime::VarLen32")) {
+      if (asString.ends_with("VarLen32")) {
          return "mlir::util::VarLen32Type::get(context)";
+      }
+      if (asString.ends_with("Buffer")) {
+         return "mlir::util::BufferType::get(context," + translateIntegerType(8) + ")";
       }
       return std::optional<std::string>();
    }
@@ -104,25 +111,26 @@ class MethodPrinter : public MatchFinder::MatchCallback {
    }
 
    public:
-   MethodPrinter(raw_ostream& hStream) : hStream(hStream) {}
+   MethodPrinter(raw_ostream& hStream, raw_ostream& cppStream) : hStream(hStream), cppStream(cppStream) {}
    virtual void run(const MatchFinder::MatchResult& result) override {
       //std::cout << "match" << std::endl;
       if (const CXXRecordDecl* md = result.Nodes.getNodeAs<clang::CXXRecordDecl>("class")) {
+         auto* mangleContext = md->getASTContext().createMangleContext();
+
          std::string className = md->getNameAsString();
          hStream << "struct " << className << " {\n";
-         auto* mangleContext = md->getASTContext().createMangleContext();
-         for (const auto& method : md->methods()) {
+         for (const auto& method : md->getDefinition()->methods()) {
             if (method->isVirtual()) continue;
             if (method->isImplicit()) continue;
             if (isa<CXXConstructorDecl>(method)) continue;
             if (isa<CXXDestructorDecl>(method)) continue;
             if (method->getAccess() == clang::AS_protected || method->getAccess() == clang::AS_private) continue;
-            bool noSideEffects=false;
-            for(auto *attr:method->attrs()){
-               if(attr->getKind()==clang::attr::Annotate){
-                  if(auto *annotateAttr=llvm::dyn_cast<clang::AnnotateAttr>(attr)){
-                     if(annotateAttr->getAnnotation()=="rt-no-sideffect"){
-                        noSideEffects=true;
+            bool noSideEffects = false;
+            for (auto* attr : method->attrs()) {
+               if (attr->getKind() == clang::attr::Annotate) {
+                  if (auto* annotateAttr = llvm::dyn_cast<clang::AnnotateAttr>(attr)) {
+                     if (annotateAttr->getAnnotation() == "rt-no-sideffect") {
+                        noSideEffects = true;
                      }
                   }
                }
@@ -146,12 +154,12 @@ class MethodPrinter : public MatchFinder::MatchCallback {
                }
                types.push_back(translatedType.value());
             }
-            auto resType = method->getReturnType();
+            const auto& resType = method->getReturnType();
             if (!resType->isVoidType()) {
                auto translatedType = translateType(resType);
                if (!translatedType.has_value()) {
                   unknownTypes = true;
-                  break;
+                  continue;
                }
                resTypes.push_back(translatedType.value());
             }
@@ -159,15 +167,19 @@ class MethodPrinter : public MatchFinder::MatchCallback {
                std::cerr << "ignoring func " << methodName << std::endl;
                continue;
             }
+            auto getPtrFuncName = "getPtrOfMethod" + methodName;
+            hStream << "static void* " << getPtrFuncName << "();\n";
+            hStream << "#ifndef RUNTIME_PTR_LIB\n";
             hStream << " inline static mlir::util::FunctionSpec " << methodName << " = ";
-
             std::string fullName = "runtime::" + className + "::" + methodName;
             hStream << " mlir::util::FunctionSpec(\"" << fullName << "\", \"" << mangled << "\", ";
             emitTypeCreateFn(hStream, types);
             hStream << ",";
             emitTypeCreateFn(hStream, resTypes);
-            hStream << "," << (noSideEffects ? "true" : "false") << ");\n";
-         }
+            hStream << "," << (noSideEffects ? "true" : "false") << "," << getPtrFuncName << ");\n";
+            hStream << "#endif \n";
+            cppStream << "void* rt::" << className << "::" << getPtrFuncName << "(){  auto x= &" << fullName << ";  return *reinterpret_cast<void**>(&x);}";
+         };
          hStream << "};\n";
       }
    }
@@ -175,7 +187,8 @@ class MethodPrinter : public MatchFinder::MatchCallback {
 
 cl::OptionCategory mycat("myname", "mydescription");
 
-static cl::opt<std::string> headerOutputFile("oh", cl::desc("output path for header"), cl::cat(mycat));
+cl::opt<std::string> headerOutputFile("oh", cl::desc("output path for header"), cl::cat(mycat));
+cl::opt<std::string> cppOutputFile("ocpp", cl::desc("output path for cpp file"), cl::cat(mycat));
 
 int main(int argc, const char** argv) {
    auto expectedParser = CommonOptionsParser::create(argc, argv, mycat);
@@ -186,21 +199,36 @@ int main(int argc, const char** argv) {
    }
    CommonOptionsParser& optionsParser = expectedParser.get();
    std::string hContent;
+   std::string cppContent;
+
    llvm::raw_string_ostream hStream(hContent);
+   llvm::raw_string_ostream cppStream(cppContent);
+
    ClangTool tool(optionsParser.getCompilations(), optionsParser.getSourcePathList());
-   MethodPrinter printer(hStream);
+   auto currentFile = optionsParser.getSourcePathList().at(0);
+   std::string delimiter = "include/";
+   currentFile.erase(0, currentFile.find(delimiter) + delimiter.length());
+
+   MethodPrinter printer(hStream, cppStream);
    MatchFinder finder;
    finder.addMatcher(methodMatcher, &printer);
    hStream << "#include <mlir/Dialect/util/FunctionHelper.h>\n";
    hStream << "namespace rt {\n";
+   cppStream << "#define RUNTIME_PTR_LIB\n";
+   cppStream << "#include \""<<headerOutputFile<<"\"\n";
+   cppStream << "#include \"" << currentFile << "\"\n";
+
    tool.run(newFrontendActionFactory(&finder).get());
 
    hStream << "}\n";
    hStream.flush();
+   cppStream.flush();
    std::cout << "------ .h --------" << std::endl;
    std::cout << hContent << std::endl;
    std::error_code errorCode;
    llvm::raw_fd_ostream hOStream(headerOutputFile, errorCode);
    hOStream << hContent;
+   llvm::raw_fd_ostream cppOStream(cppOutputFile, errorCode);
+   cppOStream << cppContent;
    return 0;
 }

@@ -1,10 +1,18 @@
 #include "mlir/Dialect/util/FunctionHelper.h"
 
-#include "mlir/Dialect/Arithmetic/IR/Arithmetic.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Dialect/util/UtilTypes.h"
-static mlir::Value convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t,mlir::Location loc) {
+
+namespace {
+std::unordered_map<std::string, mlir::util::FunctionSpec>& getFunctions() {
+   static std::unordered_map<std::string, mlir::util::FunctionSpec> functions;
+
+   return functions;
+}
+} // end namespace
+mlir::Value mlir::util::FunctionHelper::convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t, mlir::Location loc) {
    if (v.getType() == t) return v;
    mlir::Type currentType = v.getType();
    if (currentType.isIndex() || t.isIndex()) {
@@ -22,6 +30,9 @@ static mlir::Value convertValue(mlir::OpBuilder& builder, mlir::Value v, mlir::T
    if (t.isa<mlir::util::RefType>() && currentType.isa<mlir::util::RefType>()) {
       return builder.create<mlir::util::GenericMemrefCastOp>(loc, t, v);
    }
+   if (t.isa<mlir::util::BufferType>() && currentType.isa<mlir::util::BufferType>()) {
+      return builder.create<mlir::util::BufferCastOp>(loc, t, v);
+   }
    return v; //todo
 }
 mlir::ResultRange mlir::util::FunctionHelper::call(OpBuilder& builder, mlir::Location loc, const FunctionSpec& function, ValueRange values) {
@@ -30,7 +41,7 @@ mlir::ResultRange mlir::util::FunctionHelper::call(OpBuilder& builder, mlir::Loc
    if (!funcOp) {
       OpBuilder::InsertionGuard insertionGuard(builder);
       builder.setInsertionPointToStart(fnHelper.parentModule.getBody());
-      funcOp = builder.create<mlir::func::FuncOp>(fnHelper.parentModule.getLoc(), function.getMangledName(), builder.getFunctionType(function.getParameterTypes()(builder.getContext()), function.getResultTypes()(builder.getContext())), builder.getStringAttr("private"));
+      funcOp = builder.create<mlir::func::FuncOp>(fnHelper.parentModule.getLoc(), function.getMangledName(), builder.getFunctionType(function.getParameterTypes()(builder.getContext()), function.getResultTypes()(builder.getContext())), builder.getStringAttr("private"), ArrayAttr{}, ArrayAttr{});
       if (function.isNoSideEffects()) {
          funcOp->setAttr("const", builder.getUnitAttr());
       }
@@ -38,7 +49,7 @@ mlir::ResultRange mlir::util::FunctionHelper::call(OpBuilder& builder, mlir::Loc
    assert(values.size() == funcOp.getFunctionType().getNumInputs());
    std::vector<mlir::Value> convertedValues;
    for (size_t i = 0; i < funcOp.getFunctionType().getNumInputs(); i++) {
-      mlir::Value converted = convertValue(builder, values[i], funcOp.getFunctionType().getInput(i),loc);
+      mlir::Value converted = convertValue(builder, values[i], funcOp.getFunctionType().getInput(i), loc);
       convertedValues.push_back(converted);
       assert(converted.getType() == funcOp.getFunctionType().getInput(i));
    }
@@ -53,4 +64,16 @@ std::function<mlir::ResultRange(mlir::ValueRange)> mlir::util::FunctionSpec::ope
    std::function<mlir::ResultRange(mlir::ValueRange)> fn = [&builder, loc, this](mlir::ValueRange range) -> mlir::ResultRange { return mlir::util::FunctionHelper::call(builder, loc, *this, range); };
    return fn;
 }
-mlir::util::FunctionSpec::FunctionSpec(const std::string& name, const std::string& mangledName, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& parameterTypes, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& resultTypes, bool noSideEffects) : name(name), mangledName(mangledName), parameterTypes(parameterTypes), resultTypes(resultTypes), noSideEffects(noSideEffects) {}
+mlir::util::FunctionSpec::FunctionSpec(const std::string& name, const std::string& mangledName, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& parameterTypes, const std::function<std::vector<mlir::Type>(mlir::MLIRContext*)>& resultTypes, bool noSideEffects, void* (*getPointer)()) : name(name), mangledName(mangledName), parameterTypes(parameterTypes), resultTypes(resultTypes), noSideEffects(noSideEffects), getPointer(getPointer) {
+   getFunctions().insert({mangledName, *this});
+}
+
+void* mlir::util::FunctionHelper::resolveFunction(std::string mangledName) {
+   return getFunctions().at(mangledName).getPointer();
+}
+
+void mlir::util::FunctionHelper::visitAllFunctions(const std::function<void(std::string, void*)>& fn) {
+   for(auto f:getFunctions()){
+      fn(f.first,f.second.getPointer());
+   }
+}

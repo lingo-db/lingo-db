@@ -4,7 +4,6 @@
 #include <arrow/compute/api.h>
 #include <arrow/compute/api_scalar.h>
 
-
 namespace support::eval {
 struct ArrowExpr : public Expr {
    arrow::compute::Expression expr;
@@ -13,7 +12,7 @@ struct ArrowExpr : public Expr {
 arrow::compute::Expression unpack(const std::unique_ptr<expr>& expr) {
    return dynamic_cast<ArrowExpr&>(*expr).expr;
 }
-void init(){
+void init() {
    arrow::compute::GetFunctionRegistry();
 }
 std::unique_ptr<expr> pack(arrow::compute::Expression expr) {
@@ -60,7 +59,7 @@ std::unique_ptr<expr> createOr(const std::vector<std::unique_ptr<expr>>& express
    return pack(res);
 }
 std::unique_ptr<expr> createAttrRef(const std::string& str) {
-   auto res= arrow::compute::field_ref(str);
+   auto res = arrow::compute::field_ref(str);
    return pack(res);
 }
 std::unique_ptr<expr> createEq(std::unique_ptr<expr> a, std::unique_ptr<expr> b) {
@@ -108,8 +107,8 @@ std::unique_ptr<expr> createLiteral(std::variant<int64_t, double, std::string> p
       case arrow::Type::type::INTERVAL_DAY_TIME: return {};
       case arrow::Type::type::INTERVAL_MONTHS: return {};
       case arrow::Type::type::INTERVAL_MONTH_DAY_NANO: return {};
-      case arrow::Type::type::DATE32: return pack(arrow::compute::literal(std::make_shared<arrow::Date32Scalar>(std::get<int64_t>(parsed)/86400000000000ll)));
-      case arrow::Type::type::DATE64: return pack(arrow::compute::literal(std::make_shared<arrow::Date64Scalar>(std::get<int64_t>(parsed)/1000000ll)));
+      case arrow::Type::type::DATE32: return pack(arrow::compute::literal(std::make_shared<arrow::Date32Scalar>(std::get<int64_t>(parsed) / 86400000000000ll)));
+      case arrow::Type::type::DATE64: return pack(arrow::compute::literal(std::make_shared<arrow::Date64Scalar>(std::get<int64_t>(parsed) / 1000000ll)));
       case arrow::Type::type::TIMESTAMP: return pack(arrow::compute::literal(std::make_shared<arrow::TimestampScalar>(std::get<int64_t>(parsed), static_cast<arrow::TimeUnit::type>(tp1))));
       case arrow::Type::type::HALF_FLOAT: return pack(arrow::compute::literal(std::make_shared<arrow::HalfFloatScalar>(std::get<double>(parsed))));
       case arrow::Type::type::FLOAT: return pack(arrow::compute::literal(std::make_shared<arrow::FloatScalar>(std::get<double>(parsed))));
@@ -135,11 +134,16 @@ std::unique_ptr<expr> createLiteral(std::variant<int64_t, double, std::string> p
    }
 }
 
-std::unique_ptr<expr> createLike(std::unique_ptr<expr> a, std::string like){
+std::unique_ptr<expr> createLike(std::unique_ptr<expr> a, std::string like) {
    if (!a) return {};
-   auto options= std::make_shared<arrow::compute::MatchSubstringOptions>(like);
+   auto options = std::make_shared<arrow::compute::MatchSubstringOptions>(like);
    std::vector<arrow::compute::Expression> args({unpack(a)});
-   auto res = arrow::compute::call("match_like",args,options);
+   auto res = arrow::compute::call("match_like", args, options);
+   return pack(res);
+}
+std::unique_ptr<expr> createIsNull(std::unique_ptr<expr> val) {
+   if (!val) return {};
+   auto res=arrow::compute::is_null(unpack(val));
    return pack(res);
 }
 std::unique_ptr<expr> createInvalid() {
