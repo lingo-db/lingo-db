@@ -21,6 +21,12 @@ mlir::Type getBaseType(mlir::Type t) {
    }
    return t;
 }
+Type wrapNullableType(MLIRContext* context, Type type, ValueRange values) {
+   if (llvm::any_of(values, [](Value v) { return v.getType().isa<mlir::db::NullableType>(); })) {
+      return mlir::db::NullableType::get(type);
+   }
+   return type;
+}
 bool isIntegerType(mlir::Type type, unsigned int width) {
    auto asStdInt = type.dyn_cast_or_null<mlir::IntegerType>();
    return asStdInt && asStdInt.getWidth() == width;
@@ -33,12 +39,7 @@ int getIntegerWidth(mlir::Type type, bool isUnSigned) {
    return 0;
 }
 namespace {
-Type wrapNullableType(MLIRContext* context, Type type, ValueRange values) {
-   if (llvm::any_of(values, [](Value v) { return v.getType().isa<mlir::db::NullableType>(); })) {
-      return mlir::db::NullableType::get(type);
-   }
-   return type;
-}
+
 std::tuple<arrow::Type::type, uint32_t, uint32_t> convertTypeToArrow(mlir::Type type) {
    arrow::Type::type typeConstant = arrow::Type::type::NA;
    uint32_t param1 = 0, param2 = 0;

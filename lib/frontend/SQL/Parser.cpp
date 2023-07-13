@@ -245,12 +245,12 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
       auto unit = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       auto arg1 = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->next->data.ptr_value), context);
       auto arg2 = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
-      return builder.create<mlir::db::RuntimeCall>(loc, builder.getI64Type(), "DateDiff", mlir::ValueRange({unit, arg1, arg2})).getRes();
+      return builder.create<mlir::db::RuntimeCall>(loc, wrapNullableType(builder.getContext(), builder.getI64Type(), {arg1, arg2}), "DateDiff", mlir::ValueRange({unit, arg1, arg2})).getRes();
    }
    if (funcName == "date_part") {
       auto part = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
       auto arg2 = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->tail->data.ptr_value), context);
-      return builder.create<mlir::db::RuntimeCall>(loc, builder.getI64Type(), "ExtractFromDate", mlir::ValueRange({part, arg2})).getRes();
+      return builder.create<mlir::db::RuntimeCall>(loc, wrapNullableType(builder.getContext(), builder.getI64Type(), {part, arg2}), "ExtractFromDate", mlir::ValueRange({part, arg2})).getRes();
    }
    if (funcName == "substring" || funcName == "substr") {
       auto str = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);

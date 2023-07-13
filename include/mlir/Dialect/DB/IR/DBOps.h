@@ -16,6 +16,7 @@
 #define GET_OP_CLASSES
 #include "mlir/Dialect/DB/IR/DBOps.h.inc"
 mlir::Type getBaseType(mlir::Type t);
+mlir::Type wrapNullableType(mlir::MLIRContext* context, mlir::Type type, mlir::ValueRange values);
 bool isIntegerType(mlir::Type, unsigned int width);
 int getIntegerWidth(mlir::Type, bool isUnSigned);
 #endif // MLIR_DIALECT_DB_IR_DBOPS_H
