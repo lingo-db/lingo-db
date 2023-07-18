@@ -5,77 +5,150 @@ on: push
 env:
   REGISTRY: ghcr.io
 jobs:
-  build:
+  build_release:
     runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-buildimg:latest
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@v2
-      - name: Log in to the Container registry
-        uses: docker/login-action@f054a8b539a109f9f41c372932f1ae047eff08c9
+      - name: CCache
+        id: ccache
+        uses: actions/cache@v3
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      -
-        name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
-      - name: Get identifier for submodules
-        id: smid
+          path: /ccache
+          key: ccache-release-build
+      - name: Build
         run: |
-          echo "::set-output name=id::$(git submodule status | cut -c 2-9 | tr '\n' '-' )"
-      -
-        name: Build and export
-        uses: docker/build-push-action@v2
+            mkdir -p /ccache
+            export CXX="ccache g++"
+            export C="ccache gcc"
+            export CCACHE_DIR="/ccache"
+            mkdir /build/lingodb
+            cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DCMAKE_BUILD_TYPE=Release  -DENABLE_CRANELIFT_BACKEND=OFF
+            cmake --build /build/lingodb -j$(nproc)
+      - uses: actions/upload-artifact@master
         with:
-          file: tools/docker/Dockerfile
-          context: .
-          target: lingodb
-          build-args: |
-            buildImage=ghcr.io/lingo-db/lingodb-buildimg:${{ steps.smid.outputs.id }}
-          push: true
-          tags: ghcr.io/lingo-db/lingo-db:${{ github.sha }}
-  filecheck-tests:
-    needs: build
+          name: release-build
+          path: /build/lingodb
+          retention-days: 1
+  build_debug:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingo-db:${{ github.sha }}
+    container: ghcr.io/lingo-db/lingodb-buildimg:latest
     steps:
-      - name: Run Test
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: CCache
+        id: ccache
+        uses: actions/cache@v3
+        with:
+          path: /ccache
+          key: ccache-debug-build
+      - name: Build
         run: |
-          cd /repo
-          export LD_LIBRARY_PATH=/build/arrow/install/lib && /build/llvm/bin/llvm-lit -v /build/lingodb/test/lit
-  sql-tests:
-    needs: build
-    runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingo-db:${{ github.sha }}
-    steps:
-      - name: Run Test
-        run: |
-          cd /repo
-          python3 /repo/tools/scripts/sql-roundtrip-test.py /build/lingodb
-  sqlite-tests:
-    needs: build
-    runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingo-db:${{ github.sha }}
-    steps:
-      - name: Run Test
-        run: |
-          cd /repo
-          /build/lingodb/sqlite-tester test/sqlite/select1.test
-          /build/lingodb/sqlite-tester test/sqlite/select2.test
-          /build/lingodb/sqlite-tester test/sqlite/select3.test
-          /build/lingodb/sqlite-tester test/sqlite/select4.test
-          /build/lingodb/sqlite-tester test/sqlite/select5.test
-          /build/lingodb/sqlite-tester test/sqlite/groupby.test
-          /build/lingodb/sqlite-tester test/sqlite/join.test
-          /build/lingodb/sqlite-tester test/sqlite/unnesting.test
-
+            mkdir -p /ccache
+            export CXX="ccache g++"
+            export C="ccache gcc"
+            export CCACHE_DIR="/ccache"
+            mkdir /build/lingodb
+            cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DENABLE_CRANELIFT_BACKEND=OFF
+            cmake --build /build/lingodb -j$(nproc)
+      - uses: actions/upload-artifact@master
+        with:
+          name: debug-build
+          path: /build/lingodb
+          retention-days: 1
   lint:
-    needs: build
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingo-db:${{ github.sha }}
+    container: ghcr.io/lingo-db/lingodb-buildimg:latest
     steps:
-      - name: Run Test
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Build
         run: |
-          cd /repo
-          python3 /repo/tools/scripts/run-clang-tidy.py -p /build/lingodb -quiet  -exclude="arrow|vendored" -header-filter="$PWD/include/.*"  -clang-tidy-binary=/build/llvm/bin/clang-tidy
+            mkdir /build/lingodb
+            cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  -DENABLE_CRANELIFT_BACKEND=OFF
+            cmake --build /build/lingodb -j$(nproc) --target build_includes
+            sed -i 's/-fno-lifetime-dse//g' /build/lingodb/compile_commands.json
+            python3 tools/scripts/run-clang-tidy.py -p /build/lingodb -quiet  -exclude="arrow|vendored" -header-filter="$PWD/include/.*"  -clang-tidy-binary=/build/llvm/bin/clang-tidy
+
+  file_tests:
+    needs: build_debug
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-buildimg:latest
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions/download-artifact@master
+        with:
+          name: debug-build
+          path: /build/lingodb
+      - name: Test
+        run: |
+            chmod +x /build/lingodb/*
+            /build/llvm/bin/llvm-lit -v /build/lingodb/test/lit
+  sqlite_tests:
+    needs: build_release
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-buildimg:latest
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions/download-artifact@master
+        with:
+          name: release-build
+          path: /build/lingodb
+      - name: Test
+        run: |
+            chmod +x /build/lingodb/*
+            find ./test/sqlite/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P $(nproc) /build/lingodb/sqlite-tester
+  build_lingodb_python:
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/python-buildimg:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Build
+        run: |
+            mkdir -p /built-packages
+            create_package.sh cp310-cp310
+            cd tools/python
+            /opt/python/cp310-cp310/bin/python3 -m build .
+            cp dist/*.whl /built-packages/.
+      - uses: actions/upload-artifact@master
+        with:
+          name: lingodb-python-build
+          path: /built-packages
+  test_lingodb_python:
+    needs: build_lingodb_python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@master
+      - uses: actions/download-artifact@master
+        with:
+          name: lingodb-python-build
+          path: built-packages
+      - name: Test
+        run: |
+            pip install built-packages/*.whl
+            pip install pandas
+            python3 tools/python/test/test.py
+  coverage:
+    runs-on: ubuntu-latest
+    container: ghcr.io/lingo-db/lingodb-buildimg:latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Build
+        run: |
+            apt-get install -y lcov
+            mkdir /build/lingodb
+            cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DENABLE_CRANELIFT_BACKEND=OFF -DCMAKE_CXX_FLAGS=--coverage -DCMAKE_C_FLAGS=--coverage
+            cmake --build /build/lingodb -j$(nproc)
+            /build/llvm/bin/llvm-lit -v /build/lingodb/test/lit
+            mkdir /coverage-data
+            lcov --capture --directory /build/lingodb  --output-file /coverage-data/coverage.info
+            lcov --remove /coverage-data/coverage.info -o /coverage-data/filtered-coverage.info '/build/llvm/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*' '**/vendored/*' '/usr/*'
+      - uses: actions/checkout@master
+      - uses: codecov/codecov-action@v3
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: /coverage-data/filtered-coverage.info
+          fail_ci_if_error: true
