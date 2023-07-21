@@ -303,7 +303,7 @@ ParseResult mlir::subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir
 }
 
 void subop::CreateHeapOp::print(OpAsmPrinter& p) {
-   p << getSortBy() << " -> " << getType() << "\n";
+   p << getSortBy() << " -> " << getType() << " ";
    p << "([";
    bool first = true;
    for (size_t i = 0; i < getSortBy().size(); i++) {
@@ -493,7 +493,7 @@ void subop::LookupOrInsertOp::print(OpAsmPrinter& p) {
    p << " : " << op.getState().getType() << " ";
    printCustDef(p, op, op.getRef());
    if (!op.getEqFn().empty()) {
-      p << "eq: ([";
+      p << " eq: ([";
       bool first = true;
       for (size_t i = 0; i < op.getKeys().size(); i++) {
          if (first) {
@@ -590,7 +590,7 @@ void subop::InsertOp::print(OpAsmPrinter& p) {
    printColumnStateMapping(p, getOperation(), getMapping());
    auto keyTypes = getState().getType().getKeyMembers().getTypes();
    if (!op.getEqFn().empty()) {
-      p << "eq: ([";
+      p << " eq: ([";
       bool first = true;
       for (size_t i = 0; i < keyTypes.size(); i++) {
          if (first) {
@@ -827,7 +827,7 @@ void mlir::subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
    return success();
 }
 void mlir::subop::CreateSegmentTreeView::print(::mlir::OpAsmPrinter& p) {
-   p << getSource() << " : " << getSource().getType() << " -> " << getType() << " ";
+   p << " " << getSource() << " : " << getSource().getType() << " -> " << getType() << " ";
    p << "initial" << getRelevantMembers() << ":"
      << "(";
    bool first = true;
