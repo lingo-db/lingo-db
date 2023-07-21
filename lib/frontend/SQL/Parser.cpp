@@ -2,7 +2,139 @@
 #include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 #include <regex>
+namespace {
 
+struct TranslationContext {
+   std::stack<mlir::Value> currTuple;
+   std::unordered_set<const mlir::tuples::Column*> useZeroInsteadNull;
+   std::stack<std::vector<std::pair<std::string, const mlir::tuples::Column*>>> definedAttributes;
+
+   llvm::ScopedHashTable<std::string, const mlir::tuples::Column*, StringInfo> resolver;
+   using ResolverScope = llvm::ScopedHashTable<std::string, const mlir::tuples::Column*, StringInfo>::ScopeTy;
+   struct TupleScope {
+      TranslationContext* context;
+      bool active;
+      TupleScope(TranslationContext* context) : context(context) {
+         context->currTuple.push(context->currTuple.top());
+      }
+
+      ~TupleScope() {
+         context->currTuple.pop();
+      }
+   };
+
+   TranslationContext() : currTuple(), resolver() {
+      currTuple.push(mlir::Value());
+      definedAttributes.push({});
+   }
+   mlir::Value getCurrentTuple() {
+      return currTuple.top();
+   }
+   void setCurrentTuple(mlir::Value v) {
+      currTuple.top() = v;
+   }
+   void mapAttribute(ResolverScope& scope, std::string name, const mlir::tuples::Column* attr) {
+      definedAttributes.top().push_back({name, attr});
+      resolver.insertIntoScope(&scope, name, attr);
+   }
+   const mlir::tuples::Column* getAttribute(std::string name) {
+      const auto* res = resolver.lookup(name);
+      if (!res) {
+         //error("could not resolve '" + name + "'");
+         throw std::runtime_error("could not resolve '" + name + "'");
+      }
+      return res;
+   }
+   TupleScope createTupleScope() {
+      return TupleScope(this);
+   }
+   ResolverScope createResolverScope() {
+      return ResolverScope(resolver);
+   }
+   struct DefineScope {
+      TranslationContext& context;
+      DefineScope(TranslationContext& context) : context(context) {
+         context.definedAttributes.push({});
+      }
+      ~DefineScope() {
+         context.definedAttributes.pop();
+      }
+   };
+   DefineScope createDefineScope() {
+      return DefineScope(*this);
+   }
+   const std::vector<std::pair<std::string, const mlir::tuples::Column*>>& getAllDefinedColumns() {
+      return definedAttributes.top();
+   }
+   void removeFromDefinedColumns(const mlir::tuples::Column* col) {
+      auto& currDefinedColumns = definedAttributes.top();
+      auto start = currDefinedColumns.begin();
+      auto end = currDefinedColumns.end();
+      auto position = std::find_if(start, end, [&](auto el) { return el.second == col; });
+      if (position != currDefinedColumns.end()) {
+         currDefinedColumns.erase(position);
+      }
+   }
+
+   void replace(ResolverScope& scope, const mlir::tuples::Column* col, const mlir::tuples::Column* col2) {
+      auto& currDefinedColumns = definedAttributes.top();
+      auto start = currDefinedColumns.begin();
+      auto end = currDefinedColumns.end();
+      std::vector<std::string> toReplace;
+      while (start != end) {
+         auto position = std::find_if(start, end, [&](auto el) { return el.second == col; });
+         if (position != currDefinedColumns.end()) {
+            start = position + 1;
+            toReplace.push_back(position->first);
+         } else {
+            start = end;
+         }
+      }
+      for (auto s : toReplace) {
+         mapAttribute(scope, s, col2);
+      }
+   }
+};
+std::string fieldsToString(List* fields) {
+   auto* node = reinterpret_cast<Node*>(fields->head->data.ptr_value);
+   std::string colName;
+   std::string tableName;
+   if (fields->length == 1) {
+      colName = reinterpret_cast<value*>(node)->val_.str_;
+      tableName = "";
+   } else {
+      auto* nextNode = reinterpret_cast<Node*>(fields->head->next->data.ptr_value);
+      if (nextNode->type == T_A_Star) {
+         //all_columns = true;
+        throw std::runtime_error("unexpected *");
+      } else {
+         colName = reinterpret_cast<value*>(nextNode)->val_.str_;
+      }
+
+      tableName = reinterpret_cast<value*>(node)->val_.str_;
+   }
+   return tableName.empty() ? colName : tableName + "." + colName;
+}
+} // end namespace
+
+const mlir::tuples::Column* frontend::sql::Parser::resolveColRef(Node* node, TranslationContext& context) {
+   assert(node->type == T_ColumnRef);
+   auto* columnRef = reinterpret_cast<ColumnRef*>(node);
+   auto attrName = fieldsToString(columnRef->fields_);
+   const auto* attr = context.getAttribute(attrName);
+   assert(attr);
+   return attr;
+}
+frontend::sql::Parser::Parser(std::string sql, runtime::Catalog& catalog, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager()), sql(sql), catalog(catalog), moduleOp(moduleOp), parallelismAllowed(false) {
+   moduleOp.getContext()->getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
+   pg_query_parse_init();
+   result = pg_query_parse(sql.c_str());
+   if (result.error) {
+      std::stringstream syntaxErrorMessage;
+      syntaxErrorMessage << "Syntax Error at position " << result.error->cursorpos << ":" << result.error->message;
+     throw std::runtime_error(syntaxErrorMessage.str());
+   }
+}
 frontend::sql::ExpressionType frontend::sql::stringToExpressionType(const std::string& parserStr) {
    std::string str = parserStr;
    std::transform(str.begin(), str.end(), str.begin(), ::toupper);
@@ -220,7 +352,7 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
       auto packed = builder.create<mlir::util::PackOp>(loc, values);
       return builder.create<mlir::db::Hash>(loc, builder.getIndexType(), packed);
    }
-   error("could not translate func call");
+  throw std::runtime_error("could not translate func call");
    return mlir::Value();
 }
 std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateConstRelation(List* valuesLists, mlir::OpBuilder& builder) {
@@ -276,14 +408,14 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                      break;
                   }
                   default:
-                     error("unhandled constant type");
+                    throw std::runtime_error("unhandled constant type");
                }
                types.push_back(t);
                values.push_back(value);
                break;
             }
             default: {
-               error("could not handle values content");
+              throw std::runtime_error("could not handle values content");
             }
          }
       }
@@ -347,7 +479,7 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
             case ExpressionType::COMPARE_GREATER_THAN: pred = mlir::db::DBCmpPredicate::gt; break;
             case ExpressionType::COMPARE_LESS_THAN_OR_EQUAL_TO: pred = mlir::db::DBCmpPredicate::lte; break;
             case ExpressionType::COMPARE_GREATER_THAN_OR_EQUAL_TO: pred = mlir::db::DBCmpPredicate::gte; break;
-            default: error("should not happen");
+            default:throw std::runtime_error("should not happen");
          }
          auto ct = SQLTypeInference::toCommonBaseTypes(builder, {left, right});
          return builder.create<mlir::db::CmpOp>(builder.getUnknownLoc(), pred, ct[0], ct[1]);
@@ -367,11 +499,11 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
          return builder.create<mlir::db::RuntimeCall>(loc, resType, "Concatenate", mlir::ValueRange({leftString, rightString})).getRes();
       }
       default:
-         error("unsupported expression type");
+        throw std::runtime_error("unsupported expression type");
    }
    return mlir::Value();
 }
-mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, RangeVar* stmt, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
+mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, RangeVar* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    std::string relation = stmt->relname_;
    std::string alias = relation;
    if (stmt->alias_ && stmt->alias_->type_ == T_Alias && stmt->alias_->aliasname_) {
@@ -393,7 +525,7 @@ mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, R
          }
          return builder.create<mlir::relalg::RenamingOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr(renamingDefsAsAttr));
       } else {
-         error("unknown relation " + relation);
+        throw std::runtime_error("unknown relation " + relation);
       }
    }
    auto tableMetaData = rel->getMetaData();
@@ -410,7 +542,7 @@ mlir::Value frontend::sql::Parser::translateRangeVar(mlir::OpBuilder& builder, R
    }
    return builder.create<mlir::relalg::BaseTableOp>(builder.getUnknownLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), relation, mlir::relalg::TableMetaDataAttr::get(builder.getContext(), std::make_shared<runtime::TableMetaData>()), builder.getDictionaryAttr(columns));
 }
-std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateClassicSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
+std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateClassicSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    // VALUES (...)
    if (stmt->values_lists_) {
       return translateConstRelation(stmt->values_lists_, builder);
@@ -470,7 +602,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    }
    return std::make_pair(tree, targetInfo);
 }
-std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSetOperation(mlir::OpBuilder& builder, SelectStmt* stmt, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
+std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSetOperation(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    auto setSemantic = stmt->all_ ? mlir::relalg::SetSemantic::all : mlir::relalg::SetSemantic::distinct;
    std::pair<mlir::Value, TargetInfo> leftSubQueryRes;
    std::pair<mlir::Value, TargetInfo> rightSubQueryRes;
@@ -487,7 +619,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
    auto [lTree, lTargetInfo] = leftSubQueryRes;
    auto [rTree, rTargetInfo] = rightSubQueryRes;
    if (lTargetInfo.namedResults.size() != rTargetInfo.namedResults.size()) {
-      error("SET Operation expects both sides to have same number of columns");
+     throw std::runtime_error("SET Operation expects both sides to have same number of columns");
    }
    std::vector<mlir::Attribute> attributes;
    auto scopeName = attrManager.getUniqueScope("setop");
@@ -568,11 +700,11 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          tree = builder.create<mlir::relalg::ExceptOp>(builder.getUnknownLoc(), ::mlir::relalg::SetSemanticAttr::get(builder.getContext(), setSemantic), lTree, rTree, builder.getArrayAttr(attributes));
          break;
       }
-      default: error("unsupported SET operation");
+      default:throw std::runtime_error("unsupported SET operation");
    }
    return std::make_pair(tree, targetInfo);
 }
-mlir::Block* frontend::sql::Parser::translatePredicate(mlir::OpBuilder& builder, Node* node, frontend::sql::Parser::TranslationContext& context) {
+mlir::Block* frontend::sql::Parser::translatePredicate(mlir::OpBuilder& builder, Node* node, TranslationContext& context) {
    auto* block = new mlir::Block;
    mlir::OpBuilder predBuilder(builder.getContext());
    block->addArgument(mlir::tuples::TupleType::get(builder.getContext()), builder.getUnknownLoc());
@@ -584,7 +716,7 @@ mlir::Block* frontend::sql::Parser::translatePredicate(mlir::OpBuilder& builder,
    predBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), expr);
    return block;
 }
-mlir::Value frontend::sql::Parser::translateFromClause(mlir::OpBuilder& builder, SelectStmt* stmt, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
+mlir::Value frontend::sql::Parser::translateFromClause(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    List* fromClause = stmt->from_clause_;
    if (!fromClause) { return mlir::Value(); };
    mlir::Value last;
@@ -600,7 +732,7 @@ mlir::Value frontend::sql::Parser::translateFromClause(mlir::OpBuilder& builder,
    }
    return last;
 }
-mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& builder, Node* node, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
+mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& builder, Node* node, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    switch (node->type) {
       case T_RangeVar: return translateRangeVar(builder, reinterpret_cast<RangeVar*>(node), context, scope);
       case T_RangeSubselect: {
@@ -609,7 +741,7 @@ mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& buil
          if (stmt->alias_ && stmt->alias_->type_ == T_Alias && stmt->alias_->aliasname_) {
             alias = stmt->alias_->aliasname_;
          } else {
-            error("no alias for subquery");
+           throw std::runtime_error("no alias for subquery");
          }
          std::vector<std::string> colAlias = listToStringVec(stmt->alias_->colnames_);
          return translateSubSelect(builder, reinterpret_cast<SelectStmt*>(stmt->subquery_), alias, colAlias, context, scope);
@@ -618,7 +750,7 @@ mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& buil
       case T_JoinExpr: {
          JoinExpr* joinExpr = reinterpret_cast<JoinExpr*>(node);
          if ((joinExpr->jointype_ > 4) || (joinExpr->is_natural_)) {
-            error("invalid join expr");
+           throw std::runtime_error("invalid join expr");
          }
 
          mlir::Value left;
@@ -657,7 +789,7 @@ mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& buil
          }
 
          if (!joinExpr->quals_) {
-            error("join must contain predicate");
+           throw std::runtime_error("join must contain predicate");
          }
          if (joinExpr->jointype_ == JOIN_FULL) {
             mlir::Block* pred;
@@ -733,22 +865,22 @@ mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& buil
             join.getPredicate().push_back(pred);
             return join;
          }
-         error("unsupported join type");
+        throw std::runtime_error("unsupported join type");
          break;
       }
       default: {
-         error("unknown type in from clause");
+        throw std::runtime_error("unknown type in from clause");
       }
    }
    return mlir::Value();
 }
-mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder, Node* node, frontend::sql::Parser::TranslationContext& context, bool ignoreNull) {
+mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder, Node* node, TranslationContext& context, bool ignoreNull) {
    auto loc = builder.getUnknownLoc();
    if (!node) {
       if (ignoreNull) {
          return mlir::Value();
       }
-      error("empty expression");
+     throw std::runtime_error("empty expression");
    }
    switch (node->type) {
       case T_A_Const: {
@@ -776,7 +908,7 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                break;
             }
             case T_Null: return builder.create<mlir::db::NullOp>(loc, mlir::db::NullableType::get(builder.getContext(), builder.getNoneType()));
-            default: error("unsupported value type");
+            default:throw std::runtime_error("unsupported value type");
          }
          //expr = ConstTransform(parse_result, reinterpret_cast<A_Const*>(node),context);
          break;
@@ -854,7 +986,7 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
             return translateBinaryExpression(builder, opType, left, right);
 
          } else {
-            error("unsupported op");
+           throw std::runtime_error("unsupported op");
          }
          break;
       }
@@ -870,7 +1002,7 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
             case OR_EXPR: return builder.create<mlir::db::OrOp>(builder.getUnknownLoc(), values);
             case NOT_EXPR: return builder.create<mlir::db::NotOp>(builder.getUnknownLoc(), values[0]);
             default: {
-               error("unsupported boolean expression");
+              throw std::runtime_error("unsupported boolean expression");
             }
          }
          break;
@@ -984,7 +1116,7 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                return builder.create<mlir::db::NotOp>(loc, exists);
             }
             default:
-               error("unsupported sublink type");
+              throw std::runtime_error("unsupported sublink type");
          }
          break;
       }
@@ -1004,10 +1136,10 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
          return translateCoalesceExpression(builder, context, reinterpret_cast<List*>(coalesceExpr->lexpr_)->head);
       }
       default: {
-         error("unsupported expression type");
+        throw std::runtime_error("unsupported expression type");
       }
    }
-   error("should never happen");
+  throw std::runtime_error("should never happen");
    return mlir::Value();
 }
 void frontend::sql::Parser::translateCreateStatement(mlir::OpBuilder& builder, CreateStmt* statement) {
@@ -1018,7 +1150,7 @@ void frontend::sql::Parser::translateCreateStatement(mlir::OpBuilder& builder, C
    auto descriptionValue = createStringValue(builder, tableMetaData->serialize());
    rt::RelationHelper::createTable(builder, builder.getUnknownLoc())(mlir::ValueRange({getExecutionContextValue(builder), tableNameValue, descriptionValue}));
 }
-mlir::Value frontend::sql::Parser::translateSubSelect(mlir::OpBuilder& builder, SelectStmt* stmt, std::string alias, std::vector<std::string> colAlias, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
+mlir::Value frontend::sql::Parser::translateSubSelect(mlir::OpBuilder& builder, SelectStmt* stmt, std::string alias, std::vector<std::string> colAlias, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    mlir::Value subQuery;
    TargetInfo targetInfo;
    {
@@ -1042,7 +1174,7 @@ mlir::Value frontend::sql::Parser::translateSubSelect(mlir::OpBuilder& builder, 
 
    return subQuery;
 }
-mlir::Value frontend::sql::Parser::translateCoalesceExpression(mlir::OpBuilder& builder, frontend::sql::Parser::TranslationContext& context, ListCell* expressions) {
+mlir::Value frontend::sql::Parser::translateCoalesceExpression(mlir::OpBuilder& builder, TranslationContext& context, ListCell* expressions) {
    auto loc = builder.getUnknownLoc();
    if (!expressions) {
       //no expression left -> return null
@@ -1070,14 +1202,14 @@ mlir::Value frontend::sql::Parser::translateCoalesceExpression(mlir::OpBuilder& 
    ifOp.getElseRegion().push_back(elseBlock);
    return ifOp.getResult(0);
 }
-std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
+std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    switch (stmt->op_) {
       case SETOP_NONE: return translateClassicSelectStmt(builder, stmt, context, scope);
       case SETOP_EXCEPT:
       case SETOP_INTERSECT:
       case SETOP_UNION: return translateSetOperation(builder, stmt, context, scope);
       default: {
-         error("could not translate select statement type");
+        throw std::runtime_error("could not translate select statement type");
       }
    }
    return std::make_pair(mlir::Value(), TargetInfo());
@@ -1097,11 +1229,11 @@ void frontend::sql::Parser::translateCopyStatement(mlir::OpBuilder& builder, Cop
       } else if (optionName == "format") {
          std::string format = reinterpret_cast<value*>(defElem->arg_)->val_.str_;
          if (format != "csv") {
-            error("copy only supports csv");
+           throw std::runtime_error("copy only supports csv");
          }
       } else if (optionName == "null") {
       } else {
-         error("unsupported copy option");
+        throw std::runtime_error("unsupported copy option");
       }
    }
    auto tableNameValue = createStringValue(builder, tableName);
@@ -1170,7 +1302,7 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
             break;
          }
          default:
-            error("unsupported statement type");
+           throw std::runtime_error("unsupported statement type");
       }
    }
    return {};
@@ -1200,13 +1332,13 @@ std::shared_ptr<runtime::TableMetaData> frontend::sql::Parser::translateTableMet
                   break;
                }
                default: {
-                  error("unsupported constraint type");
+                 throw std::runtime_error("unsupported constraint type");
                }
             }
             break;
          }
          default: {
-            error("unsupported construct in create statement");
+           throw std::runtime_error("unsupported construct in create statement");
          }
       }
    }
@@ -1290,7 +1422,7 @@ std::pair<std::string, std::shared_ptr<runtime::ColumnMetaData>> frontend::sql::
             case CONSTR_UNIQUE: break; // do something useful
             case CONSTR_PRIMARY: break; // do something useful
             default: {
-               error("unsupported column constraint");
+              throw std::runtime_error("unsupported column constraint");
             }
          }
       }
@@ -1315,13 +1447,13 @@ std::vector<std::variant<size_t, std::string>> frontend::sql::Parser::getTypeMod
                      break;
                   }
                   default: {
-                     error("unsupported type mod");
+                    throw std::runtime_error("unsupported type mod");
                   }
                }
                break;
             }
             default: {
-               error("unsupported type mod");
+              throw std::runtime_error("unsupported type mod");
             }
          }
       }
@@ -1339,7 +1471,7 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
    auto [tree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(stmt->select_stmt_), context, scope);
    auto rel = catalog.findRelation(tableName);
    if (!rel) {
-      error("can not insert into unknown relation");
+     throw std::runtime_error("can not insert into unknown relation");
    }
    auto tableMetaData = rel->getMetaData();
    std::unordered_map<std::string, mlir::Type> tableColumnTypes;
@@ -1502,7 +1634,7 @@ Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::
                         break;
                      }
                      default: {
-                        error("unknown orderby type");
+                       throw std::runtime_error("unknown orderby type");
                      }
                   }
                }
@@ -1517,7 +1649,7 @@ Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::
                      startOffset = constVal.val_.ival_;
                      break;
                   }
-                  default: error("unsupported window start specification");
+                  default:throw std::runtime_error("unsupported window start specification");
                }
             }
             if (auto* constExpr = reinterpret_cast<A_Const*>(window->end_offset_)) {
@@ -1528,7 +1660,7 @@ Node* frontend::sql::Parser::analyzeTargetExpression(Node* node, frontend::sql::
                      endOffset = constVal.val_.ival_;
                      break;
                   }
-                  default: error("unsupported window start specification");
+                  default:throw std::runtime_error("unsupported window start specification");
                }
             }
             if (window->frame_options_ & FRAMEOPTION_START_CURRENT_ROW) {
@@ -1684,7 +1816,7 @@ std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> 
          switch (attrNode->type) {
             case T_ColumnRef: refAttr = attrManager.createRef(resolveColRef(attrNode, context)); break;
             case T_FakeNode: refAttr = attrManager.createRef(context.getAttribute(reinterpret_cast<FakeNode*>(attrNode)->colId)); break;
-            default: error("could not resolve aggr attribute");
+            default:throw std::runtime_error("could not resolve aggr attribute");
          }
          mlir::Value currRel = relation;
          if (distinct) {
@@ -1743,7 +1875,7 @@ std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> 
 
    return {groupByOp.getResult(), mapping};
 }
-std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, List* distinctClause, mlir::Value tree, frontend::sql::Parser::TranslationContext& context, frontend::sql::Parser::TranslationContext::ResolverScope& scope) {
+std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser::translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, List* distinctClause, mlir::Value tree, TranslationContext& context, TranslationContext::ResolverScope& scope) {
    auto createMap = [this](mlir::OpBuilder& builder, std::unordered_map<FakeNode*, Node*>& toMap, TranslationContext& context, mlir::Value tree, TranslationContext::ResolverScope& scope) -> mlir::Value {
       if (toMap.empty()) return tree;
       auto* block = new mlir::Block;
@@ -1894,7 +2026,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          auto* resTarget = reinterpret_cast<ResTarget*>(node);
          resTarget->val_ = analyzeTargetExpression(resTarget->val_, replaceState);
       } else {
-         error("expected res target");
+        throw std::runtime_error("expected res target");
       }
    }
    having = analyzeTargetExpression(having, replaceState);
@@ -1909,7 +2041,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                break;
             }
             default: {
-               error("unknown orderby type");
+              throw std::runtime_error("unknown orderby type");
             }
          }
       }
@@ -2104,7 +2236,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             switch (node->type) {
                case T_ColumnRef: refAttr = attrManager.createRef(resolveColRef(node, context)); break;
                case T_FakeNode: refAttr = attrManager.createRef(context.getAttribute(reinterpret_cast<FakeNode*>(node)->colId)); break;
-               default: error("could not resolve window attribute");
+               default:throw std::runtime_error("could not resolve window attribute");
             }
             mlir::Value currRel = relation;
             mlir::Type aggrResultType;
@@ -2222,7 +2354,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                      }
                      continue;
                   }
-                  default: error("unexpected colref type in target list");
+                  default:throw std::runtime_error("unexpected colref type in target list");
                }
 
                break;
@@ -2255,7 +2387,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             targets.push_back({name, fakeNode});
          }
       } else {
-         error("expected res target");
+        throw std::runtime_error("expected res target");
       }
    }
    tree = createMap(builder, mapForTargetList, context, tree, scope);
@@ -2303,7 +2435,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                      break;
                   }
                   default: {
-                     error("unknown sort type");
+                    throw std::runtime_error("unknown sort type");
                   }
                }
 
@@ -2326,7 +2458,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                            attr = targetInfo.namedResults.at(constVal.val_.ival_ - 1).second;
                            break;
                         }
-                        default: error("unsupported sort specification");
+                        default:throw std::runtime_error("unsupported sort specification");
                      }
                      break;
                   }
@@ -2346,7 +2478,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                break;
             }
             default: {
-               error("unknown orderby type");
+              throw std::runtime_error("unknown orderby type");
             }
          }
       }

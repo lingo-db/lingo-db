@@ -38,6 +38,17 @@
 #include <limits>
 #include <stack>
 #include <unordered_set>
+namespace{
+struct TranslationContext;
+struct StringInfo {
+   static bool isEqual(std::string a, std::string b) { return a == b; }
+   static std::string getEmptyKey() { return ""; }
+   static std::string getTombstoneKey() { return "-"; }
+   static size_t getHashValue(std::string str) { return std::hash<std::string>{}(str); }
+};
+using ResolverScope = llvm::ScopedHashTable<std::string, const mlir::tuples::Column*, StringInfo>::ScopeTy;
+} //end namespace
+
 namespace frontend::sql {
 enum class ExpressionType {
    INVALID
@@ -206,102 +217,7 @@ struct ReplaceState {
 ExpressionType stringToExpressionType(const std::string& parserStr);
 struct Parser {
    mlir::tuples::ColumnManager& attrManager;
-   struct StringInfo {
-      static bool isEqual(std::string a, std::string b) { return a == b; }
-      static std::string getEmptyKey() { return ""; }
-      static std::string getTombstoneKey() { return "-"; }
-      static size_t getHashValue(std::string str) { return std::hash<std::string>{}(str); }
-   };
-   struct TranslationContext {
-      std::stack<mlir::Value> currTuple;
-      std::unordered_set<const mlir::tuples::Column*> useZeroInsteadNull;
-      std::stack<std::vector<std::pair<std::string, const mlir::tuples::Column*>>> definedAttributes;
 
-      llvm::ScopedHashTable<std::string, const mlir::tuples::Column*, StringInfo> resolver;
-      using ResolverScope = llvm::ScopedHashTable<std::string, const mlir::tuples::Column*, StringInfo>::ScopeTy;
-      struct TupleScope {
-         TranslationContext* context;
-         bool active;
-         TupleScope(TranslationContext* context) : context(context) {
-            context->currTuple.push(context->currTuple.top());
-         }
-
-         ~TupleScope() {
-            context->currTuple.pop();
-         }
-      };
-
-      TranslationContext() : currTuple(), resolver() {
-         currTuple.push(mlir::Value());
-         definedAttributes.push({});
-      }
-      mlir::Value getCurrentTuple() {
-         return currTuple.top();
-      }
-      void setCurrentTuple(mlir::Value v) {
-         currTuple.top() = v;
-      }
-      void mapAttribute(ResolverScope& scope, std::string name, const mlir::tuples::Column* attr) {
-         definedAttributes.top().push_back({name, attr});
-         resolver.insertIntoScope(&scope, name, attr);
-      }
-      const mlir::tuples::Column* getAttribute(std::string name) {
-         const auto* res = resolver.lookup(name);
-         if (!res) {
-            error("could not resolve '" + name + "'");
-         }
-         return res;
-      }
-      TupleScope createTupleScope() {
-         return TupleScope(this);
-      }
-      ResolverScope createResolverScope() {
-         return ResolverScope(resolver);
-      }
-      struct DefineScope {
-         TranslationContext& context;
-         DefineScope(TranslationContext& context) : context(context) {
-            context.definedAttributes.push({});
-         }
-         ~DefineScope() {
-            context.definedAttributes.pop();
-         }
-      };
-      DefineScope createDefineScope() {
-         return DefineScope(*this);
-      }
-      const std::vector<std::pair<std::string, const mlir::tuples::Column*>>& getAllDefinedColumns() {
-         return definedAttributes.top();
-      }
-      void removeFromDefinedColumns(const mlir::tuples::Column* col) {
-         auto& currDefinedColumns = definedAttributes.top();
-         auto start = currDefinedColumns.begin();
-         auto end = currDefinedColumns.end();
-         auto position = std::find_if(start, end, [&](auto el) { return el.second == col; });
-         if (position != currDefinedColumns.end()) {
-            currDefinedColumns.erase(position);
-         }
-      }
-
-      void replace(ResolverScope& scope, const mlir::tuples::Column* col, const mlir::tuples::Column* col2) {
-         auto& currDefinedColumns = definedAttributes.top();
-         auto start = currDefinedColumns.begin();
-         auto end = currDefinedColumns.end();
-         std::vector<std::string> toReplace;
-         while (start != end) {
-            auto position = std::find_if(start, end, [&](auto el) { return el.second == col; });
-            if (position != currDefinedColumns.end()) {
-               start = position + 1;
-               toReplace.push_back(position->first);
-            } else {
-               start = end;
-            }
-         }
-         for (auto s : toReplace) {
-            mapAttribute(scope, s, col2);
-         }
-      }
-   };
    std::string sql;
    PgQueryInternalParsetreeAndError result;
    runtime::Catalog& catalog;
@@ -326,21 +242,7 @@ struct Parser {
    }
    mlir::ModuleOp moduleOp;
    bool parallelismAllowed;
-   Parser(std::string sql, runtime::Catalog& catalog, mlir::ModuleOp moduleOp) : attrManager(moduleOp->getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager()), sql(sql), catalog(catalog), moduleOp(moduleOp), parallelismAllowed(false) {
-      moduleOp.getContext()->getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(moduleOp);
-      pg_query_parse_init();
-      result = pg_query_parse(sql.c_str());
-      if (result.error) {
-         std::stringstream syntaxErrorMessage;
-         syntaxErrorMessage << "Syntax Error at position " << result.error->cursorpos << ":" << result.error->message;
-         error(syntaxErrorMessage.str());
-      }
-   }
-
-   static void error(std::string str) { //todo: improve error handling
-      std::cerr << str << std::endl;
-      abort();
-   }
+   Parser(std::string sql, runtime::Catalog& catalog, mlir::ModuleOp moduleOp);
 
    mlir::Value getExecutionContextValue(mlir::OpBuilder& builder) {
       mlir::func::FuncOp funcOp = moduleOp.lookupSymbol<mlir::func::FuncOp>("rt_get_execution_context");
@@ -356,35 +258,7 @@ struct Parser {
       return builder.create<mlir::util::CreateConstVarLen>(builder.getUnknownLoc(), mlir::util::VarLen32Type::get(builder.getContext()), builder.getStringAttr(str));
    }
 
-   std::string fieldsToString(List* fields) {
-      auto* node = reinterpret_cast<Node*>(fields->head->data.ptr_value);
-      std::string colName;
-      std::string tableName;
-      if (fields->length == 1) {
-         colName = reinterpret_cast<value*>(node)->val_.str_;
-         tableName = "";
-      } else {
-         auto* nextNode = reinterpret_cast<Node*>(fields->head->next->data.ptr_value);
-         if (nextNode->type == T_A_Star) {
-            //all_columns = true;
-            error("unexpected *");
-         } else {
-            colName = reinterpret_cast<value*>(nextNode)->val_.str_;
-         }
-
-         tableName = reinterpret_cast<value*>(node)->val_.str_;
-      }
-      return tableName.empty() ? colName : tableName + "." + colName;
-   }
-
-   auto resolveColRef(Node* node, TranslationContext& context) {
-      assert(node->type == T_ColumnRef);
-      auto* columnRef = reinterpret_cast<ColumnRef*>(node);
-      auto attrName = fieldsToString(columnRef->fields_);
-      const auto* attr = context.getAttribute(attrName);
-      assert(attr);
-      return attr;
-   }
+   const mlir::tuples::Column* resolveColRef(Node* node, TranslationContext& context);
 
    //helper function: convert pg list to vector of int/string for type modifiers
    std::vector<std::variant<size_t, std::string>> getTypeModList(List* typeMods);
@@ -402,7 +276,7 @@ struct Parser {
    std::vector<std::string> listToStringVec(List* l);
 
    //translate target list in selection and also consider aggregation and groupby
-   std::pair<mlir::Value, TargetInfo> translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, List* distinctClause, mlir::Value tree, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   std::pair<mlir::Value, TargetInfo> translateSelectionTargetList(mlir::OpBuilder& builder, List* groupBy, Node* having, List* targetList, List* sortClause, List* distinctClause, mlir::Value tree, TranslationContext& context, ResolverScope& scope);
 
    //translate insert statement
    void translateInsertStmt(mlir::OpBuilder& builder, InsertStmt* stmt);
@@ -444,33 +318,33 @@ struct Parser {
    mlir::Value translateExpression(mlir::OpBuilder& builder, Node* node, TranslationContext& context, bool ignoreNull = false);
 
    //translates a rangevar expression inside a from clause, i.e. a table scan
-   mlir::Value translateRangeVar(mlir::OpBuilder& builder, RangeVar* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   mlir::Value translateRangeVar(mlir::OpBuilder& builder, RangeVar* stmt, TranslationContext& context, ResolverScope& scope);
 
    //translate sub-query in from clause
-   mlir::Value translateSubSelect(mlir::OpBuilder& builder, SelectStmt* stmt, std::string alias, std::vector<std::string> colAlias, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   mlir::Value translateSubSelect(mlir::OpBuilder& builder, SelectStmt* stmt, std::string alias, std::vector<std::string> colAlias, TranslationContext& context, ResolverScope& scope);
 
    //translate boolean expression into an mlir block (tuple) -> bool
    mlir::Block* translatePredicate(mlir::OpBuilder& builder, Node* node, TranslationContext& context);
 
    //translate a single item of a from clause (e.g. RangeVar, SubSelect, explicit Joins,...)
-   mlir::Value translateFromClausePart(mlir::OpBuilder& builder, Node* node, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   mlir::Value translateFromClausePart(mlir::OpBuilder& builder, Node* node, TranslationContext& context, ResolverScope& scope);
 
    //translate a complete from clause into a single value of type tuple stream (connect single items with cross-products)
-   mlir::Value translateFromClause(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   mlir::Value translateFromClause(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, ResolverScope& scope);
 
    //translate list of constant values into relalg::ConstRelationOp
    std::pair<mlir::Value, TargetInfo> translateConstRelation(List* valuesLists, mlir::OpBuilder& builder);
 
    //translate set operations (union, intersect, except)
-   std::pair<mlir::Value, TargetInfo> translateSetOperation(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   std::pair<mlir::Value, TargetInfo> translateSetOperation(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, ResolverScope& scope);
 
    //translate a 'classic' select statement e.g. SELECT ...
-   std::pair<mlir::Value, TargetInfo> translateClassicSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   std::pair<mlir::Value, TargetInfo> translateClassicSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, ResolverScope& scope);
 
    //translate a select statement which is either a 'classic select statement or a set operation
-   std::pair<mlir::Value, TargetInfo> translateSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
+   std::pair<mlir::Value, TargetInfo> translateSelectStmt(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, ResolverScope& scope);
 
-   std::pair<mlir::Value, mlir::tuples::ColumnRefAttr> mapExpressionToAttribute(mlir::Value tree, TranslationContext& context, mlir::OpBuilder& builder, TranslationContext::ResolverScope& scope, Node* expression);
+   std::pair<mlir::Value, mlir::tuples::ColumnRefAttr> mapExpressionToAttribute(mlir::Value tree, TranslationContext& context, mlir::OpBuilder& builder, ResolverScope& scope, Node* expression);
    std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> performAggregation(mlir::OpBuilder& builder, std::vector<mlir::Attribute> groupByAttrs, const ReplaceState& replaceState, TranslationContext& context, mlir::Value tree);
    ~Parser();
 };

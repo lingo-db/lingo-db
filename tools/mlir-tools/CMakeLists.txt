@@ -8,7 +8,6 @@ target_link_directories( mlir-to-json PUBLIC ${CMAKE_BINARY_DIR}/lib/execution/c
 
 # sql-to-mlir
 add_executable(sql-to-mlir sql-to-mlir.cpp)
-llvm_update_compile_flags(sql-to-mlir)
 target_link_libraries(sql-to-mlir PUBLIC ${LIBS} MLIRSQLFrontend pg_query::pg_query runtime utility runner PRIVATE arrow_static)
 set_target_properties(sql-to-mlir PROPERTIES  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 target_link_directories( sql-to-mlir PUBLIC ${CMAKE_BINARY_DIR}/lib/execution/cranelift/rust-cranelift/release)
@@ -29,6 +28,5 @@ target_link_directories( run-sql PUBLIC ${CMAKE_BINARY_DIR}/lib/execution/cranel
 
 # mlir-db-opt
 add_executable(mlir-db-opt mlir-opt.cpp)
-llvm_update_compile_flags(mlir-db-opt)
 target_link_libraries(mlir-db-opt PUBLIC ${LIBS} runner runtime utility mlir-support  PRIVATE arrow_static)
 set_target_properties(mlir-db-opt PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
