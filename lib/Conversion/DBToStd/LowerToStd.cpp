@@ -819,6 +819,11 @@ class CastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
          rewriter.replaceOp(op, value);
          return success();
       }
+      if (scalarSourceType.isa<mlir::db::CharType>() || scalarTargetType.isa<mlir::db::CharType>()) {
+         mlir::Value castedToString = rewriter.create<mlir::db::CastOp>(op.getLoc(), mlir::db::StringType::get(getContext()), op.getVal());
+         rewriter.replaceOpWithNewOp<mlir::db::CastOp>(op, scalarTargetType, castedToString);
+         return success();
+      }
       if (auto sourceIntWidth = getIntegerWidth(scalarSourceType, false)) {
          if (scalarTargetType.isa<FloatType>()) {
             value = rewriter.create<arith::SIToFPOp>(loc, convertedTargetType, value);
