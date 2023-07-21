@@ -40,8 +40,6 @@ class FunctionSpec {
 
 class FunctionHelper {
    ModuleOp parentModule;
-   static void* resolveFunction(std::string mangledName);
-
    public:
    static void visitAllFunctions(const std::function<void(std::string, void*)>& fn);
    void setParentModule(const ModuleOp& parentModule);

@@ -128,78 +128,10 @@ class SQLFrontend : public execution::Frontend {
       return parallismAllowed;
    }
 };
-class BatchedSQLFrontend : public execution::Frontend {
-   mlir::MLIRContext context;
-   mlir::OwningOpRef<mlir::ModuleOp> module;
-   void loadFromString(std::string sql) override {
-      initializeContext(context);
-
-      mlir::OpBuilder builder(&context);
-
-      mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-      std::stringstream batched(sql);
-      builder.setInsertionPointToStart(moduleOp.getBody());
-      auto* queryBlock = new mlir::Block;
-      std::vector<mlir::Type> returnTypes;
-      size_t i = 0;
-      {
-         mlir::OpBuilder::InsertionGuard guard(builder);
-         builder.setInsertionPointToStart(queryBlock);
-         while (true) {
-            std::stringstream query;
-            std::string line;
-            std::getline(batched, line);
-            if (batched.eof()) {
-               //exit from repl loop
-               break;
-            }
-            while (true) {
-               if (!batched.good()) {
-                  if (batched.eof()) {
-                     query << line << std::endl;
-                  }
-                  break;
-               }
-               query << line << std::endl;
-               if (!line.empty() && line.find(';') == line.size() - 1) {
-                  break;
-               }
-               std::getline(batched, line);
-            }
-            frontend::sql::Parser translator(query.str(), *catalog, moduleOp);
-            auto val = translator.translate(builder);
-            if (val.has_value()) {
-               builder.create<mlir::subop::SetResultOp>(builder.getUnknownLoc(), i++, val.value());
-            }
-         }
-         builder.create<mlir::func::ReturnOp>(builder.getUnknownLoc());
-      }
-      mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
-      funcOp.getBody().push_back(queryBlock);
-      module = moduleOp;
-   }
-   void loadFromFile(std::string fileName) override {
-      std::ifstream istream{fileName};
-      if (!istream) {
-         error.emit() << "Error can't load file " << fileName;
-      }
-      std::stringstream buffer;
-      buffer << istream.rdbuf();
-      std::string sqlQuery = buffer.str();
-      loadFromString(sqlQuery);
-   }
-   mlir::ModuleOp* getModule() override {
-      assert(module);
-      return module.operator->();
-   }
-};
 } // namespace
 std::unique_ptr<execution::Frontend> execution::createMLIRFrontend() {
    return std::make_unique<MLIRFrontend>();
 }
 std::unique_ptr<execution::Frontend> execution::createSQLFrontend() {
    return std::make_unique<SQLFrontend>();
-}
-std::unique_ptr<execution::Frontend> execution::createBatchedSQLFrontend() {
-   return std::make_unique<BatchedSQLFrontend>();
 }

@@ -2,7 +2,7 @@
 #include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 #include "runtime/Session.h"
-int main(int argc, char** argv) {
+void printMLIR(std::string sql, std::shared_ptr<runtime::Catalog> catalog) {
    mlir::MLIRContext context;
    mlir::DialectRegistry registry;
    registry.insert<mlir::BuiltinDialect>();
@@ -21,17 +21,8 @@ int main(int argc, char** argv) {
    context.loadAllAvailableDialects();
    context.loadDialect<mlir::relalg::RelAlgDialect>();
    mlir::OpBuilder builder(&context);
-   std::string filename = std::string(argv[1]);
-   auto catalog = runtime::Catalog::createEmpty();
-   if (argc >= 3) {
-      std::string dbDir = std::string(argv[2]);
-      catalog = runtime::DBCatalog::create(catalog, dbDir, false);
-   }
-   std::ifstream istream{filename};
-   std::stringstream buffer;
-   buffer << istream.rdbuf();
    mlir::ModuleOp moduleOp = builder.create<mlir::ModuleOp>(builder.getUnknownLoc());
-   frontend::sql::Parser translator(buffer.str(), *catalog, moduleOp);
+   frontend::sql::Parser translator(sql, *catalog, moduleOp);
 
    builder.setInsertionPointToStart(moduleOp.getBody());
    auto* queryBlock = new mlir::Block;
@@ -50,5 +41,39 @@ int main(int argc, char** argv) {
    mlir::OpPrintingFlags flags;
    flags.assumeVerified();
    moduleOp->print(llvm::outs(), flags);
+}
+int main(int argc, char** argv) {
+   std::string filename = std::string(argv[1]);
+   auto catalog = runtime::Catalog::createEmpty();
+   if (argc >= 3) {
+      std::string dbDir = std::string(argv[2]);
+      catalog = runtime::DBCatalog::create(catalog, dbDir, false);
+   }
+   std::ifstream istream{filename};
+   std::stringstream buffer;
+   buffer << istream.rdbuf();
+   while (true) {
+      std::stringstream query;
+      std::string line;
+      std::getline(buffer, line);
+      while (true) {
+         if (!buffer.good()) {
+            if (buffer.eof()) {
+               query << line << std::endl;
+            }
+            break;
+         }
+         query << line << std::endl;
+         if (!line.empty() && line.find(';') == line.size() - 1) {
+            break;
+         }
+         std::getline(buffer, line);
+      }
+      printMLIR(query.str(),catalog);
+      if (buffer.eof()) {
+         //exit from repl loop
+         break;
+      }
+   }
    return 0;
 }

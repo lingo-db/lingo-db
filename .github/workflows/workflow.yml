@@ -98,6 +98,7 @@ jobs:
       - name: Test
         run: |
             chmod +x /build/lingodb/*
+            find ./test/sqlite-small/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P $(nproc) /build/lingodb/sqlite-tester
             find ./test/sqlite/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P $(nproc) /build/lingodb/sqlite-tester
   build_lingodb_python:
     runs-on: ubuntu-latest
@@ -145,10 +146,9 @@ jobs:
             /build/llvm/bin/llvm-lit -v /build/lingodb/test/lit
             mkdir /coverage-data
             lcov --capture --directory /build/lingodb  --output-file /coverage-data/coverage.info
-            lcov --remove /coverage-data/coverage.info -o /coverage-data/filtered-coverage.info '/build/llvm/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*' '**/vendored/*' '/usr/*'
+            lcov --remove /coverage-data/coverage.info -o /coverage-data/filtered-coverage.info '/build/llvm/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*' '**/vendored/*' '/usr/*' '/build/lingodb/*'
       - uses: actions/checkout@master
       - uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           files: /coverage-data/filtered-coverage.info
-          fail_ci_if_error: true

@@ -5,12 +5,6 @@
 #include "execution/Execution.h"
 #include "mlir-support/eval.h"
 
-void check(bool b, std::string message) {
-   if (!b) {
-      std::cerr << "ERROR: " << message << std::endl;
-      exit(1);
-   }
-}
 int main(int argc, char** argv) {
    std::string inputFileName = "-";
    if (argc > 1) {
