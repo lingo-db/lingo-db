@@ -318,8 +318,7 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
    config->loweringSteps.emplace_back(std::make_unique<DefaultImperativeLowering>());
    if (runMode == ExecutionMode::DEBUGGING) {
       config->executionBackend = createLLVMDebugBackend();
-   }
-   if (runMode == ExecutionMode::C) {
+   } else if (runMode == ExecutionMode::C) {
       config->executionBackend = createCBackend();
    } else if (runMode == ExecutionMode::PERF) {
       config->executionBackend = createLLVMProfilingBackend();
