@@ -1,0 +1,239 @@
+statement ok
+create table professoren (persnr integer primary key, name varchar(30) not null,rang varchar(3) not null, raum integer not null);
+
+statement ok
+create table studenten (matrnr integer primary key, name varchar(30) not null, semester integer not null);
+
+statement ok
+create table vorlesungen (vorlnr integer primary key, titel varchar(30) not null, sws integer not null, gelesenvon integer not null);
+
+statement ok
+create table voraussetzen (vorgaenger integer not null, nachfolger integer not null);
+
+statement ok
+create table hoeren (matrnr integer not null, vorlnr integer not null);
+
+statement ok
+create table assistenten (persnr integer primary key, name varchar(30) not null, fachgebiet varchar(30) not null, boss integer not null);
+
+statement ok
+create table pruefen (matrnr integer not null, vorlnr integer not null, persnr integer not null, note decimal(2,1) not null);
+
+statement ok
+create table studentengf (matrnr integer not null primary key, name varchar(30) not null, semester integer not null, geschlecht char not null, fakultaet varchar(30) not null);
+
+statement ok
+create table professorenf (persnr integer not null primary key, name varchar(30) not null, rang char(2) not null, raum integer not null, fakultaet varchar(30) not null);
+
+statement ok
+insert into professoren values (2125,'Sokrates','C4',226), (2126,'Russel','C4',232), (2127,'Kopernikus','C3',310), (2133,'Popper','C3',52), (2134,'Augustinus','C3',309), (2136,'Curie','C4',36), (2137,'Kant','C4',7);
+
+statement ok
+insert into studenten values (24002,'Xenokrates',18), (25403,'Jonas',12), (26120,'Fichte',10), (26830,'Aristoxenos',8), (27550,'Schopenhauer',6), (28106,'Carnap',3), (29120,'Theophrastos',2), (29555,'Feuerbach',2);
+
+statement ok
+insert into vorlesungen values (5001,'Grundzuege',4,2137), (5041,'Ethik',4,2125), (5043,'Erkenntnistheorie',3,2126), (5049, 'Maeeutik',2,2125), (4052,'Logik',4,2125), (5052,'Wissenschaftstheorie',3,2126), (5216,'Bioethik',2,2126), (5259,'Der Wiener Kreis',2,2133), (5022,'Glaube und Wissen',2,2134), (4630,'Die 3 Kritiken',4,2137);
+
+statement ok
+insert into voraussetzen values (5001,5041), (5001,5043), (5001,5049), (5041,5216), (5043,5052), (5041,5052), (5052,5259);
+
+statement ok
+insert into hoeren values (26120,5001), (27550,5001), (27550,4052), (28106,5041), (28106,5052), (28106,5216), (28106,5259), (29120,5001), (29120,5041), (29120,5049), (29555,5022), (25403,5022), (29555,5001);
+
+statement ok
+insert into assistenten values (3002,'Platon','Ideenlehre',2125), (3003,'Aristoteles','Syllogistik',2125), (3004,'Wittgenstein','Sprachtheorie',2126), (3005,'Rhetikus','Planetenbewegung', 2127), (3006,'Newton','Keplersche Gesetze', 2127), (3007,'Spinoza','Gott und Natur',2134);
+
+statement ok
+insert into pruefen values (28106,5001,2126,1.0), (25403,5041,2125,2.0), (27550, 4630, 2137,2.0);
+
+statement ok
+insert into studentengf values ('24002','Xenokrates','18','M','Philosophie'), ('25403','Jonas','12','W','Theologie'), ('26120','Fichte','10','W','Philosophie'), ('26830','Aristoxenos','8','M','Philosophie'), ('27550','Schopenhauer','6','M','Philosophie'), ('28106','Carnap','3','W','Physik'), ('29120','Theophrastos','2','M','Physik'), ('29555','Feuerbach','2','W','Theologie');
+
+statement ok
+insert into professorenf values ('2125','Sokrates','C4','226','Philosophie'), ('2126','Russel','C4','232','Philosophie'), ('2127','Kopernikus','C3','310','Physik'), ('2133','Popper','C3','52','Philosophie'), ('2134','Augustinus','C3','309','Theologie'), ('2136','Curie','C4','36','Physik'), ('2137','Kant','C4','7','Philosophie');
+
+
+query tsv
+select s.matrnr, sum(v.sws),min(v.sws),max(v.sws),avg(v.sws*1.0),count(*),count(v.sws)
+from studenten s, hoeren h, vorlesungen v
+where s.matrnr=h.matrnr and h.vorlnr=v.vorlnr
+group by s.matrnr
+order by s.matrnr
+----
+25403	2	2	2	2.000000000000000000	1	1
+26120	4	4	4	4.000000000000000000	1	1
+27550	8	4	4	4.000000000000000000	2	2
+28106	11	2	4	2.750000000000000000	4	4
+29120	10	2	4	3.333333333333333333	3	3
+29555	6	2	4	3.000000000000000000	2	2
+
+query tsv
+select sum(v.sws),min(v.sws),max(v.sws),avg(v.sws*1.0000),count(*),count(v.sws)
+from vorlesungen v
+----
+30	2	4	3.000000000000000000	10	10
+
+query tsv rowsort
+select s.name
+from studenten s
+where not exists( select * from hoeren h where h.matrnr=s.matrnr)
+----
+Aristoxenos
+Xenokrates
+
+query tsv rowsort
+select * from studenten
+----
+24002	Xenokrates	18
+25403	Jonas	12
+26120	Fichte	10
+26830	Aristoxenos	8
+27550	Schopenhauer	6
+28106	Carnap	3
+29120	Theophrastos	2
+29555	Feuerbach	2
+
+query tsv rowsort
+select s.name
+from studenten s
+where exists( select * from hoeren h where h.matrnr=s.matrnr)
+----
+Carnap
+Feuerbach
+Fichte
+Jonas
+Schopenhauer
+Theophrastos
+
+
+query tsv rowsort
+select *
+from studenten
+where name='Carnap'
+----
+28106	Carnap	3
+
+query tsv rowsort
+select s.name, h.vorlnr
+from studenten s left outer join hoeren h on  s.matrnr = h.matrnr
+----
+Aristoxenos	NULL
+Carnap	5041
+Carnap	5052
+Carnap	5216
+Carnap	5259
+Feuerbach	5001
+Feuerbach	5022
+Fichte	5001
+Jonas	5022
+Schopenhauer	4052
+Schopenhauer	5001
+Theophrastos	5001
+Theophrastos	5041
+Theophrastos	5049
+Xenokrates	NULL
+
+query tsv s
+select s.name,v.titel
+from hoeren h, studenten s,vorlesungen v
+where h.matrnr=s.matrnr and h.vorlnr=v.vorlnr
+order by s.name asc,v.titel desc
+limit 5
+----
+Carnap	Wissenschaftstheorie
+Carnap	Ethik
+Carnap	Der Wiener Kreis
+Carnap	Bioethik
+Feuerbach	Grundzuege
+
+query tsv rowsort a
+select s.name,v.titel
+from hoeren h, studenten s,vorlesungen v
+where h.matrnr=s.matrnr and h.vorlnr=v.vorlnr
+----
+Carnap	Bioethik
+Carnap	Der Wiener Kreis
+Carnap	Ethik
+Carnap	Wissenschaftstheorie
+Feuerbach	Glaube und Wissen
+Feuerbach	Grundzuege
+Fichte	Grundzuege
+Jonas	Glaube und Wissen
+Schopenhauer	Grundzuege
+Schopenhauer	Logik
+Theophrastos	Ethik
+Theophrastos	Grundzuege
+Theophrastos	Maeeutik
+
+query tsv b
+select s.name,v.titel
+from hoeren h, studenten s,vorlesungen v
+where h.matrnr=s.matrnr and h.vorlnr=v.vorlnr
+order by s.name asc,v.titel desc
+----
+Carnap	Wissenschaftstheorie
+Carnap	Ethik
+Carnap	Der Wiener Kreis
+Carnap	Bioethik
+Feuerbach	Grundzuege
+Feuerbach	Glaube und Wissen
+Fichte	Grundzuege
+Jonas	Glaube und Wissen
+Schopenhauer	Logik
+Schopenhauer	Grundzuege
+Theophrastos	Maeeutik
+Theophrastos	Grundzuege
+Theophrastos	Ethik
+
+query tsv rowsort c
+select s.matrnr,s.semester, avg(s.matrnr) over (partition by s.semester)
+from studenten s
+----
+24002	18	24002.0000000000000000000
+25403	12	25403.0000000000000000000
+26120	10	26120.0000000000000000000
+26830	8	26830.0000000000000000000
+27550	6	27550.0000000000000000000
+28106	3	28106.0000000000000000000
+29120	2	29337.5000000000000000000
+29555	2	29337.5000000000000000000
+
+query tsv rowsort d
+select s.matrnr, rank() over (order by s.matrnr)
+from studenten s
+----
+24002	1
+25403	2
+26120	3
+26830	4
+27550	5
+28106	6
+29120	7
+29555	8
+
+query tsv rowsort e
+select s.matrnr,s.semester, rank() over (partition by s.semester order by s.matrnr)
+from studenten s
+----
+24002	18	1
+25403	12	1
+26120	10	1
+26830	8	1
+27550	6	1
+28106	3	1
+29120	2	1
+29555	2	2
+
+query tsv rowsort f
+select s.matrnr,s.semester, sum(s.matrnr) over (partition by s.semester order by s.matrnr)
+from studenten s
+----
+24002	18	24002
+25403	12	25403
+26120	10	26120
+26830	8	26830
+27550	6	27550
+28106	3	28106
+29120	2	29120
+29555	2	58675
+

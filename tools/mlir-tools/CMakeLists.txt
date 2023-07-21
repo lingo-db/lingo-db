@@ -26,10 +26,6 @@ target_link_libraries(run-sql PUBLIC runner runtime utility mlir-support  PRIVAT
 set_target_properties(run-sql PROPERTIES  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 target_link_directories( run-sql PUBLIC ${CMAKE_BINARY_DIR}/lib/execution/cranelift/rust-cranelift/release)
 
-add_executable(run-sql-batched run-sql-batched.cpp)
-target_link_libraries(run-sql-batched PUBLIC runner runtime utility mlir-support PRIVATE arrow_static)
-set_target_properties(run-sql-batched PROPERTIES  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
-target_link_directories( run-sql-batched PUBLIC ${CMAKE_BINARY_DIR}/lib/execution/cranelift/rust-cranelift/release)
 
 # mlir-db-opt
 add_executable(mlir-db-opt mlir-opt.cpp)

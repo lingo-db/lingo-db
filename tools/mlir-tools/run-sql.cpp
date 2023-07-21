@@ -7,12 +7,7 @@
 #include "mlir-support/eval.h"
 
 #include <stdlib.h>
-void check(bool b, std::string message) {
-   if (!b) {
-      std::cerr << "ERROR: " << message << std::endl;
-      exit(1);
-   }
-}
+
 int main(int argc, char** argv) {
    if (argc <= 2) {
       std::cerr << "USAGE: run-sql *.sql database" << std::endl;

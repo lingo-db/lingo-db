@@ -65,8 +65,20 @@ build/lingodb-debug-coverage/.stamp: $(LDB_DEPS)
 
 .PHONY: run-test
 run-test: build/lingodb-debug/.stamp
-	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql mlir-doc -- -j${NPROCS}
-	env LD_LIBRARY_PATH=${ROOT_DIR}/build/arrow/install/lib ./build/llvm-build/bin/llvm-lit -v $(dir $<)/test/lit -j 1
+	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql mlir-doc sqlite-tester sql-to-mlir  -- -j${NPROCS}
+	./build/llvm-build/bin/llvm-lit -v $(dir $<)/test/lit -j 1
+	find ./test/sqlite-small/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P ${NPROCS} $(dir $<)/sqlite-tester
+
+.PHONY: test-coverage
+test-coverage: build/lingodb-debug-coverage/.stamp
+	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir -- -j${NPROCS}
+	./build/llvm-build/bin/llvm-lit -v $(dir $<)/test/lit
+	lcov --capture --directory $(dir $<)  --output-file $(dir $<)/coverage.info
+	lcov --remove $(dir $<)/coverage.info -o $(dir $<)/filtered-coverage.info \
+			'**/build/llvm-build/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*' '**/vendored/*' '/usr/*' '**/build/lingodb-debug-coverage/*'
+	genhtml  --ignore-errors source $(dir $<)/filtered-coverage.info --legend --title "lcov-test" --output-directory=$(dir $<)/coverage-report
+
+
 .PHONY: run-benchmark
 run-benchmark: build/lingodb-release/.stamp build/lingodb-debug/.stamp resources/data/tpch-1/.stamp
 	cmake --build $(dir $<) --target run-sql -- -j${NPROCS}

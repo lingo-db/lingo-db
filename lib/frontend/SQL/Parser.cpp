@@ -174,66 +174,6 @@ mlir::Value frontend::sql::Parser::translateWhenCaseExpression(mlir::OpBuilder& 
 
    return ifOp.getResult(0);
 }
-mlir::ArrayAttr frontend::sql::Parser::translateSortSpec(List* sortClause, mlir::OpBuilder& builder, TranslationContext& context, TargetInfo targetInfo) {
-   std::vector<mlir::Attribute> mapping;
-   for (auto* cell = sortClause->head; cell != nullptr; cell = cell->next) {
-      auto* temp = reinterpret_cast<Node*>(cell->data.ptr_value);
-      mlir::relalg::SortSpec spec = mlir::relalg::SortSpec::asc;
-      switch (temp->type) {
-         case T_SortBy: {
-            auto* sort = reinterpret_cast<SortBy*>(temp);
-
-            switch (sort->sortby_dir_) {
-               case SORTBY_DESC: {
-                  spec = mlir::relalg::SortSpec::desc;
-                  break;
-               }
-               case SORTBY_ASC: // fall through
-               case SORTBY_DEFAULT: {
-                  spec = mlir::relalg::SortSpec::asc;
-                  break;
-               }
-               default: {
-                  error("unknown sort type");
-               }
-            }
-
-            auto* target = sort->node_;
-            const mlir::tuples::Column* attr;
-            switch (target->type) {
-               case T_ColumnRef: {
-                  attr = resolveColRef(target, context);
-                  break;
-               }
-               case T_FakeNode: { //
-                  attr = context.getAttribute(reinterpret_cast<FakeNode*>(target)->colId);
-                  break;
-               }
-               case T_A_Const: {
-                  auto* constExpr = reinterpret_cast<A_Const*>(target);
-                  auto constVal = constExpr->val_;
-                  switch (constVal.type_) {
-                     case T_Integer: {
-                        attr = targetInfo.namedResults.at(constVal.val_.ival_ - 1).second;
-                        break;
-                     }
-                     default: error("unsupported sort specification");
-                  }
-                  break;
-               }
-               default: error("can only sort with column refs");
-            }
-
-            mapping.push_back(mlir::relalg::SortSpecificationAttr::get(builder.getContext(), attrManager.createRef(attr), spec));
-            break;
-         }
-         default: {
-            error("unknown orderby type");
-         }
-      }
-   }
-   return builder.getArrayAttr(mapping);
-}
 mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir::OpBuilder& builder, mlir::Location loc, TranslationContext& context) {
    auto* funcCall = reinterpret_cast<FuncCall*>(node);
    //expr = FuncCallTransform(parse_result,,context);

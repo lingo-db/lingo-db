@@ -1,0 +1,52 @@
+query tsv rowsort
+(values (1),(2),(2),(3))
+UNION ALL
+(values (2),(3))
+----
+1
+2
+2
+2
+3
+3
+
+query tsv rowsort
+(values (1),(2),(2),(3))
+UNION
+(values (2),(3))
+----
+1
+2
+3
+
+query tsv rowsort
+(values (1),(2),(2),(2), (3))
+EXCEPT ALL
+(values (2), (2),(3))
+----
+1
+2
+
+query tsv rowsort
+(values (1),(2),(2),(2), (3))
+EXCEPT
+(values (2), (2),(3))
+----
+1
+
+query tsv rowsort
+(values (1),(2),(2),(2), (3))
+INTERSECT
+(values (2), (2),(3))
+----
+2
+3
+
+query tsv rowsort
+(values (1),(2),(2),(2), (3))
+INTERSECT ALL
+(values (2), (2),(3))
+----
+2
+2
+3

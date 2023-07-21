@@ -68,9 +68,6 @@ mlir::util::FunctionSpec::FunctionSpec(const std::string& name, const std::strin
    getFunctions().insert({mangledName, *this});
 }
 
-void* mlir::util::FunctionHelper::resolveFunction(std::string mangledName) {
-   return getFunctions().at(mangledName).getPointer();
-}
 
 void mlir::util::FunctionHelper::visitAllFunctions(const std::function<void(std::string, void*)>& fn) {
    for(auto f:getFunctions()){

@@ -2,7 +2,14 @@
   <img src="https://www.lingo-db.com/images/lingodb-black-title.png" height="50">
 </div>
 <p>&nbsp;</p>
-
+<p align="center">
+  <a href="https://github.com/lingo-db/lingo-db/actions">
+    <img src="https://github.com/lingo-db/lingo-db/actions/workflows/workflow.yml/badge.svg?branch=main" alt="Github Actions Badge">
+  </a>
+  <a href="https://codecov.io/gh/lingo-db/lingo-db" >
+    <img src="https://codecov.io/gh/lingo-db/lingo-db/branch/main/graph/badge.svg?token=7RC3UD5YEA"/>
+  </a>
+</p>
 
 # LingoDB
 LingoDB is a cutting-edge data processing system that leverages compiler technology to achieve unprecedented flexibility and extensibility without sacrificing performance. It supports a wide range of data-processing workflows beyond relational SQL queries, thanks to declarative sub-operators. Furthermore, LingoDB can perform cross-domain optimization by interleaving optimization passes of different domains and its flexibility enables sustainable support for heterogeneous hardware.

@@ -458,9 +458,6 @@ struct Parser {
    //translate a complete from clause into a single value of type tuple stream (connect single items with cross-products)
    mlir::Value translateFromClause(mlir::OpBuilder& builder, SelectStmt* stmt, TranslationContext& context, TranslationContext::ResolverScope& scope);
 
-   //translate sort specification into array attribute for relalg::SortOp
-   mlir::ArrayAttr translateSortSpec(List* sortClause, mlir::OpBuilder& builder, TranslationContext& context, TargetInfo);
-
    //translate list of constant values into relalg::ConstRelationOp
    std::pair<mlir::Value, TargetInfo> translateConstRelation(List* valuesLists, mlir::OpBuilder& builder);
 
