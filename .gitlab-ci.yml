@@ -120,6 +120,7 @@ test_pylingodb:
 
 .file_tests:
    script:
+      - ln -s /build/llvm/bin/clang /usr/bin/clang++
       - /build/llvm/bin/llvm-lit -v /build/lingodb/test/lit
 
 .sqlite_tests:

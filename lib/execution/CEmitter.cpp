@@ -142,6 +142,7 @@ struct CppEmitter {
 
    /// Return the existing or a new name for a Value.
    StringRef getOrCreateName(Value val);
+   std::string getVariableName();
 
    /// Return the existing or a new label of a Block.
    StringRef getOrCreateName(Block& block);
@@ -527,82 +528,33 @@ LogicalResult printOperation(CppEmitter& emitter,
    return printConstantOp(emitter, operation, value);
 }
 
-LogicalResult printOperation(CppEmitter& emitter,
-                             cf::BranchOp branchOp) {
-   raw_ostream& os = emitter.ostream();
-   Block& successor = *branchOp.getSuccessor();
-
-   for (auto pair :
-        llvm::zip(branchOp.getOperands(), successor.getArguments())) {
-      Value& operand = std::get<0>(pair);
-      BlockArgument& argument = std::get<1>(pair);
-      os << emitter.getOrCreateName(argument) << " = "
-         << emitter.getOrCreateName(operand) << ";\n";
-   }
-
-   os << "goto ";
-   if (!(emitter.hasBlockLabel(successor)))
-      return branchOp.emitOpError("unable to find label for successor block");
-   os << emitter.getOrCreateName(successor);
-   return success();
-}
-
-LogicalResult printOperation(CppEmitter& emitter,
-                             cf::CondBranchOp condBranchOp) {
-   raw_indented_ostream& os = emitter.ostream();
-   Block& trueSuccessor = *condBranchOp.getTrueDest();
-   Block& falseSuccessor = *condBranchOp.getFalseDest();
-
-   os << "if (" << emitter.getOrCreateName(condBranchOp.getCondition())
-      << ") {\n";
-
-   os.indent();
-
-   // If condition is true.
-   for (auto pair : llvm::zip(condBranchOp.getTrueOperands(),
-                              trueSuccessor.getArguments())) {
-      Value& operand = std::get<0>(pair);
-      BlockArgument& argument = std::get<1>(pair);
-      os << emitter.getOrCreateName(argument) << " = "
-         << emitter.getOrCreateName(operand) << ";\n";
-   }
-
-   os << "goto ";
-   if (!(emitter.hasBlockLabel(trueSuccessor))) {
-      return condBranchOp.emitOpError("unable to find label for successor block");
-   }
-   os << emitter.getOrCreateName(trueSuccessor) << ";\n";
-   os.unindent() << "} else {\n";
-   os.indent();
-   // If condition is false.
-   for (auto pair : llvm::zip(condBranchOp.getFalseOperands(),
-                              falseSuccessor.getArguments())) {
-      Value& operand = std::get<0>(pair);
-      BlockArgument& argument = std::get<1>(pair);
-      os << emitter.getOrCreateName(argument) << " = "
-         << emitter.getOrCreateName(operand) << ";\n";
-   }
-
-   os << "goto ";
-   if (!(emitter.hasBlockLabel(falseSuccessor))) {
-      return condBranchOp.emitOpError()
-         << "unable to find label for successor block";
-   }
-   os << emitter.getOrCreateName(falseSuccessor) << ";\n";
-   os.unindent() << "}";
-   return success();
-}
-
 LogicalResult printOperation(CppEmitter& emitter, func::CallOp callOp) {
-   if (failed(emitter.emitAssignPrefix(*callOp.getOperation())))
-      return failure();
+   if (callOp->getNumResults() <= 1) {
+      if (failed(emitter.emitAssignPrefix(*callOp.getOperation())))
+         return failure();
 
-   raw_ostream& os = emitter.ostream();
-   os << callOp.getCallee() << "(";
-   if (failed(emitter.emitOperands(*callOp.getOperation())))
-      return failure();
-   os << ")";
-   return success();
+      raw_ostream& os = emitter.ostream();
+      os << callOp.getCallee() << "(";
+      if (failed(emitter.emitOperands(*callOp.getOperation())))
+         return failure();
+      os << ")";
+      return success();
+   } else {
+      raw_ostream& os = emitter.ostream();
+      auto tmpVar = emitter.getVariableName();
+      os << "auto " << tmpVar << " = " << callOp.getCallee() << "(";
+      if (failed(emitter.emitOperands(*callOp.getOperation())))
+         return failure();
+      os << ");\n";
+      size_t offset = 0;
+      for (auto r : callOp->getResults()) {
+         if (emitter.emitType(callOp->getLoc(), r.getType()).failed()) {
+            return failure();
+         }
+         os << " " << emitter.getOrCreateName(r) << " = " << tmpVar << ".t" << offset++ << ";\n";
+      }
+      return success();
+   }
 }
 
 LogicalResult printOperation(CppEmitter& emitter, scf::ForOp forOp) {
@@ -847,10 +799,10 @@ LogicalResult printOperation(CppEmitter& emitter,
          os << " " << emitter.getOrCreateName(returnOp.getOperand(0));
          return success(emitter.hasValueInScope(returnOp.getOperand(0)));
       default:
-         os << " std::make_tuple(";
+         os << " {";
          if (failed(emitter.emitOperandsAndAttributes(*returnOp.getOperation())))
             return failure();
-         os << ")";
+         os << "}";
          return success();
    }
 }
@@ -999,6 +951,9 @@ StringRef CppEmitter::getOrCreateName(Value val) {
    if (!valueMapper.count(val))
       valueMapper.insert(val, formatv("v{0}", ++valueInScopeCount.top()));
    return *valueMapper.begin(val);
+}
+std::string CppEmitter::getVariableName() {
+   return formatv("v{0}", ++valueInScopeCount.top());
 }
 
 /// Return the existing or a new label for a Block.
@@ -1243,8 +1198,8 @@ LogicalResult CppEmitter::emitOperation(Operation& op, bool trailingSemicolon) {
          // Builtin ops.
          .Case<ModuleOp>([&](auto op) { return printOperation(*this, op); })
          // CF ops.
-         .Case<cf::BranchOp, cf::CondBranchOp>(
-            [&](auto op) { return printOperation(*this, op); })
+         //.Case<cf::BranchOp, cf::CondBranchOp>(
+         //   [&](auto op) { return printOperation(*this, op); })
          // Func ops.
          .Case<func::CallOp, func::ConstantOp, func::FuncOp, func::ReturnOp>(
             [&](auto op) { return printOperation(*this, op); })

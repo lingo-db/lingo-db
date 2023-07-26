@@ -84,6 +84,7 @@ jobs:
       - name: Test
         run: |
             chmod +x /build/lingodb/*
+            ln -s /build/llvm/bin/clang /usr/bin/clang++
             /build/llvm/bin/llvm-lit -v /build/lingodb/test/lit
   sqlite_tests:
     needs: build_release
@@ -139,6 +140,7 @@ jobs:
         uses: actions/checkout@v2
       - name: Build
         run: |
+            ln -s /build/llvm/bin/clang /usr/bin/clang++
             apt-get install -y lcov
             mkdir /build/lingodb
             cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DENABLE_CRANELIFT_BACKEND=OFF -DCMAKE_CXX_FLAGS=--coverage -DCMAKE_C_FLAGS=--coverage

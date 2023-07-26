@@ -14,7 +14,7 @@ int main(int argc, char** argv) {
    std::shared_ptr<runtime::Session> session;
    if (argc > 2) {
       std::cout << "Loading Database from: " << argv[2] << '\n';
-      session = runtime::Session::createSession(std::string(argv[2]),false);
+      session = runtime::Session::createSession(std::string(argv[2]), false);
    } else {
       session = runtime::Session::createSession();
    }
@@ -25,8 +25,13 @@ int main(int argc, char** argv) {
       queryExecutionConfig->executionBackend->setNumRepetitions(std::atoi(numRuns));
       std::cout << "using " << queryExecutionConfig->executionBackend->getNumRepetitions() << " runs" << std::endl;
    }
+   if (std::getenv("LINGODB_BACKEND_ONLY")) {
+      queryExecutionConfig->queryOptimizer = {};
+      queryExecutionConfig->loweringSteps.clear();
+   }
    queryExecutionConfig->timingProcessor = std::make_unique<execution::TimingPrinter>(inputFileName);
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), *session);
+
    executer->fromFile(inputFileName);
    executer->execute();
    return 0;
