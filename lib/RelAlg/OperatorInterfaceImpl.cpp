@@ -639,6 +639,9 @@ void mlir::relalg::detail::inlineOpIntoBlock(mlir::Operation* vop, mlir::Operati
 }
 void mlir::relalg::detail::moveSubTreeBefore(mlir::Operation* op, mlir::Operation* before) {
    auto tree = mlir::dyn_cast_or_null<Operator>(op);
+   if(tree->isBeforeInBlock(before)){
+      return;
+   }
    tree->moveBefore(before);
    for (auto child : tree.getChildren()) {
       moveSubTreeBefore(child, tree);

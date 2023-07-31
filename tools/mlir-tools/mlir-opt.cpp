@@ -23,10 +23,9 @@
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "runtime/Catalog.h"
 int main(int argc, char** argv) {
-   /*if (argc > 2) {
+   if (argc > 2) {
       if (std::string(argv[1]) == "--use-db") {
-         std::shared_ptr<runtime::Database> database = runtime::DB(std::string(argv[2]));
-         mlir::relalg::setStaticCatalog(database);
+         mlir::relalg::setStaticCatalog(runtime::DBCatalog::create(runtime::Catalog::createEmpty(), std::string(argv[2]), false));
          char** argvReduced = new char*[argc - 2];
          argvReduced[0] = argv[0];
          for (int i = 3; i < argc; i++) {
@@ -35,7 +34,7 @@ int main(int argc, char** argv) {
          argc -= 2;
          argv = argvReduced;
       }
-   }*/
+   }
    mlir::registerAllPasses();
 
    mlir::relalg::registerRelAlgToSubOpConversionPasses();
