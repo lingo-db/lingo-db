@@ -1,17 +1,38 @@
 #include "bridge.h"
 #include "execution/Execution.h"
 #include <arrow/table.h>
+namespace {
+class TimingCollector : public execution::TimingProcessor {
+   std::unordered_map<std::string, double> collected;
+   std::unordered_map<std::string, double>& target;
+
+   public:
+   explicit TimingCollector(std::unordered_map<std::string, double>& target) : target(target) {}
+   virtual void addTiming(const std::unordered_map<std::string, double>& timing) override {
+      this->collected.insert(timing.begin(), timing.end());
+   }
+   virtual void process() override {
+      target = collected;
+   }
+   virtual ~TimingCollector() {}
+};
+} // namespace
 namespace bridge {
 class Connection {
    std::shared_ptr<runtime::Session> session;
+   std::unordered_map<std::string, double> times;
 
    public:
    Connection(std::shared_ptr<runtime::Session> session) : session(session) {}
    runtime::Session& getSession() {
       return *session;
    }
+   std::unordered_map<std::string, double>& getTimes() {
+      return times;
+   }
 };
 } //namespace bridge
+
 bridge::Connection* bridge::createInMemory() {
    return new Connection(runtime::Session::createSession());
 }
@@ -22,6 +43,7 @@ bool bridge::run(Connection* connection, const char* module, ArrowArrayStream* r
    auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::SPEED, false);
    std::shared_ptr<arrow::Table> result;
    queryExecutionConfig->resultProcessor = execution::createTableRetriever(result);
+   queryExecutionConfig->timingProcessor = std::make_unique<TimingCollector>(connection->getTimes());
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), connection->getSession());
    executer->fromData(module);
    executer->execute();
@@ -39,6 +61,7 @@ bool bridge::runSQL(Connection* connection, const char* query, ArrowArrayStream*
    auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::SPEED, true);
    std::shared_ptr<arrow::Table> result;
    queryExecutionConfig->resultProcessor = execution::createTableRetriever(result);
+   queryExecutionConfig->timingProcessor = std::make_unique<TimingCollector>(connection->getTimes());
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), connection->getSession());
    executer->fromData(query);
    executer->execute();
@@ -58,6 +81,13 @@ void bridge::createTable(Connection* connection, const char* name, const char* m
 void bridge::appendTable(Connection* connection, const char* name, ArrowArrayStream* recordBatchStream) {
    auto recordBatchReader = arrow::ImportRecordBatchReader(recordBatchStream).ValueOrDie();
    connection->getSession().getCatalog()->findRelation(name)->append(recordBatchReader->ToTable().ValueOrDie());
+}
+double bridge::getTiming(bridge::Connection* con, const char* type) {
+   if (con->getTimes().contains(std::string(type))) {
+      return con->getTimes()[std::string(type)];
+   } else {
+      return NAN;
+   }
 }
 void bridge::closeConnection(bridge::Connection* con) {
    delete con;

@@ -43,10 +43,14 @@ class ConnectionHandle {
       }
       return pybind11::handle();
    }
-   void createTable(pybind11::str name,pybind11::str metaData) {
+   void createTable(pybind11::str name, pybind11::str metaData) {
       std::string m = metaData;
       std::string n = name;
-      bridge::createTable(connection,n.c_str(),m.c_str());
+      bridge::createTable(connection, n.c_str(), m.c_str());
+   }
+   double getTime(pybind11::str type) {
+      std::string t = type;
+      return bridge::getTiming(connection, t.c_str());
    }
    ~ConnectionHandle() {
       bridge::closeConnection(connection);
@@ -69,7 +73,8 @@ PYBIND11_MODULE(ext, m) {
       .def("sql_stmt", &ConnectionHandle::sql_stmt)
       .def("mlir", &ConnectionHandle::mlir)
       .def("append", &ConnectionHandle::appendTable)
-      .def("create_table", &ConnectionHandle::createTable);
+      .def("create_table", &ConnectionHandle::createTable)
+      .def("get_time", &ConnectionHandle::getTime);
    m.def("connect_to_db", &connectToDB);
    m.def("in_memory", &inMemory);
 }
