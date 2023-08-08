@@ -104,9 +104,17 @@ static llvm::Error performDefaultLLVMPasses(llvm::Module* module) {
 
 static void linkStatic(mlir::ExecutionEngine* engine, execution::Error& error, execution::mainFnType& mainFunc, execution::setExecutionContextFnType& setExecutionContextFn) {
    auto currPath = std::filesystem::current_path();
+   std::ofstream symbolfile("symbolfile");
+   mlir::util::FunctionHelper::visitAllFunctions([&](std::string s, void* ptr) {
+      symbolfile << s << " = " << ptr << ";\n";
+   });
+   execution::visitBareFunctions([&](std::string s, void* ptr) {
+      symbolfile << s << " = " << ptr << ";\n";
+   });
+   symbolfile.close();
 
    engine->dumpToObjectFile("llvm-jit-static.o");
-   std::string cmd = "g++ -shared -fPIC -o llvm-jit-static.so llvm-jit-static.o";
+   std::string cmd = "g++ -shared -fPIC -o llvm-jit-static.so -Wl,--just-symbols=symbolfile llvm-jit-static.o";
    auto* pPipe = ::popen(cmd.c_str(), "r");
    if (pPipe == nullptr) {
       error.emit() << "Could not compile query module statically (Pipe could not be opened)";
@@ -281,6 +289,17 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
          return;
       }
       auto engine = std::move(maybeEngine.get());
+      auto runtimeSymbolMap = [&](llvm::orc::MangleAndInterner interner) {
+         auto symbolMap = llvm::orc::SymbolMap();
+         mlir::util::FunctionHelper::visitAllFunctions([&](std::string s, void* ptr) {
+            symbolMap[interner(s)] = llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(ptr), llvm::JITSymbolFlags::Exported);
+         });
+         execution::visitBareFunctions([&](std::string s, void* ptr) {
+            symbolMap[interner(s)] = llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(ptr), llvm::JITSymbolFlags::Exported);
+         });
+         return symbolMap;
+      };
+      engine->registerSymbols(runtimeSymbolMap);
       auto mainFnLookupResult = engine->lookup("main");
       if (!mainFnLookupResult) {
          error.emit() << "Could not lookup main function";
@@ -394,6 +413,17 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
          return;
       }
       auto engine = std::move(maybeEngine.get());
+      auto runtimeSymbolMap = [&](llvm::orc::MangleAndInterner interner) {
+         auto symbolMap = llvm::orc::SymbolMap();
+         mlir::util::FunctionHelper::visitAllFunctions([&](std::string s, void* ptr) {
+            symbolMap[interner(s)] = llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(ptr), llvm::JITSymbolFlags::Exported);
+         });
+         execution::visitBareFunctions([&](std::string s, void* ptr) {
+            symbolMap[interner(s)] = llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(ptr), llvm::JITSymbolFlags::Exported);
+         });
+         return symbolMap;
+      };
+      engine->registerSymbols(runtimeSymbolMap);
       auto mainFnLookupResult = engine->lookup("main");
       if (!mainFnLookupResult) {
          error.emit() << "Could not lookup main function";
