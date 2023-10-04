@@ -187,7 +187,7 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       };
       auto startJIT = std::chrono::high_resolution_clock::now();
 
-      auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = llvm::CodeGenOpt::Level::Default, .enableObjectDump = false});
+      auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = llvm::CodeGenOptLevel::Default, .enableObjectDump = false});
       if (!maybeEngine) {
          error.emit() << "Could not create execution engine";
          return;
@@ -283,7 +283,7 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
       auto optimizeFn = [&](llvm::Module* module) -> llvm::Error { return llvm::Error::success(); };
 
       //first step: use ExecutionEngine
-      auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = llvm::CodeGenOpt::Level::None, .enableObjectDump = true});
+      auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = llvm::CodeGenOptLevel::Default, .enableObjectDump = true});
       if (!maybeEngine) {
          error.emit() << "Could not create execution engine";
          return;
@@ -407,7 +407,7 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
       };
       auto startJIT = std::chrono::high_resolution_clock::now();
 
-      auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = llvm::CodeGenOpt::Level::Default, .enableObjectDump = true});
+      auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = llvm::CodeGenOptLevel::Default, .enableObjectDump = true});
       if (!maybeEngine) {
          error.emit() << "Could not create execution engine";
          return;

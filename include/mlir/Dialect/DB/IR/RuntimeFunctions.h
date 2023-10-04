@@ -41,7 +41,7 @@ struct RuntimeFunction {
    }
    std::function<bool(mlir::TypeRange types, mlir::Type resType)> verifyFn;
    std::optional<std::function<mlir::LogicalResult(mlir::TypeRange, ::llvm::ArrayRef<::mlir::Attribute>, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>&)>> foldFn;
-   using loweringFnT = std::function<mlir::Value(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, mlir::TypeConverter*, mlir::Location)>;
+   using loweringFnT = std::function<mlir::Value(mlir::OpBuilder& builder, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter*, mlir::Location)>;
    std::variant<loweringFnT, mlir::util::FunctionSpec> implementation;
 
    //builder functions

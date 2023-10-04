@@ -3564,7 +3564,7 @@ static void implementAtomicReduce(mlir::subop::ReduceOp reduceOp, SubOpRewriter&
    auto memRefType = mlir::MemRefType::get({}, elementType);
    auto memRef = rewriter.create<mlir::util::ToMemrefOp>(reduceOp->getLoc(), memRefType, valueRef);
    auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(reduceOp.getRegion().front().getTerminator());
-   ::mlir::arith::AtomicRMWKind atomicKind = mlir::arith::AtomicRMWKind::maxf; //maxf is invalid value;
+   ::mlir::arith::AtomicRMWKind atomicKind = mlir::arith::AtomicRMWKind::maximumf; //maxf is invalid value;
    mlir::Value memberValue = reduceOp.getRegion().front().getArguments().back();
    mlir::Value atomicOperand;
 

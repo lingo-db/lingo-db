@@ -311,9 +311,11 @@ def DB_CmpOp : DB_LogicalOp<"compare",
     let assemblyFormat = "$predicate $left `:` type($left) `,` $right `:` type($right) attr-dict";
         let extraClassDefinition = [{
             LogicalResult $cppClass::inferReturnTypes(MLIRContext* context, std::optional<Location>, ValueRange operands,
-                    DictionaryAttr attrs,OpaqueProperties opaqueProperties, RegionRange, SmallVectorImpl<Type>& inferredReturnTypes) {
+                    DictionaryAttr attributes,OpaqueProperties properties, RegionRange regions, SmallVectorImpl<Type>& inferredReturnTypes) {
                 mlir::Type i1 = IntegerType::get(context, 1);
-                if(attrs.get("predicate").cast<mlir::db::DBCmpPredicateAttr>().getValue()==mlir::db::DBCmpPredicate::isa){
+                  CmpOpAdaptor adaptor(operands, attributes, properties, regions);
+
+                if(adaptor.getPredicate()==mlir::db::DBCmpPredicate::isa){
                    inferredReturnTypes.assign({i1});
                    return success();
                 }

@@ -12,7 +12,7 @@ target_link_libraries(runtime-header-tool
         )
 function(gen_rt_def target_name header_file)
     add_custom_command(
-            COMMAND ${CMAKE_BINARY_DIR}/bin/runtime-header-tool --oh=${CMAKE_BINARY_DIR}/include/runtime-defs/${header_file} --ocpp=${CMAKE_BINARY_DIR}/include/runtime-defs/${header_file}.cpp ${CMAKE_SOURCE_DIR}/include/runtime/${header_file} -- -x c++ --std=c++20 -I ${MLIR_DIR}/../../clang/17/include/ -I ${CMAKE_SOURCE_DIR}/include -I ${ARROW_INCLUDE_DIR}
+            COMMAND ${CMAKE_BINARY_DIR}/bin/runtime-header-tool --oh=${CMAKE_BINARY_DIR}/include/runtime-defs/${header_file} --ocpp=${CMAKE_BINARY_DIR}/include/runtime-defs/${header_file}.cpp ${CMAKE_SOURCE_DIR}/include/runtime/${header_file} -- -x c++ --std=c++20 -I ${MLIR_DIR}/../../clang/18/include/ -I ${CMAKE_SOURCE_DIR}/include -I ${ARROW_INCLUDE_DIR}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             DEPENDS ${CMAKE_BINARY_DIR}/bin/runtime-header-tool
             DEPENDS ${CMAKE_SOURCE_DIR}/include/runtime/${header_file}

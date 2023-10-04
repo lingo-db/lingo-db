@@ -16,7 +16,7 @@ using namespace mlir;
 
 class ForIterator {
    protected:
-   mlir::TypeConverter* typeConverter;
+   const mlir::TypeConverter* typeConverter;
    MLIRContext* context;
    mlir::Location loc;
    mlir::Value len;
@@ -39,7 +39,7 @@ class ForIterator {
    }
    virtual Value getElement(OpBuilder& builder, Value index) = 0;
    virtual ~ForIterator() {}
-   void setTypeConverter(TypeConverter* typeConverter) {
+   void setTypeConverter(const TypeConverter* typeConverter) {
       ForIterator::typeConverter = typeConverter;
    }
 };
@@ -81,10 +81,10 @@ class ForIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
    public:
    ForIteratorIterationImpl(std::unique_ptr<ForIterator> iterator) : iterator(std::move(iterator)) {
    }
-   virtual std::vector<Value> implementLoop(mlir::Location loc, mlir::ValueRange iterArgs, mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) override {
+   virtual std::vector<Value> implementLoop(mlir::Location loc, mlir::ValueRange iterArgs, const mlir::TypeConverter& typeConverter, ConversionPatternRewriter& builder, ModuleOp parentModule, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) override {
       return implementLoopSimple(loc, iterArgs, typeConverter, builder, bodyBuilder);
    }
-   std::vector<Value> implementLoopSimple(mlir::Location loc, const ValueRange& iterArgs, TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) {
+   std::vector<Value> implementLoopSimple(mlir::Location loc, const ValueRange& iterArgs, const TypeConverter& typeConverter, ConversionPatternRewriter& builder, std::function<std::vector<Value>(std::function<Value(OpBuilder&)>, ValueRange, OpBuilder)> bodyBuilder) {
       auto insertionPoint = builder.saveInsertionPoint();
       iterator->setTypeConverter(&typeConverter);
       iterator->init(builder);

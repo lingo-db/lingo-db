@@ -15,6 +15,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SCF/Transforms/Transforms.h"
+#include "mlir/Dialect/SCF/Transforms/Patterns.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Pass/Pass.h"
@@ -153,7 +154,7 @@ void DSAToStdLoweringPass::runOnOperation() {
    mlir::dsa::populateDSAToStdPatterns(typeConverter, patterns);
    mlir::dsa::populateCollectionsToStdPatterns(typeConverter, patterns);
    mlir::util::populateUtilTypeConversionPatterns(typeConverter, patterns);
-   mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns, target);
+   mlir::scf::populateSCFStructuralTypeConversions(typeConverter, patterns);
    patterns.insert<SimpleTypeConversionPattern<mlir::func::ConstantOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
    patterns.insert<SetResultOpLowering>(typeConverter, &getContext());

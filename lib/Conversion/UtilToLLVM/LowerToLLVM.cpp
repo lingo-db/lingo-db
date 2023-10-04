@@ -20,7 +20,7 @@ using namespace mlir;
 
 namespace {
 
-static mlir::LLVM::LLVMStructType convertTuple(TupleType tupleType, TypeConverter& typeConverter) {
+static mlir::LLVM::LLVMStructType convertTuple(TupleType tupleType, const TypeConverter& typeConverter) {
    std::vector<Type> types;
    for (auto t : tupleType.getTypes()) {
       types.push_back(typeConverter.convertType(t));
@@ -126,7 +126,7 @@ class IsRefValidOpLowering : public OpConversionPattern<mlir::util::IsRefValidOp
    public:
    using OpConversionPattern<mlir::util::IsRefValidOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::IsRefValidOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOpWithNewOp<mlir::LLVM::ICmpOp>(op, mlir::LLVM::ICmpPredicate::ne, adaptor.getRef(), rewriter.create<mlir::LLVM::NullOp>(op->getLoc(), adaptor.getRef().getType()));
+      rewriter.replaceOpWithNewOp<mlir::LLVM::ICmpOp>(op, mlir::LLVM::ICmpPredicate::ne, adaptor.getRef(), rewriter.create<mlir::LLVM::ZeroOp>(op->getLoc(), adaptor.getRef().getType()));
       return success();
    }
 };
@@ -134,7 +134,7 @@ class InvalidRefOpLowering : public OpConversionPattern<mlir::util::InvalidRefOp
    public:
    using OpConversionPattern<mlir::util::InvalidRefOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::InvalidRefOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOpWithNewOp<mlir::LLVM::NullOp>(op, typeConverter->convertType(op.getType()));
+      rewriter.replaceOpWithNewOp<mlir::LLVM::ZeroOp>(op, typeConverter->convertType(op.getType()));
       return success();
    }
 };
@@ -376,7 +376,7 @@ class BufferGetLenLowering : public OpConversionPattern<mlir::util::BufferGetLen
       Type t = typeConverter->convertType(op.getBuffer().getType().cast<mlir::util::BufferType>().getT());
       DataLayout defaultLayout;
       const DataLayout* layout = &defaultLayout;
-      auto& llvmTypeConverter = *reinterpret_cast<LLVMTypeConverter*>(getTypeConverter());
+      auto& llvmTypeConverter = *reinterpret_cast<const LLVMTypeConverter*>(getTypeConverter());
       if (const DataLayoutAnalysis* analysis = llvmTypeConverter.getDataLayoutAnalysis()) {
          layout = &analysis->getAbove(op);
       }
@@ -445,7 +445,7 @@ class FilterTaggedPtrLowering : public OpConversionPattern<mlir::util::FilterTag
       maskedPtr = rewriter.create<LLVM::IntToPtrOp>(loc, adaptor.getRef().getType(), maskedPtr);
       Value ored = rewriter.create<LLVM::OrOp>(loc, ptrAsInt, maskedHash);
       Value contained = rewriter.create<LLVM::ICmpOp>(loc, LLVM::ICmpPredicate::eq, ored, ptrAsInt);
-      Value nullPtr = rewriter.create<mlir::LLVM::NullOp>(loc, adaptor.getRef().getType());
+      Value nullPtr = rewriter.create<mlir::LLVM::ZeroOp>(loc, adaptor.getRef().getType());
 
       Value filtered = rewriter.create<LLVM::SelectOp>(loc, contained, maskedPtr, nullPtr);
       rewriter.replaceOp(op, filtered);

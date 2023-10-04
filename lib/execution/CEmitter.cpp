@@ -560,7 +560,7 @@ LogicalResult printOperation(CppEmitter& emitter, func::CallOp callOp) {
 LogicalResult printOperation(CppEmitter& emitter, scf::ForOp forOp) {
    raw_indented_ostream& os = emitter.ostream();
 
-   OperandRange operands = forOp.getIterOperands();
+   OperandRange operands = forOp.getInitArgs();
    Block::BlockArgListType iterArgs = forOp.getRegionIterArgs();
    Operation::result_range results = forOp.getResults();
 
@@ -1219,10 +1219,12 @@ LogicalResult CppEmitter::emitOperation(Operation& op, bool trailingSemicolon) {
             ArithmeticPrinter(DivSIOp, DIVIDE)
             ArithmeticPrinter(DivUIOp, DIVIDE)
             ArithmeticPrinter(FloorDivSIOp, FLOOR_DIV)
-            ArithmeticPrinter(MaxFOp, MAX)
+            ArithmeticPrinter(MaximumFOp, MAX)
+            ArithmeticPrinter(MaxNumFOp, MAX)
             ArithmeticPrinter(MaxSIOp, MAX)
             ArithmeticPrinter(MaxUIOp, MAX_U)
-            ArithmeticPrinter(MinFOp, MIN)
+            ArithmeticPrinter(MinimumFOp, MIN)
+            ArithmeticPrinter(MinNumFOp, MIN)
             ArithmeticPrinter(MinSIOp, MIN)
             ArithmeticPrinter(MinUIOp, MIN_U)
             ArithmeticPrinter(MulFOp, MULTIPLY)

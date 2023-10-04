@@ -19,6 +19,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/SCF/Transforms/Transforms.h"
+#include "mlir/Dialect/SCF/Transforms/Patterns.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -60,7 +61,7 @@ static bool hasDBType(TypeConverter& converter, TypeRange types) {
 
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
-   mlir::LogicalResult safelyMoveRegion(ConversionPatternRewriter& rewriter, mlir::TypeConverter& typeConverter, mlir::Region& source, mlir::Region& target) const {
+   mlir::LogicalResult safelyMoveRegion(ConversionPatternRewriter& rewriter, const mlir::TypeConverter& typeConverter, mlir::Region& source, mlir::Region& target) const {
       rewriter.inlineRegionBefore(source, target, target.end());
       {
          if (!target.empty()) {
@@ -1138,7 +1139,7 @@ void DBToStdLoweringPass::runOnOperation() {
    mlir::populateCallOpTypeConversionPattern(patterns, typeConverter);
    mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
    mlir::util::populateUtilTypeConversionPatterns(typeConverter, patterns);
-   mlir::scf::populateSCFStructuralTypeConversionsAndLegality(typeConverter, patterns, target);
+   mlir::scf::populateSCFStructuralTypeConversions(typeConverter, patterns);
    patterns.insert<SimpleTypeConversionPattern<mlir::func::ConstantOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::arith::SelectOp>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::Append>>(typeConverter, &getContext());

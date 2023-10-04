@@ -1,5 +1,2 @@
-[submodule "llvm-project"]
-	path = llvm-project
-	url = https://github.com/jungmair/llvm-project.git
 [submodule "llvm-project/"]
 	url = https://github.com/lingo-db/llvm-project.git
