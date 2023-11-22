@@ -113,7 +113,7 @@ class TableBuilder {
       return lowered;
    }
    TableBuilder(std::shared_ptr<arrow::Schema> schema) : schema(schema) {
-      arrow::RecordBatchBuilder::Make(lowerSchema(schema), arrow::default_memory_pool(), &batchBuilder); //NOLINT (clang-diagnostic-unused-result)
+      batchBuilder=arrow::RecordBatchBuilder::Make(lowerSchema(schema), arrow::default_memory_pool()).ValueOrDie();
    }
    std::shared_ptr<arrow::RecordBatch> convertBatch(std::shared_ptr<arrow::RecordBatch> recordBatch) {
       std::vector<std::shared_ptr<arrow::ArrayData>> columnData;
@@ -125,7 +125,7 @@ class TableBuilder {
    void flushBatch() {
       if (currentBatchSize > 0) {
          std::shared_ptr<arrow::RecordBatch> recordBatch;
-         batchBuilder->Flush(&recordBatch); //NOLINT (clang-diagnostic-unused-result)
+         recordBatch=batchBuilder->Flush(true).ValueOrDie(); //NOLINT (clang-diagnostic-unused-result)
          currentBatchSize = 0;
          batches.push_back(convertBatch(recordBatch));
       }

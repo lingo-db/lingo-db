@@ -32,6 +32,6 @@ add_library(runtime OBJECT
         Relation.cpp
         Session.cpp
         Catalog.cpp)
-target_link_libraries(runtime PRIVATE TBB::tbb arrow_static)
+target_link_libraries(runtime PRIVATE tbb arrow)
 target_link_options(runtime PUBLIC -Wl,--exclude-libs,ALL)
 

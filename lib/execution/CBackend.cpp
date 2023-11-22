@@ -36,9 +36,11 @@ class DefaultCBackend : public execution::ExecutionBackend {
          return;
       }
       std::regex r("void main\\(\\) \\{");
+      auto currPath = std::filesystem::current_path().string();
+
       translatedModule = std::regex_replace(translatedModule, r, "extern \"C\" void mainFunc() {");
 
-      std::ofstream outputFile("mlir-c-module.cpp");
+      std::ofstream outputFile(currPath+"/mlir-c-module.cpp");
       outputFile << "#include<cstdint>\n"
                     "#include<tuple>\n"
                     "#include \"runtime/helpers.h\"\n"
@@ -70,8 +72,7 @@ class DefaultCBackend : public execution::ExecutionBackend {
       outputFile.close();
       usleep(20000);
 
-      auto currPath = std::filesystem::current_path();
-      std::string cmd = " clang++ -shared -O0 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -x c++ -std=c++20 -I " + std::string(SOURCE_DIR) + "/include mlir-c-module.cpp -o c-backend.so";
+      std::string cmd = " cc -shared -O0 -g -gdwarf-4 -fPIC -Wl,--export-dynamic -x c++ -std=c++20 -I " + std::string(SOURCE_DIR) + "/include " + std::string(DEPENDENCY_INCLUDES) + " " + currPath + "/mlir-c-module.cpp -o " + currPath + "/c-backend.so";
       auto* pPipe = ::popen(cmd.c_str(), "r");
       if (pPipe == nullptr) {
          error.emit() << "Could not compile query module statically (Pipe could not be opened)";
@@ -88,10 +89,10 @@ class DefaultCBackend : public execution::ExecutionBackend {
          error.emit() << "Could not compile query module statically (Pipe could not be closed)";
          return;
       }
-      void* handle = dlopen(std::string(currPath.string() + "/c-backend.so").c_str(), RTLD_LAZY);
+      void* handle = dlopen(std::string(currPath + "/c-backend.so").c_str(), RTLD_LAZY);
       const char* dlsymError = dlerror();
       if (dlsymError) {
-         error.emit() << "Can not open static library: " << std::string(dlsymError);
+         error.emit() << "Can not open static library: " << std::string(dlsymError) <<"\nerror:"<<result<<std::endl;
          return;
       }
       auto mainFunc = reinterpret_cast<execution::mainFnType>(dlsym(handle, "mainFunc"));

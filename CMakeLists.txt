@@ -6,8 +6,38 @@ project(lingodb LANGUAGES CXX C)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard to conform to")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DTRACER")
-find_package(Arrow REQUIRED)
+message("Using Python3: ${Python3_EXECUTABLE}")
+execute_process(
+        COMMAND ${Python3_EXECUTABLE} -c "import lingodbllvm; print(lingodbllvm.get_mlir_dir())"
+        OUTPUT_VARIABLE MLIR_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+execute_process(
+        COMMAND ${Python3_EXECUTABLE} -c "import pyarrow as pa; print(pa.get_include())"
+        OUTPUT_VARIABLE ARROW_INCLUDE_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+execute_process(
+        COMMAND ${Python3_EXECUTABLE} -c "import pyarrow as pa; print(pa.get_library_dirs()[0])"
+        OUTPUT_VARIABLE PYARROW_LIB_PATH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+execute_process(
+        COMMAND ${Python3_EXECUTABLE} -c "import pkg_resources; print(pkg_resources.get_distribution('tbb').location+'/../../')"
+        OUTPUT_VARIABLE TBB_LIB_PATH
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+execute_process(
+        COMMAND ${Python3_EXECUTABLE} -c "import pkg_resources; print(pkg_resources.get_distribution('tbb-devel').location+'/../../../include')"
+        OUTPUT_VARIABLE TBB_INCLUDE_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+message("tbb: ${TBB_LIB_PATH} ${TBB_INCLUDE_DIR} ")
+include_directories(${ARROW_INCLUDE_DIR})
+include_directories(${TBB_INCLUDE_DIR})
 
+link_directories(${ARROW_LIB_PATH})
+link_directories(${TBB_LIB_PATH})
 option(COMPILE_FOR_PERF "compile for perf" OFF)
 option(ENABLE_CRANELIFT_BACKEND "enable cranelift backend" OFF)
 if (COMPILE_FOR_PERF)
@@ -132,7 +162,6 @@ set(LIBS
         MLIRExecutionEngine
         MLIRLLVMToLLVMIRTranslation
         MLIRTargetLLVMIRExport
-#        MLIRTranslation
         MLIRSupport
         MLIRAnalysis
         MLIRCallInterfaces
@@ -141,7 +170,6 @@ set(LIBS
         MLIRMathTransforms
         )
 set(PRECOMPILED_CC_PATH "${CMAKE_CURRENT_BINARY_DIR}/precompiled_bitcode.cc")
-find_package(TBB)
 add_subdirectory(lib/runtime)
 add_subdirectory(lib/execution)
 add_subdirectory(lib/frontend/SQL)

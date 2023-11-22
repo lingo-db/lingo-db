@@ -3,7 +3,7 @@
 
 add_library(pybridge SHARED bridge.cpp)
 
-target_link_libraries(pybridge PRIVATE  runner runtime mlir-support ${LIBS} PRIVATE -static-libstdc++ arrow_static)
+target_link_libraries(pybridge PRIVATE  runner runtime mlir-support ${LIBS} PRIVATE -static-libstdc++ arrow)
 #target_link_options(pybridge PUBLIC -Wl,--export-dynamic)
 
 
