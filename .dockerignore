@@ -1,0 +1,7 @@
+resources
+!resources/test
+build
+venv
+.vscode
+.git
+.idea

@@ -6,6 +6,8 @@ project(lingodb LANGUAGES CXX C)
 set(CMAKE_CXX_VISIBILITY_PRESET hidden)
 set(CMAKE_CXX_STANDARD 20 CACHE STRING "C++ standard to conform to")
 set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O3 -g -DTRACER")
+include(FindZLIB)
+message("Using ZLIB: ${ZLIB_INCLUDE_DIRS}")
 message("Using Python3: ${Python3_EXECUTABLE}")
 execute_process(
         COMMAND ${Python3_EXECUTABLE} -c "import lingodbllvm; print(lingodbllvm.get_mlir_dir())"
@@ -19,7 +21,7 @@ execute_process(
 )
 execute_process(
         COMMAND ${Python3_EXECUTABLE} -c "import pyarrow as pa; print(pa.get_library_dirs()[0])"
-        OUTPUT_VARIABLE PYARROW_LIB_PATH
+        OUTPUT_VARIABLE ARROW_LIB_PATH
         OUTPUT_STRIP_TRAILING_WHITESPACE
 )
 execute_process(
@@ -32,6 +34,7 @@ execute_process(
         OUTPUT_VARIABLE TBB_INCLUDE_DIR
         OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+message("arrow: ${ARROW_INCLUDE_DIR} ${ARROW_LIB_PATH}")
 message("tbb: ${TBB_LIB_PATH} ${TBB_INCLUDE_DIR} ")
 include_directories(${ARROW_INCLUDE_DIR})
 include_directories(${TBB_INCLUDE_DIR})
