@@ -541,8 +541,12 @@ class FuncConstTypeConversionPattern : public ConversionPattern {
       auto funcType = constantOp.getType().cast<mlir::FunctionType>();
       llvm::SmallVector<mlir::Type> convertedFuncInputTypes;
       llvm::SmallVector<mlir::Type> convertedFuncResultsTypes;
-      assert(typeConverter->convertTypes(funcType.getInputs(), convertedFuncInputTypes).succeeded());
-      assert(typeConverter->convertTypes(funcType.getResults(), convertedFuncResultsTypes).succeeded());
+      if(typeConverter->convertTypes(funcType.getInputs(), convertedFuncInputTypes).failed()){
+         return failure();
+      }
+      if(typeConverter->convertTypes(funcType.getResults(), convertedFuncResultsTypes).failed()){
+         return failure();
+      }
       rewriter.replaceOpWithNewOp<mlir::func::ConstantOp>(op, rewriter.getFunctionType(convertedFuncInputTypes, convertedFuncResultsTypes), constantOp.getValue());
       return success();
    }

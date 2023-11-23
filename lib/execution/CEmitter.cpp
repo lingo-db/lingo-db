@@ -404,7 +404,8 @@ LogicalResult printOperation(CppEmitter& emitter, memref::AtomicRMWOp op) {
    assert(op.getKind() == mlir::arith::AtomicRMWKind::addf || op.getKind() == mlir::arith::AtomicRMWKind::addi || op.getKind() == mlir::arith::AtomicRMWKind::ori);
    return printStandardOperation(emitter, op, [&](auto& os) {
       os << "std::atomic_ref<";
-      assert(emitter.emitType(op.getLoc(), op.getValue().getType()).succeeded());
+      auto s=emitter.emitType(op.getLoc(), op.getValue().getType()).succeeded();
+      assert(s);
       if (op.getKind() == mlir::arith::AtomicRMWKind::addf || op.getKind() == mlir::arith::AtomicRMWKind::addi) {
          os << ">(*" << emitter.getOrCreateName(op.getMemref()) << ").fetch_add(" << emitter.getOrCreateName(op.getValue()) << ")";
       } else {

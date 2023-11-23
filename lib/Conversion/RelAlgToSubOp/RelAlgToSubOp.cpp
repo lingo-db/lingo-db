@@ -25,6 +25,7 @@
 #include "mlir/Transforms/DialectConversion.h"
 #include "mlir/Transforms/Passes.h"
 #include <llvm/ADT/TypeSwitch.h>
+#include <iostream>
 #include <mlir/Dialect/util/FunctionHelper.h>
 
 using namespace mlir;
@@ -235,9 +236,8 @@ class MapLowering : public OpConversionPattern<mlir::relalg::MapOp> {
 
    LogicalResult matchAndRewrite(mlir::relalg::MapOp mapOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto mapOp2 = rewriter.replaceOpWithNewOp<mlir::subop::MapOp>(mapOp, mlir::tuples::TupleStreamType::get(rewriter.getContext()), adaptor.getRel(), mapOp.getComputedCols());
-      assert(safelyMoveRegion(rewriter, mapOp.getPredicate(), mapOp2.getFn()).succeeded());
-
-      return success();
+      auto moved = safelyMoveRegion(rewriter, mapOp.getPredicate(), mapOp2.getFn()).succeeded();
+      return success(moved);
    }
 };
 class RenamingLowering : public OpConversionPattern<mlir::relalg::RenamingOp> {
@@ -2599,7 +2599,8 @@ class GroupJoinLowering : public OpConversionPattern<mlir::relalg::GroupJoinOp> 
       }
       if (!groupJoinOp.getMappedCols().empty()) {
          auto mapOp2 = rewriter.create<mlir::subop::MapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), filtered, groupJoinOp.getMappedCols());
-         assert(safelyMoveRegion(rewriter, groupJoinOp.getMapFunc(), mapOp2.getFn()).succeeded());
+         auto moved=safelyMoveRegion(rewriter, groupJoinOp.getMapFunc(), mapOp2.getFn()).succeeded();
+         assert(moved);
          filtered = mapOp2;
       }
       performAggrFuncReduce(loc, rewriter, distAggrFuncs, unwrappedAggrRef, filtered, reduceNames, defMapping);

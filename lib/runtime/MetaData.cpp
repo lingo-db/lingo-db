@@ -15,8 +15,9 @@ std::string serializeRecordBatch(std::shared_ptr<arrow::RecordBatch> batch) {
    std::unique_ptr<arrow::io::BufferOutputStream> bufferOutputStream = std::make_unique<arrow::io::BufferOutputStream>(buffer);
    std::shared_ptr<arrow::ipc::RecordBatchWriter> recordBatchWriter = arrow::ipc::MakeStreamWriter(bufferOutputStream.get(), batch->schema()).ValueOrDie();
 
-   assert(recordBatchWriter->WriteRecordBatch(*batch) == arrow::Status::OK());
-   assert(recordBatchWriter->Close() == arrow::Status::OK());
+   if(!recordBatchWriter->WriteRecordBatch(*batch).ok()||!recordBatchWriter->Close().ok()){
+      throw std::runtime_error("MetaData: Failed to write record batch");
+   }
    auto resBuffer = bufferOutputStream->Finish();
    return resBuffer.ValueOrDie()->ToHexString();
 }
@@ -35,7 +36,9 @@ std::shared_ptr<arrow::RecordBatch> deserializeRecordBatch(std::string str) {
    auto resizableBuffer = hexToBytes(str);
    auto reader = arrow::ipc::RecordBatchStreamReader::Open(std::make_shared<arrow::io::BufferReader>(resizableBuffer)).ValueOrDie();
    std::shared_ptr<arrow::RecordBatch> batch;
-   assert(reader->ReadNext(&batch) == arrow::Status::OK());
+   if(!reader->ReadNext(&batch).ok()){
+      throw std::runtime_error("could not deserialize batch");
+   }
    return batch;
 }
 } // end namespace

@@ -27,8 +27,12 @@ class FuncLowering : public OpConversionPattern<mlir::func::FuncOp> {
    using OpConversionPattern<mlir::func::FuncOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::func::FuncOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       llvm::SmallVector<mlir::Type, 4> inputTypes, outputTypes;
-      assert(typeConverter->convertTypes(op.getFunctionType().getInputs(), inputTypes).succeeded());
-      assert(typeConverter->convertTypes(op.getFunctionType().getResults(), outputTypes).succeeded());
+      if(typeConverter->convertTypes(op.getFunctionType().getInputs(), inputTypes).failed()){
+         return failure();
+      }
+      if(typeConverter->convertTypes(op.getFunctionType().getResults(), outputTypes).failed()){
+         return failure();
+      }
       auto funcOp = rewriter.create<mlir::cranelift::FuncOp>(op->getLoc(), op.getSymName(), rewriter.getFunctionType(inputTypes, outputTypes), ArrayAttr{}, ArrayAttr{});
       rewriter.inlineRegionBefore(op.getBody(), funcOp.getBody(),
                                   funcOp.end());

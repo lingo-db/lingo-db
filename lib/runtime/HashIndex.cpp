@@ -59,9 +59,9 @@ void HashIndex::flush() {
       auto batch = arrow::RecordBatch::Make(schema, hashData->length(), {hashData});
       auto inputFile = arrow::io::FileOutputStream::Open(dataFile).ValueOrDie();
       auto batchWriter = arrow::ipc::MakeFileWriter(inputFile, schema).ValueOrDie();
-      assert(batchWriter->WriteRecordBatch(*batch).ok());
-      assert(batchWriter->Close().ok());
-      assert(inputFile->Close().ok());
+      if (!batchWriter->WriteRecordBatch(*batch).ok() || !batchWriter->Close().ok() || !inputFile->Close().ok()) {
+         throw std::runtime_error("HashIndex: could not write record batch");
+      }
    }
 }
 void HashIndex::setPersist(bool value) {

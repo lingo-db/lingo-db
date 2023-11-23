@@ -50,7 +50,9 @@ std::shared_ptr<arrow::RecordBatch> createSample(std::shared_ptr<arrow::Table> t
       BoxedIntegerIterator<long>{0l}, BoxedIntegerIterator<long>{table->num_rows() - 1},
       std::back_inserter(result), std::min(table->num_rows(), 1024l), rng);
    for (auto i : result) {
-      assert(numericBuilder.Append(i).ok());
+      if(!numericBuilder.Append(i).ok()){
+         throw std::runtime_error("could not create sample");
+      }
    }
    auto indices = numericBuilder.Finish().ValueOrDie();
    std::vector<arrow::Datum> args({table, indices});
@@ -157,16 +159,16 @@ std::shared_ptr<arrow::Schema> createSchema(std::shared_ptr<runtime::TableMetaDa
 void storeTable(std::string file, std::shared_ptr<arrow::Table> table) {
    auto inputFile = arrow::io::FileOutputStream::Open(file).ValueOrDie();
    auto batchWriter = arrow::ipc::MakeFileWriter(inputFile, table->schema()).ValueOrDie();
-   assert(batchWriter->WriteTable(*table).ok());
-   assert(batchWriter->Close().ok());
-   assert(inputFile->Close().ok());
+   if(!batchWriter->WriteTable(*table).ok()||!batchWriter->Close().ok()||!inputFile->Close().ok()){
+      throw std::runtime_error("could not store table");
+   }
 }
-void storeSample(std::string file, std::shared_ptr<arrow::RecordBatch> table) {
+void storeSample(std::string file, std::shared_ptr<arrow::RecordBatch> batch) {
    auto inputFile = arrow::io::FileOutputStream::Open(file).ValueOrDie();
-   auto batchWriter = arrow::ipc::MakeFileWriter(inputFile, table->schema()).ValueOrDie();
-   assert(batchWriter->WriteRecordBatch(*table).ok());
-   assert(batchWriter->Close().ok());
-   assert(inputFile->Close().ok());
+   auto batchWriter = arrow::ipc::MakeFileWriter(inputFile, batch->schema()).ValueOrDie();
+   if(!batchWriter->WriteRecordBatch(*batch).ok()||!batchWriter->Close().ok()||!inputFile->Close().ok()){
+      throw std::runtime_error("could not store table");
+   }
 }
 } // end namespace
 
