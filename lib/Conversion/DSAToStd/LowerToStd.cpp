@@ -14,8 +14,8 @@
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/Dialect/SCF/Transforms/Transforms.h"
 #include "mlir/Dialect/SCF/Transforms/Patterns.h"
+#include "mlir/Dialect/SCF/Transforms/Transforms.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/Pass/Pass.h"
@@ -52,7 +52,7 @@ class DownCastLowering : public OpConversionPattern<mlir::dsa::DownCast> {
    public:
    using OpConversionPattern<mlir::dsa::DownCast>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::DownCast op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOp(op,adaptor.getOperands());
+      rewriter.replaceOp(op, adaptor.getOperands());
       return success();
    }
 };
@@ -90,7 +90,7 @@ class SimpleTypeConversionPattern : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       llvm::SmallVector<mlir::Type> convertedTypes;
-      if(typeConverter->convertTypes(op->getResultTypes(), convertedTypes).failed()){
+      if (typeConverter->convertTypes(op->getResultTypes(), convertedTypes).failed()) {
          return failure();
       }
       rewriter.replaceOpWithNewOp<Op>(op, convertedTypes, ValueRange(operands), op->getAttrs());

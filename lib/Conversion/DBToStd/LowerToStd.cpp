@@ -18,8 +18,8 @@
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
-#include "mlir/Dialect/SCF/Transforms/Transforms.h"
 #include "mlir/Dialect/SCF/Transforms/Patterns.h"
+#include "mlir/Dialect/SCF/Transforms/Transforms.h"
 #include "mlir/Dialect/util/UtilDialect.h"
 #include "mlir/Dialect/util/UtilOps.h"
 #include "mlir/IR/BuiltinTypes.h"
@@ -58,7 +58,6 @@ static bool hasDBType(TypeConverter& converter, TypeRange types) {
 }
 } // end anonymous namespace
 
-
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
    mlir::LogicalResult safelyMoveRegion(ConversionPatternRewriter& rewriter, const mlir::TypeConverter& typeConverter, mlir::Region& source, mlir::Region& target) const {
@@ -90,7 +89,7 @@ class SimpleTypeConversionPattern : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       llvm::SmallVector<mlir::Type> convertedTypes;
-      if(typeConverter->convertTypes(op->getResultTypes(), convertedTypes).failed()){
+      if (typeConverter->convertTypes(op->getResultTypes(), convertedTypes).failed()) {
          return failure();
       }
       auto newOp = rewriter.create<Op>(op->getLoc(), convertedTypes, ValueRange(operands), op->getAttrs());
@@ -133,8 +132,8 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
       if (atOp.getValid()) {
          values.push_back(newAtOp.getValid());
       }
-      if(auto charType=t.dyn_cast_or_null<mlir::db::CharType>()){
-         newAtOp->setAttr("numBytes",rewriter.getI64IntegerAttr(charType.getBytes()));
+      if (auto charType = t.dyn_cast_or_null<mlir::db::CharType>()) {
+         newAtOp->setAttr("numBytes", rewriter.getI64IntegerAttr(charType.getBytes()));
       }
       if (t.isa<mlir::db::DateType, mlir::db::TimestampType>()) {
          if (values[0].getType() != rewriter.getI64Type()) {
@@ -216,9 +215,9 @@ class AppendTBLowering : public ConversionPattern {
             val = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), val);
          }
       }
-      auto newAppendOp=rewriter.create<mlir::dsa::Append>(loc, adaptor.getDs(), val, adaptor.getValid());
-      if(auto charType=t.dyn_cast_or_null<mlir::db::CharType>()){
-         newAppendOp->setAttr("numBytes",rewriter.getI64IntegerAttr(charType.getBytes()));
+      auto newAppendOp = rewriter.create<mlir::dsa::Append>(loc, adaptor.getDs(), val, adaptor.getValid());
+      if (auto charType = t.dyn_cast_or_null<mlir::db::CharType>()) {
+         newAppendOp->setAttr("numBytes", rewriter.getI64IntegerAttr(charType.getBytes()));
       }
 
       rewriter.eraseOp(op);
@@ -1052,10 +1051,10 @@ void DBToStdLoweringPass::runOnOperation() {
          bits = 8;
       } else if (t.getBytes() == 2) {
          bits = 16;
-      } else if (t.getBytes()<=4){
-         bits=32;
-      }else{
-         bits=64;
+      } else if (t.getBytes() <= 4) {
+         bits = 32;
+      } else {
+         bits = 64;
       }
       return (Type) mlir::IntegerType::get(ctxt, bits);
    });
