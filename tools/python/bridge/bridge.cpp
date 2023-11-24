@@ -1,6 +1,9 @@
 #include "bridge.h"
 #include "execution/Execution.h"
+#include "mlir/CAPI/IR.h"
+#include "mlir/Dialect/util/UtilOps.h"
 #include <arrow/table.h>
+
 namespace {
 class TimingCollector : public execution::TimingProcessor {
    std::unordered_map<std::string, double> collected;
@@ -91,4 +94,30 @@ double bridge::getTiming(bridge::Connection* con, const char* type) {
 }
 void bridge::closeConnection(bridge::Connection* con) {
    delete con;
+}
+
+void bridge::initContext(MlirContext context) {
+   execution::initializeContext(*unwrap(context));
+}
+namespace bridge {
+struct MLIRValueRangeImpl {
+   std::vector<MlirValue> values;
+};
+
+} // end namespace bridge
+
+void bridge::addUDF(bridge::Connection* con, const char* name,bridge::UDF* udf) {
+   std::cout<<"add udf "<<name<<std::endl;
+}
+void bridge::addValueToRange(bridge::MLIRValueRange range, MlirValue value) {
+   range.impl->values.push_back(value);
+}
+MlirValue bridge::valueRangeGet(bridge::MLIRValueRange range,size_t offset) {
+   return range.impl->values.at(offset);
+}
+size_t bridge::valueRangeGetLen(bridge::MLIRValueRange range) {
+   return range.impl->values.size();
+}
+bridge::MLIRValueRange bridge::createValueRange() {
+   return {.impl = new MLIRValueRangeImpl};
 }

@@ -43,6 +43,11 @@ class ConnectionHandle {
       }
       return pybind11::handle();
    }
+   void mlir_no_result(pybind11::str module) {
+      std::string m = module;
+      ArrowArrayStream stream;
+      bridge::run(connection, m.c_str(), &stream);
+   }
    void createTable(pybind11::str name, pybind11::str metaData) {
       std::string m = metaData;
       std::string n = name;
@@ -72,6 +77,7 @@ PYBIND11_MODULE(ext, m) {
       .def("sql_query", &ConnectionHandle::sql_query)
       .def("sql_stmt", &ConnectionHandle::sql_stmt)
       .def("mlir", &ConnectionHandle::mlir)
+      .def("mlir_no_result", &ConnectionHandle::mlir_no_result)
       .def("append", &ConnectionHandle::appendTable)
       .def("create_table", &ConnectionHandle::createTable)
       .def("get_time", &ConnectionHandle::getTime);

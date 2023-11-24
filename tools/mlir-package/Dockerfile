@@ -1,6 +1,9 @@
 FROM quay.io/pypa/manylinux_2_28_x86_64 AS baseimg
 RUN yum install -y epel-release || sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-$(cut -d: -f5 /etc/system-release-cpe | cut -d. -f1).noarch.rpm
 RUN yum install -y cmake ninja-build
+RUN /opt/python/cp310-cp310/bin/python3 -m venv /venv
+RUN /venv/bin/pip install numpy pybind11
+
 ENV PLAT=manylinux_2_28_x86_64
 
 FROM baseimg AS buildllvm
@@ -13,7 +16,7 @@ WORKDIR /llvm-src
 #RUN git submodule init
 #RUN git submodule update llvm-project
 RUN mkdir -p /build/llvm
-RUN cmake -G Ninja llvm-project/llvm  -B /build/llvm \
+RUN env VIRTUAL_ENV=/venv cmake -G Ninja llvm-project/llvm  -B /build/llvm \
     -DLLVM_ENABLE_PROJECTS="mlir;clang;clang-tools-extra" \
     -DLLVM_BUILD_EXAMPLES=OFF \
     -DLLVM_TARGETS_TO_BUILD="X86" \
@@ -21,7 +24,7 @@ RUN cmake -G Ninja llvm-project/llvm  -B /build/llvm \
     -DLLVM_ENABLE_ASSERTIONS=OFF \
     -DPython3_FIND_VIRTUALENV=ONLY \
     -DLLVM_INSTALL_UTILS=ON \
-    -DMLIR_ENABLE_BINDINGS_PYTHON=OFF
+    -DMLIR_ENABLE_BINDINGS_PYTHON=ON
 RUN cmake --build /build/llvm -j$(nproc)
 RUN mkdir /installed
 RUN cmake  --install /build/llvm --prefix /installed

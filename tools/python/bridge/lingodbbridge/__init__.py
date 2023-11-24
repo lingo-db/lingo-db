@@ -1,8 +1,5 @@
 import sys,os
 import ctypes
-
-dir_path = os.path.dirname(os.path.realpath(__file__))
-ctypes.CDLL(dir_path+'/libs/libpybridge.so',os.RTLD_GLOBAL|os.RTLD_NOW|os.RTLD_DEEPBIND)
 import pyarrow as pa
 import platform
 from pathlib import Path
@@ -18,4 +15,7 @@ if platform.system().lower() == 'linux':
                 libarrow_python = ctypes.CDLL(arrow_python_path, flag)
                 break
     _set_arrow_symbol_resolution(ctypes.RTLD_GLOBAL)
+dir_path = os.path.dirname(os.path.realpath(__file__))
+ctypes.CDLL(dir_path+'/libs/libpybridge.so',os.RTLD_GLOBAL|os.RTLD_NOW|os.RTLD_DEEPBIND)
+
 from . import ext

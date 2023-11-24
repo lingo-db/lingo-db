@@ -33,5 +33,4 @@ add_library(runtime OBJECT
         Session.cpp
         Catalog.cpp)
 target_link_libraries(runtime PRIVATE tbb arrow)
-target_link_options(runtime PUBLIC -Wl,--exclude-libs,ALL)
 

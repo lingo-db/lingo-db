@@ -27,10 +27,7 @@
 #include <llvm/Support/SourceMgr.h>
 
 #include <iostream>
-
-namespace {
-
-void initializeContext(mlir::MLIRContext& context) {
+void execution::initializeContext(mlir::MLIRContext& context) {
    mlir::DialectRegistry registry;
    registry.insert<mlir::BuiltinDialect>();
    registry.insert<mlir::relalg::RelAlgDialect>();
@@ -41,7 +38,7 @@ void initializeContext(mlir::MLIRContext& context) {
    registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::arith::ArithDialect>();
    registry.insert<mlir::cf::ControlFlowDialect>();
-
+   
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::scf::SCFDialect>();
@@ -51,11 +48,14 @@ void initializeContext(mlir::MLIRContext& context) {
    context.loadDialect<mlir::relalg::RelAlgDialect>();
    context.disableMultithreading();
 }
+namespace {
+
+
 class MLIRFrontend : public execution::Frontend {
    mlir::MLIRContext context;
    mlir::OwningOpRef<mlir::ModuleOp> module;
    void loadFromFile(std::string fileName) override {
-      initializeContext(context);
+      execution::initializeContext(context);
       llvm::ErrorOr<std::unique_ptr<llvm::MemoryBuffer>> fileOrErr =
          llvm::MemoryBuffer::getFileOrSTDIN(fileName);
       if (std::error_code ec = fileOrErr.getError()) {
@@ -71,7 +71,7 @@ class MLIRFrontend : public execution::Frontend {
       }
    }
    void loadFromString(std::string data) override {
-      initializeContext(context);
+      execution::initializeContext(context);
       module = mlir::parseSourceString<mlir::ModuleOp>(data, &context);
       if (!module) {
          error.emit() << "Error can't load module\n";
@@ -87,7 +87,7 @@ class SQLFrontend : public execution::Frontend {
    mlir::OwningOpRef<mlir::ModuleOp> module;
    bool parallismAllowed;
    void loadFromString(std::string sql) override {
-      initializeContext(context);
+      execution::initializeContext(context);
 
       mlir::OpBuilder builder(&context);
 

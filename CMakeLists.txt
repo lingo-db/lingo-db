@@ -34,6 +34,7 @@ execute_process(
         OUTPUT_VARIABLE TBB_INCLUDE_DIR
         OUTPUT_STRIP_TRAILING_WHITESPACE
 )
+set(LLVM_BINARY_DIR "${MLIR_DIR}/../../../")
 message("arrow: ${ARROW_INCLUDE_DIR} ${ARROW_LIB_PATH}")
 message("tbb: ${TBB_LIB_PATH} ${TBB_INCLUDE_DIR} ")
 include_directories(${ARROW_INCLUDE_DIR})

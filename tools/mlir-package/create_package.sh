@@ -5,6 +5,7 @@ cd /build/mlir-package
 ls -l
 mkdir lingodbllvm/llvm
 cp -r /installed/. lingodbllvm/llvm/.
+cp -r /llvm-src/llvm-project/mlir/lib/Bindings/Python lingodbllvm/llvm/mlir_python_bindings
 "/opt/python/$1/bin/python3" -m build --wheel
 cp dist/*.whl /built-packages/.
 

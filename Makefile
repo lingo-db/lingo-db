@@ -32,6 +32,7 @@ LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
 
 build/dependencies: venv build
 	touch $@
+
 build/lingodb-debug/.stamp: build/dependencies
 	cmake -G Ninja . -B $(dir $@) $(LDB_ARGS)
 	touch $@
@@ -86,6 +87,13 @@ run-benchmarks: build/lingodb-release/.stamp resources/data/tpch-1/.stamp resour
 
 build-docker-dev:
 	DOCKER_BUILDKIT=1 docker build -f "tools/docker/Dockerfile" -t lingodb-dev --target baseimg "."
+
+build-docker-py-dev:
+	DOCKER_BUILDKIT=1 docker build -f "tools/python/bridge/Dockerfile" -t lingodb-py-dev --target baseimg "."
+build-py-bridge:
+	DOCKER_BUILDKIT=1 docker build -f "tools/python/bridge/Dockerfile" -t lingodb-py-dev-build --target build "."
+	docker run --rm  -v "$(pwd):/built-packages" lingodb-py-dev-build create_package.sh cp$(PY_VERSION)-cp$(PY_VERSION)
+
 build-docker:
 	DOCKER_BUILDKIT=1 docker build -f "tools/docker/Dockerfile" -t lingo-db:latest --target lingodb  "."
 

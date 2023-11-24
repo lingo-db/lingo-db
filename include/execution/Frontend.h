@@ -4,6 +4,7 @@
 #include "runtime/Catalog.h"
 namespace mlir {
 class ModuleOp;
+class MLIRContext;
 } // namespace mlir
 namespace execution {
 class Frontend {
@@ -32,6 +33,7 @@ class Frontend {
 };
 std::unique_ptr<Frontend> createMLIRFrontend();
 std::unique_ptr<Frontend> createSQLFrontend();
+void initializeContext(mlir::MLIRContext& context);
 
 } //namespace execution
 

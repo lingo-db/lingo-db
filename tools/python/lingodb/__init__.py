@@ -56,6 +56,9 @@ class Connection:
     def mlir(self, module):
         return self.native_con.mlir(module)
 
+    def mlir_no_result(self, module):
+        return self.native_con.mlir_no_result(module)
+
     def append_table(self, name, table):
         self.native_con.append(name, table)
 
