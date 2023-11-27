@@ -93,7 +93,7 @@ build-docker-dev:
 	DOCKER_BUILDKIT=1 docker build -f "tools/docker/Dockerfile" -t lingodb-dev --target baseimg "."
 
 build-docker-py-dev:
-	DOCKER_BUILDKIT=1 docker build -f "tools/python/bridge/Dockerfile" -t lingodb-py-dev --target baseimg "."
+	DOCKER_BUILDKIT=1 docker build -f "tools/python/bridge/Dockerfile" -t lingodb-py-dev --target devimg "."
 build-py-bridge:
 	DOCKER_BUILDKIT=1 docker build -f "tools/python/bridge/Dockerfile" -t lingodb-py-dev-build --target build "."
 	docker run --rm  -v "$(pwd):/built-packages" lingodb-py-dev-build create_package.sh cp$(PY_VERSION)-cp$(PY_VERSION)

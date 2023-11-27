@@ -7,7 +7,7 @@ env:
 jobs:
   build_release:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-buildimg:latest
+    container: ghcr.io/lingo-db/lingodb-dev:latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -23,17 +23,16 @@ jobs:
             export CXX="ccache g++"
             export C="ccache gcc"
             export CCACHE_DIR="/ccache"
-            mkdir /build/lingodb
-            cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DCMAKE_BUILD_TYPE=Release  -DENABLE_CRANELIFT_BACKEND=OFF
-            cmake --build /build/lingodb -j$(nproc)
+            make clean
+            make build-release
       - uses: actions/upload-artifact@master
         with:
           name: release-build
-          path: /build/lingodb
+          path: build/lingodb-release
           retention-days: 1
   build_debug:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-buildimg:latest
+    container: ghcr.io/lingo-db/lingodb-dev:latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
@@ -49,68 +48,73 @@ jobs:
             export CXX="ccache g++"
             export C="ccache gcc"
             export CCACHE_DIR="/ccache"
-            mkdir /build/lingodb
-            cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DENABLE_CRANELIFT_BACKEND=OFF
-            cmake --build /build/lingodb -j$(nproc)
+            make clean
+            make build-debug
       - uses: actions/upload-artifact@master
         with:
           name: debug-build
-          path: /build/lingodb
+          path: build/lingodb-debug
           retention-days: 1
   lint:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-buildimg:latest
+    container: ghcr.io/lingo-db/lingodb-dev:latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Build
         run: |
-            mkdir /build/lingodb
-            cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON  -DENABLE_CRANELIFT_BACKEND=OFF
-            cmake --build /build/lingodb -j$(nproc) --target build_includes
-            sed -i 's/-fno-lifetime-dse//g' /build/lingodb/compile_commands.json
-            python3 tools/scripts/run-clang-tidy.py -p /build/lingodb -quiet  -exclude="arrow|vendored" -header-filter="$PWD/include/.*"  -clang-tidy-binary=/build/llvm/bin/clang-tidy
+            make clean
+            make venv
+            make lint
 
-  file_tests:
+  test:
     needs: build_debug
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-buildimg:latest
+    container: ghcr.io/lingo-db/lingodb-dev:latest
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
         with:
           name: debug-build
-          path: /build/lingodb
+          path: build/lingodb-debug
       - name: Test
         run: |
-            chmod +x /build/lingodb/*
-            ln -s /build/llvm/bin/clang /usr/bin/clang++
-            /build/llvm/bin/llvm-lit -v /build/lingodb/test/lit
+            make venv
+            touch build/dependencies
+            touch build/lingodb-debug/.stamp
+            touch build/lingodb-debug/.buildstamp          
+            chmod +x build/lingodb-debug/*          
+            make test-no-rebuild
   sqlite_tests:
     needs: build_release
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-buildimg:latest
+    container: ghcr.io/lingo-db/lingodb-dev:latest
     steps:
       - uses: actions/checkout@master
       - uses: actions/download-artifact@master
         with:
           name: release-build
-          path: /build/lingodb
+          path: build/lingodb-release
       - name: Test
         run: |
-            chmod +x /build/lingodb/*
-            find ./test/sqlite-small/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P $(nproc) /build/lingodb/sqlite-tester
-            find ./test/sqlite/ -maxdepth 1 -type f -name '*.test' | xargs -L 1 -P $(nproc) /build/lingodb/sqlite-tester
+          make venv
+          touch build/dependencies
+          touch build/lingodb-release/.stamp
+          touch build/lingodb-release/.buildstamp
+          chmod +x build/lingodb-release/*
+          make sqlite-test-no-rebuild
+
   build_lingodb_python:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/python-buildimg:latest
+    container: ghcr.io/lingo-db/lingodb-py-dev:latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Build
         run: |
+            rm -rf /built-packages          
             mkdir -p /built-packages
-            create_package.sh cp310-cp310
+            bash tools/python/bridge/create_package.sh cp310-cp310          
             cd tools/python
             /opt/python/cp310-cp310/bin/python3 -m build .
             cp dist/*.whl /built-packages/.
@@ -134,23 +138,19 @@ jobs:
             python3 tools/python/test/test.py
   coverage:
     runs-on: ubuntu-latest
-    container: ghcr.io/lingo-db/lingodb-buildimg:latest
+    container: ghcr.io/lingo-db/lingodb-dev:latest
     steps:
       - name: Checkout
         uses: actions/checkout@v2
       - name: Build
         run: |
-            ln -s /build/llvm/bin/clang /usr/bin/clang++
-            apt-get install -y lcov
-            mkdir /build/lingodb
-            cmake -G Ninja . -B /build/lingodb -DMLIR_DIR=/build/llvm/lib/cmake/mlir -DLLVM_EXTERNAL_LIT=/build/llvm/bin/llvm-lit -DENABLE_CRANELIFT_BACKEND=OFF -DCMAKE_CXX_FLAGS=--coverage -DCMAKE_C_FLAGS=--coverage
-            cmake --build /build/lingodb -j$(nproc)
-            /build/llvm/bin/llvm-lit -v /build/lingodb/test/lit
-            mkdir /coverage-data
-            lcov --capture --directory /build/lingodb  --output-file /coverage-data/coverage.info
-            lcov --remove /coverage-data/coverage.info -o /coverage-data/filtered-coverage.info '/build/llvm/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*' '**/vendored/*' '/usr/*' '/build/lingodb/*'
+            make clean
+            make venv
+            make test-coverage
+            mkdir -p /coverage
+            cp build/lingodb-debug-coverage/filtered-coverage.info /coverage/.
       - uses: actions/checkout@master
       - uses: codecov/codecov-action@v3
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          files: /coverage-data/filtered-coverage.info
+          files: /coverage/filtered-coverage.info
