@@ -68,11 +68,15 @@ sqlite-test-no-rebuild: build/lingodb-release/.buildstamp
 .PHONY: test-coverage
 test-coverage: build/lingodb-debug-coverage/.stamp
 	cmake --build $(dir $<) --target mlir-db-opt run-mlir run-sql sql-to-mlir -- -j${NPROCS}
-	./build/llvm-build/bin/llvm-lit -v $(dir $<)/test/lit
+	${LLVM_LIT} -v $(dir $<)/test/lit
 	lcov --capture --directory $(dir $<)  --output-file $(dir $<)/coverage.info
 	lcov --remove $(dir $<)/coverage.info -o $(dir $<)/filtered-coverage.info \
-			'**/build/llvm-build/*' '**/llvm-project/*' '*.inc' '**/arrow/*' '**/pybind11/*' '**/vendored/*' '/usr/*' '**/build/lingodb-debug-coverage/*'
+			'**/site-packages/**/*' '**/vendored/*' '/usr/*' '**/build/lingodb-debug-coverage/*'
+
+coverage: build/lingodb-debug-coverage/.stamp
+	$(MAKE) test-coverage
 	genhtml  --ignore-errors source $(dir $<)/filtered-coverage.info --legend --title "lcov-test" --output-directory=$(dir $<)/coverage-report
+	open $(dir $<)/coverage-report/index.html
 
 
 .PHONY: run-benchmark

@@ -135,3 +135,13 @@ test_pylingodb:
    tags:
       - "python3"
 
+coverage:
+  image: gitlab.db.in.tum.de:5005/lingo-db/lingo-db/lingodb-dev:latest
+  script:
+    - make venv
+    - make test-coverage
+  coverage: '/lines\.{6}:\s+([0-9]+\.[0-9]+)%/'
+  #rules:
+  #  - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+  tags:
+    - "umbra-builder"
