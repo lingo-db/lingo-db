@@ -1,9 +1,9 @@
 add_library(runtime OBJECT
-        ArrowSchema.cpp
+        ArrowColumn.cpp
+        ArrowTable.cpp
         RecordBatchInfo.cpp
         ThreadLocal.cpp
         Heap.cpp
-        TableBuilder.cpp
         DumpRuntime.cpp
         DataSourceIteration.cpp
         GrowingBuffer.cpp

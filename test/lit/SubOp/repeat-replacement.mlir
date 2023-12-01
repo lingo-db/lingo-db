@@ -10,7 +10,7 @@
 
 module{
     func.func @main(){
-    %12 = subop.create_result_table ["const0"] -> !subop.result_table<[const0p0 : i32]>
+    %12 = subop.create !subop.result_table<[const0p0 : i32]>
     %3 = subop.generate[@constrel1::@const0({type = i32})] {
             %c1 = db.constant(1 : i32) : i32
             %c2 = db.constant(2 : i32) : i32
@@ -37,7 +37,8 @@ module{
       tuples.return %14 : !tuples.tuplestream
     }
     subop.materialize %11 {@constrel1::@const0 => const0p0}, %12 : !subop.result_table<[const0p0 : i32]>
-    subop.set_result 0 %12 : !subop.result_table<[const0p0 : i32]>
+    %local_table = subop.create_from ["const0"] %12 : !subop.result_table<[const0p0 : i32]> -> !subop.local_table<[const0p0 : i32]>
+    subop.set_result 0 %local_table  : !subop.local_table<[const0p0 : i32]>
     return
 }
 }

@@ -187,9 +187,10 @@ module{
             tuples.return %c0 : i32
         }
         %fstream6 = subop.gather %fstream5 @rM::@ref {revVertexId => @weights::@id({type=i32})}
-         %result_table = subop.create_result_table ["id","rank","l"] -> !subop.result_table<[id0:i32, rank0 : f64, l0 :i32]>
+         %result_table = subop.create !subop.result_table<[id0:i32, rank0 : f64, l0 :i32]>
          subop.materialize %fstream6 { @weights::@id => id0, @weights::@rank => rank0, @weights::@l => l0}, %result_table : !subop.result_table<[id0:i32,rank0 : f64, l0 :i32]>
-         subop.set_result 0 %result_table : !subop.result_table<[id0:i32, rank0 : f64, l0 :i32]>
+        %local_table = subop.create_from ["id","rank","l"] %result_table : !subop.result_table<[id0:i32,rank0 : f64, l0 :i32]> -> !subop.local_table<[id0:i32,rank0 : f64, l0 :i32]>
+        subop.set_result 0 %local_table  : !subop.local_table<[id0:i32,rank0 : f64, l0 :i32]>
         return
     }
 }

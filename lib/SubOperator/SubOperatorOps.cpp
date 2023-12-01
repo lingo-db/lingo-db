@@ -1507,6 +1507,27 @@ std::vector<std::string> subop::GenericCreateOp::getCreatedMembers() {
    }
    return {};
 }
+
+std::vector<std::string> subop::CreateFrom::getReadMembers() {
+   if (auto stateType = getState().getType().cast<mlir::subop::State>()) {
+      std::vector<std::string> res;
+      for (auto m : stateType.getMembers().getNames()) {
+         res.push_back(m.cast<mlir::StringAttr>().str());
+      }
+      return res;
+   }
+   return {};
+}
+std::vector<std::string> subop::CreateFrom::getWrittenMembers() {
+   if (auto stateType = getState().getType().cast<mlir::subop::State>()) {
+      std::vector<std::string> res;
+      for (auto m : stateType.getMembers().getNames()) {
+         res.push_back(m.cast<mlir::StringAttr>().str());
+      }
+      return res;
+   }
+   return {};
+}
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"
 

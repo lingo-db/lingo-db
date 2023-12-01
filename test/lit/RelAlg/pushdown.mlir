@@ -21,8 +21,8 @@ module @querymodule  {
 		%6 = db.compare eq %4 : i32, %5 : i32
 		tuples.return %6 : i1
 	}
-    %res_table = relalg.materialize %4 [] => [] : !subop.result_table<[]>
-    subop.set_result 0 %res_table : !subop.result_table<[]>
+    %res_table = relalg.materialize %4 [] => [] : !subop.local_table<[]>
+    subop.set_result 0 %res_table : !subop.local_table<[]>
     return
   }
 }
@@ -56,8 +56,8 @@ module @querymodule  {
 		%12 = db.compare eq %10 : i32, %11 : i32
 		tuples.return %12 : i1
 	}
-    %res_table = relalg.materialize %5 [] => [] : !subop.result_table<[]>
-    subop.set_result 0 %res_table : !subop.result_table<[]>
+    %res_table = relalg.materialize %5 [] => [] : !subop.local_table<[]>
+    subop.set_result 0 %res_table : !subop.local_table<[]>
     return
   }
 }
@@ -86,8 +86,8 @@ module @querymodule  {
 		%6 = db.compare eq %4 : i32, %5 : i32
 		tuples.return %6 : i1
 	}
-    %res_table = relalg.materialize %4 [] => [] : !subop.result_table<[]>
-    subop.set_result 0 %res_table : !subop.result_table<[]>
+    %res_table = relalg.materialize %4 [] => [] : !subop.local_table<[]>
+    subop.set_result 0 %res_table : !subop.local_table<[]>
     return
   }
 }
@@ -116,8 +116,8 @@ module @querymodule  {
 		%6 = db.compare eq %4 : i32, %5 : i32
 		tuples.return %6 : i1
 	}
-    %res_table = relalg.materialize %4 [] => [] : !subop.result_table<[]>
-    subop.set_result 0 %res_table : !subop.result_table<[]>
+    %res_table = relalg.materialize %4 [] => [] : !subop.local_table<[]>
+    subop.set_result 0 %res_table : !subop.local_table<[]>
     return
   }
 }
@@ -147,8 +147,8 @@ module @querymodule  {
 		%6 = db.compare eq %4 : i32, %5 : i32
 		tuples.return %6 : i1
 	}
-    %res_table = relalg.materialize %4 [] => [] : !subop.result_table<[]>
-    subop.set_result 0 %res_table : !subop.result_table<[]>
+    %res_table = relalg.materialize %4 [] => [] : !subop.local_table<[]>
+    subop.set_result 0 %res_table : !subop.local_table<[]>
     return
   }
 }

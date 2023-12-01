@@ -63,6 +63,11 @@ def Table : SubOperator_Type<"Table", "table",[State]> {
     let parameters = (ins "StateMembersAttr":$members);
     let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
 }
+def LocalTable : SubOperator_Type<"LocalTable", "local_table",[State]> {
+    let summary = "local table";
+    let parameters = (ins "StateMembersAttr":$members);
+    let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
+}
 def ResultTable : SubOperator_Type<"ResultTable", "result_table",[State]> {
     let summary = "reference to table";
     let parameters = (ins "StateMembersAttr":$members);
@@ -509,7 +514,16 @@ def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator,DeclareOpInterfaceMet
 //===----------------------------------------------------------------------===//
 // State Creation
 //===----------------------------------------------------------------------===//
-
+def CreateFrom: SubOperator_Op<"create_from", [Pure,SubOperator]> {
+    let summary = "create new state from existing state";
+    let arguments = (ins ArrayAttr: $columns,State:$state);
+    let results = (outs State:$result);
+    let assemblyFormat = [{$columns $state `:` type($state) `->` type($result) attr-dict }];
+      let extraClassDeclaration = [{
+          std::vector<std::string> getWrittenMembers();
+          std::vector<std::string> getReadMembers();
+      }];
+}
 def CreateSimpleStateOp : SubOperator_Op<"create_simple_state", [Pure]> {
     let summary = "create new state";
     let results = (outs SimpleState : $res);
@@ -544,12 +558,6 @@ def CreateArrayOp : SubOperator_Op<"create_array", [Pure,SubOperator]> {
               std::vector<std::string> getWrittenMembers();
               std::vector<std::string> getReadMembers();
           }];
-}
-def CreateResultTableOp : SubOperator_Op<"create_result_table", [Pure]> {
-    let summary = "create new state";
-    let arguments = (ins ArrayAttr: $columns);
-    let results = (outs ResultTable : $res);
-    let assemblyFormat = [{ $columns `->` type($res) attr-dict }];
 }
 
 def CreateSortedViewOp : SubOperator_Op<"create_sorted_view", [IsolatedFromAbove,SubOperator]> {

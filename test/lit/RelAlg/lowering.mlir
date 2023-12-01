@@ -417,8 +417,8 @@
 }
 
 // -----
-//CHECK: %{{.*}} = subop.create_result_table ["col1"] -> <[col1 : i64]>
+//CHECK: %{{.*}} = subop.create !subop.result_table<[col1 : i64]>
 //CHECK: subop.materialize %{{.*}} {@t::@col1 => col1}, %{{.*}} : !subop.result_table<[col1 : i64]>
 
 %0 = relalg.const_relation columns : [@t::@col1({type = i64})] values : [[0],[1]]
-%1 = relalg.materialize %0 [@t::@col1] => ["col1"] : !subop.result_table<[col1 : i64]>
+%1 = relalg.materialize %0 [@t::@col1] => ["col1"] : !subop.local_table<[col1 : i64]>

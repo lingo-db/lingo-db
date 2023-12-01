@@ -12,7 +12,7 @@ include "mlir/Dialect/TupleStream/TupleStreamBase.td"
 
 include "RelAlgInterfaces.td"
 
-def SubOp_ResultTable : Type<CPred<"$_self.isa<::mlir::subop::ResultTableType>()">,"result table type">;
+def SubOp_ResultTable : Type<CPred<"$_self.isa<::mlir::subop::LocalTableType>()">,"result table type">;
 def DSA_Collection : Type<CPred<"$_self.isa<::mlir::util::CollectionType>()">,"DB collection type">;
 
 

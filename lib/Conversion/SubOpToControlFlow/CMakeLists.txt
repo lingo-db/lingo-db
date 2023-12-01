@@ -17,7 +17,6 @@ add_mlir_conversion_library(MLIRSubOpToControlFlow
         heap-rt-defs
         idx-rt-defs
         tls-rt-defs
-        tb-rt-defs
         st-rt-defs
         paht-rt-defs
         db-rt-defs

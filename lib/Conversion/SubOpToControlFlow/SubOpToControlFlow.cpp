@@ -41,7 +41,6 @@
 #include "runtime-defs/RelationHelper.h"
 #include "runtime-defs/SegmentTreeView.h"
 #include "runtime-defs/SimpleState.h"
-#include "runtime-defs/TableBuilder.h"
 #include "runtime-defs/ThreadLocal.h"
 
 using namespace mlir;
@@ -583,10 +582,7 @@ class SubOpRewriter {
       return res;
    }
 };
-mlir::dsa::ResultTableType convertResultTableType(mlir::MLIRContext* ctxt, mlir::subop::ResultTableType t) {
-   auto tupleType = mlir::TupleType::get(ctxt, unpackTypes(t.getMembers().getTypes()));
-   return mlir::dsa::ResultTableType::get(ctxt, tupleType);
-}
+
 template <class OpT>
 class SubOpConversionPattern : public AbstractSubOpConversionPattern {
    public:
@@ -637,8 +633,8 @@ class MaterializeTableLowering : public SubOpTupleStreamConsumerConversionPatter
    LogicalResult matchAndRewrite(mlir::subop::MaterializeOp materializeOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
       if (!materializeOp.getState().getType().isa<mlir::subop::ResultTableType>()) return failure();
       auto stateType = materializeOp.getState().getType().cast<mlir::subop::ResultTableType>();
-      mlir::Value state = rewriter.create<mlir::dsa::DownCast>(materializeOp->getLoc(), convertResultTableType(getContext(), stateType), adaptor.getState());
-
+      mlir::Value loaded = rewriter.create<mlir::util::LoadOp>(materializeOp->getLoc(), adaptor.getState());
+      auto columnBuilders = rewriter.create<mlir::util::UnPackOp>(materializeOp->getLoc(), loaded);
       for (size_t i = 0; i < stateType.getMembers().getTypes().size(); i++) {
          auto memberName = stateType.getMembers().getNames()[i].cast<mlir::StringAttr>().str();
          auto attribute = materializeOp.getMapping().get(memberName).cast<mlir::tuples::ColumnRefAttr>();
@@ -649,9 +645,8 @@ class MaterializeTableLowering : public SubOpTupleStreamConsumerConversionPatter
             valid = rewriter.create<mlir::db::NotOp>(materializeOp->getLoc(), valid);
             val = rewriter.create<mlir::db::NullableGetVal>(materializeOp->getLoc(), getBaseType(val.getType()), val);
          }
-         rewriter.create<mlir::dsa::Append>(materializeOp->getLoc(), state, val, valid);
+         rewriter.create<mlir::dsa::Append>(materializeOp->getLoc(), columnBuilders.getResult(i), val, valid);
       }
-      rewriter.create<mlir::dsa::NextRow>(materializeOp->getLoc(), state);
       rewriter.eraseOp(materializeOp);
       return mlir::success();
    }
@@ -835,9 +830,9 @@ class CreateOpenHtFragmentLowering : public SubOpConversionPattern<mlir::subop::
    }
 };
 
-class CreateTableLowering : public SubOpConversionPattern<mlir::subop::CreateResultTableOp> {
+class CreateTableLowering : public SubOpConversionPattern<mlir::subop::GenericCreateOp> {
    public:
-   using SubOpConversionPattern<mlir::subop::CreateResultTableOp>::SubOpConversionPattern;
+   using SubOpConversionPattern<mlir::subop::GenericCreateOp>::SubOpConversionPattern;
    std::string arrowDescrFromType(mlir::Type type) const {
       if (type.isIndex()) {
          return "int[64]";
@@ -874,20 +869,19 @@ class CreateTableLowering : public SubOpConversionPattern<mlir::subop::CreateRes
       }
       return "";
    }
-   LogicalResult matchAndRewrite(mlir::subop::CreateResultTableOp createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+   LogicalResult matchAndRewrite(mlir::subop::GenericCreateOp createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       if (!createOp.getType().isa<mlir::subop::ResultTableType>()) return failure();
       auto tableType = createOp.getType().cast<mlir::subop::ResultTableType>();
       std::string descr;
-      auto columnNames = createOp.getColumns();
+      std::vector<mlir::Value> columnBuilders;
       for (size_t i = 0; i < tableType.getMembers().getTypes().size(); i++) {
-         if (!descr.empty()) {
-            descr += ";";
-         }
-         descr += columnNames[i].cast<mlir::StringAttr>().str() + ":" + arrowDescrFromType(getBaseType(tableType.getMembers().getTypes()[i].cast<mlir::TypeAttr>().getValue()));
+         auto type = tableType.getMembers().getTypes()[i].cast<mlir::TypeAttr>().getValue();
+         auto baseType=getBaseType(type);
+         columnBuilders.push_back(rewriter.create<mlir::dsa::CreateDS>(createOp.getLoc(), mlir::dsa::ColumnBuilderType::get(getContext(), baseType),rewriter.getStringAttr(arrowDescrFromType(baseType))));
       }
-      auto convertedType = typeConverter->convertType(tableType);
-      mlir::Value resultTable = rewriter.create<mlir::dsa::CreateDS>(createOp->getLoc(), convertResultTableType(getContext(), tableType), rewriter.getStringAttr(descr));
-      mlir::Value ref = rewriter.create<mlir::dsa::DownCast>(createOp->getLoc(), convertedType, resultTable);
+      mlir::Value tpl = rewriter.create<mlir::util::PackOp>(createOp->getLoc(), columnBuilders);
+      mlir::Value ref=rewriter.create<mlir::util::AllocOp>(createOp->getLoc(), mlir::util::RefType::get(tpl.getType()), mlir::Value());
+      rewriter.create<mlir::util::StoreOp>(createOp->getLoc(), tpl, ref, mlir::Value());
       rewriter.replaceOp(createOp, ref);
       return mlir::success();
    }
@@ -943,8 +937,8 @@ class SetResultOpLowering : public SubOpConversionPattern<mlir::subop::SetResult
    public:
    using SubOpConversionPattern<mlir::subop::SetResultOp>::SubOpConversionPattern;
    LogicalResult matchAndRewrite(mlir::subop::SetResultOp setResultOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      auto loaded = rewriter.create<dsa::DownCast>(setResultOp->getLoc(), convertResultTableType(getContext(), setResultOp.getState().getType().cast<mlir::subop::ResultTableType>()), adaptor.getState());
-      rewriter.replaceOpWithNewOp<mlir::dsa::SetResultOp>(setResultOp, setResultOp.getResultId(), loaded);
+      //auto loaded = rewriter.create<dsa::DownCast>(setResultOp->getLoc(), convertResultTableType(getContext(), setResultOp.getState().getType().cast<mlir::subop::ResultTableType>()), adaptor.getState());
+      rewriter.replaceOpWithNewOp<mlir::dsa::SetResultOp>(setResultOp, setResultOp.getResultId(), adaptor.getState());
       return mlir::success();
    }
 };
@@ -1106,7 +1100,42 @@ class MergeThreadLocalResultTable : public SubOpConversionPattern<mlir::subop::M
 
    LogicalResult matchAndRewrite(mlir::subop::MergeOp mergeOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       if (!mergeOp.getType().isa<mlir::subop::ResultTableType>()) return mlir::failure();
-      mlir::Value merged = rt::ResultTable::merge(rewriter, mergeOp->getLoc())(adaptor.getThreadLocal())[0];
+      auto ptrType = mlir::util::RefType::get(getContext(), IntegerType::get(getContext(), 8));
+      auto loc = mergeOp->getLoc();
+      mlir::func::FuncOp combineFn;
+      static size_t id = 0;
+      ModuleOp parentModule = mergeOp->getParentOfType<ModuleOp>();
+
+      rewriter.atStartOf(parentModule.getBody(), [&](SubOpRewriter& rewriter) {
+         combineFn = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "result_table_merge" + std::to_string(id++), mlir::FunctionType::get(getContext(), TypeRange({ptrType, ptrType}), TypeRange()));
+      });
+      {
+         auto* funcBody = new Block;
+         Value left = funcBody->addArgument(ptrType, loc);
+         Value right = funcBody->addArgument(ptrType, loc);
+         combineFn.getBody().push_back(funcBody);
+         rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
+            auto leftPtr = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, typeConverter->convertType(mergeOp.getType()), left);
+            auto rightPtr = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, typeConverter->convertType(mergeOp.getType()), right);
+            auto leftLoaded = rewriter.create<mlir::util::LoadOp>(loc, leftPtr);
+            auto rightLoaded = rewriter.create<mlir::util::LoadOp>(loc, rightPtr);
+            auto leftBuilders = rewriter.create<mlir::util::UnPackOp>(loc, leftLoaded);
+            auto rightBuilders = rewriter.create<mlir::util::UnPackOp>(loc, rightLoaded);
+            std::vector<mlir::Value> results;
+            for (size_t i = 0; i < leftBuilders.getNumResults(); i++) {
+               mlir::Value concatenated = rewriter.create<mlir::dsa::Concat>(loc, leftBuilders.getResults()[i].getType(), leftBuilders.getResults()[i], rightBuilders.getResults()[i]);
+               results.push_back(concatenated);
+            }
+            auto packed = rewriter.create<mlir::util::PackOp>(loc, results);
+            rewriter.create<mlir::util::StoreOp>(loc, packed, leftPtr, mlir::Value());
+            rewriter.create<mlir::func::ReturnOp>(loc);
+         });
+      }
+
+      Value combineFnPtr = rewriter.create<mlir::func::ConstantOp>(loc, combineFn.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(combineFn.getSymName())));
+
+      mlir::Value merged = rt::ThreadLocal::merge(rewriter, mergeOp->getLoc())(mlir::ValueRange{adaptor.getThreadLocal(), combineFnPtr})[0];
+      merged = rewriter.create<mlir::util::GenericMemrefCastOp>(mergeOp->getLoc(), typeConverter->convertType(mergeOp.getType()), merged);
       rewriter.replaceOp(mergeOp, merged);
       return mlir::success();
    }
@@ -3816,6 +3845,27 @@ class CreateContinuousViewLowering : public SubOpConversionPattern<mlir::subop::
       return success();
    }
 };
+class CreateFromResultTableLowering : public SubOpConversionPattern<mlir::subop::CreateFrom> {
+   using SubOpConversionPattern<mlir::subop::CreateFrom>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::CreateFrom createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      auto resultTableType = createOp.getState().getType().dyn_cast<mlir::subop::ResultTableType>();
+      if (!resultTableType) return failure();
+      mlir::Value loaded = rewriter.create<mlir::util::LoadOp>(createOp->getLoc(), adaptor.getState());
+      auto columnBuilders = rewriter.create<mlir::util::UnPackOp>(createOp->getLoc(), loaded);
+      std::vector<mlir::Value> columns;
+      std::vector<mlir::Type> types;
+      for (auto i = 0ul; i < columnBuilders.getNumResults(); i++) {
+         auto columnBuilder = columnBuilders.getResult(i);
+         auto eleType=columnBuilder.getType().cast<mlir::dsa::ColumnBuilderType>().getType();
+         types.push_back(eleType);
+         auto column = rewriter.create<mlir::dsa::FinishColumn>(createOp->getLoc(), mlir::dsa::ColumnType::get(getContext(), eleType), columnBuilder);
+         columns.push_back(column);
+      }
+      mlir::Value localTable = rewriter.create<mlir::dsa::CreateTable>(createOp->getLoc(), mlir::dsa::TableType::get(getContext(),mlir::TupleType::get(getContext(),types)),createOp.getColumns(), columns);
+      rewriter.replaceOp(createOp, localTable);
+      return success();
+   }
+};
 class GetBeginLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::GetBeginReferenceOp> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::GetBeginReferenceOp>::SubOpTupleStreamConsumerConversionPattern;
@@ -3937,6 +3987,7 @@ class UnwrapOptionalPreAggregationHtRefLowering : public SubOpTupleStreamConsume
       return mlir::success();
    }
 };
+
 class SetTrackedCountLowering : public SubOpConversionPattern<mlir::subop::SetTrackedCountOp> {
    public:
    using SubOpConversionPattern<mlir::subop::SetTrackedCountOp>::SubOpConversionPattern;
@@ -3981,7 +4032,11 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
    });
    typeConverter.addConversion([&](mlir::subop::ResultTableType t) -> Type {
-      return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
+      std::vector<mlir::Type> types;
+      for (auto typeAttr : t.getMembers().getTypes()) {
+         types.push_back(mlir::dsa::ColumnBuilderType::get(ctxt, getBaseType(typeAttr.cast<mlir::TypeAttr>().getValue())));
+      }
+      return mlir::util::RefType::get(mlir::TupleType::get(ctxt, types));
    });
    typeConverter.addConversion([&](mlir::subop::BufferType t) -> Type {
       return mlir::util::RefType::get(t.getContext(), mlir::IntegerType::get(ctxt, 8));
@@ -4081,6 +4136,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    //ResultTable
    rewriter.insertPattern<CreateTableLowering>(typeConverter, ctxt);
    rewriter.insertPattern<MaterializeTableLowering>(typeConverter, ctxt);
+   rewriter.insertPattern<CreateFromResultTableLowering>(typeConverter, ctxt);
    //SimpleState
    rewriter.insertPattern<CreateSimpleStateLowering>(typeConverter, ctxt);
    rewriter.insertPattern<ScanRefsSimpleStateLowering>(typeConverter, ctxt);

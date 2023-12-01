@@ -36,15 +36,28 @@ class DSA_Op<string mnemonic, list<Trait> traits = []> : Op<DSA_Dialect, mnemoni
 class DSA_Type<string name, string typeMnemonic, list<Trait> traits = []> : TypeDef<DSA_Dialect, name,traits> {
     let mnemonic = typeMnemonic;
 }
+def DSA_Column : DSA_Type<"Column","column"> {
+    let summary = "column";
+    let description = [{
+        A column of a table.
+    }];
+    let parameters = (ins "mlir::Type":$type);
+    let assemblyFormat = "`<` $type `>`";
+}
+def DSA_ColumnBuilder : DSA_Type<"ColumnBuilder","column_builder"> {
+    let summary = "column_builder";
+    let description = [{
+        A column builder of a table.
+    }];
+    let parameters = (ins "mlir::Type":$type);
+    let assemblyFormat = "`<` $type `>`";
+}
 
-
-def DSA_ResultTable : DSA_Type<"ResultTable", "result_table"> {
+def DSA_Table : DSA_Type<"Table", "table"> {
     let summary = "result_table";
     let description = [{
-        Stateful result_table with a fixed schema. Values to the last row can
-        be added using `ds_append` and once all columns are filled, the row can
-        be finalized using `next_row`.
-    }];
+        table with a fixed schema.
+        }];
 
     let parameters = (ins "TupleType":$rowType);
     let assemblyFormat = "`<` $rowType `>`";
@@ -63,6 +76,18 @@ def DSA_RecordBatch: DSA_Type<"RecordBatch","record_batch",[CollectionType]> {
     let extraClassDeclaration = [{
         mlir::Type getElementType();
     }];
+}
+def DSA_CreateTable : DSA_Op<"create_table"> {
+    let summary = "create table from columns";
+    let arguments = (ins ArrayAttr:$column_names,Variadic<DSA_Column>:$columns);
+    let results = (outs DSA_Table:$table);
+    let assemblyFormat = " $column_names `(` $columns `:` type($columns) `)` `->` type($table) attr-dict";
+}
+def DSA_FinishColumn : DSA_Op<"finish_column"> {
+    let summary = "finish column";
+    let arguments = (ins DSA_ColumnBuilder:$builder);
+    let results = (outs DSA_Column:$column);
+    let assemblyFormat = " $builder `:` type($builder) `->` type($column) attr-dict";
 }
 
 
@@ -96,12 +121,6 @@ def DSA_At : DSA_Op<"at", [Pure]> {
     let assemblyFormat = "$collection  `[` $pos `]` `:` type($collection) `->` type($val) (`,` type($valid)^)? attr-dict";
 }
 
-def DSA_NextRow : DSA_Op<"next_row"> {
-    let summary = "start next row in a table builder";
-
-    let arguments = (ins DSA_ResultTable:$builder);
-    let assemblyFormat = "$builder `:` type($builder) attr-dict";
-}
 
 def DSA_DownCast : DSA_Op<"down_cast"> {
     let summary = "set result";
@@ -113,6 +132,12 @@ def DSA_SetResultOp : DSA_Op<"set_result"> {
     let summary = "set result";
     let arguments = (ins I32Attr:$result_id, AnyType : $state);
     let assemblyFormat = [{ $result_id $state `:` type($state)  attr-dict }];
+}
+def DSA_Concat : DSA_Op<"ds_concat"> {
+    let summary = "concatenate two data structures";
+    let arguments = (ins AnyType:$left, AnyType:$right);
+    let results = (outs AnyType:$res);
+    let assemblyFormat = "$left  `:` type($left) `,` $right `:` type($right) `->` type($res) attr-dict";
 }
 
 def DSA_Append : DSA_Op<"ds_append"> {

@@ -6,8 +6,8 @@
 --//CHECK:             %{{.*}} = db.constant(1 : i32) : i32
 --//CHECK:             tuples.return %{{.*}} : i32
 --//CHECK:         }
---//CHECK:         %{{.*}} = relalg.materialize %{{.*}} [@map0::@tmp_attr0] => [""] : !subop.result_table<[unnamed$0 : i32]>
---//CHECK:         subop.set_result 0 %{{.*}} : !subop.result_table<[unnamed$0 : i32]>
+--//CHECK:         %{{.*}} = relalg.materialize %{{.*}} [@map0::@tmp_attr0] => [""] : !subop.local_table<[unnamed$0 : i32]>
+--//CHECK:         subop.set_result 0 %{{.*}} : !subop.local_table<[unnamed$0 : i32]>
 --//CHECK:         return
 --//CHECK:     }
 --//CHECK: }
@@ -16,8 +16,8 @@ select 1;
 --//CHECK: module {
 --//CHECK:     func.func @main() {
 --//CHECK:         %{{.*}} = relalg.basetable  {table_identifier = "test"} columns: {bool => @test::@bool({type = !db.nullable<i1>}), date32 => @test::@date32({type = !db.nullable<!db.date<day>>}), date64 => @test::@date64({type = !db.nullable<!db.date<millisecond>>}), decimal => @test::@decimal({type = !db.nullable<!db.decimal<5, 2>>}), float32 => @test::@float32({type = !db.nullable<f32>}), float64 => @test::@float64({type = !db.nullable<f64>}), int32 => @test::@int32({type = !db.nullable<i32>}), int64 => @test::@int64({type = !db.nullable<i64>}), str => @test::@str({type = !db.nullable<!db.string>})}
---//CHECK:         %{{.*}} = relalg.materialize %{{.*}} [@test::@str,@test::@float32,@test::@float64,@test::@decimal,@test::@int32,@test::@int64,@test::@bool,@test::@date32,@test::@date64] => ["str", "float32", "float64", "decimal", "int32", "int64", "bool", "date32", "date64"] : !subop.result_table<[str$0 : !db.nullable<!db.string>, float32$0 : !db.nullable<f32>, float64$0 : !db.nullable<f64>, decimal$0 : !db.nullable<!db.decimal<5, 2>>, int32$0 : !db.nullable<i32>, int64$0 : !db.nullable<i64>, bool$0 : !db.nullable<i1>, date32$0 : !db.nullable<!db.date<day>>, date64$0 : !db.nullable<!db.date<millisecond>>]>
---//CHECK:         subop.set_result 0 %{{.*}} : !subop.result_table<[str$0 : !db.nullable<!db.string>, float32$0 : !db.nullable<f32>, float64$0 : !db.nullable<f64>, decimal$0 : !db.nullable<!db.decimal<5, 2>>, int32$0 : !db.nullable<i32>, int64$0 : !db.nullable<i64>, bool$0 : !db.nullable<i1>, date32$0 : !db.nullable<!db.date<day>>, date64$0 : !db.nullable<!db.date<millisecond>>]>
+--//CHECK:         %{{.*}} = relalg.materialize %{{.*}} [@test::@str,@test::@float32,@test::@float64,@test::@decimal,@test::@int32,@test::@int64,@test::@bool,@test::@date32,@test::@date64] => ["str", "float32", "float64", "decimal", "int32", "int64", "bool", "date32", "date64"] : !subop.local_table<[str$0 : !db.nullable<!db.string>, float32$0 : !db.nullable<f32>, float64$0 : !db.nullable<f64>, decimal$0 : !db.nullable<!db.decimal<5, 2>>, int32$0 : !db.nullable<i32>, int64$0 : !db.nullable<i64>, bool$0 : !db.nullable<i1>, date32$0 : !db.nullable<!db.date<day>>, date64$0 : !db.nullable<!db.date<millisecond>>]>
+--//CHECK:         subop.set_result 0 %{{.*}} : !subop.local_table<[str$0 : !db.nullable<!db.string>, float32$0 : !db.nullable<f32>, float64$0 : !db.nullable<f64>, decimal$0 : !db.nullable<!db.decimal<5, 2>>, int32$0 : !db.nullable<i32>, int64$0 : !db.nullable<i64>, bool$0 : !db.nullable<i1>, date32$0 : !db.nullable<!db.date<day>>, date64$0 : !db.nullable<!db.date<millisecond>>]>
 --//CHECK:         return
 --//CHECK:     }
 --//CHECK: }

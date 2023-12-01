@@ -10,12 +10,12 @@ add_mlir_conversion_library(MLIRDSAToStd
         ../../../mlir/Conversion/DSAToStd
 
         DEPENDS
-        tb-rt-defs
         ds-it-rt-defs
         join-ht-rt-defs
         ht-rt-defs
         ec-rt-defs
-        tb-arrow-schema-defs
+        tb-arrow-column-defs
+        tb-arrow-table-defs
         LINK_COMPONENTS
         Core
 

@@ -5,7 +5,7 @@
 #include <arrow/table.h>
 
 #include "execution/ResultProcessing.h"
-#include "runtime/TableBuilder.h"
+#include "runtime/ArrowTable.h"
 #include <functional>
 
 namespace {
@@ -26,7 +26,7 @@ class TableRetriever : public execution::ResultProcessor {
    public:
    TableRetriever(std::shared_ptr<arrow::Table>& result) : result(result) {}
    void process(runtime::ExecutionContext* executionContext) override {
-      auto resultTable = executionContext->getResultOfType<runtime::ResultTable>(0);
+      auto resultTable = executionContext->getResultOfType<runtime::ArrowTable>(0);
       if (!resultTable) return;
       result = resultTable.value()->get();
    }
@@ -117,7 +117,7 @@ void printTable(const std::shared_ptr<arrow::Table>& table) {
 
 class TablePrinter : public execution::ResultProcessor {
    void process(runtime::ExecutionContext* executionContext) override {
-      auto resultTable = executionContext->getResultOfType<runtime::ResultTable>(0);
+      auto resultTable = executionContext->getResultOfType<runtime::ArrowTable>(0);
       if (!resultTable) return;
       auto table = resultTable.value()->get();
       printTable(table);
@@ -126,7 +126,7 @@ class TablePrinter : public execution::ResultProcessor {
 class BatchedTablePrinter : public execution::ResultProcessor {
    void process(runtime::ExecutionContext* executionContext) override {
       for (size_t i = 0;; i++) {
-         auto resultTable = executionContext->getResultOfType<runtime::ResultTable>(i);
+         auto resultTable = executionContext->getResultOfType<runtime::ArrowTable>(i);
          if (!resultTable) return;
          auto table = resultTable.value()->get();
          printTable(table);

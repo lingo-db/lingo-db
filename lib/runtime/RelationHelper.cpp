@@ -1,5 +1,4 @@
 #include "runtime/RelationHelper.h"
-#include "runtime/TableBuilder.h"
 
 #include <iostream>
 
@@ -7,6 +6,7 @@
 
 #include <arrow/csv/api.h>
 #include <arrow/io/api.h>
+#include <runtime/ArrowTable.h>
 namespace runtime {
 void RelationHelper::createTable(runtime::ExecutionContext* context, runtime::VarLen32 name, runtime::VarLen32 meta) {
    auto& session = context->getSession();
@@ -15,7 +15,7 @@ void RelationHelper::createTable(runtime::ExecutionContext* context, runtime::Va
 }
 void RelationHelper::appendTableFromResult(runtime::VarLen32 tableName, runtime::ExecutionContext* context, size_t resultId) {
    {
-      auto resultTable = context->getResultOfType<runtime::ResultTable>(resultId);
+      auto resultTable = context->getResultOfType<runtime::ArrowTable>(resultId);
       if (!resultTable) {
          throw std::runtime_error("appending result table failed: no result table");
       }

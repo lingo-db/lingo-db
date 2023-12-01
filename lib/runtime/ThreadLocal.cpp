@@ -2,6 +2,7 @@
 #include "utility/Tracer.h"
 namespace {
 static utility::Tracer::Event getLocalEvent("ThreadLocal", "getLocal");
+static utility::Tracer::Event mergeEvent("ThreadLocal", ",merge");
 } // end namespace
 uint8_t* runtime::ThreadLocal::getLocal() {
    utility::Tracer::Trace trace(getLocalEvent);
@@ -11,4 +12,19 @@ uint8_t* runtime::ThreadLocal::getLocal() {
 }
 runtime::ThreadLocal* runtime::ThreadLocal::create(uint8_t* (*initFn)()) {
    return new ThreadLocal(initFn);
+}
+
+uint8_t* runtime::ThreadLocal::merge(void (*mergeFn)(uint8_t*, uint8_t*)) {
+   utility::Tracer::Trace trace(mergeEvent);
+   uint8_t* first = nullptr;
+   for (auto* ptr : getTls()) {
+      auto* current = ptr;
+      if (!first) {
+         first = current;
+      } else {
+         mergeFn(first, current);
+      }
+   }
+   trace.stop();
+   return first;
 }

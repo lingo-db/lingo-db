@@ -163,16 +163,17 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
       return success();
    }
 };
-class AppendTBLowering : public ConversionPattern {
+
+class AppendCBLowering : public ConversionPattern {
    public:
-   explicit AppendTBLowering(TypeConverter& typeConverter, MLIRContext* context)
+   explicit AppendCBLowering(TypeConverter& typeConverter, MLIRContext* context)
       : ConversionPattern(typeConverter, mlir::dsa::Append::getOperationName(), 2, context) {}
 
    LogicalResult matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto loc = op->getLoc();
       mlir::dsa::AppendAdaptor adaptor(operands);
       auto appendOp = mlir::cast<mlir::dsa::Append>(op);
-      if (!appendOp.getDs().getType().isa<mlir::dsa::ResultTableType>()) {
+      if (!appendOp.getDs().getType().isa<mlir::dsa::ColumnBuilderType>()) {
          return mlir::failure();
       }
       auto t = appendOp.getVal().getType();
@@ -224,6 +225,7 @@ class AppendTBLowering : public ConversionPattern {
       return success();
    }
 };
+
 class StringCastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
    public:
    using OpConversionPattern<mlir::db::CastOp>::OpConversionPattern;
@@ -1114,16 +1116,19 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
-
+   auto convertPhysicalSingle = [&](mlir::Type t) -> mlir::Type {
+      mlir::Type arrowPhysicalType = typeConverter.convertType(t);
+      if (t.isa<mlir::db::DecimalType>()) {
+         arrowPhysicalType = mlir::IntegerType::get(t.getContext(), 128);
+      } else if (auto dateType = t.dyn_cast_or_null<mlir::db::DateType>()) {
+         arrowPhysicalType = dateType.getUnit() == mlir::db::DateUnitAttr::day ? mlir::IntegerType::get(t.getContext(), 32) : mlir::IntegerType::get(t.getContext(), 64);
+      }
+      return arrowPhysicalType;
+   };
    auto convertPhysical = [&](mlir::TupleType tuple) -> mlir::TupleType {
       std::vector<mlir::Type> types;
       for (auto t : tuple.getTypes()) {
-         mlir::Type arrowPhysicalType = typeConverter.convertType(t);
-         if (t.isa<mlir::db::DecimalType>()) {
-            arrowPhysicalType = mlir::IntegerType::get(t.getContext(), 128);
-         } else if (auto dateType = t.dyn_cast_or_null<mlir::db::DateType>()) {
-            arrowPhysicalType = dateType.getUnit() == mlir::db::DateUnitAttr::day ? mlir::IntegerType::get(t.getContext(), 32) : mlir::IntegerType::get(t.getContext(), 64);
-         }
+         mlir::Type arrowPhysicalType = convertPhysicalSingle(t);
          types.push_back(arrowPhysicalType);
       }
       return mlir::TupleType::get(tuple.getContext(), types);
@@ -1134,8 +1139,13 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::dsa::RecordBatchType r) {
       return mlir::dsa::RecordBatchType::get(r.getContext(), convertPhysical(r.getRowType()));
    });
-   typeConverter.addConversion([&](mlir::dsa::ResultTableType r) { return mlir::dsa::ResultTableType::get(r.getContext(), typeConverter.convertType(r.getRowType()).cast<mlir::TupleType>()); });
-
+   typeConverter.addConversion([&](mlir::dsa::ColumnBuilderType r) {
+      return mlir::dsa::ColumnBuilderType::get(r.getContext(), convertPhysicalSingle(r.getType()));
+   });
+   typeConverter.addConversion([&](mlir::dsa::ColumnType r) {
+      return mlir::dsa::ColumnType::get(r.getContext(), convertPhysicalSingle(r.getType()));
+   });
+   typeConverter.addConversion([&](mlir::dsa::TableType r) { return mlir::dsa::TableType::get(r.getContext(), convertPhysical(r.getRowType())); });
    RewritePatternSet patterns(&getContext());
 
    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(patterns, typeConverter);
@@ -1149,10 +1159,12 @@ void DBToStdLoweringPass::runOnOperation() {
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::DownCast>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::CreateDS>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::YieldOp>>(typeConverter, &getContext());
-   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::NextRow>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::CreateTable>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::Concat>>(typeConverter, &getContext());
+   patterns.insert<SimpleTypeConversionPattern<mlir::dsa::FinishColumn>>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::SetResultOp>>(typeConverter, &getContext());
    patterns.insert<AtLowering>(typeConverter, &getContext());
-   patterns.insert<AppendTBLowering>(typeConverter, &getContext());
+   patterns.insert<AppendCBLowering>(typeConverter, &getContext());
    patterns.insert<SimpleTypeConversionPattern<mlir::dsa::ForOp>>(typeConverter, &getContext());
    patterns.insert<StringCmpOpLowering>(typeConverter, ctxt);
    patterns.insert<CharCmpOpLowering>(typeConverter, ctxt);

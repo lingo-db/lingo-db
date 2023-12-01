@@ -12,6 +12,7 @@
 //CHECK: |                             8  |                             0  |                             9  |                             8  |
 //CHECK: |                             9  |                             0  |                             9  |                             9  |
 !result_table_type = !subop.result_table<[v : index,b : index, e : index,r:index]>
+!local_table_type = !subop.local_table<[v : index,b : index, e : index,r:index]>
 module {
     func.func @main(){
         %vals = subop.create !subop.buffer<[val : index]>
@@ -25,7 +26,7 @@ module {
             tuples.return
         }
         subop.materialize %generated {@t::@c1 => val}, %vals : !subop.buffer<[val : index]>
-         %result_table = subop.create_result_table ["v","b","e","r"] -> !result_table_type
+         %result_table = subop.create !result_table_type
 
         %view = subop.create_continuous_view %vals : !subop.buffer<[val : index]> -> !subop.continuous_view<!subop.buffer<[val : index]>>
         %stream = subop.scan_refs %view : !subop.continuous_view<!subop.buffer<[val : index]>> @scan::@ref({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.buffer<[val : index]>>>})  {sequential}
@@ -36,7 +37,8 @@ module {
         %stream5 = subop.gather %stream4 @view::@end { val => @scan::@lastval({type=index}) }
         %stream6 = subop.entries_between %stream5 @view::@begin @scan::@ref @scan::@rank({type=index})
         subop.materialize %stream6 {@scan::@currval => v, @scan::@firstval => b, @scan::@lastval => e, @scan::@rank => r}, %result_table : !result_table_type
-        subop.set_result 0 %result_table  : !result_table_type
+        %local_table = subop.create_from ["v","b","e","r"] %result_table : !result_table_type -> !local_table_type
+        subop.set_result 0 %local_table  : !local_table_type
         return
     }
 }

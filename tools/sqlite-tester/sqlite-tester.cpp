@@ -2,7 +2,7 @@
 #include "execution/Execution.h"
 #include "md5.h"
 #include "mlir-support/eval.h"
-#include "runtime/TableBuilder.h"
+#include "runtime/ArrowTable.h"
 
 #include <fstream>
 #include <iostream>
@@ -37,7 +37,7 @@ struct ResultHasher : public execution::ResultProcessor {
    std::string lines;
    ResultHasher() : hash(), numValues(0), lines() {}
    void process(runtime::ExecutionContext* executionContext) override {
-      auto resultTable = executionContext->getResultOfType<runtime::ResultTable>(0);
+      auto resultTable = executionContext->getResultOfType<runtime::ArrowTable>(0);
       if (!resultTable) {
          return; //todo: proper error handling
       }

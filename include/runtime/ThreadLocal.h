@@ -16,6 +16,7 @@ class ThreadLocal {
       }
       return tls;
    }
+   uint8_t* merge(void (*mergeFn)(uint8_t*, uint8_t*));
 };
 } // end namespace runtime
 

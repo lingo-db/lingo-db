@@ -1551,19 +1551,21 @@ class MaterializeLowering : public OpConversionPattern<mlir::relalg::Materialize
    using OpConversionPattern<mlir::relalg::MaterializeOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::relalg::MaterializeOp materializeOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto resultTableType = materializeOp.getResult().getType().cast<mlir::subop::ResultTableType>();
+      auto localTableType = materializeOp.getResult().getType().cast<mlir::subop::LocalTableType>();
       std::vector<Attribute> colNames;
       std::vector<NamedAttribute> mapping;
       for (size_t i = 0; i < materializeOp.getColumns().size(); i++) {
          auto columnName = materializeOp.getColumns()[i].cast<mlir::StringAttr>();
-         auto colMemberName = resultTableType.getMembers().getNames()[i].cast<mlir::StringAttr>().str();
+         auto colMemberName = localTableType.getMembers().getNames()[i].cast<mlir::StringAttr>().str();
          auto columnAttr = materializeOp.getCols()[i].cast<mlir::tuples::ColumnRefAttr>();
          mapping.push_back(rewriter.getNamedAttr(colMemberName, columnAttr));
          colNames.push_back(columnName);
       }
-      mlir::Value table = rewriter.create<mlir::subop::CreateResultTableOp>(materializeOp->getLoc(), resultTableType, rewriter.getArrayAttr(colNames));
-      rewriter.create<mlir::subop::MaterializeOp>(materializeOp->getLoc(), adaptor.getRel(), table, rewriter.getDictionaryAttr(mapping));
-      rewriter.replaceOp(materializeOp, table);
+      //todo: think about if this is really okay: two states have the same members...
+      mlir::Value resultTable = rewriter.create<mlir::subop::GenericCreateOp>(materializeOp->getLoc(), mlir::subop::ResultTableType::get(getContext(), localTableType.getMembers()));
+      rewriter.create<mlir::subop::MaterializeOp>(materializeOp->getLoc(), adaptor.getRel(), resultTable, rewriter.getDictionaryAttr(mapping));
+      mlir::Value localTable = rewriter.create<mlir::subop::CreateFrom>(materializeOp.getLoc(), localTableType, rewriter.getArrayAttr(colNames), resultTable);
+      rewriter.replaceOp(materializeOp, localTable);
 
       return success();
    }
