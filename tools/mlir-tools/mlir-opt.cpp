@@ -23,8 +23,8 @@
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "runtime/Catalog.h"
 
-#include <mlir/Dialect/ControlFlow/IR/ControlFlow.h>
 #include <mlir/Conversion/UtilToLLVM/Passes.h>
+#include <mlir/Dialect/ControlFlow/IR/ControlFlow.h>
 int main(int argc, char** argv) {
    if (argc > 2) {
       if (std::string(argv[1]) == "--use-db") {

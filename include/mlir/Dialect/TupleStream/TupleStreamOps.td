@@ -38,4 +38,11 @@ def GetColumnOp : TupleStream_Op<"getcol", [Pure]> {
     let results = (outs AnyType : $res);
     let assemblyFormat = [{  $tuple custom<CustRef>($attr) `:` type($res) attr-dict }];
 }
+
+def GetParamVal: TupleStream_Op<"get_param_val", [Pure]> {
+    let summary = "get param value operation";
+    let arguments = (ins AnyType: $param);
+    let results = (outs AnyType: $res);
+    let assemblyFormat = [{  $param `:` type($param) `->` type($res) attr-dict }];
+}
 #endif // LINGODB_DIALECT_TupleStream_IR_OPS
