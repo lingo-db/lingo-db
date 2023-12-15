@@ -551,6 +551,32 @@ class FuncConstTypeConversionPattern : public ConversionPattern {
       return success();
    }
 };
+class CallIndirectTypeConversionPattern : public ConversionPattern {
+   public:
+   explicit CallIndirectTypeConversionPattern(TypeConverter& typeConverter, MLIRContext* context)
+      : ConversionPattern(typeConverter, mlir::func::CallIndirectOp::getOperationName(), 1, context) {}
+
+   LogicalResult
+   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
+                   ConversionPatternRewriter& rewriter) const override {
+      auto callIndirectOp = mlir::cast<mlir::func::CallIndirectOp>(op);
+      mlir::func::CallIndirectOpAdaptor adaptor(operands);
+      auto funcType = callIndirectOp.getCallee().getType().cast<mlir::FunctionType>();
+      llvm::SmallVector<mlir::Type> convertedFuncInputTypes;
+      llvm::SmallVector<mlir::Type> convertedFuncResultsTypes;
+      if(typeConverter->convertTypes(funcType.getInputs(), convertedFuncInputTypes).failed()){
+         return failure();
+      }
+      if(typeConverter->convertTypes(funcType.getResults(), convertedFuncResultsTypes).failed()){
+         return failure();
+      }
+
+      auto newFunctionType = rewriter.getFunctionType(convertedFuncInputTypes, convertedFuncResultsTypes);
+      mlir::Value callee=rewriter.create<mlir::UnrealizedConversionCastOp>(op->getLoc(), newFunctionType, adaptor.getCallee()).getResult(0);
+      rewriter.replaceOpWithNewOp<mlir::func::CallIndirectOp>(op, callee, adaptor.getCalleeOperands());
+      return success();
+   }
+};
 class ArithSelectTypeConversionPattern : public ConversionPattern {
    public:
    explicit ArithSelectTypeConversionPattern(TypeConverter& typeConverter, MLIRContext* context)
@@ -563,9 +589,18 @@ class ArithSelectTypeConversionPattern : public ConversionPattern {
       return success();
    }
 };
+bool isUtilType(mlir::Type t,TypeConverter& converter){
+   if(auto funcType=t.dyn_cast_or_null<mlir::FunctionType>()) {
+      return llvm::any_of(funcType.getInputs(), [&](auto t){return isUtilType(t,converter);})||llvm::any_of(funcType.getResults(), [&](auto t){return isUtilType(t,converter);});
+   }else {
+      auto converted = converter.convertType(t);return converted&&converted!=t;
+   }
+}
 struct UtilToLLVMLoweringPass
    : public PassWrapper<UtilToLLVMLoweringPass, OperationPass<ModuleOp>> {
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(UtilToLLVMLoweringPass)
+   virtual llvm::StringRef getArgument() const override { return "convert-util-to-llvm"; }
+
    void getDependentDialects(DialectRegistry& registry) const override {
       registry.insert<LLVM::LLVMDialect>();
    }
@@ -582,12 +617,13 @@ struct UtilToLLVMLoweringPass
       mlir::populateReturnOpTypeConversionPattern(patterns, typeConverter);
       mlir::populateBranchOpInterfaceTypeConversionPattern(patterns, typeConverter);
       patterns.add<FuncConstTypeConversionPattern>(typeConverter, patterns.getContext());
+      patterns.insert<CallIndirectTypeConversionPattern>(typeConverter, &getContext());
       patterns.add<ArithSelectTypeConversionPattern>(typeConverter, patterns.getContext());
       LLVMConversionTarget target(getContext());
       target.addIllegalDialect<mlir::util::UtilDialect>();
       target.addLegalDialect<LLVM::LLVMDialect>();
-      auto hasUtilType = [](TypeConverter& converter, TypeRange types) {
-         return llvm::any_of(types, [&converter](mlir::Type t) { auto converted = converter.convertType(t);return converted&&converted!=t; });
+      auto hasUtilType = [&](TypeConverter& converter, TypeRange types) {
+         return llvm::any_of(types,[&](auto t){return isUtilType(t,converter);} );
       };
       auto opIsWithoutUtilTypes = [&](Operation* op) { return !hasUtilType(typeConverter, op->getOperandTypes()) && !hasUtilType(typeConverter, op->getResultTypes()); };
 

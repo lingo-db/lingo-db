@@ -22,6 +22,9 @@
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
 #include "runtime/Catalog.h"
+
+#include <mlir/Dialect/ControlFlow/IR/ControlFlow.h>
+#include <mlir/Conversion/UtilToLLVM/Passes.h>
 int main(int argc, char** argv) {
    if (argc > 2) {
       if (std::string(argv[1]) == "--use-db") {
@@ -48,6 +51,9 @@ int main(int argc, char** argv) {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::relalg::createDetachMetaDataPass();
    });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::util::createUtilToLLVMPass();
+   });
    execution::registerBackendPasses();
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
@@ -60,6 +66,7 @@ int main(int argc, char** argv) {
 
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<mlir::util::UtilDialect>();
+   registry.insert<mlir::cf::ControlFlowDialect>();
    registry.insert<mlir::LLVM::LLVMDialect>();
 
    registry.insert<mlir::scf::SCFDialect>();
