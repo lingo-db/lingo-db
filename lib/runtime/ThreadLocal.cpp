@@ -10,8 +10,8 @@ uint8_t* runtime::ThreadLocal::getLocal() {
    trace.stop();
    return local;
 }
-runtime::ThreadLocal* runtime::ThreadLocal::create(uint8_t* (*initFn)()) {
-   return new ThreadLocal(initFn);
+runtime::ThreadLocal* runtime::ThreadLocal::create(uint8_t* (*initFn)(uint8_t*), uint8_t* initArg) {
+   return new ThreadLocal(initFn,initArg);
 }
 
 uint8_t* runtime::ThreadLocal::merge(void (*mergeFn)(uint8_t*, uint8_t*)) {

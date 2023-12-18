@@ -1081,22 +1081,58 @@ class CreateThreadLocalLowering : public SubOpConversionPattern<mlir::subop::Cre
       ModuleOp parentModule = createThreadLocal->getParentOfType<ModuleOp>();
       mlir::func::FuncOp funcOp;
       auto loc = createThreadLocal->getLoc();
-
+      auto i8PtrType = util::RefType::get(rewriter.getI8Type());
       rewriter.atStartOf(parentModule.getBody(), [&](SubOpRewriter& rewriter) {
-         funcOp = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "thread_local_init" + std::to_string(id++), mlir::FunctionType::get(getContext(), TypeRange({}), TypeRange(mlir::util::RefType::get(rewriter.getI8Type()))));
+         funcOp = rewriter.create<mlir::func::FuncOp>(parentModule.getLoc(), "thread_local_init" + std::to_string(id++), mlir::FunctionType::get(getContext(), TypeRange({i8PtrType}), TypeRange(i8PtrType)));
       });
       auto* funcBody = new Block;
+      mlir::Value funcArg = funcBody->addArgument(i8PtrType, loc);
       funcOp.getBody().push_back(funcBody);
+      mlir::Block* newBlock = new Block;
+      mlir::OpBuilder builder(rewriter.getContext());
+      std::vector<mlir::Operation*> toInsert;
+      builder.setInsertionPointToStart(newBlock);
+      mlir::Value argRef = newBlock->addArgument(mlir::util::RefType::get(rewriter.getI8Type()), createThreadLocal.getLoc());
+      argRef = builder.create<util::GenericMemrefCastOp>(createThreadLocal->getLoc(), util::RefType::get(rewriter.getContext(), mlir::util::RefType::get(rewriter.getContext(), rewriter.getI8Type())), argRef);
+      for (auto& op : createThreadLocal.getInitFn().front().getOperations()) {
+         toInsert.push_back(&op);
+      }
+      for (auto *op : toInsert) {
+         op->remove();
+         builder.insert(op);
+      }
+      std::vector<mlir::Value> toStore;
+      std::vector<mlir::Operation*> toDelete;
+      newBlock->walk([&](mlir::tuples::GetParamVal op) {
+         builder.setInsertionPointAfter(op);
+         auto idx = toStore.size();
+         toStore.push_back(op.getParam());
+         mlir::Value rawPtr = builder.create<mlir::util::LoadOp>(createThreadLocal->getLoc(), argRef, builder.create<mlir::arith::ConstantIndexOp>(loc, idx));
+         mlir::Value ptr = builder.create<util::GenericMemrefCastOp>(loc, util::RefType::get(rewriter.getContext(), op.getParam().getType()), rawPtr);
+         mlir::Value value = builder.create<util::LoadOp>(loc, ptr);
+         op.replaceAllUsesWith(value);
+         toDelete.push_back(op);
+      });
+      for (auto *op : toDelete) {
+         op->erase();
+      }
       rewriter.atStartOf(funcBody, [&](SubOpRewriter& rewriter) {
-         rewriter.inlineBlock<mlir::tuples::ReturnOpAdaptor>(&createThreadLocal.getInitFn().front(), mlir::ValueRange{}, [&](mlir::tuples::ReturnOpAdaptor adaptor) {
+         rewriter.inlineBlock<mlir::tuples::ReturnOpAdaptor>(newBlock, mlir::ValueRange{funcArg}, [&](mlir::tuples::ReturnOpAdaptor adaptor) {
             mlir::Value unrealized = rewriter.create<mlir::UnrealizedConversionCastOp>(createThreadLocal->getLoc(), createThreadLocal.getType().getWrapped(), adaptor.getResults()[0]).getOutputs()[0];
             mlir::Value casted = rewriter.create<mlir::util::GenericMemrefCastOp>(createThreadLocal->getLoc(), mlir::util::RefType::get(rewriter.getI8Type()), unrealized);
             rewriter.create<mlir::func::ReturnOp>(loc, casted);
          });
       });
+      Value arg = rewriter.create<mlir::util::AllocOp>(loc, mlir::util::RefType::get(i8PtrType), rewriter.create<mlir::arith::ConstantIndexOp>(loc, toStore.size()));
+      for (size_t i = 0; i < toStore.size(); i++) {
+         Value valPtr = rewriter.create<mlir::util::AllocOp>(loc, mlir::util::RefType::get(toStore[i].getType()), mlir::Value());
 
+         rewriter.create<mlir::util::StoreOp>(loc, toStore[i], valPtr, mlir::Value());
+         valPtr = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(rewriter.getI8Type()), valPtr);
+         rewriter.create<mlir::util::StoreOp>(loc, valPtr, arg, rewriter.create<mlir::arith::ConstantIndexOp>(loc, i));
+      }
       Value functionPointer = rewriter.create<mlir::func::ConstantOp>(loc, funcOp.getFunctionType(), SymbolRefAttr::get(rewriter.getStringAttr(funcOp.getSymName())));
-      rewriter.replaceOp(createThreadLocal, rt::ThreadLocal::create(rewriter, loc)(functionPointer));
+      rewriter.replaceOp(createThreadLocal, rt::ThreadLocal::create(rewriter, loc)({functionPointer, arg}));
       return mlir::success();
    }
 };
