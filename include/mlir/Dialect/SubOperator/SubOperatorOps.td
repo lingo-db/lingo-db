@@ -787,18 +787,15 @@ def SetTrackedCountOp : SubOperator_Op<"set_tracked_count",[SubOperator,DeclareO
 }
 
 
-//===----------------------------------------------------------------------===//
-// Not used in the future (replaced by views) //todo: remove
-//===----------------------------------------------------------------------===//
 
-def MaintainOp : SubOperator_Op<"maintain",[SubOperator]> {
-      let summary = "maintain";
+def SimpleStateGetScalar : SubOperator_Op<"simple_state_get_scalar",[SubOperator]> {
+      let summary = "get scalar value of simple state";
 
-      let arguments = (ins AnyType : $state, StrAttr: $description );
-      let assemblyFormat = [{  $description $state `:` type($state)  attr-dict }];
+      let arguments = (ins SimpleState : $state, StrAttr: $member );
+      let results = (outs AnyType : $res);
+      let assemblyFormat = [{ $member $state `:` type($state) `->` type($res) attr-dict }];
       let extraClassDeclaration = [{
           std::vector<std::string> getReadMembers();
-          std::vector<std::string> getWrittenMembers();
       }];
 }
 

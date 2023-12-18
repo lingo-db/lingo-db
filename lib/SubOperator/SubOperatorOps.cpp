@@ -1238,19 +1238,9 @@ std::vector<std::string> subop::CreateContinuousView::getReadMembers() {
    }
    return res;
 }
-std::vector<std::string> subop::MaintainOp::getWrittenMembers() {
-   std::vector<std::string> res;
-   for (auto x : getState().getType().cast<mlir::subop::State>().getMembers().getNames()) {
-      res.push_back(x.cast<mlir::StringAttr>().str());
-   }
-   return res;
-}
-std::vector<std::string> subop::MaintainOp::getReadMembers() {
-   std::vector<std::string> res;
-   for (auto x : getState().getType().cast<mlir::subop::State>().getMembers().getNames()) {
-      res.push_back(x.cast<mlir::StringAttr>().str());
-   }
-   return res;
+
+std::vector<std::string> subop::SimpleStateGetScalar::getReadMembers() {
+   return {getMember().str()};
 }
 std::vector<std::string> subop::CreateSortedViewOp::getReadMembers() {
    std::vector<std::string> res;
