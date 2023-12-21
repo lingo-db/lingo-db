@@ -53,8 +53,8 @@ void Tracer::ensureThreadLocalTraceRecordList() {
       threadLocalTraceRecordList = tracer->traceRecordLists[threadId].get();
    }
 }
+const std::chrono::steady_clock::time_point initial = std::chrono::steady_clock::now();
 void Tracer::recordTrace(unsigned eventId, std::chrono::steady_clock::time_point begin, std::chrono::steady_clock::time_point end,uint64_t metaData) {
-   static std::chrono::steady_clock::time_point initial = std::chrono::steady_clock::now();
    ensureThreadLocalTraceRecordList();
    auto diffInMicroSecond = [](auto a, auto b) {
       return std::chrono::duration_cast<std::chrono::microseconds>(b - a).count();
