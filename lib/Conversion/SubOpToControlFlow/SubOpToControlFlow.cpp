@@ -4411,6 +4411,10 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    for (auto* op : defs) {
       op->moveBefore(&module.getBody()->getOperations().front());
    }
+   std::vector<mlir::Operation*> toRemove;
+   module->walk([&](mlir::tuples::GetParamVal getParamVal) {
+      getParamVal.replaceAllUsesWith(getParamVal.getParam());
+   });
 }
 } //namespace
 std::unique_ptr<mlir::Pass>
