@@ -12,6 +12,10 @@ MLIR_CAPI_EXPORTED MlirType mlirUtilRefTypeGet(MlirType elementType);
 MLIR_CAPI_EXPORTED MlirTypeID mlirUtilRefTypeGetTypeID();
 MLIR_CAPI_EXPORTED bool mlirTypeIsAUtilRefType(MlirType type);
 
+MLIR_CAPI_EXPORTED MlirType mlirUtilBufferTypeGet(MlirType elementType);
+MLIR_CAPI_EXPORTED MlirTypeID mlirUtilBufferTypeGetTypeID();
+MLIR_CAPI_EXPORTED bool mlirTypeIsAUtilBufferType(MlirType type);
+
 MLIR_CAPI_EXPORTED MlirType mlirUtilVarLen32TypeGet(MlirContext context);
 MLIR_CAPI_EXPORTED MlirTypeID mlirUtilVarLen32TypeGetTypeID();
 MLIR_CAPI_EXPORTED bool mlirTypeIsAUtilVarLen32Type(MlirType type);

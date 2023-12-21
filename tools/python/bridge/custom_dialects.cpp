@@ -26,6 +26,17 @@ bool mlirTypeIsAUtilRefType(MlirType type) {
    return llvm::isa<mlir::util::RefType>(unwrap(type));
 }
 
+MlirType mlirUtilBufferTypeGet(MlirType elementType) {
+   return wrap(mlir::util::BufferType::get(unwrap(elementType).getContext(),unwrap(elementType)));
+}
+MlirTypeID mlirUtilBufferTypeGetTypeID() {
+   return wrap(mlir::util::BufferType::getTypeID());
+}
+
+bool mlirTypeIsAUtilBufferType(MlirType type) {
+   return llvm::isa<mlir::util::BufferType>(unwrap(type));
+}
+
 MlirType mlirUtilVarLen32TypeGet(MlirContext context) {
    return wrap(mlir::util::VarLen32Type::get(unwrap(context)));
 }

@@ -22,6 +22,13 @@ PYBIND11_MODULE(mlir_lingodb, m) {
             return cls(mlirUtilRefTypeGet(type));
          },
          py::arg("cls"), py::arg("type"));
+   mlir::python::adaptors::mlir_type_subclass(utilModule, "BufferType", mlirTypeIsAUtilBufferType, mlirUtilBufferTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirType type) {
+            return cls(mlirUtilBufferTypeGet(type));
+         },
+         py::arg("cls"), py::arg("type"));
    mlir::python::adaptors::mlir_type_subclass(utilModule, "VarLen32Type", mlirTypeIsAUtilVarLen32Type, mlirUtilVarLen32TypeGetTypeID)
       .def_classmethod(
          "get",
