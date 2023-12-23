@@ -239,6 +239,30 @@ class BufferCastOpLowering : public OpConversionPattern<mlir::util::BufferCastOp
       return success();
    }
 };
+class BufferCreateOpLowering : public OpConversionPattern<mlir::util::BufferCreateOp> {
+   public:
+   using OpConversionPattern<mlir::util::BufferCreateOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::util::BufferCreateOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      Type t = typeConverter->convertType(op.getResult().getType().cast<mlir::util::BufferType>().getT());
+      DataLayout defaultLayout;
+      const DataLayout* layout = &defaultLayout;
+      auto& llvmTypeConverter = *reinterpret_cast<const LLVMTypeConverter*>(getTypeConverter());
+      if (const DataLayoutAnalysis* analysis = llvmTypeConverter.getDataLayoutAnalysis()) {
+         layout = &analysis->getAbove(op);
+      }
+      size_t typeSize = layout->getTypeSize(t);
+      mlir::Type i128Ty = rewriter.getIntegerType(128);
+      auto typeSizeValue = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), i128Ty, rewriter.getIntegerAttr(i128Ty, typeSize));
+
+      mlir::Value p1 = rewriter.create<mlir::LLVM::ZExtOp>(op->getLoc(), i128Ty, adaptor.getLen());
+      p1 = rewriter.create<mlir::LLVM::MulOp>(op->getLoc(), i128Ty, p1, typeSizeValue);
+      mlir::Value p2 = rewriter.create<mlir::LLVM::PtrToIntOp>(op->getLoc(), i128Ty, adaptor.getPtr());
+      auto const64 = rewriter.create<mlir::LLVM::ConstantOp>(op->getLoc(), i128Ty, rewriter.getIntegerAttr(i128Ty, 64));
+      auto shlp2 = rewriter.create<mlir::LLVM::ShlOp>(op->getLoc(), p2, const64);
+      rewriter.replaceOpWithNewOp<mlir::LLVM::OrOp>(op, p1, shlp2);
+      return success();
+   }
+};
 class TupleElementPtrOpLowering : public OpConversionPattern<mlir::util::TupleElementPtrOp> {
    public:
    using OpConversionPattern<mlir::util::TupleElementPtrOp>::OpConversionPattern;
@@ -527,6 +551,7 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<FilterTaggedPtrLowering>(typeConverter, patterns.getContext());
    patterns.add<TagPtrLowering>(typeConverter, patterns.getContext());
    patterns.add<UnTagPtrLowering>(typeConverter, patterns.getContext());
+   patterns.add<BufferCreateOpLowering>(typeConverter, patterns.getContext());
 }
 namespace {
 class FuncConstTypeConversionPattern : public ConversionPattern {

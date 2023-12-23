@@ -128,6 +128,12 @@ let arguments = (ins BufferType:$val);
 let results=(outs BufferType:$res);
 let assemblyFormat = "$val `:` type($val) `->` type($res) attr-dict";
 }
+def BufferCreateOp : Util_Op<"buffer_create",[Pure]> {
+let summary = "create buffer from ptr and len";
+let arguments = (ins RefType:$ptr, Index:$len);
+let results=(outs BufferType:$res);
+let assemblyFormat = "$ptr `:` type($ptr) `,` $len `->` type($res) attr-dict";
+}
 def StoreOp  : Util_Op<"store"> {
 let arguments = (ins AnyType:$val,RefType:$ref,Optional<Index>:$idx);
 let assemblyFormat = "$val `:` type($val) `,` $ref `[` $idx `]` `:`type($ref) attr-dict";
