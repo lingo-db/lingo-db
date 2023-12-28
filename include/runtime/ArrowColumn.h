@@ -13,6 +13,7 @@ class ArrowColumn {
    std::shared_ptr<arrow::ChunkedArray> getColumn() const { return column; }
 };
 class ArrowColumnBuilder {
+   size_t numValues = 0;
    std::unique_ptr<arrow::ArrayBuilder> builderUnique;
    arrow::ArrayBuilder* builder;
    ArrowColumnBuilder* childBuilder;
@@ -20,7 +21,7 @@ class ArrowColumnBuilder {
    std::vector<std::shared_ptr<arrow::Array>> additionalArrays;
    ArrowColumnBuilder(std::shared_ptr<arrow::DataType> type);
    ArrowColumnBuilder(arrow::ArrayBuilder* childBuilder);
-
+   inline void next();
    public:
    static ArrowColumnBuilder* create(VarLen32 type);
    ArrowColumnBuilder* getChildBuilder();
