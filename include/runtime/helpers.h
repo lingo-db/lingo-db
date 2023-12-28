@@ -80,7 +80,10 @@ class VarLen32 {
 
    public:
    static VarLen32 fromString(std::string str) {
-      auto *ptr = new uint8_t[str.size()];
+      if (str.size() <= shortLen) {
+         return VarLen32(reinterpret_cast<const uint8_t*>(str.data()), str.size());
+      }
+      auto* ptr = new uint8_t[str.size()];
       memcpy(ptr, str.data(), str.size());
       return VarLen32(ptr, str.size());
    }
