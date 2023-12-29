@@ -37,7 +37,7 @@ static void access(std::vector<size_t> colIds, runtime::RecordBatchInfo* info, c
       if (currChunk->column(colId)->type()->id() == arrow::Type::LIST) {
          auto childData = currChunk->column_data(colId)->child_data[0];
          colInfo.childInfo = new runtime::ColumnInfo; //todo: fix
-         colInfo.childInfo->offset = off;
+         colInfo.childInfo->offset = childData->offset;
          colInfo.childInfo->validMultiplier = childData->buffers[0] ? 1 : 0;
          colInfo.childInfo->validBuffer = getBuffer(childData, 0);
          colInfo.childInfo->dataBuffer = getBuffer(childData, 1);
