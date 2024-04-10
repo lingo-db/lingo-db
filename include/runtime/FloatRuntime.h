@@ -10,6 +10,7 @@ struct FloatRuntime {
    static double exp(double);
    static double log(double);
    static double erf(double);
+   static double pow(double,double);
 };
 
 } // namespace runtime

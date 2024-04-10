@@ -23,3 +23,6 @@ double runtime::FloatRuntime::exp(double x) {
 double runtime::FloatRuntime::erf(double x) {
    return ::erf(x);
 }
+double runtime::FloatRuntime::pow(double x,double y) {
+   return ::pow(x,y);
+}
