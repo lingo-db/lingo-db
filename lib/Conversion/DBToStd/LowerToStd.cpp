@@ -56,7 +56,6 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
 static bool hasDBType(TypeConverter& converter, TypeRange types) {
    return llvm::any_of(types, [&converter](mlir::Type t) { auto converted = converter.convertType(t);return converted&&converted!=t; });
 }
-} // end anonymous namespace
 
 template <class Op>
 class SimpleTypeConversionPattern : public ConversionPattern {
@@ -102,6 +101,41 @@ class SimpleTypeConversionPattern : public ConversionPattern {
       return success();
    }
 };
+mlir::Type convertPhysicalSingle(mlir::Type t, const TypeConverter& typeConverter) {
+   MLIRContext* ctxt = t.getContext();
+   mlir::Type arrowPhysicalType = typeConverter.convertType(t);
+   if (auto decimalType = t.dyn_cast_or_null<mlir::db::DecimalType>()) {
+      arrowPhysicalType = mlir::dsa::ArrowDecimalType::get(ctxt, decimalType.getP(), decimalType.getS());
+   } else if (auto dateType = t.dyn_cast_or_null<mlir::db::DateType>()) {
+      arrowPhysicalType = dateType.getUnit() == mlir::db::DateUnitAttr::day ? (mlir::Type)mlir::dsa::ArrowDate32Type::get(t.getContext()) : (mlir::Type)mlir::dsa::ArrowDate64Type::get(t.getContext());
+   } else if (t.isa<mlir::db::StringType>()) {
+      arrowPhysicalType = mlir::dsa::ArrowStringType::get(t.getContext());
+   } else if (auto charType = t.dyn_cast_or_null<mlir::db::CharType>()) {
+      arrowPhysicalType = mlir::dsa::ArrowFixedSizedBinaryType::get(t.getContext(), charType.getBytes());
+   } else if (auto timestampType = t.dyn_cast_or_null<mlir::db::TimestampType>()) {
+      switch (timestampType.getUnit()) {
+         case mlir::db::TimeUnitAttr::second:
+            arrowPhysicalType = mlir::dsa::ArrowTimeStampType::get(t.getContext(), mlir::dsa::TimeUnitAttr::second);
+            break;
+         case mlir::db::TimeUnitAttr::millisecond:
+            arrowPhysicalType = mlir::dsa::ArrowTimeStampType::get(t.getContext(), mlir::dsa::TimeUnitAttr::millisecond);
+            break;
+         case mlir::db::TimeUnitAttr::microsecond:
+            arrowPhysicalType = mlir::dsa::ArrowTimeStampType::get(t.getContext(), mlir::dsa::TimeUnitAttr::nanosecond);
+            break;
+         case mlir::db::TimeUnitAttr::nanosecond:
+            arrowPhysicalType = mlir::dsa::ArrowTimeStampType::get(t.getContext(), mlir::dsa::TimeUnitAttr::nanosecond);
+            break;
+      }
+   } else if (auto intervalType = t.dyn_cast_or_null<mlir::db::IntervalType>()) {
+      if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime) {
+         arrowPhysicalType = mlir::dsa::ArrowDayTimeIntervalType::get(t.getContext());
+      } else {
+         arrowPhysicalType = mlir::dsa::ArrowMonthIntervalType::get(t.getContext());
+      }
+   }
+   return arrowPhysicalType;
+};
 class AtLowering : public OpConversionPattern<mlir::dsa::At> {
    public:
    using OpConversionPattern<mlir::dsa::At>::OpConversionPattern;
@@ -114,13 +148,7 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
          rewriter.finalizeRootUpdate(atOp);
          return mlir::success();
       }
-      auto* context = getContext();
-      mlir::Type arrowPhysicalType = typeConverter->convertType(t);
-      if (t.isa<mlir::db::DecimalType>()) {
-         arrowPhysicalType = mlir::IntegerType::get(context, 128);
-      } else if (auto dateType = t.dyn_cast_or_null<mlir::db::DateType>()) {
-         arrowPhysicalType = dateType.getUnit() == mlir::db::DateUnitAttr::day ? mlir::IntegerType::get(context, 32) : mlir::IntegerType::get(context, 64);
-      }
+      mlir::Type arrowPhysicalType = convertPhysicalSingle(t,*typeConverter);
       llvm::SmallVector<mlir::Type> types;
       types.push_back(arrowPhysicalType);
       if (atOp.getValid()) {
@@ -128,36 +156,10 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
       }
       std::vector<mlir::Value> values;
       auto newAtOp = rewriter.create<mlir::dsa::At>(loc, types, adaptor.getCollection(), atOp.getPos());
-      values.push_back(newAtOp.getVal());
+      auto nativeValue = rewriter.create<mlir::dsa::ArrowTypeTo>(loc, typeConverter->convertType(t), newAtOp.getVal());
+      values.push_back(nativeValue);
       if (atOp.getValid()) {
          values.push_back(newAtOp.getValid());
-      }
-      if (auto charType = t.dyn_cast_or_null<mlir::db::CharType>()) {
-         newAtOp->setAttr("numBytes", rewriter.getI64IntegerAttr(charType.getBytes()));
-      }
-      if (t.isa<mlir::db::DateType, mlir::db::TimestampType>()) {
-         if (values[0].getType() != rewriter.getI64Type()) {
-            values[0] = rewriter.create<mlir::arith::ExtUIOp>(loc, rewriter.getI64Type(), values[0]);
-         }
-         size_t multiplier = 1;
-         if (auto dateType = t.dyn_cast_or_null<mlir::db::DateType>()) {
-            multiplier = dateType.getUnit() == mlir::db::DateUnitAttr::day ? 86400000000000 : 1000000;
-         } else if (auto timeStampType = t.dyn_cast_or_null<mlir::db::TimestampType>()) {
-            switch (timeStampType.getUnit()) {
-               case mlir::db::TimeUnitAttr::second: multiplier = 1000000000; break;
-               case mlir::db::TimeUnitAttr::millisecond: multiplier = 1000000; break;
-               case mlir::db::TimeUnitAttr::microsecond: multiplier = 1000; break;
-               default: multiplier = 1;
-            }
-         }
-         if (multiplier != 1) {
-            mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
-            values[0] = rewriter.create<mlir::arith::MulIOp>(loc, values[0], multiplierConst);
-         }
-      } else if (auto decimalType = t.dyn_cast_or_null<db::DecimalType>()) {
-         if (typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth() != 128) {
-            values[0] = rewriter.create<arith::TruncIOp>(loc, typeConverter->convertType(decimalType), values[0]);
-         }
       }
       rewriter.replaceOp(atOp, values);
       return success();
@@ -184,42 +186,11 @@ class AppendCBLowering : public ConversionPattern {
          return mlir::success();
       }
       auto* context = getContext();
-      mlir::Type arrowPhysicalType = typeConverter->convertType(t);
-      if (t.isa<mlir::db::DecimalType>()) {
-         arrowPhysicalType = mlir::IntegerType::get(context, 128);
-      } else if (auto dateType = t.dyn_cast_or_null<mlir::db::DateType>()) {
-         arrowPhysicalType = dateType.getUnit() == mlir::db::DateUnitAttr::day ? mlir::IntegerType::get(context, 32) : mlir::IntegerType::get(context, 64);
-      }
+      mlir::Type arrowPhysicalType = convertPhysicalSingle(t,*typeConverter);
 
       mlir::Value val = adaptor.getVal();
-      if (t.isa<mlir::db::DateType, mlir::db::TimestampType>()) {
-         size_t multiplier = 1;
-         if (auto dateType = t.dyn_cast_or_null<mlir::db::DateType>()) {
-            multiplier = dateType.getUnit() == mlir::db::DateUnitAttr::day ? 86400000000000 : 1000000;
-         } else if (auto timeStampType = t.dyn_cast_or_null<mlir::db::TimestampType>()) {
-            switch (timeStampType.getUnit()) {
-               case mlir::db::TimeUnitAttr::second: multiplier = 1000000000; break;
-               case mlir::db::TimeUnitAttr::millisecond: multiplier = 1000000; break;
-               case mlir::db::TimeUnitAttr::microsecond: multiplier = 1000; break;
-               default: multiplier = 1;
-            }
-         }
-         if (multiplier != 1) {
-            mlir::Value multiplierConst = rewriter.create<mlir::arith::ConstantIntOp>(loc, multiplier, 64);
-            val = rewriter.create<mlir::arith::DivSIOp>(loc, val, multiplierConst);
-         }
-         if (arrowPhysicalType != rewriter.getI64Type()) {
-            val = rewriter.create<mlir::arith::TruncIOp>(loc, arrowPhysicalType, val);
-         }
-      } else if (auto decimalType = t.dyn_cast_or_null<db::DecimalType>()) {
-         if (typeConverter->convertType(decimalType).cast<mlir::IntegerType>().getWidth() != 128) {
-            val = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), val);
-         }
-      }
+      val = rewriter.create<mlir::dsa::ArrowTypeFrom>(loc, arrowPhysicalType, val);
       auto newAppendOp = rewriter.create<mlir::dsa::Append>(loc, adaptor.getDs(), val, adaptor.getValid());
-      if (auto charType = t.dyn_cast_or_null<mlir::db::CharType>()) {
-         newAppendOp->setAttr("numBytes", rewriter.getI64IntegerAttr(charType.getBytes()));
-      }
 
       rewriter.eraseOp(op);
       return success();
@@ -1023,6 +994,7 @@ class HashLowering : public ConversionPattern {
       return success();
    }
 };
+} // end anonymous namespace
 void DBToStdLoweringPass::runOnOperation() {
    auto module = getOperation();
    getContext().getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(module);
@@ -1116,19 +1088,11 @@ void DBToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
-   auto convertPhysicalSingle = [&](mlir::Type t) -> mlir::Type {
-      mlir::Type arrowPhysicalType = typeConverter.convertType(t);
-      if (t.isa<mlir::db::DecimalType>()) {
-         arrowPhysicalType = mlir::IntegerType::get(t.getContext(), 128);
-      } else if (auto dateType = t.dyn_cast_or_null<mlir::db::DateType>()) {
-         arrowPhysicalType = dateType.getUnit() == mlir::db::DateUnitAttr::day ? mlir::IntegerType::get(t.getContext(), 32) : mlir::IntegerType::get(t.getContext(), 64);
-      }
-      return arrowPhysicalType;
-   };
+
    auto convertPhysical = [&](mlir::TupleType tuple) -> mlir::TupleType {
       std::vector<mlir::Type> types;
       for (auto t : tuple.getTypes()) {
-         mlir::Type arrowPhysicalType = convertPhysicalSingle(t);
+         mlir::Type arrowPhysicalType = convertPhysicalSingle(t,typeConverter);
          types.push_back(arrowPhysicalType);
       }
       return mlir::TupleType::get(tuple.getContext(), types);
@@ -1137,13 +1101,14 @@ void DBToStdLoweringPass::runOnOperation() {
       return mlir::dsa::RecordType::get(r.getContext(), convertPhysical(r.getRowType()));
    });
    typeConverter.addConversion([&](mlir::dsa::RecordBatchType r) {
-      return mlir::dsa::RecordBatchType::get(r.getContext(), convertPhysical(r.getRowType()));
+      auto res= mlir::dsa::RecordBatchType::get(r.getContext(), convertPhysical(r.getRowType()));
+      return res;
    });
    typeConverter.addConversion([&](mlir::dsa::ColumnBuilderType r) {
-      return mlir::dsa::ColumnBuilderType::get(r.getContext(), convertPhysicalSingle(r.getType()));
+      return mlir::dsa::ColumnBuilderType::get(r.getContext(), convertPhysicalSingle(r.getType(),typeConverter));
    });
    typeConverter.addConversion([&](mlir::dsa::ColumnType r) {
-      return mlir::dsa::ColumnType::get(r.getContext(), convertPhysicalSingle(r.getType()));
+      return mlir::dsa::ColumnType::get(r.getContext(), convertPhysicalSingle(r.getType(),typeConverter));
    });
    typeConverter.addConversion([&](mlir::dsa::TableType r) { return mlir::dsa::TableType::get(r.getContext(), convertPhysical(r.getRowType())); });
    RewritePatternSet patterns(&getContext());

@@ -140,7 +140,7 @@ void DSAToStdLoweringPass::runOnOperation() {
          auto isLegal = !hasDSAType(typeConverter, op.getType());
          return isLegal;
       });
-
+   auto ctxt = &getContext();
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
@@ -153,7 +153,41 @@ void DSAToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::dsa::TableType tableType) {
       return mlir::util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));
    });
-
+   typeConverter.addConversion([&](::mlir::dsa::ArrowFixedSizedBinaryType t) {
+   if (t.getByteWidth() > 8) return mlir::Type();
+   size_t bits = 0;
+   if (t.getByteWidth() == 1) {
+      bits = 8;
+   } else if (t.getByteWidth() == 2) {
+      bits = 16;
+   } else if (t.getByteWidth() <= 4) {
+      bits = 32;
+   } else {
+      bits = 64;
+   }
+   return (Type) mlir::IntegerType::get(ctxt, bits);
+});
+   typeConverter.addConversion([&](mlir::dsa::ArrowStringType type) {
+      return mlir::util::VarLen32Type::get(&getContext());
+   });
+   typeConverter.addConversion([&](mlir::dsa::ArrowDecimalType type) {
+      return IntegerType::get(ctxt, 128);
+   });
+   typeConverter.addConversion([&](mlir::dsa::ArrowDate32Type t) {
+      return IntegerType::get(ctxt, 32);
+   });
+   typeConverter.addConversion([&](mlir::dsa::ArrowDate64Type t) {
+      return IntegerType::get(ctxt, 64);
+   });
+   typeConverter.addConversion([&](mlir::dsa::ArrowTimeStampType t) {
+      return IntegerType::get(ctxt, 64);
+   });
+   typeConverter.addConversion([&](mlir::dsa::ArrowMonthIntervalType t) {
+      return mlir::IntegerType::get(ctxt, 32);
+   });
+   typeConverter.addConversion([&](mlir::dsa::ArrowDayTimeIntervalType t) {
+      return mlir::IntegerType::get(ctxt, 64);
+   });
    RewritePatternSet patterns(&getContext());
 
    mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::func::FuncOp>(patterns, typeConverter);

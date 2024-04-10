@@ -849,42 +849,7 @@ class CreateOpenHtFragmentLowering : public SubOpConversionPattern<mlir::subop::
 class CreateTableLowering : public SubOpConversionPattern<mlir::subop::GenericCreateOp> {
    public:
    using SubOpConversionPattern<mlir::subop::GenericCreateOp>::SubOpConversionPattern;
-   std::string arrowDescrFromType(mlir::Type type) const {
-      if (type.isIndex()) {
-         return "int[64]";
-      } else if (isIntegerType(type, 1)) {
-         return "bool";
-      } else if (auto intWidth = getIntegerWidth(type, false)) {
-         return "int[" + std::to_string(intWidth) + "]";
-      } else if (auto uIntWidth = getIntegerWidth(type, true)) {
-         return "uint[" + std::to_string(uIntWidth) + "]";
-      } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
-         // TODO: actually handle cases where 128 bits are insufficient.
-         auto prec = std::min(decimalType.getP(), 38);
-         return "decimal[" + std::to_string(prec) + "," + std::to_string(decimalType.getS()) + "]";
-      } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
-         return "float[" + std::to_string(floatType.getWidth()) + "]";
-      } else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {
-         return "string";
-      } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
-         if (dateType.getUnit() == mlir::db::DateUnitAttr::day) {
-            return "date[32]";
-         } else {
-            return "date[64]";
-         }
-      } else if (auto charType = type.dyn_cast_or_null<mlir::db::CharType>()) {
-         return "fixed_sized[" + std::to_string(charType.getBytes()) + "]";
-      } else if (auto intervalType = type.dyn_cast_or_null<mlir::db::IntervalType>()) {
-         if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
-            return "interval_months";
-         } else {
-            return "interval_daytime";
-         }
-      } else if (auto timestampType = type.dyn_cast_or_null<mlir::db::TimestampType>()) {
-         return "timestamp[" + std::to_string(static_cast<uint32_t>(timestampType.getUnit())) + "]";
-      }
-      return "";
-   }
+
    LogicalResult matchAndRewrite(mlir::subop::GenericCreateOp createOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       if (!createOp.getType().isa<mlir::subop::ResultTableType>()) return failure();
       auto tableType = createOp.getType().cast<mlir::subop::ResultTableType>();
@@ -893,7 +858,7 @@ class CreateTableLowering : public SubOpConversionPattern<mlir::subop::GenericCr
       for (size_t i = 0; i < tableType.getMembers().getTypes().size(); i++) {
          auto type = tableType.getMembers().getTypes()[i].cast<mlir::TypeAttr>().getValue();
          auto baseType = getBaseType(type);
-         columnBuilders.push_back(rewriter.create<mlir::dsa::CreateDS>(createOp.getLoc(), mlir::dsa::ColumnBuilderType::get(getContext(), baseType), rewriter.getStringAttr(arrowDescrFromType(baseType))));
+         columnBuilders.push_back(rewriter.create<mlir::dsa::CreateDS>(createOp.getLoc(), mlir::dsa::ColumnBuilderType::get(getContext(), baseType)));
       }
       mlir::Value tpl = rewriter.create<mlir::util::PackOp>(createOp->getLoc(), columnBuilders);
       mlir::Value ref = rewriter.create<mlir::util::AllocOp>(createOp->getLoc(), mlir::util::RefType::get(tpl.getType()), mlir::Value());

@@ -36,6 +36,53 @@ class DSA_Op<string mnemonic, list<Trait> traits = []> : Op<DSA_Dialect, mnemoni
 class DSA_Type<string name, string typeMnemonic, list<Trait> traits = []> : TypeDef<DSA_Dialect, name,traits> {
     let mnemonic = typeMnemonic;
 }
+def DSA_ArrowString : DSA_Type<"ArrowString","arrow_string"> {
+	let summary = "arrow string type";
+}
+def DSA_ArrowDate32 : DSA_Type<"ArrowDate32","arrow_date32"> {
+	let summary = "arrow date32 type";
+}
+def DSA_ArrowDate64 : DSA_Type<"ArrowDate64","arrow_date64"> {
+	let summary = "arrow date64 type";
+}
+def DSA_ArrowMonthInterval : DSA_Type<"ArrowMonthInterval","arrow_month_interval"> {
+	let summary = "arrow month interval type";
+}
+def DSA_ArrowDayTimeInterval : DSA_Type<"ArrowDayTimeInterval","arrow_day_time_interval"> {
+	let summary = "arrow day time interval type";
+}
+def Arrow_TimeUnit_S : I64EnumAttrCase<"second", 0>;
+def Arrow_TimeUnit_MS : I64EnumAttrCase<"millisecond", 1>;
+def Arrow_TimeUnit_MUS : I64EnumAttrCase<"microsecond", 2>;
+def Arrow_TimeUnit_NS : I64EnumAttrCase<"nanosecond", 3>;
+def Arrow_TimeUnitAttr : I64EnumAttr<"TimeUnitAttr", "",
+        [Arrow_TimeUnit_S,Arrow_TimeUnit_MS,Arrow_TimeUnit_MUS,Arrow_TimeUnit_NS]> {
+    let cppNamespace = "::mlir::dsa";
+}
+def DSA_ArrowTimeStamp : DSA_Type<"ArrowTimeStamp","arrow_timestamp"> {
+	let summary = "arrow time stamp type";
+	let parameters = (ins "TimeUnitAttr":$unit);
+	let assemblyFormat="`<` $unit`>` ";
+}
+def DSA_ArrowDecimal : DSA_Type<"ArrowDecimal","arrow_decimal"> {
+	let summary = "arrow decimal type";
+	let parameters = (ins "int64_t":$p,"int64_t":$s);
+	let assemblyFormat = "`<` $p`,` $s `>`";
+}
+def DSA_ArrowFixedSizedBinary : DSA_Type<"ArrowFixedSizedBinary","arrow_fixed_sized_binary"> {
+	let summary = "arrow fixed sized binary type";
+	let parameters = (ins "int64_t":$byte_width);
+	let assemblyFormat = "`<` $byte_width `>`";
+}
+
+def DSA_ArrowList : DSA_Type<"ArrowList","arrow_list"> {
+    let summary = "arrow list type";
+    let description = [{
+        A column of a table.
+    }];
+    let parameters = (ins "mlir::Type":$type);
+    let assemblyFormat = "`<` $type `>`";
+}
 def DSA_Column : DSA_Type<"Column","column"> {
     let summary = "column";
     let description = [{
@@ -149,7 +196,18 @@ def DSA_Append : DSA_Op<"ds_append"> {
         build($_builder, $_state, v1,v2, mlir::Value());
     }]>];
 }
-
+def DSA_ArrowTypeFrom : DSA_Op<"arrow_type_from"> {
+	let summary = "create arrow type from mlir type";
+	let arguments = (ins AnyType:$val);
+	let results = (outs AnyType:$arrow_val);
+	let assemblyFormat = "$val `:` type($val) `->` type($arrow_val) attr-dict";
+}
+def DSA_ArrowTypeTo : DSA_Op<"arrow_type_to"> {
+	let summary = "create mlir type arrow type ";
+	let arguments = (ins AnyType:$arrow_val);
+	let results = (outs AnyType:$val);
+	let assemblyFormat = "$arrow_val `:` type($arrow_val) `->` type($val) attr-dict";
+}
 
 
 def ForOp : DSA_Op<"for", [SingleBlockImplicitTerminator<"dsa::YieldOp">,
