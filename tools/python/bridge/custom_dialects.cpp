@@ -6,6 +6,7 @@
 #include "custom_dialects.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgOps.h"
+#include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 #include "mlir/Dialect/TupleStream/TupleStreamDialect.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/Dialect/util/UtilOps.h"
@@ -161,4 +162,206 @@ MlirAttribute mlirRelalgTableMetaDataAttrGetEmpty(MlirContext context) {
 }
 bool mlirAttributeIsARelalgTableMetaDataAttr(MlirAttribute attribute) {
    return llvm::isa<mlir::relalg::TableMetaDataAttr>(unwrap(attribute));
+}
+
+
+//----------------------------------------------------------------------------------------------------------------------
+// SubOp Dialect
+//----------------------------------------------------------------------------------------------------------------------
+
+MlirAttribute mlirSubOpStateMembersAttributeGet(MlirAttribute names, MlirAttribute types) {
+   return wrap(mlir::subop::StateMembersAttr::get(unwrap(names).getContext(), mlir::cast<mlir::ArrayAttr>(unwrap(names)), mlir::cast<mlir::ArrayAttr>(unwrap(types))));
+}
+bool mlirAttributeIsASubOpStateMembersAttribute(MlirAttribute attribute) {
+   return llvm::isa<mlir::subop::StateMembersAttr>(unwrap(attribute));
+}
+MlirType mlirSubOpTableTypeGet(MlirAttribute members) {
+   return wrap(mlir::subop::TableType::get(unwrap(members).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(members))));
+}
+MlirTypeID mlirSubOpTableTypeGetTypeID() {
+   return wrap(mlir::subop::TableType::getTypeID());
+}
+bool mlirTypeIsASubOpTableType(MlirType type) {
+   return llvm::isa<mlir::subop::TableType>(unwrap(type));
+}
+
+MlirType mlirSubOpLocalTableTypeGet(MlirAttribute members) {
+   return wrap(mlir::subop::LocalTableType::get(unwrap(members).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(members))));
+}
+MlirTypeID mlirSubOpLocalTableTypeGetTypeID() {
+   return wrap(mlir::subop::LocalTableType::getTypeID());
+}
+bool mlirTypeIsASubOpLocalTableType(MlirType type) {
+   return llvm::isa<mlir::subop::LocalTableType>(unwrap(type));
+}
+
+MlirType mlirSubOpResultTableTypeGet(MlirAttribute members) {
+   return wrap(mlir::subop::ResultTableType::get(unwrap(members).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(members))));
+}
+MlirTypeID mlirSubOpResultTableTypeGetTypeID() {
+   return wrap(mlir::subop::ResultTableType::getTypeID());
+}
+bool mlirTypeIsASubOpResultTableType(MlirType type) {
+   return llvm::isa<mlir::subop::ResultTableType>(unwrap(type));
+}
+
+MlirType mlirSubOpSimpleStateTypeGet(MlirAttribute members) {
+   return wrap(mlir::subop::SimpleStateType::get(unwrap(members).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(members))));
+}
+MlirTypeID mlirSubOpSimpleStateTypeGetTypeID() {
+   return wrap(mlir::subop::SimpleStateType::getTypeID());
+}
+bool mlirTypeIsASubOpSimpleStateType(MlirType type) {
+   return llvm::isa<mlir::subop::SimpleStateType>(unwrap(type));
+}
+
+MlirType mlirSubOpMapTypeGet(MlirAttribute keyMembers, MlirAttribute valMembers) {
+   return wrap(mlir::subop::MapType::get(unwrap(keyMembers).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(keyMembers)), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(valMembers))));
+}
+MlirTypeID mlirSubOpMapTypeGetTypeID() {
+   return wrap(mlir::subop::MapType::getTypeID());
+}
+bool mlirTypeIsASubOpMapType(MlirType type) {
+   return llvm::isa<mlir::subop::MapType>(unwrap(type));
+}
+
+MlirType mlirSubOpMultiMapTypeGet(MlirAttribute keyMembers, MlirAttribute valMembers) {
+   return wrap(mlir::subop::MultiMapType::get(unwrap(keyMembers).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(keyMembers)), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(valMembers))));
+}
+MlirTypeID mlirSubOpMultiMapTypeGetTypeID() {
+   return wrap(mlir::subop::MultiMapType::getTypeID());
+}
+bool mlirTypeIsASubOpMultiMapType(MlirType type) {
+   return llvm::isa<mlir::subop::MultiMapType>(unwrap(type));
+}
+
+MlirType mlirSubOpBufferTypeGet(MlirAttribute members) {
+   return wrap(mlir::subop::BufferType::get(unwrap(members).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(members))));
+}
+MlirTypeID mlirSubOpBufferTypeGetTypeID() {
+   return wrap(mlir::subop::BufferType::getTypeID());
+}
+bool mlirTypeIsASubOpBufferType(MlirType type) {
+   return llvm::isa<mlir::subop::BufferType>(unwrap(type));
+}
+
+MlirType mlirSubOpArrayTypeGet(MlirAttribute members) {
+   return wrap(mlir::subop::ArrayType::get(unwrap(members).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(members))));
+}
+MlirTypeID mlirSubOpArrayTypeGetTypeID() {
+   return wrap(mlir::subop::ArrayType::getTypeID());
+}
+bool mlirTypeIsASubOpArrayType(MlirType type) {
+   return llvm::isa<mlir::subop::ArrayType>(unwrap(type));
+}
+
+MlirType mlirSubOpContinuousViewTypeGet(MlirType basedOn) {
+   return wrap(mlir::subop::ContinuousViewType::get(unwrap(basedOn).getContext(), mlir::cast<mlir::subop::State>(unwrap(basedOn))));
+}
+MlirTypeID mlirSubOpContinuousViewTypeGetTypeID() {
+   return wrap(mlir::subop::ContinuousViewType::getTypeID());
+}
+bool mlirTypeIsASubOpContinuousViewType(MlirType type) {
+   return llvm::isa<mlir::subop::ContinuousViewType>(unwrap(type));
+}
+
+MlirType mlirSubOpHeapTypeGet(MlirAttribute members, uint32_t maxElements) {
+   return wrap(mlir::subop::HeapType::get(unwrap(members).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(members)), maxElements));
+}
+MlirTypeID mlirSubOpHeapTypeGetTypeID() {
+   return wrap(mlir::subop::HeapType::getTypeID());
+}
+bool mlirTypeIsASubOpHeapType(MlirType type) {
+   return llvm::isa<mlir::subop::HeapType>(unwrap(type));
+}
+
+MlirType mlirSubOpSegmentTreeViewTypeGet(MlirAttribute keyMembers, MlirAttribute valMembers) {
+   return wrap(mlir::subop::SegmentTreeViewType::get(unwrap(keyMembers).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(keyMembers)), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(valMembers))));
+}
+MlirTypeID mlirSubOpSegmentTreeViewTypeGetTypeID() {
+   return wrap(mlir::subop::SegmentTreeViewType::getTypeID());
+}
+bool mlirTypeIsASubOpSegmentTreeViewType(MlirType type) {
+   return llvm::isa<mlir::subop::SegmentTreeViewType>(unwrap(type));
+}
+
+MlirType mlirSubOpEntryTypeGet(MlirType t) {
+   return wrap(mlir::subop::EntryType::get(unwrap(t).getContext(), unwrap(t)));
+}
+MlirTypeID mlirSubOpEntryTypeGetTypeID() {
+   return wrap(mlir::subop::EntryType::getTypeID());
+}
+bool mlirTypeIsASubOpEntryType(MlirType type) {
+   return llvm::isa<mlir::subop::EntryType>(unwrap(type));
+}
+
+MlirType mlirSubOpEntryRefTypeGet(MlirType t) {
+   return wrap(mlir::subop::EntryRefType::get(unwrap(t).getContext(), mlir::cast<mlir::subop::State>(unwrap(t))));
+}
+MlirTypeID mlirSubOpEntryRefTypeGetTypeID() {
+   return wrap(mlir::subop::EntryRefType::getTypeID());
+}
+bool mlirTypeIsASubOpEntryRefType(MlirType type) {
+   return llvm::isa<mlir::subop::EntryRefType>(unwrap(type));
+}
+
+MlirType mlirSubOpMapEntryRefTypeGet(MlirType t) {
+   return wrap(mlir::subop::MapEntryRefType::get(unwrap(t).getContext(), mlir::cast<mlir::subop::MapType>(unwrap(t))));
+}
+MlirTypeID mlirSubOpMapEntryRefTypeGetTypeID() {
+   return wrap(mlir::subop::MapEntryRefType::getTypeID());
+}
+bool mlirTypeIsASubOpMapEntryRefType(MlirType type) {
+   return llvm::isa<mlir::subop::MapEntryRefType>(unwrap(type));
+}
+
+MlirType mlirSubOpTableEntryRefTypeGet(MlirAttribute t) {
+   return wrap(mlir::subop::TableEntryRefType::get(unwrap(t).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(t))));
+}
+MlirTypeID mlirSubOpTableEntryRefTypeGetTypeID() {
+   return wrap(mlir::subop::TableEntryRefType::getTypeID());
+}
+bool mlirTypeIsASubOpTableEntryRefType(MlirType type) {
+   return llvm::isa<mlir::subop::TableEntryRefType>(unwrap(type));
+}
+
+
+MlirType mlirSubOpLookupEntryRefTypeGet(MlirType t) {
+   return wrap(mlir::subop::LookupEntryRefType::get(unwrap(t).getContext(), mlir::cast<mlir::subop::LookupAbleState>(unwrap(t))));
+}
+MlirTypeID mlirSubOpLookupEntryRefTypeGetTypeID() {
+   return wrap(mlir::subop::LookupEntryRefType::getTypeID());
+}
+bool mlirTypeIsASubOpLookupEntryRefType(MlirType type) {
+   return llvm::isa<mlir::subop::LookupEntryRefType>(unwrap(type));
+}
+
+MlirType mlirSubOpMultiMapEntryRefTypeGet(MlirType t) {
+   return wrap(mlir::subop::MultiMapEntryRefType::get(unwrap(t).getContext(), mlir::cast<mlir::subop::MultiMapType>(unwrap(t))));
+}
+MlirTypeID mlirSubOpMultiMapEntryRefTypeGetTypeID() {
+   return wrap(mlir::subop::MultiMapEntryRefType::getTypeID());
+}
+bool mlirTypeIsASubOpMultiMapEntryRefType(MlirType type) {
+   return llvm::isa<mlir::subop::MultiMapEntryRefType>(unwrap(type));
+}
+
+MlirType mlirSubOpContinuousEntryRefTypeGet(MlirType t) {
+   return wrap(mlir::subop::ContinuousEntryRefType::get(unwrap(t).getContext(), mlir::cast<mlir::subop::State>(unwrap(t))));
+}
+MlirTypeID mlirSubOpContinuousEntryRefTypeGetTypeID() {
+   return wrap(mlir::subop::ContinuousEntryRefType::getTypeID());
+}
+bool mlirTypeIsASubOpContinuousEntryRefType(MlirType type) {
+   return llvm::isa<mlir::subop::ContinuousEntryRefType>(unwrap(type));
+}
+
+MlirType mlirSubOpEntryListTypeGet(MlirType t) {
+   return wrap(mlir::subop::ListType::get(unwrap(t).getContext(), mlir::cast<mlir::subop::StateEntryReference>(unwrap(t))));
+}
+MlirTypeID mlirSubOpEntryListTypeGetTypeID() {
+   return wrap(mlir::subop::ListType::getTypeID());
+}
+bool mlirTypeIsASubOpEntryListType(MlirType type) {
+   return llvm::isa<mlir::subop::ListType>(unwrap(type));
 }

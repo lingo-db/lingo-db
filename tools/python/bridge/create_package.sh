@@ -29,6 +29,8 @@ ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-op-bindings -bind-dialect=db -I ${MLIR_I
 ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-enum-bindings -bind-dialect=db -I ${MLIR_INCLUDE_DIR} -I  ${BASE_PATH}/include/ dialects/DBOps.td > lingodbbridge/mlir/dialects/_db_enum_gen.py
 ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-op-bindings -bind-dialect=relalg -I ${MLIR_INCLUDE_DIR} -I  ${BASE_PATH}/include/  -I  ${BASE_PATH}/include/mlir/Dialect/RelAlg/IR dialects/RelAlgOps.td > lingodbbridge/mlir/dialects/_relalg_ops_gen.py
 ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-enum-bindings -bind-dialect=relalg -I ${MLIR_INCLUDE_DIR} -I  ${BASE_PATH}/include/ -I  ${BASE_PATH}/include/mlir/Dialect/RelAlg/IR dialects/RelAlgOps.td > lingodbbridge/mlir/dialects/_relalg_enum_gen.py
+${MLIR_BIN_DIR}/mlir-tblgen -gen-python-op-bindings -bind-dialect=subop -I ${MLIR_INCLUDE_DIR} -I  ${BASE_PATH}/include/  -I  ${BASE_PATH}/include/mlir/Dialect/SubOperator dialects/SubOperatorOps.td > lingodbbridge/mlir/dialects/_subop_ops_gen.py
+${MLIR_BIN_DIR}/mlir-tblgen -gen-python-enum-bindings -bind-dialect=subop -I ${MLIR_INCLUDE_DIR} -I  ${BASE_PATH}/include/ -I  ${BASE_PATH}/include/mlir/Dialect/SubOperator dialects/SubOperatorOps.td > lingodbbridge/mlir/dialects/_subop_enum_gen.py
 
 mkdir -p lingodbbridge/libs
 cp ../lingodb-release/tools/python/bridge/libpybridge.so  lingodbbridge/libs/.

@@ -135,4 +135,164 @@ PYBIND11_MODULE(mlir_lingodb, m) {
             return cls(mlirRelalgTableMetaDataAttrGetEmpty(context));
          },
          py::arg("cls"), py::arg("context"));
+
+   //----------------------------------------------------------------------------------------------------------------------
+   // SubOp Dialect
+   //----------------------------------------------------------------------------------------------------------------------
+   auto subOpModule = m.def_submodule("subop", "extensions required for sub-operator dialect");
+   mlir::python::adaptors::mlir_attribute_subclass(subOpModule, "StateMembersAttr", mlirAttributeIsASubOpStateMembersAttribute)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirAttribute names, MlirAttribute types) {
+            return cls(mlirSubOpStateMembersAttributeGet(names, types));
+         },
+         py::arg("cls"), py::arg("names"), py::arg("types"));
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "TableType", mlirTypeIsASubOpTableType, mlirSubOpTableTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirAttribute members) {
+            return cls(mlirSubOpTableTypeGet(members));
+         },
+         py::arg("cls"), py::arg("members"));
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "LocalTableType", mlirTypeIsASubOpLocalTableType, mlirSubOpLocalTableTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirAttribute members) {
+            return cls(mlirSubOpLocalTableTypeGet(members));
+         },
+         py::arg("cls"), py::arg("members"));
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "ResultTableType", mlirTypeIsASubOpResultTableType, mlirSubOpResultTableTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirAttribute members) {
+            return cls(mlirSubOpResultTableTypeGet(members));
+         },
+         py::arg("cls"), py::arg("members"));
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "SimpleStateType", mlirTypeIsASubOpSimpleStateType, mlirSubOpSimpleStateTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirAttribute members) {
+            return cls(mlirSubOpSimpleStateTypeGet(members));
+         },
+         py::arg("cls"), py::arg("members"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "MapType", mlirTypeIsASubOpMapType, mlirSubOpMapTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirAttribute keyMembers, MlirAttribute valMembers) {
+            return cls(mlirSubOpMapTypeGet(keyMembers, valMembers));
+         },
+         py::arg("cls"), py::arg("keyMembers"), py::arg("valMembers"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "MultiMapType", mlirTypeIsASubOpMultiMapType, mlirSubOpMultiMapTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirAttribute keyMembers, MlirAttribute valMembers) {
+            return cls(mlirSubOpMultiMapTypeGet(keyMembers, valMembers));
+         },
+         py::arg("cls"), py::arg("keyMembers"), py::arg("valMembers"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "BufferType", mlirTypeIsASubOpBufferType, mlirSubOpBufferTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirAttribute members) {
+            return cls(mlirSubOpBufferTypeGet(members));
+         },
+         py::arg("cls"), py::arg("members"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "ArrayType", mlirTypeIsASubOpArrayType, mlirSubOpArrayTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirAttribute members) {
+            return cls(mlirSubOpArrayTypeGet(members));
+         },
+         py::arg("cls"), py::arg("members"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "ContinuousViewType", mlirTypeIsASubOpContinuousViewType, mlirSubOpContinuousViewTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirType basedOn) {
+            return cls(mlirSubOpContinuousViewTypeGet(basedOn));
+         },
+         py::arg("cls"), py::arg("basedOn"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "HeapType", mlirTypeIsASubOpHeapType, mlirSubOpHeapTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirAttribute members, uint32_t maxElements) {
+            return cls(mlirSubOpHeapTypeGet(members,maxElements));
+         },
+         py::arg("cls"), py::arg("members"), py::arg("maxElements"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "SegmentTreeViewType", mlirTypeIsASubOpSegmentTreeViewType, mlirSubOpSegmentTreeViewTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirAttribute keyMembers, MlirAttribute valMembers) {
+            return cls(mlirSubOpSegmentTreeViewTypeGet(keyMembers, valMembers));
+         },
+         py::arg("cls"), py::arg("keyMembers"), py::arg("valMembers"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "EntryType", mlirTypeIsASubOpEntryType, mlirSubOpEntryTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirType t) {
+            return cls(mlirSubOpEntryTypeGet(t));
+         },
+         py::arg("cls"), py::arg("t"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "EntryRefType", mlirTypeIsASubOpEntryRefType, mlirSubOpEntryRefTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirType t) {
+            return cls(mlirSubOpEntryRefTypeGet(t));
+         },
+         py::arg("cls"), py::arg("t"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "MapEntryRefType", mlirTypeIsASubOpMapEntryRefType, mlirSubOpMapEntryRefTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirType t) {
+            return cls(mlirSubOpMapEntryRefTypeGet(t));
+         },
+         py::arg("cls"), py::arg("t"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "TableEntryRefType", mlirTypeIsASubOpTableEntryRefType, mlirSubOpTableEntryRefTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirAttribute a) {
+            return cls(mlirSubOpTableEntryRefTypeGet(a));
+         },
+         py::arg("cls"), py::arg("a"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "LookupEntryRefType", mlirTypeIsASubOpLookupEntryRefType, mlirSubOpLookupEntryRefTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirType t) {
+            return cls(mlirSubOpLookupEntryRefTypeGet(t));
+         },
+         py::arg("cls"), py::arg("t"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "MultiMapEntryRefType", mlirTypeIsASubOpMultiMapEntryRefType, mlirSubOpMultiMapEntryRefTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirType t) {
+            return cls(mlirSubOpMultiMapEntryRefTypeGet(t));
+         },
+         py::arg("cls"), py::arg("t"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "ContinuousEntryRefType", mlirTypeIsASubOpContinuousEntryRefType, mlirSubOpContinuousEntryRefTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirType t) {
+            return cls(mlirSubOpContinuousEntryRefTypeGet(t));
+         },
+         py::arg("cls"), py::arg("t"));
+
+   mlir::python::adaptors::mlir_type_subclass(subOpModule, "EntryListType", mlirTypeIsASubOpEntryListType, mlirSubOpEntryListTypeGetTypeID)
+      .def_classmethod(
+         "get",
+         [](py::object cls, MlirType t) {
+            return cls(mlirSubOpEntryListTypeGet(t));
+         },
+         py::arg("cls"), py::arg("t"));
 }
