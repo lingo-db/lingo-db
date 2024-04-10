@@ -47,7 +47,8 @@ static uint64_t read8PadZero(const uint8_t* p, uint32_t len) {
    /*uint64_t x;
    memcpy(&x,p,len);
    return x;
-   */if (cachelineRemains8(p)) {
+   */
+   if (cachelineRemains8(p)) {
       auto bytes = unalignedLoad64(p);
       auto shift = len * 8;
       auto mask = ~((~0ull) << shift);
@@ -78,6 +79,11 @@ class VarLen32 {
    }
 
    public:
+   static VarLen32 fromString(std::string str) {
+      auto *ptr = new uint8_t[str.size()];
+      memcpy(ptr, str.data(), str.size());
+      return VarLen32(ptr, str.size());
+   }
    VarLen32() : VarLen32(nullptr, 0) {}
    VarLen32(const uint8_t* ptr, uint32_t len) : len(len) {
       if (len > shortLen) {

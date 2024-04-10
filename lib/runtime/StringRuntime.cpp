@@ -156,6 +156,7 @@ __int128 runtime::StringRuntime::toDecimal(runtime::VarLen32 string, int32_t req
 CAST_NUMERIC_TO_STRING(int64_t, arrow::Int64Type, Int)
 CAST_NUMERIC_TO_STRING(float, arrow::FloatType, Float32)
 CAST_NUMERIC_TO_STRING(double, arrow::DoubleType, Float64)
+CAST_NUMERIC_TO_STRING(bool, arrow::BooleanType, Bool)
 
 runtime::VarLen32 runtime::StringRuntime::fromDecimal(__int128 val, int32_t scale) { // NOLINT (clang-diagnostic-return-type-c-linkage)
 

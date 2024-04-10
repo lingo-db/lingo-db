@@ -256,6 +256,8 @@ class StringCastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
          } else if (scalarTargetType.isa<mlir::db::DateType>()) {
             result = rt::StringRuntime::toDate(rewriter, loc)({valueToCast})[0];
          }
+      } else if (scalarSourceType.isInteger(1)) {
+         result = rt::StringRuntime::fromBool(rewriter, loc)({valueToCast})[0];
       } else if (auto intWidth = getIntegerWidth(scalarSourceType, false)) {
          result = rt::StringRuntime::fromInt(rewriter, loc)({valueToCast})[0];
       } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
