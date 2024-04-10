@@ -28,25 +28,46 @@ class SplitTableScan : public mlir::RewritePattern {
       : RewritePattern(mlir::subop::ScanOp::getOperationName(), 1, context) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto scanOp = mlir::cast<mlir::subop::ScanOp>(op);
-      if (!scanOp.getState().getType().isa<mlir::subop::TableType>()) return mlir::failure();
-      auto tableType = scanOp.getState().getType().cast<mlir::subop::TableType>();
-      std::vector<mlir::Attribute> memberNames;
-      std::vector<mlir::Attribute> memberTypes;
-      auto tableMembers = tableType.getMembers();
-      for (auto i = 0ul; i < tableMembers.getTypes().size(); i++) {
-         auto type = tableMembers.getTypes()[i].cast<mlir::TypeAttr>();
-         auto name = tableMembers.getNames()[i].cast<mlir::StringAttr>();
-         if (scanOp.getMapping().contains(name)) {
-            memberNames.push_back(name);
-            memberTypes.push_back(type);
+      if (scanOp.getState().getType().isa<mlir::subop::TableType>()) {
+         auto tableType = scanOp.getState().getType().cast<mlir::subop::TableType>();
+         std::vector<mlir::Attribute> memberNames;
+         std::vector<mlir::Attribute> memberTypes;
+         auto tableMembers = tableType.getMembers();
+         for (auto i = 0ul; i < tableMembers.getTypes().size(); i++) {
+            auto type = tableMembers.getTypes()[i].cast<mlir::TypeAttr>();
+            auto name = tableMembers.getNames()[i].cast<mlir::StringAttr>();
+            if (scanOp.getMapping().contains(name)) {
+               memberNames.push_back(name);
+               memberTypes.push_back(type);
+            }
          }
-      }
-      auto members = mlir::subop::StateMembersAttr::get(getContext(), mlir::ArrayAttr::get(getContext(), memberNames), mlir::ArrayAttr::get(getContext(), memberTypes));
+         auto members = mlir::subop::StateMembersAttr::get(getContext(), mlir::ArrayAttr::get(getContext(), memberNames), mlir::ArrayAttr::get(getContext(), memberTypes));
 
-      auto [refDef, refRef] = createColumn(mlir::subop::TableEntryRefType::get(getContext(), members), "scan", "ref");
-      mlir::Value scanRefsOp = rewriter.create<mlir::subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
-      rewriter.replaceOpWithNewOp<mlir::subop::GatherOp>(op, scanRefsOp, refRef, scanOp.getMapping());
-      return mlir::success();
+         auto [refDef, refRef] = createColumn(mlir::subop::TableEntryRefType::get(getContext(), members), "scan", "ref");
+         mlir::Value scanRefsOp = rewriter.create<mlir::subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
+         rewriter.replaceOpWithNewOp<mlir::subop::GatherOp>(op, scanRefsOp, refRef, scanOp.getMapping());
+         return mlir::success();
+      }else if(scanOp.getState().getType().isa<mlir::subop::LocalTableType>()) {
+         auto tableType = scanOp.getState().getType().cast<mlir::subop::LocalTableType>();
+         std::vector<mlir::Attribute> memberNames;
+         std::vector<mlir::Attribute> memberTypes;
+         auto tableMembers = tableType.getMembers();
+         for (auto i = 0ul; i < tableMembers.getTypes().size(); i++) {
+            auto type = tableMembers.getTypes()[i].cast<mlir::TypeAttr>();
+            auto name = tableMembers.getNames()[i].cast<mlir::StringAttr>();
+            if (scanOp.getMapping().contains(name)) {
+               memberNames.push_back(name);
+               memberTypes.push_back(type);
+            }
+         }
+         auto members = mlir::subop::StateMembersAttr::get(getContext(), mlir::ArrayAttr::get(getContext(), memberNames), mlir::ArrayAttr::get(getContext(), memberTypes));
+
+         auto [refDef, refRef] = createColumn(mlir::subop::TableEntryRefType::get(getContext(), members), "scan", "ref");
+         mlir::Value scanRefsOp = rewriter.create<mlir::subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
+         rewriter.replaceOpWithNewOp<mlir::subop::GatherOp>(op, scanRefsOp, refRef, scanOp.getMapping());
+         return mlir::success();
+      }
+      return mlir::failure();
    }
 };
 class SplitGenericScan : public mlir::RewritePattern {

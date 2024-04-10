@@ -1,5 +1,6 @@
 #ifndef RUNTIME_DATASOURCEITERATION_H
 #define RUNTIME_DATASOURCEITERATION_H
+#include "ArrowTable.h"
 #include "RecordBatchInfo.h"
 #include "runtime/ExecutionContext.h"
 #include "runtime/helpers.h"
@@ -10,6 +11,7 @@ class DataSource {
    virtual void iterate(bool parallel, std::vector<size_t> colIds, const std::function<void(runtime::RecordBatchInfo*)>& cb) = 0;
    virtual ~DataSource() {}
    static DataSource* get(ExecutionContext* executionContext, runtime::VarLen32 description);
+   static DataSource* getFromTable(ArrowTable* arrowTable, runtime::VarLen32 mappingVal);
 };
 class DataSourceIteration {
    std::shared_ptr<arrow::RecordBatch> currChunk;

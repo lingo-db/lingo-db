@@ -29,7 +29,7 @@ static void access(std::vector<size_t> colIds, runtime::RecordBatchInfo* info, c
    info->numRows = currChunk->num_rows();
 }
 class RecordBatchTableSource : public runtime::DataSource {
-   const std::vector<std::shared_ptr<arrow::RecordBatch>>& batches;
+   std::vector<std::shared_ptr<arrow::RecordBatch>> batches; //todo: efficiency?
    std::unordered_map<std::string, size_t> memberToColumnId;
 
    public:
@@ -72,6 +72,21 @@ class RecordBatchTableSource : public runtime::DataSource {
       return memberToColumnId[member];
    }
 };
+std::vector<std::shared_ptr<arrow::RecordBatch>> toRecordBatches(std::shared_ptr<arrow::Table> table) {
+   std::vector<std::shared_ptr<arrow::RecordBatch>> batches;
+   arrow::TableBatchReader reader(table);
+   reader.set_chunksize(20000);
+   std::shared_ptr<arrow::RecordBatch> nextChunk;
+   while (reader.ReadNext(&nextChunk) == arrow::Status::OK()) {
+      if (nextChunk) {
+         batches.push_back(nextChunk);
+      } else {
+         break;
+      }
+      nextChunk.reset();
+   }
+   return batches;
+}
 } // end namespace
 
 void runtime::DataSourceIteration::end(DataSourceIteration* iteration) {
@@ -112,6 +127,16 @@ runtime::DataSource* runtime::DataSource::get(runtime::ExecutionContext* executi
       memberToColumnId[m.first] = getTableColumnId(relation->getArrowSchema(), m.second.get<std::string>());
    }
    return new RecordBatchTableSource(relation->getRecordBatches(), memberToColumnId);
+}
+runtime::DataSource* runtime::DataSource::getFromTable(ArrowTable* arrowTable, runtime::VarLen32 memberArray) {
+   auto schema = arrowTable->get()->schema();
+   std::unordered_map<std::string, size_t> memberToColumnId;
+   nlohmann::json members = nlohmann::json::parse(memberArray.str());
+
+   for (size_t i = 0; i < members.size(); i++) {
+      memberToColumnId[members[i]] = i;
+   }
+   return new RecordBatchTableSource(toRecordBatches(arrowTable->get()), memberToColumnId);
 }
 
 void runtime::DataSourceIteration::iterate(bool parallel, void (*forEachChunk)(runtime::RecordBatchInfo*, void*), void* context) {
