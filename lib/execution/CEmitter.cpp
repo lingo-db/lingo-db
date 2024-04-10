@@ -375,7 +375,13 @@ LogicalResult printOperation(CppEmitter& emitter, util::AllocOp op) {
 static std::string escapeQuotes(std::string s) {
    std::stringstream sstream;
    sstream << std::quoted(s);
-   return sstream.str().substr(1, sstream.str().length() - 2);
+   auto quoteEscaped= sstream.str().substr(1, sstream.str().length() - 2);
+   auto nlEscaped = std::regex_replace(quoteEscaped, std::regex("\n"), "\\n");
+   return nlEscaped;
+}
+LogicalResult printOperation(CppEmitter& emitter, util::DeAllocOp op) {
+   emitter.ostream()<<"free("<<emitter.getOrCreateName(op.getRef())<<")";
+   return mlir::success();
 }
 LogicalResult printOperation(CppEmitter& emitter, util::CreateConstVarLen op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::VarLen32{reinterpret_cast<const uint8_t*>(\"" << escapeQuotes(op.getStr().str()) << "\"), " << op.getStr().size() << "}"; });
@@ -465,6 +471,13 @@ LogicalResult printOperation(CppEmitter& emitter, util::UnTagPtr op) {
 }
 LogicalResult printOperation(CppEmitter& emitter, util::BufferCastOp op) {
    return printStandardOperation(emitter, op, [&](auto& os) { os << emitter.getOrCreateName(op.getVal()); });
+}
+LogicalResult printOperation(CppEmitter& emitter, util::BufferCreateOp op) {
+   std::string type;
+   if (failed(emitter.typeToString(op->getLoc(), op.getType().getElementType().cast<mlir::util::RefType>().getElementType(), type))) {
+      return failure();
+   }
+   return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::Buffer{"<<emitter.getOrCreateName(op.getLen()) <<"*sizeof("<<type<<"),(uint8_t*)"<<emitter.getOrCreateName(op.getPtr())<<"}"; });
 }
 LogicalResult printOperation(CppEmitter& emitter, util::BufferGetLen op) {
    std::string type;
@@ -1295,7 +1308,7 @@ LogicalResult CppEmitter::emitOperation(Operation& op, bool trailingSemicolon) {
             }
          })
          // SCF ops.
-         .Case<util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp, util::LoadOp, util::StoreOp, util::AllocOp, util::AllocaOp, util::CreateConstVarLen, util::UndefOp, util::BufferCastOp, util::InvalidRefOp, util::IsRefValidOp, util::SizeOfOp, util::PackOp, util::CreateVarLen, util::Hash64, util::HashCombine, util::HashVarLen, util::FilterTaggedPtr, util::UnTagPtr, util::BufferGetRef, util::BufferGetLen, util::VarLenCmp, util::VarLenGetLen, util::GetTupleOp, util::VarLenTryCheapHash>(
+         .Case<util::GenericMemrefCastOp, util::TupleElementPtrOp, util::ArrayElementPtrOp, util::LoadOp, util::StoreOp, util::AllocOp, util::AllocaOp, util::CreateConstVarLen, util::UndefOp, util::BufferCastOp,util::BufferCreateOp,util::DeAllocOp, util::InvalidRefOp, util::IsRefValidOp, util::SizeOfOp, util::PackOp, util::CreateVarLen, util::Hash64, util::HashCombine, util::HashVarLen, util::FilterTaggedPtr, util::UnTagPtr, util::BufferGetRef, util::BufferGetLen, util::VarLenCmp, util::VarLenGetLen, util::GetTupleOp, util::VarLenTryCheapHash>(
             [&](auto op) { return printOperation(*this, op); })
          .Case<util::ToMemrefOp, memref::AtomicRMWOp>(
             [&](auto op) { return printOperation(*this, op); })
