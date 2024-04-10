@@ -6,6 +6,7 @@
 #include "mlir/Conversion/SubOpToControlFlow/SubOpToControlFlowPass.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
+#include "mlir/Dialect/Func/Extensions/AllExtensions.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/RelAlg/IR/RelAlgDialect.h"
@@ -21,6 +22,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
+
 #include "runtime/Catalog.h"
 
 #include <mlir/Conversion/UtilToLLVM/Passes.h>
@@ -70,7 +72,7 @@ int main(int argc, char** argv) {
    registry.insert<mlir::LLVM::LLVMDialect>();
 
    registry.insert<mlir::scf::SCFDialect>();
-
+   mlir::func::registerAllExtensions(registry);
    support::eval::init();
 
    return failed(
