@@ -27,7 +27,7 @@ resources/data/job/.stamp: tools/generate/job.sh build/lingodb-debug/.buildstamp
 	touch $@
 
 LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-		 -DPython3_EXECUTABLE="venv/bin/python3" \
+		 -DPython3_EXECUTABLE="${ROOT_DIR}/venv/bin/python3" \
 	   	 -DCMAKE_BUILD_TYPE=Debug
 
 build/dependencies: venv build
