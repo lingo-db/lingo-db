@@ -24,8 +24,8 @@ module{
             tuples.return
         }
         subop.materialize %generated {@t::@c1 => test}, %result_table : !subop.result_table<[test : index]>
-        %local_table = subop.create_from ["test"] %result_table : !subop.result_table<[test : index]> -> !subop.local_table<[test : index]>
-        subop.set_result 0 %local_table  : !subop.local_table<[test : index]>
+        %local_table = subop.create_from ["test"] %result_table : !subop.result_table<[test : index]> -> !subop.local_table<[test : index],["test"]>
+        subop.set_result 0 %local_table  : !subop.local_table<[test : index],["test"]>
         return
     }
 }

@@ -33,8 +33,8 @@ module{
         %result_table = subop.create !subop.result_table<[ctr2 : i32]>
         %s10 = subop.scan %finalCounter : !subop.simple_state<[ctr:i32]> {ctr => @s::@ctr({type=i32})}
         subop.materialize %s10 {@s::@ctr=>ctr2}, %result_table : !subop.result_table<[ctr2 : i32]>
-        %local_table = subop.create_from ["ctr"] %result_table : !subop.result_table<[ctr2 : i32]> -> !subop.local_table<[ctr2 : i32]>
-        subop.set_result 0 %local_table  : !subop.local_table<[ctr2 : i32]>
+        %local_table = subop.create_from ["ctr"] %result_table : !subop.result_table<[ctr2 : i32]> -> !subop.local_table<[ctr2 : i32],["ctr"]>
+        subop.set_result 0 %local_table  : !subop.local_table<[ctr2 : i32],["ctr"]>
         return
     }
 }

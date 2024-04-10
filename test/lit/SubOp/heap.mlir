@@ -6,7 +6,7 @@
 //CHECK: |                             2  |
 //CHECK: |                             3  |
 !result_table_type = !subop.result_table<[ir : index]>
-!local_table_type = !subop.local_table<[ir : index]>
+!local_table_type = !subop.local_table<[ir : index],["i"]>
 module {
     func.func @main(){
         %heap = subop.create_heap ["ih"] -> !subop.heap<4,[ih : index]> ([%left],[%right]){

@@ -201,8 +201,8 @@ module{
          %fstream1 = subop.scan %finalCentroids :  !subop.buffer<[clusterX : f32, clusterY : f32, clusterId : i32]>  { clusterX => @centroid::@x({type=f32}),clusterY => @centroid::@y({type=f32}), clusterId => @centroid::@id({type=i32})}
          %result_table = subop.create !subop.result_table<[id0 : i32, x0 : f32, y0 : f32]>
          subop.materialize %fstream1 {@centroid::@id => id0, @centroid::@x => x0, @centroid::@y => y0}, %result_table : !subop.result_table<[id0 : i32, x0 : f32, y0 : f32]>
-        %local_table = subop.create_from ["id","x","y"] %result_table : !subop.result_table<[id0 : i32, x0 : f32, y0 : f32]> -> !subop.local_table<[id0 : i32, x0 : f32, y0 : f32]>
-        subop.set_result 0 %local_table : !subop.local_table<[id0 : i32, x0 : f32, y0 : f32]>
+        %local_table = subop.create_from ["id","x","y"] %result_table : !subop.result_table<[id0 : i32, x0 : f32, y0 : f32]> -> !subop.local_table<[id0 : i32, x0 : f32, y0 : f32],["id","x","y"]>
+        subop.set_result 0 %local_table : !subop.local_table<[id0 : i32, x0 : f32, y0 : f32],["id","x","y"]>
         return
     }
 }

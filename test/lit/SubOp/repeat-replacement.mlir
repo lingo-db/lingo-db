@@ -37,8 +37,8 @@ module{
       tuples.return %14 : !tuples.tuplestream
     }
     subop.materialize %11 {@constrel1::@const0 => const0p0}, %12 : !subop.result_table<[const0p0 : i32]>
-    %local_table = subop.create_from ["const0"] %12 : !subop.result_table<[const0p0 : i32]> -> !subop.local_table<[const0p0 : i32]>
-    subop.set_result 0 %local_table  : !subop.local_table<[const0p0 : i32]>
+    %local_table = subop.create_from ["const0"] %12 : !subop.result_table<[const0p0 : i32]> -> !subop.local_table<[const0p0 : i32],["const0"]>
+    subop.set_result 0 %local_table  : !subop.local_table<[const0p0 : i32],["const0"]>
     return
 }
 }

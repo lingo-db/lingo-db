@@ -28,8 +28,8 @@ print(con2.mlir("""module {
       %4 = relalg.count %arg0
       tuples.return %4 : i64
     }
-    %3 = relalg.materialize %2 [@aggr0::@tmp_attr0] => ["count"] : !subop.local_table<[count: i64]>
-    subop.set_result 0 %3 :  !subop.local_table<[count: i64]>
+    %3 = relalg.materialize %2 [@aggr0::@tmp_attr0] => ["count"] : !subop.local_table<[count: i64],["cnt"]>
+    subop.set_result 0 %3 :  !subop.local_table<[count: i64],["cnt"]>
     return
   }
 }

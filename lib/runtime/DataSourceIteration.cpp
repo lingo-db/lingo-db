@@ -3,6 +3,7 @@
 #include <iterator>
 
 #include "utility/Tracer.h"
+
 #include <arrow/array.h>
 #include <arrow/table.h>
 #include <oneapi/tbb.h>
@@ -128,13 +129,14 @@ runtime::DataSource* runtime::DataSource::get(runtime::ExecutionContext* executi
    }
    return new RecordBatchTableSource(relation->getRecordBatches(), memberToColumnId);
 }
-runtime::DataSource* runtime::DataSource::getFromTable(ArrowTable* arrowTable, runtime::VarLen32 memberArray) {
+runtime::DataSource* runtime::DataSource::getFromTable(ArrowTable* arrowTable, runtime::VarLen32 memberArray,runtime::VarLen32 columnArray) {
    auto schema = arrowTable->get()->schema();
    std::unordered_map<std::string, size_t> memberToColumnId;
    nlohmann::json members = nlohmann::json::parse(memberArray.str());
+   nlohmann::json columns = nlohmann::json::parse(columnArray.str());
 
    for (size_t i = 0; i < members.size(); i++) {
-      memberToColumnId[members[i]] = i;
+      memberToColumnId[members[i]] = arrowTable->get()->schema()->GetFieldIndex(columns[i]);
    }
    return new RecordBatchTableSource(toRecordBatches(arrowTable->get()), memberToColumnId);
 }

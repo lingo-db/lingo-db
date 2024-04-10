@@ -157,10 +157,10 @@ PYBIND11_MODULE(mlir_lingodb, m) {
    mlir::python::adaptors::mlir_type_subclass(subOpModule, "LocalTableType", mlirTypeIsASubOpLocalTableType, mlirSubOpLocalTableTypeGetTypeID)
       .def_classmethod(
          "get",
-         [](py::object cls, MlirAttribute members) {
-            return cls(mlirSubOpLocalTableTypeGet(members));
+         [](py::object cls, MlirAttribute members,MlirAttribute columns) {
+            return cls(mlirSubOpLocalTableTypeGet(members,columns));
          },
-         py::arg("cls"), py::arg("members"));
+         py::arg("cls"), py::arg("members"),py::arg("columns"));
    mlir::python::adaptors::mlir_type_subclass(subOpModule, "ResultTableType", mlirTypeIsASubOpResultTableType, mlirSubOpResultTableTypeGetTypeID)
       .def_classmethod(
          "get",

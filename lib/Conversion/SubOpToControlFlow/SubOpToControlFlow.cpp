@@ -1682,6 +1682,7 @@ class ScanRefsLocalTableLowering : public SubOpConversionPattern<mlir::subop::Sc
 
    LogicalResult matchAndRewrite(mlir::subop::ScanRefsOp scanOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
       if (!scanOp.getState().getType().isa<mlir::subop::LocalTableType>()) return failure();
+      auto localTableType = scanOp.getState().getType().cast<mlir::subop::LocalTableType>();
       auto loc = scanOp->getLoc();
       auto refType = scanOp.getRef().getColumn().type.cast<mlir::subop::TableEntryRefType>();
       std::string memberMapping = "[";
@@ -1697,9 +1698,18 @@ class ScanRefsLocalTableLowering : public SubOpConversionPattern<mlir::subop::Sc
          memberMapping += "\"" + name + "\"";
       }
       memberMapping += "]";
+      std::string columnArray = "[";
+      for (auto columnName : localTableType.getColumnNames()) {
+         if (columnArray.length() > 1) {
+            columnArray += ",";
+         }
+         columnArray += "\"" + columnName.cast<mlir::StringAttr>().str() + "\"";
+      }
+      columnArray += "]";
       mlir::Value memberMappingValue = rewriter.create<mlir::util::CreateConstVarLen>(scanOp->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), memberMapping);
+      mlir::Value columnArrayValue = rewriter.create<mlir::util::CreateConstVarLen>(scanOp->getLoc(), mlir::util::VarLen32Type::get(rewriter.getContext()), columnArray);
       mlir::Value tablePtr = rewriter.create<mlir::dsa::DownCast>(scanOp->getLoc(), mlir::util::RefType::get(rewriter.getContext(), rewriter.getI8Type()), adaptor.getState());
-      mlir::Value dataSourceValue = rt::DataSource::getFromTable(rewriter, scanOp->getLoc())({tablePtr, memberMappingValue})[0];
+      mlir::Value dataSourceValue = rt::DataSource::getFromTable(rewriter, scanOp->getLoc())({tablePtr, memberMappingValue,columnArrayValue})[0];
       mlir::Value iterator = rt::DataSourceIteration::init(rewriter, scanOp->getLoc())({dataSourceValue, memberMappingValue})[0];
       ColumnMapping mapping;
 
@@ -3660,14 +3670,14 @@ class UnrealizedConversionCastLowering : public SubOpConversionPattern<mlir::Unr
       }
       convertedTypes.clear();
       if (succeeded(typeConverter->convertTypes(op.getOutputs().getTypes(), convertedTypes))) {
-         auto newOp=rewriter.create<mlir::UnrealizedConversionCastOp>(op->getLoc(), convertedTypes, adaptor.getInputs());
+         auto newOp = rewriter.create<mlir::UnrealizedConversionCastOp>(op->getLoc(), convertedTypes, adaptor.getInputs());
          for (auto z : llvm::zip(op.getOutputs(), newOp.getOutputs())) {
             auto [output, newOutput] = z;
             output.replaceUsesWithIf(newOutput, [&](auto& use) -> bool {
                bool res = !(use.getOwner()->getDialect()->getNamespace() == "subop" || mlir::isa<mlir::UnrealizedConversionCastOp>(use.getOwner()));
                return res;
             });
-            rewriter.replaceOp(op,newOp.getOutputs());
+            rewriter.replaceOp(op, newOp.getOutputs());
          }
          return success();
       }

@@ -27,8 +27,8 @@ module @querymodule  {
 		%10 = db.and %6,%9:i1,i1
         tuples.return %10 : i1
   	}
-    %res_table = relalg.materialize %3 [] => [] : !subop.local_table<[]>
-    subop.set_result 0 %res_table : !subop.local_table<[]>
+    %res_table = relalg.materialize %3 [] => [] : !subop.local_table<[],[]>
+    subop.set_result 0 %res_table : !subop.local_table<[],[]>
     return
   }
 }
@@ -60,8 +60,8 @@ module @querymodule  {
 		%9 = db.add %7 : i32, %8 : i32
         tuples.return %6, %9 : i32, i32
   	}
-  	%res_table = relalg.materialize %3 [@map::@attr3, @map::@attr4] => ["a","b"] : !subop.local_table<[a: i32,b:i32]>
-    subop.set_result 0 %res_table : !subop.local_table<[a: i32,b:i32]>
+  	%res_table = relalg.materialize %3 [@map::@attr3, @map::@attr4] => ["a","b"] : !subop.local_table<[a: i32,b:i32],["a","b"]>
+    subop.set_result 0 %res_table : !subop.local_table<[a: i32,b:i32],["a","b"]>
     return
   }
 }

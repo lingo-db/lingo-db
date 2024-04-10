@@ -65,8 +65,8 @@ def Table : SubOperator_Type<"Table", "table",[State]> {
 }
 def LocalTable : SubOperator_Type<"LocalTable", "local_table",[State]> {
     let summary = "local table";
-    let parameters = (ins "StateMembersAttr":$members);
-    let assemblyFormat = "`<` custom<StateMembers>($members) `>`";
+    let parameters = (ins "StateMembersAttr":$members, "ArrayAttr": $columnNames);
+    let assemblyFormat = "`<` custom<StateMembers>($members) `,` $columnNames `>`";
 }
 def ResultTable : SubOperator_Type<"ResultTable", "result_table",[State]> {
     let summary = "reference to table";

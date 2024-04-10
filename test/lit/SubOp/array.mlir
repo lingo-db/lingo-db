@@ -12,7 +12,7 @@
 //CHECK: |                             8  |
 //CHECK: |                             9  |
 !result_table_type = !subop.result_table<[v : index]>
-!local_table_type = !subop.local_table<[v : index]>
+!local_table_type = !subop.local_table<[v : index],["v"]>
 module {
     func.func @main(){
         %numElements = subop.create_simple_state !subop.simple_state<[numElements: index]> initial: {

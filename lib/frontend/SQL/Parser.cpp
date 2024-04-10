@@ -1294,7 +1294,7 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
                colTypes.push_back(mlir::TypeAttr::get(columnType));
                colMemberNames.push_back(builder.getStringAttr(colMemberName));
             }
-            auto localTableType = mlir::subop::LocalTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)));
+            auto localTableType = mlir::subop::LocalTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)),builder.getArrayAttr(names));
             return builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), localTableType, tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
          }
          case T_InsertStmt: {
@@ -1542,7 +1542,7 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
       orderedColAttrs.push_back(insertedCols.at(x));
       colTypes.push_back(mlir::TypeAttr::get(insertedCols.at(x).cast<mlir::tuples::ColumnRefAttr>().getColumn().type));
    }
-   auto localTableType = mlir::subop::LocalTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)));
+   auto localTableType = mlir::subop::LocalTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)),builder.getArrayAttr(orderedColNamesAttrs));
    mlir::Value newRows = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), localTableType, mapOp.getResult(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
 
    auto executionContextValue = getExecutionContextValue(builder);
@@ -1554,7 +1554,7 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
 
    // TODO: find more elegant solution
    // disable unwanted output by overwriting the result
-   auto emptyTableType = mlir::subop::LocalTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr({}), builder.getArrayAttr({})));
+   auto emptyTableType = mlir::subop::LocalTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr({}), builder.getArrayAttr({})),builder.getArrayAttr({}));
    auto emptyMaterialization = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), emptyTableType, mapOp.getResult(), builder.getArrayAttr({}), builder.getArrayAttr({}));
    builder.create<mlir::subop::SetResultOp>(builder.getUnknownLoc(), 0, emptyMaterialization);
 }

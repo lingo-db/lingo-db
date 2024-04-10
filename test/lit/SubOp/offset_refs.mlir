@@ -12,7 +12,7 @@
 //CHECK: |                             8  |                             0  |                             9  |                             8  |
 //CHECK: |                             9  |                             0  |                             9  |                             9  |
 !result_table_type = !subop.result_table<[v : index,b : index, e : index,r:index]>
-!local_table_type = !subop.local_table<[v : index,b : index, e : index,r:index]>
+!local_table_type = !subop.local_table<[v : index,b : index, e : index,r:index],["v","b","e","r"]>
 module {
     func.func @main(){
         %vals = subop.create !subop.buffer<[val : index]>

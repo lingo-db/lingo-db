@@ -185,8 +185,8 @@ bool mlirTypeIsASubOpTableType(MlirType type) {
    return llvm::isa<mlir::subop::TableType>(unwrap(type));
 }
 
-MlirType mlirSubOpLocalTableTypeGet(MlirAttribute members) {
-   return wrap(mlir::subop::LocalTableType::get(unwrap(members).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(members))));
+MlirType mlirSubOpLocalTableTypeGet(MlirAttribute members,MlirAttribute columns) {
+   return wrap(mlir::subop::LocalTableType::get(unwrap(members).getContext(), mlir::cast<mlir::subop::StateMembersAttr>(unwrap(members)), mlir::cast<mlir::ArrayAttr>(unwrap(columns))));
 }
 MlirTypeID mlirSubOpLocalTableTypeGetTypeID() {
    return wrap(mlir::subop::LocalTableType::getTypeID());

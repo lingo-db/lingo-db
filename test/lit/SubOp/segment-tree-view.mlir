@@ -13,7 +13,7 @@
 //CHECK: |                             9  |                            45  |
 
 !result_table_type = !subop.result_table<[v : index, s : index]>
-!local_table_type = !subop.local_table<[v : index, s : index]>
+!local_table_type = !subop.local_table<[v : index, s : index],["v","s"]>
 !c_v = !subop.continuous_view<!subop.buffer<[val : index]>>
 !c_v_e_r = !subop.continous_entry_ref<!c_v>
 module {
