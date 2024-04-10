@@ -162,11 +162,7 @@ runtime::VarLen32 runtime::StringRuntime::fromDecimal(__int128 val, int32_t scal
 
    arrow::Decimal128 decimalrep(arrow::BasicDecimal128(val >> 64, val));
    std::string str = decimalrep.ToString(scale);
-   size_t len = str.length();
-   uint8_t* data = new uint8_t[len];
-   memcpy(data, str.data(), len);
-
-   return runtime::VarLen32(data, len);
+   return runtime::VarLen32::fromString(str);
 }
 
 runtime::VarLen32 runtime::StringRuntime::fromChar(uint64_t val, size_t bytes) { // NOLINT (clang-diagnostic-return-type-c-linkage)
@@ -193,9 +189,7 @@ bool runtime::StringRuntime::compareNEq(runtime::VarLen32 str1, runtime::VarLen3
    if (str1.getLen() != str2.getLen()) return true;
    return std::string_view(str1.data(), str1.getLen()) != std::string_view(str2.data(), str2.getLen());
 }
-EXPORT runtime::VarLen32 rt_varlen_from_ptr(uint8_t* ptr, uint32_t len) { // NOLINT (clang-diagnostic-return-type-c-linkage)
-   return runtime::VarLen32(ptr, len);
-}
+
 
 EXPORT char* rt_varlen_to_ref(runtime::VarLen32* varlen) { // NOLINT (clang-diagnostic-return-type-c-linkage)
    return varlen->data();
@@ -204,7 +198,7 @@ runtime::VarLen32 runtime::StringRuntime::substr(runtime::VarLen32 str, size_t f
    from -= 1;
    to = std::min((size_t) str.getLen(), to);
    if (from > to || str.getLen() < to) throw std::runtime_error("can not perform substring operation");
-   return runtime::VarLen32(&str.getPtr()[from], to - from);
+   return runtime::VarLen32::fromString(str.str().substr(from, to - from));
 }
 
 size_t runtime::StringRuntime::findMatch(VarLen32 str, VarLen32 needle, size_t start, size_t end) {
@@ -267,7 +261,7 @@ int64_t runtime::StringRuntime::toDate(runtime::VarLen32 str) {
 runtime::VarLen32 runtime::StringRuntime::fromDate(int64_t date) {
    static arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
    auto asString = arrow_vendored::date::format("%F", epoch + std::chrono::nanoseconds{date});
-   return runtime::VarLen32(reinterpret_cast<uint8_t*>(asString.data()), asString.length());
+   return runtime::VarLen32::fromString(asString);
 }
 
 extern "C" runtime::VarLen32 createVarLen32(uint8_t* ptr, uint32_t len) { //NOLINT(clang-diagnostic-return-type-c-linkage)
