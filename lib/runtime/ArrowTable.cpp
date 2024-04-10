@@ -20,7 +20,6 @@ ArrowTable* ArrowTable::addColumn(VarLen32 name, ArrowColumn* column) {
 ArrowTable* ArrowTable::merge(ThreadLocal* threadLocal) {
    utility::Tracer::Trace trace(tableMerge);
    std::vector<std::shared_ptr<arrow::Table>> tables;
-   ArrowTable* first = nullptr;
    for (auto* ptr : threadLocal->getTls()) {
       auto* current = reinterpret_cast<ArrowTable*>(ptr);
       tables.push_back(current->get());
@@ -28,4 +27,7 @@ ArrowTable* ArrowTable::merge(ThreadLocal* threadLocal) {
    auto concatenated = arrow::ConcatenateTables(tables).ValueOrDie();
    trace.stop();
    return new ArrowTable(concatenated);
+}
+ArrowColumn* ArrowTable::getColumn(VarLen32 name) {
+   return new ArrowColumn(get()->GetColumnByName(name.str()));
 }

@@ -1,11 +1,11 @@
 #include "runtime/ArrowColumn.h"
 
-#include <iostream>
 #include <arrow/array.h>
 #include <arrow/array/builder_binary.h>
 #include <arrow/array/builder_decimal.h>
 #include <arrow/array/builder_primitive.h>
 #include <arrow/builder.h>
+
 using namespace runtime;
 namespace {
 std::shared_ptr<arrow::Array> cast(std::shared_ptr<arrow::Array> array, std::shared_ptr<arrow::DataType> type) {
@@ -94,14 +94,14 @@ void ArrowColumnBuilder::addBool(bool isValid, bool value) {
       handleStatus(typedBuilder->Append(value));
    }
 }
-#define COLUMN_BUILDER_ADD_PRIMITIVE(name, blubb)                                                \
-   void ArrowColumnBuilder::add##name(bool isValid, arrow::blubb ::c_type val) {                 \
+#define COLUMN_BUILDER_ADD_PRIMITIVE(name, blubb)                                                 \
+   void ArrowColumnBuilder::add##name(bool isValid, arrow::blubb ::c_type val) {                  \
       auto* typedBuilder = reinterpret_cast<arrow::NumericBuilder<arrow::blubb>*>(builder.get()); \
-      if (!isValid) {                                                                            \
-         handleStatus(typedBuilder->AppendNull()); /*NOLINT (clang-diagnostic-unused-result)*/   \
-      } else {                                                                                   \
-         handleStatus(typedBuilder->Append(val)); /*NOLINT (clang-diagnostic-unused-result)*/    \
-      }                                                                                          \
+      if (!isValid) {                                                                             \
+         handleStatus(typedBuilder->AppendNull()); /*NOLINT (clang-diagnostic-unused-result)*/    \
+      } else {                                                                                    \
+         handleStatus(typedBuilder->Append(val)); /*NOLINT (clang-diagnostic-unused-result)*/     \
+      }                                                                                           \
    }
 
 COLUMN_BUILDER_ADD_PRIMITIVE(Int8, Int8Type)

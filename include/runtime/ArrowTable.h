@@ -12,6 +12,7 @@ class ArrowTable {
    ArrowTable(std::shared_ptr<arrow::Table> table) : table(table){};
    static ArrowTable* createEmpty();
    ArrowTable* addColumn(VarLen32 name, ArrowColumn* column);
+   ArrowColumn* getColumn(VarLen32 name);
    ArrowTable* merge(ThreadLocal* threadLocal);
    std::shared_ptr<arrow::Table> get() const { return table; }
 };
