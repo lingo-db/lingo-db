@@ -8,6 +8,7 @@
 #include "runtime-defs/Hashtable.h"
 #include "runtime-defs/LazyJoinHashtable.h"
 #include "runtime-defs/TableBuilder.h"
+#include "runtime-defs/ArrowSchema.h"
 using namespace mlir;
 namespace {
 mlir::Value getExecutionContext(ConversionPatternRewriter& rewriter, mlir::Operation* op) {
@@ -85,7 +86,8 @@ class CreateTableBuilderLowering : public OpConversionPattern<mlir::dsa::CreateD
          return failure();
       }
       auto loc = createOp->getLoc();
-      mlir::Value schema = rewriter.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(getContext()), createOp.getInitAttr().value().cast<StringAttr>().str());
+      mlir::Value schemaDescription = rewriter.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(getContext()), createOp.getInitAttr().value().cast<StringAttr>().str());
+      mlir::Value schema=rt::ArrowSchema::createFromString(rewriter,loc)({schemaDescription})[0];
       Value tableBuilder = rt::ResultTable::create(rewriter, loc)({getExecutionContext(rewriter, createOp), schema})[0];
       rewriter.replaceOp(createOp, tableBuilder);
       return success();

@@ -1,4 +1,5 @@
 add_library(runtime OBJECT
+        ArrowSchema.cpp
         RecordBatchInfo.cpp
         ThreadLocal.cpp
         Heap.cpp

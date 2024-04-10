@@ -2,7 +2,7 @@
 #define RUNTIME_TABLEBUILDER_H
 #include "ExecutionContext.h"
 #include "runtime/helpers.h"
-
+#include "runtime/ArrowSchema.h"
 #include <cassert>
 
 #include "ThreadLocal.h"
@@ -17,7 +17,7 @@ class ResultTable {
    public:
    std::shared_ptr<arrow::Table> get();
    //interface for generated code
-   static ResultTable* create(ExecutionContext*,VarLen32 schemaDescription);
+   static ResultTable* create(ExecutionContext*,ArrowSchema* schema);
    static ResultTable* merge(ThreadLocal* threadLocal);
    void addBool(bool isValid, bool value);
    void addInt8(bool isValid, int8_t);

@@ -15,6 +15,7 @@ add_mlir_conversion_library(MLIRDSAToStd
         join-ht-rt-defs
         ht-rt-defs
         ec-rt-defs
+        tb-arrow-schema-defs
         LINK_COMPONENTS
         Core
 
