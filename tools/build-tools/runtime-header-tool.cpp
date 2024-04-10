@@ -18,8 +18,14 @@ using namespace clang;
 using namespace clang::ast_matchers;
 using namespace clang::tooling;
 using namespace llvm;
+cl::OptionCategory mycat("myname", "mydescription");
 
-DeclarationMatcher methodMatcher = cxxRecordDecl(isDefinition(), hasParent(namespaceDecl(hasName("runtime"))), isExpansionInMainFile()).bind("class");
+cl::opt<std::string> headerOutputFile("oh", cl::desc("output path for header"), cl::cat(mycat));
+cl::opt<std::string> cppOutputFile("ocpp", cl::desc("output path for cpp file"), cl::cat(mycat));
+cl::opt<std::string> libPrefix("lib-prefix", cl::desc("output path for cpp file"), cl::cat(mycat));
+cl::opt<std::string> resultNamespace("result-namespace", cl::desc("lib prefix"), cl::cat(mycat));
+
+DeclarationMatcher methodMatcher = cxxRecordDecl(isDefinition(), hasParent(namespaceDecl(matchesName("::runtime"))), isExpansionInMainFile()).bind("class");
 
 class MethodPrinter : public MatchFinder::MatchCallback {
    llvm::raw_ostream& hStream;
@@ -171,24 +177,20 @@ class MethodPrinter : public MatchFinder::MatchCallback {
             hStream << "static void* " << getPtrFuncName << "();\n";
             hStream << "#ifndef RUNTIME_PTR_LIB\n";
             hStream << " inline static mlir::util::FunctionSpec " << methodName << " = ";
-            std::string fullName = "runtime::" + className + "::" + methodName;
+            std::string fullName = libPrefix + className + "::" + methodName;
             hStream << " mlir::util::FunctionSpec(\"" << fullName << "\", \"" << mangled << "\", ";
             emitTypeCreateFn(hStream, types);
             hStream << ",";
             emitTypeCreateFn(hStream, resTypes);
             hStream << "," << (noSideEffects ? "true" : "false") << "," << getPtrFuncName << ");\n";
             hStream << "#endif \n";
-            cppStream << "void* rt::" << className << "::" << getPtrFuncName << "(){  auto x= &" << fullName << ";  return *reinterpret_cast<void**>(&x);}";
+            cppStream << "void* "<<resultNamespace<<"::" << className << "::" << getPtrFuncName << "(){  auto x= &" << fullName << ";  return *reinterpret_cast<void**>(&x);}";
          };
          hStream << "};\n";
       }
    }
 };
 
-cl::OptionCategory mycat("myname", "mydescription");
-
-cl::opt<std::string> headerOutputFile("oh", cl::desc("output path for header"), cl::cat(mycat));
-cl::opt<std::string> cppOutputFile("ocpp", cl::desc("output path for cpp file"), cl::cat(mycat));
 
 int main(int argc, const char** argv) {
    auto expectedParser = CommonOptionsParser::create(argc, argv, mycat);
@@ -213,9 +215,9 @@ int main(int argc, const char** argv) {
    MatchFinder finder;
    finder.addMatcher(methodMatcher, &printer);
    hStream << "#include <mlir/Dialect/util/FunctionHelper.h>\n";
-   hStream << "namespace rt {\n";
+   hStream << "namespace "<<resultNamespace<<" {\n";
    cppStream << "#define RUNTIME_PTR_LIB\n";
-   cppStream << "#include \""<<headerOutputFile<<"\"\n";
+   cppStream << "#include \"" << headerOutputFile << "\"\n";
    cppStream << "#include \"" << currentFile << "\"\n";
 
    tool.run(newFrontendActionFactory(&finder).get());
