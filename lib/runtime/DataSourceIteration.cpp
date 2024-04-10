@@ -15,7 +15,15 @@ static utility::Tracer::Event processMorselSingle("DataSourceIteration", "proces
 
 static utility::Tracer::Event cleanupTLS("DataSourceIteration", "cleanup");
 static utility::Tracer::Event tableScan("DataSourceIteration", "tableScan");
-
+static uint8_t* getBuffer(std::shared_ptr<arrow::ArrayData> arrayData, size_t bufferId) {
+   static uint8_t alternative = 0b11111111;
+   if (arrayData->buffers.size() > bufferId && arrayData->buffers[bufferId]) {
+      auto* buffer = arrayData->buffers[bufferId].get();
+      return (uint8_t*) buffer->address();
+   } else {
+      return &alternative; //always return valid pointer to at least one byte filled with ones
+   }
+}
 static void access(std::vector<size_t> colIds, runtime::RecordBatchInfo* info, const std::shared_ptr<arrow::RecordBatch>& currChunk) {
    for (size_t i = 0; i < colIds.size(); i++) {
       auto colId = colIds[i];
@@ -26,6 +34,17 @@ static void access(std::vector<size_t> colIds, runtime::RecordBatchInfo* info, c
       colInfo.validBuffer = runtime::RecordBatchInfo::getBuffer(currChunk.get(), colId, 0);
       colInfo.dataBuffer = runtime::RecordBatchInfo::getBuffer(currChunk.get(), colId, 1);
       colInfo.varLenBuffer = runtime::RecordBatchInfo::getBuffer(currChunk.get(), colId, 2);
+      if (currChunk->column(colId)->type()->id() == arrow::Type::LIST) {
+         auto childData = currChunk->column_data(colId)->child_data[0];
+         colInfo.childInfo = new runtime::ColumnInfo; //todo: fix
+         colInfo.childInfo->offset = off;
+         colInfo.childInfo->validMultiplier = childData->buffers[0] ? 1 : 0;
+         colInfo.childInfo->validBuffer = getBuffer(childData, 0);
+         colInfo.childInfo->dataBuffer = getBuffer(childData, 1);
+         colInfo.childInfo->varLenBuffer = getBuffer(childData, 2);
+      } else {
+         colInfo.childInfo = nullptr;
+      }
    }
    info->numRows = currChunk->num_rows();
 }
@@ -129,7 +148,7 @@ runtime::DataSource* runtime::DataSource::get(runtime::ExecutionContext* executi
    }
    return new RecordBatchTableSource(relation->getRecordBatches(), memberToColumnId);
 }
-runtime::DataSource* runtime::DataSource::getFromTable(ArrowTable* arrowTable, runtime::VarLen32 memberArray,runtime::VarLen32 columnArray) {
+runtime::DataSource* runtime::DataSource::getFromTable(ArrowTable* arrowTable, runtime::VarLen32 memberArray, runtime::VarLen32 columnArray) {
    auto schema = arrowTable->get()->schema();
    std::unordered_map<std::string, size_t> memberToColumnId;
    nlohmann::json members = nlohmann::json::parse(memberArray.str());

@@ -156,7 +156,10 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
       }
       std::vector<mlir::Value> values;
       auto newAtOp = rewriter.create<mlir::dsa::At>(loc, types, adaptor.getCollection(), atOp.getPos());
-      auto nativeValue = rewriter.create<mlir::dsa::ArrowTypeTo>(loc, typeConverter->convertType(t), newAtOp.getVal());
+      mlir::Value nativeValue=newAtOp.getVal();
+      if(typeConverter->convertType(t)!=nativeValue.getType()) {
+         nativeValue = rewriter.create<mlir::dsa::ArrowTypeTo>(loc, typeConverter->convertType(t), nativeValue);
+      }
       values.push_back(nativeValue);
       if (atOp.getValid()) {
          values.push_back(newAtOp.getValid());
@@ -189,8 +192,10 @@ class AppendCBLowering : public ConversionPattern {
       mlir::Type arrowPhysicalType = convertPhysicalSingle(t,*typeConverter);
 
       mlir::Value val = adaptor.getVal();
-      val = rewriter.create<mlir::dsa::ArrowTypeFrom>(loc, arrowPhysicalType, val);
-      auto newAppendOp = rewriter.create<mlir::dsa::Append>(loc, adaptor.getDs(), val, adaptor.getValid());
+      if(val.getType()!=arrowPhysicalType) {
+         val = rewriter.create<mlir::dsa::ArrowTypeFrom>(loc, arrowPhysicalType, val);
+      }
+      rewriter.create<mlir::dsa::Append>(loc, adaptor.getDs(), val, adaptor.getValid());
 
       rewriter.eraseOp(op);
       return success();

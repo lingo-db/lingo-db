@@ -10,7 +10,7 @@ using namespace runtime;
 namespace {
 std::shared_ptr<arrow::Array> cast(std::shared_ptr<arrow::Array> array, std::shared_ptr<arrow::DataType> type) {
    auto arrayData = array->data();
-   arrayData = arrow::ArrayData::Make(type, arrayData->length, arrayData->buffers, arrayData->null_count, arrayData->offset);
+   arrayData = arrow::ArrayData::Make(type, arrayData->length, arrayData->buffers, arrayData->child_data, arrayData->null_count, arrayData->offset);
    return arrow::MakeArray(arrayData);
 }
 std::shared_ptr<arrow::DataType> createType(std::string name, uint32_t p1, uint32_t p2) {
@@ -54,6 +54,10 @@ std::shared_ptr<arrow::DataType> createType(std::string name, uint32_t p1, uint3
    throw std::runtime_error("unknown type");
 }
 std::shared_ptr<arrow::DataType> parseType(std::string typeDescr) {
+   if (typeDescr.starts_with("list[") && typeDescr.ends_with(']')) {
+      auto elementType = parseType(typeDescr.substr(5, typeDescr.size() - 6));
+      return arrow::list(elementType);
+   }
    size_t lParamPos = typeDescr.find("[");
    std::string p1 = "0";
    std::string p2 = "0";
@@ -84,10 +88,31 @@ ArrowColumnBuilder* ArrowColumnBuilder::create(VarLen32 type) {
 }
 
 ArrowColumnBuilder::ArrowColumnBuilder(std::shared_ptr<arrow::DataType> type) : type(type) {
-   builder = arrow::MakeBuilder(GetPhysicalType(type)).ValueOrDie();
+   builderUnique = arrow::MakeBuilder(GetPhysicalType(type)).ValueOrDie();
+   builder=builderUnique.get();
+   if (type->id() == arrow::Type::LIST){
+      childBuilder = new ArrowColumnBuilder(reinterpret_cast<arrow::ListBuilder*>(builder)->value_builder());
+   }
 }
+ ArrowColumnBuilder::ArrowColumnBuilder(arrow::ArrayBuilder* valueBuilder) :type(){
+
+   builder=valueBuilder;
+   childBuilder=nullptr;
+}
+ArrowColumnBuilder* ArrowColumnBuilder::getChildBuilder() {
+   if(!childBuilder) {
+      throw std::runtime_error("child builder is null");
+   }
+   return childBuilder;
+}
+ ArrowColumnBuilder::~ArrowColumnBuilder() {
+   if(childBuilder) {
+      delete childBuilder;
+   }
+}
+
 void ArrowColumnBuilder::addBool(bool isValid, bool value) {
-   auto* typedBuilder = reinterpret_cast<arrow::BooleanBuilder*>(builder.get());
+   auto* typedBuilder = reinterpret_cast<arrow::BooleanBuilder*>(builder);
    if (!isValid) {
       handleStatus(typedBuilder->AppendNull());
    } else {
@@ -96,7 +121,7 @@ void ArrowColumnBuilder::addBool(bool isValid, bool value) {
 }
 #define COLUMN_BUILDER_ADD_PRIMITIVE(name, blubb)                                                 \
    void ArrowColumnBuilder::add##name(bool isValid, arrow::blubb ::c_type val) {                  \
-      auto* typedBuilder = reinterpret_cast<arrow::NumericBuilder<arrow::blubb>*>(builder.get()); \
+      auto* typedBuilder = reinterpret_cast<arrow::NumericBuilder<arrow::blubb>*>(builder); \
       if (!isValid) {                                                                             \
          handleStatus(typedBuilder->AppendNull()); /*NOLINT (clang-diagnostic-unused-result)*/    \
       } else {                                                                                    \
@@ -112,7 +137,7 @@ COLUMN_BUILDER_ADD_PRIMITIVE(Float32, FloatType)
 COLUMN_BUILDER_ADD_PRIMITIVE(Float64, DoubleType)
 
 void ArrowColumnBuilder::addDecimal(bool isValid, __int128 value) {
-   auto* typedBuilder = reinterpret_cast<arrow::Decimal128Builder*>(builder.get());
+   auto* typedBuilder = reinterpret_cast<arrow::Decimal128Builder*>(builder);
    if (!isValid) {
       handleStatus(typedBuilder->AppendNull());
    } else {
@@ -121,7 +146,7 @@ void ArrowColumnBuilder::addDecimal(bool isValid, __int128 value) {
    }
 }
 void ArrowColumnBuilder::addBinary(bool isValid, runtime::VarLen32 string) {
-   auto* typedBuilder = reinterpret_cast<arrow::BinaryBuilder*>(builder.get());
+   auto* typedBuilder = reinterpret_cast<arrow::BinaryBuilder*>(builder);
    if (!isValid) {
       handleStatus(typedBuilder->AppendNull());
    } else {
@@ -130,11 +155,19 @@ void ArrowColumnBuilder::addBinary(bool isValid, runtime::VarLen32 string) {
    }
 }
 void ArrowColumnBuilder::addFixedSized(bool isValid, int64_t val) {
-   auto* typedBuilder = reinterpret_cast<arrow::FixedSizeBinaryBuilder*>(builder.get());
+   auto* typedBuilder = reinterpret_cast<arrow::FixedSizeBinaryBuilder*>(builder);
    if (!isValid) {
       handleStatus(typedBuilder->AppendNull());
    } else {
       handleStatus(typedBuilder->Append(reinterpret_cast<char*>(&val)));
+   }
+}
+void ArrowColumnBuilder::addList(bool isValid) {
+   auto* typedBuilder = reinterpret_cast<arrow::ListBuilder*>(builder);
+   if (!isValid) {
+      handleStatus(typedBuilder->AppendNull());
+   } else {
+      handleStatus(typedBuilder->Append());
    }
 }
 ArrowColumn* ArrowColumnBuilder::finish() {

@@ -170,6 +170,9 @@ void DSAToStdLoweringPass::runOnOperation() {
    typeConverter.addConversion([&](mlir::dsa::ArrowStringType type) {
       return mlir::util::VarLen32Type::get(&getContext());
    });
+   typeConverter.addConversion([&](mlir::dsa::ArrowListType type) {
+   return mlir::util::BufferType::get(&getContext(),typeConverter.convertType(type.getType()));
+});
    typeConverter.addConversion([&](mlir::dsa::ArrowDecimalType type) {
       return IntegerType::get(ctxt, 128);
    });

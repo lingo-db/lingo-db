@@ -18,6 +18,8 @@ struct ColumnInfo {
    uint8_t* dataBuffer;
    // Pointer to  variable size data
    uint8_t* varLenBuffer;
+   // pointer to child column info (for nested types)
+   ColumnInfo* childInfo;
 };
 struct RecordBatchInfo {
    size_t numRows;
