@@ -102,7 +102,7 @@ class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> 
 static mlir::LogicalResult safelyMoveRegion(ConversionPatternRewriter& rewriter, mlir::Region& source, mlir::Region& target) {
    rewriter.inlineRegionBefore(source, target, target.end());
    {
-      if (!target.empty()) {
+      if (false &&!target.empty()) {
          source.push_back(new Block);
          std::vector<mlir::Location> locs;
          for (size_t i = 0; i < target.front().getArgumentTypes().size(); i++) {

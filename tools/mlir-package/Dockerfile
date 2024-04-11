@@ -16,7 +16,7 @@ WORKDIR /llvm-src
 #RUN git submodule init
 #RUN git submodule update llvm-project
 RUN mkdir -p /build/llvm
-RUN env VIRTUAL_ENV=/venv cmake -G Ninja llvm-project/llvm  -B /build/llvm \
+RUN env VIRTUAL_ENV=/venv cmake llvm-project/llvm  -B /build/llvm \
     -DLLVM_ENABLE_PROJECTS="mlir;clang;clang-tools-extra" \
     -DLLVM_BUILD_EXAMPLES=OFF \
     -DLLVM_TARGETS_TO_BUILD="X86" \

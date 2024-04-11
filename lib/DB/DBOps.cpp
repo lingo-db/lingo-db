@@ -156,7 +156,7 @@ OpFoldResult mlir::db::ConstantOp::fold(mlir::db::ConstantOp::FoldAdaptor adapto
       return adaptor.getVal();
    }
    if (!adaptor.getVal()) return {};
-   if (auto sourceIntWidth = getIntegerWidth(scalarSourceType, false)) {
+   if (getIntegerWidth(scalarSourceType, false)) {
       auto intVal = adaptor.getVal().cast<mlir::IntegerAttr>().getInt();
       if (scalarTargetType.isa<FloatType>()) {
          return mlir::FloatAttr::get(scalarTargetType, (double) intVal);
@@ -164,7 +164,7 @@ OpFoldResult mlir::db::ConstantOp::fold(mlir::db::ConstantOp::FoldAdaptor adapto
          auto [low, high] = support::getDecimalScaleMultiplier(decimalTargetType.getS());
          std::vector<uint64_t> parts = {low, high};
          return IntegerAttr::get(IntegerType::get(getContext(), 128), APInt(128, intVal) * APInt(128, parts));
-      } else if (auto targetIntWidth = getIntegerWidth(scalarTargetType, false)) {
+      } else if (getIntegerWidth(scalarTargetType, false)) {
          return {};
       }
    } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
@@ -183,7 +183,7 @@ OpFoldResult mlir::db::ConstantOp::fold(mlir::db::ConstantOp::FoldAdaptor adapto
          return {};
       } else if (scalarTargetType.isa<FloatType>()) {
          return {};
-      } else if (auto targetIntWidth = getIntegerWidth(scalarTargetType, false)) {
+      } else if (getIntegerWidth(scalarTargetType, false)) {
          return {};
       }
    }

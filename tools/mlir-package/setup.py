@@ -4,6 +4,7 @@ import os
 from setuptools import setup
 
 clang_libs = [f"llvm/lib/*{n}*" for n in ["clangAST",
+                                          "clangAPINotes",
                                           "clangASTMatchers",
                                           "clangBasic",
                                           "clangFrontend",

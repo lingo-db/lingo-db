@@ -143,9 +143,9 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
       auto loc = atOp->getLoc();
       auto t = atOp.getType(0);
       if (typeConverter->isLegal(t)) {
-         rewriter.startRootUpdate(atOp);
+         rewriter.startOpModification(atOp);
          atOp->setOperands(adaptor.getOperands());
-         rewriter.finalizeRootUpdate(atOp);
+         rewriter.finalizeOpModification(atOp);
          return mlir::success();
       }
       mlir::Type arrowPhysicalType = convertPhysicalSingle(t,*typeConverter);
@@ -183,12 +183,11 @@ class AppendCBLowering : public ConversionPattern {
       }
       auto t = appendOp.getVal().getType();
       if (typeConverter->isLegal(t)) {
-         rewriter.startRootUpdate(op);
+         rewriter.startOpModification(op);
          appendOp->setOperands(operands);
-         rewriter.finalizeRootUpdate(op);
+         rewriter.finalizeOpModification(op);
          return mlir::success();
       }
-      auto* context = getContext();
       mlir::Type arrowPhysicalType = convertPhysicalSingle(t,*typeConverter);
 
       mlir::Value val = adaptor.getVal();
@@ -236,7 +235,7 @@ class StringCastOpLowering : public OpConversionPattern<mlir::db::CastOp> {
          }
       } else if (scalarSourceType.isInteger(1)) {
          result = rt::StringRuntime::fromBool(rewriter, loc)({valueToCast})[0];
-      } else if (auto intWidth = getIntegerWidth(scalarSourceType, false)) {
+      } else if (getIntegerWidth(scalarSourceType, false)) {
          result = rt::StringRuntime::fromInt(rewriter, loc)({valueToCast})[0];
       } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
          result = floatType.getWidth() == 32 ? rt::StringRuntime::fromFloat32(rewriter, loc)({valueToCast})[0] : rt::StringRuntime::fromFloat64(rewriter, loc)({valueToCast})[0];

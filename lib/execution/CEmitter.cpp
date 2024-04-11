@@ -1,6 +1,6 @@
 #include "execution/CBackend.h"
 #include "mlir/Dialect/util/FunctionHelper.h"
-
+#include "llvm/ADT/ScopedHashTable.h"
 //emits C code for a MLIR module containing operations of the func, arith, scf, and util dialects
 
 // Derived from https://github.com/llvm/llvm-project/blob/56470b72f1fc1727d5ee87e2fed96e7dad286230/mlir/lib/Target/Cpp/TranslateToCpp.cpp

@@ -73,7 +73,7 @@ class AvoidUnnecessaryMaterialization : public mlir::RewritePattern {
                   auto otherMember = lookupByValue(scanOp2.getMapping(), otherColumnDef);
                   newMapping.push_back(rewriter.getNamedAttr(otherMember.value(), curr.getValue()));
                }
-               rewriter.updateRootInPlace(op, [&] {
+               rewriter.modifyOpInPlace(op, [&] {
                   scanOp.setOperand(scanOp2.getState());
                   scanOp.setMappingAttr(rewriter.getDictionaryAttr(newMapping));
                });

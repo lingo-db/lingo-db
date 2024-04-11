@@ -39,9 +39,10 @@ struct EnforceCPPABIPass
          }
          if (passByMem.empty() && boolParams.empty()) return;
          std::vector<mlir::Type> paramTypes(funcOp.getArgumentTypes().begin(), funcOp.getArgumentTypes().end());
+         std::vector<mlir::Type> paramElTypes(funcOp.getArgumentTypes().begin(), funcOp.getArgumentTypes().end());
          for (size_t memId : passByMem) {
             auto originalType=paramTypes[memId];
-            paramTypes[memId] = mlir::LLVM::LLVMPointerType::get(originalType);
+            paramTypes[memId] = mlir::LLVM::LLVMPointerType::get(&getContext());
             funcOp.setArgAttr(memId, "llvm.byval", mlir::TypeAttr::get(originalType));
          }
          for (size_t paramId : boolParams) {
@@ -56,7 +57,7 @@ struct EnforceCPPABIPass
                mlir::OpBuilder builder(userFunc->getContext());
                builder.setInsertionPointToStart(&userFunc.getBody().front());
                auto const1 = builder.create<mlir::LLVM::ConstantOp>(callOp.getLoc(), builder.getI64Type(), builder.getI64IntegerAttr(1));
-               mlir::Value allocatedElementPtr = builder.create<mlir::LLVM::AllocaOp>(callOp.getLoc(), paramTypes[memId], const1, 16);
+               mlir::Value allocatedElementPtr = builder.create<mlir::LLVM::AllocaOp>(callOp.getLoc(), paramTypes[memId],paramElTypes[memId], const1, 16);
                mlir::OpBuilder builder2(userFunc->getContext());
                builder2.setInsertionPoint(callOp);
                builder2.create<mlir::LLVM::StoreOp>(callOp->getLoc(), callOp.getOperand(memId), allocatedElementPtr);

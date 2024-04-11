@@ -5,6 +5,7 @@
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/Passes.h"
+#include "mlir/Dialect/DLTI/DLTI.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
@@ -38,7 +39,8 @@ void execution::initializeContext(mlir::MLIRContext& context) {
    registry.insert<mlir::func::FuncDialect>();
    registry.insert<mlir::arith::ArithDialect>();
    registry.insert<mlir::cf::ControlFlowDialect>();
-   
+   registry.insert<mlir::DLTIDialect>();
+
    registry.insert<mlir::memref::MemRefDialect>();
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::scf::SCFDialect>();
@@ -49,7 +51,6 @@ void execution::initializeContext(mlir::MLIRContext& context) {
    context.disableMultithreading();
 }
 namespace {
-
 
 class MLIRFrontend : public execution::Frontend {
    mlir::MLIRContext context;
@@ -108,7 +109,7 @@ class SQLFrontend : public execution::Frontend {
       mlir::func::FuncOp funcOp = builder.create<mlir::func::FuncOp>(builder.getUnknownLoc(), "main", builder.getFunctionType({}, {}));
       funcOp.getBody().push_back(queryBlock);
       module = moduleOp;
-      parallismAllowed=translator.isParallelismAllowed();
+      parallismAllowed = translator.isParallelismAllowed();
    }
    void loadFromFile(std::string fileName) override {
       std::ifstream istream{fileName};
@@ -124,7 +125,7 @@ class SQLFrontend : public execution::Frontend {
       assert(module);
       return module.operator->();
    }
-   bool isParallelismAllowed() override{
+   bool isParallelismAllowed() override {
       return parallismAllowed;
    }
 };

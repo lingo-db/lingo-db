@@ -9,6 +9,7 @@
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/util/FunctionHelper.h"
+#include "mlir/IR/BuiltinAttributes.h"
 
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
 #include "mlir/IR/Builders.h"
@@ -18,14 +19,15 @@
 #include "mlir/Target/LLVMIR/Dialect/Builtin/BuiltinToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
+#include "mlir/Target/LLVMIR/Import.h"
 
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/MC/TargetRegistry.h"
-#include "llvm/Support/Host.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/TargetParser/Host.h"
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
@@ -42,6 +44,33 @@ namespace {
 static utility::Tracer::Event execution("LLVM", "execution");
 
 static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, bool verify) {
+   std::string error;
+   auto targetTriple = llvm::sys::getDefaultTargetTriple();
+
+   // Look up the target using the target triple.
+   auto *target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+   if (!target) {
+      llvm::errs() << error;
+      return 1;
+   }
+
+   // Create the TargetMachine.
+   const auto *cpu = "generic";
+   const auto *features = "";
+   llvm::TargetOptions opt;
+   auto rm = std::optional<llvm::Reloc::Model>();
+   auto *targetMachine = target->createTargetMachine(targetTriple, cpu, features, opt, rm);
+
+   if (!targetMachine) {
+      llvm::errs() << "Could not create TargetMachine!";
+      return 1;
+   }
+
+   // Retrieve the data layout from the TargetMachine.
+   const llvm::DataLayout& dataLayout = targetMachine->createDataLayout();
+   mlir::Attribute dataLayoutSpec = mlir::translateDataLayout(dataLayout, moduleOp->getContext());
+   moduleOp->setAttr("util.dataLayout", dataLayoutSpec);
+
    mlir::PassManager pm2(moduleOp->getContext());
    pm2.enableVerifier(verify);
    pm2.addPass(mlir::createConvertSCFToCFPass());
@@ -62,12 +91,12 @@ static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, bool verify) {
 static void addLLVMExecutionContextFuncs(mlir::ModuleOp& moduleOp) {
    mlir::OpBuilder builder(moduleOp->getContext());
    builder.setInsertionPointToStart(moduleOp.getBody());
-   auto pointerType = mlir::LLVM::LLVMPointerType::get(builder.getI8Type());
+   auto pointerType = mlir::LLVM::LLVMPointerType::get(moduleOp->getContext());
    auto globalOp = builder.create<mlir::LLVM::GlobalOp>(builder.getUnknownLoc(), builder.getI64Type(), false, mlir::LLVM::Linkage::Private, "execution_context", builder.getI64IntegerAttr(0));
    auto setExecContextFn = builder.create<mlir::LLVM::LLVMFuncOp>(moduleOp.getLoc(), "rt_set_execution_context", mlir::LLVM::LLVMFunctionType::get(mlir::LLVM::LLVMVoidType::get(builder.getContext()), builder.getI64Type()), mlir::LLVM::Linkage::External);
    {
       mlir::OpBuilder::InsertionGuard guard(builder);
-      auto* block = setExecContextFn.addEntryBlock();
+      auto* block = setExecContextFn.addEntryBlock(builder);
       auto execContext = block->getArgument(0);
       builder.setInsertionPointToStart(block);
       auto ptr = builder.create<mlir::LLVM::AddressOfOp>(builder.getUnknownLoc(), globalOp);
@@ -76,10 +105,10 @@ static void addLLVMExecutionContextFuncs(mlir::ModuleOp& moduleOp) {
    }
    if (auto getExecContextFn = mlir::dyn_cast_or_null<mlir::LLVM::LLVMFuncOp>(moduleOp.lookupSymbol("rt_get_execution_context"))) {
       mlir::OpBuilder::InsertionGuard guard(builder);
-      auto* block = getExecContextFn.addEntryBlock();
+      auto* block = getExecContextFn.addEntryBlock(builder);
       builder.setInsertionPointToStart(block);
       auto ptr = builder.create<mlir::LLVM::AddressOfOp>(builder.getUnknownLoc(), globalOp);
-      auto execContext = builder.create<mlir::LLVM::LoadOp>(builder.getUnknownLoc(), ptr);
+      auto execContext = builder.create<mlir::LLVM::LoadOp>(builder.getUnknownLoc(), builder.getI64Type(), ptr);
       auto execContextAsPtr = builder.create<mlir::LLVM::IntToPtrOp>(builder.getUnknownLoc(), pointerType, execContext);
       builder.create<mlir::LLVM::ReturnOp>(builder.getUnknownLoc(), mlir::ValueRange{execContextAsPtr});
    }
@@ -252,10 +281,18 @@ static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::stri
 }
 static void addDebugInfo(mlir::ModuleOp module, std::string lastSnapShotFile) {
    auto fileAttr = mlir::LLVM::DIFileAttr::get(module->getContext(), lastSnapShotFile, std::filesystem::current_path().string());
-   auto compileUnitAttr = mlir::LLVM::DICompileUnitAttr::get(module->getContext(), llvm::dwarf::DW_LANG_C, fileAttr, mlir::StringAttr::get(module->getContext(), "LingoDB"), true, mlir::LLVM::DIEmissionKind::Full);
+   auto compileUnitAttr = mlir::LLVM::DICompileUnitAttr::get(mlir::DistinctAttr::create(mlir::UnitAttr::get(module->getContext())), static_cast<uint8_t>(llvm::dwarf::DW_LANG_C), fileAttr, mlir::StringAttr::get(module->getContext(), "LingoDB"), true, mlir::LLVM::DIEmissionKind::Full);
    module->walk([&](mlir::LLVM::LLVMFuncOp funcOp) {
+      mlir::DistinctAttr id;
+      mlir::LLVM::DICompileUnitAttr compileUnitAt;
+      auto subprogramFlags = mlir::LLVM::DISubprogramFlags::Optimized;
+      if (!funcOp.isExternal()) {
+         id = mlir::DistinctAttr::create(mlir::UnitAttr::get(module.getContext()));
+         subprogramFlags = subprogramFlags | mlir::LLVM::DISubprogramFlags::Definition;
+         compileUnitAt = compileUnitAttr;
+      }
       auto subroutineType = mlir::LLVM::DISubroutineTypeAttr::get(module->getContext(), {});
-      auto subProgramAttr = mlir::LLVM::DISubprogramAttr::get(compileUnitAttr, fileAttr, funcOp.getName(), funcOp.getName(), fileAttr, 0, 0, mlir::LLVM::DISubprogramFlags::Definition | mlir::LLVM::DISubprogramFlags::Optimized, subroutineType);
+      auto subProgramAttr = mlir::LLVM::DISubprogramAttr::get(id, compileUnitAt, fileAttr, funcOp.getName(), funcOp.getName(), fileAttr, 0, 0, subprogramFlags, subroutineType);
       funcOp->setLoc(mlir::FusedLocWith<mlir::LLVM::DIScopeAttr>::get(funcOp->getLoc(), subProgramAttr, module->getContext()));
    });
 }
@@ -281,7 +318,6 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
       };
       //do not optimize in debug mode
       auto optimizeFn = [&](llvm::Module* module) -> llvm::Error { return llvm::Error::success(); };
-
       //first step: use ExecutionEngine
       auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = llvm::CodeGenOptLevel::Default, .enableObjectDump = true});
       if (!maybeEngine) {

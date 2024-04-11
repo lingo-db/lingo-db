@@ -11,17 +11,7 @@
 #include "runtime-defs/LazyJoinHashtable.h"
 using namespace mlir;
 namespace {
-/*mlir::Value getExecutionContext(ConversionPatternRewriter& rewriter, mlir::Operation* op) {
-   auto parentModule = op->getParentOfType<ModuleOp>();
-   mlir::func::FuncOp funcOp = parentModule.lookupSymbol<mlir::func::FuncOp>("rt_get_execution_context");
-   if (!funcOp) {
-      mlir::OpBuilder::InsertionGuard guard(rewriter);
-      rewriter.setInsertionPointToStart(parentModule.getBody());
-      funcOp = rewriter.create<mlir::func::FuncOp>(op->getLoc(), "rt_get_execution_context", mlir::FunctionType::get(op->getContext(), {}, {mlir::util::RefType::get(op->getContext(), rewriter.getI8Type())}), rewriter.getStringAttr("private"), ArrayAttr{}, ArrayAttr{});
-   }
-   mlir::Value executionContext = rewriter.create<mlir::func::CallOp>(op->getLoc(), funcOp, mlir::ValueRange{}).getResult(0);
-   return executionContext;
-}*/
+
 mlir::Value arrowTypeFrom(mlir::OpBuilder rewriter, mlir::Location loc, mlir::Type arrowType, mlir::Type physicalType, mlir::Type inputType, mlir::Value physicalVal) {
    if (arrowType.isa<dsa::ArrowDate32Type, dsa::ArrowDate64Type, dsa::ArrowTimeStampType>()) {
       size_t multiplier = 1;
@@ -546,9 +536,8 @@ namespace mlir::dsa {
 void populateDSAToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
    auto *context = patterns.getContext();
    auto indexType = IndexType::get(context);
-   auto i8ptrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
 
-   typeConverter.addConversion([context, i8ptrType, indexType, &typeConverter](mlir::dsa::RecordBatchType recordBatchType) {
+   typeConverter.addConversion([context, indexType, &typeConverter](mlir::dsa::RecordBatchType recordBatchType) {
       std::vector<Type> types;
       types.push_back(indexType);
       if (auto tupleT = recordBatchType.getRowType().dyn_cast_or_null<TupleType>()) {

@@ -13,17 +13,13 @@ BASE_PATH=$(pwd)
 cd build/pylingodb
 mkdir -p lingodbbridge/mlir/dialects
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/_ods_common.py lingodbbridge/mlir/dialects/.
-cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/_func_ops_ext.py lingodbbridge/mlir/dialects/.
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/_func_ops_gen.py lingodbbridge/mlir/dialects/.
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/func.py lingodbbridge/mlir/dialects/.
-cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/_arith_ops_ext.py lingodbbridge/mlir/dialects/.
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/_arith_ops_gen.py lingodbbridge/mlir/dialects/.
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/_arith_enum_gen.py lingodbbridge/mlir/dialects/.
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/arith.py lingodbbridge/mlir/dialects/.
-cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/_scf_ops_ext.py lingodbbridge/mlir/dialects/.
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/_scf_ops_gen.py lingodbbridge/mlir/dialects/.
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/scf.py lingodbbridge/mlir/dialects/.
-cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/_builtin_ops_ext.py lingodbbridge/mlir/dialects/.
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/_builtin_ops_gen.py lingodbbridge/mlir/dialects/.
 cp -L ${MLIR_PYTHON_BASE}/mlir/dialects/builtin.py lingodbbridge/mlir/dialects/.
 ${MLIR_BIN_DIR}/mlir-tblgen -gen-python-op-bindings -bind-dialect=util -I ${MLIR_INCLUDE_DIR} -I ${BASE_PATH}/include/ dialects/UtilOps.td > lingodbbridge/mlir/dialects/_util_ops_gen.py

@@ -140,7 +140,7 @@ void DSAToStdLoweringPass::runOnOperation() {
          auto isLegal = !hasDSAType(typeConverter, op.getType());
          return isLegal;
       });
-   auto ctxt = &getContext();
+   auto *ctxt = &getContext();
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
