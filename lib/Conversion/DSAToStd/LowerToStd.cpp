@@ -21,6 +21,8 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include <mlir/IR/BuiltinTypes.h>
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/Async/IR/Async.h"
 
 #include "runtime-defs/DataSourceIteration.h"
 #include "runtime-defs/ExecutionContext.h"
@@ -102,6 +104,8 @@ void DSAToStdLoweringPass::runOnOperation() {
    getContext().getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(module);
    // Define Conversion Target
    ConversionTarget target(getContext());
+   target.addLegalDialect<gpu::GPUDialect>();
+   target.addLegalDialect<async::AsyncDialect>();
    target.addLegalOp<ModuleOp>();
    target.addLegalOp<UnrealizedConversionCastOp>();
 

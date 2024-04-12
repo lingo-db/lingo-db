@@ -51,7 +51,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
       std::unordered_set<std::string> nestedMembers;
       auto getTopLevelOp = [](mlir::Operation* op) {
          if (op->getParentOp() && op->getParentOp()->getParentOp()) {
-            while (!mlir::isa<mlir::func::FuncOp>(op->getParentOp()) && !(mlir::isa<mlir::subop::LoopOp>(op->getParentOp()) && mlir::isa<mlir::func::FuncOp>(op->getParentOp()->getParentOp()))) {
+            while (!mlir::isa_and_nonnull<mlir::func::FuncOp>(op->getParentOp()) && !(mlir::isa_and_nonnull<mlir::subop::LoopOp>(op->getParentOp()) && mlir::isa_and_nonnull<mlir::func::FuncOp>(op->getParentOp()->getParentOp()))) {
                op = op->getParentOp();
             }
          }

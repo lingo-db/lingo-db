@@ -29,7 +29,8 @@
 #include "mlir/Transforms/Passes.h"
 #include "runtime-defs/StringRuntime.h"
 #include <mlir/Dialect/util/FunctionHelper.h>
-
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/Async/IR/Async.h"
 using namespace mlir;
 
 namespace {
@@ -1005,6 +1006,8 @@ void DBToStdLoweringPass::runOnOperation() {
 
    // Define Conversion Target
    ConversionTarget target(getContext());
+   target.addLegalDialect<gpu::GPUDialect>();
+   target.addLegalDialect<async::AsyncDialect>();
    target.addLegalOp<ModuleOp>();
    target.addLegalOp<UnrealizedConversionCastOp>();
 

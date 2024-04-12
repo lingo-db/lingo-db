@@ -20,6 +20,8 @@
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Target/LLVMIR/Import.h"
+#include "mlir/ExecutionEngine/OptUtils.h"
+#include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
 
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
@@ -48,18 +50,18 @@ static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, bool verify) {
    auto targetTriple = llvm::sys::getDefaultTargetTriple();
 
    // Look up the target using the target triple.
-   auto *target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
+   auto* target = llvm::TargetRegistry::lookupTarget(targetTriple, error);
    if (!target) {
       llvm::errs() << error;
       return 1;
    }
 
    // Create the TargetMachine.
-   const auto *cpu = "generic";
-   const auto *features = "";
+   const auto* cpu = "generic";
+   const auto* features = "";
    llvm::TargetOptions opt;
    auto rm = std::optional<llvm::Reloc::Model>();
-   auto *targetMachine = target->createTargetMachine(targetTriple, cpu, features, opt, rm);
+   auto* targetMachine = target->createTargetMachine(targetTriple, cpu, features, opt, rm);
 
    if (!targetMachine) {
       llvm::errs() << "Could not create TargetMachine!";
@@ -182,6 +184,178 @@ static void linkStatic(mlir::ExecutionEngine* engine, execution::Error& error, e
    }
    return;
 }
+#if GPU_ENABLED==1
+static bool lowerToLLVMWithGPU(mlir::ModuleOp& moduleOp, bool verify) {
+   LLVMInitializeNVPTXTarget();
+   LLVMInitializeNVPTXTargetInfo();
+   LLVMInitializeNVPTXTargetMC();
+   LLVMInitializeNVPTXAsmPrinter();
+
+   mlir::PassManager pm2(moduleOp->getContext());
+   pm2.enableVerifier(verify);
+
+   //pm2.enableIRPrinting();
+
+   pm2.addPass(mlir::createConvertSCFToCFPass());
+   pm2.addPass(mlir::createConvertIndexToLLVMPass());
+   pm2.addNestedPass<mlir::func::FuncOp>(mlir::util::createUtilToLLVMPass());
+   //pm2.addPass(mlir::util::createUtilToLLVMPass());
+   pm2.addPass(mlir::createGpuKernelOutliningPass());
+   pm2.addPass(mlir::createGpuNVVMAttachTarget(mlir::GpuNVVMAttachTargetOptions{.chip = "sm_35"}));
+   pm2.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createStripDebugInfoPass());
+   pm2.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createConvertGpuOpsToNVVMOps());
+   pm2.addNestedPass<mlir::gpu::GPUModuleOp>(mlir::createReconcileUnrealizedCastsPass());
+   pm2.addNestedPass<mlir::func::FuncOp>(mlir::createGpuAsyncRegionPass());
+   pm2.addPass(mlir::createGpuToLLVMConversionPass());
+   pm2.addPass(mlir::createGpuModuleToBinaryPass());
+   pm2.addPass(mlir::createAsyncToAsyncRuntimePass());
+   pm2.addPass(mlir::createAsyncRuntimeRefCountingPass());
+   pm2.addPass(mlir::createConvertAsyncToLLVMPass());
+
+   pm2.addPass(mlir::createConvertControlFlowToLLVMPass());
+   pm2.addPass(mlir::createFinalizeMemRefToLLVMConversionPass());
+   pm2.addPass(mlir::createArithToLLVMConversionPass());
+   pm2.addPass(mlir::createReconcileUnrealizedCastsPass());
+   pm2.addPass(mlir::createConvertFuncToLLVMPass());
+   pm2.addPass(mlir::createReconcileUnrealizedCastsPass());
+   pm2.addNestedPass<mlir::LLVM::LLVMFuncOp>(execution::createEnforceCABI());
+   pm2.addPass(mlir::createCSEPass());
+   if (mlir::failed(pm2.run(moduleOp))) {
+      return false;
+   }
+   return true;
+}
+
+class GPULLVMBackend : public execution::ExecutionBackend {
+   void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
+      mlir::registerBuiltinDialectTranslation(*moduleOp->getContext());
+      mlir::registerLLVMDialectTranslation(*moduleOp->getContext());
+      llvm::InitializeNativeTarget();
+      llvm::InitializeNativeTargetAsmPrinter();
+      auto startLowerToLLVM = std::chrono::high_resolution_clock::now();
+      if (!lowerToLLVMWithGPU(moduleOp, verify)) {
+         error.emit() << "Could not lower module to llvm dialect";
+         return;
+      }
+      addLLVMExecutionContextFuncs(moduleOp);
+      auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
+      timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
+      double translateToLLVMIRTime;
+      auto convertFn = [&](mlir::Operation* module, llvm::LLVMContext& context) -> std::unique_ptr<llvm::Module> {
+         auto startTranslationToLLVMIR = std::chrono::high_resolution_clock::now();
+         auto res = translateModuleToLLVMIR(module, context, "LLVMDialectModule", false);
+         auto endTranslationToLLVMIR = std::chrono::high_resolution_clock::now();
+         translateToLLVMIRTime = std::chrono::duration_cast<std::chrono::microseconds>(endTranslationToLLVMIR - startTranslationToLLVMIR).count() / 1000.0;
+         return std::move(res);
+      };
+      double llvmPassesTime;
+
+      auto optimizeFn = [&](llvm::Module* module) -> llvm::Error {
+         module->dump();
+         auto startLLVMIRPasses = std::chrono::high_resolution_clock::now();
+         auto error = performDefaultLLVMPasses(module);
+         auto endLLVMIRPasses = std::chrono::high_resolution_clock::now();
+         llvmPassesTime = std::chrono::duration_cast<std::chrono::microseconds>(endLLVMIRPasses - startLLVMIRPasses).count() / 1000.0;
+         return error;
+      };
+      auto startJIT = std::chrono::high_resolution_clock::now();
+      // Libraries that we'll pass to the ExecutionEngine for loading.
+      std::list<std::string> libPaths = {RUNNER_UTILS_LIB,C_RUNNER_UTILS_LIB,ASYNC_RUNTIME_LIB, CUDA_RUNTIME_LIB};
+      llvm::SmallVector<llvm::StringRef, 4> executionEngineLibs;
+
+      using MlirRunnerInitFn = void (*)(llvm::StringMap<void *> &);
+      using MlirRunnerDestroyFn = void (*)();
+
+      llvm::StringMap<void *> exportSymbols;
+      llvm::SmallVector<MlirRunnerDestroyFn> destroyFns;
+
+      // Handle libraries that do support mlir-runner init/destroy callbacks.
+      for (auto &libPath : libPaths) {
+         auto lib = llvm::sys::DynamicLibrary::getPermanentLibrary(libPath.c_str());
+         void *initSym = lib.getAddressOfSymbol("__mlir_runner_init");
+         void *destroySim = lib.getAddressOfSymbol("__mlir_runner_destroy");
+
+         // Library does not support mlir runner, load it with ExecutionEngine.
+         if (!initSym || !destroySim) {
+            executionEngineLibs.push_back(libPath);
+            continue;
+         }
+
+         auto initFn = reinterpret_cast<MlirRunnerInitFn>(initSym);
+         initFn(exportSymbols);
+
+         auto destroyFn = reinterpret_cast<MlirRunnerDestroyFn>(destroySim);
+         destroyFns.push_back(destroyFn);
+      }
+      auto tmBuilderOrError = llvm::orc::JITTargetMachineBuilder::detectHost();
+      if (!tmBuilderOrError) {
+         llvm::errs() << "Failed to create a JITTargetMachineBuilder for the host\n";
+         assert(false&&"should not happen");
+      }
+      auto tmOrError = tmBuilderOrError->createTargetMachine();
+      if (!tmOrError) {
+         llvm::errs() << "Failed to create a TargetMachine for the host\n";
+         assert(false&&"should not happen");
+      }
+
+
+      auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer =  mlir::makeOptimizingTransformer(0,0,tmOrError->get()), .jitCodeGenOptLevel = llvm::CodeGenOptLevel::Default,.sharedLibPaths=executionEngineLibs,.enableObjectDump = false});
+      if (!maybeEngine) {
+         error.emit() << "Could not create execution engine";
+         return;
+      }
+      auto engine = std::move(maybeEngine.get());
+      auto runtimeSymbolMap = [&](llvm::orc::MangleAndInterner interner) {
+         auto symbolMap = llvm::orc::SymbolMap();
+         mlir::util::FunctionHelper::visitAllFunctions([&](std::string s, void* ptr) {
+            symbolMap[interner(s)] = llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(ptr), llvm::JITSymbolFlags::Exported);
+         });
+         execution::visitBareFunctions([&](std::string s, void* ptr) {
+            symbolMap[interner(s)] = llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(ptr), llvm::JITSymbolFlags::Exported);
+         });
+         for (auto &exportSymbol : exportSymbols)
+            symbolMap[interner(exportSymbol.getKey())] = llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(exportSymbol.getValue()), llvm::JITSymbolFlags::Exported);
+         return symbolMap;
+      };
+      engine->registerSymbols(runtimeSymbolMap);
+      auto mainFnLookupResult = engine->lookup("main");
+      if (!mainFnLookupResult) {
+         error.emit() << "Could not lookup main function";
+         return;
+      }
+      auto setExecutionContextLookup = engine->lookup("rt_set_execution_context");
+      if (!setExecutionContextLookup) {
+         error.emit() << "Could not lookup function for setting the execution context";
+         return;
+      }
+      auto mainFunc = reinterpret_cast<execution::mainFnType>(mainFnLookupResult.get());
+      auto setExecutionContextFunc = reinterpret_cast<execution::setExecutionContextFnType>(setExecutionContextLookup.get());
+      auto endJIT = std::chrono::high_resolution_clock::now();
+      setExecutionContextFunc(executionContext);
+      auto totalJITTime = std::chrono::duration_cast<std::chrono::microseconds>(endJIT - startJIT).count() / 1000.0;
+      totalJITTime -= translateToLLVMIRTime;
+      totalJITTime -= llvmPassesTime;
+
+      std::vector<double> measuredTimes;
+      for (size_t i = 0; i < numRepetitions; i++) {
+         auto executionStart = std::chrono::high_resolution_clock::now();
+         utility::Tracer::Trace trace(execution);
+         mainFunc();
+         trace.stop();
+         auto executionEnd = std::chrono::high_resolution_clock::now();
+         executionContext->reset();
+         measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
+      }
+      timing["toLLVMIR"] = translateToLLVMIRTime;
+      timing["llvmOptimize"] = llvmPassesTime;
+      timing["llvmCodeGen"] = totalJITTime;
+      timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
+   }
+   bool requiresSnapshotting() override {
+      return false;
+   }
+};
+#endif
 
 class DefaultCPULLVMBackend : public execution::ExecutionBackend {
    void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) override {
@@ -523,4 +697,12 @@ std::unique_ptr<execution::ExecutionBackend> execution::createLLVMDebugBackend()
 }
 std::unique_ptr<execution::ExecutionBackend> execution::createLLVMProfilingBackend() {
    return std::make_unique<CPULLVMProfilingBackend>();
+}
+
+std::unique_ptr<execution::ExecutionBackend> execution::createGPULLVMBackend() {
+   #if GPU_ENABLED==1
+      return std::make_unique<GPULLVMBackend>();
+   #else
+      return {};
+   #endif
 }

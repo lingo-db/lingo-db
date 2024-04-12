@@ -14,7 +14,7 @@ clang_libs = [f"llvm/lib/*{n}*" for n in ["clangAST",
                                           "clangToolingInclusions", "clangToolingCore", "clangRewrite", "clangLex",
                                           "clangEdit"]]
 
-bin_files = ["FileCheck", "mlir-tblgen", "clang-tidy"]
+bin_files = ["FileCheck", "mlir-tblgen", "clang-tidy","mlir-cpu-runner"]
 for filename in os.listdir("lingodbllvm/llvm/bin"):
     # Check if the current file is a regular file (not a directory)
     full_path = os.path.join("lingodbllvm/llvm/bin", filename)
@@ -24,7 +24,7 @@ for filename in os.listdir("lingodbllvm/llvm/bin"):
                 f.write("#!/usr/bin/env python\n")
                 f.write("print('This is a dummy file')\n")
 
-required_lib_files = ["llvm/lib/libMLIR*", "llvm/lib/libLLVM*"] + clang_libs
+required_lib_files = ["llvm/lib/libmlir_*","llvm/lib/libMLIR*", "llvm/lib/libLLVM*"] + clang_libs
 for filename in os.listdir("lingodbllvm/llvm/lib"):
     full_path = os.path.join("lingodbllvm/llvm/lib", filename)
     if os.path.isfile(full_path):
@@ -34,7 +34,7 @@ for filename in os.listdir("lingodbllvm/llvm/lib"):
 
 package_data = ['llvm/include/**/*',
                 'llvm/lib/cmake/**/*', 'llvm/bin/*', 'llvm/lib/**/*', 'llvm/mlir_python_bindings/**/*',
-                'llvm/python_packages/**/*']
+                'llvm/python_packages/**/*','llvm/src/*']
 setup(name='lingodb-llvm',
       description='',
       version='0.0.0.dev0',

@@ -44,6 +44,8 @@ link_directories(${ARROW_LIB_PATH})
 link_directories(${TBB_LIB_PATH})
 option(COMPILE_FOR_PERF "compile for perf" OFF)
 option(ENABLE_CRANELIFT_BACKEND "enable cranelift backend" OFF)
+option(ENABLE_GPU_BACKEND "enable GPU backend" OFF)
+
 if (COMPILE_FOR_PERF)
     SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -ffixed-r15")
 endif (COMPILE_FOR_PERF)

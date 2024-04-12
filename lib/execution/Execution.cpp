@@ -175,6 +175,10 @@ ExecutionMode getExecutionMode() {
          runMode = ExecutionMode::SPEED;
       } else if (std::string(mode) == "C") {
          runMode = ExecutionMode::C;
+      }else if (std::string(mode) == "GPU") {
+         #if GPU_ENABLED==1
+         runMode = ExecutionMode::GPU;
+         #endif
       }
    }
    return runMode;
@@ -328,7 +332,11 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
 #else
       config->executionBackend = createDefaultLLVMBackend();
 #endif
-   } else {
+  }else if(runMode == ExecutionMode::GPU) {
+   #if GPU_ENABLED == 1
+      config->executionBackend = createGPULLVMBackend();
+#endif
+   }else {
       config->executionBackend = createDefaultLLVMBackend();
    }
    config->resultProcessor = execution::createTablePrinter();

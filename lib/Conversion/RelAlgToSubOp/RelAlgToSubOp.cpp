@@ -27,6 +27,8 @@
 #include <llvm/ADT/TypeSwitch.h>
 #include <iostream>
 #include <mlir/Dialect/util/FunctionHelper.h>
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
+#include "mlir/Dialect/Async/IR/Async.h"
 
 using namespace mlir;
 
@@ -2681,6 +2683,8 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
 
    // Define Conversion Target
    ConversionTarget target(getContext());
+   target.addLegalDialect<gpu::GPUDialect>();
+   target.addLegalDialect<async::AsyncDialect>();
    target.addLegalOp<ModuleOp>();
    target.addLegalOp<UnrealizedConversionCastOp>();
    target.addIllegalDialect<relalg::RelAlgDialect>();

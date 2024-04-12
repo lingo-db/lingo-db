@@ -22,6 +22,10 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Support/FileUtilities.h"
 #include "mlir/Tools/mlir-opt/MlirOptMain.h"
+#include "mlir/Dialect/Async/IR/Async.h"
+#include "mlir/InitAllExtensions.h"
+#include "mlir/Target/LLVM/NVVM/Target.h"
+#include "mlir/Target/LLVMIR/Dialect/All.h"
 
 #include "runtime/Catalog.h"
 
@@ -70,9 +74,12 @@ int main(int argc, char** argv) {
    registry.insert<mlir::util::UtilDialect>();
    registry.insert<mlir::cf::ControlFlowDialect>();
    registry.insert<mlir::LLVM::LLVMDialect>();
-
+   registry.insert<mlir::async::AsyncDialect>();
+   registry.insert<mlir::gpu::GPUDialect>();
    registry.insert<mlir::scf::SCFDialect>();
-   mlir::func::registerAllExtensions(registry);
+   mlir::registerAllExtensions(registry);
+   mlir::NVVM::registerNVVMTargetInterfaceExternalModels(registry);
+   mlir::registerAllToLLVMIRTranslations(registry);
    support::eval::init();
 
    return failed(
