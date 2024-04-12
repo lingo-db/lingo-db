@@ -108,7 +108,7 @@ class SubOpLoweringStep : public LoweringStep {
       if (enabledPasses.contains("PullGatherUp"))
          lowerSubOpPm.addPass(mlir::subop::createPullGatherUpPass());
       if (!moduleOp->hasAttr("subop.sequential")) {
-         lowerSubOpPm.addPass(mlir::subop::createParallelizePass());
+         lowerSubOpPm.addNestedPass<mlir::func::FuncOp>(mlir::subop::createParallelizePass());
          lowerSubOpPm.addPass(mlir::subop::createSpecializeParallelPass());
       }
       lowerSubOpPm.addPass(mlir::subop::createEnforceOrderPass());

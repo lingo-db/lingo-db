@@ -12,7 +12,7 @@
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 namespace {
 
-class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::OperationPass<mlir::ModuleOp>> {
+class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::OperationPass<>> {
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(ParallelizePass)
    virtual llvm::StringRef getArgument() const override { return "subop-parallelize"; }
