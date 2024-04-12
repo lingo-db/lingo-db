@@ -92,7 +92,10 @@ sqlite-dataset-tests:
     - touch build/lingodb-release/.stamp
     - touch build/lingodb-release/.buildstamp
     - mkdir -p /datasets/tpch-1
-    - cd /opt/data/umbra/tpch1
+    - mkdir -p /data
+    - cp -r /opt/data/umbra/tpch1 /data/tpch-1
+    - cd /data/tpch-1
+    - for table in ./*.tbl; do  sed -i 's/|$//' "$table"; done
     - $BASE_PATH/build/lingodb-release/sql /datasets/tpch-1 < $BASE_PATH/resources/sql/tpch/initialize.sql
 #   - mkdir -p /datasets/tpcds-1
 #   - cd /opt/data/umbra/tpcds1

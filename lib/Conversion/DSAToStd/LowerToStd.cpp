@@ -5,11 +5,13 @@
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Async/IR/Async.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -21,8 +23,6 @@
 #include "mlir/Pass/Pass.h"
 #include "mlir/Transforms/DialectConversion.h"
 #include <mlir/IR/BuiltinTypes.h>
-#include "mlir/Dialect/GPU/IR/GPUDialect.h"
-#include "mlir/Dialect/Async/IR/Async.h"
 
 #include "runtime-defs/DataSourceIteration.h"
 #include "runtime-defs/ExecutionContext.h"
@@ -144,7 +144,7 @@ void DSAToStdLoweringPass::runOnOperation() {
          auto isLegal = !hasDSAType(typeConverter, op.getType());
          return isLegal;
       });
-   auto *ctxt = &getContext();
+   auto* ctxt = &getContext();
    typeConverter.addConversion([&](mlir::TupleType tupleType) {
       return convertTuple(tupleType, typeConverter);
    });
@@ -158,25 +158,25 @@ void DSAToStdLoweringPass::runOnOperation() {
       return mlir::util::RefType::get(&getContext(), IntegerType::get(&getContext(), 8));
    });
    typeConverter.addConversion([&](::mlir::dsa::ArrowFixedSizedBinaryType t) {
-   if (t.getByteWidth() > 8) return mlir::Type();
-   size_t bits = 0;
-   if (t.getByteWidth() == 1) {
-      bits = 8;
-   } else if (t.getByteWidth() == 2) {
-      bits = 16;
-   } else if (t.getByteWidth() <= 4) {
-      bits = 32;
-   } else {
-      bits = 64;
-   }
-   return (Type) mlir::IntegerType::get(ctxt, bits);
-});
+      if (t.getByteWidth() > 8) return mlir::Type();
+      size_t bits = 0;
+      if (t.getByteWidth() == 1) {
+         bits = 8;
+      } else if (t.getByteWidth() == 2) {
+         bits = 16;
+      } else if (t.getByteWidth() <= 4) {
+         bits = 32;
+      } else {
+         bits = 64;
+      }
+      return (Type) mlir::IntegerType::get(ctxt, bits);
+   });
    typeConverter.addConversion([&](mlir::dsa::ArrowStringType type) {
       return mlir::util::VarLen32Type::get(&getContext());
    });
    typeConverter.addConversion([&](mlir::dsa::ArrowListType type) {
-   return mlir::util::BufferType::get(&getContext(),typeConverter.convertType(type.getType()));
-});
+      return mlir::util::BufferType::get(&getContext(), typeConverter.convertType(type.getType()));
+   });
    typeConverter.addConversion([&](mlir::dsa::ArrowDecimalType type) {
       return IntegerType::get(ctxt, 128);
    });

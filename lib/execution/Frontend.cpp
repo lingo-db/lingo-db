@@ -1,7 +1,6 @@
 #include "execution/Frontend.h"
 #include "frontend/SQL/Parser.h"
 
-
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Async/IR/Async.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
@@ -24,8 +23,8 @@
 #include "mlir/IR/Dialect.h"
 #include "mlir/IR/DialectRegistry.h"
 #include "mlir/IR/MLIRContext.h"
-#include "mlir/Parser/Parser.h"
 #include "mlir/InitAllExtensions.h"
+#include "mlir/Parser/Parser.h"
 #include "mlir/Target/LLVM/NVVM/Target.h"
 #include "mlir/Target/LLVMIR/Dialect/All.h"
 #include <llvm/Support/ErrorOr.h>
@@ -51,11 +50,11 @@ void execution::initializeContext(mlir::MLIRContext& context) {
    registry.insert<mlir::scf::SCFDialect>();
    registry.insert<mlir::LLVM::LLVMDialect>();
 
-   #if GPU_ENABLED==1
+#if GPU_ENABLED == 1
    registry.insert<mlir::async::AsyncDialect>();
    registry.insert<mlir::gpu::GPUDialect>();
    mlir::NVVM::registerNVVMTargetInterfaceExternalModels(registry);
-   #endif
+#endif
    mlir::registerAllExtensions(registry);
    mlir::registerAllToLLVMIRTranslations(registry);
    context.appendDialectRegistry(registry);

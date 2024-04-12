@@ -704,7 +704,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             }
          }
       });
-      bool enableGroupJoins = true;
+      bool enableGroupJoins = false;
       if (const char* shouldEnableGJ = std::getenv("LINGODB_ENABLE_GJ")) {
          if (std::string(shouldEnableGJ) == "OFF") {
             enableGroupJoins = false;

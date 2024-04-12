@@ -5,6 +5,7 @@
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/UtilToLLVM/Passes.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Async/IR/Async.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
@@ -14,6 +15,7 @@
 #include "mlir/Dialect/DSA/IR/DSAOps.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -29,8 +31,6 @@
 #include "mlir/Transforms/Passes.h"
 #include "runtime-defs/StringRuntime.h"
 #include <mlir/Dialect/util/FunctionHelper.h>
-#include "mlir/Dialect/GPU/IR/GPUDialect.h"
-#include "mlir/Dialect/Async/IR/Async.h"
 using namespace mlir;
 
 namespace {
@@ -108,7 +108,7 @@ mlir::Type convertPhysicalSingle(mlir::Type t, const TypeConverter& typeConverte
    if (auto decimalType = t.dyn_cast_or_null<mlir::db::DecimalType>()) {
       arrowPhysicalType = mlir::dsa::ArrowDecimalType::get(ctxt, decimalType.getP(), decimalType.getS());
    } else if (auto dateType = t.dyn_cast_or_null<mlir::db::DateType>()) {
-      arrowPhysicalType = dateType.getUnit() == mlir::db::DateUnitAttr::day ? (mlir::Type)mlir::dsa::ArrowDate32Type::get(t.getContext()) : (mlir::Type)mlir::dsa::ArrowDate64Type::get(t.getContext());
+      arrowPhysicalType = dateType.getUnit() == mlir::db::DateUnitAttr::day ? (mlir::Type) mlir::dsa::ArrowDate32Type::get(t.getContext()) : (mlir::Type) mlir::dsa::ArrowDate64Type::get(t.getContext());
    } else if (t.isa<mlir::db::StringType>()) {
       arrowPhysicalType = mlir::dsa::ArrowStringType::get(t.getContext());
    } else if (auto charType = t.dyn_cast_or_null<mlir::db::CharType>()) {
@@ -149,7 +149,7 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
          rewriter.finalizeOpModification(atOp);
          return mlir::success();
       }
-      mlir::Type arrowPhysicalType = convertPhysicalSingle(t,*typeConverter);
+      mlir::Type arrowPhysicalType = convertPhysicalSingle(t, *typeConverter);
       llvm::SmallVector<mlir::Type> types;
       types.push_back(arrowPhysicalType);
       if (atOp.getValid()) {
@@ -157,8 +157,8 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
       }
       std::vector<mlir::Value> values;
       auto newAtOp = rewriter.create<mlir::dsa::At>(loc, types, adaptor.getCollection(), atOp.getPos());
-      mlir::Value nativeValue=newAtOp.getVal();
-      if(typeConverter->convertType(t)!=nativeValue.getType()) {
+      mlir::Value nativeValue = newAtOp.getVal();
+      if (typeConverter->convertType(t) != nativeValue.getType()) {
          nativeValue = rewriter.create<mlir::dsa::ArrowTypeTo>(loc, typeConverter->convertType(t), nativeValue);
       }
       values.push_back(nativeValue);
@@ -189,10 +189,10 @@ class AppendCBLowering : public ConversionPattern {
          rewriter.finalizeOpModification(op);
          return mlir::success();
       }
-      mlir::Type arrowPhysicalType = convertPhysicalSingle(t,*typeConverter);
+      mlir::Type arrowPhysicalType = convertPhysicalSingle(t, *typeConverter);
 
       mlir::Value val = adaptor.getVal();
-      if(val.getType()!=arrowPhysicalType) {
+      if (val.getType() != arrowPhysicalType) {
          val = rewriter.create<mlir::dsa::ArrowTypeFrom>(loc, arrowPhysicalType, val);
       }
       rewriter.create<mlir::dsa::Append>(loc, adaptor.getDs(), val, adaptor.getValid());
@@ -1099,7 +1099,7 @@ void DBToStdLoweringPass::runOnOperation() {
    auto convertPhysical = [&](mlir::TupleType tuple) -> mlir::TupleType {
       std::vector<mlir::Type> types;
       for (auto t : tuple.getTypes()) {
-         mlir::Type arrowPhysicalType = convertPhysicalSingle(t,typeConverter);
+         mlir::Type arrowPhysicalType = convertPhysicalSingle(t, typeConverter);
          types.push_back(arrowPhysicalType);
       }
       return mlir::TupleType::get(tuple.getContext(), types);
@@ -1108,14 +1108,14 @@ void DBToStdLoweringPass::runOnOperation() {
       return mlir::dsa::RecordType::get(r.getContext(), convertPhysical(r.getRowType()));
    });
    typeConverter.addConversion([&](mlir::dsa::RecordBatchType r) {
-      auto res= mlir::dsa::RecordBatchType::get(r.getContext(), convertPhysical(r.getRowType()));
+      auto res = mlir::dsa::RecordBatchType::get(r.getContext(), convertPhysical(r.getRowType()));
       return res;
    });
    typeConverter.addConversion([&](mlir::dsa::ColumnBuilderType r) {
-      return mlir::dsa::ColumnBuilderType::get(r.getContext(), convertPhysicalSingle(r.getType(),typeConverter));
+      return mlir::dsa::ColumnBuilderType::get(r.getContext(), convertPhysicalSingle(r.getType(), typeConverter));
    });
    typeConverter.addConversion([&](mlir::dsa::ColumnType r) {
-      return mlir::dsa::ColumnType::get(r.getContext(), convertPhysicalSingle(r.getType(),typeConverter));
+      return mlir::dsa::ColumnType::get(r.getContext(), convertPhysicalSingle(r.getType(), typeConverter));
    });
    typeConverter.addConversion([&](mlir::dsa::TableType r) { return mlir::dsa::TableType::get(r.getContext(), convertPhysical(r.getRowType())); });
    RewritePatternSet patterns(&getContext());

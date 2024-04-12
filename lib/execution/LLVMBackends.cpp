@@ -12,6 +12,7 @@
 #include "mlir/IR/BuiltinAttributes.h"
 
 #include "mlir/ExecutionEngine/ExecutionEngine.h"
+#include "mlir/ExecutionEngine/OptUtils.h"
 #include "mlir/IR/Builders.h"
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/Pass.h"
@@ -20,11 +21,10 @@
 #include "mlir/Target/LLVMIR/Dialect/LLVMIR/LLVMToLLVMIRTranslation.h"
 #include "mlir/Target/LLVMIR/Export.h"
 #include "mlir/Target/LLVMIR/Import.h"
-#include "mlir/ExecutionEngine/OptUtils.h"
-#include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
 
 #include "llvm/BinaryFormat/Dwarf.h"
 #include "llvm/CodeGen/TargetRegisterInfo.h"
+#include "llvm/ExecutionEngine/Orc/JITTargetMachineBuilder.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/MC/TargetRegistry.h"
@@ -184,7 +184,7 @@ static void linkStatic(mlir::ExecutionEngine* engine, execution::Error& error, e
    }
    return;
 }
-#if GPU_ENABLED==1
+#if GPU_ENABLED == 1
 static bool lowerToLLVMWithGPU(mlir::ModuleOp& moduleOp, bool verify) {
    LLVMInitializeNVPTXTarget();
    LLVMInitializeNVPTXTargetInfo();
@@ -260,20 +260,20 @@ class GPULLVMBackend : public execution::ExecutionBackend {
       };
       auto startJIT = std::chrono::high_resolution_clock::now();
       // Libraries that we'll pass to the ExecutionEngine for loading.
-      std::list<std::string> libPaths = {RUNNER_UTILS_LIB,C_RUNNER_UTILS_LIB,ASYNC_RUNTIME_LIB, CUDA_RUNTIME_LIB};
+      std::list<std::string> libPaths = {RUNNER_UTILS_LIB, C_RUNNER_UTILS_LIB, ASYNC_RUNTIME_LIB, CUDA_RUNTIME_LIB};
       llvm::SmallVector<llvm::StringRef, 4> executionEngineLibs;
 
-      using MlirRunnerInitFn = void (*)(llvm::StringMap<void *> &);
+      using MlirRunnerInitFn = void (*)(llvm::StringMap<void*>&);
       using MlirRunnerDestroyFn = void (*)();
 
-      llvm::StringMap<void *> exportSymbols;
+      llvm::StringMap<void*> exportSymbols;
       llvm::SmallVector<MlirRunnerDestroyFn> destroyFns;
 
       // Handle libraries that do support mlir-runner init/destroy callbacks.
-      for (auto &libPath : libPaths) {
+      for (auto& libPath : libPaths) {
          auto lib = llvm::sys::DynamicLibrary::getPermanentLibrary(libPath.c_str());
-         void *initSym = lib.getAddressOfSymbol("__mlir_runner_init");
-         void *destroySim = lib.getAddressOfSymbol("__mlir_runner_destroy");
+         void* initSym = lib.getAddressOfSymbol("__mlir_runner_init");
+         void* destroySim = lib.getAddressOfSymbol("__mlir_runner_destroy");
 
          // Library does not support mlir runner, load it with ExecutionEngine.
          if (!initSym || !destroySim) {
@@ -290,16 +290,15 @@ class GPULLVMBackend : public execution::ExecutionBackend {
       auto tmBuilderOrError = llvm::orc::JITTargetMachineBuilder::detectHost();
       if (!tmBuilderOrError) {
          llvm::errs() << "Failed to create a JITTargetMachineBuilder for the host\n";
-         assert(false&&"should not happen");
+         assert(false && "should not happen");
       }
       auto tmOrError = tmBuilderOrError->createTargetMachine();
       if (!tmOrError) {
          llvm::errs() << "Failed to create a TargetMachine for the host\n";
-         assert(false&&"should not happen");
+         assert(false && "should not happen");
       }
 
-
-      auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer =  mlir::makeOptimizingTransformer(0,0,tmOrError->get()), .jitCodeGenOptLevel = llvm::CodeGenOptLevel::Default,.sharedLibPaths=executionEngineLibs,.enableObjectDump = false});
+      auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = mlir::makeOptimizingTransformer(0, 0, tmOrError->get()), .jitCodeGenOptLevel = llvm::CodeGenOptLevel::Default, .sharedLibPaths = executionEngineLibs, .enableObjectDump = false});
       if (!maybeEngine) {
          error.emit() << "Could not create execution engine";
          return;
@@ -313,7 +312,7 @@ class GPULLVMBackend : public execution::ExecutionBackend {
          execution::visitBareFunctions([&](std::string s, void* ptr) {
             symbolMap[interner(s)] = llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(ptr), llvm::JITSymbolFlags::Exported);
          });
-         for (auto &exportSymbol : exportSymbols)
+         for (auto& exportSymbol : exportSymbols)
             symbolMap[interner(exportSymbol.getKey())] = llvm::orc::ExecutorSymbolDef(llvm::orc::ExecutorAddr::fromPtr(exportSymbol.getValue()), llvm::JITSymbolFlags::Exported);
          return symbolMap;
       };
@@ -700,9 +699,9 @@ std::unique_ptr<execution::ExecutionBackend> execution::createLLVMProfilingBacke
 }
 
 std::unique_ptr<execution::ExecutionBackend> execution::createGPULLVMBackend() {
-   #if GPU_ENABLED==1
-      return std::make_unique<GPULLVMBackend>();
-   #else
-      return {};
-   #endif
+#if GPU_ENABLED == 1
+   return std::make_unique<GPULLVMBackend>();
+#else
+   return {};
+#endif
 }

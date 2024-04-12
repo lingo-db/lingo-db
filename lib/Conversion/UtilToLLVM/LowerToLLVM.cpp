@@ -548,60 +548,6 @@ void mlir::util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeCon
    patterns.add<BufferCreateOpLowering>(typeConverter, patterns.getContext());
 }
 namespace {
-static LogicalResult convertFuncOpTypes(FunctionOpInterface funcOp,
-                                        const TypeConverter& typeConverter,
-                                        ConversionPatternRewriter& rewriter) {
-   FunctionType type = dyn_cast<FunctionType>(funcOp.getFunctionType());
-   if (!type)
-      return failure();
-
-   // Convert the original function types.
-   TypeConverter::SignatureConversion result(type.getNumInputs());
-   SmallVector<Type, 1> newResults;
-   if (failed(typeConverter.convertSignatureArgs(type.getInputs(), result)) ||
-       failed(typeConverter.convertTypes(type.getResults(), newResults)) ||
-       failed(rewriter.convertRegionTypes(&funcOp.getFunctionBody(),
-                                          typeConverter, &result)))
-      return failure();
-
-   // Update the function signature in-place.
-   auto newType = FunctionType::get(rewriter.getContext(),
-                                    result.getConvertedTypes(), newResults);
-
-   rewriter.modifyOpInPlace(funcOp, [&] { funcOp.setType(newType); });
-
-   return success();
-}
-
-class GPUFuncConversionPattern : public ConversionPattern {
-   public:
-   explicit GPUFuncConversionPattern(TypeConverter& typeConverter, MLIRContext* context)
-      : ConversionPattern(typeConverter, mlir::gpu::GPUFuncOp::getOperationName(), 1, context) {}
-
-   LogicalResult
-   matchAndRewrite(Operation* op, ArrayRef<Value> operands,
-                   ConversionPatternRewriter& rewriter) const override {
-      auto gpuFunc = mlir::cast<mlir::gpu::GPUFuncOp>(op);
-      auto funcType = gpuFunc.getFunctionType();
-      auto argTypes = gpuFunc.getBody().getArgumentTypes();
-      TypeConverter::SignatureConversion result(argTypes.size());
-      if (failed(typeConverter->convertSignatureArgs(argTypes, result))) {
-         return failure();
-      }
-      if (failed(rewriter.convertRegionTypes(&gpuFunc.getBody(), *typeConverter, &result))) {
-         return failure();
-      }
-      SmallVector<Type, 1> newResults;
-      if (failed(typeConverter->convertTypes(funcType.getResults(), newResults)))
-         return failure();
-
-      // Update the function signature in-place.
-      auto newType = FunctionType::get(rewriter.getContext(), result.getConvertedTypes().take_front(funcType.getNumInputs()), newResults);
-
-      rewriter.modifyOpInPlace(gpuFunc, [&] { gpuFunc.setType(newType); });
-      return success();
-   }
-};
 
 class FuncConstTypeConversionPattern : public ConversionPattern {
    public:
@@ -705,8 +651,6 @@ struct UtilToLLVMLoweringPass
 
       target.addDynamicallyLegalOp<mlir::func::CallOp, mlir::func::CallIndirectOp, mlir::func::ReturnOp, mlir::arith::SelectOp>(opIsWithoutUtilTypes);
       target.addDynamicallyLegalDialect<mlir::cf::ControlFlowDialect>(opIsWithoutUtilTypes);
-      patterns.add<GPUFuncConversionPattern>(typeConverter, patterns.getContext());
-      //mlir::populateFunctionOpInterfaceTypeConversionPattern<mlir::gpu::GPUFuncOp>(patterns, typeConverter);
 
       target.addDynamicallyLegalOp<func::FuncOp>([&](func::FuncOp op) {
          auto isSignatureLegal = !hasUtilType(typeConverter, op.getFunctionType().getInputs()) &&
@@ -727,16 +671,7 @@ struct UtilToLLVMLoweringPass
             return true;
          }
       });
-      target.addDynamicallyLegalOp<gpu::GPUFuncOp>([&](gpu::GPUFuncOp op) {
-         auto isSignatureLegal = !hasUtilType(typeConverter, op.getFunctionType().getInputs()) &&
-            !hasUtilType(typeConverter, op.getFunctionType().getResults());
-         for (auto& block : op.getBody().getBlocks()) {
-            if (hasUtilType(typeConverter, block.getArgumentTypes())) {
-               return false;
-            }
-         }
-         return isSignatureLegal;
-      });
+
       //target.addLegalOp<func::FuncOp>();
       if (failed(applyPartialConversion(op, target, std::move(patterns))))
          signalPassFailure();

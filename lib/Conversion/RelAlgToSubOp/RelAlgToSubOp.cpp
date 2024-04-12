@@ -2,11 +2,13 @@
 #include "mlir/Conversion/RelAlgToSubOp/OrderedAttributes.h"
 #include "mlir/Conversion/RelAlgToSubOp/RelAlgToSubOpPass.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/Async/IR/Async.h"
 #include "mlir/Dialect/ControlFlow/IR/ControlFlow.h"
 #include "mlir/Dialect/DB/IR/DBDialect.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
 #include "mlir/Dialect/DSA/IR/DSADialect.h"
 #include "mlir/Dialect/Func/Transforms/FuncConversions.h"
+#include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/LLVMTypes.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
@@ -27,8 +29,6 @@
 #include <llvm/ADT/TypeSwitch.h>
 #include <iostream>
 #include <mlir/Dialect/util/FunctionHelper.h>
-#include "mlir/Dialect/GPU/IR/GPUDialect.h"
-#include "mlir/Dialect/Async/IR/Async.h"
 
 using namespace mlir;
 
@@ -104,7 +104,7 @@ class BaseTableLowering : public OpConversionPattern<mlir::relalg::BaseTableOp> 
 static mlir::LogicalResult safelyMoveRegion(ConversionPatternRewriter& rewriter, mlir::Region& source, mlir::Region& target) {
    rewriter.inlineRegionBefore(source, target, target.end());
    {
-      if (false &&!target.empty()) {
+      if (false && !target.empty()) {
          source.push_back(new Block);
          std::vector<mlir::Location> locs;
          for (size_t i = 0; i < target.front().getArgumentTypes().size(); i++) {
@@ -2603,7 +2603,7 @@ class GroupJoinLowering : public OpConversionPattern<mlir::relalg::GroupJoinOp> 
       }
       if (!groupJoinOp.getMappedCols().empty()) {
          auto mapOp2 = rewriter.create<mlir::subop::MapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), filtered, groupJoinOp.getMappedCols());
-         auto moved=safelyMoveRegion(rewriter, groupJoinOp.getMapFunc(), mapOp2.getFn()).succeeded();
+         auto moved = safelyMoveRegion(rewriter, groupJoinOp.getMapFunc(), mapOp2.getFn()).succeeded();
          assert(moved);
          filtered = mapOp2;
       }
