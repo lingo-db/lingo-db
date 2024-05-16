@@ -4081,6 +4081,21 @@ class SimpleStateGetScalarLowering : public SubOpConversionPattern<mlir::subop::
       return mlir::success();
    }
 };
+class ExecutionGroupLowering : public SubOpConversionPattern<mlir::subop::ExecutionGroupOp> {
+   using SubOpConversionPattern<mlir::subop::ExecutionGroupOp>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::ExecutionGroupOp executionGroup, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      rewriter.inlineBlock<mlir::subop::ExecutionGroupReturnOpAdaptor>(&executionGroup.getSubOps().front(), adaptor.getInputs(), [&](mlir::subop::ExecutionGroupReturnOpAdaptor adaptor) {
+         if (!adaptor.getInputs().empty()) {
+            executionGroup.getResults().replaceAllUsesWith(adaptor.getInputs());
+            rewriter.eraseOp(executionGroup);
+         } else {
+            rewriter.eraseOp(executionGroup);
+         }
+      });
+      return success();
+   }
+};
+
 static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter) {
    std::vector<Type> types;
    for (auto t : tupleType.getTypes()) {
@@ -4309,6 +4324,8 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    rewriter.insertPattern<GetSingleValLowering>(typeConverter, ctxt);
    rewriter.insertPattern<SetTrackedCountLowering>(typeConverter, ctxt);
    rewriter.insertPattern<SimpleStateGetScalarLowering>(typeConverter, ctxt);
+
+   rewriter.insertPattern<ExecutionGroupLowering>(typeConverter, ctxt);
 
    rewriter.rewrite(module.getBody());
    std::vector<mlir::Operation*> defs;

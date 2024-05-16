@@ -102,4 +102,11 @@ def ReferenceProducer : OpInterface<"ReferenceProducer"> {
     InterfaceMethod<"","mlir::tuples::ColumnDefAttr", "getProducedReference",(ins )>,
     ];
 }
+
+def ContainsNestedSubOps : OpInterface<"ContainsNestedSubOps"> {
+  let cppNamespace = "::mlir::subop";
+	let methods = [
+	InterfaceMethod<"","mlir::Block*", "getBody",(ins )>,
+	];
+}
 #endif// Interfaces

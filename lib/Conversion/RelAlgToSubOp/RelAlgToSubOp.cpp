@@ -2677,6 +2677,30 @@ class TrackTuplesLowering : public OpConversionPattern<mlir::relalg::TrackTuples
       return mlir::success();
    }
 };
+class QueryOpLowering : public OpConversionPattern<mlir::relalg::QueryOp> {
+   public:
+   using OpConversionPattern<mlir::relalg::QueryOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::relalg::QueryOp queryOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      auto executionGroup=rewriter.create<mlir::subop::ExecutionGroupOp>(queryOp->getLoc(), queryOp->getResultTypes(),adaptor.getInputs());
+      executionGroup.getSubOps().getBlocks().clear();
+
+      rewriter.inlineRegionBefore(queryOp.getQueryOps(), executionGroup.getSubOps(), executionGroup.getSubOps().end());
+      rewriter.replaceOp(queryOp, executionGroup);
+      return mlir::success();
+   }
+};
+class QueryReturnOpLowering : public OpConversionPattern<mlir::relalg::QueryReturnOp> {
+   public:
+   using OpConversionPattern<mlir::relalg::QueryReturnOp>::OpConversionPattern;
+
+   LogicalResult matchAndRewrite(mlir::relalg::QueryReturnOp queryReturnOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      rewriter.replaceOpWithNewOp<mlir::subop::ExecutionGroupReturnOp>(queryReturnOp,adaptor.getInputs());
+
+      return mlir::success();
+   }
+};
+
 void RelalgToSubOpLoweringPass::runOnOperation() {
    auto module = getOperation();
    getContext().getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(module);
@@ -2734,6 +2758,8 @@ void RelalgToSubOpLoweringPass::runOnOperation() {
    patterns.insert<GroupJoinLowering>(ctxt);
    patterns.insert<NestedLowering>(ctxt);
    patterns.insert<TrackTuplesLowering>(ctxt);
+   patterns.insert<QueryOpLowering>(ctxt);
+   patterns.insert<QueryReturnOpLowering>(ctxt);
 
    if (failed(applyFullConversion(module, target, std::move(patterns))))
       signalPassFailure();

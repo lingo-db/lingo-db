@@ -1278,24 +1278,36 @@ std::optional<mlir::Value> frontend::sql::Parser::translate(mlir::OpBuilder& bui
             parallelismAllowed = true;
             TranslationContext context;
             auto scope = context.createResolverScope();
-            auto [tree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(statement), context, scope);
-            //::mlir::Type result, ::mlir::Value rel, ::mlir::ArrayAttr attrs, ::mlir::ArrayAttr columns
-            std::vector<mlir::Attribute> attrs;
-            std::vector<mlir::Attribute> names;
-            std::vector<mlir::Attribute> colMemberNames;
-            std::vector<mlir::Attribute> colTypes;
-            auto& memberManager = builder.getContext()->getLoadedDialect<mlir::subop::SubOperatorDialect>()->getMemberManager();
-            for (auto x : targetInfo.namedResults) {
-               if (x.first == "primaryKeyHashValue") continue;
-               names.push_back(builder.getStringAttr(x.first));
-               auto colMemberName = memberManager.getUniqueMember(x.first.empty() ? "unnamed" : x.first);
-               auto columnType = x.second->type;
-               attrs.push_back(attrManager.createRef(x.second));
-               colTypes.push_back(mlir::TypeAttr::get(columnType));
-               colMemberNames.push_back(builder.getStringAttr(colMemberName));
+            mlir::Block* block = new mlir::Block;
+            mlir::Type localTableType;
+            {
+               mlir::OpBuilder::InsertionGuard guard(builder);
+               builder.setInsertionPointToStart(block);
+               auto [tree, targetInfo] = translateSelectStmt(builder, reinterpret_cast<SelectStmt*>(statement), context, scope);
+               //::mlir::Type result, ::mlir::Value rel, ::mlir::ArrayAttr attrs, ::mlir::ArrayAttr columns
+               std::vector<mlir::Attribute> attrs;
+               std::vector<mlir::Attribute> names;
+               std::vector<mlir::Attribute> colMemberNames;
+               std::vector<mlir::Attribute> colTypes;
+               auto& memberManager = builder.getContext()->getLoadedDialect<mlir::subop::SubOperatorDialect>()->getMemberManager();
+               for (auto x : targetInfo.namedResults) {
+                  if (x.first == "primaryKeyHashValue") continue;
+                  names.push_back(builder.getStringAttr(x.first));
+                  auto colMemberName = memberManager.getUniqueMember(x.first.empty() ? "unnamed" : x.first);
+                  auto columnType = x.second->type;
+                  attrs.push_back(attrManager.createRef(x.second));
+                  colTypes.push_back(mlir::TypeAttr::get(columnType));
+                  colMemberNames.push_back(builder.getStringAttr(colMemberName));
+               }
+               localTableType = mlir::subop::LocalTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)), builder.getArrayAttr(names));
+               mlir::Value result = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), localTableType, tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
+               builder.create<mlir::relalg::QueryReturnOp>(builder.getUnknownLoc(), result);
             }
-            auto localTableType = mlir::subop::LocalTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)),builder.getArrayAttr(names));
-            return builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), localTableType, tree, builder.getArrayAttr(attrs), builder.getArrayAttr(names));
+            mlir::relalg::QueryOp queryOp = builder.create<mlir::relalg::QueryOp>(builder.getUnknownLoc(), mlir::TypeRange{localTableType}, mlir::ValueRange{});
+            queryOp.getQueryOps().getBlocks().clear();
+            queryOp.getQueryOps().push_back(block);
+            return queryOp.getResults()[0];
+
          }
          case T_InsertStmt: {
             translateInsertStmt(builder, reinterpret_cast<InsertStmt*>(statement));

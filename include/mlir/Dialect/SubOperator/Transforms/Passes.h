@@ -13,6 +13,7 @@ std::unique_ptr<Pass> createReuseLocalPass();
 std::unique_ptr<Pass> createGlobalOptPass();
 std::unique_ptr<Pass> createParallelizePass();
 std::unique_ptr<Pass> createSpecializeParallelPass();
+std::unique_ptr<Pass> createSplitIntoExecutionStepsPass();
 std::unique_ptr<Pass> createInlineNestedMapPass();
 std::unique_ptr<Pass> createFinalizePass();
 void registerSubOpTransformations();

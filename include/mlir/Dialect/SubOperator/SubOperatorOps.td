@@ -483,7 +483,7 @@ def RenamingOp : SubOperator_Op<"rename", [Pure,SubOperator]> {
     let assemblyFormat = [{ $stream `renamed` `:` custom<CustDefArr>($columns) attr-dict-with-keyword }];
 }
 
-def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
+def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>, ContainsNestedSubOps]> {
    let summary = "compute nested map";
   let description = [{#
      Example:
@@ -508,6 +508,7 @@ def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator,DeclareOpInterfaceMet
     let extraClassDeclaration = [{
         std::vector<std::string> getWrittenMembers();
         std::vector<std::string> getReadMembers();
+        mlir::Block* getBody(){ return &getRegion().front();}
     }];
 }
 
@@ -797,6 +798,43 @@ def SimpleStateGetScalar : SubOperator_Op<"simple_state_get_scalar",[SubOperator
       let extraClassDeclaration = [{
           std::vector<std::string> getReadMembers();
       }];
+}
+
+def ExecutionGroupOp : SubOperator_Op<"execution_group",[IsolatedFromAbove]> {
+    let summary = "execution group";
+    let arguments = (ins Variadic<AnyType>:$inputs);
+    let results = (outs Variadic<AnyType>:$results);
+    let regions = (region SizedRegion<1>:$sub_ops);
+    let assemblyFormat = [{ ($inputs^ `:` type($inputs))? custom<CustRegion>($sub_ops)  (`->` type($results)^ )? attr-dict-with-keyword }];
+}
+def ExecutionGroupReturnOp : SubOperator_Op<"execution_group_return",[Terminator]> {
+   let summary = "execution group return";
+   let arguments = (ins Variadic<AnyType>:$inputs);
+   let assemblyFormat = [{ ($inputs^ `:` type($inputs))? attr-dict-with-keyword }];
+}
+def ExecutionStepOp : SubOperator_Op<"execution_step",[SubOperator,IsolatedFromAbove]> {
+    let summary = "execution step";
+    let arguments = (ins Variadic<AnyType>:$inputs, BoolArrayAttr:$is_thread_local);
+    let results = (outs Variadic<AnyType>:$results);
+    let regions = (region SizedRegion<1>:$sub_ops);
+    let assemblyFormat = [{ ($inputs^ `:` type($inputs))? $is_thread_local custom<CustRegion>($sub_ops)  (`->` type($results)^ )? attr-dict-with-keyword }];
+}
+def ExecutionStepReturnOp : SubOperator_Op<"execution_step_return",[Terminator]> {
+   let summary = "execution step return";
+   let arguments = (ins Variadic<AnyType>:$inputs);
+   let assemblyFormat = [{ ($inputs^ `:` type($inputs))? attr-dict-with-keyword }];
+}
+def NestedExecutionGroupOp : SubOperator_Op<"nested_execution_group",[IsolatedFromAbove]> {
+    let summary = "nested execution group";
+    let arguments = (ins Variadic<AnyType>:$inputs);
+    let results = (outs Variadic<AnyType>:$results);
+    let regions = (region SizedRegion<1>:$sub_ops);
+    let assemblyFormat = [{ ($inputs^ `:` type($inputs))? custom<CustRegion>($sub_ops)  (`->` type($results)^ )? attr-dict-with-keyword }];
+}
+def NestedExecutionGroupReturnOp : SubOperator_Op<"nested_execution_group_return",[Terminator]> {
+   let summary = "nested execution group return";
+   let arguments = (ins Variadic<AnyType>:$inputs);
+   let assemblyFormat = [{ ($inputs^ `:` type($inputs))? attr-dict-with-keyword }];
 }
 
 #endif // LINGODB_DIALECT_SubOperator_IR_OPS

@@ -526,4 +526,18 @@ def TrackTuplesOP : RelAlg_Op<"track_tuples", [Operator]> {
     let assemblyFormat = [{ $rel $resultId attr-dict }];
 }
 
+def QueryOp : RelAlg_Op<"query"> {
+    let summary = "query";
+    let arguments = (ins Variadic<AnyType>:$inputs);
+    let results = (outs Variadic<AnyType>:$results);
+    let regions = (region SizedRegion<1>:$query_ops);
+    let assemblyFormat = [{ ($inputs^ `:` type($inputs))? custom<CustRegion>($query_ops)  `->` type($results) attr-dict-with-keyword }];
+}
+def QueryReturnOp : RelAlg_Op<"query_return",[Terminator]> {
+   let summary = "query return";
+   let arguments = (ins Variadic<AnyType>:$inputs);
+   let assemblyFormat = [{ ($inputs^ `:` type($inputs))? attr-dict-with-keyword }];
+}
+
+
 #endif // LINGODB_DIALECT_RELALG_IR_OPS
