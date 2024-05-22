@@ -28,4 +28,11 @@ void mlir::subop::registerSubOpTransformations() {
    ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
       return mlir::subop::createSpecializeParallelPass();
    });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::subop::createInlineNestedMapPass();
+   });
+   ::mlir::registerPass([]() -> std::unique_ptr<::mlir::Pass> {
+      return mlir::subop::createFinalizePass();
+   });
+
 }

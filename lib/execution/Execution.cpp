@@ -112,6 +112,8 @@ class SubOpLoweringStep : public LoweringStep {
          lowerSubOpPm.addPass(mlir::subop::createSpecializeParallelPass());
       }
       lowerSubOpPm.addPass(mlir::subop::createEnforceOrderPass());
+      lowerSubOpPm.addPass(mlir::subop::createInlineNestedMapPass());
+      lowerSubOpPm.addPass(mlir::subop::createFinalizePass());
       mlir::subop::setCompressionEnabled(enabledPasses.contains("Compression"));
       lowerSubOpPm.addPass(mlir::subop::createLowerSubOpPass());
       lowerSubOpPm.addPass(mlir::createCanonicalizerPass());

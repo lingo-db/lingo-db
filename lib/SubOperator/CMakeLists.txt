@@ -18,6 +18,8 @@ add_mlir_dialect_library(MLIRSubOperator
         Transforms/NormalizeSubOpPass.cpp
         Transforms/ParallelizePass.cpp
         Transforms/SpecializeParallelPass.cpp
+        Transforms/InlineNestedMapPass.cpp
+        Transforms/FinalizePass.cpp
         ADDITIONAL_HEADER_DIRS
         ../../include/mlir/Dialect/SubOperator
 

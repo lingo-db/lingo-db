@@ -2325,10 +2325,41 @@ class GenerateLowering : public SubOpConversionPattern<mlir::subop::GenerateOp> 
       }
       rewriter.inlineBlock<mlir::tuples::ReturnOpAdaptor>(&generateOp.getRegion().front(), {}, [](auto x) {});
       if (streams.size() != 1) {
-         auto unionOp = rewriter.create<mlir::subop::UnionOp>(generateOp->getLoc(), streams);
-         unionOp->setAttr("materialize", rewriter.operator mlir::OpBuilder&().getUnitAttr());
-         generateOp.replaceAllUsesWith(unionOp.getResult());
+
+
+
+
+         auto& memberManager = getContext()->getLoadedDialect<mlir::subop::SubOperatorDialect>()->getMemberManager();
+         auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+         auto loc = generateOp.getLoc();
+         std::vector<mlir::Attribute> types;
+         std::vector<mlir::Attribute> names;
+         std::vector<mlir::NamedAttribute> defMapping;
+         std::vector<mlir::NamedAttribute> refMapping;
+
+         for (auto m : generateOp.getGeneratedColumns()) {
+            auto* column = &m.cast<mlir::tuples::ColumnDefAttr>().getColumn();
+               auto name = memberManager.getUniqueMember("tmp_union");
+               types.push_back(mlir::TypeAttr::get(typeConverter->convertType(column->type)));
+               names.push_back(rewriter.getStringAttr(name));
+               defMapping.push_back(rewriter.getNamedAttr(name, m));
+               refMapping.push_back(rewriter.getNamedAttr(name, colManager.createRef(&m.cast<mlir::tuples::ColumnDefAttr>().getColumn())));
+         }
+         mlir::Value tmpBuffer;
+         rewriter.atStartOf(generateOp->getBlock(), [&](SubOpRewriter& rewriter) {
+            auto bufferType = mlir::subop::BufferType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr(names), rewriter.getArrayAttr(types)));
+            tmpBuffer = rewriter.create<mlir::subop::GenericCreateOp>(loc, bufferType);
+         });
+         for (auto stream : streams) {
+            rewriter.create<mlir::subop::MaterializeOp>(loc, stream, tmpBuffer, rewriter.getDictionaryAttr(refMapping));
+         }
+         auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
+         scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(rewriter.getContext(), tmpBuffer.getType().cast<mlir::subop::State>());
+         auto scan = rewriter.create<mlir::subop::ScanRefsOp>(loc, tmpBuffer, scanRefDef);
+         mlir::Value loaded = rewriter.create<mlir::subop::GatherOp>(loc, scan, colManager.createRef(&scanRefDef.getColumn()), rewriter.getDictionaryAttr(defMapping));
+         generateOp.replaceAllUsesWith(loaded);
          rewriter.eraseOp(generateOp);
+
       } else {
          rewriter.replaceTupleStream(generateOp.getRes(), rewriter.getTupleStream(streams[0]));
       }
@@ -2340,90 +2371,6 @@ class GenerateLowering : public SubOpConversionPattern<mlir::subop::GenerateOp> 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 /////////////////////////////////////////////////// Consuming a TupleStream//////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-class UnionLowering : public SubOpConversionPattern<mlir::subop::UnionOp> {
-   public:
-   using SubOpConversionPattern<mlir::subop::UnionOp>::SubOpConversionPattern;
-   LogicalResult matchAndRewrite(mlir::subop::UnionOp unionOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
-      if (unionOp->hasAttr("materialize")) {
-         auto& memberManager = getContext()->getLoadedDialect<mlir::subop::SubOperatorDialect>()->getMemberManager();
-         auto firstStream = rewriter.getTupleStream(unionOp.getStreams()[0]);
-         auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
-         auto loc = unionOp.getLoc();
-         std::vector<mlir::Attribute> types;
-         std::vector<mlir::Attribute> names;
-         std::vector<mlir::NamedAttribute> defMapping;
-         std::vector<mlir::NamedAttribute> refMapping;
-         mlir::relalg::ColumnSet commonColumns = mlir::relalg::ColumnSet::fromArrayAttr(firstStream.inFlightOp.getColumns());
-         for (auto stream : unionOp.getStreams()) {
-            auto currStream = rewriter.getTupleStream(stream);
-            commonColumns = commonColumns.intersect(mlir::relalg::ColumnSet::fromArrayAttr(currStream.inFlightOp.getColumns()));
-         }
-         for (auto m : firstStream.inFlightOp.getColumns()) {
-            auto* column = &m.cast<mlir::tuples::ColumnDefAttr>().getColumn();
-            if (commonColumns.contains(column)) {
-               auto name = memberManager.getUniqueMember("tmp_union");
-               types.push_back(mlir::TypeAttr::get(typeConverter->convertType(column->type)));
-               names.push_back(rewriter.getStringAttr(name));
-               defMapping.push_back(rewriter.getNamedAttr(name, m));
-               refMapping.push_back(rewriter.getNamedAttr(name, colManager.createRef(&m.cast<mlir::tuples::ColumnDefAttr>().getColumn())));
-            }
-         }
-         mlir::Value tmpBuffer;
-         rewriter.atStartOf(unionOp->getBlock(), [&](SubOpRewriter& rewriter) {
-            auto bufferType = mlir::subop::BufferType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr(names), rewriter.getArrayAttr(types)));
-            tmpBuffer = rewriter.create<mlir::subop::GenericCreateOp>(unionOp->getLoc(), bufferType);
-         });
-         for (auto stream : unionOp.getStreams()) {
-            rewriter.create<mlir::subop::MaterializeOp>(loc, stream, tmpBuffer, rewriter.getDictionaryAttr(refMapping));
-         }
-         auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
-         scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(rewriter.getContext(), tmpBuffer.getType().cast<mlir::subop::State>());
-         auto scan = rewriter.create<mlir::subop::ScanRefsOp>(loc, tmpBuffer, scanRefDef);
-         mlir::Value loaded = rewriter.create<mlir::subop::GatherOp>(loc, scan, colManager.createRef(&scanRefDef.getColumn()), rewriter.getDictionaryAttr(defMapping));
-         unionOp.getRes().replaceAllUsesWith(loaded);
-         rewriter.eraseOp(unionOp);
-         return mlir::success();
-      } else {
-         std::vector<mlir::Operation*> currentUsers(unionOp.getRes().getUsers().begin(), unionOp.getRes().getUsers().end());
-         for (auto* user : currentUsers) {
-            if (mlir::isa<mlir::tuples::ReturnOp>(user)) continue;
-
-            if (auto otherUnionOp = mlir::dyn_cast_or_null<mlir::subop::UnionOp>(user)) {
-               std::vector<mlir::Value> newStreams;
-               for (auto x : otherUnionOp.getStreams()) {
-                  if (x.getDefiningOp() == unionOp) {
-                     newStreams.insert(newStreams.end(), unionOp.getStreams().begin(), unionOp.getStreams().end());
-                  } else {
-                     newStreams.push_back(x);
-                  }
-               }
-               otherUnionOp->setOperands(newStreams);
-            } else {
-               mlir::OpBuilder::InsertionGuard guard(rewriter);
-               rewriter.setInsertionPointAfter(user);
-               std::vector<mlir::Value> streams;
-               for (auto s : unionOp.getStreams()) {
-                  mlir::IRMapping mapping;
-                  mapping.map(unionOp.getRes(), s);
-                  auto* cloned = rewriter.clone(user, mapping);
-                  if (cloned->getNumResults() > 0) {
-                     streams.push_back(cloned->getResult(0));
-                  }
-                  rewriter.insert(cloned);
-               }
-               rewriter.eraseOp(user);
-               if (user->getNumResults() > 0) {
-                  auto newUnion = rewriter.create<mlir::subop::UnionOp>(unionOp->getLoc(), streams);
-                  user->getResult(0).replaceAllUsesWith(newUnion);
-               }
-            }
-         }
-         rewriter.eraseOp(unionOp);
-      }
-
-      return mlir::success();
-   }
-};
 
 class FilterLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::FilterOp> {
    public:
@@ -4358,7 +4305,6 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
    rewriter.insertPattern<EntriesBetweenLowering>(typeConverter, ctxt);
    rewriter.insertPattern<InFlightLowering>(typeConverter, ctxt);
    rewriter.insertPattern<GenerateLowering>(typeConverter, ctxt);
-   rewriter.insertPattern<UnionLowering>(typeConverter, ctxt);
    rewriter.insertPattern<LoopLowering>(typeConverter, ctxt);
    rewriter.insertPattern<GetSingleValLowering>(typeConverter, ctxt);
    rewriter.insertPattern<SetTrackedCountLowering>(typeConverter, ctxt);
