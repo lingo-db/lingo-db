@@ -17,6 +17,7 @@ con2 = lingodb.create_in_memory()
 con2.add_table("df", pa.Table.from_pandas(df))
 print(con2.mlir("""module {
   func.func @main() {
+    %result = relalg.query (){
     %0 = relalg.basetable {table_identifier = "df"} columns: { col1 => @df::@col1({type = i64})}
     %1 = relalg.selection %0 (%arg0 : !tuples.tuple){
         %4 = db.constant(2) : i64
@@ -29,7 +30,9 @@ print(con2.mlir("""module {
       tuples.return %4 : i64
     }
     %3 = relalg.materialize %2 [@aggr0::@tmp_attr0] => ["count"] : !subop.local_table<[count: i64],["cnt"]>
-    subop.set_result 0 %3 :  !subop.local_table<[count: i64],["cnt"]>
+    relalg.query_return %3 : !subop.local_table<[count: i64],["cnt"]>
+    } -> !subop.local_table<[count: i64],["cnt"]>
+    subop.set_result 0 %result :  !subop.local_table<[count: i64],["cnt"]>
     return
   }
 }

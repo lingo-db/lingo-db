@@ -79,7 +79,7 @@ subop.reduce %stream @state::@ref [@t::@col] ["sum"] ([%curr],[%val]){
 //CHECK:    tuples.return
 //CHECK:  }
 
-%generated = subop.generate [@t::@c1({type=index})] {
+%generated, %streams = subop.generate [@t::@c1({type=index})] {
 	%c0 = arith.constant 0 : index
 	subop.generate_emit %c0 : index
 	tuples.return

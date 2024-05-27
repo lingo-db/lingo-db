@@ -1069,7 +1069,11 @@ ParseResult mlir::subop::GenerateOp::parse(::mlir::OpAsmParser& parser, ::mlir::
 
    Region* body = result.addRegion();
    if (parser.parseRegion(*body, {})) return failure();
+   //todo: count the number of emitters and add that many arguments
    result.addTypes(mlir::tuples::TupleStreamType::get(parser.getContext()));
+   body->walk([&](mlir::subop::GenerateEmitOp){
+      result.addTypes(mlir::tuples::TupleStreamType::get(parser.getContext()));
+   });
    if (parser.parseOptionalAttrDict(result.attributes))
       return ::mlir::failure();
    return success();

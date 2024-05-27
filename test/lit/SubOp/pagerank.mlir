@@ -8,13 +8,14 @@
 //CHECK: |                             3  |          0.042749999999999996  |                             1  |
 module{
     func.func @main(){
+        	%subop_result = subop.execution_group (){
         %numVertices = subop.create_simple_state !subop.simple_state<[numVertices: index]> initial: {
              %c0 = arith.constant 0  : index
             tuples.return %c0 : index
         }
         %edges = subop.create !subop.buffer<[edgeFrom : i32, edgeTo : i32]>
 
-        %edgeData = subop.generate [@c::@from({type=i32}),@c::@to({type=i32})] {
+        %edgeData, %streams:6 = subop.generate [@c::@from({type=i32}),@c::@to({type=i32})] {
             %c0 = db.constant(0) : i32
             %c1 = db.constant(1) : i32
             %c2 = db.constant(2) : i32
@@ -155,7 +156,10 @@ module{
                     %newRank = arith.addf %rank, %damped : f64
                     tuples.return %newRank : f64
                 }
-
+			%shouldContinue = subop.create_simple_state !subop.simple_state<[shouldContinue:i1]> initial: {
+				 %false = arith.constant 0 : i1
+				tuples.return %false : i1
+			}
             %20 = subop.scan_refs %ctr : !subop.simple_state<[ctr:i32]> @s::@ref({type=!subop.entry_ref<!subop.simple_state<[ctr:i32]>>})
             %21 = subop.gather %20 @s::@ref {ctr=> @s::@ctr({type=i32})}
             %s23 = subop.map %21 computes: [@m::@p1({type=i32}),@m::@continue({type=i1})] (%tpl: !tuples.tuple){
@@ -166,8 +170,10 @@ module{
                  %p1Lt5 = arith.cmpi slt, %p1, %c5 : i32
                  tuples.return %p1, %p1Lt5 : i32,i1
             }
+           	%s24 = subop.lookup %s23 %shouldContinue[] : !subop.simple_state<[shouldContinue:i1]> @ls::@ref({type=!subop.entry_ref<!subop.simple_state<[shouldContinue:i1]>>})
             subop.scatter %s23 @s::@ref {@m::@p1 => ctr}
-            subop.loop_continue (%s23[@m::@continue]) %nextWeights :!subop.array<[nextRank: f64,nextL : i32]>
+            subop.scatter %s24 @ls::@ref {@m::@continue => shouldContinue}
+            subop.loop_continue (%shouldContinue:  !subop.simple_state<[shouldContinue:i1]>["shouldContinue"]) %nextWeights :!subop.array<[nextRank: f64,nextL : i32]>
         }
         //todo: properly implement damping factor...
         //todo: backwards mapping
@@ -190,7 +196,9 @@ module{
          %result_table = subop.create !subop.result_table<[id0:i32, rank0 : f64, l0 :i32]>
          subop.materialize %fstream6 { @weights::@id => id0, @weights::@rank => rank0, @weights::@l => l0}, %result_table : !subop.result_table<[id0:i32,rank0 : f64, l0 :i32]>
         %local_table = subop.create_from ["id","rank","l"] %result_table : !subop.result_table<[id0:i32,rank0 : f64, l0 :i32]> -> !subop.local_table<[id0:i32,rank0 : f64, l0 :i32],["id","rank","l"]>
-        subop.set_result 0 %local_table  : !subop.local_table<[id0:i32,rank0 : f64, l0 :i32],["id","rank","l"]>
+        subop.execution_group_return %local_table : !subop.local_table<[id0:i32,rank0 : f64, l0 :i32],["id","rank","l"]>
+		} -> !subop.local_table<[id0:i32,rank0 : f64, l0 :i32],["id","rank","l"]>
+		subop.set_result 0 %subop_result  : !subop.local_table<[id0:i32,rank0 : f64, l0 :i32],["id","rank","l"]>
         return
     }
 }

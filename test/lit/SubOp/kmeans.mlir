@@ -7,13 +7,14 @@
 
 module{
     func.func @main(){
+            	%subop_result = subop.execution_group (){
         %initialCentroids = subop.create !subop.buffer<[initialClusterX : f32, initialClusterY : f32, initialClusterId : i32]>
         %numPoints = subop.create_simple_state !subop.simple_state<[numPoints: i64]> initial: {
             %c0 = db.constant(0) : i64
           tuples.return %c0 : i64
         }
         %points = subop.create !subop.buffer<[pointX : f32, pointY : f32]>
-        %pointsStream = subop.generate [@p::@x({type=f32}),@p::@y({type=f32})] {
+        %pointsStream, %streams:10 = subop.generate [@p::@x({type=f32}),@p::@y({type=f32})] {
           %x1 = db.constant(1) : f32
           %y1 = db.constant(1) : f32
           subop.generate_emit %x1, %y1 : f32,f32
@@ -57,7 +58,7 @@ module{
         %numPointsStream = subop.scan %numPoints : !subop.simple_state<[numPoints: i64]>  {numPoints => @numPoints::@value({type=i64})}
 
         %nested = subop.nested_map %numPointsStream [@numPoints::@value](%t, %n){
-          %randomSampleStream = subop.generate [@generated::@id({type=index}),@generated::@idx({type=index})] {
+          %randomSampleStream, %streams2 = subop.generate [@generated::@id({type=index}),@generated::@idx({type=index})] {
             %k = arith.constant 3 : index
             %c0 = arith.constant 0 : index
             %c064 = arith.constant 0 : i64
@@ -195,14 +196,15 @@ module{
                     %new_has_changed = arith.ori %notEq, %has_changed : i1
                     tuples.return %new_has_changed : i1
                   }
-                  %changed_stream = subop.scan %changed  :  !subop.simple_state<[changed :i1]> {changed => @s::@changed({type=i1})}
-                 subop.loop_continue (%changed_stream [@s::@changed]) %nextCentroids : !subop.buffer<[nextClusterX : f32, nextClusterY : f32, nextClusterId : i32]>
+                 subop.loop_continue (%changed : !subop.simple_state<[changed :i1]> ["changed"]) %nextCentroids : !subop.buffer<[nextClusterX : f32, nextClusterY : f32, nextClusterId : i32]>
         }
          %fstream1 = subop.scan %finalCentroids :  !subop.buffer<[clusterX : f32, clusterY : f32, clusterId : i32]>  { clusterX => @centroid::@x({type=f32}),clusterY => @centroid::@y({type=f32}), clusterId => @centroid::@id({type=i32})}
          %result_table = subop.create !subop.result_table<[id0 : i32, x0 : f32, y0 : f32]>
          subop.materialize %fstream1 {@centroid::@id => id0, @centroid::@x => x0, @centroid::@y => y0}, %result_table : !subop.result_table<[id0 : i32, x0 : f32, y0 : f32]>
         %local_table = subop.create_from ["id","x","y"] %result_table : !subop.result_table<[id0 : i32, x0 : f32, y0 : f32]> -> !subop.local_table<[id0 : i32, x0 : f32, y0 : f32],["id","x","y"]>
-        subop.set_result 0 %local_table : !subop.local_table<[id0 : i32, x0 : f32, y0 : f32],["id","x","y"]>
+        subop.execution_group_return %local_table : !subop.local_table<[id0 : i32, x0 : f32, y0 : f32],["id","x","y"]>
+        } -> !subop.local_table<[id0 : i32, x0 : f32, y0 : f32],["id","x","y"]>
+        subop.set_result 0 %subop_result : !subop.local_table<[id0 : i32, x0 : f32, y0 : f32],["id","x","y"]>
         return
     }
 }

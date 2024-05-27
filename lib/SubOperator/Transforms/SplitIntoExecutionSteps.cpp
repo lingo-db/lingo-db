@@ -3,6 +3,7 @@
 #include "mlir/Dialect/SubOperator/Transforms/Passes.h"
 #include "mlir/Dialect/SubOperator/Transforms/SubOpDependencyAnalysis.h"
 #include "mlir/IR/BuiltinOps.h"
+#include "mlir/IR/IRMapping.h"
 #include <queue>
 namespace {
 class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps, mlir::OperationPass<mlir::ModuleOp>> {
@@ -11,17 +12,24 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
    virtual llvm::StringRef getArgument() const override { return "subop-split-into-steps"; }
 
    void splitNested(mlir::subop::ExecutionGroupOp executionGroupOp) {
-      executionGroupOp->walk([&](mlir::subop::ContainsNestedSubOps containsNestedSubOps) {
+      std::vector<mlir::subop::ContainsNestedSubOps> opsWithNesting;
+      executionGroupOp->walk<mlir::WalkOrder::PreOrder>([&](mlir::subop::ContainsNestedSubOps containsNestedSubOps) {
+         opsWithNesting.push_back(containsNestedSubOps);
+      });
+      for (auto containsNestedSubOps : opsWithNesting) {
          std::unordered_map<mlir::Operation*, std::vector<mlir::Operation*>> steps;
          std::unordered_map<mlir::Operation*, mlir::Operation*> opToStep;
          for (mlir::Operation& op : *containsNestedSubOps.getBody()) {
             if (&op == containsNestedSubOps.getBody()->getTerminator()) {
                continue;
             }
+            if (mlir::isa<mlir::subop::GetLocal>(op)) {
+               continue;
+            }
             mlir::Operation* beforeInStream = nullptr;
             for (auto operand : op.getOperands()) {
                if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
-                  if (auto producer = operand.getDefiningOp()) {
+                  if (auto* producer = operand.getDefiningOp()) {
                      assert(!beforeInStream);
                      beforeInStream = producer;
                   }
@@ -38,8 +46,10 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
          }
          // Step 2: collect required/produced state for each step
          // -> also deal with GetLocal operations (that do belong to the same step that accesses the state)
-         std::unordered_map<mlir::Operation*, std::vector<mlir::Value>> requiredState;
+         std::unordered_map<mlir::Operation*, std::vector<std::tuple<mlir::Value, mlir::Value, bool>>> requiredState;
          std::unordered_map<mlir::Operation*, std::vector<mlir::Value>> producedState;
+         std::unordered_set<mlir::Operation*> getLocals;
+
          enum Kind {
             READ,
             WRITE
@@ -64,16 +74,21 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
                      }
                   }
                   for (auto operand : nestedOp->getOperands()) {
-                     auto parentOp = operand.getDefiningOp() ? operand.getDefiningOp() : mlir::cast<mlir::BlockArgument>(operand).getOwner()->getParentOp();
-                     if (parentOp->isProperAncestor(op)) {
-                        if (auto getLocal = mlir::dyn_cast_or_null<mlir::subop::GetLocal>(operand.getDefiningOp())) {
-                           requiredState[step.first].push_back(getLocal.getThreadLocal());
-                           steps[step.first].push_back(getLocal.getOperation());
-                        } else {
+                     if (auto getLocal = mlir::dyn_cast_or_null<mlir::subop::GetLocal>(operand.getDefiningOp())) {
+                        auto* parentOp = getLocal.getThreadLocal().getDefiningOp() ? getLocal.getThreadLocal().getDefiningOp() : mlir::cast<mlir::BlockArgument>(getLocal.getThreadLocal()).getOwner()->getParentOp();
+                        if (parentOp->isProperAncestor(op) || (getLocal.getThreadLocal().getDefiningOp() && getLocal.getThreadLocal().getDefiningOp()->getBlock() == op->getBlock())) {
+                           requiredState[step.first].push_back({getLocal.getThreadLocal(), getLocal.getRes(), true});
+                           //steps[step.first].push_back(getLocal.getOperation());
+                           getLocals.insert(getLocal);
+                        }
+                     } else {
+                        auto* parentOp = operand.getDefiningOp() ? operand.getDefiningOp() : mlir::cast<mlir::BlockArgument>(operand).getOwner()->getParentOp();
+
+                        if (parentOp->isProperAncestor(op) || (operand.getDefiningOp() && operand.getDefiningOp()->getBlock() == op->getBlock())) {
                            if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
                               continue;
                            }
-                           requiredState[step.first].push_back(operand);
+                           requiredState[step.first].push_back({operand, operand, false});
                         }
                      }
                   }
@@ -83,9 +98,9 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
          std::unordered_map<mlir::Operation*, std::unordered_set<mlir::Operation*>> dependencies;
          for (auto& [step, vals] : requiredState) {
             for (auto val : vals) {
-               if (auto producer = val.getDefiningOp()) {
+               if (auto* producer = std::get<0>(val).getDefiningOp()) {
                   if (producer->getBlock() == step->getBlock()) {
-                     auto producerStep = opToStep[producer];
+                     auto* producerStep = opToStep[producer];
                      if (producerStep != step) {
                         dependencies[step].insert(producerStep);
                      }
@@ -98,15 +113,13 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
          for (auto [member, ops] : memberUsage) {
             for (size_t i = 0; i < ops.size(); i++) {
                for (size_t j = i + 1; j < ops.size(); j++) {
-                  auto op1 = std::get<0>(ops[i]);
-                  auto op2 = std::get<0>(ops[j]);
-                  auto pipelineOp1 = std::get<1>(ops[i]);
-                  auto pipelineOp2 = std::get<1>(ops[j]);
+                  auto* pipelineOp1 = std::get<1>(ops[i]);
+                  auto* pipelineOp2 = std::get<1>(ops[j]);
                   auto kind1 = std::get<2>(ops[i]);
                   auto kind2 = std::get<2>(ops[j]);
                   auto addConflict = [&]() {
-                     auto step1 = opToStep[pipelineOp1];
-                     auto step2 = opToStep[pipelineOp2];
+                     auto* step1 = opToStep[pipelineOp1];
+                     auto* step2 = opToStep[pipelineOp2];
                      assert(step1);
                      assert(step2);
                      if (step1 == step2) {
@@ -176,26 +189,26 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
             llvm::SmallVector<bool> threadLocal;
             auto* block = new mlir::Block;
 
-            for (auto required : requiredState[currRoot]) {
+            for (auto [required, local, isThreadLocal] : requiredState[currRoot]) {
                if (stateMapping.count(required) == 0) {
                   nestedExecutionOperands.push_back(required);
                   auto nestedExecutionBlockArg = nestedExecutionBlock->addArgument(required.getType(), required.getLoc());
                   inputs.push_back(nestedExecutionBlockArg);
-                  blockArgs.push_back(block->addArgument(required.getType(), required.getLoc()));
-                  threadLocal.push_back(false);
                } else {
                   assert(stateMapping.count(required));
                   inputs.push_back(stateMapping[required]);
-                  blockArgs.push_back(block->addArgument(required.getType(), required.getLoc()));
-                  threadLocal.push_back(false);
                }
+               blockArgs.push_back(block->addArgument(local.getType(), local.getLoc()));
+               threadLocal.push_back(isThreadLocal);
             }
             mlir::OpBuilder builder(&getContext());
             builder.setInsertionPointToStart(block);
             for (auto* op : steps[currRoot]) {
                op->remove();
                for (auto [o, n] : llvm::zip(requiredState[currRoot], blockArgs)) {
-                  o.replaceUsesWithIf(n, [&](mlir::OpOperand& operand) {
+                  auto [required, local, isThreadLocal] = o;
+
+                  local.replaceUsesWithIf(n, [&](mlir::OpOperand& operand) {
                      return op->isAncestor(operand.getOwner());
                   });
                }
@@ -221,18 +234,33 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
                llvm::dbgs() << "-----------------------------------------------\n";
             }
          }
-         b.setInsertionPoint(containsNestedSubOps.getBody()->getTerminator());
-         auto nestedExecutionGroup = b.create<mlir::subop::NestedExecutionGroupOp>(containsNestedSubOps.getLoc(), mlir::TypeRange{}, nestedExecutionOperands);
+         auto* terminator = containsNestedSubOps.getBody()->getTerminator();
+         b.setInsertionPoint(terminator);
+         std::vector<mlir::Value> toReturn;
+         std::vector<mlir::Value> toMap;
+         std::vector<mlir::Type> toReturnTypes;
+         for (auto operand : terminator->getOperands()) {
+            if (stateMapping.count(operand)) {
+               toReturn.push_back(stateMapping[operand]);
+               toReturnTypes.push_back(operand.getType());
+               toMap.push_back(operand);
+            }
+         }
+         returnOp->setOperands(toReturn);
+         auto nestedExecutionGroup = b.create<mlir::subop::NestedExecutionGroupOp>(containsNestedSubOps.getLoc(), toReturnTypes, nestedExecutionOperands);
          nestedExecutionGroup.getSubOps().getBlocks().clear();
          nestedExecutionGroup.getSubOps().push_back(nestedExecutionBlock);
          b.setInsertionPointToStart(nestedExecutionBlock);
-         /*auto returnOp = mlir::cast<mlir::subop::ExecutionGroupReturnOp>(executionGroup.getSubOps().front().getTerminator());
-         std::vector<mlir::Value> returnValues;
-         for (auto result : returnOp.getInputs()) {
-            returnValues.push_back(stateMapping[result]);
+         for (auto [from, to] : llvm::zip(toMap, nestedExecutionGroup.getResults())) {
+            from.replaceUsesWithIf(to, [&](mlir::OpOperand& operand) {
+               return terminator == operand.getOwner();
+            });
          }
-         returnOp->setOperands(returnValues);*/
-      });
+
+         for (auto* getLocal : getLocals) {
+            getLocal->erase();
+         }
+      }
    }
    void runOnOperation() override {
       // Step 1: split into different streams
@@ -251,7 +279,7 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
             mlir::Operation* beforeInStream = nullptr;
             for (auto operand : op.getOperands()) {
                if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
-                  if (auto producer = operand.getDefiningOp()) {
+                  if (auto* producer = operand.getDefiningOp()) {
                      assert(!beforeInStream);
                      beforeInStream = producer;
                   }
@@ -295,8 +323,9 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
                      }
                   }
                   for (auto operand : nestedOp->getOperands()) {
-                     if (auto producer = operand.getDefiningOp()) {
-                        if (auto getLocal = mlir::dyn_cast_or_null<mlir::subop::GetLocal>(producer)) {
+                     //todo:: refine
+                     if (auto* producer = operand.getDefiningOp()) {
+                        if (auto getLocal = mlir::dyn_cast_or_null<mlir::subop::GetLocal>(operand.getDefiningOp())) {
                            if (getLocal.getThreadLocal().getDefiningOp() && getLocal.getThreadLocal().getDefiningOp()->getBlock() == op->getBlock()) {
                               requiredState[step.first].push_back({getLocal.getThreadLocal(), getLocal.getRes(), true});
                               //steps[step.first].push_back(getLocal.getOperation());
@@ -318,9 +347,9 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
          std::unordered_map<mlir::Operation*, std::unordered_set<mlir::Operation*>> dependencies;
          for (auto& [step, vals] : requiredState) {
             for (auto val : vals) {
-               if (auto producer = std::get<0>(val).getDefiningOp()) {
+               if (auto* producer = std::get<0>(val).getDefiningOp()) {
                   if (producer->getBlock() == step->getBlock()) {
-                     auto producerStep = opToStep[producer];
+                     auto* producerStep = opToStep[producer];
                      if (producerStep != step) {
                         dependencies[step].insert(producerStep);
                      }
@@ -333,15 +362,13 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
          for (auto [member, ops] : memberUsage) {
             for (size_t i = 0; i < ops.size(); i++) {
                for (size_t j = i + 1; j < ops.size(); j++) {
-                  auto op1 = std::get<0>(ops[i]);
-                  auto op2 = std::get<0>(ops[j]);
-                  auto pipelineOp1 = std::get<1>(ops[i]);
-                  auto pipelineOp2 = std::get<1>(ops[j]);
+                  auto* pipelineOp1 = std::get<1>(ops[i]);
+                  auto* pipelineOp2 = std::get<1>(ops[j]);
                   auto kind1 = std::get<2>(ops[i]);
                   auto kind2 = std::get<2>(ops[j]);
                   auto addConflict = [&]() {
-                     auto step1 = opToStep[pipelineOp1];
-                     auto step2 = opToStep[pipelineOp2];
+                     auto* step1 = opToStep[pipelineOp1];
+                     auto* step2 = opToStep[pipelineOp2];
                      assert(step1);
                      assert(step2);
                      if (step1 == step2) {
@@ -362,26 +389,6 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
                }
             }
          }
-         /*
-         for (auto [a, b] : dependencies) {
-            a->dump();
-            llvm::dbgs() << "depends on:\n";
-            for (auto c : b) {
-               c->dump();
-            }
-            llvm::dbgs() << "-----------------------------------------------\n";
-         }
-          for (auto [member, ops] : memberUsage) {
-           llvm::dbgs() << "member: " << member << "\n";
-           for (auto [op, pipelineOp, kind] : ops) {
-              llvm::dbgs() << "op: ";
-              op.dump();
-              llvm::dbgs() << "pipelineOp: ";
-              pipelineOp->dump();
-              llvm::dbgs() << "kind: " << (kind == READ ? "READ" : "WRITE") << "\n";
-           }
-}
-          */
 
          // Step 4: create ExecutionStepOps in correct order and handle states
          std::unordered_map<mlir::Operation*, size_t> dependCount;
@@ -466,7 +473,7 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
             returnValues.push_back(stateMapping[result]);
          }
          returnOp->setOperands(returnValues);
-         for (auto getLocal : getLocals) {
+         for (auto* getLocal : getLocals) {
             getLocal->erase();
          }
          splitNested(executionGroup);

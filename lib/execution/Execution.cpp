@@ -89,6 +89,7 @@ class SubOpLoweringStep : public LoweringStep {
       auto startLowerSubOp = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerSubOpPm(moduleOp->getContext());
       lowerSubOpPm.enableVerifier(verify);
+      //lowerSubOpPm.enableIRPrinting();
       std::unordered_set<std::string> enabledPasses = {"GlobalOpt", "ReuseLocal", "Specialize", "PullGatherUp", "Compression"};
       if (const char* mode = std::getenv("LINGODB_SUBOP_OPTS")) {
          enabledPasses.clear();

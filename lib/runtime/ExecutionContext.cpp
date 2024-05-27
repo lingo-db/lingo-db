@@ -5,6 +5,9 @@ void runtime::ExecutionContext::setResult(uint32_t id, uint8_t* ptr) {
    states.erase(ptr);
    results[id] = ptr;
 }
+void runtime::ExecutionContext::clearResult(uint32_t id){
+   results.erase(id);
+}
 
 void runtime::ExecutionContext::setTupleCount(uint32_t id, int64_t tupleCount) {
    tupleCounts[id] = tupleCount;

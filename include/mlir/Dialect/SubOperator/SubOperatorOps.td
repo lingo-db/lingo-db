@@ -428,7 +428,7 @@ def ScanRefsOp : SubOperator_Op<"scan_refs", [Pure,SubOperator,ReferenceProducer
 def GenerateOp : SubOperator_Op<"generate",[Pure,SubOperator]> {
     let summary = "generate tuples using imperative code";
     let arguments = (ins ArrayAttr:$generated_columns);
-    let results = (outs TupleStream : $res);
+    let results = (outs TupleStream : $res, Variadic<TupleStream>:$streams);
     let regions = (region SizedRegion<1>:$region);
     let hasCustomAssemblyFormat = 1;
 }
@@ -763,20 +763,22 @@ def CombineTupleOp : SubOperator_Op<"combine_tuple", [Pure,SubOperator]> {
 // Control-Flow
 //===----------------------------------------------------------------------===//
 
-def LoopOp : SubOperator_Op<"loop",[SubOperator]> {
+def LoopOp : SubOperator_Op<"loop",[SubOperator,ContainsNestedSubOps]> {
   let summary = "loop";
-  let regions = (region SizedRegion<1>:$body);
+  let regions = (region SizedRegion<1>:$bodyRegion);
   let arguments = (ins Variadic<AnyType>: $args);
   let results = (outs Variadic<AnyType>:$res);
   let hasCustomAssemblyFormat = 1;
   let extraClassDeclaration = [{
     std::vector<std::string> getWrittenMembers();
     std::vector<std::string> getReadMembers();
+            mlir::Block* getBody(){ return &getRegion().front();}
+
   }];
 }
 def LoopContinueOp : SubOperator_Op<"loop_continue",[Terminator]> {
-    let arguments = (ins TupleStream:$cond_stream, ColumnRefAttr: $cond_column, Variadic<AnyType>:$values);
-    let assemblyFormat = [{ `(` $cond_stream `[` custom<CustRef>($cond_column) `]` `)` ($values^ `:` type($values))?  attr-dict }];
+    let arguments = (ins AnyType:$cond_state, StrAttr: $cond_member, Variadic<AnyType>:$values);
+    let assemblyFormat = [{ `(` $cond_state `:` type($cond_state) `[` $cond_member `]` `)` ($values^ `:` type($values))?  attr-dict }];
 }
 
 def SetTrackedCountOp : SubOperator_Op<"set_tracked_count",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {

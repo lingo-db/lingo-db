@@ -380,7 +380,6 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
             createOp->erase();
          }
       }
-      getOperation()->dump();
    }
 };
 } // end anonymous namespace

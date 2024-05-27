@@ -405,8 +405,11 @@ class ConstRelationLowering : public OpConversionPattern<mlir::relalg::ConstRela
    using OpConversionPattern<mlir::relalg::ConstRelationOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::relalg::ConstRelationOp constRelationOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = constRelationOp->getLoc();
-
-      auto generateOp = rewriter.replaceOpWithNewOp<mlir::subop::GenerateOp>(constRelationOp, mlir::tuples::TupleStreamType::get(rewriter.getContext()), constRelationOp.getColumns());
+      std::vector<mlir::Type> returnTypes{mlir::tuples::TupleStreamType::get(rewriter.getContext())};
+      for (auto i=0ull;i< constRelationOp.getValues().size();i++) {
+         returnTypes.push_back(mlir::tuples::TupleStreamType::get(rewriter.getContext()));
+      }
+      auto generateOp = rewriter.create<mlir::subop::GenerateOp>(constRelationOp.getLoc(), returnTypes, constRelationOp.getColumns());
       {
          auto* generateBlock = new Block;
          mlir::OpBuilder::InsertionGuard guard2(rewriter);
@@ -435,6 +438,7 @@ class ConstRelationLowering : public OpConversionPattern<mlir::relalg::ConstRela
          }
          rewriter.create<mlir::tuples::ReturnOp>(loc);
       }
+      rewriter.replaceOp(constRelationOp, generateOp.getRes());
       return success();
    }
 };
@@ -789,7 +793,7 @@ class CountingSetOperationLowering : public ConversionPattern {
          {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(b);
-            auto generateOp = rewriter.create<mlir::subop::GenerateOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), rewriter.getArrayAttr({}));
+            auto generateOp = rewriter.create<mlir::subop::GenerateOp>(loc, std::vector<mlir::Type>{mlir::tuples::TupleStreamType::get(rewriter.getContext()), mlir::tuples::TupleStreamType::get(rewriter.getContext())}, rewriter.getArrayAttr({}));
             {
                auto* generateBlock = new Block;
                mlir::OpBuilder::InsertionGuard guard2(rewriter);
@@ -2138,8 +2142,28 @@ class WindowLowering : public OpConversionPattern<mlir::relalg::WindowOp> {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(combineBlock);
             std::vector<mlir::Value> newStateValues;
-            auto scan = rewriter.create<mlir::subop::ScanOp>(loc, otherBuffer, helper.createStateColumnMapping());
-            rewriter.create<mlir::subop::MaterializeOp>(loc, scan.getRes(), currentBuffer, helper.createColumnstateMapping());
+            auto nestedExecutionGroup = rewriter.create<mlir::subop::NestedExecutionGroupOp>(loc, mlir::TypeRange{}, mlir::ValueRange{currentBuffer, otherBuffer});
+            auto *nestedBlock = new Block;
+            nestedExecutionGroup.getSubOps().push_back(nestedBlock);
+            auto leftGroup = nestedBlock->addArgument(currentBuffer.getType(), loc);
+            auto rightGroup = nestedBlock->addArgument(otherBuffer.getType(), loc);
+            {
+               mlir::OpBuilder::InsertionGuard guard(rewriter);
+               rewriter.setInsertionPointToStart(nestedBlock);
+               {
+                  mlir::OpBuilder::InsertionGuard guard(rewriter);
+                  auto step = rewriter.create<mlir::subop::ExecutionStepOp>(loc, mlir::TypeRange{}, mlir::ValueRange{leftGroup, rightGroup}, rewriter.getBoolArrayAttr({false, false}));
+                  auto *stepBlock = new Block;
+                  step.getRegion().push_back(stepBlock);
+                  rewriter.setInsertionPointToStart(stepBlock);
+                  auto leftStep = stepBlock->addArgument(leftGroup.getType(), loc);
+                  auto rightStep = stepBlock->addArgument(rightGroup.getType(), loc);
+                  auto scan = rewriter.create<mlir::subop::ScanOp>(loc, rightStep, helper.createStateColumnMapping());
+                  rewriter.create<mlir::subop::MaterializeOp>(loc, scan.getRes(), leftStep, helper.createColumnstateMapping());
+                  rewriter.create<mlir::subop::ExecutionStepReturnOp>(loc, mlir::ValueRange{});
+               }
+               rewriter.create<mlir::subop::NestedExecutionGroupReturnOp>(loc, mlir::ValueRange{});
+            }
             rewriter.create<mlir::tuples::ReturnOp>(loc, currentBuffer);
             reduceOp.getCombine().push_back(combineBlock);
          }
@@ -2682,7 +2706,7 @@ class QueryOpLowering : public OpConversionPattern<mlir::relalg::QueryOp> {
    using OpConversionPattern<mlir::relalg::QueryOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::relalg::QueryOp queryOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto executionGroup=rewriter.create<mlir::subop::ExecutionGroupOp>(queryOp->getLoc(), queryOp->getResultTypes(),adaptor.getInputs());
+      auto executionGroup = rewriter.create<mlir::subop::ExecutionGroupOp>(queryOp->getLoc(), queryOp->getResultTypes(), adaptor.getInputs());
       executionGroup.getSubOps().getBlocks().clear();
 
       rewriter.inlineRegionBefore(queryOp.getQueryOps(), executionGroup.getSubOps(), executionGroup.getSubOps().end());
@@ -2695,7 +2719,7 @@ class QueryReturnOpLowering : public OpConversionPattern<mlir::relalg::QueryRetu
    using OpConversionPattern<mlir::relalg::QueryReturnOp>::OpConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::relalg::QueryReturnOp queryReturnOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      rewriter.replaceOpWithNewOp<mlir::subop::ExecutionGroupReturnOp>(queryReturnOp,adaptor.getInputs());
+      rewriter.replaceOpWithNewOp<mlir::subop::ExecutionGroupReturnOp>(queryReturnOp, adaptor.getInputs());
 
       return mlir::success();
    }

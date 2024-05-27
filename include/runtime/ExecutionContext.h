@@ -46,6 +46,7 @@ class ExecutionContext {
       return tupleCounts;
    }
    void setResult(uint32_t id, uint8_t* ptr);
+   void clearResult(uint32_t id);
    void setTupleCount(uint32_t id, int64_t tupleCount);
    void registerState(const State& s) {
       states.insert({s.ptr, s});

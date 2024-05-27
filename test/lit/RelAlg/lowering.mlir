@@ -13,7 +13,7 @@
 %1 = relalg.renaming %0  renamed: [@renamed::@col2({type = !db.string})=[@t::@col1]]
 // -----
 //CHECK: module {
-//CHECK:   %{{.*}} = subop.generate[@t::@col1({type = !db.string})]{
+//CHECK:   %{{.*}}, %{{.*}} = subop.generate[@t::@col1({type = !db.string})]{
 //CHECK:     %{{.*}} = db.constant("A") : !db.string
 //CHECK:     subop.generate_emit %{{.*}} : !db.string
 //CHECK:     %{{.*}} = db.constant("B") : !db.string
@@ -24,23 +24,23 @@
 %0 = relalg.const_relation columns : [@t::@col1({type = !db.string})] values : [["A"],["B"]]
 %1 = relalg.projection all  [@t::@col1] %0
 // -----
-//CHECK: [[INITIAL:%.*]] = subop.generate
+//CHECK: [[INITIAL:%.*]], %{{.*}}:2 = subop.generate
 //CHECK: [[MAP:%.*]]  = subop.create !subop.map<[keyval$0 : !db.string], []>
-//CHECK: %2 = subop.lookup_or_insert [[INITIAL]][[MAP]] [@t::@col1] : !subop.map<[keyval$0 : !db.string], []> @lookup::@ref({type = !subop.lookup_entry_ref<!subop.map<[keyval$0 : !db.string], []>>}) eq: ([%arg0],[%arg1]) {
+//CHECK: %{{.*}} = subop.lookup_or_insert [[INITIAL]][[MAP]] [@t::@col1] : !subop.map<[keyval$0 : !db.string], []> @lookup::@ref({type = !subop.lookup_entry_ref<!subop.map<[keyval$0 : !db.string], []>>}) eq: ([%arg0],[%arg1]) {
 //CHECK:   %true = arith.constant true
-//CHECK:   %4 = db.compare isa %arg0 : !db.string, %arg1 : !db.string
-//CHECK:   %5 = arith.andi %true, %4 : i1
-//CHECK:   tuples.return %5 : i1
+//CHECK:   %{{.*}} = db.compare isa %arg0 : !db.string, %arg1 : !db.string
+//CHECK:   %{{.*}} = arith.andi %true, %{{.*}} : i1
+//CHECK:   tuples.return %{{.*}} : i1
 //CHECK: }initial: {
 //CHECK:   tuples.return
 //CHECK: }
-//CHECK: %3 = subop.scan [[MAP]] : !subop.map<[keyval$0 : !db.string], []> {keyval$0 => @t::@col1({type = !db.string})}
+//CHECK: %{{.*}} = subop.scan [[MAP]] : !subop.map<[keyval$0 : !db.string], []> {keyval$0 => @t::@col1({type = !db.string})}
 
 %0 = relalg.const_relation columns : [@t::@col1({type = !db.string})] values : [["A"],["B"]]
 %1 = relalg.projection distinct  [@t::@col1] %0
 // -----
-//CHECK: [[LEFT:%.*]] = subop.generate[@t::@col1({type = i64})]
-//CHECK: [[RIGHT:%.*]] = subop.generate[@t2::@col1({type = i64})]
+//CHECK: [[LEFT:%.*]], %{{.*}} = subop.generate[@t::@col1({type = i64})]
+//CHECK: [[RIGHT:%.*]], %{{.*}} = subop.generate[@t2::@col1({type = i64})]
 //CHECK: %{{.*}} = subop.create !subop.buffer
 //CHECK: subop.materialize [[LEFT]] {@t::@col1 => member$0}, %{{.*}} : !subop.buffer
 //CHECK: %{{.*}} = subop.nested_map [[RIGHT]] [] (%arg0) {
@@ -70,8 +70,8 @@
  }
  // -----
 //CHECK: module
- //CHECK: [[LEFT:%.*]] = subop.generate[@t::@col1({type = i64})]
- //CHECK: [[RIGHT:%.*]] = subop.generate[@t2::@col1({type = i64})]
+ //CHECK: [[LEFT:%.*]], %{{.*}} = subop.generate[@t::@col1({type = i64})]
+ //CHECK: [[RIGHT:%.*]], %{{.*}} = subop.generate[@t2::@col1({type = i64})]
  //CHECK: [[LEFTMAP:%.*]] = subop.map [[LEFT]]
  //CHECK: [[RIGHTMAP:%.*]] = subop.map [[RIGHT]]
  //CHECK: %{{.*}} = subop.union [[LEFTMAP]], [[RIGHTMAP]]
@@ -80,8 +80,8 @@
  %2 = relalg.union all %0, %1  mapping: {@setop::@col1({type = i64})=[@t::@col1,@t2::@col1]}
 // -----
 //CHECK: module
-//CHECK: [[LEFT:%.*]] = subop.generate[@t::@col1({type = i64})]
-//CHECK: [[RIGHT:%.*]] = subop.generate[@t2::@col1({type = i64})]
+//CHECK: [[LEFT:%.*]], %{{.*}} = subop.generate[@t::@col1({type = i64})]
+//CHECK: [[RIGHT:%.*]], %{{.*}} = subop.generate[@t2::@col1({type = i64})]
 //CHECK-DAG: [[MAP:%.*]] = subop.create !subop.map<[keyval$0 : i64], []>
 //CHECK-DAG: [[LEFTMAP:%.*]] = subop.map [[LEFT]]
 //CHECK-DAG: [[RIGHTMAP:%.*]] = subop.map [[RIGHT]]
@@ -92,8 +92,8 @@
 %1 = relalg.const_relation columns : [@t2::@col1({type = i64})] values : [[0],[1]]
 %2 = relalg.union distinct %0, %1  mapping: {@setop::@col1({type = i64})=[@t::@col1,@t2::@col1]}
 // -----
-//CHECK: [[LEFT:%.*]] = subop.generate[@t::@col1({type = i64})]
-//CHECK: [[RIGHT:%.*]] = subop.generate[@t2::@col1({type = i64})]
+//CHECK: [[LEFT:%.*]], %{{.*}} = subop.generate[@t::@col1({type = i64})]
+//CHECK: [[RIGHT:%.*]], %{{.*}} = subop.generate[@t2::@col1({type = i64})]
 //CHECK: %{{.*}} = subop.create !subop.buffer<[member$0 : i64]>
 //CHECK: subop.materialize [[RIGHT]] {@t2::@col1 => member$0}, %{{.*}} : !subop.buffer<[member$0 : i64]>
 //CHECK: %{{.*}} = subop.nested_map [[LEFT]] [] (%arg0) {
@@ -133,8 +133,8 @@
 	 tuples.return %10 : i1
  }
 // -----
-//CHECK: [[LEFT:%.*]] = subop.generate[@t::@col1({type = i64})]
-//CHECK: [[RIGHT:%.*]] = subop.generate[@t2::@col1({type = i64})]
+//CHECK: [[LEFT:%.*]], %{{.*}} = subop.generate[@t::@col1({type = i64})]
+//CHECK: [[RIGHT:%.*]], %{{.*}} = subop.generate[@t2::@col1({type = i64})]
 //CHECK: %{{.*}} = subop.create !subop.buffer<[member$0 : i64]>
 //CHECK: subop.materialize [[RIGHT]] {@t2::@col1 => member$0}, %{{.*}} : !subop.buffer<[member$0 : i64]>
 //CHECK: %{{.*}} = subop.nested_map [[LEFT]] [] (%arg0) {
@@ -175,8 +175,8 @@
 	 tuples.return %10 : i1
  }
 // -----
-//CHECK: [[LEFT:%.*]] = subop.generate[@t::@col1({type = i64})]
-//CHECK: [[RIGHT:%.*]] = subop.generate[@t2::@col1({type = i64})]
+//CHECK: [[LEFT:%.*]], %{{.*}} = subop.generate[@t::@col1({type = i64})]
+//CHECK: [[RIGHT:%.*]], %{{.*}} = subop.generate[@t2::@col1({type = i64})]
 //CHECK: %{{.*}} = subop.create !subop.multimap<[member$0 : i64], []>
 //CHECK: subop.insert [[LEFT]]%{{.*}}  : !subop.multimap<[member$0 : i64], []> {@t::@col1 => member$0} eq: ([%arg0],[%arg1]) {
 //CHECK:   %{{.*}} = db.compare eq %arg0 : i64, %arg1 : i64
@@ -212,8 +212,8 @@
  } attributes {useHashJoin, leftHash = [#tuples.columnref<@t::@col1>], rightHash = [#tuples.columnref<@t2::@col1>], nullsEqual = [0 : i8]}
 
 // -----
-//CHECK: [[LEFT:%.*]] = subop.generate[@t::@col1({type = i64})]
-//CHECK: [[RIGHT:%.*]] = subop.generate[@t2::@col1({type = i64})]
+//CHECK: [[LEFT:%.*]], %{{.*}} = subop.generate[@t::@col1({type = i64})]
+//CHECK: [[RIGHT:%.*]], %{{.*}} = subop.generate[@t2::@col1({type = i64})]
 //CHECK: %{{.*}} = subop.create !subop.multimap<[member$0 : i64], []>
 //CHECK: subop.insert [[RIGHT]]%{{.*}}  : !subop.multimap<[member$0 : i64], []> {@t2::@col1 => member$0} eq: ([%arg0],[%arg1]) {
 //CHECK:   %{{.*}} = db.compare eq %arg0 : i64, %arg1 : i64
@@ -261,8 +261,8 @@
  } attributes {useHashJoin, leftHash = [#tuples.columnref<@t::@col1>], rightHash = [#tuples.columnref<@t2::@col1>], nullsEqual = [0 : i8]}
 
 // -----
-//CHECK: [[LEFT:%.*]] = subop.generate[@t::@col1({type = i64})]
-//CHECK: [[RIGHT:%.*]] = subop.generate[@t2::@col1({type = i64})]
+//CHECK: [[LEFT:%.*]], %{{.*}} = subop.generate[@t::@col1({type = i64})]
+//CHECK: [[RIGHT:%.*]], %{{.*}} = subop.generate[@t2::@col1({type = i64})]
 //CHECK: %{{.*}} = subop.create !subop.multimap<[member$0 : i64], []>
 //CHECK: subop.insert [[RIGHT]]%{{.*}}  : !subop.multimap<[member$0 : i64], []> {@t2::@col1 => member$0} eq: ([%arg0],[%arg1]) {
 //CHECK:   %{{.*}} = db.compare eq %arg0 : i64, %arg1 : i64
@@ -310,8 +310,8 @@
  } attributes {useHashJoin, leftHash = [#tuples.columnref<@t::@col1>], rightHash = [#tuples.columnref<@t2::@col1>], nullsEqual = [0 : i8]}
 
 // -----
-//CHECK: [[RIGHT:%.*]] = subop.generate[@t::@col1({type = i64})]
-//CHECK: [[LEFT:%.*]] = subop.generate[@t2::@col1({type = i64})]
+//CHECK: [[RIGHT:%.*]], %{{.*}} = subop.generate[@t::@col1({type = i64})]
+//CHECK: [[LEFT:%.*]], %{{.*}} = subop.generate[@t2::@col1({type = i64})]
 //CHECK: %{{.*}} = subop.create !subop.multimap<[member$0 : i64], [member$1 : i64, flag$0 : i1]>
 //CHECK: %{{.*}} = subop.map [[LEFT]] computes : [@materialized::@marker({type = i1})] (){
 //CHECK:   %{{.*}} = db.constant(false) : i1

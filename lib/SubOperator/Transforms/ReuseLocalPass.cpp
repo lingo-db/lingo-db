@@ -235,6 +235,9 @@ class AvoidDeadMaterialization : public mlir::RewritePattern {
       if (auto getLocal = mlir::dyn_cast_or_null<mlir::subop::GetLocal>(materializeOp.getState().getDefiningOp())) {
          return mlir::failure();
       }
+      if (!materializeOp.getState().getDefiningOp()) {
+         return mlir::failure();
+      }
       for (auto* user : materializeOp.getState().getUsers()) {
          if (user != op) {
             //other user of state => "probably" still useful

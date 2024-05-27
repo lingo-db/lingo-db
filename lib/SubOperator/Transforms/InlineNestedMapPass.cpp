@@ -22,11 +22,13 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
    virtual llvm::StringRef getArgument() const override { return "subop-nested-map-inline"; }
 
    void runOnOperation() override {
-      std::vector<mlir::subop::NestedMapOp> nestedMapOps;
+      std::queue<mlir::subop::NestedMapOp> nestedMapOps;
       getOperation()->walk([&](mlir::subop::NestedMapOp nestedMapOp) {
-         nestedMapOps.push_back(nestedMapOp);
+         nestedMapOps.push(nestedMapOp);
       });
-      for (auto nestedMap : nestedMapOps) {
+      while(!nestedMapOps.empty()) {
+         auto nestedMap = nestedMapOps.front();
+         nestedMapOps.pop();
          auto returnOp = mlir::dyn_cast<mlir::tuples::ReturnOp>(nestedMap.getRegion().front().getTerminator());
          if (!returnOp) {
             nestedMap.emitError("NestedMapOp must be terminated by a ReturnOp");
@@ -68,6 +70,9 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
                mlir::IRMapping mapping;
                mapping.map(currentUse.get(), v);
                auto* cloned = builder.clone(*op, mapping);
+               if(auto clonedNestedMap = mlir::dyn_cast<mlir::subop::NestedMapOp>(cloned)) {
+                  nestedMapOps.push(clonedNestedMap);
+               }
                opsToMove.push_back(cloned);
                for (auto& use : op->getUses()) {
                   if (use.get().getType().isa_and_nonnull<mlir::tuples::TupleStreamType>()) {
@@ -126,7 +131,7 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
             newParams.push_back(colRefAttr);
          }
          auto tuple = nestedMapOp.getBody()->getArgument(0);
-         for (auto user : tuple.getUsers()) {
+         for (auto *user : tuple.getUsers()) {
             if (auto combineOp = mlir::dyn_cast<mlir::subop::CombineTupleOp>(user)) {
                if (combineOp->getBlock() != nestedMapOp.getBody()) {
                   nestedMapOp.emitError("NestedMapOp: tuple parameter must only be used in the body block");
@@ -134,7 +139,7 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
                }
                std::unordered_set<mlir::tuples::Column*> availableColumns;
                std::function<void(mlir::Value)> computeAvailableColumns = [&](mlir::Value v) {
-                  if (auto defOp = v.getDefiningOp()) {
+                  if (auto *defOp = v.getDefiningOp()) {
                      auto createdOps = createdColumns.getCreatedColumns(defOp);
 
                      availableColumns.insert(createdOps.begin(), createdOps.end());
@@ -149,7 +154,7 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
                std::function<void(mlir::Operation*, std::unordered_set<mlir::tuples::Column*>)> addRequiredColumns = [&](mlir::Operation* op, std::unordered_set<mlir::tuples::Column*> availableColumns) {
                   auto created = createdColumns.getCreatedColumns(op);
                   availableColumns.insert(created.begin(), created.end());
-                  for (auto usedColumn : usedColumns.getUsedColumns(op)) {
+                  for (auto *usedColumn : usedColumns.getUsedColumns(op)) {
                      if (!availableColumns.contains(usedColumn)) {
                         requiredColumns.insert(usedColumn);
                      }
@@ -168,7 +173,7 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
                   b.setInsertionPointToStart(mapBlock);
                   auto& colManager = getContext().getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
                   std::vector<mlir::Value> mapOpReturnVals;
-                  for (auto r : requiredColumns) {
+                  for (auto *r : requiredColumns) {
                      auto colRefAttr = colManager.createRef(r);
                      auto colDefAttr = colManager.createDef(r);
 
@@ -195,7 +200,7 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
          nestedMapOp.setParametersAttr(mlir::ArrayAttr::get(&getContext(), newParams));
 
       });
-      for (auto op : opsToErase) {
+      for (auto *op : opsToErase) {
          op->erase();
       }
    }
