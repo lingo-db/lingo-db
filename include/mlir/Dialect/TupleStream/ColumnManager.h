@@ -8,6 +8,10 @@
 namespace mlir::tuples {
 class ColumnManager {
    public:
+   ColumnManager() = default;
+   ColumnManager(const ColumnManager&) = delete;
+   ColumnManager& operator=(const ColumnManager&) = delete;
+
    void setContext(MLIRContext* context);
    std::shared_ptr<Column> get(StringRef scope, StringRef attribute);
    ColumnDefAttr createDef(SymbolRefAttr name, Attribute fromExisting = Attribute());

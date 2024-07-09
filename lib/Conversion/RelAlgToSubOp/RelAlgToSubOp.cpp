@@ -847,22 +847,86 @@ static std::pair<mlir::Value, std::string> createCounterState(mlir::OpBuilder& r
 
 static mlir::Value translateNLJ(mlir::Value left, mlir::Value right, mlir::relalg::ColumnSet columns, mlir::ConversionPatternRewriter& rewriter, mlir::Location loc, std::function<mlir::Value(mlir::Value, mlir::ConversionPatternRewriter& rewriter)> fn) {
    MaterializationHelper helper(columns, rewriter.getContext());
-   auto vectorType = mlir::subop::BufferType::get(rewriter.getContext(), helper.createStateMembersAttr());
-   mlir::Value vector = rewriter.create<mlir::subop::GenericCreateOp>(loc, vectorType);
-   rewriter.create<mlir::subop::MaterializeOp>(loc, right, vector, helper.createColumnstateMapping());
-   auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), left, rewriter.getArrayAttr({}));
-   auto* b = new Block;
-   mlir::Value tuple = b->addArgument(mlir::tuples::TupleType::get(rewriter.getContext()), loc);
-   nestedMapOp.getRegion().push_back(b);
-   {
-      mlir::OpBuilder::InsertionGuard guard(rewriter);
-      rewriter.setInsertionPointToStart(b);
-      auto [markerState, markerName] = createMarkerState(rewriter, loc);
-      mlir::Value scan = rewriter.create<mlir::subop::ScanOp>(loc, vector, helper.createStateColumnMapping());
-      mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, scan, tuple);
-      rewriter.create<mlir::tuples::ReturnOp>(loc, fn(combined, rewriter));
+   if(columns.empty()){
+      auto [counterState, counterName] = createCounterState(rewriter, loc);
+      auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
+      // for right side: increment counter:
+      auto referenceDefAttr = colManager.createDef(colManager.getUniqueScope("lookup"), "ref");
+      referenceDefAttr.getColumn().type = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), counterState.getType().cast<mlir::subop::LookupAbleState>());
+      auto lookup = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), right, counterState, rewriter.getArrayAttr({}), referenceDefAttr);
+
+      // Create reduce operation that increases counter for each seen tuple
+      auto reduceOp = rewriter.create<mlir::subop::ReduceOp>(loc, lookup, colManager.createRef(&referenceDefAttr.getColumn()), rewriter.getArrayAttr({}), rewriter.getArrayAttr({rewriter.getStringAttr(counterName)}));
+      mlir::Block* reduceBlock = new Block;
+      auto counter = reduceBlock->addArgument(rewriter.getI64Type(), loc);
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(reduceBlock);
+         auto one = rewriter.create<mlir::arith::ConstantOp>(loc, rewriter.getI64Type(), rewriter.getI64IntegerAttr(1));
+         mlir::Value updatedCounter = rewriter.create<mlir::arith::AddIOp>(loc, counter, one);
+         rewriter.create<mlir::tuples::ReturnOp>(loc, updatedCounter);
+      }
+      reduceOp.getRegion().push_back(reduceBlock);
+
+
+
+
+      auto referenceDefAttr2 = colManager.createDef(colManager.getUniqueScope("lookup"), "ref");
+      auto counterValDefAttr = colManager.createDef(colManager.getUniqueScope("counter"), "val");
+      counterValDefAttr.getColumn().type = rewriter.getI64Type();
+      referenceDefAttr2.getColumn().type = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), counterState.getType().cast<mlir::subop::LookupAbleState>());
+      auto lookup2 = rewriter.create<mlir::subop::LookupOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), left, counterState, rewriter.getArrayAttr({}), referenceDefAttr2);
+      auto gathered = rewriter.create<mlir::subop::GatherOp>(loc, lookup2.getRes(),  colManager.createRef(&referenceDefAttr2.getColumn()), rewriter.getDictionaryAttr(rewriter.getNamedAttr(counterName, counterValDefAttr)));
+      auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), gathered.getRes(), rewriter.getArrayAttr({colManager.createRef(&counterValDefAttr.getColumn())}));
+
+      // for left side: loop
+      auto* b = new Block;
+      mlir::Value tuple = b->addArgument(mlir::tuples::TupleType::get(rewriter.getContext()), loc);
+      mlir::Value counterVal=b->addArgument(rewriter.getI64Type(), loc);
+      nestedMapOp.getRegion().push_back(b);
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(b);
+         auto [markerState, markerName] = createMarkerState(rewriter, loc);
+         auto generateOp = rewriter.create<mlir::subop::GenerateOp>(loc, std::vector<mlir::Type>{mlir::tuples::TupleStreamType::get(rewriter.getContext()), mlir::tuples::TupleStreamType::get(rewriter.getContext())}, rewriter.getArrayAttr({}));
+         {
+            auto* generateBlock = new Block;
+            mlir::OpBuilder::InsertionGuard guard2(rewriter);
+            rewriter.setInsertionPointToStart(generateBlock);
+            generateOp.getRegion().push_back(generateBlock);
+            counterVal= rewriter.create<mlir::arith::IndexCastOp>(loc, rewriter.getIndexType(), counterVal);
+            mlir::Value zeroIdx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 0);
+            mlir::Value oneIdx = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
+            rewriter.create<mlir::scf::ForOp>(loc, zeroIdx, counterVal, oneIdx, mlir::ValueRange{}, [&](mlir::OpBuilder& b, mlir::Location loc, mlir::Value idx, mlir::ValueRange vr) {
+               b.create<mlir::subop::GenerateEmitOp>(loc, mlir::ValueRange{});
+               b.create<mlir::scf::YieldOp>(loc);
+            });
+            rewriter.create<mlir::tuples::ReturnOp>(loc);
+         }
+
+
+         mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, generateOp.getRes(), tuple);
+         rewriter.create<mlir::tuples::ReturnOp>(loc, fn(combined, rewriter));
+      }
+      return nestedMapOp.getRes();
+   }else {
+      auto vectorType = mlir::subop::BufferType::get(rewriter.getContext(), helper.createStateMembersAttr());
+      mlir::Value vector = rewriter.create<mlir::subop::GenericCreateOp>(loc, vectorType);
+      rewriter.create<mlir::subop::MaterializeOp>(loc, right, vector, helper.createColumnstateMapping());
+      auto nestedMapOp = rewriter.create<mlir::subop::NestedMapOp>(loc, mlir::tuples::TupleStreamType::get(rewriter.getContext()), left, rewriter.getArrayAttr({}));
+      auto* b = new Block;
+      mlir::Value tuple = b->addArgument(mlir::tuples::TupleType::get(rewriter.getContext()), loc);
+      nestedMapOp.getRegion().push_back(b);
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(b);
+         auto [markerState, markerName] = createMarkerState(rewriter, loc);
+         mlir::Value scan = rewriter.create<mlir::subop::ScanOp>(loc, vector, helper.createStateColumnMapping());
+         mlir::Value combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, scan, tuple);
+         rewriter.create<mlir::tuples::ReturnOp>(loc, fn(combined, rewriter));
+      }
+      return nestedMapOp.getRes();
    }
-   return nestedMapOp.getRes();
 }
 mlir::Block* createEqFn(mlir::ConversionPatternRewriter& rewriter, mlir::ArrayAttr leftColumns, mlir::ArrayAttr rightColumns, mlir::ArrayAttr nullsEqual, mlir::Location loc) {
    mlir::OpBuilder::InsertionGuard guard(rewriter);
