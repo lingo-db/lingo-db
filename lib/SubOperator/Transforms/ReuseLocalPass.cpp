@@ -232,9 +232,6 @@ class AvoidDeadMaterialization : public mlir::RewritePattern {
       : RewritePattern(mlir::subop::MaterializeOp::getOperationName(), 1, context) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto materializeOp = mlir::cast<mlir::subop::MaterializeOp>(op);
-      if (auto getLocal = mlir::dyn_cast_or_null<mlir::subop::GetLocal>(materializeOp.getState().getDefiningOp())) {
-         return mlir::failure();
-      }
       if (!materializeOp.getState().getDefiningOp()) {
          return mlir::failure();
       }

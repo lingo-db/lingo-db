@@ -16,6 +16,7 @@ std::unique_ptr<Pass> createSpecializeParallelPass();
 std::unique_ptr<Pass> createSplitIntoExecutionStepsPass();
 std::unique_ptr<Pass> createInlineNestedMapPass();
 std::unique_ptr<Pass> createFinalizePass();
+std::unique_ptr<Pass> createPrepareLoweringPass();
 void registerSubOpTransformations();
 } // end namespace subop
 } // end namespace mlir

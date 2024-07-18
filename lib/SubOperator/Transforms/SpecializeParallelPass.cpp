@@ -35,26 +35,67 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
       if (!mapType) {
          return mlir::failure();
       }
+      auto resIdx = threadLocalParent.getRes().getUses().begin()->getOperandNumber();
+      auto producedState = threadLocalParent->getParentOfType<mlir::subop::ExecutionStepOp>().getResult(resIdx);
+
       std::vector<mlir::subop::LookupOrInsertOp> lookupOrInsertOps;
-      std::unordered_set<mlir::Operation*> getLocalOps;
       mlir::subop::MergeOp mergeOp;
-      for (auto* threadLocalUser : threadLocalParent->getUsers()) {
-         if (auto getLocal = mlir::dyn_cast<mlir::subop::GetLocal>(threadLocalUser)) {
-            getLocalOps.insert(getLocal.getOperation());
-            for (auto* localUser : getLocal->getUsers()) {
-               if (auto lOI = mlir::dyn_cast<mlir::subop::LookupOrInsertOp>(localUser)) {
-                  lookupOrInsertOps.push_back(lOI);
+      mlir::subop::ExecutionStepOp mergeStep;
+      std::vector<mlir::Value> localExecutionSteps;
+      for (auto& threadLocalUse : producedState.getUses()) {
+         if (auto executionStep = mlir::dyn_cast_or_null<mlir::subop::ExecutionStepOp>(threadLocalUse.getOwner())) {
+            auto val = executionStep.getSubOps().getArgument(threadLocalUse.getOperandNumber());
+            auto localUses = executionStep.getSubOps().getArgument(threadLocalUse.getOperandNumber()).getUses();
+
+            if (!localUses.empty()) {
+               if (auto merge = mlir::dyn_cast<mlir::subop::MergeOp>(localUses.begin()->getOwner())) {
+                  mergeOp = merge;
+                  mergeStep = executionStep;
+
+
+                  std::function<bool(mlir::Value)> checkUse = [&](mlir::Value v) -> bool {
+
+                     for (auto& use : v.getUses()) {
+                        if (mlir::isa<mlir::subop::ScanRefsOp, mlir::subop::LookupOp>(use.getOwner())) {
+                        }else if (auto executionStep = mlir::dyn_cast<mlir::subop::ExecutionStepOp>(use.getOwner())) {
+                           if(!checkUse(executionStep.getSubOps().getArgument(use.getOperandNumber()))){
+                              return false;
+                           }
+                        } else {
+                           return false;
+                        }
+                     }
+                     return true;
+                  };
+                  if(!checkUse(mergeStep.getResult(0))){
+                     return mlir::failure();
+                  }
+                  /*for (auto* mergedUser : executionStep.getResult(0).getUsers()) {
+                     if (mlir::isa<mlir::subop::ScanRefsOp, mlir::subop::LookupOp>(mergedUser)) {
+                     } else {
+                        //todo
+                        return mlir::failure();
+                     }
+                  }*/
                } else {
-                  return mlir::failure();
-               }
-            }
-         } else if (auto merge = mlir::dyn_cast<mlir::subop::MergeOp>(threadLocalUser)) {
-            mergeOp = merge;
-            for (auto* mergedUser : merge->getUsers()) {
-               if (mlir::isa<mlir::subop::ScanRefsOp, mlir::subop::LookupOp>(mergedUser)) {
-               } else {
-                  //todo
-                  return mlir::failure();
+                  std::function<bool(mlir::Value)> checkUse = [&](mlir::Value v) -> bool {
+
+                     for (auto& use : v.getUses()) {
+                        if (mlir::isa<mlir::subop::LookupOrInsertOp>(use.getOwner())) {
+                        }else if (auto executionStep = mlir::dyn_cast<mlir::subop::ExecutionStepOp>(use.getOwner())) {
+                           if(!checkUse(executionStep.getSubOps().getArgument(use.getOperandNumber()))){
+                              return false;
+                           }
+                        } else {
+                           return false;
+                        }
+                     }
+                     return true;
+                  };
+                  if (!checkUse(val)) {
+                     return mlir::failure();
+                  }
+                  localExecutionSteps.push_back(val);
                }
             }
          } else {
@@ -95,10 +136,15 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
       mlir::subop::SubOpStateUsageTransformer htTransformer(analysis, getContext(), [&](mlir::Operation* op, mlir::Type type) -> mlir::Type {
          return htTypeConverter.convertType(type);
       });
-      for (auto* l : getLocalOps) {
-         fragmentTransformer.updateValue(l->getResult(0), optimisticHtFragment);
+      for (auto v:localExecutionSteps) {
+         fragmentTransformer.updateValue(v, optimisticHtFragment);
+         v.setType(optimisticHtFragment);
       }
-      htTransformer.updateValue(mergeOp.getRes(), optimisticHt);
+      htTransformer.updateValue(mergeStep.getResult(0), optimisticHt);
+      mergeStep.getResult(0).setType(optimisticHt);
+      mergeStep.getSubOps().getArgument(0).setType(threadLocalType);
+
+      producedState.setType(threadLocalType);
       auto loc = op->getLoc();
       auto newCreateThreadLocal = rewriter.create<mlir::subop::CreateThreadLocalOp>(loc, threadLocalType);
       auto* newBlock = new mlir::Block;
@@ -108,16 +154,11 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
          rewriter.setInsertionPointToStart(newBlock);
          rewriter.create<mlir::tuples::ReturnOp>(loc, rewriter.create<mlir::subop::GenericCreateOp>(loc, optimisticHtFragment).getRes());
       }
-      for (auto* l : getLocalOps) {
-         mlir::OpBuilder::InsertionGuard guard(rewriter);
-         rewriter.setInsertionPoint(l);
-         auto local = rewriter.create<mlir::subop::GetLocal>(l->getLoc(), optimisticHtFragment, newCreateThreadLocal.getRes());
-         rewriter.replaceOp(l, local.getRes());
-      }
+
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPoint(mergeOp);
-         auto newMergeOp = rewriter.create<mlir::subop::MergeOp>(mergeOp->getLoc(), optimisticHt, newCreateThreadLocal.getRes());
+         auto newMergeOp = rewriter.create<mlir::subop::MergeOp>(mergeOp->getLoc(), optimisticHt, mergeStep.getSubOps().getArgument(0));
          if (!mergeOp.getCombineFn().empty()) {
             mlir::IRMapping mapping;
             mergeOp.getCombineFn().cloneInto(&newMergeOp.getCombineFn(), mapping);

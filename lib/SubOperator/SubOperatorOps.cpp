@@ -3,8 +3,8 @@
 #include "mlir/Dialect/TupleStream/TupleStreamDialect.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOpsAttributes.h"
-
 #include "mlir/IR/DialectImplementation.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/IR/OpImplementation.h"
 
 #include <llvm/ADT/TypeSwitch.h>
@@ -1071,7 +1071,7 @@ ParseResult mlir::subop::GenerateOp::parse(::mlir::OpAsmParser& parser, ::mlir::
    if (parser.parseRegion(*body, {})) return failure();
    //todo: count the number of emitters and add that many arguments
    result.addTypes(mlir::tuples::TupleStreamType::get(parser.getContext()));
-   body->walk([&](mlir::subop::GenerateEmitOp){
+   body->walk([&](mlir::subop::GenerateEmitOp) {
       result.addTypes(mlir::tuples::TupleStreamType::get(parser.getContext()));
    });
    if (parser.parseOptionalAttrDict(result.attributes))
@@ -1116,6 +1116,37 @@ std::vector<std::string> subop::LockOp::getWrittenMembers() {
    });
    return res;
 }
+void cloneRegionInto(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping, mlir::Region& region, mlir::Region& newRegion) {
+   newRegion.getBlocks().clear();
+   for (auto& block : region) {
+      auto* newBlock = builder.createBlock(&newRegion);
+      for (auto arg : block.getArguments()) {
+         auto newArg = newBlock->addArgument(arg.getType(), arg.getLoc());
+         mapping.map(arg, newArg);
+      }
+      mlir::OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToStart(newBlock);
+      for (auto& op : block) {
+         if (auto subop = mlir::dyn_cast<mlir::subop::SubOperator>(op)) {
+            subop.cloneSubOp(builder, mapping, columnMapping);
+
+         } else {
+            builder.clone(op, mapping);
+         }
+      }
+   }
+}
+void mapResults(mlir::IRMapping& mapping, mlir::Operation* from, mlir::Operation* to){
+    for (auto i = 0ul; i < from->getNumResults(); i++) {
+        mapping.map(from->getResult(i), to->getResult(i));
+    }
+}
+mlir::Operation* subop::LockOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<LockOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getRef()));
+   cloneRegionInto(builder, mapping, columnMapping, getNested(), newOp.getNested());
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   return newOp;
+}
 std::vector<std::string> subop::NestedMapOp::getReadMembers() {
    std::vector<std::string> res;
    this->getRegion().walk([&](mlir::subop::SubOperator subop) {
@@ -1137,6 +1168,12 @@ std::vector<std::string> subop::NestedMapOp::getWrittenMembers() {
       }
    });
    return std::vector<std::string>(res.begin(), res.end());
+}
+mlir::Operation* subop::NestedMapOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newMap = builder.create<NestedMapOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getParameters()));
+   cloneRegionInto(builder, mapping, columnMapping, getRegion(), newMap.getRegion());
+   mapResults(mapping,this->getOperation(), newMap.getOperation());
+   return newMap;
 }
 std::vector<std::string> subop::LoopOp::getReadMembers() {
    std::vector<std::string> res;
@@ -1267,12 +1304,25 @@ std::vector<std::string> subop::ReduceOp::getReadMembers() {
    }
    return res;
 }
+
+mlir::Operation* subop::ReduceOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<ReduceOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getRef()), columnMapping.remap(getColumns()), getMembers());
+   builder.cloneRegionBefore(getCombine(), newOp.getCombine(), newOp.getCombine().begin(),mapping);
+   builder.cloneRegionBefore(getRegion(), newOp.getRegion(), newOp.getRegion().begin(),mapping);
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   return newOp;
+}
 std::vector<std::string> subop::ScatterOp::getWrittenMembers() {
    std::vector<std::string> res;
    for (auto x : getMapping()) {
       res.push_back(x.getName().str());
    }
    return res;
+}
+mlir::Operation* subop::ScatterOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<ScatterOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getRef()), columnMapping.remap(getMapping()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   return newOp;
 }
 std::vector<std::string> subop::LookupOrInsertOp::getWrittenMembers() {
    std::vector<std::string> res;
@@ -1281,6 +1331,13 @@ std::vector<std::string> subop::LookupOrInsertOp::getWrittenMembers() {
    }
    return res;
 }
+mlir::Operation* subop::LookupOrInsertOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<LookupOrInsertOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), mapping.lookupOrDefault(getState()), columnMapping.remap(getKeys()), columnMapping.clone(getRef()));
+   builder.cloneRegionBefore(getInitFn(), newOp.getInitFn(), newOp.getInitFn().begin(),mapping);
+   builder.cloneRegionBefore(getEqFn(), newOp.getEqFn(), newOp.getEqFn().begin(),mapping);
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   return newOp;
+}
 std::vector<std::string> subop::InsertOp::getWrittenMembers() {
    std::vector<std::string> res;
    for (auto x : getState().getType().cast<mlir::subop::State>().getMembers().getNames()) {
@@ -1288,12 +1345,26 @@ std::vector<std::string> subop::InsertOp::getWrittenMembers() {
    }
    return res;
 }
+
+mlir::Operation* subop::InsertOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<InsertOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), mapping.lookupOrDefault(getState()), columnMapping.remap(getMapping()));
+   builder.cloneRegionBefore(getEqFn(), newOp.getEqFn(), newOp.getEqFn().begin(),mapping);
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   return newOp;
+}
 std::vector<std::string> subop::LookupOp::getReadMembers() {
    std::vector<std::string> res;
    for (auto x : getState().getType().cast<mlir::subop::State>().getMembers().getNames()) {
       res.push_back(x.cast<mlir::StringAttr>().str());
    }
    return res;
+}
+mlir::Operation* subop::LookupOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<LookupOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), mapping.lookupOrDefault(getState()), columnMapping.remap(getKeys()), columnMapping.clone(getRef()));
+   builder.cloneRegionBefore(getEqFn(), newOp.getEqFn(), newOp.getEqFn().begin(),mapping);
+   builder.cloneRegionBefore(getInitFn(), newOp.getInitFn(), newOp.getInitFn().begin(),mapping);
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   return newOp;
 }
 std::vector<std::string> subop::GatherOp::getReadMembers() {
    std::vector<std::string> res;
@@ -1303,9 +1374,26 @@ std::vector<std::string> subop::GatherOp::getReadMembers() {
    return res;
 }
 
+mlir::Operation* subop::GatherOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<GatherOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getRef()), columnMapping.clone(getMapping()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+
+   return newOp;
+}
+
 mlir::LogicalResult subop::MapOp::foldColumns(mlir::subop::ColumnFoldInfo& columnInfo) {
    replaceColumnUsesInLamda(getContext(), getFn().front(), columnInfo);
    return mlir::success();
+}
+
+mlir::Operation* subop::MapOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<MapOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.clone(getComputedCols()));
+   builder.cloneRegionBefore(getFn(), newOp.getFn(), newOp.getFn().begin(),mapping);
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   newOp.getFn().walk([&](mlir::tuples::GetColumnOp getColumnOp) {
+      getColumnOp.setAttrAttr(columnMapping.remap(getColumnOp.getAttr()));
+   });
+   return newOp;
 }
 mlir::LogicalResult subop::FilterOp::foldColumns(mlir::subop::ColumnFoldInfo& columnInfo) {
    auto& colManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
@@ -1321,6 +1409,11 @@ mlir::LogicalResult subop::FilterOp::foldColumns(mlir::subop::ColumnFoldInfo& co
    setConditionsAttr(b.getArrayAttr(newConditions));
    return mlir::success();
 }
+mlir::Operation* subop::FilterOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<FilterOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), getFilterSemantic(), columnMapping.remap(getConditions()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   return newOp;
+}
 mlir::LogicalResult subop::MaterializeOp::foldColumns(mlir::subop::ColumnFoldInfo& columnInfo) {
    auto& colManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
 
@@ -1335,6 +1428,11 @@ mlir::LogicalResult subop::MaterializeOp::foldColumns(mlir::subop::ColumnFoldInf
    }
    setMappingAttr(b.getDictionaryAttr(newMapping));
    return mlir::success();
+}
+mlir::Operation* subop::MaterializeOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<MaterializeOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), mapping.lookupOrDefault(getState()), columnMapping.remap(getMapping()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   return newOp;
 }
 mlir::LogicalResult subop::InsertOp::foldColumns(mlir::subop::ColumnFoldInfo& columnInfo) {
    auto& colManager = getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
@@ -1381,12 +1479,25 @@ void subop::ScanListOp::updateStateType(mlir::subop::SubOpStateUsageTransformer&
 void subop::ScanListOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
    assert(false && "should not happen");
 }
+mlir::Operation* subop::ScanListOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<ScanListOp>(this->getLoc(), mapping.lookupOrDefault(getList()), columnMapping.clone(getElem()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+
+   return newOp;
+}
 void subop::ScanRefsOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
    if (state == getState() && newType != state.getType()) {
       auto newRefType = transformer.getNewRefType(this->getOperation(), getRef().getColumn().type);
       setRefAttr(transformer.createReplacementColumn(getRefAttr(), newRefType));
    }
 }
+mlir::Operation* subop::ScanRefsOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<ScanRefsOp>(this->getLoc(), mapping.lookupOrDefault(getState()), columnMapping.clone(getRef()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+
+   return newOp;
+}
+
 void subop::ScanRefsOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
    assert(false && "should not happen");
 }
@@ -1398,6 +1509,13 @@ void subop::ScanOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& tra
 }
 void subop::ScanOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
    assert(false && "should not happen");
+}
+
+mlir::Operation* subop::ScanOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<ScanOp>(this->getLoc(), mapping.lookupOrDefault(getState()), columnMapping.clone(getMapping()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+
+   return newOp;
 }
 
 void subop::GatherOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
@@ -1463,6 +1581,11 @@ void subop::UnwrapOptionalRefOp::replaceColumns(mlir::subop::SubOpStateUsageTran
       setRefAttr(transformer.createReplacementColumn(getRefAttr(), newRefType));
    }
 }
+mlir::Operation* subop::UnwrapOptionalRefOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<UnwrapOptionalRefOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getOptionalRef()), columnMapping.clone(getRef()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   return newOp;
+}
 void subop::LockOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
    assert(false && "should not happen");
 }
@@ -1477,6 +1600,25 @@ void subop::MaterializeOp::replaceColumns(mlir::subop::SubOpStateUsageTransforme
 void subop::MaterializeOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
    if (state == getState() && newType != state.getType()) {
       setMappingAttr(transformer.updateMapping(getMapping()));
+   }
+}
+
+void subop::ExecutionStepOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
+   assert(false && "should not happen");
+}
+
+void subop::ExecutionStepOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
+   for (auto [i, a, isThreadLocal] : llvm::zip(getInputs(), getSubOps().getArguments(), getIsThreadLocal())) {
+      if (i == state) {
+         if (isThreadLocal.cast<mlir::BoolAttr>().getValue()) {
+            auto localType = newType.cast<mlir::subop::ThreadLocalType>().getWrapped();
+            transformer.updateValue(a, localType);
+            a.setType(localType);
+         } else {
+            transformer.updateValue(a, newType);
+            a.setType(newType);
+         }
+      }
    }
 }
 
@@ -1521,6 +1663,41 @@ std::vector<std::string> subop::CreateFrom::getWrittenMembers() {
       return res;
    }
    return {};
+}
+
+mlir::Operation* subop::RenamingOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<RenamingOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.clone(getColumns()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+
+   return newOp;
+}
+mlir::Operation* subop::EntriesBetweenOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<EntriesBetweenOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getLeftRef()), columnMapping.remap(getRightRef()), columnMapping.clone(getBetween()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+
+   return newOp;
+}
+mlir::Operation* subop::GetBeginReferenceOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<GetBeginReferenceOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), mapping.lookupOrDefault(getState()), columnMapping.clone(getRef()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+
+   return newOp;
+}
+mlir::Operation* subop::GetEndReferenceOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<GetEndReferenceOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), mapping.lookupOrDefault(getState()), columnMapping.clone(getRef()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   return newOp;
+}
+mlir::Operation* subop::OffsetReferenceBy::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<OffsetReferenceBy>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getRef()), columnMapping.remap(getIdx()), columnMapping.clone(getNewRef()));
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   return newOp;
+}
+mlir::Operation* subop::GenerateOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
+   auto newOp = builder.create<GenerateOp>(this->getLoc(), getResultTypes(), columnMapping.clone(getGeneratedColumns()));
+   builder.cloneRegionBefore(getRegion(), newOp.getRegion(), newOp.getRegion().begin(),mapping);
+   mapResults(mapping,this->getOperation(), newOp.getOperation());
+   return newOp;
 }
 #define GET_OP_CLASSES
 #include "mlir/Dialect/SubOperator/SubOperatorOps.cpp.inc"

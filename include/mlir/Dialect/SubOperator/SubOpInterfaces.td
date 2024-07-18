@@ -21,6 +21,14 @@ def SubOperator : OpInterface<"SubOperator"> {
                return {};
            }]
         >,
+		InterfaceMethod<
+		  /*description=*/"",
+		  /*retTy=*/"mlir::Operation*",
+		  /*methodName=*/"cloneSubOp",(ins "mlir::OpBuilder&":$builder, "mlir::IRMapping&" :$mapping, "mlir::subop::ColumnMapping&":$columnMapping),"",
+		 /*defaultImplementation=*/[{
+			 return builder.clone(*this->getOperation(), mapping);
+		 }]
+		>,
   ];
 
 }

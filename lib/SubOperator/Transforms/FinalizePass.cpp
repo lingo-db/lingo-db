@@ -20,14 +20,14 @@ class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<
    public:
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(FinalizePass)
    virtual llvm::StringRef getArgument() const override { return "subop-finalize"; }
-   void cloneRec(mlir::Operation* op, mlir::IRMapping mapping,mlir::Value val) {
+   void cloneRec(mlir::Operation* op, mlir::IRMapping mapping,mlir::Value val, mlir::subop::ColumnMapping columnMapping) {
 
 
       mlir::OpBuilder builder(op->getContext());
       builder.setInsertionPointAfter(mapping.lookup(val).getDefiningOp()?mapping.lookup(val).getDefiningOp():op);
-      builder.clone(*op, mapping);
+      mlir::cast<mlir::subop::SubOperator>(op).cloneSubOp(builder, mapping, columnMapping);
       for (auto& use : op->getUses()) {
-         cloneRec(use.getOwner(), mapping,use.get());
+         cloneRec(use.getOwner(), mapping,use.get(), columnMapping);
       }
    }
    void runOnOperation() override {
@@ -46,7 +46,7 @@ class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<
             mlir::IRMapping mapping;
             mapping.map(currentUnion.getResult(), operands[i]);
             for (auto* user : currentUnion.getResult().getUsers()) {
-               cloneRec(user, mapping,currentUnion.getResult());
+               cloneRec(user, mapping,currentUnion.getResult(),{});
             }
          }
          currentUnion->replaceAllUsesWith(mlir::ValueRange{operands[operands.size()-1]});

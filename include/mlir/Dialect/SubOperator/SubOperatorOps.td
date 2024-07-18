@@ -378,16 +378,12 @@ def LockOp : SubOperator_Op<"lock", [SubOperator,DeclareOpInterfaceMethods<State
   let extraClassDeclaration = [{
     std::vector<std::string> getWrittenMembers();
     std::vector<std::string> getReadMembers();
+    mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
   }];
   let regions = (region SizedRegion<1>:$nested);
   let assemblyFormat = [{ $stream `lock` `(` $ref `)` $nested attr-dict }];
 }
-def GetLocal : SubOperator_Op<"get_local"> {
-     let summary = "get local state from thread local";
-     let arguments = (ins ThreadLocal: $threadLocal);
-     let results = (outs AnyType : $res);
-     let assemblyFormat = [{ $threadLocal `:` type($threadLocal) `->` type($res)  attr-dict }];
- }
+
 
 //===----------------------------------------------------------------------===//
 // Creating Tuple Streams
@@ -401,6 +397,8 @@ def ScanOp : SubOperator_Op<"scan", [Pure,SubOperator,DeclareOpInterfaceMethods<
     let assemblyFormat = [{  $state `:` type($state) custom<StateColumnMapping>($mapping) attr-dict }];
     let extraClassDeclaration = [{
         std::vector<std::string> getReadMembers();
+            mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
+
     }];
 }
 
@@ -412,6 +410,8 @@ def ScanListOp : SubOperator_Op<"scan_list", [Pure,SubOperator,ReferenceProducer
     let assemblyFormat = [{  $list `:` type($list) custom<CustDef>($elem) attr-dict }];
     let extraClassDeclaration = [{
         mlir::tuples::ColumnDefAttr getProducedReference(){ return getElem(); }
+        mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
+
     }];
 }
 
@@ -423,6 +423,7 @@ def ScanRefsOp : SubOperator_Op<"scan_refs", [Pure,SubOperator,ReferenceProducer
     let assemblyFormat = [{  $state `:` type($state) custom<CustDef>($ref) attr-dict }];
     let extraClassDeclaration = [{
         mlir::tuples::ColumnDefAttr getProducedReference(){ return getRef(); }
+        mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
     }];
 }
 def GenerateOp : SubOperator_Op<"generate",[Pure,SubOperator]> {
@@ -431,6 +432,9 @@ def GenerateOp : SubOperator_Op<"generate",[Pure,SubOperator]> {
     let results = (outs TupleStream : $res, Variadic<TupleStream>:$streams);
     let regions = (region SizedRegion<1>:$region);
     let hasCustomAssemblyFormat = 1;
+    let extraClassDeclaration = [{
+        mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
+    }];
 }
 
 def GenerateEmitOp : SubOperator_Op<"generate_emit"> {
@@ -458,6 +462,9 @@ def MapOp : SubOperator_Op<"map", [Pure,SubOperator,DeclareOpInterfaceMethods<Co
     let results = (outs TupleStream:$result);
     let regions = (region SizedRegion<1>:$fn);
     let assemblyFormat = [{  $stream `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($fn) attr-dict-with-keyword }];
+        let extraClassDeclaration = [{
+            mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
+        }];
 }
 
 def FilterSemantic_AllTrue : I64EnumAttrCase<"all_true", 0>;
@@ -473,6 +480,9 @@ def FilterOp : SubOperator_Op<"filter", [Pure,SubOperator,DeclareOpInterfaceMeth
     let arguments = (ins TupleStream : $stream, FilterSemantic:$filterSemantic,ArrayAttr : $conditions );
     let results = (outs TupleStream : $res);
     let assemblyFormat = [{  $stream $filterSemantic custom<CustRefArr>($conditions)  attr-dict }];
+        let extraClassDeclaration = [{
+            mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
+        }];
 }
 
 def RenamingOp : SubOperator_Op<"rename", [Pure,SubOperator]> {
@@ -481,9 +491,12 @@ def RenamingOp : SubOperator_Op<"rename", [Pure,SubOperator]> {
     let arguments = (ins TupleStream:$stream,ArrayAttr:$columns);
     let results = (outs TupleStream:$result);
     let assemblyFormat = [{ $stream `renamed` `:` custom<CustDefArr>($columns) attr-dict-with-keyword }];
+	let extraClassDeclaration = [{
+		mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
+	}];
 }
 
-def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>, ContainsNestedSubOps]> {
+def NestedMapOp : SubOperator_Op<"nested_map",[DeclareOpInterfaceMethods<SubOperator>,DeclareOpInterfaceMethods<StateUsingSubOperator>, ContainsNestedSubOps]> {
    let summary = "compute nested map";
   let description = [{#
      Example:
@@ -509,6 +522,7 @@ def NestedMapOp : SubOperator_Op<"nested_map",[SubOperator,DeclareOpInterfaceMet
         std::vector<std::string> getWrittenMembers();
         std::vector<std::string> getReadMembers();
         mlir::Block* getBody(){ return &getRegion().front();}
+       	mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
     }];
 }
 
@@ -618,6 +632,7 @@ def MaterializeOp : SubOperator_Op<"materialize",[SubOperator,DeclareOpInterface
     let assemblyFormat = [{  $stream custom<ColumnStateMapping>($mapping) `,` $state `:` type($state)  attr-dict }];
     let extraClassDeclaration = [{
         std::vector<std::string> getWrittenMembers();
+		mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
     }];
 }
 
@@ -630,6 +645,7 @@ def LookupOrInsertOp : SubOperator_Op<"lookup_or_insert",[SubOperator,ReferenceP
       let extraClassDeclaration = [{
           std::vector<std::string> getWrittenMembers();
           mlir::tuples::ColumnDefAttr getProducedReference(){ return getRef(); }
+          mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
       }];
 }
 def InsertOp : SubOperator_Op<"insert",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>,DeclareOpInterfaceMethods<ColumnFoldable>]> {
@@ -639,6 +655,7 @@ def InsertOp : SubOperator_Op<"insert",[SubOperator,DeclareOpInterfaceMethods<St
       let hasCustomAssemblyFormat = 1;
       let extraClassDeclaration = [{
           std::vector<std::string> getWrittenMembers();
+          mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
       }];
 }
 
@@ -651,6 +668,7 @@ def LookupOp : SubOperator_Op<"lookup",[SubOperator,DeclareOpInterfaceMethods<St
       let extraClassDeclaration = [{
           std::vector<std::string> getReadMembers();
           mlir::tuples::ColumnDefAttr getProducedReference(){ return getRef(); }
+          mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
       }];
 }
 def GetBeginReferenceOp : SubOperator_Op<"get_begin_ref",[SubOperator]> {
@@ -658,26 +676,41 @@ def GetBeginReferenceOp : SubOperator_Op<"get_begin_ref",[SubOperator]> {
     let results = (outs TupleStream: $res);
 
     let assemblyFormat = [{  $stream $state `:` type($state) custom<CustDef>($ref)   attr-dict }];
+	let extraClassDeclaration = [{
+		mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
+	}];
 }
 def GetEndReferenceOp : SubOperator_Op<"get_end_ref",[SubOperator]> {
     let arguments = (ins TupleStream : $stream, AnyType : $state, ColumnDefAttr:$ref);
     let results = (outs TupleStream: $res);
     let assemblyFormat = [{  $stream $state `:` type($state) custom<CustDef>($ref)   attr-dict }];
+	let extraClassDeclaration = [{
+		mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
+	}];
 }
 def EntriesBetweenOp : SubOperator_Op<"entries_between",[SubOperator]> {
     let arguments = (ins TupleStream : $stream, ColumnRefAttr:$left_ref,ColumnRefAttr:$right_ref, ColumnDefAttr: $between);
     let results = (outs TupleStream: $res);
     let assemblyFormat = [{  $stream custom<CustRef>($left_ref) custom<CustRef>($right_ref)  custom<CustDef>($between) attr-dict }];
+	let extraClassDeclaration = [{
+		mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
+	}];
 }
 def OffsetReferenceBy : SubOperator_Op<"offset_ref_by",[SubOperator]> {
     let arguments = (ins TupleStream : $stream, ColumnRefAttr:$ref,ColumnRefAttr:$idx, ColumnDefAttr: $newRef);
     let results = (outs TupleStream: $res);
     let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<CustRef>($idx) custom<CustDef>($newRef) attr-dict }];
+	let extraClassDeclaration = [{
+		mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
+	}];
 }
 def UnwrapOptionalRefOp : SubOperator_Op<"unwrap_optional_ref",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let arguments = (ins TupleStream : $stream, ColumnRefAttr:$optional_ref, ColumnDefAttr: $ref);
     let results = (outs TupleStream: $res);
     let assemblyFormat = [{  $stream custom<CustRef>($optional_ref) custom<CustDef>($ref) attr-dict }];
+	let extraClassDeclaration = [{
+		mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
+	}];
 }
 
 
@@ -695,6 +728,7 @@ def GatherOp : SubOperator_Op<"gather",[SubOperator,DeclareOpInterfaceMethods<St
     let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<StateColumnMapping>($mapping)  attr-dict }];
     let extraClassDeclaration = [{
         std::vector<std::string> getReadMembers();
+        mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
     }];
 }
 def ScatterOp : SubOperator_Op<"scatter",[SubOperator,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
@@ -704,6 +738,7 @@ def ScatterOp : SubOperator_Op<"scatter",[SubOperator,DeclareOpInterfaceMethods<
     let assemblyFormat = [{  $stream custom<CustRef>($ref) custom<ColumnStateMapping>($mapping)  attr-dict }];
     let extraClassDeclaration = [{
         std::vector<std::string> getWrittenMembers();
+        mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
     }];
 }
 
@@ -724,6 +759,7 @@ def ReduceOp : SubOperator_Op<"reduce",[SubOperator,DeclareOpInterfaceMethods<St
         let extraClassDeclaration = [{
             std::vector<std::string> getWrittenMembers();
             std::vector<std::string> getReadMembers();
+            mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
         }];
 }
 
@@ -731,11 +767,6 @@ def ReduceOp : SubOperator_Op<"reduce",[SubOperator,DeclareOpInterfaceMethods<St
 // Utility Operations
 //===----------------------------------------------------------------------===//
 
-def GetSingleValOp : SubOperator_Op<"get_single_val", [Pure]> {
-    let arguments = (ins TupleStream : $stream, ColumnRefAttr:$column);
-    let results = (outs AnyType : $res);
-    let assemblyFormat = [{  $stream `[` custom<CustRef>($column) `]` `->` type($res) attr-dict }];
-}
 def InFlightOp : SubOperator_Op<"in_flight", [Pure,SubOperator]> {
     let summary = "operation symbolizes 'in flight' tuple stream -> values => columns";
 
@@ -814,7 +845,7 @@ def ExecutionGroupReturnOp : SubOperator_Op<"execution_group_return",[Terminator
    let arguments = (ins Variadic<AnyType>:$inputs);
    let assemblyFormat = [{ ($inputs^ `:` type($inputs))? attr-dict-with-keyword }];
 }
-def ExecutionStepOp : SubOperator_Op<"execution_step",[SubOperator,IsolatedFromAbove]> {
+def ExecutionStepOp : SubOperator_Op<"execution_step",[SubOperator,IsolatedFromAbove,DeclareOpInterfaceMethods<StateUsingSubOperator>]> {
     let summary = "execution step";
     let arguments = (ins Variadic<AnyType>:$inputs, BoolArrayAttr:$is_thread_local);
     let results = (outs Variadic<AnyType>:$results);

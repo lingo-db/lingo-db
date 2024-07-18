@@ -54,11 +54,6 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
                      addDependency(subopRoot, definingOp, roots);
                   } else {
                      if (subopRoot->getBlock() == definingOp->getBlock()) {
-                        if (auto getLocal = mlir::dyn_cast_or_null<mlir::subop::GetLocal>(definingOp)) {
-                           if (auto* createTLOp = getLocal.getThreadLocal().getDefiningOp()) {
-                              pipelineRequirements[subopRoot].push_back(createTLOp);
-                           }
-                        }
                         pipelineRequirements[subopRoot].push_back(definingOp);
                      }
                   }
