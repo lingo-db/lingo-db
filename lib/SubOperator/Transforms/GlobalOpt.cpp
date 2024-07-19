@@ -19,6 +19,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
    static std::optional<std::string> fingerprint(mlir::Operation* op, std::unordered_map<mlir::tuples::Column*, std::string>& columnFingerPrints) {
       if (!op) return {};
       return llvm::TypeSwitch<mlir::Operation*, std::optional<std::string>>(op)
+         //todo: rework
          .Case([&](mlir::tuples::GetColumnOp getColumnOp) -> std::optional<std::string> {
             if (!columnFingerPrints.contains(&getColumnOp.getAttr().getColumn())) return {};
             return columnFingerPrints.at(&getColumnOp.getAttr().getColumn());

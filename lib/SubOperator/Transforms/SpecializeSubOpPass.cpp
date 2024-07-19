@@ -8,6 +8,7 @@
 #include "mlir/Dialect/SubOperator/Transforms/Passes.h"
 #include "mlir/Dialect/SubOperator/Transforms/StateUsageTransformer.h"
 #include "mlir/Dialect/SubOperator/Transforms/SubOpDependencyAnalysis.h"
+#include "mlir/Dialect/SubOperator/Utils.h"
 #include "mlir/Dialect/TupleStream/TupleStreamDialect.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 #include "mlir/Dialect/util/UtilDialect.h"
@@ -83,28 +84,29 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
       }
       mlir::Type hashIndexedViewType;
       mlir::Value hashIndexedView;
+
+      mlir::subop::MapCreationHelper buildHashHelper(rewriter.getContext());
+      buildHashHelper.buildBlock(rewriter, [&](mlir::PatternRewriter& rewriter) {
+         std::vector<mlir::Value> values;
+         for (auto keyMemberName : multiMapType.getKeyMembers().getNames()) {
+            auto keyColumnAttr = insertOp.getMapping().get(keyMemberName.cast<mlir::StringAttr>().strref()).cast<mlir::tuples::ColumnRefAttr>();
+            values.push_back(buildHashHelper.access(keyColumnAttr, loc));
+         }
+         mlir::Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.create<mlir::util::PackOp>(loc, values));
+         mlir::Value inValidLink = rewriter.create<mlir::util::InvalidRefOp>(loc, linkType);
+         rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange{hashed, inValidLink});
+      });
       {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPoint(insertOp);
-         auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, insertOp.getStream(), rewriter.getArrayAttr({hashDef, linkDef}));
+         auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, insertOp.getStream(), rewriter.getArrayAttr({hashDef, linkDef}), buildHashHelper.getColRefs());
+         mapOp.getFn().push_back(buildHashHelper.getMapBlock());
          std::vector<mlir::NamedAttribute> newMapping(insertOp.getMapping().begin(), insertOp.getMapping().end());
          newMapping.push_back(rewriter.getNamedAttr(hashMember, hashRef));
          newMapping.push_back(rewriter.getNamedAttr(linkMember, linkRef));
          rewriter.create<mlir::subop::MaterializeOp>(loc, mapOp.getResult(), buffer, rewriter.getDictionaryAttr(newMapping));
          hashIndexedViewType = mlir::subop::HashIndexedViewType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr({rewriter.getStringAttr(hashMember)}), rewriter.getArrayAttr({mlir::TypeAttr::get(rewriter.getIndexType())})), mlir::subop::StateMembersAttr::get(getContext(), rewriter.getArrayAttr(hashIndexedViewNames), rewriter.getArrayAttr(hashIndexedViewTypes)));
          hashIndexedView = rewriter.create<mlir::subop::CreateHashIndexedView>(loc, hashIndexedViewType, buffer, hashMember, linkMember);
-         auto* mapBlock = new mlir::Block;
-         mlir::Value tuple = mapBlock->addArgument(mlir::tuples::TupleType::get(getContext()), loc);
-         mapOp.getFn().push_back(mapBlock);
-         rewriter.setInsertionPointToStart(mapBlock);
-         std::vector<mlir::Value> values;
-         for (auto keyMemberName : multiMapType.getKeyMembers().getNames()) {
-            auto keyColumn = insertOp.getMapping().get(keyMemberName.cast<mlir::StringAttr>().strref()).cast<mlir::tuples::ColumnRefAttr>();
-            values.push_back(rewriter.create<mlir::tuples::GetColumnOp>(loc, keyColumn.getColumn().type, keyColumn, tuple));
-         }
-         mlir::Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.create<mlir::util::PackOp>(loc, values));
-         mlir::Value inValidLink = rewriter.create<mlir::util::InvalidRefOp>(loc, linkType);
-         rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange{hashed, inValidLink});
       }
       auto entryRefType = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), hashIndexedViewType.cast<mlir::subop::LookupAbleState>());
       auto entryRefListType = mlir::subop::ListType::get(rewriter.getContext(), entryRefType);
@@ -125,10 +127,19 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
          rewriter.setInsertionPoint(lookupOp);
          auto [hashDefLookup, hashRefLookup] = createColumn(rewriter.getIndexType(), "hj", "hash");
          auto [lookupPredDef, lookupPredRef] = createColumn(rewriter.getI1Type(), "lookup", "pred");
-         auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, lookupOp.getStream(), rewriter.getArrayAttr({hashDefLookup}));
+         auto lookupKeys = lookupOp.getKeys();
+         mlir::subop::MapCreationHelper lookupHashHelper(rewriter.getContext());
+         lookupHashHelper.buildBlock(rewriter, [&](mlir::PatternRewriter& rewriter) {
+            std::vector<mlir::Value> values;
+            for (auto key : lookupKeys) {
+               auto keyColumnAttr = key.cast<mlir::tuples::ColumnRefAttr>();
+               values.push_back(lookupHashHelper.access(keyColumnAttr, loc));
+            }
+            mlir::Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.create<mlir::util::PackOp>(loc, values));
+            rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange{hashed});
+         });
          auto [listDef, listRef] = createColumn(entryRefListType, "lookup", "list");
          auto lookupRef = lookupOp.getRef();
-         auto lookupKeys = lookupOp.getKeys();
          std::vector<mlir::NamedAttribute> gatheredForEqFn;
          std::vector<mlir::tuples::ColumnRefAttr> keyRefsForEqFn;
          for (auto keyMember : llvm::zip(multiMapType.getKeyMembers().getNames(), multiMapType.getKeyMembers().getTypes())) {
@@ -138,36 +149,25 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
             gatheredForEqFn.push_back(rewriter.getNamedAttr(name, lookupKeyMemberDef));
             keyRefsForEqFn.push_back(lookupKeyMemberRef);
          }
-         auto* predFnBlock = new mlir::Block;
-         {
-            mlir::OpBuilder::InsertionGuard guard(rewriter);
-            rewriter.setInsertionPointToStart(predFnBlock);
-            mlir::Value tuple = predFnBlock->addArgument(mlir::tuples::TupleType::get(getContext()), loc);
+         auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, lookupOp.getStream(), rewriter.getArrayAttr({hashDefLookup}), lookupHashHelper.getColRefs());
+         mapOp.getFn().push_back(lookupHashHelper.getMapBlock());
+         mlir::subop::MapCreationHelper predFnHelper(rewriter.getContext());
+         predFnHelper.buildBlock(rewriter, [&](mlir::PatternRewriter& rewriter) {
             mlir::IRMapping mapping;
             size_t i = 0;
             for (auto key : keyRefsForEqFn) {
-               mapping.map(lookupOp.getEqFn().getArgument(i++), rewriter.create<mlir::tuples::GetColumnOp>(loc, key.getColumn().type, key, tuple));
+               mapping.map(lookupOp.getEqFn().getArgument(i++), predFnHelper.access(key, loc));
             }
             for (auto key : lookupKeys) {
                auto keyColumn = key.cast<mlir::tuples::ColumnRefAttr>();
-               mapping.map(lookupOp.getEqFn().getArgument(i++), rewriter.create<mlir::tuples::GetColumnOp>(loc, keyColumn.getColumn().type, keyColumn, tuple));
+               mapping.map(lookupOp.getEqFn().getArgument(i++), predFnHelper.access(keyColumn, loc));
             }
             for (auto& op : lookupOp.getEqFn().front()) {
                rewriter.clone(op, mapping);
             }
-         }
+         });
          rewriter.replaceOpWithNewOp<mlir::subop::LookupOp>(lookupOp, mlir::tuples::TupleStreamType::get(rewriter.getContext()), mapOp.getResult(), hashIndexedView, rewriter.getArrayAttr({hashRefLookup}), listDef);
-         auto* mapBlock = new mlir::Block;
-         mlir::Value tuple = mapBlock->addArgument(mlir::tuples::TupleType::get(getContext()), loc);
-         mapOp.getFn().push_back(mapBlock);
-         rewriter.setInsertionPointToStart(mapBlock);
-         std::vector<mlir::Value> values;
-         for (auto key : lookupKeys) {
-            auto keyColumn = key.cast<mlir::tuples::ColumnRefAttr>();
-            values.push_back(rewriter.create<mlir::tuples::GetColumnOp>(loc, keyColumn.getColumn().type, keyColumn, tuple));
-         }
-         mlir::Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.create<mlir::util::PackOp>(loc, values));
-         rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange{hashed});
+
          mlir::Value currentTuple;
          transformer.setCallBeforeFn([&](mlir::Operation* op) {
             if (auto nestedMapOp = mlir::dyn_cast_or_null<mlir::subop::NestedMapOp>(op)) {
@@ -180,8 +180,8 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
                rewriter.setInsertionPointAfter(scanListOp);
                auto combined = rewriter.create<mlir::subop::CombineTupleOp>(loc, scanListOp.getRes(), currentTuple);
                auto gatherOp = rewriter.create<mlir::subop::GatherOp>(loc, combined.getRes(), columnManager.createRef(&scanListOp.getElem().getColumn()), rewriter.getDictionaryAttr(gatheredForEqFn));
-               auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, gatherOp.getRes(), rewriter.getArrayAttr({lookupPredDef}));
-               mapOp.getFn().push_back(predFnBlock);
+               auto mapOp = rewriter.create<mlir::subop::MapOp>(loc, gatherOp.getRes(), rewriter.getArrayAttr({lookupPredDef}), predFnHelper.getColRefs());
+               mapOp.getFn().push_back(predFnHelper.getMapBlock());
                auto filter = rewriter.create<mlir::subop::FilterOp>(loc, mapOp.getResult(), mlir::subop::FilterSemantic::all_true, rewriter.getArrayAttr({lookupPredRef}));
                scanListOp.getRes().replaceAllUsesExcept(filter.getResult(), combined);
             }

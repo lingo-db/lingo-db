@@ -107,9 +107,7 @@ module{
                       }
 
                       %cstream = subop.scan %centroids : !subop.buffer<[clusterX : f32, clusterY : f32, clusterId : i32]> {clusterX => @cluster::@x({type=f32}),clusterY => @cluster::@y({type=f32}),clusterId => @cluster::@id({type=i32})}
-                      %cstream2 = subop.map %cstream computes : [@m::@dist({type=f32})] (%tpl: !tuples.tuple){
-                         %clusterX = tuples.getcol %tpl @cluster::@x : f32
-                         %clusterY = tuples.getcol %tpl @cluster::@y : f32
+                      %cstream2 = subop.map %cstream computes : [@m::@dist({type=f32})] input : [@cluster::@x, @cluster::@y] (%clusterX : f32, %clusterY : f32){
                          %diffX = arith.subf %clusterX, %x : f32
                          %diffY = arith.subf %clusterY, %y : f32
                          %diffX2 = arith.mulf %diffX, %diffX :f32
@@ -149,10 +147,7 @@ module{
                     tuples.return %new_sum_x,%new_sum_y, %new_count : f32,f32,i32
                   }
                  %fstream = subop.scan %hashmap : !subop.hashmap<[centroidId : i32],[sumX : f32, sumY : f32, count : i32]> {centroidId => @centroid::@id({type=i32}), sumX =>@hm::@sum_x({type=i32}) , sumY =>@hm::@sum_y({type=i32}),count => @hm::@count({type=i32})}
-                 %fstream1 = subop.map %fstream computes : [@centroid::@x({type=f32}),@centroid::@y({type=f32})] (%tpl: !tuples.tuple){
-                    %sum_x = tuples.getcol %tpl @hm::@sum_x : f32
-                    %sum_y = tuples.getcol %tpl @hm::@sum_y : f32
-                    %count = tuples.getcol %tpl @hm::@count : i32
+                 %fstream1 = subop.map %fstream computes : [@centroid::@x({type=f32}),@centroid::@y({type=f32})] input: [@hm::@sum_x,@hm::@sum_y,@hm::@count] (%sum_x : f32, %sum_y : f32, %count : i32){
                     %countf = arith.sitofp %count : i32 to f32
                     %x = arith.divf %sum_x, %countf : f32
                     %y = arith.divf %sum_y, %countf : f32
@@ -176,12 +171,7 @@ module{
                                                                          }
                  %cstream3 = subop.lookup %cstream2 %changed[] :  !subop.simple_state<[changed :i1]> @changed::@ref({type=!subop.lookup_entry_ref< !subop.simple_state<[changed :i1]>>})
                  %cstream4 = subop.gather %cstream3 @hm::@ref {sumX => @hm::@sum_x({type=f32}), sumY => @hm::@sum_y({type=f32}), count => @hm::@count({type=i32})}
-                  %cstream5 = subop.map %cstream4 computes : [@m::@iseq({type=i1})] (%tpl: !tuples.tuple){
-                     %old_x = tuples.getcol %tpl @cluster::@x : f32
-                     %old_y = tuples.getcol %tpl @cluster::@y : f32
-                     %sum_x = tuples.getcol %tpl @hm::@sum_x : f32
-                     %sum_y = tuples.getcol %tpl @hm::@sum_y : f32
-                     %count = tuples.getcol %tpl @hm::@count : i32
+                  %cstream5 = subop.map %cstream4 computes : [@m::@iseq({type=i1})] input: [@cluster::@x, @cluster::@y, @hm::@sum_x, @hm::@sum_y, @hm::@count] (%old_x : f32, %old_y : f32, %sum_x : f32, %sum_y : f32, %count : i32){
                      %countf = arith.sitofp %count : i32 to f32
                      %x = arith.divf %sum_x, %countf : f32
                      %y = arith.divf %sum_y, %countf : f32

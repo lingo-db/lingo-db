@@ -21,9 +21,8 @@ module{
 					subop.generate_emit %c3 :i32
 				tuples.return
 			}
-			%10 = subop.map %3 computes : [@set2::@repeat({type = index})] (%arg0: !tuples.tuple){
-			  %14 = tuples.getcol %arg0 @constrel1::@const0 : i32
-			  %19 = arith.index_cast %14 : i32 to index
+			%10 = subop.map %3 computes : [@set2::@repeat({type = index})] input: [@constrel1::@const0] (%arg0: i32){
+			  %19 = arith.index_cast %arg0 : i32 to index
 			  tuples.return %19 : index
 			}
 			%11 = subop.nested_map %10 [@set2::@repeat] (%arg0, %arg1) {

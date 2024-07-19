@@ -15,16 +15,14 @@ module{
 
 				%20 = subop.scan %ctr : !subop.simple_state<[ctr:i32]> { ctr => @s::@ctr({type=i32})}
 				%s21 = subop.lookup %20 %newCounter[] : !subop.simple_state<[ctrn:i32]> @s::@ref({type=!subop.entry_ref<!subop.simple_state<[ctrn:i32]>>})
-				%s23 = subop.map %s21 computes: [@m::@p1({type=i32})] (%tpl: !tuples.tuple){
-					 %ctrVal = tuples.getcol %tpl @s::@ctr : i32
+				%s23 = subop.map %s21 computes: [@m::@p1({type=i32})] input: [@s::@ctr] (%ctrVal : i32){
 					 %c1 = db.constant(1) : i32
 					 %p1 = arith.addi %c1, %ctrVal : i32
 					 tuples.return %p1 : i32
 				}
 				subop.scatter %s23 @s::@ref {@m::@p1 => ctrn}
 				%s1 = subop.scan %ctr : !subop.simple_state<[ctr:i32]> {ctr => @s::@ctr({type=i32})}
-				%s2 = subop.map %s1 computes: [@m::@lt5({type=i1})] (%tpl: !tuples.tuple){
-					 %ctrVal = tuples.getcol %tpl @s::@ctr : i32
+				%s2 = subop.map %s1 computes: [@m::@lt5({type=i1})] input: [@s::@ctr] (%ctrVal : i32){
 					 %c5 = db.constant(5) : i32
 					 %lt5 = arith.cmpi ult, %ctrVal, %c5 : i32
 					 tuples.return %lt5 : i1

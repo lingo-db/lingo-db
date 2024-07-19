@@ -53,12 +53,7 @@ module{
         %gatheredToDenseId = subop.gather %gatheredFromDenseId @toMapping::@ref {denseId => @to::@denseId({type=i32})}
         %lookedUpNV = subop.lookup %gatheredToDenseId %numVertices[] : !subop.simple_state<[numVertices:index]> @numVertices::@ref({type=!subop.entry_ref<!subop.simple_state<[numVertices:index]>>})
         %gatheredNV= subop.gather %lookedUpNV @numVertices::@ref {numVertices => @numVertices::@val({type=index})}
-        %newDenseIds = subop.map %gatheredNV computes: [@m::@newFromId({type=i32}),@m::@newToId({type=i32}), @m::@newNumElements({type=index})] (%tpl: !tuples.tuple){
-             %numV = tuples.getcol %tpl @numVertices::@val : index
-             %from = tuples.getcol %tpl @c::@from : i32
-             %to = tuples.getcol %tpl @c::@to : i32
-             %fromDense = tuples.getcol %tpl @from::@denseId : i32
-             %toDense = tuples.getcol %tpl @to::@denseId : i32
+        %newDenseIds = subop.map %gatheredNV computes: [@m::@newFromId({type=i32}),@m::@newToId({type=i32}), @m::@newNumElements({type=index})] input: [@numVertices::@val,@c::@from,@c::@to,@from::@denseId,@to::@denseId] (%numV : index, %from : i32,%to : i32, %fromDense : i32, %toDense:i32){
              %c0 = arith.constant 0 : i32
              %c1i = arith.constant 1 : index
              %fromInvalid = arith.cmpi slt, %fromDense,%c0 : i32
@@ -125,8 +120,7 @@ module{
                 %iLStream1 = subop.scan_refs %nextWeightsView : !subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>> @nextWeightsView::@ref({type=!subop.continous_entry_ref<!subop.continuous_view<!subop.array<[nextRank: f64,nextL : i32]>>>})
                 %iLStream2 = subop.lookup %iLStream1 %numVertices[] : !subop.simple_state<[numVertices:index]> @numVertices::@ref3({type=!subop.entry_ref<!subop.simple_state<[numVertices:index]>>})
                 %iLStream3 = subop.gather %iLStream2 @numVertices::@ref3 {numVertices => @numVertices::@val3({type=index})}
-                %iLStream4 = subop.map %iLStream3 computes: [@m::@initialRank({type=f64})] (%tpl: !tuples.tuple){
-                    %totalVertices = tuples.getcol %tpl @numVertices::@val3 : index
+                %iLStream4 = subop.map %iLStream3 computes: [@m::@initialRank({type=f64})] input:[@numVertices::@val3] (%totalVertices : index){
                     %totalVerticesI64 = arith.index_cast %totalVertices : index to i64
                     %totalVerticesf = arith.uitofp %totalVerticesI64 : i64 to f64
                     %c15 = arith.constant 0.15 : f64
@@ -162,8 +156,7 @@ module{
 			}
             %20 = subop.scan_refs %ctr : !subop.simple_state<[ctr:i32]> @s::@ref({type=!subop.entry_ref<!subop.simple_state<[ctr:i32]>>})
             %21 = subop.gather %20 @s::@ref {ctr=> @s::@ctr({type=i32})}
-            %s23 = subop.map %21 computes: [@m::@p1({type=i32}),@m::@continue({type=i1})] (%tpl: !tuples.tuple){
-                 %ctrVal = tuples.getcol %tpl @s::@ctr : i32
+            %s23 = subop.map %21 computes: [@m::@p1({type=i32}),@m::@continue({type=i1})] input: [@s::@ctr] (%ctrVal : i32){
                  %c1 = db.constant(1) : i32
                  %p1 = arith.addi %c1, %ctrVal : i32
                  %c5 = arith.constant 1000 : i32

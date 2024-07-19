@@ -50,9 +50,7 @@
 //CHECK:   }
 //CHECK:   %{{.*}} = subop.scan %{{.*}} : !subop.buffer
 //CHECK:   %{{.*}} = subop.combine_tuple %{{.*}}, %arg0
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] (%arg1: !tuples.tuple){
-//CHECK:     %{{.*}} = tuples.getcol %arg1 @t::@col1 : i64
-//CHECK:     %{{.*}} = tuples.getcol %arg1 @t2::@col1 : i64
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] input : [@t::@col1,@t2::@col1] (%arg1: i64,%arg2: i64){
 //CHECK:     %{{.*}} = db.compare eq %{{.*}} : i64, %{{.*}} : i64
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
@@ -103,9 +101,7 @@
 //CHECK:   }
 //CHECK:   %{{.*}} = subop.scan %{{.*}} : !subop.buffer<[member$0 : i64]> {member$0 => @t2::@col1({type = i64})}
 //CHECK:   %{{.*}} = subop.combine_tuple %{{.*}}, %arg0
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] (%arg1: !tuples.tuple){
-//CHECK:     %{{.*}} = tuples.getcol %arg1 @t::@col1 : i64
-//CHECK:     %{{.*}} = tuples.getcol %arg1 @t2::@col1 : i64
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] input : [@t::@col1,@t2::@col1]  (%arg1: i64,%arg2: i64){
 //CHECK:     %{{.*}} = db.compare eq %{{.*}} : i64, %{{.*}} : i64
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
@@ -114,7 +110,7 @@
 //CHECK:     %{{.*}} = db.constant(false) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map1::@boolval({type = i1})] (){
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map1::@boolval({type = i1})] input : [] (){
 //CHECK:     %{{.*}} = db.constant(true) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
@@ -144,9 +140,7 @@
 //CHECK:   }
 //CHECK:   %{{.*}} = subop.scan %{{.*}} : !subop.buffer<[member$0 : i64]> {member$0 => @t2::@col1({type = i64})}
 //CHECK:   %{{.*}} = subop.combine_tuple %{{.*}}, %arg0
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] (%arg1: !tuples.tuple){
-//CHECK:     %{{.*}} = tuples.getcol %arg1 @t::@col1 : i64
-//CHECK:     %{{.*}} = tuples.getcol %arg1 @t2::@col1 : i64
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] input : [@t::@col1,@t2::@col1]  (%arg1: i64,%arg2: i64){
 //CHECK:     %{{.*}} = db.compare eq %{{.*}} : i64, %{{.*}} : i64
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
@@ -155,7 +149,7 @@
 //CHECK:     %{{.*}} = db.constant(false) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map1::@boolval({type = i1})] (){
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map1::@boolval({type = i1})] input : [] (){
 //CHECK:     %{{.*}} = db.constant(true) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
@@ -196,7 +190,7 @@
 //CHECK:   %{{.*}} = subop.scan_list %arg1 : !subop.list<!subop.multi_map_entry_ref<<[member$0 : i64], []>>> @lookup1::@entryref({type = !subop.multi_map_entry_ref<<[member$0 : i64], []>>})
 //CHECK:   %{{.*}} = subop.gather %{{.*}} @lookup1::@entryref {member$0 => @t::@col1({type = i64})}
 //CHECK:   %{{.*}} = subop.combine_tuple %{{.*}}, %arg0
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] (%arg2: !tuples.tuple){
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] input : [] (){
 //CHECK:     %{{.*}} = db.constant(1 : i64) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
@@ -233,7 +227,7 @@
 //CHECK:   %{{.*}} = subop.scan_list %arg1 : !subop.list<!subop.multi_map_entry_ref<<[member$0 : i64], []>>> @lookup1::@entryref({type = !subop.multi_map_entry_ref<<[member$0 : i64], []>>})
 //CHECK:   %{{.*}} = subop.gather %{{.*}} @lookup1::@entryref {member$0 => @t2::@col1({type = i64})}
 //CHECK:   %{{.*}} = subop.combine_tuple %{{.*}}, %arg0
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] (%arg2: !tuples.tuple){
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] input : [] (){
 //CHECK:     %{{.*}} = db.constant(1 : i64) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
@@ -242,7 +236,7 @@
 //CHECK:     %{{.*}} = db.constant(false) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map1::@boolval({type = i1})] (){
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map1::@boolval({type = i1})] input : [] (){
 //CHECK:     %{{.*}} = db.constant(true) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
@@ -282,7 +276,7 @@
 //CHECK:   %{{.*}} = subop.scan_list %arg1 : !subop.list<!subop.multi_map_entry_ref<<[member$0 : i64], []>>> @lookup1::@entryref({type = !subop.multi_map_entry_ref<<[member$0 : i64], []>>})
 //CHECK:   %{{.*}} = subop.gather %{{.*}} @lookup1::@entryref {member$0 => @t2::@col1({type = i64})}
 //CHECK:   %{{.*}} = subop.combine_tuple %{{.*}}, %arg0
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] (%arg2: !tuples.tuple){
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] input : [] (){
 //CHECK:     %{{.*}} = db.constant(1 : i64) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
@@ -291,7 +285,7 @@
 //CHECK:     %{{.*}} = db.constant(false) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map1::@boolval({type = i1})] (){
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map1::@boolval({type = i1})] input : [] (){
 //CHECK:     %{{.*}} = db.constant(true) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
@@ -313,7 +307,7 @@
 //CHECK: [[RIGHT:%.*]], %{{.*}} = subop.generate[@t::@col1({type = i64})]
 //CHECK: [[LEFT:%.*]], %{{.*}} = subop.generate[@t2::@col1({type = i64})]
 //CHECK: %{{.*}} = subop.create !subop.multimap<[member$0 : i64], [member$1 : i64, flag$0 : i1]>
-//CHECK: %{{.*}} = subop.map [[LEFT]] computes : [@materialized::@marker({type = i1})] (){
+//CHECK: %{{.*}} = subop.map [[LEFT]] computes : [@materialized::@marker({type = i1})] input : [] (){
 //CHECK:   %{{.*}} = db.constant(false) : i1
 //CHECK:   tuples.return %{{.*}} : i1
 //CHECK: }
@@ -331,12 +325,12 @@
 //CHECK:   %{{.*}} = subop.scan_list %arg1 : !subop.list<!subop.multi_map_entry_ref<<[member$0 : i64], [member$1 : i64, flag$0 : i1]>>> @lookup1::@entryref({type = !subop.multi_map_entry_ref<<[member$0 : i64], [member$1 : i64, flag$0 : i1]>>})
 //CHECK:   %{{.*}} = subop.gather %{{.*}} @lookup1::@entryref {member$0 => @t::@col1({type = i64}), member$1 => @t2::@col1({type = i64})}
 //CHECK:   %{{.*}} = subop.combine_tuple %{{.*}}, %arg0
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] (%arg2: !tuples.tuple){
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@map::@pred({type = i1})] input : [] (){
 //CHECK:     %{{.*}} = db.constant(1 : i64) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
 //CHECK:   %{{.*}} = subop.filter %{{.*}} all_true [@map::@pred]
-//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@marker::@marker({type = i1})] (){
+//CHECK:   %{{.*}} = subop.map %{{.*}} computes : [@marker::@marker({type = i1})] input : [] (){
 //CHECK:     %{{.*}} = db.constant(true) : i1
 //CHECK:     tuples.return %{{.*}} : i1
 //CHECK:   }
@@ -401,8 +395,7 @@
 
 %1 = relalg.basetable { table_identifier="test" } columns: {t => @t1::@col1({type=i64})}
 // -----
-//CHECK:  %{{.*}} = subop.map %{{.*}} computes : [@m::@col2({type = i64})] (%arg0: !tuples.tuple){
-//CHECK:    %{{.*}} = tuples.getcol %arg0 @t::@col1 : i64
+//CHECK:  %{{.*}} = subop.map %{{.*}} computes : [@m::@col2({type = i64})] input : [@t::@col1] (%arg0: i64){
 //CHECK:    %c42_i64 = arith.constant 42 : i64
 //CHECK:    %{{.*}} = arith.addi %{{.*}}, %c42_i64 : i64
 //CHECK:    tuples.return %{{.*}} : i64

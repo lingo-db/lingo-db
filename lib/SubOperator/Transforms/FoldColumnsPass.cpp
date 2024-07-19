@@ -1,5 +1,6 @@
 #include "llvm/Support/Debug.h"
 #include "mlir/Dialect/DB/IR/DBOps.h"
+#include "mlir/Dialect/SubOperator/SubOperatorInterfaces.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 #include "mlir/Dialect/SubOperator/Transforms/Passes.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
@@ -14,17 +15,17 @@ class PushRenamingUp : public mlir::RewritePattern {
       : RewritePattern(mlir::subop::RenamingOp::getOperationName(), 1, context) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto renamingOp = mlir::cast<mlir::subop::RenamingOp>(op);
-      auto loc=op->getLoc();
+      auto loc = op->getLoc();
       if (!renamingOp->hasOneUse()) return mlir::failure();
       auto columns = renamingOp.getColumns();
 
       auto* user = *renamingOp->getUsers().begin();
       if (auto columnFoldable = mlir::dyn_cast_or_null<mlir::subop::ColumnFoldable>(user)) {
-         mlir::subop::ColumnFoldInfo columnFoldInfo;
+         mlir::subop::ColumnMapping columnFoldInfo;
          for (auto c : renamingOp.getColumns()) {
             auto* newColumn = &c.cast<mlir::tuples::ColumnDefAttr>().getColumn();
             auto* prevColumn = &c.cast<mlir::tuples::ColumnDefAttr>().getFromExisting().cast<mlir::ArrayAttr>()[0].cast<mlir::tuples::ColumnRefAttr>().getColumn();
-            columnFoldInfo.directMappings[newColumn] = prevColumn;
+            columnFoldInfo.mapRaw(newColumn, prevColumn);
          }
          if (columnFoldable.foldColumns(columnFoldInfo).succeeded()) {
             rewriter.replaceOp(op, renamingOp.getStream());

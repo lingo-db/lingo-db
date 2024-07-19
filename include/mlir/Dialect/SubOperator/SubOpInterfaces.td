@@ -100,7 +100,7 @@ def StateEntryReference : TypeInterface<"StateEntryReference"> {
 def ColumnFoldable : OpInterface<"ColumnFoldable"> {
   let cppNamespace = "::mlir::subop";
     let methods = [
-    InterfaceMethod<"","mlir::LogicalResult", "foldColumns",(ins "mlir::subop::ColumnFoldInfo&":$columnInfo)>,
+    InterfaceMethod<"","mlir::LogicalResult", "foldColumns",(ins "mlir::subop::ColumnMapping&":$columnInfo)>,
     ];
 }
 

@@ -1,7 +1,6 @@
 #ifndef MLIR_DIALECT_SUBOPERATOR_SUBOPERATORINTERFACES_H
 #define MLIR_DIALECT_SUBOPERATOR_SUBOPERATORINTERFACES_H
 #include "mlir/Dialect/SubOperator/SubOperatorOpsAttributes.h"
-#include "mlir/Dialect/SubOperator/Transforms/ColumnFolding.h"
 #include "mlir/Dialect/SubOperator/Transforms/StateUsageTransformer.h"
 #include "mlir/Dialect/TupleStream/TupleStreamOpsAttributes.h"
 #include "mlir/IR/Builders.h"
@@ -77,6 +76,9 @@ class ColumnMapping {
          remapped.push_back(clone(x.cast<mlir::tuples::ColumnDefAttr>()));
       }
       return mlir::ArrayAttr::get(mapping.getContext(), remapped);
+   }
+   void mapRaw(mlir::tuples::Column* from, mlir::tuples::Column* to) {
+      mapping[from] = to;
    }
 };
 } // end namespace mlir::subop

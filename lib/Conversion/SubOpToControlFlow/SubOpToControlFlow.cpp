@@ -1175,45 +1175,21 @@ class MapLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::MapOp>::SubOpTupleStreamConsumerConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::MapOp mapOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
-      {
-         std::vector<mlir::Operation*> toErase;
-         mlir::IRMapping irMapping;
-         auto cloned = mlir::cast<mlir::subop::MapOp>(rewriter.clone(mapOp, irMapping));
 
-         mlir::Block* source = &cloned.getFn().front();
-         auto* terminator = source->getTerminator();
 
-         source->walk([&](mlir::tuples::GetColumnOp getColumnOp) {
-            getColumnOp.replaceAllUsesWith(mapping.resolve(getColumnOp.getAttr()));
-            toErase.push_back(getColumnOp.getOperation());
-         });
-         /*source->walk([&](mlir::tuples::GetParamVal getParamVal) {
-            mlir::Value val = rewriter.getMapped(getParamVal.getParam(), getParamVal.getOperation());
-            getParamVal.replaceAllUsesWith(val);
-            toErase.push_back(getParamVal.getOperation());
-         })*/
-         for (auto* op : toErase) {
-            op->dropAllUses();
-            op->erase();
-         }
-         auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(terminator);
-         std::vector<Value> res(returnOp.getResults().begin(), returnOp.getResults().end());
-         for (auto& r : res) {
-            r = rewriter.getMapped(r);
-         }
-         std::vector<mlir::Operation*> toInsert;
-         for (auto& x : source->getOperations()) {
-            toInsert.push_back(&x);
-         }
-         for (auto* x : toInsert) {
-            x->remove();
-            rewriter.insert(x);
-         }
-         rewriter.eraseOp(terminator);
-         cloned->erase();
-         mapping.define(mapOp.getComputedCols(), res);
+      auto args=mapping.resolve(mapOp.getInputCols());
+      std::vector<Value> res;
+
+      rewriter.inlineBlock<mlir::tuples::ReturnOpAdaptor>(&mapOp.getFn().front(), args, [&](mlir::tuples::ReturnOpAdaptor adaptor) {
+         res.insert(res.end(), adaptor.getResults().begin(), adaptor.getResults().end());
+      });
+      for (auto& r : res) {
+         r = rewriter.getMapped(r);
       }
+      mapping.define(mapOp.getComputedCols(), res);
+
       rewriter.replaceTupleStream(mapOp, mapping);
+
       return success();
    }
 };

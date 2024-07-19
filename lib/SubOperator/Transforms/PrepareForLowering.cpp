@@ -328,7 +328,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                   }
                   b.create<mlir::tuples::ReturnOp>(b.getUnknownLoc(), mapOpReturnVals);
                }
-               auto mapOp = b.create<mlir::subop::MapOp>(b.getUnknownLoc(), mlir::tuples::TupleStreamType::get(b.getContext()), combineOp.getStream(), b.getArrayAttr(createdByMap));
+               auto mapOp = b.create<mlir::subop::MapOp>(b.getUnknownLoc(), mlir::tuples::TupleStreamType::get(b.getContext()), combineOp.getStream(), b.getArrayAttr(createdByMap),b.getArrayAttr({}));
                mapOp.getFn().push_back(mapBlock);
                combineOp->replaceAllUsesWith(mlir::ValueRange{mapOp.getResult()});
                opsToErase.push_back(combineOp);

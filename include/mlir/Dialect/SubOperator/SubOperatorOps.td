@@ -458,10 +458,10 @@ def UnionOp : SubOperator_Op<"union", [Pure,SubOperator]> {
 def MapOp : SubOperator_Op<"map", [Pure,SubOperator,DeclareOpInterfaceMethods<ColumnFoldable>]> {
     let summary = "map operation";
 
-    let arguments = (ins TupleStream:$stream,ArrayAttr:$computed_cols);
+    let arguments = (ins TupleStream:$stream,ArrayAttr:$computed_cols, ArrayAttr:$input_cols);
     let results = (outs TupleStream:$result);
     let regions = (region SizedRegion<1>:$fn);
-    let assemblyFormat = [{  $stream `computes` `:` custom<CustDefArr>($computed_cols) custom<CustRegion>($fn) attr-dict-with-keyword }];
+    let assemblyFormat = [{  $stream `computes` `:` custom<CustDefArr>($computed_cols) `input` `:` custom<CustRefArr>($input_cols) custom<CustRegion>($fn) attr-dict-with-keyword }];
         let extraClassDeclaration = [{
             mlir::Operation* cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping);
         }];
