@@ -462,6 +462,48 @@ class HashVarLenLowering : public OpConversionPattern<util::HashVarLen> {
       return success();
    }
 };
+class BufferGetMemRefOpLowering : public OpConversionPattern<util::BufferGetMemRefOp> {
+   public:
+   using OpConversionPattern<util::BufferGetMemRefOp>::OpConversionPattern;
+   LogicalResult matchAndRewrite(util::BufferGetMemRefOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
+      // Buffer length in bytes
+      auto bytesPerEntry = rewriter.create<LLVM::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(1ul));
+      Value len = rewriter.create<LLVM::TruncOp>(op->getLoc(), rewriter.getI64Type(), adaptor.getBuffer());
+      len = rewriter.create<LLVM::UDivOp>(op->getLoc(), len, bytesPerEntry);
+      // Buffer pointer
+      auto const64 = rewriter.create<LLVM::ConstantOp>(op->getLoc(), rewriter.getIntegerType(128), rewriter.getIntegerAttr(rewriter.getIntegerType(128), 64));
+      auto shiftedLeft = rewriter.create<LLVM::LShrOp>(op->getLoc(), adaptor.getBuffer(), const64);
+      Value refInt = rewriter.create<LLVM::TruncOp>(op->getLoc(), rewriter.getI64Type(), shiftedLeft);
+      Value elementPtr = rewriter.create<LLVM::IntToPtrOp>(op->getLoc(), LLVM::LLVMPointerType::get(getContext()), refInt);
+
+      // Setup undefined memref
+      auto memrefType = cast<MemRefType>(op.getMemref().getType());
+      auto targetType = typeConverter->convertType(memrefType);
+      auto targetPointerType = LLVM::LLVMPointerType::get(getContext());
+      Value tpl = rewriter.create<LLVM::UndefOp>(op->getLoc(), targetType);
+
+      // Get values to build a memref: !llvm.struct<(ptr, ptr, i64, array<1 x i64>, array<1 x i64>)>
+      // ptr
+      Value deadBeefConst = rewriter.create<LLVM::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(0xdeadbeef));
+      auto allocatedPtr = rewriter.create<LLVM::IntToPtrOp>(op->getLoc(), targetPointerType, deadBeefConst);
+      // ptr
+      Value alignedPtr = elementPtr;
+      // i64
+      auto offset = rewriter.create<LLVM::ConstantOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(0));
+
+      // Insert values into "undefined" memref<?xi8> to make it a valid one
+      tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, allocatedPtr, rewriter.getDenseI64ArrayAttr(0));
+      tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, alignedPtr, rewriter.getDenseI64ArrayAttr(1));
+      tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, offset, rewriter.getDenseI64ArrayAttr(2));
+      // array<1 x i64> - dimension size
+      tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, len, rewriter.getDenseI64ArrayAttr({3,0}));
+      // array<1 x i64> - stride
+      tpl = rewriter.create<LLVM::InsertValueOp>(op->getLoc(), targetType, tpl, bytesPerEntry, rewriter.getDenseI64ArrayAttr({4,0}));
+
+      rewriter.replaceOp(op, tpl);
+      return success();
+   }
+};
 
 class FilterTaggedPtrLowering : public OpConversionPattern<util::FilterTaggedPtr> {
    public:
@@ -559,6 +601,7 @@ void util::populateUtilToLLVMConversionPatterns(LLVMTypeConverter& typeConverter
    patterns.add<TagPtrLowering>(typeConverter, patterns.getContext());
    patterns.add<UnTagPtrLowering>(typeConverter, patterns.getContext());
    patterns.add<BufferCreateOpLowering>(typeConverter, patterns.getContext());
+   patterns.add<BufferGetMemRefOpLowering>(typeConverter, patterns.getContext());
    patterns.add<BufferGetElementRefLowering>(typeConverter, patterns.getContext());
 }
 namespace {
