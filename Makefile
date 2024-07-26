@@ -26,6 +26,11 @@ resources/data/job/.stamp: tools/generate/job.sh build/lingodb-debug/.buildstamp
 	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
 	touch $@
 
+resources/data/ssb-simplified-1/.stamp: tools/generate/ssb_simplified.sh build/lingodb-debug/.buildstamp
+	mkdir -p resources/data/ssb-simplified-1
+	bash $< $(CURDIR)/build/lingodb-debug $(dir $(CURDIR)/$@) 1
+	touch $@
+
 LDB_ARGS= -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
 		 -DPython3_EXECUTABLE="${ROOT_DIR}/venv/bin/python3" \
 	   	 -DCMAKE_BUILD_TYPE=Debug
