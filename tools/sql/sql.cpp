@@ -10,8 +10,33 @@ void check(bool b, std::string message) {
       exit(1);
    }
 }
-void handleQuery(runtime::Session& session, std::string sqlQuery) {
+
+class ConciseTimingPrinter : public execution::TimingProcessor {
+   double compilation;
+   double execution;
+
+   public:
+   ConciseTimingPrinter(): compilation(0.0), execution(0.0){
+
+   }
+   void addTiming(const std::unordered_map<std::string, double>& timing) override {
+      for (auto [name, t] : timing) {
+         if (name == "executionTime") {
+            execution = t;
+         } else {
+            compilation += t;
+         }
+      }
+   }
+   void process() override {
+      std::cerr <<" compilation: "<< compilation << " [ms] execution: " << execution << " [ms]"<<std::endl;
+   }
+};
+void handleQuery(runtime::Session& session, std::string sqlQuery, bool reportTimes) {
    auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::DEFAULT, true);
+   if(reportTimes) {
+      queryExecutionConfig->timingProcessor = std::make_unique<ConciseTimingPrinter>();
+   }
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), session);
    executer->fromData(sqlQuery);
    executer->execute();
@@ -21,12 +46,23 @@ int main(int argc, char** argv) {
       std::cerr << "USAGE: sql database" << std::endl;
       return 1;
    }
-   auto session = runtime::Session::createSession(std::string(argv[1]),true);
+   bool reportTimes=false;
+   if(const char* reportTimesEnv=std::getenv("LINGODB_SQL_REPORT_TIMES")){
+      reportTimes= std::stoll(reportTimesEnv);
+   }
+   bool prompt=true;
+   if(const char* promptEnv=std::getenv("LINGODB_SQL_PROMPT")){
+      prompt= std::stoll(promptEnv);
+   }
+
+   auto session = runtime::Session::createSession(std::string(argv[1]), true);
 
    support::eval::init();
    while (true) {
       //print prompt
-      std::cout << "sql>";
+      if (prompt){
+         std::cout << "sql>";
+      }
       //read query from stdin until semicolon appears
       std::stringstream query;
       std::string line;
@@ -42,9 +78,8 @@ int main(int argc, char** argv) {
          }
          std::getline(std::cin, line);
       }
-      handleQuery(*session, query.str());
+      handleQuery(*session, query.str(), reportTimes);
    }
 
    return 0;
 }
-
