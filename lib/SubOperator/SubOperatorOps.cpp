@@ -1110,12 +1110,12 @@ std::vector<std::string> subop::LockOp::getWrittenMembers() {
 void cloneRegionInto(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping, mlir::Region& region, mlir::Region& newRegion) {
    newRegion.getBlocks().clear();
    for (auto& block : region) {
+      mlir::OpBuilder::InsertionGuard guard(builder);
       auto* newBlock = builder.createBlock(&newRegion);
       for (auto arg : block.getArguments()) {
          auto newArg = newBlock->addArgument(arg.getType(), arg.getLoc());
          mapping.map(arg, newArg);
       }
-      mlir::OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointToStart(newBlock);
       for (auto& op : block) {
          if (auto subop = mlir::dyn_cast<mlir::subop::SubOperator>(op)) {
