@@ -1,3 +1,4 @@
+#include "llvm/Support/Debug.h"
 #include "mlir/Dialect/SubOperator/SubOperatorInterfaces.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 #include "mlir/Dialect/SubOperator/Transforms/ColumnCreationAnalysis.h"
@@ -37,6 +38,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
          auto columnCreationAnalysis = getAnalysis<mlir::subop::ColumnCreationAnalysis>();
          llvm::DenseMap<mlir::Value, GlobalThreadLocalInfo> toThreadLocalsGlobal;
          std::vector<std::pair<mlir::tuples::ColumnRefAttr, std::vector<mlir::Operation*>>> toLockGlobal;
+         llvm::DenseSet<mlir::Value> threadLocalNotPossibleAnymore;
          executionGroup.getSubOps().walk([&](mlir::subop::ExecutionStepOp executionStepOp) {
             llvm::DenseMap<mlir::Value, mlir::Value> extStates;
 
@@ -219,40 +221,49 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                         //ignore: do not interact with states
                         continue;
                      }
-                     //llvm::dbgs() << "problematic operation:";
-                     //pipelineOp->dump();
                      canBeParallel = false;
                   }
                   //finally: mark as parallel
                   if (canBeParallel) {
-                     scanRefsOp->setAttr("parallel", mlir::UnitAttr::get(&getContext()));
                      //llvm::dbgs() << "parallel: ";
                      //scanRefsOp.dump();
-
                      for (auto l : toThreadLocals) {
-                        if (toThreadLocalsGlobal.contains(l.first)) {
-                           auto& globalInfo = toThreadLocalsGlobal[l.first];
-                           //todo: make sure that everything fits together
-                           if (l.second.combineRegion) {
-                              globalInfo.combineRegion = l.second.combineRegion;
-                           }
-                           if (l.second.compareRegion) {
-                              globalInfo.compareRegion = l.second.compareRegion;
-                           }
-                           globalInfo.shouldUse.insert(executionStepOp);
-                        } else {
-                           toThreadLocalsGlobal.insert({l.first, {l.second.combineRegion, l.second.compareRegion, {executionStepOp}, l.second.requiresCombine, false}});
+                        if (threadLocalNotPossibleAnymore.contains(l.first)) {
+                           canBeParallel = false;
+                           continue;
                         }
                      }
-                     for (auto* mA : markAsAtomic) {
-                        mA->setAttr("atomic", mlir::UnitAttr::get(&getContext()));
+                     if(canBeParallel) {
+                        scanRefsOp->setAttr("parallel", mlir::UnitAttr::get(&getContext()));
+                        for (auto l : toThreadLocals) {
+                           if (toThreadLocalsGlobal.contains(l.first)) {
+                              auto& globalInfo = toThreadLocalsGlobal[l.first];
+                              //todo: make sure that everything fits together
+                              if (l.second.combineRegion) {
+                                 globalInfo.combineRegion = l.second.combineRegion;
+                              }
+                              if (l.second.compareRegion) {
+                                 globalInfo.compareRegion = l.second.compareRegion;
+                              }
+                              globalInfo.shouldUse.insert(executionStepOp);
+                           } else {
+                              toThreadLocalsGlobal.insert({l.first, {l.second.combineRegion, l.second.compareRegion, {executionStepOp}, l.second.requiresCombine, false}});
+                           }
+                        }
+                        for (auto* mA : markAsAtomic) {
+                           mA->setAttr("atomic", mlir::UnitAttr::get(&getContext()));
+                        }
+                        for (auto l : toLock) {
+                           toLockGlobal.push_back(l);
+                        }
                      }
-                     for (auto l : toLock) {
-                        toLockGlobal.push_back(l);
+                  }
+                  if (!canBeParallel) {
+                     for (auto x: executionStepOp.getOperands()){
+                        threadLocalNotPossibleAnymore.insert(x);
                      }
-                  } else {
-                     //llvm::dbgs()<<"not parallel: ";
-                     //scanRefsOp.dump();
+                     llvm::dbgs()<<"not parallel: ";
+                     scanRefsOp.dump();
                   }
                }
             }

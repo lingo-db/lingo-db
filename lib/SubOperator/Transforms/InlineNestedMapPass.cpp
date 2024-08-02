@@ -13,6 +13,7 @@
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/IRMapping.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
+#include <iostream>
 #include <queue>
 namespace {
 
@@ -56,9 +57,11 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
                for (auto& use : unionOp.getResult().getUses()) {
                   opsToProcess.push({use, v, true, columnMapping});
                }
-               std::vector<mlir::Value> args(unionOp.getOperands().begin(), unionOp.getOperands().end());
-               args.erase(args.begin() + currentUse.getOperandNumber());
-               unionOp->setOperands(args);
+               if (!encounteredUnion) {
+                  std::vector<mlir::Value> args(unionOp.getOperands().begin(), unionOp.getOperands().end());
+                  args.erase(args.begin() + currentUse.getOperandNumber());
+                  unionOp->setOperands(args);
+               }
                unions.push_back(unionOp);
                continue;
             }

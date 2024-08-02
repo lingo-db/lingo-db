@@ -27,7 +27,7 @@ class ColumnManager {
    std::string getUniqueScope(StringRef base) {
       if (scopeUnifier.count(std::string(base))) {
          scopeUnifier[std::string(base)] += 1;
-         return std::string(base) + std::to_string(scopeUnifier[std::string(base)]);
+         return std::string(base) +std::string("_u_")+std::to_string(scopeUnifier[std::string(base)]);
       } else {
          scopeUnifier[std::string(base)] = 0;
          return std::string(base);
