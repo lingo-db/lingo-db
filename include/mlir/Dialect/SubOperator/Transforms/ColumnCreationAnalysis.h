@@ -9,10 +9,17 @@ namespace mlir::subop {
 
 struct ColumnCreationAnalysis {
    std::unordered_map<mlir::Operation*, std::unordered_set<mlir::tuples::Column*>> createdColumns;
+
+   std::unordered_map<mlir::tuples::Column*, mlir::Operation*> columnCreators;
    ColumnCreationAnalysis(mlir::Operation* op);
    void analyze(mlir::Operation* op, mlir::Attribute attr);
    const std::unordered_set<mlir::tuples::Column*>& getCreatedColumns(mlir::Operation* op) {
       return createdColumns[op];
+   }
+
+   mlir::Operation* getColumnCreator(mlir::tuples::Column* column) {
+      assert(columnCreators.count(column) && "Column not created by any operation");
+      return columnCreators[column];
    }
 };
 } // namespace mlir::subop

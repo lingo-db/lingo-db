@@ -1345,9 +1345,11 @@ mlir::Operation* subop::InsertOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRM
 }
 std::vector<std::string> subop::LookupOp::getReadMembers() {
    std::vector<std::string> res;
-   for (auto x : getState().getType().cast<mlir::subop::State>().getMembers().getNames()) {
-      res.push_back(x.cast<mlir::StringAttr>().str());
-   }
+if (auto lookableState = getState().getType().dyn_cast_or_null<mlir::subop::LookupAbleState>()) {
+for (auto x : lookableState.getKeyMembers().getNames()) {
+   res.push_back(x.cast<mlir::StringAttr>().str());
+}
+}
    return res;
 }
 mlir::Operation* subop::LookupOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {

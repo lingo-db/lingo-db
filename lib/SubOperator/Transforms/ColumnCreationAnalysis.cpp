@@ -12,6 +12,7 @@ void mlir::subop::ColumnCreationAnalysis::analyze(mlir::Operation* op, mlir::Att
       }
    } else if (auto columnDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>()) {
       createdColumns[op].insert(&columnDefAttr.getColumn());
+      columnCreators[&columnDefAttr.getColumn()] = op;
       analyze(op, columnDefAttr.getFromExisting());
    }
 }

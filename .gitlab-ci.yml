@@ -92,17 +92,19 @@ sqlite-dataset-tests:
     - touch build/lingodb-release/.stamp
     - touch build/lingodb-release/.buildstamp
     - mkdir -p /datasets/tpch-1
+    - mkdir -p /datasets/tpcds-1
     - mkdir -p /data
     - cp -r /opt/data/umbra/tpch1 /data/tpch-1
     - cd /data/tpch-1
     - for table in ./*.tbl; do  sed -i 's/|$//' "$table"; done
     - $BASE_PATH/build/lingodb-release/sql /datasets/tpch-1 < $BASE_PATH/resources/sql/tpch/initialize.sql
-#   - mkdir -p /datasets/tpcds-1
-#   - cd /opt/data/umbra/tpcds1
-#   - $BASE_PATH/build/lingodb-release/sql /datasets/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
+    - cp -r /opt/data/umbra/tpcds1 /data/tpds-1
+    - cd /data/tpds-1
+    - for table in ./*.dat; do  sed -i 's/|$//' "$table"; done
+    - $BASE_PATH/build/lingodb-release/sql /datasets/tpcds-1 < $BASE_PATH/resources/sql/tpcds/initialize.sql
     - cd $BASE_PATH
     - build/lingodb-release/sqlite-tester ./test/sqlite-datasets/tpchSf1.test /datasets/tpch-1
-#   - build/lingodb-release/sqlite-tester ./test/sqlite-datasets/tpcdsSf1.test /datasets/tpcds-1
+    - build/lingodb-release/sqlite-tester ./test/sqlite-datasets/tpcdsSf1.test /datasets/tpcds-1
   tags:
     - "umbra-integration"
 
