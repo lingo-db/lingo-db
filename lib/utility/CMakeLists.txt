@@ -1,1 +1,1 @@
-add_library(utility Tracer.cpp)
+add_library(utility Tracer.cpp Setting.cpp)

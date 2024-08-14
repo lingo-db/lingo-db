@@ -5,8 +5,11 @@
 #include "execution/Execution.h"
 #include "execution/Timing.h"
 #include "mlir-support/eval.h"
+#include "utility/Setting.h"
 
 #include <stdlib.h>
+
+utility::GlobalSetting<bool> eagerLoading("system.eager_loading", false);
 
 int main(int argc, char** argv) {
    if (argc <= 2) {
@@ -16,7 +19,7 @@ int main(int argc, char** argv) {
    std::string inputFileName = std::string(argv[1]);
    std::string directory = std::string(argv[2]);
    std::cout << "Loading Database from: " << directory << '\n';
-   auto session = runtime::Session::createSession(directory,false);
+   auto session = runtime::Session::createSession(directory, eagerLoading.getValue());
 
    support::eval::init();
    execution::ExecutionMode runMode = execution::getExecutionMode();

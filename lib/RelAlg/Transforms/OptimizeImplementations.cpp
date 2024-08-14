@@ -705,11 +705,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          }
       });
       bool enableGroupJoins = false;
-      if (const char* shouldEnableGJ = std::getenv("LINGODB_ENABLE_GJ")) {
-         if (std::string(shouldEnableGJ) == "OFF") {
-            enableGroupJoins = false;
-         }
-      }
+      //todo: reactivate groupjoins
       if (enableGroupJoins) {
          getOperation().walk([&](mlir::relalg::AggregationOp op) {
             auto* potentialJoin = op.getRel().getDefiningOp();

@@ -13,13 +13,13 @@
 #include "mlir/InitAllPasses.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
+#include "utility/Setting.h"
 #include "utility/Tracer.h"
 
 #include <chrono>
 #include <sstream>
 #include <unordered_set>
 
-#include <oneapi/tbb.h>
 namespace {
 static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::string fileName) {
    mlir::PassManager pm(moduleOp->getContext());
@@ -32,6 +32,9 @@ static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::stri
    }
 }
 } // namespace
+utility::GlobalSetting<std::string> executionModeSetting("system.execution_mode", "DEFAULT");
+utility::GlobalSetting<std::string> subopOptPassesSetting("system.subop.opt", "GlobalOpt,ReuseLocal,Specialize,PullGatherUp,Compression");
+} // end anonymous namespace
 namespace execution {
 class DefaultQueryOptimizer : public QueryOptimizer {
    void optimize(mlir::ModuleOp& moduleOp) override {
@@ -90,14 +93,13 @@ class SubOpLoweringStep : public LoweringStep {
       mlir::PassManager lowerSubOpPm(moduleOp->getContext());
       lowerSubOpPm.enableVerifier(verify);
       //lowerSubOpPm.enableIRPrinting();
-      std::unordered_set<std::string> enabledPasses = {"GlobalOpt", "ReuseLocal", "Specialize", "PullGatherUp", "Compression"};
-      if (const char* mode = std::getenv("LINGODB_SUBOP_OPTS")) {
-         enabledPasses.clear();
-         std::stringstream configList(mode);
-         std::string optPass;
-         while (std::getline(configList, optPass, ',')) {
-            enabledPasses.insert(optPass);
-         }
+      std::unordered_set<std::string> enabledPasses = {};
+
+      enabledPasses.clear();
+      std::stringstream configList(subopOptPassesSetting.getValue());
+      std::string optPass;
+      while (std::getline(configList, optPass, ',')) {
+         enabledPasses.insert(optPass);
       }
       if (enabledPasses.contains("GlobalOpt"))
          lowerSubOpPm.addPass(mlir::subop::createGlobalOptPass());
@@ -164,29 +166,28 @@ ExecutionMode getExecutionMode() {
    } else {
       runMode = ExecutionMode::DEFAULT;
    }
-
-   if (const char* mode = std::getenv("LINGODB_EXECUTION_MODE")) {
-      if (std::string(mode) == "PERF") {
-         runMode = ExecutionMode::PERF;
-      } else if (std::string(mode) == "CHEAP") {
-         runMode = ExecutionMode::CHEAP;
-      } else if (std::string(mode) == "EXTREME_CHEAP") {
-         runMode = ExecutionMode::EXTREME_CHEAP;
-      } else if (std::string(mode) == "DEFAULT") {
-         runMode = ExecutionMode::DEFAULT;
-      } else if (std::string(mode) == "DEBUGGING") {
-         runMode = ExecutionMode::DEBUGGING;
-      } else if (std::string(mode) == "SPEED") {
-         std::cout << "using speed mode" << std::endl;
-         runMode = ExecutionMode::SPEED;
-      } else if (std::string(mode) == "C") {
-         runMode = ExecutionMode::C;
-      }else if (std::string(mode) == "GPU") {
-         #if GPU_ENABLED==1
-         runMode = ExecutionMode::GPU;
-         #endif
-      }
+   std::string mode = executionModeSetting.getValue();
+   if (std::string(mode) == "PERF") {
+      runMode = ExecutionMode::PERF;
+   } else if (std::string(mode) == "CHEAP") {
+      runMode = ExecutionMode::CHEAP;
+   } else if (std::string(mode) == "EXTREME_CHEAP") {
+      runMode = ExecutionMode::EXTREME_CHEAP;
+   } else if (std::string(mode) == "DEFAULT") {
+      runMode = ExecutionMode::DEFAULT;
+   } else if (std::string(mode) == "DEBUGGING") {
+      runMode = ExecutionMode::DEBUGGING;
+   } else if (std::string(mode) == "SPEED") {
+      std::cout << "using speed mode" << std::endl;
+      runMode = ExecutionMode::SPEED;
+   } else if (std::string(mode) == "C") {
+      runMode = ExecutionMode::C;
+   } else if (std::string(mode) == "GPU") {
+#if GPU_ENABLED == 1
+      runMode = ExecutionMode::GPU;
+#endif
    }
+
    return runMode;
 }
 
@@ -338,11 +339,11 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
 #else
       config->executionBackend = createDefaultLLVMBackend();
 #endif
-  }else if(runMode == ExecutionMode::GPU) {
-   #if GPU_ENABLED == 1
+   } else if (runMode == ExecutionMode::GPU) {
+#if GPU_ENABLED == 1
       config->executionBackend = createGPULLVMBackend();
 #endif
-   }else {
+   } else {
       config->executionBackend = createDefaultLLVMBackend();
    }
    config->resultProcessor = execution::createTablePrinter();

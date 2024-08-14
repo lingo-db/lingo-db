@@ -23,7 +23,7 @@ get_target_property(CUDA_RT_OUTPUT_DIR mlir_cuda_runtime LIBRARY_OUTPUT_DIRECTOR
 endif(ENABLE_GPU_BACKEND)
 add_library(runner ${EXECUTION_FILES})
 llvm_update_compile_flags(runner)
-target_link_libraries(runner PRIVATE ${LIBS} MLIRSQLFrontend PUBLIC pg_query::pg_query PRIVATE tbb)
+target_link_libraries(runner PRIVATE ${LIBS} MLIRSQLFrontend utility PUBLIC pg_query::pg_query PRIVATE tbb)
 set(COMPILE_DEFS "SOURCE_DIR=\"${CMAKE_SOURCE_DIR}\"")
 list(APPEND COMPILE_DEFS " DEPENDENCY_INCLUDES=\"-I ${ARROW_INCLUDE_DIR} -I ${TBB_INCLUDE_DIR}\"")
 if(ENABLE_CRANELIFT_BACKEND)
