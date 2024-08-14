@@ -86,7 +86,7 @@ static utility::Tracer::Event llvmOpt("Compilation", "LLVMOptPasses");
    pm2.addPass(mlir::createArithToLLVMConversionPass());
    pm2.addPass(mlir::createConvertFuncToLLVMPass());
    pm2.addPass(mlir::createReconcileUnrealizedCastsPass());
-   pm2.addNestedPass<mlir::LLVM::LLVMFuncOp>(execution::createEnforceCABI());
+   pm2.addPass(execution::createEnforceCABI());
    pm2.addPass(mlir::createCSEPass());
    if (mlir::failed(pm2.run(moduleOp))) {
       return false;
@@ -222,7 +222,7 @@ static bool lowerToLLVMWithGPU(mlir::ModuleOp& moduleOp, bool verify) {
    pm2.addPass(mlir::createReconcileUnrealizedCastsPass());
    pm2.addPass(mlir::createConvertFuncToLLVMPass());
    pm2.addPass(mlir::createReconcileUnrealizedCastsPass());
-   pm2.addNestedPass<mlir::LLVM::LLVMFuncOp>(execution::createEnforceCABI());
+   pm2.addPass(execution::createEnforceCABI());
    pm2.addPass(mlir::createCSEPass());
    if (mlir::failed(pm2.run(moduleOp))) {
       return false;
