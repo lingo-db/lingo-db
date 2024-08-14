@@ -3847,7 +3847,28 @@ class NestedExecutionGroupLowering : public SubOpConversionPattern<mlir::subop::
       return success();
    }
 };
-};// namespace
+
+class SetTrackedCountLowering : public SubOpConversionPattern<mlir::subop::SetTrackedCountOp> {
+   public:
+   using SubOpConversionPattern<mlir::subop::SetTrackedCountOp>::SubOpConversionPattern;
+   LogicalResult matchAndRewrite(mlir::subop::SetTrackedCountOp setTrackedCountOp, OpAdaptor adaptor, SubOpRewriter& rewriter) const override {
+      auto loc = setTrackedCountOp->getLoc();
+      mlir::Value executionContext = getExecutionContext(rewriter, setTrackedCountOp);
+
+      // Get resultId
+      mlir::Value resultId = rewriter.create<mlir::arith::ConstantIntOp>(loc, setTrackedCountOp.getResultId(), mlir::IntegerType::get(rewriter.getContext(), 32));
+
+      // Get tupleCount
+      Value loadedTuple = rewriter.create<mlir::util::LoadOp>(loc, adaptor.getTupleCount());
+      Value tupleCount = rewriter.create<mlir::util::UnPackOp>(loc, loadedTuple).getResults()[0];
+
+      rt::ExecutionContext::setTupleCount(rewriter, loc)({executionContext, resultId, tupleCount});
+      rewriter.eraseOp(setTrackedCountOp);
+      return mlir::success();
+   }
+};
+
+}; // namespace
 void SubOpToControlFlowLoweringPass::runOnOperation() {
    auto module = getOperation();
    getContext().getLoadedDialect<mlir::util::UtilDialect>()->getFunctionHelper().setParentModule(module);
@@ -4092,7 +4113,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
             rewriter.insertPattern<LoopLowering>(typeConverter, ctxt);
             rewriter.insertPattern<NestedExecutionGroupLowering>(typeConverter, ctxt);
             //rewriter.insertPattern<GetSingleValLowering>(typeConverter, ctxt);
-            //rewriter.insertPattern<SetTrackedCountLowering>(typeConverter, ctxt);
+            rewriter.insertPattern<SetTrackedCountLowering>(typeConverter, ctxt);
             //rewriter.insertPattern<SimpleStateGetScalarLowering>(typeConverter, ctxt);
 
             for (auto [param, arg, isThreadLocal] : llvm::zip(step.getInputs(), step.getSubOps().front().getArguments(), step.getIsThreadLocal())) {

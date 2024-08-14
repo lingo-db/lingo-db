@@ -931,7 +931,7 @@ static mlir::Value translateNLJ(mlir::Value left, mlir::Value right, mlir::relal
          mlir::Value sum = rewriter.create<mlir::arith::AddIOp>(loc, counter1, counter2);
          rewriter.create<mlir::tuples::ReturnOp>(loc, sum);
       }
-        reduceOp.getCombine().push_back(combineBlock);
+      reduceOp.getCombine().push_back(combineBlock);
 
       auto referenceDefAttr2 = colManager.createDef(colManager.getUniqueScope("lookup"), "ref");
       auto counterValDefAttr = colManager.createDef(colManager.getUniqueScope("counter"), "val");
@@ -2821,6 +2821,16 @@ class TrackTuplesLowering : public OpConversionPattern<mlir::relalg::TrackTuples
          rewriter.create<mlir::tuples::ReturnOp>(loc, updatedCounter);
       }
       reduceOp.getRegion().push_back(reduceBlock);
+      mlir::Block* combineBlock = new Block;
+      auto counter1 = combineBlock->addArgument(rewriter.getI64Type(), loc);
+      auto counter2 = combineBlock->addArgument(rewriter.getI64Type(), loc);
+      {
+         mlir::OpBuilder::InsertionGuard guard(rewriter);
+         rewriter.setInsertionPointToStart(combineBlock);
+         mlir::Value sum = rewriter.create<mlir::arith::AddIOp>(loc, counter1, counter2);
+         rewriter.create<mlir::tuples::ReturnOp>(loc, sum);
+      }
+      reduceOp.getCombine().push_back(combineBlock);
 
       // Saves counter state to execution context
       rewriter.create<mlir::subop::SetTrackedCountOp>(loc, counterState, adaptor.getResultId(), counterName);
