@@ -42,6 +42,7 @@
 #include "runtime-defs/SegmentTreeView.h"
 #include "runtime-defs/SimpleState.h"
 #include "runtime-defs/ThreadLocal.h"
+#include "runtime-defs/Tracing.h"
 #include <stack>
 using namespace mlir;
 
@@ -3966,6 +3967,29 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
       //todo: handle arguments of executionGroup
       for (auto& op : executionGroup.getRegion().front().getOperations()) {
          if (auto step = mlir::dyn_cast_or_null<mlir::subop::ExecutionStepOp>(&op)) {
+#ifdef TRACER
+            mlir::Value tracingStep;
+            {
+               std::string stepLocStr = "";
+
+               if (auto lineLoc = op.getLoc()->dyn_cast_or_null<mlir::FileLineColLoc>()) {
+                  auto fileName = lineLoc.getFilename().str();
+                  auto baseNameStarts = fileName.find_last_of("/");
+                  if (baseNameStarts != std::string::npos) {
+                     fileName = fileName.substr(baseNameStarts + 1);
+                  }
+                  auto endingStarts = fileName.find(".");
+                  if (endingStarts != std::string::npos) {
+                     fileName = fileName.substr(0, endingStarts);
+                  };
+                  stepLocStr = fileName + std::string(":") + std::to_string(lineLoc.getLine());
+               }
+               mlir::OpBuilder builder(executionGroup);
+
+               mlir::Value stepLoc = builder.create<mlir::util::CreateConstVarLen>(op.getLoc(), mlir::util::VarLen32Type::get(ctxt), stepLocStr);
+               tracingStep = rt::ExecutionStepTracing::start(builder, op.getLoc())({stepLoc})[0];
+            }
+#endif
             SubOpRewriter rewriter(step, mapping);
             rewriter.insertPattern<MapLowering>(typeConverter, ctxt);
             rewriter.insertPattern<FilterLowering>(typeConverter, ctxt);
@@ -4097,6 +4121,12 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
                mapping.map(o, rewriter.getMapped(i));
             }
             rewriter.cleanup();
+#if TRACER
+            {
+               mlir::OpBuilder builder(executionGroup);
+               rt::ExecutionStepTracing::end(builder, op.getLoc())({tracingStep});
+            }
+#endif
          }
       }
       auto returnOp = mlir::cast<mlir::subop::ExecutionGroupReturnOp>(executionGroup.getRegion().front().getTerminator());

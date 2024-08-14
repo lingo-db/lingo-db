@@ -20,6 +20,7 @@ add_mlir_conversion_library(MLIRSubOpToControlFlow
         st-rt-defs
         paht-rt-defs
         db-rt-defs
+        tracing-rt-defs
         LINK_COMPONENTS
         Core
 

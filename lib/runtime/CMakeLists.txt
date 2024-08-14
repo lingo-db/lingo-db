@@ -1,4 +1,5 @@
 add_library(runtime OBJECT
+        Tracing.cpp
         ArrowColumn.cpp
         ArrowTable.cpp
         RecordBatchInfo.cpp
