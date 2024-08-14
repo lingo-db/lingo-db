@@ -3,6 +3,7 @@
 #include "Backend.h"
 #include "Error.h"
 #include "Frontend.h"
+#include "Instrumentation.h"
 #include "ResultProcessing.h"
 #include "Timing.h"
 namespace mlir {
@@ -15,6 +16,7 @@ class QueryOptimizer {
    std::unordered_map<std::string, double> timing;
    Error error;
    bool verify = true;
+   std::shared_ptr<SnapshotState> serializationState;
 
    public:
    runtime::Catalog* getDatabase() const {
@@ -23,9 +25,17 @@ class QueryOptimizer {
    void setCatalog(runtime::Catalog* catalog) {
       QueryOptimizer::catalog = catalog;
    }
+   void setSerializationState(std::shared_ptr<SnapshotState> serializationState) {
+      QueryOptimizer::serializationState = serializationState;
+   }
+   auto getSerializationState() {
+      return serializationState;
+   }
+
    void disableVerification() {
       verify = false;
    }
+
    const std::unordered_map<std::string, double>& getTiming() const {
       return timing;
    }
@@ -39,6 +49,7 @@ class LoweringStep {
    std::unordered_map<std::string, double> timing;
    Error error;
    bool verify = true;
+   std::shared_ptr<SnapshotState> serializationState;
 
    public:
    runtime::Catalog* getCatalog() const {
@@ -50,6 +61,13 @@ class LoweringStep {
    void setCatalog(runtime::Catalog* catalog) {
       LoweringStep::catalog = catalog;
    }
+   void setSerializationState(std::shared_ptr<SnapshotState> serializationState) {
+      LoweringStep::serializationState = serializationState;
+   }
+   auto getSerializationState() {
+      return serializationState;
+   }
+
    void disableVerification() {
       verify = false;
    }

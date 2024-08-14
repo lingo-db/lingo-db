@@ -119,9 +119,6 @@ class DefaultCBackend : public execution::ExecutionBackend {
       }
       dlclose(handle);
    }
-   bool requiresSnapshotting() override {
-      return true;
-   }
 };
 } // namespace
 

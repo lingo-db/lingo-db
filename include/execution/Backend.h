@@ -1,6 +1,7 @@
 #ifndef EXECUTION_BACKEND_H
 #define EXECUTION_BACKEND_H
 #include "Error.h"
+#include "Instrumentation.h"
 #include "runtime/ExecutionContext.h"
 namespace mlir {
 class ModuleOp;
@@ -14,8 +15,7 @@ class ExecutionBackend {
    std::unordered_map<std::string, double> timing;
    Error error;
    bool verify = true;
-   size_t snapShotCounter;
-
+   std::shared_ptr<SnapshotState> serializationState;
    public:
    size_t getNumRepetitions() const {
       return numRepetitions;
@@ -31,10 +31,13 @@ class ExecutionBackend {
       verify = false;
    }
    virtual void execute(mlir::ModuleOp& moduleOp, runtime::ExecutionContext* executionContext) = 0;
-   virtual bool requiresSnapshotting() = 0;
-   void setSnapShotCounter(size_t snapShotCounter) {
-      ExecutionBackend::snapShotCounter = snapShotCounter;
+   void setSerializationState(std::shared_ptr<SnapshotState> serializationState) {
+      ExecutionBackend::serializationState = serializationState;
    }
+   auto getSerializationState() {
+      return serializationState;
+   }
+
    virtual ~ExecutionBackend() {}
 };
 void visitBareFunctions(const std::function<void(std::string, void*)>& fn);

@@ -40,15 +40,16 @@
 #include <spawn.h>
 
 #include "dlfcn.h"
+#include "execution/Instrumentation.h"
 #include "unistd.h"
 #include "utility/Tracer.h"
 namespace {
 static utility::Tracer::Event execution("Execution", "run");
 
-static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, bool verify) {
 static utility::Tracer::Event llvmCodeGen("Compilation", "LLVMCodeGen");
 static utility::Tracer::Event llvmOpt("Compilation", "LLVMOptPasses");
 
+static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, std::shared_ptr<execution::SnapshotState> serializationState, bool verify) {
    std::string error;
    auto targetTriple = llvm::sys::getDefaultTargetTriple();
 
@@ -78,6 +79,7 @@ static utility::Tracer::Event llvmOpt("Compilation", "LLVMOptPasses");
 
    mlir::PassManager pm2(moduleOp->getContext());
    pm2.enableVerifier(verify);
+   addLingoDBInstrumentation(pm2, serializationState);
    pm2.addPass(mlir::createConvertSCFToCFPass());
    pm2.addPass(mlir::util::createUtilToLLVMPass());
    pm2.addPass(mlir::createConvertControlFlowToLLVMPass());
@@ -367,7 +369,7 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
       auto startLowerToLLVM = std::chrono::high_resolution_clock::now();
-      if (!lowerToLLVMDialect(moduleOp, verify)) {
+      if (!lowerToLLVMDialect(moduleOp,getSerializationState(), verify)) {
          error.emit() << "Could not lower module to llvm dialect";
          return;
       }
@@ -445,9 +447,6 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       timing["llvmCodeGen"] = totalJITTime;
       timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
    }
-   bool requiresSnapshotting() override {
-      return false;
-   }
 };
 static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::string fileName) {
    mlir::PassManager pm(moduleOp->getContext());
@@ -482,13 +481,13 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
       auto startLowerToLLVM = std::chrono::high_resolution_clock::now();
-      if (!lowerToLLVMDialect(moduleOp, verify)) {
+      if (!lowerToLLVMDialect(moduleOp,getSerializationState(), verify)) {
          error.emit() << "Could not lower module to llvm dialect";
          return;
       }
       addLLVMExecutionContextFuncs(moduleOp);
       auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
-      auto llvmSnapshotFile = "snapshot-" + std::to_string(snapShotCounter) + ".mlir";
+      auto llvmSnapshotFile = execution::getSnapshotDir()+"/llvm-debug.mlir";
       snapshot(moduleOp, error, llvmSnapshotFile);
       addDebugInfo(moduleOp, llvmSnapshotFile);
       timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
@@ -543,9 +542,6 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
       }
       timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
    }
-   bool requiresSnapshotting() override {
-      return true;
-   }
 };
 
 class CPULLVMProfilingBackend : public execution::ExecutionBackend {
@@ -587,14 +583,14 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
       auto startLowerToLLVM = std::chrono::high_resolution_clock::now();
-      if (!lowerToLLVMDialect(moduleOp, verify)) {
+      if (!lowerToLLVMDialect(moduleOp,getSerializationState(), verify)) {
          error.emit() << "Could not lower module to llvm dialect";
          return;
       }
       addLLVMExecutionContextFuncs(moduleOp);
       auto endLowerToLLVM = std::chrono::high_resolution_clock::now();
       timing["lowerToLLVM"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerToLLVM - startLowerToLLVM).count() / 1000.0;
-      auto llvmSnapshotFile = "snapshot-" + std::to_string(snapShotCounter) + ".mlir";
+      auto llvmSnapshotFile = execution::getSnapshotDir()+"/llvm-profile.mlir";
       snapshot(moduleOp, error, llvmSnapshotFile);
       addDebugInfo(moduleOp, llvmSnapshotFile);
       mlir::PassManager pm(moduleOp->getContext());
@@ -686,9 +682,6 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
       timing["llvmOptimize"] = llvmPassesTime;
       timing["llvmCodeGen"] = totalJITTime;
       timing["executionTime"] = (measuredTimes.size() > 1 ? *std::min_element(measuredTimes.begin() + 1, measuredTimes.end()) : measuredTimes[0]);
-   }
-   bool requiresSnapshotting() override {
-      return true;
    }
 };
 

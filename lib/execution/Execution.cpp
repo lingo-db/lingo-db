@@ -20,18 +20,9 @@
 #include <sstream>
 #include <unordered_set>
 
+#include <oneapi/tbb.h>
+
 namespace {
-static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::string fileName) {
-   mlir::PassManager pm(moduleOp->getContext());
-   mlir::OpPrintingFlags flags;
-   flags.shouldPrintDebugInfo();
-   flags.enableDebugInfo(true, false);
-   pm.addPass(mlir::createLocationSnapshotPass(flags, fileName));
-   if (pm.run(moduleOp).failed()) {
-      error.emit() << "Snapshotting failed";
-   }
-}
-} // namespace
 utility::GlobalSetting<std::string> executionModeSetting("system.execution_mode", "DEFAULT");
 utility::GlobalSetting<std::string> subopOptPassesSetting("system.subop.opt", "GlobalOpt,ReuseLocal,Specialize,PullGatherUp,Compression");
 utility::Tracer::Event queryOptimizationEvent("Compilation", "Query Opt.");
@@ -47,6 +38,7 @@ class DefaultQueryOptimizer : public QueryOptimizer {
       utility::Tracer::Trace trace(queryOptimizationEvent);
       mlir::PassManager pm(moduleOp.getContext());
       pm.enableVerifier(verify);
+      addLingoDBInstrumentation(pm, getSerializationState());
       //pm.addPass(mlir::createInlinerPass());
       //pm.addPass(mlir::createSymbolDCEPass());
       mlir::relalg::createQueryOptPipeline(pm, catalog);
@@ -64,6 +56,7 @@ class RelAlgLoweringStep : public LoweringStep {
       auto startLowerRelAlg = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerRelAlgPm(moduleOp->getContext());
       lowerRelAlgPm.enableVerifier(verify);
+      addLingoDBInstrumentation(lowerRelAlgPm, getSerializationState());
       mlir::relalg::createLowerRelAlgToSubOpPipeline(lowerRelAlgPm);
       if (mlir::failed(lowerRelAlgPm.run(moduleOp))) {
          error.emit() << "Lowering of RelAlg to Sub-Operators failed";
@@ -101,6 +94,8 @@ class SubOpLoweringStep : public LoweringStep {
       auto startLowerSubOp = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerSubOpPm(moduleOp->getContext());
       lowerSubOpPm.enableVerifier(verify);
+      addLingoDBInstrumentation(lowerSubOpPm, getSerializationState());
+
       //lowerSubOpPm.enableIRPrinting();
       std::unordered_set<std::string> enabledPasses = {};
 
@@ -147,6 +142,7 @@ class DefaultImperativeLowering : public LoweringStep {
       auto startLowerDB = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerDBPm(moduleOp->getContext());
       lowerDBPm.enableVerifier(verify);
+      addLingoDBInstrumentation(lowerDBPm, getSerializationState());
       mlir::db::createLowerDBPipeline(lowerDBPm);
       if (mlir::failed(lowerDBPm.run(moduleOp))) {
          error.emit() << "Lowering of imperative db operations failed";
@@ -156,6 +152,7 @@ class DefaultImperativeLowering : public LoweringStep {
       auto startLowerDSA = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerDSAPm(moduleOp->getContext());
       lowerDSAPm.enableVerifier(verify);
+      addLingoDBInstrumentation(lowerDSAPm, getSerializationState());
       lowerDSAPm.addPass(mlir::dsa::createLowerToStdPass());
       lowerDSAPm.addPass(mlir::createCanonicalizerPass());
       lowerDSAPm.addPass(mlir::createLoopInvariantCodeMotionPass());
@@ -202,7 +199,6 @@ ExecutionMode getExecutionMode() {
 }
 
 class DefaultQueryExecuter : public QueryExecuter {
-   size_t snapShotCounter = 0;
    void handleError(std::string phase, Error& e) {
       if (e) {
          std::cerr << phase << ": " << e.getMessage() << std::endl;
@@ -214,20 +210,33 @@ class DefaultQueryExecuter : public QueryExecuter {
          queryExecutionConfig->timingProcessor->addTiming(timing);
       }
    }
-   void performSnapShot(mlir::ModuleOp moduleOp, std::string fileName = "") {
-      if (queryExecutionConfig->executionBackend->requiresSnapshotting()) {
-         if (fileName.empty()) {
-            fileName = "snapshot-" + std::to_string(snapShotCounter++) + ".mlir";
-         }
-         Error e;
-         snapshot(moduleOp, e, fileName);
-         handleError("SNAPSHOT", e);
-      }
-   }
 
    public:
    using QueryExecuter::QueryExecuter;
    void execute() override {
+      bool parallelismEnabled = queryExecutionConfig->parallel;
+      size_t numThreads = tbb::info::default_concurrency() / 2;
+      if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
+         if (std::string(mode) == "OFF") {
+            parallelismEnabled = false;
+         } else {
+            numThreads = std::stol(mode);
+         }
+      }
+      tbb::global_control c(tbb::global_control::max_allowed_parallelism, numThreads);
+      int sum = oneapi::tbb::parallel_reduce(
+         oneapi::tbb::blocked_range<int>(1, 100000), 0,
+         [](oneapi::tbb::blocked_range<int> const& r, int init) -> int {
+            for (int v = r.begin(); v != r.end(); v++) {
+               init += v;
+            }
+            return init;
+         },
+         [](int lhs, int rhs) -> int {
+            return lhs + rhs;
+         });
+
+      if (sum < 0) { exit(0); }
       if (!executionContext) {
          std::cerr << "Execution Context is missing" << std::endl;
          exit(1);
@@ -253,12 +262,15 @@ class DefaultQueryExecuter : public QueryExecuter {
          std::cerr << "Must provide file or string!" << std::endl;
          exit(1);
       }
+      auto serializationState = std::make_shared<SnapshotState>();
+      serializationState->serialize = true;
+
       handleError("FRONTEND", frontend.getError());
       mlir::ModuleOp& moduleOp = *queryExecutionConfig->frontend->getModule();
-      performSnapShot(moduleOp, "input.mlir");
       if (queryExecutionConfig->queryOptimizer) {
          auto& queryOptimizer = *queryExecutionConfig->queryOptimizer;
          queryOptimizer.setCatalog(catalog);
+         queryOptimizer.setSerializationState(serializationState);
          queryOptimizer.optimize(moduleOp);
          handleError("OPTIMIZER", queryOptimizer.getError());
          handleTiming(queryOptimizer.getTiming());
@@ -272,16 +284,6 @@ class DefaultQueryExecuter : public QueryExecuter {
             }
          }
       }
-      bool parallelismEnabled = queryExecutionConfig->parallel;
-      size_t numThreads = tbb::info::default_concurrency() / 2;
-      if (const char* mode = std::getenv("LINGODB_PARALLELISM")) {
-         if (std::string(mode) == "OFF") {
-            parallelismEnabled = false;
-         } else {
-            numThreads = std::stol(mode);
-         }
-      }
-      }
 
       if (!frontend.isParallelismAllowed() || !parallelismEnabled) {
          moduleOp->setAttr("subop.sequential", mlir::UnitAttr::get(moduleOp->getContext()));
@@ -290,27 +292,14 @@ class DefaultQueryExecuter : public QueryExecuter {
       for (auto& loweringStepPtr : queryExecutionConfig->loweringSteps) {
          auto& loweringStep = *loweringStepPtr;
          loweringStep.setCatalog(catalog);
+         loweringStep.setSerializationState(serializationState);
          loweringStep.implement(moduleOp);
          handleError("LOWERING", loweringStep.getError());
          handleTiming(loweringStep.getTiming());
-         performSnapShot(moduleOp);
       }
 
       auto& executionBackend = *queryExecutionConfig->executionBackend;
-
-      tbb::global_control c(tbb::global_control::max_allowed_parallelism, numThreads);
-      int sum = oneapi::tbb::parallel_reduce(
-         oneapi::tbb::blocked_range<int>(1, 100000), 0,
-         [](oneapi::tbb::blocked_range<int> const& r, int init) -> int {
-            for (int v = r.begin(); v != r.end(); v++) {
-               init += v;
-            }
-            return init;
-         },
-         [](int lhs, int rhs) -> int {
-            return lhs + rhs;
-         });
-      if (sum < 0) { exit(0); }
+      executionBackend.setSerializationState(serializationState);
       executionBackend.execute(moduleOp, executionContext.get());
 #ifdef TRACER
       utility::Tracer::dump();
