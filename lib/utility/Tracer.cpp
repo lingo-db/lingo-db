@@ -2,6 +2,7 @@
 
 #include "json.h"
 
+#include "utility/Setting.h"
 #include <fstream>
 #include <iostream>
 #include <mutex>
@@ -9,6 +10,8 @@
 #include <unistd.h>
 
 namespace {
+utility::GlobalSetting<std::string> traceOutputDir("system.trace_dir", ".");
+
 thread_local utility::Tracer::TraceRecordList* threadLocalTraceRecordList = nullptr;
 utility::Tracer* singleton() {
 #ifdef TRACER
@@ -25,6 +28,27 @@ utility::Tracer* getTracer() {
 }
 } // end namespace
 namespace utility {
+#ifdef TRACER
+void Tracer::Event::writeOut(utility::Tracer::TraceRecord* record, nlohmann::json& j) {
+   j["tid"] = record->threadId;
+   j["name"] = name;
+   j["category"] = category;
+   j["start"] = record->traceBegin;
+   j["duration"] = record->traceEnd - record->traceBegin;
+}
+void Tracer::StringMetaDataEvent::writeOut(utility::Tracer::TraceRecord* record, nlohmann::json& j) {
+   utility::Tracer::Event::writeOut(record, j);
+   j["extra"] = nlohmann::json::object();
+   j["extra"][metaName] = strings[record->metaData];
+}
+uint64_t Tracer::StringMetaDataEvent::serializeMetaData(std::string pass) {
+   std::unique_lock<std::mutex> lock(mutex);
+   uint64_t res = strings.size();
+   strings.push_back(pass);
+   return res;
+}
+#endif
+
 Tracer::TraceRecordList::~TraceRecordList() {
    auto* curr = first;
    while (curr) {
@@ -34,12 +58,11 @@ Tracer::TraceRecordList::~TraceRecordList() {
    }
 }
 
-unsigned Tracer::registerEvent(std::string_view category, std::string_view name) {
+unsigned Tracer::registerEvent(Event* event) {
    auto* tracer = getTracer();
    std::unique_lock<std::mutex> lock(tracer->mutex);
    auto id = tracer->eventDescriptions.size();
-   tracer->eventDescriptions.emplace_back(category, name);
-
+   tracer->eventDescriptions.emplace_back(event);
    return id;
 }
 void Tracer::ensureThreadLocalTraceRecordList() {
@@ -54,7 +77,7 @@ void Tracer::ensureThreadLocalTraceRecordList() {
    }
 }
 const std::chrono::steady_clock::time_point initial = std::chrono::steady_clock::now();
-void Tracer::recordTrace(unsigned eventId, std::chrono::steady_clock::time_point begin, std::chrono::steady_clock::time_point end,uint64_t metaData) {
+void Tracer::recordTrace(unsigned eventId, std::chrono::steady_clock::time_point begin, std::chrono::steady_clock::time_point end, uint64_t metaData) {
    ensureThreadLocalTraceRecordList();
    auto diffInMicroSecond = [](auto a, auto b) {
       return std::chrono::duration_cast<std::chrono::microseconds>(b - a).count();
@@ -63,7 +86,7 @@ void Tracer::recordTrace(unsigned eventId, std::chrono::steady_clock::time_point
    record->eventId = eventId;
    record->traceBegin = diffInMicroSecond(initial, begin);
    record->traceEnd = diffInMicroSecond(initial, end);
-   record->metaData=metaData;
+   record->metaData = metaData;
 }
 void Tracer::dump() {
    getTracer()->dumpInternal();
@@ -71,25 +94,11 @@ void Tracer::dump() {
 
 void Tracer::dumpInternal() {
    std::unique_lock<std::mutex> lock(mutex);
-   std::string filename = "lingodb.trace";
+   std::string filename = traceOutputDir.getValue() + "/lingodb.trace";
    std::ofstream out(filename);
-   int pid = getpid();
-   auto result = nlohmann::json::object();
-   result["traceEvents"] = nlohmann::json::array();
-   auto& eventList = result["traceEvents"];
+   auto result = nlohmann::json::array();
    std::vector<TraceRecord> traceRecords;
    for (auto& list : traceRecordLists) {
-      auto threadObject = nlohmann::json::object();
-      threadObject["name"] = "thread_name";
-      threadObject["ph"] = "M";
-      threadObject["pid"] = pid;
-      threadObject["tid"] = list->threadId;
-      {
-         threadObject["args"] = nlohmann::json::object();
-         auto& args = threadObject["args"];
-         args["name"] = list->threadName;
-      }
-      eventList.push_back(threadObject);
       for (auto* it = list->first; it != list->last; it = it->next) {
          traceRecords.insert(traceRecords.end(), &it->traceRecords[0], &it->traceRecords[TraceRecordList::Chunk::size]);
       }
@@ -105,25 +114,14 @@ void Tracer::dumpInternal() {
    });
    for (auto& r : traceRecords) {
       assert(r.eventId < eventDescriptions.size());
-      auto& eventDescription = eventDescriptions[r.eventId];
+#ifdef TRACER
+      auto *event = eventDescriptions[r.eventId];
       auto recordObject = nlohmann::json::object();
-      recordObject["name"] = eventDescription.second;
-      recordObject["cat"] = eventDescription.first;
-      recordObject["ph"] = "X";
-      recordObject["pid"] = pid;
-      recordObject["tid"] = r.threadId;
-      recordObject["ts"] = r.traceBegin;
-      recordObject["dur"] = r.traceEnd - r.traceBegin;
-      {
-         recordObject["args"] = nlohmann::json::object();
-         auto& args = recordObject["args"];
-         args["meta"] = r.metaData;
-      }
-      eventList.push_back(recordObject);
+      event->writeOut(&r, recordObject);
+      result.push_back(recordObject);
+#endif
    }
 
-   result["displayTimeUnit"] = "ms";
    out << to_string(result) << std::endl;
-   std::cout << "trace file written to file:" << filename << std::endl;
 }
 } // end namespace utility

@@ -43,9 +43,12 @@
 #include "unistd.h"
 #include "utility/Tracer.h"
 namespace {
-static utility::Tracer::Event execution("LLVM", "execution");
+static utility::Tracer::Event execution("Execution", "run");
 
 static bool lowerToLLVMDialect(mlir::ModuleOp& moduleOp, bool verify) {
+static utility::Tracer::Event llvmCodeGen("Compilation", "LLVMCodeGen");
+static utility::Tracer::Event llvmOpt("Compilation", "LLVMOptPasses");
+
    std::string error;
    auto targetTriple = llvm::sys::getDefaultTargetTriple();
 
@@ -117,6 +120,7 @@ static void addLLVMExecutionContextFuncs(mlir::ModuleOp& moduleOp) {
 }
 
 static llvm::Error performDefaultLLVMPasses(llvm::Module* module) {
+   utility::Tracer::Trace trace(llvmOpt);
    llvm::legacy::FunctionPassManager funcPM(module);
    funcPM.add(llvm::createInstructionCombiningPass());
    funcPM.add(llvm::createReassociatePass());
@@ -388,6 +392,7 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
          return error;
       };
       auto startJIT = std::chrono::high_resolution_clock::now();
+      utility::Tracer::Trace traceCodeGen(llvmCodeGen);
 
       auto maybeEngine = mlir::ExecutionEngine::create(moduleOp, {.llvmModuleBuilder = convertFn, .transformer = optimizeFn, .jitCodeGenOptLevel = llvm::CodeGenOptLevel::Default, .enableObjectDump = false});
       if (!maybeEngine) {
@@ -418,6 +423,7 @@ class DefaultCPULLVMBackend : public execution::ExecutionBackend {
       }
       auto mainFunc = reinterpret_cast<execution::mainFnType>(mainFnLookupResult.get());
       auto setExecutionContextFunc = reinterpret_cast<execution::setExecutionContextFnType>(setExecutionContextLookup.get());
+      traceCodeGen.stop();
       auto endJIT = std::chrono::high_resolution_clock::now();
       setExecutionContextFunc(executionContext);
       auto totalJITTime = std::chrono::duration_cast<std::chrono::microseconds>(endJIT - startJIT).count() / 1000.0;

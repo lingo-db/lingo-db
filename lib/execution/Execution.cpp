@@ -34,11 +34,17 @@ static void snapshot(mlir::ModuleOp moduleOp, execution::Error& error, std::stri
 } // namespace
 utility::GlobalSetting<std::string> executionModeSetting("system.execution_mode", "DEFAULT");
 utility::GlobalSetting<std::string> subopOptPassesSetting("system.subop.opt", "GlobalOpt,ReuseLocal,Specialize,PullGatherUp,Compression");
+utility::Tracer::Event queryOptimizationEvent("Compilation", "Query Opt.");
+utility::Tracer::Event lowerRelalgEvent("Compilation", "Lower RelAlg");
+utility::Tracer::Event lowerSubOpEvent("Compilation", "Lower SubOp");
+utility::Tracer::Event lowerImperativeEvent("Compilation", "Lower DB");
+utility::Tracer::Event loadIndicesEvent("Compilation", "Lower DB");
 } // end anonymous namespace
 namespace execution {
 class DefaultQueryOptimizer : public QueryOptimizer {
    void optimize(mlir::ModuleOp& moduleOp) override {
       auto start = std::chrono::high_resolution_clock::now();
+      utility::Tracer::Trace trace(queryOptimizationEvent);
       mlir::PassManager pm(moduleOp.getContext());
       pm.enableVerifier(verify);
       //pm.addPass(mlir::createInlinerPass());
@@ -53,6 +59,8 @@ class DefaultQueryOptimizer : public QueryOptimizer {
 };
 class RelAlgLoweringStep : public LoweringStep {
    void implement(mlir::ModuleOp& moduleOp) override {
+      utility::Tracer::Trace trace(lowerRelalgEvent);
+
       auto startLowerRelAlg = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerRelAlgPm(moduleOp->getContext());
       lowerRelAlgPm.enableVerifier(verify);
@@ -63,7 +71,7 @@ class RelAlgLoweringStep : public LoweringStep {
       }
       auto endLowerRelAlg = std::chrono::high_resolution_clock::now();
       timing["lowerRelAlg"] = std::chrono::duration_cast<std::chrono::microseconds>(endLowerRelAlg - startLowerRelAlg).count() / 1000.0;
-
+      utility::Tracer::Trace indexLoadingTrace(loadIndicesEvent);
       // Load the required tables/indices for the query
       moduleOp.walk([&](mlir::Operation* op) {
          if (auto getExternalOp = mlir::dyn_cast_or_null<mlir::subop::GetExternalOp>(*op)) {
@@ -89,6 +97,7 @@ class RelAlgLoweringStep : public LoweringStep {
 };
 class SubOpLoweringStep : public LoweringStep {
    void implement(mlir::ModuleOp& moduleOp) override {
+      utility::Tracer::Trace trace(lowerSubOpEvent);
       auto startLowerSubOp = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerSubOpPm(moduleOp->getContext());
       lowerSubOpPm.enableVerifier(verify);
@@ -134,6 +143,7 @@ class SubOpLoweringStep : public LoweringStep {
 };
 class DefaultImperativeLowering : public LoweringStep {
    void implement(mlir::ModuleOp& moduleOp) override {
+      utility::Tracer::Trace trace(lowerImperativeEvent);
       auto startLowerDB = std::chrono::high_resolution_clock::now();
       mlir::PassManager lowerDBPm(moduleOp->getContext());
       lowerDBPm.enableVerifier(verify);
@@ -261,7 +271,6 @@ class DefaultQueryExecuter : public QueryExecuter {
                handleError("TUPLE_TRACKING", e);
             }
          }
-         performSnapShot(moduleOp);
       }
       bool parallelismEnabled = queryExecutionConfig->parallel;
       size_t numThreads = tbb::info::default_concurrency() / 2;
@@ -272,6 +281,8 @@ class DefaultQueryExecuter : public QueryExecuter {
             numThreads = std::stol(mode);
          }
       }
+      }
+
       if (!frontend.isParallelismAllowed() || !parallelismEnabled) {
          moduleOp->setAttr("subop.sequential", mlir::UnitAttr::get(moduleOp->getContext()));
          numThreads = 1;
@@ -286,7 +297,6 @@ class DefaultQueryExecuter : public QueryExecuter {
       }
 
       auto& executionBackend = *queryExecutionConfig->executionBackend;
-      executionBackend.setSnapShotCounter(snapShotCounter);
 
       tbb::global_control c(tbb::global_control::max_allowed_parallelism, numThreads);
       int sum = oneapi::tbb::parallel_reduce(

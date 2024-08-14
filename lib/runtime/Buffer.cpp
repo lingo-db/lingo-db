@@ -23,7 +23,7 @@ void runtime::FlexibleBuffer::iterateBuffersParallel(const std::function<void(Bu
    tbb::parallel_for_each(buffers.begin(), buffers.end(), [&](Buffer buffer, tbb::feeder<Buffer>& feeder) {
       if (buffer.numElements <= 20000) {
          utility::Tracer::Trace trace(iterateEvent);
-         trace.setMetaData(buffer.numElements);
+         //trace.setMetaData(buffer.numElements);
          fn(buffer);
          trace.stop();
       } else {
@@ -87,7 +87,7 @@ void runtime::Buffer::iterate(bool parallel, runtime::Buffer buffer, size_t type
    if (parallel) {
       tbb::parallel_for(range, [&](tbb::blocked_range<size_t> r) {
          utility::Tracer::Trace trace(iterateEvent);
-         trace.setMetaData(r.size());
+         //trace.setMetaData(r.size());
          forEachChunk(buffer, r.begin(), r.end(), contextPtr);
          trace.stop();
       });
