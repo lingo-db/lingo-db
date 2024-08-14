@@ -792,8 +792,6 @@ static TupleType convertTuple(TupleType tupleType, TypeConverter& typeConverter)
    return TupleType::get(tupleType.getContext(), TypeRange(types));
 }
 
-
-
 class TableRefGatherOpLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop::GatherOp, 2> {
    public:
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::GatherOp, 2>::SubOpTupleStreamConsumerConversionPattern;
@@ -1176,9 +1174,7 @@ class MapLowering : public SubOpTupleStreamConsumerConversionPattern<mlir::subop
    using SubOpTupleStreamConsumerConversionPattern<mlir::subop::MapOp>::SubOpTupleStreamConsumerConversionPattern;
 
    LogicalResult matchAndRewrite(mlir::subop::MapOp mapOp, OpAdaptor adaptor, SubOpRewriter& rewriter, ColumnMapping& mapping) const override {
-
-
-      auto args=mapping.resolve(mapOp.getInputCols());
+      auto args = mapping.resolve(mapOp.getInputCols());
       std::vector<Value> res;
 
       rewriter.inlineBlock<mlir::tuples::ReturnOpAdaptor>(&mapOp.getFn().front(), args, [&](mlir::tuples::ReturnOpAdaptor adaptor) {
@@ -3682,7 +3678,7 @@ class NestedMapLowering : public SubOpTupleStreamConsumerConversionPattern<mlir:
                   break;
                ops.push_back(&op);
             }
-            for (auto *op : ops) {
+            for (auto* op : ops) {
                op->remove();
                rewriter.insertAndRewrite(op);
             }
@@ -3767,7 +3763,7 @@ class LoopLowering : public SubOpConversionPattern<mlir::subop::LoopOp> {
                      break;
                   ops.push_back(&op);
                }
-               for (auto *op : ops) {
+               for (auto* op : ops) {
                   rewriter.operator mlir::OpBuilder&().setInsertionPointToEnd(after);
                   op->remove();
                   rewriter.insertAndRewrite(op);
@@ -3827,7 +3823,7 @@ class NestedExecutionGroupLowering : public SubOpConversionPattern<mlir::subop::
                   break;
                ops.push_back(&op);
             }
-            for (auto *op : ops) {
+            for (auto* op : ops) {
                rewriter.operator mlir::OpBuilder&().setInsertionPoint(dummyOp);
                op->remove();
                rewriter.insertAndRewrite(op);
@@ -4134,7 +4130,7 @@ void SubOpToControlFlowLoweringPass::runOnOperation() {
                }
                ops.push_back(&op);
             }
-            for (auto *op : ops) {
+            for (auto* op : ops) {
                rewriter.rewrite(op, executionGroup);
             }
             auto returnOp = mlir::cast<mlir::subop::ExecutionStepReturnOp>(step.getSubOps().front().getTerminator());

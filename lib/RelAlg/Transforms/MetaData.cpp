@@ -28,9 +28,7 @@ class DetachMetaData : public mlir::PassWrapper<DetachMetaData, mlir::OperationP
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(DetachMetaData)
    void runOnOperation() override {
       getOperation().walk([&](mlir::relalg::BaseTableOp op) {
-         getOperation().walk([&](mlir::relalg::BaseTableOp op) {
             op.setMetaAttr(mlir::relalg::TableMetaDataAttr::get(&getContext(), std::make_shared<runtime::TableMetaData>()));
-         });
       });
    }
 };
