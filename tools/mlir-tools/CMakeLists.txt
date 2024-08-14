@@ -30,3 +30,12 @@ target_link_directories( run-sql PUBLIC ${CMAKE_BINARY_DIR}/lib/execution/cranel
 add_executable(mlir-db-opt mlir-opt.cpp)
 target_link_libraries(mlir-db-opt PUBLIC ${LIBS} runner runtime utility mlir-support  PRIVATE arrow)
 set_target_properties(mlir-db-opt PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+
+
+#mlir-analyze-snapshots
+add_executable(mlir-analyze-snapshots analyze-snapshots.cpp)
+llvm_update_compile_flags(mlir-analyze-snapshots)
+target_link_libraries(mlir-analyze-snapshots  PUBLIC runtime utility runner mlir-support ${LIBS} PRIVATE arrow)
+set_target_properties(mlir-analyze-snapshots PROPERTIES  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+target_link_directories( mlir-analyze-snapshots PUBLIC ${CMAKE_BINARY_DIR}/lib/execution/cranelift/rust-cranelift/release)
+
