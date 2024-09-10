@@ -32,9 +32,9 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
                if (&refProducer.getProducedReference().getColumn() == &gatherOp.getRef().getColumn()) {
                   mlir::Block* minimalSafeBlock = nullptr;
                   for (auto operand : currentChild->getOperands()) {
-                     if (!operand.getType().isa<mlir::tuples::TupleStreamType>()) {
+                     if (!mlir::isa<mlir::tuples::TupleStreamType>(operand.getType())) {
                         mlir::Block* localSafeBlock;
-                        if (auto blockArgument = operand.dyn_cast<mlir::BlockArgument>()) {
+                        if (auto blockArgument = mlir::dyn_cast<mlir::BlockArgument>(operand)) {
                            localSafeBlock = blockArgument.getOwner()->getParentOp()->getBlock();
                         } else if (auto* definingOp = operand.getDefiningOp()) {
                            localSafeBlock = definingOp->getBlock();
@@ -65,14 +65,14 @@ class PullGatherUpPass : public mlir::PassWrapper<PullGatherUpPass, mlir::Operat
             currentParent = *users.begin();
             bool otherStreams = false;
             for (auto v : currentParent->getOperands()) {
-               otherStreams |= v != currStream && v.getType().isa<mlir::tuples::TupleStreamType>();
+               otherStreams |= v != currStream && mlir::isa<mlir::tuples::TupleStreamType>(v.getType());
             }
             if (otherStreams) break;
             auto usedColumns = columnUsageAnalysis.getUsedColumns(currentParent);
             std::vector<mlir::NamedAttribute> usedByCurrent;
             std::vector<mlir::NamedAttribute> notUsedByCurrent;
             for (auto x : remaining) {
-               if (usedColumns.contains(&x.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn())) {
+               if (usedColumns.contains(&mlir::cast<mlir::tuples::ColumnDefAttr>(x.getValue()).getColumn())) {
                   usedByCurrent.push_back(x);
                } else {
                   notUsedByCurrent.push_back(x);

@@ -14,20 +14,20 @@
 namespace {
 using ReplaceFnT = std::function<mlir::tuples::ColumnRefAttr(mlir::tuples::ColumnRefAttr)>;
 mlir::Attribute updateAttribute(mlir::Attribute attr, ReplaceFnT replaceFn) {
-   if (auto colRefAttr = attr.dyn_cast<mlir::tuples::ColumnRefAttr>()) {
+   if (auto colRefAttr = mlir::dyn_cast<mlir::tuples::ColumnRefAttr>(attr)) {
       return replaceFn(colRefAttr);
    }
-   if (auto colDefAttr = attr.dyn_cast<mlir::tuples::ColumnDefAttr>()) {
+   if (auto colDefAttr = mlir::dyn_cast<mlir::tuples::ColumnDefAttr>(attr)) {
       if (colDefAttr.getFromExisting()) {
          return mlir::tuples::ColumnDefAttr::get(attr.getContext(), colDefAttr.getName(), colDefAttr.getColumnPtr(), updateAttribute(colDefAttr.getFromExisting(), replaceFn));
       } else {
          return attr;
       }
    }
-   if (auto sortSpec = attr.dyn_cast<mlir::relalg::SortSpecificationAttr>()) {
+   if (auto sortSpec = mlir::dyn_cast<mlir::relalg::SortSpecificationAttr>(attr)) {
       return mlir::relalg::SortSpecificationAttr::get(attr.getContext(), replaceFn(sortSpec.getAttr()), sortSpec.getSortSpec());
    }
-   if (auto arrayAttr = attr.dyn_cast<mlir::ArrayAttr>()) {
+   if (auto arrayAttr = mlir::dyn_cast<mlir::ArrayAttr>(attr)) {
       std::vector<mlir::Attribute> attributes;
       for (auto elem : arrayAttr) {
          attributes.push_back(updateAttribute(elem, replaceFn));

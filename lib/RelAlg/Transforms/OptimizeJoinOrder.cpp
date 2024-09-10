@@ -62,7 +62,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
          })
          .Case<mlir::relalg::LimitOp>([&](mlir::relalg::LimitOp limitOp) {
             if (children.size() == 1 && children[0]->hasAttr("rows")) {
-               limitOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), std::min(children[0]->getAttr("rows").cast<mlir::FloatAttr>().getValueAsDouble(), (double) limitOp.getMaxRows())));
+               limitOp->setAttr("rows", mlir::FloatAttr::get(mlir::Float64Type::get(&getContext()), std::min(mlir::cast<mlir::FloatAttr>(children[0]->getAttr("rows")).getValueAsDouble(), (double) limitOp.getMaxRows())));
             }
          })
          .Case<mlir::relalg::BaseTableOp>([&](mlir::relalg::BaseTableOp baseTableOp) {
@@ -73,7 +73,7 @@ class OptimizeJoinOrder : public mlir::PassWrapper<OptimizeJoinOrder, mlir::Oper
             double sum = 0;
             for (auto child : children) {
                if (child->hasAttr("rows")) {
-                  sum += child->getAttr("rows").cast<mlir::FloatAttr>().getValueAsDouble();
+                  sum += mlir::cast<mlir::FloatAttr>(child->getAttr("rows")).getValueAsDouble();
                }
             }
             if (sum != 0) {

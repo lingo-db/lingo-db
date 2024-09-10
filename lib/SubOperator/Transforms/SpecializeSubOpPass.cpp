@@ -40,7 +40,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
 
       auto createOp = mlir::cast<mlir::subop::GenericCreateOp>(op);
       auto state = createOp.getRes();
-      auto multiMapType = state.getType().dyn_cast_or_null<mlir::subop::MultiMapType>();
+      auto multiMapType = mlir::dyn_cast_or_null<mlir::subop::MultiMapType>(state.getType());
       if (!multiMapType) {
          return mlir::failure();
       }
@@ -89,7 +89,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
       buildHashHelper.buildBlock(rewriter, [&](mlir::PatternRewriter& rewriter) {
          std::vector<mlir::Value> values;
          for (auto keyMemberName : multiMapType.getKeyMembers().getNames()) {
-            auto keyColumnAttr = insertOp.getMapping().get(keyMemberName.cast<mlir::StringAttr>().strref()).cast<mlir::tuples::ColumnRefAttr>();
+            auto keyColumnAttr = mlir::cast<mlir::tuples::ColumnRefAttr>(insertOp.getMapping().get(mlir::cast<mlir::StringAttr>(keyMemberName).strref()));
             values.push_back(buildHashHelper.access(keyColumnAttr, loc));
          }
          mlir::Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.create<mlir::util::PackOp>(loc, values));
@@ -108,7 +108,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
          hashIndexedViewType = mlir::subop::HashIndexedViewType::get(rewriter.getContext(), mlir::subop::StateMembersAttr::get(rewriter.getContext(), rewriter.getArrayAttr({rewriter.getStringAttr(hashMember)}), rewriter.getArrayAttr({mlir::TypeAttr::get(rewriter.getIndexType())})), mlir::subop::StateMembersAttr::get(getContext(), rewriter.getArrayAttr(hashIndexedViewNames), rewriter.getArrayAttr(hashIndexedViewTypes)));
          hashIndexedView = rewriter.create<mlir::subop::CreateHashIndexedView>(loc, hashIndexedViewType, buffer, hashMember, linkMember);
       }
-      auto entryRefType = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), hashIndexedViewType.cast<mlir::subop::LookupAbleState>());
+      auto entryRefType = mlir::subop::LookupEntryRefType::get(rewriter.getContext(), mlir::cast<mlir::subop::LookupAbleState>(hashIndexedViewType));
       auto entryRefListType = mlir::subop::ListType::get(rewriter.getContext(), entryRefType);
       mlir::subop::SubOpStateUsageTransformer transformer(analysis, getContext(), [&](mlir::Operation* op, mlir::Type type) -> mlir::Type {
          return llvm::TypeSwitch<mlir::Operation*, mlir::Type>(op)
@@ -132,7 +132,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
          lookupHashHelper.buildBlock(rewriter, [&](mlir::PatternRewriter& rewriter) {
             std::vector<mlir::Value> values;
             for (auto key : lookupKeys) {
-               auto keyColumnAttr = key.cast<mlir::tuples::ColumnRefAttr>();
+               auto keyColumnAttr = mlir::cast<mlir::tuples::ColumnRefAttr>(key);
                values.push_back(lookupHashHelper.access(keyColumnAttr, loc));
             }
             mlir::Value hashed = rewriter.create<mlir::db::Hash>(loc, rewriter.create<mlir::util::PackOp>(loc, values));
@@ -143,8 +143,8 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
          std::vector<mlir::NamedAttribute> gatheredForEqFn;
          std::vector<mlir::tuples::ColumnRefAttr> keyRefsForEqFn;
          for (auto keyMember : llvm::zip(multiMapType.getKeyMembers().getNames(), multiMapType.getKeyMembers().getTypes())) {
-            auto name = std::get<0>(keyMember).cast<mlir::StringAttr>().str();
-            auto type = std::get<1>(keyMember).cast<mlir::TypeAttr>().getValue();
+            auto name = mlir::cast<mlir::StringAttr>(std::get<0>(keyMember)).str();
+            auto type = mlir::cast<mlir::TypeAttr>(std::get<1>(keyMember)).getValue();
             auto [lookupKeyMemberDef, lookupKeyMemberRef] = createColumn(type, "lookup", name);
             gatheredForEqFn.push_back(rewriter.getNamedAttr(name, lookupKeyMemberDef));
             keyRefsForEqFn.push_back(lookupKeyMemberRef);
@@ -159,7 +159,7 @@ class MultiMapAsHashIndexedView : public mlir::RewritePattern {
                mapping.map(lookupOp.getEqFn().getArgument(i++), predFnHelper.access(key, loc));
             }
             for (auto key : lookupKeys) {
-               auto keyColumn = key.cast<mlir::tuples::ColumnRefAttr>();
+               auto keyColumn = mlir::cast<mlir::tuples::ColumnRefAttr>(key);
                mapping.map(lookupOp.getEqFn().getArgument(i++), predFnHelper.access(keyColumn, loc));
             }
             for (auto& op : lookupOp.getEqFn().front()) {
@@ -204,7 +204,7 @@ class MapAsHashMap : public mlir::RewritePattern {
       : RewritePattern(mlir::subop::GenericCreateOp::getOperationName(), 1, context), analysis(analysis) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto createOp = mlir::cast<mlir::subop::GenericCreateOp>(op);
-      auto mapType = createOp.getType().dyn_cast_or_null<mlir::subop::MapType>();
+      auto mapType = mlir::dyn_cast_or_null<mlir::subop::MapType>(createOp.getType());
       if (!mapType) {
          return mlir::failure();
       }
@@ -212,16 +212,16 @@ class MapAsHashMap : public mlir::RewritePattern {
 
       mlir::TypeConverter typeConverter;
       typeConverter.addConversion([&](mlir::subop::ListType listType) {
-         return mlir::subop::ListType::get(listType.getContext(), typeConverter.convertType(listType.getT()).cast<mlir::subop::StateEntryReference>());
+         return mlir::subop::ListType::get(listType.getContext(), mlir::cast<mlir::subop::StateEntryReference>(typeConverter.convertType(listType.getT())));
       });
       typeConverter.addConversion([&](mlir::subop::OptionalType optionalType) {
-         return mlir::subop::OptionalType::get(optionalType.getContext(), typeConverter.convertType(optionalType.getT()).cast<mlir::subop::StateEntryReference>());
+         return mlir::subop::OptionalType::get(optionalType.getContext(), mlir::cast<mlir::subop::StateEntryReference>(typeConverter.convertType(optionalType.getT())));
       });
       typeConverter.addConversion([&](mlir::subop::MapEntryRefType refType) {
          return mlir::subop::HashMapEntryRefType::get(refType.getContext(), hashMapType);
       });
       typeConverter.addConversion([&](mlir::subop::LookupEntryRefType lookupRefType) {
-         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), typeConverter.convertType(lookupRefType.getState()).cast<mlir::subop::LookupAbleState>());
+         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), mlir::cast<mlir::subop::LookupAbleState>(typeConverter.convertType(lookupRefType.getState())));
       });
       typeConverter.addConversion([&](mlir::subop::MapType mapType) {
          return hashMapType;
@@ -243,7 +243,7 @@ class MultiMapAsHashMultiMap : public mlir::RewritePattern {
       : RewritePattern(mlir::subop::GenericCreateOp::getOperationName(), 1, context), analysis(analysis) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto createOp = mlir::cast<mlir::subop::GenericCreateOp>(op);
-      auto multiMapType = createOp.getType().dyn_cast_or_null<mlir::subop::MultiMapType>();
+      auto multiMapType = mlir::dyn_cast_or_null<mlir::subop::MultiMapType>(createOp.getType());
       if (!multiMapType) {
          return mlir::failure();
       }
@@ -251,16 +251,16 @@ class MultiMapAsHashMultiMap : public mlir::RewritePattern {
 
       mlir::TypeConverter typeConverter;
       typeConverter.addConversion([&](mlir::subop::ListType listType) {
-         return mlir::subop::ListType::get(listType.getContext(), typeConverter.convertType(listType.getT()).cast<mlir::subop::StateEntryReference>());
+         return mlir::subop::ListType::get(listType.getContext(), mlir::cast<mlir::subop::StateEntryReference>(typeConverter.convertType(listType.getT())));
       });
       typeConverter.addConversion([&](mlir::subop::OptionalType optionalType) {
-         return mlir::subop::OptionalType::get(optionalType.getContext(), typeConverter.convertType(optionalType.getT()).cast<mlir::subop::StateEntryReference>());
+         return mlir::subop::OptionalType::get(optionalType.getContext(), mlir::cast<mlir::subop::StateEntryReference>(typeConverter.convertType(optionalType.getT())));
       });
       typeConverter.addConversion([&](mlir::subop::MultiMapEntryRefType refType) {
          return mlir::subop::HashMultiMapEntryRefType::get(refType.getContext(), hashMapType);
       });
       typeConverter.addConversion([&](mlir::subop::LookupEntryRefType lookupRefType) {
-         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), typeConverter.convertType(lookupRefType.getState()).cast<mlir::subop::LookupAbleState>());
+         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), mlir::cast<mlir::subop::LookupAbleState>(typeConverter.convertType(lookupRefType.getState())));
       });
       typeConverter.addConversion([&](mlir::subop::MultiMapType mapType) {
          return hashMapType;

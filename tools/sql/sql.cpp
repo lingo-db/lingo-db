@@ -4,20 +4,15 @@
 
 #include "execution/Execution.h"
 #include "mlir-support/eval.h"
-void check(bool b, std::string message) {
-   if (!b) {
-      std::cerr << "ERROR: " << message << std::endl;
-      exit(1);
-   }
-}
+
+namespace {
 
 class ConciseTimingPrinter : public execution::TimingProcessor {
    double compilation;
    double execution;
 
    public:
-   ConciseTimingPrinter(): compilation(0.0), execution(0.0){
-
+   ConciseTimingPrinter() : compilation(0.0), execution(0.0) {
    }
    void addTiming(const std::unordered_map<std::string, double>& timing) override {
       for (auto [name, t] : timing) {
@@ -29,18 +24,19 @@ class ConciseTimingPrinter : public execution::TimingProcessor {
       }
    }
    void process() override {
-      std::cerr <<" compilation: "<< compilation << " [ms] execution: " << execution << " [ms]"<<std::endl;
+      std::cerr << " compilation: " << compilation << " [ms] execution: " << execution << " [ms]" << std::endl;
    }
 };
 void handleQuery(runtime::Session& session, std::string sqlQuery, bool reportTimes) {
    auto queryExecutionConfig = execution::createQueryExecutionConfig(execution::ExecutionMode::DEFAULT, true);
-   if(reportTimes) {
+   if (reportTimes) {
       queryExecutionConfig->timingProcessor = std::make_unique<ConciseTimingPrinter>();
    }
    auto executer = execution::QueryExecuter::createDefaultExecuter(std::move(queryExecutionConfig), session);
    executer->fromData(sqlQuery);
    executer->execute();
 }
+} // namespace
 int main(int argc, char** argv) {
    if (argc <= 1) {
       std::cerr << "USAGE: sql database" << std::endl;

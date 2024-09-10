@@ -15,10 +15,10 @@ class OrderedAttributes {
    static OrderedAttributes fromRefArr(ArrayAttr arrayAttr) {
       OrderedAttributes res;
       for (auto attr : arrayAttr) {
-         if (auto attrRef = attr.dyn_cast_or_null<mlir::tuples::ColumnRefAttr>()) {
+         if (auto attrRef = mlir::dyn_cast_or_null<mlir::tuples::ColumnRefAttr>(attr)) {
             res.insert(&attrRef.getColumn());
          }
-         if (auto attrDef = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>()) {
+         if (auto attrDef = mlir::dyn_cast_or_null<mlir::tuples::ColumnDefAttr>(attr)) {
             res.insert(&attrDef.getColumn());
          }
       }

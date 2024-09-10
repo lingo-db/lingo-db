@@ -3,20 +3,23 @@
 #include <arrow/api.h>
 #include <arrow/compute/api.h>
 #include <arrow/compute/api_scalar.h>
-
-namespace support::eval {
-struct ArrowExpr : public Expr {
+namespace {
+struct ArrowExpr : public support::eval::Expr {
    arrow::compute::Expression expr;
    ArrowExpr(arrow::compute::Expression expr) : expr(expr) {}
 };
-arrow::compute::Expression unpack(const std::unique_ptr<expr>& expr) {
+arrow::compute::Expression unpack(const std::unique_ptr<support::eval::expr>& expr) {
    return dynamic_cast<ArrowExpr&>(*expr).expr;
 }
+
+std::unique_ptr<support::eval::expr> pack(arrow::compute::Expression expr) {
+   return std::make_unique<ArrowExpr>(expr);
+}
+} // end anonymous namespace
+namespace support::eval {
+
 void init() {
    arrow::compute::GetFunctionRegistry();
-}
-std::unique_ptr<expr> pack(arrow::compute::Expression expr) {
-   return std::make_unique<ArrowExpr>(expr);
 }
 std::optional<size_t> countResults(std::shared_ptr<arrow::RecordBatch> batch, std::unique_ptr<expr> filter) {
    if (!filter) return {};

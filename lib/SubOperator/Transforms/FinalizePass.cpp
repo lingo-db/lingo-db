@@ -80,12 +80,12 @@ class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<
          std::vector<mlir::NamedAttribute> refMapping;
 
          for (auto m : generateOp.getGeneratedColumns()) {
-            auto* column = &m.cast<mlir::tuples::ColumnDefAttr>().getColumn();
+            auto* column = &mlir::cast<mlir::tuples::ColumnDefAttr>(m).getColumn();
             auto name = memberManager.getUniqueMember("tmp_union");
             types.push_back(mlir::TypeAttr::get(column->type));
             names.push_back(builder.getStringAttr(name));
             defMapping.push_back(builder.getNamedAttr(name, m));
-            refMapping.push_back(builder.getNamedAttr(name, colManager.createRef(&m.cast<mlir::tuples::ColumnDefAttr>().getColumn())));
+            refMapping.push_back(builder.getNamedAttr(name, colManager.createRef(&mlir::cast<mlir::tuples::ColumnDefAttr>(m).getColumn())));
          }
          mlir::Value tmpBuffer;
 
@@ -97,7 +97,7 @@ class FinalizePass : public mlir::PassWrapper<FinalizePass, mlir::OperationPass<
             builder.create<mlir::subop::MaterializeOp>(loc, stream, tmpBuffer, builder.getDictionaryAttr(refMapping));
          }
          auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
-         scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(builder.getContext(), tmpBuffer.getType().cast<mlir::subop::State>());
+         scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(builder.getContext(), mlir::cast<mlir::subop::State>(tmpBuffer.getType()));
          auto scan = builder.create<mlir::subop::ScanRefsOp>(loc, tmpBuffer, scanRefDef);
          mlir::Value loaded = builder.create<mlir::subop::GatherOp>(loc, scan, colManager.createRef(&scanRefDef.getColumn()), builder.getDictionaryAttr(defMapping));
          generateOp.getRes().replaceAllUsesWith(loaded);

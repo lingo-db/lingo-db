@@ -18,19 +18,19 @@ mlir::Value mlir::util::FunctionHelper::convertValue(mlir::OpBuilder& builder, m
    if (currentType.isIndex() || t.isIndex()) {
       return builder.create<mlir::arith::IndexCastOp>(loc, t, v);
    }
-   if (currentType.isa<mlir::IntegerType>() && t.isa<mlir::IntegerType>()) {
-      auto targetWidth = t.cast<mlir::IntegerType>().getWidth();
-      auto sourceWidth = currentType.cast<mlir::IntegerType>().getWidth();
+   if (mlir::isa<mlir::IntegerType>(currentType) && mlir::isa<mlir::IntegerType>(t)) {
+      auto targetWidth = mlir::cast<mlir::IntegerType>(t).getWidth();
+      auto sourceWidth = mlir::cast<mlir::IntegerType>(currentType).getWidth();
       if (targetWidth > sourceWidth) {
          return builder.create<mlir::arith::ExtSIOp>(loc, t, v);
       } else {
          return builder.create<mlir::arith::TruncIOp>(loc, t, v);
       }
    }
-   if (t.isa<mlir::util::RefType>() && currentType.isa<mlir::util::RefType>()) {
+   if (mlir::isa<mlir::util::RefType>(t) && mlir::isa<mlir::util::RefType>(currentType)) {
       return builder.create<mlir::util::GenericMemrefCastOp>(loc, t, v);
    }
-   if (t.isa<mlir::util::BufferType>() && currentType.isa<mlir::util::BufferType>()) {
+   if (mlir::isa<mlir::util::BufferType>(t) && mlir::isa<mlir::util::BufferType>(currentType)) {
       return builder.create<mlir::util::BufferCastOp>(loc, t, v);
    }
    return v; //todo

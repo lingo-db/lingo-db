@@ -34,7 +34,7 @@ class PackOpLowering : public OpConversionPattern<mlir::util::PackOp> {
    public:
    using OpConversionPattern<mlir::util::PackOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::PackOp packOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto tupleType = packOp.getTuple().getType().dyn_cast_or_null<TupleType>();
+      auto tupleType = mlir::dyn_cast_or_null<TupleType>(packOp.getTuple().getType());
       auto structType = convertTuple(tupleType, *typeConverter);
       Value tpl = rewriter.create<LLVM::UndefOp>(packOp->getLoc(), structType);
       unsigned pos = 0;
@@ -100,7 +100,7 @@ class ToMemrefOpLowering : public OpConversionPattern<mlir::util::ToMemrefOp> {
    public:
    using OpConversionPattern<mlir::util::ToMemrefOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::ToMemrefOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto memrefType = op.getMemref().getType().cast<MemRefType>();
+      auto memrefType = mlir::cast<MemRefType>(op.getMemref().getType());
 
       auto targetType = typeConverter->convertType(memrefType);
 
@@ -141,7 +141,7 @@ class AllocaOpLowering : public OpConversionPattern<mlir::util::AllocaOp> {
    using OpConversionPattern<mlir::util::AllocaOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::AllocaOp allocOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = allocOp->getLoc();
-      auto genericMemrefType = allocOp.getRef().getType().cast<mlir::util::RefType>();
+      auto genericMemrefType = mlir::cast<mlir::util::RefType>(allocOp.getRef().getType());
       Value entries;
       if (allocOp.getSize()) {
          entries = adaptor.getSize();
@@ -163,7 +163,7 @@ class AllocOpLowering : public OpConversionPattern<mlir::util::AllocOp> {
    LogicalResult matchAndRewrite(mlir::util::AllocOp allocOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto loc = allocOp->getLoc();
 
-      auto genericMemrefType = allocOp.getRef().getType().cast<mlir::util::RefType>();
+      auto genericMemrefType = mlir::cast<mlir::util::RefType>(allocOp.getRef().getType());
       Value entries;
       if (allocOp.getSize()) {
          entries = adaptor.getSize();
@@ -238,7 +238,7 @@ class BufferCreateOpLowering : public OpConversionPattern<mlir::util::BufferCrea
    public:
    using OpConversionPattern<mlir::util::BufferCreateOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::BufferCreateOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      Type t = typeConverter->convertType(op.getResult().getType().cast<mlir::util::BufferType>().getT());
+      Type t = typeConverter->convertType(mlir::cast<mlir::util::BufferType>(op.getResult().getType()).getT());
       DataLayout defaultLayout;
       const DataLayout* layout = &defaultLayout;
       auto& llvmTypeConverter = *reinterpret_cast<const LLVMTypeConverter*>(getTypeConverter());
@@ -391,7 +391,7 @@ class BufferGetLenLowering : public OpConversionPattern<mlir::util::BufferGetLen
    public:
    using OpConversionPattern<mlir::util::BufferGetLen>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::util::BufferGetLen op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      Type t = typeConverter->convertType(op.getBuffer().getType().cast<mlir::util::BufferType>().getT());
+      Type t = typeConverter->convertType(mlir::cast<mlir::util::BufferType>(op.getBuffer().getType()).getT());
       DataLayout defaultLayout;
       const DataLayout* layout = &defaultLayout;
       auto& llvmTypeConverter = *reinterpret_cast<const LLVMTypeConverter*>(getTypeConverter());
@@ -558,7 +558,7 @@ class FuncConstTypeConversionPattern : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands,
                    ConversionPatternRewriter& rewriter) const override {
       auto constantOp = mlir::cast<mlir::func::ConstantOp>(op);
-      auto funcType = constantOp.getType().cast<mlir::FunctionType>();
+      auto funcType = mlir::cast<mlir::FunctionType>(constantOp.getType());
       llvm::SmallVector<mlir::Type> convertedFuncInputTypes;
       llvm::SmallVector<mlir::Type> convertedFuncResultsTypes;
       if (typeConverter->convertTypes(funcType.getInputs(), convertedFuncInputTypes).failed()) {
@@ -581,7 +581,7 @@ class CallIndirectTypeConversionPattern : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto callIndirectOp = mlir::cast<mlir::func::CallIndirectOp>(op);
       mlir::func::CallIndirectOpAdaptor adaptor(operands);
-      auto funcType = callIndirectOp.getCallee().getType().cast<mlir::FunctionType>();
+      auto funcType = mlir::cast<mlir::FunctionType>(callIndirectOp.getCallee().getType());
       llvm::SmallVector<mlir::Type> convertedFuncInputTypes;
       llvm::SmallVector<mlir::Type> convertedFuncResultsTypes;
       if (typeConverter->convertTypes(funcType.getInputs(), convertedFuncInputTypes).failed()) {
@@ -610,7 +610,7 @@ class ArithSelectTypeConversionPattern : public ConversionPattern {
    }
 };
 bool isUtilType(mlir::Type t, TypeConverter& converter) {
-   if (auto funcType = t.dyn_cast_or_null<mlir::FunctionType>()) {
+   if (auto funcType = mlir::dyn_cast_or_null<mlir::FunctionType>(t)) {
       return llvm::any_of(funcType.getInputs(), [&](auto t) { return isUtilType(t, converter); }) || llvm::any_of(funcType.getResults(), [&](auto t) { return isUtilType(t, converter); });
    } else {
       auto converted = converter.convertType(t);
@@ -663,7 +663,7 @@ struct UtilToLLVMLoweringPass
          return isSignatureLegal;
       });
       target.addDynamicallyLegalOp<mlir::func::ConstantOp>([&](mlir::func::ConstantOp op) {
-         if (auto functionType = op.getType().dyn_cast_or_null<mlir::FunctionType>()) {
+         if (auto functionType = mlir::dyn_cast_or_null<mlir::FunctionType>(op.getType())) {
             auto isLegal = !hasUtilType(typeConverter, functionType.getInputs()) &&
                !hasUtilType(typeConverter, functionType.getResults());
             return isLegal;

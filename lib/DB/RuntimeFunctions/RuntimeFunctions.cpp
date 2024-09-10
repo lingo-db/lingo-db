@@ -16,7 +16,7 @@ mlir::db::RuntimeFunction* mlir::db::RuntimeFunctionRegistry::lookup(std::string
 namespace {
 mlir::Value dateAddImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;
-   if (originalArgumentTypes[1].cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
+   if (mlir::cast<mlir::db::IntervalType>(originalArgumentTypes[1]).getUnit() == mlir::db::IntervalUnitAttr::daytime) {
       return rewriter.create<mlir::arith::AddIOp>(loc, loweredArguments);
    } else {
       return rt::DateRuntime::addMonths(rewriter, loc)(loweredArguments)[0];
@@ -34,7 +34,7 @@ mlir::Value sqrtImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArgument
    using namespace mlir;
 
    mlir::Value val = loweredArguments[0];
-   if (val.getType().isa<mlir::IntegerType>()) {
+   if (mlir::isa<mlir::IntegerType>(val.getType())) {
       mlir::Value res = rt::IntegerRuntime::sqrt(rewriter, loc)(val)[0]; //todo: for decimals
       if (res.getType() != val.getType()) {
          res = rewriter.create<mlir::arith::TruncIOp>(loc, val.getType(), res);
@@ -47,7 +47,7 @@ mlir::Value sqrtImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArgument
 }
 mlir::Value dateSubImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) {
    using namespace mlir;
-   if (originalArgumentTypes[1].cast<mlir::db::IntervalType>().getUnit() == mlir::db::IntervalUnitAttr::daytime) {
+   if (mlir::cast<mlir::db::IntervalType>(originalArgumentTypes[1]).getUnit() == mlir::db::IntervalUnitAttr::daytime) {
       return rewriter.create<mlir::arith::SubIOp>(loc, loweredArguments);
    } else {
       return rt::DateRuntime::subtractMonths(rewriter, loc)(loweredArguments)[0];
@@ -131,7 +131,7 @@ mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredAr
    using namespace mlir;
    auto i128Type = IntegerType::get(rewriter.getContext(), 128);
    auto i64Type = IntegerType::get(rewriter.getContext(), 64);
-   auto nullableType = originalArgumentTypes[0].dyn_cast_or_null<mlir::db::NullableType>();
+   auto nullableType = mlir::dyn_cast_or_null<mlir::db::NullableType>(originalArgumentTypes[0]);
    auto baseType = getBaseType(originalArgumentTypes[0]);
 
    auto f64Type = FloatType::getF64(rewriter.getContext());
@@ -145,7 +145,7 @@ mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredAr
       isNull = rewriter.create<arith::ConstantOp>(loc, rewriter.getIntegerAttr(rewriter.getI1Type(), 0));
       val = loweredArguments[0];
    }
-   if (baseType.isa<mlir::IndexType>()) {
+   if (mlir::isa<mlir::IndexType>(baseType)) {
       rt::DumpRuntime::dumpIndex(rewriter, loc)(loweredArguments[0]);
    } else if (isIntegerType(baseType, 1)) {
       rt::DumpRuntime::dumpBool(rewriter, loc)({isNull, val});
@@ -159,8 +159,8 @@ mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredAr
          val = rewriter.create<arith::ExtUIOp>(loc, i64Type, val);
       }
       rt::DumpRuntime::dumpUInt(rewriter, loc)({isNull, val});
-   } else if (auto decType = baseType.dyn_cast_or_null<mlir::db::DecimalType>()) {
-      if (typeConverter->convertType(decType).cast<mlir::IntegerType>().getWidth() < 128) {
+   } else if (auto decType = mlir::dyn_cast_or_null<mlir::db::DecimalType>(baseType)) {
+      if (mlir::cast<mlir::IntegerType>(typeConverter->convertType(decType)).getWidth() < 128) {
          auto converted = rewriter.create<arith::ExtSIOp>(loc, rewriter.getIntegerType(128), val);
          val = converted;
       }
@@ -170,29 +170,29 @@ mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredAr
       Value high = rewriter.create<arith::ShRUIOp>(loc, i128Type, val, shift);
       high = rewriter.create<arith::TruncIOp>(loc, i64Type, high);
       rt::DumpRuntime::dumpDecimal(rewriter, loc)({isNull, low, high, scale});
-   } else if (auto dateType = baseType.dyn_cast_or_null<mlir::db::DateType>()) {
+   } else if (auto dateType = mlir::dyn_cast_or_null<mlir::db::DateType>(baseType)) {
       rt::DumpRuntime::dumpDate(rewriter, loc)({isNull, val});
-   } else if (auto timestampType = baseType.dyn_cast_or_null<mlir::db::TimestampType>()) {
+   } else if (auto timestampType = mlir::dyn_cast_or_null<mlir::db::TimestampType>(baseType)) {
       switch (timestampType.getUnit()) {
          case mlir::db::TimeUnitAttr::second: rt::DumpRuntime::dumpTimestampSecond(rewriter, loc)({isNull, val}); break;
          case mlir::db::TimeUnitAttr::millisecond: rt::DumpRuntime::dumpTimestampMilliSecond(rewriter, loc)({isNull, val}); break;
          case mlir::db::TimeUnitAttr::microsecond: rt::DumpRuntime::dumpTimestampMicroSecond(rewriter, loc)({isNull, val}); break;
          case mlir::db::TimeUnitAttr::nanosecond: rt::DumpRuntime::dumpTimestampNanoSecond(rewriter, loc)({isNull, val}); break;
       }
-   } else if (auto intervalType = baseType.dyn_cast_or_null<mlir::db::IntervalType>()) {
+   } else if (auto intervalType = mlir::dyn_cast_or_null<mlir::db::IntervalType>(baseType)) {
       if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
          rt::DumpRuntime::dumpIntervalMonths(rewriter, loc)({isNull, val});
       } else {
          rt::DumpRuntime::dumpIntervalDaytime(rewriter, loc)({isNull, val});
       }
-   } else if (auto floatType = baseType.dyn_cast_or_null<mlir::FloatType>()) {
+   } else if (auto floatType = mlir::dyn_cast_or_null<mlir::FloatType>(baseType)) {
       if (floatType.getWidth() < 64) {
          val = rewriter.create<arith::ExtFOp>(loc, f64Type, val);
       }
       rt::DumpRuntime::dumpFloat(rewriter, loc)({isNull, val});
-   } else if (baseType.isa<mlir::db::StringType>()) {
+   } else if (mlir::isa<mlir::db::StringType>(baseType)) {
       rt::DumpRuntime::dumpString(rewriter, loc)({isNull, val});
-   } else if (auto charType = baseType.dyn_cast_or_null<mlir::db::CharType>()) {
+   } else if (auto charType = mlir::dyn_cast_or_null<mlir::db::CharType>(baseType)) {
       Value numBytes = rewriter.create<arith::ConstantOp>(loc, rewriter.getI64IntegerAttr(charType.getBytes()));
       if (charType.getBytes() < 5) {
          val = rewriter.create<arith::ExtSIOp>(loc, i64Type, val);
@@ -202,10 +202,10 @@ mlir::Value dumpValuesImpl(mlir::OpBuilder& rewriter, mlir::ValueRange loweredAr
    return mlir::Value();
 }
 mlir::LogicalResult dateAddFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<::mlir::Attribute> operands, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>& results) {
-   if (auto dateType = types[0].dyn_cast_or_null<mlir::db::DateType>()) {
-      if (auto intervalType = types[1].dyn_cast_or_null<mlir::db::IntervalType>()) {
-         auto leftIntAttr = operands[0].dyn_cast_or_null<mlir::IntegerAttr>();
-         auto rightIntAttr = operands[1].dyn_cast_or_null<mlir::IntegerAttr>();
+   if (auto dateType = mlir::dyn_cast_or_null<mlir::db::DateType>(types[0])) {
+      if (auto intervalType = mlir::dyn_cast_or_null<mlir::db::IntervalType>(types[1])) {
+         auto leftIntAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(operands[0]);
+         auto rightIntAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(operands[1]);
          if (leftIntAttr && rightIntAttr) {
             if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime) {
                results.push_back(mlir::IntegerAttr::get(mlir::IntegerType::get(dateType.getContext(), 64), leftIntAttr.getValue() + rightIntAttr.getValue()));
@@ -220,10 +220,10 @@ mlir::LogicalResult dateAddFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<::mlir
    return mlir::failure();
 }
 mlir::LogicalResult dateSubtractFoldFn(mlir::TypeRange types, ::llvm::ArrayRef<::mlir::Attribute> operands, ::llvm::SmallVectorImpl<::mlir::OpFoldResult>& results) {
-   if (auto dateType = types[0].dyn_cast_or_null<mlir::db::DateType>()) {
-      if (auto intervalType = types[1].dyn_cast_or_null<mlir::db::IntervalType>()) {
-         auto leftIntAttr = operands[0].dyn_cast_or_null<mlir::IntegerAttr>();
-         auto rightIntAttr = operands[1].dyn_cast_or_null<mlir::IntegerAttr>();
+   if (auto dateType = mlir::dyn_cast_or_null<mlir::db::DateType>(types[0])) {
+      if (auto intervalType = mlir::dyn_cast_or_null<mlir::db::IntervalType>(types[1])) {
+         auto leftIntAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(operands[0]);
+         auto rightIntAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(operands[1]);
          if (leftIntAttr && rightIntAttr) {
             if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::daytime) {
                results.push_back(mlir::IntegerAttr::get(mlir::IntegerType::get(dateType.getContext(), 64), leftIntAttr.getValue() - rightIntAttr.getValue()));
@@ -255,7 +255,7 @@ std::shared_ptr<mlir::db::RuntimeFunctionRegistry> mlir::db::RuntimeFunctionRegi
    builtinRegistry->add("Like").implementedAs(rt::StringRuntime::like).matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool);
    builtinRegistry->add("ConstLike").matchesTypes({RuntimeFunction::stringLike, RuntimeFunction::stringLike}, resTypeIsBool).implementedAs(constLikeImpl).needsWrapping();
    builtinRegistry->add("RoundDecimal").matchesTypes({RuntimeFunction::anyDecimal, RuntimeFunction::intLike}, RuntimeFunction::matchesArgument()).needsWrapping().implementedAs([](mlir::OpBuilder& rewriter, mlir::ValueRange loweredArguments, mlir::TypeRange originalArgumentTypes, mlir::Type resType, const mlir::TypeConverter* typeConverter, mlir::Location loc) -> mlir::Value {
-      mlir::Value s = rewriter.create<mlir::arith::ConstantIndexOp>(loc, originalArgumentTypes[0].cast<mlir::db::DecimalType>().getS());
+      mlir::Value s = rewriter.create<mlir::arith::ConstantIndexOp>(loc, mlir::cast<mlir::db::DecimalType>(originalArgumentTypes[0]).getS());
       mlir::Value res = rt::DecimalRuntime::round(rewriter, loc)(mlir::ValueRange({loweredArguments[0], loweredArguments[1], s}))[0];
       auto loweredResType = typeConverter->convertType(resType);
       if (!loweredResType.isInteger(128)) {

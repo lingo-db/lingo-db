@@ -51,7 +51,7 @@ class AvoidUnnecessaryMaterialization : public mlir::RewritePattern {
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       auto scanOp = mlir::cast<mlir::subop::ScanOp>(op);
-      if (!scanOp.getState().getType().isa<mlir::subop::BufferType>()) {
+      if (!mlir::isa<mlir::subop::BufferType>(scanOp.getState().getType())) {
          return mlir::failure();
       }
       auto readMembers = scanOp.getReadMembers();
@@ -69,7 +69,7 @@ class AvoidUnnecessaryMaterialization : public mlir::RewritePattern {
                std::vector<mlir::NamedAttribute> newMapping;
                for (auto curr : scanOp.getMapping()) {
                   auto currentMember = curr.getName();
-                  auto otherColumnDef = colManager.createDef(&materializeOp.getMapping().get(currentMember).cast<mlir::tuples::ColumnRefAttr>().getColumn());
+                  auto otherColumnDef = colManager.createDef(&mlir::cast<mlir::tuples::ColumnRefAttr>(materializeOp.getMapping().get(currentMember)).getColumn());
                   auto otherMember = lookupByValue(scanOp2.getMapping(), otherColumnDef);
                   newMapping.push_back(rewriter.getNamedAttr(otherMember.value(), curr.getValue()));
                }
@@ -91,8 +91,8 @@ class AvoidArrayMaterialization : public mlir::RewritePattern {
       if (op->getNumOperands() < 1) {
          return op;
       }
-      bool isFirstTupleStream = op->getOperand(0).getType().isa<mlir::tuples::TupleStreamType>();
-      bool noOtherTupleStream = llvm::none_of(op->getOperands().drop_front(), [](mlir::Value v) { return v.getType().isa<mlir::tuples::TupleStreamType>(); });
+      bool isFirstTupleStream = mlir::isa<mlir::tuples::TupleStreamType>(op->getOperand(0).getType());
+      bool noOtherTupleStream = llvm::none_of(op->getOperands().drop_front(), [](mlir::Value v) { return mlir::isa<mlir::tuples::TupleStreamType>(v.getType()); });
       if (isFirstTupleStream && noOtherTupleStream) {
          return getRoot(op->getOperand(0).getDefiningOp());
       } else if (isFirstTupleStream) {
@@ -109,7 +109,7 @@ class AvoidArrayMaterialization : public mlir::RewritePattern {
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       auto scanRefsOp = mlir::cast<mlir::subop::ScanRefsOp>(op);
-      if (!scanRefsOp.getState().getType().isa<mlir::subop::ArrayType>()) {
+      if (!mlir::isa<mlir::subop::ArrayType>(scanRefsOp.getState().getType())) {
          return mlir::failure();
       }
       if (scanRefsOp->hasAttr("sequential")) {
@@ -147,7 +147,7 @@ class AvoidArrayMaterialization : public mlir::RewritePattern {
                } else {
                   if (auto otherScanRefsOp = mlir::dyn_cast_or_null<mlir::subop::ScanRefsOp>(root)) {
                      auto otherState = otherScanRefsOp.getState();
-                     if (!otherState.getType().isa<mlir::subop::ArrayType>()) {
+                     if (!mlir::isa<mlir::subop::ArrayType>(otherState.getType())) {
                         return mlir::failure();
                      }
                      if (auto offsetBy = mlir::dyn_cast_or_null<mlir::subop::OffsetReferenceBy>(colUser)) {
@@ -174,7 +174,7 @@ class AvoidArrayMaterialization : public mlir::RewritePattern {
                            scatterOp = localScatterOp;
                            offsetByOp = offsetBy;
                            replaceWith = colManager.createRef(&otherScanRefsOp.getRef().getColumn());
-                           if (scatterOp.getWrittenMembers().size() != scanRefsOp.getState().getType().cast<mlir::subop::State>().getMembers().getNames().size()) {
+                           if (scatterOp.getWrittenMembers().size() != mlir::cast<mlir::subop::State>(scanRefsOp.getState().getType()).getMembers().getNames().size()) {
                               return mlir::failure();
                            }
                         } else {
@@ -201,12 +201,12 @@ class AvoidArrayMaterialization : public mlir::RewritePattern {
       if (scatterOp) {
          std::unordered_map<std::string, mlir::tuples::ColumnRefAttr> scatterMapping;
          for (auto m : scatterOp.getMapping()) {
-            scatterMapping.insert({m.getName().str(), m.getValue().cast<mlir::tuples::ColumnRefAttr>()});
+            scatterMapping.insert({m.getName().str(), mlir::cast<mlir::tuples::ColumnRefAttr>(m.getValue())});
          }
          std::vector<mlir::Attribute> renamed;
          for (auto gatherOp : gatherOps) {
             for (auto m : gatherOp.getMapping()) {
-               renamed.push_back(colManager.createDef(&m.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn(), rewriter.getArrayAttr(scatterMapping.at(m.getName().str()))));
+               renamed.push_back(colManager.createDef(&mlir::cast<mlir::tuples::ColumnDefAttr>(m.getValue()).getColumn(), rewriter.getArrayAttr(scatterMapping.at(m.getName().str()))));
             }
             rewriter.replaceOp(gatherOp, gatherOp.getStream());
          }
@@ -255,7 +255,7 @@ class ReuseHashtable : public mlir::RewritePattern {
       auto& colManager = rewriter.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager();
       auto insertOp = mlir::cast<mlir::subop::InsertOp>(op);
       auto state = insertOp.getState();
-      auto multimapType = state.getType().dyn_cast_or_null<mlir::subop::MultiMapType>();
+      auto multimapType = mlir::dyn_cast_or_null<mlir::subop::MultiMapType>(state.getType());
       if (!multimapType) return mlir::failure();
       std::vector<mlir::subop::LookupOp> lookupOps;
       for (auto* user : state.getUsers()) {
@@ -269,14 +269,14 @@ class ReuseHashtable : public mlir::RewritePattern {
       }
 
       if (auto scanOp = mlir::dyn_cast_or_null<mlir::subop::ScanOp>(insertOp.getStream().getDefiningOp())) {
-         if (auto htType = scanOp.getState().getType().dyn_cast_or_null<mlir::subop::MapType>()) {
+         if (auto htType = mlir::dyn_cast_or_null<mlir::subop::MapType>(scanOp.getState().getType())) {
             std::vector<mlir::tuples::Column*> hashedColumns;
             for (auto m : multimapType.getKeyMembers().getNames()) {
-               hashedColumns.push_back(&insertOp.getMapping().get(m.cast<mlir::StringAttr>().strref()).cast<mlir::tuples::ColumnRefAttr>().getColumn());
+               hashedColumns.push_back(&mlir::cast<mlir::tuples::ColumnRefAttr>(insertOp.getMapping().get(mlir::cast<mlir::StringAttr>(m).strref())).getColumn());
             }
             std::unordered_map<std::string, std::string> memberMapping;
             for (auto m : insertOp.getMapping()) {
-               auto colDef = colManager.createDef(&m.getValue().cast<mlir::tuples::ColumnRefAttr>().getColumn());
+               auto colDef = colManager.createDef(&mlir::cast<mlir::tuples::ColumnRefAttr>(m.getValue()).getColumn());
                auto hmMember = lookupByValue(scanOp.getMapping(), colDef);
                auto bufferMember = m.getName().str();
                if (hmMember) {
@@ -286,9 +286,9 @@ class ReuseHashtable : public mlir::RewritePattern {
             std::unordered_set<mlir::tuples::Column*> hashMapKey;
             std::unordered_map<std::string, mlir::tuples::Column*> keyMemberToColumn;
             for (auto keyMember : htType.getKeyMembers().getNames()) {
-               auto colDef = scanOp.getMapping().get(keyMember.cast<mlir::StringAttr>().str()).cast<mlir::tuples::ColumnDefAttr>();
+               auto colDef = mlir::cast<mlir::tuples::ColumnDefAttr>(scanOp.getMapping().get(mlir::cast<mlir::StringAttr>(keyMember).str()));
                hashMapKey.insert(&colDef.getColumn());
-               keyMemberToColumn[keyMember.cast<mlir::StringAttr>().str()] = &colDef.getColumn();
+               keyMemberToColumn[mlir::cast<mlir::StringAttr>(keyMember).str()] = &colDef.getColumn();
             }
             if (hashMapKey.size() != hashedColumns.size()) {
                return mlir::failure();
@@ -314,7 +314,7 @@ class ReuseHashtable : public mlir::RewritePattern {
             for (auto lookupOp : lookupOps) {
                std::vector<mlir::tuples::Column*> lookupHashedColumns;
                for (auto c : lookupOp.getKeys()) {
-                  lookupHashedColumns.push_back(&c.cast<mlir::tuples::ColumnRefAttr>().getColumn());
+                  lookupHashedColumns.push_back(&mlir::cast<mlir::tuples::ColumnRefAttr>(c).getColumn());
                }
                if (lookupHashedColumns.size() != hashedColumns.size()) return mlir::failure();
                std::unordered_map<mlir::tuples::Column*, mlir::tuples::Column*> columnMapping;
@@ -323,7 +323,7 @@ class ReuseHashtable : public mlir::RewritePattern {
                }
                std::vector<mlir::Attribute> lookupColumns;
                for (auto keyMember : htType.getKeyMembers().getNames()) {
-                  auto* col = columnMapping.at(keyMemberToColumn.at(keyMember.cast<mlir::StringAttr>().str()));
+                  auto* col = columnMapping.at(keyMemberToColumn.at(mlir::cast<mlir::StringAttr>(keyMember).str()));
                   lookupColumns.push_back(colManager.createRef(col));
                }
                rewriter.setInsertionPointAfter(lookupOp);

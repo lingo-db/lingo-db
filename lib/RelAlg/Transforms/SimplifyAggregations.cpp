@@ -43,7 +43,7 @@ class WrapAggrFuncPattern : public mlir::RewritePattern {
          auto val = rewriter.create<mlir::relalg::AggrFuncOp>(op->getLoc(), aggrFuncOp.getType(), aggrFuncOp.getFn(), relArgument, aggrFuncOp.getAttr());
          rewriter.create<mlir::tuples::ReturnOp>(op->getLoc(), mlir::ValueRange({val}));
       }
-      auto nullableType = aggrFuncOp.getType().dyn_cast_or_null<mlir::db::NullableType>();
+      auto nullableType = mlir::dyn_cast_or_null<mlir::db::NullableType>(aggrFuncOp.getType());
       mlir::Value getScalarOp = rewriter.replaceOpWithNewOp<mlir::relalg::GetScalarOp>(op, nullableType, attributeManager.createRef(&def.getColumn()), aggrOp.asRelation());
       mlir::Value res = getScalarOp;
       if (!nullableType) {
@@ -84,7 +84,7 @@ class WrapCountRowsPattern : public mlir::RewritePattern {
          rewriter.create<mlir::tuples::ReturnOp>(op->getLoc(), mlir::ValueRange({val}));
       }
       mlir::Type nullableType = aggrFuncOp.getType();
-      if (!nullableType.isa<mlir::db::NullableType>()) {
+      if (!mlir::isa<mlir::db::NullableType>(nullableType)) {
          nullableType = mlir::db::NullableType::get(rewriter.getContext(), nullableType);
       }
       mlir::Value getScalarOp = rewriter.create<mlir::relalg::GetScalarOp>(op->getLoc(), nullableType, attributeManager.createRef(&def.getColumn()), aggrOp.asRelation());
@@ -114,8 +114,8 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
          auto xType = aggrFuncOp.getResult().getType();
          auto asDoubleAttr = attrManager.createDef(attrManager.getUniqueScope("var_samp"), "asDouble");
          auto squaredAttr = attrManager.createDef(attrManager.getUniqueScope("var_samp"), "x2");
-         squaredAttr.getColumn().type = aggrFuncOp.getAttr().getColumn().type.isa<mlir::db::NullableType>() ? (mlir::Type) mlir::db::NullableType::get(getContext(), rewriter.getF64Type()) : (mlir::Type) rewriter.getF64Type();
-         asDoubleAttr.getColumn().type = aggrFuncOp.getAttr().getColumn().type.isa<mlir::db::NullableType>() ? (mlir::Type) mlir::db::NullableType::get(getContext(), rewriter.getF64Type()) : (mlir::Type) rewriter.getF64Type();
+         squaredAttr.getColumn().type = mlir::isa<mlir::db::NullableType>(aggrFuncOp.getAttr().getColumn().type) ? (mlir::Type) mlir::db::NullableType::get(getContext(), rewriter.getF64Type()) : (mlir::Type) rewriter.getF64Type();
+         asDoubleAttr.getColumn().type = mlir::isa<mlir::db::NullableType>(aggrFuncOp.getAttr().getColumn().type) ? (mlir::Type) mlir::db::NullableType::get(getContext(), rewriter.getF64Type()) : (mlir::Type) rewriter.getF64Type();
 
          auto mapOp = rewriter.create<mlir::relalg::MapOp>(op->getLoc(), mlir::tuples::TupleStreamType::get(getContext()), rel, rewriter.getArrayAttr({squaredAttr, asDoubleAttr}));
          auto* block = new mlir::Block;
@@ -124,7 +124,7 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
             rewriter.setInsertionPointToStart(block);
             auto x = rewriter.create<mlir::tuples::GetColumnOp>(loc, aggrFuncOp.getAttr().getColumn().type, aggrFuncOp.getAttr(), tuple);
-            mlir::Value asDouble = rewriter.create<mlir::db::CastOp>(loc, x.getType().isa<mlir::db::NullableType>() ? (mlir::Type) mlir::db::NullableType::get(getContext(), rewriter.getF64Type()) : (mlir::Type) rewriter.getF64Type(), x);
+            mlir::Value asDouble = rewriter.create<mlir::db::CastOp>(loc, mlir::isa<mlir::db::NullableType>(x.getType()) ? (mlir::Type) mlir::db::NullableType::get(getContext(), rewriter.getF64Type()) : (mlir::Type) rewriter.getF64Type(), x);
             mlir::Value squared = rewriter.create<mlir::db::MulOp>(loc, asDouble, asDouble);
             rewriter.create<mlir::tuples::ReturnOp>(loc, mlir::ValueRange{squared, asDouble});
          }
@@ -133,7 +133,7 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
          auto asDoubleAttrRef = attrManager.createRef(&asDoubleAttr.getColumn());
          mlir::Value sumSquared = rewriter.create<mlir::relalg::AggrFuncOp>(loc, xType, mlir::relalg::AggrFunc::sum, mapOp.getResult(), squaredAttrRef);
          auto originalType = xType;
-         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, originalType.isa<mlir::db::NullableType>() ? originalType : mlir::db::NullableType::get(originalType), mlir::relalg::AggrFunc::sum, rel, asDoubleAttrRef);
+         mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, mlir::isa<mlir::db::NullableType>(originalType) ? originalType : mlir::db::NullableType::get(originalType), mlir::relalg::AggrFunc::sum, rel, asDoubleAttrRef);
 
          mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(loc, rewriter.getI64Type(), mlir::relalg::AggrFunc::count, rel, asDoubleAttrRef);
          mlir::Value squareSum = rewriter.create<mlir::db::MulOp>(loc, sum, sum);
@@ -157,10 +157,10 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
       }
       if (aggrFuncOp.getFn() == mlir::relalg::AggrFunc::avg) {
          auto asNullable = [&](mlir::Type t) -> mlir::Type {
-            if (t.isa<mlir::db::NullableType>()) {
+            if (mlir::isa<mlir::db::NullableType>(t)) {
                return t;
             }
-            if (aggrFuncOp.getType().isa<mlir::db::NullableType>()) {
+            if (mlir::isa<mlir::db::NullableType>(aggrFuncOp.getType())) {
                return mlir::db::NullableType::get(t.getContext(), t);
             } else {
                return t;
@@ -168,12 +168,12 @@ class RewriteComplexAggrFuncs : public mlir::RewritePattern {
          };
          mlir::Value sum = rewriter.create<mlir::relalg::AggrFuncOp>(loc, asNullable(aggrFuncOp.getAttr().getColumn().type), mlir::relalg::AggrFunc::sum, aggrFuncOp.getRel(), aggrFuncOp.getAttr());
          mlir::Value count = rewriter.create<mlir::relalg::AggrFuncOp>(loc, rewriter.getI64Type(), mlir::relalg::AggrFunc::count, aggrFuncOp.getRel(), aggrFuncOp.getAttr());
-         if (!getBaseType(sum.getType()).isa<mlir::db::DecimalType>() && getBaseType(aggrFuncOp.getResult().getType()).isa<mlir::db::DecimalType>()) {
+         if (!mlir::isa<mlir::db::DecimalType>(getBaseType(sum.getType())) && mlir::isa<mlir::db::DecimalType>(getBaseType(aggrFuncOp.getResult().getType()))) {
             sum = rewriter.create<mlir::db::CastOp>(loc, asNullable(mlir::db::DecimalType::get(getContext(), 19, 0)), sum); //todo
          }
          auto baseType = getBaseType(sum.getType());
 
-         mlir::Value casted = rewriter.create<mlir::db::CastOp>(loc, baseType.isa<mlir::db::DecimalType>() ? mlir::db::DecimalType::get(getContext(), 19, 0) : baseType, count);
+         mlir::Value casted = rewriter.create<mlir::db::CastOp>(loc, mlir::isa<mlir::db::DecimalType>(baseType) ? mlir::db::DecimalType::get(getContext(), 19, 0) : baseType, count);
          rewriter.replaceOpWithNewOp<mlir::db::DivOp>(aggrFuncOp, sum, casted);
          return mlir::success();
       }

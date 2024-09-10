@@ -32,7 +32,7 @@
 
 using namespace mlir;
 using llvm::formatv;
-
+namespace {
 /// Convenience functions to produce interleaved output with functions returning
 /// a LogicalResult. This is different than those in STLExtras as functions used
 /// on each element doesn't return a string.
@@ -73,6 +73,7 @@ inline LogicalResult interleaveSemicolonWithError(const Container& c,
                                                   UnaryFunctor eachFn) {
    return interleaveWithError(c.begin(), c.end(), eachFn, [&]() { os << "; "; });
 }
+} // end anonymous namespace
 
 namespace {
 /// Emitter that uses dialect specific emitters to emit C++ code.
@@ -474,14 +475,14 @@ LogicalResult printOperation(CppEmitter& emitter, util::BufferCastOp op) {
 }
 LogicalResult printOperation(CppEmitter& emitter, util::BufferCreateOp op) {
    std::string type;
-   if (failed(emitter.typeToString(op->getLoc(), op.getType().getElementType().cast<mlir::util::RefType>().getElementType(), type))) {
+   if (failed(emitter.typeToString(op->getLoc(), mlir::cast<mlir::util::RefType>(op.getType().getElementType()).getElementType(), type))) {
       return failure();
    }
    return printStandardOperation(emitter, op, [&](auto& os) { os << "runtime::Buffer{"<<emitter.getOrCreateName(op.getLen()) <<"*sizeof("<<type<<"),(uint8_t*)"<<emitter.getOrCreateName(op.getPtr())<<"}"; });
 }
 LogicalResult printOperation(CppEmitter& emitter, util::BufferGetLen op) {
    std::string type;
-   if (failed(emitter.typeToString(op->getLoc(), op.getBuffer().getType().getElementType().cast<mlir::util::RefType>().getElementType(), type))) {
+   if (failed(emitter.typeToString(op->getLoc(), mlir::cast<mlir::util::RefType>(op.getBuffer().getType().getElementType()).getElementType(), type))) {
       return failure();
    }
    return printStandardOperation(emitter, op, [&](auto& os) { os << emitter.getOrCreateName(op.getBuffer()) << ".numElements/std::max(1ul,sizeof(" << type << "))"; });
@@ -1040,11 +1041,11 @@ LogicalResult CppEmitter::emitAttribute(Location loc, Attribute attr) {
    };
 
    // Print floating point attributes.
-   if (auto fAttr = attr.dyn_cast<FloatAttr>()) {
+   if (auto fAttr = mlir::dyn_cast<FloatAttr>(attr)) {
       printFloat(fAttr.getValue());
       return success();
    }
-   if (auto dense = attr.dyn_cast<DenseFPElementsAttr>()) {
+   if (auto dense = mlir::dyn_cast<DenseFPElementsAttr>(attr)) {
       os << '{';
       interleaveComma(dense, os, [&](const APFloat& val) { printFloat(val); });
       os << '}';
@@ -1052,21 +1053,18 @@ LogicalResult CppEmitter::emitAttribute(Location loc, Attribute attr) {
    }
 
    // Print integer attributes.
-   if (auto iAttr = attr.dyn_cast<IntegerAttr>()) {
-      if (auto iType = iAttr.getType().dyn_cast<IntegerType>()) {
+   if (auto iAttr = mlir::dyn_cast<IntegerAttr>(attr)) {
+      if (auto iType = mlir::dyn_cast<IntegerType>(iAttr.getType())) {
          printInt(iAttr.getValue(), shouldMapToUnsigned(iType.getSignedness()));
          return success();
       }
-      if (auto iType = iAttr.getType().dyn_cast<IndexType>()) {
+      if (auto iType = mlir::dyn_cast<IndexType>(iAttr.getType())) {
          printInt(iAttr.getValue(), false);
          return success();
       }
    }
-   if (auto dense = attr.dyn_cast<DenseIntElementsAttr>()) {
-      if (auto iType = dense.getType()
-                          .cast<TensorType>()
-                          .getElementType()
-                          .dyn_cast<IntegerType>()) {
+   if (auto dense = mlir::dyn_cast<DenseIntElementsAttr>(attr)) {
+      if (auto iType = mlir::dyn_cast<IntegerType>(mlir::cast<TensorType>(dense.getType()).getElementType())) {
          os << '{';
          interleaveComma(dense, os, [&](const APInt& val) {
             printInt(val, shouldMapToUnsigned(iType.getSignedness()));
@@ -1074,10 +1072,7 @@ LogicalResult CppEmitter::emitAttribute(Location loc, Attribute attr) {
          os << '}';
          return success();
       }
-      if (auto iType = dense.getType()
-                          .cast<TensorType>()
-                          .getElementType()
-                          .dyn_cast<IndexType>()) {
+      if (auto iType = mlir::dyn_cast<IndexType>(mlir::cast<TensorType>(dense.getType()).getElementType())) {
          os << '{';
          interleaveComma(dense, os,
                          [&](const APInt& val) { printInt(val, false); });
@@ -1087,7 +1082,7 @@ LogicalResult CppEmitter::emitAttribute(Location loc, Attribute attr) {
    }
 
    // Print symbolic reference attributes.
-   if (auto sAttr = attr.dyn_cast<SymbolRefAttr>()) {
+   if (auto sAttr = mlir::dyn_cast<SymbolRefAttr>(attr)) {
       if (sAttr.getNestedReferences().size() > 1)
          return emitError(loc, "attribute has more than 1 nested reference");
       os << sAttr.getRootReference().getValue();
@@ -1095,7 +1090,7 @@ LogicalResult CppEmitter::emitAttribute(Location loc, Attribute attr) {
    }
 
    // Print type attributes.
-   if (auto type = attr.dyn_cast<TypeAttr>())
+   if (auto type = mlir::dyn_cast<TypeAttr>(attr))
       return emitType(loc, type.getValue());
 
    return emitError(loc, "cannot emit attribute: ") << attr;
@@ -1328,7 +1323,7 @@ LogicalResult CppEmitter::typeToString(Location loc, Type type, std::string& str
    return success();
 }
 LogicalResult CppEmitter::emitType(Location loc, Type type, llvm::raw_ostream& os) {
-   if (auto iType = type.dyn_cast<IntegerType>()) {
+   if (auto iType = mlir::dyn_cast<IntegerType>(type)) {
       auto width = iType.getWidth();
       if (width == 24) {
          width = 32;
@@ -1353,7 +1348,7 @@ LogicalResult CppEmitter::emitType(Location loc, Type type, llvm::raw_ostream& o
             return emitError(loc, "cannot emit integer type ") << type;
       }
    }
-   if (auto fType = type.dyn_cast<FloatType>()) {
+   if (auto fType = mlir::dyn_cast<FloatType>(type)) {
       switch (fType.getWidth()) {
          case 32:
             return (os << "float"), success();
@@ -1363,9 +1358,9 @@ LogicalResult CppEmitter::emitType(Location loc, Type type, llvm::raw_ostream& o
             return emitError(loc, "cannot emit float type ") << type;
       }
    }
-   if (auto iType = type.dyn_cast<IndexType>())
+   if (auto iType = mlir::dyn_cast<IndexType>(type))
       return (os << "size_t"), success();
-   if (auto tType = type.dyn_cast<TensorType>()) {
+   if (auto tType = mlir::dyn_cast<TensorType>(type)) {
       if (!tType.hasRank())
          return emitError(loc, "cannot emit unranked tensor type");
       if (!tType.hasStaticShape())
@@ -1381,9 +1376,9 @@ LogicalResult CppEmitter::emitType(Location loc, Type type, llvm::raw_ostream& o
       os << ">";
       return success();
    }
-   if (auto tType = type.dyn_cast<TupleType>())
+   if (auto tType = mlir::dyn_cast<TupleType>(type))
       return emitTupleType(loc, tType.getTypes(), os);
-   if (auto funcType = type.dyn_cast<FunctionType>()) {
+   if (auto funcType = mlir::dyn_cast<FunctionType>(type)) {
       os << "std::add_pointer<";
       if (failed(emitTypes(loc, funcType.getResults(), os)))
          return failure();
@@ -1403,23 +1398,23 @@ LogicalResult CppEmitter::emitType(Location loc, Type type, llvm::raw_ostream& o
       os << ")>::type";
       return success();
    }
-   if (auto pType = type.dyn_cast<mlir::util::RefType>()) {
+   if (auto pType = mlir::dyn_cast<mlir::util::RefType>(type)) {
       if (failed(emitType(loc, pType.getElementType(), os)))
          return failure();
       os << "*";
       return success();
    }
-   if (auto memrefType = type.dyn_cast<mlir::MemRefType>()) {
+   if (auto memrefType = mlir::dyn_cast<mlir::MemRefType>(type)) {
       if (failed(emitType(loc, memrefType.getElementType(), os)))
          return failure();
       os << "*";
       return success();
    }
-   if (auto vLType = type.dyn_cast<mlir::util::VarLen32Type>()) {
+   if (auto vLType = mlir::dyn_cast<mlir::util::VarLen32Type>(type)) {
       os << "runtime::VarLen32";
       return success();
    }
-   if (auto bufType = type.dyn_cast<mlir::util::BufferType>()) {
+   if (auto bufType = mlir::dyn_cast<mlir::util::BufferType>(type)) {
       os << "runtime::Buffer";
       return success();
    }

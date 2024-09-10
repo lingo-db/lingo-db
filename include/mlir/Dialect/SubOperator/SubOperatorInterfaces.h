@@ -25,13 +25,13 @@ class ColumnMapping {
       return defAttr.getContext()->getLoadedDialect<mlir::tuples::TupleStreamDialect>()->getColumnManager().createDef(mapping[&defAttr.getColumn()], defAttr.getFromExisting());
    }
    mlir::Attribute remap(mlir::Attribute attr) {
-      if (auto refAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnRefAttr>()) {
+      if (auto refAttr = mlir::dyn_cast_or_null<mlir::tuples::ColumnRefAttr>(attr)) {
          return remap(refAttr);
-      } else if (auto defAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>()) {
+      } else if (auto defAttr = mlir::dyn_cast_or_null<mlir::tuples::ColumnDefAttr>(attr)) {
          return remap(defAttr);
-      } else if (auto arrayAttr = attr.dyn_cast_or_null<mlir::ArrayAttr>()) {
+      } else if (auto arrayAttr = mlir::dyn_cast_or_null<mlir::ArrayAttr>(attr)) {
          return remap(arrayAttr);
-      } else if (auto dictionaryAttr = attr.dyn_cast_or_null<mlir::DictionaryAttr>()) {
+      } else if (auto dictionaryAttr = mlir::dyn_cast_or_null<mlir::DictionaryAttr>(attr)) {
          return remap(dictionaryAttr);
       } else {
          assert(false);
@@ -66,14 +66,14 @@ class ColumnMapping {
    mlir::DictionaryAttr clone(mlir::DictionaryAttr mapping) {
       std::vector<mlir::NamedAttribute> remapped;
       for (auto x : mapping) {
-         remapped.push_back(mlir::NamedAttribute(x.getName(), clone(x.getValue().cast<mlir::tuples::ColumnDefAttr>())));
+         remapped.push_back(mlir::NamedAttribute(x.getName(), clone(mlir::cast<mlir::tuples::ColumnDefAttr>(x.getValue()))));
       }
       return mlir::DictionaryAttr::get(mapping.getContext(), remapped);
    }
    mlir::ArrayAttr clone(mlir::ArrayAttr mapping) {
       std::vector<mlir::Attribute> remapped;
       for (auto x : mapping) {
-         remapped.push_back(clone(x.cast<mlir::tuples::ColumnDefAttr>()));
+         remapped.push_back(clone(mlir::cast<mlir::tuples::ColumnDefAttr>(x)));
       }
       return mlir::ArrayAttr::get(mapping.getContext(), remapped);
    }

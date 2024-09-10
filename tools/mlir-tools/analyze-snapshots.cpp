@@ -41,7 +41,7 @@
 #include <queue>
 
 namespace cl = llvm::cl;
-
+namespace {
 cl::opt<std::string> jsonInputFilename(cl::Positional,
                                        cl::desc("<input json file>"),
                                        cl::init("-"),
@@ -179,7 +179,7 @@ nlohmann::json toJSON(size_t& startElement, std::vector<MLIRElement>& elements, 
             valueUse["value"] = get(buf, pos, element.length);
             std::string mlirType;
             llvm::raw_string_ostream os(mlirType);
-            std::get<ValueUseElement>(element.element).value.getType().cast<mlir::Type>().print(os);
+            mlir::cast<mlir::Type>(std::get<ValueUseElement>(element.element).value.getType()).print(os);
             valueUse["mlirType"] = mlirType;
             j.push_back(std::move(valueUse));
          } else if (std::holds_alternative<BlockArgDefElement>(element.element)) {
@@ -227,7 +227,7 @@ std::string referenceFromLineLoc(mlir::FileLineColLoc lineLoc) {
    auto fileName = lineLoc.getFilename().str();
    return referenceFromFileAndLine(fileName, lineLoc.getLine());
 }
-
+} // namespace
 int main(int argc, char** argv) {
    cl::ParseCommandLineOptions(argc, argv, "toy compiler\n");
 
@@ -295,7 +295,7 @@ int main(int argc, char** argv) {
          }
          size_t length = (opDef.scopeLoc.End.getPointer() - basePtr) - realStart;
          std::string mappedId;
-         if (auto fileLineLoc = opDef.op->getLoc()->dyn_cast_or_null<mlir::FileLineColLoc>()) {
+         if (auto fileLineLoc = mlir::dyn_cast_or_null<mlir::FileLineColLoc>(opDef.op->getLoc())) {
             mappedId = referenceFromLineLoc(fileLineLoc);
          }
          auto [line, _] = sourceMgr.getLineAndColumn(opDef.loc.Start);
@@ -330,7 +330,7 @@ int main(int argc, char** argv) {
          }
       }
       for (auto aliasDef : state.getAttributeAliasDefs()) {
-         if (aliasDef.value.isa<mlir::LocationAttr>()) {
+         if (mlir::isa<mlir::LocationAttr>(aliasDef.value)) {
             size_t start = aliasDef.definition.loc.Start.getPointer() - basePtr;
             const auto* end = aliasDef.definition.loc.End.getPointer();
             while (*end != '\n') {

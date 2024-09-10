@@ -243,7 +243,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
       bool nullable = false;
       if (!lowerTerminator.getResults().empty()) {
          Value lowerPredVal = lowerTerminator.getResults()[0];
-         nullable |= lowerPredVal.getType().isa<mlir::db::NullableType>();
+         nullable |= mlir::isa<mlir::db::NullableType>(lowerPredVal.getType());
          values.push_back(lowerPredVal);
       }
       for (auto selOp : selectionOps) {
@@ -252,7 +252,7 @@ class Unnesting : public mlir::PassWrapper<Unnesting, mlir::OperationPass<mlir::
          mlir::IRMapping mapping;
          mapping.map(selOp.getPredicateArgument(), lower.getPredicateArgument());
          mlir::relalg::detail::inlineOpIntoBlock(higherPredVal.getDefiningOp(), higherPredVal.getDefiningOp()->getParentOp(), &lower.getPredicateBlock(), mapping);
-         nullable |= higherPredVal.getType().isa<mlir::db::NullableType>();
+         nullable |= mlir::isa<mlir::db::NullableType>(higherPredVal.getType());
          values.push_back(mapping.lookup(higherPredVal));
       }
       mlir::Type resType = builder.getI1Type();

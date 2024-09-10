@@ -2,19 +2,19 @@
 #include "mlir/Dialect/TupleStream/TupleStreamOps.h"
 void mlir::subop::ColumnUsageAnalysis::analyze(mlir::Operation* op, mlir::Attribute attr) {
    if (!attr) return;
-   if (auto arrayAttr = attr.dyn_cast_or_null<mlir::ArrayAttr>()) {
+   if (auto arrayAttr = mlir::dyn_cast_or_null<mlir::ArrayAttr>(attr)) {
       for (auto x : arrayAttr) {
          analyze(op, x);
       }
-   } else if (auto dictionaryAttr = attr.dyn_cast_or_null<mlir::DictionaryAttr>()) {
+   } else if (auto dictionaryAttr = mlir::dyn_cast_or_null<mlir::DictionaryAttr>(attr)) {
       for (auto x : dictionaryAttr) {
          analyze(op, x.getValue());
       }
-   } else if (auto columnRefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnRefAttr>()) {
+   } else if (auto columnRefAttr = mlir::dyn_cast_or_null<mlir::tuples::ColumnRefAttr>(attr)) {
       usedColumns[op].insert(&columnRefAttr.getColumn());
       operationsUsingColumn[&columnRefAttr.getColumn()].insert(op);
 
-   } else if (auto columnDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>()) {
+   } else if (auto columnDefAttr = mlir::dyn_cast_or_null<mlir::tuples::ColumnDefAttr>(attr)) {
       analyze(op, columnDefAttr.getFromExisting());
    }
 }

@@ -15,7 +15,7 @@ struct InsertPerfAsmPass
       return "--llvm-insert-profiling-helpers";
    }
    static mlir::Location dropNames(mlir::Location l) {
-      if (auto namedLoc = l.dyn_cast<mlir::NameLoc>()) {
+      if (auto namedLoc = mlir::dyn_cast<mlir::NameLoc>(l)) {
          return dropNames(namedLoc.getChildLoc());
       }
       return l;
@@ -23,7 +23,7 @@ struct InsertPerfAsmPass
    void runOnOperation() override {
       getOperation()->walk([](mlir::LLVM::CallOp callOp) {
          size_t loc = 0xdeadbeef;
-         if (auto fileLoc = dropNames(callOp.getLoc()).dyn_cast<mlir::FileLineColLoc>()) {
+         if (auto fileLoc = mlir::dyn_cast<mlir::FileLineColLoc>(dropNames(callOp.getLoc()))) {
             loc = fileLoc.getLine();
          }
          mlir::OpBuilder b(callOp);

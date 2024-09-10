@@ -107,11 +107,6 @@ std::vector<std::shared_ptr<arrow::RecordBatch>> toRecordBatches(std::shared_ptr
    }
    return batches;
 }
-} // end namespace
-
-void runtime::DataSourceIteration::end(DataSourceIteration* iteration) {
-   delete iteration;
-}
 uint64_t getTableColumnId(const std::shared_ptr<arrow::Schema>& schema, std::string columnName) {
    auto columnNames = schema->field_names();
    size_t columnId = 0;
@@ -123,6 +118,12 @@ uint64_t getTableColumnId(const std::shared_ptr<arrow::Schema>& schema, std::str
    }
    throw std::runtime_error("column not found: " + columnName);
 }
+} // end namespace
+
+void runtime::DataSourceIteration::end(DataSourceIteration* iteration) {
+   delete iteration;
+}
+
 runtime::DataSourceIteration* runtime::DataSourceIteration::init(DataSource* dataSource, runtime::VarLen32 members) {
    nlohmann::json descr = nlohmann::json::parse(members.str());
    std::vector<size_t> colIds;

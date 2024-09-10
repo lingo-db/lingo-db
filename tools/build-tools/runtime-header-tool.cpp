@@ -18,12 +18,14 @@ using namespace clang;
 using namespace clang::ast_matchers;
 using namespace clang::tooling;
 using namespace llvm;
+namespace {
 cl::OptionCategory mycat("myname", "mydescription");
 
 cl::opt<std::string> headerOutputFile("oh", cl::desc("output path for header"), cl::cat(mycat));
 cl::opt<std::string> cppOutputFile("ocpp", cl::desc("output path for cpp file"), cl::cat(mycat));
 cl::opt<std::string> libPrefix("lib-prefix", cl::desc("output path for cpp file"), cl::cat(mycat));
 cl::opt<std::string> resultNamespace("result-namespace", cl::desc("lib prefix"), cl::cat(mycat));
+
 
 DeclarationMatcher methodMatcher = cxxRecordDecl(isDefinition(), hasParent(namespaceDecl(matchesName("::runtime"))), isExpansionInMainFile()).bind("class");
 
@@ -190,7 +192,7 @@ class MethodPrinter : public MatchFinder::MatchCallback {
       }
    }
 };
-
+} // namespace
 
 int main(int argc, const char** argv) {
    auto expectedParser = CommonOptionsParser::create(argc, argv, mycat);

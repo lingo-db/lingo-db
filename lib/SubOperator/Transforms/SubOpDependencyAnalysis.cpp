@@ -8,7 +8,7 @@ mlir::subop::SubOpRootAnalysis::SubOpRootAnalysis(mlir::Operation* op) {
    op->walk([&](mlir::subop::SubOperator subop) {
       for (auto x : subop->getOperands()) {
          if (auto pred = mlir::dyn_cast_or_null<mlir::subop::SubOperator>(x.getDefiningOp())) {
-            if (x.getType().isa<mlir::tuples::TupleStreamType>()) {
+            if (mlir::isa<mlir::tuples::TupleStreamType>(x.getType())) {
                this->roots[subop].insert(this->roots[subop].end(), this->roots[pred].begin(), this->roots[pred].end());
             }
          }
@@ -48,7 +48,7 @@ mlir::subop::SubOpDependencyAnalysis::SubOpDependencyAnalysis(mlir::Operation* o
       auto roots = rootAnalysis.getRoots(subop);
       for (auto* subopRoot : roots) {
          for (auto x : subop->getOperands()) {
-            if (!x.getType().isa<mlir::tuples::TupleStreamType>()) {
+            if (!mlir::isa<mlir::tuples::TupleStreamType>(x.getType())) {
                if (auto* definingOp = x.getDefiningOp()) {
                   if (mlir::dyn_cast_or_null<mlir::subop::SubOperator>(definingOp)) {
                      addDependency(subopRoot, definingOp, roots);

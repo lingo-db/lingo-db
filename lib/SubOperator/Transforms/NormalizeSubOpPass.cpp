@@ -28,14 +28,14 @@ class SplitTableScan : public mlir::RewritePattern {
       : RewritePattern(mlir::subop::ScanOp::getOperationName(), 1, context) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto scanOp = mlir::cast<mlir::subop::ScanOp>(op);
-      if (scanOp.getState().getType().isa<mlir::subop::TableType>()) {
-         auto tableType = scanOp.getState().getType().cast<mlir::subop::TableType>();
+      if (mlir::isa<mlir::subop::TableType>(scanOp.getState().getType())) {
+         auto tableType = mlir::cast<mlir::subop::TableType>(scanOp.getState().getType());
          std::vector<mlir::Attribute> memberNames;
          std::vector<mlir::Attribute> memberTypes;
          auto tableMembers = tableType.getMembers();
          for (auto i = 0ul; i < tableMembers.getTypes().size(); i++) {
-            auto type = tableMembers.getTypes()[i].cast<mlir::TypeAttr>();
-            auto name = tableMembers.getNames()[i].cast<mlir::StringAttr>();
+            auto type = mlir::cast<mlir::TypeAttr>(tableMembers.getTypes()[i]);
+            auto name = mlir::cast<mlir::StringAttr>(tableMembers.getNames()[i]);
             if (scanOp.getMapping().contains(name)) {
                memberNames.push_back(name);
                memberTypes.push_back(type);
@@ -47,14 +47,14 @@ class SplitTableScan : public mlir::RewritePattern {
          mlir::Value scanRefsOp = rewriter.create<mlir::subop::ScanRefsOp>(op->getLoc(), scanOp.getState(), refDef);
          rewriter.replaceOpWithNewOp<mlir::subop::GatherOp>(op, scanRefsOp, refRef, scanOp.getMapping());
          return mlir::success();
-      }else if(scanOp.getState().getType().isa<mlir::subop::LocalTableType>()) {
-         auto tableType = scanOp.getState().getType().cast<mlir::subop::LocalTableType>();
+      }else if(mlir::isa<mlir::subop::LocalTableType>(scanOp.getState().getType())) {
+         auto tableType = mlir::cast<mlir::subop::LocalTableType>(scanOp.getState().getType());
          std::vector<mlir::Attribute> memberNames;
          std::vector<mlir::Attribute> memberTypes;
          auto tableMembers = tableType.getMembers();
          for (auto i = 0ul; i < tableMembers.getTypes().size(); i++) {
-            auto type = tableMembers.getTypes()[i].cast<mlir::TypeAttr>();
-            auto name = tableMembers.getNames()[i].cast<mlir::StringAttr>();
+            auto type = mlir::cast<mlir::TypeAttr>(tableMembers.getTypes()[i]);
+            auto name = mlir::cast<mlir::StringAttr>(tableMembers.getNames()[i]);
             if (scanOp.getMapping().contains(name)) {
                memberNames.push_back(name);
                memberTypes.push_back(type);
@@ -76,19 +76,19 @@ class SplitGenericScan : public mlir::RewritePattern {
       : RewritePattern(mlir::subop::ScanOp::getOperationName(), 1, context) {}
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto scanOp = mlir::cast<mlir::subop::ScanOp>(op);
-      if (scanOp.getState().getType().isa<mlir::subop::TableType>()) return mlir::failure();
+      if (mlir::isa<mlir::subop::TableType>(scanOp.getState().getType())) return mlir::failure();
       //todo: check that one can obtain references
-      mlir::Type refType = mlir::subop::EntryRefType::get(getContext(), scanOp.getState().getType().cast<mlir::subop::State>());
-      if (auto continuousView = scanOp.getState().getType().dyn_cast_or_null<mlir::subop::ContinuousViewType>()) {
+      mlir::Type refType = mlir::subop::EntryRefType::get(getContext(), mlir::cast<mlir::subop::State>(scanOp.getState().getType()));
+      if (auto continuousView = mlir::dyn_cast_or_null<mlir::subop::ContinuousViewType>(scanOp.getState().getType())) {
          refType = mlir::subop::ContinuousEntryRefType::get(rewriter.getContext(), continuousView);
       }
-      if (auto array = scanOp.getState().getType().dyn_cast_or_null<mlir::subop::ArrayType>()) {
+      if (auto array = mlir::dyn_cast_or_null<mlir::subop::ArrayType>(scanOp.getState().getType())) {
          refType = mlir::subop::ContinuousEntryRefType::get(rewriter.getContext(), array);
       }
-      if (auto hashMapType = scanOp.getState().getType().dyn_cast_or_null<mlir::subop::HashMapType>()) {
+      if (auto hashMapType = mlir::dyn_cast_or_null<mlir::subop::HashMapType>(scanOp.getState().getType())) {
          refType = mlir::subop::HashMapEntryRefType::get(rewriter.getContext(), hashMapType);
       }
-      if (auto hashMultiMapType = scanOp.getState().getType().dyn_cast_or_null<mlir::subop::HashMultiMapType>()) {
+      if (auto hashMultiMapType = mlir::dyn_cast_or_null<mlir::subop::HashMultiMapType>(scanOp.getState().getType())) {
          refType = mlir::subop::HashMultiMapEntryRefType::get(rewriter.getContext(), hashMultiMapType);
       }
 
@@ -110,7 +110,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
       const auto& currentUsed = columnUsageAnalysis.getUsedColumns(op);
       usedColumns.insert(currentUsed.begin(), currentUsed.end());
       for (auto res : op->getResults()) {
-         if (res.getType().isa<mlir::tuples::TupleStreamType>()) {
+         if (mlir::isa<mlir::tuples::TupleStreamType>(res.getType())) {
             for (auto* user : res.getUsers()) {
                getRecursivelyUsedColumns(usedColumns, columnUsageAnalysis, user);
             }
@@ -125,7 +125,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
          }
       }
       for (auto operand : op->getOperands()) {
-         if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
+         if (mlir::isa<mlir::tuples::TupleStreamType>(operand.getType())) {
             if (auto* defOp = operand.getDefiningOp()) {
                getRequired(requiredColumns, usedColumns, columnCreationAnalysis, defOp);
             }
@@ -155,7 +155,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                numUsers++;
                bool tupleStreamContinues = false;
                for (auto userResultType : user->getResultTypes()) {
-                  tupleStreamContinues |= userResultType.isa<mlir::tuples::TupleStreamType>();
+                  tupleStreamContinues |= mlir::isa<mlir::tuples::TupleStreamType>(userResultType);
                }
                if (!tupleStreamContinues) {
                   numEndUsers++;
@@ -197,7 +197,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                   builder.create<mlir::subop::MaterializeOp>(unionOp->getLoc(), stream, tmpBuffer, builder.getDictionaryAttr(refMapping));
                }
                auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
-               scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(builder.getContext(), tmpBuffer.getType().cast<mlir::subop::State>());
+               scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(builder.getContext(), mlir::cast<mlir::subop::State>(tmpBuffer.getType()));
                auto scan = builder.create<mlir::subop::ScanRefsOp>(unionOp->getLoc(), tmpBuffer, scanRefDef);
                mlir::Value loaded = builder.create<mlir::subop::GatherOp>(unionOp->getLoc(), scan, colManager.createRef(&scanRefDef.getColumn()), builder.getDictionaryAttr(defMapping));
                unionOp.getRes().replaceAllUsesWith(loaded);
@@ -206,7 +206,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
          } else {
             size_t sum = 0;
             for (auto operand : op->getOperands()) {
-               if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
+               if (mlir::isa<mlir::tuples::TupleStreamType>(operand.getType())) {
                   if (auto* def = operand.getDefiningOp()) {
                      if (unionStreamCount.contains(def)) {
                         sum += unionStreamCount[def];
@@ -233,7 +233,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                      numUsers++;
                      bool tupleStreamContinues = false;
                      for (auto userResultType : user->getResultTypes()) {
-                        tupleStreamContinues |= userResultType.isa<mlir::tuples::TupleStreamType>();
+                        tupleStreamContinues |= mlir::isa<mlir::tuples::TupleStreamType>(userResultType);
                      }
                      if (!tupleStreamContinues) {
                         numEndUsers++;
@@ -272,7 +272,7 @@ class NormalizeSubOpPass : public mlir::PassWrapper<NormalizeSubOpPass, mlir::Op
                      builder.setInsertionPointAfter(op);
                      auto materializeOp = builder.create<mlir::subop::MaterializeOp>(op->getLoc(), op->getResult(0), tmpBuffer, builder.getDictionaryAttr(refMapping));
                      auto scanRefDef = colManager.createDef(colManager.getUniqueScope("tmp_union"), "scan_ref");
-                     scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(builder.getContext(), tmpBuffer.getType().cast<mlir::subop::State>());
+                     scanRefDef.getColumn().type = mlir::subop::EntryRefType::get(builder.getContext(), mlir::cast<mlir::subop::State>(tmpBuffer.getType()));
                      auto scan = builder.create<mlir::subop::ScanRefsOp>(op->getLoc(), tmpBuffer, scanRefDef);
                      mlir::Value loaded = builder.create<mlir::subop::GatherOp>(op->getLoc(), scan, colManager.createRef(&scanRefDef.getColumn()), builder.getDictionaryAttr(defMapping));
                      op->getResult(0).replaceAllUsesExcept(loaded, materializeOp);

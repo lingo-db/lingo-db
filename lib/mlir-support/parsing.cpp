@@ -3,7 +3,7 @@
 #include "arrow/util/value_parsing.h"
 
 #include <regex>
-
+namespace {
 int32_t parseDate32(std::string str) {
    static std::regex r("(\\d\\d\\d\\d)-(\\d)-(\\d\\d)");
    str = std::regex_replace(str, r, "$1-0$2-$3");
@@ -23,49 +23,6 @@ arrow::TimeUnit::type convertTimeUnit(support::TimeUnit unit) {
    return arrow::TimeUnit::SECOND;
 }
 
-std::pair<uint64_t, uint64_t> support::getDecimalScaleMultiplier(int32_t scale) {
-   auto decimalrep = arrow::Decimal128::GetScaleMultiplier(scale);
-   return {decimalrep.low_bits(), (uint64_t) decimalrep.high_bits()};
-}
-std::pair<uint64_t, uint64_t> support::parseDecimal(std::string str, int32_t reqScale) {
-   int32_t precision;
-   int32_t scale;
-   arrow::Decimal128 decimalrep;
-   if (!arrow::Decimal128::FromString(str, &decimalrep, &precision, &scale).ok()) {
-      assert(false && "could not parse decimal const");
-   }
-   auto x = decimalrep.Rescale(scale, reqScale);
-   decimalrep = x.ValueOrDie();
-   uint64_t low = decimalrep.low_bits();
-   uint64_t high = decimalrep.high_bits();
-   return {low, high};
-}
-
-std::variant<int64_t, double, std::string> parseInt(std::variant<int64_t, double, std::string> val) {
-   int64_t res;
-   if (std::holds_alternative<int64_t>(val)) {
-      res = std::get<int64_t>(val);
-   } else if (std::holds_alternative<double>(val)) {
-      res = std::get<double>(val);
-   } else {
-      res = std::stoll(std::get<std::string>(val));
-   }
-   return res;
-}
-std::variant<int64_t, double, std::string> parseInterval(std::variant<int64_t, double, std::string> val) {
-   int64_t res;
-   if (std::holds_alternative<int64_t>(val)) {
-      res = std::get<int64_t>(val);
-   } else if (std::holds_alternative<double>(val)) {
-      throw std::runtime_error("can not parse interval from double");
-   } else {
-      res = std::stoll(std::get<std::string>(val));
-      if (std::get<std::string>(val).ends_with("days")) {
-         res *= 24 * 60 * 60 * 1000000000ll;
-      }
-   }
-   return res;
-}
 std::variant<int64_t, double, std::string> parseDouble(std::variant<int64_t, double, std::string> val) {
    double res;
    if (std::holds_alternative<int64_t>(val)) {
@@ -137,6 +94,50 @@ std::variant<int64_t, double, std::string> parseTimestamp(std::variant<int64_t, 
    arrow::internal::ParseValue<arrow::TimestampType>(arrow::TimestampType(convertTimeUnit(unit)), str.data(), str.length(), &res);
    return res;
 }
+std::variant<int64_t, double, std::string> parseInt(std::variant<int64_t, double, std::string> val) {
+   int64_t res;
+   if (std::holds_alternative<int64_t>(val)) {
+      res = std::get<int64_t>(val);
+   } else if (std::holds_alternative<double>(val)) {
+      res = std::get<double>(val);
+   } else {
+      res = std::stoll(std::get<std::string>(val));
+   }
+   return res;
+}
+std::variant<int64_t, double, std::string> parseInterval(std::variant<int64_t, double, std::string> val) {
+   int64_t res;
+   if (std::holds_alternative<int64_t>(val)) {
+      res = std::get<int64_t>(val);
+   } else if (std::holds_alternative<double>(val)) {
+      throw std::runtime_error("can not parse interval from double");
+   } else {
+      res = std::stoll(std::get<std::string>(val));
+      if (std::get<std::string>(val).ends_with("days")) {
+         res *= 24 * 60 * 60 * 1000000000ll;
+      }
+   }
+   return res;
+}
+} // namespace
+
+std::pair<uint64_t, uint64_t> support::getDecimalScaleMultiplier(int32_t scale) {
+   auto decimalrep = arrow::Decimal128::GetScaleMultiplier(scale);
+   return {decimalrep.low_bits(), (uint64_t) decimalrep.high_bits()};
+}
+std::pair<uint64_t, uint64_t> support::parseDecimal(std::string str, int32_t reqScale) {
+   int32_t precision;
+   int32_t scale;
+   arrow::Decimal128 decimalrep;
+   if (!arrow::Decimal128::FromString(str, &decimalrep, &precision, &scale).ok()) {
+      assert(false && "could not parse decimal const");
+   }
+   auto x = decimalrep.Rescale(scale, reqScale);
+   decimalrep = x.ValueOrDie();
+   uint64_t low = decimalrep.low_bits();
+   uint64_t high = decimalrep.high_bits();
+   return {low, high};
+}
 std::variant<int64_t, double, std::string> support::parse(std::variant<int64_t, double, std::string> val, arrow::Type::type type, uint32_t param1, uint32_t param2) {
    switch (type) {
       case arrow::Type::type::INT8:
@@ -147,6 +148,7 @@ std::variant<int64_t, double, std::string> support::parse(std::variant<int64_t, 
       case arrow::Type::type::UINT16:
       case arrow::Type::type::UINT32:
       case arrow::Type::type::UINT64:
+         return parseInt(val);
       case arrow::Type::type::INTERVAL_DAY_TIME:
       case arrow::Type::type::INTERVAL_MONTHS:
          return parseInterval(val);

@@ -26,17 +26,17 @@ void DBDialect::initialize() {
 }
 
 ::mlir::Operation* DBDialect::materializeConstant(::mlir::OpBuilder& builder, ::mlir::Attribute value, ::mlir::Type type, ::mlir::Location loc) {
-   if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
-      if (auto intAttr = value.dyn_cast_or_null<mlir::IntegerAttr>()) {
+   if (auto decimalType = mlir::dyn_cast_or_null<mlir::db::DecimalType>(type)) {
+      if (auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(value)) {
          return builder.create<mlir::db::ConstantOp>(loc, type, builder.getStringAttr(support::decimalToString(intAttr.getValue().getLoBits(64).getLimitedValue(), intAttr.getValue().getHiBits(64).getLimitedValue(), decimalType.getS())));
       }
    }
-   if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
-      if (auto intAttr = value.dyn_cast_or_null<mlir::IntegerAttr>()) {
+   if (auto dateType = mlir::dyn_cast_or_null<mlir::db::DateType>(type)) {
+      if (auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(value)) {
          return builder.create<mlir::db::ConstantOp>(loc, type, builder.getStringAttr(support::dateToString(intAttr.getInt())));
       }
    }
-   if (type.isa<mlir::db::StringType, mlir::IntegerType, mlir::FloatType>()) {
+   if (mlir::isa<mlir::db::StringType, mlir::IntegerType, mlir::FloatType>(type)) {
       return builder.create<mlir::db::ConstantOp>(loc, type, value);
    }
    return nullptr;

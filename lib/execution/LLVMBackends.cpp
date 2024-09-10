@@ -470,7 +470,7 @@ static void addDebugInfo(mlir::ModuleOp module, std::string lastSnapShotFile) {
          compileUnitAt = compileUnitAttr;
       }
       auto subroutineType = mlir::LLVM::DISubroutineTypeAttr::get(module->getContext(), {});
-      auto subProgramAttr = mlir::LLVM::DISubprogramAttr::get(id, compileUnitAt, fileAttr, funcOp.getName(), funcOp.getName(), fileAttr, 0, 0, subprogramFlags, subroutineType);
+      auto subProgramAttr = mlir::LLVM::DISubprogramAttr::get(module->getContext(),id, compileUnitAt, fileAttr, funcOp.getNameAttr(), funcOp.getNameAttr(), fileAttr, 0, 0, subprogramFlags, subroutineType, {});
       funcOp->setLoc(mlir::FusedLocWith<mlir::LLVM::DIScopeAttr>::get(funcOp->getLoc(), subProgramAttr, module->getContext()));
    });
 }

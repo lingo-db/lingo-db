@@ -2,6 +2,7 @@
 #include "mlir/Dialect/SubOperator/SubOperatorDialect.h"
 #include "mlir/Dialect/SubOperator/SubOperatorOps.h"
 #include "runtime/Session.h"
+namespace {
 void printMLIR(std::string sql, std::shared_ptr<runtime::Catalog> catalog) {
    mlir::MLIRContext context;
    mlir::DialectRegistry registry;
@@ -42,6 +43,7 @@ void printMLIR(std::string sql, std::shared_ptr<runtime::Catalog> catalog) {
    flags.assumeVerified();
    moduleOp->print(llvm::outs(), flags);
 }
+} // end namespace
 int main(int argc, char** argv) {
    std::string filename = std::string(argv[1]);
    auto catalog = runtime::Catalog::createEmpty();

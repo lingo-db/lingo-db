@@ -135,12 +135,12 @@ struct SQLTypeInference {
    static mlir::Type getCommonBaseType(mlir::Type left, mlir::Type right) {
       left = getBaseType(left);
       right = getBaseType(right);
-      bool stringPresent = left.isa<mlir::db::StringType>() || right.isa<mlir::db::StringType>();
-      bool intPresent = left.isa<mlir::IntegerType>() || right.isa<mlir::IntegerType>();
-      bool charPresent = left.isa<mlir::db::CharType>() || right.isa<mlir::db::CharType>();
-      bool floatPresent = left.isa<mlir::FloatType>() || right.isa<mlir::FloatType>();
-      bool decimalPresent = left.isa<mlir::db::DecimalType>() || right.isa<mlir::db::DecimalType>();
-      bool datePresent = left.isa<mlir::db::DateType>() || right.isa<mlir::db::DateType>();
+      bool stringPresent = mlir::isa<mlir::db::StringType>(left) || mlir::isa<mlir::db::StringType>(right);
+      bool intPresent = mlir::isa<mlir::IntegerType>(left) || mlir::isa<mlir::IntegerType>(right);
+      bool charPresent = mlir::isa<mlir::db::CharType>(left) || mlir::isa<mlir::db::CharType>(right);
+      bool floatPresent = mlir::isa<mlir::FloatType>(left) || mlir::isa<mlir::FloatType>(right);
+      bool decimalPresent = mlir::isa<mlir::db::DecimalType>(left) || mlir::isa<mlir::db::DecimalType>(right);
+      bool datePresent = mlir::isa<mlir::db::DateType>(left) || mlir::isa<mlir::db::DateType>(right);
       if (datePresent) return getHigherDateType(left, right);
       if (stringPresent) return mlir::db::StringType::get(left.getContext());
       if (charPresent) return left == right ? left : mlir::db::StringType::get(left.getContext());
@@ -150,7 +150,7 @@ struct SQLTypeInference {
       return left;
    }
    static mlir::Type getCommonType(mlir::Type left, mlir::Type right) {
-      bool isNullable = left.isa<mlir::db::NullableType>() || right.isa<mlir::db::NullableType>();
+      bool isNullable = mlir::isa<mlir::db::NullableType>(left) || mlir::isa<mlir::db::NullableType>(right);
       auto commonBaseType = getCommonBaseType(left, right);
       if (isNullable) {
          return mlir::db::NullableType::get(left.getContext(), commonBaseType);
@@ -175,12 +175,12 @@ struct SQLTypeInference {
       return res;
    }
    static std::vector<mlir::Value> toCommonNumber(mlir::OpBuilder& builder, mlir::ValueRange values) {
-      auto anyDecimal = llvm::any_of(values, [](mlir::Value v) { return getBaseType(v.getType()).isa<mlir::db::DecimalType>(); });
+      auto anyDecimal = llvm::any_of(values, [](mlir::Value v) { return mlir::isa<mlir::db::DecimalType>(getBaseType(v.getType())); });
       auto anyFloat = llvm::any_of(values, [](mlir::Value v) { return getBaseType(v.getType()).isIntOrFloat() && !getBaseType(v.getType()).isIntOrIndex(); });
       if (anyDecimal && !anyFloat) {
          std::vector<mlir::Value> res;
          for (auto val : values) {
-            if (!getBaseType(val.getType()).isa<mlir::db::DecimalType>()) {
+            if (!mlir::isa<mlir::db::DecimalType>(getBaseType(val.getType()))) {
                res.push_back(castValueToType(builder, val, mlir::db::DecimalType::get(builder.getContext(), 19, 0)));
             } else {
                res.push_back(val);

@@ -11,7 +11,7 @@ RUN mkdir /llvm-src
 #COPY .git /llvm-src/.git
 RUN git clone https://github.com/lingo-db/llvm-project.git /llvm-src/llvm-project
 WORKDIR /llvm-src/llvm-project
-RUN git checkout patched
+RUN git checkout patched-0.0.2
 WORKDIR /llvm-src
 #RUN git submodule init
 #RUN git submodule update llvm-project

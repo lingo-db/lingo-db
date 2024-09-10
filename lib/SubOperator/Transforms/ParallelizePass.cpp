@@ -53,9 +53,9 @@ ExecutionStepAnalyzed analyze(mlir::subop::ExecutionStepOp executionStepOp, mlir
    for (auto [i, a] : llvm::zip(executionStepOp.getInputs(), executionStepOp.getSubOps().getArguments())) {
       auto argType = a.getType();
       extStates.insert({a, i});
-      if (auto stateType = argType.dyn_cast_or_null<mlir::subop::State>()) {
+      if (auto stateType = mlir::dyn_cast_or_null<mlir::subop::State>(argType)) {
          for (auto m : stateType.getMembers().getNames()) {
-            extMembers.insert(m.cast<mlir::StringAttr>().str());
+            extMembers.insert(mlir::cast<mlir::StringAttr>(m).str());
          }
       }
    }
@@ -122,19 +122,19 @@ ExecutionStepAnalyzed analyze(mlir::subop::ExecutionStepOp executionStepOp, mlir
             }
          } else if (auto reduceOp = mlir::dyn_cast_or_null<mlir::subop::ReduceOp>(pipelineOp)) {
             auto creationOp = mlir::cast<mlir::subop::SubOperator>(columnCreationAnalysis.getColumnCreator(&reduceOp.getRef().getColumn()));
-            auto accessesNestedState = llvm::all_of(creationOp->getOperands(), [&](mlir::Value v) { return v.getType().isa<mlir::subop::State>() ? isNested(v) : true; });
+            auto accessesNestedState = llvm::all_of(creationOp->getOperands(), [&](mlir::Value v) { return mlir::isa<mlir::subop::State>(v.getType()) ? isNested(v) : true; });
             if (!accessesNestedState) {
                addProblematicOp(reduceOp, getCollisions(), creationOp);
             }
          } else if (auto scatterOp = mlir::dyn_cast_or_null<mlir::subop::ScatterOp>(pipelineOp)) {
             auto creationOp = mlir::cast<mlir::subop::SubOperator>(columnCreationAnalysis.getColumnCreator(&scatterOp.getRef().getColumn()));
-            auto accessesNestedState = llvm::all_of(creationOp->getOperands(), [&](mlir::Value v) { return v.getType().isa<mlir::subop::State>() ? isNested(v) : true; });
+            auto accessesNestedState = llvm::all_of(creationOp->getOperands(), [&](mlir::Value v) { return mlir::isa<mlir::subop::State>(v.getType()) ? isNested(v) : true; });
             if (!accessesNestedState) {
                addProblematicOp(scatterOp, getCollisions(), creationOp);
             }
          } else if (auto gatherOp = mlir::dyn_cast_or_null<mlir::subop::ScatterOp>(pipelineOp)) {
             auto creationOp = mlir::cast<mlir::subop::SubOperator>(columnCreationAnalysis.getColumnCreator(&gatherOp.getRef().getColumn()));
-            auto accessesNestedState = llvm::all_of(creationOp->getOperands(), [&](mlir::Value v) { return v.getType().isa<mlir::subop::State>() ? isNested(v) : true; });
+            auto accessesNestedState = llvm::all_of(creationOp->getOperands(), [&](mlir::Value v) { return mlir::isa<mlir::subop::State>(v.getType()) ? isNested(v) : true; });
             if (!accessesNestedState) {
                addProblematicOp(gatherOp, getCollisions(), creationOp);
             }
@@ -225,7 +225,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                               auto stateAccessing = problematicOp.stateAccessing;
                               if (auto lookupOp = mlir::dyn_cast_or_null<mlir::subop::LookupOp>(stateAccessing.getOperation())) {
                                  auto ext = extStates[lookupOp.getState()];
-                                 if (ext.getDefiningOp() && ext.getType().isa<mlir::subop::SimpleStateType>() && ext.getType().dyn_cast_or_null<mlir::subop::SimpleStateType>().getMembers().getTypes().size() == reduceOp.getMembers().size() && !reduceOp.getCombine().empty()) {
+                                 if (ext.getDefiningOp() && mlir::isa<mlir::subop::SimpleStateType>(ext.getType()) && mlir::dyn_cast_or_null<mlir::subop::SimpleStateType>(ext.getType()).getMembers().getTypes().size() == reduceOp.getMembers().size() && !reduceOp.getCombine().empty()) {
                                     toThreadLocals[ext].requiresCombine = true;
                                     toThreadLocals[ext].combineRegion = &reduceOp.getCombine();
                                  } else {
@@ -273,7 +273,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
                         if (canBeParallel) {
                            scanRefsOp->setAttr("parallel", mlir::UnitAttr::get(&getContext()));
                            for (auto l : toThreadLocals) {
-                              if (l.first.getType().isa<mlir::subop::SimpleStateType>()) {
+                              if (mlir::isa<mlir::subop::SimpleStateType>(l.first.getType())) {
                                  assert(l.second.combineRegion);
                               }
                               if (toThreadLocalsGlobal.contains(l.first)) {
@@ -350,7 +350,7 @@ class ParallelizePass : public mlir::PassWrapper<ParallelizePass, mlir::Operatio
             mlir::OpBuilder builder(&getContext());
             builder.setInsertionPoint(createOp);
             auto mergedType = createOp->getResultTypes()[0];
-            auto threadLocalType = mlir::subop::ThreadLocalType::get(builder.getContext(), createOp->getResultTypes()[0].cast<mlir::subop::State>());
+            auto threadLocalType = mlir::subop::ThreadLocalType::get(builder.getContext(), mlir::cast<mlir::subop::State>(createOp->getResultTypes()[0]));
             auto createThreadLocal = builder.create<mlir::subop::CreateThreadLocalOp>(createOp->getLoc(), threadLocalType);
             auto* block = new mlir::Block;
             createThreadLocal.getInitFn().push_back(block);

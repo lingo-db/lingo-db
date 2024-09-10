@@ -23,7 +23,7 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
             }
             mlir::Operation* beforeInStream = nullptr;
             for (auto operand : op.getOperands()) {
-               if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
+               if (mlir::isa<mlir::tuples::TupleStreamType>(operand.getType())) {
                   if (auto* producer = operand.getDefiningOp()) {
                      assert(!beforeInStream);
                      beforeInStream = producer;
@@ -52,7 +52,7 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
          for (auto& step : steps) {
             for (auto* op : step.second) {
                for (auto result : op->getResults()) {
-                  if (!result.getType().isa<mlir::tuples::TupleStreamType>()) {
+                  if (!mlir::isa<mlir::tuples::TupleStreamType>(result.getType())) {
                      producedState[step.first].push_back(result);
                   }
                }
@@ -69,7 +69,7 @@ class SplitIntoExecutionSteps : public mlir::PassWrapper<SplitIntoExecutionSteps
                      //todo:: refine
                      if (auto* producer = operand.getDefiningOp()) {
                         if (producer->getBlock() == op->getBlock()) {
-                           if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
+                           if (mlir::isa<mlir::tuples::TupleStreamType>(operand.getType())) {
                               continue;
                            }
                            requiredState[step.first].push_back({operand, operand});

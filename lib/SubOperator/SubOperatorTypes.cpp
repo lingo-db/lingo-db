@@ -28,8 +28,8 @@ static void printStateMembers(mlir::AsmPrinter& p, mlir::subop::StateMembersAttr
    p << "[";
    auto first = true;
    for (size_t i = 0; i < stateMembersAttr.getNames().size(); i++) {
-      auto name = stateMembersAttr.getNames()[i].cast<mlir::StringAttr>().str();
-      auto type = stateMembersAttr.getTypes()[i].cast<mlir::TypeAttr>().getValue();
+      auto name = mlir::cast<mlir::StringAttr>(stateMembersAttr.getNames()[i]).str();
+      auto type = mlir::cast<mlir::TypeAttr>(stateMembersAttr.getTypes()[i]).getValue();
       if (first) {
          first = false;
       } else {

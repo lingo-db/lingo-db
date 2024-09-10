@@ -129,7 +129,7 @@ void DSAToStdLoweringPass::runOnOperation() {
       return isLegal;
    });
    target.addDynamicallyLegalOp<func::ConstantOp>([&](func::ConstantOp op) {
-      if (auto functionType = op.getType().dyn_cast_or_null<mlir::FunctionType>()) {
+      if (auto functionType = mlir::dyn_cast_or_null<mlir::FunctionType>(op.getType())) {
          auto isLegal = !hasDSAType(typeConverter, functionType.getInputs()) &&
             !hasDSAType(typeConverter, functionType.getResults());
          return isLegal;

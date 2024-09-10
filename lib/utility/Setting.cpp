@@ -49,11 +49,13 @@ struct RegisteredSettings{
    std::mutex mutex;
    std::unordered_map<std::string, utility::Setting*> settings;
 };
-
+namespace{
 RegisteredSettings& getRegisteredSettings(){
    static RegisteredSettings settings;
    return settings;
 }
+} // namespace
+
 
 void utility::Setting::registerSetting() {
    auto& settings = getRegisteredSettings();

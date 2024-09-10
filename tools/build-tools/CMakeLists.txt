@@ -12,7 +12,7 @@ target_link_libraries(runtime-header-tool
         )
 function(gen_rt_def_generic target_name header_file output_path input_path lib_prefix result_namespace)
     add_custom_command(
-            COMMAND ${CMAKE_BINARY_DIR}/bin/runtime-header-tool --oh=${CMAKE_BINARY_DIR}/${output_path}/${header_file} --ocpp=${CMAKE_BINARY_DIR}/${output_path}/${header_file}.cpp --lib-prefix=${lib_prefix} --result-namespace=${result_namespace} ${CMAKE_SOURCE_DIR}/${input_path}/${header_file} -- -x c++ --std=c++20 -I ${MLIR_DIR}/../../clang/19/include/ -I ${CMAKE_SOURCE_DIR}/include -I ${ARROW_INCLUDE_DIR} -I ${TBB_INCLUDE_DIR}
+            COMMAND ${CMAKE_BINARY_DIR}/bin/runtime-header-tool --oh=${CMAKE_BINARY_DIR}/${output_path}/${header_file} --ocpp=${CMAKE_BINARY_DIR}/${output_path}/${header_file}.cpp --lib-prefix=${lib_prefix} --result-namespace=${result_namespace} ${CMAKE_SOURCE_DIR}/${input_path}/${header_file} -- -x c++ --std=c++20 -I ${MLIR_DIR}/../../clang/20/include/ -I ${CMAKE_SOURCE_DIR}/include -I ${ARROW_INCLUDE_DIR} -I ${TBB_INCLUDE_DIR}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
             DEPENDS ${CMAKE_BINARY_DIR}/bin/runtime-header-tool
             DEPENDS ${CMAKE_SOURCE_DIR}/${input_path}/${header_file}

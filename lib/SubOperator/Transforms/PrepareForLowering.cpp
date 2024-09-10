@@ -34,7 +34,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
             }
             mlir::Operation* beforeInStream = nullptr;
             for (auto operand : op.getOperands()) {
-               if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
+               if (mlir::isa<mlir::tuples::TupleStreamType>(operand.getType())) {
                   if (auto* producer = operand.getDefiningOp()) {
                      assert(!beforeInStream);
                      beforeInStream = producer;
@@ -66,7 +66,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
          for (auto& step : steps) {
             for (auto* op : step.second) {
                for (auto result : op->getResults()) {
-                  if (!result.getType().isa<mlir::tuples::TupleStreamType>()) {
+                  if (!mlir::isa<mlir::tuples::TupleStreamType>(result.getType())) {
                      producedState[step.first].push_back(result);
                   }
                }
@@ -83,7 +83,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
                      auto* parentOp = operand.getDefiningOp() ? operand.getDefiningOp() : mlir::cast<mlir::BlockArgument>(operand).getOwner()->getParentOp();
 
                      if (parentOp->isProperAncestor(op) || (operand.getDefiningOp() && operand.getDefiningOp()->getBlock() == op->getBlock())) {
-                        if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
+                        if (mlir::isa<mlir::tuples::TupleStreamType>(operand.getType())) {
                            continue;
                         }
                         requiredState[step.first].push_back({operand, operand, false});
@@ -268,7 +268,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
          std::vector<mlir::Attribute> newParams;
          size_t argId = 1;
          for (auto colRefAttr : nestedMapOp.getParameters()) {
-            colArgs.insert({&colRefAttr.cast<mlir::tuples::ColumnRefAttr>().getColumn(), argId++});
+            colArgs.insert({&mlir::cast<mlir::tuples::ColumnRefAttr>(colRefAttr).getColumn(), argId++});
             newParams.push_back(colRefAttr);
          }
          auto tuple = nestedMapOp.getBody()->getArgument(0);
@@ -285,7 +285,7 @@ class PrepareLoweringPass : public mlir::PassWrapper<PrepareLoweringPass, mlir::
 
                      availableColumns.insert(createdOps.begin(), createdOps.end());
                      for (auto operand : defOp->getOperands()) {
-                        if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
+                        if (mlir::isa<mlir::tuples::TupleStreamType>(operand.getType())) {
                            computeAvailableColumns(operand);
                         }
                      }

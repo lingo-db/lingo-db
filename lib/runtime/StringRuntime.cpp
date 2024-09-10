@@ -10,6 +10,7 @@
 // src: https://github.com/cmu-db/noisepage/blob/c2635d3360dd24a9f7a094b4b8bcd131d99f2d4b/src/execution/sql/operators/like_operators.cpp
 // (MIT License, Copyright (c) 2018 CMU Database Group)
 #define NextByte(p, plen) ((p)++, (plen)--)
+namespace {
 bool iterativeLike(const char* str, size_t strLen, const char* pattern, size_t patternLen, char escape) {
    const char *s = str, *p = pattern;
    std::size_t slen = strLen, plen = patternLen;
@@ -79,6 +80,7 @@ bool iterativeLike(const char* str, size_t strLen, const char* pattern, size_t p
    }
    return slen == 0 && plen == 0;
 }
+} // namespace
 //end taken from noisepage
 
 bool runtime::StringRuntime::like(runtime::VarLen32 str1, runtime::VarLen32 str2) {
@@ -218,12 +220,13 @@ size_t runtime::StringRuntime::findNext(VarLen32 str, VarLen32 needle, size_t st
    if (found == std::string::npos) return invalidPos;
    return found;
 }
+namespace {
 void toUpper(char* str, size_t len) {
    for (auto i = 0ul; i < len; i++) {
       str[i] = std::toupper(str[i]);
    }
 }
-
+} // namespace
 int64_t runtime::StringRuntime::len(VarLen32 str) {
    return str.getLen();
 }

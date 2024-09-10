@@ -81,7 +81,7 @@ InterfaceMethod<
     auto op=this->getOperation();
     for (auto operand : op->getOperands()) {
         mlir::Type t=operand.getType();
-        bool isreltype=t.isa<mlir::tuples::TupleStreamType>();
+        bool isreltype=mlir::isa<mlir::tuples::TupleStreamType>(t);
         auto childOp=operand.getDefiningOp();
         if (isreltype&&childOp) {
             auto childOperator=mlir::dyn_cast_or_null<Operator>(childOp);
@@ -114,7 +114,7 @@ InterfaceMethod<
     size_t j=0;
     for (auto operand : op->getOperands()) {
         mlir::Type t=operand.getType();
-        bool isreltype=t.isa<mlir::tuples::TupleStreamType>();
+        bool isreltype=mlir::isa<mlir::tuples::TupleStreamType>(t);
         auto childOp=operand.getDefiningOp();
         if (isreltype&&childOp) {
             op->setOperand(i,children[j].asRelation());

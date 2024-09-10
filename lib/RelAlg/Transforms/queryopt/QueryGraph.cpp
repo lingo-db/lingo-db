@@ -59,11 +59,11 @@ std::unique_ptr<support::eval::expr> mlir::relalg::buildEvalExpr(mlir::Value val
    if (!op) return std::move(support::eval::createInvalid());
    if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(op)) {
       std::variant<int64_t, double, std::string> parseArg;
-      if (auto integerAttr = constantOp.getValue().dyn_cast_or_null<mlir::IntegerAttr>()) {
+      if (auto integerAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(constantOp.getValue())) {
          parseArg = integerAttr.getInt();
-      } else if (auto floatAttr = constantOp.getValue().dyn_cast_or_null<mlir::FloatAttr>()) {
+      } else if (auto floatAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(constantOp.getValue())) {
          parseArg = floatAttr.getValueAsDouble();
-      } else if (auto stringAttr = constantOp.getValue().dyn_cast_or_null<mlir::StringAttr>()) {
+      } else if (auto stringAttr = mlir::dyn_cast_or_null<mlir::StringAttr>(constantOp.getValue())) {
          parseArg = stringAttr.str();
       } else {
          return support::eval::createInvalid();
@@ -87,34 +87,34 @@ std::unique_ptr<support::eval::expr> mlir::relalg::buildEvalExpr(mlir::Value val
             case 32: typeConstant = arrow::Type::type::UINT32; break;
             case 64: typeConstant = arrow::Type::type::UINT64; break;
          }
-      } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
+      } else if (auto decimalType = mlir::dyn_cast_or_null<mlir::db::DecimalType>(type)) {
          typeConstant = arrow::Type::type::DECIMAL128;
          param1 = decimalType.getP();
          param2 = decimalType.getS();
-      } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
+      } else if (auto floatType = mlir::dyn_cast_or_null<mlir::FloatType>(type)) {
          switch (floatType.getWidth()) {
             case 16: typeConstant = arrow::Type::type::HALF_FLOAT; break;
             case 32: typeConstant = arrow::Type::type::FLOAT; break;
             case 64: typeConstant = arrow::Type::type::DOUBLE; break;
          }
-      } else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {
+      } else if (auto stringType = mlir::dyn_cast_or_null<mlir::db::StringType>(type)) {
          typeConstant = arrow::Type::type::STRING;
-      } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
+      } else if (auto dateType = mlir::dyn_cast_or_null<mlir::db::DateType>(type)) {
          if (dateType.getUnit() == mlir::db::DateUnitAttr::day) {
             typeConstant = arrow::Type::type::DATE32;
          } else {
             typeConstant = arrow::Type::type::DATE64;
          }
-      } else if (auto charType = type.dyn_cast_or_null<mlir::db::CharType>()) {
+      } else if (auto charType = mlir::dyn_cast_or_null<mlir::db::CharType>(type)) {
          typeConstant = arrow::Type::type::FIXED_SIZE_BINARY;
          param1 = charType.getBytes();
-      } else if (auto intervalType = type.dyn_cast_or_null<mlir::db::IntervalType>()) {
+      } else if (auto intervalType = mlir::dyn_cast_or_null<mlir::db::IntervalType>(type)) {
          if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
             typeConstant = arrow::Type::type::INTERVAL_MONTHS;
          } else {
             typeConstant = arrow::Type::type::INTERVAL_DAY_TIME;
          }
-      } else if (auto timestampType = type.dyn_cast_or_null<mlir::db::TimestampType>()) {
+      } else if (auto timestampType = mlir::dyn_cast_or_null<mlir::db::TimestampType>(type)) {
          typeConstant = arrow::Type::type::TIMESTAMP;
          param1 = static_cast<uint32_t>(timestampType.getUnit());
       }
@@ -170,21 +170,21 @@ std::unique_ptr<support::eval::expr> mlir::relalg::buildEvalExpr(mlir::Value val
    } else if (auto runtimeCall = mlir::dyn_cast_or_null<mlir::db::RuntimeCall>(op)) {
       if (runtimeCall.getFn() == "ConstLike" || runtimeCall.getFn() == "Like") {
          if (auto constantOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(runtimeCall.getArgs()[1].getDefiningOp())) {
-            return support::eval::createLike(buildEvalExpr(runtimeCall.getArgs()[0], mapping), constantOp.getValue().cast<mlir::StringAttr>().str());
+            return support::eval::createLike(buildEvalExpr(runtimeCall.getArgs()[0], mapping), mlir::cast<mlir::StringAttr>(constantOp.getValue()).str());
          }
       }
    }
    //val.dump();
    return support::eval::createInvalid();
 }
-
+namespace {
 std::optional<double> estimateUsingSample(mlir::relalg::QueryGraph::Node& n) {
    if (!n.op) return {};
    if (n.additionalPredicates.empty()) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
       std::unordered_map<const mlir::tuples::Column*, std::string> mapping;
       for (auto c : baseTableOp.getColumns()) {
-         mapping[&c.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn()] = c.getName().str();
+         mapping[&mlir::cast<mlir::tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
       }
       auto meta = baseTableOp.getMeta().getMeta();
       auto sample = meta->getSample();
@@ -205,6 +205,22 @@ std::optional<double> estimateUsingSample(mlir::relalg::QueryGraph::Node& n) {
 
    return {};
 }
+double getRows(mlir::relalg::QueryGraph::Node& n) {
+   if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
+      auto numRows = baseTableOp.getMeta().getMeta()->getNumRows();
+      baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(n.op.getContext()), numRows));
+      return numRows == 0 ? 1 : numRows;
+   }
+   if (n.op) {
+      if (n.op->hasAttr("rows")) {
+         if (auto floatAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(n.op->getAttr("rows"))) {
+            return floatAttr.getValueAsDouble();
+         }
+      }
+   }
+   return 1;
+}
+} // namespace
 mlir::relalg::ColumnSet mlir::relalg::QueryGraph::getPKey(mlir::relalg::QueryGraph::Node& n) {
    if (!n.op) return {};
    if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
@@ -212,7 +228,7 @@ mlir::relalg::ColumnSet mlir::relalg::QueryGraph::getPKey(mlir::relalg::QueryGra
       mlir::relalg::ColumnSet attributes;
       std::unordered_map<std::string, const mlir::tuples::Column*> mapping;
       for (auto c : baseTableOp.getColumns()) {
-         mapping[c.getName().str()] = &c.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn();
+         mapping[c.getName().str()] = &mlir::cast<mlir::tuples::ColumnDefAttr>(c.getValue()).getColumn();
       }
       for (auto c : meta->getPrimaryKey()) {
          attributes.insert(mapping.at(c));
@@ -222,21 +238,7 @@ mlir::relalg::ColumnSet mlir::relalg::QueryGraph::getPKey(mlir::relalg::QueryGra
 
    return {};
 }
-double getRows(mlir::relalg::QueryGraph::Node& n) {
-   if (auto baseTableOp = mlir::dyn_cast_or_null<mlir::relalg::BaseTableOp>(n.op.getOperation())) {
-      auto numRows = baseTableOp.getMeta().getMeta()->getNumRows();
-      baseTableOp->setAttr("rows", mlir::FloatAttr::get(mlir::FloatType::getF64(n.op.getContext()), numRows));
-      return numRows == 0 ? 1 : numRows;
-   }
-   if (n.op) {
-      if (n.op->hasAttr("rows")) {
-         if (auto floatAttr = n.op->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()) {
-            return floatAttr.getValueAsDouble();
-         }
-      }
-   }
-   return 1;
-}
+
 void mlir::relalg::QueryGraph::estimate() {
    for (auto& node : nodes) {
       node.selectivity = 1;

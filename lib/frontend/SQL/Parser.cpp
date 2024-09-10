@@ -206,8 +206,8 @@ frontend::sql::ExpressionType frontend::sql::stringToExpressionType(const std::s
       .Default(ExpressionType::INVALID);
 }
 mlir::FloatType frontend::sql::SQLTypeInference::getHigherFloatType(mlir::Type left, mlir::Type right) {
-   mlir::FloatType leftFloat = left.dyn_cast_or_null<mlir::FloatType>();
-   if (auto rightFloat = right.dyn_cast_or_null<mlir::FloatType>()) {
+   mlir::FloatType leftFloat = mlir::dyn_cast_or_null<mlir::FloatType>(left);
+   if (auto rightFloat = mlir::dyn_cast_or_null<mlir::FloatType>(right)) {
       if (!leftFloat || rightFloat.getWidth() > leftFloat.getWidth()) {
          return rightFloat;
       }
@@ -215,8 +215,8 @@ mlir::FloatType frontend::sql::SQLTypeInference::getHigherFloatType(mlir::Type l
    return leftFloat;
 }
 mlir::IntegerType frontend::sql::SQLTypeInference::getHigherIntType(mlir::Type left, mlir::Type right) {
-   mlir::IntegerType leftInt = left.dyn_cast_or_null<mlir::IntegerType>();
-   if (auto rightInt = right.dyn_cast_or_null<mlir::IntegerType>()) {
+   mlir::IntegerType leftInt = mlir::dyn_cast_or_null<mlir::IntegerType>(left);
+   if (auto rightInt = mlir::dyn_cast_or_null<mlir::IntegerType>(right)) {
       if (!leftInt || rightInt.getWidth() > leftInt.getWidth()) {
          return rightInt;
       }
@@ -224,8 +224,8 @@ mlir::IntegerType frontend::sql::SQLTypeInference::getHigherIntType(mlir::Type l
    return leftInt;
 }
 mlir::db::DecimalType frontend::sql::SQLTypeInference::getHigherDecimalType(mlir::Type left, mlir::Type right) {
-   auto a = left.dyn_cast_or_null<mlir::db::DecimalType>();
-   if (auto b = right.dyn_cast_or_null<mlir::db::DecimalType>()) {
+   auto a = mlir::dyn_cast_or_null<mlir::db::DecimalType>(left);
+   if (auto b = mlir::dyn_cast_or_null<mlir::db::DecimalType>(right)) {
       if (!a) return b;
       int hidig = std::max(a.getP() - a.getS(), b.getP() - b.getS());
       int maxs = std::max(a.getS(), b.getS());
@@ -234,28 +234,28 @@ mlir::db::DecimalType frontend::sql::SQLTypeInference::getHigherDecimalType(mlir
    return a;
 }
 mlir::db::DateType frontend::sql::SQLTypeInference::getHigherDateType(mlir::Type left, mlir::Type right) {
-   auto a = left.dyn_cast_or_null<mlir::db::DateType>();
-   if (auto b = right.dyn_cast_or_null<mlir::db::DateType>()) {
+   auto a = mlir::dyn_cast_or_null<mlir::db::DateType>(left);
+   if (auto b = mlir::dyn_cast_or_null<mlir::db::DateType>(right)) {
       if (!a) return b;
    }
    return a;
 }
 mlir::Value frontend::sql::SQLTypeInference::castValueToType(mlir::OpBuilder& builder, mlir::Value v, mlir::Type t) {
-   bool isNullable = v.getType().isa<mlir::db::NullableType>();
-   if (isNullable && !t.isa<mlir::db::NullableType>()) {
+   bool isNullable = mlir::isa<mlir::db::NullableType>(v.getType());
+   if (isNullable && !mlir::isa<mlir::db::NullableType>(t)) {
       t = mlir::db::NullableType::get(builder.getContext(), t);
    }
-   bool onlyTargetIsNullable = !isNullable && t.isa<mlir::db::NullableType>();
+   bool onlyTargetIsNullable = !isNullable && mlir::isa<mlir::db::NullableType>(t);
    if (v.getType() == t) { return v; }
    if (auto* defOp = v.getDefiningOp()) {
       if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(defOp)) {
-         if (!t.isa<mlir::db::NullableType>()) {
+         if (!mlir::isa<mlir::db::NullableType>(t)) {
             constOp.getResult().setType(t);
             return constOp;
          }
       }
       if (auto nullOp = mlir::dyn_cast_or_null<mlir::db::NullOp>(defOp)) {
-         auto t2 = t.cast<mlir::db::NullableType>();
+         auto t2 = mlir::cast<mlir::db::NullableType>(t);
          nullOp.getResult().setType(t2);
          return nullOp;
       }
@@ -332,7 +332,7 @@ mlir::Value frontend::sql::Parser::translateFuncCallExpression(Node* node, mlir:
    }
    if (funcName == "abs") {
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
-      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), getBaseType(val.getType()).isa<mlir::db::DecimalType>() ? "AbsDecimal" : "AbsInt", val).getRes();
+      return builder.create<mlir::db::RuntimeCall>(loc, val.getType(), mlir::isa<mlir::db::DecimalType>(getBaseType(val.getType())) ? "AbsDecimal" : "AbsInt", val).getRes();
    }
    if (funcName == "upper") {
       auto val = translateExpression(builder, reinterpret_cast<Node*>(funcCall->args_->head->data.ptr_value), context);
@@ -450,12 +450,12 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
    auto loc = builder.getUnknownLoc();
    switch (opType) {
       case ExpressionType::OPERATOR_PLUS:
-         if (getBaseType(left.getType()).isa<mlir::db::DateType>() && getBaseType(right.getType()).isa<mlir::db::IntervalType>()) {
+         if (mlir::isa<mlir::db::DateType>(getBaseType(left.getType())) && mlir::isa<mlir::db::IntervalType>(getBaseType(right.getType()))) {
             return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateAdd", mlir::ValueRange({left, right})).getRes();
          }
          return builder.create<mlir::db::AddOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
       case ExpressionType::OPERATOR_MINUS:
-         if (left.getType().isa<mlir::db::DateType>() && right.getType().isa<mlir::db::IntervalType>()) {
+         if (mlir::isa<mlir::db::DateType>(left.getType()) && mlir::isa<mlir::db::IntervalType>(right.getType())) {
             return builder.create<mlir::db::RuntimeCall>(loc, left.getType(), "DateSubtract", mlir::ValueRange({left, right})).getRes();
          }
          return builder.create<mlir::db::SubOp>(builder.getUnknownLoc(), SQLTypeInference::toCommonBaseTypes(builder, {left, right}));
@@ -487,7 +487,7 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
       case ExpressionType::COMPARE_LIKE:
       case ExpressionType::COMPARE_NOT_LIKE: {
          auto ct = SQLTypeInference::toCommonBaseTypes(builder, {left, right});
-         auto isNullable = left.getType().isa<mlir::db::NullableType>() || right.getType().isa<mlir::db::NullableType>();
+         auto isNullable = mlir::isa<mlir::db::NullableType>(left.getType()) || mlir::isa<mlir::db::NullableType>(right.getType());
          mlir::Type resType = isNullable ? (mlir::Type) mlir::db::NullableType::get(builder.getContext(), builder.getI1Type()) : (mlir::Type) builder.getI1Type();
          auto like = builder.create<mlir::db::RuntimeCall>(loc, resType, "Like", mlir::ValueRange({ct[0], ct[1]})).getRes();
          return opType == ExpressionType::COMPARE_NOT_LIKE ? builder.create<mlir::db::NotOp>(loc, like) : like;
@@ -495,7 +495,7 @@ mlir::Value frontend::sql::Parser::translateBinaryExpression(mlir::OpBuilder& bu
       case ExpressionType::OPERATOR_CONCAT: {
          auto leftString = SQLTypeInference::castValueToType(builder, left, mlir::db::StringType::get(builder.getContext()));
          auto rightString = SQLTypeInference::castValueToType(builder, right, mlir::db::StringType::get(builder.getContext()));
-         mlir::Type resType = right.getType().isa<mlir::db::NullableType>() ? rightString.getType() : leftString.getType();
+         mlir::Type resType = mlir::isa<mlir::db::NullableType>(right.getType()) ? rightString.getType() : leftString.getType();
          return builder.create<mlir::db::RuntimeCall>(loc, resType, "Concatenate", mlir::ValueRange({leftString, rightString})).getRes();
       }
       default:
@@ -811,7 +811,7 @@ mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& buil
                      auto [scopename, name] = attrManager.getName(x.second);
 
                      auto attrDef = attrManager.createDef(outerjoinName, scopename + "_" + name, builder.getArrayAttr({attrManager.createRef(x.second)}));
-                     attrDef.getColumn().type = x.second->type.isa<mlir::db::NullableType>() ? x.second->type : mlir::db::NullableType::get(builder.getContext(), x.second->type);
+                     attrDef.getColumn().type = mlir::isa<mlir::db::NullableType>(x.second->type) ? x.second->type : mlir::db::NullableType::get(builder.getContext(), x.second->type);
                      outerJoinMapping.push_back(attrDef);
                      remapped.insert({x.second, &attrDef.getColumn()});
                   }
@@ -846,7 +846,7 @@ mlir::Value frontend::sql::Parser::translateFromClausePart(mlir::OpBuilder& buil
                      auto [scopename, name] = attrManager.getName(x.second);
 
                      auto attrDef = attrManager.createDef(outerjoinName, name, builder.getArrayAttr({attrManager.createRef(x.second)}));
-                     attrDef.getColumn().type = x.second->type.isa<mlir::db::NullableType>() ? x.second->type : mlir::db::NullableType::get(builder.getContext(), x.second->type);
+                     attrDef.getColumn().type = mlir::isa<mlir::db::NullableType>(x.second->type) ? x.second->type : mlir::db::NullableType::get(builder.getContext(), x.second->type);
                      outerJoinMapping.push_back(attrDef);
                      remapped.insert({x.second, &attrDef.getColumn()});
                   }
@@ -965,9 +965,9 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                auto columnType = createColumnType(typeName, false, getTypeModList(castNode->type_name_->typmods_));
                auto resType = createTypeFromColumnType(builder.getContext(), columnType);
                if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(toCast.getDefiningOp())) {
-                  if (auto intervalType = resType.dyn_cast<mlir::db::IntervalType>()) {
+                  if (auto intervalType = mlir::dyn_cast<mlir::db::IntervalType>(resType)) {
                      std::string unit = "";
-                     auto stringRepresentation = constOp.getValue().cast<mlir::StringAttr>().str();
+                     auto stringRepresentation = mlir::cast<mlir::StringAttr>(constOp.getValue()).str();
                      if (!columnType.modifiers.empty() && std::get<std::string>(columnType.modifiers[0]) == "years") {
                         stringRepresentation = std::to_string(std::stol(stringRepresentation) * 12);
                      }
@@ -1021,7 +1021,7 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
       case T_NullTest: {
          auto* nullTest = reinterpret_cast<NullTest*>(node);
          auto expr = translateExpression(builder, reinterpret_cast<Node*>(nullTest->arg_), context);
-         if (expr.getType().isa<mlir::db::NullableType>()) {
+         if (mlir::isa<mlir::db::NullableType>(expr.getType())) {
             mlir::Value isNull = builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), expr);
             if (nullTest->nulltesttype_ == IS_NOT_NULL) {
                return builder.create<mlir::db::NotOp>(builder.getUnknownLoc(), isNull);
@@ -1052,7 +1052,7 @@ mlir::Value frontend::sql::Parser::translateExpression(mlir::OpBuilder& builder,
                assert(!targetInfo.namedResults.empty());
                const auto* attr = targetInfo.namedResults[0].second;
                mlir::Type resType = attr->type;
-               if (!resType.isa<mlir::db::NullableType>()) {
+               if (!mlir::isa<mlir::db::NullableType>(resType)) {
                   resType = mlir::db::NullableType::get(builder.getContext(), attr->type);
                }
                mlir::Value scalarValue = builder.create<mlir::relalg::GetScalarOp>(loc, resType, attrManager.createRef(attr), subQueryTree);
@@ -1181,7 +1181,7 @@ mlir::Value frontend::sql::Parser::translateCoalesceExpression(mlir::OpBuilder& 
       return builder.create<mlir::db::NullOp>(loc, mlir::db::NullableType::get(builder.getContext(), builder.getNoneType()));
    }
    mlir::Value value = translateExpression(builder, reinterpret_cast<Node*>(expressions->data.ptr_value), context);
-   mlir::Value isNull = value.getType().isa<mlir::db::NullableType>() ? (mlir::Value) builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), value) : (mlir::Value) builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 0, builder.getI1Type());
+   mlir::Value isNull = mlir::isa<mlir::db::NullableType>(value.getType()) ? (mlir::Value) builder.create<mlir::db::IsNullOp>(builder.getUnknownLoc(), value) : (mlir::Value) builder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), 0, builder.getI1Type());
    mlir::Value isNotNull = builder.create<mlir::db::NotOp>(loc, isNull);
    auto* whenBlock = new mlir::Block;
    auto* elseBlock = new mlir::Block;
@@ -1558,7 +1558,7 @@ void frontend::sql::Parser::translateInsertStmt(mlir::OpBuilder& builder, Insert
          colMemberNames.push_back(builder.getStringAttr(memberManager.getUniqueMember(x)));
          orderedColNamesAttrs.push_back(builder.getStringAttr(x));
          orderedColAttrs.push_back(insertedCols.at(x));
-         colTypes.push_back(mlir::TypeAttr::get(insertedCols.at(x).cast<mlir::tuples::ColumnRefAttr>().getColumn().type));
+         colTypes.push_back(mlir::TypeAttr::get(mlir::cast<mlir::tuples::ColumnRefAttr>(insertedCols.at(x)).getColumn().type));
       }
       localTableType = mlir::subop::LocalTableType::get(builder.getContext(), mlir::subop::StateMembersAttr::get(builder.getContext(), builder.getArrayAttr(colMemberNames), builder.getArrayAttr(colTypes)), builder.getArrayAttr(orderedColNamesAttrs));
       mlir::Value newRows = builder.create<mlir::relalg::MaterializeOp>(builder.getUnknownLoc(), localTableType, mapOp.getResult(), builder.getArrayAttr(orderedColAttrs), builder.getArrayAttr(orderedColNamesAttrs));
@@ -1788,11 +1788,13 @@ std::pair<mlir::Value, mlir::tuples::ColumnRefAttr> frontend::sql::Parser::mapEx
    mapBuilder.create<mlir::tuples::ReturnOp>(builder.getUnknownLoc(), createdValue);
    return {mapOp.getResult(), attrManager.createRef(&attrDef.getColumn())};
 }
+namespace {
 std::string fingerprint(Node* n) {
    std::regex r(",\\s*\"location\":\\s*\\d+");
    std::string json = pg_query_nodes_to_json(n);
    return std::regex_replace(json, r, "");
 }
+} // namespace
 std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> frontend::sql::Parser::performAggregation(mlir::OpBuilder& builder, std::vector<mlir::Attribute> groupByAttrs, const ReplaceState& replaceState, TranslationContext& context, mlir::Value tree) {
    static size_t groupById = 0;
    auto tupleStreamType = mlir::tuples::TupleStreamType::get(builder.getContext());
@@ -1854,7 +1856,7 @@ std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> 
                auto baseType = getBaseType(aggrResultType);
                if (baseType.isIntOrFloat() && !baseType.isIntOrIndex()) {
                   //keep aggrResultType
-               } else if (baseType.isa<mlir::db::DecimalType>()) {
+               } else if (mlir::isa<mlir::db::DecimalType>(baseType)) {
                   mlir::OpBuilder b(builder.getContext());
                   mlir::Value x = b.create<mlir::db::ConstantOp>(b.getUnknownLoc(), baseType, b.getUnitAttr());
                   mlir::Value x2 = b.create<mlir::db::ConstantOp>(b.getUnknownLoc(), mlir::db::DecimalType::get(b.getContext(), 19, 0), b.getUnitAttr());
@@ -1871,17 +1873,17 @@ std::tuple<mlir::Value, std::unordered_map<std::string, mlir::tuples::Column*>> 
                   div.getDefiningOp()->erase();
                   x.getDefiningOp()->erase();
                }
-               if (refAttr.getColumn().type.isa<mlir::db::NullableType>()) {
+               if (mlir::isa<mlir::db::NullableType>(refAttr.getColumn().type)) {
                   aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
                }
             }
             if (aggrFunc == mlir::relalg::AggrFunc::stddev_samp || aggrFunc == mlir::relalg::AggrFunc::var_samp) {
                aggrResultType = builder.getF64Type();
-               if (refAttr.getColumn().type.isa<mlir::db::NullableType>()) {
+               if (mlir::isa<mlir::db::NullableType>(refAttr.getColumn().type)) {
                   aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
                }
             }
-            if (!aggrResultType.isa<mlir::db::NullableType>() && (groupByAttrs.empty())) {
+            if (!mlir::isa<mlir::db::NullableType>(aggrResultType) && (groupByAttrs.empty())) {
                aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
             }
          }
@@ -1943,7 +1945,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       std::vector<mlir::Value> createdValues;
       std::vector<mlir::Attribute> createdCols;
       for (auto p : toMap) {
-         auto colRef = p.cast<mlir::tuples::ColumnDefAttr>();
+         auto colRef = mlir::cast<mlir::tuples::ColumnDefAttr>(p);
          mlir::Value expr = mapBuilder.create<mlir::db::NullOp>(builder.getUnknownLoc(), colRef.getColumn().type);
          auto attrDef = attrManager.createDef(&colRef.getColumn());
          createdCols.push_back(attrDef);
@@ -1993,7 +1995,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       mapBuilder.setInsertionPointToStart(block);
       std::vector<mlir::Value> createdValues;
       std::vector<mlir::Attribute> createdCols;
-      auto colDef = val.cast<mlir::tuples::ColumnDefAttr>();
+      auto colDef = mlir::cast<mlir::tuples::ColumnDefAttr>(val);
       auto colRef = attrManager.createRef(&colDef.getColumn());
       mlir::Value shiftVal = mapBuilder.create<mlir::arith::ConstantIntOp>(builder.getUnknownLoc(), shift, mapBuilder.getI64Type());
       mlir::Value colVal = mapBuilder.create<mlir::tuples::GetColumnOp>(builder.getUnknownLoc(), colRef.getColumn().type, colRef, tuple);
@@ -2026,8 +2028,8 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
       std::vector<mlir::Value> createdValues;
       std::vector<mlir::Attribute> createdCols;
       for (size_t i = 0; i < toMap.size(); i++) {
-         auto colRef = toMap[i].cast<mlir::tuples::ColumnRefAttr>();
-         auto newColDef = mapTo[i].cast<mlir::tuples::ColumnDefAttr>();
+         auto colRef = mlir::cast<mlir::tuples::ColumnRefAttr>(toMap[i]);
+         auto newColDef = mlir::cast<mlir::tuples::ColumnDefAttr>(mapTo[i]);
          mlir::Value expr = mapBuilder.create<mlir::tuples::GetColumnOp>(builder.getUnknownLoc(), colRef.getColumn().type, colRef, tuple);
          if (colRef.getColumn().type != newColDef.getColumn().type) {
             expr = mapBuilder.create<mlir::db::AsNullableOp>(builder.getUnknownLoc(), newColDef.getColumn().type, expr);
@@ -2103,7 +2105,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
          i++;
       }
    }
-   auto asNullable = [](mlir::Type t) { return t.isa<mlir::db::NullableType>() ? t : mlir::db::NullableType::get(t.getContext(), t); };
+   auto asNullable = [](mlir::Type t) { return mlir::isa<mlir::db::NullableType>(t) ? t : mlir::db::NullableType::get(t.getContext(), t); };
    if (!groupByAttrs.empty() || !replaceState.aggrs.empty()) {
       if (rollup) {
          struct Part {
@@ -2127,7 +2129,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             for (size_t j = 1; j <= n; j++) {
                localGroupByAttrs.push_back(groupByAttrs.at(j - 1));
                auto attrDef = attrManager.createDef(scopeName, "tmp" + std::to_string(rollupId++));
-               auto currentType = groupByAttrs.at(j - 1).cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+               auto currentType = mlir::cast<mlir::tuples::ColumnRefAttr>(groupByAttrs.at(j - 1)).getColumn().type;
                attrDef.getColumn().type = asNullable(currentType);
 
                localGroupByAttrsNullable.push_back(attrDef);
@@ -2136,7 +2138,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                present |= (1 << (j - 1));
                auto currentAttr = groupByAttrs.at(j - 1);
                auto attrDef = attrManager.createDef(scopeName, "tmp" + std::to_string(rollupId++));
-               auto currentType = currentAttr.cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+               auto currentType = mlir::cast<mlir::tuples::ColumnRefAttr>(currentAttr).getColumn().type;
                attrDef.getColumn().type = asNullable(currentType);
                notAvailable.push_back(attrDef);
             }
@@ -2173,22 +2175,22 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             std::vector<mlir::Attribute> unionAttributes;
             size_t id = 0;
             for (size_t j = 0; j < currentLocalAttributes.size(); j++) {
-               auto left = attrManager.createRef(&currentAttributes[j].cast<mlir::tuples::ColumnDefAttr>().getColumn());
-               auto right = attrManager.createRef(&currentLocalAttributes[j].cast<mlir::tuples::ColumnDefAttr>().getColumn());
+               auto left = attrManager.createRef(&mlir::cast<mlir::tuples::ColumnDefAttr>(currentAttributes[j]).getColumn());
+               auto right = attrManager.createRef(&mlir::cast<mlir::tuples::ColumnDefAttr>(currentLocalAttributes[j]).getColumn());
 
                auto unionAttribute = attrManager.createDef(rollupUnionName, "tmp" + std::to_string(id++), builder.getArrayAttr({left, right}));
-               unionAttribute.getColumn().type = currentLocalAttributes[j].cast<mlir::tuples::ColumnDefAttr>().getColumn().type;
+               unionAttribute.getColumn().type = mlir::cast<mlir::tuples::ColumnDefAttr>(currentLocalAttributes[j]).getColumn().type;
                unionAttributes.push_back(unionAttribute);
             }
             currTree = builder.create<mlir::relalg::UnionOp>(builder.getUnknownLoc(), ::mlir::relalg::SetSemanticAttr::get(builder.getContext(), mlir::relalg::SetSemantic::all), currTree, parts[i].tree, builder.getArrayAttr(unionAttributes));
             currentAttributes = unionAttributes;
          }
          for (size_t i = 0; i < groupByAttrs.size(); i++) {
-            context.replace(scope, &groupByAttrs[i].cast<mlir::tuples::ColumnRefAttr>().getColumn(), &currentAttributes[i].cast<mlir::tuples::ColumnDefAttr>().getColumn());
+            context.replace(scope, &mlir::cast<mlir::tuples::ColumnRefAttr>(groupByAttrs[i]).getColumn(), &mlir::cast<mlir::tuples::ColumnDefAttr>(currentAttributes[i]).getColumn());
          }
          size_t i = 0;
          for (auto s : orderedAggregates) {
-            context.mapAttribute(scope, s, &currentAttributes[groupByAttrs.size() + i++].cast<mlir::tuples::ColumnDefAttr>().getColumn());
+            context.mapAttribute(scope, s, &mlir::cast<mlir::tuples::ColumnDefAttr>(currentAttributes[groupByAttrs.size() + i++]).getColumn());
          }
          tree = currTree;
          for (auto aggr : replaceState.groupingFuncs) {
@@ -2196,7 +2198,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             auto shiftAmount = groupByAttrToPos.at(name);
             auto [tree2, attr] = mapCheckBit(builder, currentAttributes.back(), shiftAmount, context, tree);
             tree = tree2;
-            context.mapAttribute(scope, fakeNode->colId, &attr.cast<mlir::tuples::ColumnDefAttr>().getColumn());
+            context.mapAttribute(scope, fakeNode->colId, &mlir::cast<mlir::tuples::ColumnDefAttr>(attr).getColumn());
          }
       } else {
          auto [tree2, mapping] = performAggregation(builder, groupByAttrs, replaceState, context, tree);
@@ -2271,7 +2273,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                   auto baseType = getBaseType(aggrResultType);
                   if (baseType.isIntOrFloat() && !baseType.isIntOrIndex()) {
                      //keep aggrResultType
-                  } else if (baseType.isa<mlir::db::DecimalType>()) {
+                  } else if (mlir::isa<mlir::db::DecimalType>(baseType)) {
                      mlir::OpBuilder b(builder.getContext());
                      mlir::Value x = b.create<mlir::db::ConstantOp>(b.getUnknownLoc(), baseType, b.getUnitAttr());
                      mlir::Value x2 = b.create<mlir::db::ConstantOp>(b.getUnknownLoc(), mlir::db::DecimalType::get(b.getContext(), 19, 0), b.getUnitAttr());
@@ -2288,17 +2290,17 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                      div.getDefiningOp()->erase();
                      x.getDefiningOp()->erase();
                   }
-                  if (refAttr.getColumn().type.isa<mlir::db::NullableType>()) {
+                  if (mlir::isa<mlir::db::NullableType>(refAttr.getColumn().type)) {
                      aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
                   }
                }
                if (aggrFunc == mlir::relalg::AggrFunc::stddev_samp || aggrFunc == mlir::relalg::AggrFunc::var_samp) {
                   aggrResultType = builder.getF64Type();
-                  if (refAttr.getColumn().type.isa<mlir::db::NullableType>()) {
+                  if (mlir::isa<mlir::db::NullableType>(refAttr.getColumn().type)) {
                      aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
                   }
                }
-               if (!aggrResultType.isa<mlir::db::NullableType>() && (groupByAttrs.empty())) {
+               if (!mlir::isa<mlir::db::NullableType>(aggrResultType) && (groupByAttrs.empty())) {
                   aggrResultType = mlir::db::NullableType::get(builder.getContext(), aggrResultType);
                }
             }
@@ -2391,7 +2393,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
             default: {
                auto printed = std::string(fingerprint(targetExpr));
                if (groupedExpressions.contains(printed)) {
-                  attribute = &groupedExpressions[printed].cast<mlir::tuples::ColumnRefAttr>().getColumn();
+                  attribute = &mlir::cast<mlir::tuples::ColumnRefAttr>(groupedExpressions[printed]).getColumn();
                   name = "";
                } else {
                   fakeNode = createFakeNode("", nullptr);
@@ -2488,7 +2490,7 @@ std::pair<mlir::Value, frontend::sql::Parser::TargetInfo> frontend::sql::Parser:
                   default: {
                      auto printed = std::string(fingerprint(target));
                      if (groupedExpressions.contains(printed)) {
-                        attr = &groupedExpressions[printed].cast<mlir::tuples::ColumnRefAttr>().getColumn();
+                        attr = &mlir::cast<mlir::tuples::ColumnRefAttr>(groupedExpressions[printed]).getColumn();
                      } else {
                         auto [tree2, attr2] = mapExpressionToAttribute(tree, context, builder, sortScope, target);
                         attr = &attr2.getColumn();

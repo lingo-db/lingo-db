@@ -13,13 +13,13 @@ using namespace mlir;
 namespace {
 
 mlir::Value arrowTypeFrom(mlir::OpBuilder rewriter, mlir::Location loc, mlir::Type arrowType, mlir::Type physicalType, mlir::Type inputType, mlir::Value physicalVal) {
-   if (arrowType.isa<dsa::ArrowDate32Type, dsa::ArrowDate64Type, dsa::ArrowTimeStampType>()) {
+   if (mlir::isa<dsa::ArrowDate32Type, dsa::ArrowDate64Type, dsa::ArrowTimeStampType>(arrowType)) {
       size_t multiplier = 1;
-      if (arrowType.isa<dsa::ArrowDate32Type>()) {
+      if (mlir::isa<dsa::ArrowDate32Type>(arrowType)) {
          multiplier = 86400000000000;
-      } else if (arrowType.isa<dsa::ArrowDate64Type>()) {
+      } else if (mlir::isa<dsa::ArrowDate64Type>(arrowType)) {
          multiplier = 1000000;
-      } else if (auto timeStampType = arrowType.dyn_cast_or_null<dsa::ArrowTimeStampType>()) {
+      } else if (auto timeStampType = mlir::dyn_cast_or_null<dsa::ArrowTimeStampType>(arrowType)) {
          switch (timeStampType.getUnit()) {
             case mlir::dsa::TimeUnitAttr::second: multiplier = 1000000000; break;
             case mlir::dsa::TimeUnitAttr::millisecond: multiplier = 1000000; break;
@@ -37,7 +37,7 @@ mlir::Value arrowTypeFrom(mlir::OpBuilder rewriter, mlir::Location loc, mlir::Ty
       return physicalVal;
    } else if (physicalType == inputType) {
       return physicalVal;
-   } else if (auto decimalType = arrowType.dyn_cast_or_null<dsa::ArrowDecimalType>()) {
+   } else if (auto decimalType = mlir::dyn_cast_or_null<dsa::ArrowDecimalType>(arrowType)) {
       if (inputType.getIntOrFloatBitWidth() != 128) {
          return rewriter.create<arith::ExtSIOp>(loc, physicalType, physicalVal);
       }
@@ -45,16 +45,16 @@ mlir::Value arrowTypeFrom(mlir::OpBuilder rewriter, mlir::Location loc, mlir::Ty
    return mlir::Value();
 }
 mlir::Value arrowTypeTo(mlir::OpBuilder rewriter, mlir::Location loc, mlir::Type arrowType, mlir::Type physicalType, mlir::Type t, mlir::Value physicalVal) {
-   if (arrowType.isa<dsa::ArrowDate32Type, dsa::ArrowDate64Type, dsa::ArrowTimeStampType>()) {
+   if (mlir::isa<dsa::ArrowDate32Type, dsa::ArrowDate64Type, dsa::ArrowTimeStampType>(arrowType)) {
       if (physicalType.getIntOrFloatBitWidth() < 64) {
          physicalVal = rewriter.create<arith::ExtUIOp>(loc, rewriter.getI64Type(), physicalVal);
       }
       size_t multiplier = 1;
-      if (arrowType.isa<dsa::ArrowDate32Type>()) {
+      if (mlir::isa<dsa::ArrowDate32Type>(arrowType)) {
          multiplier = 86400000000000;
-      } else if (arrowType.isa<dsa::ArrowDate64Type>()) {
+      } else if (mlir::isa<dsa::ArrowDate64Type>(arrowType)) {
          multiplier = 1000000;
-      } else if (auto timeStampType = arrowType.dyn_cast_or_null<dsa::ArrowTimeStampType>()) {
+      } else if (auto timeStampType = mlir::dyn_cast_or_null<dsa::ArrowTimeStampType>(arrowType)) {
          switch (timeStampType.getUnit()) {
             case mlir::dsa::TimeUnitAttr::second: multiplier = 1000000000; break;
             case mlir::dsa::TimeUnitAttr::millisecond: multiplier = 1000000; break;
@@ -69,7 +69,7 @@ mlir::Value arrowTypeTo(mlir::OpBuilder rewriter, mlir::Location loc, mlir::Type
       return physicalVal;
    } else if (physicalType == t) {
       return physicalVal;
-   } else if (auto decimalType = arrowType.dyn_cast_or_null<dsa::ArrowDecimalType>()) {
+   } else if (auto decimalType = mlir::dyn_cast_or_null<dsa::ArrowDecimalType>(arrowType)) {
       if (t.getIntOrFloatBitWidth() != 128) {
          return rewriter.create<arith::TruncIOp>(loc, t, physicalVal);
       }
@@ -82,7 +82,7 @@ class CBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
          rt::ArrowColumnBuilder::addInt64(rewriter, loc)({builderVal, isValid, val});
       } else if (isIntegerType(arrowType, 1)) {
          rt::ArrowColumnBuilder::addBool(rewriter, loc)({builderVal, isValid, val});
-      } else if (auto intType = arrowType.dyn_cast_or_null<IntegerType>()) {
+      } else if (auto intType = mlir::dyn_cast_or_null<IntegerType>(arrowType)) {
          switch (intType.getWidth()) {
             case 8: rt::ArrowColumnBuilder::addInt8(rewriter, loc)({builderVal, isValid, val}); break;
             case 16: rt::ArrowColumnBuilder::addInt16(rewriter, loc)({builderVal, isValid, val}); break;
@@ -90,20 +90,20 @@ class CBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
             case 64: rt::ArrowColumnBuilder::addInt64(rewriter, loc)({builderVal, isValid, val}); break;
             default: assert(false && "should not happen");
          }
-      } else if (auto floatType = arrowType.dyn_cast_or_null<mlir::FloatType>()) {
+      } else if (auto floatType = mlir::dyn_cast_or_null<mlir::FloatType>(arrowType)) {
          switch (floatType.getWidth()) {
             case 32: rt::ArrowColumnBuilder::addFloat32(rewriter, loc)({builderVal, isValid, val}); break;
             case 64: rt::ArrowColumnBuilder::addFloat64(rewriter, loc)({builderVal, isValid, val}); break;
          }
-      } else if (arrowType.isa<mlir::dsa::ArrowStringType>()) {
+      } else if (mlir::isa<mlir::dsa::ArrowStringType>(arrowType)) {
          rt::ArrowColumnBuilder::addBinary(rewriter, loc)({builderVal, isValid, val});
-      } else if (auto fixedWidthType = arrowType.dyn_cast_or_null<mlir::dsa::ArrowFixedSizedBinaryType>()) {
+      } else if (auto fixedWidthType = mlir::dyn_cast_or_null<mlir::dsa::ArrowFixedSizedBinaryType>(arrowType)) {
          rt::ArrowColumnBuilder::addFixedSized(rewriter, loc)({builderVal, isValid, val});
-      } else if (arrowType.isa<mlir::dsa::ArrowDecimalType>()) {
+      } else if (mlir::isa<mlir::dsa::ArrowDecimalType>(arrowType)) {
          rt::ArrowColumnBuilder::addDecimal(rewriter, loc)({builderVal, isValid, val});
-      } else if (arrowType.isa<mlir::dsa::ArrowTimeStampType, mlir::dsa::ArrowDate64Type, mlir::dsa::ArrowDayTimeIntervalType>()) {
+      } else if (mlir::isa<mlir::dsa::ArrowTimeStampType, mlir::dsa::ArrowDate64Type, mlir::dsa::ArrowDayTimeIntervalType>(arrowType)) {
          rt::ArrowColumnBuilder::addInt64(rewriter, loc)({builderVal, isValid, val});
-      } else if (arrowType.isa<mlir::dsa::ArrowDate32Type, mlir::dsa::ArrowMonthIntervalType>()) {
+      } else if (mlir::isa<mlir::dsa::ArrowDate32Type, mlir::dsa::ArrowMonthIntervalType>(arrowType)) {
          rt::ArrowColumnBuilder::addInt32(rewriter, loc)({builderVal, isValid, val});
       } else {
          return mlir::failure();
@@ -114,7 +114,7 @@ class CBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
    public:
    using OpConversionPattern<mlir::dsa::Append>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::Append appendOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!appendOp.getDs().getType().isa<mlir::dsa::ColumnBuilderType>()) {
+      if (!mlir::isa<mlir::dsa::ColumnBuilderType>(appendOp.getDs().getType())) {
          return failure();
       }
       mlir::Type arrowType = appendOp.getVal().getType();
@@ -125,12 +125,12 @@ class CBAppendLowering : public OpConversionPattern<mlir::dsa::Append> {
       if (!isValid) {
          isValid = rewriter.create<mlir::arith::ConstantIntOp>(loc, 1, 1);
       }
-      if (auto arrowListType = arrowType.dyn_cast_or_null<mlir::dsa::ArrowListType>()) {
+      if (auto arrowListType = mlir::dyn_cast_or_null<mlir::dsa::ArrowListType>(arrowType)) {
          rt::ArrowColumnBuilder::addList(rewriter, loc)({builderVal, isValid});
          auto childBuilder = rt::ArrowColumnBuilder::getChildBuilder(rewriter, loc)({builderVal})[0];
          auto forOp = rewriter.create<mlir::dsa::ForOp>(loc, mlir::TypeRange{}, adaptor.getVal(), mlir::ValueRange{});
          mlir::Block* block = new mlir::Block;
-         block->addArgument(adaptor.getVal().getType().cast<mlir::util::BufferType>().getElementType(), loc);
+         block->addArgument(mlir::cast<mlir::util::BufferType>(adaptor.getVal().getType()).getElementType(), loc);
          forOp.getBodyRegion().push_back(block);
          {
             mlir::OpBuilder::InsertionGuard guard(rewriter);
@@ -166,26 +166,26 @@ class CreateColumnBuilderLowering : public OpConversionPattern<mlir::dsa::Create
          return "int[" + std::to_string(intWidth) + "]";
       } else if (auto uIntWidth = getIntegerWidth(type, true)) {
          return "uint[" + std::to_string(uIntWidth) + "]";
-      } else if (auto decimalType = type.dyn_cast_or_null<mlir::dsa::ArrowDecimalType>()) {
+      } else if (auto decimalType = mlir::dyn_cast_or_null<mlir::dsa::ArrowDecimalType>(type)) {
          auto prec = std::min(decimalType.getP(), (int64_t) 38);
          return "decimal[" + std::to_string(prec) + "," + std::to_string(decimalType.getS()) + "]";
-      } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
+      } else if (auto floatType = mlir::dyn_cast_or_null<mlir::FloatType>(type)) {
          return "float[" + std::to_string(floatType.getWidth()) + "]";
-      } else if (type.isa<mlir::dsa::ArrowStringType>()) { //todo: do we still need the strings?
+      } else if (mlir::isa<mlir::dsa::ArrowStringType>(type)) { //todo: do we still need the strings?
          return "string";
-      } else if (type.isa<mlir::dsa::ArrowDate32Type>()) {
+      } else if (mlir::isa<mlir::dsa::ArrowDate32Type>(type)) {
          return "date[32]";
-      } else if (type.isa<mlir::dsa::ArrowDate64Type>()) {
+      } else if (mlir::isa<mlir::dsa::ArrowDate64Type>(type)) {
          return "date[64]";
-      } else if (auto fixedSizedBinaryType = type.dyn_cast_or_null<mlir::dsa::ArrowFixedSizedBinaryType>()) {
+      } else if (auto fixedSizedBinaryType = mlir::dyn_cast_or_null<mlir::dsa::ArrowFixedSizedBinaryType>(type)) {
          return "fixed_sized[" + std::to_string(fixedSizedBinaryType.getByteWidth()) + "]";
-      } else if (auto intervalType = type.dyn_cast_or_null<mlir::dsa::ArrowMonthIntervalType>()) {
+      } else if (auto intervalType = mlir::dyn_cast_or_null<mlir::dsa::ArrowMonthIntervalType>(type)) {
          return "interval_months";
-      } else if (auto intervalType = type.dyn_cast_or_null<mlir::dsa::ArrowDayTimeIntervalType>()) {
+      } else if (auto intervalType = mlir::dyn_cast_or_null<mlir::dsa::ArrowDayTimeIntervalType>(type)) {
          return "interval_daytime";
-      } else if (auto timestampType = type.dyn_cast_or_null<mlir::dsa::ArrowTimeStampType>()) {
+      } else if (auto timestampType = mlir::dyn_cast_or_null<mlir::dsa::ArrowTimeStampType>(type)) {
          return "timestamp[" + std::to_string(static_cast<uint32_t>(timestampType.getUnit())) + "]";
-      } else if (auto listType = type.dyn_cast_or_null<mlir::dsa::ArrowListType>()) {
+      } else if (auto listType = mlir::dyn_cast_or_null<mlir::dsa::ArrowListType>(type)) {
          return "list[" + arrowDescrFromType(listType.getType()) + "]";
       }
       assert(false);
@@ -195,11 +195,11 @@ class CreateColumnBuilderLowering : public OpConversionPattern<mlir::dsa::Create
    public:
    using OpConversionPattern<mlir::dsa::CreateDS>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::CreateDS createOp, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!createOp.getDs().getType().isa<mlir::dsa::ColumnBuilderType>()) {
+      if (!mlir::isa<mlir::dsa::ColumnBuilderType>(createOp.getDs().getType())) {
          return failure();
       }
       auto loc = createOp->getLoc();
-      mlir::Value typeDescr = rewriter.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(getContext()), arrowDescrFromType(createOp.getType().cast<mlir::dsa::ColumnBuilderType>().getType()));
+      mlir::Value typeDescr = rewriter.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(getContext()), arrowDescrFromType(mlir::cast<mlir::dsa::ColumnBuilderType>(createOp.getType()).getType()));
       Value columnBuilder = rt::ArrowColumnBuilder::create(rewriter, loc)({typeDescr})[0];
       rewriter.replaceOp(createOp, columnBuilder);
       return success();
@@ -212,7 +212,7 @@ class CreateTableLowering : public OpConversionPattern<mlir::dsa::CreateTable> {
       auto loc = createOp->getLoc();
       mlir::Value table = rt::ArrowTable::createEmpty(rewriter, loc)({})[0];
       for (auto x : llvm::zip(createOp.getColumnNames(), adaptor.getColumns())) {
-         auto name = std::get<0>(x).cast<StringAttr>().getValue();
+         auto name = mlir::cast<StringAttr>(std::get<0>(x)).getValue();
          auto column = std::get<1>(x);
          mlir::Value columnName = rewriter.create<mlir::util::CreateConstVarLen>(loc, mlir::util::VarLen32Type::get(getContext()), name);
          table = rt::ArrowTable::addColumn(rewriter, loc)({table, columnName, column})[0];
@@ -226,7 +226,7 @@ class ColumnnBuilderConcat : public OpConversionPattern<mlir::dsa::Concat> {
    public:
    using OpConversionPattern<mlir::dsa::Concat>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::Concat op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!op.getLeft().getType().isa<mlir::dsa::ColumnBuilderType>() || !op.getLeft().getType().isa<mlir::dsa::ColumnBuilderType>()) {
+      if (!mlir::isa<mlir::dsa::ColumnBuilderType>(op.getLeft().getType()) || !mlir::isa<mlir::dsa::ColumnBuilderType>(op.getLeft().getType())) {
          return failure();
       }
       rt::ArrowColumnBuilder::merge(rewriter, op->getLoc())({adaptor.getLeft(), adaptor.getRight()});
@@ -238,7 +238,7 @@ class ColumnnBuilderFinish : public OpConversionPattern<mlir::dsa::FinishColumn>
    public:
    using OpConversionPattern<mlir::dsa::FinishColumn>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::dsa::FinishColumn op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      if (!op.getBuilder().getType().isa<mlir::dsa::ColumnBuilderType>()) {
+      if (!mlir::isa<mlir::dsa::ColumnBuilderType>(op.getBuilder().getType())) {
          return failure();
       }
       auto column = rt::ArrowColumnBuilder::finish(rewriter, op->getLoc())({
@@ -294,7 +294,7 @@ std::vector<mlir::Type> getColumnInfoTypes(mlir::Type t, mlir::Type converted) {
    auto indexType = IndexType::get(context);
    auto i8ptrType = mlir::util::RefType::get(context, IntegerType::get(context, 8));
    mlir::Type valueType = converted;
-   if (t.isa<mlir::dsa::ArrowStringType,mlir::dsa::ArrowListType>()) {
+   if (mlir::isa<mlir::dsa::ArrowStringType,mlir::dsa::ArrowListType>(t)) {
       valueType = mlir::IntegerType::get(context, 32);
    } else if (t == mlir::IntegerType::get(context, 1)) {
       valueType = mlir::IntegerType::get(context, 8);
@@ -340,7 +340,7 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
       auto* context = rewriter.getContext();
       auto indexType = rewriter.getIndexType();
       Value val;
-      if (baseType.isa<mlir::dsa::ArrowStringType>()) {
+      if (mlir::isa<mlir::dsa::ArrowStringType>(baseType)) {
          Value pos1 = rewriter.create<util::LoadOp>(loc, rewriter.getI32Type(), valueBuffer, index);
          pos1.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
          Value const1 = rewriter.create<mlir::arith::ConstantIndexOp>(loc, 1);
@@ -358,11 +358,11 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
          //for integers and floats: just load the value
          val = rewriter.create<util::LoadOp>(loc, baseType, valueBuffer, index);
          val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
-      } else if (baseType.isa<dsa::ArrowDate32Type, dsa::ArrowDate64Type, dsa::ArrowMonthIntervalType, dsa::ArrowDayTimeIntervalType, dsa::ArrowTimeStampType, dsa::ArrowDecimalType>()) {
+      } else if (mlir::isa<dsa::ArrowDate32Type, dsa::ArrowDate64Type, dsa::ArrowMonthIntervalType, dsa::ArrowDayTimeIntervalType, dsa::ArrowTimeStampType, dsa::ArrowDecimalType>(baseType)) {
          //dates, timestamps, etc are also just integers
          val = rewriter.create<util::LoadOp>(loc, typeConverter->convertType(baseType), valueBuffer, index);
          val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
-      } else if (auto fixedSizeType = baseType.dyn_cast<mlir::dsa::ArrowFixedSizedBinaryType>()) {
+      } else if (auto fixedSizeType = mlir::dyn_cast<mlir::dsa::ArrowFixedSizedBinaryType>(baseType)) {
          auto convertedType = typeConverter->convertType(baseType);
          auto numBytes = fixedSizeType.getByteWidth();
          auto bits = numBytes * 8;
@@ -437,7 +437,7 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
                secondI32Val.getDefiningOp()->setAttr("nosideffect", rewriter.getUnitAttr());
             }
          }
-      } else if (auto listType = baseType.dyn_cast_or_null<mlir::dsa::ArrowListType>()) {
+      } else if (auto listType = mlir::dyn_cast_or_null<mlir::dsa::ArrowListType>(baseType)) {
          auto bufferType = mlir::util::BufferType::get(context, typeConverter->convertType(listType.getType()));
          auto columnInfoType = rewriter.getTupleType(getColumnInfoTypes(listType.getType(), typeConverter->convertType(listType.getType())));
          auto castedRef = rewriter.create<mlir::util::GenericMemrefCastOp>(loc, mlir::util::RefType::get(columnInfoType), childPtr);
@@ -510,13 +510,13 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
          // nullMultiplier: necessary to compute the position of validity bit in validityBuffer
          nullMultiplier = rewriter.create<mlir::util::GetTupleOp>(loc, rewriter.getIndexType(), info, baseOffset + 1);
          // validityBuffer: pointer to bytes to encode invalid values (e.g. null)
-         validityBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, info.getType().cast<TupleType>().getType(baseOffset + 2), info, baseOffset + 2);
+         validityBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, mlir::cast<TupleType>(info.getType()).getType(baseOffset + 2), info, baseOffset + 2);
          // originalValueBuffer: pointer to the location of the row in memory
-         originalValueBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, info.getType().cast<TupleType>().getType(baseOffset + 3), info, baseOffset + 3);
+         originalValueBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, mlir::cast<TupleType>(info.getType()).getType(baseOffset + 3), info, baseOffset + 3);
          valueBuffer = rewriter.create<mlir::util::ArrayElementPtrOp>(loc, originalValueBuffer.getType(), originalValueBuffer, columnOffset); // pointer to the column
          // varLenBuffer: pointer to variable sized data store
-         varLenBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, info.getType().cast<TupleType>().getType(baseOffset + 4), info, baseOffset + 4);
-         childPtr = rewriter.create<mlir::util::GetTupleOp>(loc, info.getType().cast<TupleType>().getType(baseOffset + 5), info, baseOffset + 5);
+         varLenBuffer = rewriter.create<mlir::util::GetTupleOp>(loc, mlir::cast<TupleType>(info.getType()).getType(baseOffset + 4), info, baseOffset + 4);
+         childPtr = rewriter.create<mlir::util::GetTupleOp>(loc, mlir::cast<TupleType>(info.getType()).getType(baseOffset + 5), info, baseOffset + 5);
       }
       Value val = loadValue(rewriter, loc, baseType, originalValueBuffer, valueBuffer, validityBuffer, varLenBuffer, childPtr, nullMultiplier, columnOffset, index);
 
@@ -533,14 +533,14 @@ class AtLowering : public OpConversionPattern<mlir::dsa::At> {
 };
 } // end namespace
 namespace mlir::dsa {
-void populateDSAToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) {
+void populateDSAToStdPatterns(mlir::TypeConverter& typeConverter, mlir::RewritePatternSet& patterns) { // NOLINT(misc-use-internal-linkage)
    auto *context = patterns.getContext();
    auto indexType = IndexType::get(context);
 
    typeConverter.addConversion([context, indexType, &typeConverter](mlir::dsa::RecordBatchType recordBatchType) {
       std::vector<Type> types;
       types.push_back(indexType);
-      if (auto tupleT = recordBatchType.getRowType().dyn_cast_or_null<TupleType>()) {
+      if (auto tupleT = mlir::dyn_cast_or_null<TupleType>(recordBatchType.getRowType())) {
          for (auto t : tupleT.getTypes()) {
             auto converted = typeConverter.convertType(t);
             auto columnInfoTypes = getColumnInfoTypes(t, converted);

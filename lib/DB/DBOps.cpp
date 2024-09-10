@@ -16,23 +16,23 @@ bool mlir::db::CmpOp::isUnequalityPred() { return getPredicate() == mlir::db::DB
 bool mlir::db::CmpOp::isLessPred(bool eq) { return getPredicate() == (eq ? mlir::db::DBCmpPredicate::lte : mlir::db::DBCmpPredicate::lt); }
 bool mlir::db::CmpOp::isGreaterPred(bool eq) { return getPredicate() == (eq ? mlir::db::DBCmpPredicate::gte : mlir::db::DBCmpPredicate::gt); }
 mlir::Type getBaseType(mlir::Type t) {
-   if (auto nullableT = t.dyn_cast_or_null<mlir::db::NullableType>()) {
+   if (auto nullableT = mlir::dyn_cast_or_null<mlir::db::NullableType>(t)) {
       return nullableT.getType();
    }
    return t;
 }
 Type wrapNullableType(MLIRContext* context, Type type, ValueRange values) {
-   if (llvm::any_of(values, [](Value v) { return v.getType().isa<mlir::db::NullableType>(); })) {
+   if (llvm::any_of(values, [](Value v) { return mlir::isa<mlir::db::NullableType>(v.getType()); })) {
       return mlir::db::NullableType::get(type);
    }
    return type;
 }
 bool isIntegerType(mlir::Type type, unsigned int width) {
-   auto asStdInt = type.dyn_cast_or_null<mlir::IntegerType>();
+   auto asStdInt = mlir::dyn_cast_or_null<mlir::IntegerType>(type);
    return asStdInt && asStdInt.getWidth() == width;
 }
 int getIntegerWidth(mlir::Type type, bool isUnSigned) {
-   auto asStdInt = type.dyn_cast_or_null<mlir::IntegerType>();
+   auto asStdInt = mlir::dyn_cast_or_null<mlir::IntegerType>(type);
    if (asStdInt && asStdInt.isUnsigned() == isUnSigned) {
       return asStdInt.getWidth();
    }
@@ -59,70 +59,80 @@ std::tuple<arrow::Type::type, uint32_t, uint32_t> convertTypeToArrow(mlir::Type 
          case 32: typeConstant = arrow::Type::type::UINT32; break;
          case 64: typeConstant = arrow::Type::type::UINT64; break;
       }
-   } else if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
+   } else if (auto decimalType = mlir::dyn_cast_or_null<mlir::db::DecimalType>(type)) {
       typeConstant = arrow::Type::type::DECIMAL128;
       param1 = decimalType.getP();
       param2 = decimalType.getS();
-   } else if (auto floatType = type.dyn_cast_or_null<mlir::FloatType>()) {
+   } else if (auto floatType = mlir::dyn_cast_or_null<mlir::FloatType>(type)) {
       switch (floatType.getWidth()) {
          case 16: typeConstant = arrow::Type::type::HALF_FLOAT; break;
          case 32: typeConstant = arrow::Type::type::FLOAT; break;
          case 64: typeConstant = arrow::Type::type::DOUBLE; break;
       }
-   } else if (auto stringType = type.dyn_cast_or_null<mlir::db::StringType>()) {
+   } else if (auto stringType = mlir::dyn_cast_or_null<mlir::db::StringType>(type)) {
       typeConstant = arrow::Type::type::STRING;
-   } else if (auto dateType = type.dyn_cast_or_null<mlir::db::DateType>()) {
+   } else if (auto dateType = mlir::dyn_cast_or_null<mlir::db::DateType>(type)) {
       if (dateType.getUnit() == mlir::db::DateUnitAttr::day) {
          typeConstant = arrow::Type::type::DATE32;
       } else {
          typeConstant = arrow::Type::type::DATE64;
       }
-   } else if (auto charType = type.dyn_cast_or_null<mlir::db::CharType>()) {
+   } else if (auto charType = mlir::dyn_cast_or_null<mlir::db::CharType>(type)) {
       typeConstant = arrow::Type::type::STRING;
       param1 = charType.getBytes();
-   } else if (auto intervalType = type.dyn_cast_or_null<mlir::db::IntervalType>()) {
+   } else if (auto intervalType = mlir::dyn_cast_or_null<mlir::db::IntervalType>(type)) {
       if (intervalType.getUnit() == mlir::db::IntervalUnitAttr::months) {
          typeConstant = arrow::Type::type::INTERVAL_MONTHS;
       } else {
          typeConstant = arrow::Type::type::INTERVAL_DAY_TIME;
       }
-   } else if (auto timestampType = type.dyn_cast_or_null<mlir::db::TimestampType>()) {
+   } else if (auto timestampType = mlir::dyn_cast_or_null<mlir::db::TimestampType>(type)) {
       typeConstant = arrow::Type::type::TIMESTAMP;
       param1 = static_cast<uint32_t>(timestampType.getUnit());
    }
    assert(typeConstant != arrow::Type::type::NA);
    return {typeConstant, param1, param2};
 }
+mlir::Type getAdaptedDecimalTypeAfterMulDiv(mlir::MLIRContext* context, int precision, int scale) {
+   int beforeComma = precision - scale;
+   if (beforeComma > 32 && scale > 6) {
+      return mlir::db::DecimalType::get(context, 38, 6);
+   }
+   if (beforeComma > 32 && scale <= 6) {
+      return mlir::db::DecimalType::get(context, 38, scale);
+   }
+   return mlir::db::DecimalType::get(context, std::min(precision, 38), std::min(scale, 38 - beforeComma));
+}
 } // namespace
 OpFoldResult mlir::db::ConstantOp::fold(mlir::db::ConstantOp::FoldAdaptor adaptor) {
    auto type = getType();
    auto [arrowType, param1, param2] = convertTypeToArrow(type);
    std::variant<int64_t, double, std::string> parseArg;
-   if (auto integerAttr = getValue().dyn_cast_or_null<IntegerAttr>()) {
+   if (auto integerAttr = mlir::dyn_cast_or_null<IntegerAttr>(getValue())) {
       parseArg = integerAttr.getInt();
-   } else if (auto floatAttr = getValue().dyn_cast_or_null<FloatAttr>()) {
+   } else if (auto floatAttr = mlir::dyn_cast_or_null<FloatAttr>(getValue())) {
       parseArg = floatAttr.getValueAsDouble();
-   } else if (auto stringAttr = getValue().dyn_cast_or_null<StringAttr>()) {
+   } else if (auto stringAttr = mlir::dyn_cast_or_null<StringAttr>(getValue())) {
       parseArg = stringAttr.str();
    } else {
       return {};
    }
    auto parseResult = support::parse(parseArg, arrowType, param1, param2);
-   if (auto decimalType = type.dyn_cast_or_null<mlir::db::DecimalType>()) {
+   if (auto decimalType = mlir::dyn_cast_or_null<mlir::db::DecimalType>(type)) {
       auto [low, high] = support::parseDecimal(std::get<std::string>(parseResult), decimalType.getS());
       std::vector<uint64_t> parts = {low, high};
       return IntegerAttr::get(mlir::IntegerType::get(getContext(), 128), mlir::APInt(128, parts));
-   } else if (auto integerType = type.dyn_cast_or_null<mlir::IntegerType>()) {
+   } else if (auto integerType = mlir::dyn_cast_or_null<mlir::IntegerType>(type)) {
       return IntegerAttr::get(integerType, std::get<int64_t>(parseResult));
-   } else if (type.isa<mlir::FloatType>()) {
+   } else if (mlir::isa<mlir::FloatType>(type)) {
       return FloatAttr::get(type, std::get<double>(parseResult));
-   } else if (type.isa<mlir::db::StringType>()) {
+   } else if (mlir::isa<mlir::db::StringType>(type)) {
       std::string str = std::get<std::string>(parseResult);
       return mlir::StringAttr::get(getContext(), str);
-   } else if (type.isa<mlir::db::CharType>()) {
+   } else if (mlir::isa<mlir::db::CharType>(type)) {
       std::string str = std::get<std::string>(parseResult);
       return mlir::StringAttr::get(getContext(), str);
-   } else if (type.isa<mlir::db::IntervalType, mlir::db::DateType, mlir::db::TimestampType>()) {
+   } else if (mlir::isa<mlir::db::IntervalType, mlir::db::DateType, mlir::db::TimestampType>(type)) {
       return mlir::IntegerAttr::get(mlir::IntegerType::get(getContext(), 64), std::get<int64_t>(parseResult));
    } else {
       type.dump();
@@ -131,16 +141,16 @@ OpFoldResult mlir::db::ConstantOp::fold(mlir::db::ConstantOp::FoldAdaptor adapto
 }
 
 ::mlir::OpFoldResult mlir::db::AddOp::fold(mlir::db::AddOp::FoldAdaptor adaptor) {
-   auto left = adaptor.getLeft().dyn_cast_or_null<mlir::IntegerAttr>();
-   auto right = adaptor.getRight().dyn_cast_or_null<mlir::IntegerAttr>();
+   auto left = mlir::dyn_cast_or_null<mlir::IntegerAttr>(adaptor.getLeft());
+   auto right = mlir::dyn_cast_or_null<mlir::IntegerAttr>(adaptor.getRight());
    if (left && right && left.getType() == right.getType()) {
       return IntegerAttr::get(left.getType(), left.getValue() + right.getValue());
    }
    return {};
 }
 ::mlir::OpFoldResult mlir::db::SubOp::fold(mlir::db::SubOp::FoldAdaptor adaptor) {
-   auto left = adaptor.getLeft().dyn_cast_or_null<mlir::IntegerAttr>();
-   auto right = adaptor.getRight().dyn_cast_or_null<mlir::IntegerAttr>();
+   auto left = mlir::dyn_cast_or_null<mlir::IntegerAttr>(adaptor.getLeft());
+   auto right = mlir::dyn_cast_or_null<mlir::IntegerAttr>(adaptor.getRight());
    if (left && right && left.getType() == right.getType()) {
       return IntegerAttr::get(left.getType(), left.getValue() - right.getValue());
    }
@@ -150,38 +160,38 @@ OpFoldResult mlir::db::ConstantOp::fold(mlir::db::ConstantOp::FoldAdaptor adapto
 ::mlir::OpFoldResult mlir::db::CastOp::fold(mlir::db::CastOp::FoldAdaptor adaptor) {
    auto scalarSourceType = getVal().getType();
    auto scalarTargetType = getType();
-   if (scalarSourceType.isa<mlir::db::StringType>() || scalarTargetType.isa<mlir::db::StringType>()) return {};
-   if (scalarSourceType.isa<mlir::db::NullableType>()) return {};
+   if (mlir::isa<mlir::db::StringType>(scalarSourceType) || mlir::isa<mlir::db::StringType>(scalarTargetType)) return {};
+   if (mlir::isa<mlir::db::NullableType>(scalarSourceType)) return {};
    if (scalarSourceType == scalarTargetType) {
       return adaptor.getVal();
    }
    if (!adaptor.getVal()) return {};
    if (getIntegerWidth(scalarSourceType, false)) {
-      auto intVal = adaptor.getVal().cast<mlir::IntegerAttr>().getInt();
-      if (scalarTargetType.isa<FloatType>()) {
+      auto intVal = mlir::cast<mlir::IntegerAttr>(adaptor.getVal()).getInt();
+      if (mlir::isa<FloatType>(scalarTargetType)) {
          return mlir::FloatAttr::get(scalarTargetType, (double) intVal);
-      } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
+      } else if (auto decimalTargetType = mlir::dyn_cast_or_null<db::DecimalType>(scalarTargetType)) {
          auto [low, high] = support::getDecimalScaleMultiplier(decimalTargetType.getS());
          std::vector<uint64_t> parts = {low, high};
          return IntegerAttr::get(IntegerType::get(getContext(), 128), APInt(128, intVal) * APInt(128, parts));
       } else if (getIntegerWidth(scalarTargetType, false)) {
          return {};
       }
-   } else if (auto floatType = scalarSourceType.dyn_cast_or_null<FloatType>()) {
+   } else if (auto floatType = mlir::dyn_cast_or_null<FloatType>(scalarSourceType)) {
       if (getIntegerWidth(scalarTargetType, false)) {
-         return mlir::IntegerAttr::get(scalarTargetType, adaptor.getVal().cast<mlir::FloatAttr>().getValueAsDouble());
-      } else if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
+         return mlir::IntegerAttr::get(scalarTargetType, mlir::cast<mlir::FloatAttr>(adaptor.getVal()).getValueAsDouble());
+      } else if (auto decimalTargetType = mlir::dyn_cast_or_null<db::DecimalType>(scalarTargetType)) {
          return {};
       }
-   } else if (auto decimalSourceType = scalarSourceType.dyn_cast_or_null<db::DecimalType>()) {
-      if (auto decimalTargetType = scalarTargetType.dyn_cast_or_null<db::DecimalType>()) {
+   } else if (auto decimalSourceType = mlir::dyn_cast_or_null<db::DecimalType>(scalarSourceType)) {
+      if (auto decimalTargetType = mlir::dyn_cast_or_null<db::DecimalType>(scalarTargetType)) {
          auto sourceScale = decimalSourceType.getS();
          auto targetScale = decimalTargetType.getS();
          if (sourceScale == targetScale) {
             return adaptor.getVal();
          }
          return {};
-      } else if (scalarTargetType.isa<FloatType>()) {
+      } else if (mlir::isa<FloatType>(scalarTargetType)) {
          return {};
       } else if (getIntegerWidth(scalarTargetType, false)) {
          return {};
@@ -198,23 +208,14 @@ OpFoldResult mlir::db::ConstantOp::fold(mlir::db::ConstantOp::FoldAdaptor adapto
    auto foldFn = fn->foldFn.value();
    return foldFn(getOperandTypes(), adaptor.getOperands(), results);
 }
-mlir::Type getAdaptedDecimalTypeAfterMulDiv(mlir::MLIRContext* context, int precision, int scale) {
-   int beforeComma = precision - scale;
-   if (beforeComma > 32 && scale > 6) {
-      return mlir::db::DecimalType::get(context, 38, 6);
-   }
-   if (beforeComma > 32 && scale <= 6) {
-      return mlir::db::DecimalType::get(context, 38, scale);
-   }
-   return mlir::db::DecimalType::get(context, std::min(precision, 38), std::min(scale, 38 - beforeComma));
-}
+namespace {
 LogicalResult inferReturnType(MLIRContext* context, std::optional<Location> location, ValueRange operands, SmallVectorImpl<Type>& inferredReturnTypes) {
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType = baseTypeLeft;
-   if (baseTypeLeft.isa<mlir::db::DecimalType>()) {
-      auto a = baseTypeLeft.cast<mlir::db::DecimalType>();
-      auto b = baseTypeRight.cast<mlir::db::DecimalType>();
+   if (mlir::isa<mlir::db::DecimalType>(baseTypeLeft)) {
+      auto a = mlir::cast<mlir::db::DecimalType>(baseTypeLeft);
+      auto b = mlir::cast<mlir::db::DecimalType>(baseTypeRight);
       auto hidig = std::max(a.getP() - a.getS(), b.getP() - b.getS());
       auto maxs = std::max(a.getS(), b.getS());
       // Addition is super-type of both, with larger precision for carry.
@@ -228,9 +229,9 @@ LogicalResult inferMulReturnType(MLIRContext* context, std::optional<Location> l
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType = baseTypeLeft;
-   if (baseTypeLeft.isa<mlir::db::DecimalType>()) {
-      auto a = baseTypeLeft.cast<mlir::db::DecimalType>();
-      auto b = baseTypeRight.cast<mlir::db::DecimalType>();
+   if (mlir::isa<mlir::db::DecimalType>(baseTypeLeft)) {
+      auto a = mlir::cast<mlir::db::DecimalType>(baseTypeLeft);
+      auto b = mlir::cast<mlir::db::DecimalType>(baseTypeRight);
       auto sump = a.getP() + b.getP();
       auto sums = a.getS() + b.getS();
       baseType = getAdaptedDecimalTypeAfterMulDiv(context, sump, sums);
@@ -242,9 +243,9 @@ LogicalResult inferDivReturnType(MLIRContext* context, std::optional<Location> l
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType = baseTypeLeft;
-   if (baseTypeLeft.isa<mlir::db::DecimalType>()) {
-      auto a = baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
-      auto b = baseTypeRight.dyn_cast<mlir::db::DecimalType>();
+   if (mlir::isa<mlir::db::DecimalType>(baseTypeLeft)) {
+      auto a = mlir::dyn_cast<mlir::db::DecimalType>(baseTypeLeft);
+      auto b = mlir::dyn_cast<mlir::db::DecimalType>(baseTypeRight);
       baseType = getAdaptedDecimalTypeAfterMulDiv(context, a.getP() - a.getS() + b.getS() + std::max(6, a.getS() + b.getP()), std::max(6, a.getS() + b.getP()));
    }
    inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
@@ -255,14 +256,15 @@ LogicalResult inferRemReturnType(MLIRContext* context, std::optional<Location> l
    Type baseTypeLeft = getBaseType(operands[0].getType());
    Type baseTypeRight = getBaseType(operands[1].getType());
    Type baseType = baseTypeLeft;
-   if (baseTypeLeft.isa<mlir::db::DecimalType>()) {
-      auto a = baseTypeLeft.dyn_cast<mlir::db::DecimalType>();
-      auto b = baseTypeRight.dyn_cast<mlir::db::DecimalType>();
+   if (mlir::isa<mlir::db::DecimalType>(baseTypeLeft)) {
+      auto a = mlir::dyn_cast<mlir::db::DecimalType>(baseTypeLeft);
+      auto b = mlir::dyn_cast<mlir::db::DecimalType>(baseTypeRight);
       baseType = mlir::db::DecimalType::get(a.getContext(), std::min(a.getP() - a.getS(), b.getP() - b.getS()) + std::max(a.getS(), b.getS()), std::max(a.getS(), b.getS()));
    }
    inferredReturnTypes.push_back(wrapNullableType(context, baseType, operands));
    return success();
 }
+} // namespace
 ::mlir::LogicalResult mlir::db::RuntimeCall::verify() {
    mlir::db::RuntimeCall& runtimeCall = *this;
    auto reg = runtimeCall.getContext()->getLoadedDialect<mlir::db::DBDialect>()->getRuntimeFunctionRegistry();
@@ -289,13 +291,13 @@ bool mlir::db::RuntimeCall::needsNullWrap() {
 
 bool mlir::db::CmpOp::supportsInvalidValues() {
    auto type = getBaseType(getLeft().getType());
-   if (type.isa<db::StringType>()) {
+   if (mlir::isa<db::StringType>(type)) {
       return false;
    }
    return true;
 }
 bool mlir::db::CastOp::supportsInvalidValues() {
-   if (getBaseType(getResult().getType()).isa<db::StringType>() || getBaseType(getVal().getType()).isa<db::StringType>()) {
+   if (mlir::isa<db::StringType>(getBaseType(getResult().getType())) || mlir::isa<db::StringType>(getBaseType(getVal().getType()))) {
       return false;
    }
    return true;

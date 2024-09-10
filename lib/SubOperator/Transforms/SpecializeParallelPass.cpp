@@ -31,7 +31,7 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
       if (!createOp) {
          return mlir::failure();
       }
-      auto mapType = createOp.getType().dyn_cast_or_null<mlir::subop::HashMapType>();
+      auto mapType = mlir::dyn_cast_or_null<mlir::subop::HashMapType>(createOp.getType());
       if (!mapType) {
          return mlir::failure();
       }
@@ -108,7 +108,7 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
       mlir::TypeConverter fragmentTypeConverter;
 
       fragmentTypeConverter.addConversion([&](mlir::subop::LookupEntryRefType lookupRefType) {
-         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), fragmentTypeConverter.convertType(lookupRefType.getState()).cast<mlir::subop::LookupAbleState>());
+         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), mlir::cast<mlir::subop::LookupAbleState>(fragmentTypeConverter.convertType(lookupRefType.getState())));
       });
       fragmentTypeConverter.addConversion([&](mlir::subop::HashMapType mapType) {
          return optimisticHtFragment;
@@ -121,14 +121,14 @@ class IntroducePreAggrHt : public mlir::RewritePattern {
          return mlir::subop::PreAggrHTEntryRefType::get(refType.getContext(), optimisticHt);
       });
       htTypeConverter.addConversion([&](mlir::subop::LookupEntryRefType lookupRefType) {
-         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), htTypeConverter.convertType(lookupRefType.getState()).cast<mlir::subop::LookupAbleState>());
+         return mlir::subop::LookupEntryRefType::get(lookupRefType.getContext(), mlir::cast<mlir::subop::LookupAbleState>(htTypeConverter.convertType(lookupRefType.getState())));
       });
 
       htTypeConverter.addConversion([&](mlir::subop::ListType listType) {
-         return mlir::subop::ListType::get(listType.getContext(), htTypeConverter.convertType(listType.getT()).cast<mlir::subop::StateEntryReference>());
+         return mlir::subop::ListType::get(listType.getContext(), mlir::cast<mlir::subop::StateEntryReference>(htTypeConverter.convertType(listType.getT())));
       });
       htTypeConverter.addConversion([&](mlir::subop::OptionalType optionalType) {
-         return mlir::subop::OptionalType::get(optionalType.getContext(), htTypeConverter.convertType(optionalType.getT()).cast<mlir::subop::StateEntryReference>());
+         return mlir::subop::OptionalType::get(optionalType.getContext(), mlir::cast<mlir::subop::StateEntryReference>(htTypeConverter.convertType(optionalType.getT())));
       });
       mlir::subop::SubOpStateUsageTransformer fragmentTransformer(analysis, getContext(), [&](mlir::Operation* op, mlir::Type type) -> mlir::Type {
          return fragmentTypeConverter.convertType(type);

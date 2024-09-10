@@ -78,14 +78,14 @@ class InlineNestedMapPass : public mlir::PassWrapper<InlineNestedMapPass, mlir::
                }
                opsToMove.push_back(cloned);
                for (auto& use : op->getUses()) {
-                  if (use.get().getType().isa_and_nonnull<mlir::tuples::TupleStreamType>()) {
+                  if (mlir::isa_and_nonnull<mlir::tuples::TupleStreamType>(use.get().getType())) {
                      opsToProcess.push({use, mapping.lookup(use.get()), encounteredUnion, columnMapping});
                   }
                }
             } else {
                opsToMove.push_back(op);
                for (auto& use : op->getUses()) {
-                  if (use.get().getType().isa_and_nonnull<mlir::tuples::TupleStreamType>()) {
+                  if (mlir::isa_and_nonnull<mlir::tuples::TupleStreamType>(use.get().getType())) {
                      opsToProcess.push({use, use.get(), encounteredUnion, columnMapping});
                   }
                }

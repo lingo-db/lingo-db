@@ -44,13 +44,13 @@ mlir::tuples::ColumnDefAttr SubOpStateUsageTransformer::createReplacementColumn(
 mlir::ArrayAttr SubOpStateUsageTransformer::updateMembers(mlir::ArrayAttr currentMembers) {
    bool anyNeedsReplacement = false;
    for (auto m : currentMembers) {
-      anyNeedsReplacement |= memberMapping.contains(m.cast<mlir::StringAttr>().str());
+      anyNeedsReplacement |= memberMapping.contains(mlir::cast<mlir::StringAttr>(m).str());
    }
    if (anyNeedsReplacement) {
       mlir::OpBuilder b(currentMembers.getContext());
       std::vector<mlir::Attribute> newMembers;
       for (auto m : currentMembers) {
-         auto memberName = m.cast<mlir::StringAttr>().str();
+         auto memberName = mlir::cast<mlir::StringAttr>(m).str();
          if (memberMapping.contains(memberName)) {
             newMembers.push_back(b.getStringAttr(memberMapping.at(memberName)));
          } else {

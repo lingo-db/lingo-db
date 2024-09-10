@@ -34,7 +34,7 @@ ParseResult parseCustRefArr(OpAsmParser& parser, ArrayAttr& attr) {
       return failure();
    }
    for (auto a : parsedAttr) {
-      SymbolRefAttr parsedSymbolRefAttr = a.dyn_cast<SymbolRefAttr>();
+      SymbolRefAttr parsedSymbolRefAttr = mlir::dyn_cast<SymbolRefAttr>(a);
       mlir::tuples::ColumnRefAttr attr = getColumnManager(parser).createRef(parsedSymbolRefAttr);
       attributes.push_back(attr);
    }
@@ -52,7 +52,7 @@ void printCustRefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) 
       } else {
          p << ",";
       }
-      mlir::tuples::ColumnRefAttr parsedSymbolRefAttr = a.dyn_cast<mlir::tuples::ColumnRefAttr>();
+      mlir::tuples::ColumnRefAttr parsedSymbolRefAttr = mlir::dyn_cast<mlir::tuples::ColumnRefAttr>(a);
       p << parsedSymbolRefAttr.getName();
    }
    p << "]";
@@ -72,7 +72,7 @@ ParseResult parseCustDef(OpAsmParser& parser, mlir::tuples::ColumnDefAttr& attr)
       }
    }
    attr = getColumnManager(parser).createDef(attrSymbolAttr, fromExisting);
-   auto propType = dictAttr.get("type").dyn_cast<TypeAttr>().getValue();
+   auto propType = mlir::dyn_cast<TypeAttr>(dictAttr.get("type")).getValue();
    attr.getColumn().type = propType;
    return success();
 }
@@ -85,7 +85,7 @@ void printCustDef(OpAsmPrinter& p, mlir::Operation* op, mlir::tuples::ColumnDefA
    p << "(" << mlir::DictionaryAttr::get(context, relAttrDefProps) << ")";
    Attribute fromExisting = attr.getFromExisting();
    if (fromExisting) {
-      ArrayAttr fromExistingArr = fromExisting.dyn_cast_or_null<ArrayAttr>();
+      ArrayAttr fromExistingArr = mlir::dyn_cast_or_null<ArrayAttr>(fromExisting);
       p << "=";
       printCustRefArr(p, op, fromExistingArr);
    }
@@ -139,7 +139,7 @@ void printStateColumnMapping(OpAsmPrinter& p, mlir::Operation* op, DictionaryAtt
    for (auto mapping : attr) {
       auto columnName = mapping.getName();
       auto attr = mapping.getValue();
-      auto relationDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
+      auto relationDefAttr = mlir::dyn_cast_or_null<mlir::tuples::ColumnDefAttr>(attr);
       if (first) {
          first = false;
       } else {
@@ -156,7 +156,7 @@ void printColumnStateMapping(OpAsmPrinter& p, mlir::Operation* op, DictionaryAtt
    for (auto mapping : attr) {
       auto columnName = mapping.getName();
       auto attr = mapping.getValue();
-      auto relationRefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnRefAttr>();
+      auto relationRefAttr = mlir::dyn_cast_or_null<mlir::tuples::ColumnRefAttr>(attr);
       if (first) {
          first = false;
       } else {
@@ -232,7 +232,7 @@ void printCustDefArr(OpAsmPrinter& p, mlir::Operation* op, ArrayAttr arrayAttr) 
       } else {
          p << ",";
       }
-      mlir::tuples::ColumnDefAttr parsedSymbolRefAttr = a.dyn_cast<mlir::tuples::ColumnDefAttr>();
+      mlir::tuples::ColumnDefAttr parsedSymbolRefAttr = mlir::dyn_cast<mlir::tuples::ColumnDefAttr>(a);
       printCustDef(p, op, parsedSymbolRefAttr);
    }
    p << "]";
@@ -261,7 +261,7 @@ ParseResult mlir::subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir
             break;
          }
       }
-      leftArgs[i].type = heapType.getMembers().getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      leftArgs[i].type = mlir::cast<mlir::TypeAttr>(heapType.getMembers().getTypes()[j]).getValue();
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(leftArgs[i])) return failure();
    }
@@ -275,7 +275,7 @@ ParseResult mlir::subop::CreateHeapOp::parse(::mlir::OpAsmParser& parser, ::mlir
             break;
          }
       }
-      rightArgs[i].type = heapType.getMembers().getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      rightArgs[i].type = mlir::cast<mlir::TypeAttr>(heapType.getMembers().getTypes()[j]).getValue();
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(rightArgs[i])) return failure();
    }
@@ -346,7 +346,7 @@ ParseResult mlir::subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, 
             break;
          }
       }
-      leftArgs[i].type = vecType.getMembers().getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      leftArgs[i].type = mlir::cast<mlir::TypeAttr>(vecType.getMembers().getTypes()[j]).getValue();
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(leftArgs[i])) return failure();
    }
@@ -360,7 +360,7 @@ ParseResult mlir::subop::CreateSortedViewOp::parse(::mlir::OpAsmParser& parser, 
             break;
          }
       }
-      rightArgs[i].type = vecType.getMembers().getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      rightArgs[i].type = mlir::cast<mlir::TypeAttr>(vecType.getMembers().getTypes()[j]).getValue();
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(rightArgs[i])) return failure();
    }
@@ -444,7 +444,7 @@ ParseResult mlir::subop::LookupOrInsertOp::parse(::mlir::OpAsmParser& parser, ::
          return failure();
       }
       for (size_t i = 0; i < keys.size(); i++) {
-         leftArgs[i].type = keys[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+         leftArgs[i].type = mlir::cast<mlir::tuples::ColumnRefAttr>(keys[i]).getColumn().type;
          if (i > 0 && parser.parseComma().failed()) return failure();
          if (parser.parseArgument(leftArgs[i])) return failure();
       }
@@ -452,7 +452,7 @@ ParseResult mlir::subop::LookupOrInsertOp::parse(::mlir::OpAsmParser& parser, ::
          return failure();
       }
       for (size_t i = 0; i < keys.size(); i++) {
-         rightArgs[i].type = keys[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+         rightArgs[i].type = mlir::cast<mlir::tuples::ColumnRefAttr>(keys[i]).getColumn().type;
          if (i > 0 && parser.parseComma().failed()) return failure();
          if (parser.parseArgument(rightArgs[i])) return failure();
       }
@@ -548,7 +548,7 @@ ParseResult mlir::subop::InsertOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
          return failure();
       }
       for (size_t i = 0; i < keyTypes.size(); i++) {
-         leftArgs[i].type = keyTypes[i].cast<mlir::TypeAttr>().getValue();
+         leftArgs[i].type = mlir::cast<mlir::TypeAttr>(keyTypes[i]).getValue();
          if (i > 0 && parser.parseComma().failed()) return failure();
          if (parser.parseArgument(leftArgs[i])) return failure();
       }
@@ -556,7 +556,7 @@ ParseResult mlir::subop::InsertOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
          return failure();
       }
       for (size_t i = 0; i < keyTypes.size(); i++) {
-         rightArgs[i].type = keyTypes[i].cast<mlir::TypeAttr>().getValue();
+         rightArgs[i].type = mlir::cast<mlir::TypeAttr>(keyTypes[i]).getValue();
          if (i > 0 && parser.parseComma().failed()) return failure();
          if (parser.parseArgument(rightArgs[i])) return failure();
       }
@@ -645,7 +645,7 @@ ParseResult mlir::subop::LookupOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
          return failure();
       }
       for (size_t i = 0; i < keys.size(); i++) {
-         leftArgs[i].type = stateType.getKeyMembers().getTypes()[i].cast<mlir::TypeAttr>().getValue();
+         leftArgs[i].type = mlir::cast<mlir::TypeAttr>(stateType.getKeyMembers().getTypes()[i]).getValue();
          if (i > 0 && parser.parseComma().failed()) return failure();
          if (parser.parseArgument(leftArgs[i])) return failure();
       }
@@ -653,7 +653,7 @@ ParseResult mlir::subop::LookupOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
          return failure();
       }
       for (size_t i = 0; i < keys.size(); i++) {
-         rightArgs[i].type = keys[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+         rightArgs[i].type = mlir::cast<mlir::tuples::ColumnRefAttr>(keys[i]).getColumn().type;
          if (i > 0 && parser.parseComma().failed()) return failure();
          if (parser.parseArgument(rightArgs[i])) return failure();
       }
@@ -788,7 +788,7 @@ void mlir::subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
             break;
          }
       }
-      initialFnArguments[i].type = sourceMembers.getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      initialFnArguments[i].type = mlir::cast<mlir::TypeAttr>(sourceMembers.getTypes()[j]).getValue();
    }
    Region* initialFn = result.addRegion();
    if (parser.parseRegion(*initialFn, initialFnArguments)) return failure();
@@ -804,7 +804,7 @@ void mlir::subop::LoopOp::print(::mlir::OpAsmPrinter& p) {
       return failure();
    }
    for (size_t i = 0; i < resultType.getValueMembers().getTypes().size(); i++) {
-      auto t = resultType.getValueMembers().getTypes()[i].cast<mlir::TypeAttr>().getValue();
+      auto t = mlir::cast<mlir::TypeAttr>(resultType.getValueMembers().getTypes()[i]).getValue();
       combineFnLeftArguments[i].type = t;
       combineFnRightArguments[i].type = t;
    }
@@ -880,10 +880,10 @@ ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
    if (parser.parseLParen() || parser.parseLSquare()) {
       return failure();
    }
-   auto referenceType = reference.getColumn().type.cast<mlir::subop::StateEntryReference>();
+   auto referenceType = mlir::cast<mlir::subop::StateEntryReference>(reference.getColumn().type);
    auto stateMembers = referenceType.getMembers();
    for (size_t i = 0; i < columns.size(); i++) {
-      leftArgs[i].type = columns[i].cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+      leftArgs[i].type = mlir::cast<mlir::tuples::ColumnRefAttr>(columns[i]).getColumn().type;
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(leftArgs[i])) return failure();
    }
@@ -897,7 +897,7 @@ ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
             break;
          }
       }
-      rightArgs[i].type = stateMembers.getTypes()[j].cast<mlir::TypeAttr>().getValue();
+      rightArgs[i].type = mlir::cast<mlir::TypeAttr>(stateMembers.getTypes()[j]).getValue();
       if (i > 0 && parser.parseComma().failed()) return failure();
       if (parser.parseArgument(rightArgs[i])) return failure();
    }
@@ -930,8 +930,8 @@ ParseResult mlir::subop::ReduceOp::parse(::mlir::OpAsmParser& parser, ::mlir::Op
                break;
             }
          }
-         combineFnLeftArguments[i].type = stateMembers.getTypes()[j].cast<mlir::TypeAttr>().getValue();
-         combineFnRightArguments[i].type = stateMembers.getTypes()[j].cast<mlir::TypeAttr>().getValue();
+         combineFnLeftArguments[i].type = mlir::cast<mlir::TypeAttr>(stateMembers.getTypes()[j]).getValue();
+         combineFnRightArguments[i].type = mlir::cast<mlir::TypeAttr>(stateMembers.getTypes()[j]).getValue();
       }
       std::vector<OpAsmParser::Argument> combineArgs;
       combineArgs.insert(combineArgs.end(), combineFnLeftArguments.begin(), combineFnLeftArguments.end());
@@ -1023,7 +1023,7 @@ ParseResult mlir::subop::NestedMapOp::parse(::mlir::OpAsmParser& parser, ::mlir:
    }
    for (auto x : parameters) {
       OpAsmParser::Argument arg;
-      arg.type = x.cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+      arg.type = mlir::cast<mlir::tuples::ColumnRefAttr>(x).getColumn().type;
       if (parser.parseComma() || parser.parseArgument(arg)) return failure();
       parameterArgs.push_back(arg);
    }
@@ -1107,6 +1107,7 @@ std::vector<std::string> subop::LockOp::getWrittenMembers() {
    });
    return res;
 }
+namespace{
 void cloneRegionInto(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping, mlir::Region& region, mlir::Region& newRegion) {
    newRegion.getBlocks().clear();
    for (auto& block : region) {
@@ -1127,11 +1128,13 @@ void cloneRegionInto(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::s
       }
    }
 }
+
 void mapResults(mlir::IRMapping& mapping, mlir::Operation* from, mlir::Operation* to) {
    for (auto i = 0ul; i < from->getNumResults(); i++) {
       mapping.map(from->getResult(i), to->getResult(i));
    }
 }
+} // namespace
 mlir::Operation* subop::LockOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRMapping& mapping, mlir::subop::ColumnMapping& columnMapping) {
    auto newOp = builder.create<LockOp>(this->getLoc(), mapping.lookupOrDefault(getStream()), columnMapping.remap(getRef()));
    cloneRegionInto(builder, mapping, columnMapping, getNested(), newOp.getNested());
@@ -1171,7 +1174,7 @@ std::vector<std::string> subop::LoopOp::getReadMembers() {
    for (auto arg : getArgs()) {
       if (auto stateType = mlir::dyn_cast_or_null<mlir::subop::State>(arg.getType())) {
          for (auto x : stateType.getMembers().getNames()) {
-            res.push_back(x.cast<mlir::StringAttr>().str());
+            res.push_back(mlir::cast<mlir::StringAttr>(x).str());
          }
       }
    }
@@ -1190,7 +1193,7 @@ std::vector<std::string> subop::LoopOp::getWrittenMembers() {
    for (auto resT : getResultTypes()) {
       if (auto stateType = mlir::dyn_cast_or_null<mlir::subop::State>(resT)) {
          for (auto x : stateType.getMembers().getNames()) {
-            res.push_back(x.cast<mlir::StringAttr>().str());
+            res.push_back(mlir::cast<mlir::StringAttr>(x).str());
          }
       }
    }
@@ -1199,21 +1202,21 @@ std::vector<std::string> subop::LoopOp::getWrittenMembers() {
 std::vector<std::string> subop::CreateArrayOp::getReadMembers() {
    std::vector<std::string> res;
    for (auto x : getNumElements().getType().getMembers().getNames()) {
-      res.push_back(x.cast<mlir::StringAttr>().str());
+      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
    }
    return res;
 }
 std::vector<std::string> subop::CreateArrayOp::getWrittenMembers() {
    std::vector<std::string> res;
    for (auto x : getRes().getType().getMembers().getNames()) {
-      res.push_back(x.cast<mlir::StringAttr>().str());
+      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
    }
    return res;
 }
 std::vector<std::string> subop::CreateSortedViewOp::getWrittenMembers() {
    std::vector<std::string> res;
-   for (auto x : getToSort().getType().cast<mlir::subop::BufferType>().getMembers().getNames()) {
-      res.push_back(x.cast<mlir::StringAttr>().str());
+   for (auto x : mlir::cast<mlir::subop::BufferType>(getToSort().getType()).getMembers().getNames()) {
+      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
    }
    return res;
 }
@@ -1227,7 +1230,7 @@ std::vector<std::string> subop::MergeOp::getReadMembers() {
    auto names = getThreadLocal().getType().getWrapped().getMembers().getNames();
    std::vector<std::string> res;
    for (auto name : names) {
-      res.push_back(name.cast<mlir::StringAttr>().str());
+      res.push_back(mlir::cast<mlir::StringAttr>(name).str());
    }
    return res;
 }
@@ -1235,38 +1238,38 @@ std::vector<std::string> subop::MergeOp::getWrittenMembers() {
    auto names = getThreadLocal().getType().getWrapped().getMembers().getNames();
    std::vector<std::string> res;
    for (auto name : names) {
-      res.push_back(name.cast<mlir::StringAttr>().str());
+      res.push_back(mlir::cast<mlir::StringAttr>(name).str());
    }
    return res;
 }
 std::vector<std::string> subop::CreateSegmentTreeView::getWrittenMembers() {
    std::vector<std::string> res;
-   auto names = getType().cast<mlir::subop::SegmentTreeViewType>().getValueMembers().getNames();
+   auto names = mlir::cast<mlir::subop::SegmentTreeViewType>(getType()).getValueMembers().getNames();
    for (auto name : names) {
-      res.push_back(name.cast<mlir::StringAttr>().str());
+      res.push_back(mlir::cast<mlir::StringAttr>(name).str());
    }
    return res;
 }
 std::vector<std::string> subop::CreateSegmentTreeView::getReadMembers() {
    std::vector<std::string> res;
    for (auto name : getRelevantMembers()) {
-      res.push_back(name.cast<mlir::StringAttr>().str());
+      res.push_back(mlir::cast<mlir::StringAttr>(name).str());
    }
    return res;
 }
 std::vector<std::string> subop::CreateContinuousView::getWrittenMembers() {
    std::vector<std::string> res;
-   auto names = getSource().getType().cast<mlir::subop::State>().getMembers().getNames();
+   auto names = mlir::cast<mlir::subop::State>(getSource().getType()).getMembers().getNames();
    for (auto name : names) {
-      res.push_back(name.cast<mlir::StringAttr>().str());
+      res.push_back(mlir::cast<mlir::StringAttr>(name).str());
    }
    return res;
 }
 std::vector<std::string> subop::CreateContinuousView::getReadMembers() {
    std::vector<std::string> res;
-   auto names = getSource().getType().cast<mlir::subop::State>().getMembers().getNames();
+   auto names = mlir::cast<mlir::subop::State>(getSource().getType()).getMembers().getNames();
    for (auto name : names) {
-      res.push_back(name.cast<mlir::StringAttr>().str());
+      res.push_back(mlir::cast<mlir::StringAttr>(name).str());
    }
    return res;
 }
@@ -1277,21 +1280,21 @@ std::vector<std::string> subop::SimpleStateGetScalar::getReadMembers() {
 std::vector<std::string> subop::CreateSortedViewOp::getReadMembers() {
    std::vector<std::string> res;
    for (auto x : getSortBy()) {
-      res.push_back(x.cast<mlir::StringAttr>().str());
+      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
    }
    return res;
 }
 std::vector<std::string> subop::ReduceOp::getWrittenMembers() {
    std::vector<std::string> res;
    for (auto x : getMembers()) {
-      res.push_back(x.cast<mlir::StringAttr>().str());
+      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
    }
    return res;
 }
 std::vector<std::string> subop::ReduceOp::getReadMembers() {
    std::vector<std::string> res;
    for (auto x : getMembers()) {
-      res.push_back(x.cast<mlir::StringAttr>().str());
+      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
    }
    return res;
 }
@@ -1317,8 +1320,8 @@ mlir::Operation* subop::ScatterOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IR
 }
 std::vector<std::string> subop::LookupOrInsertOp::getWrittenMembers() {
    std::vector<std::string> res;
-   for (auto x : getState().getType().cast<mlir::subop::State>().getMembers().getNames()) {
-      res.push_back(x.cast<mlir::StringAttr>().str());
+   for (auto x : mlir::cast<mlir::subop::State>(getState().getType()).getMembers().getNames()) {
+      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
    }
    return res;
 }
@@ -1331,8 +1334,8 @@ mlir::Operation* subop::LookupOrInsertOp::cloneSubOp(mlir::OpBuilder& builder, m
 }
 std::vector<std::string> subop::InsertOp::getWrittenMembers() {
    std::vector<std::string> res;
-   for (auto x : getState().getType().cast<mlir::subop::State>().getMembers().getNames()) {
-      res.push_back(x.cast<mlir::StringAttr>().str());
+   for (auto x : mlir::cast<mlir::subop::State>(getState().getType()).getMembers().getNames()) {
+      res.push_back(mlir::cast<mlir::StringAttr>(x).str());
    }
    return res;
 }
@@ -1345,9 +1348,9 @@ mlir::Operation* subop::InsertOp::cloneSubOp(mlir::OpBuilder& builder, mlir::IRM
 }
 std::vector<std::string> subop::LookupOp::getReadMembers() {
    std::vector<std::string> res;
-if (auto lookableState = getState().getType().dyn_cast_or_null<mlir::subop::LookupAbleState>()) {
+if (auto lookableState = mlir::dyn_cast_or_null<mlir::subop::LookupAbleState>(getState().getType())) {
 for (auto x : lookableState.getKeyMembers().getNames()) {
-   res.push_back(x.cast<mlir::StringAttr>().str());
+   res.push_back(mlir::cast<mlir::StringAttr>(x).str());
 }
 }
    return res;
@@ -1415,7 +1418,7 @@ void subop::NestedMapOp::updateStateType(mlir::subop::SubOpStateUsageTransformer
 void subop::NestedMapOp::replaceColumns(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::tuples::Column* oldColumn, mlir::tuples::Column* newColumn) {
    std::vector<Attribute> newColumns;
    for (auto col : getParameters()) {
-      auto colRef = col.cast<mlir::tuples::ColumnRefAttr>();
+      auto colRef = mlir::cast<mlir::tuples::ColumnRefAttr>(col);
       if (&colRef.getColumn() == oldColumn) {
          auto argumentPos = newColumns.size() + 1;
          transformer.updateValue(getRegion().getArgument(argumentPos), newColumn->type);
@@ -1568,8 +1571,8 @@ void subop::ExecutionStepOp::replaceColumns(mlir::subop::SubOpStateUsageTransfor
 void subop::ExecutionStepOp::updateStateType(mlir::subop::SubOpStateUsageTransformer& transformer, mlir::Value state, mlir::Type newType) {
    for (auto [i, a, isThreadLocal] : llvm::zip(getInputs(), getSubOps().getArguments(), getIsThreadLocal())) {
       if (i == state) {
-         if (isThreadLocal.cast<mlir::BoolAttr>().getValue()) {
-            auto localType = newType.cast<mlir::subop::ThreadLocalType>().getWrapped();
+         if (mlir::cast<mlir::BoolAttr>(isThreadLocal).getValue()) {
+            auto localType = mlir::cast<mlir::subop::ThreadLocalType>(newType).getWrapped();
             transformer.updateValue(a, localType);
             a.setType(localType);
          } else {
@@ -1592,10 +1595,10 @@ std::vector<std::string> subop::SetTrackedCountOp::getReadMembers() {
    return {getReadState().str()};
 }
 std::vector<std::string> subop::GenericCreateOp::getCreatedMembers() {
-   if (auto stateType = getRes().getType().cast<mlir::subop::State>()) {
+   if (auto stateType = mlir::cast<mlir::subop::State>(getRes().getType())) {
       std::vector<std::string> res;
       for (auto m : stateType.getMembers().getNames()) {
-         res.push_back(m.cast<mlir::StringAttr>().str());
+         res.push_back(mlir::cast<mlir::StringAttr>(m).str());
       }
       return res;
    }
@@ -1603,20 +1606,20 @@ std::vector<std::string> subop::GenericCreateOp::getCreatedMembers() {
 }
 
 std::vector<std::string> subop::CreateFrom::getReadMembers() {
-   if (auto stateType = getState().getType().cast<mlir::subop::State>()) {
+   if (auto stateType = mlir::cast<mlir::subop::State>(getState().getType())) {
       std::vector<std::string> res;
       for (auto m : stateType.getMembers().getNames()) {
-         res.push_back(m.cast<mlir::StringAttr>().str());
+         res.push_back(mlir::cast<mlir::StringAttr>(m).str());
       }
       return res;
    }
    return {};
 }
 std::vector<std::string> subop::CreateFrom::getWrittenMembers() {
-   if (auto stateType = getState().getType().cast<mlir::subop::State>()) {
+   if (auto stateType = mlir::cast<mlir::subop::State>(getState().getType())) {
       std::vector<std::string> res;
       for (auto m : stateType.getMembers().getNames()) {
-         res.push_back(m.cast<mlir::StringAttr>().str());
+         res.push_back(mlir::cast<mlir::StringAttr>(m).str());
       }
       return res;
    }

@@ -188,7 +188,7 @@ static size_t getAlignmentOf(mlir::Operation* op, mlir::Type t, const DataLayout
    DataLayout defaultLayout;
    const DataLayout* layout = &defaultLayout;
    layout = &dataLayoutAnalysis.getAbove(op);
-   if (auto tupleType = t.dyn_cast<mlir::TupleType>()) {
+   if (auto tupleType = mlir::dyn_cast<mlir::TupleType>(t)) {
       unsigned structAlignment = 1;
       for (Type element : tupleType.getTypes()) {
          unsigned elementAlignment = getAlignmentOf(op, element, dataLayoutAnalysis);
@@ -204,7 +204,7 @@ static size_t getSizeOf(mlir::Operation* op, mlir::Type t, const DataLayoutAnaly
    DataLayout defaultLayout;
    const DataLayout* layout = &defaultLayout;
    layout = &dataLayoutAnalysis.getAbove(op);
-   if (auto tupleType = t.dyn_cast<mlir::TupleType>()) {
+   if (auto tupleType = mlir::dyn_cast<mlir::TupleType>(t)) {
       unsigned structSize = 0;
       unsigned structAlignment = 1;
       for (Type element : tupleType.getTypes()) {
@@ -274,12 +274,12 @@ class AllocaOpLowering : public ConversionPattern {
       int64_t staticSize = 0;
       if (allocOp.getSize()) {
          if (auto constOp = mlir::dyn_cast_or_null<mlir::arith::ConstantOp>(allocOp.getSize().getDefiningOp())) {
-            staticSize = constOp.getValue().cast<mlir::IntegerAttr>().getInt();
+            staticSize = mlir::cast<mlir::IntegerAttr>(constOp.getValue()).getInt();
          }
       } else {
          staticSize = 1;
       }
-      Type t = typeConverter->convertType(allocOp.getRef().getType().cast<mlir::util::RefType>().getElementType());
+      Type t = mlir::cast<mlir::util::RefType>(typeConverter->convertType(allocOp.getRef().getType()).getElementType());
       staticSize *= getSizeOf(allocOp.getOperation(), t, dataLayoutAnalysis);
       assert(staticSize > 0);
       rewriter.replaceOpWithNewOp<mlir::cranelift::AllocaOp>(allocOp, rewriter.getI32IntegerAttr(staticSize));
@@ -310,7 +310,7 @@ class AllocOpLowering : public ConversionPattern {
       mlir::util::AllocOpAdaptor adaptor(operands);
       auto loc = allocOp->getLoc();
 
-      auto genericMemrefType = allocOp.getRef().getType().cast<mlir::util::RefType>();
+      auto genericMemrefType = mlir::cast<mlir::util::RefType>(allocOp.getRef().getType());
       Value entries;
       if (allocOp.getSize()) {
          entries = adaptor.getSize();
@@ -332,10 +332,10 @@ class ConstLowering : public OpConversionPattern<mlir::arith::ConstantOp> {
    LogicalResult matchAndRewrite(mlir::arith::ConstantOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
       auto convertedType = typeConverter->convertType(op.getType());
       if (op.getType().isInteger(128)) {
-         auto intVal = op.getValue().cast<mlir::IntegerAttr>().getValue();
+         auto intVal = mlir::cast<mlir::IntegerAttr>(op.getValue()).getValue();
          if (intVal.getBitWidth() > 64) {
             int64_t low = *intVal.getLoBits(64).getRawData();
-            int64_t high = *op.getValue().cast<mlir::IntegerAttr>().getValue().getHiBits(intVal.getBitWidth() - 64).getRawData();
+            int64_t high = *mlir::cast<mlir::IntegerAttr>(op.getValue()).getValue().getHiBits(intVal.getBitWidth() - 64).getRawData();
             mlir::Value lowV = rewriter.create<mlir::cranelift::IConstOp>(op.getLoc(), rewriter.getI64Type(), low);
             mlir::Value highV = rewriter.create<mlir::cranelift::IConstOp>(op.getLoc(), rewriter.getI64Type(), high);
             rewriter.replaceOpWithNewOp<mlir::cranelift::IConcatOp>(op, convertedType, lowV, highV);
@@ -344,13 +344,13 @@ class ConstLowering : public OpConversionPattern<mlir::arith::ConstantOp> {
          }
          return success();
       } else if (op.getType().isIntOrIndex()) {
-         rewriter.replaceOpWithNewOp<mlir::cranelift::IConstOp>(op, convertedType, op.getValue().cast<mlir::IntegerAttr>().getInt());
+         rewriter.replaceOpWithNewOp<mlir::cranelift::IConstOp>(op, convertedType, mlir::cast<mlir::IntegerAttr>(op.getValue()).getInt());
          return success();
       } else if (op.getType().isF32()) {
-         rewriter.replaceOpWithNewOp<mlir::cranelift::F32ConstOp>(op, convertedType, op.getValue().cast<mlir::FloatAttr>());
+         rewriter.replaceOpWithNewOp<mlir::cranelift::F32ConstOp>(op, convertedType, mlir::cast<mlir::FloatAttr>(op.getValue()));
          return success();
       } else if (op.getType().isF64()) {
-         rewriter.replaceOpWithNewOp<mlir::cranelift::F64ConstOp>(op, convertedType, op.getValue().cast<mlir::FloatAttr>());
+         rewriter.replaceOpWithNewOp<mlir::cranelift::F64ConstOp>(op, convertedType, mlir::cast<mlir::FloatAttr>(op.getValue()));
          return success();
       }
       return failure();
@@ -390,7 +390,7 @@ class ArrayElementPtrOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto arrayElementPtrOp = mlir::dyn_cast_or_null<mlir::util::ArrayElementPtrOp>(op);
       mlir::util::ArrayElementPtrOpAdaptor adaptor(operands);
-      mlir::Value bytesPerEntry = rewriter.create<mlir::cranelift::IConstOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(getSizeOf(op, typeConverter->convertType(arrayElementPtrOp.getRef().getType().cast<mlir::util::RefType>().getElementType()), dataLayoutAnalysis)));
+      mlir::Value bytesPerEntry = rewriter.create<mlir::cranelift::IConstOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(getSizeOf(op, mlir::cast<mlir::util::RefType>(typeConverter->convertType(arrayElementPtrOp.getRef().getType()).getElementType()), dataLayoutAnalysis)));
       mlir::Value ptr = adaptor.getRef();
       mlir::Value off = adaptor.getIdx();
       mlir::Value byteOff = rewriter.create<mlir::cranelift::IMulOp>(op->getLoc(), off, bytesPerEntry);
@@ -411,9 +411,9 @@ class TupleElementPtrOpLowering : public ConversionPattern {
                    ConversionPatternRewriter& rewriter) const override {
       auto tupleElementPtrOp = mlir::dyn_cast_or_null<mlir::util::TupleElementPtrOp>(op);
       mlir::util::TupleElementPtrOpAdaptor adaptor(operands);
-      Type t = typeConverter->convertType(tupleElementPtrOp.getRef().getType().cast<mlir::util::RefType>().getElementType());
+      Type t = mlir::cast<mlir::util::RefType>(typeConverter->convertType(tupleElementPtrOp.getRef().getType()).getElementType());
 
-      mlir::Value offset = rewriter.create<mlir::cranelift::IConstOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(getTupleOffset(op, t.cast<mlir::TupleType>(), tupleElementPtrOp.getIdx(), dataLayoutAnalysis)));
+      mlir::Value offset = rewriter.create<mlir::cranelift::IConstOp>(op->getLoc(), rewriter.getI64Type(), rewriter.getI64IntegerAttr(getTupleOffset(op, mlir::cast<mlir::TupleType>(t), tupleElementPtrOp.getIdx(), dataLayoutAnalysis)));
       rewriter.replaceOpWithNewOp<mlir::cranelift::IAddOp>(op, adaptor.getRef(), offset);
       return success();
    }
@@ -510,8 +510,8 @@ class IndexCastOpLowering : public OpConversionPattern<mlir::arith::IndexCastOp>
    public:
    using OpConversionPattern<mlir::arith::IndexCastOp>::OpConversionPattern;
    LogicalResult matchAndRewrite(mlir::arith::IndexCastOp op, OpAdaptor adaptor, ConversionPatternRewriter& rewriter) const override {
-      auto targetType = typeConverter->convertType(op.getType()).cast<mlir::IntegerType>();
-      auto sourceType = adaptor.getIn().getType().cast<mlir::IntegerType>();
+      auto targetType = mlir::cast<mlir::IntegerType>(typeConverter->convertType(op.getType()));
+      auto sourceType = mlir::cast<mlir::IntegerType>(adaptor.getIn().getType());
       if (targetType == sourceType) {
          rewriter.replaceOp(op, adaptor.getIn());
       } else if (targetType.getWidth() < sourceType.getWidth()) {
@@ -632,7 +632,7 @@ class BufferGetLenLowering : public ConversionPattern {
    matchAndRewrite(Operation* op, ArrayRef<Value> operands, ConversionPatternRewriter& rewriter) const override {
       auto bufferOp = mlir::cast<mlir::util::BufferGetLen>(op);
       mlir::util::BufferGetLenAdaptor adaptor(operands);
-      Type t = typeConverter->convertType(bufferOp.getBuffer().getType().cast<mlir::util::BufferType>().getT());
+      Type t = typeConverter->convertType(mlir::cast<mlir::util::BufferType>(bufferOp.getBuffer().getType()).getT());
       DataLayout defaultLayout;
 
       size_t typeSize = getSizeOf(op, t, dataLayoutAnalysis);

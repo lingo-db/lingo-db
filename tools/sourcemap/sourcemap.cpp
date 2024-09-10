@@ -30,13 +30,14 @@
 #include <queue>
 
 #include "json.h"
-
+namespace {
 mlir::Location dropNames(mlir::Location l) {
-   if (auto namedLoc = l.dyn_cast<mlir::NameLoc>()) {
+   if (auto namedLoc = mlir::dyn_cast<mlir::NameLoc>(l)) {
       return dropNames(namedLoc.getChildLoc());
    }
    return l;
 }
+} // end namespace
 int main(int argc, char** argv) {
    mlir::DialectRegistry registry;
    registry.insert<mlir::relalg::RelAlgDialect>();
@@ -101,7 +102,7 @@ int main(int argc, char** argv) {
             if (dependencies.size()) {
                operation["dependencies"] = dependencies;
             }
-            if (auto fileLineLoc = dropNames(op->getLoc()).dyn_cast<mlir::FileLineColLoc>()) {
+            if (auto fileLineLoc = mlir::dyn_cast<mlir::FileLineColLoc>(dropNames(op->getLoc()))) {
                auto mappedFile = fileLineLoc.getFilename().str();
                auto mappedLine = fileLineLoc.getLine();
                auto p = mappedFile + ":" + std::to_string(mappedLine);

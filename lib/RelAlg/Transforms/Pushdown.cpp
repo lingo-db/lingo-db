@@ -65,8 +65,8 @@ class OuterJoinToInnerJoin : public mlir::RewritePattern {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(mapBlock);
          for (auto m : outerJoinOp.getMapping()) {
-            auto defAttr = m.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
-            auto refAttr = defAttr.getFromExisting().cast<mlir::ArrayAttr>()[0].cast<mlir::tuples::ColumnRefAttr>();
+            auto defAttr = mlir::dyn_cast_or_null<mlir::tuples::ColumnDefAttr>(m);
+            auto refAttr = mlir::cast<mlir::tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(defAttr.getFromExisting())[0]);
             auto colVal = rewriter.create<mlir::tuples::GetColumnOp>(op->getLoc(), defAttr.getColumn().type, refAttr, tuple);
             if (colVal.getType() != defAttr.getColumn().type) {
                returnValues.push_back(rewriter.create<mlir::db::AsNullableOp>(op->getLoc(), defAttr.getColumn().type, colVal, mlir::Value()));
@@ -119,8 +119,8 @@ class SingleJoinToInnerJoin : public mlir::RewritePattern {
          mlir::OpBuilder::InsertionGuard guard(rewriter);
          rewriter.setInsertionPointToStart(mapBlock);
          for (auto m : outerJoinOp.getMapping()) {
-            auto defAttr = m.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
-            auto refAttr = defAttr.getFromExisting().cast<mlir::ArrayAttr>()[0].cast<mlir::tuples::ColumnRefAttr>();
+            auto defAttr = mlir::dyn_cast_or_null<mlir::tuples::ColumnDefAttr>(m);
+            auto refAttr = mlir::cast<mlir::tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(defAttr.getFromExisting())[0]);
             auto colVal = rewriter.create<mlir::tuples::GetColumnOp>(op->getLoc(), defAttr.getColumn().type, refAttr, tuple);
             if (colVal.getType() != defAttr.getColumn().type) {
                returnValues.push_back(rewriter.create<mlir::db::AsNullableOp>(op->getLoc(), defAttr.getColumn().type, colVal, mlir::Value()));
@@ -202,8 +202,8 @@ class Pushdown : public mlir::PassWrapper<Pushdown, mlir::OperationPass<mlir::fu
                        bool canPushThrough = true;
                        while (auto* definingOp = returnedStream.getDefiningOp()) {
                           if (definingOp->hasOneUse() && definingOp->getNumOperands() > 0) {
-                             bool isFirstTupleStream = definingOp->getOperand(0).getType().isa<mlir::tuples::TupleStreamType>();
-                             bool noOtherTupleStream = llvm::none_of(definingOp->getOperands().drop_front(), [](mlir::Value v) { return v.getType().isa<mlir::tuples::TupleStreamType>(); });
+                             bool isFirstTupleStream = mlir::isa<mlir::tuples::TupleStreamType>(definingOp->getOperand(0).getType());
+                             bool noOtherTupleStream = llvm::none_of(definingOp->getOperands().drop_front(), [](mlir::Value v) { return mlir::isa<mlir::tuples::TupleStreamType>(v.getType()); });
                              if (isFirstTupleStream && noOtherTupleStream) {
                                 returnedStream = definingOp->getOperand(0);
                              } else {

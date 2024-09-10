@@ -49,7 +49,7 @@ class RecordBatchIterator : public ForIterator {
    mlir::dsa::RecordBatchType recordBatchType;
 
    public:
-   RecordBatchIterator(Value recordBatch, Type recordBatchType) : ForIterator(recordBatch.getContext()), recordBatch(recordBatch), recordBatchType(recordBatchType.cast<mlir::dsa::RecordBatchType>()) {
+   RecordBatchIterator(Value recordBatch, Type recordBatchType) : ForIterator(recordBatch.getContext()), recordBatch(recordBatch), recordBatchType(mlir::cast<mlir::dsa::RecordBatchType>(recordBatchType)) {
    }
    virtual Value upper(OpBuilder& builder) override {
       return builder.create<mlir::util::GetTupleOp>(loc, builder.getIndexType(), recordBatch, 0);
@@ -67,11 +67,11 @@ class BufferIterator : public ForIterator {
    BufferIterator(Value buffer) : ForIterator(buffer.getContext()), buffer(buffer) {
    }
    virtual void init(OpBuilder& builder) override {
-      values = builder.create<util::BufferGetRef>(loc, buffer.getType().cast<mlir::util::BufferType>().getElementType(), buffer);
+      values = builder.create<util::BufferGetRef>(loc, mlir::cast<mlir::util::BufferType>(buffer.getType()).getElementType(), buffer);
       len = builder.create<util::BufferGetLen>(loc, mlir::IndexType::get(context), buffer);
    }
    virtual Value getElement(OpBuilder& builder, Value index) override {
-      return builder.create<util::ArrayElementPtrOp>(loc, mlir::util::RefType::get(buffer.getContext(), values.getType().cast<mlir::util::RefType>().getElementType()), values, index);
+      return builder.create<util::ArrayElementPtrOp>(loc, mlir::util::RefType::get(buffer.getContext(), mlir::cast<mlir::util::RefType>(values.getType()).getElementType()), values, index);
    }
 };
 
@@ -113,9 +113,9 @@ class ForIteratorIterationImpl : public mlir::dsa::CollectionIterationImpl {
    }
 };
 std::unique_ptr<mlir::dsa::CollectionIterationImpl> mlir::dsa::CollectionIterationImpl::getImpl(Type collectionType, Value loweredCollection) {
-   if (auto vector = collectionType.dyn_cast_or_null<mlir::util::BufferType>()) {
+   if (auto vector = mlir::dyn_cast_or_null<mlir::util::BufferType>(collectionType)) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<BufferIterator>(loweredCollection));
-   } else if (auto recordBatch = collectionType.dyn_cast_or_null<mlir::dsa::RecordBatchType>()) {
+   } else if (auto recordBatch = mlir::dyn_cast_or_null<mlir::dsa::RecordBatchType>(collectionType)) {
       return std::make_unique<ForIteratorIterationImpl>(std::make_unique<RecordBatchIterator>(loweredCollection, recordBatch));
    }
    return std::unique_ptr<mlir::dsa::CollectionIterationImpl>();

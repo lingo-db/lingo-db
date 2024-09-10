@@ -45,6 +45,7 @@ void runtime::DumpRuntime::dumpDate(bool null, int64_t date) {
       std::cout << "date(" << arrow_vendored::date::format("%F", epoch + std::chrono::nanoseconds{date}) << ")" << std::endl;
    }
 }
+namespace {
 template <class Unit>
 void dumpTimestamp(bool null, uint64_t date) {
    static arrow_vendored::date::sys_days epoch = arrow_vendored::date::sys_days{arrow_vendored::date::jan / 1 / 1970};
@@ -54,6 +55,7 @@ void dumpTimestamp(bool null, uint64_t date) {
       std::cout << "timestamp(" << arrow_vendored::date::format("%F %T", epoch + Unit{date}) << ")" << std::endl;
    }
 }
+} // namespace
 void runtime::DumpRuntime::dumpTimestampSecond(bool null, uint64_t date) {
    dumpTimestamp<std::chrono::seconds>(null, date);
 }

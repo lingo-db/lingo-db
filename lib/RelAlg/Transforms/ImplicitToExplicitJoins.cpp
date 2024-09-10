@@ -91,7 +91,7 @@ class ImplicitToExplicitJoins : public mlir::PassWrapper<ImplicitToExplicitJoins
 
             auto newAttrType = getscalarop.getType();
             auto newDef = attributeManager.createDef(scopeName, attributeName, fromExisting);
-            if (!newAttrType.isa<mlir::db::NullableType>()) {
+            if (!mlir::isa<mlir::db::NullableType>(newAttrType)) {
                newAttrType = mlir::db::NullableType::get(builder.getContext(), newAttrType);
             }
             newDef.getColumn().type = newAttrType;

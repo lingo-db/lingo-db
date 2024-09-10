@@ -26,7 +26,7 @@ class ColumnFoldingPass : public mlir::PassWrapper<ColumnFoldingPass, mlir::Oper
                if (current->getNumResults() != 1)
                   break;
                auto next = current->getResult(0);
-               if (!next.getType().isa<mlir::tuples::TupleStreamType>()) {
+               if (!mlir::isa<mlir::tuples::TupleStreamType>(next.getType())) {
                   break;
                }
                if (!next.hasOneUse()) {
@@ -48,7 +48,7 @@ class ColumnFoldingPass : public mlir::PassWrapper<ColumnFoldingPass, mlir::Oper
             return;
          }
          mlir::Value v = columnFoldable->getResult(0);
-         if (!v.getType().isa<mlir::tuples::TupleStreamType>()) {
+         if (!mlir::isa<mlir::tuples::TupleStreamType>(v.getType())) {
             return;
          }
          if (columnFoldable.eliminateDeadColumns(usedColumns, v).succeeded()) {
@@ -63,6 +63,6 @@ class ColumnFoldingPass : public mlir::PassWrapper<ColumnFoldingPass, mlir::Oper
 
 namespace mlir {
 namespace relalg {
-std::unique_ptr<mlir::Pass> createColumnFoldingPass() { return std::make_unique<ColumnFoldingPass>(); }
+std::unique_ptr<mlir::Pass> createColumnFoldingPass() { return std::make_unique<ColumnFoldingPass>(); } // NOLINT(misc-use-internal-linkage)
 } // end namespace relalg
 } // end namespace mlir

@@ -198,7 +198,7 @@ class DecomposeLambdas : public mlir::PassWrapper<DecomposeLambdas, mlir::Operat
          for (size_t i = 0; i < computedValRange.size(); i++) {
             OpBuilder builder(currentMap);
             mlir::IRMapping mapping;
-            auto currentAttr = currentMap.getComputedCols()[i].cast<mlir::tuples::ColumnDefAttr>();
+            auto currentAttr = mlir::cast<mlir::tuples::ColumnDefAttr>(currentMap.getComputedCols()[i]);
             mlir::Value currentVal = computedValRange[i];
             auto newmap = builder.create<relalg::MapOp>(currentMap->getLoc(), mlir::tuples::TupleStreamType::get(builder.getContext()), tree, builder.getArrayAttr({currentAttr}));
             tree = newmap;

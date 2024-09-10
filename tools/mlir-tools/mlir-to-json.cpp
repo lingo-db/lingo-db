@@ -33,7 +33,7 @@
 #include <queue>
 
 namespace cl = llvm::cl;
-
+namespace {
 cl::opt<std::string> inputFilename(cl::Positional,
                                    cl::desc("<input mlir file>"),
                                    cl::init("-"),
@@ -166,18 +166,18 @@ class ToJson {
          {"type", "expression_leaf"},
          {"leaf_type", "constant"}};
       result["data_type"] = convertDataType(type);
-      if (auto integerAttr = attr.dyn_cast_or_null<mlir::IntegerAttr>()) {
+      if (auto integerAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(attr)) {
          if (type.isInteger(1)) {
             result["value"] = (bool) integerAttr.getInt();
          } else {
             result["value"] = integerAttr.getInt();
          }
 
-      } else if (auto floatAttr = attr.dyn_cast_or_null<mlir::FloatAttr>()) {
+      } else if (auto floatAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(attr)) {
          result["value"] = floatAttr.getValueAsDouble();
-      } else if (auto stringAttr = attr.dyn_cast_or_null<mlir::StringAttr>()) {
+      } else if (auto stringAttr = mlir::dyn_cast_or_null<mlir::StringAttr>(attr)) {
          result["value"] = stringAttr.str();
-      } else if (auto boolAttr = attr.dyn_cast_or_null<mlir::BoolAttr>()) {
+      } else if (auto boolAttr = mlir::dyn_cast_or_null<mlir::BoolAttr>(attr)) {
          result["value"] = boolAttr.getValue();
       } else {
          llvm::errs() << "Constant could not be converted ";
@@ -300,7 +300,7 @@ class ToJson {
    nlohmann::json convertSortSpec(mlir::ArrayAttr sortspecs) {
       nlohmann::json result = nlohmann::json::array();
       for (auto attr : sortspecs) {
-         auto sortspecAttr = attr.cast<mlir::relalg::SortSpecificationAttr>();
+         auto sortspecAttr = mlir::cast<mlir::relalg::SortSpecificationAttr>(attr);
          result.push_back(nlohmann::json{
             {"value", columnToJSON(sortspecAttr.getAttr())},
             {"direction", sortspecAttr.getSortSpec() == mlir::relalg::SortSpec::asc ? "asc" : "desc"}});
@@ -314,8 +314,8 @@ class ToJson {
       auto rightJoinColumns = mlir::dyn_cast_or_null<mlir::ArrayAttr>(joinOp->getAttr("rightHash"));
       assert(leftJoinColumns && rightJoinColumns && leftJoinColumns.size() - skipFirstLeft == rightJoinColumns.size());
       for (size_t i = skipFirstLeft; i != leftJoinColumns.size(); i++) {
-         auto leftColumn = leftJoinColumns[i].dyn_cast_or_null<mlir::tuples::ColumnRefAttr>();
-         auto rightColumn = rightJoinColumns[i - skipFirstLeft].dyn_cast_or_null<mlir::tuples::ColumnRefAttr>();
+         auto leftColumn = mlir::dyn_cast_or_null<mlir::tuples::ColumnRefAttr>(leftJoinColumns[i]);
+         auto rightColumn = mlir::dyn_cast_or_null<mlir::tuples::ColumnRefAttr>(rightJoinColumns[i - skipFirstLeft]);
          assert(leftColumn && rightColumn);
          result.push_back(innerExpression({"", "=", ""}, {columnToJSON(leftColumn), columnToJSON(rightColumn)}));
       }
@@ -326,7 +326,7 @@ class ToJson {
       result["joinType"] = joinType;
 
       nlohmann::json condition;
-      std::string impl = joinOp->hasAttr("impl") ? joinOp->getAttr("impl").cast<mlir::StringAttr>().str() : "";
+      std::string impl = joinOp->hasAttr("impl") ? mlir::cast<mlir::StringAttr>(joinOp->getAttr("impl")).str() : "";
       if (impl == "hash" || impl == "markhash") {
          result["joinImpl"] = "hash";
          result["comparisons"] = extractHashCondition(joinOp);
@@ -342,7 +342,7 @@ class ToJson {
       }
    }
    std::string getOperationReference(mlir::Operation* op) {
-      if (auto lineOp = op->getLoc()->dyn_cast_or_null<mlir::FileLineColLoc>()) {
+      if (auto lineOp = mlir::dyn_cast_or_null<mlir::FileLineColLoc>(op->getLoc())) {
          auto fileName = lineOp.getFilename().str();
          auto baseNameStarts = fileName.find_last_of("/");
          if (baseNameStarts != std::string::npos) {
@@ -358,9 +358,9 @@ class ToJson {
    }
    double getOutputCardinality(mlir::Operation* op) {
       if (op->hasAttr("rows")) {
-         if (auto floatAttr = op->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()) {
+         if (auto floatAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(op->getAttr("rows"))) {
             return floatAttr.getValueAsDouble();
-         } else if (auto intAttr = op->getAttr("rows").dyn_cast_or_null<mlir::IntegerAttr>()) {
+         } else if (auto intAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(op->getAttr("rows"))) {
             return intAttr.getInt();
          }
       }
@@ -386,7 +386,7 @@ class ToJson {
       result["type"] = "operator";
       result["consuming"] = nlohmann::json::array();
       for (auto operand : op->getOperands()) {
-         if (operand.getType().isa<mlir::tuples::TupleStreamType>()) {
+         if (mlir::isa<mlir::tuples::TupleStreamType>(operand.getType())) {
             mlir::relalg::TrackTuplesOP trackTuplesOp;
             for (auto* user : operand.getUsers()) {
                if (auto tracking = mlir::dyn_cast_or_null<mlir::relalg::TrackTuplesOP>(user)) {
@@ -416,7 +416,7 @@ class ToJson {
             for (auto columnAttr : baseTable.getColumnsAttr()) {
                result["attributes"].push_back(nlohmann::json{
                   {"attribute", columnAttr.getName().str()},
-                  {"column", columnToJSON(columnAttr.getValue().cast<mlir::tuples::ColumnDefAttr>())}});
+                  {"column", columnToJSON(mlir::cast<mlir::tuples::ColumnDefAttr>(columnAttr.getValue()))}});
             }
             return result;
          })
@@ -441,12 +441,12 @@ class ToJson {
             result["operator"] = "aggregation";
             result["keys"] = nlohmann::json::array();
             for (auto groupByCol : aggregationOp.getGroupByCols()) {
-               auto colRefAttr = groupByCol.cast<mlir::tuples::ColumnRefAttr>();
+               auto colRefAttr = mlir::cast<mlir::tuples::ColumnRefAttr>(groupByCol);
                result["keys"].push_back(columnToJSON(colRefAttr));
             }
             result["aggregates"] = nlohmann::json::array();
             for (auto [aggregate, aggrResult] : llvm::zip(aggregationOp.getComputedCols(), aggregationOp.getAggrFunc().getBlocks().begin()->getTerminator()->getOperands())) {
-               auto colDefAttr = aggregate.cast<mlir::tuples::ColumnDefAttr>();
+               auto colDefAttr = mlir::cast<mlir::tuples::ColumnDefAttr>(aggregate);
                nlohmann::json aggrExpr;
                if (auto countStar = mlir::dyn_cast_or_null<mlir::relalg::CountRowsOp>(aggrResult.getDefiningOp())) {
                   aggrExpr = innerExpression({"count(*)"}, mlir::ValueRange{});
@@ -463,8 +463,8 @@ class ToJson {
             result["operator"] = "materialize";
             for (auto [colNameAttr, colRefAttr] : llvm::zip(materializeOp.getColumns(), materializeOp.getCols())) {
                result["output"].push_back(nlohmann::json{
-                  {"name", colNameAttr.cast<mlir::StringAttr>().str()},
-                  {"column", columnToJSON(colRefAttr.cast<mlir::tuples::ColumnRefAttr>())}});
+                  {"name", mlir::cast<mlir::StringAttr>(colNameAttr).str()},
+                  {"column", columnToJSON(mlir::cast<mlir::tuples::ColumnRefAttr>(colRefAttr))}});
             }
             return result;
          })
@@ -496,7 +496,7 @@ class ToJson {
             result["operator"] = "map";
             result["computed"] = nlohmann::json::array();
             for (auto [column, computed] : llvm::zip(mapOp.getComputedCols(), mapOp.getPredicate().front().getTerminator()->getOperands())) {
-               auto columnDefAttr = column.cast<mlir::tuples::ColumnDefAttr>();
+               auto columnDefAttr = mlir::cast<mlir::tuples::ColumnDefAttr>(column);
                result["computed"].push_back({{"computed", columnToJSON(columnDefAttr)}, {"expression", convertExpression(computed.getDefiningOp())}});
             }
             return result;
@@ -518,8 +518,8 @@ class ToJson {
             result["operator"] = "rename";
             result["renamed"] = nlohmann::json::array();
             for (auto col : renamingOp.getColumns()) {
-               auto colDef = col.cast<mlir::tuples::ColumnDefAttr>();
-               result["renamed"].push_back(nlohmann::json{{"old", columnToJSON(colDef.getFromExisting().cast<mlir::ArrayAttr>()[0].cast<mlir::tuples::ColumnRefAttr>())}, {"new", columnToJSON(colDef)}});
+               auto colDef = mlir::cast<mlir::tuples::ColumnDefAttr>(col);
+               result["renamed"].push_back(nlohmann::json{{"old", columnToJSON(mlir::cast<mlir::tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(colDef.getFromExisting())[0]))}, {"new", columnToJSON(colDef)}});
             }
             return result;
          })
@@ -528,12 +528,12 @@ class ToJson {
             result["values"] = nlohmann::json::array();
             result["attributes"] = nlohmann::json::array();
             for (auto col : constRelationOp.getColumns()) {
-               result["attributes"].push_back(columnToJSON(col.cast<mlir::tuples::ColumnDefAttr>()));
+               result["attributes"].push_back(columnToJSON(mlir::cast<mlir::tuples::ColumnDefAttr>(col)));
             }
             for (auto row : constRelationOp.getValues()) {
                nlohmann::json rowValues = nlohmann::json::array();
-               for (auto c : row.cast<mlir::ArrayAttr>()) {
-                  rowValues.push_back(convertConstant(c, constRelationOp.getColumns()[rowValues.size()].cast<mlir::tuples::ColumnDefAttr>().getColumn().type));
+               for (auto c : mlir::cast<mlir::ArrayAttr>(row)) {
+                  rowValues.push_back(convertConstant(c, mlir::cast<mlir::tuples::ColumnDefAttr>(constRelationOp.getColumns()[rowValues.size()]).getColumn().type));
                }
                result["values"].push_back(rowValues);
             }
@@ -541,17 +541,17 @@ class ToJson {
          })
          .Case<mlir::relalg::UnionOp>([&](mlir::relalg::UnionOp unionOp) {
             result["operator"] = "union";
-            result["semantics"]= unionOp.getSetSemantic() == mlir::relalg::SetSemantic::distinct ? "distinct" : "all";
+            result["semantics"] = unionOp.getSetSemantic() == mlir::relalg::SetSemantic::distinct ? "distinct" : "all";
             return result;
          })
          .Case<mlir::relalg::ExceptOp>([&](mlir::relalg::ExceptOp exceptOp) {
             result["operator"] = "except";
-            result["semantics"]= exceptOp.getSetSemantic() == mlir::relalg::SetSemantic::distinct ? "distinct" : "all";
+            result["semantics"] = exceptOp.getSetSemantic() == mlir::relalg::SetSemantic::distinct ? "distinct" : "all";
             return result;
          })
          .Case<mlir::relalg::IntersectOp>([&](mlir::relalg::IntersectOp intersectOp) {
             result["operator"] = "intersect";
-            result["semantics"]= intersectOp.getSetSemantic() == mlir::relalg::SetSemantic::distinct ? "distinct" : "all";
+            result["semantics"] = intersectOp.getSetSemantic() == mlir::relalg::SetSemantic::distinct ? "distinct" : "all";
             return result;
          })
          .Case<mlir::relalg::WindowOp>([&](mlir::relalg::WindowOp windowOp) {
@@ -577,7 +577,7 @@ class ToJson {
             }
             result["aggregates"] = nlohmann::json::array();
             for (auto [aggregate, aggrResult] : llvm::zip(windowOp.getComputedCols(), windowOp.getAggrFunc().getBlocks().begin()->getTerminator()->getOperands())) {
-               auto colDefAttr = aggregate.cast<mlir::tuples::ColumnDefAttr>();
+               auto colDefAttr = mlir::cast<mlir::tuples::ColumnDefAttr>(aggregate);
                nlohmann::json aggrExpr;
                if (auto countStar = mlir::dyn_cast_or_null<mlir::relalg::CountRowsOp>(aggrResult.getDefiningOp())) {
                   aggrExpr = innerExpression({"count(*)"}, mlir::ValueRange{}); //todo: quick hack
@@ -597,7 +597,7 @@ class ToJson {
             result["semantics"] = projectionOp.getSetSemantic() == mlir::relalg::SetSemantic::distinct ? "distinct" : "all";
             result["columns"] = nlohmann::json::array();
             for (auto column : projectionOp.getCols()) {
-               auto columnRef = column.cast<mlir::tuples::ColumnRefAttr>();
+               auto columnRef = mlir::cast<mlir::tuples::ColumnRefAttr>(column);
                result["columns"].push_back(columnToJSON(columnRef));
             }
             return result;
@@ -650,6 +650,7 @@ void execute(std::string inputFileName, std::string databasePath, std::unordered
    executer->fromFile(inputFileName);
    executer->execute();
 }
+} // namespace
 
 int main(int argc, char** argv) {
    cl::ParseCommandLineOptions(argc, argv, "toy compiler\n");

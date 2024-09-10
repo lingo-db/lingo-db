@@ -4,8 +4,9 @@
 #include "mlir/Transforms/Passes.h"
 
 #include <iostream>
-
+namespace{
 std::shared_ptr<runtime::Catalog> staticCatalog = {};
+} // end anonymous namespace
 void mlir::relalg::setStaticCatalog(std::shared_ptr<runtime::Catalog> catalog) {
    std::cerr << "Warning: setting static catalog, should only be used in combination with mlir-db-opt" << std::endl;
    staticCatalog = catalog;

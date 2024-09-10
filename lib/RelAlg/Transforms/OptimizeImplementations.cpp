@@ -82,7 +82,7 @@ class HashJoinUtils {
                   nullsEqual.push_back(builder2.getI8IntegerAttr(!cmpOp.isEqualityPred(false)));
                   builder2.setInsertionPoint(cmpOp);
                   mlir::Value constTrue = builder2.create<mlir::arith::ConstantIntOp>(builder2.getUnknownLoc(), 1, 1);
-                  if (cmpOp->getResult(0).getType().isa<mlir::db::NullableType>()) {
+                  if (mlir::isa<mlir::db::NullableType>(cmpOp->getResult(0).getType())) {
                      constTrue = builder2.create<mlir::db::AsNullableOp>(builder2.getUnknownLoc(), cmpOp->getResult(0).getType(), constTrue);
                   }
                   cmpOp->replaceAllUsesWith(mlir::ValueRange{constTrue});
@@ -257,9 +257,9 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
          rewriter.setInsertionPointToStart(mapBlock);
          std::vector<mlir::Value> res;
          for (mlir::Attribute attr : mapping) {
-            auto relationDefAttr = attr.dyn_cast_or_null<mlir::tuples::ColumnDefAttr>();
+            auto relationDefAttr = mlir::dyn_cast_or_null<mlir::tuples::ColumnDefAttr>(attr);
             auto* defAttr = &relationDefAttr.getColumn();
-            auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<mlir::ArrayAttr>()[exisingOffset].cast<mlir::tuples::ColumnRefAttr>();
+            auto fromExisting = mlir::cast<mlir::tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting())[exisingOffset]);
             if (excluded.contains(&fromExisting.getColumn())) continue;
             mlir::Value value = rewriter.create<mlir::tuples::GetColumnOp>(loc, rewriter.getI64Type(), fromExisting, tupleArg);
             if (fromExisting.getColumn().type != defAttr->type) {
@@ -290,9 +290,9 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                return res;
             })
             .Case([&](mlir::tuples::GetColumnOp& getColumnOp) {
-               if (getBaseType(getColumnOp.getType()).isa<mlir::db::StringType>()) {
+               if (mlir::isa<mlir::db::StringType>(getBaseType(getColumnOp.getType()))) {
                   return 4;
-               } else if (getBaseType(getColumnOp.getType()).isa<mlir::db::DecimalType>()) {
+               } else if (mlir::isa<mlir::db::DecimalType>(getBaseType(getColumnOp.getType()))) {
                   return 2;
                } else {
                   return 1;
@@ -301,7 +301,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             .Case([&](mlir::relalg::CmpOpInterface cmpOp) {
                auto t = cmpOp.getLeft().getType();
                auto childCost = estimatedEvaluationCost(cmpOp.getLeft()) + estimatedEvaluationCost(cmpOp.getRight());
-               if (getBaseType(t).isa<mlir::db::StringType>()) {
+               if (mlir::isa<mlir::db::StringType>(getBaseType(t))) {
                   return 10 + childCost;
                } else {
                   return 1 + childCost;
@@ -310,7 +310,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             .Case([&](mlir::db::BetweenOp cmpOp) {
                auto t = cmpOp.getLower().getType();
                auto childCost = estimatedEvaluationCost(cmpOp.getVal()) + estimatedEvaluationCost(cmpOp.getLower()) + estimatedEvaluationCost(cmpOp.getUpper());
-               if (getBaseType(t).isa<mlir::db::StringType>()) {
+               if (mlir::isa<mlir::db::StringType>(getBaseType(t))) {
                   return 20 + childCost;
                } else {
                   return 2 + childCost;
@@ -366,7 +366,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                if (baseTableOp) {
                   std::unordered_map<const mlir::tuples::Column*, std::string> mapping;
                   for (auto c : baseTableOp.getColumns()) {
-                     mapping[&c.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn()] = c.getName().str();
+                     mapping[&mlir::cast<mlir::tuples::ColumnDefAttr>(c.getValue()).getColumn()] = c.getName().str();
                   }
                   auto meta = baseTableOp.getMeta().getMeta();
                   auto sample = meta->getSample();
@@ -452,8 +452,8 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                         auto rightBaseTable = mlir::cast<mlir::relalg::BaseTableOp>(rightPath.top());
                         int numBaseRowsLeft = leftBaseTable.getMeta().getMeta()->getNumRows() + 1;
                         int numBaseRowsRight = rightBaseTable.getMeta().getMeta()->getNumRows() + 1;
-                        int numNonBaseRowsLeft = left->hasAttr("rows") ? left->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>().getValueAsDouble() + 1 : 1;
-                        int numNonBaseRowsRight = right->hasAttr("rows") ? right->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>().getValueAsDouble() + 1 : 1;
+                        int numNonBaseRowsLeft = left->hasAttr("rows") ? mlir::dyn_cast_or_null<mlir::FloatAttr>(left->getAttr("rows")).getValueAsDouble() + 1 : 1;
+                        int numNonBaseRowsRight = right->hasAttr("rows") ? mlir::dyn_cast_or_null<mlir::FloatAttr>(right->getAttr("rows")).getValueAsDouble() + 1 : 1;
                         // Exchange left and right side if deemed beneficial by heuristic
                         if (numNonBaseRowsRight / numBaseRowsLeft < numNonBaseRowsLeft / numBaseRowsRight) {
                            reversed = true;
@@ -479,10 +479,10 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
 
                   // Compute correct number of rows for index nested loop join
                   double numRowsLeft = 0, numRowsRight = std::numeric_limits<double>::max(); // default: disable inlj
-                  if (auto leftCardinalityAttr = left->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()) {
+                  if (auto leftCardinalityAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(left->getAttr("rows"))) {
                      numRowsLeft = leftCardinalityAttr.getValueAsDouble();
                   }
-                  if (auto rightCardinalityAttr = right->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()) {
+                  if (auto rightCardinalityAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(right->getAttr("rows"))) {
                      numRowsRight = rightCardinalityAttr.getValueAsDouble();
                   }
                   if (isInnerJoin && leftCanUsePrimaryKeyIndex && right->hasAttr("rows") && 20 * numRowsRight < numRowsLeft) {
@@ -516,7 +516,7 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                      // Add name of table to leftHash annotation
                      std::vector<mlir::Attribute> leftHash;
                      leftHash.push_back(leftBaseTable.getTableIdentifierAttr());
-                     for (auto attr : op->getAttr("leftHash").dyn_cast_or_null<mlir::ArrayAttr>()) {
+                     for (auto attr : mlir::dyn_cast_or_null<mlir::ArrayAttr>(op->getAttr("leftHash"))) {
                         leftHash.push_back(attr);
                      }
                      op->setAttr("leftHash", mlir::ArrayAttr::get(&getContext(), leftHash));
@@ -538,14 +538,14 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                if (left->hasAttr("rows") && right->hasAttr("rows")) {
                   double rowsLeft = 0;
                   double rowsRight = 0;
-                  if (auto lDAttr = left->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()) {
+                  if (auto lDAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(left->getAttr("rows"))) {
                      rowsLeft = lDAttr.getValueAsDouble();
-                  } else if (auto lIAttr = left->getAttr("rows").dyn_cast_or_null<mlir::IntegerAttr>()) {
+                  } else if (auto lIAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(left->getAttr("rows"))) {
                      rowsLeft = lIAttr.getInt();
                   }
-                  if (auto rDAttr = right->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()) {
+                  if (auto rDAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(right->getAttr("rows"))) {
                      rowsRight = rDAttr.getValueAsDouble();
-                  } else if (auto rIAttr = right->getAttr("rows").dyn_cast_or_null<mlir::IntegerAttr>()) {
+                  } else if (auto rIAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(right->getAttr("rows"))) {
                      rowsRight = rIAttr.getInt();
                   }
                   if (rowsLeft < rowsRight) {
@@ -558,14 +558,14 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
                   if (left->hasAttr("rows") && right->hasAttr("rows")) {
                      double rowsLeft = 0;
                      double rowsRight = 0;
-                     if (auto lDAttr = left->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()) {
+                     if (auto lDAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(left->getAttr("rows"))) {
                         rowsLeft = lDAttr.getValueAsDouble();
-                     } else if (auto lIAttr = left->getAttr("rows").dyn_cast_or_null<mlir::IntegerAttr>()) {
+                     } else if (auto lIAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(left->getAttr("rows"))) {
                         rowsLeft = lIAttr.getInt();
                      }
-                     if (auto rDAttr = right->getAttr("rows").dyn_cast_or_null<mlir::FloatAttr>()) {
+                     if (auto rDAttr = mlir::dyn_cast_or_null<mlir::FloatAttr>(right->getAttr("rows"))) {
                         rowsRight = rDAttr.getValueAsDouble();
-                     } else if (auto rIAttr = right->getAttr("rows").dyn_cast_or_null<mlir::IntegerAttr>()) {
+                     } else if (auto rIAttr = mlir::dyn_cast_or_null<mlir::IntegerAttr>(right->getAttr("rows"))) {
                         rowsRight = rIAttr.getInt();
                      }
                      if (rowsLeft < rowsRight) {
@@ -607,8 +607,8 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
       getOperation().walk([&](mlir::relalg::InnerJoinOp op) {
          auto usedColumns = op.getUsedColumns();
          if (!op->hasAttr("leftHash") || !op->hasAttr("rightHash")) return;
-         auto leftKeys = op->getAttr("leftHash").cast<mlir::ArrayAttr>();
-         auto rightKeys = op->getAttr("rightHash").cast<mlir::ArrayAttr>();
+         auto leftKeys = mlir::cast<mlir::ArrayAttr>(op->getAttr("leftHash"));
+         auto rightKeys = mlir::cast<mlir::ArrayAttr>(op->getAttr("rightHash"));
          auto leftKeySet = mlir::relalg::ColumnSet::fromArrayAttr(leftKeys);
          auto rightKeySet = mlir::relalg::ColumnSet::fromArrayAttr(rightKeys);
          mlir::relalg::ColumnSet reallyRequiredColumns;
@@ -723,11 +723,11 @@ class OptimizeImplementations : public mlir::PassWrapper<OptimizeImplementations
             Operator joinOperator = mlir::cast<Operator>(potentialJoin);
             usedColumns.insert(joinOperator.getUsedColumns());
             if (!join->hasAttr("useHashJoin") || !join->hasAttr("leftHash") || !join->hasAttr("rightHash")) return;
-            auto leftKeys = join->getAttr("leftHash").cast<mlir::ArrayAttr>();
-            auto rightKeys = join->getAttr("rightHash").cast<mlir::ArrayAttr>();
+            auto leftKeys = mlir::cast<mlir::ArrayAttr>(join->getAttr("leftHash"));
+            auto rightKeys = mlir::cast<mlir::ArrayAttr>(join->getAttr("rightHash"));
             for (auto p : llvm::zip(leftKeys, rightKeys)) {
-               auto t1 = std::get<0>(p).cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
-               auto t2 = std::get<1>(p).cast<mlir::tuples::ColumnRefAttr>().getColumn().type;
+               auto t1 = mlir::cast<mlir::tuples::ColumnRefAttr>(std::get<0>(p)).getColumn().type;
+               auto t2 = mlir::cast<mlir::tuples::ColumnRefAttr>(std::get<1>(p)).getColumn().type;
                if (t1 != t2) return;
             }
             auto leftKeySet = mlir::relalg::ColumnSet::fromArrayAttr(leftKeys);

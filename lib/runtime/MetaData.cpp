@@ -41,7 +41,6 @@ std::shared_ptr<arrow::RecordBatch> deserializeRecordBatch(std::string str) {
    }
    return batch;
 }
-} // end namespace
 std::shared_ptr<runtime::ColumnMetaData> createColumnMetaData(const nlohmann::json& info) {
    auto res = std::make_shared<runtime::ColumnMetaData>();
    if (info.contains("distinct_values")) {
@@ -73,6 +72,39 @@ std::shared_ptr<runtime::ColumnMetaData> createColumnMetaData(const nlohmann::js
    }
    return res;
 }
+
+nlohmann::json::object_t serializeColumn(std::shared_ptr<runtime::ColumnMetaData> column) {
+   nlohmann::json::object_t res;
+   if (column->getDistinctValues()) {
+      res["distinct_values"] = column->getDistinctValues().value();
+   }
+   auto columnType = column->getColumnType();
+   res["type"] = nlohmann::json::object_t();
+   res["type"]["base"] = columnType.base;
+   res["type"]["nullable"] = columnType.nullable;
+   auto props = nlohmann::json::array_t();
+   for (auto x : columnType.modifiers) {
+      if (std::holds_alternative<size_t>(x)) {
+         props.push_back(std::get<size_t>(x));
+      } else {
+         props.push_back(std::get<std::string>(x));
+      }
+   }
+   res["type"]["props"] = props;
+   return res;
+}
+nlohmann::json::object_t serializeIndex(std::shared_ptr<runtime::IndexMetaData> indexMetaData) {
+   nlohmann::json::object_t res;
+   res["name"] = indexMetaData->name;
+   res["columns"] = nlohmann::json::array_t();
+   for (auto c : indexMetaData->columns) {
+      res["columns"].push_back(c);
+   }
+   res["type"] = indexMetaData->type;
+   return res;
+}
+} // end namespace
+
 std::shared_ptr<runtime::TableMetaData> runtime::TableMetaData::create(const std::string& jsonMetaData, const std::string& name = "", std::shared_ptr<arrow::RecordBatch> sample = std::shared_ptr<arrow::RecordBatch>()) {
    auto res = std::make_shared<runtime::TableMetaData>();
    res->present = !jsonMetaData.empty() || sample;
@@ -114,36 +146,6 @@ std::shared_ptr<runtime::TableMetaData> runtime::TableMetaData::create(const std
       res->orderedColumns.push_back(columnName);
       res->columns[columnName] = createColumnMetaData(c);
    }
-   return res;
-}
-nlohmann::json::object_t serializeColumn(std::shared_ptr<runtime::ColumnMetaData> column) {
-   nlohmann::json::object_t res;
-   if (column->getDistinctValues()) {
-      res["distinct_values"] = column->getDistinctValues().value();
-   }
-   auto columnType = column->getColumnType();
-   res["type"] = nlohmann::json::object_t();
-   res["type"]["base"] = columnType.base;
-   res["type"]["nullable"] = columnType.nullable;
-   auto props = nlohmann::json::array_t();
-   for (auto x : columnType.modifiers) {
-      if (std::holds_alternative<size_t>(x)) {
-         props.push_back(std::get<size_t>(x));
-      } else {
-         props.push_back(std::get<std::string>(x));
-      }
-   }
-   res["type"]["props"] = props;
-   return res;
-}
-nlohmann::json::object_t serializeIndex(std::shared_ptr<runtime::IndexMetaData> indexMetaData) {
-   nlohmann::json::object_t res;
-   res["name"] = indexMetaData->name;
-   res["columns"] = nlohmann::json::array_t();
-   for (auto c : indexMetaData->columns) {
-      res["columns"].push_back(c);
-   }
-   res["type"] = indexMetaData->type;
    return res;
 }
 std::string runtime::TableMetaData::serialize(bool serializeSample) const {

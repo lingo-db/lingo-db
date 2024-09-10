@@ -17,11 +17,11 @@ class WrapWithNullCheck : public mlir::RewritePattern {
    WrapWithNullCheck(mlir::MLIRContext* context) : RewritePattern(MatchAnyOpTypeTag(), mlir::PatternBenefit(1), context) {}
    mlir::LogicalResult match(mlir::Operation* op) const override {
       if (op->getNumResults() > 1) return mlir::failure();
-      if (op->getNumResults() == 1 && !op->getResultTypes()[0].isa<mlir::db::NullableType>()) return mlir::failure();
+      if (op->getNumResults() == 1 && !mlir::isa<mlir::db::NullableType>(op->getResultTypes()[0])) return mlir::failure();
       auto needsWrapInterface = mlir::dyn_cast_or_null<mlir::db::NeedsNullWrap>(op);
       if (!needsWrapInterface) return mlir::failure();
       if (!needsWrapInterface.needsNullWrap()) return mlir::failure();
-      if (llvm::any_of(op->getOperands(), [](mlir::Value v) { return v.getType().isa<mlir::db::NullableType>(); })) {
+      if (llvm::any_of(op->getOperands(), [](mlir::Value v) { return mlir::isa<mlir::db::NullableType>(v.getType()); })) {
          return mlir::success();
       }
       return mlir::failure();
@@ -31,7 +31,7 @@ class WrapWithNullCheck : public mlir::RewritePattern {
       rewriter.setInsertionPoint(op);
       mlir::Value isAnyNull;
       for (auto operand : op->getOperands()) {
-         if (operand.getType().isa<mlir::db::NullableType>()) {
+         if (mlir::isa<mlir::db::NullableType>(operand.getType())) {
             auto isCurrNull = rewriter.create<mlir::db::IsNullOp>(op->getLoc(), operand);
             if (isAnyNull) {
                isAnyNull = rewriter.create<mlir::arith::OrIOp>(op->getLoc(), isAnyNull, isCurrNull);
@@ -45,7 +45,7 @@ class WrapWithNullCheck : public mlir::RewritePattern {
       if (supInvVal && supInvVal.supportsInvalidValues()) {
          mlir::IRMapping mapping;
          for (auto operand : op->getOperands()) {
-            if (operand.getType().isa<mlir::db::NullableType>()) {
+            if (mlir::isa<mlir::db::NullableType>(operand.getType())) {
                mapping.map(operand, rewriter.create<mlir::db::NullableGetVal>(op->getLoc(), operand));
             }
          }
@@ -68,7 +68,7 @@ class WrapWithNullCheck : public mlir::RewritePattern {
                } }, [&](mlir::OpBuilder& b, mlir::Location loc) {
                mlir::IRMapping mapping;
                for (auto operand : op->getOperands()) {
-                  if (operand.getType().isa<mlir::db::NullableType>()) {
+                  if (mlir::isa<mlir::db::NullableType>(operand.getType())) {
                      mapping.map(operand,b.create<mlir::db::NullableGetVal>(op->getLoc(),operand));
                   }
                }
@@ -90,7 +90,7 @@ class SimplifySortComparePattern : public mlir::RewritePattern {
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto sortCompareOp = mlir::cast<mlir::db::SortCompare>(op);
       auto loc = op->getLoc();
-      if (!sortCompareOp.getLeft().getType().isa<mlir::db::NullableType>()) return mlir::failure();
+      if (!mlir::isa<mlir::db::NullableType>(sortCompareOp.getLeft().getType())) return mlir::failure();
       mlir::Value isLeftNull = rewriter.create<mlir::db::IsNullOp>(loc, sortCompareOp.getLeft());
       mlir::Value isRightNull = rewriter.create<mlir::db::IsNullOp>(loc, sortCompareOp.getRight());
       mlir::Value isAnyNull = rewriter.create<mlir::arith::OrIOp>(loc, isLeftNull, isRightNull);
@@ -117,8 +117,8 @@ class SimplifyCompareISAPattern : public mlir::RewritePattern {
    mlir::LogicalResult matchAndRewrite(mlir::Operation* op, mlir::PatternRewriter& rewriter) const override {
       auto cmpOp = mlir::cast<mlir::db::CmpOp>(op);
       if (cmpOp.getPredicate() != mlir::db::DBCmpPredicate::isa) return mlir::failure();
-      auto isLeftNullable = cmpOp.getLeft().getType().isa<mlir::db::NullableType>();
-      auto isRightNullable = cmpOp.getRight().getType().isa<mlir::db::NullableType>();
+      auto isLeftNullable = mlir::isa<mlir::db::NullableType>(cmpOp.getLeft().getType());
+      auto isRightNullable = mlir::isa<mlir::db::NullableType>(cmpOp.getRight().getType());
       auto loc = op->getLoc();
       if (isLeftNullable && isRightNullable) {
          mlir::Value isLeftNull = rewriter.create<mlir::db::IsNullOp>(loc, cmpOp.getLeft());
@@ -184,6 +184,6 @@ class EliminateNulls : public mlir::PassWrapper<EliminateNulls, mlir::OperationP
 
 namespace mlir::db {
 
-std::unique_ptr<Pass> createEliminateNullsPass() { return std::make_unique<EliminateNulls>(); }
+std::unique_ptr<Pass> createEliminateNullsPass() { return std::make_unique<EliminateNulls>(); } // NOLINT(misc-use-internal-linkage)
 
 } // end namespace mlir::db

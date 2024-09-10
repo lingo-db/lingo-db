@@ -24,7 +24,7 @@ class InferNotNullConditions : public mlir::PassWrapper<InferNotNullConditions, 
    MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(InferNotNullConditions)
    virtual llvm::StringRef getArgument() const override { return "relalg-infer-not-null"; }
    void addNullCheck(mlir::relalg::SelectionOp selection, mlir::Value v, mlir::relalg::ColumnCreatorAnalysis columnCreatorAnalysis) {
-      if (v.getType().isa<mlir::db::NullableType>()) {
+      if (mlir::isa<mlir::db::NullableType>(v.getType())) {
          if (auto getColumnOp = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(v.getDefiningOp())) {
             const auto *c = &getColumnOp.getAttr().getColumn();
             if (!columnCreatorAnalysis.getCreator(c).canColumnReach({}, selection, c)) return;
@@ -48,7 +48,7 @@ class InferNotNullConditions : public mlir::PassWrapper<InferNotNullConditions, 
          }
       });
       getOperation().walk([&](mlir::db::BetweenOp betweenOp) {
-         if (!betweenOp.getLower().getType().isa<mlir::db::NullableType>() && !betweenOp.getUpper().getType().isa<mlir::db::NullableType>()) {
+         if (!mlir::isa<mlir::db::NullableType>(betweenOp.getLower().getType()) && !mlir::isa<mlir::db::NullableType>(betweenOp.getUpper().getType())) {
             if (auto selectionOp = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(betweenOp->getParentOp())) {
                if (isAndedResult(betweenOp.getOperation())) {
                   addNullCheck(selectionOp, betweenOp.getVal(), columnCreatorAnalysis);
@@ -57,7 +57,7 @@ class InferNotNullConditions : public mlir::PassWrapper<InferNotNullConditions, 
          }
       });
       getOperation().walk([&](mlir::db::OneOfOp oneOfOp) {
-         bool compareOnlyWithNonNullable = llvm::all_of(oneOfOp.getVals(), [](mlir::Value val) { return !val.getType().isa<mlir::db::NullableType>(); });
+         bool compareOnlyWithNonNullable = llvm::all_of(oneOfOp.getVals(), [](mlir::Value val) { return !mlir::isa<mlir::db::NullableType>(val.getType()); });
          if (compareOnlyWithNonNullable) {
             if (auto selectionOp = mlir::dyn_cast_or_null<mlir::relalg::SelectionOp>(oneOfOp->getParentOp())) {
                if (isAndedResult(oneOfOp.getOperation())) {

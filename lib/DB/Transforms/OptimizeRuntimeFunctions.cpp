@@ -24,7 +24,7 @@ struct AnyMatcher : public Matcher {
 std::optional<std::string> getConstantString(mlir::Value v) {
    if (auto* defOp = v.getDefiningOp()) {
       if (auto constOp = mlir::dyn_cast_or_null<mlir::db::ConstantOp>(defOp)) {
-         if (auto strAttr = constOp.getValue().dyn_cast<mlir::StringAttr>()) {
+         if (auto strAttr = mlir::dyn_cast<mlir::StringAttr>(constOp.getValue())) {
             return strAttr.str();
          }
       }
@@ -106,6 +106,6 @@ class OptimizeRuntimeFunctions : public mlir::PassWrapper<OptimizeRuntimeFunctio
 
 namespace mlir::db {
 
-std::unique_ptr<Pass> createOptimizeRuntimeFunctionsPass() { return std::make_unique<OptimizeRuntimeFunctions>(); }
+std::unique_ptr<Pass> createOptimizeRuntimeFunctionsPass() { return std::make_unique<OptimizeRuntimeFunctions>(); } // NOLINT(misc-use-internal-linkage)
 
 } // end namespace mlir::db

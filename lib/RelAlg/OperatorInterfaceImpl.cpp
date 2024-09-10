@@ -72,7 +72,7 @@ bool mlir::relalg::detail::canColumnReach(mlir::Operation* currentOp, mlir::Oper
       return true;
    }
    for (auto res : currentOp->getResults()) {
-      if (res.getType().isa<mlir::tuples::TupleStreamType>()) {
+      if (mlir::isa<mlir::tuples::TupleStreamType>(res.getType())) {
          for (auto* user : res.getUsers()) {
             if (auto op = mlir::dyn_cast_or_null<Operator>(user)) {
                if (op.canColumnReach(mlir::cast<Operator>(currentOp), mlir::cast<Operator>(targetOp), column)) {
@@ -209,21 +209,21 @@ ColumnSet WindowOp::getUsedColumns() {
       used.insert(&aggrFn.getAttr().getColumn());
    });
    for (Attribute a : getOrderBy()) {
-      used.insert(&a.dyn_cast_or_null<mlir::relalg::SortSpecificationAttr>().getAttr().getColumn());
+      used.insert(&mlir::dyn_cast_or_null<mlir::relalg::SortSpecificationAttr>(a).getAttr().getColumn());
    }
    return used;
 }
 ColumnSet SortOp::getUsedColumns() {
    ColumnSet used;
    for (Attribute a : getSortspecs()) {
-      used.insert(&a.dyn_cast_or_null<mlir::relalg::SortSpecificationAttr>().getAttr().getColumn());
+      used.insert(&mlir::dyn_cast_or_null<mlir::relalg::SortSpecificationAttr>(a).getAttr().getColumn());
    }
    return used;
 }
 ColumnSet TopKOp::getUsedColumns() {
    ColumnSet used;
    for (Attribute a : getSortspecs()) {
-      used.insert(&a.dyn_cast_or_null<mlir::relalg::SortSpecificationAttr>().getAttr().getColumn());
+      used.insert(&mlir::dyn_cast_or_null<mlir::relalg::SortSpecificationAttr>(a).getAttr().getColumn());
    }
    return used;
 }
@@ -264,7 +264,7 @@ ColumnSet RenamingOp::getCreatedColumns() {
    ColumnSet created;
 
    for (Attribute attr : getColumns()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
       created.insert(&relationDefAttr.getColumn());
    }
    return created;
@@ -273,8 +273,8 @@ ColumnSet RenamingOp::getUsedColumns() {
    ColumnSet used;
 
    for (Attribute attr : getColumns()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
-      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
+      auto fromExisting = mlir::dyn_cast_or_null<ArrayAttr>(relationDefAttr.getFromExisting());
       used.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
    return used;
@@ -288,9 +288,9 @@ ColumnSet RenamingOp::getAvailableColumns() {
 }
 bool mlir::relalg::RenamingOp::canColumnReach(Operator source, Operator target, const mlir::tuples::Column* col) {
    for (Attribute attr : getColumns()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
-      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
-      if (&fromExisting[0].cast<mlir::tuples::ColumnRefAttr>().getColumn() == col) {
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
+      auto fromExisting = mlir::dyn_cast_or_null<ArrayAttr>(relationDefAttr.getFromExisting());
+      if (&mlir::cast<mlir::tuples::ColumnRefAttr>(fromExisting[0]).getColumn() == col) {
          return false;
       }
    }
@@ -298,17 +298,17 @@ bool mlir::relalg::RenamingOp::canColumnReach(Operator source, Operator target, 
 }
 ColumnSet mlir::relalg::detail::getSetOpCreatedColumns(mlir::Operation* op) {
    ColumnSet created;
-   for (mlir::Attribute attr : op->getAttr("mapping").cast<mlir::ArrayAttr>()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+   for (mlir::Attribute attr : mlir::cast<mlir::ArrayAttr>(op->getAttr("mapping"))) {
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
       created.insert(&relationDefAttr.getColumn());
    }
    return created;
 }
 ColumnSet mlir::relalg::detail::getSetOpUsedColumns(mlir::Operation* op) {
    ColumnSet used;
-   for (Attribute attr : op->getAttr("mapping").cast<mlir::ArrayAttr>()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
-      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+   for (Attribute attr : mlir::cast<mlir::ArrayAttr>(op->getAttr("mapping"))) {
+      auto relationDefAttr = mlir::cast<ColumnDefAttr>(attr);
+      auto fromExisting = mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting());
       used.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
    return used;
@@ -317,16 +317,16 @@ ColumnSet OuterJoinOp::getCreatedColumns() {
    ColumnSet created;
 
    for (Attribute attr : getMapping()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
       created.insert(&relationDefAttr.getColumn());
    }
    return created;
 }
 ColumnSet OuterJoinOp::getUsedColumns() {
    auto used = mlir::relalg::detail::getUsedColumns(getOperation());
-   for (Attribute attr : this->getOperation()->getAttr("mapping").cast<mlir::ArrayAttr>()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
-      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+   for (Attribute attr : mlir::cast<mlir::ArrayAttr>(this->getOperation()->getAttr("mapping"))) {
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
+      auto fromExisting = mlir::dyn_cast_or_null<ArrayAttr>(relationDefAttr.getFromExisting());
       used.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
    return used;
@@ -335,8 +335,8 @@ ColumnSet OuterJoinOp::getAvailableColumns() {
    ColumnSet renamed;
 
    for (Attribute attr : getMapping()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
-      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
+      auto fromExisting = mlir::cast<ArrayAttr>(relationDefAttr.getFromExisting());
       renamed.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
    auto availablePreviously = mlir::cast<Operator>(getLeft().getDefiningOp()).getAvailableColumns();
@@ -354,16 +354,16 @@ ColumnSet FullOuterJoinOp::getCreatedColumns() {
    ColumnSet created;
 
    for (Attribute attr : getMapping()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
       created.insert(&relationDefAttr.getColumn());
    }
    return created;
 }
 ColumnSet FullOuterJoinOp::getUsedColumns() {
    auto used = mlir::relalg::detail::getUsedColumns(getOperation());
-   for (Attribute attr : this->getOperation()->getAttr("mapping").cast<mlir::ArrayAttr>()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
-      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+   for (Attribute attr : mlir::cast<mlir::ArrayAttr>(this->getOperation()->getAttr("mapping"))) {
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
+      auto fromExisting = mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting());
       used.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
    return used;
@@ -382,16 +382,16 @@ ColumnSet SingleJoinOp::getCreatedColumns() {
    ColumnSet created;
 
    for (Attribute attr : getMapping()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
       created.insert(&relationDefAttr.getColumn());
    }
    return created;
 }
 ColumnSet SingleJoinOp::getUsedColumns() {
    auto used = mlir::relalg::detail::getUsedColumns(getOperation());
-   for (Attribute attr : this->getOperation()->getAttr("mapping").cast<mlir::ArrayAttr>()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
-      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+   for (Attribute attr : mlir::cast<mlir::ArrayAttr>(this->getOperation()->getAttr("mapping"))) {
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
+      auto fromExisting =  mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting());
       used.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
    return used;
@@ -400,8 +400,8 @@ ColumnSet SingleJoinOp::getAvailableColumns() {
    ColumnSet renamed;
 
    for (Attribute attr : getMapping()) {
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
-      auto fromExisting = relationDefAttr.getFromExisting().dyn_cast_or_null<ArrayAttr>();
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
+      auto fromExisting =  mlir::cast<mlir::ArrayAttr>(relationDefAttr.getFromExisting());
       renamed.insert(ColumnSet::fromArrayAttr(fromExisting));
    }
    auto availablePreviously = mlir::cast<Operator>(getLeft().getDefiningOp()).getAvailableColumns();
@@ -445,7 +445,7 @@ ColumnSet BaseTableOp::getCreatedColumns() {
    ColumnSet creations;
    for (auto mapping : getColumns()) {
       auto attr = mapping.getValue();
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
       creations.insert(&relationDefAttr.getColumn());
    }
    return creations;
@@ -460,7 +460,7 @@ mlir::relalg::FunctionalDependencies BaseTableOp::getFDs() {
    ColumnSet pk;
    for (auto mapping : getColumns()) {
       auto attr = mapping.getValue();
-      auto relationDefAttr = attr.dyn_cast_or_null<ColumnDefAttr>();
+      auto relationDefAttr = mlir::dyn_cast_or_null<ColumnDefAttr>(attr);
       if (pks.contains(mapping.getName().str())) {
          pk.insert(&relationDefAttr.getColumn());
       }
@@ -513,12 +513,12 @@ mlir::relalg::FunctionalDependencies mlir::relalg::InnerJoinOp::getFDs() {
    FunctionalDependencies newFds;
    if (!getPredicateBlock().empty()) {
       if (this->getOperation()->hasAttr("leftHash") && this->getOperation()->hasAttr("rightHash")) {
-         auto left = this->getOperation()->getAttr("leftHash").cast<mlir::ArrayAttr>();
-         auto right = this->getOperation()->getAttr("rightHash").cast<mlir::ArrayAttr>();
+         auto left = mlir::cast<mlir::ArrayAttr>(this->getOperation()->getAttr("leftHash"));
+         auto right = mlir::cast<mlir::ArrayAttr>(this->getOperation()->getAttr("rightHash"));
          if (left.size() == right.size()) { //todo remove! only hackish check to avoid bug related to hackish inl implementation
             for (auto z : llvm::zip(left, right)) {
-               auto* leftColumn = &std::get<0>(z).cast<mlir::tuples::ColumnRefAttr>().getColumn();
-               auto* rightColumn = &std::get<1>(z).cast<mlir::tuples::ColumnRefAttr>().getColumn();
+               auto* leftColumn = &mlir::cast<mlir::tuples::ColumnRefAttr>(std::get<0>(z)).getColumn();
+               auto* rightColumn = &mlir::cast<mlir::tuples::ColumnRefAttr>(std::get<1>(z)).getColumn();
                mlir::relalg::ColumnSet left;
                left.insert(leftColumn);
                mlir::relalg::ColumnSet right;
@@ -597,7 +597,7 @@ void mlir::relalg::detail::addPredicate(mlir::Operation* op, std::function<mlir:
    auto additionalPred = predicateProducer(lambdaOperator.getPredicateArgument(), builder);
    if (terminator->getNumOperands() > 0) {
       mlir::Value oldValue = terminator->getOperand(0);
-      bool nullable = oldValue.getType().isa<mlir::db::NullableType>() || additionalPred.getType().isa<mlir::db::NullableType>();
+      bool nullable = mlir::isa<mlir::db::NullableType>(oldValue.getType()) || mlir::isa<mlir::db::NullableType>(additionalPred.getType());
       mlir::Type restype = builder.getI1Type();
       if (nullable) {
          restype = mlir::db::NullableType::get(builder.getContext(), restype);
@@ -654,7 +654,7 @@ mlir::LogicalResult mlir::relalg::MapOp::foldColumns(mlir::relalg::ColumnFoldInf
    for (auto z : llvm::zip(returnOp.getResults(), getComputedCols())) {
       if (auto getColumnOp = mlir::dyn_cast_or_null<mlir::tuples::GetColumnOp>(std::get<0>(z).getDefiningOp())) {
          auto* previousColumn = &getColumnOp.getAttr().getColumn();
-         auto* currentColumn = &std::get<1>(z).cast<mlir::tuples::ColumnDefAttr>().getColumn();
+         auto* currentColumn = &mlir::cast<mlir::tuples::ColumnDefAttr>(std::get<1>(z)).getColumn();
          columnInfo.directMappings[currentColumn] = previousColumn;
       }
    }
@@ -665,7 +665,7 @@ mlir::LogicalResult mlir::relalg::MapOp::eliminateDeadColumns(mlir::relalg::Colu
    std::vector<mlir::Value> results;
    std::vector<mlir::Attribute> resultingColumns;
    for (auto z : llvm::zip(returnOp.getResults(), getComputedCols())) {
-      auto defAttr = std::get<1>(z).cast<mlir::tuples::ColumnDefAttr>();
+      auto defAttr = mlir::cast<mlir::tuples::ColumnDefAttr>(std::get<1>(z));
       if (usedColumns.contains(&defAttr.getColumn())) {
          results.push_back(std::get<0>(z));
          resultingColumns.push_back(defAttr);

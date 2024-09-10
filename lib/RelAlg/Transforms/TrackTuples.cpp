@@ -23,7 +23,7 @@ class InsertTrackTuplesAfterRelalg : public mlir::RewritePattern {
       }
       // Check if op emits a tuple stream
       bool isApplicableType = llvm::any_of(op->getResultTypes(), [](mlir::Type type) {
-         return type.isa<mlir::tuples::TupleStreamType>();
+         return mlir::isa<mlir::tuples::TupleStreamType>(type);
       });
 
       if (!isApplicableType) {
@@ -45,7 +45,7 @@ class InsertTrackTuplesAfterRelalg : public mlir::RewritePattern {
       // Introduce a TrackTuplesOp for every result tupleStream of op
       rewriter.setInsertionPointAfter(op);
       for (auto result : op->getResults()) {
-         if (result.getType().isa<mlir::tuples::TupleStreamType>()) {
+         if (mlir::isa<mlir::tuples::TupleStreamType>(result.getType())) {
             rewriter.create<mlir::relalg::TrackTuplesOP>(op->getLoc(), result, currentTupleCounter++);
          }
       }

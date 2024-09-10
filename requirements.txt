@@ -1,5 +1,5 @@
 -f https://www.lingo-db.com/dev-dependencies/
-lingodb-llvm==0.0.1
+lingodb-llvm==0.0.2
 numpy==1.26.4
 pyarrow==14.0.0
 lit==17.0.5

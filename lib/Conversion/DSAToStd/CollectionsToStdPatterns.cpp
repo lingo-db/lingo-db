@@ -30,7 +30,7 @@ class ForOpLowering : public OpConversionPattern<mlir::dsa::ForOp> {
          argumentTypes.push_back(t);
          argumentLocs.push_back(forOp->getLoc());
       }
-      auto collectionType = forOp.getCollection().getType().dyn_cast_or_null<mlir::util::CollectionType>();
+      auto collectionType = mlir::dyn_cast_or_null<mlir::util::CollectionType>(forOp.getCollection().getType());
       auto iterator = mlir::dsa::CollectionIterationImpl::getImpl(collectionType, adaptor.getCollection());
 
       ModuleOp parentModule = forOp->getParentOfType<ModuleOp>();

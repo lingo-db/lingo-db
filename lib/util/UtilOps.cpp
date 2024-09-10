@@ -10,7 +10,7 @@ using namespace mlir;
 
 ::mlir::LogicalResult mlir::util::UnPackOp::verify() {
    mlir::util::UnPackOp& unPackOp = *this;
-   if (auto tupleType = unPackOp.getTuple().getType().dyn_cast_or_null<mlir::TupleType>()) {
+   if (auto tupleType = mlir::dyn_cast_or_null<mlir::TupleType>(unPackOp.getTuple().getType())) {
       if (tupleType.getTypes().size() != unPackOp.getVals().size()) {
          unPackOp.emitOpError("must unpack exactly as much as entries in tuple");
          unPackOp.dump();
@@ -31,7 +31,7 @@ using namespace mlir;
 }
 ::mlir::LogicalResult mlir::util::PackOp::verify() {
    mlir::util::PackOp& packOp = *this;
-   if (auto tupleType = packOp.getTuple().getType().dyn_cast_or_null<mlir::TupleType>()) {
+   if (auto tupleType = mlir::dyn_cast_or_null<mlir::TupleType>(packOp.getTuple().getType())) {
       if (tupleType.getTypes().size() != packOp.getVals().size()) {
          packOp.emitOpError("must unpack exactly as much as entries in tuple");
          packOp.dump();
@@ -101,7 +101,7 @@ LogicalResult mlir::util::GetTupleOp::canonicalize(mlir::util::GetTupleOp op, ml
 }
 
 LogicalResult mlir::util::StoreOp::canonicalize(mlir::util::StoreOp op, mlir::PatternRewriter& rewriter) {
-   if (auto ty = op.getVal().getType().dyn_cast_or_null<mlir::TupleType>()) {
+   if (auto ty = mlir::dyn_cast_or_null<mlir::TupleType>(op.getVal().getType())) {
       auto base = op.getRef();
       if (auto idx = op.getIdx()) {
          base = rewriter.create<mlir::util::ArrayElementPtrOp>(op.getLoc(), base.getType(), base, idx);
@@ -119,7 +119,7 @@ LogicalResult mlir::util::StoreOp::canonicalize(mlir::util::StoreOp op, mlir::Pa
 }
 
 ::mlir::LogicalResult mlir::util::UndefOp::canonicalize(mlir::util::UndefOp op, ::mlir::PatternRewriter& rewriter) {
-   if (auto ty = op.getType().dyn_cast_or_null<mlir::TupleType>()) {
+   if (auto ty = mlir::dyn_cast_or_null<mlir::TupleType>(op.getType())) {
       std::vector<mlir::Value> values;
       for (auto t : ty.getTypes()) {
          values.push_back(rewriter.create<mlir::util::UndefOp>(op->getLoc(), t));
@@ -138,7 +138,7 @@ void mlir::util::LoadOp::getEffects(::mlir::SmallVectorImpl<::mlir::SideEffects:
 ::mlir::LogicalResult mlir::util::TupleElementPtrOp::verify() {
    mlir::util::TupleElementPtrOp& op = *this;
    auto resElementType = op.getType().getElementType();
-   auto ptrTupleType = op.getRef().getType().cast<mlir::util::RefType>().getElementType().cast<mlir::TupleType>();
+   auto ptrTupleType = mlir::cast<mlir::TupleType>(mlir::cast<mlir::util::RefType>(op.getRef().getType()).getElementType());
    auto ptrElementType = ptrTupleType.getTypes()[op.getIdx()];
    if (resElementType != ptrElementType) {
       op.emitOpError("Element types do not match");

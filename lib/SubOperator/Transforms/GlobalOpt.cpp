@@ -53,9 +53,9 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
       llvm::TypeSwitch<mlir::Operation*>(op)
          .Case([&](mlir::subop::RenamingOp renamingOp) {
             for (auto computed : renamingOp.getColumns()) {
-               auto colDefAttr = computed.cast<mlir::tuples::ColumnDefAttr>();
+               auto colDefAttr = mlir::cast<mlir::tuples::ColumnDefAttr>(computed);
                auto* colDefAttrCol = &colDefAttr.getColumn();
-               auto* colRefAttrCol = &colDefAttr.getFromExisting().cast<mlir::ArrayAttr>()[0].cast<mlir::tuples::ColumnRefAttr>().getColumn();
+               auto* colRefAttrCol = &mlir::cast<mlir::tuples::ColumnRefAttr>(mlir::cast<mlir::ArrayAttr>(colDefAttr.getFromExisting())[0]).getColumn();
                auto fp = columnFingerPrints.contains(colRefAttrCol);
                if (fp) {
                   columnFingerPrints.insert({colDefAttrCol, columnFingerPrints.at(colRefAttrCol)});
@@ -68,7 +68,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
          .Case([&](mlir::subop::MapOp mapOp) {
             auto returnOp = mlir::cast<mlir::tuples::ReturnOp>(mapOp.getFn().front().getTerminator());
             for (auto computed : llvm::zip(mapOp.getComputedCols(), returnOp.getResults())) {
-               auto* col = &(std::get<0>(computed).cast<mlir::tuples::ColumnDefAttr>().getColumn());
+               auto* col = &(mlir::cast<mlir::tuples::ColumnDefAttr>(std::get<0>(computed)).getColumn());
                auto* op = std::get<1>(computed).getDefiningOp();
                auto fp = fingerprint(op, columnFingerPrints);
                if (fp) {
@@ -95,7 +95,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
       auto columnUsageAnalysis = getAnalysis<mlir::subop::ColumnUsageAnalysis>();
       std::unordered_map<std::string, std::vector<mlir::subop::GetExternalOp>> externalOpByTableName;
       getOperation().walk([&](mlir::subop::GetExternalOp op) {
-         if (auto tableType = op.getType().dyn_cast_or_null<mlir::subop::TableType>()) {
+         if (auto tableType = mlir::dyn_cast_or_null<mlir::subop::TableType>(op.getType())) {
             auto json = nlohmann::json::parse(op.getDescr().str());
             externalOpByTableName[json["table"]].push_back(op);
          }
@@ -154,8 +154,8 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
 
                for (auto x : other.getMapping()) {
                   if (mapping.contains(x.getName().str())) {
-                     auto fromRef = colManager.createRef(&mapping.at(x.getName().str()).cast<mlir::tuples::ColumnDefAttr>().getColumn());
-                     auto toDef = colManager.createDef(&x.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn(), mlir::ArrayAttr::get(&getContext(), fromRef));
+                     auto fromRef = colManager.createRef(&mlir::cast<mlir::tuples::ColumnDefAttr>(mapping.at(x.getName().str())).getColumn());
+                     auto toDef = colManager.createDef(&mlir::cast<mlir::tuples::ColumnDefAttr>(x.getValue()).getColumn(), mlir::ArrayAttr::get(&getContext(), fromRef));
                      mappedCols.push_back(toDef);
                   } else {
                      mapping.insert({x.getName().str(), x.getValue()});
@@ -197,7 +197,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
       getOperation().walk([&](mlir::subop::ScanOp op) {
          std::unordered_map<mlir::tuples::Column*, std::string> columnFingerPrints;
          for (auto m : op.getMapping()) {
-            auto* col = &m.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn();
+            auto* col = &mlir::cast<mlir::tuples::ColumnDefAttr>(m.getValue()).getColumn();
             columnFingerPrints.insert({col, m.getName().str()});
          }
          std::unordered_map<mlir::Operation*, std::vector<mlir::subop::MaterializeOp>> materializeOps;
@@ -205,7 +205,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
          std::vector<mlir::Operation*> relevantUsers;
          for (auto* user : op->getUsers()) {
             handleScanUserRec(user, columnFingerPrints, materializeOps[user], filterOps[user]);
-            if (materializeOps[user].size() == 1 && materializeOps[user][0].getState().getType().isa<mlir::subop::BufferType, mlir::subop::MultiMapType>()) {
+            if (materializeOps[user].size() == 1 && mlir::isa<mlir::subop::BufferType, mlir::subop::MultiMapType>(materializeOps[user][0].getState().getType())) {
                relevantUsers.push_back(user);
             }
          }
@@ -217,7 +217,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
             std::unordered_map<std::string, std::string> fingerprintMapping;
             auto firstState = materializeOps[first][0].getState();
             for (auto c : materializeOps[first][0].getMapping()) {
-               auto* col = &c.getValue().cast<mlir::tuples::ColumnRefAttr>().getColumn();
+               auto* col = &mlir::cast<mlir::tuples::ColumnRefAttr>(c.getValue()).getColumn();
                if (columnFingerPrints.contains(col)) {
                   fingerprintMapping.insert({columnFingerPrints[col], c.getName().str()});
                } else {
@@ -227,7 +227,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
             std::unordered_set<std::string> firstFilters;
             for (auto f : filterOps[first]) {
                for (auto p : f.getConditions()) {
-                  auto* col = &p.cast<mlir::tuples::ColumnRefAttr>().getColumn();
+                  auto* col = &mlir::cast<mlir::tuples::ColumnRefAttr>(p).getColumn();
                   if (columnFingerPrints.contains(col)) {
                      firstFilters.insert(columnFingerPrints[col]);
                   } else {
@@ -243,7 +243,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
                auto otherState = materializeOps[other][0].getState();
 
                for (auto c : materializeOps[other][0].getMapping()) {
-                  auto* col = &c.getValue().cast<mlir::tuples::ColumnRefAttr>().getColumn();
+                  auto* col = &mlir::cast<mlir::tuples::ColumnRefAttr>(c.getValue()).getColumn();
                   if (columnFingerPrints.contains(col)) {
                      auto fingerprint = columnFingerPrints[col];
                      if (!fingerprintMapping.contains(fingerprint) || isWrittenTo(c.getName().str(), materializeOps[other][0].getOperation())) {
@@ -257,7 +257,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
                std::unordered_set<std::string> currentFilters;
                for (auto f : filterOps[other]) {
                   for (auto p : f.getConditions()) {
-                     auto* col = &p.cast<mlir::tuples::ColumnRefAttr>().getColumn();
+                     auto* col = &mlir::cast<mlir::tuples::ColumnRefAttr>(p).getColumn();
                      if (columnFingerPrints.contains(col)) {
                         currentFilters.insert(columnFingerPrints[col]);
                      } else {
@@ -274,27 +274,27 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
                if (!extraMembers.empty()) continue;
                std::unordered_map<std::string, std::string> memberMapping;
                for (auto c : materializeOps[other][0].getMapping()) {
-                  memberMapping.insert({c.getName().str(), fingerprintMapping.at(columnFingerPrints.at(&c.getValue().cast<mlir::tuples::ColumnRefAttr>().getColumn()))});
+                  memberMapping.insert({c.getName().str(), fingerprintMapping.at(columnFingerPrints.at(&mlir::cast<mlir::tuples::ColumnRefAttr>(c.getValue()).getColumn()))});
                }
-               if (auto firstMultiMapType = firstState.getType().dyn_cast_or_null<mlir::subop::MultiMapType>()) {
-                  if (auto otherMultiMapType = otherState.getType().dyn_cast_or_null<mlir::subop::MultiMapType>()) {
+               if (auto firstMultiMapType = mlir::dyn_cast_or_null<mlir::subop::MultiMapType>(firstState.getType())) {
+                  if (auto otherMultiMapType = mlir::dyn_cast_or_null<mlir::subop::MultiMapType>(otherState.getType())) {
                      bool keysEqual = true;
                      if (firstMultiMapType.getKeyMembers().getNames().size() != otherMultiMapType.getKeyMembers().getNames().size()) {
                         continue;
                      }
                      for (auto z : llvm::zip(firstMultiMapType.getKeyMembers().getNames(), otherMultiMapType.getKeyMembers().getNames())) {
-                        auto firstKey = std::get<0>(z).cast<mlir::StringAttr>().str();
-                        auto otherKey = std::get<1>(z).cast<mlir::StringAttr>().str();
+                        auto firstKey = mlir::cast<mlir::StringAttr>(std::get<0>(z)).str();
+                        auto otherKey = mlir::cast<mlir::StringAttr>(std::get<1>(z)).str();
                         keysEqual |= memberMapping.at(otherKey) == firstKey;
                      }
                      if (keysEqual) {
                         mlir::subop::SubOpStateUsageTransformer transformer(columnUsageAnalysis, &getContext(), [&](mlir::Operation* op, mlir::Type type) -> mlir::Type {
-                           if (auto listType = type.dyn_cast_or_null<mlir::subop::ListType>()) {
-                              if (listType.getT().isa<mlir::subop::MultiMapEntryRefType>()) {
+                           if (auto listType = mlir::dyn_cast_or_null<mlir::subop::ListType>(type)) {
+                              if (mlir::isa<mlir::subop::MultiMapEntryRefType>(listType.getT())) {
                                  return mlir::subop::ListType::get(&getContext(), mlir::subop::MultiMapEntryRefType::get(&getContext(), firstMultiMapType));
                               }
                            }
-                           if (type.isa<mlir::subop::MultiMapEntryRefType>()) {
+                           if (mlir::isa<mlir::subop::MultiMapEntryRefType>(type)) {
                               return mlir::subop::MultiMapEntryRefType::get(&getContext(), firstMultiMapType);
                            }
                            assert(false && "not supported yet");
@@ -320,7 +320,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
       getOperation().walk([&](mlir::subop::ScanOp op) {
          std::unordered_map<mlir::tuples::Column*, std::string> columnFingerPrints;
          for (auto m : op.getMapping()) {
-            auto* col = &m.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn();
+            auto* col = &mlir::cast<mlir::tuples::ColumnDefAttr>(m.getValue()).getColumn();
             columnFingerPrints.insert({col, m.getName().str()});
          }
          std::unordered_map<mlir::Operation*, std::vector<mlir::subop::MaterializeOp>> materializeOps;
@@ -332,7 +332,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
             bool failed = false;
             for (auto f : filterOps[user]) {
                for (auto p : f.getConditions()) {
-                  auto* col = &p.cast<mlir::tuples::ColumnRefAttr>().getColumn();
+                  auto* col = &mlir::cast<mlir::tuples::ColumnRefAttr>(p).getColumn();
                   if (columnFingerPrints.contains(col)) {
                      filterFingerPrint += columnFingerPrints[col];
                   } else {
@@ -374,7 +374,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
          std::unordered_map<mlir::Operation*, size_t> groupForOp;
          std::unordered_map<mlir::tuples::Column*, std::string> columnFingerPrints;
          for (auto m : scanOp.getMapping()) {
-            auto* col = &m.getValue().cast<mlir::tuples::ColumnDefAttr>().getColumn();
+            auto* col = &mlir::cast<mlir::tuples::ColumnDefAttr>(m.getValue()).getColumn();
             columnFingerPrints.insert({col, m.getName().str()});
          }
          std::unordered_map<mlir::Operation*, std::vector<mlir::subop::MaterializeOp>> materializeOps;
@@ -390,7 +390,7 @@ class GlobalOptPass : public mlir::PassWrapper<GlobalOptPass, mlir::OperationPas
             if (!f->hasAttr("selectivity")) continue;
             double sel = f->getAttrOfType<mlir::FloatAttr>("selectivity").getValueAsDouble();
             for (auto p : f.getConditions()) {
-               auto* col = &p.cast<mlir::tuples::ColumnRefAttr>().getColumn();
+               auto* col = &mlir::cast<mlir::tuples::ColumnRefAttr>(p).getColumn();
                if (columnFingerPrints.contains(col)) {
                   filterFingerPrint += columnFingerPrints[col];
                } else {

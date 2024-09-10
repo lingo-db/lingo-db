@@ -8,9 +8,9 @@
 #include "utility/Setting.h"
 
 #include <stdlib.h>
-
+namespace {
 utility::GlobalSetting<bool> eagerLoading("system.eager_loading", false);
-
+} // namespace
 int main(int argc, char** argv) {
    if (argc <= 2) {
       std::cerr << "USAGE: run-sql *.sql database" << std::endl;
