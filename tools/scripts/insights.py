@@ -27,12 +27,15 @@ def extract_relalg_filename(json_file):
 def combine_json_files(trace, plan, layers, output_file):
     """Combines three JSON files into a single JSON object and writes it to an output file."""
     combined = {
+        "fileType": "insights",
         "trace": trace,
         "plan": plan,
         "layers": layers
     }
     with open(output_file, 'w') as out_file:
         json.dump(combined, out_file, indent=None)
+
+dir_path = os.path.dirname(os.path.realpath(__file__))
 
 def main():
     # Set environment variables
@@ -43,7 +46,7 @@ def main():
     }
 
     # Define directories and filenames
-    bin_dir = os.getenv('BIN_DIR', './build/lingodb-relwithdeb')  # Replace with actual BIN_DIR
+    bin_dir = os.getenv('BIN_DIR', './build/lingodb-relwithdebinfo')  # Replace with actual BIN_DIR
     snapshot_json = "./snapshots/detailed-snapshot-info.json"
 
     # Command 1: Run SQL
@@ -51,14 +54,14 @@ def main():
     run_command(command_1)
 
     # Command 2: Analyze snapshots
-    command_2 = f'{bin_dir}/mlir-analyze-snapshots {snapshot_json}'
+    command_2 = f'{bin_dir}/mlir-analyze-snapshots {snapshot_json} mlir-layers.json'
     run_command(command_2)
 
     # Extract filename from JSON
     extracted_file = extract_relalg_filename(snapshot_json)
 
     # Run mlir-db-opt command
-    command_3 = f'{bin_dir}/mlir-db-opt --strip-debuginfo {extracted_file} > {extracted_file}.alt'
+    command_3 = f'bash {dir_path}/clean-snapshot.sh {bin_dir} {extracted_file} {extracted_file}.alt'
     run_command(command_3)
 
     # Run mlir-to-json command
@@ -67,7 +70,7 @@ def main():
     layers=json.load(open("mlir-layers.json"))
     trace=json.load(open("lingodb.trace"))
     # Combine JSON files
-    combine_json_files(trace, plan, layers, "insights.json")
+    combine_json_files(trace["trace"], plan, layers, "insights.json")
 
 if __name__ == "__main__":
     main()

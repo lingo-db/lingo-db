@@ -193,6 +193,8 @@ ExecutionMode getExecutionMode() {
 #if GPU_ENABLED == 1
       runMode = ExecutionMode::GPU;
 #endif
+   } else if (std::string(mode)=="NONE") {
+      runMode = ExecutionMode::NONE;
    }
 
    return runMode;
@@ -247,10 +249,6 @@ class DefaultQueryExecuter : public QueryExecuter {
          std::cerr << "Frontend is missing" << std::endl;
          exit(1);
       }
-      if (!queryExecutionConfig->executionBackend) {
-         std::cerr << "Execution Backend is missing" << std::endl;
-         exit(1);
-      }
       auto& frontend = *queryExecutionConfig->frontend;
 
       frontend.setCatalog(catalog);
@@ -297,18 +295,19 @@ class DefaultQueryExecuter : public QueryExecuter {
          handleError("LOWERING", loweringStep.getError());
          handleTiming(loweringStep.getTiming());
       }
-
-      auto& executionBackend = *queryExecutionConfig->executionBackend;
-      executionBackend.setSerializationState(serializationState);
-      executionBackend.execute(moduleOp, executionContext.get());
+      if(queryExecutionConfig->executionBackend) {
+         auto& executionBackend = *queryExecutionConfig->executionBackend;
+         executionBackend.setSerializationState(serializationState);
+         executionBackend.execute(moduleOp, executionContext.get());
 #ifdef TRACER
-      utility::Tracer::dump();
+         utility::Tracer::dump();
 #endif
-      handleError("BACKEND", executionBackend.getError());
-      handleTiming(executionBackend.getTiming());
-      if (queryExecutionConfig->resultProcessor) {
-         auto& resultProcessor = *queryExecutionConfig->resultProcessor;
-         resultProcessor.process(executionContext.get());
+         handleError("BACKEND", executionBackend.getError());
+         handleTiming(executionBackend.getTiming());
+         if (queryExecutionConfig->resultProcessor) {
+            auto& resultProcessor = *queryExecutionConfig->resultProcessor;
+            resultProcessor.process(executionContext.get());
+         }
       }
       if (queryExecutionConfig->timingProcessor) {
          queryExecutionConfig->timingProcessor->process();
@@ -342,7 +341,7 @@ std::unique_ptr<QueryExecutionConfig> createQueryExecutionConfig(execution::Exec
 #if GPU_ENABLED == 1
       config->executionBackend = createGPULLVMBackend();
 #endif
-   } else {
+   } else if (runMode != ExecutionMode::NONE) {
       config->executionBackend = createDefaultLLVMBackend();
    }
    config->resultProcessor = execution::createTablePrinter();

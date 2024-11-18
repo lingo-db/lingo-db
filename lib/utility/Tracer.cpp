@@ -121,7 +121,9 @@ void Tracer::dumpInternal() {
       result.push_back(recordObject);
 #endif
    }
-
-   out << to_string(result) << std::endl;
+   auto fileContent=nlohmann::json::object();
+   fileContent["fileType"]="traceOnly";
+   fileContent["trace"]=result;
+   out << to_string(fileContent) << std::endl;
 }
 } // end namespace utility

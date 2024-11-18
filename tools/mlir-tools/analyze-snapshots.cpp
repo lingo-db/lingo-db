@@ -46,6 +46,11 @@ cl::opt<std::string> jsonInputFilename(cl::Positional,
                                        cl::desc("<input json file>"),
                                        cl::init("-"),
                                        cl::value_desc("filename"));
+
+cl::opt<std::string> jsonOutputFilename(cl::Positional,
+                                       cl::desc("<output json file>"),
+                                       cl::init("-"),
+                                       cl::value_desc("filename"));
 struct OpElement {
    mlir::Operation* op;
    std::string id;
@@ -356,6 +361,10 @@ int main(int argc, char** argv) {
       auto parsed = toJSON(startElement, elements, 0, sourceMgr.getBufferInfo(bufferId).Buffer->getBuffer().size(), basePtr, [](nlohmann::json& j, std::string s) { j.push_back({{"type", "raw"}, {"value", s}}); });
       jsonOutput.push_back({{"parsed", std::move(parsed)}, {"passInfo", step}});
    }
-   std::ofstream file("mlir-layers.json");
-   file << jsonOutput.dump() << std::endl;
+   if(jsonOutputFilename=="-") {
+      std::cout<<jsonOutput.dump()<<std::endl;
+   }else {
+      std::ofstream file(jsonOutputFilename);
+      file << jsonOutput.dump() << std::endl;
+   }
 }
