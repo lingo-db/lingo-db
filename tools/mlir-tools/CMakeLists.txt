@@ -1,10 +1,18 @@
 
 #mlir-to-json
-add_executable(mlir-to-json mlir-to-json.cpp)
+add_executable(mlir-to-json mlir-relalg-to-json.cpp)
 llvm_update_compile_flags(mlir-to-json)
 target_link_libraries(mlir-to-json  PUBLIC runtime utility runner mlir-support ${LIBS} PRIVATE arrow)
 set_target_properties(mlir-to-json PROPERTIES  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 target_link_directories( mlir-to-json PUBLIC ${CMAKE_BINARY_DIR}/lib/execution/cranelift/rust-cranelift/release)
+
+
+
+add_executable(mlir-subop-to-json mlir-subop-to-json.cpp)
+llvm_update_compile_flags(mlir-subop-to-json)
+target_link_libraries(mlir-subop-to-json PUBLIC runtime utility runner mlir-support ${LIBS} PRIVATE arrow)
+set_target_properties(mlir-subop-to-json PROPERTIES  RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+target_link_directories(mlir-subop-to-json PUBLIC ${CMAKE_BINARY_DIR}/lib/execution/cranelift/rust-cranelift/release)
 
 # sql-to-mlir
 add_executable(sql-to-mlir sql-to-mlir.cpp)
