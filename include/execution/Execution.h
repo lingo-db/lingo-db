@@ -52,6 +52,7 @@ class LoweringStep {
    std::shared_ptr<SnapshotState> serializationState;
 
    public:
+   virtual std::string getShortName() const=0;
    runtime::Catalog* getCatalog() const {
       return catalog;
    }

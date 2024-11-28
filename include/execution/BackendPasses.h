@@ -4,7 +4,6 @@
 #include <mlir/Pass/Pass.h>
 namespace execution {
 std::unique_ptr<mlir::Pass> createEnforceCABI();
-std::unique_ptr<mlir::Pass> createAnnotateProfilingDataPass();
 std::unique_ptr<mlir::Pass> createDecomposeTuplePass();
 void registerBackendPasses();
 } // namespace execution

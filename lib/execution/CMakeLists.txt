@@ -1,4 +1,4 @@
-set(EXECUTION_FILES ResultProcessor.cpp EnforceCABIPass.cpp AnnotateProfilingDataPass.cpp Frontend.cpp LLVMBackends.cpp Execution.cpp BackendPasses.cpp CEmitter.cpp CBackend.cpp BareFunctions.cpp Instrumentation.cpp)
+set(EXECUTION_FILES ResultProcessor.cpp EnforceCABIPass.cpp Frontend.cpp LLVMBackends.cpp Execution.cpp BackendPasses.cpp CEmitter.cpp CBackend.cpp BareFunctions.cpp Instrumentation.cpp)
 if(ENABLE_CRANELIFT_BACKEND)
     list(APPEND EXECUTION_FILES CraneliftBackend.cpp DecomposeTuplePass.cpp)
 endif(ENABLE_CRANELIFT_BACKEND)

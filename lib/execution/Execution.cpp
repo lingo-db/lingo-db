@@ -50,6 +50,9 @@ class DefaultQueryOptimizer : public QueryOptimizer {
    }
 };
 class RelAlgLoweringStep : public LoweringStep {
+   std::string getShortName() const override {
+      return "subop";
+   }
    void implement(mlir::ModuleOp& moduleOp) override {
       utility::Tracer::Trace trace(lowerRelalgEvent);
 
@@ -89,14 +92,15 @@ class RelAlgLoweringStep : public LoweringStep {
    }
 };
 class SubOpLoweringStep : public LoweringStep {
+   std::string getShortName() const override {
+      return "hl-imperative";
+   }
    void implement(mlir::ModuleOp& moduleOp) override {
       utility::Tracer::Trace trace(lowerSubOpEvent);
       auto startLowerSubOp = std::chrono::high_resolution_clock::now();
-      mlir::PassManager lowerSubOpPm(moduleOp->getContext());
-      lowerSubOpPm.enableVerifier(verify);
-      addLingoDBInstrumentation(lowerSubOpPm, getSerializationState());
-
-      //lowerSubOpPm.enableIRPrinting();
+      mlir::PassManager optSubOpPm(moduleOp->getContext());
+      optSubOpPm.enableVerifier(verify);
+      addLingoDBInstrumentation(optSubOpPm, getSerializationState());
       std::unordered_set<std::string> enabledPasses = {};
 
       enabledPasses.clear();
@@ -106,23 +110,32 @@ class SubOpLoweringStep : public LoweringStep {
          enabledPasses.insert(optPass);
       }
       if (enabledPasses.contains("GlobalOpt"))
-         lowerSubOpPm.addPass(mlir::subop::createGlobalOptPass());
-      lowerSubOpPm.addPass(mlir::subop::createFoldColumnsPass());
+         optSubOpPm.addPass(mlir::subop::createGlobalOptPass());
+      optSubOpPm.addPass(mlir::subop::createFoldColumnsPass());
       if (enabledPasses.contains("ReuseLocal"))
-         lowerSubOpPm.addPass(mlir::subop::createReuseLocalPass());
-      lowerSubOpPm.addPass(mlir::subop::createSpecializeSubOpPass(enabledPasses.contains("Specialize")));
-      lowerSubOpPm.addPass(mlir::subop::createNormalizeSubOpPass());
+         optSubOpPm.addPass(mlir::subop::createReuseLocalPass());
+      optSubOpPm.addPass(mlir::subop::createSpecializeSubOpPass(enabledPasses.contains("Specialize")));
+      optSubOpPm.addPass(mlir::subop::createNormalizeSubOpPass());
       if (enabledPasses.contains("PullGatherUp"))
-         lowerSubOpPm.addPass(mlir::subop::createPullGatherUpPass());
-      lowerSubOpPm.addPass(mlir::subop::createEnforceOrderPass());
-      lowerSubOpPm.addPass(mlir::subop::createInlineNestedMapPass());
-      lowerSubOpPm.addPass(mlir::subop::createFinalizePass());
-      lowerSubOpPm.addPass(mlir::subop::createSplitIntoExecutionStepsPass());
+         optSubOpPm.addPass(mlir::subop::createPullGatherUpPass());
+      optSubOpPm.addPass(mlir::subop::createEnforceOrderPass());
+      optSubOpPm.addPass(mlir::subop::createInlineNestedMapPass());
+      optSubOpPm.addPass(mlir::subop::createFinalizePass());
+      optSubOpPm.addPass(mlir::subop::createSplitIntoExecutionStepsPass());
       if (!moduleOp->hasAttr("subop.sequential")) {
-         lowerSubOpPm.addNestedPass<mlir::func::FuncOp>(mlir::subop::createParallelizePass());
-         lowerSubOpPm.addPass(mlir::subop::createSpecializeParallelPass());
+         optSubOpPm.addNestedPass<mlir::func::FuncOp>(mlir::subop::createParallelizePass());
+         optSubOpPm.addPass(mlir::subop::createSpecializeParallelPass());
       }
-      lowerSubOpPm.addPass(mlir::subop::createPrepareLoweringPass());
+      optSubOpPm.addPass(mlir::subop::createPrepareLoweringPass());
+      if (mlir::failed(optSubOpPm.run(moduleOp))) {
+         error.emit() << "Lowering of Sub-Operators to imperative operations failed";
+         return;
+      }
+      snapshotImportantStep("subop-opt", moduleOp, getSerializationState());
+
+      mlir::PassManager lowerSubOpPm(moduleOp->getContext());
+      lowerSubOpPm.enableVerifier(verify);
+      addLingoDBInstrumentation(lowerSubOpPm, getSerializationState());
 
       mlir::subop::setCompressionEnabled(enabledPasses.contains("Compression"));
       lowerSubOpPm.addPass(mlir::subop::createLowerSubOpPass());
@@ -137,6 +150,9 @@ class SubOpLoweringStep : public LoweringStep {
    }
 };
 class DefaultImperativeLowering : public LoweringStep {
+   std::string getShortName() const override {
+      return "ll-imperative";
+   }
    void implement(mlir::ModuleOp& moduleOp) override {
       utility::Tracer::Trace trace(lowerImperativeEvent);
       auto startLowerDB = std::chrono::high_resolution_clock::now();
@@ -265,6 +281,7 @@ class DefaultQueryExecuter : public QueryExecuter {
 
       handleError("FRONTEND", frontend.getError());
       mlir::ModuleOp& moduleOp = *queryExecutionConfig->frontend->getModule();
+      snapshotImportantStep("canonical", moduleOp, serializationState);
       if (queryExecutionConfig->queryOptimizer) {
          auto& queryOptimizer = *queryExecutionConfig->queryOptimizer;
          queryOptimizer.setCatalog(catalog);
@@ -281,6 +298,7 @@ class DefaultQueryExecuter : public QueryExecuter {
                handleError("TUPLE_TRACKING", e);
             }
          }
+         snapshotImportantStep("qopt", moduleOp, serializationState);
       }
 
       if (!frontend.isParallelismAllowed() || !parallelismEnabled) {
@@ -292,6 +310,7 @@ class DefaultQueryExecuter : public QueryExecuter {
          loweringStep.setCatalog(catalog);
          loweringStep.setSerializationState(serializationState);
          loweringStep.implement(moduleOp);
+         snapshotImportantStep(loweringStep.getShortName(), moduleOp, serializationState);
          handleError("LOWERING", loweringStep.getError());
          handleTiming(loweringStep.getTiming());
       }

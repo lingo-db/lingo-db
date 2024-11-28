@@ -43,6 +43,8 @@
 #include "execution/Instrumentation.h"
 #include "unistd.h"
 #include "utility/Tracer.h"
+
+#include <iostream>
 namespace {
 static utility::Tracer::Event execution("Execution", "run");
 
@@ -545,21 +547,12 @@ class CPULLVMDebugBackend : public execution::ExecutionBackend {
 };
 
 class CPULLVMProfilingBackend : public execution::ExecutionBackend {
-   inline void assignToThisCore(int coreId) {
-      cpu_set_t mask;
-      CPU_ZERO(&mask);
-      CPU_SET(coreId, &mask);
-      sched_setaffinity(0, sizeof(mask), &mask);
-   }
-
    pid_t runPerfRecord() {
-      assignToThisCore(9);
       pid_t childPid = 0;
       auto parentPid = std::to_string(getpid());
-      const char* argV[] = {"perf", "record", "-R", "-e", "ibs_op//p", "-c", "5000", "--intr-regs=r15", "-C", "9", nullptr};
-      auto status = posix_spawn(&childPid, "/usr/bin/perf", nullptr, nullptr, const_cast<char**>(argV), environ);
-      sleep(5);
-      assignToThisCore(9);
+      const char* argV[] = {"perf", "record",  "-c", "5000","-p", parentPid.c_str(), nullptr};
+      auto status = posix_spawn(&childPid, "/home/michael/.local/bin/perf", nullptr, nullptr, const_cast<char**>(argV), environ);
+      sleep(10);
       if (status != 0)
          error.emit() << "Launching of perf failed" << status;
       return childPid;
@@ -568,7 +561,6 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
       mlir::registerBuiltinDialectTranslation(*moduleOp->getContext());
       mlir::registerLLVMDialectTranslation(*moduleOp->getContext());
       LLVMInitializeX86AsmParser();
-      reserveLastRegister = true;
       llvm::InitializeNativeTarget();
       llvm::InitializeNativeTargetAsmPrinter();
       auto targetTriple = llvm::sys::getDefaultTargetTriple();
@@ -593,12 +585,6 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
       auto llvmSnapshotFile = execution::getSnapshotDir()+"/llvm-profile.mlir";
       snapshot(moduleOp, error, llvmSnapshotFile);
       addDebugInfo(moduleOp, llvmSnapshotFile);
-      mlir::PassManager pm(moduleOp->getContext());
-      pm.addPass(execution::createAnnotateProfilingDataPass());
-      if (mlir::failed(pm.run(moduleOp))) {
-         error.emit() << "Could not annotate profiling information";
-         return;
-      }
       double translateToLLVMIRTime;
       auto convertFn = [&](mlir::Operation* module, llvm::LLVMContext& context) -> std::unique_ptr<llvm::Module> {
          auto startTranslationToLLVMIR = std::chrono::high_resolution_clock::now();
@@ -660,11 +646,7 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
       //start profiling
       pid_t pid = runPerfRecord();
       if (error) return;
-      uint64_t r15DefaultValue = 0xbadeaffe;
-      __asm__ __volatile__("mov %0, %%r15\n\t"
-                           : /* no output */
-                           : "a"(r15DefaultValue)
-                           : "%r15");
+
       std::vector<double> measuredTimes;
       for (size_t i = 0; i < numRepetitions; i++) {
          auto executionStart = std::chrono::high_resolution_clock::now();
@@ -674,7 +656,6 @@ class CPULLVMProfilingBackend : public execution::ExecutionBackend {
          measuredTimes.push_back(std::chrono::duration_cast<std::chrono::microseconds>(executionEnd - executionStart).count() / 1000.0);
       }
       //finish profiling
-      reserveLastRegister = false;
       kill(pid, SIGINT);
       sleep(2);
 
